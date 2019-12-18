@@ -1,0 +1,283 @@
+#include "cachelib/navy/serialization/RecordIO.h"
+
+#include <folly/Format.h>
+#include <folly/Range.h>
+#include <folly/io/RecordIO.h>
+
+using namespace folly::recordio_helpers;
+
+namespace facebook {
+namespace cachelib {
+namespace navy {
+constexpr uint32_t kMetadataHeaderFileId = 1;
+namespace {
+class FileRecordWriter final : public RecordWriter {
+ public:
+  explicit FileRecordWriter(int fd) : writer_{folly::File(fd)} {}
+  ~FileRecordWriter() override = default;
+
+  void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
+    writer_.write(std::move(buf));
+  }
+  bool invalidate() override { return false; }
+
+ private:
+  folly::RecordIOWriter writer_;
+};
+
+class FileRecordReader final : public RecordReader {
+ public:
+  explicit FileRecordReader(int fd)
+      : reader_{folly::File(fd)}, curr_{reader_.seek(0)} {}
+  ~FileRecordReader() override = default;
+
+  std::unique_ptr<folly::IOBuf> readRecord() override {
+    auto buf = folly::IOBuf::copyBuffer(curr_->first);
+    ++curr_;
+    return buf;
+  }
+
+  bool isEnd() const override { return curr_ == reader_.end(); }
+
+ private:
+  folly::RecordIOReader reader_;
+  folly::RecordIOReader::Iterator curr_;
+};
+
+class DeviceMetaDataWriter final : public RecordWriter {
+ public:
+  explicit DeviceMetaDataWriter(Device& dev, size_t metadataSize)
+      : dev_(dev), metadataSize_{metadataSize} {}
+
+  ~DeviceMetaDataWriter() override {
+    uint8_t* bufferData = buffer_.data();
+    // Write the last remaining bytes to the device
+    if (bufIndex_ > 0) {
+      if (offset_ + kBlockSize < metadataSize_) {
+        memset(&bufferData[bufIndex_], 0, kBlockSize - bufIndex_);
+        dev_.write(offset_, kBlockSize, bufferData);
+        offset_ += kBlockSize;
+      }
+    }
+    if (offset_ + kBlockSize <= metadataSize_) {
+      // Write an additional block of zeroed out memory just to make the end
+      // of metadata clear
+      memset(bufferData, 0, kBlockSize);
+      dev_.write(offset_, kBlockSize, bufferData);
+    }
+  }
+
+  void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
+    size_t totalLength = prependHeader(buf, kMetadataHeaderFileId);
+    if (totalLength == 0) {
+      return;
+    }
+
+    buf->unshare();
+    buf->coalesce();
+    auto size = buf->length();
+    auto data = buf->data();
+    auto dataOffset = 0;
+    uint8_t* bufferData = buffer_.data();
+
+    do {
+      if (bufIndex_ + headerSize() > kBlockSize) {
+        auto extraBytes = kBlockSize - bufIndex_;
+        // zero the unused bytes in the buffer
+        memset(&bufferData[bufIndex_], 0, extraBytes);
+        // Make sure we do not write beyond the maximum allocated for metadata
+        if (offset_ + kBlockSize > metadataSize_) {
+          throw std::logic_error("exceeding metadata limit");
+        }
+        if (!dev_.write(offset_, kBlockSize, bufferData)) {
+          throw std::invalid_argument(
+              folly::sformat("write failed: offset = {}", offset_));
+        }
+        offset_ += kBlockSize;
+        bufIndex_ = 0;
+      }
+      auto cpBytes =
+          std::min(static_cast<uint64_t>(kBlockSize - bufIndex_), size);
+      memcpy(&bufferData[bufIndex_], data + dataOffset, cpBytes);
+      dataOffset += cpBytes;
+      bufIndex_ += cpBytes;
+      size -= cpBytes;
+    } while (size > 0);
+  }
+
+  bool invalidate() override {
+    Buffer invalidateBuffer{kBlockSize, kBlockSize};
+    memset(invalidateBuffer.data(), 0, kBlockSize);
+    return dev_.write(0, kBlockSize, invalidateBuffer.data());
+  }
+
+ private:
+  static constexpr uint32_t kBlockSize{4096};
+  Device& dev_;
+  uint64_t offset_{0};
+  size_t metadataSize_{0};
+  Buffer buffer_{kBlockSize, kBlockSize};
+  uint32_t bufIndex_{0};
+};
+
+class DeviceMetaDataReader final : public RecordReader {
+ public:
+  explicit DeviceMetaDataReader(Device& dev, size_t metadataSize)
+      : dev_{dev}, metadataSize_{metadataSize} {}
+  ~DeviceMetaDataReader() override = default;
+
+  std::unique_ptr<folly::IOBuf> readRecord() override {
+    bool readHeader = true;
+    std::unique_ptr<folly::IOBuf> buf = nullptr;
+    uint8_t* bufferData = buffer_.data();
+    uint64_t size = 0;
+    uint8_t* data = nullptr;
+    auto dataOffset = 0;
+
+    do {
+      // This is true when we have to read a header and there are not
+      // enough bytes in the buffer OR we have to read the next block
+      // in the multi-block read
+      if (bufIndex_ + headerSize() > kBlockSize) {
+        // read new block from the device if the number of bytes left from
+        // previous read are less than header size.
+        if (offset_ + kBlockSize > metadataSize_) {
+          throw std::logic_error("exceeding metadata limit");
+        }
+        // read from device to the middle of the buffer 'kReadOffset'
+        if (!dev_.read(offset_, kBlockSize, bufferData)) {
+          throw std::invalid_argument(
+              folly::sformat("read failed: offset = {}", offset_));
+        }
+        offset_ += kBlockSize;
+        bufIndex_ = 0;
+      }
+
+      // Parse the header if we are expecting header
+      if (readHeader) {
+        readHeader = false;
+        auto valid = validateRecordHeader(
+            folly::Range<unsigned char*>(&bufferData[bufIndex_],
+                                         kBlockSize - bufIndex_),
+            kMetadataHeaderFileId);
+        if (!valid) {
+          throw std::logic_error("Invalid record header");
+        }
+
+        recordio_detail::Header* h =
+            reinterpret_cast<recordio_detail::Header*>(&bufferData[bufIndex_]);
+        size = headerSize() + h->dataLength;
+        // copy the header also to IOBuf so that we can do validation
+        buf = folly::IOBuf::create(size);
+        if (buf == nullptr) {
+          return nullptr;
+        }
+        buf->append(size);
+        data = buf->writableData();
+        dataOffset = 0;
+      }
+      auto cpSize =
+          std::min(static_cast<uint64_t>(kBlockSize - bufIndex_), size);
+      memcpy(data + dataOffset, &bufferData[bufIndex_], cpSize);
+      bufIndex_ += cpSize;
+      dataOffset += cpSize;
+      size -= cpSize;
+    } while (size > 0);
+    // Validate the what we just read from the device
+    auto record =
+        validateRecordData(folly::Range<unsigned char*>(data, buf->length()));
+    if (record.fileId == 0) {
+      throw std::invalid_argument(folly::sformat(
+          "Invalid record : offset = {}, length = {}", offset_, buf->length()));
+    }
+    // skip the header part and return
+    buf->trimStart(headerSize());
+
+    return buf;
+  }
+
+  bool isEnd() const override {
+    Buffer headerBuf{kBlockSize, kBlockSize};
+    if (offset_ + kBlockSize > metadataSize_) {
+      return true;
+    }
+    auto res = dev_.read(offset_, kBlockSize, headerBuf.data());
+    if (!res) {
+      return true;
+    }
+    auto valid = validateRecordHeader(
+        folly::Range<unsigned char*>(headerBuf.data(), kBlockSize),
+        kMetadataHeaderFileId);
+
+    return !valid;
+  }
+
+ private:
+  Device& dev_;
+  uint64_t offset_{0};
+  size_t metadataSize_{0};
+  uint64_t bufIndex_{kBlockSize};
+  Buffer buffer_{kBlockSize, kBlockSize};
+};
+
+class MemoryRecordWriter final : public RecordWriter {
+ public:
+  explicit MemoryRecordWriter(folly::IOBufQueue& ioQueue) : ioQueue_{ioQueue} {}
+  ~MemoryRecordWriter() override = default;
+
+  void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
+    buf->coalesce();
+    ioQueue_.append(std::move(buf));
+  }
+  bool invalidate() override { return false; }
+
+ private:
+  folly::IOBufQueue& ioQueue_;
+};
+
+class MemoryRecordReader final : public RecordReader {
+ public:
+  explicit MemoryRecordReader(folly::IOBufQueue& ioQueue) : ioQueue_{ioQueue} {}
+  ~MemoryRecordReader() override = default;
+
+  std::unique_ptr<folly::IOBuf> readRecord() override {
+    return ioQueue_.pop_front();
+  }
+
+  bool isEnd() const override { return ioQueue_.empty(); }
+
+ private:
+  folly::IOBufQueue& ioQueue_;
+};
+} // namespace
+
+std::unique_ptr<RecordWriter> createMetadataRecordWriter(Device& dev,
+                                                         size_t metadataSize) {
+  return std::make_unique<DeviceMetaDataWriter>(dev, metadataSize);
+}
+
+std::unique_ptr<RecordReader> createMetadataRecordReader(Device& dev,
+                                                         size_t metadataSize) {
+  return std::make_unique<DeviceMetaDataReader>(dev, metadataSize);
+}
+
+std::unique_ptr<RecordWriter> createFileRecordWriter(int fd) {
+  return std::make_unique<FileRecordWriter>(fd);
+}
+
+std::unique_ptr<RecordReader> createFileRecordReader(int fd) {
+  return std::make_unique<FileRecordReader>(fd);
+}
+
+std::unique_ptr<RecordWriter> createMemoryRecordWriter(
+    folly::IOBufQueue& ioQueue) {
+  return std::make_unique<MemoryRecordWriter>(ioQueue);
+}
+
+std::unique_ptr<RecordReader> createMemoryRecordReader(
+    folly::IOBufQueue& ioQueue) {
+  return std::make_unique<MemoryRecordReader>(ioQueue);
+}
+} // namespace navy
+} // namespace cachelib
+} // namespace facebook

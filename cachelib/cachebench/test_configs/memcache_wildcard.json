@@ -1,0 +1,39 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 20480,
+    "htBucketPower": 28
+  },
+  "test_config": 
+    {
+      "name": "wildcard",
+
+      "prepopulateCache": true,
+      "numOps": 10000000,
+      "numThreads": 32,
+      "numKeys": 278893,
+      "distribution" :  "range",
+
+      "keySizeRange": [17, 26, 35, 44, 53, 62, 71, 80, 89, 98, 107, 108],
+      "keySizeRangeProbability": [
+        0.29,
+        0.168,
+        0.065,
+        0.178,
+        0.13,
+        0.026,
+        0.041,
+        0.028,
+        0.028,
+        0.014,
+        0.032
+      ],
+
+      "valSizeRange": [1, 1000000],
+      "valSizeRangeProbability": [1.0],
+
+      "getRatio": 0.79,
+      "setRatio": 0.16,
+      "delRatio": 0.05
+    }
+ 
+}

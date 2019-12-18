@@ -1,0 +1,53 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 38000, 
+    "dipperAsyncThreads": 128, 
+    "dipperBackend": "navy_dipper", 
+    "dipperDevicePath": "/dev/md0", 
+    "writeAmpDeviceList": ["nvme1n1", "nvme2n1"],
+    "dipperNavyBigHashBucketSize": 4096, 
+    "dipperNavyBigHashSizePct": 0, 
+    "dipperNavyBlock": 4096, 
+    "dipperNavyParcelMemoryMB": 6048, 
+    "dipperSizeMB": 932000, 
+    "dipperUseDirectIO": true, 
+    "enableChainedItem": true, 
+    "htBucketPower": 26, 
+    "moveOnSlabRelease": false, 
+    "poolRebalanceIntervalSec": 5,
+    "dipperNavyUseStackAllocation" : true
+  }, 
+  "test_config": 
+    {
+      "enableLookaside": true, 
+      "generator": "online", 
+      "numKeys": 2866320000, 
+      "numOps": 200000000, 
+      "numThreads": 36, 
+      "poolDistributions": [
+        {
+          "addChainedRatio": 0.0, 
+          "delRatio": 0.0, 
+          "getRatio": 0.87983, 
+          "keySizeRange": [
+            8, 
+            16
+          ], 
+          "keySizeRangeProbability": [
+            1.0
+          ], 
+          "loneGetRatio": 1.0426679936986586e-05, 
+          "loneSetRatio": 0.00317, 
+          "popDistFile": "memcache_twmemcache.ltw.oregon_pop.json", 
+          "setRatio": 0.117, 
+          "valSizeDistFile": "memcache_twmemcache.ltw.oregon_sizes.json"
+        }
+      ], 
+      "prepopulateCache": true, 
+      "prepopulateSleepMs": 5, 
+      "prepopulateThreads": 50,
+      "opDelayNs" : 1000,
+      "opDelayBatch" : 1
+    }
+ 
+}

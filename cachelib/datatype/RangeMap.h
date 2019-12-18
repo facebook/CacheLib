@@ -1,0 +1,283 @@
+#pragma once
+
+#include <limits>
+
+#include <boost/iterator/iterator_facade.hpp>
+
+#include "cachelib/allocator/TypedHandle.h"
+#include "cachelib/common/Hash.h"
+#include "cachelib/datatype/Buffer.h"
+#include "cachelib/datatype/DataTypes.h"
+
+namespace facebook {
+namespace cachelib {
+namespace detail {
+template <typename Key>
+class FOLLY_PACK_ATTR BinaryIndex;
+
+template <typename Key, typename Value, typename BufManager>
+class BinaryIndexIterator;
+} // namespace detail
+
+// Range Map data structure for cachelib
+// Key needs to be a fixed size POD and implements operator<.
+// Value can be variable sized, but must be POD.
+template <typename K, typename V, typename C>
+class RangeMap {
+ public:
+  using EntryKey = K;
+  using EntryValue = V;
+  using Cache = C;
+  using Item = typename Cache::Item;
+  using ItemHandle = typename Item::Handle;
+
+  struct FOLLY_PACK_ATTR EntryKeyValue {
+    EntryKey key;
+    EntryValue value;
+  };
+  using Itr = detail::BinaryIndexIterator<EntryKey,
+                                          EntryKeyValue,
+                                          detail::BufferManager<Cache>>;
+  using ConstItr = detail::BinaryIndexIterator<EntryKey,
+                                               const EntryKeyValue,
+                                               detail::BufferManager<Cache>>;
+
+  // Create a new cachelib::RangeMap
+  // @param cache   cache allocator to allocate from
+  // @param pid     pool where we'll allocate the map from
+  // @param key     key for the item in cache
+  // @param numEntries   number of entries this map can contain initially
+  // @param numBytes     number of bytes allocated for value storage initially
+  // @return  valid cachelib::RangeMap on success,
+  //          cachelib::RangeMap::isNullItemHandle() == true on failure
+  static RangeMap create(Cache& cache,
+                         PoolId pid,
+                         typename Cache::Key key,
+                         uint32_t numEntries = kDefaultNumEntries,
+                         uint32_t numBytes = kDefaultNumBytes);
+
+  // Convert a item handle to a cachelib::RangeMap
+  // @param cache   cache allocator to allocate from
+  // @param handle  parent handle for this cachelib::RangeMap
+  // @return cachelib::RangeMap
+  static RangeMap fromItemHandle(Cache& cache, ItemHandle handle);
+
+  // Constructs null cachelib map
+  RangeMap() = default;
+
+  // Move constructor
+  RangeMap(RangeMap&& other);
+  RangeMap& operator=(RangeMap&& other);
+
+  // Copy is disallowed
+  RangeMap(const RangeMap& other) = delete;
+  RangeMap& operator=(const RangeMap& other) = delete;
+
+  // Insert value into RangeMap. False if key already exists.
+  // @throw std::bad_alloc if we can't allocate for the value
+  //                       map is still in a valid state. User can re-try.
+  bool insert(const EntryKey& key, const EntryValue& value);
+
+  // Insert or replace a {key, value} pair into the map.
+  // @throw std::bad_alloc if we can't allocate for the value
+  //                       map is still in a valid state. User can re-try.
+  enum InsertOrReplaceResult {
+    kInserted,
+    kReplaced,
+  };
+  InsertOrReplaceResult insertOrReplace(const EntryKey& key,
+                                        const EntryValue& value);
+
+  // Remove key. False if not found.
+  bool remove(const EntryKey& key);
+
+  // Return an iterator for this key. Can iterate in sorted order.
+  // itr == end() if not found.
+  Itr lookup(const EntryKey& key);
+  ConstItr lookup(const EntryKey& key) const;
+
+  // Return an exact range or null if not found. [key1, key2] are inclusive.
+  folly::Range<Itr> rangeLookup(const EntryKey& key1, const EntryKey& key2);
+  folly::Range<ConstItr> rangeLookup(const EntryKey& key1,
+                                     const EntryKey& key2) const;
+
+  // Return cloest range to requested [key1, key2]. Null if nothing is in map.
+  // I.e. for input [5, 10], we might return [6, 9].
+  folly::Range<Itr> rangeLookupApproximate(const EntryKey& key1,
+                                           const EntryKey& key2);
+  folly::Range<ConstItr> rangeLookupApproximate(const EntryKey& key1,
+                                                const EntryKey& key2) const;
+
+  // Iterate through the map in a sorted order via mutable or const.
+  Itr begin();
+  Itr end();
+  ConstItr begin() const;
+  ConstItr end() const;
+
+  // Compact storage to make more room for allocations
+  // Cost: O(N*LOG(N)). Compacting storage is O(N) where N is number
+  //       of the allocations. Updating the index is O(N*LOG(N)).
+  //
+  // @throw std::runtime_error if unrecoverable error is encountered.
+  //                           this indicates a bug in our code.
+  //                           Map is no longer in a usable state. User
+  //                           should delete the whole map by its key from
+  //                           cache.
+  void compact();
+
+  // Return number of bytes this map is using for hash table and the buffers
+  // This doesn't include cachelib item overhead
+  size_t sizeInBytes() const;
+
+  // Return number of elements in this map
+  uint32_t size() const {
+    return handle_->template getMemoryAs<BinaryIndex>()->numEntries();
+  }
+
+  // Return capacity of the index in this map
+  uint32_t capacity() const {
+    return handle_->template getMemoryAs<BinaryIndex>()->capacity();
+  }
+
+  // This does not modify the content of this structure.
+  // It resets it to an item handle, which can be used with any API in
+  // CacheAllocator that deals with ItemHandle. After invoking this function,
+  // this structure is left in a null state.
+  ItemHandle resetToItemHandle() && { return std::move(handle_); }
+
+  // Borrow the item handle underneath this structure. This is useful to
+  // implement insertion into CacheAllocator.
+  const ItemHandle& viewItemHandle() const { return handle_; }
+
+  bool isNullItemHandle() const { return handle_ == nullptr; }
+
+ private:
+  using BinaryIndex = detail::BinaryIndex<EntryKey>;
+  using BufferManager = detail::BufferManager<Cache>;
+
+  static constexpr int kWastedSpacePctThreshold = 50;
+  static constexpr uint32_t kDefaultNumEntries = 20;
+  static constexpr uint32_t kDefaultNumBytes = kDefaultNumEntries * 8;
+
+  // Create a new cachelib::RangeMap
+  // @throw std::bad_alloc if fail to allocate hashtable or storage for a map
+  RangeMap(Cache& cache,
+           PoolId pid,
+           typename Cache::Key key,
+           uint32_t numEntries,
+           uint32_t numBytes);
+
+  // Attach to an existing cachelib::RangeMap
+  RangeMap(Cache& cache, ItemHandle handle);
+
+  // Expand index or storage if insufficient space
+  InsertOrReplaceResult insertOrReplaceInternal(const EntryKey& key,
+                                                const EntryValue& value);
+  detail::BufferAddr cloneIndexAndAllocate(uint32_t allocSize,
+                                           bool expandIndex);
+
+  Cache* cache_{nullptr};
+  ItemHandle handle_;
+  BufferManager bufferManager_{nullptr};
+};
+
+namespace detail {
+// An index that stores its entries in sorted order.
+// Lookup: O(Log N). Insert/Remove: O(Log N) + O(N) memcpy.
+// Key needs to be a POD and also support ordering. (i.e. implement operator<)
+template <typename Key>
+class FOLLY_PACK_ATTR BinaryIndex {
+ public:
+  struct FOLLY_PACK_ATTR Entry {
+    Key key{};
+    BufferAddr addr{};
+  };
+
+  static uint32_t computeStorageSize(uint32_t capacity);
+
+  static BinaryIndex* createNewIndex(void* buffer, uint32_t capacity);
+  static void cloneIndex(BinaryIndex& dst, const BinaryIndex& src);
+
+  // Return end() if not found.
+  Entry* lookup(Key key);
+  const Entry* lookup(Key key) const;
+
+  // Return the exact match or a lower bound. If empty index, return end().
+  Entry* lookupLowerbound(Key key);
+  const Entry* lookupLowerbound(Key key) const;
+
+  // Return old addr if exists.
+  BufferAddr insertOrReplace(Key key, BufferAddr addr);
+
+  // Return false if key already exists.
+  bool insert(Key key, BufferAddr addr);
+
+  // Return addr removed if exists. Null addr otherwise.
+  BufferAddr remove(Key key);
+
+  Entry* begin() { return entries_; }
+  Entry* end() { return entries_ + numEntries_; }
+  const Entry* begin() const { return entries_; }
+  const Entry* end() const { return entries_ + numEntries_; }
+
+  uint32_t capacity() const { return capacity_; }
+  uint32_t numEntries() const { return numEntries_; }
+
+  // When number of entries get close to capacity, it's time to resize
+  bool overLimit() const {
+    return numEntries_ >= capacity_ - 1 ||
+           numEntries_ > capacity_ * kCapacityOverlimitRatio;
+  }
+
+ private:
+  static constexpr double kCapacityOverlimitRatio = 0.5;
+
+  explicit BinaryIndex(uint32_t capacity);
+
+  void insertInternal(Key key, BufferAddr addr);
+
+  uint32_t capacity_{};
+  uint32_t numEntries_{};
+  Entry entries_[];
+};
+
+// An interator interface that can return a custom Value type. The iterators
+// are sorted according to their order in BinaryIndex.
+template <typename Key, typename Value, typename BufManager>
+class BinaryIndexIterator
+    : public boost::iterator_facade<BinaryIndexIterator<Key, Value, BufManager>,
+                                    Value,
+                                    boost::forward_traversal_tag> {
+ public:
+  BinaryIndexIterator() = default;
+  BinaryIndexIterator(const BufManager* manager,
+                      BinaryIndex<Key>* index,
+                      const typename BinaryIndex<Key>::Entry* entry)
+      : entry_{entry}, index_{index}, manager_{manager} {
+    if (index_ != nullptr && entry_ != index_->end()) {
+      value_ = manager_->template get<Value>(entry_->addr);
+    }
+  }
+
+  BinaryIndexIterator<Key, const Value, BufManager> toConstItr();
+
+  Value& dereference() const;
+
+ private:
+  void increment();
+
+  bool equal(const BinaryIndexIterator& other) const;
+
+  const typename BinaryIndex<Key>::Entry* entry_{nullptr};
+  Value* value_{nullptr};
+
+  BinaryIndex<Key>* index_{nullptr};
+  const BufManager* manager_{nullptr};
+
+  friend class boost::iterator_core_access;
+};
+} // namespace detail
+} // namespace cachelib
+} // namespace facebook
+
+#include "cachelib/datatype/RangeMap-inl.h"

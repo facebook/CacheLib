@@ -1,0 +1,58 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 20480,
+    "htBucketPower": 28
+  },
+  "test_config": 
+    {
+      "name": "reg",
+
+      "prepopulateCache": true,
+      "numOps": 10000000,
+      "numThreads": 32,
+      "numKeys": 232160,
+      "distribution" :  "range",
+
+      "keySizeRange": [
+        32,
+        40,
+        48,
+        56,
+        64,
+        72,
+        80,
+        88,
+        96,
+        104,
+        112,
+        120,
+        128,
+        160,
+        161
+      ],
+      "keySizeRangeProbability": [
+        0.042,
+        0.09,
+        0.197,
+        0.034,
+        0.105,
+        0.062,
+        0.01,
+        0.016,
+        0.009,
+        0.05,
+        0.303,
+        0.02,
+        0.039,
+        0.023
+      ],
+
+      "valSizeRange": [1, 1000000],
+      "valSizeRangeProbability": [1.0],
+
+      "getRatio": 0.88,
+      "setRatio": 0.088,
+      "delRatio": 0.032
+    }
+ 
+}

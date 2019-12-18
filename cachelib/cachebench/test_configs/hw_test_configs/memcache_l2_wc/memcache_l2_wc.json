@@ -1,0 +1,57 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 38000,
+    "dipperAsyncThreads": 128,
+    "dipperBackend": "navy_dipper",
+    "dipperDevicePath": "/dev/md0",
+    "writeAmpDeviceList": ["nvme1n1", "nvme2n1"],
+    "dipperNavyBigHashBucketSize": 4096,
+    "dipperNavyBigHashSizePct": 0,
+    "dipperNavyBlock": 4096,
+    "dipperNavyParcelMemoryMB": 6048,
+    "dipperSizeMB": 932000,
+    "dipperUseDirectIO": true,
+    "enableChainedItem": true,
+    "htBucketPower": 26,
+    "moveOnSlabRelease": true,
+    "poolRebalanceIntervalSec": 2,
+    "rebalanceStrategy": "tail-age",
+    "rebalanceMinRatio": 0.1,
+    "rebalanceMinSlabs": 2,
+    "dipperNavyUseStackAllocation" : true
+  },
+  "test_config": 
+    {
+      "enableLookaside": true,
+      "generator": "online",
+      "numKeys": 72298041,
+      "numOps": 63000000,
+      "numThreads": 24,
+      "poolDistributions": [
+        {
+          "addChainedRatio": 0.0,
+          "delRatio": 0.0,
+          "getRatio": 0.6,
+          "keySizeRange": [
+            8,
+            16
+          ],
+          "keySizeRangeProbability": [
+            1.0
+          ],
+          "loneGetRatio": 8.2e-06,
+          "loneSetRatio": 0.21,
+          "setRatio": 0.0,
+          "popDistFile": "memcache_twmemcache.ltw.ireland_pop.json",
+          "setRatio": 0.0,
+          "valSizeDistFile": "memcache_twmemcache.ltw.ireland_sizes.json"
+        }
+      ],
+      "prepopulateCache": true,
+      "prepopulateSleepMs": 5,
+      "prepopulateThreads": 50,
+      "opDelayNs" : 5000000,
+      "opDelayBatch" : 1
+    }
+ 
+}

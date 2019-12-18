@@ -1,0 +1,31 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 8192, 
+    "poolRebalanceIntervalSec": 0
+  }, 
+  "test_config": 
+    {
+      "addChainedRatio": 0.0, 
+      "delRatio": 0.0, 
+      "distribution": "normal", 
+      "enableLookaside": true, 
+      "getRatio": 0.9745502424095354, 
+      "keySizeRange": [
+        1, 
+        8, 
+        64
+      ], 
+      "keySizeRangeProbability": [
+        0.3, 
+        0.7
+      ], 
+      "loneGetRatio": 0.025449757590464674, 
+      "numKeys": 23626789, 
+      "numOps": 5000000, 
+      "numThreads": 48, 
+      "prepopulateCache": true, 
+      "setRatio": 0.0, 
+      "valSizeDistFile": "assoc_altoona2_follower_sizes.json"
+    }
+ 
+}

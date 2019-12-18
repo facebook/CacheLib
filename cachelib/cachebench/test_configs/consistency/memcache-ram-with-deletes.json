@@ -1,0 +1,27 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 128,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true
+  },
+  "test_config" : {
+      "prepopulateCache" : true,
+      "checkConsistency" : true,
+
+      "numOps" : 50000000,
+      "numThreads" : 40,
+      "numKeys" : 200000,
+      "distribution" :  "range",
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+
+      "valSizeRange" : [256, 1024, 4096, 8192],
+      "valSizeRangeProbability" : [0.2, 0.7, 0.1],
+
+      "getRatio" : 0.8,
+      "setRatio" : 0.1,
+      "delRatio" : 0.01
+    }
+}

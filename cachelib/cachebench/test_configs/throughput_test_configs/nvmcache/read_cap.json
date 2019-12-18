@@ -1,0 +1,42 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 150,
+
+    "numPools" : 1,
+    "provisionPool" : true,
+    "allocFactor" : 2.0,
+
+    "dipperFilePath": "/dev/shm/cachebench",
+    "dipperDevicePath": "/dev/nvme0n1p1",
+
+    "dipperSizeMB" : 900000,
+    "dipperNavyBigHashBucketSize" : 4096,
+    "dipperNavyBigHashSizePct" : 65,
+
+    "dipperBackend" : "navy_dipper",
+    "dipperUseDirectIO": true,
+    "dipperNavyBigHashBloomFilterSize": 0
+  },
+  "test_config" : 
+    {
+      "prepopulateCache" : false,
+      "distribution" : "range",
+      "checkConsistency" : false,
+
+      "numOps" : 30000000,
+      "numThreads" : 40,
+      "numKeys" : 200000000,
+
+      "keySizeRange" : [15, 16],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [72, 73],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 1.0,
+      "setRatio" : 0.0,
+      "delRatio" : 0.0,
+      "addChainRatio": 0.00
+    }
+ 
+}

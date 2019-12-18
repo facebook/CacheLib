@@ -1,0 +1,39 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 32,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true,
+
+    "dipperSizeMB" : 512,
+    "dipperBackend" : "navy_dipper",
+    "dipperUseDirectIO": false,
+    "dipperFilePath" : "/dev/shm/cachebench"
+  },
+  "test_config" : 
+    {
+      "prepopulateCache" : true,
+
+      "numOps" : 100000,
+      "numThreads" : 16,
+      "numKeys" : 100000,
+      "distribution" :  "range",
+
+      "keySizeRange" : [8, 16],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [500, 600],
+      "valSizeRangeProbability" : [1.0],
+
+      "chainedItemLengthRange" : [1, 2],
+      "chainedItemLengthRangeProbability" : [1.0],
+
+      "chainedItemValSizeRange" : [500, 600],
+      "chainedItemValSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.55,
+      "setRatio" : 0.3,
+      "delRatio" : 0.05,
+      "addChainedRatio" : 0.1
+    }
+ 
+}

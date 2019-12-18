@@ -1,0 +1,27 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 20480,
+    "htBucketPower": 27
+  },
+  "test_config": 
+    {
+      "name": "memcache get only",
+
+      "prepopulateCache": true,
+      "numOps": 10000000,
+      "numThreads": 48,
+      "numKeys": 10000000,
+      "distribution" :  "range",
+
+      "keySizeRange": [16, 17],
+      "keySizeRangeProbability": [1.0],
+
+      "valSizeRange": [1, 1000000],
+      "valSizeRangeProbability": [1.0],
+
+      "getRatio": 1.0,
+      "setRatio": 0.0,
+      "delRatio": 0.0
+    }
+ 
+}

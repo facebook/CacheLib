@@ -1,0 +1,10 @@
+To run the tests which require production traces, first see the
+data pipeline in workload_characterization.
+
+Once this has been run, run setup.sh to symlink to the production traces.
+
+If you have traces in a non-default location, you can run
+
+./setup.sh $TRACEDIR
+
+to specify a root directory to look in.
