@@ -6,13 +6,6 @@
 
 using namespace facebook::cachelib::tests;
 
-using facebook::cachelib::PosixShmSegment;
-using facebook::cachelib::ShmAttach;
-using facebook::cachelib::ShmNew;
-using facebook::cachelib::ShmSegment;
-using facebook::cachelib::ShmSegmentOpts;
-using facebook::cachelib::SysVShmSegment;
-using facebook::cachelib::detail::getPageAlignedSize;
 using facebook::cachelib::detail::getPageSize;
 using facebook::cachelib::detail::getPageSizeInSMap;
 using facebook::cachelib::detail::isPageAlignedSize;

@@ -4,10 +4,7 @@
 #include "cachelib/shm/SysVShmSegment.h"
 #include "cachelib/shm/tests/common.h"
 
-using facebook::cachelib::PageSizeT;
-using facebook::cachelib::ShmSegmentOpts;
 using facebook::cachelib::detail::getPageAlignedSize;
-using facebook::cachelib::detail::getPageSize;
 using facebook::cachelib::detail::getPageSizeInSMap;
 using facebook::cachelib::detail::isPageAlignedSize;
 

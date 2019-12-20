@@ -1,7 +1,6 @@
 #include "cachelib/allocator/tests/EventInterfaceTest.h"
 #include "cachelib/allocator/tests/TestBase.h"
 
-using namespace facebook::cachelib::tests;
 
 namespace facebook {
 namespace cachelib {

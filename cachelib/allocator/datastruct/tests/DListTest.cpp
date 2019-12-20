@@ -40,7 +40,6 @@ class DListNode {
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;
-using namespace std;
 
 using DListImpl = DList<DListNode, &DListNode::hook_>;
 

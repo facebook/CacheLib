@@ -11,12 +11,7 @@
 static const std::string namePrefix = "shm-test";
 using namespace facebook::cachelib::tests;
 
-using facebook::cachelib::PosixShmSegment;
-using facebook::cachelib::ShmAttach;
 using facebook::cachelib::ShmManager;
-using facebook::cachelib::ShmNew;
-using facebook::cachelib::ShmSegment;
-using facebook::cachelib::SysVShmSegment;
 namespace fs = boost::filesystem;
 
 using ShutDownRes = typename facebook::cachelib::ShmManager::ShutDownRes;

@@ -2,7 +2,6 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 
-using namespace facebook::cachelib;
 
 namespace facebook {
 namespace cachelib {

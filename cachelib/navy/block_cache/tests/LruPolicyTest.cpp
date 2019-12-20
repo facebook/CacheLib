@@ -1,6 +1,5 @@
 #include "cachelib/navy/block_cache/LruPolicy.h"
 
-#include "cachelib/navy/common/Utils.h"
 
 #include <gtest/gtest.h>
 #include <thread>

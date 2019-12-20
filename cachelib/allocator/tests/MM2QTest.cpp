@@ -5,7 +5,6 @@
 
 namespace facebook {
 namespace cachelib {
-using facebook::cachelib::MM2Q;
 using MM2QTest = MMTypeTest<MM2Q>;
 
 TEST_F(MM2QTest, AddBasic) { testAddBasic(MM2Q::Config{}); }

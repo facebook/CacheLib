@@ -4,7 +4,6 @@
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 
 using namespace facebook::cachelib::tests;
-using namespace facebook::files;
 
 /* static */
 bool AllocTestBase::isSameSlabList(const std::vector<Slab*>& slabs1,

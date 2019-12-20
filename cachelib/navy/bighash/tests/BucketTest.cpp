@@ -7,7 +7,6 @@
 #include "cachelib/navy/testing/Callbacks.h"
 
 using testing::_;
-using testing::StrictMock;
 
 namespace facebook {
 namespace cachelib {

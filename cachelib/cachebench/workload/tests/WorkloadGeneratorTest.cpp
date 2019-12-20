@@ -2,11 +2,9 @@
 #include <random>
 
 #include "cachelib/cachebench/util/Config.h"
-#include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/cachebench/workload/distributions/RangeDistribution.h"
 
-using namespace ::testing;
 
 namespace facebook {
 namespace cachelib {

@@ -60,7 +60,6 @@ void unlinkImpl(const char* const name) {
     return;
   }
 
-  using util::throwSystemError;
   switch (errno) {
   case ENOENT:
   case EACCES:

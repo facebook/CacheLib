@@ -28,7 +28,6 @@ int shmGetImpl(key_t key, size_t size, int flags) {
     return shmid;
   }
 
-  using util::throwSystemError;
   switch (errno) {
   case EACCES:
   case EINVAL:

@@ -1,4 +1,3 @@
-#include <folly/String.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/datastruct/MultiDList.h"
@@ -39,7 +38,6 @@ class DListNode {
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;
-using namespace std;
 
 using MultiDListImpl = MultiDList<DListNode, &DListNode::hook_>;
 

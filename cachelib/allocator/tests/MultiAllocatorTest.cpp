@@ -8,7 +8,6 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 
-using namespace facebook::cachelib::tests;
 namespace facebook {
 namespace cachelib {
 namespace tests {

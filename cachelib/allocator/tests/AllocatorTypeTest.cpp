@@ -1,7 +1,6 @@
 #include "BaseAllocatorTest.h"
 #include "TestBase.h"
 
-using namespace facebook::cachelib::tests;
 
 namespace facebook {
 namespace cachelib {
@@ -447,7 +446,6 @@ TEST_F(Lru2QAllocatorTest, MMReconfigure) {
 }
 
 using LruAllocatorWithMovingTest = BaseAllocatorTest<LruAllocator>;
-using Lru2QAllocatorWithMovingTest = BaseAllocatorTest<Lru2QAllocator>;
 using TinyLFUAllocatorWithMovingTest = BaseAllocatorTest<TinyLFUAllocator>;
 
 TEST_F(LruAllocatorWithMovingTest, UnevictableItemsWithMoving) {

@@ -6,7 +6,6 @@
 
 namespace facebook {
 namespace cachelib {
-using facebook::cachelib::MMLru;
 using MMLruTest = MMTypeTest<MMLru>;
 
 TEST_F(MMLruTest, AddBasic) { testAddBasic(MMLru::Config{}); }

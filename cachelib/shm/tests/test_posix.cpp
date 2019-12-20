@@ -12,7 +12,6 @@ using namespace facebook::cachelib::tests;
 using facebook::cachelib::PosixShmSegment;
 using facebook::cachelib::ShmAttach;
 using facebook::cachelib::ShmNew;
-using ::testing::Test;
 
 class PosixShmTest : public ShmTestBase {
  public:
