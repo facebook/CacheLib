@@ -281,18 +281,23 @@ class NvmCache {
 
     // notify all pending waiters that are waiting for the fetch.
     void wakeUpWaiters() {
-      auto clone = [](const ItemHandle& hdl) {
-        try {
-          return hdl.clone();
-        } catch (const exception::RefcountOverflow&) {
-          // TODO: T56986970
-          // Silently swallow exception is bad!! We need to
-          // pass this error back to the user.
-          return ItemHandle{};
-        }
-      };
+      bool refcountOverflowed = false;
       for (auto& w : waiters) {
-        w->set(clone(it));
+        // If refcount overflowed earlier, then we will return miss to
+        // all subsequent waitors.
+        if (refcountOverflowed) {
+          w->set(ItemHandle{});
+          continue;
+        }
+
+        try {
+          w->set(it.clone());
+        } catch (const exception::RefcountOverflow&) {
+          // We'll return a miss to the user's pending read,
+          // so we should enqueue a delete via NvmCache.
+          cache.cache_.remove(it);
+          refcountOverflowed = true;
+        }
       }
     }
   };
