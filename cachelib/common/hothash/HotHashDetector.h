@@ -10,9 +10,6 @@ namespace facebook {
 namespace cachelib {
 
 /*
- * Algorithm described in this quip doc: https://fb.quip.com/HaVpAkqwchqE
- * Also here for completeness of this file:
- *
  * Principles of the algorithm
  *
  * - Maintain a fixed-size Level-1 (L1) array of S counters. On bumpHash, the

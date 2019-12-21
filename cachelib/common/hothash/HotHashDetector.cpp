@@ -1,4 +1,4 @@
-#include "HotHashDetector.h"
+#include "cachelib/common/hothash/HotHashDetector.h"
 
 #include <algorithm>
 #include <deque>

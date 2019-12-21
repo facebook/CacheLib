@@ -4,7 +4,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
-#include "HotHashDetector.h"
+#include "cachelib/common/hothash/HotHashDetector.h"
 
 using facebook::cachelib::HotHashDetector;
 
