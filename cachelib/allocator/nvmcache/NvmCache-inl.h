@@ -467,6 +467,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
   XDCHECK_GE(numBufs, 1u);
   const auto pBlob = dItem.getBlob(0);
 
+  stats().numNvmAllocAttempts.inc();
   // use the original alloc size to allocate, but make sure that the usable
   // size matches the pBlob's size
   auto it = cache_.allocateInternal(
@@ -491,6 +492,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
       auto cBlob = dItem.getBlob(i);
       XDCHECK_GT(cBlob.origAllocSize, 0u);
       XDCHECK_GT(cBlob.data.size(), 0u);
+      stats().numNvmAllocAttempts.inc();
       auto chainedIt = cache_.allocateChainedItem(it, cBlob.origAllocSize);
       if (!chainedIt) {
         return nullptr;

@@ -338,6 +338,9 @@ struct GlobalCacheStats {
   // number of puts to nvm of a clean item in RAM due to nvm eviction.
   uint64_t numNvmPutFromClean{0};
 
+  // attempts made from nvm cache to allocate an item for promotion
+  uint64_t numNvmAllocAttempts{0};
+
   // number of attempts to allocate an item
   uint64_t allocAttempts{0};
 

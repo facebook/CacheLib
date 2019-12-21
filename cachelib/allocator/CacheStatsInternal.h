@@ -86,6 +86,9 @@ struct Stats {
   TLCounter numNvmRejectsByClean{0};
   TLCounter numNvmRejectsByAP{0};
 
+  // attempts made from nvm cache to allocate an item for promotion
+  TLCounter numNvmAllocAttempts{0};
+
   // the number of allocated items that are permanent
   TLCounter numPermanentItems{0};
 

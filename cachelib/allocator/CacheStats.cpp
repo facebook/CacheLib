@@ -65,6 +65,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numPermanentItems = numPermanentItems.get();
   ret.numChainedParentItems = numChainedParentItems.get();
   ret.numChainedChildItems = numChainedChildItems.get();
+  ret.numNvmAllocAttempts = numNvmAllocAttempts.get();
 
   auto accum = [](const PerPoolClassAtomicCounters& c) {
     uint64_t sum = 0;
