@@ -34,17 +34,21 @@ TLStats& TLStats::operator+=(const TLStats& other) {
   numNvmEncryptionErrors += other.numNvmEncryptionErrors;
   numNvmDecryptionErrors += other.numNvmDecryptionErrors;
 
+  numPermanentItems += other.numPermanentItems;
+  numChainedParentItems += other.numChainedParentItems;
+  numChainedChildItems += other.numChainedChildItems;
+
   for (size_t i = 0; i < cacheHits.size(); i++) {
     for (size_t j = 0; j < cacheHits[i].size(); j++) {
       cacheHits[i][j] += other.cacheHits[i][j];
     }
   }
-  return *this;
 
   // please add any new fields to this operator and increment the size based
   // on the compiler warning.
-  SizeVerify<sizeof(TLStats)> a = SizeVerify<65704>{};
-  (void)a;
+  SizeVerify<sizeof(TLStats)> a = SizeVerify<65728>{};
+  std::ignore = a;
+  return *this;
 }
 
 void AtomicStats::reset() {
@@ -281,6 +285,10 @@ void GlobalCacheStats::initFrom(const detail::TLStats& l) {
   numNvmEvictions = l.numNvmEvictions;
   numNvmEncryptionErrors = l.numNvmEncryptionErrors;
   numNvmDecryptionErrors = l.numNvmDecryptionErrors;
+
+  numPermanentItems = l.numPermanentItems;
+  numChainedParentItems = l.numChainedParentItems;
+  numChainedChildItems = l.numChainedChildItems;
 }
 
 } // namespace cachelib

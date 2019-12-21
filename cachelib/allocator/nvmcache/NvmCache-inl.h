@@ -39,7 +39,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   // from nvmcache.
   inflightPuts_[shard].invalidateToken(key);
 
-  auto& stats = cache_.getStats();
+  auto& stats = cache_.tlStats();
   ++stats.numNvmGets;
 
   GetCtx* ctx{nullptr};
@@ -128,7 +128,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
 
 template <typename C>
 void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
-  auto& stats = cache_.getStats();
+  auto& stats = cache_.tlStats();
   ++stats.numNvmEvictions;
 
   const auto& dItem = *reinterpret_cast<const DipperItem*>(value.data());
@@ -275,7 +275,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
-  auto& stats = cache_.getStats();
+  auto& stats = cache_.tlStats();
   ++stats.numNvmPuts;
   if (hasTombStone(item.getKey())) {
     ++stats.numNvmAbortedPutOnTombstone;
@@ -373,7 +373,7 @@ bool NvmCache<C>::mightHaveConcurrentFill(size_t shard,
   l.unlock();
 
   if (found) {
-    auto& stats = cache_.getStats();
+    auto& stats = cache_.tlStats();
     ++stats.numNvmAbortedPutOnInflightGet;
   }
   return found;
@@ -394,7 +394,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  auto& stats = cache_.getStats();
+  auto& stats = cache_.tlStats();
   if (error != 0) {
     if (error != ENOENT) {
       // instead of disabling dipper, we enqueue a delete and return a miss.
@@ -553,7 +553,7 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     }
   };
 
-  auto& stats = cache_.getStats();
+  auto& stats = cache_.tlStats();
   ++stats.numNvmDeletes;
 
   // invalidate any inflight put that is on flight since we are queueing up a
@@ -594,7 +594,7 @@ bool NvmCache<C>::compactionFilterCb(folly::StringPiece /* unused */,
   const auto* dItem = reinterpret_cast<const DipperItem*>(val.data());
   bool expired = dItem->isExpired();
   if (expired) {
-    auto& stats = cache_.getStats();
+    auto& stats = cache_.tlStats();
     ++stats.numNvmCompactionFiltered;
   }
   return expired;

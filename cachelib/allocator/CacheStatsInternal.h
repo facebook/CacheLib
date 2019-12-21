@@ -76,6 +76,17 @@ struct TLStats {
   uint64_t numNvmEncryptionErrors{0};
   uint64_t numNvmDecryptionErrors{0};
 
+  // the number of allocated items that are permanent
+  uint64_t numPermanentItems{0};
+
+  // the number of allocated and CHAINED items that are parents (i.e.,
+  // consisting of at least one chained child)
+  uint64_t numChainedParentItems{0};
+
+  // the number of allocated and CHAINED items that are children (i.e.,
+  // allocated with a parent handle that it's chained to)
+  uint64_t numChainedChildItems{0};
+
   // count of a stat for a specific allocation class
   using ClassCounters = std::array<uint64_t, MemoryAllocator::kMaxClasses>;
 

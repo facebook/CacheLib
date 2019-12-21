@@ -439,7 +439,7 @@ class CacheAllocator : public CacheBase {
   // inspect the contents of it.
   //
   void markUseful(const ItemHandle& handle, AccessMode mode) {
-    auto& stats = getStats();
+    auto& stats = tlStats();
     markUsefulInternal(*handle, mode, stats);
   }
 
@@ -1601,7 +1601,7 @@ class CacheAllocator : public CacheBase {
   ItemHandle findChainedItem(const Item& parent) const;
 
   // Get the thread local version of the Stats
-  detail::TLStats& getStats() const noexcept { return tlStats_.tlStats(); }
+  detail::TLStats& tlStats() const noexcept { return tlStats_.tlStats(); }
 
   void resetStats();
 
@@ -1723,17 +1723,6 @@ class CacheAllocator : public CacheBase {
   // other threads resulting in bumping up from one thread and bumping down
   // from another.
   util::FastStats<int64_t> handleCount_{};
-
-  // the number of allocated items that are permanent
-  util::FastStats<uint64_t> numPermanentItems_{};
-
-  // the number of allocated and CHAINED items that are parents (i.e.,
-  // consisting of at least one chained child)
-  util::FastStats<uint64_t> numChainedParentItems_{};
-
-  // the number of allocated and CHAINED items that are children (i.e.,
-  // allocated with a parent handle that it's chained to)
-  util::FastStats<uint64_t> numChainedChildItems_{};
 
   // Eviction failures due to parent cannot be removed from access container
   util::FastStats<uint64_t> numEvictionFailureFromParentAccessContainer_{};

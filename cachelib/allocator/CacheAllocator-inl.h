@@ -336,7 +336,7 @@ CacheAllocator<CacheTrait>::allocatePermanent(PoolId poolId,
   auto item = allocateInternal(poolId, key, size, util::getCurrentTimeSec(),
                                0 /* ttlSecs */, true /* unevictable */);
   if (item) {
-    ++numPermanentItems_.tlStats();
+    ++tlStats().numPermanentItems;
   }
   return item;
 }
@@ -407,7 +407,7 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
                                                 uint32_t size) {
   auto it = allocateChainedItemInternal(parent, size);
   if (it && it->isUnevictable()) {
-    ++numPermanentItems_.tlStats();
+    ++tlStats().numPermanentItems;
   }
   if (eventTracker_) {
     const auto result =
@@ -489,16 +489,18 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
     child->asChainedItem().appendChain(oldHead->asChainedItem(), compressor_);
   }
 
+  auto& tlStats = this->tlStats();
+
   // Count an item that just became a new parent
   if (!parent->hasChainedItem()) {
-    ++numChainedParentItems_.tlStats();
+    ++tlStats.numChainedParentItems;
   }
   // Parent needs to be marked before inserting child into MM container
   // so the parent-child relationship is established before an eviction
   // can be triggered from the child
   parent->markHasChainedItem();
   // Count a new child
-  ++numChainedChildItems_.tlStats();
+  ++tlStats.numChainedChildItems;
 
   insertInMMContainer(*child);
 
@@ -523,6 +525,8 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
         "Invalid parent {}", parent ? parent->toString() : nullptr));
   }
 
+  auto& tlStats = this->tlStats();
+
   ItemHandle head;
   { // scope of chained item lock.
     auto l = chainedItemLocks_.lockExclusive(parent->getKey());
@@ -534,7 +538,7 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
     } else {
       chainedItemAccessContainer_->remove(*head);
       parent->unmarkHasChainedItem();
-      --numChainedParentItems_.tlStats();
+      --tlStats.numChainedParentItems;
     }
     head->asChainedItem().setNext(nullptr, compressor_);
   }
@@ -543,7 +547,7 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
 
   // decrement the refcount to indicate this item is unlinked from its parent
   head->decRef();
-  --numChainedChildItems_.tlStats();
+  --tlStats.numChainedChildItems;
 
   if (eventTracker_) {
     eventTracker_->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
@@ -766,6 +770,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
   atomicStats_.fragmentationSize[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, it));
 
+  auto& tlStats = this->tlStats();
   // Chained items can only end up in this place if the user has allocated
   // memory for a chained item but has decided not to insert the chained item
   // to a parent item and instead drop the chained item handle. In this case,
@@ -777,7 +782,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
                          it.toString(), toRecycle->toString()));
     }
     if (it.isUnevictable()) {
-      --numPermanentItems_.tlStats();
+      --tlStats.numPermanentItems;
     }
     allocator_->free(&it);
     return ReleaseRes::kReleased;
@@ -796,7 +801,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
       toRecycle == nullptr ? ReleaseRes::kReleased : ReleaseRes::kNotRecycled;
 
   if (it.isUnevictable()) {
-    --numPermanentItems_.tlStats();
+    --tlStats.numPermanentItems;
   }
 
   // Free chained allocs if there are any
@@ -854,7 +859,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         }
 
         if (head->isUnevictable()) {
-          --numPermanentItems_.tlStats();
+          --tlStats.numPermanentItems;
         }
 
         // Item is not moving and refcount is 0, we can proceed to
@@ -867,10 +872,10 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         }
       }
 
-      --numChainedChildItems_.tlStats();
+      --tlStats.numChainedChildItems;
       head = next;
     }
-    --numChainedParentItems_.tlStats();
+    --tlStats.numChainedParentItems;
   }
 
   if (&it == toRecycle) {
@@ -1724,7 +1729,7 @@ CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
                                          AccessMode mode) {
   auto handle = findInternal(key);
 
-  auto& stats = getStats();
+  auto& stats = tlStats();
   ++stats.numCacheGets;
   if (UNLIKELY(!handle)) {
     ++stats.numCacheGetMiss;
@@ -1757,7 +1762,7 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
   if (handle) {
     if (handle->isExpired()) {
       // update cache miss stats if the item has already been expired.
-      auto& stats = getStats();
+      auto& stats = tlStats();
       ++stats.numCacheGetMiss;
       // remove the item if it is expired
       if (config_.reapExpiredItemsOnFind) {
@@ -2197,7 +2202,7 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   PoolStats ret;
   ret.isCompactCache = isCompactCache;
   ret.poolName = allocator_->getPoolName(poolId);
-  ret.poolSize = this->getPool(poolId).getPoolSize();
+  ret.poolSize = getPool(poolId).getPoolSize();
   ret.cacheStats = std::move(cacheStats);
   ret.mpStats = std::move(mpStats);
   ret.numPoolGetHits = totalHits;
@@ -2852,9 +2857,11 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     }
   }
 
-  metadata_.numPermanentItems = numPermanentItems_.getSnapshot();
-  metadata_.numChainedParentItems = numChainedParentItems_.getSnapshot();
-  metadata_.numChainedChildItems = numChainedChildItems_.getSnapshot();
+  auto tlStats = tlStats_.getSnapshot();
+
+  metadata_.numPermanentItems = tlStats.numPermanentItems;
+  metadata_.numChainedParentItems = tlStats.numChainedParentItems;
+  metadata_.numChainedChildItems = tlStats.numChainedChildItems;
   metadata_.numAbortedSlabReleases = atomicStats_.numAbortedSlabReleases.get();
 
   auto serializeMMContainers = [](MMContainers& mmContainers) {
@@ -3072,10 +3079,11 @@ void CacheAllocator<CacheTrait>::resetStats() {
     }
   }
 
+  auto& tlStats = this->tlStats();
   // deserialize item counter stats
-  numPermanentItems_.tlStats() = metadata_.numPermanentItems;
-  numChainedParentItems_.tlStats() = metadata_.numChainedParentItems;
-  numChainedChildItems_.tlStats() = metadata_.numChainedChildItems;
+  tlStats.numPermanentItems = metadata_.numPermanentItems;
+  tlStats.numChainedParentItems = metadata_.numChainedParentItems;
+  tlStats.numChainedChildItems = metadata_.numChainedChildItems;
   atomicStats_.numAbortedSlabReleases.set(
       static_cast<uint64_t>(metadata_.numAbortedSlabReleases));
 }
@@ -3133,11 +3141,7 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
 
   ret.invalidAllocs = atomicStats_.invalidAllocs.get();
 
-  // Tally item stats
   ret.numItems = accessContainer_->getStats().numKeys;
-  ret.numPermanentItems = numPermanentItems_.getSnapshot();
-  ret.numChainedParentItems = numChainedParentItems_.getSnapshot();
-  ret.numChainedChildItems = numChainedChildItems_.getSnapshot();
   ret.numRefcountOverflow = atomicStats_.numRefcountOverflow.get();
 
   ret.numEvictionFailureFromAccessContainer =
