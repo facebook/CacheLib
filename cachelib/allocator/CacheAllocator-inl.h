@@ -216,7 +216,7 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
         config_.rejectFirstSuffixIgnoreLength,
         config_.rejectFirstUseDramHitSignal);
   }
-  resetStats();
+  initStats();
   initNvmCache(dramCacheAttached);
   initWorkers();
 }
@@ -336,7 +336,7 @@ CacheAllocator<CacheTrait>::allocatePermanent(PoolId poolId,
   auto item = allocateInternal(poolId, key, size, util::getCurrentTimeSec(),
                                0 /* ttlSecs */, true /* unevictable */);
   if (item) {
-    ++tlStats().numPermanentItems;
+    stats_.numPermanentItems.inc();
   }
   return item;
 }
@@ -351,7 +351,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              bool unevictable) {
   util::LatencyTracker tracker{allocateLatency_};
 
-  SCOPE_FAIL { atomicStats_.invalidAllocs.inc(); };
+  SCOPE_FAIL { stats_.invalidAllocs.inc(); };
 
   // number of bytes required for this item
   const auto requiredSize = Item::getRequiredSize(key, size);
@@ -359,7 +359,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
   // the allocation class in our memory allocator.
   const auto cid = allocator_->getAllocationClassId(pid, requiredSize);
 
-  atomicStats_.allocAttempts[pid][cid].inc();
+  (*stats_.allocAttempts)[pid][cid].inc();
 
   void* memory = allocator_->allocate(pid, requiredSize);
   if (memory == nullptr && !config_.disableEviction) {
@@ -380,7 +380,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     handle = acquire(new (memory) Item(key, size, creationTime, expiryTime));
     if (handle) {
       handle.markNascent();
-      atomicStats_.fragmentationSize[pid][cid].add(
+      (*stats_.fragmentationSize)[pid][cid].add(
           util::getFragmentation(*this, *handle));
       if (unevictable) {
         handle->markUnevictable();
@@ -388,7 +388,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     }
 
   } else { // failed to allocate memory.
-    atomicStats_.allocFailures[pid][cid].inc();
+    (*stats_.allocFailures)[pid][cid].inc();
   }
 
   if (eventTracker_) {
@@ -407,7 +407,7 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
                                                 uint32_t size) {
   auto it = allocateChainedItemInternal(parent, size);
   if (it && it->isUnevictable()) {
-    ++tlStats().numPermanentItems;
+    stats_.numPermanentItems.inc();
   }
   if (eventTracker_) {
     const auto result =
@@ -428,7 +428,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
     return ItemHandle{};
   }
 
-  SCOPE_FAIL { atomicStats_.invalidAllocs.inc(); };
+  SCOPE_FAIL { stats_.invalidAllocs.inc(); };
 
   // number of bytes required for this item
   const auto requiredSize = ChainedItem::getRequiredSize(size);
@@ -436,14 +436,14 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
   const auto pid = allocator_->getAllocInfo(parent->getMemory()).poolId;
   const auto cid = allocator_->getAllocationClassId(pid, requiredSize);
 
-  atomicStats_.allocAttempts[pid][cid].inc();
+  (*stats_.allocAttempts)[pid][cid].inc();
 
   void* memory = allocator_->allocate(pid, requiredSize);
   if (memory == nullptr) {
     memory = findEviction(pid, cid);
   }
   if (memory == nullptr) {
-    atomicStats_.allocFailures[pid][cid].inc();
+    (*stats_.allocFailures)[pid][cid].inc();
     return ItemHandle{};
   }
 
@@ -454,7 +454,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 
   if (child) {
     child.markNascent();
-    atomicStats_.fragmentationSize[pid][cid].add(
+    (*stats_.fragmentationSize)[pid][cid].add(
         util::getFragmentation(*this, *child));
     if (parent->isUnevictable()) {
       child->markUnevictable();
@@ -489,18 +489,16 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
     child->asChainedItem().appendChain(oldHead->asChainedItem(), compressor_);
   }
 
-  auto& tlStats = this->tlStats();
-
   // Count an item that just became a new parent
   if (!parent->hasChainedItem()) {
-    ++tlStats.numChainedParentItems;
+    stats_.numChainedParentItems.inc();
   }
   // Parent needs to be marked before inserting child into MM container
   // so the parent-child relationship is established before an eviction
   // can be triggered from the child
   parent->markHasChainedItem();
   // Count a new child
-  ++tlStats.numChainedChildItems;
+  stats_.numChainedChildItems.inc();
 
   insertInMMContainer(*child);
 
@@ -525,8 +523,6 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
         "Invalid parent {}", parent ? parent->toString() : nullptr));
   }
 
-  auto& tlStats = this->tlStats();
-
   ItemHandle head;
   { // scope of chained item lock.
     auto l = chainedItemLocks_.lockExclusive(parent->getKey());
@@ -538,7 +534,7 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
     } else {
       chainedItemAccessContainer_->remove(*head);
       parent->unmarkHasChainedItem();
-      --tlStats.numChainedParentItems;
+      stats_.numChainedParentItems.dec();
     }
     head->asChainedItem().setNext(nullptr, compressor_);
   }
@@ -547,7 +543,7 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
 
   // decrement the refcount to indicate this item is unlinked from its parent
   head->decRef();
-  --tlStats.numChainedChildItems;
+  stats_.numChainedChildItems.dec();
 
   if (eventTracker_) {
     eventTracker_->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
@@ -767,10 +763,9 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
   }
 
   const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
-  atomicStats_.fragmentationSize[allocInfo.poolId][allocInfo.classId].sub(
+  (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, it));
 
-  auto& tlStats = this->tlStats();
   // Chained items can only end up in this place if the user has allocated
   // memory for a chained item but has decided not to insert the chained item
   // to a parent item and instead drop the chained item handle. In this case,
@@ -782,7 +777,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
                          it.toString(), toRecycle->toString()));
     }
     if (it.isUnevictable()) {
-      --tlStats.numPermanentItems;
+      stats_.numPermanentItems.dec();
     }
     allocator_->free(&it);
     return ReleaseRes::kReleased;
@@ -801,7 +796,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
       toRecycle == nullptr ? ReleaseRes::kReleased : ReleaseRes::kNotRecycled;
 
   if (it.isUnevictable()) {
-    --tlStats.numPermanentItems;
+    stats_.numPermanentItems.dec();
   }
 
   // Free chained allocs if there are any
@@ -832,7 +827,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
 
       const auto childInfo =
           allocator_->getAllocInfo(static_cast<const void*>(head));
-      atomicStats_.fragmentationSize[childInfo.poolId][childInfo.classId].sub(
+      (*stats_.fragmentationSize)[childInfo.poolId][childInfo.classId].sub(
           util::getFragmentation(*this, *head));
 
       removeFromMMContainer(*head);
@@ -859,7 +854,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         }
 
         if (head->isUnevictable()) {
-          --tlStats.numPermanentItems;
+          stats_.numPermanentItems.dec();
         }
 
         // Item is not moving and refcount is 0, we can proceed to
@@ -872,10 +867,10 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         }
       }
 
-      --tlStats.numChainedChildItems;
+      stats_.numChainedChildItems.dec();
       head = next;
     }
-    --tlStats.numChainedParentItems;
+    stats_.numChainedParentItems.dec();
   }
 
   if (&it == toRecycle) {
@@ -892,7 +887,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::incRef(Item& it) {
   it.incRef();
-  ++tlStats().handleCount;
+  ++handleCount_.tlStats();
 }
 
 template <typename CacheTrait>
@@ -900,7 +895,7 @@ typename CacheAllocator<CacheTrait>::Item::RefCount::Value
 CacheAllocator<CacheTrait>::decRef(Item& it) {
   const auto ret = it.decRef();
   // do this after we ensured that we incremented a reference.
-  --tlStats().handleCount;
+  --handleCount_.tlStats();
   return ret;
 }
 
@@ -911,7 +906,7 @@ CacheAllocator<CacheTrait>::acquire(Item* it) {
     return ItemHandle{};
   }
 
-  SCOPE_FAIL { atomicStats_.numRefcountOverflow.inc(); };
+  SCOPE_FAIL { stats_.numRefcountOverflow.inc(); };
 
   incRef(*it);
   return ItemHandle{it, *this};
@@ -1272,9 +1267,9 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
 
     if (toReleaseHandle) {
       if (toReleaseHandle->hasChainedItem()) {
-        atomicStats_.chainedItemEvictions[pid][cid].inc();
+        (*stats_.chainedItemEvictions)[pid][cid].inc();
       } else {
-        atomicStats_.regularItemEvictions[pid][cid].inc();
+        (*stats_.regularItemEvictions)[pid][cid].inc();
       }
 
       // Invalidate iterator since later on we may use this mmContainer
@@ -1335,13 +1330,13 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCache(const Item& item) {
 
   doWrite = !item.isExpired();
   if (!doWrite) {
-    tlStats().numNvmRejectsByExpiry++;
+    stats_.numNvmRejectsByExpiry.inc();
     return false;
   }
 
   doWrite = (!item.isNvmClean() || item.isNvmEvicted());
   if (!doWrite) {
-    tlStats().numNvmRejectsByClean++;
+    stats_.numNvmRejectsByClean.inc();
     return false;
   }
   return true;
@@ -1351,15 +1346,14 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
-  auto& tlStats = this->tlStats();
   if (item.isEvictable()) {
     if (config_.filterCb && config_.filterCb(item, chainedItemRange)) {
-      tlStats.numNvmRejectsByFilterCb++;
+      stats_.numNvmRejectsByFilterCb.inc();
       return false;
     }
     if (nvmAdmissionPolicy_ &&
         !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
-      tlStats.numNvmRejectsByAP++;
+      stats_.numNvmRejectsByAP.inc();
       return false;
     }
   }
@@ -1392,7 +1386,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
 
   if (!evictHandle) {
     ++itr;
-    atomicStats_.evictFailAC.inc();
+    stats_.evictFailAC.inc();
     return evictHandle;
   }
 
@@ -1407,7 +1401,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
   // for eviction. It is safe to destroy the handle here since the moving bit
   // is set. Iterator was already advance by the remove call above.
   if (evictHandle->isMoving()) {
-    atomicStats_.evictFailMove.inc();
+    stats_.evictFailMove.inc();
     return ItemHandle{};
   }
 
@@ -1460,7 +1454,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   auto parentHandle =
       accessContainer_->removeIf(parent, &itemEvictionPredicate);
   if (!parentHandle) {
-    atomicStats_.evictFailParentAC.inc();
+    stats_.evictFailParentAC.inc();
     return parentHandle;
   }
 
@@ -1488,7 +1482,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   // and we're the only holder of the parent item. Safe to destroy the handle
   // here since moving bit is set.
   if (parentHandle->isMoving()) {
-    atomicStats_.evictFailParentMove.inc();
+    stats_.evictFailParentMove.inc();
     return ItemHandle{};
   }
 
@@ -1730,14 +1724,13 @@ CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
                                          AccessMode mode) {
   auto handle = findInternal(key);
 
-  auto& stats = tlStats();
-  ++stats.numCacheGets;
+  stats_.numCacheGets.inc();
   if (UNLIKELY(!handle)) {
-    ++stats.numCacheGetMiss;
+    stats_.numCacheGetMiss.inc();
     return handle;
   }
 
-  markUsefulInternal(*handle, mode, stats);
+  markUseful(handle, mode);
   return handle;
 }
 
@@ -1763,8 +1756,7 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
   if (handle) {
     if (handle->isExpired()) {
       // update cache miss stats if the item has already been expired.
-      auto& stats = tlStats();
-      ++stats.numCacheGetMiss;
+      stats_.numCacheGetMiss.inc();
       // remove the item if it is expired
       if (config_.reapExpiredItemsOnFind) {
         removeImpl(*handle, true /* removeFromNvm */,
@@ -1802,11 +1794,30 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::recordAccessInMMContainer(
-    Item& item, AccessMode mode, detail::TLStats& stats) {
+void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
+                                            AccessMode mode) {
+  if (!handle) {
+    return;
+  }
+
+  auto& item = *handle;
+  recordAccessInMMContainer(item, mode);
+
+  if (LIKELY(!item.hasChainedItem())) {
+    return;
+  }
+
+  forEachChainedItem(item, [this, mode](ChainedItem& chainedItem) {
+    recordAccessInMMContainer(chainedItem, mode);
+  });
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
+                                                           AccessMode mode) {
   const auto allocInfo =
       allocator_->getAllocInfo(static_cast<const void*>(&item));
-  ++stats.cacheHits[allocInfo.poolId][allocInfo.classId];
+  (*stats_.cacheHits)[allocInfo.poolId][allocInfo.classId].inc();
 
   // track recently accessed items if needed
   if (UNLIKELY(config_.trackRecentItemsForDump)) {
@@ -2184,17 +2195,14 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
     for (const ClassId cid : classIds) {
       const auto& container = getEvictableMMContainer(poolId, cid);
       const auto& unevictableContainer = getUnevictableMMContainer(poolId, cid);
-      uint64_t classHits = 0;
-      tlStats_.forEach([&](const detail::TLStats& s) {
-        classHits += s.cacheHits[poolId][cid];
-      });
+      uint64_t classHits = (*stats_.cacheHits)[poolId][cid].get();
       cacheStats.insert(
           {cid,
-           {allocSizes[cid], atomicStats_.allocAttempts[poolId][cid].get(),
-            atomicStats_.allocFailures[poolId][cid].get(),
-            atomicStats_.fragmentationSize[poolId][cid].get(), classHits,
-            atomicStats_.chainedItemEvictions[poolId][cid].get(),
-            atomicStats_.regularItemEvictions[poolId][cid].get(),
+           {allocSizes[cid], (*stats_.allocAttempts)[poolId][cid].get(),
+            (*stats_.allocFailures)[poolId][cid].get(),
+            (*stats_.fragmentationSize)[poolId][cid].get(), classHits,
+            (*stats_.chainedItemEvictions)[poolId][cid].get(),
+            (*stats_.regularItemEvictions)[poolId][cid].get(),
             container.getStats(), unevictableContainer.getStats()}});
       totalHits += classHits;
     }
@@ -2249,17 +2257,17 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
                                              ClassId receiver,
                                              SlabReleaseMode mode,
                                              const void* hint) {
-  atomicStats_.numActiveSlabReleases.inc();
-  SCOPE_EXIT { atomicStats_.numActiveSlabReleases.dec(); };
+  stats_.numActiveSlabReleases.inc();
+  SCOPE_EXIT { stats_.numActiveSlabReleases.dec(); };
   switch (mode) {
   case SlabReleaseMode::kRebalance:
-    atomicStats_.numReleasedForRebalance.inc();
+    stats_.numReleasedForRebalance.inc();
     break;
   case SlabReleaseMode::kResize:
-    atomicStats_.numReleasedForResize.inc();
+    stats_.numReleasedForResize.inc();
     break;
   case SlabReleaseMode::kAdvise:
-    atomicStats_.numReleasedForAdvise.inc();
+    stats_.numReleasedForAdvise.inc();
     break;
   }
 
@@ -2283,7 +2291,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
 
     allocator_->completeSlabRelease(releaseContext);
   } catch (const exception::SlabReleaseAborted& e) {
-    atomicStats_.numAbortedSlabReleases.inc();
+    stats_.numAbortedSlabReleases.inc();
     throw exception::SlabReleaseAborted(folly::sformat(
         "Slab release aborted while releasing "
         "a slab in pool {} victim {} receiver {}. Original ex msg: ",
@@ -2295,18 +2303,18 @@ template <typename CacheTrait>
 SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats() const
     noexcept {
   std::lock_guard<std::mutex> l(workersMutex_);
-  return SlabReleaseStats{atomicStats_.numActiveSlabReleases.get(),
-                          atomicStats_.numReleasedForRebalance.get(),
-                          atomicStats_.numReleasedForResize.get(),
-                          atomicStats_.numReleasedForAdvise.get(),
+  return SlabReleaseStats{stats_.numActiveSlabReleases.get(),
+                          stats_.numReleasedForRebalance.get(),
+                          stats_.numReleasedForResize.get(),
+                          stats_.numReleasedForAdvise.get(),
                           poolRebalancer_ ? poolRebalancer_->getRunCount()
                                           : 0ULL,
                           poolResizer_ ? poolResizer_->getRunCount() : 0ULL,
                           memMonitor_ ? memMonitor_->getRunCount() : 0ULL,
-                          atomicStats_.numMoveAttempts.get(),
-                          atomicStats_.numMoveSuccesses.get(),
-                          atomicStats_.numEvictionAttempts.get(),
-                          atomicStats_.numEvictionSuccesses.get()};
+                          stats_.numMoveAttempts.get(),
+                          stats_.numMoveSuccesses.get(),
+                          stats_.numEvictionAttempts.get(),
+                          stats_.numEvictionSuccesses.get()};
 }
 
 template <typename CacheTrait>
@@ -2370,7 +2378,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
   for (unsigned int itemMovingAttempts = 0;
        unlimitedMovingTries || itemMovingAttempts < config_.movingTries;
        ++itemMovingAttempts) {
-    atomicStats_.numMoveAttempts.inc();
+    stats_.numMoveAttempts.inc();
 
     // Nothing to move and the key is likely also bogus for chained items.
     if (oldItem.isOnlyMoving()) {
@@ -2417,9 +2425,9 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
   const auto allocInfo = allocator_->getAllocInfo(oldItem.getMemory());
   allocator_->free(&oldItem);
 
-  atomicStats_.fragmentationSize[allocInfo.poolId][allocInfo.classId].sub(
+  (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, oldItem));
-  atomicStats_.numMoveSuccesses.inc();
+  stats_.numMoveSuccesses.inc();
   return true;
 }
 
@@ -2465,7 +2473,7 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
 
   auto startTime = util::getCurrentTimeSec();
   while (true) {
-    atomicStats_.numEvictionAttempts.inc();
+    stats_.numEvictionAttempts.inc();
 
     // if the item is already in a state where only the moving bit is set,
     // nothing needs to be done. We simply need to unmark moving bit and free
@@ -2492,14 +2500,14 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
       const auto allocInfo =
           allocator_->getAllocInfo(static_cast<const void*>(&item));
       if (owningHandle->hasChainedItem()) {
-        atomicStats_.chainedItemEvictions[allocInfo.poolId][allocInfo.classId]
+        (*stats_.chainedItemEvictions)[allocInfo.poolId][allocInfo.classId]
             .inc();
       } else {
-        atomicStats_.regularItemEvictions[allocInfo.poolId][allocInfo.classId]
+        (*stats_.regularItemEvictions)[allocInfo.poolId][allocInfo.classId]
             .inc();
       }
 
-      atomicStats_.numEvictionSuccesses.inc();
+      stats_.numEvictionSuccesses.inc();
 
       // we have the last handle. no longer need to hold on to the moving bit
       item.unmarkMoving();
@@ -2830,7 +2838,7 @@ typename CacheTrait::MMType::LruType CacheAllocator<CacheTrait>::getItemLruType(
 // ---------------------------------
 template <typename CacheTrait>
 folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
-  if (atomicStats_.numActiveSlabReleases.get() != 0) {
+  if (stats_.numActiveSlabReleases.get() != 0) {
     throw std::logic_error(
         "There are still slabs being released at the moment");
   }
@@ -2846,11 +2854,10 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   {
     folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
     for (PoolId pid : pools) {
-      for (unsigned int cid = 0;
-           cid < atomicStats_.fragmentationSize[pid].size();
+      for (unsigned int cid = 0; cid < (*stats_.fragmentationSize)[pid].size();
            ++cid) {
         metadata_.fragmentationSize[pid][cid] =
-            atomicStats_.fragmentationSize[pid][cid].get();
+            (*stats_.fragmentationSize)[pid][cid].get();
       }
       if (isCompactCachePool_[pid]) {
         metadata_.compactCachePools.push_back(pid);
@@ -2858,12 +2865,10 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     }
   }
 
-  auto tlStats = tlStats_.getSnapshot();
-
-  metadata_.numPermanentItems = tlStats.numPermanentItems;
-  metadata_.numChainedParentItems = tlStats.numChainedParentItems;
-  metadata_.numChainedChildItems = tlStats.numChainedChildItems;
-  metadata_.numAbortedSlabReleases = atomicStats_.numAbortedSlabReleases.get();
+  metadata_.numPermanentItems = stats_.numPermanentItems.get();
+  metadata_.numChainedParentItems = stats_.numChainedParentItems.get();
+  metadata_.numChainedChildItems = stats_.numChainedChildItems.get();
+  metadata_.numAbortedSlabReleases = stats_.numAbortedSlabReleases.get();
 
   auto serializeMMContainers = [](MMContainers& mmContainers) {
     MMSerializationTypeContainer state;
@@ -3050,42 +3055,41 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
 
 template <typename CacheTrait>
 unsigned int CacheAllocator<CacheTrait>::getNumActiveHandles() const {
-  return tlStats_.getSnapshot().handleCount;
+  return handleCount_.getSnapshot();
 }
 
 template <typename CacheTrait>
 int CacheAllocator<CacheTrait>::getHandleCountForThread() const {
-  return tlStats().handleCount;
+  return handleCount_.tlStats();
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::resetHandleCountForThread() {
-  tlStats().handleCount = 0;
+  handleCount_.tlStats() = 0;
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::adjustHandleCountForThread(int delta) {
-  tlStats().handleCount += delta;
+  handleCount_.tlStats() += delta;
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::resetStats() {
-  atomicStats_.reset();
+void CacheAllocator<CacheTrait>::initStats() {
+  stats_.init();
 
   // deserialize the fragmentation size of each thread.
   for (const auto& pid : metadata_.fragmentationSize) {
     for (const auto& cid : pid.second) {
-      atomicStats_.fragmentationSize[pid.first][cid.first].set(
+      (*stats_.fragmentationSize)[pid.first][cid.first].set(
           static_cast<uint64_t>(cid.second));
     }
   }
 
-  auto& tlStats = this->tlStats();
   // deserialize item counter stats
-  tlStats.numPermanentItems = metadata_.numPermanentItems;
-  tlStats.numChainedParentItems = metadata_.numChainedParentItems;
-  tlStats.numChainedChildItems = metadata_.numChainedChildItems;
-  atomicStats_.numAbortedSlabReleases.set(
+  stats_.numPermanentItems.set(metadata_.numPermanentItems);
+  stats_.numChainedParentItems.set(metadata_.numChainedParentItems);
+  stats_.numChainedChildItems.set(metadata_.numChainedChildItems);
+  stats_.numAbortedSlabReleases.set(
       static_cast<uint64_t>(metadata_.numAbortedSlabReleases));
 }
 
@@ -3130,28 +3134,9 @@ CacheAllocator<CacheTrait>::viewAsChainedAllocs(const ItemHandle& parent) {
 template <typename CacheTrait>
 GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   GlobalCacheStats ret{};
-  ret.initFrom(tlStats_.getSnapshot());
-  // fill in the other stuff.
-  for (PoolId pid = 0; pid < static_cast<PoolId>(MemoryPoolManager::kMaxPools);
-       ++pid) {
-    ret.allocAttempts +=
-        detail::AtomicStats::accumulate(atomicStats_.allocAttempts[pid]);
-    ret.allocFailures +=
-        detail::AtomicStats::accumulate(atomicStats_.allocFailures[pid]);
-  }
-
-  ret.invalidAllocs = atomicStats_.invalidAllocs.get();
+  stats_.populateGlobalCacheStats(ret);
 
   ret.numItems = accessContainer_->getStats().numKeys;
-  ret.numRefcountOverflow = atomicStats_.numRefcountOverflow.get();
-
-  ret.numEvictionFailureFromAccessContainer = atomicStats_.evictFailAC.get();
-  ret.numEvictionFailureFromParentAccessContainer =
-      atomicStats_.evictFailParentAC.get();
-  ret.numEvictionFailureFromMoving = atomicStats_.evictFailMove.get();
-  ret.numEvictionFailureFromParentMoving =
-      atomicStats_.evictFailParentMove.get();
-
   ret.allocateLatencyNs = allocateLatency_.estimate();
   ret.nvmLookupLatencyNs = nvmLookupLatency_.estimate();
   ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
@@ -3167,8 +3152,7 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmUpTime = currTime - nvmCacheState_.getCreationTime();
   ret.nvmCacheEnabled = nvmCache_ ? nvmCache_->isEnabled() : false;
   ret.reaperStats = getReaperStats();
-
-  ret.numAbortedSlabReleases = atomicStats_.numAbortedSlabReleases.get();
+  ret.numActiveHandles = getNumActiveHandles();
 
   return ret;
 }

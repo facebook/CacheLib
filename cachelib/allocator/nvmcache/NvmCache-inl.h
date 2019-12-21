@@ -39,8 +39,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   // from nvmcache.
   inflightPuts_[shard].invalidateToken(key);
 
-  auto& stats = cache_.tlStats();
-  ++stats.numNvmGets;
+  stats().numNvmGets.inc();
 
   GetCtx* ctx{nullptr};
   ItemHandle hdl{nullptr};
@@ -67,7 +66,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     if (it != fillMap.end()) {
       ctx = it->second.get();
       ctx->addWaiter(std::move(waitContext));
-      ++stats.numNvmGetCoalesced;
+      stats().numNvmGetCoalesced.inc();
       return hdl;
     }
 
@@ -91,7 +90,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   if (rv != dipper::DipperStatus::OK()) {
     // instead of disabling dipper, we enqueue a delete and return a miss.
     remove(key);
-    ++stats.numNvmGetMiss;
+    stats().numNvmGetMiss.inc();
   } else {
     guard.dismiss();
   }
@@ -128,8 +127,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
 
 template <typename C>
 void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
-  auto& stats = cache_.tlStats();
-  ++stats.numNvmEvictions;
+  stats().numNvmEvictions.inc();
 
   const auto& dItem = *reinterpret_cast<const DipperItem*>(value.data());
   const auto timeNow = util::getCurrentTimeSec();
@@ -137,7 +135,7 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
   const auto expiryTime = dItem.getExpiryTime();
   if (expiryTime != 0) {
     if (expiryTime < timeNow) {
-      ++stats.numNvmExpiredEvict;
+      stats().numNvmExpiredEvict.inc();
       cache_.nvmEvictionSecondsPastExpiry_.trackValue(timeNow - expiryTime);
     } else {
       cache_.nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
@@ -155,16 +153,16 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
 
   if (!hdl->isNvmClean()) {
     // this is a bug
-    ++stats.numNvmUncleanEvict;
+    stats().numNvmUncleanEvict.inc();
   } else {
     if (hdl->isNvmEvicted()) {
       // this means we evicted something twice. This is possible since we
       // could have two copies in the nvm cache and issued the call backs
       // late. Not a correctness issue.
-      ++stats.numNvmCleanDoubleEvict;
+      stats().numNvmCleanDoubleEvict.inc();
     } else {
       hdl->markNvmEvicted();
-      ++stats.numNvmCleanEvict;
+      stats().numNvmCleanEvict.inc();
     }
   }
 }
@@ -275,16 +273,15 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
-  auto& stats = cache_.tlStats();
-  ++stats.numNvmPuts;
+  stats().numNvmPuts.inc();
   if (hasTombStone(item.getKey())) {
-    ++stats.numNvmAbortedPutOnTombstone;
+    stats().numNvmAbortedPutOnTombstone.inc();
     return;
   }
 
   auto dItem = makeDipperItem(hdl);
   if (!dItem) {
-    ++stats.numNvmPutEncodeFailure;
+    stats().numNvmPutEncodeFailure.inc();
     return;
   }
 
@@ -293,7 +290,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     auto iobufRet = config_.encryptCb(folly::ByteRange{
         reinterpret_cast<const uint8_t*>(dItem.get()), dItem->totalSize()});
     if (!iobufRet) {
-      ++stats.numNvmEncryptionErrors;
+      stats().numNvmEncryptionErrors.inc();
       return;
     }
     iobuf = std::move(*iobufRet);
@@ -316,7 +313,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   dipper::DipperPutParams params(ctx.key(), val, flags);
 
   if (item.isNvmClean() && item.isNvmEvicted()) {
-    ++stats.numNvmPutFromClean;
+    stats().numNvmPutFromClean.inc();
   }
 
   // On a concurrent get, we remove the key from inflight evictions and hence
@@ -332,14 +329,14 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
           }
         });
     if (rv != dipper::DipperStatus::OK()) {
-      ++stats.numNvmPutErrs;
+      stats().numNvmPutErrs.inc();
     } else {
       guard.dismiss();
     }
   });
 
   if (!executed) {
-    ++stats.numNvmAbortedPutOnInflightGet;
+    stats().numNvmAbortedPutOnInflightGet.inc();
   }
 }
 
@@ -373,8 +370,7 @@ bool NvmCache<C>::mightHaveConcurrentFill(size_t shard,
   l.unlock();
 
   if (found) {
-    auto& stats = cache_.tlStats();
-    ++stats.numNvmAbortedPutOnInflightGet;
+    stats().numNvmAbortedPutOnInflightGet.inc();
   }
   return found;
 }
@@ -394,18 +390,17 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  auto& stats = cache_.tlStats();
   if (error != 0) {
     if (error != ENOENT) {
       // instead of disabling dipper, we enqueue a delete and return a miss.
       remove(key);
     }
-    ++stats.numNvmGetMiss;
+    stats().numNvmGetMiss.inc();
     return;
   }
 
   if (hasTombStone(key)) {
-    ++stats.numNvmGetMiss;
+    stats().numNvmGetMiss.inc();
     return;
   }
 
@@ -414,8 +409,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (config_.decryptCb) {
     auto decryptedIoBufRet = config_.decryptCb(val);
     if (!decryptedIoBufRet) {
-      ++stats.numNvmDecryptionErrors;
-      ++stats.numNvmGetMiss;
+      stats().numNvmDecryptionErrors.inc();
+      stats().numNvmGetMiss.inc();
       // instead of disabling dipper, we enqueue a delete and return a miss.
       remove(key);
       return;
@@ -428,7 +423,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
   // this item expired. return a miss.
   if (dItem->isExpired()) {
-    ++stats.numNvmGetMiss;
+    stats().numNvmGetMiss.inc();
     ItemHandle hdl{};
     hdl.markExpired();
     hdl.markWentToNvm();
@@ -438,7 +433,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
   auto it = createItem(key, *dItem);
   if (!it) {
-    ++stats.numNvmGetMiss;
+    stats().numNvmGetMiss.inc();
     // we failed to fill due to an internal failure. Return a miss and
     // invalidate what we have in nvmcache
     remove(key);
@@ -553,8 +548,7 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     }
   };
 
-  auto& stats = cache_.tlStats();
-  ++stats.numNvmDeletes;
+  stats().numNvmDeletes.inc();
 
   // invalidate any inflight put that is on flight since we are queueing up a
   // deletion.
@@ -594,8 +588,7 @@ bool NvmCache<C>::compactionFilterCb(folly::StringPiece /* unused */,
   const auto* dItem = reinterpret_cast<const DipperItem*>(val.data());
   bool expired = dItem->isExpired();
   if (expired) {
-    auto& stats = cache_.tlStats();
-    ++stats.numNvmCompactionFiltered;
+    stats().numNvmCompactionFiltered.inc();
   }
   return expired;
 }

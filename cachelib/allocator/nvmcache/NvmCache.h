@@ -211,6 +211,7 @@ class NvmCache {
   size_t getSize() const noexcept { return store_->dipperGetSize(); }
 
  private:
+  detail::Stats& stats() { return cache_.stats_; }
   // creates the RAM item from DipperItem.
   //
   // @param key   key for the dipper item

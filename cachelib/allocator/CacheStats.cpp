@@ -3,63 +3,15 @@
 
 namespace facebook {
 namespace cachelib {
-
-namespace {
-template <int v>
-struct SizeVerify {};
-} // namespace
-
 namespace detail {
 
-TLStats& TLStats::operator+=(const TLStats& other) {
-  handleCount += other.handleCount;
-
-  numCacheGets += other.numCacheGets;
-  numCacheGetMiss += other.numCacheGetMiss;
-
-  numNvmGets += other.numNvmGets;
-  numNvmGetMiss += other.numNvmGetMiss;
-  numNvmGetMissExpired = other.numNvmGetMissExpired;
-  numNvmGetCoalesced += other.numNvmGetCoalesced;
-  numNvmDeletes += other.numNvmDeletes;
-  numNvmPuts += other.numNvmPuts;
-  numNvmPutErrs += other.numNvmPutErrs;
-  numNvmPutEncodeFailure += other.numNvmPutEncodeFailure;
-  numNvmAbortedPutOnTombstone += other.numNvmAbortedPutOnTombstone;
-  numNvmCompactionFiltered += other.numNvmCompactionFiltered;
-  numNvmAbortedPutOnInflightGet += other.numNvmAbortedPutOnInflightGet;
-  numNvmUncleanEvict += other.numNvmUncleanEvict;
-  numNvmCleanEvict += other.numNvmCleanEvict;
-  numNvmCleanDoubleEvict += other.numNvmCleanDoubleEvict;
-  numNvmExpiredEvict += other.numNvmExpiredEvict;
-  numNvmPutFromClean += other.numNvmPutFromClean;
-  numNvmEvictions += other.numNvmEvictions;
-  numNvmEncryptionErrors += other.numNvmEncryptionErrors;
-  numNvmDecryptionErrors += other.numNvmDecryptionErrors;
-
-  numNvmRejectsByFilterCb += other.numNvmRejectsByFilterCb;
-  numNvmRejectsByExpiry += other.numNvmRejectsByExpiry;
-  numNvmRejectsByClean += other.numNvmRejectsByClean;
-  numNvmRejectsByAP += other.numNvmRejectsByAP;
-
-  numPermanentItems += other.numPermanentItems;
-  numChainedParentItems += other.numChainedParentItems;
-  numChainedChildItems += other.numChainedChildItems;
-
-  for (size_t i = 0; i < cacheHits.size(); i++) {
-    for (size_t j = 0; j < cacheHits[i].size(); j++) {
-      cacheHits[i][j] += other.cacheHits[i][j];
-    }
-  }
-
-  // please add any new fields to this operator and increment the size based
-  // on the compiler warning.
-  SizeVerify<sizeof(TLStats)> a = SizeVerify<65768>{};
-  std::ignore = a;
-  return *this;
-}
-
-void AtomicStats::reset() {
+void Stats::init() {
+  cacheHits = std::make_unique<PerPoolClassTLCounters>();
+  allocAttempts = std::make_unique<PerPoolClassAtomicCounters>();
+  fragmentationSize = std::make_unique<PerPoolClassAtomicCounters>();
+  allocFailures = std::make_unique<PerPoolClassAtomicCounters>();
+  chainedItemEvictions = std::make_unique<PerPoolClassAtomicCounters>();
+  regularItemEvictions = std::make_unique<PerPoolClassAtomicCounters>();
   auto initToZero = [](auto& a) {
     for (auto& s : a) {
       for (auto& c : s) {
@@ -68,11 +20,72 @@ void AtomicStats::reset() {
     }
   };
 
-  initToZero(allocAttempts);
-  initToZero(allocFailures);
-  initToZero(fragmentationSize);
-  initToZero(chainedItemEvictions);
-  initToZero(regularItemEvictions);
+  initToZero(*allocAttempts);
+  initToZero(*allocFailures);
+  initToZero(*fragmentationSize);
+  initToZero(*chainedItemEvictions);
+  initToZero(*regularItemEvictions);
+}
+
+template <int>
+struct SizeVerify {};
+
+void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
+  // SizeVerify<sizeof(Stats::cacheHits)> a = SizeVerify<196608>{};
+  // std::ignore = a;
+  ret.numCacheGets = numCacheGets.get();
+  ret.numCacheGetMiss = numCacheGetMiss.get();
+
+  ret.numNvmGets = numNvmGets.get();
+  ret.numNvmGetMiss = numNvmGetMiss.get();
+  ret.numNvmGetMissExpired = numNvmGetMissExpired.get();
+  ret.numNvmGetCoalesced = numNvmGetCoalesced.get();
+  ret.numNvmPuts = numNvmPuts.get();
+  ret.numNvmDeletes = numNvmDeletes.get();
+  ret.numNvmPutErrs = numNvmPutErrs.get();
+  ret.numNvmPutEncodeFailure = numNvmPutEncodeFailure.get();
+  ret.numNvmAbortedPutOnTombstone += numNvmAbortedPutOnTombstone.get();
+  ret.numNvmCompactionFiltered += numNvmCompactionFiltered.get();
+  ret.numNvmAbortedPutOnInflightGet = numNvmAbortedPutOnInflightGet.get();
+  ret.numNvmUncleanEvict = numNvmUncleanEvict.get();
+  ret.numNvmCleanEvict = numNvmCleanEvict.get();
+  ret.numNvmCleanDoubleEvict = numNvmCleanDoubleEvict.get();
+  ret.numNvmExpiredEvict = numNvmExpiredEvict.get();
+  ret.numNvmPutFromClean = numNvmPutFromClean.get();
+  ret.numNvmEvictions = numNvmEvictions.get();
+
+  ret.numNvmEncryptionErrors = numNvmEncryptionErrors.get();
+  ret.numNvmDecryptionErrors = numNvmDecryptionErrors.get();
+
+  ret.numNvmRejectsByFilterCb = numNvmRejectsByFilterCb.get();
+  ret.numNvmRejectsByExpiry = numNvmRejectsByExpiry.get();
+  ret.numNvmRejectsByClean = numNvmRejectsByClean.get();
+  ret.numNvmRejectsByAP = numNvmRejectsByAP.get();
+
+  ret.numPermanentItems = numPermanentItems.get();
+  ret.numChainedParentItems = numChainedParentItems.get();
+  ret.numChainedChildItems = numChainedChildItems.get();
+
+  auto accum = [](const PerPoolClassAtomicCounters& c) {
+    uint64_t sum = 0;
+    for (const auto& x : c) {
+      for (const auto& v : x) {
+        sum += v.get();
+      }
+    }
+    return sum;
+  };
+  ret.allocAttempts = accum(*allocAttempts);
+  ret.allocFailures = accum(*allocFailures);
+
+  ret.invalidAllocs = invalidAllocs.get();
+  ret.numRefcountOverflow = numRefcountOverflow.get();
+
+  ret.numEvictionFailureFromAccessContainer = evictFailAC.get();
+  ret.numEvictionFailureFromParentAccessContainer = evictFailParentAC.get();
+  ret.numEvictionFailureFromMoving = evictFailMove.get();
+  ret.numEvictionFailureFromParentMoving = evictFailParentMove.get();
+  ret.numAbortedSlabReleases = numAbortedSlabReleases.get();
 }
 
 } // namespace detail
@@ -270,42 +283,6 @@ uint64_t PoolStats::numUnevictableItems() const noexcept {
 }
 
 double CCacheStats::hitRatio() const { return hitRatioCalc(get, getMiss); }
-
-void GlobalCacheStats::initFrom(const detail::TLStats& l) {
-  numActiveHandles = l.handleCount;
-  numCacheGets = l.numCacheGets;
-  numCacheGetMiss = l.numCacheGetMiss;
-
-  numNvmGets = l.numNvmGets;
-  numNvmGetMiss = l.numNvmGetMiss;
-  numNvmGetMissExpired = l.numNvmGetMissExpired;
-  numNvmGetCoalesced = l.numNvmGetCoalesced;
-  numNvmPuts = l.numNvmPuts;
-  numNvmDeletes = l.numNvmDeletes;
-  numNvmPutErrs = l.numNvmPutErrs;
-  numNvmPutEncodeFailure = l.numNvmPutEncodeFailure;
-  numNvmAbortedPutOnTombstone += l.numNvmAbortedPutOnTombstone;
-  numNvmCompactionFiltered += l.numNvmCompactionFiltered;
-  numNvmAbortedPutOnInflightGet = l.numNvmAbortedPutOnInflightGet;
-  numNvmUncleanEvict = l.numNvmUncleanEvict;
-  numNvmCleanEvict = l.numNvmCleanEvict;
-  numNvmCleanDoubleEvict = l.numNvmCleanDoubleEvict;
-  numNvmExpiredEvict = l.numNvmExpiredEvict;
-  numNvmPutFromClean = l.numNvmPutFromClean;
-  numNvmEvictions = l.numNvmEvictions;
-
-  numNvmEncryptionErrors = l.numNvmEncryptionErrors;
-  numNvmDecryptionErrors = l.numNvmDecryptionErrors;
-
-  numNvmRejectsByFilterCb = l.numNvmRejectsByFilterCb;
-  numNvmRejectsByExpiry = l.numNvmRejectsByExpiry;
-  numNvmRejectsByClean = l.numNvmRejectsByClean;
-  numNvmRejectsByAP = l.numNvmRejectsByAP;
-
-  numPermanentItems = l.numPermanentItems;
-  numChainedParentItems = l.numChainedParentItems;
-  numChainedChildItems = l.numChainedChildItems;
-}
 
 } // namespace cachelib
 } // namespace facebook

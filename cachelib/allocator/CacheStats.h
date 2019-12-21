@@ -274,7 +274,7 @@ struct CacheMetadata {
 
 // forward declaration
 namespace detail {
-struct TLStats;
+struct Stats;
 }
 
 // Stats that apply globally in cache and
@@ -398,17 +398,15 @@ struct GlobalCacheStats {
   uint64_t numNvmRejectsByClean{};
   uint64_t numNvmRejectsByAP{};
 
-  uint64_t numActiveHandles{};
-
   // Decryption and Encryption errors
   uint64_t numNvmEncryptionErrors{0};
   uint64_t numNvmDecryptionErrors{0};
 
-  // initialize some of the value that come from corresponding TLStats
-  void initFrom(const detail::TLStats&);
-
   // Number of times slab release was aborted due to shutdown
   uint64_t numAbortedSlabReleases{0};
+
+  // current active handles outstanding
+  uint64_t numActiveHandles;
 };
 
 struct CacheMemoryStats {

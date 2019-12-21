@@ -438,10 +438,7 @@ class CacheAllocator : public CacheBase {
   // users want to look into the cache and only mark items as useful when they
   // inspect the contents of it.
   //
-  void markUseful(const ItemHandle& handle, AccessMode mode) {
-    auto& stats = tlStats();
-    markUsefulInternal(*handle, mode, stats);
-  }
+  void markUseful(const ItemHandle& handle, AccessMode mode);
 
   using AccessIterator = typename AccessContainer::Iterator;
   // Iterator interface for the cache. It guarantees that all keys that were
@@ -1188,19 +1185,6 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
 
-  // mark an item and its chained allocations as useful.
-  void markUsefulInternal(Item& item, AccessMode mode, detail::TLStats& stats) {
-    recordAccessInMMContainer(item, mode, stats);
-
-    if (LIKELY(!item.hasChainedItem())) {
-      return;
-    }
-
-    forEachChainedItem(item, [this, mode, &stats](ChainedItem& chainedItem) {
-      recordAccessInMMContainer(chainedItem, mode, stats);
-    });
-  }
-
   // Moves an item to a different slab. Ths should only be used during slab
   // release after the item's moving bit has been set. The user supplied
   // callback is responsible for copying the contents and fixing the semantics
@@ -1594,16 +1578,14 @@ class CacheAllocator : public CacheBase {
   // @param item    Record the item has been accessed in its mmContainer
   // @param mode    the mode of access
   // @param stats   stats object to avoid a thread local lookup.
-  void recordAccessInMMContainer(Item& item,
-                                 AccessMode mode,
-                                 detail::TLStats& stats);
+  void recordAccessInMMContainer(Item& item, AccessMode mode);
 
   ItemHandle findChainedItem(const Item& parent) const;
 
   // Get the thread local version of the Stats
-  detail::TLStats& tlStats() const noexcept { return tlStats_.tlStats(); }
+  detail::Stats& stats() const noexcept { return stats_; }
 
-  void resetStats();
+  void initStats();
 
   // return an iterator to the item's chained allocations. The order of
   // iteration on the item will be LIFO of the addChainedItem calls.
@@ -1712,11 +1694,10 @@ class CacheAllocator : public CacheBase {
   // time when the ram cache was first created
   const time_t cacheCreationTime_{0};
 
-  // thread local stats for this instance
-  mutable util::FastStats<detail::TLStats> tlStats_{};
+  // thread local accumulation of handle counts
+  mutable util::FastStats<int64_t> handleCount_{};
 
-  // stats that are maintained as atomics
-  mutable detail::AtomicStats atomicStats_{};
+  mutable detail::Stats stats_{};
 
   // latency stats of various cachelib operations
   mutable util::LatencyStats allocateLatency_;

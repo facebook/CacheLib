@@ -216,5 +216,5 @@ class MemoryPoolManager {
   // Allow access to private members by unit tests
   friend class facebook::cachelib::tests::AllocTestBase;
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook
