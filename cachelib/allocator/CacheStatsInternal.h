@@ -143,6 +143,18 @@ struct AtomicStats {
   PerPoolClassAtomicCounters chainedItemEvictions{};
   PerPoolClassAtomicCounters regularItemEvictions{};
 
+  // Eviction failures due to parent cannot be removed from access container
+  AtomicCounter evictFailParentAC{0};
+
+  // Eviction failures due to parent cannot be removed because it's being moved
+  AtomicCounter evictFailParentMove{0};
+
+  // Eviction failures because this item cannot be removed from access container
+  AtomicCounter evictFailAC{0};
+
+  // Eviction failures because this item is being moved
+  AtomicCounter evictFailMove{0};
+
   void reset();
   static uint64_t accumulate(const PerClassAtomicCounters& c) {
     return std::accumulate(

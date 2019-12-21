@@ -1718,18 +1718,6 @@ class CacheAllocator : public CacheBase {
   // stats that are maintained as atomics
   mutable detail::AtomicStats atomicStats_{};
 
-  // Eviction failures due to parent cannot be removed from access container
-  util::FastStats<uint64_t> numEvictionFailureFromParentAccessContainer_{};
-
-  // Eviction failures due to parent cannot be removed because it's being moved
-  util::FastStats<uint64_t> numEvictionFailureFromParentMoving_{};
-
-  // Eviction failures because this item cannot be removed from access container
-  util::FastStats<uint64_t> numEvictionFailureFromAccessContainer_{};
-
-  // Eviction failures because this item is being moved
-  util::FastStats<uint64_t> numEvictionFailureFromMoving_{};
-
   mutable util::FastStats<uint64_t> numNvmRejectsByFilterCb_{};
   mutable util::FastStats<uint64_t> numNvmRejectsByExpiry_{};
   mutable util::FastStats<uint64_t> numNvmRejectsByClean_{};

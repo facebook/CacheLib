@@ -1391,7 +1391,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
 
   if (!evictHandle) {
     ++itr;
-    ++numEvictionFailureFromAccessContainer_.tlStats();
+    atomicStats_.evictFailAC.inc();
     return evictHandle;
   }
 
@@ -1406,7 +1406,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
   // for eviction. It is safe to destroy the handle here since the moving bit
   // is set. Iterator was already advance by the remove call above.
   if (evictHandle->isMoving()) {
-    ++numEvictionFailureFromMoving_.tlStats();
+    atomicStats_.evictFailMove.inc();
     return ItemHandle{};
   }
 
@@ -1459,7 +1459,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   auto parentHandle =
       accessContainer_->removeIf(parent, &itemEvictionPredicate);
   if (!parentHandle) {
-    ++numEvictionFailureFromParentAccessContainer_.tlStats();
+    atomicStats_.evictFailParentAC.inc();
     return parentHandle;
   }
 
@@ -1487,7 +1487,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   // and we're the only holder of the parent item. Safe to destroy the handle
   // here since moving bit is set.
   if (parentHandle->isMoving()) {
-    ++numEvictionFailureFromParentMoving_.tlStats();
+    atomicStats_.evictFailParentMove.inc();
     return ItemHandle{};
   }
 
@@ -3144,14 +3144,13 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.numItems = accessContainer_->getStats().numKeys;
   ret.numRefcountOverflow = atomicStats_.numRefcountOverflow.get();
 
-  ret.numEvictionFailureFromAccessContainer =
-      numEvictionFailureFromAccessContainer_.getSnapshot();
+  ret.numEvictionFailureFromAccessContainer = atomicStats_.evictFailAC.get();
   ret.numEvictionFailureFromParentAccessContainer =
-      numEvictionFailureFromParentAccessContainer_.getSnapshot();
-  ret.numEvictionFailureFromMoving =
-      numEvictionFailureFromMoving_.getSnapshot();
+      atomicStats_.evictFailParentAC.get();
+  ret.numEvictionFailureFromMoving = atomicStats_.evictFailMove.get();
   ret.numEvictionFailureFromParentMoving =
-      numEvictionFailureFromParentMoving_.getSnapshot();
+      atomicStats_.evictFailParentMove.get();
+
   ret.allocateLatencyNs = allocateLatency_.estimate();
   ret.nvmLookupLatencyNs = nvmLookupLatency_.estimate();
   ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
