@@ -1718,11 +1718,6 @@ class CacheAllocator : public CacheBase {
   // stats that are maintained as atomics
   mutable detail::AtomicStats atomicStats_{};
 
-  mutable util::FastStats<uint64_t> numNvmRejectsByFilterCb_{};
-  mutable util::FastStats<uint64_t> numNvmRejectsByExpiry_{};
-  mutable util::FastStats<uint64_t> numNvmRejectsByClean_{};
-  mutable util::FastStats<uint64_t> numNvmRejectsByAP_{};
-
   // latency stats of various cachelib operations
   mutable util::LatencyStats allocateLatency_;
   mutable util::LatencyStats nvmLookupLatency_;

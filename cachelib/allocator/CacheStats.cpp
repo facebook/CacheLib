@@ -16,6 +16,7 @@ TLStats& TLStats::operator+=(const TLStats& other) {
 
   numCacheGets += other.numCacheGets;
   numCacheGetMiss += other.numCacheGetMiss;
+
   numNvmGets += other.numNvmGets;
   numNvmGetMiss += other.numNvmGetMiss;
   numNvmGetMissExpired = other.numNvmGetMissExpired;
@@ -36,6 +37,11 @@ TLStats& TLStats::operator+=(const TLStats& other) {
   numNvmEncryptionErrors += other.numNvmEncryptionErrors;
   numNvmDecryptionErrors += other.numNvmDecryptionErrors;
 
+  numNvmRejectsByFilterCb += other.numNvmRejectsByFilterCb;
+  numNvmRejectsByExpiry += other.numNvmRejectsByExpiry;
+  numNvmRejectsByClean += other.numNvmRejectsByClean;
+  numNvmRejectsByAP += other.numNvmRejectsByAP;
+
   numPermanentItems += other.numPermanentItems;
   numChainedParentItems += other.numChainedParentItems;
   numChainedChildItems += other.numChainedChildItems;
@@ -48,7 +54,7 @@ TLStats& TLStats::operator+=(const TLStats& other) {
 
   // please add any new fields to this operator and increment the size based
   // on the compiler warning.
-  SizeVerify<sizeof(TLStats)> a = SizeVerify<65736>{};
+  SizeVerify<sizeof(TLStats)> a = SizeVerify<65768>{};
   std::ignore = a;
   return *this;
 }
@@ -269,6 +275,7 @@ void GlobalCacheStats::initFrom(const detail::TLStats& l) {
   numActiveHandles = l.handleCount;
   numCacheGets = l.numCacheGets;
   numCacheGetMiss = l.numCacheGetMiss;
+
   numNvmGets = l.numNvmGets;
   numNvmGetMiss = l.numNvmGetMiss;
   numNvmGetMissExpired = l.numNvmGetMissExpired;
@@ -286,8 +293,14 @@ void GlobalCacheStats::initFrom(const detail::TLStats& l) {
   numNvmExpiredEvict = l.numNvmExpiredEvict;
   numNvmPutFromClean = l.numNvmPutFromClean;
   numNvmEvictions = l.numNvmEvictions;
+
   numNvmEncryptionErrors = l.numNvmEncryptionErrors;
   numNvmDecryptionErrors = l.numNvmDecryptionErrors;
+
+  numNvmRejectsByFilterCb = l.numNvmRejectsByFilterCb;
+  numNvmRejectsByExpiry = l.numNvmRejectsByExpiry;
+  numNvmRejectsByClean = l.numNvmRejectsByClean;
+  numNvmRejectsByAP = l.numNvmRejectsByAP;
 
   numPermanentItems = l.numPermanentItems;
   numChainedParentItems = l.numChainedParentItems;

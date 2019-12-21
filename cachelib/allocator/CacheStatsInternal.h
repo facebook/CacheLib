@@ -82,6 +82,12 @@ struct TLStats {
   uint64_t numNvmEncryptionErrors{0};
   uint64_t numNvmDecryptionErrors{0};
 
+  // basic admission policy stats
+  uint64_t numNvmRejectsByFilterCb{0};
+  uint64_t numNvmRejectsByExpiry{0};
+  uint64_t numNvmRejectsByClean{0};
+  uint64_t numNvmRejectsByAP{0};
+
   // the number of allocated items that are permanent
   uint64_t numPermanentItems{0};
 

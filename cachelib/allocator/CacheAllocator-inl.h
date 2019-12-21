@@ -1335,13 +1335,13 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCache(const Item& item) {
 
   doWrite = !item.isExpired();
   if (!doWrite) {
-    numNvmRejectsByExpiry_.tlStats()++;
+    tlStats().numNvmRejectsByExpiry++;
     return false;
   }
 
   doWrite = (!item.isNvmClean() || item.isNvmEvicted());
   if (!doWrite) {
-    numNvmRejectsByClean_.tlStats()++;
+    tlStats().numNvmRejectsByClean++;
     return false;
   }
   return true;
@@ -1351,14 +1351,15 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
+  auto& tlStats = this->tlStats();
   if (item.isEvictable()) {
     if (config_.filterCb && config_.filterCb(item, chainedItemRange)) {
-      numNvmRejectsByFilterCb_.tlStats()++;
+      tlStats.numNvmRejectsByFilterCb++;
       return false;
     }
     if (nvmAdmissionPolicy_ &&
         !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
-      numNvmRejectsByAP_.tlStats()++;
+      tlStats.numNvmRejectsByAP++;
       return false;
     }
   }
@@ -3167,10 +3168,6 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmCacheEnabled = nvmCache_ ? nvmCache_->isEnabled() : false;
   ret.reaperStats = getReaperStats();
 
-  ret.numNvmRejectsByFilterCb = numNvmRejectsByFilterCb_.getSnapshot();
-  ret.numNvmRejectsByExpiry = numNvmRejectsByExpiry_.getSnapshot();
-  ret.numNvmRejectsByClean = numNvmRejectsByClean_.getSnapshot();
-  ret.numNvmRejectsByAP = numNvmRejectsByAP_.getSnapshot();
   ret.numAbortedSlabReleases = atomicStats_.numAbortedSlabReleases.get();
 
   return ret;
