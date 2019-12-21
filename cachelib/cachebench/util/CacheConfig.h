@@ -50,9 +50,22 @@ struct CacheConfig : public JSONConfig {
   // disabled
   std::string dipperBackend{""};
 
-  // by default, use dev/shm unless specified. everything under this should
-  // be cleaned up when we exit the load test.
-  std::string dipperFilePath{"/dev/shm/dipper-cachebench"};
+  // uses a user specified file for caching. If the path specified is a file,
+  // then navy uses that directly. If the path specificied is a directory, we
+  // will create a file inside with appropriate size . If a directory is
+  // specified by user, cachebench cleans it up at exit. If it is a file,
+  // cachebench preserves the file upon exit
+  std::string dipperFilePath{};
+
+  // optional path to a device for bigdipper mode. When this is used, we
+  // treat device path and file path as is and use them directly for big
+  // dipper operations. If this is not specified, we use the file path as
+  // device path as well by creating  a new file inside that.
+  std::string dipperDevicePath{""};
+
+  // if set, disregards the file path and device path. Uses the in-memory
+  // device
+  bool dipperNavyUseMemoryDevice{false};
 
   // list of device identifiers for the device path that can be used to
   // monitor the physical write amplification. If empty, physical write amp is
@@ -60,12 +73,6 @@ struct CacheConfig : public JSONConfig {
   // to be a physical device identifier; where as the dipperDevicePath can be
   // specified as any /dev that could point to a logical raid device.
   std::vector<std::string> writeAmpDeviceList{};
-
-  // optional path to a device for bigdipper mode. When this is used, we
-  // treat device path and file path as is and use them directly for big
-  // dipper operations. If this is not specified, we use the file path as
-  // device path as well by creating  a new file inside that.
-  std::string dipperDevicePath{""};
 
   // if enabled passes down the appropriate options to use DirectIO
   bool dipperUseDirectIO{true};

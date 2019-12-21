@@ -7,7 +7,7 @@
     "dipperSizeMB" : 512,
     "dipperBackend" : "navy_dipper",
     "dipperUseDirectIO": false,
-    "dipperFilePath" : "/dev/shm/cachebench"
+    "dipperNavyUseMemoryDevice": true
   },
   "test_config" : 
     {

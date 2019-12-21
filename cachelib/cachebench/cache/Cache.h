@@ -308,9 +308,7 @@ class Cache {
   // reading of the nand bytes written for the benchmark if enabled.
   const uint64_t nandBytesBegin_{0};
 
-  // User provided flash cache file is not managed by CacheBench. We do not
-  // create/resize/delete said file.
-  bool isFlashFileUserProvided_{false};
+  bool shouldCleanupFiles_{false};
 };
 
 // Specializations are required for each MMType

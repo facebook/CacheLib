@@ -76,23 +76,15 @@ Cache<Allocator>::Cache(CacheConfig config,
 
   allocatorConfig.setCacheSize(config_.cacheSizeMB * (MB));
 
-  auto cleanupGuard = folly::makeGuard(
-      [&] { boost::filesystem::remove_all(config_.dipperFilePath); });
-
-  // Set up Dipper related files
-  if (!config_.dipperBackend.empty()) {
-    CHECK(!config_.dipperFilePath.empty());
-
-    struct stat path_stat;
-    stat(config_.dipperFilePath.c_str(), &path_stat);
-    isFlashFileUserProvided_ = S_ISREG(path_stat.st_mode);
-
-    if (!isFlashFileUserProvided_) {
-      const auto path = boost::filesystem::unique_path(
-          std::string("nvmcache_" + config_.dipperBackend) + ".%%%%-%%%%-%%%%");
-      config_.dipperFilePath = (config_.dipperFilePath / path).string();
-      boost::filesystem::create_directories(config_.dipperFilePath);
+  auto cleanupGuard = folly::makeGuard([&] {
+    if (shouldCleanupFiles_) {
+      boost::filesystem::remove_all(config_.dipperFilePath);
     }
+  });
+
+  // Set up Navy
+  if (!config_.dipperBackend.empty()) {
+    CHECK_EQ(config_.dipperBackend, "navy_dipper");
 
     typename Allocator::NvmCacheConfig nvmConfig;
     nvmConfig.dipperOptions = folly::dynamic::object;
@@ -104,67 +96,72 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_async_threads"] =
         config_.dipperAsyncThreads;
 
-    if (config_.dipperBackend == "navy_dipper") {
-      facebook::dipper::registerBackend<facebook::dipper::NavyDipperFactory>();
-      if (config_.dipperDevicePath.empty()) {
-        if (isFlashFileUserProvided_) {
-          nvmConfig.dipperOptions["dipper_navy_file_name"] =
-              config_.dipperFilePath;
-        } else {
-          nvmConfig.dipperOptions["dipper_file_path"] = config_.dipperFilePath;
-          nvmConfig.dipperOptions["dipper_navy_file_name"] =
-              config_.dipperFilePath + "/navy_cache";
-          nvmConfig.dipperOptions["dipper_navy_truncate_file"] = true;
-        }
+    facebook::dipper::registerBackend<facebook::dipper::NavyDipperFactory>();
+    if (config_.dipperNavyUseMemoryDevice) {
+      // nothing to do here.
+    } else if (!config_.dipperDevicePath.empty()) {
+      nvmConfig.dipperOptions["dipper_navy_file_name"] =
+          config_.dipperDevicePath;
+    } else {
+      CHECK(!config_.dipperFilePath.empty());
+      // if we get a directory, create a file. we will clean it up. If we
+      // already have a file, user provided it. So we will also keep it around
+      // after the tests.
+      if (cachelib::util::isDir(config_.dipperFilePath)) {
+        const auto path = boost::filesystem::unique_path(
+            std::string("nvmcache_" + config_.dipperBackend) +
+            ".%%%%-%%%%-%%%%");
+        config_.dipperFilePath = (config_.dipperFilePath / path).string();
+        boost::filesystem::create_directories(config_.dipperFilePath);
+        shouldCleanupFiles_ = true;
+        nvmConfig.dipperOptions["dipper_navy_truncate_file"] = true;
+        nvmConfig.dipperOptions["dipper_navy_file_name"] =
+            config_.dipperFilePath + "/navy_cache";
       } else {
         nvmConfig.dipperOptions["dipper_navy_file_name"] =
-            config_.dipperDevicePath;
-        nvmConfig.dipperOptions["dipper_file_path"] = config_.dipperFilePath;
+            config_.dipperFilePath;
       }
-      nvmConfig.dipperOptions["dipper_navy_file_size"] =
-          config_.dipperSizeMB * MB;
+    }
 
-      // Request ordering reduces throughput significantly
-      nvmConfig.dipperOptions["dipper_request_ordering"] = true;
-      nvmConfig.dipperOptions["dipper_navy_direct_io"] =
-          config_.dipperUseDirectIO;
-      nvmConfig.dipperOptions["dipper_navy_lru"] = true;
-      nvmConfig.dipperOptions["dipper_navy_block_size"] =
-          config_.dipperNavyBlock;
-      nvmConfig.dipperOptions["dipper_navy_region_size"] = 16 * MB;
+    nvmConfig.dipperOptions["dipper_navy_file_size"] =
+        config_.dipperSizeMB * MB;
 
-      if (config.dipperNavyUseStackAllocation ||
-          config_.dipperNavySizeClasses.empty()) {
-        nvmConfig.dipperOptions["dipper_navy_read_buffer"] =
-            config_.dipperNavyStackAllocReadBufSizeKB * 1024;
-      } else {
-        nvmConfig.dipperOptions["dipper_navy_size_classes"] =
-            folly::dynamic::array(config_.dipperNavySizeClasses.begin(),
-                                  config_.dipperNavySizeClasses.end());
-      }
+    // Request ordering reduces throughput significantly
+    nvmConfig.dipperOptions["dipper_request_ordering"] = true;
+    nvmConfig.dipperOptions["dipper_navy_direct_io"] =
+        config_.dipperUseDirectIO;
+    nvmConfig.dipperOptions["dipper_navy_lru"] = true;
+    nvmConfig.dipperOptions["dipper_navy_block_size"] = config_.dipperNavyBlock;
+    nvmConfig.dipperOptions["dipper_navy_region_size"] = 16 * MB;
 
-      nvmConfig.dipperOptions["dipper_navy_bighash_size_pct"] =
-          config_.dipperNavyBigHashSizePct;
-      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_size"] =
-          config_.dipperNavyBigHashBucketSize;
-      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_bf_size"] =
-          config_.dipperNavyBloomFilterPerBucketSize;
-      nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
-          config_.dipperNavySmallItemMaxSize;
-      nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
-          config_.dipperNavyParcelMemoryMB;
-
-      if (config_.navyHitsReinsertionThreshold > 0) {
-        nvmConfig.dipperOptions["dipper_navy_reinsertion_hits_threshold"] =
-            config_.navyHitsReinsertionThreshold;
-      }
-      if (config_.navyProbabilityReinsertionThreshold > 0) {
-        nvmConfig
-            .dipperOptions["dipper_navy_reinsertion_probability_threshold"] =
-            config_.navyProbabilityReinsertionThreshold;
-      }
+    if (config.dipperNavyUseStackAllocation ||
+        config_.dipperNavySizeClasses.empty()) {
+      nvmConfig.dipperOptions["dipper_navy_read_buffer"] =
+          config_.dipperNavyStackAllocReadBufSizeKB * 1024;
     } else {
-      XLOG(FATAL) << "Unknown dipper backend " << config.dipperBackend;
+      nvmConfig.dipperOptions["dipper_navy_size_classes"] =
+          folly::dynamic::array(config_.dipperNavySizeClasses.begin(),
+                                config_.dipperNavySizeClasses.end());
+    }
+
+    nvmConfig.dipperOptions["dipper_navy_bighash_size_pct"] =
+        config_.dipperNavyBigHashSizePct;
+    nvmConfig.dipperOptions["dipper_navy_bighash_bucket_size"] =
+        config_.dipperNavyBigHashBucketSize;
+    nvmConfig.dipperOptions["dipper_navy_bighash_bucket_bf_size"] =
+        config_.dipperNavyBloomFilterPerBucketSize;
+    nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
+        config_.dipperNavySmallItemMaxSize;
+    nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
+        config_.dipperNavyParcelMemoryMB;
+
+    if (config_.navyHitsReinsertionThreshold > 0) {
+      nvmConfig.dipperOptions["dipper_navy_reinsertion_hits_threshold"] =
+          config_.navyHitsReinsertionThreshold;
+    }
+    if (config_.navyProbabilityReinsertionThreshold > 0) {
+      nvmConfig.dipperOptions["dipper_navy_reinsertion_probability_threshold"] =
+          config_.navyProbabilityReinsertionThreshold;
     }
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
@@ -234,7 +231,7 @@ Cache<Allocator>::~Cache() {
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();
 
-    if (!config_.dipperBackend.empty() && !isFlashFileUserProvided_) {
+    if (!config_.dipperBackend.empty() && shouldCleanupFiles_) {
       boost::filesystem::remove_all(config_.dipperFilePath);
     }
   } catch (...) {
