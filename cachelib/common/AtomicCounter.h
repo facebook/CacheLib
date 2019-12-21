@@ -21,7 +21,7 @@ class AtomicCounter {
       : val_{rhs.val_.load(std::memory_order_relaxed)} {}
 
   AtomicCounter& operator=(const AtomicCounter& rhs) {
-    new (this) AtomicCounter(rhs);
+    val_ = rhs.val_.load(std::memory_order_relaxed);
     return *this;
   }
 
@@ -29,14 +29,17 @@ class AtomicCounter {
 
   void set(uint64_t n) { val_.store(n, std::memory_order_relaxed); }
 
-  // @add, @sub, @inc and @dec all return counter's new value
-  uint64_t add(uint64_t n) {
+  uint64_t add_fetch(uint64_t n) {
     return val_.fetch_add(n, std::memory_order_relaxed) + n;
   }
 
-  uint64_t sub(uint64_t n) {
+  void add(uint64_t n) { val_.fetch_add(n, std::memory_order_relaxed); }
+
+  uint64_t sub_fetch(uint64_t n) {
     return val_.fetch_sub(n, std::memory_order_relaxed) - n;
   }
+
+  void sub(uint64_t n) { val_.fetch_sub(n, std::memory_order_relaxed); }
 
   void inc() { add(1); }
 
@@ -58,17 +61,15 @@ class TLCounter {
 
   void set(uint64_t n) { val_.tlStats() = n; }
 
-  // this is not an atomic fetch_add equivalent.
-  uint64_t add(uint64_t n) {
-    val_.tlStats() += n;
-    return get();
+  uint64_t add_fetch(uint64_t) {
+    throw std::runtime_error("add_fetch not supported");
   }
+  void add(uint64_t n) { val_.tlStats() += n; }
 
-  // this is not an atomic fetch_sub equivalent.
-  uint64_t sub(uint64_t n) {
-    val_.tlStats() -= n;
-    return get();
+  uint64_t sub_fetch(uint64_t) {
+    throw std::runtime_error("sub_fetch not supported");
   }
+  void sub(uint64_t n) { val_.tlStats() -= n; }
 
   void inc() { ++val_.tlStats(); }
   void dec() { --val_.tlStats(); }

@@ -82,8 +82,8 @@ bool Driver::admissionTest(HashedKey hk,
   // We can't check value before - it will over admit things. Same with
   // concurrent inserts.
   size_t parcelSize = hk.key().size() + value.size();
-  auto currParcelMemory = parcelMemory_.add(parcelSize);
-  auto currConcurrentInserts = concurrentInserts_.add(1);
+  auto currParcelMemory = parcelMemory_.add_fetch(parcelSize);
+  auto currConcurrentInserts = concurrentInserts_.add_fetch(1);
   if (permanent) {
     return true;
   }

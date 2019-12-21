@@ -9,10 +9,11 @@ namespace tests {
 template <typename Counter>
 void testAddSubIncDecBasic(Counter& a) {
   EXPECT_EQ(0, a.get());
-  EXPECT_EQ(1, a.add(1));
-  EXPECT_EQ(6, a.add(5));
+  a.add(1);
+  EXPECT_EQ(1, a.get());
+  a.add(5);
   EXPECT_EQ(6, a.get());
-  EXPECT_EQ(5, a.sub(1));
+  a.sub(1);
   EXPECT_EQ(5, a.get());
   a.inc();
   EXPECT_EQ(6, a.get());
@@ -67,6 +68,14 @@ TEST(AtomicCounter, AddSubIncDecMT) {
 TEST(TLCounter, AddSubIncDecMT) {
   TLCounter a;
   testAddSubIncDecMT(a);
+}
+
+TEST(AtomicCounter, FetchAddSub) {
+  AtomicCounter a{0};
+  EXPECT_EQ(1, a.add_fetch(1));
+  EXPECT_EQ(6, a.add_fetch(5));
+  EXPECT_EQ(1, a.sub_fetch(5));
+  EXPECT_EQ(0, a.sub_fetch(1));
 }
 
 } // namespace tests
