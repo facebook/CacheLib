@@ -1718,12 +1718,6 @@ class CacheAllocator : public CacheBase {
   // stats that are maintained as atomics
   mutable detail::AtomicStats atomicStats_{};
 
-  // per thread counter of number of handles that have been given to the User
-  // through the public API. In some cases, Itemhandles are transferred to
-  // other threads resulting in bumping up from one thread and bumping down
-  // from another.
-  util::FastStats<int64_t> handleCount_{};
-
   // Eviction failures due to parent cannot be removed from access container
   util::FastStats<uint64_t> numEvictionFailureFromParentAccessContainer_{};
 

@@ -12,6 +12,8 @@ struct SizeVerify {};
 namespace detail {
 
 TLStats& TLStats::operator+=(const TLStats& other) {
+  handleCount += other.handleCount;
+
   numCacheGets += other.numCacheGets;
   numCacheGetMiss += other.numCacheGetMiss;
   numNvmGets += other.numNvmGets;
@@ -46,7 +48,7 @@ TLStats& TLStats::operator+=(const TLStats& other) {
 
   // please add any new fields to this operator and increment the size based
   // on the compiler warning.
-  SizeVerify<sizeof(TLStats)> a = SizeVerify<65728>{};
+  SizeVerify<sizeof(TLStats)> a = SizeVerify<65736>{};
   std::ignore = a;
   return *this;
 }
@@ -264,6 +266,7 @@ uint64_t PoolStats::numUnevictableItems() const noexcept {
 double CCacheStats::hitRatio() const { return hitRatioCalc(get, getMiss); }
 
 void GlobalCacheStats::initFrom(const detail::TLStats& l) {
+  numActiveHandles = l.handleCount;
   numCacheGets = l.numCacheGets;
   numCacheGetMiss = l.numCacheGetMiss;
   numNvmGets = l.numNvmGets;

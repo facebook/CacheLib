@@ -16,6 +16,12 @@ struct TLStats {
   // number of calls to CacheAllocator::find
   uint64_t numCacheGets{0};
 
+  // per thread counter of number of handles that have been given to the User
+  // through the public API. In some cases, Itemhandles are transferred to
+  // other threads resulting in bumping up from one thread and bumping down
+  // from another.
+  int64_t handleCount{};
+
   // number of such calls being a miss in the cache.
   uint64_t numCacheGetMiss{0};
 

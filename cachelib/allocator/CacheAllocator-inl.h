@@ -892,7 +892,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::incRef(Item& it) {
   it.incRef();
-  ++handleCount_.tlStats();
+  ++tlStats().handleCount;
 }
 
 template <typename CacheTrait>
@@ -900,7 +900,7 @@ typename CacheAllocator<CacheTrait>::Item::RefCount::Value
 CacheAllocator<CacheTrait>::decRef(Item& it) {
   const auto ret = it.decRef();
   // do this after we ensured that we incremented a reference.
-  --handleCount_.tlStats();
+  --tlStats().handleCount;
   return ret;
 }
 
@@ -3049,22 +3049,22 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
 
 template <typename CacheTrait>
 unsigned int CacheAllocator<CacheTrait>::getNumActiveHandles() const {
-  return handleCount_.getSnapshot();
+  return tlStats_.getSnapshot().handleCount;
 }
 
 template <typename CacheTrait>
 int CacheAllocator<CacheTrait>::getHandleCountForThread() const {
-  return handleCount_.tlStats();
+  return tlStats().handleCount;
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::resetHandleCountForThread() {
-  handleCount_.tlStats() = 0;
+  tlStats().handleCount = 0;
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::adjustHandleCountForThread(int delta) {
-  handleCount_.tlStats() += delta;
+  tlStats().handleCount += delta;
 }
 
 template <typename CacheTrait>
@@ -3174,7 +3174,6 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.numNvmRejectsByAP = numNvmRejectsByAP_.getSnapshot();
   ret.numAbortedSlabReleases = atomicStats_.numAbortedSlabReleases.get();
 
-  ret.numActiveHandles = getNumActiveHandles();
   return ret;
 }
 
