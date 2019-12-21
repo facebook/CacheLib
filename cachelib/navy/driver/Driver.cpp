@@ -83,7 +83,7 @@ bool Driver::admissionTest(HashedKey hk,
   // concurrent inserts.
   size_t parcelSize = hk.key().size() + value.size();
   auto currParcelMemory = parcelMemory_.add(parcelSize);
-  auto currConcurrentInserts = concurrentInserts_.inc();
+  auto currConcurrentInserts = concurrentInserts_.add(1);
   if (permanent) {
     return true;
   }
