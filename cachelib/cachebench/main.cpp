@@ -1,12 +1,18 @@
+#include <folly/init/Init.h>
 #include <folly/logging/LoggerDB.h>
 #include <gflags/gflags.h>
 
+#ifdef CACHEBENCH_FB_ENV
+
 #include "cachelib/cachebench/fb303/FB303ThriftServer.h"
+#include "cachelib/logger/ScubaLogger.h"
+#include "common/init/Init.h"
+
+#endif
+
 #include "cachelib/cachebench/runner/Runner.h"
 #include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/common/Utils.h"
-#include "cachelib/logger/ScubaLogger.h"
-#include "common/init/Init.h"
 
 DEFINE_string(json_test_config,
               "",
@@ -18,7 +24,10 @@ DEFINE_uint64(
 DEFINE_string(progress_stats_file,
               "",
               "Print detailed stats at each progress interval to this file");
+
+#ifdef CACHEBENCH_FB_ENV
 DEFINE_int32(fb303_port, 12345, "Port for cachebench fb303 service.");
+#endif
 
 void sigint_handler(int sig_num) {
   switch (sig_num) {
@@ -29,12 +38,14 @@ void sigint_handler(int sig_num) {
   }
 }
 
+#ifdef CACHEBENCH_FB_ENV
 namespace folly {
 const char* getBaseLoggingConfig() {
   facebook::cachelib::registerCachelibScubaLogger();
   return CACHELIB_FOLLY_LOGGING_CONFIG;
 }
 } // namespace folly
+#endif
 
 int main(int argc, char** argv) {
   using namespace facebook::cachelib::cachebench;
@@ -49,12 +60,16 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+#ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
 
   std::unique_ptr<FB303ThriftService> fb303_;
   if (FLAGS_fb303_port) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
+#else
+  folly::init(&argc, &argv, true);
+#endif
 
   Runner runner{FLAGS_json_test_config, FLAGS_progress_stats_file,
                 FLAGS_progress};

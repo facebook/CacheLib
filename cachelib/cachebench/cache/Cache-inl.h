@@ -200,6 +200,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 
     pools_.push_back(pid);
 
+#ifdef CACHEBENCH_FB_ENV
     CacheAdmin::Config adminConfig;
     adminConfig.cacheName = "cachebench";
 
@@ -218,6 +219,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 
     // Log working set traces for in-depth post-run analysis
     admin_->enableWorkingSetAnalysis(*cache_, adminConfig);
+#endif
   }
 
   cleanupGuard.dismiss();
@@ -226,7 +228,9 @@ Cache<Allocator>::Cache(CacheConfig config,
 template <typename Allocator>
 Cache<Allocator>::~Cache() {
   try {
+#ifdef CACHEBENCH_FB_ENV
     admin_.reset();
+#endif
 
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();
