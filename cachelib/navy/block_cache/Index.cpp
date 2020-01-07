@@ -9,21 +9,37 @@ namespace cachelib {
 namespace navy {
 constexpr uint32_t Index::kNumBuckets; // Link error otherwise
 
-bool Index::insert(uint64_t key, uint32_t value) {
+Index::LookupResult Index::lookup(uint64_t key) const {
+  LookupResult lr;
+  auto b = bucket(key);
+  std::shared_lock<folly::SharedMutex> lock{getMutex(b)};
+  if (buckets_[b].lookup(subkey(key), lr.value_)) {
+    lr.found_ = true;
+  }
+  return lr;
+}
+
+Index::LookupResult Index::insert(uint64_t key, uint32_t value) {
+  LookupResult lr;
   auto b = bucket(key);
   std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  return buckets_[b].insert(subkey(key), value);
+  auto res = buckets_[b].insert(subkey(key), value);
+  if (res) {
+    lr.found_ = true;
+    lr.value_ = *res;
+  }
+  return lr;
 }
 
 bool Index::replace(uint64_t key, uint32_t newValue, uint32_t oldValue) {
   auto b = bucket(key);
   std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  uint32_t curValue = 0;
-  if (!buckets_[b].lookup(subkey(key), curValue)) {
+  uint32_t outValue = 0;
+  if (!buckets_[b].lookup(subkey(key), outValue)) {
     return false;
   }
 
-  if (curValue != oldValue) {
+  if (outValue != oldValue) {
     return false;
   }
 
@@ -46,14 +62,20 @@ Index::LookupResult Index::remove(uint64_t key) {
   return lr;
 }
 
-Index::LookupResult Index::lookup(uint64_t key) const {
-  LookupResult lr;
+bool Index::remove(uint64_t key, uint32_t value) {
   auto b = bucket(key);
-  std::shared_lock<folly::SharedMutex> lock{getMutex(b)};
-  if (buckets_[b].lookup(subkey(key), lr.value_)) {
-    lr.found_ = true;
+  std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
+  uint32_t outValue = 0;
+  if (!buckets_[b].lookup(subkey(key), outValue)) {
+    return false;
   }
-  return lr;
+
+  if (outValue != value) {
+    return false;
+  }
+
+  buckets_[b].remove(subkey(key));
+  return true;
 }
 
 void Index::reset() {

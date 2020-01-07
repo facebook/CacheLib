@@ -33,7 +33,7 @@ TEST(Index, Recovery) {
   }
 }
 
-TEST(Index, Replace) {
+TEST(Index, ReplaceExact) {
   Index index;
   // Empty value should fail in replace
   EXPECT_FALSE(index.replace(111, 3333, 2222));
@@ -49,6 +49,23 @@ TEST(Index, Replace) {
 
   EXPECT_TRUE(index.replace(111, 3333, 4444));
   EXPECT_EQ(3333, index.lookup(111).value());
+}
+
+TEST(Index, RemoveExact) {
+  Index index;
+  // Empty value should fail in replace
+  EXPECT_FALSE(index.remove(111, 4444));
+
+  index.insert(111, 4444);
+  EXPECT_TRUE(index.lookup(111).found());
+  EXPECT_EQ(4444, index.lookup(111).value());
+
+  // Old value mismatch should fail in replace
+  EXPECT_FALSE(index.remove(111, 2222));
+  EXPECT_EQ(4444, index.lookup(111).value());
+
+  EXPECT_TRUE(index.remove(111, 4444));
+  EXPECT_FALSE(index.lookup(111).found());
 }
 } // namespace tests
 } // namespace navy

@@ -284,7 +284,7 @@ class BTree : public Traits {
   }
 
   // Return true if replaced an existing entry
-  bool FOLLY_NOINLINE insert(Key key, Value value) {
+  std::optional<Value> FOLLY_NOINLINE insert(Key key, Value value) {
     if (root_ == nullptr) {
       root_ = Leaf::create(Traits::smallLeafSize());
     }
@@ -303,12 +303,15 @@ class BTree : public Traits {
     } else if (r.ptr1 != nullptr) {
       root_ = r.ptr1;
     }
-    return r.replaced;
+    if (!r.replaced) {
+      return std::nullopt;
+    }
+    return r.value;
   }
 
-  folly::Optional<Value> FOLLY_NOINLINE remove(Key key) {
+  std::optional<Value> FOLLY_NOINLINE remove(Key key) {
     if (root_ == nullptr) {
-      return folly::none;
+      return std::nullopt;
     }
     auto found = removeRecursive(key, height_, root_, nullptr, 0);
     if (height_ > 0) {
@@ -389,6 +392,7 @@ class BTree : public Traits {
 
   struct InsertOutput {
     bool replaced{false};
+    Value value{};
     Key median{};
     void* ptr1{};
     void* ptr2{};
@@ -400,8 +404,12 @@ class BTree : public Traits {
 
   // Returns the address of the entry if found and removed successfully.
   // Returns false otherwise.
-  folly::Optional<Value> removeRecursive(
-      Key key, uint32_t height, void* ptr, Node* parent, uint32_t child);
+  std::optional<Value> removeRecursive(
+      Key key,
+      uint32_t height,
+      void* ptr,
+      Node* parent,
+      uint32_t child);
 
   template <typename Child>
   static void balance(Node* node,
@@ -477,8 +485,9 @@ typename BTree<K, V, T>::InsertOutput BTree<K, V, T>::insertRecursive(
     auto leaf = reinterpret_cast<Leaf*>(ptr);
     auto i = leaf->find(key);
     if (i < leaf->size() && leaf->getKey(i) == key) {
-      leaf->data_[i] = value;
       res.replaced = true;
+      res.value = leaf->data_[i];
+      leaf->data_[i] = value;
       return res;
     }
     // Not found, insert if we have enough space in the node. If not, try to
@@ -512,6 +521,7 @@ typename BTree<K, V, T>::InsertOutput BTree<K, V, T>::insertRecursive(
     auto i = node->find(key);
     auto r = insertRecursive(key, value, height - 1, node->data_[i]);
     res.replaced = r.replaced;
+    res.value = r.value;
     if (r.ptr2 != nullptr) {
       XDCHECK_EQ(node->capacity(), T::nodeSize());
       if (node->size() < node->capacity()) {
@@ -543,13 +553,17 @@ typename BTree<K, V, T>::InsertOutput BTree<K, V, T>::insertRecursive(
 }
 
 template <typename K, typename V, typename T>
-folly::Optional<V> BTree<K, V, T>::removeRecursive(
-    Key key, uint32_t height, void* ptr, Node* parent, uint32_t child) {
+std::optional<V> BTree<K, V, T>::removeRecursive(
+    Key key,
+    uint32_t height,
+    void* ptr,
+    Node* parent,
+    uint32_t child) {
   if (height == 0) {
     auto leaf = reinterpret_cast<Leaf*>(ptr);
     auto i = leaf->find(key);
     if (i >= leaf->size() || leaf->getKey(i) != key) {
-      return folly::none;
+      return std::nullopt;
     }
     Value value = leaf->data_[i];
     size_--;

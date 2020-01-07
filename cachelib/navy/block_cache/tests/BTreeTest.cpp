@@ -198,9 +198,9 @@ TEST(BTree, Insert) {
   EXPECT_FALSE(bt.insert(40, 400));
   EXPECT_FALSE(bt.insert(50, 500));
   EXPECT_FALSE(bt.insert(60, 600));
-  EXPECT_TRUE(bt.insert(10, 1000));
-  EXPECT_TRUE(bt.insert(30, 3000));
-  EXPECT_TRUE(bt.insert(60, 6000));
+  EXPECT_EQ(*bt.insert(10, 1000), 100);
+  EXPECT_EQ(*bt.insert(30, 3000), 300);
+  EXPECT_EQ(*bt.insert(60, 6000), 600);
   EXPECT_EQ(6, bt.size());
   uint32_t value{};
   EXPECT_TRUE(bt.lookup(10, value) && value == 1000);

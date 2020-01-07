@@ -106,9 +106,13 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
   // region would not be reclaimed and index never gets an invalid entry.
   const auto status = writeEntry(addr, slotSize, hk, value);
   if (status == Status::Ok) {
-    const auto replaced =
+    const auto lr =
         index_.insert(hk.keyHash(), encodeRelAddress(addr.add(slotSize)));
-    if (replaced) {
+    // We replaced an existing key in the index
+    if (lr.found()) {
+      holeSizeTotal_.add(
+          regionManager_.getRegionSlotSize(decodeRelAddress(lr.value()).rid()));
+      holeCount_.inc();
       insertHashCollisionCount_.inc();
     }
     succInsertCount_.inc();
@@ -169,7 +173,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
 Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
   auto lr = index_.remove(hk.keyHash());
-  if (lr.removed()) {
+  if (lr.found()) {
     auto addr = decodeRelAddress(lr.value());
     holeSizeTotal_.add(regionManager_.getRegionSlotSize(addr.rid()));
     holeCount_.inc();
@@ -238,10 +242,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
       reinsertionPolicy_->remove(hk);
     }
     sizeDist_.removeSize(entrySize);
-    auto res = index_.remove(hk.keyHash());
-    if (res.removed() && decodeRelAddress(res.value()) == currAddr) {
-      // This is only a true eviction if we're able to successfully remove
-      // the entry from the index and also the address is still the same.
+    if (index_.remove(hk.keyHash(), encodeRelAddress(currAddr))) {
       return ReinsertionRes::kEvicted;
     }
     return ReinsertionRes::kRemoved;
