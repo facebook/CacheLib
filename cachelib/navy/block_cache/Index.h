@@ -50,9 +50,9 @@ class Index {
   LookupResult lookup(uint64_t key) const;
 
   // Overwrites existing
-  // If the entry was successfully overwritten, LookupResult.found() returns true
-  // and LookupResult.value() returns the address of the entry that was just
-  // overwritten.
+  // If the entry was successfully overwritten, LookupResult.found() returns
+  // true and LookupResult.value() returns the address of the entry that was
+  // just overwritten.
   LookupResult insert(uint64_t key, uint32_t value);
 
   // Replace old value with new value if there exists the key with the identical
