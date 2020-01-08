@@ -477,6 +477,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     const unsigned int numPools = 2;
     const unsigned int keyLen = 25;
     const std::set<uint32_t> acSizes = {512 * 1024, 1024 * 1024};
@@ -560,6 +563,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.enableCachePersistence(this->cacheDir_);
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     const unsigned int numPools = 2;
     const unsigned int keyLen = 25;
@@ -666,6 +672,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                               std::chrono::seconds{1}, poolResizeSlabsPerIter);
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     // const unsigned int numPools = 3;
     const unsigned int keyLen = 25;
@@ -778,6 +787,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     const unsigned int numPools = 3;
     const unsigned int keyLen = 25;
     const std::set<uint32_t> acSizes = {512 * 1024, 1024 * 1024};
@@ -876,6 +888,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.memAdviseReclaimPercentPerIter = 2;
     config.memMaxAdvisePercent = 20;
 
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     const unsigned int numPools = 5;
     const unsigned int keyLen = 25;
     const unsigned int slabsPerPool = 50;
@@ -969,6 +984,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.memUpperLimit = 2;
     config.memAdviseReclaimPercentPerIter = 2;
     config.memMaxAdvisePercent = 20;
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     const int numPools = 5;
     const unsigned int keyLen = 25;

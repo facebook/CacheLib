@@ -197,6 +197,7 @@ class RebalanceStrategyTest : public testing::Test {
 
     config.setCacheSize(51 * Slab::kSize);
     config.poolRebalancerFreeAllocThreshold = 20;
+
     initAllocatorConfigForStrategy(config, LruTailAge);
     doWork(config, true, 8);
   }

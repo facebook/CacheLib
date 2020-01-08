@@ -347,6 +347,10 @@ TYPED_TEST(BaseAllocatorTest, ReadOnlyCacheView) {
   this->testReadOnlyCacheView();
 }
 
+TYPED_TEST(BaseAllocatorTest, RebalanceByAllocFailure) {
+  this->testRebalanceByAllocFailure();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;

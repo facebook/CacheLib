@@ -48,6 +48,9 @@ NvmCacheTest<B>::NvmCacheTest() {
         [this](const LruAllocator::RemoveCbData&) { nEvictions_++; });
     allocConfig_.setCacheSize(20 * 1024 * 1024);
 
+    // Disable slab rebalancing
+    allocConfig_.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     LruAllocator::NvmCacheConfig nvmConfig;
     nvmConfig.dipperOptions = backend_.getOptions();
     allocConfig_.enableNvmCache(nvmConfig);

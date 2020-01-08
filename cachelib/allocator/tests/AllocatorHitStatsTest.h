@@ -30,6 +30,8 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     config.setItemReaperOnFind(true);
     // Enable chained item to test chained item's fragmentation.
     config.configureChainedItems();
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     AllocatorT alloc(config);
     const std::set<uint32_t>& allocSizes = {1024,      4 * 1024,   16 * 1024,
@@ -190,6 +192,9 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     typename AllocatorT::Config config;
     config.setRemoveCallback(evictCb);
     config.setCacheSize(100 * Slab::kSize);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     // create an allocator worth 100 slabs.
     AllocatorT alloc(config);

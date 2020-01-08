@@ -367,7 +367,7 @@ class CacheAllocatorConfig {
   std::shared_ptr<RebalanceStrategy> poolAdviseStrategy;
 
   // time interval to sleep between iterators of rebalancing the pools.
-  std::chrono::milliseconds poolRebalanceInterval{0};
+  std::chrono::milliseconds poolRebalanceInterval{std::chrono::seconds{1}};
 
   // Free slabs pro-actively if the ratio of number of freeallocs to
   // the number of allocs per slab in a slab class is above this
@@ -375,8 +375,10 @@ class CacheAllocatorConfig {
   // A value of 0 means, this feature is disabled.
   unsigned int poolRebalancerFreeAllocThreshold{0};
 
-  // rebalancing strategy for all pools
-  std::shared_ptr<RebalanceStrategy> defaultPoolRebalanceStrategy{nullptr};
+  // rebalancing strategy for all pools. By default the strategy will
+  // rebalance to avoid alloc fialures.
+  std::shared_ptr<RebalanceStrategy> defaultPoolRebalanceStrategy{
+      new RebalanceStrategy{}};
 
   // time interval to sleep between iterations of pool size optimization,
   // for regular pools and compact caches

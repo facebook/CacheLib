@@ -114,11 +114,15 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config configA;
     configA.disableCacheEviction();
     configA.setCacheSize(numSlabs * Slab::kSize);
+    // Disable slab rebalancing
+    configA.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     auto a = std::make_unique<AllocatorT>(configA);
 
     typename AllocatorT::Config configB;
     configB.disableCacheEviction();
     configB.setCacheSize(numSlabs * Slab::kSize);
+    // Disable slab rebalancing
+    configB.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     auto b = std::make_unique<AllocatorT>(configB);
 
     // two different allocator types, so stats aren't conflated
@@ -1184,6 +1188,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setCacheSize(10 * Slab::kSize);
     config.enableCachePersistence(this->cacheDir_);
     config.configureChainedItems();
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     // Create a new cache allocator and save it properly
     {
@@ -3750,6 +3757,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.disableCacheEviction();
     config.setCacheSize(numSlabs * Slab::kSize);
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     AllocatorT allocator(config);
 
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
@@ -4198,6 +4207,10 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.configureChainedItems();
     config.setRemoveCallback(removeCb);
     config.setCacheSize(10 * Slab::kSize);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
     const auto poolSize = numBytes;
@@ -4921,6 +4934,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.disableCacheEviction();
     config.setCacheSize(numSlabs * Slab::kSize);
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     AllocatorT allocator(config);
 
     // 1. Allocate some permanent items
@@ -5041,6 +5056,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.configureChainedItems();
     config.setCacheSize(300 * Slab::kSize);
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
     const auto poolSize = numBytes;
@@ -5105,6 +5122,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     auto ccItemCount = 7;
     config.configureChainedItems();
     config.enableCachePersistence(this->cacheDir_);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     // Test allocations. These allocations should remain after save/restore.
     // Original lru allocator
@@ -5287,6 +5307,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.setCacheSize(10 * Slab::kSize);
     config.configureChainedItems();
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
     AllocatorT alloc(config);
     const auto poolId =
         alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize);
@@ -5742,6 +5765,41 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_DEATH(std::memset(reinterpret_cast<char*>(const_cast<void*>(ptr)), 0,
                              allocSize),
                  ".*");
+  }
+
+  void testRebalanceByAllocFailure() {
+    typename AllocatorT::Config config;
+    const size_t nSlabs = 3;
+    config.setCacheSize(nSlabs * Slab::kSize);
+    AllocatorT alloc(config);
+
+    const auto smallSize = 1024 * 1024;
+    const auto largeSize = 3 * 1024 * 1024;
+    const auto poolId =
+        alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
+                      {smallSize + 100, largeSize + 100});
+
+    // Allocate until the smaller objects fill up the cache
+    std::vector<typename AllocatorT::ItemHandle> handles;
+    for (int i = 0;; i++) {
+      auto handle = util::allocateAccessible(
+          alloc, poolId, folly::sformat("small_{}", i), smallSize);
+      if (handle == nullptr) {
+        break;
+      }
+      handles.push_back(std::move(handle));
+    }
+
+    EXPECT_EQ(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+    handles.clear();
+    while (true) {
+      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+      if (util::allocateAccessible(alloc, poolId, "large", largeSize) !=
+          nullptr) {
+        break;
+      }
+    }
   }
 };
 } // namespace tests
