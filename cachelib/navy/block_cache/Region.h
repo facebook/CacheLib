@@ -63,18 +63,10 @@ class Region {
   Region(const Region&) = delete;
   Region& operator=(const Region&) = delete;
 
+  void reset();
+
   RegionDescriptor open(OpenMode mode);
   void close(RegionDescriptor&& desc);
-
-  void reset() {
-    XDCHECK_EQ(activeOpen(), 0U);
-    classId_ = kClassIdMax;
-    flags_ = 0;
-    activeReaders_ = 0;
-    activeWriters_ = 0;
-    lastEntryEndOffset_ = 0;
-    numItems_ = 0;
-  }
 
   void setClassId(uint16_t classId) {
     XDCHECK(!isPinned());
@@ -99,15 +91,7 @@ class Region {
   // Try set lock bit on. Returns true if set and the caller got exclusive
   // access. Access block and lock are orthogonal concepts, but typically we
   // want to block particular access and then set the lock bit.
-  bool tryLock() {
-    if ((flags_ & kBlockAccess) != 0 && activeOpen() == 0) {
-      auto saveFlags = flags_;
-      flags_ |= kLock;
-      return flags_ != saveFlags;
-    } else {
-      return false;
-    }
-  }
+  bool tryLock();
 
   void unlock() { flags_ &= ~kLock; }
 
@@ -119,16 +103,7 @@ class Region {
     return (lastEntryEndOffset_ + size <= regionSize_);
   }
 
-  RelAddress allocate(uint32_t size) {
-    if (lastEntryEndOffset_ + size <= regionSize_) {
-      auto offset = lastEntryEndOffset_;
-      lastEntryEndOffset_ += size;
-      numItems_++;
-      return RelAddress{regionId_, offset};
-    } else {
-      throw std::logic_error("can not allocate");
-    }
-  }
+  RelAddress allocate(uint32_t size);
 
   void setPinned() { flags_ |= kPinned; }
 
