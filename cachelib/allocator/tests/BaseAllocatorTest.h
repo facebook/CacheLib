@@ -5753,7 +5753,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     auto offset = alloc.getItemPtrAsOffset(hdl->getMemory());
 
-    auto roCache = ReadOnlySharedCacheView<AllocatorT>(config);
+    auto roCache = ReadOnlySharedCacheView(config.cacheDir, config.usePosixShm);
 
     auto ptr = roCache.getItemPtrFromOffset(offset);
     ASSERT_NE(reinterpret_cast<uintptr_t>(ptr),

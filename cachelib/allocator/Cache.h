@@ -5,6 +5,7 @@
 
 #include <gtest/gtest_prod.h>
 
+#include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
@@ -35,20 +36,6 @@ enum class AccessMode { kRead, kWrite };
 // enum value to indicate if the removal from the MMContainer was an eviction
 // or not.
 enum class RemoveContext { kEviction, kNormal };
-
-namespace detail {
-// identifier for the metadata info
-extern const std::string kShmInfoName;
-
-// identifier for the main cache segment
-extern const std::string kShmCacheName;
-
-// identifier for the main hash table if used
-extern const std::string kShmHashTableName;
-
-// identifier for the auxilary hash table for chained items
-extern const std::string kShmChainedItemHashTableName;
-} // namespace detail
 
 class CacheBase {
  public:

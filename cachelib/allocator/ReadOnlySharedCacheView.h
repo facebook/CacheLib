@@ -6,10 +6,9 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
-#include <folly/Range.h>
 #pragma GCC diagnostic pop
 
-#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
@@ -17,18 +16,15 @@ namespace cachelib {
 
 // used as a read only into a shared cache. The cache is owned by another
 // process and we peek into the items in the cache based on their offsets.
-template <typename CacheT>
 class ReadOnlySharedCacheView {
  public:
-  // tries to attach to an existing cache with the cacheDir if present.
-  using CacheConfig = typename CacheT::Config;
-  // attach to the cache using its config.
-  explicit ReadOnlySharedCacheView(const CacheConfig& cacheConfig)
-      : ReadOnlySharedCacheView(cacheConfig.cacheDir, cacheConfig.usePosixShm) {
-  }
-
   // tries to attach to an existing cache with the cacheDir if present under
   // the correct shm mode.
+  //
+  // @param cacheDir    the directory that identifies the cache
+  // @param usePosix    the posix compatbility status of original cache. This
+  //                    would be part of the config that was used to
+  //                    initialize the cache
   explicit ReadOnlySharedCacheView(const std::string& cacheDir,
                                    bool usePosixShm)
       : shm_(ShmManager::attachShmReadOnly(
