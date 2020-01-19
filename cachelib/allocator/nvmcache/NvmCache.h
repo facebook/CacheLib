@@ -159,11 +159,6 @@ class NvmCache {
   //                    consistency
   void put(const ItemHandle& hdl, PutToken token);
 
-  // If there is a concurrect eviction of the key, mark it as cancelled, so that
-  // it won't write to dipper.
-  //
-  // @param key         the key which is being evicted
-
   // returns the current state of whether nvmcache is enabled or not. nvmcache
   // can be disabled if the backend implementation ends up in a corrupt state
   bool isEnabled() const noexcept { return dipperEnabled_; }
@@ -198,10 +193,6 @@ class NvmCache {
 
   // Flush and trigger compact keys for testing.
   void flushForTesting();
-
-  // Reports stats as string of lines, separated with \n. See Dipper for
-  // details.
-  std::string reportStats() const { return store_->dipperReportStats(); }
 
   // Obtain stats in a <string -> double> representation.
   std::unordered_map<std::string, double> getStatsMap() const {

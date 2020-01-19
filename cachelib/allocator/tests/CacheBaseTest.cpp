@@ -23,7 +23,6 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
                                                unsigned int) const override {
     return PoolEvictionAgeStats();
   }
-  std::string getNvmCacheStats() const override { return {}; }
   std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     return {};

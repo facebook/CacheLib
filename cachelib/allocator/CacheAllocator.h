@@ -875,10 +875,6 @@ class CacheAllocator : public CacheBase {
   // return cache's memory usage stats
   CacheMemoryStats getCacheMemoryStats() const override final;
 
-  std::string getNvmCacheStats() const override {
-    return nvmCache_ ? nvmCache_->reportStats() : std::string();
-  }
-
   std::unordered_map<std::string, double> getNvmCacheStatsMap()
       const override final;
 

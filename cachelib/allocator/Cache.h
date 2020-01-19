@@ -73,17 +73,6 @@ class CacheBase {
   virtual PoolEvictionAgeStats getPoolEvictionAgeStats(
       PoolId pid, unsigned int slabProjectionLength) const = 0;
 
-  // Get NVM cache stats as string of lines, one counter per line. Lines are
-  // separated with \n and start with 0 or more tabs. Counter formatted as:
-  //
-  // <key> [SPACE] <value>
-  //
-  // where key is a valid C++ identifier name, value is an uint64_t/string/
-  // double value till the end of line.
-  //
-  // @return as above
-  virtual std::string getNvmCacheStats() const = 0;
-
   // Return a map of <stat name -> stat value> representation for all the nvm
   // cache stats. This is useful for our monitoring to directly upload them.
   virtual std::unordered_map<std::string, double> getNvmCacheStatsMap()
