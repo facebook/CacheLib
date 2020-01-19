@@ -919,9 +919,6 @@ class CacheAllocator : public CacheBase {
   // run the benchmarks after flushing.
   void flushNvmCache();
 
-  // Flush to engine and trigger compaction for testing
-  void flushAndCompactForTesting();
-
   // Dump the last N items for an evictable MM Container
   // @return  vector of the string of each item. Empty if nothing in LRU
   // @throw  std::invalid_argument if <pid, cid> does not exist

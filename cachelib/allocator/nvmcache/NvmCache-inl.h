@@ -586,11 +586,6 @@ void NvmCache<C>::flushPendingOps() {
 }
 
 template <typename C>
-void NvmCache<C>::flushForTesting() {
-  store_->dipperFlush(true /* compactKeys */);
-}
-
-template <typename C>
 bool NvmCache<C>::compactionFilterCb(folly::StringPiece /* unused */,
                                      folly::StringPiece val) {
   const auto* dItem = reinterpret_cast<const DipperItem*>(val.data());

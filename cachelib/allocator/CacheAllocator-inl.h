@@ -1609,13 +1609,6 @@ void CacheAllocator<CacheTrait>::flushNvmCache() {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::flushAndCompactForTesting() {
-  if (nvmCache_) {
-    nvmCache_->flushForTesting();
-  }
-}
-
-template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
   if (eventTracker_) {

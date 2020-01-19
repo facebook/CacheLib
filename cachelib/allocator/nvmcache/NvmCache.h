@@ -191,9 +191,6 @@ class NvmCache {
   // there are no more operations being enqueued.
   void flushPendingOps();
 
-  // Flush and trigger compact keys for testing.
-  void flushForTesting();
-
   // Obtain stats in a <string -> double> representation.
   std::unordered_map<std::string, double> getStatsMap() const {
     return store_->getStatsMap();
