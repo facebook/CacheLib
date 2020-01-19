@@ -245,8 +245,8 @@ void ThreadPoolJobScheduler::enqueueWithKey(Job job,
     writer_.enqueueWithKey(std::move(job), name, JobQueue::QueuePos::Back, key);
     break;
   case JobType::Reclaim:
-    writer_.enqueueWithKey(
-        std::move(job), name, JobQueue::QueuePos::Front, key);
+    writer_.enqueueWithKey(std::move(job), name, JobQueue::QueuePos::Front,
+                           key);
     break;
   default:
     XLOGF(ERR,
@@ -296,6 +296,83 @@ void ThreadPoolJobScheduler::getCounters(const CounterVisitor& visitor) const {
   getStats(reader_.getStats(), reader_.getName());
   getStats(writer_.getStats(), writer_.getName());
 }
+
+namespace {
+constexpr size_t numShards(size_t power) { return 1ULL << power; }
+} // namespace
+
+OrderedThreadPoolJobScheduler::OrderedThreadPoolJobScheduler(
+    size_t readerThreads, size_t writerThreads, size_t numShardsPower)
+    : mutexes_(numShards(numShardsPower)),
+      pendingJobs_(numShards(numShardsPower)),
+      shouldSpool_(numShards(numShardsPower), false),
+      numShardsPower_(numShardsPower),
+      scheduler_(readerThreads, writerThreads) {}
+
+void OrderedThreadPoolJobScheduler::enqueueWithKey(Job job,
+                                                   folly::StringPiece name,
+                                                   JobType type,
+                                                   uint64_t key) {
+  const auto shard = key % numShards(numShardsPower_);
+  JobParams params{std::move(job), type, name, key};
+  std::lock_guard<std::mutex> l(mutexes_[shard]);
+  if (shouldSpool_[shard]) {
+    // add to the pending jobs since there is already a job for this key
+    pendingJobs_[shard].emplace_back(std::move(params));
+    numSpooled_.inc();
+    currSpooled_.inc();
+  } else {
+    shouldSpool_[shard] = true;
+    scheduleJobLocked(std::move(params), shard);
+  }
+}
+
+void OrderedThreadPoolJobScheduler::scheduleJobLocked(JobParams params,
+                                                      uint64_t shard) {
+  scheduler_.enqueueWithKey(
+      [this, j = std::move(params.job), shard]() mutable {
+        auto ret = j();
+        if (ret == JobExitCode::Done) {
+          scheduleNextJob(shard);
+        } else {
+          XDCHECK_EQ(ret, JobExitCode::Reschedule);
+        }
+        return ret;
+      },
+      params.name,
+      params.type,
+      params.key);
+}
+
+void OrderedThreadPoolJobScheduler::scheduleNextJob(uint64_t shard) {
+  std::lock_guard<std::mutex> l(mutexes_[shard]);
+  if (pendingJobs_[shard].empty()) {
+    shouldSpool_[shard] = false;
+    return;
+  }
+
+  currSpooled_.dec();
+  scheduleJobLocked(std::move(pendingJobs_[shard].front()), shard);
+  pendingJobs_[shard].pop_front();
+}
+
+void OrderedThreadPoolJobScheduler::enqueue(Job job,
+                                            folly::StringPiece name,
+                                            JobType type) {
+  scheduler_.enqueue(std::move(job), name, type);
+}
+
+void OrderedThreadPoolJobScheduler::finish() {
+  scheduler_.finish();
+  XDCHECK_EQ(currSpooled_.get(), 0ULL);
+}
+
+void OrderedThreadPoolJobScheduler::getCounters(const CounterVisitor& v) const {
+  scheduler_.getCounters(v);
+  v("navy_req_order_spooled", numSpooled_.get());
+  v("navy_req_order_curr_spool_size", currSpooled_.get());
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

@@ -42,12 +42,12 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, dipperUseDirectIO);
   JSONSetVal(configJson, dipperBloomSizeMB);
   JSONSetVal(configJson, dipperAsyncThreads);
-  JSONSetVal(configJson, dipperDisableReqOrdering);
   JSONSetVal(configJson, dipperBucketSizeKB);
 
   JSONSetVal(configJson, dipperNavyBlock);
   JSONSetVal(configJson, dipperNavyUseRegionLru);
   JSONSetVal(configJson, dipperNavySizeClasses);
+  JSONSetVal(configJson, dipperNavyReqOrderShardsPower);
   JSONSetVal(configJson, dipperNavyBigHashSizePct);
   JSONSetVal(configJson, dipperNavyBigHashBucketSize);
   JSONSetVal(configJson, dipperNavyBloomFilterPerBucketSize);

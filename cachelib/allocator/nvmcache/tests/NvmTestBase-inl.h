@@ -31,7 +31,8 @@ NavyDipper::NavyDipper() {
   config_["dipper_navy_lru"] = true;
   config_["dipper_navy_block_size"] = 1024;
   config_["dipper_test_mode"] = true;
-  config_["dipper_request_ordering"] = true;
+  config_["dipper_request_ordering"] = false;
+  config_["dipper_navy_req_order_shards_power"] = 10;
   config_["dipper_num_ushards"] = 1;
 }
 

@@ -126,8 +126,14 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_navy_file_size"] =
         config_.dipperSizeMB * MB;
 
-    // Request ordering reduces throughput significantly
-    nvmConfig.dipperOptions["dipper_request_ordering"] = true;
+    if (config_.dipperNavyReqOrderShardsPower != 0) {
+      nvmConfig.dipperOptions["dipper_navy_req_order_shards_power"] =
+          config_.dipperNavyReqOrderShardsPower;
+      nvmConfig.dipperOptions["dipper_request_ordering"] = false;
+    } else {
+      nvmConfig.dipperOptions["dipper_request_ordering"] = true;
+    }
+
     nvmConfig.dipperOptions["dipper_navy_direct_io"] =
         config_.dipperUseDirectIO;
     nvmConfig.dipperOptions["dipper_navy_lru"] = true;

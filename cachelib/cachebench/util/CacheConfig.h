@@ -83,11 +83,6 @@ struct CacheConfig : public JSONConfig {
   // number of asynchronous workers for dipper.
   uint64_t dipperAsyncThreads{48};
 
-  // if we should explicitly disable dipper level request ordering for
-  // backends that do its own ordering. This can not be turned off for
-  // backends that need ordering.
-  bool dipperDisableReqOrdering{false};
-
   // only for big dipper.
   uint64_t dipperBucketSizeKB{};
 
@@ -101,6 +96,11 @@ struct CacheConfig : public JSONConfig {
   std::vector<uint64_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
                                               4 * 512,  6 * 512,  8 * 512,
                                               12 * 512, 16 * 512, 32 * 512};
+
+  // Number of shards expressed as power of two for native request ordering in
+  // Navy. 0 means disabled. If disabled, default dipper level request
+  // ordering is enabled.
+  uint64_t dipperNavyReqOrderShardsPower{21};
 
   // Determins how much of the device is given to big hash engine in Navy
   uint64_t dipperNavyBigHashSizePct = 50;

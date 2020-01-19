@@ -170,6 +170,11 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
 template <typename C>
 NvmCache<C>::NvmCache(C& c, const Config& config, bool truncate)
     : config_(config.validate()), cache_(c) {
+  constexpr folly::StringPiece navyReqOrderStr =
+      "dipper_navy_req_order_shards_power";
+
+  bool usingNavyReqOrdering = config_.dipperOptions.get_ptr(navyReqOrderStr);
+
   store_ = dipper::dipperOpen(
       config_.dipperOptions,
       [this](folly::StringPiece key, folly::StringPiece val) {
@@ -177,7 +182,8 @@ NvmCache<C>::NvmCache(C& c, const Config& config, bool truncate)
       },
       [this](folly::StringPiece key, folly::StringPiece val) {
         return this->compactionFilterCb(key, val);
-      });
+      },
+      !usingNavyReqOrdering);
   if (truncate) {
     auto ret = store_->dipperReset();
     if (ret != dipper::DipperStatus::OK()) {
