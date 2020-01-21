@@ -187,17 +187,6 @@ class MemoryAllocator {
                  const std::set<uint32_t>& allocSizes = {},
                  bool ensureProvisionable = false);
 
-  // Provision enough slabs to the memory pool such that each Allocation Class
-  // under it has at least one slab.
-  //
-  // @param  pid    the pool ID
-  //
-  // @return  the number of slabs that are further required to completely
-  //          provision the pool. If this is 0, the pool is in a provisioned
-  //          state.
-  // @throw std::invalid_argument if the pool id is invalid
-  unsigned int provisionPool(PoolId pid);
-
   // shrink the existing pool by _bytes_ .
   // @param bytes  the number of bytes to be taken away from the pool
   // @return  true if the operation succeeded. false if the size of the pool is

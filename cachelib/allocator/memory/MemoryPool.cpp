@@ -499,22 +499,3 @@ MPStats MemoryPool::getStats() const {
                  slabsUnAllocated,    nSlabResize_,       nSlabRebalance_,
                  curSlabsAdvised_};
 }
-
-unsigned int MemoryPool::provision() {
-  unsigned int required = 0;
-  for (auto& ac : ac_) {
-    // does not need provisioning for this allocation class.
-    if (ac->getNumSlabs() > 0) {
-      continue;
-    }
-    // see if we have a slab to add to the allocation class.
-    auto slab = getSlab();
-    if (slab) {
-      ac->addSlab(slab);
-    } else {
-      required++;
-    }
-  }
-
-  return required;
-}

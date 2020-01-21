@@ -4,7 +4,6 @@
     "poolRebalanceIntervalSec" : 1,
     "moveOnSlabRelease" : true,
 
-    "provisionPool" : true,
     "allocFactor" : 2.0,
     "navyProbabilityReinsertionThreshold": 50,
     "dipperSizeMB" : 512,

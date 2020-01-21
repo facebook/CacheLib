@@ -3,7 +3,6 @@
     "cacheSizeMB" : 150,
 
     "numPools" : 1,
-    "provisionPool" : true,
     "allocFactor" : 2.0,
 
     "dipperFilePath": "/dev/shm/cachebench",
@@ -17,7 +16,7 @@
     "dipperUseDirectIO": true,
     "dipperNavyBigHashBloomFilterSize": 0
   },
-  "test_config" : 
+  "test_config" :
     {
       "prepopulateCache" : false,
       "distribution" : "range",
@@ -38,5 +37,5 @@
       "delRatio" : 0.0,
       "addChainRatio": 0.00
     }
- 
+
 }

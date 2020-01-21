@@ -5,10 +5,9 @@
     "moveOnSlabRelease" : true,
 
     "numPools" : 1,
-    "provisionPool" : true,
     "allocFactor" : 2.0
   },
-  "test_config" : 
+  "test_config" :
     {
       "prepopulateCache" : true,
       "checkConsistency" : true,
@@ -35,5 +34,5 @@
       "delRatio" : 0.2,
       "addChainedRatio" : 0.05
     }
- 
+
 }

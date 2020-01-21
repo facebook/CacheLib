@@ -39,9 +39,6 @@ struct CacheConfig : public JSONConfig {
   uint64_t numPools{1};
   std::vector<double> poolSizes{1.0};
 
-  // Whether or not we preallocate memory to each pool
-  bool provisionPool{false};
-
   // The size of dipper cache to use. Default to not use dipper. This is the
   // overall size of the dipper resources
   uint64_t dipperSizeMB{0};

@@ -451,64 +451,6 @@ TEST_F(MemoryAllocatorTest, Restorable) {
   }
 }
 
-TEST_F(MemoryAllocatorTest, ProvisionPool) {
-  const unsigned int numClasses = 10;
-  const unsigned int numPools = 2;
-  const size_t poolSize = numClasses * 5 * Slab::kSize;
-  // allocate enough memory for all the pools plus slab headers.
-  const size_t size = numPools * poolSize + 2 * Slab::kSize;
-
-  auto allocSizes = getRandomAllocSizes(numClasses);
-  auto c = getDefaultConfig(allocSizes);
-  void* memory = allocate(size);
-  MemoryAllocator m(c, memory, size);
-  auto pid1 = m.addPool("a", poolSize);
-  auto& pool1 = m.getPool(pid1);
-
-  {
-    auto prevStats = pool1.getStats();
-    ASSERT_EQ(0, prevStats.allocatedSlabs());
-
-    auto required = m.provisionPool(pid1);
-
-    auto newStats = pool1.getStats();
-    ASSERT_EQ(numClasses, newStats.allocatedSlabs());
-    // we should not require any additional slabs to provision
-    ASSERT_EQ(0, required);
-
-    // this should not add any more slabs to the pool1
-    required = m.provisionPool(pid1);
-    ASSERT_EQ(0, required);
-    ASSERT_EQ(newStats.allocatedSlabs(), pool1.getStats().allocatedSlabs());
-  }
-
-  {
-    // fill up the pool1 with just biggest allocation and try provision slabs
-    // again.
-    while (m.allocate(pid1, *allocSizes.rbegin()) != nullptr) {
-    }
-    // pool1 should now be full.
-    ASSERT_EQ(getCurrentSlabAllocSize(pool1), pool1.getPoolSize());
-    auto before = pool1.getStats();
-    // this should still not require any more slabs to provision.
-    auto required = m.provisionPool(pid1);
-    ASSERT_EQ(0, required);
-    ASSERT_EQ(before.allocatedSlabs(), pool1.getStats().allocatedSlabs());
-  }
-
-  auto pid2 = m.addPool("b", poolSize);
-  auto& pool2 = m.getPool(pid2);
-  while (m.allocate(pid2, *allocSizes.rbegin()) != nullptr) {
-  }
-  // pool should now be full.
-  ASSERT_EQ(getCurrentSlabAllocSize(pool2), pool2.getPoolSize());
-  // this should still not require any more slabs to provision.
-  auto before = pool2.getStats();
-  auto required = m.provisionPool(pid2);
-  ASSERT_EQ(numClasses - 1, required);
-  ASSERT_EQ(before.allocatedSlabs(), pool2.getStats().allocatedSlabs());
-}
-
 TEST_F(MemoryAllocatorTest, ResizePool) {
   const unsigned int numClasses = 10;
   const unsigned int numPools = 2;

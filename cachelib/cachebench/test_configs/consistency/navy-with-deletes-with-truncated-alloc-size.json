@@ -6,7 +6,6 @@
 
     "numPools" : 2,
     "poolSizes" : [0.5, 0.5],
-    "provisionPool" : true,
     "allocFactor" : 2.0,
     "dipperSizeMB" : 1024,
     "dipperUseDirectIO": false,

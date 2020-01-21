@@ -6,14 +6,13 @@
 
     "numPools" : 2,
     "poolSizes" : [0.5, 0.5],
-    "provisionPool" : true,
     "allocFactor" : 2.0,
     "dipperSizeMB" : 1024,
     "dipperUseDirectIO": false,
     "dipperBackend" : "navy_dipper",
     "dipperNavyUseMemoryDevice": true
   },
-  "test_config" : 
+  "test_config" :
     {
       "prepopulateCache" : true,
       "checkConsistency" : true,
@@ -42,5 +41,5 @@
       "keyPoolDistribution": [0.5, 0.5],
       "opPoolDistribution" : [0.5, 0.5]
     }
- 
+
 }

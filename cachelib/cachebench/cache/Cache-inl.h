@@ -194,16 +194,10 @@ Cache<Allocator>::Cache(CacheConfig config,
     const size_t poolSize = numBytes * ratio;
     typename Allocator::MMConfig mmConfig =
         makeMMConfig<typename Allocator::MMConfig>(config_);
-    const PoolId pid = cache_->addPool(folly::sformat("pool_{}", i), poolSize,
-                                       {} /* allocSizes */, mmConfig);
-    if (config_.provisionPool) {
-      const auto numSlabsStillNeeded = cache_->provisionPool(pid);
-      if (numSlabsStillNeeded) {
-        std::cout << "pool: " << pid << " still needs " << numSlabsStillNeeded
-                  << " slabs." << std::endl;
-      }
-    }
-
+    const PoolId pid = cache_->addPool(
+        folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
+        nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
+        true /* ensureSufficientMem */);
     pools_.push_back(pid);
 
 #ifdef CACHEBENCH_FB_ENV

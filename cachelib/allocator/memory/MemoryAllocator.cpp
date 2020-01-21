@@ -87,11 +87,6 @@ PoolId MemoryAllocator::addPool(folly::StringPiece name,
   return memoryPoolManager_.createNewPool(name, size, poolAllocSizes);
 }
 
-unsigned int MemoryAllocator::provisionPool(PoolId pid) {
-  auto& mp = memoryPoolManager_.getPoolById(pid);
-  return mp.provision();
-}
-
 PoolId MemoryAllocator::getPoolId(const std::string& name) const noexcept {
   try {
     const auto& mp = memoryPoolManager_.getPoolByName(name);

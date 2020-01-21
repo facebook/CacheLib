@@ -136,14 +136,6 @@ class MemoryPool {
   // @throw std::run_time_error if the slab class information is corrupted.
   void free(void* memory);
 
-  // Provision enough slabs to the memory pool such that each Allocation Class
-  // under it has at least one slab.
-  //
-  // @return  the number of slabs that are further required to completely
-  //          provision the pool. If this is 0, the pool is in a provisioned
-  //          state.
-  unsigned int provision();
-
   // resize the memory pool. This only adjusts the Pool size. It does not
   // release the slabs back to the SlabAllocator if the new size is less than
   // the current size. The caller is responsible for doing that through

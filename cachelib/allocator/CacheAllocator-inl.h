@@ -2002,11 +2002,6 @@ folly::IOBuf CacheAllocator<CacheTrait>::wrapAsIOBuf(const Item& item) {
 }
 
 template <typename CacheTrait>
-unsigned int CacheAllocator<CacheTrait>::provisionPool(PoolId pid) {
-  return allocator_->provisionPool(pid);
-}
-
-template <typename CacheTrait>
 PoolId CacheAllocator<CacheTrait>::addPool(
     folly::StringPiece name,
     size_t size,

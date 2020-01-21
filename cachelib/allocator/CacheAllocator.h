@@ -581,15 +581,8 @@ class CacheAllocator : public CacheBase {
                  std::shared_ptr<RebalanceStrategy> resizeStrategy = nullptr,
                  bool ensureProvisionable = false);
 
-  // provision a slab for each allocation class inside this pool
-  //
-  // @param pid   pool id
-  //
-  // @return  the number of slabs that are further required to completely
-  //          provision the pool. If this is 0, the pool is in a provisioned
-  //          state.
-  // @throw std::invalid_argument if the pool id is invalid
-  unsigned int provisionPool(PoolId pid);
+  // TODO: Deprecated. No-op. Will Delete.
+  unsigned int provisionPool(PoolId) { return 0; }
 
   // update an existing pool's config
   //
