@@ -581,9 +581,6 @@ class CacheAllocator : public CacheBase {
                  std::shared_ptr<RebalanceStrategy> resizeStrategy = nullptr,
                  bool ensureProvisionable = false);
 
-  // TODO: Deprecated. No-op. Will Delete.
-  unsigned int provisionPool(PoolId) { return 0; }
-
   // update an existing pool's config
   //
   // @param pid       pool id for the pool to be updated
