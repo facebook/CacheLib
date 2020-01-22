@@ -1,0 +1,50 @@
+## Trace format
+Procesess the warm storage server traces of the following form:
+
+V0813 00:05:45.892258 BLOCKID=blk_1cd7b16a-12c5-4c06-9756-f97b6b89f0d6 OFFSET=0 IOSIZE=589134
+V0813 00:05:45.922302 BLOCKID=blk_8ab31d1a-4625-4da7-8f09-7ca48207d335 OFFSET=2399607 IOSIZE=1251844
+
+## Sampling 
+sample.par can take a full trace and sample it by a % specified. 
+
+buck run cachelib/scripts/ws_traces:sample_trace -- <raw_trace> <sample_pct> 
+
+this also processes the above tracefile into a more appropriate one with space
+separated format like below and puts it under the same location as the
+original raw trace. 
+
+blk_da9efa48-e00a-4333-b397-e7c04899607a 0 2097152 1565679954.121613
+blk_da9efa48-e00a-4333-b397-e7c04899607a 2097152 2097152 1565679956.804347
+blk_bc9ba657-9383-4c61-9e25-d73c331601cf 0 2097152 1565679954.820654
+blk_bc9ba657-9383-4c61-9e25-d73c331601cf 2097152 2097152 1565679955.189997
+
+
+## Plotting hits percentile
+This plots the fraction of keys vs their cumulative hit ratio
+buck run cachelib/scripts/ws_traces:hits_percentile -- <processed_trace_file> <output directory>
+
+Produces a plot in png form at the output directory.
+
+
+## Plotting reuse distance vs percentile of accesses
+
+Gives an overview of what fraction of accesses is covered by a certain reuse
+distance. 
+
+buck run cachelib/scripts/ws_traces:reuse -- <processed_trace_file> <output dir>
+
+
+Produces a plit in png form at the output directory.
+
+
+## Cache analysis
+
+Runs an analysis on LRU cache with various lifetimes and computes the
+percentage of iops savings and un-cacheable workload
+
+buck run cachelib/scripts/ws_traces:cache-analysis -- <processed_trace_file> -o <output-dir> 
+
+
+Produces a table of values in the output with various cache lifetimes
+
+
