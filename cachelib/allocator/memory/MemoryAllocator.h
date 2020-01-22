@@ -71,11 +71,13 @@ class MemoryAllocator {
     Config(std::set<uint32_t> sizes,
            bool zeroOnRelease,
            bool disableCoredump,
-           bool _lockMemory)
-        : allocSizes(std::move(sizes)),
-          enableZeroedSlabAllocs(zeroOnRelease),
-          disableFullCoredump(disableCoredump),
-          lockMemory(_lockMemory) {}
+           bool lockMem,
+           bool ensureOneSlab)
+        : allocSizes{std::move(sizes)},
+          enableZeroedSlabAllocs{zeroOnRelease},
+          disableFullCoredump{disableCoredump},
+          lockMemory{lockMem},
+          ensureOneSlabPerAllocSize{ensureOneSlab} {}
 
     // Hint to determine the allocation class sizes
     std::set<uint32_t> allocSizes;
@@ -93,6 +95,10 @@ class MemoryAllocator {
     // allocator is not shared, user needs to ensure there are appropriate
     // rlimits setup to lock the memory.
     bool lockMemory{false};
+
+    // If true, addPool() will throw std::invalid_argument if insufficient
+    // memory to have at least one slab for each allocation class for a pool
+    bool ensureOneSlabPerAllocSize{false};
   };
 
   // Creates a memory allocator out of the caller allocated memory region. The
@@ -129,7 +135,8 @@ class MemoryAllocator {
   MemoryAllocator(const serialization::MemoryAllocatorObject& object,
                   void* memoryStart,
                   size_t memSize,
-                  bool disableCoredump);
+                  bool disableCoredump,
+                  bool ensureOneSlabPerAllocSize);
 
   MemoryAllocator(const MemoryAllocator&) = delete;
   MemoryAllocator& operator=(const MemoryAllocator&) = delete;
@@ -174,8 +181,6 @@ class MemoryAllocator {
   // @param size      the size of the pool
   // @param allocSize the set of allocation sizes for this memory pool,
   //                  if empty, a default one will be used
-  // @param ensureProvisionable   ensures that the size of the pool is enough
-  //                              to provision one slab to each allocation class
   //
   // @return a valid pool id that the caller can use on successful return.
   //
@@ -184,8 +189,7 @@ class MemoryAllocator {
   //         std::logic_error if we have run out the allowed number of pools.
   PoolId addPool(folly::StringPiece name,
                  size_t size,
-                 const std::set<uint32_t>& allocSizes = {},
-                 bool ensureProvisionable = false);
+                 const std::set<uint32_t>& allocSizes = {});
 
   // shrink the existing pool by _bytes_ .
   // @param bytes  the number of bytes to be taken away from the pool

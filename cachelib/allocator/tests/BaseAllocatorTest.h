@@ -651,23 +651,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     auto poolId1 = alloc.addPool("one", poolSize1);
     auto poolId2 = alloc.addPool("two", poolSize2);
 
-    ASSERT_THROW(alloc.addPool("three",
-                               poolSize3,
-                               std::set<uint32_t>{200, 500, 1000},
-                               typename AllocatorT::MMConfig{},
-                               nullptr,
-                               nullptr,
-                               true /* ensureProvisionable */),
-                 std::invalid_argument);
-
-    ASSERT_NO_THROW(alloc.addPool("three",
-                                  poolSize3,
-                                  std::set<uint32_t>{200, 500},
-                                  typename AllocatorT::MMConfig{},
-                                  nullptr,
-                                  nullptr,
-                                  true /* ensureProvisionable */));
-
     // try to allocate as much as possible and ensure that even when we run more
     // than twice the size of the cache, we are able to allocate by recycling
     // the memory. To do this, we first ensure we have a minimum number of
@@ -688,6 +671,34 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // pool1 should still be full and only allocate from evictions.
     this->ensureAllocsOnlyFromEvictions(alloc, poolId1, sizes1, keyLen,
                                         3 * poolSize1);
+  }
+
+  void testPoolSize() {
+    // create an allocator worth 100 slabs.
+    typename AllocatorT::Config config;
+    config.enableEnsureOneSlabPerAllocSize();
+    config.setCacheSize(100 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+
+    auto poolSize3 = 2 * Slab::kSize;
+    auto poolSize1 = numBytes / 3;
+    auto poolSize2 = numBytes - poolSize1 - poolSize3;
+
+    std::set<uint32_t> defaultAllocSizes{1000, 2000, 3000, 4000, 5000,
+                                         6000, 7000, 8000, 9000, 10000};
+
+    ASSERT_NO_THROW(alloc.addPool("one", poolSize1, defaultAllocSizes));
+    ASSERT_NO_THROW(alloc.addPool("two", poolSize2, defaultAllocSizes));
+
+    ASSERT_THROW(
+        alloc.addPool("three", poolSize3, std::set<uint32_t>{200, 500, 1000}),
+        std::invalid_argument);
+
+    ASSERT_NO_THROW(alloc.addPool("three",
+                                  poolSize3,
+                                  std::set<uint32_t>{200, 500},
+                                  typename AllocatorT::MMConfig{}));
   }
 
   // make some allocations without evictions and ensure that we are able to

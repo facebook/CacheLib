@@ -258,6 +258,10 @@ class CacheAllocatorConfig {
   // of work.
   CacheAllocatorConfig& setCacheWorkerPostWorkHandler(std::function<void()> cb);
 
+  // If enabled, will throw std::invalid_argument if insufficient memory to
+  // have at least one slab for each allocation class for a pool
+  CacheAllocatorConfig& enableEnsureOneSlabPerAllocSize();
+
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
   bool poolResizingEnabled() const noexcept {
@@ -550,6 +554,10 @@ class CacheAllocatorConfig {
   uint32_t maxAllocationClassSize{Slab::kSize};
   uint32_t minAllocationClassSize{72};
   bool reduceFragmentationInAllocationClass{false};
+
+  // If true, CacheAllocator::addPool() will throw std::invalid_argument if
+  // insufficient memory to have at least one slab for each allocation class
+  bool ensureOneSlabPerAllocSize{false};
 
   template <typename CacheTrait>
   friend class CacheAllocator;
@@ -913,6 +921,13 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheWorkerPostWorkHandler(
     std::function<void()> cb) {
   cacheWorkerPostWorkHandler = cb;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>&
+CacheAllocatorConfig<T>::enableEnsureOneSlabPerAllocSize() {
+  ensureOneSlabPerAllocSize = true;
   return *this;
 }
 

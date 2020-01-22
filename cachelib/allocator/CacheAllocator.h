@@ -565,9 +565,6 @@ class CacheAllocator : public CacheBase {
   //                              the default one will be used.
   // @param resizeStrategy        resize strategy for the pool. If not set,
   //                              the default one will be used.
-  // @param ensureProvisionable   ensures that the size of the pool is enough
-  //                              to give one slab to each allocation class,
-  //                              false by default.
   //
   // @return a valid PoolId that the caller can use.
   // @throw   std::invalid_argument if the size is invalid or there is not
@@ -578,8 +575,7 @@ class CacheAllocator : public CacheBase {
                  const std::set<uint32_t>& allocSizes = {},
                  MMConfig config = {},
                  std::shared_ptr<RebalanceStrategy> rebalanceStrategy = nullptr,
-                 std::shared_ptr<RebalanceStrategy> resizeStrategy = nullptr,
-                 bool ensureProvisionable = false);
+                 std::shared_ptr<RebalanceStrategy> resizeStrategy = nullptr);
 
   // update an existing pool's config
   //
@@ -1469,7 +1465,7 @@ class CacheAllocator : public CacheBase {
                   config.reduceFragmentationInAllocationClass)
             : config.defaultAllocSizes,
         config.enableZeroedSlabAllocs, config.disableFullCoredump,
-        config.lockMemory};
+        config.lockMemory, config.ensureOneSlabPerAllocSize};
   }
 
   // starts one of the cache workers passing the current instance and the args

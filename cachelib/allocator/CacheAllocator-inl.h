@@ -193,7 +193,8 @@ CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
         deserializer_->deserialize<MemoryAllocator::SerializationType>(),
         shmManager_->attachShm(detail::kShmCacheName, addr).addr,
         config_.size,
-        config_.disableFullCoredump);
+        config_.disableFullCoredump,
+        config_.ensureOneSlabPerAllocSize);
   } catch (...) {
     munmap(addr, config_.size);
     throw;
@@ -2008,10 +2009,9 @@ PoolId CacheAllocator<CacheTrait>::addPool(
     const std::set<uint32_t>& allocSizes,
     MMConfig config,
     std::shared_ptr<RebalanceStrategy> rebalanceStrategy,
-    std::shared_ptr<RebalanceStrategy> resizeStrategy,
-    bool ensureProvisionable) {
+    std::shared_ptr<RebalanceStrategy> resizeStrategy) {
   folly::SharedMutex::WriteHolder w(poolsResizeAndRebalanceLock_);
-  auto pid = allocator_->addPool(name, size, allocSizes, ensureProvisionable);
+  auto pid = allocator_->addPool(name, size, allocSizes);
   createMMContainers(pid, std::move(config));
   setRebalanceStrategy(pid, std::move(rebalanceStrategy));
   setResizeStrategy(pid, std::move(resizeStrategy));
