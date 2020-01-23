@@ -12,6 +12,7 @@
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
+#include "cachelib/cachebench/workload/GeneratorBase.h"
 #include "cachelib/cachebench/workload/distributions/DiscreteDistribution.h"
 #include "cachelib/cachebench/workload/distributions/NormalDistribution.h"
 #include "cachelib/cachebench/workload/distributions/RangeDistribution.h"
@@ -21,13 +22,19 @@ namespace cachelib {
 namespace cachebench {
 
 template <typename Distribution = DiscreteDistribution>
-class OnlineGenerator {
+class OnlineGenerator : public GeneratorBase {
  public:
   explicit OnlineGenerator(const StressorConfig& config);
+  virtual ~OnlineGenerator() {}
 
-  const Request& getReq(uint8_t poolId, std::mt19937& gen);
+  const Request& getReq(
+      uint8_t poolId,
+      std::mt19937& gen,
+      std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
-  OpType getOp(uint8_t pid, std::mt19937& gen);
+  OpType getOp(uint8_t pid,
+               std::mt19937& gen,
+               std::optional<uint64_t> requestId = std::nullopt) override;
 
   const std::vector<std::string>& getAllKeys() const { return allKeys__; }
 

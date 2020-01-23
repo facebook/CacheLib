@@ -5,7 +5,6 @@
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/cachebench/workload/distributions/RangeDistribution.h"
 
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {

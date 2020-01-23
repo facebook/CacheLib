@@ -1,45 +1,24 @@
 #pragma once
 
-#include <algorithm>
-#include <cstdint>
-#include <sstream>
-#include <string>
-#include <vector>
-
-#include <folly/Format.h>
-#include <folly/Random.h>
-#include <folly/logging/xlog.h>
-
 #include "cachelib/cachebench/cache/Cache.h"
-#include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
+#include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-class ReplayGenerator {
+class ReplayGenerator : public ReplayGeneratorBase {
  public:
   explicit ReplayGenerator(StressorConfig config)
-      : infile_(config.traceFileName),
+      : ReplayGeneratorBase(config),
         sizes_(1),
         req_(key_, sizes_.begin(), sizes_.end()),
-        repeats_(1) {
-    if (config.checkConsistency) {
-      throw std::invalid_argument(folly::sformat(
-          "Cannot replay traces with consistency checking enabled"));
-    }
-    if (infile_.fail()) {
-      throw std::invalid_argument(
-          folly::sformat("could not read file: {}", config.traceFileName));
-    }
-    infile_.rdbuf()->pubsetbuf(infileBuffer_, BUFFERSIZE);
-    // header
-    std::string row;
-    std::getline(infile_, row);
-  }
+        repeats_(1) {}
+
+  virtual ~ReplayGenerator() {}
 
   // getReq generates the next request from the named trace file.
   // it expects a comma separated file (possibly with a header)
@@ -48,50 +27,57 @@ class ReplayGenerator {
   //
   // Here, repeats gives a number of times to repeat the request specified on
   // this line before reading the next line of the file.
-  const Request& getReq(uint8_t, std::mt19937&) {
-    if (--repeats_ > 0) {
-      return req_;
-    }
-    std::string token;
-    if (!std::getline(infile_, key_, ',')) {
-      repeats_ = 1;
-      throw cachelib::cachebench::EndOfTrace("");
-    }
-    std::getline(infile_, token, ',');
-    // TODO optype parsing
-    op_ = OpType::kGet;
-    std::getline(infile_, token, ',');
-    sizes_[0] = std::stoi(token);
-    std::getline(infile_, token);
-    repeats_ = std::stoi(token);
-    return req_;
-  }
+  // TODO: not thread safe, can only work with single threaded stressor
+  const Request& getReq(
+      uint8_t,
+      std::mt19937&,
+      std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
-  void registerThread() {}
+  OpType getOp(uint8_t,
+               std::mt19937&,
+               std::optional<uint64_t> requestId = std::nullopt) override;
 
-  OpType getOp(uint8_t, std::mt19937&) { return op_; }
-
-  const std::vector<std::string>& getAllKeys() { return keys_; }
+  void notifyResult(uint64_t, uint8_t) override {}
 
   template <typename CacheT>
   std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
 
  private:
-  // ifstream pointing to the trace file
-  std::ifstream infile_;
-  std::vector<std::string> keys_;
   // current outstanding key
   std::string key_;
   std::vector<size_t> sizes_;
   // current outstanding req object
   Request req_;
-  static constexpr size_t BUFFERSIZE = 1L << 14;
-  char infileBuffer_[BUFFERSIZE];
+
   // number of times to issue the current req object
   // before fetching a new line from the trace
   uint32_t repeats_;
-  OpType op_;
 };
+
+const Request& ReplayGenerator::getReq(uint8_t,
+                                       std::mt19937&,
+                                       std::optional<uint64_t>) {
+  if (--repeats_ > 0) {
+    return req_;
+  }
+  std::string token;
+  if (!std::getline(infile_, key_, ',')) {
+    repeats_ = 1;
+    throw cachelib::cachebench::EndOfTrace("");
+  }
+  std::getline(infile_, token, ',');
+  // TODO optype parsing
+  op_ = OpType::kGet;
+  std::getline(infile_, token, ',');
+  sizes_[0] = std::stoi(token);
+  std::getline(infile_, token);
+  repeats_ = std::stoi(token);
+  return req_;
+}
+
+OpType ReplayGenerator::getOp(uint8_t, std::mt19937&, std::optional<uint64_t>) {
+  return op_;
+}
 
 template <typename CacheT>
 std::pair<size_t, std::chrono::seconds> ReplayGenerator::prepopulateCache(

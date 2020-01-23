@@ -51,6 +51,8 @@ struct Request {
   // If not chained, the size is *sizeBegin
   std::vector<size_t>::iterator sizeBegin;
   std::vector<size_t>::iterator sizeEnd;
+
+  std::optional<uint64_t> requestId;
 };
 
 } // namespace cachebench
