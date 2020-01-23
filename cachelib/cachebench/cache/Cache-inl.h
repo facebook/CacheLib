@@ -180,8 +180,6 @@ Cache<Allocator>::Cache(CacheConfig config,
     usesNvm_ = true;
   }
 
-  allocatorConfig.enableEnsureOneSlabPerAllocSize();
-
   if (!cacheDir_.empty()) {
     allocatorConfig.cacheDir = cacheDir_;
     cache_ =
@@ -197,7 +195,9 @@ Cache<Allocator>::Cache(CacheConfig config,
     typename Allocator::MMConfig mmConfig =
         makeMMConfig<typename Allocator::MMConfig>(config_);
     const PoolId pid = cache_->addPool(
-        folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig);
+        folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
+        nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
+        true /* ensureSufficientMem */);
     pools_.push_back(pid);
 
 #ifdef CACHEBENCH_FB_ENV

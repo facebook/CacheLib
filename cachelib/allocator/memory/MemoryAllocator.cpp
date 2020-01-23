@@ -36,14 +36,12 @@ MemoryAllocator::MemoryAllocator(
     const serialization::MemoryAllocatorObject& object,
     void* memoryStart,
     size_t memSize,
-    bool disableCoredump,
-    bool ensureOneSlabPerAllocSize)
+    bool disableCoredump)
     : config_(std::set<uint32_t>{object.allocSizes.begin(),
                                  object.allocSizes.end()},
               object.enableZeroedSlabAllocs,
               disableCoredump,
-              object.lockMemory,
-              ensureOneSlabPerAllocSize),
+              object.lockMemory),
       slabAllocator_(object.slabAllocator,
                      memoryStart,
                      memSize,
@@ -67,7 +65,8 @@ void* MemoryAllocator::allocateZeroedSlab(PoolId id) {
 
 PoolId MemoryAllocator::addPool(folly::StringPiece name,
                                 size_t size,
-                                const std::set<uint32_t>& allocSizes) {
+                                const std::set<uint32_t>& allocSizes,
+                                bool ensureProvisionable) {
   const std::set<uint32_t>& poolAllocSizes =
       allocSizes.empty() ? config_.allocSizes : allocSizes;
 
@@ -75,7 +74,7 @@ PoolId MemoryAllocator::addPool(folly::StringPiece name,
     throw std::invalid_argument("Too many allocation classes");
   }
 
-  if (config_.ensureOneSlabPerAllocSize &&
+  if (ensureProvisionable &&
       cachelib::Slab::kSize * poolAllocSizes.size() > size) {
     throw std::invalid_argument(folly::sformat(
         "Pool {} cannot have at least one slab for each allocation class. "

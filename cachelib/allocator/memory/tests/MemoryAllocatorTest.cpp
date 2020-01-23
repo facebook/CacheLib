@@ -18,8 +18,7 @@ namespace {
 Config getDefaultConfig(std::set<uint32_t> allocSizes) {
   return {
       std::move(allocSizes), false /* enabledZerodSlabAllocs */,
-      true /* disableFullCoreDump */, false /* lockMemory */,
-      false /* ensureOneSlabPerAllocSize */
+      true /* disableFullCoreDump */, false /* lockMemory */
   };
 }
 unsigned int forEachAllocationCount;
@@ -27,7 +26,7 @@ bool test_callback(void* /* unused */, AllocInfo /* unused */) {
   forEachAllocationCount++;
   return true;
 }
-} // namespace
+}
 
 namespace facebook {
 namespace cachelib {
@@ -305,8 +304,7 @@ TEST_F(MemoryAllocatorTest, Serialization) {
       deserializer.deserialize<serialization::MemoryAllocatorObject>(),
       memory2,
       size,
-      true /* disableCoredump*/,
-      false /* ensureOneSlabPerAllocSize */);
+      true /* disableCoredump*/);
   ASSERT_TRUE(isSameMemoryAllocator(m, m2));
 
   for (auto itr : allocatedPools) {
@@ -418,8 +416,7 @@ TEST_F(MemoryAllocatorTest, Restorable) {
         deserializer.deserialize<serialization::MemoryAllocatorObject>(),
         memory,
         size,
-        true /* disableCoredump*/,
-      false /* ensureOneSlabPerAllocSize */);
+        true /* disableCoredump*/);
     ASSERT_TRUE(isSameMemoryAllocator(m, m2));
     ASSERT_TRUE(m2.isRestorable());
 
@@ -430,23 +427,20 @@ TEST_F(MemoryAllocatorTest, Restorable) {
     Deserializer deserializer2(begin, end);
     auto correctState =
         deserializer2.deserialize<serialization::MemoryAllocatorObject>();
-    MemoryAllocator m3(correctState, memory, size, true /* disableCoredump*/,
-                       false /* ensureOneSlabPerAllocSize */);
+    MemoryAllocator m3(correctState, memory, size, true /* disableCoredump*/);
     ASSERT_TRUE(m2.isRestorable());
 
     size_t randomSize =
         size + ((folly::Random::rand32() % 5) + 1) * Slab::kSize;
 
     ASSERT_THROW(MemoryAllocator m4(correctState, memory, randomSize,
-                                    true /* disableCoredump*/,
-                                    false /* ensureOneSlabPerAllocSize */),
+                                    true /* disableCoredump*/),
                  std::invalid_argument);
 
     randomSize = size - ((folly::Random::rand32() % 5) + 1) * Slab::kSize;
 
     ASSERT_THROW(MemoryAllocator m4(correctState, memory, randomSize,
-                                    true /* disableCoredump*/,
-                                    false /* ensureOneSlabPerAllocSize */),
+                                    true /* disableCoredump*/),
                  std::invalid_argument);
   }
 
@@ -680,8 +674,7 @@ TEST_F(MemoryAllocatorTest, ZeroedSlabAllocs) {
                          Slab::kSize}, // one for small allocation
                                        // the other for slab allocation
       true /* enableZeroedSlabAllocs */, true /* disableFullCoredump*/,
-      false /* lockMemory */,
-      false /* ensureOneSlabPerAllocSize */};
+      false /* lockMemory */};
 
   void* memory = allocate(allocatorSize);
   MemoryAllocator m(config, memory, allocatorSize);
@@ -722,8 +715,7 @@ TEST_F(MemoryAllocatorTest, ZeroedSlabAllocs) {
   // save and restore
   auto serializedData = m.saveState();
   MemoryAllocator m2(serializedData, memory, allocatorSize,
-                     true /* disableCoredump */,
-                     false /* ensureOneSlabPerAllocSize */);
+                     true /* disableCoredump*/);
 
   // write to all the slabs and then free them using restored memory allocator
   for (void* slabAlloc : slabAllocations) {
@@ -805,5 +797,5 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   m.forEachAllocation(test_callback);
   ASSERT_EQ(forEachAllocationCount, 0);
 }
-} // namespace cachelib
-} // namespace facebook
+}
+}

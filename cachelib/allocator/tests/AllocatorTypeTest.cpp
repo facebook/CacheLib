@@ -38,9 +38,6 @@ TYPED_TEST(BaseAllocatorTest, Removals) { this->testRemovals(); }
 // other pool without evictions.
 TYPED_TEST(BaseAllocatorTest, Pools) { this->testPools(); }
 
-// Test creating pools of varying size and allocation classes
-TYPED_TEST(BaseAllocatorTest, PoolSize) { this->testPoolSize(); }
-
 // make some allocations without evictions and ensure that we are able to
 // fetch them.
 TYPED_TEST(BaseAllocatorTest, Find) { this->testFind(); }
