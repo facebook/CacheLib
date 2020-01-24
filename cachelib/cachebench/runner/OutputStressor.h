@@ -13,6 +13,7 @@
 #include "cachelib/cachebench/util/Request.h"
 
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
+#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/ReplayGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 

@@ -27,11 +27,19 @@ enum class OpType {
   kSize
 };
 
+enum class OpResultType { kGetMiss = 0, kGetHit, kSetSuccess, kSetFailure };
+
 struct Request {
   Request(std::string& k,
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e)
       : key(k), sizeBegin(b), sizeEnd(e) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          int64_t reqId)
+      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId) {}
 
   static std::string getUniqueKey() {
     return std::string(folly::to<std::string>(

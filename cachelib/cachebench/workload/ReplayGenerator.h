@@ -37,8 +37,6 @@ class ReplayGenerator : public ReplayGeneratorBase {
                std::mt19937&,
                std::optional<uint64_t> requestId = std::nullopt) override;
 
-  void notifyResult(uint64_t, uint8_t) override {}
-
   template <typename CacheT>
   std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
 

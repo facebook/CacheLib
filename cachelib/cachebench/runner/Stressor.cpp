@@ -64,6 +64,11 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   if (stressorConfig.mode == "stress") {
     if (stressorConfig.allocator == "LRU" || stressorConfig.allocator.empty()) {
       // default allocator is LRU, other allocator types should be added here
+      if (stressorConfig.generator == "piecewise-replay") {
+        return std::make_unique<
+            CacheStressor<LruAllocator, PieceWiseReplayGenerator>>(
+            cacheConfig, stressorConfig);
+      }
       if (stressorConfig.generator == "replay") {
         return std::make_unique<CacheStressor<LruAllocator, ReplayGenerator>>(
             cacheConfig, stressorConfig);
@@ -106,6 +111,11 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
                                                            stressorConfig);
     } else if (stressorConfig.allocator == "LRU2Q") {
       // default allocator is LRU, other allocator types should be added here
+      if (stressorConfig.generator == "piecewise-replay") {
+        return std::make_unique<
+            CacheStressor<Lru2QAllocator, PieceWiseReplayGenerator>>(
+            cacheConfig, stressorConfig);
+      }
       if (stressorConfig.generator == "replay") {
         return std::make_unique<CacheStressor<Lru2QAllocator, ReplayGenerator>>(
             cacheConfig, stressorConfig);

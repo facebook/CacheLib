@@ -1,0 +1,16 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 8192,
+    "poolRebalanceIntervalSec": 0
+  },
+  "test_config":
+    {
+      "enableLookaside": false,
+      "generator": "piecewise-replay",
+      "numOps": 240000000,
+      "numThreads": 1,
+      "prepopulateCache": false,
+      "traceFileName": "bigcache.csv"
+    }
+
+}

@@ -25,7 +25,7 @@ class GeneratorBase {
                        std::optional<uint64_t> /*requestId*/) = 0;
 
   // Notify the workload generator about the result of the request
-  virtual void notifyResult(uint64_t /*requestId*/, uint8_t /*result*/) {}
+  virtual void notifyResult(uint64_t /*requestId*/, OpResultType /*result*/) {}
 };
 
 } // namespace cachebench
