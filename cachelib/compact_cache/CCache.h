@@ -1,7 +1,4 @@
 /**
- * @file CCache.h
- * @author jaapweel
- *
  * The compact cache is a highly memory-efficient way of mapping a key to a
  * value. It is implemented as an N-way associative hash table. This means that
  * each bucket in the hash table has room for at most N items. If the bucket
@@ -29,15 +26,14 @@
 
 #include <type_traits>
 
-#include "CCacheBucketLock.h"
-#include "CCacheFixedLruBucket.h"
-#include "CCacheVariableLruBucket.h"
-
-#include <tao/locks/Cohort.h>
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/ICompactCache.h"
+#include "cachelib/common/Cohort.h"
 #include "cachelib/common/FastStats.h"
+#include "cachelib/compact_cache/CCacheBucketLock.h"
+#include "cachelib/compact_cache/CCacheFixedLruBucket.h"
+#include "cachelib/compact_cache/CCacheVariableLruBucket.h"
 
 /****************************************************************************/
 /* CONFIGURATION */
@@ -523,8 +519,8 @@ class CompactCache : public ICompactCache {
   RemoveCb removeCb_;
   ReplaceCb replaceCb_;
   ValidCb validCb_;
-  facebook::tao::Cohort cohort_;  /**< resize cohort synchronization */
-  folly::SharedMutex resizeLock_; /**< Lock to prevent resize conflicts. */
+  facebook::cachelib::Cohort cohort_; /**< resize cohort synchronization */
+  folly::SharedMutex resizeLock_;     /**< Lock to prevent resize conflicts. */
   const size_t bucketsPerChunk_;
   util::FastStats<CCacheStats> stats_;
   const bool allowPromotions_; /**< Whether promotions are allowed on read

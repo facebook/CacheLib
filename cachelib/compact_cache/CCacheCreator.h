@@ -1,9 +1,6 @@
 #pragma once
 
 /**
- * @author adri
- * @file CCacheCreator.h
- *
  * This file provides two trait classes: CCacheCreator and
  * CCacheVariableCreator that are helpers for creating a compact cache
  * so that the user does not have to know about key type and value descriptor.
@@ -16,8 +13,8 @@
  * stores values of a variable size.
  */
 
-#include "CCache.h"
-#include "CCacheDescriptor.h"
+#include "cachelib/compact_cache/CCache.h"
+#include "cachelib/compact_cache/CCacheDescriptor.h"
 
 namespace facebook {
 namespace cachelib {
@@ -78,5 +75,5 @@ struct CCacheVariableCreator {
   /* Create the compact cache. */
   using type = CompactCache<Descriptor, AllocatorT>;
 };
-} // cachelib
-} // facebook
+} // namespace cachelib
+} // namespace facebook
