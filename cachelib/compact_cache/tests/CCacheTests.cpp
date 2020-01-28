@@ -1,4 +1,4 @@
-#include <common/init/Init.h>
+#include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -307,6 +307,6 @@ TYPED_TEST(CompactCacheAllocatorTests, resize) {
 
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
-  facebook::initFacebook(&argc, &argv);
+  folly::init(&argc, &argv);
   return RUN_ALL_TESTS();
 }
