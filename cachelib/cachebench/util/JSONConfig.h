@@ -18,6 +18,10 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 struct JSONConfig {
+  static void setValImpl(uint32_t& field, const folly::dynamic& val) {
+    field = val.asInt();
+  }
+
   static void setValImpl(uint64_t& field, const folly::dynamic& val) {
     field = val.asInt();
   }

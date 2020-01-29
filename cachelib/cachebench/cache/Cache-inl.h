@@ -136,7 +136,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 
     nvmConfig.dipperOptions["dipper_navy_direct_io"] =
         config_.dipperUseDirectIO;
-    nvmConfig.dipperOptions["dipper_navy_lru"] = true;
+    nvmConfig.dipperOptions["dipper_navy_lru"] = config_.dipperNavyUseRegionLru;
     nvmConfig.dipperOptions["dipper_navy_block_size"] = config_.dipperNavyBlock;
     nvmConfig.dipperOptions["dipper_navy_region_size"] = 16 * MB;
 
@@ -150,14 +150,17 @@ Cache<Allocator>::Cache(CacheConfig config,
                                 config_.dipperNavySizeClasses.end());
     }
 
-    nvmConfig.dipperOptions["dipper_navy_bighash_size_pct"] =
-        config_.dipperNavyBigHashSizePct;
-    nvmConfig.dipperOptions["dipper_navy_bighash_bucket_size"] =
-        config_.dipperNavyBigHashBucketSize;
-    nvmConfig.dipperOptions["dipper_navy_bighash_bucket_bf_size"] =
-        config_.dipperNavyBloomFilterPerBucketSize;
-    nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
-        config_.dipperNavySmallItemMaxSize;
+    if (config_.dipperNavyBigHashSizePct > 0) {
+      nvmConfig.dipperOptions["dipper_navy_bighash_size_pct"] =
+          config_.dipperNavyBigHashSizePct;
+      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_size"] =
+          config_.dipperNavyBigHashBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_bf_size"] =
+          config_.dipperNavyBloomFilterPerBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
+          config_.dipperNavySmallItemMaxSize;
+    }
+
     nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
         config_.dipperNavyParcelMemoryMB;
 
@@ -169,6 +172,20 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.dipperOptions["dipper_navy_reinsertion_probability_threshold"] =
           config_.navyProbabilityReinsertionThreshold;
     }
+
+    nvmConfig.dipperOptions["dipper_navy_reader_threads"] =
+        config_.navyReaderThreads;
+    nvmConfig.dipperOptions["dipper_navy_writer_threads"] =
+        config_.navyWriterThreads;
+    nvmConfig.dipperOptions["dipper_navy_clean_regions"] =
+        config_.navyCleanRegions;
+    if (config_.navyAdmissionWriteRateMB > 0) {
+      nvmConfig.dipperOptions["dipper_navy_adm_policy"] = "dynamic_random";
+      nvmConfig.dipperOptions["dipper_navy_adm_write_rate"] =
+          config_.navyAdmissionWriteRateMB * MB;
+    }
+    nvmConfig.dipperOptions["dipper_navy_max_concurrent_inserts"] =
+        config_.navyMaxConcurrentInserts;
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;

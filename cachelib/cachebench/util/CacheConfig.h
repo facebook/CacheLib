@@ -131,6 +131,24 @@ struct CacheConfig : public JSONConfig {
   // use a probability based reinsertion policy with navy
   uint64_t navyProbabilityReinsertionThreshold{0};
 
+  // number of asynchronous worker thread for read operation.
+  // override dipperAsyncThreads
+  uint32_t navyReaderThreads{32};
+
+  // number of asynchronous worker thread for write operation,
+  // override dipperAsyncThreads
+  uint32_t navyWriterThreads{32};
+
+  // buffer of clean regions to be maintained free to ensure writes
+  // into navy don't queue behind a reclaim of region.
+  uint32_t navyCleanRegions{1};
+
+  // disabled when value is 0
+  uint32_t navyAdmissionWriteRateMB{0};
+
+  // maximum pending inserts before rejecting new inserts.
+  uint32_t navyMaxConcurrentInserts{1000000};
+
   // 2Q params
   size_t lru2qHotPct{20};
   size_t lru2qColdPct{20};
