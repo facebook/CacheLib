@@ -1,0 +1,41 @@
+{
+    "cache_config" : {
+      "cacheSizeMB" : 20248,
+      "poolRebalanceIntervalSec" : 5,
+      "moveOnSlabRelease" : false,
+      "htBucketPower": 26,
+      "allocSizes": [32768, 262144],
+
+      "dipperSizeMB" : 950000,
+      "dipperBackend" : "navy_dipper",
+      "dipperUseDirectIO": true,
+      "dipperAsyncThreads": 128,
+      "dipperNavyBigHashSizePct" : 0,
+      "dipperNavyBigHashBucketSize" : 4096,
+      "dipperNavyBlock": 4096,
+      "dipperNavySizeClasses": [],
+      "dipperNavyParcelMemoryMB": 6048,
+      "dipperDevicePath": "/dev/md0"
+    },
+    "test_config" : {
+        "prepopulateCache" : false,
+        "prepopulateThreads" : 2,
+        "prepopulateSleepMs" : 50,
+        "distribution" : "range",
+        "enableLookaside" : true,
+
+        "numOps" : 10000000,
+        "numThreads" : 34,
+        "numKeys" : 7000000,
+
+        "keySizeRange" : [7, 8],
+        "keySizeRangeProbability" : [1.0],
+
+        "valSizeRange" : [32667, 32668, 262044],
+        "valSizeRangeProbability" : [0.47, 0.53],
+
+        "getRatio" : 1.0,
+        "setRatio" : 0.0,
+        "delRatio" : 0.0
+    }
+}
