@@ -18,11 +18,12 @@ bool Runner::run() {
       Stressor::makeStressor(config_.getCacheConfig(), config_.getTestConfig());
   ProgressTracker tracker{*stressor, progressStatsFile_};
 
+  stressor->start();
+
   if (!tracker.start(std::chrono::seconds{progressInterval_})) {
     throw std::runtime_error("Cannot start ProgressTracker.");
   }
 
-  stressor->start();
   stressor->finish();
 
   uint64_t durationNs = stressor->getTestDurationNs();

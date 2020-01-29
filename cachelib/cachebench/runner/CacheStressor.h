@@ -116,11 +116,11 @@ class CacheStressor : public Stressor {
   // spawning all the stress test threads
   void start() override {
     startTime_ = std::chrono::system_clock::now();
-    stressWorker_ = std::thread([this] {
-      std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                  config_.numThreads * config_.numOps / 1e6)
-                << std::endl;
 
+    std::cout << folly::sformat("Total {:.2f}M ops to be run",
+                                config_.numThreads * config_.numOps / 1e6)
+              << std::endl;
+    stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
         workers.push_back(

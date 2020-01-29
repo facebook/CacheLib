@@ -29,9 +29,9 @@ void ProgressTracker::reportProgress() {
   ::localtime_r(&nowTimeT, &time);
   ::strftime(buf, sizeof(buf), "%H:%M:%S", &time);
   auto throughputStats = stressor_.aggregateThroughputStats();
+  auto mOpsPerSec = throughputStats.ops / 1e6;
 
-  auto thStr = folly::sformat(
-      "{} {:>10.2f}M ops completed", buf, throughputStats.ops / 1e6);
+  auto thStr = folly::sformat("{} {:>10.2f}M ops completed", buf, mOpsPerSec);
 
   // log this always to stdout
   std::cout << thStr << std::endl;
