@@ -8,7 +8,7 @@
 
 #include <folly/logging/xlog.h>
 
-#include "common/hash/FurcHash.h"
+#include "cachelib/common/Hash.h"
 
 /****************************************************************************/
 /* CONFIGURATION */
@@ -50,7 +50,7 @@ namespace detail {
       ++stats_.tlStats().op_name##Hit;       \
       return CCacheReturn::FOUND;            \
     default:                                 \
-      XDCHECK(false);                         \
+      XDCHECK(false);                        \
     }                                        \
   } while (0);                               \
   return CCacheReturn::ERROR;
@@ -506,8 +506,8 @@ typename CompactCache<C, A, B>::Bucket* CompactCache<C, A, B>::tableFindChunk(
   XDCHECK_LE(numChunks, allocator_.getNumChunks());
 
   /* furcHash is well behaved; numChunks <= 1 returns 0 for chunkIndex */
-  int chunkIndex =
-      furcHash(reinterpret_cast<const char*>(&key), sizeof(key), numChunks);
+  auto chunkIndex = facebook::cachelib::furcHash(
+      reinterpret_cast<const void*>(&key), sizeof(key), numChunks);
   return reinterpret_cast<Bucket*>(allocator_.getChunk(chunkIndex));
 }
 

@@ -31,5 +31,26 @@ struct MurmurHash2 final : public Hash {
 
   constexpr static uint64_t kMurmur2Seed = 4193360111ul;
 };
+
+// a stateless consistent hash function
+//
+// This function accepts a "buf" of length "len" and a value "range" that
+// establishes the range of output to be [0 : (range-1)]. The result will be
+// uniformly distributed within that range based on the key, and has the
+// property that changes in "range" will produce the minimum amount of re-
+// distribution of keys.
+//
+// For example, if "range" is increased from 11 to 12, 1/12th of keys for each
+// output value [0 : 10] will be reassigned the value of 11 while the
+// remaining 11/12th of keys will produce the same value as before.
+//
+// On average a call to this function will take less than 400ns for "range" up
+// to 131071 (average key length 13 bytes), but there is a small chance that it
+// will take several times this, up to 4us in very rare cases.  It uses
+// MurmurHash64A() internally, a hash function with both fast performance
+// and excellent statistical properties. This endows furcHash() with good
+// performance even for longer keys.
+uint32_t furcHash(const void* buf, size_t len, uint32_t range);
+
 } // namespace cachelib
 } // namespace facebook
