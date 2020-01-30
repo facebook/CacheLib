@@ -5,10 +5,10 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
+#include <folly/FileUtil.h>
 #include <folly/chrono/Hardware.h>
 
 #include "common/base/proc/ProcFsWrapper.h"
-#include "common/files/FileUtil.h"
 
 namespace facebook {
 namespace cachelib {
@@ -68,14 +68,14 @@ class SysctlSetting {
   }
 
   static bool readSysctl(const std::string& nodeName, std::string& content) {
-    return files::FileUtil::readFileToString(sysctlPathName(nodeName),
-                                             &content);
+    auto path = sysctlPathName(nodeName);
+    return folly::readFile(path.c_str(), content);
   }
 
   static bool writeSysctl(const std::string& nodeName,
                           const std::string& content) {
-    return files::FileUtil::writeStringToFile(content,
-                                              sysctlPathName(nodeName));
+    auto path = sysctlPathName(nodeName);
+    return folly::writeFile(content, path.c_str());
   }
 
   std::string settingName_;
