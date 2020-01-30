@@ -45,7 +45,8 @@ class ReadOnlySharedCacheView {
   // responsibility to ensure the memory backing the offset corresponds to an
   // active ItemHandle in the system.
   //
-  // @param a valid pointer if the offset is valid. nullptr if invalid.
+  // Returns a valid pointer if the offset is valid. Returns nullptr if no
+  // shared memory mapping is mounted. Throws if the given offset is invalid.
   const void* getItemPtrFromOffset(uintptr_t offset) {
     auto mapping = shm_->getCurrentMapping();
     if (mapping.addr == nullptr) {
