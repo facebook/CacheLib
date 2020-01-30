@@ -1,8 +1,9 @@
 #include <sys/time.h>
 #include <fstream>
 
-#include <boost/filesystem.hpp>
+#include <folly/FileUtil.h>
 
+#include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/ShmManager.h"
 #include "cachelib/shm/SysVShmSegment.h"
@@ -12,7 +13,6 @@ static const std::string namePrefix = "shm-test";
 using namespace facebook::cachelib::tests;
 
 using facebook::cachelib::ShmManager;
-namespace fs = boost::filesystem;
 
 using ShutDownRes = typename facebook::cachelib::ShmManager::ShutDownRes;
 
@@ -26,7 +26,7 @@ class ShmManagerTest : public ShmTestBase {
  protected:
   void SetUp() final {
     // make sure nothing exists at the start
-    fs::remove_all(cacheDir);
+    facebook::cachelib::util::removePath(cacheDir);
   }
 
   void TearDown() final {
@@ -37,7 +37,7 @@ class ShmManagerTest : public ShmTestBase {
     }
 
     try {
-      fs::remove_all(cacheDir);
+      facebook::cachelib::util::removePath(cacheDir);
       // make sure nothing exists at the end
     } catch (const std::exception& e) {
       // ignore
@@ -104,14 +104,15 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
     checkMemory(m.addr, m.size, magicVal);
 
     // delete the file before shutdown
-    ASSERT_TRUE(fs::exists(cacheDir + "/metadata"));
-    ASSERT_TRUE(fs::remove(cacheDir + "/metadata"));
+    ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
+    facebook::cachelib::util::removePath(cacheDir + "/metadata");
+    ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
     // trying to shutdown with the file deleted should fail.
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kFileDeleted);
   }
 
-  ASSERT_TRUE(fs::exists(cacheDir));
-  ASSERT_FALSE(fs::exists(cacheDir + "/metadata"));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
 
   // now try to attach and that should fail.
   {
@@ -125,9 +126,10 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
   }
 
   // delete files after shutdown and this should result in same behavior
-  ASSERT_TRUE(fs::exists(cacheDir));
-  ASSERT_TRUE(fs::exists(cacheDir + "/metadata"));
-  ASSERT_TRUE(fs::remove(cacheDir + "/metadata"));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
+  facebook::cachelib::util::removePath(cacheDir + "/metadata");
+  ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
 
   // now try to attach and that should fail.
   {
@@ -164,8 +166,9 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
     s.getShmByName(segmentName).detachCurrentMapping();
 
     // delete the meta file
-    ASSERT_TRUE(fs::exists(cacheDir + "/metadata"));
-    ASSERT_TRUE(fs::remove(cacheDir + "/metadata"));
+    ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
+    facebook::cachelib::util::removePath(cacheDir + "/metadata");
+    ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
 
     // shutdown should work as expected.
     ASSERT_NO_THROW(ASSERT_TRUE(s.shutDown() == ShutDownRes::kFileDeleted));
@@ -224,15 +227,15 @@ void ShmManagerTest::testDropFile(bool posix) {
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
 
-  ASSERT_TRUE(fs::exists(cacheDir));
-  fs::ofstream(cacheDir + "/ColdRoll");
-  ASSERT_TRUE(fs::exists(cacheDir + "/ColdRoll"));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  std::ofstream(cacheDir + "/ColdRoll");
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
 
   // now try to attach and that should fail.
   {
     ShmManager s(cacheDir, posix);
     // must be present still
-    ASSERT_FALSE(fs::exists(cacheDir + "/ColdRoll"));
+    ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
     ASSERT_THROW(s.attachShm(segmentName), std::invalid_argument);
     auto m = s.createShm(segmentName, size, addr);
     checkMemory(m.addr, m.size, 0);
@@ -274,8 +277,8 @@ void ShmManagerTest::testInvalidType(bool posix) {
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   }
 
-  ASSERT_TRUE(fs::exists(cacheDir));
-  ASSERT_TRUE(fs::exists(cacheDir + "/metadata"));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
   // now try to connect with the second type.
 
   ASSERT_THROW(ShmManager s(cacheDir, !posix), std::invalid_argument);
@@ -419,18 +422,21 @@ TEST_F(ShmManagerTestSysV, StaticCleanup) { testStaticCleanup(false); }
 void ShmManagerTest::testInvalidCachedDir(bool posix) {
   std::ofstream f(cacheDir);
   f.close();
-  ASSERT_TRUE(fs::exists(cacheDir));
-  ASSERT_TRUE(fs::is_regular_file(cacheDir));
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  ASSERT_FALSE(facebook::cachelib::util::isDir(cacheDir));
   // expect error since the cache dir is a file.
   ASSERT_THROW(ShmManager s(cacheDir, posix), std::system_error);
 
-  fs::remove_all(cacheDir);
+  facebook::cachelib::util::removePath(cacheDir);
   // this should have created the directory and an empty meta file
   ASSERT_NO_THROW(ShmManager s(cacheDir, posix));
-  ASSERT_TRUE(fs::exists(cacheDir));
-  ASSERT_TRUE(fs::is_directory(cacheDir));
-  ASSERT_TRUE(fs::exists(cacheDir + "/metadata"));
-  ASSERT_EQ(fs::file_size(cacheDir + "/metadata"), 0);
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  ASSERT_TRUE(facebook::cachelib::util::isDir(cacheDir));
+  auto metaPath = cacheDir + "/metadata";
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(metaPath));
+  std::string content;
+  ASSERT_TRUE(folly::readFile(metaPath.c_str(), content));
+  ASSERT_TRUE(content.empty());
 }
 
 TEST_F(ShmManagerTestPosix, InvalidCacheDir) { testInvalidCachedDir(true); }
@@ -439,7 +445,7 @@ TEST_F(ShmManagerTestSysV, InvalidCacheDir) { testInvalidCachedDir(false); }
 
 // test to ensure that random contents in the file cause it to fail
 void ShmManagerTest::testInvalidMetaFile(bool posix) {
-  fs::create_directories(cacheDir);
+  facebook::cachelib::util::makeDir(cacheDir);
   std::ofstream f(cacheDir + "/metadata");
   f << "helloworld";
   f.flush();
@@ -453,7 +459,7 @@ TEST_F(ShmManagerTestSysV, InvalidMetaFile) { testInvalidMetaFile(false); }
 
 // test to ensure that random contents in the file cause it to fail
 void ShmManagerTest::testEmptyMetaFile(bool posix) {
-  fs::create_directories(cacheDir);
+  facebook::cachelib::util::makeDir(cacheDir);
   {
     std::ofstream f(cacheDir + "/metadata", std::ios::trunc);
     f.flush();
