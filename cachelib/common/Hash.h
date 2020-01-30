@@ -1,7 +1,8 @@
 #pragma once
 
 #include <folly/hash/Hash.h>
-#include "common/hash/MurmurHash2.h"
+
+#include "cachelib/common/MurmurHash.h"
 
 namespace facebook {
 namespace cachelib {
@@ -14,18 +15,21 @@ struct Hash {
 };
 using Hasher = std::shared_ptr<Hash>;
 
-struct FNVHash : public Hash {
+struct FNVHash final : public Hash {
   uint32_t operator()(const void* buf, size_t n) const noexcept override {
     return folly::hash::fnv32_buf(buf, n, folly::hash::FNV_32_HASH_START);
   }
   int getMagicId() const noexcept override { return 1; }
 };
 
-struct MurmurHash2 : public Hash {
+struct MurmurHash2 final : public Hash {
   uint32_t operator()(const void* buf, size_t n) const noexcept override {
-    return ::MurmurHash2(buf, static_cast<int>(n), kMurmur2Seed);
+    return facebook::cachelib::murmurHash2(buf, static_cast<int>(n),
+                                           kMurmur2Seed);
   }
   int getMagicId() const noexcept override { return 2; }
+
+  constexpr static uint64_t kMurmur2Seed = 4193360111ul;
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook
