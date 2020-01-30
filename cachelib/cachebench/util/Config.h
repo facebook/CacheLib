@@ -1,6 +1,6 @@
 #pragma once
-#include <boost/filesystem.hpp>
 #include <unordered_map>
+
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
 

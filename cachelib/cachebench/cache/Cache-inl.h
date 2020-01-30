@@ -3,8 +3,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include <boost/filesystem.hpp>
-
 #include <folly/Format.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
@@ -78,7 +76,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 
   auto cleanupGuard = folly::makeGuard([&] {
     if (shouldCleanupFiles_) {
-      boost::filesystem::remove_all(config_.dipperFilePath);
+      util::removePath(config_.dipperFilePath);
     }
   });
 
@@ -108,11 +106,10 @@ Cache<Allocator>::Cache(CacheConfig config,
       // already have a file, user provided it. So we will also keep it around
       // after the tests.
       if (cachelib::util::isDir(config_.dipperFilePath)) {
-        const auto path = boost::filesystem::unique_path(
-            std::string("nvmcache_" + config_.dipperBackend) +
-            ".%%%%-%%%%-%%%%");
-        config_.dipperFilePath = (config_.dipperFilePath / path).string();
-        boost::filesystem::create_directories(config_.dipperFilePath);
+        const auto uniqueSuffix = folly::sformat("nvmcache_{}_{}", ::getpid(),
+                                                 folly::Random::rand32());
+        config_.dipperFilePath = config_.dipperFilePath + "/" + uniqueSuffix;
+        util::makeDir(config_.dipperFilePath);
         shouldCleanupFiles_ = true;
         nvmConfig.dipperOptions["dipper_navy_truncate_file"] = true;
         nvmConfig.dipperOptions["dipper_navy_file_name"] =
@@ -253,7 +250,7 @@ Cache<Allocator>::~Cache() {
     cache_.reset();
 
     if (!config_.dipperBackend.empty() && shouldCleanupFiles_) {
-      boost::filesystem::remove_all(config_.dipperFilePath);
+      util::removePath(config_.dipperFilePath);
     }
   } catch (...) {
   }

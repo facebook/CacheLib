@@ -78,8 +78,10 @@ CacheBenchConfig::CacheBenchConfig(const std::string& path) {
   auto configJson = folly::parseJson(configString);
   auto& testConfigJson = configJson["test_config"];
   if (testConfigJson.getDefault("configPath", "").empty()) {
-    testConfigJson["configPath"] =
-        boost::filesystem::path(path).remove_filename().c_str();
+    // strip out the file name at the end to get  the directory.
+    const std::string configDir{path.begin(),
+                                path.begin() + path.find_last_of('/')};
+    testConfigJson["configPath"] = configDir;
   }
 
   testConfig_ = StressorConfig{testConfigJson};
