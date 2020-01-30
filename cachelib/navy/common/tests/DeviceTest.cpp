@@ -1,14 +1,12 @@
-#include "cachelib/navy/common/Device.h"
-
 #include <thread>
 
 #include <folly/File.h>
 #include <folly/ScopeGuard.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <boost/filesystem.hpp>
-#include <boost/filesystem/path.hpp>
 
+#include "cachelib/common/Utils.h"
+#include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/testing/Callbacks.h"
 #include "cachelib/navy/testing/MockDevice.h"
 
@@ -104,14 +102,12 @@ TEST(Device, Stats) {
 }
 
 TEST(Device, RAID0IO) {
-  auto filePath =
-      boost::filesystem::unique_path("/tmp/DEVICE_RAID0IO_TEST-%%%%-%%%%-%%%%");
-  boost::filesystem::create_directories(filePath);
-  SCOPE_EXIT { boost::filesystem::remove_all(filePath); };
+  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
 
-  std::vector<std::string> files = {
-      filePath.string() + "/CACHE0", filePath.string() + "/CACHE1",
-      filePath.string() + "/CACHE2", filePath.string() + "/CACHE3"};
+  std::vector<std::string> files = {filePath + "/CACHE0", filePath + "/CACHE1",
+                                    filePath + "/CACHE2", filePath + "/CACHE3"};
 
   int size = 4 * 1024 * 1024;
   int blockSize = 4096;
