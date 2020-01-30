@@ -235,6 +235,10 @@ bool getStatIfExists(const std::string& name, mode_t* mode) {
   return false;
 }
 
+bool pathExists(const std::string& path) {
+  return getStatIfExists(path, nullptr);
+}
+
 bool isDir(const std::string& name) {
   struct stat buf = {};
   auto err = stat(name.c_str(), &buf);
@@ -338,6 +342,6 @@ std::string toString(std::chrono::nanoseconds d) {
   }
 }
 
-} // util
-} // cachelib
-} // facebook
+} // namespace util
+} // namespace cachelib
+} // namespace facebook

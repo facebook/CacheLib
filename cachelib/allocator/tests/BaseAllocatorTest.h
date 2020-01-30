@@ -1,7 +1,5 @@
 #pragma once
 
-#include "TestBase.h"
-
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -20,7 +18,7 @@
 #include "cachelib/allocator/MarginalHitsStrategy.h"
 #include "cachelib/allocator/PoolRebalancer.h"
 #include "cachelib/allocator/Util.h"
-
+#include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 namespace facebook {
@@ -1580,7 +1578,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       AllocatorT alloc(config);
       ASSERT_TRUE(alloc.isOnShm());
       tempCacheDir = alloc.tempShm_->tempCacheDir_;
-      ASSERT_TRUE(files::FileUtil::fileExists(tempCacheDir));
+      ASSERT_TRUE(util::pathExists(tempCacheDir));
 
       std::vector<std::string> keys;
       const unsigned int keyLen = 100;
@@ -1600,7 +1598,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
     ASSERT_FALSE(AllocatorT::ShmManager::segmentExists(
         tempCacheDir, detail::kTempShmCacheName.str(), config.usePosixShm));
-    ASSERT_FALSE(files::FileUtil::fileExists(tempCacheDir));
+    ASSERT_FALSE(util::pathExists(tempCacheDir));
   }
 
   // make some allocations and access them and record explicitly the time it was

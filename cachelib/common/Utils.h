@@ -171,6 +171,9 @@ __attribute__((__always_inline__)) inline uint64_t getTimeNsFromCycles(
  * throws system_error for all other errors */
 bool getStatIfExists(const std::string& name, mode_t* mode);
 
+// returns true if the path edxists and false if not.
+bool pathExists(const std::string& path);
+
 /* throws error on any failure. */
 void makeDir(const std::string& name);
 

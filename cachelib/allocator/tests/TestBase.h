@@ -1,15 +1,13 @@
 #pragma once
+#include <string>
+
+#include <folly/Random.h>
 #include <gtest/gtest.h>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
-
-#include <string>
-
-#include <folly/Random.h>
-
-#include "common/files/FileUtil.h"
 
 namespace facebook {
 namespace cachelib {
@@ -36,10 +34,10 @@ class AllocatorTest : public SlabAllocatorTestBase {
   AllocatorTest()
       : cacheDir_("/tmp/cachelib_lru_allocator_test" +
                   folly::to<std::string>(folly::Random::rand32())) {
-    files::FileUtil::recursivelyCreateDir(cacheDir_);
+    util::makeDir(cacheDir_);
   }
 
-  ~AllocatorTest() override { files::FileUtil::removeAll(cacheDir_); }
+  ~AllocatorTest() override { util::removePath(cacheDir_); }
 
   // for the given lru allocator, figure out a random set of allocation sizes
   // that are valid with given key length. This is to ensure that using these
@@ -111,8 +109,8 @@ class AllocatorTest : public SlabAllocatorTestBase {
   const std::string kShmInfoName = "cachelib_serialization";
   const size_t kShmInfoSize = 10 * 1024 * 1024; // 10 MB
 };
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook
 
 #include "TestBase-inl.h"

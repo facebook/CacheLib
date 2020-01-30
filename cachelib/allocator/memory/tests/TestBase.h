@@ -5,7 +5,6 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
-#include "common/files/FileUtil.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -108,6 +107,6 @@ class SlabAllocatorTestBase : public AllocTestBase {
       unsigned int n, size_t minSize = Slab::kMinAllocSize);
 };
 
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook
