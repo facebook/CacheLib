@@ -1,8 +1,8 @@
-#include "NvmTestBase.h"
 
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/allocator/NvmCacheState.h"
+#include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
 #include "dipper/dipper_registry.h"
 
 namespace facebook {
@@ -10,21 +10,14 @@ namespace cachelib {
 namespace tests {
 
 NavyDipper::NavyDipper() {
-  path_ = boost::filesystem::unique_path(std::string("nvmcache_navydipper") +
-                                         ".%%%%-%%%%-%%%%");
-
-  const auto dipperFilePath = "/tmp" / path_;
-  boost::filesystem::create_directories(dipperFilePath);
-  const auto space = boost::filesystem::space(dipperFilePath);
-  if (space.available < 400 * 1024 * 1024) {
-    throw std::runtime_error("400MB is required for navy setup in test mode");
-  }
-
+  // use navy in-memory device
+  dir_ = folly::sformat("/tmp/nvmcache-navydipper/{}", ::getpid());
+  util::makeDir(dir_);
   config_ = folly::dynamic::object;
   config_["dipper_backend"] = "navy_dipper";
-  config_["dipper_navy_recovery_path"] = dipperFilePath.string();
+  config_["dipper_navy_recovery_path"] = dir_;
   config_["dipper_fs_size"] = 100; /* megabytes */
-  config_["dipper_navy_file_name"] = (dipperFilePath / "navy").string();
+  config_["dipper_navy_file_name"] = dir_ + "/navy";
   config_["dipper_navy_direct_io"] = false;
   config_["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
   config_["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
@@ -36,13 +29,10 @@ NavyDipper::NavyDipper() {
   config_["dipper_num_ushards"] = 1;
 }
 
-NavyDipper::~NavyDipper() { boost::filesystem::remove_all("/tmp" / path_); }
-
 template <typename B>
 NvmCacheTest<B>::NvmCacheTest() {
   facebook::dipper::registerBackend<facebook::dipper::NavyDipperFactory>();
-  cacheDir_ =
-      boost::filesystem::unique_path("/tmp/cachedir-%%%%-%%%%-%%%%").string();
+  cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   {
     allocConfig_.enableCachePersistence(cacheDir_);
     allocConfig_.setRemoveCallback(
@@ -69,7 +59,7 @@ AllocatorT& NvmCacheTest<B>::makeCache() {
 
 template <typename B>
 NvmCacheTest<B>::~NvmCacheTest() {
-  boost::filesystem::remove_all(cacheDir_);
+  util::removePath(cacheDir_);
 }
 
 template <typename B>

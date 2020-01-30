@@ -286,10 +286,14 @@ void makeDir(const std::string& name) {
 
 /* throws error on any failure. */
 void removePath(const std::string& name) {
+  if (!pathExists(name)) {
+    return;
+  }
+
   if (isDir(name)) {
     auto dir = opendir(name.c_str());
     if (!dir) {
-      throwSystemError(errno);
+      throwSystemError(errno, folly::sformat("Err removing path={}", name));
     }
     SCOPE_EXIT { free(dir); };
     struct dirent* entry;
@@ -302,12 +306,12 @@ void removePath(const std::string& name) {
     }
     auto err = rmdir(name.c_str());
     if (err) {
-      throwSystemError(errno);
+      throwSystemError(errno, folly::sformat("Err removing path={}", name));
     }
   } else {
     auto err = unlink(name.c_str());
     if (err) {
-      throwSystemError(errno);
+      throwSystemError(errno, folly::sformat("Err removing path={}", name));
     }
   }
 }

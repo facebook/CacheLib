@@ -1,9 +1,9 @@
 #pragma once
 
 #include <gtest/gtest.h>
-#include <boost/filesystem.hpp>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/common/Utils.h"
 #include "dipper/navy_dipper/navyif.h"
 
 namespace facebook {
@@ -19,12 +19,12 @@ using ChainedAllocs = AllocatorT::ChainedAllocs;
 class NavyDipper {
  public:
   NavyDipper();
-  ~NavyDipper();
+  ~NavyDipper() { util::removePath(dir_); }
   folly::dynamic getOptions() { return config_; }
 
  private:
   folly::dynamic config_;
-  boost::filesystem::path path_;
+  std::string dir_;
 };
 
 template <typename B>
