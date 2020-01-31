@@ -15,9 +15,9 @@ def simulate_cache(cache, accesses):
         miss = False
         for c in a[1].chunks():
             k = (blk, c)
-            found, _ = cache.find(k, a[1].ts)
+            found = cache.find(k, a[1].ts)
             if not found:
-                cache.insert(k, a[1].ts)
+                cache.insert(k, a[1].ts, a[1].features.toList())
                 miss = True
 
         if not miss:
