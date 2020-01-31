@@ -1,4 +1,4 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
+#!/usr/bin/env python3
 
 import datetime
 from enum import Enum, unique
@@ -49,6 +49,13 @@ class KeyFeatures(object):
             self.op, self.pipeline, self.namespace, self.user
         )
 
+    def __repr__(self):
+        # for easy debugging purpose
+        return self.__str__()
+
+    def toList(self):
+        return [self.op.value, self.pipeline, self.namespace, self.user]
+
 
 class BlkAccess(object):
     # chunk alignment for warm storage
@@ -80,6 +87,10 @@ class BlkAccess(object):
         return "offset={}, size={}, ts={}, features={}".format(
             self.offset, self.size(), self.ts, self.features
         )
+
+    def __repr__(self):
+        # for easy debugging purpose
+        return self.__str__()
 
     def size(self):
         return self.end() - self.start() + 1
@@ -310,19 +321,36 @@ def make_format_string(fields):
 
 def get_output_suffix(options):
     out = "/"
-    if options.reject_first:
-        out += "reject-first-"
+    # admission policy notes
+    if options.rejectx_ap:
+        out += (
+            "rejectx-ap-"
+            + str(options.ap_threshold)
+            + "_"
+            + str(options.ap_probability)
+        )
+    elif options.learned_ap:
+        out += (
+            "ml-ap-"
+            + str(options.ap_threshold)
+            + "_"
+            + str(options.learned_ap_filter_count)
+        )
+    elif options.coinflip_ap:
+        out += "coinflip-ap-" + str(options.ap_probability)
 
+    # cache type notes
     if options.lirs:
-        out += "lirs"
+        out += "_lirs"
     elif options.fifo:
-        out += "fifo"
+        out += "_fifo"
     else:
-        out += "lru"
+        out += "_lru"
 
     if options.write_mbps != 0:
         out += "-{}".format(options.write_mbps)
 
+    out += "_{}GB".format(options.size_gb)
     return out
 
 
