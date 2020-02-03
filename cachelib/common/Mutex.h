@@ -229,7 +229,6 @@ using PThreadSpinMutex = detail::PThreadSpinMutexImpl<1024>;
 using PThreadSpinLock = detail::PThreadSpinLock;
 using RWMockLock = detail::RWMockLock;
 
-// same interface as folly::CachelinePadded<T>
 template <typename T>
 struct DefaultLockAlignment {
  public:

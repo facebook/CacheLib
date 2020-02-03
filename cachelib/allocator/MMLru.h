@@ -7,8 +7,8 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
 #pragma GCC diagnostic pop
-#include <folly/CachelinePadded.h>
 #include <folly/container/Array.h>
+#include <folly/lang/Aligned.h>
 #include <folly/synchronization/DistributedMutex.h>
 
 #include "cachelib/allocator/Util.h"
@@ -355,7 +355,7 @@ class MMLru {
     // protects all operations on the lru. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
     // time.
-    mutable folly::CachelinePadded<Mutex> lruMutex_;
+    mutable folly::cacheline_aligned<Mutex> lruMutex_;
 
     const PtrCompressor compressor_{};
 
