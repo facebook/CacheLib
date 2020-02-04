@@ -1,10 +1,9 @@
-#include "BloomFilter.h"
 
 #include <cassert>
 #include <cstring>
 
+#include "cachelib/navy/bighash/BloomFilter.h"
 #include "cachelib/navy/common/Hash.h"
-
 #include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/serialization/Serialization.h"
 

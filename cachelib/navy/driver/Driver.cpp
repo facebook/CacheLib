@@ -1,9 +1,7 @@
-#include "Driver.h"
-
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/navy/common/Hash.h"
-
+#include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/driver/NoopEngine.h"
 
 namespace facebook {

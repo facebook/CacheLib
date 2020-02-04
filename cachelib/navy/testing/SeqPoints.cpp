@@ -1,4 +1,4 @@
-#include "SeqPoints.h"
+#include "cachelib/navy/testing/SeqPoints.h"
 
 #include <folly/Range.h>
 #include <glog/logging.h>

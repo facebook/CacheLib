@@ -1,10 +1,9 @@
-#include "LruPolicy.h"
-
 #include <cstdio>
 
 #include <folly/Format.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/navy/block_cache/LruPolicy.h"
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {

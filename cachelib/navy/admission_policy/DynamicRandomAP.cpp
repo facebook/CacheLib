@@ -1,5 +1,3 @@
-#include "DynamicRandomAP.h"
-
 #include <algorithm>
 #include <shared_mutex>
 #include <utility>
@@ -8,6 +6,7 @@
 #include <folly/hash/Hash.h>
 #include <folly/lang/Bits.h>
 
+#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {

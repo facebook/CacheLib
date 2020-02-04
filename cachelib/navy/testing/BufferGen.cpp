@@ -1,4 +1,4 @@
-#include "BufferGen.h"
+#include "cachelib/navy/testing/BufferGen.h"
 
 namespace facebook {
 namespace cachelib {

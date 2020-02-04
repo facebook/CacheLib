@@ -1,9 +1,9 @@
 #pragma once
 
-#include "EvictionPolicy.h"
-
 #include <deque>
 #include <mutex>
+
+#include "cachelib/navy/block_cache/EvictionPolicy.h"
 
 namespace facebook {
 namespace cachelib {

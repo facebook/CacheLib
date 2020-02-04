@@ -1,9 +1,8 @@
-#include "Device.h"
-
-#include <unistd.h>
 #include <cstring>
 
 #include <folly/Format.h>
+
+#include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {

@@ -1,4 +1,4 @@
-#include "MockDevice.h"
+#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook {
 namespace cachelib {

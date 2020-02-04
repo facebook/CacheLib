@@ -1,7 +1,5 @@
 #pragma once
 
-#include "EvictionPolicy.h"
-
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -10,6 +8,7 @@
 
 #include <folly/stats/QuantileEstimator.h>
 
+#include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {

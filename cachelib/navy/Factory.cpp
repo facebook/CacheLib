@@ -1,8 +1,8 @@
-#include "Factory.h"
 
 #include <folly/Format.h>
 #include <folly/Random.h>
 
+#include "cachelib/navy/Factory.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/admission_policy/RejectRandomAP.h"
 #include "cachelib/navy/bighash/BigHash.h"

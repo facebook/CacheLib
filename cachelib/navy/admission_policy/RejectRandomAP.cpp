@@ -1,9 +1,9 @@
-#include "RejectRandomAP.h"
 
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/navy/admission_policy/RejectRandomAP.h"
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {
