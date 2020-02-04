@@ -240,6 +240,7 @@ class CacheStressor : public Stressor {
       }
     };
 
+    std::optional<uint64_t> lastRequestId = std::nullopt;
     for (uint64_t i = 0;
          i < config_.numOps &&
          cache_->getInconsistencyCount() < config_.maxInconsistencyCount &&
@@ -258,9 +259,9 @@ class CacheStressor : public Stressor {
         ++stats.ops;
 
         const auto pid = opPoolDist(gen);
-        const Request& req(getReq(pid, gen));
+        const Request& req(getReq(pid, gen, lastRequestId));
         const std::string* key = &(req.key);
-        const OpType op = wg_.getOp(pid, gen);
+        const OpType op = wg_.getOp(pid, gen, req.requestId);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
@@ -269,35 +270,59 @@ class CacheStressor : public Stressor {
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          setKey(pid, stats, key, *(req.sizeBegin));
+          OpResultType result;
+          {
+            // Limit the scope because notifyResult() below may delete
+            // the req and key
+            chainedItemLock(Mode::Exclusive, *key);
+            SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+            result = setKey(pid, stats, key, *(req.sizeBegin));
+          }
+
+          if (req.requestId) {
+            wg_.notifyResult(*req.requestId, result);
+          }
           throttleFn();
           break;
         }
         case OpType::kLoneGet:
         case OpType::kGet: {
           ++stats.get;
+          OpResultType result;
+
           Mode lockMode = Mode::Shared;
 
-          chainedItemLock(lockMode, *key);
-          SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
-          // TODO currently pure lookaside, we should
-          // add a distribution over sequences of requests/access patterns
-          // e.g. get-no-set and set-no-get
-          auto it = cache_->find(*key, AccessMode::kRead);
-          if (it == nullptr) {
-            ++stats.getMiss;
-            if (config_.enableLookaside) {
-              // allocate and insert on miss
-              // upgrade access privledges, (lock_upgrade is not
-              // appropriate here)
-              chainedItemUnlock(lockMode, *key);
-              lockMode = Mode::Exclusive;
-              chainedItemLock(lockMode, *key);
-              setKey(pid, stats, key, *(req.sizeBegin));
+          {
+            // Limit the scope because notifyResult() below may delete
+            // the req and key
+            chainedItemLock(lockMode, *key);
+            SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
+            // TODO currently pure lookaside, we should
+            // add a distribution over sequences of requests/access patterns
+            // e.g. get-no-set and set-no-get
+            auto it = cache_->find(*key, AccessMode::kRead);
+            if (it == nullptr) {
+              ++stats.getMiss;
+              result = OpResultType::kGetMiss;
+
+              if (config_.enableLookaside) {
+                // allocate and insert on miss
+                // upgrade access privledges, (lock_upgrade is not
+                // appropriate here)
+                chainedItemUnlock(lockMode, *key);
+                lockMode = Mode::Exclusive;
+                chainedItemLock(lockMode, *key);
+                setKey(pid, stats, key, *(req.sizeBegin));
+              }
+            } else {
+              result = OpResultType::kGetHit;
             }
           }
+
+          if (req.requestId) {
+            wg_.notifyResult(*req.requestId, result);
+          }
+
           throttleFn();
           break;
         }
@@ -355,29 +380,35 @@ class CacheStressor : public Stressor {
               folly::sformat("invalid operation generated: {}", (int)op));
           break;
         }
+
+        lastRequestId = req.requestId;
       } catch (const cachebench::EndOfTrace& ex) {
         break;
       }
     }
   }
 
-  void setKey(PoolId pid,
-              ThroughputStats& stats,
-              const std::string* key,
-              size_t size) {
+  OpResultType setKey(PoolId pid,
+                      ThroughputStats& stats,
+                      const std::string* key,
+                      size_t size) {
     ++stats.set;
     auto it = cache_->allocate(pid, *key, size);
     if (it == nullptr) {
       ++stats.setFailure;
+      return OpResultType::kSetFailure;
     } else {
       populateItem(it);
       cache_->insertOrReplace(it);
+      return OpResultType::kSetSuccess;
     }
   }
 
-  const Request& getReq(const PoolId& pid, std::mt19937& gen) {
+  const Request& getReq(const PoolId& pid,
+                        std::mt19937& gen,
+                        std::optional<uint64_t>& lastRequestId) {
     while (true) {
-      const Request& req(wg_.getReq(pid, gen));
+      const Request& req(wg_.getReq(pid, gen, lastRequestId));
       if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
         continue;
       }
