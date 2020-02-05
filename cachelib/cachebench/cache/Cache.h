@@ -4,7 +4,7 @@
 #include <folly/hash/Hash.h>
 
 #ifdef CACHEBENCH_FB_ENV
-#include "cachelib/admin/CacheAdmin.h"
+#include "cachelib/facebook/admin/CacheAdmin.h"
 #endif
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
