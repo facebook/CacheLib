@@ -4,7 +4,7 @@
 
 namespace {
 // Line format: timestamp, cacheKey, OpType, size, TTL
-constexpr uint32_t kTraceNumFields = 5;
+constexpr uint32_t kTraceNumFields = 9;
 } // namespace
 
 namespace facebook {
@@ -61,14 +61,17 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
   std::lock_guard<std::mutex> lock(lock_);
   while (std::getline(infile_, line)) {
-    XLOG(INFO) << "Read line: " << line;
     std::vector<folly::StringPiece> fields;
+    // Line format:
+    // timestamp, cacheKey, OpType, objectSize, responseSize, rangeStart,
+    // rangeEnd, TTL, samplingRate
     folly::split(",", line, fields);
     if (fields.size() == kTraceNumFields) {
       auto reqId = nextReqId_++;
+      // TODO: support range request
       activeReqM_.emplace(std::piecewise_construct,
                           std::forward_as_tuple(reqId),
-                          std::forward_as_tuple(fields[1], fields[3], reqId));
+                          std::forward_as_tuple(fields[1], fields[4], reqId));
       return activeReqM_.find(reqId)->second.req;
     }
   }

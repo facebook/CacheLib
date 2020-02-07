@@ -21,7 +21,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // getReq generates the next request from the named trace file.
   // it expects a comma separated file (possibly with a header)
   // which consists of the fields:
-  // timestamp, cacheKey, OpType, size, TTL
+  // timestamp, cacheKey, OpType, objectSize, responseSize, rangeStart,
+  // rangeEnd, TTL, samplingRate
   const Request& getReq(
       uint8_t,
       std::mt19937&,
