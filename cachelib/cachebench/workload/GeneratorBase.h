@@ -24,7 +24,8 @@ class GeneratorBase {
                        std::mt19937& /*gen*/,
                        std::optional<uint64_t> /*requestId*/) = 0;
 
-  // Notify the workload generator about the result of the request
+  // Notify the workload generator about the result of the request.
+  // Note the workload generator may release the memory for the request.
   virtual void notifyResult(uint64_t /*requestId*/, OpResultType /*result*/) {}
 };
 

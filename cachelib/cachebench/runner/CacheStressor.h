@@ -267,60 +267,45 @@ class CacheStressor : public Stressor {
           oneHitKey = Request::getUniqueKey();
           key = &oneHitKey;
         }
+
+        OpResultType result(OpResultType::kNop);
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
-          OpResultType result;
-          {
-            // Limit the scope because notifyResult() below may delete
-            // the req and key
-            chainedItemLock(Mode::Exclusive, *key);
-            SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-            result = setKey(pid, stats, key, *(req.sizeBegin));
-          }
+          chainedItemLock(Mode::Exclusive, *key);
+          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          result = setKey(pid, stats, key, *(req.sizeBegin));
 
-          if (req.requestId) {
-            wg_.notifyResult(*req.requestId, result);
-          }
           throttleFn();
           break;
         }
         case OpType::kLoneGet:
         case OpType::kGet: {
           ++stats.get;
-          OpResultType result;
 
           Mode lockMode = Mode::Shared;
 
-          {
-            // Limit the scope because notifyResult() below may delete
-            // the req and key
-            chainedItemLock(lockMode, *key);
-            SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
-            // TODO currently pure lookaside, we should
-            // add a distribution over sequences of requests/access patterns
-            // e.g. get-no-set and set-no-get
-            auto it = cache_->find(*key, AccessMode::kRead);
-            if (it == nullptr) {
-              ++stats.getMiss;
-              result = OpResultType::kGetMiss;
+          chainedItemLock(lockMode, *key);
+          SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
+          // TODO currently pure lookaside, we should
+          // add a distribution over sequences of requests/access patterns
+          // e.g. get-no-set and set-no-get
+          auto it = cache_->find(*key, AccessMode::kRead);
+          if (it == nullptr) {
+            ++stats.getMiss;
+            result = OpResultType::kGetMiss;
 
-              if (config_.enableLookaside) {
-                // allocate and insert on miss
-                // upgrade access privledges, (lock_upgrade is not
-                // appropriate here)
-                chainedItemUnlock(lockMode, *key);
-                lockMode = Mode::Exclusive;
-                chainedItemLock(lockMode, *key);
-                setKey(pid, stats, key, *(req.sizeBegin));
-              }
-            } else {
-              result = OpResultType::kGetHit;
+            if (config_.enableLookaside) {
+              // allocate and insert on miss
+              // upgrade access privledges, (lock_upgrade is not
+              // appropriate here)
+              chainedItemUnlock(lockMode, *key);
+              lockMode = Mode::Exclusive;
+              chainedItemLock(lockMode, *key);
+              setKey(pid, stats, key, *(req.sizeBegin));
             }
-          }
-
-          if (req.requestId) {
-            wg_.notifyResult(*req.requestId, result);
+          } else {
+            result = OpResultType::kGetHit;
           }
 
           throttleFn();
@@ -382,6 +367,10 @@ class CacheStressor : public Stressor {
         }
 
         lastRequestId = req.requestId;
+        if (req.requestId) {
+          // req might be deleted after calling notifyResult()
+          wg_.notifyResult(*req.requestId, result);
+        }
       } catch (const cachebench::EndOfTrace& ex) {
         break;
       }

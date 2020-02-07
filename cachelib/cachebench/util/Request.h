@@ -27,7 +27,13 @@ enum class OpType {
   kSize
 };
 
-enum class OpResultType { kGetMiss = 0, kGetHit, kSetSuccess, kSetFailure };
+enum class OpResultType {
+  kNop = 0,
+  kGetMiss,
+  kGetHit,
+  kSetSuccess,
+  kSetFailure
+};
 
 struct Request {
   Request(std::string& k,
