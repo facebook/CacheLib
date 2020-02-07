@@ -38,7 +38,7 @@ struct Request {
   Request(std::string& k,
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
-          int64_t reqId)
+          uint64_t reqId)
       : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId) {}
 
   static std::string getUniqueKey() {

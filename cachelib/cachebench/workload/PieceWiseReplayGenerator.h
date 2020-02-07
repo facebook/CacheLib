@@ -15,7 +15,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     // Insert an invalid request to be used when getReq() fails.
     activeReqM_.emplace(std::piecewise_construct,
                         std::forward_as_tuple(kInvalidRequestId),
-                        std::forward_as_tuple("", "0", -1));
+                        std::forward_as_tuple("", "0", kInvalidRequestId));
   }
 
   // getReq generates the next request from the named trace file.
@@ -45,7 +45,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
     explicit ReqWrapper(folly::StringPiece k,
                         folly::StringPiece size,
-                        int64_t reqId)
+                        uint64_t reqId)
         : key(k.str()), sizes(1), req(key, sizes.begin(), sizes.end(), reqId) {
       sizes[0] = std::stoi(size.str());
 

@@ -1,5 +1,7 @@
 #include "folly/String.h"
 
+#include "cachelib/cachebench/util/Exceptions.h"
+
 namespace {
 // Line format: timestamp, cacheKey, OpType, size, TTL
 constexpr uint32_t kTraceNumFields = 5;
@@ -15,11 +17,7 @@ const Request& PieceWiseReplayGenerator::getReq(
   {
     std::lock_guard<std::mutex> lock(lock_);
     if (lastRequestId && activeReqM_.count(*lastRequestId) > 0) {
-      // without piece wise caching, this must be a miss, perform set
-      // operation next
-      auto it = activeReqM_.find(*lastRequestId);
-      it->second.op = OpType::kSet;
-      return it->second.req;
+      return activeReqM_.find(*lastRequestId)->second.req;
     }
   }
 
@@ -40,14 +38,22 @@ OpType PieceWiseReplayGenerator::getOp(uint8_t,
 void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
                                             OpResultType result) {
   // TODO: implement piece-wise caching and range request logic
-  if (result != OpResultType::kGetMiss && result != OpResultType::kSetFailure) {
-    std::lock_guard<std::mutex> lock(lock_);
-    auto it = activeReqM_.find(requestId);
-    if (it != activeReqM_.end()) {
-      activeReqM_.erase(it);
-    } else {
-      XLOG(INFO) << "request id not found: " << requestId;
-    }
+  std::lock_guard<std::mutex> lock(lock_);
+  auto it = activeReqM_.find(requestId);
+
+  if (it == activeReqM_.end()) {
+    XLOG(INFO) << "Request id not found: " << requestId;
+    return;
+  }
+
+  if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
+      result == OpResultType::kSetFailure) {
+    activeReqM_.erase(it);
+  } else if (result == OpResultType::kGetMiss) {
+    // Perform set operation next
+    it->second.op = OpType::kSet;
+  } else {
+    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
   }
 }
 
@@ -67,8 +73,7 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
     }
   }
 
-  // Return an invalid request
-  return activeReqM_.find(kInvalidRequestId)->second.req;
+  throw cachelib::cachebench::EndOfTrace("");
 }
 
 } // namespace cachebench
