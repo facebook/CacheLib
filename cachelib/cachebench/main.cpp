@@ -4,6 +4,7 @@
 
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/cachebench/fb303/FB303ThriftServer.h"
+#include "common/init/Init.h"
 #endif
 
 #include "cachelib/cachebench/runner/Runner.h"
@@ -48,12 +49,14 @@ int main(int argc, char** argv) {
   }
 
 #ifdef CACHEBENCH_FB_ENV
+  facebook::initFacebook(&argc, &argv);
   std::unique_ptr<FB303ThriftService> fb303_;
   if (FLAGS_fb303_port) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
-#endif
+#else
   folly::init(&argc, &argv, true);
+#endif
 
   Runner runner{FLAGS_json_test_config, FLAGS_progress_stats_file,
                 FLAGS_progress};
