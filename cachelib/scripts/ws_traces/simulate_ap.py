@@ -35,89 +35,8 @@ Major difference from simulate_cache -
 """
 
 
-def simulate_cache(cache, accesses, sampling_ratio):
-    # "stats" tracks intermediate results every 100000 iops.
-    # This is mostly for debugging & analysis purposes since it allows us to
-    # observe and compare how caching behaviors evolves over time
-    stats_idx = 0
-    stats = {
-        "iops_requests": [0],  # number of total iops
-        "iops_saved": [
-            0
-        ],  # number of iops saved (all chunks must be hit to be counted as iops save)
-        "chunk_queries": [0],  # number of total chunk queries
-        "chunk_hits": [0],  # chunk-level / CacheLib hit count
-        "iops_partial_hits": [0],  # request with some chunks cached
-        "chunks_written": [0],  # number of total chunks admitted to cache
-        "duration": [0],  # duration in seconds
-    }
-    last_trace_time = 0
-    last_chunks_written = 0
-    write_mb_per_sec = 0
-    print("duration(hours) | write_rate | iops_saved_ratio")
-    for block_id, access in accesses:
-
-        if last_trace_time == 0:
-            last_trace_time = access.ts
-
-        # stats management
-        if stats["iops_requests"][stats_idx] > 100000:
-            dur = access.ts - last_trace_time
-            stats["duration"][stats_idx] = dur
-            last_trace_time = access.ts
-            stats["chunks_written"][stats_idx] = (
-                cache.keys_written - last_chunks_written
-            )
-            last_chunks_written = cache.keys_written
-
-            # logging intermediate results (fast-fail)
-            iops_save_ratio = (
-                stats["iops_saved"][stats_idx] / stats["iops_requests"][stats_idx]
-            )
-            write_mb_per_sec = utils.mb_per_sec(
-                stats["chunks_written"][stats_idx], dur, sampling_ratio
-            )
-            print(dur / 3600, "|", write_mb_per_sec, "| ", iops_save_ratio)
-
-            # seal stats and move idx
-            for stat_key in stats.keys():
-                stats[stat_key].append(0)
-            stats_idx += 1
-
-        stats["iops_requests"][stats_idx] += 1
-        stats["chunk_queries"][stats_idx] += len(access.chunks())
-
-        misses = []
-        chunk_hit = False
-        # iterate over each chunk of this request
-        for chunk_id in access.chunks():
-            k = (block_id, chunk_id)
-            found = cache.find(k, access.ts)
-            if found:
-                stats["chunk_hits"][stats_idx] += 1
-                chunk_hit = True
-            else:
-                misses.append(chunk_id)
-
-        if len(misses) == 0:
-            stats["iops_saved"][stats_idx] += 1
-        else:
-            for chunk_id in misses:
-                k = (block_id, chunk_id)
-                cache.insert(k, access.ts, access.features.toList())
-
-            if chunk_hit:
-                # request-level miss, but chunk_hit
-                stats["iops_partial_hits"][stats_idx] += 1
-
-        # update dynamic features (independent of in the cache)
-        for chunk_id in access.chunks():
-            k = (block_id, chunk_id)
-            cache.dynamic_features.updateFeatures(k, access.ts)
-    return stats
-
-
 def main(options, args):
+    print(options)
     use_lru = not (options.fifo or options.lirs)
     assert use_lru or options.lirs or options.fifo
 
@@ -227,7 +146,7 @@ def main(options, args):
             use_lru, num_cache_elems, ap, options.learned_ap_filter_count
         )
 
-    stats = simulate_cache(cache, accesses, sampling_ratio)
+    stats = sim_cache.simulate_cache(cache, accesses, sampling_ratio)
 
     chunks_written = cache.keys_written
     write_mb_per_sec = utils.mb_per_sec(

@@ -52,7 +52,7 @@ class DynamicFeatures:
         if key not in self.last_access_time:
             return np.inf
         distance = ts - self.last_access_time[key]
-        # don't record distance if that's greater than hoursnp.inf
+        # don't record distance if that's greater than self.hours
         if distance > self.hours * 3600:
             return np.inf
         return distance
