@@ -1,5 +1,7 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
+#!/usr/bin/env python3
 
+import json
+import os
 import random
 from collections import OrderedDict
 
@@ -303,7 +305,7 @@ class RejectXAP(object):
     def batchAccept(self, batch, ts):
         decisions = {}
         for key in batch:
-            decisions[key] = self.accept(key)
+            decisions[key] = self.accept(key, ts)
         return decisions
 
 
@@ -470,3 +472,145 @@ def simulate_cache(cache, accesses, sampling_ratio):
             k = (block_id, chunk_id)
             cache.dynamic_features.updateFeatures(k, access.ts)
     return stats
+
+
+def simulate_cache_driver(options, args):
+    print(options)
+    use_lru = not (options.fifo or options.lirs)
+    assert use_lru or options.lirs or options.fifo
+
+    tracefile = args[0]
+    if not options.output_dir:
+        output_dir = "/".join(tracefile.split("/")[:-1])
+    else:
+        output_dir = options.output_dir
+
+    output_dir += utils.get_output_suffix(options)
+
+    # create the output directory
+    os.makedirs(output_dir, 0o755, exist_ok=True)
+
+    input_file_name = tracefile[: -len(".trace")].split("/")[-1]
+    out_file_name = "{}/{}_cache_perf.txt".format(output_dir, input_file_name)
+    accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(tracefile)
+
+    trace_duration_secs = round(end_ts - start_ts, 2)
+    sampling_ratio = float(input_file_name.split(".")[0].split("_")[-1])
+
+    # filter out just get accesses
+    valid_op_types = [utils.OpType.GET_PERM, utils.OpType.GET_TEMP]
+
+    accesses = [
+        (block_id, access)
+        for block_id, access in accesses
+        if access.features and access.features.op in valid_op_types
+    ]
+
+    total_iops = len(accesses)
+
+    scaled_write_mbps = float(options.write_mbps) * float(sampling_ratio) / 100.0
+
+    max_key = max(accesses, key=lambda x: x[0])
+
+    # output is formatted as json from the following dict
+    logjson = {}
+    logjson["options"] = options
+    logjson["chunkSize"] = utils.BlkAccess.ALIGNMENT
+    logjson["totalIOPS"] = total_iops
+    logjson["blkCount"] = max_key[0]
+    logjson["traceSeconds"] = trace_duration_secs
+
+    if options.lirs:
+        logjson["EvictionPolicy"] = "LIRS"
+    elif options.fifo:
+        logjson["EvictionPolicy"] = "FIFO"
+    else:
+        logjson["EvictionPolicy"] = "LRU"
+
+    logjson["samplingRatio"] = sampling_ratio
+
+    logjson["results"] = {}
+
+    num_cache_elems = (
+        options.size_gb * 1024 * 1024 * 1024 * sampling_ratio / 100
+    ) // utils.BlkAccess.ALIGNMENT
+
+    ap = None
+    apname = ""
+    if options.rejectx_ap:
+        threshold = 1
+        factor = 2
+        if options.ap_threshold:
+            threshold = options.ap_threshold
+        if options.ap_probability:
+            factor = options.ap_probability
+        if scaled_write_mbps == 0:
+            ap = RejectXAP(threshold, factor * num_cache_elems)
+            apname = "RejectX"
+        else:
+            ap = RejectFirstWriteRateAP(
+                2 * num_cache_elems, scaled_write_mbps, utils.BlkAccess.ALIGNMENT
+            )
+            apname = "RejectFirstWriteRate"
+    elif options.learned_ap:
+        assert options.learned_ap_model and options.ap_threshold
+        ap = LearnedAP(options.learned_ap_model, options.ap_threshold)
+        print(
+            "Learned AP with model:",
+            options.learned_ap_model,
+            "threshold:",
+            options.ap_threshold,
+        )
+        apname = "Learned-Regression"
+    elif options.coinflip_ap:
+        assert options.ap_probability
+        ap = CoinFlipAP(options.ap_probability)
+        print("CoinFlip AP with probability:", options.ap_probability)
+        apname = "CoinFlip-P"
+
+    else:
+        if scaled_write_mbps != 0:
+            ap = WriteRateRejectAP(scaled_write_mbps, utils.BlkAccess.ALIGNMENT)
+            apname = "WriteRateReject"
+        else:
+            ap = AcceptAll()
+            apname = "AcceptAll"
+
+    logjson["AdmissionPolicy"] = apname
+
+    if options.lirs:
+        cache = LIRSCache(num_cache_elems, 1.0, ap, options.learned_ap_filter_count)
+    else:
+        cache = QueueCache(
+            use_lru, num_cache_elems, ap, options.learned_ap_filter_count
+        )
+
+    stats = simulate_cache(cache, accesses, sampling_ratio)
+
+    chunks_written = cache.keys_written
+    write_mb_per_sec = utils.mb_per_sec(
+        chunks_written, trace_duration_secs, sampling_ratio
+    )
+    total_iops_saved = sum(stats["iops_saved"])
+    logjson["results"]["NumCacheElems"] = num_cache_elems
+    logjson["results"]["IOPSRequested"] = stats["iops_requests"]
+    logjson["results"]["IOPSSaved"] = stats["iops_saved"]
+    logjson["results"]["TotalIOPSSaved"] = total_iops_saved
+    logjson["results"]["ChunkQueries"] = stats["chunk_queries"]
+    logjson["results"]["ChunkHits"] = stats["chunk_hits"]
+    logjson["results"]["IOPsPartialHits"] = stats["iops_partial_hits"]
+    logjson["results"]["FlashWriteRate"] = write_mb_per_sec
+    logjson["results"]["NumCacheEviction"] = cache.evictions
+    logjson["results"]["AvgEvictionAge"] = cache.computeEvictionAge()
+    logjson["results"]["NumNoHitEvictions"] = cache.un_accessed_evictions
+    logjson["results"]["AvgNoHitEvictionAge"] = cache.computeNoHitEvictionAge()
+    logjson["results"]["ChunkWritten"] = stats["chunks_written"]
+    logjson["results"]["Duration"] = stats["duration"]
+
+    print(
+        f"Results preview: \n \
+        Flash write rate - {write_mb_per_sec} MB/s \n \
+        IOPS saved ratio - {total_iops_saved / total_iops}"
+    )
+    with open(out_file_name, "w+") as out:
+        json.dump(logjson, out)
