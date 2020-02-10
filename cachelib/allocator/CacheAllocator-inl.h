@@ -3192,7 +3192,7 @@ bool CacheAllocator<CacheTrait>::stopWorker(folly::StringPiece name,
 
   bool ret = worker->stop(timeout);
   if (ret) {
-    XLOGF(INFO, "Stopped worker '{}'", name);
+    XLOGF(DBG1, "Stopped worker '{}'", name);
   } else {
     XLOGF(ERR, "Couldn't stop worker '{}', timeout: {} seconds", name,
           timeout.count());
@@ -3216,7 +3216,7 @@ bool CacheAllocator<CacheTrait>::startNewWorker(
   worker = std::make_unique<T>(*this, std::forward<Args>(args)...);
   bool ret = worker->start(interval, name);
   if (ret) {
-    XLOGF(INFO, "Started worker '{}'", name);
+    XLOGF(DBG1, "Started worker '{}'", name);
   } else {
     XLOGF(ERR, "Couldn't start worker '{}', interval: {} milliseconds", name,
           interval.count());
