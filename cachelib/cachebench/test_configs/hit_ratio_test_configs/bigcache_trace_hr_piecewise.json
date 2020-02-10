@@ -10,8 +10,7 @@
 
     "dipperSizeMB": 61047,
     "dipperBackend": "navy_dipper",
-    "dipperFilePath": "/dev/shm/cachebench",
-    "dipperNavyUseMemoryDevice": false,
+    "dipperNavyUseMemoryDevice": true,
     "dipperUseDirectIO": false,
 
     "dipperNavyBlock": 4096,
@@ -37,7 +36,7 @@
       "enableLookaside": false,
       "generator": "piecewise-replay",
       "numOps": 240000000,
-      "numThreads": 1,
+      "numThreads": 32,
       "prepopulateCache": false,
       "traceFileName": "bigcache.csv"
     }
