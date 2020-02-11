@@ -126,13 +126,15 @@ JobExitCode RegionManager::startReclaim() {
         auto& region = getRegion(rid);
         {
           std::lock_guard<std::mutex> lock{getLock(rid)};
-          if (!region.blockAccess() || !region.tryLock()) {
+          if (!region.readyForReclaim()) {
+            // Once a region is set exclusive, all future accesses will be
+            // blocked. However there might still be accesses in-flight,
+            // so we would retry if that's the case.
             return JobExitCode::Reschedule;
           }
         }
-        // We know that we blocked access and locked the region. We're the only
-        // thread working with it. Hence, it's safe to access @Region without
-        // lock.
+        // We know now we're the only thread working with this region.
+        // Hence, it's safe to access @Region without lock.
         if (region.getNumItems() != 0) {
           auto buffer = makeIOBuffer(regionSize());
           if (!read(RelAddress{rid, 0}, buffer.mutableView())) {
@@ -152,14 +154,16 @@ JobExitCode RegionManager::startReclaim() {
 RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   auto& region = getRegion(rid);
   std::lock_guard<std::mutex> lock{getLock(rid)};
-  // Lock guarantees ordering
-  if (seqNumber_.load(std::memory_order_relaxed) != seqNumber) {
-    return RegionDescriptor{OpenStatus::Retry};
-  } else {
-    auto desc = region.open(OpenMode::Read);
-    return desc.isReady() ? std::move(desc)
-                          : RegionDescriptor{OpenStatus::Reclaimed};
+  auto desc = region.openForRead();
+  if (!desc.isReady()) {
+    return desc;
   }
+  // Region lock guarantees ordering
+  if (seqNumber_.load(std::memory_order_relaxed) != seqNumber) {
+    region.close(std::move(desc));
+    return RegionDescriptor{OpenStatus::Retry};
+  }
+  return desc;
 }
 
 void RegionManager::close(RegionDescriptor&& desc) {
@@ -174,13 +178,13 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   auto& region = getRegion(rid);
   {
     std::lock_guard<std::mutex> lock{getLock(rid)};
-    region.unlock();
-    region.unblockAccess();
     // Permanent item region (pinned) should not be reclaimed
     XDCHECK(!region.isPinned());
-    region.reset();
-    // Lock guarantees ordering
+    // Region lock guarantees ordering
     seqNumber_.fetch_add(1, std::memory_order_relaxed);
+    // Reset all region internal state, making it ready to be
+    // used by a region allocator.
+    region.reset();
   }
   {
     std::lock_guard<std::mutex> lock{cleanRegionsMutex_};

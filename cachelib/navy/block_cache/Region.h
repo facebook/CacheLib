@@ -63,41 +63,47 @@ class Region {
   Region(const Region&) = delete;
   Region& operator=(const Region&) = delete;
 
+  // Immediately block future accesses to this region. Return true if
+  // there are no pending operation to this region, false otherwise.
+  // It is safe to repeatedly call this until success. Note that it is
+  // only safe for one thread to call this, as we assume only a single
+  // thread can be running region reclaim at a time.
+  bool readyForReclaim();
+
+  // Open this region for write and allocate a slot of @size.
+  // Fail if there's insufficient space.
+  std::tuple<RegionDescriptor, RelAddress> openAndAllocate(uint32_t size);
+
+  // Open this region for reading. Fail if region is blocked,
+  RegionDescriptor openForRead();
+
+  // Reset the region's internal state. This is used to reset state
+  // after a region has been reclaimed.
   void reset();
 
-  RegionDescriptor open(OpenMode mode);
+  // Close the region and consume the region descriptor.
   void close(RegionDescriptor&& desc);
 
+  // Associate this region with a RegionAllocator
   void setClassId(uint16_t classId) {
     XDCHECK(!isPinned());
     classId_ = classId;
   }
-
-  bool isPinned() const { return (flags_ & kPinned) != 0; }
-
   uint16_t getClassId() const {
     XDCHECK(!isPinned());
     return classId_;
   }
 
-  // Block access. Succeding @open will fail until unblocked.
-  bool blockAccess() {
-    flags_ |= kBlockAccess;
-    return activeOpen() == 0;
-  }
-
-  void unblockAccess() { flags_ &= ~kBlockAccess; }
-
-  // Try set lock bit on. Returns true if set and the caller got exclusive
-  // access. Access block and lock are orthogonal concepts, but typically we
-  // want to block particular access and then set the lock bit.
-  bool tryLock();
-
-  void unlock() { flags_ &= ~kLock; }
+  // Set this region as pinned (i.e. non-evictable)
+  void setPinned() { flags_ |= kPinned; }
+  bool isPinned() const { return (flags_ & kPinned) != 0; }
 
   uint32_t getLastEntryEndOffset() const { return lastEntryEndOffset_; }
 
   uint32_t getNumItems() const { return numItems_; }
+
+ private:
+  uint32_t activeOpen();
 
   uint32_t canAllocate(uint32_t size) {
     return (lastEntryEndOffset_ + size <= regionSize_);
@@ -105,13 +111,8 @@ class Region {
 
   RelAddress allocate(uint32_t size);
 
-  void setPinned() { flags_ |= kPinned; }
-
- private:
-  uint32_t activeOpen() { return activeReaders_ + activeWriters_; }
   static constexpr uint32_t kBlockAccess{1u << 0};
-  static constexpr uint32_t kLock{1u << 1};
-  static constexpr uint16_t kPinned{1u << 2};
+  static constexpr uint16_t kPinned{1u << 1};
 
   const RegionId regionId_{};
   const uint64_t regionSize_{0};

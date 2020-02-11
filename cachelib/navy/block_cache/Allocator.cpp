@@ -94,22 +94,22 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   if (rid.valid()) {
     std::lock_guard<std::mutex> rlock{regionManager_.getLock(rid)};
     auto& region = regionManager_.getRegion(rid);
-    auto desc = region.open(OpenMode::Write);
-    if (!desc.isReady()) {
+    RegionDescriptor desc{OpenStatus::Error};
+    std::tie(desc, addr) = region.openAndAllocate(size);
+    XDCHECK_NE(OpenStatus::Reclaimed, desc.status());
+    XDCHECK_NE(OpenStatus::Retry, desc.status());
+    if (desc.isReady()) {
       return std::make_tuple(std::move(desc), size, addr);
     }
-    bool canAllocate = region.canAllocate(size);
-    if (canAllocate) {
-      addr = region.allocate(size);
-      return std::make_tuple(std::move(desc), size, addr);
-    } else {
-      if (!region.isPinned()) {
-        regionManager_.track(rid);
-      }
-      ra.reset();
-      region.close(std::move(desc));
-      rid = RegionId{};
+
+    // Region is full, so we reset region allocator and get ready to
+    // get a new region below.
+    XDCHECK_EQ(OpenStatus::Error, desc.status());
+    ra.reset();
+    if (!region.isPinned()) {
+      regionManager_.track(rid);
     }
+    rid = RegionId{};
   }
 
   // if we are here, we either didn't find a valid region or the region we
@@ -132,15 +132,11 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     region.setClassId(ra.classId());
   }
 
-  // Replace with a reclaimed region
+  // Replace with a reclaimed region and allocate
   ra.setAllocationRegion(rid);
-  auto desc = region.open(OpenMode::Write);
-  if (!desc.isReady()) {
-    return std::make_tuple(std::move(desc), size, addr);
-  }
-
-  XDCHECK(region.canAllocate(size));
-  addr = region.allocate(size);
+  RegionDescriptor desc{OpenStatus::Error};
+  std::tie(desc, addr) = region.openAndAllocate(size);
+  XDCHECK_EQ(OpenStatus::Ready, desc.status());
   return std::make_tuple(std::move(desc), size, addr);
 }
 

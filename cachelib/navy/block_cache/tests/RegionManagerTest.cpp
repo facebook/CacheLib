@@ -91,12 +91,14 @@ TEST(RegionManager, Recovery) {
     rm->getRegion(RegionId{0}).setClassId(0);
     rm->getRegion(RegionId{1}).setClassId(0);
     for (int i = 0; i < 20; i++) {
-      rm->getRegion(RegionId{1}).allocate(101);
+      auto [desc, addr] = rm->getRegion(RegionId{1}).openAndAllocate(101);
+      rm->getRegion(RegionId{1}).close(std::move(desc));
     }
     rm->pin(rm->getRegion(RegionId{1}));
     rm->getRegion(RegionId{2}).setClassId(1);
     for (int i = 0; i < 30; i++) {
-      rm->getRegion(RegionId{2}).allocate(101);
+      auto [desc, addr] = rm->getRegion(RegionId{2}).openAndAllocate(101);
+      rm->getRegion(RegionId{2}).close(std::move(desc));
     }
     EXPECT_EQ(1, rm->pinnedCount());
 
@@ -216,13 +218,15 @@ TEST(RegionManager, RecoveryLRUOrder) {
 
     rm->getRegion(RegionId{0}).setClassId(1);
     for (int i = 0; i < 10; i++) {
-      rm->getRegion(RegionId{0}).allocate(200);
+      auto [desc, addr] = rm->getRegion(RegionId{0}).openAndAllocate(200);
+      rm->getRegion(RegionId{0}).close(std::move(desc));
     }
     rm->getRegion(RegionId{1}).setClassId(0);
     rm->getRegion(RegionId{2}).setClassId(0);
     rm->getRegion(RegionId{3}).setClassId(2);
     for (int i = 0; i < 20; i++) {
-      rm->getRegion(RegionId{3}).allocate(150);
+      auto [desc, addr] = rm->getRegion(RegionId{3}).openAndAllocate(150);
+      rm->getRegion(RegionId{3}).close(std::move(desc));
     }
 
     auto rw = createMemoryRecordWriter(ioq);
