@@ -3,6 +3,8 @@
 
 #include <folly/hash/Hash.h>
 
+// Comment out the define for FB_ENV when we build for external environments
+#define CACHEBENCH_FB_ENV
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/facebook/admin/CacheAdmin.h"
 #endif
