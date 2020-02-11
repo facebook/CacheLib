@@ -120,10 +120,6 @@ class RegionManager {
   bool read(RelAddress addr, MutableBufferView buf) const;
   void flush() const;
 
-  std::mutex& getLock(RegionId rid) const {
-    return regionMutexes_[rid.index() % kNumLocks];
-  }
-
   // Stores region information in a Thrift object for all regions
   void persist(RecordWriter& rw) const;
 
@@ -163,8 +159,6 @@ class RegionManager {
   // Detects @numFree_ and tracks appropriate regions. Called during recovery.
   void detectFree();
 
-  static constexpr uint32_t kNumLocks = 256;
-
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};
   const uint64_t baseOffset_{};
@@ -176,7 +170,6 @@ class RegionManager {
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter pinnedCount_;
   mutable AtomicCounter physicalWrittenCount_;
-  mutable std::mutex regionMutexes_[kNumLocks];
 
   mutable std::mutex cleanRegionsMutex_;
   std::vector<RegionId> cleanRegions_;

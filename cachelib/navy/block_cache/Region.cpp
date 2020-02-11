@@ -4,25 +4,28 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 bool Region::readyForReclaim() {
+  std::lock_guard<std::mutex> l{lock_};
   flags_ |= kBlockAccess;
-  return activeOpen() == 0;
+  return activeOpenLocked() == 0;
 }
 
-uint32_t Region::activeOpen() { return activeReaders_ + activeWriters_; }
+uint32_t Region::activeOpenLocked() { return activeReaders_ + activeWriters_; }
 
 std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
     uint32_t size) {
+  std::lock_guard<std::mutex> l{lock_};
   XDCHECK(!(flags_ & kBlockAccess));
-  if (!canAllocate(size)) {
+  if (!canAllocateLocked(size)) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{});
   }
   activeWriters_++;
   return std::make_tuple(
       RegionDescriptor{OpenStatus::Ready, regionId_, OpenMode::Write},
-      allocate(size));
+      allocateLocked(size));
 }
 
 RegionDescriptor Region::openForRead() {
+  std::lock_guard<std::mutex> l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
     return RegionDescriptor{OpenStatus::Retry};
@@ -32,7 +35,8 @@ RegionDescriptor Region::openForRead() {
 }
 
 void Region::reset() {
-  XDCHECK_EQ(activeOpen(), 0U);
+  std::lock_guard<std::mutex> l{lock_};
+  XDCHECK_EQ(activeOpenLocked(), 0U);
   classId_ = kClassIdMax;
   flags_ = 0;
   activeReaders_ = 0;
@@ -42,6 +46,7 @@ void Region::reset() {
 }
 
 void Region::close(RegionDescriptor&& desc) {
+  std::lock_guard<std::mutex> l{lock_};
   switch (desc.mode()) {
   case OpenMode::Write:
     activeWriters_--;
@@ -54,8 +59,8 @@ void Region::close(RegionDescriptor&& desc) {
   }
 }
 
-RelAddress Region::allocate(uint32_t size) {
-  XDCHECK(canAllocate(size));
+RelAddress Region::allocateLocked(uint32_t size) {
+  XDCHECK(canAllocateLocked(size));
   auto offset = lastEntryEndOffset_;
   lastEntryEndOffset_ += size;
   numItems_++;

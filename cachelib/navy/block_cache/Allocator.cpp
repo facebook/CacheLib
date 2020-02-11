@@ -92,7 +92,6 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   RegionId rid = ra.getAllocationRegion();
   // region is full, track it and reset ra and get a new region
   if (rid.valid()) {
-    std::lock_guard<std::mutex> rlock{regionManager_.getLock(rid)};
     auto& region = regionManager_.getRegion(rid);
     RegionDescriptor desc{OpenStatus::Error};
     std::tie(desc, addr) = region.openAndAllocate(size);
@@ -122,7 +121,6 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
 
   // we got a region fresh off of reclaim. Need to initialize it.
   auto& region = regionManager_.getRegion(rid);
-  LockGuard rlock{regionManager_.getLock(rid)};
   if (isPermanentAllocator(ra)) {
     // Pin immediately. We want to persist this region as pinned even if it
     // is not full.

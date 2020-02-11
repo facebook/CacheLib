@@ -56,7 +56,6 @@ RegionId RegionManager::evict() {
 void RegionManager::reset() {
   policy_->reset();
   for (uint32_t i = 0; i < numRegions_; i++) {
-    std::lock_guard<std::mutex> lock{regionMutexes_[i % kNumLocks]};
     regions_[i]->reset();
   }
   {
@@ -124,14 +123,11 @@ JobExitCode RegionManager::startReclaim() {
       [this, rid] {
         const auto startTime = getSteadyClock();
         auto& region = getRegion(rid);
-        {
-          std::lock_guard<std::mutex> lock{getLock(rid)};
-          if (!region.readyForReclaim()) {
-            // Once a region is set exclusive, all future accesses will be
-            // blocked. However there might still be accesses in-flight,
-            // so we would retry if that's the case.
-            return JobExitCode::Reschedule;
-          }
+        if (!region.readyForReclaim()) {
+          // Once a region is set exclusive, all future accesses will be
+          // blocked. However there might still be accesses in-flight,
+          // so we would retry if that's the case.
+          return JobExitCode::Reschedule;
         }
         // We know now we're the only thread working with this region.
         // Hence, it's safe to access @Region without lock.
@@ -153,13 +149,45 @@ JobExitCode RegionManager::startReclaim() {
 
 RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   auto& region = getRegion(rid);
-  std::lock_guard<std::mutex> lock{getLock(rid)};
   auto desc = region.openForRead();
   if (!desc.isReady()) {
     return desc;
   }
-  // Region lock guarantees ordering
-  if (seqNumber_.load(std::memory_order_relaxed) != seqNumber) {
+
+  // << Interaction of Region Lock and Sequence Number >>
+  //
+  // Reader:
+  // 1r. Load seq number
+  // 2r. Check index
+  // 3r. Open region
+  // 4r. Load seq number
+  //     If hasn't changed, proceed to read and close region.
+  //     Otherwise, abort read and close region.
+  //
+  // Reclaim:
+  // 1x. Mark region ready for reclaim
+  // 2x. Reclaim and evict entries from index
+  // 3x. Store seq number
+  // 4x. Reset region
+  //
+  // In order for these two sequence of operations to not have data race,
+  // we must guarantee the following ordering:
+  //   3r -> 4r
+  //
+  // We know that 3r either happens before 1x or happens after 4x, this
+  // means with the above ordering, 4r will either:
+  // 1. Read the same seq number and proceed to read
+  //    (3r -> 4r -> (read item and close region) -> 1x)
+  // 2. Or, read a different seq number and abort read (4x -> 3r -> 4r)
+  // Either of the above is CORRECT operation.
+  //
+  // This means we must prevent 3r from reordered below 4r. We know at
+  // the end of 3r we have a mutex::unlock(), but it is only equivalent
+  // to a memory_order_release, which means anything above 3r cannot
+  // be ordered down, but 4r can be ordered up! So we have to set a full
+  // memory barrier here in the form of memory_order_acq_rel to make sure
+  // 3r will stay exactly where it is to guarantee 3r -> 4r ordering.
+  if (seqNumber_.load(std::memory_order_acq_rel) != seqNumber) {
     region.close(std::move(desc));
     return RegionDescriptor{OpenStatus::Retry};
   }
@@ -169,23 +197,20 @@ RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
 void RegionManager::close(RegionDescriptor&& desc) {
   RegionId rid = desc.id();
   auto& region = getRegion(rid);
-  std::lock_guard<std::mutex> lock{getLock(rid)};
   region.close(std::move(desc));
 }
 
 void RegionManager::releaseEvictedRegion(RegionId rid,
                                          std::chrono::nanoseconds startTime) {
   auto& region = getRegion(rid);
-  {
-    std::lock_guard<std::mutex> lock{getLock(rid)};
-    // Permanent item region (pinned) should not be reclaimed
-    XDCHECK(!region.isPinned());
-    // Region lock guarantees ordering
-    seqNumber_.fetch_add(1, std::memory_order_relaxed);
-    // Reset all region internal state, making it ready to be
-    // used by a region allocator.
-    region.reset();
-  }
+  // Permanent item region (pinned) should not be reclaimed
+  XDCHECK(!region.isPinned());
+  // Full barrier because is we cannot have seqNumber_.fetch_add() re-ordered
+  // below region.reset(). It is similar to the full barrier in openForRead.
+  seqNumber_.fetch_add(1, std::memory_order_acq_rel);
+  // Reset all region internal state, making it ready to be
+  // used by a region allocator.
+  region.reset();
   {
     std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
     reclaimsScheduled_--;
@@ -265,7 +290,6 @@ void RegionManager::detectFree() {
   // Increment @numFree_ for every consecutive region starting from the back of
   // the array that has @lastEntryEndOffset == 0.
   for (uint32_t i = numRegions_; i-- > 0;) {
-    std::lock_guard<std::mutex> lock{regionMutexes_[i % kNumLocks]};
     if (regions_[i]->getNumItems() == 0) {
       numFree_++;
     } else {
@@ -274,7 +298,6 @@ void RegionManager::detectFree() {
   }
   // Track all regions that are not free
   for (uint32_t i = 0; i < numRegions_ - numFree_; i++) {
-    std::lock_guard<std::mutex> lock{regionMutexes_[i % kNumLocks]};
     if (!regions_[i]->isPinned()) {
       track(RegionId{i});
     }
@@ -282,7 +305,6 @@ void RegionManager::detectFree() {
   // Move all regions with items to the LRU head. Clean regions with 0 items
   // will group in the LRU tail.
   for (uint32_t i = 0; i < numRegions_ - numFree_; i++) {
-    std::lock_guard<std::mutex> lock{regionMutexes_[i % kNumLocks]};
     if (!regions_[i]->isPinned()) {
       if (regions_[i]->getNumItems() != 0) {
         touch(RegionId{i});

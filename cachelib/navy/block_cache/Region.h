@@ -87,29 +87,43 @@ class Region {
   // Associate this region with a RegionAllocator
   void setClassId(uint16_t classId) {
     XDCHECK(!isPinned());
+    std::lock_guard<std::mutex> l{lock_};
     classId_ = classId;
   }
   uint16_t getClassId() const {
     XDCHECK(!isPinned());
+    std::lock_guard<std::mutex> l{lock_};
     return classId_;
   }
 
   // Set this region as pinned (i.e. non-evictable)
-  void setPinned() { flags_ |= kPinned; }
-  bool isPinned() const { return (flags_ & kPinned) != 0; }
+  void setPinned() {
+    std::lock_guard<std::mutex> l{lock_};
+    flags_ |= kPinned;
+  }
+  bool isPinned() const {
+    std::lock_guard<std::mutex> l{lock_};
+    return (flags_ & kPinned) != 0;
+  }
 
-  uint32_t getLastEntryEndOffset() const { return lastEntryEndOffset_; }
+  uint32_t getLastEntryEndOffset() const {
+    std::lock_guard<std::mutex> l{lock_};
+    return lastEntryEndOffset_;
+  }
 
-  uint32_t getNumItems() const { return numItems_; }
+  uint32_t getNumItems() const {
+    std::lock_guard<std::mutex> l{lock_};
+    return numItems_;
+  }
 
  private:
-  uint32_t activeOpen();
+  uint32_t activeOpenLocked();
 
-  uint32_t canAllocate(uint32_t size) {
+  uint32_t canAllocateLocked(uint32_t size) {
     return (lastEntryEndOffset_ + size <= regionSize_);
   }
 
-  RelAddress allocate(uint32_t size);
+  RelAddress allocateLocked(uint32_t size);
 
   static constexpr uint32_t kBlockAccess{1u << 0};
   static constexpr uint16_t kPinned{1u << 1};
@@ -124,6 +138,8 @@ class Region {
   // End offset of last slot added to region
   uint32_t lastEntryEndOffset_{0};
   uint32_t numItems_{0};
+
+  mutable std::mutex lock_;
 };
 
 // RegionDescriptor. Contains status of the open, region id and the open mode.
