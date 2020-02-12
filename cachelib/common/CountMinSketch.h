@@ -38,19 +38,42 @@ class CountMinSketch {
                  uint32_t maxDepth);
 
   CountMinSketch(uint32_t width, uint32_t depth);
+  CountMinSketch() = default;
 
+  CountMinSketch(const CountMinSketch&) = delete;
+  CountMinSketch& operator=(const CountMinSketch&) = delete;
+
+  CountMinSketch(CountMinSketch&& other) noexcept
+      : width_(other.width_),
+        depth_(other.depth_),
+        table_(std::move(other.table_)) {
+    other.width_ = 0;
+    other.depth_ = 0;
+  }
+
+  CountMinSketch& operator=(CountMinSketch&& other) {
+    if (this != &other) {
+      this->~CountMinSketch();
+      new (this) CountMinSketch(std::move(other));
+    }
+    return *this;
+  }
+
+  uint32_t getCount(uint64_t key) const;
   void increment(uint64_t key);
   void resetCount(uint64_t key);
-  uint32_t getCount(uint64_t key) const;
+
+  // decays all counts by the given decay rate. count *= decay
+  void decayCountsBy(double decay);
 
   // Sets count for all keys to zero
-  void reset();
+  void reset() { decayCountsBy(0.0); }
 
   uint32_t width() const { return width_; }
 
   uint32_t depth() const { return depth_; }
 
-  uint64_t getByteSize() {
+  uint64_t getByteSize() const {
     // Each elem in @table_ has 4 bytes
     return width_ * depth_ * 4;
   }
@@ -62,11 +85,11 @@ class CountMinSketch {
   // Get the index for @hashNumber row in the table
   uint64_t getIndex(uint32_t hashNumber, uint64_t key) const;
 
-  const uint32_t width_{};
-  const uint32_t depth_{};
+  uint32_t width_{0};
+  uint32_t depth_{0};
 
   // Stores counts
-  std::unique_ptr<uint32_t[]> table_;
+  std::unique_ptr<uint32_t[]> table_{};
 };
 } // namespace util
 } // namespace cachelib

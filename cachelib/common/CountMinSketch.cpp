@@ -73,12 +73,12 @@ void CountMinSketch::increment(uint64_t key) {
 }
 
 uint32_t CountMinSketch::getCount(uint64_t key) const {
-  auto count = table_[getIndex(0, key)];
-  for (uint32_t hashNum = 1; hashNum < depth_; hashNum++) {
+  auto count = std::numeric_limits<uint32_t>::max();
+  for (uint32_t hashNum = 0; hashNum < depth_; hashNum++) {
     auto index = getIndex(hashNum, key);
     count = std::min(count, table_[index]);
   }
-  return count;
+  return count * (depth_ != 0);
 }
 
 void CountMinSketch::resetCount(uint64_t key) {
@@ -89,11 +89,11 @@ void CountMinSketch::resetCount(uint64_t key) {
   }
 }
 
-void CountMinSketch::reset() {
+void CountMinSketch::decayCountsBy(double decay) {
   // Delete previous table and reinitialize
   uint64_t tableSize = width_ * depth_;
   for (uint64_t i = 0; i < tableSize; i++) {
-    table_[i] = 0;
+    table_[i] *= decay;
   }
 }
 
