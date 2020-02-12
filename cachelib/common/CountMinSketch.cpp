@@ -1,15 +1,15 @@
-#include "cachelib/navy/common/CountMinSketch.h"
 
 #include <cmath>
 #include <limits>
 
 #include <folly/Format.h>
 
-#include "cachelib/navy/common/Hash.h"
+#include "cachelib/common/CountMinSketch.h"
+#include "cachelib/common/Hash.h"
 
 namespace facebook {
 namespace cachelib {
-namespace navy {
+namespace util {
 CountMinSketch::CountMinSketch(double error,
                                double probability,
                                uint32_t maxWidth,
@@ -98,9 +98,11 @@ void CountMinSketch::reset() {
 }
 
 uint64_t CountMinSketch::getIndex(uint32_t hashNum, uint64_t key) const {
-  auto rowIndex = combineHashes(hashInt(hashNum), key) % width_;
+  auto rowIndex = facebook::cachelib::combineHashes(
+                      facebook::cachelib::hashInt(hashNum), key) %
+                  width_;
   return hashNum * width_ + rowIndex;
 }
-} // namespace navy
+} // namespace util
 } // namespace cachelib
 } // namespace facebook

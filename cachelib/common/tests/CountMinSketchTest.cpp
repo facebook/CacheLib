@@ -1,13 +1,14 @@
-#include "cachelib/navy/common/CountMinSketch.h"
-
 #include <random>
 
 #include <gtest/gtest.h>
 
+#include "cachelib/common/CountMinSketch.h"
+
 namespace facebook {
 namespace cachelib {
-namespace navy {
 namespace tests {
+using facebook::cachelib::util::CountMinSketch;
+
 TEST(CountMinSketch, Simple) {
   CountMinSketch cms{100, 3};
   std::mt19937_64 rg{1};
@@ -88,6 +89,5 @@ TEST(CountMinSketch, InvalidArgs) {
   EXPECT_THROW(CountMinSketch(0, 0, 0, 0), std::invalid_argument);
 }
 } // namespace tests
-} // namespace navy
 } // namespace cachelib
 } // namespace facebook

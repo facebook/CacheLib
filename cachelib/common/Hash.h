@@ -52,5 +52,12 @@ struct MurmurHash2 final : public Hash {
 // performance even for longer keys.
 uint32_t furcHash(const void* buf, size_t len, uint32_t range);
 
+// combines two 64 bit hash into one
+inline uint64_t combineHashes(uint64_t h1, uint64_t h2) {
+  return folly::hash::hash_128_to_64(h1, h2);
+}
+
+inline uint64_t hashInt(uint64_t key) { return folly::hash::twang_mix64(key); }
+
 } // namespace cachelib
 } // namespace facebook

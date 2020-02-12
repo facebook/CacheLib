@@ -9,8 +9,6 @@ namespace cachelib {
 namespace navy {
 // Default hash function
 uint64_t hashBuffer(BufferView key, uint64_t seed = 0);
-uint64_t hashInt(uint64_t key);
-uint64_t combineHashes(uint64_t h1, uint64_t h2);
 
 // Default checksumming function
 uint32_t checksum(BufferView data, uint32_t startingChecksum = 0);

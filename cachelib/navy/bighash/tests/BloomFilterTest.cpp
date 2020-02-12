@@ -1,8 +1,8 @@
-#include "cachelib/navy/bighash/BloomFilter.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/common/Hash.h"
+#include "cachelib/navy/bighash/BloomFilter.h"
 #include "cachelib/navy/common/Hash.h"
 
 namespace facebook {
@@ -45,20 +45,20 @@ TEST(BloomFilter, SimpleCollision) {
     bf.setInitBit(i);
     {
       uint64_t key = 1;
-      EXPECT_EQ(0, combineHashes(key, hashInt(0)) % 4);
-      EXPECT_EQ(3, combineHashes(key, hashInt(1)) % 4);
+      EXPECT_EQ(0, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
+      EXPECT_EQ(3, facebook::cachelib::combineHashes(key, hashInt(1)) % 4);
       EXPECT_TRUE(bf.couldExist(i, key));
     }
     {
       uint64_t key = 3;
-      EXPECT_EQ(2, combineHashes(key, hashInt(0)) % 4);
-      EXPECT_EQ(2, combineHashes(key, hashInt(1)) % 4);
+      EXPECT_EQ(2, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
+      EXPECT_EQ(2, facebook::cachelib::combineHashes(key, hashInt(1)) % 4);
       EXPECT_FALSE(bf.couldExist(i, key));
     }
     {
       uint64_t key = 33;
-      EXPECT_EQ(0, combineHashes(key, hashInt(0)) % 4);
-      EXPECT_EQ(3, combineHashes(key, hashInt(1)) % 4);
+      EXPECT_EQ(0, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
+      EXPECT_EQ(3, facebook::cachelib::combineHashes(key, hashInt(1)) % 4);
       EXPECT_TRUE(bf.couldExist(i, key)); // Collision
     }
     // For index 1, check clearing others doesn't affect it
@@ -80,11 +80,15 @@ TEST(BloomFilter, SharedCollision) {
   BloomFilter bf{1, 2, 4};
   bf.setInitBit(0);
   EXPECT_EQ(1, bf.getByteSize());
-  EXPECT_EQ(0, combineHashes(1, hashInt(0)) % 4); // Bit 0 in 1st hash table
-  EXPECT_EQ(3, combineHashes(1, hashInt(1)) % 4); // Bit 3 in 2nd hash table
+  EXPECT_EQ(0, facebook::cachelib::combineHashes(1, hashInt(0)) %
+                   4); // Bit 0 in 1st hash table
+  EXPECT_EQ(3, facebook::cachelib::combineHashes(1, hashInt(1)) %
+                   4); // Bit 3 in 2nd hash table
   bf.set(0, 1);
-  EXPECT_EQ(2, combineHashes(3, hashInt(0)) % 4); // Bit 2 in 1st hash table
-  EXPECT_EQ(2, combineHashes(3, hashInt(1)) % 4); // Bit 2 in 2nd hash table
+  EXPECT_EQ(2, facebook::cachelib::combineHashes(3, hashInt(0)) %
+                   4); // Bit 2 in 1st hash table
+  EXPECT_EQ(2, facebook::cachelib::combineHashes(3, hashInt(1)) %
+                   4); // Bit 2 in 2nd hash table
   bf.set(0, 3);
 
   // BloomFilter looks like:
@@ -95,15 +99,15 @@ TEST(BloomFilter, SharedCollision) {
   // Try key = 18: 1st bit #2, 2nd bit #3.
   {
     uint64_t key = 18;
-    EXPECT_EQ(2, combineHashes(key, hashInt(0)) % 4);
-    EXPECT_EQ(3, combineHashes(key, hashInt(1)) % 4);
+    EXPECT_EQ(2, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
+    EXPECT_EQ(3, facebook::cachelib::combineHashes(key, hashInt(1)) % 4);
     EXPECT_TRUE(bf.couldExist(0, key));
   }
   // Try key = 15: 1st bit #0, 2nd bit #2.
   {
     uint64_t key = 15;
-    EXPECT_EQ(0, combineHashes(key, hashInt(0)) % 4);
-    EXPECT_EQ(2, combineHashes(key, hashInt(1)) % 4);
+    EXPECT_EQ(0, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
+    EXPECT_EQ(2, facebook::cachelib::combineHashes(key, hashInt(1)) % 4);
     EXPECT_TRUE(bf.couldExist(0, key));
   }
 }

@@ -1,7 +1,7 @@
-
 #include <cassert>
 #include <cstring>
 
+#include "cachelib/common/Hash.h"
 #include "cachelib/navy/bighash/BloomFilter.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Utils.h"
@@ -53,7 +53,7 @@ BloomFilter::BloomFilter(uint32_t numFilters,
   // array: new T[N]().
 
   for (size_t i = 0; i < seeds_.size(); i++) {
-    seeds_[i] = hashInt(i);
+    seeds_[i] = facebook::cachelib::hashInt(i);
   }
   // By default all filters are initialized
   std::memset(init_.get(), 0xff, bitsToBytes(numFilters_));
@@ -64,7 +64,8 @@ void BloomFilter::set(uint32_t idx, uint64_t key) {
   auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
-    auto bucket = combineHashes(key, seed) & (hashTableBitSize_ - 1);
+    auto bucket =
+        facebook::cachelib::combineHashes(key, seed) & (hashTableBitSize_ - 1);
     bitSet(filterPtr, firstBit + bucket);
     firstBit += hashTableBitSize_;
   }
@@ -79,7 +80,8 @@ bool BloomFilter::couldExist(uint32_t idx, uint64_t key) const {
   auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
-    auto bucket = combineHashes(key, seed) & (hashTableBitSize_ - 1);
+    auto bucket =
+        facebook::cachelib::combineHashes(key, seed) & (hashTableBitSize_ - 1);
     if (!bitGet(filterPtr, firstBit + bucket)) {
       return false;
     }

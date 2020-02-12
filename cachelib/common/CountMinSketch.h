@@ -6,7 +6,7 @@
 
 namespace facebook {
 namespace cachelib {
-namespace navy {
+namespace util {
 // A probabilistic counting data structure that never undercounts items. It is
 // a table structure with the depth being the number of hashes and the width
 // being the number of unique items. When a key is inserted, each row's hash
@@ -64,6 +64,6 @@ class CountMinSketch {
   // Stores counts
   std::unique_ptr<std::atomic<uint32_t>[]> table_;
 };
-} // namespace navy
+} // namespace util
 } // namespace cachelib
 } // namespace facebook
