@@ -1683,10 +1683,10 @@ class CacheAllocator : public CacheBase {
   mutable detail::Stats stats_{};
 
   // latency stats of various cachelib operations
-  mutable util::LatencyStats allocateLatency_;
-  mutable util::LatencyStats nvmLookupLatency_;
-  mutable util::LatencyStats nvmInsertLatency_;
-  mutable util::LatencyStats nvmRemoveLatency_;
+  mutable util::PercentileStats allocateLatency_;
+  mutable util::PercentileStats nvmLookupLatency_;
+  mutable util::PercentileStats nvmInsertLatency_;
+  mutable util::PercentileStats nvmRemoveLatency_;
 
   // percentile stats for various nvm cache statistics
   mutable util::PercentileStats nvmSmallEvictionAgeSecs_;

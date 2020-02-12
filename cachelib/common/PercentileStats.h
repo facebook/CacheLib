@@ -62,35 +62,16 @@ class PercentileStats {
   folly::SlidingWindowQuantileEstimator<> estimator_;
 };
 
-// wrapper around percentile stats that assumes that the value tracked is
-// cpu cycles
-class LatencyStats : public PercentileStats {
- public:
-  LatencyStats() = default;
-
-  PercentileStats::Estimates estimate() {
-    auto ret = PercentileStats::estimate();
-    return Estimates{util::getTimeNsFromCycles(ret.avg),
-                     util::getTimeNsFromCycles(ret.p10),
-                     util::getTimeNsFromCycles(ret.p25),
-                     util::getTimeNsFromCycles(ret.p50),
-                     util::getTimeNsFromCycles(ret.p75),
-                     util::getTimeNsFromCycles(ret.p90),
-                     util::getTimeNsFromCycles(ret.p95),
-                     util::getTimeNsFromCycles(ret.p99),
-                     util::getTimeNsFromCycles(ret.p999),
-                     util::getTimeNsFromCycles(ret.p100)};
-  }
-};
-
 class LatencyTracker {
  public:
-  explicit LatencyTracker(LatencyStats& stats)
-      : stats_(&stats), cyclesBegin_(util::cpuCycleCounter()) {}
+  explicit LatencyTracker(PercentileStats& stats)
+      : stats_(&stats), begin_(std::chrono::steady_clock::now()) {}
   ~LatencyTracker() {
     if (stats_) {
-      uint64_t cycles = util::cpuCycleCounter() - cyclesBegin_;
-      stats_->trackValue(cycles);
+      auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - begin_)
+                           .count();
+      stats_->trackValue(diffNanos);
     }
   }
 
@@ -98,9 +79,10 @@ class LatencyTracker {
   LatencyTracker& operator=(const LatencyTracker&) = delete;
 
   LatencyTracker(LatencyTracker&& rhs) noexcept
-      : stats_(rhs.stats_), cyclesBegin_(rhs.cyclesBegin_) {
+      : stats_(rhs.stats_), begin_(rhs.begin_) {
     rhs.stats_ = nullptr;
   }
+
   LatencyTracker& operator=(LatencyTracker&& rhs) noexcept {
     if (this != &rhs) {
       this->~LatencyTracker();
@@ -110,8 +92,8 @@ class LatencyTracker {
   }
 
  private:
-  LatencyStats* stats_{nullptr};
-  const uint64_t cyclesBegin_{};
+  PercentileStats* stats_{nullptr};
+  std::chrono::time_point<std::chrono::steady_clock> begin_;
 };
 } // namespace util
 } // namespace cachelib

@@ -8,8 +8,6 @@
 #include <folly/FileUtil.h>
 #include <folly/chrono/Hardware.h>
 
-#include "common/base/proc/ProcFsWrapper.h"
-
 namespace facebook {
 namespace cachelib {
 namespace util {
@@ -145,27 +143,6 @@ size_t getNumPages(size_t len) noexcept;
 
 // return true if the memory is page aligned.
 bool isPageAlignedAddr(const void* addr) noexcept;
-
-// Return the CPU cycle counter.
-// @return  the cycle counter, in raw cycle units.
-__attribute__((__always_inline__)) inline uint64_t cpuCycleCounter() noexcept {
-  return folly::hardware_timestamp();
-}
-
-__attribute__((__always_inline__)) inline uint64_t getCpuFreqMhz() {
-  static const uint64_t cpuFreq =
-      proc::ProcFsWrapper{}.systemCpuInfo().cpuSpeedMHz;
-  return cpuFreq;
-}
-// get the time elapsed accroding to the cpu cycles.
-__attribute__((__always_inline__)) inline uint64_t getTimeNsFromCycles(
-    uint64_t cycles) {
-  auto freq = util::getCpuFreqMhz();
-  if (freq == 0) {
-    return 0;
-  }
-  return static_cast<uint64_t>(cycles * 1000ul / freq);
-}
 
 /* returns true with the file's mode. false if the file does not exist.
  * throws system_error for all other errors */
