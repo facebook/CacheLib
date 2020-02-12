@@ -15,6 +15,7 @@
 #include <folly/Random.h>
 
 #include "cachelib/common/Utils.h"
+#include "common/base/Proc.h"
 namespace facebook {
 namespace cachelib {
 namespace util {
@@ -345,6 +346,10 @@ std::string toString(std::chrono::nanoseconds d) {
     return folly::sformat("{:.2f}s", static_cast<double>(count) / secs);
   }
 }
+
+size_t getRSSBytes() { return facebook::Proc::getMemoryUsage(); }
+
+size_t getMemAvailable() { return facebook::Proc::getMemInfo().memAvailable; }
 
 } // namespace util
 } // namespace cachelib

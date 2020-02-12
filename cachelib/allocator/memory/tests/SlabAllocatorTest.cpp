@@ -13,7 +13,6 @@
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/shm/ShmManager.h"
-#include "common/base/Proc.h"
 
 using namespace facebook::cachelib::tests;
 using namespace facebook::cachelib;
@@ -582,7 +581,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(5));
   ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
-  auto memRssBefore = facebook::Proc::getMemoryUsage();
+  auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // Use up all but a few slabs so that we have a few free
   for (size_t i = 0; i < numSlabs; i++) {
@@ -599,7 +598,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   ASSERT_EQ(util::getNumResidentPages(memory, size),
             util::getNumPages(size - numAdviseSlabs * Slab::kSize));
 
-  auto memRssAfter = facebook::Proc::getMemoryUsage();
+  auto memRssAfter = facebook::cachelib::util::getRSSBytes();
   ASSERT_TRUE(memRssBefore > memRssAfter);
 
   // Reclaim half of released memory
@@ -611,7 +610,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   ASSERT_EQ(util::getNumResidentPages(memory, size),
             util::getNumPages(size - numAdviseSlabs / 2 * Slab::kSize));
 
-  auto memRssAfter1 = facebook::Proc::getMemoryUsage();
+  auto memRssAfter1 = facebook::cachelib::util::getRSSBytes();
   ASSERT_TRUE(memRssAfter1 > memRssAfter);
 
   // Reclaim rest of released memory
@@ -622,7 +621,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   // Reclaiming doesn't change the number of resident pages returned by mincore.
   ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
 
-  auto memRssAfter2 = facebook::Proc::getMemoryUsage();
+  auto memRssAfter2 = facebook::cachelib::util::getRSSBytes();
   ASSERT_TRUE(memRssAfter2 > memRssAfter);
 }
 
@@ -632,7 +631,7 @@ void testAdvise(SlabAllocator& s,
                 void* memory,
                 const size_t size) {
   ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
-  auto memRssBefore = facebook::Proc::getMemoryUsage();
+  auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // Use up all but a few slabs so that we have a few free
   for (size_t i = 0; i < numSlabs; i++) {
@@ -649,7 +648,7 @@ void testAdvise(SlabAllocator& s,
   ASSERT_EQ(util::getNumResidentPages(memory, size),
             util::getNumPages(size - numAdviseSlabs * Slab::kSize));
 
-  auto memRssAfter = facebook::Proc::getMemoryUsage();
+  auto memRssAfter = facebook::cachelib::util::getRSSBytes();
   ASSERT_GT(memRssBefore, memRssAfter);
 }
 
@@ -659,7 +658,7 @@ void testRestoreAndAdvise(SlabAllocator& s,
                           const size_t size) {
   ASSERT_EQ(util::getNumResidentPages(memory, size),
             util::getNumPages(size - numAdviseSlabs * Slab::kSize));
-  auto memRssBefore = facebook::Proc::getMemoryUsage();
+  auto memRssBefore = facebook::cachelib::util::getRSSBytes();
 
   // No free slabs available
   ASSERT_EQ(nullptr, s.makeNewSlab(0));
@@ -671,7 +670,7 @@ void testRestoreAndAdvise(SlabAllocator& s,
   }
   ASSERT_EQ(util::getNumResidentPages(memory, size), util::getNumPages(size));
 
-  auto memRssAfter = facebook::Proc::getMemoryUsage();
+  auto memRssAfter = facebook::cachelib::util::getRSSBytes();
   ASSERT_LT(memRssBefore, memRssAfter);
 }
 

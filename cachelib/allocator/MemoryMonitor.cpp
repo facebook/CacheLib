@@ -4,7 +4,6 @@
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/common/Exceptions.h"
-#include "common/base/Proc.h"
 
 namespace facebook {
 namespace cachelib {
@@ -59,7 +58,7 @@ void MemoryMonitor::work() {
 }
 
 void MemoryMonitor::checkFreeMemory() {
-  auto memFree = static_cast<size_t>(facebook::Proc::getMemInfo().memAvailable);
+  auto memFree = facebook::cachelib::util::getMemAvailable();
   const auto stats = cache_.getCacheMemoryStats();
   if (memFree < lowerLimit_) {
     XLOGF(DBG,
@@ -78,7 +77,7 @@ void MemoryMonitor::checkFreeMemory() {
 }
 
 void MemoryMonitor::checkResidentMemory() {
-  auto rss = static_cast<size_t>(facebook::Proc::getMemoryUsage());
+  auto rss = static_cast<size_t>(facebook::cachelib::util::getRSSBytes());
   const auto stats = cache_.getCacheMemoryStats();
   if (rss > upperLimit_) {
     XLOGF(DBG,
