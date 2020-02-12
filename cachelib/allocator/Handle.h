@@ -3,7 +3,6 @@
 #include <iostream>
 #include <mutex>
 
-#include <fmt/format.h>
 #include <folly/Function.h>
 #include <folly/fibers/Baton.h>
 #include <folly/futures/Future.h>
@@ -49,7 +48,8 @@ struct HandleImpl {
     try {
       alloc_->release(it_, isNascent());
     } catch (const std::exception& e) {
-      XLOGF(CRITICAL, "Failed to release {} : {}", fmt::ptr(it_), e.what());
+      XLOGF(CRITICAL, "Failed to release {:#10x} : {}", static_cast<void*>(it_),
+            e.what());
     }
     it_ = nullptr;
   }
@@ -316,7 +316,8 @@ struct HandleImpl {
       try {
         alloc_.release(it, /* isNascent */ false);
       } catch (const std::exception& e) {
-        XLOGF(CRITICAL, "Failed to release {} : {}", fmt::ptr(it), e.what());
+        XLOGF(CRITICAL, "Failed to release {:#10x} : {}",
+              static_cast<void*>(it), e.what());
       }
     }
 
