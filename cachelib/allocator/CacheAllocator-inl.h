@@ -2912,7 +2912,9 @@ CacheAllocator<CacheTrait>::shutDown() {
   if (shmManager_ == nullptr) {
     throw std::invalid_argument(
         "shutDown can only be called once from a cached manager created on "
-        "shared memory");
+        "shared memory. You may also be incorrectly constructing your "
+        "allocator. Are you passing in "
+        "AllocatorType::SharedMem* ?");
   }
   XDCHECK(!config_.cacheDir.empty());
 
