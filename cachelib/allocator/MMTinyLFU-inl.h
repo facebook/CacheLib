@@ -1,11 +1,6 @@
 namespace facebook {
 namespace cachelib {
 
-// Number of hashes
-constexpr size_t kHashCount = 4;
-// The error threshold for frequency calculation
-constexpr size_t kErrorThreshold = 5;
-
 /* Container Interface Implementation */
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 MMTinyLFU::Container<T, HookPtr>::Container(
@@ -23,24 +18,26 @@ void MMTinyLFU::Container<T,
   if (2 * capacity_ > capacity) {
     return;
   }
+
   capacity_ = std::max(capacity, kDefaultCapacity);
+
   // The window counter that's incremented on every fetch.
   windowSize_ = 0;
+
   // The frequency counters are halved every maxWindowSize_ fetches to decay the
   // frequency counts.
   maxWindowSize_ = capacity_ * config_.windowToCacheSizeRatio;
+
   // Number of frequency counters - roughly equal to the window size divided by
   // error tolerance.
   size_t numCounters =
-      static_cast<size_t>(std::exp(1.0) * capacity_ *
-                          config_.windowToCacheSizeRatio / kErrorThreshold);
+      static_cast<size_t>(std::exp(1.0) * maxWindowSize_ / kErrorThreshold);
+
   numCounters = folly::nextPowTwo(numCounters);
-  // Number of bits for each frequency counter, determined by ratio of
-  // window size to cache size.
-  auto numBits = std::ceil(std::log(folly::divCeil(maxWindowSize_, capacity_)));
+
   // The CountMinSketch frequency counter
-  accessFreq_ = std::make_unique<unicorn::datastruct::CountMinSketch>(
-      kHashCount, numCounters, numBits);
+  accessFreq_ =
+      facebook::cachelib::util::CountMinSketch(numCounters, kHashCount);
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
@@ -112,14 +109,14 @@ MMTinyLFU::Container<T, HookPtr>::getEvictionAgeStatLocked(
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::updateFrequenciesLocked(
     const T& node) noexcept {
-  accessFreq_->add(hashNode(node));
+  accessFreq_.increment(hashNode(node));
   ++windowSize_;
-  // Halve frequency counts every maxWindowSize_ to decay the frequencies.
-  // This avoids having items that were accessed frequently (were hot) but
-  // aren't being accessed anymore (are cold) from staying in cache forever.
+  // decay counts every maxWindowSize_ .  This avoids having items that were
+  // accessed frequently (were hot) but aren't being accessed anymore (are
+  // cold) from staying in cache forever.
   if (windowSize_ == maxWindowSize_) {
     windowSize_ >>= 1;
-    accessFreq_->halveAllCounters();
+    accessFreq_.decayCountsBy(kDecayFactor);
   }
 }
 

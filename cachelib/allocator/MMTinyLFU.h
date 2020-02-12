@@ -8,21 +8,17 @@
 #include <folly/Math.h>
 #pragma GCC diagnostic pop
 
+#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/datastruct/MultiDList.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
+#include "cachelib/common/CountMinSketch.h"
 #include "cachelib/common/Mutex.h"
-#include "unicorn/datastruct/CountMinSketch.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/CacheStats.h"
 
 namespace facebook {
 namespace cachelib {
-
-// Initial cache capacity
-constexpr size_t kDefaultCapacity = 1000;
 
 // Implements the W-TinyLFU cache eviction policy as described in -
 // https://arxiv.org/pdf/1512.00727.pdf
@@ -37,7 +33,7 @@ constexpr size_t kDefaultCapacity = 1000;
 // cache. Hits in each cache simply move the item to the head of each
 // LRU cache.
 // The frequency counts are maintained in CountMinSketch approximate
-// counters - https://en.wikipedia.org/wiki/Count%E2%80%93min_sketch
+// counters -
 
 // Counter Overhead:
 // The windowToCacheSizeRatio determines the size of counters. The default
@@ -412,7 +408,7 @@ class MMTinyLFU {
 
     size_t counterSize() const noexcept {
       LockHolder l(lruMutex_);
-      return accessFreq_ ? accessFreq_->size() : 0;
+      return accessFreq_.getByteSize();
     }
 
     // Returns the eviction age stats. See CacheStats.h for details
@@ -471,8 +467,8 @@ class MMTinyLFU {
     bool admitToMain(const T& tinyNode, const T& mainNode) const noexcept {
       XDCHECK(isTiny(tinyNode));
       XDCHECK(!isTiny(mainNode));
-      auto tinyFreq = accessFreq_->getFrequency(hashNode(tinyNode));
-      auto mainFreq = accessFreq_->getFrequency(hashNode(mainNode));
+      auto tinyFreq = accessFreq_.getCount(hashNode(tinyNode));
+      auto mainFreq = accessFreq_.getCount(hashNode(mainNode));
       return tinyFreq >= mainFreq;
     }
 
@@ -506,6 +502,18 @@ class MMTinyLFU {
     static void unmarkAccessed(T& node) noexcept {
       node.template unSetFlag<Flags::MM_FLAG_1>();
     }
+
+    // Initial cache capacity estimate for count-min-sketch
+    static constexpr size_t kDefaultCapacity = 100;
+
+    // Number of hashes
+    static constexpr size_t kHashCount = 4;
+
+    // The error threshold for frequency calculation
+    static constexpr size_t kErrorThreshold = 5;
+
+    // decay rate for frequency
+    static constexpr double kDecayFactor = 0.5;
 
     // protects all operations on the lru. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
@@ -543,7 +551,7 @@ class MMTinyLFU {
 
     // Approximate streaming frequency counters. The counts are halved every
     // time the maxWindowSize is hit.
-    std::unique_ptr<unicorn::datastruct::CountMinSketch> accessFreq_;
+    facebook::cachelib::util::CountMinSketch accessFreq_{};
 
     FRIEND_TEST(MMTinyLFUTest, SegmentStress);
     FRIEND_TEST(MMTinyLFUTest, TinyLFUBasic);
