@@ -1,12 +1,12 @@
 #pragma once
 
-#include <atomic>
 #include <memory>
 #include <stdexcept>
 
 namespace facebook {
 namespace cachelib {
 namespace util {
+
 // A probabilistic counting data structure that never undercounts items. It is
 // a table structure with the depth being the number of hashes and the width
 // being the number of unique items. When a key is inserted, each row's hash
@@ -14,6 +14,9 @@ namespace util {
 // count at that index is incremented. As a result, one key being inserted will
 // increment different indicies in each row. Querying the count returns the
 // minimum values of these elements since some hashes might collide.
+//
+// Users are supposed to synchronize concurrent accesses to the data
+// structure.
 //
 // E.g. insert(1)
 // hash1(1) = 2 -> increment row 1, index 2
@@ -61,8 +64,9 @@ class CountMinSketch {
 
   const uint32_t width_{};
   const uint32_t depth_{};
+
   // Stores counts
-  std::unique_ptr<std::atomic<uint32_t>[]> table_;
+  std::unique_ptr<uint32_t[]> table_;
 };
 } // namespace util
 } // namespace cachelib

@@ -29,7 +29,7 @@ CountMinSketch::CountMinSketch(uint32_t width, uint32_t depth)
         folly::sformat("Depth must be greater than 0. Depth: {}", depth)};
   }
 
-  table_ = std::make_unique<std::atomic<uint32_t>[]>(width_ * depth_);
+  table_ = std::make_unique<uint32_t[]>(width_ * depth_);
   reset();
 }
 
@@ -68,15 +68,15 @@ uint32_t CountMinSketch::calculateDepth(double probability, uint32_t maxDepth) {
 void CountMinSketch::increment(uint64_t key) {
   for (uint32_t hashNum = 0; hashNum < depth_; hashNum++) {
     auto index = getIndex(hashNum, key);
-    table_[index].fetch_add(1, std::memory_order_relaxed);
+    table_[index] += 1;
   }
 }
 
 uint32_t CountMinSketch::getCount(uint64_t key) const {
-  auto count = table_[getIndex(0, key)].load(std::memory_order_relaxed);
+  auto count = table_[getIndex(0, key)];
   for (uint32_t hashNum = 1; hashNum < depth_; hashNum++) {
     auto index = getIndex(hashNum, key);
-    count = std::min(count, table_[index].load(std::memory_order_relaxed));
+    count = std::min(count, table_[index]);
   }
   return count;
 }
@@ -85,7 +85,7 @@ void CountMinSketch::resetCount(uint64_t key) {
   auto count = getCount(key);
   for (uint32_t hashNum = 0; hashNum < depth_; hashNum++) {
     auto index = getIndex(hashNum, key);
-    table_[index].fetch_sub(count, std::memory_order_relaxed);
+    table_[index] -= count;
   }
 }
 
@@ -93,7 +93,7 @@ void CountMinSketch::reset() {
   // Delete previous table and reinitialize
   uint64_t tableSize = width_ * depth_;
   for (uint64_t i = 0; i < tableSize; i++) {
-    table_[i].store(0, std::memory_order_relaxed);
+    table_[i] = 0;
   }
 }
 
