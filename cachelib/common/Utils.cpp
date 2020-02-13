@@ -13,9 +13,10 @@
 #include <folly/Format.h>
 #pragma GCC diagnostic pop
 #include <folly/Random.h>
+#include <folly/logging/xlog.h>
 
 #include "cachelib/common/Utils.h"
-#include "common/base/Proc.h"
+
 namespace facebook {
 namespace cachelib {
 namespace util {
@@ -347,9 +348,63 @@ std::string toString(std::chrono::nanoseconds d) {
   }
 }
 
-size_t getRSSBytes() { return facebook::Proc::getMemoryUsage(); }
+namespace {
+// char to int  conversion
+bool isDigit(char c) { return std::isdigit(c); }
+} // namespace
 
-size_t getMemAvailable() { return facebook::Proc::getMemInfo().memAvailable; }
+size_t getRSSBytes() {
+  // read field 2 from /proc/self/statm according to
+  // http://man7.org/linux/man-pages/man5/proc.5.html
+  std::string memInfoStr;
+  if (!folly::readFile("/proc/self/statm", memInfoStr)) {
+    return 0;
+  }
+
+  XDCHECK(!std::isdigit(memInfoStr.back()));
+  memInfoStr.pop_back();
+
+  std::vector<folly::StringPiece> tokens;
+  folly::split(' ', memInfoStr, tokens);
+
+  // 7 numeric fields followed by carriage return
+  XDCHECK_GE(tokens.size(), 7ULL);
+  if (tokens.size() < 7) {
+    return 0;
+  }
+
+  for (auto t : tokens) {
+    XDCHECK_EQ(std::find_if_not(t.begin(), t.end(), isDigit), t.end());
+  }
+
+  size_t pages = folly::to<size_t>(tokens[1]) + 3;
+  return pages * getPageSize();
+}
+
+size_t getMemAvailable() {
+  // read MemAvailable line from  /proc/meminfo
+  std::string memInfoStr;
+  if (!folly::readFile("/proc/meminfo", memInfoStr)) {
+    return 0;
+  }
+
+  std::vector<folly::StringPiece> lines;
+  folly::split('\n', memInfoStr, lines);
+
+  constexpr folly::StringPiece memAvailStr{"MemAvailable"};
+  for (auto l : lines) {
+    if (l.startsWith(memAvailStr)) {
+      // format is MemAvailable:   172048584 kB
+      auto startIt = std::find_if(l.begin(), l.end(), isDigit);
+      XDCHECK_NE(startIt, l.end());
+      // last 3 chars are ' kB'
+      auto endIt = l.end() - 3;
+      XDCHECK_EQ(std::find_if_not(startIt, l.end(), isDigit), endIt);
+      return folly::to<size_t>(folly::StringPiece{startIt, endIt}) * 1024ULL;
+    }
+  }
+  return 0;
+} // namespace util
 
 } // namespace util
 } // namespace cachelib

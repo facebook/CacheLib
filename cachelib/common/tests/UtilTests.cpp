@@ -1,14 +1,20 @@
-#include "cachelib/common/FastStats.h"
-#include "cachelib/common/Utils.h"
-
 #include <atomic>
+
+#include <sys/mman.h>
 
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/common/FastStats.h"
+#include "cachelib/common/Utils.h"
+
 using facebook::cachelib::util::FastStats;
 using facebook::cachelib::util::SysctlSetting;
 using facebook::cachelib::util::toString;
+
+namespace facebook {
+namespace cachelib {
+namespace tests {
 
 TEST(Util, ToString) {
   ASSERT_EQ(toString(std::chrono::seconds(5)), "5.00s");
@@ -148,3 +154,22 @@ TEST(Util, SysctlTests) {
     EXPECT_THROW(SysctlSetting setting(settingName, "1"), std::runtime_error);
   }
 }
+
+TEST(Util, MemAvailable) { EXPECT_GT(util::getMemAvailable(), 0); }
+
+TEST(Util, MemRSS) {
+  auto val = util::getRSSBytes();
+  EXPECT_GT(val, 0);
+  size_t len = 500 * 1024 * 1024;
+  void* ptr = ::mmap(nullptr, len, PROT_WRITE | PROT_READ,
+                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  EXPECT_NE(MAP_FAILED, ptr);
+  SCOPE_EXIT { ::munmap(ptr, len); };
+  memset(ptr, 5, len);
+  EXPECT_GT(util::getRSSBytes(), val);
+  EXPECT_GE(util::getRSSBytes() - val, len);
+}
+
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook

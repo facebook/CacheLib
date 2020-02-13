@@ -181,9 +181,11 @@ void throwSystemError(int err, const Args&... args) {
 // For example 5us or 5ns or 5s, or 5h
 std::string toString(std::chrono::nanoseconds d);
 
-// returns the current process's RSS size in bytes.
+// returns the current process's RSS size in bytes. Returns 0 upon any error.
+// Caller is supposed to treat 0 values as errors.
 size_t getRSSBytes();
 
+// returns the current mem-available reported by the kernel. 0 means an error.
 size_t getMemAvailable();
 
 } // namespace util
