@@ -1,6 +1,5 @@
-#include "BaseAllocatorTest.h"
-#include "TestBase.h"
-
+#include "cachelib/allocator/tests/BaseAllocatorTest.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {
@@ -304,9 +303,7 @@ TYPED_TEST(BaseAllocatorTest, ReplaceIfAccessible) {
   this->testReplaceIfAccessible();
 }
 
-TYPED_TEST(BaseAllocatorTest, PermanentItems) {
-  this->testPermanentItems();
-}
+TYPED_TEST(BaseAllocatorTest, PermanentItems) { this->testPermanentItems(); }
 
 TYPED_TEST(BaseAllocatorTest, ChainedItemIterator) {
   this->testChainedItemIterator();

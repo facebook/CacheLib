@@ -1,4 +1,4 @@
-#include "TestBase.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 #include <folly/Random.h>
 

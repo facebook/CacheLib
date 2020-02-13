@@ -1,9 +1,7 @@
-#include "DataTypes.h"
-
+#include "cachelib/datatype/DataTypes.h"
 #include "cachelib/allocator/CacheAllocator.h"
-
-#include "FixedSizeArray.h"
-#include "Map.h"
+#include "cachelib/datatype/FixedSizeArray.h"
+#include "cachelib/datatype/Map.h"
 
 // For a new data type, certify it by adding a CL_DATA_CERTIFY(...) in
 // check_cachelib_datatype_requirements, at the bottom of this. If the

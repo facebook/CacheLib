@@ -1,4 +1,4 @@
-#include "TestBase.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 #include <algorithm>
 #include <future>

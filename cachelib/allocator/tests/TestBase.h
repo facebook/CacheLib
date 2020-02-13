@@ -113,4 +113,4 @@ class AllocatorTest : public SlabAllocatorTestBase {
 } // namespace cachelib
 } // namespace facebook
 
-#include "TestBase-inl.h"
+#include "cachelib/allocator/tests/TestBase-inl.h"

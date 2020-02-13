@@ -1,5 +1,5 @@
-#include "AccessTypeTest.h"
 #include "cachelib/allocator/ChainedHashTable.h"
+#include "cachelib/allocator/tests/AccessTypeTest.h"
 
 namespace facebook {
 namespace cachelib {
@@ -15,7 +15,6 @@ TEST_F(ChainedHashTest, Replace) { testReplace(); }
 TEST_F(ChainedHashTest, Remove) { testRemove(); }
 
 TEST_F(ChainedHashTest, Find) { testFind(); }
-
 
 TEST_F(ChainedHashTest, HandleIteration) {
   testHandleIterationWithExceptions();
@@ -238,6 +237,6 @@ TEST_F(ChainedHashTest, IteratorWithThrottler) {
   ASSERT_EQ(existingKeys, visitedKeys);
   ASSERT_TRUE((time1 > time2 * 5));
 }
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook

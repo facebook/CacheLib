@@ -1,4 +1,4 @@
-#include "DataTypeTest.h"
+#include "cachelib/datatype/tests/DataTypeTest.h"
 
 namespace facebook {
 namespace cachelib {

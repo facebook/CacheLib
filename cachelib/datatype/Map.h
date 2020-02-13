@@ -284,4 +284,4 @@ class Map {
 } // namespace cachelib
 } // namespace facebook
 
-#include "Map-inl.h"
+#include "cachelib/datatype/Map-inl.h"

@@ -1,5 +1,5 @@
-#include "TestBase.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
 
 #include <folly/Random.h>

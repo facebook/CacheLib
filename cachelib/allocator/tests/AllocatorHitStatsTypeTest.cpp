@@ -1,5 +1,5 @@
-#include "AllocatorHitStatsTest.h"
-#include "TestBase.h"
+#include "cachelib/allocator/tests/AllocatorHitStatsTest.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {

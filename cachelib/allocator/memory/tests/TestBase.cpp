@@ -1,4 +1,4 @@
-#include "TestBase.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"

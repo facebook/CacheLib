@@ -112,4 +112,4 @@ class NvmCacheTest : public testing::Test {
 } // namespace cachelib
 } // namespace facebook
 
-#include "NvmTestBase-inl.h"
+#include "cachelib/allocator/nvmcache/tests/NvmTestBase-inl.h"

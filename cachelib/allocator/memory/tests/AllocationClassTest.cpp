@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "TestBase.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/Slab.h"

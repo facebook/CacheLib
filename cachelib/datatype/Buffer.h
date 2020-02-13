@@ -470,4 +470,4 @@ class BufferManagerIterator
 } // namespace cachelib
 } // namespace facebook
 
-#include "Buffer-inl.h"
+#include "cachelib/datatype/Buffer-inl.h"

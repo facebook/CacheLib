@@ -1,5 +1,5 @@
-#include "TestBase.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
 
 #include <folly/Random.h>
@@ -26,7 +26,7 @@ bool test_callback(void* /* unused */, AllocInfo /* unused */) {
   forEachAllocationCount++;
   return true;
 }
-}
+} // namespace
 
 namespace facebook {
 namespace cachelib {
@@ -797,5 +797,5 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   m.forEachAllocation(test_callback);
   ASSERT_EQ(forEachAllocationCount, 0);
 }
-}
-}
+} // namespace cachelib
+} // namespace facebook

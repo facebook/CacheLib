@@ -1,4 +1,3 @@
-#include "MMTypeBench.h"
 
 #include <condition_variable>
 #include <iomanip>
@@ -7,13 +6,13 @@
 #include <vector>
 
 #include <folly/Benchmark.h>
-#include <gflags/gflags.h>
-
 #include <folly/init/Init.h>
-#include "cachelib/common/Mutex.h"
+#include <gflags/gflags.h>
 
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MMLru.h"
+#include "cachelib/benchmarks/MMTypeBench.h"
+#include "cachelib/common/Mutex.h"
 
 DEFINE_uint32(num_nodes, 10000, "Number of nodes to populate the list with");
 DEFINE_uint32(num_threads,

@@ -1,4 +1,4 @@
-#include "Buffer.h"
+#include "cachelib/datatype/Buffer.h"
 
 namespace facebook {
 namespace cachelib {

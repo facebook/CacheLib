@@ -1,7 +1,7 @@
 #include <folly/Random.h>
 #include <thread>
-#include "TestBase.h"
 #include "cachelib/allocator/Refcount.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {
@@ -385,13 +385,13 @@ void RefCountTest::testBasic() {
   ref.template unsetFlag<FlagBit1>();
   ASSERT_FALSE((ref.template setFlagConditional<FlagBit3, FlagBit1>()));
 }
-}
+} // namespace
 
 TEST_F(RefCountTest, MultiThreaded) { testFuncForAll<MultiThreaded>(); }
 TEST_F(RefCountTest, Overflow) { testFuncForAll<Overflow>(); }
 TEST_F(RefCountTest, Underflow) { testFuncForAll<Overflow>(); }
 TEST_F(RefCountTest, MaxCount) { testFuncForAll<MaxCount>(); }
 TEST_F(RefCountTest, Flags) { testFuncForAll<Basic>(); }
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook

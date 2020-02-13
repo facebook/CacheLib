@@ -7,11 +7,13 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include "cachelib/common/CompilerUtils.h"
-#include "cachelib/common/Exceptions.h"
-
 #include <folly/CPortability.h>
 #include <folly/Likely.h>
+#include <folly/logging/xlog.h>
+#include <folly/portability/Asm.h>
+
+#include "cachelib/common/CompilerUtils.h"
+#include "cachelib/common/Exceptions.h"
 
 namespace facebook {
 namespace cachelib {

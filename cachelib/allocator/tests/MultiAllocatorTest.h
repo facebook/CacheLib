@@ -1,6 +1,6 @@
 #pragma once
 
-#include "TestBase.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 #include <algorithm>
 #include <future>
@@ -10,7 +10,6 @@
 #include <vector>
 
 #include <folly/Random.h>
-
 
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"

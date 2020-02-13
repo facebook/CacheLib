@@ -1,4 +1,3 @@
-#include <folly/portability/Asm.h>
 
 namespace facebook {
 namespace cachelib {
@@ -130,5 +129,5 @@ T RefCountWithFlags<T, RefCountBits>::unsetFlag() noexcept {
   constexpr T bitMask = std::numeric_limits<T>::max() - (((T)1) << flagBit);
   return __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
 }
-}
-}
+} // namespace cachelib
+} // namespace facebook

@@ -1,6 +1,6 @@
 #pragma once
-#include "TestBase.h"
 #include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 #include <memory>
 #include <set>
@@ -569,6 +569,6 @@ void AccessTypeTest<AccessType>::testRemoveIf() {
     ASSERT_EQ(c.find(node->getKey()).get(), node.get());
   }
 }
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook
