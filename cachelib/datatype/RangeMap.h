@@ -2,10 +2,9 @@
 
 #include <limits>
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/Buffer.h"
 #include "cachelib/datatype/DataTypes.h"
 
@@ -245,9 +244,9 @@ class FOLLY_PACK_ATTR BinaryIndex {
 // are sorted according to their order in BinaryIndex.
 template <typename Key, typename Value, typename BufManager>
 class BinaryIndexIterator
-    : public boost::iterator_facade<BinaryIndexIterator<Key, Value, BufManager>,
-                                    Value,
-                                    boost::forward_traversal_tag> {
+    : public IteratorFacade<BinaryIndexIterator<Key, Value, BufManager>,
+                            Value,
+                            std::forward_iterator_tag> {
  public:
   BinaryIndexIterator() = default;
   BinaryIndexIterator(const BufManager* manager,
@@ -262,19 +261,15 @@ class BinaryIndexIterator
   BinaryIndexIterator<Key, const Value, BufManager> toConstItr();
 
   Value& dereference() const;
-
- private:
   void increment();
-
   bool equal(const BinaryIndexIterator& other) const;
 
+ private:
   const typename BinaryIndex<Key>::Entry* entry_{nullptr};
   Value* value_{nullptr};
 
   BinaryIndex<Key>* index_{nullptr};
   const BufManager* manager_{nullptr};
-
-  friend class boost::iterator_core_access;
 };
 } // namespace detail
 } // namespace cachelib

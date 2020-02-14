@@ -2,11 +2,10 @@
 
 #include <limits>
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/DataTypes.h"
 
 namespace facebook {
@@ -60,9 +59,8 @@ class FOLLY_PACK_ATTR Buffer {
   bool canAllocate(uint32_t size) const;
   bool canAllocateWithoutCompaction(uint32_t size) const;
 
-  class Iterator : public boost::iterator_facade<Iterator,
-                                                 uint8_t,
-                                                 boost::forward_traversal_tag> {
+  class Iterator
+      : public IteratorFacade<Iterator, uint8_t, std::forward_iterator_tag> {
    public:
     Iterator() = default;
     explicit Iterator(Buffer& buffer)
@@ -84,14 +82,6 @@ class FOLLY_PACK_ATTR Buffer {
       return *reinterpret_cast<uint8_t*>(curr_->getData());
     }
 
-    uint32_t getDataOffset() const {
-      if (!curr_) {
-        return kInvalidOffset;
-      }
-      return buffer_->getDataOffset(*curr_);
-    }
-
-   private:
     void increment() {
       if (!curr_) {
         return;
@@ -112,12 +102,18 @@ class FOLLY_PACK_ATTR Buffer {
       return buffer_ == other.buffer_ && curr_ == other.curr_;
     }
 
+    uint32_t getDataOffset() const {
+      if (!curr_) {
+        return kInvalidOffset;
+      }
+      return buffer_->getDataOffset(*curr_);
+    }
+
+   private:
     // BEGIN private members
     Buffer* buffer_{nullptr};
     mutable Slot* curr_{nullptr};
     // END private members
-
-    friend class boost::iterator_core_access;
   };
   Iterator begin() { return Iterator{*this}; }
   Iterator end() { return {}; }
@@ -401,9 +397,9 @@ class BufferManager {
 
 template <typename T, typename Mgr>
 class BufferManagerIterator
-    : public boost::iterator_facade<BufferManagerIterator<T, Mgr>,
-                                    T,
-                                    boost::forward_traversal_tag> {
+    : public IteratorFacade<BufferManagerIterator<T, Mgr>,
+                            T,
+                            std::forward_iterator_tag> {
  public:
   explicit BufferManagerIterator(const Mgr& mgr)
       : mgr_(mgr),
@@ -429,7 +425,6 @@ class BufferManagerIterator
                       curr_.getDataOffset()};
   }
 
- private:
   void increment() {
     ++curr_;
     while (curr_ == Buffer::Iterator{}) {
@@ -456,14 +451,11 @@ class BufferManagerIterator
     return &mgr_ == &other.mgr_ && curr_ == other.curr_;
   }
 
-  // BEGIN private members
+ private:
   uint32_t index_{0};
   const Mgr& mgr_;
   Buffer::Iterator curr_{};
   const uint32_t numChainedItems_{0};
-  // END private members
-
-  friend class boost::iterator_core_access;
 };
 
 } // namespace detail

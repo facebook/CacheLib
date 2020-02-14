@@ -2,10 +2,9 @@
 
 #include <limits>
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/Buffer.h"
 #include "cachelib/datatype/DataTypes.h"
 

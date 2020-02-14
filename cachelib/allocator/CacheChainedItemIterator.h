@@ -1,7 +1,7 @@
 #pragma once
 
-#include <boost/iterator/iterator_facade.hpp>
 #include <stdexcept>
+#include "cachelib/common/Iterators.h"
 
 namespace facebook {
 namespace cachelib {
@@ -15,14 +15,27 @@ class BaseAllocatorTest;
 // has the item but no itemhandle (e.g. during release)
 template <typename Cache>
 class CacheChainedItemIterator
-    : public boost::iterator_facade<CacheChainedItemIterator<Cache>,
+    : public detail::IteratorFacade<CacheChainedItemIterator<Cache>,
                                     typename Cache::Item,
-                                    boost::forward_traversal_tag> {
+                                    std::forward_iterator_tag> {
  public:
+  using Item = typename Cache::Item;
+
   CacheChainedItemIterator() = default;
 
+  Item& dereference() const { return *curr_; }
+
+  void increment() {
+    if (curr_) {
+      curr_ = curr_->asChainedItem().getNext(*compressor_);
+    }
+  }
+
+  bool equal(const CacheChainedItemIterator<Cache>& other) const {
+    return curr_ == other.curr_;
+  }
+
  private:
-  using Item = typename Cache::Item;
   using PtrCompressor = typename Item::PtrCompressor;
   // Private because only CacheT can create this.
   // @param item         Pointer to chained item (nullptr for null iterator)
@@ -36,19 +49,6 @@ class CacheChainedItemIterator
     }
   }
 
-  // derefernce the current iterator
-  Item& dereference() const { return *curr_; }
-
-  void increment() {
-    if (curr_) {
-      curr_ = curr_->asChainedItem().getNext(*compressor_);
-    }
-  }
-
-  bool equal(const CacheChainedItemIterator<Cache>& other) const {
-    return curr_ == other.curr_;
-  }
-
   // Current iterator position in chain
   Item* curr_{nullptr};
 
@@ -57,7 +57,6 @@ class CacheChainedItemIterator
 
   friend Cache;
   friend typename Cache::ChainedAllocs;
-  friend class boost::iterator_core_access;
 
   // For testing
   template <typename AllocatorT>

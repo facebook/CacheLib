@@ -8,9 +8,8 @@
 #include <folly/Format.h>
 #pragma GCC diagnostic pop
 
-#include <boost/iterator/iterator_facade.hpp>
-
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/common/Iterators.h"
 
 // CL_REQUIRE(expression)
 //   use this after all the template arguments to require certain traits.
@@ -21,13 +20,12 @@ namespace cachelib {
 namespace util {
 template <typename T>
 class ForwardIterator
-    : public boost::
-          iterator_facade<ForwardIterator<T>, T, boost::forward_traversal_tag> {
+    : public facebook::cachelib::detail::
+          IteratorFacade<ForwardIterator<T>, T, std::forward_iterator_tag> {
  public:
   ForwardIterator() = default;
   ForwardIterator(T* element, T* end) : element_(element), end_(end) {}
 
- private:
   void increment() {
     checkSanity();
     ++element_;
@@ -39,6 +37,7 @@ class ForwardIterator
 
   T& dereference() const { return *element_; }
 
+ private:
   void checkSanity() const {
     if (reinterpret_cast<uintptr_t>(element_) >=
         reinterpret_cast<uintptr_t>(end_)) {
@@ -49,8 +48,6 @@ class ForwardIterator
 
   T* element_{};
   T* end_{};
-
-  friend class boost::iterator_core_access;
 };
 
 namespace detail {
