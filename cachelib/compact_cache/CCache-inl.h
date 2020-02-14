@@ -423,9 +423,7 @@ int CompactCache<C, A, B>::callBucketFn(
   }
 
   /* 1) Increase the refcount of the current cohort. */
-  bool topCohort = cohort_.incrActiveReqs();
-  /* always decrease the refcount before returning */
-  SCOPE_EXIT { cohort_.decrActiveReqs(topCohort); };
+  Cohort::Token tok = cohort_.incrActiveReqs();
 
   /* 2) Find the hash table bucket for the key. */
   Bucket* bucket = tableFindBucket(key);

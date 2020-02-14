@@ -11,21 +11,58 @@ namespace tests {
 // ensure that incrementing and decrementing works as expected
 TEST(Cohort, IncrDecr) {
   Cohort cohort;
-  auto isTop = cohort.incrActiveReqs();
+  auto tok = cohort.incrActiveReqs();
+  bool isTop = tok.isTop();
   EXPECT_EQ(isTop, cohort.isTopCohort());
   EXPECT_EQ(cohort.getPending(isTop), 1ULL);
-  cohort.decrActiveReqs(isTop);
+  tok.decrement();
+  EXPECT_EQ(cohort.getPending(isTop), 0ULL);
+
+  {
+    // test auto-decrement when exiting scope
+    auto tok0 = cohort.incrActiveReqs();
+    EXPECT_EQ(tok0.isTop(), isTop);
+    EXPECT_EQ(cohort.getPending(isTop), 1ULL);
+  }
+  EXPECT_EQ(cohort.getPending(isTop), 0ULL);
+
+  {
+    // test move constructor against double-decrement
+    auto tok1 = cohort.incrActiveReqs();
+    auto tok2 = std::move(tok1);
+  }
+  EXPECT_EQ(cohort.getPending(isTop), 0ULL);
+
+  {
+    // test move assignment against leak or double-decrement
+    auto tok3 = cohort.incrActiveReqs();
+    auto tok4 = cohort.incrActiveReqs();
+    auto tok5 = cohort.incrActiveReqs();
+    tok3 = std::move(tok4);
+    tok3.decrement();
+    tok3 = std::move(tok5);
+  }
+  EXPECT_EQ(cohort.getPending(isTop), 0ULL);
+
+  {
+    // test self-move
+    auto tok6 = cohort.incrActiveReqs();
+    auto ptr6 = &tok6; // compiler prevents direct self-move
+    tok6 = std::move(*ptr6);
+    tok6.decrement();
+  }
   EXPECT_EQ(cohort.getPending(isTop), 0ULL);
 }
 
 // try to switch cohorts and ensure that switching waits for current pending
 // refs to be drained
-TEST(Cohort, SwithWithCohort) {
+TEST(Cohort, SwitchWithCohort) {
   Cohort cohort;
 
-  auto isTop = cohort.incrActiveReqs();
-  cohort.incrActiveReqs();
-  cohort.incrActiveReqs();
+  bool isTop = cohort.isTopCohort();
+  auto tok0 = cohort.incrActiveReqs();
+  auto tok1 = cohort.incrActiveReqs();
+  auto tok2 = cohort.incrActiveReqs();
   EXPECT_EQ(cohort.getPending(isTop), 3ULL);
 
   folly::Baton b;
@@ -36,11 +73,11 @@ TEST(Cohort, SwithWithCohort) {
 
   std::this_thread::sleep_for(std::chrono::seconds(5));
 
-  cohort.decrActiveReqs(isTop);
+  tok2.decrement();
   EXPECT_EQ(cohort.getPending(isTop), 2ULL);
-  cohort.decrActiveReqs(isTop);
+  tok1.decrement();
   EXPECT_EQ(cohort.getPending(isTop), 1ULL);
-  cohort.decrActiveReqs(isTop);
+  tok0.decrement();
   EXPECT_EQ(cohort.getPending(isTop), 0ULL);
 
   b.wait();
@@ -55,20 +92,25 @@ TEST(Cohort, SwithWithCohort) {
 TEST(Cohort, MaintainTopOrBottom) {
   Cohort cohort;
   auto isTop = cohort.isTopCohort();
-  EXPECT_EQ(isTop, cohort.incrActiveReqs());
-  EXPECT_EQ(isTop, cohort.incrActiveReqs());
-  EXPECT_EQ(isTop, cohort.incrActiveReqs());
+  auto tok0 = cohort.incrActiveReqs();
+  EXPECT_EQ(isTop, tok0.isTop());
+  auto tok1 = cohort.incrActiveReqs();
+  EXPECT_EQ(isTop, tok1.isTop());
+  auto tok2 = cohort.incrActiveReqs();
+  EXPECT_EQ(isTop, tok2.isTop());
   EXPECT_EQ(isTop, cohort.isTopCohort());
 
-  cohort.decrActiveReqs(isTop);
-  cohort.decrActiveReqs(isTop);
-  cohort.decrActiveReqs(isTop);
+  tok0.decrement();
+  tok1.decrement();
+  tok2.decrement();
 
   cohort.switchCohorts();
 
   EXPECT_NE(isTop, cohort.isTopCohort());
-  EXPECT_NE(isTop, cohort.incrActiveReqs());
-  EXPECT_NE(isTop, cohort.incrActiveReqs());
+  auto tok3 = cohort.incrActiveReqs();
+  EXPECT_NE(isTop, tok3.isTop());
+  auto tok4 = cohort.incrActiveReqs();
+  EXPECT_NE(isTop, tok4.isTop());
 }
 
 // ensure that incrementing cohort is consistent with switching in a
@@ -83,9 +125,8 @@ TEST(Cohort, MultiThreaded) {
 
   auto incrDecrInThread = [&]() {
     for (int i = 0; i < nBumps; i++) {
-      auto isTop = cohort.incrActiveReqs();
+      auto tok = cohort.incrActiveReqs();
       std::this_thread::sleep_for(std::chrono::microseconds(10));
-      cohort.decrActiveReqs(isTop);
     }
   };
 

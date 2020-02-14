@@ -19,6 +19,50 @@ class Cohort {
   Cohort(const Cohort&) = delete;            // no copy
   Cohort& operator=(const Cohort&) = delete; // no copy
 
+  // This class represents the top/bottom state of the cohort as returned
+  // by Cohort::incrActiveReqs().  The corresponding decrement will be
+  // performed when the token goes out of scope or decrement() is called.
+  // Make sure the owner Cohort is longer-lived than the token.
+  class Token {
+    friend class Cohort;
+
+   public:
+    ~Token() {
+      if (owner_) {
+        decrement();
+      }
+    }
+
+    Token(Token&& other) noexcept
+        : owner_(std::exchange(other.owner_, nullptr)),
+          top_(std::exchange(other.top_, false)) {}
+
+    Token& operator=(Token&& other) noexcept {
+      if (this != &other) {
+        this->~Token();
+        new (this) Token(std::move(other));
+      }
+      return *this;
+    }
+
+    Token(const Token&) = delete;            // no copy
+    Token& operator=(const Token&) = delete; // no copy
+
+    void decrement() noexcept {
+      XDCHECK_NE(owner_, nullptr);
+      owner_->decrActiveReqs(top_);
+      owner_ = nullptr;
+    }
+
+    bool isTop() const noexcept { return top_; }
+
+   private:
+    Token(Cohort* c, bool top) : owner_(c), top_(top) {}
+
+    Cohort* owner_;
+    bool top_;
+  };
+
   // Switch to the currently unused cohort, and  wait for all readers to drain
   // from the old cohort
   void switchCohorts() noexcept {
@@ -43,22 +87,6 @@ class Cohort {
     }
   }
 
-  // If a cohort is specified, decrements its refcount. Guards against refcounts
-  // going negative and will assert in this case if enabled.
-  // TODO (sathya) catch incorrect decRefs and throw
-  //
-  // @param topCohort bool if the current used cohort was the top one
-  void decrActiveReqs(bool isTop) noexcept {
-    uint64_t newVal = cohortVal_.fetch_sub(isTop ? kTopRef : kBottomRef);
-    std::ignore = newVal;
-
-    // ensure refs didn't go to zero
-    // TODO(sathya) this actually does not ensure that we decremented below 0
-    XDCHECK_NE(newVal, kTopRef);
-    XDCHECK_NE(newVal, kBottomRef);
-    XDCHECK_NE(newVal, 0ULL);
-  }
-
   // increments the refcount for the current cohort.
   // Optimisitically assumes the cohort is not switching. Just increment and
   // if it actually changed in the interim then we subtract and try again.
@@ -67,7 +95,7 @@ class Cohort {
   //
   // @returns bool topCohort, if we ended up in top cohort (versus bottom
   //          one). This must be passed on to the corresponding decr
-  bool incrActiveReqs() noexcept {
+  Token incrActiveReqs() noexcept {
     while (true) {
       const uint64_t cohort = cohortVal_.load();
       XDCHECK_NE(cohort, 0ULL);
@@ -83,7 +111,7 @@ class Cohort {
       const uint64_t newCohort =
           cohortVal_.fetch_add(topCohort ? kTopRef : kBottomRef);
       if (static_cast<bool>(newCohort & kTopCohortBit) == topCohort) {
-        return topCohort;
+        return Token(this, topCohort);
       }
       cohortVal_.fetch_sub(topCohort ? kTopRef : kBottomRef);
     }
@@ -103,6 +131,22 @@ class Cohort {
   }
 
  private:
+  // If a cohort is specified, decrements its refcount. Guards against refcounts
+  // going negative and will assert in this case if enabled.
+  // TODO (sathya) catch incorrect decRefs and throw
+  //
+  // @param topCohort bool if the current used cohort was the top one
+  void decrActiveReqs(bool isTop) noexcept {
+    uint64_t newVal = cohortVal_.fetch_sub(isTop ? kTopRef : kBottomRef);
+    std::ignore = newVal;
+
+    // ensure refs didn't go to zero
+    // TODO(sathya) this actually does not ensure that we decremented below 0
+    XDCHECK_NE(newVal, kTopRef);
+    XDCHECK_NE(newVal, kBottomRef);
+    XDCHECK_NE(newVal, 0ULL);
+  }
+
   // Store the refcount for current and future cohorts in a single uint64_t.
   // Readers update the refcount only of the cohort that is currently marked
   // as active. Writers busywait until the refcount drains from the other
