@@ -14,6 +14,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   CacheBaseTest()
       : slabAllocator_(createSlabAllocator(10)),
         memoryPool_(0, 1024, *slabAllocator_, {64}) {}
+  const std::string getCacheName() const override { return cacheName; }
   const MemoryPool& getPool(PoolId) const override { return memoryPool_; }
   PoolStats getPoolStats(PoolId) const override { return PoolStats(); }
   AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId) const override {
@@ -62,6 +63,9 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
  protected:
   std::unique_ptr<SlabAllocator> slabAllocator_;
   MemoryPool memoryPool_;
+
+ private:
+  std::string cacheName{"CacheBaseTestCache"};
 };
 
 TEST_F(CacheBaseTest, RebalanceStrategyTest) {

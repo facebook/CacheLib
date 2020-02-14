@@ -31,6 +31,9 @@ class CacheAllocatorConfig {
   using MoveCb = typename CacheType::MoveCb;
   using NvmCacheConfig = typename CacheType::NvmCacheT::Config;
 
+  // Set cache name as a string
+  CacheAllocatorConfig& setCacheName(const std::string&);
+
   // Set cache size in bytes
   CacheAllocatorConfig& setCacheSize(size_t _size);
 
@@ -315,6 +318,9 @@ class CacheAllocatorConfig {
 
   std::map<std::string, std::string> serialize() const;
 
+  // Cache name for users to indentify their own cache.
+  std::string cacheName{""};
+
   // Amount of memory for this cache instance
   size_t size = 1 * 1024 * 1024 * 1024;
 
@@ -563,6 +569,13 @@ class CacheAllocatorConfig {
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
 };
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheName(
+    const std::string& _cacheName) {
+  cacheName = _cacheName;
+  return *this;
+}
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheSize(size_t _size) {

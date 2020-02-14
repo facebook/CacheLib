@@ -194,6 +194,8 @@ Cache<Allocator>::Cache(CacheConfig config,
     usesNvm_ = true;
   }
 
+  allocatorConfig.cacheName = "cachebench";
+
   if (!cacheDir_.empty()) {
     allocatorConfig.cacheDir = cacheDir_;
     cache_ =
@@ -216,7 +218,6 @@ Cache<Allocator>::Cache(CacheConfig config,
 
 #ifdef CACHEBENCH_FB_ENV
     CacheAdmin::Config adminConfig;
-    adminConfig.cacheName = "cachebench";
 
     // These tell us how the cache is doing. Upload them to make evaluating
     // workloads easier.

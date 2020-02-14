@@ -849,6 +849,9 @@ class CacheAllocator : public CacheBase {
   // and Memory monitor workers.
   AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId pid) const override final;
 
+  // get cache name
+  const std::string getCacheName() const override final;
+
   // pool stats by pool id
   PoolStats getPoolStats(PoolId pid) const override final;
 

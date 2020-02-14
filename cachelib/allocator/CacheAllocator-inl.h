@@ -2162,6 +2162,11 @@ std::set<PoolId> CacheAllocator<CacheTrait>::getRegularPoolIdsForResize()
 }
 
 template <typename CacheTrait>
+const std::string CacheAllocator<CacheTrait>::getCacheName() const {
+  return config_.cacheName;
+}
+
+template <typename CacheTrait>
 PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   const auto& pool = allocator_->getPool(poolId);
   const auto& allocSizes = pool.getAllocSizes();
