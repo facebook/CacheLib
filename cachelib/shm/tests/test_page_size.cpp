@@ -18,9 +18,11 @@ void ShmTest::testPageSize(PageSizeT p, bool posix) {
   ASSERT_TRUE(isPageAlignedSize(size, p));
 
   // create with unaligned size
-  ShmSegment s(ShmNew, segmentName, size, posix, opts);
-  ASSERT_TRUE(s.mapAddress(nullptr));
-  ASSERT_EQ(p, getPageSizeInSMap(s.getCurrentMapping().addr));
+  ASSERT_NO_THROW({
+    ShmSegment s(ShmNew, segmentName, size, posix, opts);
+    ASSERT_TRUE(s.mapAddress(nullptr));
+    ASSERT_EQ(p, getPageSizeInSMap(s.getCurrentMapping().addr));
+  });
 
   ASSERT_NO_THROW({
     ShmSegment s2(ShmAttach, segmentName, posix, opts);
