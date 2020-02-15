@@ -8,6 +8,7 @@
 #include <folly/Optional.h>
 
 #include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/EventInterface.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/PoolOptimizeStrategy.h"
@@ -30,6 +31,9 @@ class CacheAllocatorConfig {
   using NvmCacheDecryptionCb = typename CacheType::NvmCacheT::DecryptionCB;
   using MoveCb = typename CacheType::MoveCb;
   using NvmCacheConfig = typename CacheType::NvmCacheT::Config;
+  using Key = typename CacheType::Key;
+  using EventTrackerSharedPtr =
+      std::shared_ptr<typename CacheType::EventTracker>;
 
   // Set cache name as a string
   CacheAllocatorConfig& setCacheName(const std::string&);
@@ -261,6 +265,10 @@ class CacheAllocatorConfig {
   // of work.
   CacheAllocatorConfig& setCacheWorkerPostWorkHandler(std::function<void()> cb);
 
+  // Passes in a callback to initialize an event tracker when the allocator
+  // starts
+  CacheAllocatorConfig& setEventTracker(EventTrackerSharedPtr&&);
+
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
   bool poolResizingEnabled() const noexcept {
@@ -397,6 +405,9 @@ class CacheAllocatorConfig {
 
   // optimization strategy
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy{nullptr};
+
+  // Callback for initializing the eventTracker on CacheAllocator construction.
+  EventTrackerSharedPtr eventTracker{nullptr};
 
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
@@ -926,6 +937,13 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheWorkerPostWorkHandler(
     std::function<void()> cb) {
   cacheWorkerPostWorkHandler = cb;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
+    EventTrackerSharedPtr&& otherEventTracker) {
+  eventTracker = std::move(otherEventTracker);
   return *this;
 }
 

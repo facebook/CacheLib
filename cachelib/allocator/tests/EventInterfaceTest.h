@@ -13,7 +13,6 @@
 
 #include <folly/Random.h>
 
-
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
@@ -94,13 +93,12 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     // create an allocator worth 100 slabs.
     config.setCacheSize(100 * Slab::kSize);
+    auto eventTracker =
+        std::make_shared<TestEventInterface<typename AllocatorT::Key>>();
+    config.setEventTracker(eventTracker);
     AllocatorT alloc(config);
 
-    auto eventTracker =
-        std::make_unique<TestEventInterface<typename AllocatorT::Key>>();
     auto eventTrackerPtr = eventTracker.get();
-
-    alloc.setEventTracker(std::move(eventTracker));
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
     auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
@@ -158,13 +156,14 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     // create an allocator worth 100 slabs.
     config.setCacheSize(100 * Slab::kSize);
-    AllocatorT alloc(config);
 
     auto eventTracker =
-        std::make_unique<TestEventInterface<typename AllocatorT::Key>>();
+        std::make_shared<TestEventInterface<typename AllocatorT::Key>>();
     auto eventTrackerPtr = eventTracker.get();
 
-    alloc.setEventTracker(std::move(eventTracker));
+    config.setEventTracker(eventTracker);
+
+    AllocatorT alloc(config);
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
     auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
@@ -196,13 +195,13 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     // create an allocator worth 100 slabs.
     config.setCacheSize(100 * Slab::kSize);
-    AllocatorT alloc(config);
-
     auto eventTracker =
-        std::make_unique<TestEventInterface<typename AllocatorT::Key>>();
+        std::make_shared<TestEventInterface<typename AllocatorT::Key>>();
     auto eventTrackerPtr = eventTracker.get();
 
-    alloc.setEventTracker(std::move(eventTracker));
+    config.setEventTracker(eventTracker);
+
+    AllocatorT alloc(config);
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
     auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,

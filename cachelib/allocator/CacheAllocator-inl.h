@@ -391,11 +391,11 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     (*stats_.allocFailures)[pid][cid].inc();
   }
 
-  if (eventTracker_) {
+  if (auto eventTracker = getEventTracker()) {
     const auto result =
         handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    eventTracker_->record(AllocatorApiEvent::ALLOCATE, key, result, size,
-                          expiryTime - creationTime);
+    eventTracker->record(AllocatorApiEvent::ALLOCATE, key, result, size,
+                         expiryTime - creationTime);
   }
 
   return handle;
@@ -409,11 +409,11 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
   if (it && it->isUnevictable()) {
     stats_.numPermanentItems.inc();
   }
-  if (eventTracker_) {
+  if (auto eventTracker = getEventTracker()) {
     const auto result =
         it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    eventTracker_->record(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(),
-                          result, size, parent->getConfiguredTTL());
+    eventTracker->record(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(),
+                         result, size, parent->getConfiguredTTL());
   }
   return it;
 }
@@ -508,10 +508,10 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
   child->incRef();
   XDCHECK_EQ(2u, child->getRefCount());
 
-  if (eventTracker_) {
-    eventTracker_->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
-                          AllocatorApiResult::INSERTED, child->getSize(),
-                          child->getConfiguredTTL());
+  if (auto eventTracker = getEventTracker()) {
+    eventTracker->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
+                         AllocatorApiResult::INSERTED, child->getSize(),
+                         child->getConfiguredTTL());
   }
 }
 
@@ -545,10 +545,10 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
   head->decRef();
   stats_.numChainedChildItems.dec();
 
-  if (eventTracker_) {
-    eventTracker_->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
-                          AllocatorApiResult::REMOVED, head->getSize(),
-                          head->getConfiguredTTL());
+  if (auto eventTracker = getEventTracker()) {
+    eventTracker->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
+                         AllocatorApiResult::REMOVED, head->getSize(),
+                         head->getConfiguredTTL());
   }
 
   return head;
@@ -1025,9 +1025,9 @@ bool CacheAllocator<CacheTrait>::insertImpl(const ItemHandle& handle,
     result = AllocatorApiResult::INSERTED;
   }
 
-  if (eventTracker_) {
-    eventTracker_->record(event, handle->getKey(), result, handle->getSize(),
-                          handle->getConfiguredTTL());
+  if (auto eventTracker = getEventTracker()) {
+    eventTracker->record(event, handle->getKey(), result, handle->getSize(),
+                         handle->getConfiguredTTL());
   }
 
   return result == AllocatorApiResult::INSERTED;
@@ -1047,12 +1047,12 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
     replaced = accessContainer_->insertOrReplace(*handle);
   } catch (const exception::RefcountOverflow&) {
     removeFromMMContainer(*handle);
-    if (eventTracker_) {
-      eventTracker_->record(AllocatorApiEvent::INSERT_OR_REPLACE,
-                            handle->getKey(),
-                            AllocatorApiResult::FAILED,
-                            handle->getSize(),
-                            handle->getConfiguredTTL());
+    if (auto eventTracker = getEventTracker()) {
+      eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
+                           handle->getKey(),
+                           AllocatorApiResult::FAILED,
+                           handle->getSize(),
+                           handle->getConfiguredTTL());
     }
     throw;
   }
@@ -1081,13 +1081,12 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
 
   handle.unmarkNascent();
 
-  if (eventTracker_) {
+  if (auto eventTracker = getEventTracker()) {
     XDCHECK(handle);
     const auto result =
         replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
-    eventTracker_->record(AllocatorApiEvent::INSERT_OR_REPLACE,
-                          handle->getKey(), result, handle->getSize(),
-                          handle->getConfiguredTTL());
+    eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(),
+                         result, handle->getSize(), handle->getConfiguredTTL());
   }
 
   return replaced;
@@ -1549,9 +1548,9 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
     if (nvmCache_) {
       nvmCache_->remove(key);
     }
-    if (eventTracker_) {
-      eventTracker_->record(AllocatorApiEvent::REMOVE, key,
-                            AllocatorApiResult::NOT_FOUND);
+    if (auto eventTracker = getEventTracker()) {
+      eventTracker->record(AllocatorApiEvent::REMOVE, key,
+                           AllocatorApiResult::NOT_FOUND);
     }
     return RemoveRes::kNotFoundInRam;
   }
@@ -1611,10 +1610,10 @@ void CacheAllocator<CacheTrait>::flushNvmCache() {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
-  if (eventTracker_) {
-    eventTracker_->record(AllocatorApiEvent::REMOVE, it->getKey(),
-                          AllocatorApiResult::REMOVED, it->getSize(),
-                          it->getConfiguredTTL());
+  if (auto eventTracker = getEventTracker()) {
+    eventTracker->record(AllocatorApiEvent::REMOVE, it->getKey(),
+                         AllocatorApiResult::REMOVED, it->getSize(),
+                         it->getConfiguredTTL());
   }
   return removeImpl(*it);
 }
@@ -1647,11 +1646,12 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
   // removed.
   removeFromMMContainer(item);
 
-  if (recordApiEvent && eventTracker_) {
+  auto eventTracker = getEventTracker();
+  if (recordApiEvent && eventTracker) {
     const auto result =
         success ? AllocatorApiResult::REMOVED : AllocatorApiResult::NOT_FOUND;
-    eventTracker_->record(AllocatorApiEvent::REMOVE, item.getKey(), result,
-                          item.getSize(), item.getConfiguredTTL());
+    eventTracker->record(AllocatorApiEvent::REMOVE, item.getKey(), result,
+                         item.getSize(), item.getConfiguredTTL());
   }
 
   // the last guy with reference to the item will release it back to the
@@ -1731,12 +1731,13 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::findFast(typename Item::Key key, AccessMode mode) {
   auto handle = findFastImpl(key, mode);
-  if (UNLIKELY(eventTracker_ != nullptr)) {
+  auto eventTracker = getEventTracker();
+  if (UNLIKELY(eventTracker != nullptr)) {
     const auto result =
         handle ? AllocatorApiResult::FOUND : AllocatorApiResult::NOT_FOUND;
-    eventTracker_->record(AllocatorApiEvent::FIND_FAST, key, result,
-                          handle ? handle->getSize() : -1,
-                          handle ? handle->getConfiguredTTL() : -1);
+    eventTracker->record(AllocatorApiEvent::FIND_FAST, key, result,
+                         handle ? handle->getSize() : -1,
+                         handle ? handle->getConfiguredTTL() : -1);
   }
   return handle;
 }
@@ -1755,19 +1756,21 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
         removeImpl(*handle, true /* removeFromNvm */,
                    false /* recordApiEvent */);
       }
-      if (UNLIKELY(eventTracker_ != nullptr)) {
-        eventTracker_->record(AllocatorApiEvent::FIND, key,
-                              AllocatorApiResult::NOT_FOUND);
+      auto eventTracker = getEventTracker();
+      if (UNLIKELY(eventTracker != nullptr)) {
+        eventTracker->record(AllocatorApiEvent::FIND, key,
+                             AllocatorApiResult::NOT_FOUND);
       }
       ItemHandle ret;
       ret.markExpired();
       return ret;
     }
 
-    if (UNLIKELY(eventTracker_ != nullptr)) {
-      eventTracker_->record(AllocatorApiEvent::FIND, key,
-                            AllocatorApiResult::FOUND, handle->getSize(),
-                            handle->getConfiguredTTL());
+    auto eventTracker = getEventTracker();
+    if (UNLIKELY(eventTracker != nullptr)) {
+      eventTracker->record(AllocatorApiEvent::FIND, key,
+                           AllocatorApiResult::FOUND, handle->getSize(),
+                           handle->getConfiguredTTL());
     }
     return handle;
   }
@@ -1779,8 +1782,9 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
     eventResult = AllocatorApiResult::NOT_FOUND_IN_MEMORY;
   }
 
-  if (UNLIKELY(eventTracker_ != nullptr)) {
-    eventTracker_->record(AllocatorApiEvent::FIND, key, eventResult);
+  auto eventTracker = getEventTracker();
+  if (UNLIKELY(eventTracker != nullptr)) {
+    eventTracker->record(AllocatorApiEvent::FIND, key, eventResult);
   }
 
   return handle;

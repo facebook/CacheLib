@@ -231,9 +231,6 @@ Cache<Allocator>::Cache(CacheConfig config,
     adminConfig.itemStatsInterval = std::chrono::seconds{0};
     adminConfig.globalOdsInterval = std::chrono::seconds{0};
     admin_ = std::make_unique<CacheAdmin>(*cache_, adminConfig);
-
-    // Log working set traces for in-depth post-run analysis
-    admin_->enableWorkingSetAnalysis(*cache_, adminConfig);
 #endif
   }
 

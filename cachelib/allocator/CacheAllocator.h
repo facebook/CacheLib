@@ -26,7 +26,6 @@
 #include "cachelib/allocator/CacheTraits.h"
 #include "cachelib/allocator/CacheVersion.h"
 #include "cachelib/allocator/ChainedAllocs.h"
-#include "cachelib/allocator/EventInterface.h"
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/allocator/KAllocation.h"
 #include "cachelib/allocator/MemoryMappedFile.h"
@@ -140,6 +139,8 @@ class CacheAllocator : public CacheBase {
   using ChainedItemIter = CacheChainedItemIterator<CacheT>;
   using Key = typename Item::Key;
   using PoolIds = std::set<PoolId>;
+
+  using EventTracker = EventInterface<Key>;
 
   // holds information about removal, used in RemoveCb
   struct RemoveCbData {
@@ -446,7 +447,7 @@ class CacheAllocator : public CacheBase {
   // removed. Keys that are removed/inserted during the lifetime of an
   // iterator are not guaranteed to be either visited or not-visited.
   // Adding/Removing from the hash table while the iterator is alive will not
-  // invalidate any iterator or the element that the iterator points at
+  // inivalidate any iterator or the element that the iterator points at
   // currently. The iterator internally holds a Handle to the item and hence
   // the keys that the iterator holds reference to, will not be evictable
   // until the iterator is destroyed.
@@ -874,8 +875,8 @@ class CacheAllocator : public CacheBase {
   std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     std::unordered_map<std::string, uint64_t> eventTrackerStats;
-    if (eventTracker_) {
-      eventTracker_->getStats(eventTrackerStats);
+    if (auto eventTracker = getEventTracker()) {
+      eventTracker->getStats(eventTrackerStats);
     }
     return eventTrackerStats;
   }
@@ -964,12 +965,6 @@ class CacheAllocator : public CacheBase {
   // because another process was attached. False if the user tried to clean up
   // and the cache was actually attached.
   static bool cleanupStrayShmSegments(const std::string& cacheDir, bool posix);
-
-  // Start tracking allocator events using  a given instance of the interface
-  // implementaiton.
-  void setEventTracker(std::unique_ptr<EventInterface<Key>> eventTracker) {
-    eventTracker_ = std::move(eventTracker);
-  }
 
   // gives a relative offset to a pointer within the cache.
   uint64_t getItemPtrAsOffset(const void* ptr);
@@ -1326,6 +1321,10 @@ class CacheAllocator : public CacheBase {
 
   unsigned int reclaimSlabs(PoolId id, size_t numSlabs) final {
     return allocator_->reclaimSlabsAndGrow(id, numSlabs);
+  }
+
+  FOLLY_ALWAYS_INLINE EventTracker* getEventTracker() const {
+    return config_.eventTracker.get();
   }
 
   // Releases a slab from a pool into its corresponding memory pool
@@ -1710,9 +1709,6 @@ class CacheAllocator : public CacheBase {
 
   // state for the nvmcache
   NvmCacheState nvmCacheState_;
-
-  // Object for tracking allocator API events.
-  std::unique_ptr<EventInterface<Key>> eventTracker_;
 
   // admission policy for nvmcache
   std::unique_ptr<NvmAdmissionPolicy<CacheT>> nvmAdmissionPolicy_;
