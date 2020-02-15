@@ -165,7 +165,9 @@ TEST(Util, MemRSS) {
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   EXPECT_NE(MAP_FAILED, ptr);
   SCOPE_EXIT { ::munmap(ptr, len); };
-  memset(ptr, 5, len);
+  std::memset(ptr, 5, len);
+  // sleep to let the stat catch up.
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
   EXPECT_GT(util::getRSSBytes(), val);
   EXPECT_GE(util::getRSSBytes() - val, len);
 }
