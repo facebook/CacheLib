@@ -467,13 +467,6 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
                                                 ItemHandle child) {
-  if (nvmCache_ != nullptr && parent->isUnevictable() &&
-      parent->isAccessible()) {
-    throw std::invalid_argument(
-        "When the parent item is already visible, can't use addChainedItem API "
-        "with nvmCache enabled");
-  }
-
   if (!parent || !child || !child->isChainedItem()) {
     throw std::invalid_argument(
         folly::sformat("Invalid parent or child. parent: {}, child: {}",
@@ -508,6 +501,7 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
   child->incRef();
   XDCHECK_EQ(2u, child->getRefCount());
 
+  invalidateNvm(*parent);
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
                          AllocatorApiResult::INSERTED, child->getSize(),
@@ -537,6 +531,8 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
       stats_.numChainedParentItems.dec();
     }
     head->asChainedItem().setNext(nullptr, compressor_);
+
+    invalidateNvm(*parent);
   }
   const auto res = removeFromMMContainer(*head);
   XDCHECK(res == true);
@@ -625,6 +621,7 @@ void CacheAllocator<CacheTrait>::transferChainAndReplace(
   if (replaceIfAccessible(*parent, *newParent)) {
     newParent.unmarkNascent();
   }
+  invalidateNvm(*parent);
 }
 
 template <typename CacheTrait>
@@ -661,11 +658,10 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::replaceChainedItem(Item& oldItem,
                                                ItemHandle newItemHandle,
-                                               const Item& parent) {
+                                               Item& parent) {
   if (!newItemHandle) {
     throw std::invalid_argument("Empty handle for newItem");
   }
-
   auto l = chainedItemLocks_.lockExclusive(parent.getKey());
 
   if (!oldItem.isChainedItem() || !newItemHandle->isChainedItem() ||
@@ -679,7 +675,10 @@ CacheAllocator<CacheTrait>::replaceChainedItem(Item& oldItem,
         oldItem.toString(), newItemHandle->toString(), parent.toString()));
   }
 
-  return replaceChainedItemLocked(oldItem, std::move(newItemHandle), parent);
+  auto oldItemHdl =
+      replaceChainedItemLocked(oldItem, std::move(newItemHandle), parent);
+  invalidateNvm(parent);
+  return oldItemHdl;
 }
 
 template <typename CacheTrait>
@@ -1657,6 +1656,14 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
   // the last guy with reference to the item will release it back to the
   // allocator.
   return success ? RemoveRes::kSuccess : RemoveRes::kNotFoundInRam;
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
+  if (nvmCache_ != nullptr && item.isAccessible() && item.isNvmClean()) {
+    item.unmarkNvmClean();
+    nvmCache_->remove(item.getKey());
+  }
 }
 
 template <typename CacheTrait>

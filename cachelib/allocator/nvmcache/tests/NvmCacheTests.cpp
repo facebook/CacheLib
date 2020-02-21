@@ -979,6 +979,144 @@ TYPED_TEST(NvmCacheTest, ChainedItems) {
   verifyChainedAllcos(it);
 }
 
+TYPED_TEST(NvmCacheTest, ChainedItemsModifyAccessible) {
+  auto& config = this->getConfig();
+  config.configureChainedItems();
+  auto& cache = this->makeCache();
+  auto pid = this->poolId();
+
+  const uint32_t allocSize = 15 * 1024 - 5;
+  std::string key = "foobar";
+  std::vector<std::string> vals;
+  {
+    auto it = cache.allocate(pid, key, allocSize);
+    ASSERT_NE(nullptr, it);
+
+    auto fillItem = [&](Item& item) {
+      size_t fullSize = cache.getUsableSize(item);
+      const auto text = genRandomStr(fullSize);
+      vals.push_back(text);
+      std::memcpy(
+          reinterpret_cast<char*>(item.getMemory()), text.data(), text.size());
+    };
+
+    fillItem(*it);
+    cache.insertOrReplace(it);
+    {
+      auto chainedIt =
+          cache.allocateChainedItem(it, folly::Random::rand32(100, allocSize));
+      ASSERT_TRUE(chainedIt);
+      fillItem(*chainedIt);
+      cache.addChainedItem(it, std::move(chainedIt));
+    }
+    {
+      this->pushToNvmCacheFromRamForTesting(key);
+      this->removeFromRamForTesting(key);
+    }
+    // Read everything again
+    {
+      auto hdl = this->fetch(key, false /* ramOnly*/);
+      hdl.wait();
+      ASSERT_TRUE(hdl->isNvmClean());
+      {
+        auto chainedIt = cache.allocateChainedItem(
+            hdl, folly::Random::rand32(100, allocSize));
+        ASSERT_TRUE(chainedIt);
+        fillItem(*chainedIt);
+        cache.addChainedItem(hdl, std::move(chainedIt));
+      }
+      ASSERT_EQ(vals.size(), 3);
+    }
+    auto verifyItem = [&](const Item& item, const std::string& text) {
+      ASSERT_EQ(cache.getUsableSize(item), text.size()) << item.toString();
+      ASSERT_EQ(0, std::memcmp(item.getMemory(), text.data(), text.size()))
+          << item.toString();
+    };
+
+    auto verifyChainedAllcos = [&](const ItemHandle& hdl, uint32_t nChained) {
+      auto allocs = cache.viewAsChainedAllocs(hdl);
+      verifyItem(allocs.getParentItem(), vals[0]);
+
+      int index = 0;
+      for (const auto& c : allocs.getChain()) {
+        verifyItem(c, vals[nChained - index++]);
+      }
+    };
+    {
+      auto res = this->inspectCache(key);
+      EXPECT_NE(nullptr, res.first);
+      verifyChainedAllcos(res.first, 2);
+      if (nullptr != res.second) {
+        verifyChainedAllcos(res.second, 2);
+      }
+    }
+
+    // popChained Item test
+    {
+      this->pushToNvmCacheFromRamForTesting(key);
+      this->removeFromRamForTesting(key);
+    }
+    // Read everything again
+    {
+      auto hdl = this->fetch(key, false /* ramOnly*/);
+      hdl.wait();
+      ASSERT_TRUE(hdl->isNvmClean());
+      {
+        auto chainedIt = cache.popChainedItem(hdl);
+        ASSERT_TRUE(chainedIt);
+        vals.pop_back();
+      }
+      ASSERT_EQ(vals.size(), 2);
+    }
+
+    {
+      auto res = this->inspectCache(key);
+      EXPECT_NE(nullptr, res.first);
+      verifyChainedAllcos(res.first, 1);
+      if (nullptr != res.second) {
+        verifyChainedAllcos(res.second, 1);
+      }
+    }
+
+    // replaceChained Item test
+    {
+      this->pushToNvmCacheFromRamForTesting(key);
+      this->removeFromRamForTesting(key);
+    }
+
+    // Read everything again
+    {
+      auto hdl = this->fetch(key, false /* ramOnly*/);
+      hdl.wait();
+      ASSERT_TRUE(hdl->isNvmClean());
+
+      vals.pop_back();
+      auto newItemHandle =
+          cache.allocateChainedItem(hdl, folly::Random::rand32(100, allocSize));
+      ASSERT_TRUE(newItemHandle);
+      fillItem(*newItemHandle);
+
+      {
+        auto* firstChainedItem =
+            cache.viewAsChainedAllocs(hdl).getNthInChain(0);
+        Item& oldItem = *firstChainedItem;
+        auto oldHandle =
+            cache.replaceChainedItem(oldItem, std::move(newItemHandle), *hdl);
+        ASSERT_TRUE(oldHandle);
+      }
+      ASSERT_EQ(vals.size(), 2);
+    }
+    {
+      auto res = this->inspectCache(key);
+      EXPECT_NE(nullptr, res.first);
+      verifyChainedAllcos(res.first, 1);
+      if (nullptr != res.second) {
+        verifyChainedAllcos(res.second, 1);
+      }
+    }
+  }
+}
+
 TYPED_TEST(NvmCacheTest, EncodeDecode) {
   auto& config = this->getConfig();
   config.configureChainedItems();
