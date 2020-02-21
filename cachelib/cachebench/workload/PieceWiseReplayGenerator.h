@@ -1,21 +1,26 @@
 #pragma once
 
 #include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
+#include "cachelib/common/piecewise/GenericPieces.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
 constexpr uint64_t kInvalidRequestId = 0;
+// physical grouping size (in Bytes) for contiguous pieces
+constexpr uint64_t kCachePieceGroupSize = 16777216;
 
 class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  public:
   explicit PieceWiseReplayGenerator(StressorConfig config)
       : ReplayGeneratorBase(config) {
     // Insert an invalid request to be used when getReq() fails.
-    activeReqM_.emplace(std::piecewise_construct,
-                        std::forward_as_tuple(kInvalidRequestId),
-                        std::forward_as_tuple("", "0", kInvalidRequestId));
+    activeReqM_.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(kInvalidRequestId),
+        std::forward_as_tuple(
+            config, kInvalidRequestId, "", 1, 1, folly::none, folly::none));
   }
 
   // getReq generates the next request from the named trace file.
@@ -39,16 +44,48 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
  private:
   struct ReqWrapper {
-    std::string key;
+    std::string baseKey;
+    std::string pieceKey;
     std::vector<size_t> sizes;
     Request req;
     OpType op;
+    std::unique_ptr<GenericPieces> cachePieces;
+    RequestRange requestRange;
 
-    explicit ReqWrapper(folly::StringPiece k,
-                        folly::StringPiece size,
-                        uint64_t reqId)
-        : key(k.str()), sizes(1), req(key, sizes.begin(), sizes.end(), reqId) {
-      sizes[0] = std::stoi(size.str());
+    /**
+     * @param fullContentSize: byte size of the full content
+     * @param responseHeaderSize: response header size for the request
+     */
+    explicit ReqWrapper(const StressorConfig& config,
+                        uint64_t reqId,
+                        folly::StringPiece key,
+                        size_t fullContentSize,
+                        size_t responseHeaderSize,
+                        folly::Optional<uint64_t> rangeStart,
+                        folly::Optional<uint64_t> rangeEnd)
+        : baseKey(GenericPieces::escapeCacheKey(key.str())),
+          pieceKey(baseKey),
+          sizes(1),
+          req(pieceKey, sizes.begin(), sizes.end(), reqId),
+          requestRange(rangeStart, rangeEnd) {
+      if (fullContentSize < config.cachePieceSize) {
+        // Store the entire object along with the response header
+        // TODO: deal with range request in this case, we need to trim the
+        // response after fetching it.
+        sizes[0] = fullContentSize + responseHeaderSize;
+      } else {
+        // Piecewise caching
+        cachePieces = std::make_unique<GenericPieces>(
+            baseKey,
+            config.cachePieceSize,
+            kCachePieceGroupSize / config.cachePieceSize,
+            fullContentSize,
+            &requestRange);
+
+        // Header piece is the first piece
+        pieceKey = GenericPieces::createPieceHeaderKey(baseKey);
+        sizes[0] = responseHeaderSize;
+      }
 
       // Only support get from trace for now
       op = OpType::kGet;
@@ -65,6 +102,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   std::unordered_map<uint64_t, ReqWrapper> activeReqM_;
 
   const Request& getReqFromTrace();
+
+  void updatePieceProcessing(
+      std::unordered_map<uint64_t, ReqWrapper>::iterator it,
+      OpResultType result);
 };
 
 template <typename CacheT>
@@ -90,7 +131,7 @@ PieceWiseReplayGenerator::prepopulateCache(CacheT& cache) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
           }
           count++;
-          notifyResult(*req.requestId, OpResultType::kGetHit);
+          notifyResult(*req.requestId, OpResultType::kSetSuccess);
         }
       }
     }

@@ -65,6 +65,19 @@ class GenericPieces {
   uint64_t getPieceSize() const { return pieceSize_; }
   uint64_t getPiecesPerGroup() const { return numPiecesPerGroup_; }
 
+  bool isPieceWithinBound(uint64_t pieceIndex) const {
+    return pieceIndex <= endPieceIndex_;
+  }
+
+  uint64_t getSizeOfAPiece(uint64_t pieceIndex) const {
+    // The size is full piece size when it's not the last piece
+    if (pieceIndex < endPieceIndex_) {
+      return pieceSize_;
+    } else {
+      return getLastByteOffsetOfLastPiece() % pieceSize_ + 1;
+    }
+  }
+
   /**
    * Returns the body-length of the *full* blob (e.g. if there is a
    * 1000000-byte blob and 6400 bytes are requested in a range request, this
