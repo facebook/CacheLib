@@ -59,103 +59,57 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   }
 }
 
+namespace {
+std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
+  if (config.generator == "piecewise-replay") {
+    return std::make_unique<PieceWiseReplayGenerator>(config);
+  }
+
+  if (config.generator == "replay") {
+    return std::make_unique<ReplayGenerator>(config);
+  }
+
+  // TODO: Remove the empty() check once we label workload-based configs
+  // properly
+  if (config.generator.empty() || config.generator == "workload") {
+    if (config.distribution == "range") {
+      return std::make_unique<WorkloadGenerator<RangeDistribution>>(config);
+    } else if (config.distribution == "normal") {
+      return std::make_unique<WorkloadGenerator<NormalDistribution>>(config);
+    } else if (config.distribution == "workload" ||
+               // TODO: Remove the empty() check once we label workload-based
+               // configs properly
+               config.distribution.empty()) {
+      return std::make_unique<WorkloadGenerator<>>(config);
+    }
+  } else if (config.generator == "online") {
+    if (config.distribution == "range") {
+      return std::make_unique<OnlineGenerator<RangeDistribution>>(config);
+    } else if (config.distribution == "normal") {
+      return std::make_unique<OnlineGenerator<NormalDistribution>>(config);
+    } else if (config.distribution == "workload" ||
+               config.distribution.empty()) {
+      return std::make_unique<OnlineGenerator<>>(config);
+    }
+  } else {
+    throw std::invalid_argument("Invalid config");
+  }
+  // WorkloadGenerator as default
+  return std::make_unique<WorkloadGenerator<>>(config);
+}
+} // namespace
+
 std::unique_ptr<Stressor> Stressor::makeStressor(
     CacheConfig cacheConfig, StressorConfig stressorConfig) {
   if (stressorConfig.mode == "stress") {
+    auto generator = makeGenerator(stressorConfig);
     if (stressorConfig.allocator == "LRU" || stressorConfig.allocator.empty()) {
       // default allocator is LRU, other allocator types should be added here
-      if (stressorConfig.generator == "piecewise-replay") {
-        return std::make_unique<
-            CacheStressor<LruAllocator, PieceWiseReplayGenerator>>(
-            cacheConfig, stressorConfig);
-      }
-      if (stressorConfig.generator == "replay") {
-        return std::make_unique<CacheStressor<LruAllocator, ReplayGenerator>>(
-            cacheConfig, stressorConfig);
-      }
-      if (stressorConfig.generator.empty() ||
-          stressorConfig.generator == "workload") {
-        if (stressorConfig.distribution == "range") {
-          return std::make_unique<CacheStressor<
-              LruAllocator, WorkloadGenerator<RangeDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "normal") {
-          return std::make_unique<CacheStressor<
-              LruAllocator, WorkloadGenerator<NormalDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "workload" ||
-                   stressorConfig.distribution.empty()) {
-          return std::make_unique<
-              CacheStressor<LruAllocator, WorkloadGenerator<>>>(cacheConfig,
-                                                                stressorConfig);
-        }
-      } else if (stressorConfig.generator == "online") {
-        if (stressorConfig.distribution == "range") {
-          return std::make_unique<
-              CacheStressor<LruAllocator, OnlineGenerator<RangeDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "normal") {
-          return std::make_unique<
-              CacheStressor<LruAllocator, OnlineGenerator<NormalDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "workload" ||
-                   stressorConfig.distribution.empty()) {
-          return std::make_unique<
-              CacheStressor<LruAllocator, OnlineGenerator<>>>(cacheConfig,
-                                                              stressorConfig);
-        }
-      } else {
-        throw std::invalid_argument("Invalid config");
-      }
-      return std::make_unique<CacheStressor<LruAllocator>>(cacheConfig,
-                                                           stressorConfig);
+      return std::make_unique<CacheStressor<LruAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
     } else if (stressorConfig.allocator == "LRU2Q") {
-      // default allocator is LRU, other allocator types should be added here
-      if (stressorConfig.generator == "piecewise-replay") {
-        return std::make_unique<
-            CacheStressor<Lru2QAllocator, PieceWiseReplayGenerator>>(
-            cacheConfig, stressorConfig);
-      }
-      if (stressorConfig.generator == "replay") {
-        return std::make_unique<CacheStressor<Lru2QAllocator, ReplayGenerator>>(
-            cacheConfig, stressorConfig);
-      }
-      if (stressorConfig.generator.empty() ||
-          stressorConfig.generator == "workload") {
-        if (stressorConfig.distribution == "range") {
-          return std::make_unique<CacheStressor<
-              Lru2QAllocator, WorkloadGenerator<RangeDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "normal") {
-          return std::make_unique<CacheStressor<
-              Lru2QAllocator, WorkloadGenerator<NormalDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "workload" ||
-                   stressorConfig.distribution.empty()) {
-          return std::make_unique<
-              CacheStressor<Lru2QAllocator, WorkloadGenerator<>>>(
-              cacheConfig, stressorConfig);
-        }
-      } else if (stressorConfig.generator == "online") {
-        if (stressorConfig.distribution == "range") {
-          return std::make_unique<CacheStressor<
-              Lru2QAllocator, OnlineGenerator<RangeDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "normal") {
-          return std::make_unique<CacheStressor<
-              Lru2QAllocator, OnlineGenerator<NormalDistribution>>>(
-              cacheConfig, stressorConfig);
-        } else if (stressorConfig.distribution == "workload" ||
-                   stressorConfig.distribution.empty()) {
-          return std::make_unique<
-              CacheStressor<Lru2QAllocator, OnlineGenerator<>>>(cacheConfig,
-                                                                stressorConfig);
-        }
-      } else {
-        throw std::invalid_argument("Invalid config");
-      }
-      return std::make_unique<CacheStressor<Lru2QAllocator>>(cacheConfig,
-                                                             stressorConfig);
+      return std::make_unique<CacheStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
     }
   }
   if (stressorConfig.mode == "stdout") {

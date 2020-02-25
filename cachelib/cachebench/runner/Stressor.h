@@ -24,6 +24,8 @@ struct ThroughputStats {
   void render(uint64_t elapsedTimeNs, std::ostream& out) const;
 };
 
+class GeneratorBase;
+
 class Stressor {
  public:
   static std::unique_ptr<Stressor> makeStressor(CacheConfig cacheConfig,

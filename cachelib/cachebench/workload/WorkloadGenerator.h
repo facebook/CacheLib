@@ -38,7 +38,7 @@ class WorkloadGenerator : public GeneratorBase {
                std::mt19937& gen,
                std::optional<uint64_t> requestId = std::nullopt) override;
 
-  const std::vector<std::string>& getAllKeys() const { return keys_; }
+  const std::vector<std::string>& getAllKeys() const override { return keys_; }
 
  private:
   void generateFirstKeyIndexForPool();

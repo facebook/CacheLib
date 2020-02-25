@@ -41,7 +41,9 @@ class ReplayGeneratorBase : public GeneratorBase {
 
   void registerThread() {}
 
-  const std::vector<std::string>& getAllKeys() const { return keys_; }
+  const std::vector<std::string>& getAllKeys() const {
+    throw std::logic_error("ReplayGenerator has no keys precomputed!");
+  }
 
  protected:
   // ifstream pointing to the trace file

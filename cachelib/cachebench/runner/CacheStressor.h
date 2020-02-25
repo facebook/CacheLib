@@ -10,17 +10,15 @@
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/cachebench/util/Config.h"
+#include "cachelib/cachebench/util/Exceptions.h"
+#include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
-
-#include "cachelib/cachebench/workload/OnlineGenerator.h"
-#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
-#include "cachelib/cachebench/workload/ReplayGenerator.h"
-#include "cachelib/cachebench/workload/WorkloadGenerator.h"
+#include "cachelib/cachebench/workload/GeneratorBase.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-template <typename Allocator, typename Generator = WorkloadGenerator<>>
+template <typename Allocator>
 class CacheStressor : public Stressor {
  public:
   using CacheT = Cache<Allocator>;
@@ -31,10 +29,12 @@ class CacheStressor : public Stressor {
 
   // @param wrapper   wrapper that encapsulate the CacheAllocator
   // @param config    stress test config
-  CacheStressor(CacheConfig cacheConfig, StressorConfig config)
+  CacheStressor(CacheConfig cacheConfig,
+                StressorConfig config,
+                std::unique_ptr<GeneratorBase>&& generator)
       : config_(std::move(config)),
         throughputStats_(config_.numThreads),
-        wg_(config_),
+        wg_(std::move(generator)),
         hardcodedString_(genHardcodedString()) {
     // if either consistency check is enabled or if we want to move
     // items during slab release, we want readers and writers to chained
@@ -76,13 +76,12 @@ class CacheStressor : public Stressor {
     }
 
     if (config_.checkConsistency) {
-      cache_->enableConsistencyCheck(wg_.getAllKeys());
+      cache_->enableConsistencyCheck(wg_->getAllKeys());
     }
     // Fill up the cache with specified key/value distribution
     if (config_.prepopulateCache) {
       try {
         auto ret = prepopulateCache();
-
         std::cout << folly::sformat("Inserted {:,} keys in {:.2f} mins",
                                     ret.first,
                                     ret.second.count() / 60.)
@@ -273,7 +272,7 @@ class CacheStressor : public Stressor {
           }
           count++;
           if (req.requestId) {
-            wg_.notifyResult(*req.requestId, OpResultType::kSetSuccess);
+            wg_->notifyResult(*req.requestId, OpResultType::kSetSuccess);
           }
         }
       }
@@ -300,7 +299,8 @@ class CacheStressor : public Stressor {
   // @param genChainedItemValSize   randomly choose a size for chained item
   // @param stats       Throughput stats
   void stressByDiscreteDistribution(ThroughputStats& stats) {
-    wg_.registerThread();
+    wg_->registerThread();
+
     std::mt19937 gen(folly::Random::rand32());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
                                             config_.opPoolDistribution.end());
@@ -338,7 +338,7 @@ class CacheStressor : public Stressor {
         const auto pid = opPoolDist(gen);
         const Request& req(getReq(pid, gen, lastRequestId));
         const std::string* key = &(req.key);
-        const OpType op = wg_.getOp(pid, gen, req.requestId);
+        const OpType op = wg_->getOp(pid, gen, req.requestId);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
@@ -446,7 +446,7 @@ class CacheStressor : public Stressor {
         lastRequestId = req.requestId;
         if (req.requestId) {
           // req might be deleted after calling notifyResult()
-          wg_.notifyResult(*req.requestId, result);
+          wg_->notifyResult(*req.requestId, result);
         }
       } catch (const cachebench::EndOfTrace& ex) {
         break;
@@ -474,7 +474,7 @@ class CacheStressor : public Stressor {
                         std::mt19937& gen,
                         std::optional<uint64_t>& lastRequestId) {
     while (true) {
-      const Request& req(wg_.getReq(pid, gen, lastRequestId));
+      const Request& req(wg_->getReq(pid, gen, lastRequestId));
       if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
         continue;
       }
@@ -486,7 +486,7 @@ class CacheStressor : public Stressor {
 
   std::vector<ThroughputStats> throughputStats_;
 
-  Generator wg_;
+  std::unique_ptr<GeneratorBase> wg_;
 
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;
