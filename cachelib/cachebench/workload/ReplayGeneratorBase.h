@@ -39,12 +39,9 @@ class ReplayGeneratorBase : public GeneratorBase {
 
   virtual ~ReplayGeneratorBase() { infile_.close(); }
 
-  template <typename CacheT>
-  std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
-
   void registerThread() {}
 
-  const std::vector<std::string>& getAllKeys() { return keys_; }
+  const std::vector<std::string>& getAllKeys() const { return keys_; }
 
  protected:
   // ifstream pointing to the trace file

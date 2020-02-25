@@ -10,10 +10,11 @@ namespace cachebench {
 namespace detail {
 std::chrono::seconds executeParallel(
     std::function<void(size_t start, size_t end)> fn,
+    size_t numThreads,
     size_t count,
     size_t offset = 0) {
+  numThreads = std::max(numThreads, 1UL);
   auto startTime = std::chrono::steady_clock::now();
-  const auto numThreads = std::thread::hardware_concurrency();
   const size_t perThread = count / numThreads;
   std::vector<std::thread> processingThreads;
   for (size_t i = 0; i < numThreads; i++) {
@@ -24,6 +25,22 @@ std::chrono::seconds executeParallel(
     });
   }
   fn(offset + perThread * numThreads, offset + count);
+  for (auto& t : processingThreads) {
+    t.join();
+  }
+
+  return std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::steady_clock::now() - startTime);
+}
+
+std::chrono::seconds executeParallel(std::function<void()> fn,
+                                     size_t numThreads) {
+  numThreads = std::max(numThreads, 1UL);
+  auto startTime = std::chrono::steady_clock::now();
+  std::vector<std::thread> processingThreads;
+  for (size_t i = 0; i < numThreads; i++) {
+    processingThreads.emplace_back([&fn]() { fn(); });
+  }
   for (auto& t : processingThreads) {
     t.join();
   }

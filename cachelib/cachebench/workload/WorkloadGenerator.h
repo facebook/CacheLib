@@ -40,9 +40,6 @@ class WorkloadGenerator : public GeneratorBase {
 
   const std::vector<std::string>& getAllKeys() const { return keys_; }
 
-  template <typename CacheT>
-  std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
-
  private:
   void generateFirstKeyIndexForPool();
   void generateKeys();
@@ -66,46 +63,6 @@ class WorkloadGenerator : public GeneratorBase {
 
   std::vector<Distribution> workloadDist_;
 };
-
-template <typename Distribution>
-template <typename CacheT>
-std::pair<uint64_t, std::chrono::seconds>
-WorkloadGenerator<Distribution>::prepopulateCache(CacheT& cache) {
-  auto prePopulateFn = [&](size_t start, size_t end) {
-    if (start >= end) {
-      return;
-    }
-
-    size_t count = start;
-    PoolId pid =
-        std::distance(firstKeyIndexForPool_.begin(),
-                      std::upper_bound(firstKeyIndexForPool_.begin(),
-                                       firstKeyIndexForPool_.end(), start)) -
-        1;
-    std::mt19937 gen(folly::Random::rand32());
-    while (count < end) {
-      if (count >= firstKeyIndexForPool_[pid + 1]) {
-        pid++;
-      }
-      const std::string& key = keys_.at(count);
-      size_t s = workloadDist_[workloadIdx(pid)].sampleValDist(gen);
-      const auto allocHandle = cache.allocate(pid, key, s);
-      if (allocHandle) {
-        cache.insertOrReplace(allocHandle);
-        // We throttle in case we are using flash so that we dont drop
-        // evictions to flash by inserting at a very high rate.
-        if (!cache.isRamOnly() && count % 8 == 0) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-        count++;
-      }
-    }
-  };
-
-  auto duration = detail::executeParallel(prePopulateFn, keys_.size());
-  return std::make_pair(keys_.size(), duration);
-}
-
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

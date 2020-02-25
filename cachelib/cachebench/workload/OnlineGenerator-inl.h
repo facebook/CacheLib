@@ -173,6 +173,7 @@ void OnlineGenerator<Distribution>::generateKeyDistributions() {
             keyIndicesForPool_[i][j] = idx;
           }
         },
+        config_.numThreads,
         numOpsForPool);
   }
 

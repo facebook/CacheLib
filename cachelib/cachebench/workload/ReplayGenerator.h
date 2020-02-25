@@ -37,9 +37,6 @@ class ReplayGenerator : public ReplayGeneratorBase {
                std::mt19937&,
                std::optional<uint64_t> requestId = std::nullopt) override;
 
-  template <typename CacheT>
-  std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
-
  private:
   // current outstanding key
   std::string key_;
@@ -75,41 +72,6 @@ const Request& ReplayGenerator::getReq(uint8_t,
 
 OpType ReplayGenerator::getOp(uint8_t, std::mt19937&, std::optional<uint64_t>) {
   return op_;
-}
-
-template <typename CacheT>
-std::pair<size_t, std::chrono::seconds> ReplayGenerator::prepopulateCache(
-    CacheT& cache) {
-  size_t count(0);
-  std::mt19937 gen(folly::Random::rand32());
-  constexpr size_t batchSize = 1UL << 20;
-  auto startTime = std::chrono::steady_clock::now();
-  for (auto pid : cache.poolIds()) {
-    while (cache.getPoolStats(pid).numEvictions() == 0) {
-      for (size_t j = 0; j < batchSize; j++) {
-        // we know using pool 0 is safe here, the trace generator doesn't use
-        // this parameter
-        getReq(0, gen);
-        // to speed up prepopulation, don't repeat keys
-        repeats_ = 1;
-        const auto allocHandle =
-            cache.allocate(pid, req_.key, req_.key.size() + *(req_.sizeBegin));
-        if (allocHandle) {
-          cache.insertOrReplace(allocHandle);
-          // We throttle in case we are using flash so that we dont drop
-          // evictions to flash by inserting at a very high rate.
-          if (!cache.isRamOnly() && count % 8 == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-          }
-          count++;
-        }
-      }
-    }
-  }
-
-  return std::make_pair(count,
-                        std::chrono::duration_cast<std::chrono::seconds>(
-                            std::chrono::steady_clock::now() - startTime));
 }
 
 } // namespace cachebench

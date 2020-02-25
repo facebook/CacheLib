@@ -39,9 +39,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
-  template <typename CacheT>
-  std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
-
  private:
   struct ReqWrapper {
     std::string baseKey;
@@ -107,41 +104,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
       std::unordered_map<uint64_t, ReqWrapper>::iterator it,
       OpResultType result);
 };
-
-template <typename CacheT>
-std::pair<size_t, std::chrono::seconds>
-PieceWiseReplayGenerator::prepopulateCache(CacheT& cache) {
-  size_t count(0);
-  std::mt19937 gen(folly::Random::rand32());
-  constexpr size_t batchSize = 1UL << 20;
-  auto startTime = std::chrono::steady_clock::now();
-  for (auto pid : cache.poolIds()) {
-    while (cache.getPoolStats(pid).numEvictions() == 0) {
-      for (size_t j = 0; j < batchSize; j++) {
-        // we know using pool 0 is safe here, the trace generator doesn't use
-        // this parameter
-        const auto& req = getReq(0, gen);
-        const auto allocHandle =
-            cache.allocate(pid, req.key, req.key.size() + *(req.sizeBegin));
-        if (allocHandle) {
-          cache.insertOrReplace(allocHandle);
-          // We throttle in case we are using flash so that we dont drop
-          // evictions to flash by inserting at a very high rate.
-          if (!cache.isRamOnly() && count % 8 == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-          }
-          count++;
-          notifyResult(*req.requestId, OpResultType::kSetSuccess);
-        }
-      }
-    }
-  }
-
-  return std::make_pair(count,
-                        std::chrono::duration_cast<std::chrono::seconds>(
-                            std::chrono::steady_clock::now() - startTime));
-}
-
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook
