@@ -87,19 +87,19 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
 // written to the slot.
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     RegionAllocator& ra, uint32_t size) {
-  RelAddress addr;
   LockGuard l{ra.getLock()};
   RegionId rid = ra.getAllocationRegion();
-  // region is full, track it and reset ra and get a new region
   if (rid.valid()) {
     auto& region = regionManager_.getRegion(rid);
-    RegionDescriptor desc{OpenStatus::Error};
-    std::tie(desc, addr) = region.openAndAllocate(size);
+    auto [desc, addr] = region.openAndAllocate(size);
     XDCHECK_NE(OpenStatus::Reclaimed, desc.status());
     XDCHECK_NE(OpenStatus::Retry, desc.status());
     if (desc.isReady()) {
       return std::make_tuple(std::move(desc), size, addr);
     }
+    // Buffer has been fully allocated. So we can schedule an async flush
+    // now to flush when the all the in-mem writes have been completed
+    regionManager_.doFlush(rid, true /* async */);
 
     // Region is full, so we reset region allocator and get ready to
     // get a new region below.
@@ -116,7 +116,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   XDCHECK(!rid.valid());
   auto status = regionManager_.getCleanRegion(rid);
   if (status != OpenStatus::Ready) {
-    return std::make_tuple(RegionDescriptor{status}, size, addr);
+    return std::make_tuple(RegionDescriptor{status}, size, RelAddress{});
   }
 
   // we got a region fresh off of reclaim. Need to initialize it.
@@ -132,14 +132,26 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
 
   // Replace with a reclaimed region and allocate
   ra.setAllocationRegion(rid);
-  RegionDescriptor desc{OpenStatus::Error};
-  std::tie(desc, addr) = region.openAndAllocate(size);
+  auto [desc, addr] = region.openAndAllocate(size);
   XDCHECK_EQ(OpenStatus::Ready, desc.status());
   return std::make_tuple(std::move(desc), size, addr);
 }
 
 void Allocator::close(RegionDescriptor&& desc) {
   regionManager_.close(std::move(desc));
+}
+
+void Allocator::flush() {
+  if (!regionManager_.doesBufferingWrites()) {
+    return;
+  }
+  for (auto& ra : allocators_) {
+    std::lock_guard<std::mutex> lock{ra.getLock()};
+    auto rid = ra.getAllocationRegion();
+    if (rid.valid()) {
+      regionManager_.doFlush(rid, false /*async */);
+    }
+  }
 }
 
 void Allocator::reset() {

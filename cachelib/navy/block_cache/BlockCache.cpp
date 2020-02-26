@@ -70,7 +70,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
           config.cacheBaseOffset, config.blockSize,
           *config.device,         config.cleanRegionsPool,
           *config.scheduler,      bindThis(&BlockCache::onRegionReclaim, *this),
-          config.sizeClasses,     std::move(config.evictionPolicy)},
+          config.sizeClasses,     std::move(config.evictionPolicy),
+          config.numInMemBuffers},
       allocator_{regionManager_, config.blockSize},
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
@@ -146,7 +147,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   RegionDescriptor desc = regionManager_.openForRead(addrEnd.rid(), seqNumber);
   switch (desc.status()) {
   case OpenStatus::Ready: {
-    auto status = readEntry(addrEnd, hk, value);
+    auto status = readEntry(desc, addrEnd, hk, value);
     if (status == Status::Ok) {
       regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
@@ -326,7 +327,8 @@ Status BlockCache::writeEntry(RelAddress addr,
   return Status::Ok;
 }
 
-Status BlockCache::readEntry(RelAddress addr,
+Status BlockCache::readEntry(const RegionDescriptor& readDesc,
+                             RelAddress addr,
                              HashedKey expected,
                              Buffer& value) {
   // Because region opened for read, nobody will reclaim it or modify. Safe
@@ -343,7 +345,7 @@ Status BlockCache::readEntry(RelAddress addr,
       << folly::sformat("blockSize={}, size={}", blockSize_, size);
 
   auto buffer = regionManager_.makeIOBuffer(size);
-  if (!regionManager_.read(addr.sub(size), buffer.mutableView())) {
+  if (!regionManager_.read(readDesc, addr.sub(size), buffer.mutableView())) {
     return Status::DeviceError;
   }
 
@@ -370,7 +372,8 @@ Status BlockCache::readEntry(RelAddress addr,
     } else if (buffer.size() < size) {
       // Read less than actual size. Read again with proper buffer.
       buffer = regionManager_.makeIOBuffer(size);
-      if (!regionManager_.read(addr.sub(size), buffer.mutableView())) {
+      if (!regionManager_.read(
+              readDesc, addr.sub(size), buffer.mutableView())) {
         return Status::DeviceError;
       }
     }
@@ -387,6 +390,7 @@ Status BlockCache::readEntry(RelAddress addr,
 
 void BlockCache::flush() {
   XLOG(INFO, "Flush block cache");
+  allocator_.flush();
   regionManager_.flush();
 }
 

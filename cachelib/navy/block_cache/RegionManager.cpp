@@ -13,7 +13,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              JobScheduler& scheduler,
                              RegionEvictCallback evictCb,
                              std::vector<uint32_t> sizeClasses,
-                             std::unique_ptr<EvictionPolicy> policy)
+                             std::unique_ptr<EvictionPolicy> policy,
+                             uint32_t numInMemBuffers)
     : numRegions_{numRegions},
       regionSize_{regionSize},
       baseOffset_{baseOffset},
@@ -25,11 +26,17 @@ RegionManager::RegionManager(uint32_t numRegions,
       numCleanRegions_{numCleanRegions},
       scheduler_{scheduler},
       evictCb_{evictCb},
-      sizeClasses_{sizeClasses} {
+      sizeClasses_{sizeClasses},
+      numInMemBuffers_{numInMemBuffers} {
   XDCHECK_EQ(regionSize_ % blockSize_, 0u);
   XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
+  }
+  if (doesBufferingWrites()) {
+    for (uint32_t i = 0; i < numInMemBuffers_; i++) {
+      buffers_.push_back(std::make_unique<Buffer>(regionSize_));
+    }
   }
 }
 
@@ -71,6 +78,58 @@ void RegionManager::reset() {
   seqNumber_.store(0, std::memory_order_release);
 }
 
+// Caller is expected to call flushBuffer until true is returned.
+// This routine is idempotent and is safe to call multiple times until
+// detachBuffer is done.
+bool RegionManager::flushBuffer(const RegionId& rid) {
+  std::unique_ptr<Buffer> buf;
+  auto& region = getRegion(rid);
+  auto callBack = [this](RelAddress addr, BufferView bufferView) {
+    if (!deviceWrite(addr, bufferView)) {
+      return false;
+    }
+    numInMemBufWaitingFlush_.dec();
+    return true;
+  };
+
+  // This is no-op if the buffer is already flushed
+  if (!region.flushBuffer(std::move(callBack))) {
+    return false;
+  }
+  // detach buffer can return nullptr if there are active readers
+  buf = region.detachBuffer();
+  if (buf) {
+    returnBufferToPool(std::move(buf));
+    return true;
+  }
+  return false;
+}
+
+OpenStatus RegionManager::assignBufferToRegion(RegionId rid) {
+  XDCHECK(rid.valid());
+  auto buf = claimBufferFromPool();
+  if (!buf) {
+    return OpenStatus::Retry;
+  }
+  auto& region = getRegion(rid);
+  region.attachBuffer(std::move(buf));
+  return OpenStatus::Ready;
+}
+
+std::unique_ptr<Buffer> RegionManager::claimBufferFromPool() {
+  std::unique_ptr<Buffer> buf;
+  {
+    std::lock_guard<std::mutex> bufLock{bufferMutex_};
+    if (buffers_.empty()) {
+      return nullptr;
+    }
+    buf = std::move(buffers_.back());
+    buffers_.pop_back();
+  }
+  numInMemBufActive_.inc();
+  return buf;
+}
+
 OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
   auto status = OpenStatus::Retry;
   uint32_t newSched = 0;
@@ -98,7 +157,41 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
           [this] { return startReclaim(); }, "reclaim", JobType::Reclaim);
     }
   }
+  if (doesBufferingWrites() && status == OpenStatus::Ready) {
+    status = assignBufferToRegion(rid);
+    if (status != OpenStatus::Ready) {
+      std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+      cleanRegions_.push_back(rid);
+    }
+  }
   return status;
+}
+
+void RegionManager::doFlush(RegionId rid, bool async) {
+  // Not applicable if not configured to use in-memory buffers
+  if (!doesBufferingWrites()) {
+    return;
+  }
+
+  getRegion(rid).setPendingFlush();
+  numInMemBufWaitingFlush_.inc();
+  if (async) {
+    scheduler_.enqueue(
+        [this, rid] {
+          if (flushBuffer(rid)) {
+            return JobExitCode::Done;
+          }
+          return JobExitCode::Reschedule;
+        },
+        "flush",
+        JobType::Flush);
+  } else {
+    while (!flushBuffer(rid)) {
+      /* sleep override */
+      std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    }
+    return;
+  }
 }
 
 // Tries to get a free region first, otherwise evicts one and schedules region
@@ -132,8 +225,11 @@ JobExitCode RegionManager::startReclaim() {
         // We know now we're the only thread working with this region.
         // Hence, it's safe to access @Region without lock.
         if (region.getNumItems() != 0) {
+          XDCHECK(!region.hasBuffer());
           auto buffer = makeIOBuffer(regionSize());
-          if (!read(RelAddress{rid, 0}, buffer.mutableView())) {
+          auto desc = RegionDescriptor::makeReadDescriptor(
+              OpenStatus::Ready, RegionId{rid}, true /* physRead */);
+          if (!read(desc, RelAddress{rid, 0}, buffer.mutableView())) {
             XLOGF(ERR, "Failed to read region {} during reclaim", rid.index());
             buffer = Buffer{};
           }
@@ -318,7 +414,7 @@ bool RegionManager::isValidIORange(uint32_t offset, uint32_t size) const {
          uint64_t{offset} + size <= regionSize_;
 }
 
-bool RegionManager::write(RelAddress addr, BufferView buf) const {
+bool RegionManager::deviceWrite(RelAddress addr, BufferView buf) {
   XDCHECK(isValidIORange(addr.offset(), buf.size()));
   auto physOffset = physicalOffset(addr);
   if (!device_.write(physOffset, buf.size(), buf.data())) {
@@ -328,13 +424,33 @@ bool RegionManager::write(RelAddress addr, BufferView buf) const {
   return true;
 }
 
-bool RegionManager::read(RelAddress addr, MutableBufferView buf) const {
-  XDCHECK(isValidIORange(addr.offset(), buf.size()));
-  auto physOffset = physicalOffset(addr);
-  return device_.read(physOffset, buf.size(), buf.data());
+bool RegionManager::write(RelAddress addr, BufferView buf) {
+  if (doesBufferingWrites()) {
+    auto rid = addr.rid();
+    auto& region = getRegion(rid);
+    region.writeToBuffer(addr.offset(), buf);
+    return true;
+  }
+  return deviceWrite(addr, buf);
 }
 
-void RegionManager::flush() const { device_.flush(); }
+bool RegionManager::read(const RegionDescriptor& desc,
+                         RelAddress addr,
+                         MutableBufferView buf) const {
+  if (doesBufferingWrites() && !desc.isPhysReadMode()) {
+    auto rid = addr.rid();
+    auto& region = getRegion(rid);
+    XDCHECK(region.hasBuffer());
+    region.readFromBuffer(addr.offset(), buf);
+    return true;
+  }
+  XDCHECK(isValidIORange(addr.offset(), buf.size()));
+  auto physOffset = physicalOffset(addr);
+  auto r = device_.read(physOffset, buf.size(), buf.data());
+  return r;
+}
+
+void RegionManager::flush() { device_.flush(); }
 
 void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reclaim", reclaimCount_.get());
@@ -342,6 +458,8 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_evicted", evictedCount_.get());
   visitor("navy_bc_pinned_regions", pinnedCount_.get());
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
+  visitor("navy_bc_inmem_active", numInMemBufActive_.get());
+  visitor("navy_bc_inmem_waiting_flush", numInMemBufWaitingFlush_.get());
   policy_->getCounters(visitor);
 }
 } // namespace navy

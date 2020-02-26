@@ -57,6 +57,9 @@ class BlockCacheProto {
   // Default: 1
   virtual void setCleanRegionsPool(uint32_t n) = 0;
 
+  // (Optional) Number of In memory buffers to maintain. Default: 0
+  virtual void setNumInMemBuffers(uint32_t numInMemBuffers) = 0;
+
   // (Optional) Enable hits reinsertion policy that determines if an item should
   // stay for more time in cache. @reinsertionThreshold means if an item had
   // been accessed more than that threshold, it will be eligible for

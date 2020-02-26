@@ -11,7 +11,6 @@
 #include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
@@ -82,12 +81,14 @@ class Allocator {
   //  - Ready   Fills @addr and @slotSize
   //  - Retry   Retry later, reclamation is running
   //  - Error   Can't allocate this size even later (hard failure)
-
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(uint32_t size,
                                                               bool permanent);
   void close(RegionDescriptor&& rid);
 
   void reset();
+
+  // Flushes any regions with in-memory buffers to device
+  void flush();
 
   void getCounters(const CounterVisitor& visitor) const;
 

@@ -30,7 +30,7 @@ TEST(RegionManager, ReclaimLruAsFifo) {
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
                                             *device, 1, ex, std::move(evictCb),
-                                            sizeClasses, std::move(policy));
+                                            sizeClasses, std::move(policy), 0);
 
   // without touch, the first region inserted is reclaimed
   EXPECT_EQ(0, rm->evict().index());
@@ -55,7 +55,7 @@ TEST(RegionManager, ReclaimLru) {
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
                                             *device, 1, ex, std::move(evictCb),
-                                            sizeClasses, std::move(policy));
+                                            sizeClasses, std::move(policy), 0);
 
   rm->touch(RegionId{0});
   rm->touch(RegionId{1});
@@ -81,7 +81,7 @@ TEST(RegionManager, Recovery) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
-        sizeClasses, std::move(policy));
+        sizeClasses, std::move(policy), 0);
 
     // Get 3 regions, assign and allocate
     for (uint32_t i = 0; i < 3; i++) {
@@ -122,7 +122,7 @@ TEST(RegionManager, Recovery) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
-        sizeClasses, std::move(policy));
+        sizeClasses, std::move(policy), 0);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -173,16 +173,19 @@ TEST(RegionManager, ReadWrite) {
                                             ex,
                                             std::move(evictCb),
                                             sizeClasses,
-                                            std::make_unique<LruPolicy>(4));
+                                            std::make_unique<LruPolicy>(4),
+                                            0);
 
   constexpr uint32_t kLocalOffset = 3 * 1024;
   constexpr uint32_t kSize = 1024;
   BufferGen bg;
   RelAddress addr{RegionId{1}, kLocalOffset};
+  auto desc =
+      RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, RegionId{1});
   auto buf = bg.gen(kSize);
   EXPECT_TRUE(rm->write(addr, buf.view()));
   Buffer bufRead{kSize};
-  EXPECT_TRUE(rm->read(addr, bufRead.mutableView()));
+  EXPECT_TRUE(rm->read(desc, addr, bufRead.mutableView()));
   EXPECT_EQ(buf.view(), bufRead.view());
 
   // Check device directly at the offset we expect data to be written
@@ -206,7 +209,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
-        sizeClasses, std::move(policy));
+        sizeClasses, std::move(policy), 0);
 
     // Get all free regions. Mark 1 and 2 clean (num entries == 0), 0 and 3
     // used. After recovery, LRU should return clean before used, in order
@@ -241,7 +244,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
-        sizeClasses, std::move(policy));
+        sizeClasses, std::move(policy), 0);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
