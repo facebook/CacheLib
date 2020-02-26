@@ -105,33 +105,54 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
   std::lock_guard<std::mutex> lock(lock_);
   while (std::getline(infile_, line)) {
-    std::vector<folly::StringPiece> fields;
-    // Line format:
-    // timestamp, cacheKey, OpType, objectSize, responseSize,
-    // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate
-    folly::split(",", line, fields);
-    if (fields.size() == kTraceNumFields) {
-      auto reqId = nextReqId_++;
+    try {
+      std::vector<folly::StringPiece> fields;
+      // Line format:
+      // timestamp, cacheKey, OpType, objectSize, responseSize,
+      // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate
+      folly::split(",", line, fields);
+      if (fields.size() == kTraceNumFields) {
+        // Invalid sample: cacheKey is empty, objectSize is not positive
+        if (!fields[1].compare("-") || !fields[1].compare("") ||
+            folly::to<int64_t>(fields[3].str()) <= 0) {
+          continue;
+        }
 
-      auto parseRangeField = [](folly::StringPiece p) {
-        auto val = folly::to<int64_t>(p);
-        return val >= 0 ? folly::Optional<uint64_t>(val) : folly::none;
-      };
+        auto parseRangeField = [](folly::StringPiece range,
+                                  size_t contentSize) {
+          folly::Optional<uint64_t> result;
+          // Negative value means it's not range request
+          auto val = folly::to<int64_t>(range);
+          if (val >= 0) {
+            // range index can not be larger than content size
+            result = std::min(static_cast<size_t>(val), contentSize - 1);
+          } else {
+            result = folly::none;
+          }
 
-      auto rangeStart = parseRangeField(fields[6]);
-      auto rangeEnd = parseRangeField(fields[7]);
-      auto responseHeaderSize = folly::to<size_t>(fields[5].str());
-      activeReqM_.emplace(
-          std::piecewise_construct,
-          std::forward_as_tuple(reqId),
-          std::forward_as_tuple(config_,
-                                reqId,
-                                fields[1],
-                                folly::to<size_t>(fields[3].str()),
-                                responseHeaderSize,
-                                rangeStart,
-                                rangeEnd));
-      return activeReqM_.find(reqId)->second.req;
+          return result;
+        };
+
+        auto fullContentSize = folly::to<size_t>(fields[3].str());
+        auto responseHeaderSize = folly::to<size_t>(fields[5].str());
+        auto rangeStart = parseRangeField(fields[6], fullContentSize);
+        auto rangeEnd = parseRangeField(fields[7], fullContentSize);
+
+        auto reqId = nextReqId_++;
+        activeReqM_.emplace(std::piecewise_construct,
+                            std::forward_as_tuple(reqId),
+                            std::forward_as_tuple(config_,
+                                                  reqId,
+                                                  fields[1],
+                                                  fullContentSize,
+                                                  responseHeaderSize,
+                                                  rangeStart,
+                                                  rangeEnd));
+        return activeReqM_.find(reqId)->second.req;
+      }
+    } catch (const std::exception& e) {
+      XLOG(ERR) << "Processing line: " << line
+                << ", causes exception: " << e.what();
     }
   }
 
