@@ -3,8 +3,7 @@
 #include "cachelib/cachebench/util/Exceptions.h"
 
 namespace {
-// Line format: timestamp, cacheKey, OpType, size, TTL
-constexpr uint32_t kTraceNumFields = 9;
+constexpr uint32_t kTraceNumFields = 10;
 } // namespace
 
 namespace facebook {
@@ -108,8 +107,8 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
   while (std::getline(infile_, line)) {
     std::vector<folly::StringPiece> fields;
     // Line format:
-    // timestamp, cacheKey, OpType, objectSize, responseSize, rangeStart,
-    // rangeEnd, TTL, samplingRate
+    // timestamp, cacheKey, OpType, objectSize, responseSize,
+    // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate
     folly::split(",", line, fields);
     if (fields.size() == kTraceNumFields) {
       auto reqId = nextReqId_++;
@@ -119,10 +118,9 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         return val >= 0 ? folly::Optional<uint64_t>(val) : folly::none;
       };
 
-      auto rangeStart = parseRangeField(fields[5]);
-      auto rangeEnd = parseRangeField(fields[6]);
-      // TODO: set correct response header size after T62193035.
-      size_t responseHeaderSize = 500;
+      auto rangeStart = parseRangeField(fields[6]);
+      auto rangeEnd = parseRangeField(fields[7]);
+      auto responseHeaderSize = folly::to<size_t>(fields[5].str());
       activeReqM_.emplace(
           std::piecewise_construct,
           std::forward_as_tuple(reqId),
