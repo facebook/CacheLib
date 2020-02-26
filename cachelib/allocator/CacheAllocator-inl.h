@@ -210,7 +210,7 @@ CacheAllocator<CacheTrait>::restoreCCacheManager() {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
-  if (config_.rejectFirstAPNumEntries && config_.nvmConfig.hasValue()) {
+  if (config_.rejectFirstAPNumEntries && config_.nvmConfig.has_value()) {
     nvmAdmissionPolicy_ = std::make_unique<RejectFirstAP<CacheT>>(
         config_.rejectFirstAPNumEntries, config_.rejectFirstAPNumSplits,
         config_.rejectFirstSuffixIgnoreLength,
@@ -223,7 +223,7 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
-  if (!config_.nvmConfig.hasValue()) {
+  if (!config_.nvmConfig.has_value()) {
     return;
   }
 

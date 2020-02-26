@@ -30,11 +30,11 @@ GenericPieces::GenericPieces(const std::string& baseKey,
 
   if (range) {
     const auto& requestRange = range->getRequestRange();
-    if (requestRange.hasValue()) {
+    if (requestRange.has_value()) {
       // Range request, might not need to fetch all the pieces
       requestedStartByte_ = requestRange->first;
       startPieceIndex_ = requestedStartByte_ / pieceSize_;
-      if (requestRange->second.hasValue()) {
+      if (requestRange->second.has_value()) {
         uint64_t requestedEndByte = requestRange->second.value();
         if (requestedEndByte < fullBodyLen_) {
           requestedEndByte_ = requestedEndByte;

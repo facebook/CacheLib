@@ -7,7 +7,7 @@ using facebook::cachelib::RequestRange;
 
 TEST(GenericPiecesTests, Normal) {
   RequestRange hr(folly::none);
-  EXPECT_FALSE(hr.getRequestRange().hasValue());
+  EXPECT_FALSE(hr.getRequestRange().has_value());
   GenericPieces cp("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(4, cp.getNumPiecesTotal());
   EXPECT_EQ(0, cp.getRequestedStartByte());
@@ -17,7 +17,7 @@ TEST(GenericPiecesTests, Normal) {
 
   // Spanning multiple pieces
   hr = RequestRange(260, 759);
-  EXPECT_TRUE(hr.getRequestRange().hasValue()); // Sanity check
+  EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(4, cp.getNumPiecesTotal());
   EXPECT_EQ(260, cp.getRequestedStartByte());
@@ -27,7 +27,7 @@ TEST(GenericPiecesTests, Normal) {
 
   // All in one piece
   hr = RequestRange(800, 995);
-  EXPECT_TRUE(hr.getRequestRange().hasValue()); // Sanity check
+  EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(800, cp.getRequestedStartByte());
   EXPECT_EQ(995, cp.getRequestedEndByte());
@@ -36,7 +36,7 @@ TEST(GenericPiecesTests, Normal) {
 
   // No end specified
   hr = RequestRange(400, folly::none);
-  EXPECT_TRUE(hr.getRequestRange().hasValue()); // Sanity check
+  EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(400, cp.getRequestedStartByte());
   EXPECT_EQ(999, cp.getRequestedEndByte());
@@ -45,7 +45,7 @@ TEST(GenericPiecesTests, Normal) {
 
   // Specified end is way past actual end
   hr = RequestRange(400, 56789);
-  EXPECT_TRUE(hr.getRequestRange().hasValue()); // Sanity check
+  EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(400, cp.getRequestedStartByte());
   EXPECT_EQ(999, cp.getRequestedEndByte());
