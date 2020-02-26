@@ -18,10 +18,6 @@ enum class OpenMode {
 
   // Read Mode, caller always uses this mode for reading
   Read,
-
-  // Physical Read Mode. Read Mode is modified to Phys Read Mode if
-  // inMemBuffers are in use and the buffer is flushed.
-  PhysRead,
 };
 
 enum class OpenStatus {
@@ -116,10 +112,79 @@ class Region {
     return numItems_;
   }
 
+  // Write buf to attached buffer at offset 'offset'
+  void writeToBuffer(uint32_t offset, BufferView buf);
+
+  // Read from attached buffer from 'fromOffset' into 'outBuf'
+  void readFromBuffer(uint32_t fromOffset, MutableBufferView outBuf) const;
+
+  // Attach buffer 'buf' to the region
+  void attachBuffer(std::unique_ptr<Buffer>&& buf) {
+    std::lock_guard l{lock_};
+    XDCHECK_EQ(buffer_, nullptr);
+    buffer_ = std::move(buf);
+  }
+
+  // checks if the region has buffer attached
+  bool hasBuffer() const {
+    std::lock_guard l{lock_};
+    return buffer_.get() != nullptr;
+  }
+
+  // detaches the attached buffer and returns it only if there are no
+  // active readers, otherwise returns nullptr
+  std::unique_ptr<Buffer> detachBuffer() {
+    std::lock_guard l{lock_};
+    XDCHECK_NE(buffer_, nullptr);
+    if (activeInMemReaders_ == 0) {
+      XDCHECK_EQ(activeWriters_, 0UL);
+      auto retBuf = std::move(buffer_);
+      buffer_ = nullptr;
+      return retBuf;
+    }
+    return nullptr;
+  }
+
+  // flushes the attached buffer by calling the callBack function.
+  // The callBack function is expected to write to the underlying device.
+  // The callback function should return true if successfully flushed the
+  // buffer, otherwise it should return false.
+  bool flushBuffer(folly::Function<bool(RelAddress, BufferView)>&& callBack);
+
+  void setPendingFlush() {
+    std::lock_guard l{lock_};
+    XDCHECK_NE(buffer_, nullptr);
+    XDCHECK((flags_ & (kFlushPending | kFlushed)) == 0);
+
+    flags_ |= kFlushPending;
+  }
+
+  // checks if the region's buffer is flushed
+  bool isFlushedLocked() const { return (flags_ & kFlushed) != 0; }
+
+  // returns the number of active writers using the region
+  uint32_t getActiveWriters() const {
+    std::lock_guard l{lock_};
+    return activeWriters_;
+  }
+
+  // returns the number of active readers using the region
+  uint32_t getActiveInMemReaders() const {
+    std::lock_guard l{lock_};
+    return activeInMemReaders_;
+  }
+
+  // returns the region id
+  RegionId id() const { return regionId_; }
+
  private:
   uint32_t activeOpenLocked();
 
-  uint32_t canAllocateLocked(uint32_t size) {
+  // checks to see if there is enough space in the region for a new write of
+  // size 'size'
+  bool canAllocateLocked(uint32_t size) const {
+    // assert that buffer is not flushed and flush is not pending
+    XDCHECK((flags_ & (kFlushPending | kFlushed)) == 0);
     return (lastEntryEndOffset_ + size <= regionSize_);
   }
 
@@ -127,17 +192,21 @@ class Region {
 
   static constexpr uint32_t kBlockAccess{1u << 0};
   static constexpr uint16_t kPinned{1u << 1};
+  static constexpr uint16_t kFlushPending{1u << 2};
+  static constexpr uint16_t kFlushed{1u << 3};
 
   const RegionId regionId_{};
   const uint64_t regionSize_{0};
 
   uint16_t classId_{kClassIdMax};
   uint16_t flags_{0};
-  uint32_t activeReaders_{0};
+  uint32_t activePhysReaders_{0};
+  uint32_t activeInMemReaders_{0};
   uint32_t activeWriters_{0};
   // End offset of last slot added to region
   uint32_t lastEntryEndOffset_{0};
   uint32_t numItems_{0};
+  std::unique_ptr<Buffer> buffer_{nullptr};
 
   mutable std::mutex lock_;
 };
@@ -147,18 +216,28 @@ class Region {
 // descriptor to properly close and update the internal counters.
 class RegionDescriptor {
  public:
-  explicit RegionDescriptor(OpenStatus status,
-                            RegionId regionId = RegionId{},
-                            OpenMode mode = OpenMode::None)
-      : status_(status), regionId_(regionId), mode_(mode) {}
-
+  RegionDescriptor(OpenStatus status) : status_(status) {}
+  static RegionDescriptor makeWriteDescriptor(OpenStatus status,
+                                              RegionId regionId) {
+    return RegionDescriptor{status, regionId, OpenMode::Write};
+  }
+  static RegionDescriptor makeReadDescriptor(OpenStatus status,
+                                             RegionId regionId,
+                                             bool physReadMode) {
+    return RegionDescriptor{status, regionId, OpenMode::Read, physReadMode};
+  }
   RegionDescriptor(const RegionDescriptor&) = delete;
   RegionDescriptor& operator=(const RegionDescriptor&) = delete;
 
   RegionDescriptor(RegionDescriptor&& o) noexcept
-      : status_{o.status_}, regionId_{o.regionId_}, mode_{o.mode_} {
+      : status_{o.status_},
+        regionId_{o.regionId_},
+        mode_{o.mode_},
+        physReadMode_{o.physReadMode_} {
     o.mode_ = OpenMode::None;
     o.regionId_ = RegionId{};
+    o.status_ = OpenStatus::Retry;
+    o.physReadMode_ = false;
   }
 
   RegionDescriptor& operator=(RegionDescriptor&& o) noexcept {
@@ -169,18 +248,33 @@ class RegionDescriptor {
     return *this;
   }
 
-  bool isReady() { return status_ == OpenStatus::Ready; }
+  bool isPhysReadMode() const {
+    return (mode_ == OpenMode::Read) && physReadMode_;
+  }
 
-  OpenMode mode() { return mode_; }
+  bool isReady() const { return status_ == OpenStatus::Ready; }
 
-  OpenStatus status() { return status_; }
+  OpenMode mode() const { return mode_; }
 
-  RegionId id() { return regionId_; }
+  OpenStatus status() const { return status_; }
+
+  RegionId id() const { return regionId_; }
 
  private:
+  RegionDescriptor(OpenStatus status,
+                   RegionId regionId,
+                   OpenMode mode,
+                   bool physReadMode = false)
+      : status_(status),
+        regionId_(regionId),
+        mode_(mode),
+        physReadMode_(physReadMode) {}
+
   OpenStatus status_;
   RegionId regionId_{};
   OpenMode mode_{OpenMode::None};
+  // physReadMode_ is applicable only in read mode
+  bool physReadMode_{false};
 };
 } // namespace navy
 } // namespace cachelib
