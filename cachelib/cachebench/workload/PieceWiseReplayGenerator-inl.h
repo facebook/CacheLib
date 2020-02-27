@@ -115,6 +115,7 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         // Invalid sample: cacheKey is empty, objectSize is not positive
         if (!fields[1].compare("-") || !fields[1].compare("") ||
             folly::to<int64_t>(fields[3].str()) <= 0) {
+          ++invalidSamples_;
           continue;
         }
 

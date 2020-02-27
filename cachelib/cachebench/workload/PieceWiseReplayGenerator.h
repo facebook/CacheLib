@@ -23,6 +23,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
             config, kInvalidRequestId, "", 1, 1, folly::none, folly::none));
   }
 
+  virtual ~PieceWiseReplayGenerator() {
+    XLOG(INFO) << "# of invalid samples: " << invalidSamples_;
+  }
+
   // getReq generates the next request from the named trace file.
   // it expects a comma separated file (possibly with a header)
   // which consists of the fields:
@@ -97,6 +101,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // Active requests that are in processing.
   // Mapping from requestId to ReqWrapper.
   std::unordered_map<uint64_t, ReqWrapper> activeReqM_;
+
+  uint64_t invalidSamples_{0};
 
   const Request& getReqFromTrace();
 
