@@ -1484,7 +1484,7 @@ TYPED_TEST(NvmCacheTest, FullAllocSize) {
   // Test truncated alloc sizes
   auto& config = this->getConfig();
   config.nvmConfig->truncateItemToOriginalAllocSizeInNvm = false;
-  this->poolAllocsizes_ = {64};
+  this->poolAllocsizes_ = {200};
   auto& cache = this->makeCache();
   auto pid = this->poolId();
 
@@ -1528,14 +1528,19 @@ TYPED_TEST(NvmCacheTest, TruncatedAllocSize) {
   // Test truncated alloc sizes
   auto& config = this->getConfig();
   config.nvmConfig->truncateItemToOriginalAllocSizeInNvm = true;
-  this->poolAllocsizes_ = {64};
+  this->poolAllocsizes_ = {200};
   auto& cache = this->makeCache();
   auto pid = this->poolId();
+
+  // We use 101 bytes for value size because it's just bigger than
+  // the small item threshold (100 bytes) we set up for NvmCache.
+  // This ensures we won't evict anything prematurely in flash device.
+  const uint32_t valSize = 101;
 
   // Allocate a small item but use its extra bytes
   uint32_t totalSize = 0;
   {
-    auto it = cache.allocate(pid, "test", 1);
+    auto it = cache.allocate(pid, "test", valSize);
     ASSERT_NE(nullptr, it);
     ASSERT_LT(it->getSize(), cache.getUsableSize(*it));
 
@@ -1550,7 +1555,7 @@ TYPED_TEST(NvmCacheTest, TruncatedAllocSize) {
   }
   {
     // Make sure we end up with a different item in free list
-    auto it = cache.allocate(pid, "placeholder", 1);
+    auto it = cache.allocate(pid, "placeholder", valSize);
     for (uint32_t i = 0; i < totalSize; ++i) {
       it->template getMemoryAs<char>()[i] = 0;
     }
@@ -1561,11 +1566,160 @@ TYPED_TEST(NvmCacheTest, TruncatedAllocSize) {
     ASSERT_NE(nullptr, it);
     ASSERT_EQ(totalSize, cache.getUsableSize(*it));
     EXPECT_EQ(0, it->template getMemoryAs<char>()[0]);
-    for (uint32_t i = 1; i < totalSize; ++i) {
+    for (uint32_t i = valSize; i < totalSize; ++i) {
       EXPECT_NE(static_cast<char>(i), it->template getMemoryAs<char>()[i])
           << "i: " << i;
     }
   }
+}
+
+TYPED_TEST(NvmCacheTest, NavyStats) {
+  // Ensure we export all the stats we expect
+  // Everytime we add a new stat, make sure to update this test accordingly
+  auto nvmStats = this->cache().getNvmCacheStatsMap();
+
+  int seen = 0;
+  auto cs = [&seen, &nvmStats](const std::string& name) mutable {
+    if (nvmStats.end() != nvmStats.find(name)) {
+      seen++;
+      return true;
+    }
+    return false;
+  };
+
+  // navy::Driver
+  EXPECT_TRUE(cs("navy_inserts"));
+  EXPECT_TRUE(cs("navy_succ_inserts"));
+  EXPECT_TRUE(cs("navy_lookups"));
+  EXPECT_TRUE(cs("navy_succ_lookups"));
+  EXPECT_TRUE(cs("navy_removes"));
+  EXPECT_TRUE(cs("navy_succ_removes"));
+  EXPECT_TRUE(cs("navy_rejected"));
+  EXPECT_TRUE(cs("navy_rejected_concurrent_inserts"));
+  EXPECT_TRUE(cs("navy_rejected_parcel_memory"));
+  EXPECT_TRUE(cs("navy_rejected_bytes"));
+  EXPECT_TRUE(cs("navy_io_errors"));
+  EXPECT_TRUE(cs("navy_parcel_memory"));
+  EXPECT_TRUE(cs("navy_concurrent_inserts"));
+  EXPECT_EQ(13, seen);
+
+  // navy::OrderedThreadPoolJobScheduler
+  EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));
+  EXPECT_TRUE(cs("navy_reader_pool_reschedules"));
+  EXPECT_TRUE(cs("navy_reader_pool_jobs_high_reschedule"));
+  EXPECT_TRUE(cs("navy_reader_pool_jobs_done"));
+  EXPECT_TRUE(cs("navy_max_reader_pool_pending_jobs"));
+  EXPECT_TRUE(cs("navy_writer_pool_max_queue_len"));
+  EXPECT_TRUE(cs("navy_writer_pool_reschedules"));
+  EXPECT_TRUE(cs("navy_writer_pool_jobs_high_reschedule"));
+  EXPECT_TRUE(cs("navy_writer_pool_jobs_done"));
+  EXPECT_TRUE(cs("navy_max_writer_pool_pending_jobs"));
+  EXPECT_TRUE(cs("navy_req_order_spooled"));
+  EXPECT_TRUE(cs("navy_req_order_curr_spool_size"));
+  EXPECT_EQ(25, seen);
+
+  // navy::BlockCache
+  EXPECT_TRUE(cs("navy_bc_items"));
+  EXPECT_TRUE(cs("navy_bc_inserts"));
+  EXPECT_TRUE(cs("navy_bc_insert_hash_collisions"));
+  EXPECT_TRUE(cs("navy_bc_succ_inserts"));
+  EXPECT_TRUE(cs("navy_bc_lookups"));
+  EXPECT_TRUE(cs("navy_bc_lookup_false_positives"));
+  EXPECT_TRUE(cs("navy_bc_lookup_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bc_succ_lookups"));
+  EXPECT_TRUE(cs("navy_bc_removes"));
+  EXPECT_TRUE(cs("navy_bc_succ_removes"));
+  EXPECT_TRUE(cs("navy_bc_eviction_lookup_misses"));
+  EXPECT_TRUE(cs("navy_bc_alloc_errors"));
+  EXPECT_TRUE(cs("navy_bc_logical_written"));
+  EXPECT_TRUE(cs("navy_bc_hole_count"));
+  EXPECT_TRUE(cs("navy_bc_hole_bytes"));
+  EXPECT_TRUE(cs("navy_bc_reinsertions"));
+  EXPECT_TRUE(cs("navy_bc_reinsertion_bytes"));
+  EXPECT_TRUE(cs("navy_bc_reinsertion_errors"));
+  for (int size = 64;;
+       size = std::min(4 * 1024 * 1024, static_cast<int>(size * 1.25))) {
+    EXPECT_TRUE(cs(folly::sformat("navy_bc_approx_bytes_in_size_{}", size)));
+    if (size == 4 * 1024 * 1024) {
+      break;
+    }
+  }
+  EXPECT_EQ(94, seen);
+
+  // navy::RegionManager
+  EXPECT_TRUE(cs("navy_bc_reclaim"));
+  EXPECT_TRUE(cs("navy_bc_reclaim_time"));
+  EXPECT_TRUE(cs("navy_bc_evicted"));
+  EXPECT_TRUE(cs("navy_bc_pinned_regions"));
+  EXPECT_TRUE(cs("navy_bc_physical_written"));
+  EXPECT_EQ(99, seen);
+
+  // navy::LruPolicy
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_min"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p5"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p50"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p90"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p99"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_max"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_min"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p5"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p50"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p90"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p99"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_max"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_min"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p5"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p50"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p90"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p99"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_max"));
+  EXPECT_EQ(117, seen);
+
+  // navy::BigHash
+  EXPECT_TRUE(cs("navy_bh_items"));
+  EXPECT_TRUE(cs("navy_bh_inserts"));
+  EXPECT_TRUE(cs("navy_bh_succ_inserts"));
+  EXPECT_TRUE(cs("navy_bh_lookups"));
+  EXPECT_TRUE(cs("navy_bh_succ_lookups"));
+  EXPECT_TRUE(cs("navy_bh_removes"));
+  EXPECT_TRUE(cs("navy_bh_succ_removes"));
+  EXPECT_TRUE(cs("navy_bh_evictions"));
+  EXPECT_TRUE(cs("navy_bh_logical_written"));
+  EXPECT_TRUE(cs("navy_bh_physical_written"));
+  EXPECT_TRUE(cs("navy_bh_io_errors"));
+  EXPECT_TRUE(cs("navy_bh_bf_false_positive_pct"));
+  EXPECT_TRUE(cs("navy_bh_checksum_errors"));
+  for (int size = 64;; size = std::min(512, static_cast<int>(size * 1.25))) {
+    EXPECT_TRUE(cs(folly::sformat("navy_bh_approx_bytes_in_size_{}", size)));
+    if (size == 512) {
+      break;
+    }
+  }
+  EXPECT_EQ(141, seen);
+
+  // navy::Device
+  EXPECT_TRUE(cs("navy_device_bytes_written"));
+  EXPECT_TRUE(cs("navy_device_read_errors"));
+  EXPECT_TRUE(cs("navy_device_write_errors"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_p100"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_p100"));
+  EXPECT_EQ(160, seen);
+
+  EXPECT_EQ(seen, nvmStats.size());
 }
 } // namespace tests
 } // namespace cachelib
