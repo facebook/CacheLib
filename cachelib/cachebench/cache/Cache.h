@@ -104,7 +104,14 @@ class Cache {
 
   template <typename... Params>
   auto allocate(Params&&... args) {
-    return cache_->allocate(std::forward<Params>(args)...);
+    ItemHandle handle;
+    try {
+      handle = cache_->allocate(std::forward<Params>(args)...);
+    } catch (const std::invalid_argument& e) {
+      XLOGF(DBG, "Unable to allocate, reason: {}", e.what());
+    }
+
+    return handle;
   }
 
   int getHandleCountForThread() const {
