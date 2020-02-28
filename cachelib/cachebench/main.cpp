@@ -1,4 +1,5 @@
 #include <folly/init/Init.h>
+#include <folly/io/async/EventBase.h>
 #include <folly/logging/LoggerDB.h>
 #include <gflags/gflags.h>
 
@@ -23,6 +24,9 @@ DEFINE_uint64(
 DEFINE_string(progress_stats_file,
               "",
               "Print detailed stats at each progress interval to this file");
+DEFINE_int32(timeout_seconds,
+             0,
+             "Maximum allowed seconds for running test. 0 means no timeout");
 
 #ifdef CACHEBENCH_FB_ENV
 DEFINE_int32(fb303_port, 12345, "Port for cachebench fb303 service.");
@@ -60,9 +64,16 @@ int main(int argc, char** argv) {
   folly::init(&argc, &argv, true);
 #endif
 
+  // make sure the test end before timeout
+  folly::EventBase eb;
+  if (FLAGS_timeout_seconds > 0) {
+    eb.runAfterDelay([]() { stopTest(); }, FLAGS_timeout_seconds * 1000);
+  }
+
   Runner runner{FLAGS_json_test_config, FLAGS_progress_stats_file,
                 FLAGS_progress};
   if (!runner.run()) {
     return 1;
   }
+  return 0;
 }
