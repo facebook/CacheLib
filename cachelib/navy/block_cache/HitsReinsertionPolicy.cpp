@@ -84,7 +84,7 @@ void HitsReinsertionPolicy::reset() {
 }
 
 void HitsReinsertionPolicy::persist(RecordWriter& rw) {
-  serialization::AccessTrackerSet accessTrackerSet;
+  serializeProto(size_t(accessMaps_.size()), rw);
   for (size_t i = 0; i < accessMaps_.size(); i++) {
     std::lock_guard<std::mutex> l{locks_[i % kNumLocks]};
     serialization::AccessTracker trackerData;
@@ -95,22 +95,22 @@ void HitsReinsertionPolicy::persist(RecordWriter& rw) {
       access.numReinsertions = static_cast<int8_t>(kv.second.numReinsertions);
       trackerData.data[kv.first] = access;
     }
-    accessTrackerSet.trackers.push_back(std::move(trackerData));
+    serializeProto(trackerData, rw);
   }
-  serializeProto(accessTrackerSet, rw);
 }
 
 void HitsReinsertionPolicy::recover(RecordReader& rr) {
-  auto accessTrackerSet = deserializeProto<serialization::AccessTrackerSet>(rr);
-  if (accessMaps_.size() != accessTrackerSet.trackers.size()) {
+  size_t numTrackers = deserializeProto<size_t>(rr);
+  if (accessMaps_.size() != numTrackers) {
     throw std::invalid_argument(
         folly::sformat("Access Map Size Mismatch. Expected: {}, Actual: {}.",
                        accessMaps_.size(),
-                       accessTrackerSet.trackers.size()));
+                       numTrackers));
   }
 
-  for (size_t i = 0; i < accessTrackerSet.trackers.size(); i++) {
-    const auto& trackerData = accessTrackerSet.trackers[i];
+  for (size_t i = 0; i < numTrackers; i++) {
+    const auto& trackerData =
+        deserializeProto<serialization::AccessTracker>(rr);
     auto& map = accessMaps_[i];
     for (auto& kv : trackerData.data) {
       AccessStats access;

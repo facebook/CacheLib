@@ -1687,6 +1687,41 @@ TEST(BlockCache, HitsReinsertionPolicy) {
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
+
+TEST(BlockCache, HitsReinsertionPolicyRecovery) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto deviceSize = metadataSize + kDeviceSize;
+  auto device = createMemoryDevice(deviceSize);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  auto engine = makeEngine(std::move(config), metadataSize);
+  auto driver = makeDriver(
+      std::move(engine), std::move(ex), std::move(device), metadataSize);
+
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  // Allocate 3 regions
+  for (size_t i = 0; i < 3; i++) {
+    for (size_t j = 0; j < 4; j++) {
+      CacheEntry e{bg.gen(8), bg.gen(3200)};
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+      log.push_back(std::move(e));
+    }
+  }
+
+  driver->persist();
+  driver->reset();
+  EXPECT_TRUE(driver->recover());
+
+  for (auto& entry : log) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value));
+    EXPECT_EQ(entry.value(), value.view());
+  }
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

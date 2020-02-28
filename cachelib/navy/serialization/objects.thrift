@@ -33,10 +33,6 @@ struct AccessTracker {
   1: map<i64, AccessStats> data,
 }
 
-struct AccessTrackerSet {
-  1: list<AccessTracker> trackers,
-}
-
 struct BlockCacheConfig {
   1: required i64 version = 0,
   2: required i64 cacheBaseOffset = 0,
