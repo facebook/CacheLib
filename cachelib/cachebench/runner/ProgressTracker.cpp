@@ -42,10 +42,13 @@ void ProgressTracker::reportProgress() {
     statsFile_ << "== Allocator Stats ==" << std::endl;
     const auto currCacheStats = stressor_.getCacheStats();
     currCacheStats.render(statsFile_);
+
     statsFile_ << "== Throughput Stats ==" << std::endl;
-    throughputStats.render(
-        std::chrono::nanoseconds{now - stressor_.startTime()}.count(),
-        statsFile_);
+    auto elapsedTimeNs =
+        std::chrono::nanoseconds{now - stressor_.startTime()}.count();
+    throughputStats.render(elapsedTimeNs, statsFile_);
+
+    stressor_.renderWorkloadGeneratorStats(elapsedTimeNs, statsFile_);
     statsFile_ << std::endl;
   }
 }

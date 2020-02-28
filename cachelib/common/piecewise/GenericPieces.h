@@ -6,6 +6,7 @@
 
 #include <folly/dynamic.h>
 #include <folly/io/IOBuf.h>
+#include <folly/logging/xlog.h>
 
 #include "cachelib/common/piecewise/RequestRange.h"
 
@@ -75,6 +76,23 @@ class GenericPieces {
       return pieceSize_;
     } else {
       return getLastByteOffsetOfLastPiece() % pieceSize_ + 1;
+    }
+  }
+
+  uint64_t getRequestedSizeOfAPiece(uint64_t pieceIndex) const {
+    if (startPieceIndex_ == endPieceIndex_) {
+      XDCHECK_EQ(pieceIndex, startPieceIndex_);
+      return requestedEndByte_ - requestedStartByte_ + 1;
+    }
+
+    if (pieceIndex == startPieceIndex_) {
+      // For the first piece, trim bytes before requestedStartByte_
+      return pieceSize_ - requestedStartByte_ % pieceSize_;
+    } else if (pieceIndex == endPieceIndex_) {
+      // For the last piece, trim bytes after requestedEndByte_
+      return requestedEndByte_ % pieceSize_ + 1;
+    } else {
+      return pieceSize_;
     }
   }
 

@@ -167,6 +167,11 @@ class CacheStressor : public Stressor {
     return res;
   }
 
+  void renderWorkloadGeneratorStats(uint64_t elapsedTimeNs,
+                                    std::ostream& out) const override {
+    wg_->renderStats(elapsedTimeNs, out);
+  }
+
   uint64_t getTestDurationNs() const override { return testDurationNs_; }
 
  private:

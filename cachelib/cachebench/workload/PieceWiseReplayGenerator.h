@@ -43,6 +43,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
+  void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const override;
+
  private:
   struct ReqWrapper {
     std::string baseKey;
@@ -52,6 +54,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     OpType op;
     std::unique_ptr<GenericPieces> cachePieces;
     RequestRange requestRange;
+    // whether current pieceKey is header piece or body piece
+    bool isHeaderPiece;
+    // response header size
+    size_t headerSize;
 
     /**
      * @param fullContentSize: byte size of the full content
@@ -68,11 +74,12 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
           pieceKey(baseKey),
           sizes(1),
           req(pieceKey, sizes.begin(), sizes.end(), reqId),
-          requestRange(rangeStart, rangeEnd) {
+          requestRange(rangeStart, rangeEnd),
+          headerSize(responseHeaderSize) {
       if (fullContentSize < config.cachePieceSize) {
-        // Store the entire object along with the response header
-        // TODO: deal with range request in this case, we need to trim the
-        // response after fetching it.
+        // The entire object is stored along with the response header.
+        // We always fetch the full content first, then trim the
+        // response if it's range request
         sizes[0] = fullContentSize + responseHeaderSize;
       } else {
         // Piecewise caching
@@ -86,6 +93,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         // Header piece is the first piece
         pieceKey = GenericPieces::createPieceHeaderKey(baseKey);
         sizes[0] = responseHeaderSize;
+        isHeaderPiece = true;
       }
 
       // Only support get from trace for now
@@ -93,16 +101,33 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     }
   };
 
+  struct PieceWiseReplayGeneratorStats {
+    // Byte wise stats: getBytes and getHitBytes records the bytes of the whole
+    // response (body + response header), while getBodyBytes and getHitBodyBytes
+    // records the body bytes only.
+    double getBytes{0};
+    double getHitBytes{0};
+    double getBodyBytes{0};
+    double getHitBodyBytes{0};
+
+    // Object wise stats: for an object get, we mark it as hit only when
+    // all pieces are cache hits.
+    uint64_t objGets;
+    uint64_t objGetHits;
+  };
+
   std::atomic<uint64_t> nextReqId_{1};
 
-  // Lock to protect file operation and activeReqM_
-  std::mutex lock_;
+  // Lock to protect file operation, activeReqM_, and stats_
+  mutable std::mutex lock_;
 
   // Active requests that are in processing.
   // Mapping from requestId to ReqWrapper.
   std::unordered_map<uint64_t, ReqWrapper> activeReqM_;
 
   uint64_t invalidSamples_{0};
+
+  PieceWiseReplayGeneratorStats stats_;
 
   const Request& getReqFromTrace();
 
