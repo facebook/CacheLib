@@ -5,6 +5,7 @@
 #include <mutex>
 #include <vector>
 
+#include <folly/container/F14Map.h>
 #include <folly/stats/QuantileEstimator.h>
 
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
@@ -57,7 +58,7 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
 
   const uint8_t hitsThreshold_{};
 
-  std::array<std::unordered_map<uint64_t, AccessStats>, kNumLocks> accessMaps_;
+  std::array<folly::F14FastMap<uint64_t, AccessStats>, kNumLocks> accessMaps_;
   mutable std::array<std::mutex, kNumLocks> locks_;
 
   mutable AtomicCounter itemsEvictedWithNoAccess_;
