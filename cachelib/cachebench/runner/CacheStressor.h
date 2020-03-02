@@ -259,6 +259,10 @@ class CacheStressor : public Stressor {
           if (++continuousCacheHits[pid] > 1000) {
             fullPools.insert(pid);
           }
+
+          if (req.requestId) {
+            wg_->notifyResult(*req.requestId, OpResultType::kGetHit);
+          }
           continue;
         }
 
