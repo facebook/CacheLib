@@ -1854,6 +1854,13 @@ CacheAllocator<CacheTrait>::getSampleItem() {
     return ItemHandle{};
   }
 
+  if (item->isChainedItem()) {
+    // we'll always return parent items
+    const ChainedItem& ci = item->asChainedItem();
+    const Item* parent = &ci.getParentItem(compressor_);
+    item = parent;
+  }
+
   auto handle = findInternal(item->getKey());
   // Check that item returned is the same that was sampled
   if (handle.get() == item) {
