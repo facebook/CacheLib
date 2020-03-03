@@ -36,10 +36,10 @@ class OnlineGenerator : public GeneratorBase {
                std::mt19937& gen,
                std::optional<uint64_t> requestId = std::nullopt) override;
 
-  const std::vector<std::string>& getAllKeys() const { return allKeys__; }
+  const std::vector<std::string>& getAllKeys() const {
+    throw std::logic_error("OnlineGenerator has no keys precomputed!");
+  }
 
-  template <typename CacheT>
-  std::pair<size_t, std::chrono::seconds> prepopulateCache(CacheT& cache);
   void registerThread();
 
  private:
@@ -75,55 +75,6 @@ class OnlineGenerator : public GeneratorBase {
 
   std::vector<Distribution> workloadDist_;
 };
-
-template <typename Distribution>
-template <typename CacheT>
-std::pair<size_t, std::chrono::seconds>
-OnlineGenerator<Distribution>::prepopulateCache(CacheT& cache) {
-  auto prePopulateFn = [&](size_t start, size_t end) {
-    if (start >= end) {
-      return;
-    }
-
-    size_t count = start;
-    uint8_t pid =
-        std::distance(firstKeyIndexForPool_.begin(),
-                      std::upper_bound(firstKeyIndexForPool_.begin(),
-                                       firstKeyIndexForPool_.end(), start)) -
-        1;
-    std::mt19937 gen(folly::Random::rand32());
-    std::string key("");
-    while (count < end) {
-      // getPoolStats is expensive to fetch on every iteratio and can
-      // serialize the cache creation. So check the eviction coutn every 10k
-      // insertions
-      if (count >= firstKeyIndexForPool_[pid + 1] ||
-          ((count % 10000 == 0) &&
-           cache.getPoolStats(pid).numEvictions() > 0)) {
-        pid++;
-        if (pid >= firstKeyIndexForPool_.size() - 1) {
-          break;
-        }
-      }
-      generateKey(pid, count, key);
-      size_t s = *(generateSize(pid, count)->begin());
-      const auto allocHandle = cache.allocate(pid, key, s);
-      if (allocHandle) {
-        cache.insertOrReplace(allocHandle);
-        // We throttle in case we are using flash so that we dont drop
-        // evictions to flash by inserting at a very high rate.
-        if (!cache.isRamOnly() && count % 8 == 0) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(5));
-        }
-        count++;
-      }
-    }
-  };
-  auto duration =
-      detail::executeParallel(prePopulateFn, firstKeyIndexForPool_.back() - 1);
-
-  return std::make_pair(keys_.size(), duration);
-}
 
 } // namespace cachebench
 } // namespace cachelib

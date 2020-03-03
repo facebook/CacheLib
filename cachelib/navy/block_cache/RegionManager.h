@@ -21,6 +21,7 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
 // Callback that is used to clear index.
 //   @rid       Region ID
 //   @buffer    Buffer with region data, valid during callback invocation
@@ -56,7 +57,8 @@ class RegionManager {
                 JobScheduler& scheduler,
                 RegionEvictCallback evictCb,
                 std::vector<uint32_t> sizeClasses,
-                std::unique_ptr<EvictionPolicy> policy);
+                std::unique_ptr<EvictionPolicy> policy,
+                uint32_t numInMemBuffers);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -76,6 +78,8 @@ class RegionManager {
     region.setPinned();
     pinnedCount_.inc();
   }
+
+  void doFlush(RegionId rid, bool async);
 
   uint64_t pinnedCount() const { return pinnedCount_.get(); }
 
@@ -116,9 +120,31 @@ class RegionManager {
     return device_.makeIOBuffer(size);
   }
 
-  bool write(RelAddress addr, BufferView buf) const;
-  bool read(RelAddress addr, MutableBufferView buf) const;
-  void flush() const;
+  // Assign a buffer from buffer pool
+  std::unique_ptr<Buffer> claimBufferFromPool();
+
+  // Return the buffer to the pool
+  void returnBufferToPool(std::unique_ptr<Buffer> buf) {
+    {
+      std::lock_guard<std::mutex> bufLock{bufferMutex_};
+      buffers_.push_back(std::move(buf));
+    }
+    numInMemBufActive_.dec();
+  }
+
+  // writes buffer 'buf' at the 'addr'
+  // 'addr' must be the address returned by Region::open(OpenMode::Write)
+  bool write(RelAddress addr, BufferView buf);
+
+  // reads into buffer from the 'addr'
+  // 'addr' must be the address returned by Region::open(OpenMode::Read)
+  bool read(const RegionDescriptor& desc,
+            RelAddress addr,
+            MutableBufferView buf) const;
+
+  // flushes all in memory buffers to the device and then issues device flush
+  void flush();
+  bool flushBuffer(const RegionId& rid);
 
   // Stores region information in a Thrift object for all regions
   void persist(RecordWriter& rw) const;
@@ -148,13 +174,18 @@ class RegionManager {
   JobExitCode startReclaim();
   void releaseEvictedRegion(RegionId rid, std::chrono::nanoseconds startTime);
   void doEviction(RegionId rid, BufferView buffer) const;
+  bool doesBufferingWrites() const { return numInMemBuffers_ > 0; }
 
  private:
+  using LockGuard = std::lock_guard<std::mutex>;
   uint64_t physicalOffset(RelAddress addr) const {
     return baseOffset_ + toAbsolute(addr).offset();
   }
 
+  bool deviceWrite(RelAddress addr, BufferView buf);
+
   bool isValidIORange(uint32_t offset, uint32_t size) const;
+  OpenStatus assignBufferToRegion(RegionId rid);
 
   // Detects @numFree_ and tracks appropriate regions. Called during recovery.
   void detectFree();
@@ -193,6 +224,15 @@ class RegionManager {
   mutable AtomicCounter reclaimCount_;
   mutable AtomicCounter reclaimTimeCountUs_;
   mutable AtomicCounter evictedCount_;
+
+  // stats to keep track of inmem buffer usage
+  mutable AtomicCounter numInMemBufActive_;
+  mutable AtomicCounter numInMemBufWaitingFlush_;
+
+  const uint32_t numInMemBuffers_{0};
+  // Locking order is region lock, followed by bufferMutex_;
+  mutable std::mutex bufferMutex_;
+  std::vector<std::unique_ptr<Buffer>> buffers_;
 };
 } // namespace navy
 } // namespace cachelib

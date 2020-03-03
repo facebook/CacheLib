@@ -38,6 +38,9 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, traceFileName);
   JSONSetVal(configJson, configPath);
 
+  JSONSetVal(configJson, cachePieceSize);
+  JSONSetVal(configJson, maxCachePieces);
+
   if (configJson.count("poolDistributions")) {
     for (auto& it : configJson["poolDistributions"]) {
       poolDistributions.push_back(DistributionConfig(it, configPath));
@@ -49,7 +52,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 392>();
+  checkCorrectSize<StressorConfig, 408>();
 }
 
 bool StressorConfig::usesChainedItems() const {

@@ -334,7 +334,7 @@ class CacheAllocator : public CacheBase {
   // @throw std::invalid_argument if any of the pre-conditions fails
   ItemHandle replaceChainedItem(Item& oldItem,
                                 ItemHandle newItem,
-                                const Item& parent);
+                                Item& parent);
 
   // transfers the ownership of the chain from the current parent to the new
   // parent and inserts the new parent into the cache. Caller must synchronize
@@ -1203,6 +1203,10 @@ class CacheAllocator : public CacheBase {
   ItemHandle replaceChainedItemLocked(Item& oldItem,
                                       ItemHandle newItemHdl,
                                       const Item& parent);
+
+  // Mark the item as dirty and enqueue for deletion from nvmcache
+  // @param hdl         item to invalidate.
+  void invalidateNvm(Item& item);
 
   // Insert an item into MM container. The caller must hold a valid handle for
   // the item.

@@ -68,8 +68,8 @@ void WorkloadGenerator<Distribution>::generateKeys() {
     size_t numKeysForPool =
         firstKeyIndexForPool_[i + 1] - firstKeyIndexForPool_[i];
     totalKeys += numKeysForPool;
-    keyGenDuration +=
-        detail::executeParallel(fn, numKeysForPool, firstKeyIndexForPool_[i]);
+    keyGenDuration += detail::executeParallel(
+        fn, config_.numThreads, numKeysForPool, firstKeyIndexForPool_[i]);
   }
 
   auto startTime = std::chrono::steady_clock::now();
@@ -163,7 +163,7 @@ void WorkloadGenerator<Distribution>::generateKeyDistributions() {
             keyIndicesForPool_[i][j] = idx;
           }
         },
-        numOpsForPool);
+        config_.numThreads, numOpsForPool);
   }
 
   std::cout << folly::sformat("Generated access patterns in {:.2f} mins",

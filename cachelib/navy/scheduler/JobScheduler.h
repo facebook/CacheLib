@@ -30,7 +30,7 @@ enum class JobExitCode {
 // Allow job to have movable captures
 using Job = folly::Function<JobExitCode()>;
 
-enum class JobType { Read, Write, Reclaim };
+enum class JobType { Read, Write, Reclaim, Flush };
 
 class JobScheduler {
  public:

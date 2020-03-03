@@ -83,6 +83,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
 
   void setDevice(Device* device) { config_.device = device; }
 
+  void setNumInMemBuffers(uint32_t numInMemBuffers) override {
+    config_.numInMemBuffers = numInMemBuffers;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  DestructorCallback cb) && {
     config_.scheduler = &scheduler;

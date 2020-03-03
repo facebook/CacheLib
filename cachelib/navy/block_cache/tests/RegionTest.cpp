@@ -13,7 +13,8 @@ TEST(Region, ReadAndBlock) {
   EXPECT_EQ(desc.status(), OpenStatus::Ready);
 
   EXPECT_FALSE(r.readyForReclaim());
-  // Once readyForReclaim has been attempted, all future accesses will be blocked.
+  // Once readyForReclaim has been attempted, all future accesses will be
+  // blocked.
   EXPECT_EQ(r.openForRead().status(), OpenStatus::Retry);
   r.close(std::move(desc));
   EXPECT_TRUE(r.readyForReclaim());
@@ -38,6 +39,22 @@ TEST(Region, WriteAndBlock) {
   auto [desc3, addr3] = r.openAndAllocate(1024);
   EXPECT_EQ(desc3.status(), OpenStatus::Ready);
 }
+
+TEST(Region, BufferAttachDetach) {
+  auto b = std::make_unique<Buffer>(1024);
+  Region r{RegionId(0), 1024};
+  r.attachBuffer(std::move(b));
+  EXPECT_TRUE(r.hasBuffer());
+  Buffer writeBuf(1024);
+  memset(writeBuf.data(), 'A', 1024);
+  Buffer readBuf(1024);
+  r.writeToBuffer(0, writeBuf.view());
+  r.readFromBuffer(0, readBuf.mutableView());
+  EXPECT_TRUE(writeBuf.view() == readBuf.view());
+  b = r.detachBuffer();
+  EXPECT_FALSE(r.hasBuffer());
+}
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

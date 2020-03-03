@@ -170,13 +170,17 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
 template <typename C>
 NvmCache<C>::NvmCache(C& c, const Config& config, bool truncate)
     : config_(config.validate()), cache_(c) {
-  constexpr folly::StringPiece navyReqOrderStr =
+  constexpr folly::StringPiece kNavyReqOrderStr =
       "dipper_navy_req_order_shards_power";
+  constexpr folly::StringPiece kTruncateFlashCache =
+      "dipper_truncate_flash_cache";
 
-  bool usingNavyReqOrdering = config_.dipperOptions.get_ptr(navyReqOrderStr);
+  auto dipperOptions = config_.dipperOptions;
+  bool usingNavyReqOrdering = dipperOptions.get_ptr(kNavyReqOrderStr);
+  dipperOptions[kTruncateFlashCache] = truncate;
 
   store_ = dipper::dipperOpen(
-      config_.dipperOptions,
+      dipperOptions,
       [this](folly::StringPiece key, folly::StringPiece val) {
         this->evictCB(key, val);
       },
@@ -184,13 +188,6 @@ NvmCache<C>::NvmCache(C& c, const Config& config, bool truncate)
         return this->compactionFilterCb(key, val);
       },
       !usingNavyReqOrdering);
-  if (truncate) {
-    auto ret = store_->dipperReset();
-    if (ret != dipper::DipperStatus::OK()) {
-      throw std::runtime_error(
-          folly::sformat("nvm cache truncation failed %s", ret.errMsg));
-    }
-  }
 }
 
 template <typename C>

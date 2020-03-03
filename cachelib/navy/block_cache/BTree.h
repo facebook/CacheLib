@@ -231,6 +231,11 @@ struct BTreeTraits {
 //   { largeLeafSize() } -> uint32_t;
 // };
 // Sizes above are number of keys the node can store.
+//
+// To compute the average space used by each node in this BTree,
+// use the following formula:
+//  size = (sizeof(K) + sizeof(V)) /
+//         ((smallLeafSize() + largeLeafSize()) / (2 * largeLeafSize()))
 template <typename K, typename V, typename Traits>
 class BTree : public Traits {
  public:

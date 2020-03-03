@@ -30,12 +30,14 @@ bool Runner::run() {
   auto cacheStats = stressor->getCacheStats();
   auto opsStats = stressor->aggregateThroughputStats();
   tracker.stop();
-  stressor.reset();
 
   std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
   cacheStats.render(std::cout);
+
   std::cout << "\n== Throughput for  ==\n";
   opsStats.render(durationNs, std::cout);
+
+  stressor->renderWorkloadGeneratorStats(durationNs, std::cout);
   std::cout << std::endl;
 
   if (cacheStats.isNvmCacheDisabled) {
@@ -47,6 +49,7 @@ bool Runner::run() {
               << " inconsistent cases" << std::endl;
   }
 
+  stressor.reset();
   return cacheStats.inconsistencyCount == 0 && !cacheStats.isNvmCacheDisabled;
 }
 

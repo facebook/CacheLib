@@ -51,6 +51,9 @@ class BlockCache final : public Engine {
     JobScheduler* scheduler{nullptr};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
+    // Number of in-memory buffers wherer writes are buffered before flushed
+    // on to the device
+    uint32_t numInMemBuffers{0};
 
     uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
@@ -120,7 +123,10 @@ class BlockCache final : public Engine {
                     uint32_t slotSize,
                     HashedKey hk,
                     BufferView value);
-  Status readEntry(RelAddress addrEnd, HashedKey expected, Buffer& value);
+  Status readEntry(const RegionDescriptor& readDesc,
+                   RelAddress addrEnd,
+                   HashedKey expected,
+                   Buffer& value);
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted

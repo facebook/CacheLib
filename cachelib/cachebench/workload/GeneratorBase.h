@@ -27,6 +27,14 @@ class GeneratorBase {
   // Notify the workload generator about the result of the request.
   // Note the workload generator may release the memory for the request.
   virtual void notifyResult(uint64_t /*requestId*/, OpResultType /*result*/) {}
+
+  virtual const std::vector<std::string>& getAllKeys() const = 0;
+
+  // TODO: check if this can be removed
+  virtual void registerThread() {}
+
+  virtual void renderStats(uint64_t /*elapsedTimeNs*/,
+                           std::ostream& /*out*/) const {}
 };
 
 } // namespace cachebench

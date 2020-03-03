@@ -27,6 +27,9 @@ NavyDipper::NavyDipper() {
   config_["dipper_request_ordering"] = false;
   config_["dipper_navy_req_order_shards_power"] = 10;
   config_["dipper_num_ushards"] = 1;
+  config_["dipper_navy_bighash_size_pct"] = 50;
+  config_["dipper_navy_bighash_bucket_size"] = 512;
+  config_["dipper_navy_small_item_max_size"] = 100;
 }
 
 template <typename B>

@@ -14,6 +14,7 @@ void MockJobScheduler::enqueue(Job job, folly::StringPiece name, JobType type) {
   std::lock_guard<std::mutex> lock{m_};
   switch (type) {
   case JobType::Reclaim:
+  case JobType::Flush:
     q_.emplace_front(std::move(job), name);
     break;
   case JobType::Read:

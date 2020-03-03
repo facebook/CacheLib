@@ -119,6 +119,13 @@ struct StressorConfig : public JSONConfig {
   // specified, it defaults to the path of the json file being parsed.
   std::string configPath{};
 
+  // Configs for piecewise caching in which we split a huge content into
+  // multiple pieces.
+  // cachePieceSize: size of each piece
+  // maxCachePieces: maximum number of pieces we cache for a single content
+  uint64_t cachePieceSize{65536}; // 64KB
+  uint64_t maxCachePieces{32000}; // 32000 * 64KB = 2GB
+
   // Allows multiple distributions, one corresponding to each pool of workload
   // in the cache.
   std::vector<DistributionConfig> poolDistributions;

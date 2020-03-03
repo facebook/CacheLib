@@ -24,6 +24,8 @@ struct ThroughputStats {
   void render(uint64_t elapsedTimeNs, std::ostream& out) const;
 };
 
+class GeneratorBase;
+
 class Stressor {
  public:
   static std::unique_ptr<Stressor> makeStressor(CacheConfig cacheConfig,
@@ -33,6 +35,8 @@ class Stressor {
 
   virtual Stats getCacheStats() const = 0;
   virtual ThroughputStats aggregateThroughputStats() const = 0;
+  virtual void renderWorkloadGeneratorStats(uint64_t /*elapsedTimeNs*/,
+                                            std::ostream& /*out*/) const {}
   virtual std::chrono::time_point<std::chrono::system_clock> startTime()
       const = 0;
   virtual uint64_t getTestDurationNs() const = 0;

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <iostream>
+#include <unordered_set>
 
 #include <folly/Random.h>
 
@@ -8,17 +10,15 @@
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/cachebench/util/Config.h"
+#include "cachelib/cachebench/util/Exceptions.h"
+#include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
-
-#include "cachelib/cachebench/workload/OnlineGenerator.h"
-#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
-#include "cachelib/cachebench/workload/ReplayGenerator.h"
-#include "cachelib/cachebench/workload/WorkloadGenerator.h"
+#include "cachelib/cachebench/workload/GeneratorBase.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-template <typename Allocator, typename Generator = WorkloadGenerator<>>
+template <typename Allocator>
 class CacheStressor : public Stressor {
  public:
   using CacheT = Cache<Allocator>;
@@ -29,10 +29,12 @@ class CacheStressor : public Stressor {
 
   // @param wrapper   wrapper that encapsulate the CacheAllocator
   // @param config    stress test config
-  CacheStressor(CacheConfig cacheConfig, StressorConfig config)
+  CacheStressor(CacheConfig cacheConfig,
+                StressorConfig config,
+                std::unique_ptr<GeneratorBase>&& generator)
       : config_(std::move(config)),
         throughputStats_(config_.numThreads),
-        wg_(config_),
+        wg_(std::move(generator)),
         hardcodedString_(genHardcodedString()) {
     // if either consistency check is enabled or if we want to move
     // items during slab release, we want readers and writers to chained
@@ -74,13 +76,12 @@ class CacheStressor : public Stressor {
     }
 
     if (config_.checkConsistency) {
-      cache_->enableConsistencyCheck(wg_.getAllKeys());
+      cache_->enableConsistencyCheck(wg_->getAllKeys());
     }
     // Fill up the cache with specified key/value distribution
     if (config_.prepopulateCache) {
       try {
-        auto ret = wg_.prepopulateCache(*cache_);
-
+        auto ret = prepopulateCache();
         std::cout << folly::sformat("Inserted {:,} keys in {:.2f} mins",
                                     ret.first,
                                     ret.second.count() / 60.)
@@ -166,6 +167,11 @@ class CacheStressor : public Stressor {
     return res;
   }
 
+  void renderWorkloadGeneratorStats(uint64_t elapsedTimeNs,
+                                    std::ostream& out) const override {
+    wg_->renderStats(elapsedTimeNs, out);
+  }
+
   uint64_t getTestDurationNs() const override { return testDurationNs_; }
 
  private:
@@ -209,6 +215,85 @@ class CacheStressor : public Stressor {
     }
   }
 
+  // Fill the cache and make sure all pools are full.
+  // It's the generator's resposibility of providing keys that obey to the
+  // distribution
+  std::pair<size_t, std::chrono::seconds> prepopulateCache() {
+    std::atomic<uint64_t> totalCount = 0;
+
+    auto prePopulateFn = [&]() {
+      std::mt19937 gen(folly::Random::rand32());
+      std::discrete_distribution<> keyPoolDist(
+          config_.keyPoolDistribution.begin(),
+          config_.keyPoolDistribution.end());
+      size_t count = 0;
+      std::unordered_set<PoolId> fullPools;
+      std::optional<uint64_t> lastRequestId = std::nullopt;
+
+      // in some cases eviction will never happen. To avoid infinite loop in
+      // this case, we use continuousCacheHits as the signal of cache full
+      std::unordered_map<PoolId, size_t> continuousCacheHits;
+
+      while (fullPools.size() < cache_->numPools()) {
+        // get a pool according to keyPoolDistribution
+        auto pid = keyPoolDist(gen);
+        if (fullPools.count(pid) > 0) {
+          // it's a known full pool, skip it
+          continue;
+        }
+
+        // getPoolStats is expensive to fetch on every iteration and can
+        // serialize the cache creation. So check the eviction count every 10k
+        // insertions
+        if (count % 10000 == 0 &&
+            cache_->getPoolStats(pid).numEvictions() > 0) {
+          // it's a new found full pool, record it and reselect one
+          fullPools.insert(pid);
+          continue;
+        }
+
+        // now we have a good pool, get a request
+        const Request& req = getReq(pid, gen, lastRequestId);
+        if (cache_->find(req.key)) {
+          // Treat 1000 continuous cache hits as cache full
+          if (++continuousCacheHits[pid] > 1000) {
+            fullPools.insert(pid);
+          }
+
+          if (req.requestId) {
+            wg_->notifyResult(*req.requestId, OpResultType::kGetHit);
+          }
+          continue;
+        }
+
+        // cache miss. Allocate and write to cache
+        continuousCacheHits[pid] = 0;
+
+        // req contains a new key, set it to cache
+        const auto allocHandle =
+            cache_->allocate(pid, req.key, req.key.size() + *(req.sizeBegin));
+        if (allocHandle) {
+          cache_->insertOrReplace(allocHandle);
+          // We throttle in case we are using flash so that we dont drop
+          // evictions to flash by inserting at a very high rate.
+          if (!cache_->isRamOnly() && count % 8 == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+          }
+          count++;
+          if (req.requestId) {
+            wg_->notifyResult(*req.requestId, OpResultType::kSetSuccess);
+          }
+        }
+      }
+      totalCount.fetch_add(count);
+    };
+
+    auto numThreads = config_.prepopulateThreads ? config_.prepopulateThreads
+                                                 : config_.numThreads;
+    auto duration = detail::executeParallel(prePopulateFn, numThreads);
+    return std::make_pair(totalCount.load(), duration);
+  }
+
   // Runs a number of operations on the cache allocator. The actual
   // operations and key/value used are determined by a set of random
   // number generators
@@ -223,7 +308,8 @@ class CacheStressor : public Stressor {
   // @param genChainedItemValSize   randomly choose a size for chained item
   // @param stats       Throughput stats
   void stressByDiscreteDistribution(ThroughputStats& stats) {
-    wg_.registerThread();
+    wg_->registerThread();
+
     std::mt19937 gen(folly::Random::rand32());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
                                             config_.opPoolDistribution.end());
@@ -261,7 +347,7 @@ class CacheStressor : public Stressor {
         const auto pid = opPoolDist(gen);
         const Request& req(getReq(pid, gen, lastRequestId));
         const std::string* key = &(req.key);
-        const OpType op = wg_.getOp(pid, gen, req.requestId);
+        const OpType op = wg_->getOp(pid, gen, req.requestId);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
@@ -369,7 +455,7 @@ class CacheStressor : public Stressor {
         lastRequestId = req.requestId;
         if (req.requestId) {
           // req might be deleted after calling notifyResult()
-          wg_.notifyResult(*req.requestId, result);
+          wg_->notifyResult(*req.requestId, result);
         }
       } catch (const cachebench::EndOfTrace& ex) {
         break;
@@ -397,7 +483,7 @@ class CacheStressor : public Stressor {
                         std::mt19937& gen,
                         std::optional<uint64_t>& lastRequestId) {
     while (true) {
-      const Request& req(wg_.getReq(pid, gen, lastRequestId));
+      const Request& req(wg_->getReq(pid, gen, lastRequestId));
       if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
         continue;
       }
@@ -409,7 +495,7 @@ class CacheStressor : public Stressor {
 
   std::vector<ThroughputStats> throughputStats_;
 
-  Generator wg_;
+  std::unique_ptr<GeneratorBase> wg_;
 
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;
