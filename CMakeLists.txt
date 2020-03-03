@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15.3 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
 
 # package information
 set(PACKAGE_NAME      "cachelib")
