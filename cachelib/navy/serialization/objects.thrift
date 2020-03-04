@@ -29,8 +29,14 @@ struct AccessStats {
   3: byte numReinsertions = 0,
 }
 
+struct AccessStatsPair {
+  1: i64 key,
+  2: AccessStats stats,
+}
+
 struct AccessTracker {
-  1: map<i64, AccessStats> data,
+  1: map<i64, AccessStats> deprecated_data,
+  2: list<AccessStatsPair> data,
 }
 
 struct BlockCacheConfig {

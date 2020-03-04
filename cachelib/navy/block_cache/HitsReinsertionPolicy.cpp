@@ -88,12 +88,15 @@ void HitsReinsertionPolicy::persist(RecordWriter& rw) {
   for (size_t i = 0; i < accessMaps_.size(); i++) {
     std::lock_guard<std::mutex> l{locks_[i % kNumLocks]};
     serialization::AccessTracker trackerData;
+    trackerData.data.reserve(accessMaps_[i].size());
     for (auto& kv : accessMaps_[i]) {
-      serialization::AccessStats access;
-      access.totalHits = static_cast<int8_t>(kv.second.totalHits);
-      access.currHits = static_cast<int8_t>(kv.second.currHits);
-      access.numReinsertions = static_cast<int8_t>(kv.second.numReinsertions);
-      trackerData.data[kv.first] = access;
+      serialization::AccessStatsPair pair;
+      pair.key = static_cast<int64_t>(kv.first);
+      pair.stats.totalHits = static_cast<int8_t>(kv.second.totalHits);
+      pair.stats.currHits = static_cast<int8_t>(kv.second.currHits);
+      pair.stats.numReinsertions =
+          static_cast<int8_t>(kv.second.numReinsertions);
+      trackerData.data.push_back(std::move(pair));
     }
     serializeProto(trackerData, rw);
   }
@@ -112,12 +115,18 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
     const auto& trackerData =
         deserializeProto<serialization::AccessTracker>(rr);
     auto& map = accessMaps_[i];
+
+    // For compatibility, remove after BigCache release 145 is out.
+    // Deprecated data shouldn't contain anything since we do not have any
+    // bigcache host running on Navy for release 144 or prior releases.
+    XDCHECK(trackerData.deprecated_data.empty());
+
     for (auto& kv : trackerData.data) {
       AccessStats access;
-      access.totalHits = static_cast<uint8_t>(kv.second.totalHits);
-      access.currHits = static_cast<uint8_t>(kv.second.currHits);
-      access.numReinsertions = static_cast<uint8_t>(kv.second.numReinsertions);
-      map[kv.first] = access;
+      access.totalHits = static_cast<uint8_t>(kv.stats.totalHits);
+      access.currHits = static_cast<uint8_t>(kv.stats.currHits);
+      access.numReinsertions = static_cast<uint8_t>(kv.stats.numReinsertions);
+      map[static_cast<uint64_t>(kv.key)] = access;
     }
   }
 }
