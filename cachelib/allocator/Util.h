@@ -112,7 +112,7 @@ folly::StringPiece castToKey(const T& type) noexcept {
 // Returns item's fragmentation size caused by the bad allocation.
 // this should be equal to alloc_size - required_size.
 //
-// @param cache   reference of the cache
+// @param item    reference of the cache
 // @param item    reference of the item
 // @return        the memory fragmentation size of this item.
 
