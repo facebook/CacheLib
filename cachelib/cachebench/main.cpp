@@ -7,6 +7,7 @@
 #define CACHEBENCH_FB_ENV
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/cachebench/fb303/FB303ThriftServer.h"
+#include "cachelib/cachebench/odsl_exporter/OdslExporter.h"
 #include "common/init/Init.h"
 #endif
 
@@ -29,7 +30,11 @@ DEFINE_int32(timeout_seconds,
              "Maximum allowed seconds for running test. 0 means no timeout");
 
 #ifdef CACHEBENCH_FB_ENV
-DEFINE_int32(fb303_port, 12345, "Port for cachebench fb303 service.");
+DEFINE_bool(export_to_ods, true, "Upload cachelib stats to ODS");
+DEFINE_int32(fb303_port,
+             0,
+             "Port for cachebench fb303 service. If 0, do not export to fb303. "
+             "If valid, this will disable ODSL export.");
 #endif
 
 void sigint_handler(int sig_num) {
@@ -56,8 +61,11 @@ int main(int argc, char** argv) {
 
 #ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
+  std::unique_ptr<OdslExporter> odslExporter_;
   std::unique_ptr<FB303ThriftService> fb303_;
-  if (FLAGS_fb303_port) {
+  if (FLAGS_fb303_port == 0 && FLAGS_export_to_ods) {
+    odslExporter_ = std::make_unique<OdslExporter>();
+  } else if (FLAGS_fb303_port > 0) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
 #else
