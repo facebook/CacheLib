@@ -1578,10 +1578,9 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   // Everytime we add a new stat, make sure to update this test accordingly
   auto nvmStats = this->cache().getNvmCacheStatsMap();
 
-  int seen = 0;
-  auto cs = [&seen, &nvmStats](const std::string& name) mutable {
+  auto cs = [&nvmStats](const std::string& name) mutable {
     if (nvmStats.end() != nvmStats.find(name)) {
-      seen++;
+      nvmStats.erase(name);
       return true;
     }
     return false;
@@ -1601,7 +1600,6 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_io_errors"));
   EXPECT_TRUE(cs("navy_parcel_memory"));
   EXPECT_TRUE(cs("navy_concurrent_inserts"));
-  EXPECT_EQ(13, seen);
 
   // navy::OrderedThreadPoolJobScheduler
   EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));
@@ -1616,7 +1614,6 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_max_writer_pool_pending_jobs"));
   EXPECT_TRUE(cs("navy_req_order_spooled"));
   EXPECT_TRUE(cs("navy_req_order_curr_spool_size"));
-  EXPECT_EQ(25, seen);
 
   // navy::BlockCache
   EXPECT_TRUE(cs("navy_bc_items"));
@@ -1644,7 +1641,6 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
       break;
     }
   }
-  EXPECT_EQ(94, seen);
 
   // navy::RegionManager
   EXPECT_TRUE(cs("navy_bc_reclaim"));
@@ -1652,7 +1648,6 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_evicted"));
   EXPECT_TRUE(cs("navy_bc_pinned_regions"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
-  EXPECT_EQ(99, seen);
 
   // navy::LruPolicy
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_min"));
@@ -1673,7 +1668,8 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p90"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p99"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_max"));
-  EXPECT_EQ(117, seen);
+  EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
+  EXPECT_TRUE(cs("navy_bc_inmem_active"));
 
   // navy::BigHash
   EXPECT_TRUE(cs("navy_bh_items"));
@@ -1695,7 +1691,6 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
       break;
     }
   }
-  EXPECT_EQ(141, seen);
 
   // navy::Device
   EXPECT_TRUE(cs("navy_device_bytes_written"));
@@ -1717,9 +1712,14 @@ TYPED_TEST(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_write_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p999999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p100"));
-  EXPECT_EQ(160, seen);
 
-  EXPECT_EQ(seen, nvmStats.size());
+  // there should be no additional stats
+  if (nvmStats.size()) {
+    for (auto kv : nvmStats) {
+      XLOG(ERR) << kv.first << kv.second;
+    }
+  }
+  EXPECT_EQ(0, nvmStats.size());
 }
 } // namespace tests
 } // namespace cachelib
