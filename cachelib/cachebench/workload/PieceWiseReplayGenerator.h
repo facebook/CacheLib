@@ -24,11 +24,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   }
 
   virtual ~PieceWiseReplayGenerator() {
-    XLOG(INFO)
-        << "Summary count of samples in workload generator:" << std::endl
-        << "# of prepopulate samples: " << prepopulateSamples_ << std::endl
-        << "# of postpopulate samples: " << postpopulateSamples_ << std::endl
-        << "# of invalid samples: " << invalidSamples_;
+    XLOG(INFO) << "Summary count of samples in workload generator: "
+               << "# of prepopulate samples: " << prepopulateSamples_
+               << ", # of postpopulate samples: " << postpopulateSamples_
+               << ", # of invalid samples: " << invalidSamples_;
   }
 
   // getReq generates the next request from the named trace file.
@@ -106,18 +105,25 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   };
 
   struct PieceWiseReplayGeneratorStats {
-    // Byte wise stats: getBytes and getHitBytes records the bytes of the whole
-    // response (body + response header), while getBodyBytes and getHitBodyBytes
-    // records the body bytes only.
+    // Byte wise stats: getBytes, getHitBytes and getFullHitBytes record the
+    // bytes of the whole response (body + response header), while
+    // getBodyBytes, getHitBodyBytes and getFullHitBodyBytes record the body
+    // bytes only. getFullHitBytes and getFullHitBodyBytes only include cache
+    // hits of the full object (ie, all pieces), while getHitBytes and
+    // getHitBodyBytes includes partial hits as well.
     double getBytes{0};
     double getHitBytes{0};
+    double getFullHitBytes{0};
     double getBodyBytes{0};
     double getHitBodyBytes{0};
+    double getFullHitBodyBytes{0};
 
-    // Object wise stats: for an object get, we mark it as hit only when
-    // all pieces are cache hits.
-    uint64_t objGets;
-    uint64_t objGetHits;
+    // Object wise stats: for an object get, objGetFullHits is incremented when
+    // all pieces are cache hits, while objGetHits is incremented for partial
+    // hits as well.
+    uint64_t objGets{0};
+    uint64_t objGetHits{0};
+    uint64_t objGetFullHits{0};
   };
 
   std::atomic<uint64_t> nextReqId_{1};

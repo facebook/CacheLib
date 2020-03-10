@@ -96,6 +96,10 @@ class GenericPieces {
     }
   }
 
+  uint64_t getRequestedSize() const {
+    return (requestedEndByte_ - requestedStartByte_ + 1);
+  }
+
   /**
    * Returns the body-length of the *full* blob (e.g. if there is a
    * 1000000-byte blob and 6400 bytes are requested in a range request, this

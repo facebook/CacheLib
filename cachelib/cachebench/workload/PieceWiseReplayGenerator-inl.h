@@ -59,13 +59,19 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
                                  : (it->second.sizes[0] -
                                     it->second.headerSize - range->first);
           stats_.getHitBytes += rangeSize + it->second.headerSize;
+          stats_.getFullHitBytes += rangeSize + it->second.headerSize;
           stats_.getHitBodyBytes += rangeSize;
+          stats_.getFullHitBodyBytes += rangeSize;
         } else {
           stats_.getHitBytes += it->second.sizes[0];
+          stats_.getFullHitBytes += it->second.sizes[0];
           stats_.getHitBodyBytes += it->second.sizes[0] - it->second.headerSize;
+          stats_.getFullHitBodyBytes +=
+              it->second.sizes[0] - it->second.headerSize;
         }
 
         stats_.objGetHits += 1;
+        stats_.objGetFullHits += 1;
       }
 
       activeReqM_.erase(it);
@@ -90,6 +96,7 @@ void PieceWiseReplayGenerator::updatePieceProcessing(
     if (!isPrepopulate() && result == OpResultType::kGetHit) {
       if (it->second.isHeaderPiece) {
         stats_.getHitBytes += it->second.sizes[0];
+        stats_.objGetHits += 1;
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
         // getRequestedSizeOfAPiece() takes care of trim if needed
@@ -126,9 +133,13 @@ void PieceWiseReplayGenerator::updatePieceProcessing(
       it->second.isHeaderPiece = false;
       it->second.cachePieces->updateFetchIndex();
     } else {
-      // Record the cache hit stats
+      // Record the cache hit stats: we got all the pieces that were requested
       if (!isPrepopulate() && result == OpResultType::kGetHit) {
-        stats_.objGetHits += 1;
+        auto requestedSize = it->second.cachePieces->getRequestedSize();
+        stats_.getFullHitBytes += requestedSize + it->second.headerSize;
+        stats_.getFullHitBodyBytes += requestedSize;
+
+        stats_.objGetFullHits += 1;
       }
 
       activeReqM_.erase(it);
@@ -156,33 +167,41 @@ void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
                         curStats.objGets / 1e6)
       << std::endl;
 
+  auto safeDiv = [](auto nr, auto dr) {
+    return dr == 0 ? 0.0 : 100.0 * nr / dr;
+  };
+
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
   const uint64_t getBytesPerSec = curStats.getBytes / 1024 / elapsedSecs;
   const double getBytesSuccessRate =
-      curStats.getBytes == 0 ? 0.0
-                             : 100.0 * curStats.getHitBytes / curStats.getBytes;
+      safeDiv(curStats.getHitBytes, curStats.getBytes);
+  const double getBytesFullSuccessRate =
+      safeDiv(curStats.getFullHitBytes, curStats.getBytes);
 
   const uint64_t getBodyBytesPerSec =
       curStats.getBodyBytes / 1024 / elapsedSecs;
   const double getBodyBytesSuccessRate =
-      curStats.getBodyBytes == 0
-          ? 0.0
-          : 100.0 * curStats.getHitBodyBytes / curStats.getBodyBytes;
+      safeDiv(curStats.getHitBodyBytes, curStats.getBodyBytes);
+  const double getBodyBytesFullSuccessRate =
+      safeDiv(curStats.getFullHitBodyBytes, curStats.getBodyBytes);
 
   const uint64_t getPerSec = curStats.objGets / elapsedSecs;
-  const double getSuccessRate =
-      curStats.objGets == 0 ? 0.0
-                            : 100.0 * curStats.objGetHits / curStats.objGets;
+  const double getSuccessRate = safeDiv(curStats.objGetHits, curStats.objGets);
+  const double getFullSuccessRate =
+      safeDiv(curStats.objGetFullHits, curStats.objGets);
 
   auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
-                      double v2) {
-    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%", k1, v1, k2, v2)
+                      double v2, folly::StringPiece k3, double v3) {
+    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%, {:10}: {:6.2f}%",
+                          k1, v1, k2, v2, k3, v3)
         << std::endl;
   };
-  outFn("getBytes(KB)", getBytesPerSec, "success", getBytesSuccessRate);
+  outFn("getBytes(KB)", getBytesPerSec, "success", getBytesSuccessRate,
+        "full success", getBytesFullSuccessRate);
   outFn("getBodyBytes(KB)", getBodyBytesPerSec, "success",
-        getBodyBytesSuccessRate);
-  outFn("objectGet", getPerSec, "success", getSuccessRate);
+        getBodyBytesSuccessRate, "full success", getBodyBytesFullSuccessRate);
+  outFn("objectGet", getPerSec, "success", getSuccessRate, "full success",
+        getFullSuccessRate);
 }
 
 const Request& PieceWiseReplayGenerator::getReqFromTrace() {
