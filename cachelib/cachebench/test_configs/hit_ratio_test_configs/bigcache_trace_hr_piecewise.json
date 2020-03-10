@@ -35,9 +35,9 @@
 
       "enableLookaside": false,
       "generator": "piecewise-replay",
-      "numOps": 240000000,
+      "numOps": 1000000000,
       "numThreads": 32,
-      "prepopulateCache": false,
+      "prepopulateCache": true,
       "traceFileName": "bigcache.csv"
     }
 }

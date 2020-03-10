@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -35,6 +37,17 @@ class GeneratorBase {
 
   virtual void renderStats(uint64_t /*elapsedTimeNs*/,
                            std::ostream& /*out*/) const {}
+
+  void setIsPrepopulate(bool flag) {
+    isPrepopulate_.store(flag, std::memory_order_relaxed);
+  }
+
+  bool isPrepopulate() const {
+    return isPrepopulate_.load(std::memory_order_relaxed);
+  }
+
+ private:
+  std::atomic<bool> isPrepopulate_{false};
 };
 
 } // namespace cachebench

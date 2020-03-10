@@ -80,7 +80,9 @@ class CacheStressor : public Stressor {
     }
     // Fill up the cache with specified key/value distribution
     if (config_.prepopulateCache) {
+      wg_->setIsPrepopulate(true);
       try {
+        std::cout << "Starting cache prepopulate" << std::endl;
         auto ret = prepopulateCache();
         std::cout << folly::sformat("Inserted {:,} keys in {:.2f} mins",
                                     ret.first,
@@ -107,6 +109,7 @@ class CacheStressor : public Stressor {
                   << std::endl;
       }
     }
+    wg_->setIsPrepopulate(false);
   }
 
   ~CacheStressor() override { finish(); }

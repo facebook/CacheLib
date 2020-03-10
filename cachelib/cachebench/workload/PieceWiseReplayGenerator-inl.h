@@ -50,7 +50,7 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
         result == OpResultType::kSetSuccess ||
         result == OpResultType::kSetFailure) {
       // Record the cache hit stats
-      if (result == OpResultType::kGetHit) {
+      if (!isPrepopulate() && result == OpResultType::kGetHit) {
         // We trim the fetched bytes if it's range request
         if (it->second.requestRange.getRequestRange()) {
           auto range = it->second.requestRange.getRequestRange();
@@ -87,11 +87,12 @@ void PieceWiseReplayGenerator::updatePieceProcessing(
     auto nextPieceIndex = it->second.cachePieces->getCurFetchingPieceIndex();
 
     // Record the cache hit stats
-    if (result == OpResultType::kGetHit) {
+    if (!isPrepopulate() && result == OpResultType::kGetHit) {
       if (it->second.isHeaderPiece) {
         stats_.getHitBytes += it->second.sizes[0];
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
+        // getRequestedSizeOfAPiece() takes care of trim if needed
         auto requestedSize =
             it->second.cachePieces->getRequestedSizeOfAPiece(resultPieceIndex);
         stats_.getHitBytes += requestedSize;
@@ -126,7 +127,7 @@ void PieceWiseReplayGenerator::updatePieceProcessing(
       it->second.cachePieces->updateFetchIndex();
     } else {
       // Record the cache hit stats
-      if (result == OpResultType::kGetHit) {
+      if (!isPrepopulate() && result == OpResultType::kGetHit) {
         stats_.objGetHits += 1;
       }
 
@@ -151,6 +152,10 @@ void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
   }
 
   // Output the stats
+  out << folly::sformat("{:10}: {:.2f} million", "Total Processed Samples",
+                        curStats.objGets / 1e6)
+      << std::endl;
+
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
   const uint64_t getBytesPerSec = curStats.getBytes / 1024 / elapsedSecs;
   const double getBytesSuccessRate =
@@ -219,16 +224,22 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         auto rangeEnd = parseRangeField(fields[7], fullContentSize);
 
         // Record the byte wise and object wise stats that we will egress
-        if (rangeStart) {
-          size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
-                                      : (fullContentSize - *rangeStart);
-          stats_.getBytes += rangeSize + responseHeaderSize;
-          stats_.getBodyBytes += rangeSize;
+        if (!isPrepopulate()) {
+          if (rangeStart) {
+            size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
+                                        : (fullContentSize - *rangeStart);
+            stats_.getBytes += rangeSize + responseHeaderSize;
+            stats_.getBodyBytes += rangeSize;
+          } else {
+            stats_.getBytes += fullContentSize + responseHeaderSize;
+            stats_.getBodyBytes += fullContentSize;
+          }
+          stats_.objGets += 1;
+
+          ++postpopulateSamples_;
         } else {
-          stats_.getBytes += fullContentSize + responseHeaderSize;
-          stats_.getBodyBytes += fullContentSize;
+          ++prepopulateSamples_;
         }
-        stats_.objGets += 1;
 
         auto reqId = nextReqId_++;
         activeReqM_.emplace(std::piecewise_construct,

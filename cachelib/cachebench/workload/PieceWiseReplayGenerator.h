@@ -24,7 +24,11 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   }
 
   virtual ~PieceWiseReplayGenerator() {
-    XLOG(INFO) << "# of invalid samples: " << invalidSamples_;
+    XLOG(INFO)
+        << "Summary count of samples in workload generator:" << std::endl
+        << "# of prepopulate samples: " << prepopulateSamples_ << std::endl
+        << "# of postpopulate samples: " << postpopulateSamples_ << std::endl
+        << "# of invalid samples: " << invalidSamples_;
   }
 
   // getReq generates the next request from the named trace file.
@@ -126,6 +130,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   std::unordered_map<uint64_t, ReqWrapper> activeReqM_;
 
   uint64_t invalidSamples_{0};
+  uint64_t prepopulateSamples_{0};
+  uint64_t postpopulateSamples_{0};
 
   PieceWiseReplayGeneratorStats stats_;
 
