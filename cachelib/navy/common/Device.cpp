@@ -157,7 +157,7 @@ class RAID0Device final : public Device {
                      uint32_t stripeIOSize) {
     XLOGF(ERR,
           "IO error: {} logicalOffset {} logicalIOSize {} stripeSize {} "
-          "stripe {} stripeOffset {} stripeIOSize {} errno %i ({})",
+          "stripe {} stripeOffset {} stripeIOSize {} errno {} ({})",
           opName,
           logicalOffset,
           logicalIOSize,
