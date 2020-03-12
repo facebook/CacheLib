@@ -177,7 +177,7 @@ def process_line_and_add(accesses, keys, users, namespaces, pipelines, l, sample
 
     try:
         parts = l.split(" ")
-        formatted_time = "2019" + parts[0][1:] + parts[1]
+        formatted_time = "2020" + parts[0][1:] + parts[1]
         timestamp = datetime.datetime.strptime(
             formatted_time, "%Y%m%d%H:%M:%S.%f"
         ).timestamp()

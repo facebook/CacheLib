@@ -142,7 +142,7 @@ def add_options_parser():
         help="Cache size in GB",
         action="store",
         type="int",
-        default=600,
+        default=400,
     )
 
     (options, args) = parser.parse_args()

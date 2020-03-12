@@ -549,7 +549,7 @@ def simulate_cache_driver(options, args):
             apname = "RejectX"
         else:
             ap = RejectFirstWriteRateAP(
-                2 * num_cache_elems, scaled_write_mbps, utils.BlkAccess.ALIGNMENT
+                factor * num_cache_elems, scaled_write_mbps, utils.BlkAccess.ALIGNMENT
             )
             apname = "RejectFirstWriteRate"
     elif options.learned_ap:
@@ -613,4 +613,5 @@ def simulate_cache_driver(options, args):
         IOPS saved ratio - {total_iops_saved / total_iops}"
     )
     with open(out_file_name, "w+") as out:
+        logjson["options"] = str(logjson["options"])
         json.dump(logjson, out)
