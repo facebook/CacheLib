@@ -1718,6 +1718,329 @@ TEST_F(NvmCacheTest, NavyStats) {
   }
   EXPECT_EQ(0, nvmStats.size());
 }
+
+TEST_F(NvmCacheTest, Raid0Basic) {
+  auto& config = getConfig();
+  auto& options = config.nvmConfig->dipperOptions;
+  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+  options["dipper_navy_file_name"] = "";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0",
+                            filePath + "/CACHE1",
+                            filePath + "/CACHE2",
+                            filePath + "/CACHE3");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+
+  this->convertToShmCache();
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+  std::string key = "blah";
+  std::string val = "foobar";
+  {
+    auto it = nvm.allocate(pid, key, val.length());
+    ASSERT_NE(nullptr, it);
+    ::memcpy(it->getMemory(), val.data(), val.length());
+    nvm.insertOrReplace(it);
+  }
+
+  // item is only in RAM
+  {
+    auto res = this->inspectCache(key);
+    // must exist in RAM
+    ASSERT_NE(nullptr, res.first);
+    ASSERT_EQ(::memcmp(res.first->getMemory(), val.data(), val.length()), 0);
+
+    // must not be in nvmcache
+    ASSERT_EQ(nullptr, res.second);
+  }
+
+  this->pushToNvmCacheFromRamForTesting(key);
+  this->removeFromRamForTesting(key);
+
+  {
+    auto res = this->inspectCache(key);
+    // must not exist in RAM
+    ASSERT_EQ(nullptr, res.first);
+
+    // must be in nvmcache
+    ASSERT_NE(nullptr, res.second);
+    ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+
+    // we should not have brought anything into RAM.
+    ASSERT_EQ(nullptr, this->inspectCache(key).first);
+  }
+
+  // recovery should find the key/val
+  this->warmRoll();
+  {
+    auto res = this->inspectCache(key);
+    // must not exist in RAM
+    ASSERT_EQ(nullptr, res.first);
+
+    // must be in nvmcache
+    ASSERT_NE(nullptr, res.second);
+    ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+
+    // we should not have brought anything into RAM.
+    ASSERT_EQ(nullptr, this->inspectCache(key).first);
+  }
+}
+
+TEST_F(NvmCacheTest, IncorrectRaid) {
+  auto& config = getConfig();
+  auto& options = config.nvmConfig->dipperOptions;
+  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+
+  // specifying just a single file path for raid should fail.
+  options["dipper_navy_file_name"] = "";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+
+  ASSERT_THROW(this->makeCache(), std::invalid_argument);
+
+  // specify both file name and raid path and creation should fail.
+  options["dipper_navy_file_name"] = "/tmp/nvmcache-navy-raid0/foo";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+}
+
+TEST_F(NvmCacheTest, Raid0OrderChange) {
+  auto& config = getConfig();
+  auto& options = config.nvmConfig->dipperOptions;
+  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+
+  options["dipper_navy_file_name"] = "";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0",
+                            filePath + "/CACHE1",
+                            filePath + "/CACHE2",
+                            filePath + "/CACHE3");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+
+  // setup a cache with some content and change the raid0 order and verify
+  // that everything is correct.
+  std::string val = "foobar";
+  int nKeys = 100;
+  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+
+  this->convertToShmCache();
+  {
+    auto& nvm = this->cache();
+    auto pid = this->poolId();
+
+    for (int i = 0; i < nKeys; i++) {
+      auto it = nvm.allocate(pid, makeKey(i), val.length());
+      ASSERT_NE(nullptr, it);
+      ::memcpy(it->getMemory(), val.data(), val.length());
+      nvm.insertOrReplace(it);
+    }
+
+    // item is only in RAM
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must exist in RAM
+      ASSERT_NE(nullptr, res.first);
+      ASSERT_EQ(::memcmp(res.first->getMemory(), val.data(), val.length()), 0);
+
+      // must not be in nvmcache
+      ASSERT_EQ(nullptr, res.second);
+      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->removeFromRamForTesting(makeKey(i));
+    }
+
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must not exist in RAM
+      ASSERT_EQ(nullptr, res.first);
+
+      // must be in nvmcache
+      ASSERT_NE(nullptr, res.second);
+      ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+    }
+  }
+
+  // change the order of files
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE3",
+                            filePath + "/CACHE1",
+                            filePath + "/CACHE2",
+                            filePath + "/CACHE0");
+
+  this->warmRoll();
+  // recovery should succeed and we must find those item in nvmcache.
+  for (int i = 0; i < nKeys; i++) {
+    auto res = this->inspectCache(makeKey(i));
+    // must not exist in RAM
+    ASSERT_EQ(nullptr, res.first);
+
+    // must be in nvmcache
+    ASSERT_NE(nullptr, res.second);
+    ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+  }
+}
+
+TEST_F(NvmCacheTest, Raid0NumFilesChange) {
+  auto& config = getConfig();
+  auto& options = config.nvmConfig->dipperOptions;
+  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+
+  options["dipper_navy_file_name"] = "";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0",
+                            filePath + "/CACHE1",
+                            filePath + "/CACHE2",
+                            filePath + "/CACHE3");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+
+  // setup a cache with some content and change the raid0 order and verify
+  // that everything is correct.
+  std::string val = "foobar";
+  int nKeys = 100;
+  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+
+  this->convertToShmCache();
+  {
+    auto& nvm = this->cache();
+    auto pid = this->poolId();
+
+    for (int i = 0; i < nKeys; i++) {
+      auto it = nvm.allocate(pid, makeKey(i), val.length());
+      ASSERT_NE(nullptr, it);
+      ::memcpy(it->getMemory(), val.data(), val.length());
+      nvm.insertOrReplace(it);
+    }
+
+    // item is only in RAM
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must exist in RAM
+      ASSERT_NE(nullptr, res.first);
+      ASSERT_EQ(::memcmp(res.first->getMemory(), val.data(), val.length()), 0);
+
+      // must not be in nvmcache
+      ASSERT_EQ(nullptr, res.second);
+      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->removeFromRamForTesting(makeKey(i));
+    }
+
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must not exist in RAM
+      ASSERT_EQ(nullptr, res.first);
+
+      // must be in nvmcache
+      ASSERT_NE(nullptr, res.second);
+      ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+    }
+  }
+
+  options["dipper_navy_raid_paths"] = folly::dynamic::array(
+      filePath + "/CACHE0", filePath + "/CACHE2", filePath + "/CACHE3");
+  this->warmRoll();
+  // recovery should fail and we should lose the previous content. nvmcache
+  // should still be enabled
+  //
+  EXPECT_TRUE(this->cache().isNvmCacheEnabled());
+  for (int i = 0; i < nKeys; i++) {
+    auto res = this->inspectCache(makeKey(i));
+    // must not exist in RAM
+    ASSERT_EQ(nullptr, res.first);
+
+    // must not be in nvmcache since it got dropped
+    ASSERT_EQ(nullptr, res.second);
+  }
+}
+
+TEST_F(NvmCacheTest, Raid0SizeChange) {
+  auto& config = getConfig();
+  auto& options = config.nvmConfig->dipperOptions;
+  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+
+  options["dipper_navy_file_name"] = "";
+  options["dipper_navy_raid_paths"] =
+      folly::dynamic::array(filePath + "/CACHE0",
+                            filePath + "/CACHE1",
+                            filePath + "/CACHE2",
+                            filePath + "/CACHE3");
+
+  options["dipper_navy_file_size"] = 10 * 1024 * 1024;
+
+  // setup a cache with some content and change the raid0 order and verify
+  // that everything is correct.
+  std::string val = "foobar";
+  int nKeys = 100;
+  auto makeKey = [&](int i) { return folly::sformat("blah-{}", i); };
+
+  this->convertToShmCache();
+  {
+    auto& nvm = this->cache();
+    auto pid = this->poolId();
+
+    for (int i = 0; i < nKeys; i++) {
+      auto it = nvm.allocate(pid, makeKey(i), val.length());
+      ASSERT_NE(nullptr, it);
+      ::memcpy(it->getMemory(), val.data(), val.length());
+      nvm.insertOrReplace(it);
+    }
+
+    // item is only in RAM
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must exist in RAM
+      ASSERT_NE(nullptr, res.first);
+      ASSERT_EQ(::memcmp(res.first->getMemory(), val.data(), val.length()), 0);
+
+      // must not be in nvmcache
+      ASSERT_EQ(nullptr, res.second);
+      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->removeFromRamForTesting(makeKey(i));
+    }
+
+    for (int i = 0; i < nKeys; i++) {
+      auto res = this->inspectCache(makeKey(i));
+      // must not exist in RAM
+      ASSERT_EQ(nullptr, res.first);
+
+      // must be in nvmcache
+      ASSERT_NE(nullptr, res.second);
+      ASSERT_EQ(::memcmp(res.second->getMemory(), val.data(), val.length()), 0);
+    }
+  }
+
+  // increase the size of the raid-0 files
+  options["dipper_navy_file_size"] = 32 * 1024 * 1024;
+  this->warmRoll();
+  // recovery should fail and we should lose the previous content. nvmcache
+  // should still be enabled
+  //
+  EXPECT_TRUE(this->cache().isNvmCacheEnabled());
+  for (int i = 0; i < nKeys; i++) {
+    auto res = this->inspectCache(makeKey(i));
+    // must not exist in RAM
+    ASSERT_EQ(nullptr, res.first);
+
+    // must not be in nvmcache since it got dropped
+    ASSERT_EQ(nullptr, res.second);
+  }
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
