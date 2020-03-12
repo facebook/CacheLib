@@ -225,6 +225,7 @@ class CacheStressor : public Stressor {
     std::atomic<uint64_t> totalCount = 0;
 
     auto prePopulateFn = [&]() {
+      wg_->registerThread();
       std::mt19937 gen(folly::Random::rand32());
       std::discrete_distribution<> keyPoolDist(
           config_.keyPoolDistribution.begin(),
