@@ -4,7 +4,6 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/Utils.h"
-#include "dipper/navy_dipper/navyif.h"
 
 namespace facebook {
 namespace cachelib {

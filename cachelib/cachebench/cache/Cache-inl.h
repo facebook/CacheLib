@@ -9,8 +9,6 @@
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/cachebench/util/NandWrites.h"
-#include "dipper/dipper_registry.h"
-#include "dipper/navy_dipper/navyif.h"
 
 namespace facebook {
 namespace cachelib {
@@ -88,13 +86,10 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions = folly::dynamic::object;
     nvmConfig.dipperOptions["dipper_backend"] = config_.dipperBackend;
     nvmConfig.dipperOptions["dipper_force_reinit"] = true;
-    nvmConfig.dipperOptions["dipper_compression"] =
-        static_cast<int>(dipper::DipperCompressionMethod::DCM_NONE);
 
     nvmConfig.dipperOptions["dipper_async_threads"] =
         config_.dipperAsyncThreads;
 
-    facebook::dipper::registerBackend<facebook::dipper::NavyDipperFactory>();
     if (config_.dipperNavyUseMemoryDevice) {
       // nothing to do here.
     } else if (!config_.dipperDevicePath.empty()) {

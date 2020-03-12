@@ -58,7 +58,7 @@ TYPED_TEST(NvmCacheTest, EvictToDipperGet) {
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
 
-  // read from reverse to no cause evictions to dipper
+  // read from reverse to no cause evictions to navy
   for (unsigned int i = nKeys + 100; i-- > 0;) {
     unsigned int index = i - 1;
     auto key = folly::sformat("key{}", index);
@@ -102,7 +102,7 @@ TYPED_TEST(NvmCacheTest, EvictToDipperGetCheckCtime) {
 
   /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(5));
 
-  // read from reverse to no cause evictions to dipper
+  // read from reverse to no cause evictions to navy
   for (unsigned int i = nKeys - 1; i > 0; i--) {
     auto key = std::string("blah") + folly::to<std::string>(i - 1);
     auto hdl = this->fetch(key, false /* ramOnly */);
@@ -430,7 +430,7 @@ TYPED_TEST(NvmCacheTest, NvmClean) {
 
   ASSERT_LT(0, numClean);
 
-  // we must have done evictions from ram to dipper
+  // we must have done evictions from ram to navy
   nEvictions = this->evictionCount() - evictBefore;
   nPuts = this->getStats().numNvmPuts - putsBefore;
   ASSERT_LT(0, nEvictions);
@@ -449,7 +449,7 @@ TYPED_TEST(NvmCacheTest, NvmClean) {
   }
   ASSERT_EQ(0, this->getStats().numNvmEvictions);
 
-  // we must have done evictions from ram to dipper
+  // we must have done evictions from ram to navy
   nEvictions = this->evictionCount() - evictBefore;
   nPuts = this->getStats().numNvmPuts - putsBefore;
   ASSERT_LT(0, nEvictions);
@@ -524,7 +524,7 @@ TYPED_TEST(NvmCacheTest, NvmEvicted) {
     ASSERT_TRUE(hdl->isNvmClean());
   }
 
-  // we must have done evictions from ram to dipper
+  // we must have done evictions from ram to navy
   ASSERT_EQ(this->evictionCount() - evictBefore, 2 * nKeys);
   ASSERT_EQ(nKeys, this->getStats().numNvmPuts - putsBefore);
   ASSERT_EQ(nKeys, this->getStats().numNvmPutFromClean);

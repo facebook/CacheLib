@@ -18,12 +18,6 @@
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Utils.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wconversion"
-#include "dipper/dipper.h"
-#include "dipper/dipper_types.h"
-#pragma GCC diagnostic pop
-
 namespace facebook {
 namespace cachelib {
 
