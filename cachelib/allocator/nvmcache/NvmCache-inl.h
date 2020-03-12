@@ -82,18 +82,19 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   XDCHECK(ctx);
   auto guard = folly::makeGuard([ctx, this]() { removeFromFillMap(*ctx); });
 
-  auto rv = store_->dipperGetAsync(
-      dipper::DipperGetParams{ctx->getKey()},
-      [this, ctx](int err, folly::ByteRange k, folly::ByteRange v) {
-        this->onGetComplete(*ctx, err, k, v);
+  auto status = navyCache_->lookupAsync(
+      makeBufferView(ctx->getKey()),
+      [this, ctx](navy::Status s, navy::BufferView k, navy::Buffer v) {
+        this->onGetComplete(*ctx, s, k, v.view());
       });
-  if (rv != dipper::DipperStatus::OK()) {
-    // instead of disabling dipper, we enqueue a delete and return a miss.
+  if (status != navy::Status::Ok) {
+    // instead of disabling navy, we enqueue a delete and return a miss.
     remove(key);
     stats().numNvmGetMiss.inc();
   } else {
     guard.dismiss();
   }
+
   return hdl;
 }
 
@@ -103,22 +104,22 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
     return nullptr;
   }
 
-  dipper::DipperGetParams params{key};
   folly::Baton b;
   ItemHandle hdl{};
   hdl.markWentToNvm();
-  auto cb = [&, this](int err, folly::ByteRange, folly::ByteRange v) {
-    if (err != ENOENT) {
-      auto dItem = reinterpret_cast<const DipperItem*>(v.data());
-      hdl = createItem(key, *dItem);
-    }
-    b.post();
-  };
 
   // no need for fill lock or inspecting the state of other concurrent
   // operations since we only want to check the state for debugging purposes.
-  const auto rv = store_->dipperGetAsync(params, std::move(cb));
-  if (rv != dipper::DipperStatus::OK()) {
+  auto status = navyCache_->lookupAsync(
+      makeBufferView(key),
+      [&, this](navy::Status st, navy::BufferView, navy::Buffer v) {
+        if (st != navy::Status::NotFound) {
+          auto dItem = reinterpret_cast<const DipperItem*>(v.data());
+          hdl = createItem(key, *dItem);
+        }
+        b.post();
+      });
+  if (status != navy::Status::Ok) {
     return hdl;
   }
   b.wait();
@@ -126,7 +127,13 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
 }
 
 template <typename C>
-void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
+void NvmCache<C>::evictCB(navy::BufferView key,
+                          navy::BufferView value,
+                          navy::DestructorEvent event) {
+  if (event != cachelib::navy::DestructorEvent::Recycled) {
+    return;
+  }
+
   stats().numNvmEvictions.inc();
 
   const auto& dItem = *reinterpret_cast<const DipperItem*>(value.data());
@@ -146,7 +153,8 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
       ? cache_.nvmLargeEvictionAgeSecs_.trackValue(lifetime)
       : cache_.nvmSmallEvictionAgeSecs_.trackValue(lifetime);
 
-  auto hdl = cache_.peek(key);
+  auto hdl = cache_.peek(folly::StringPiece{
+      reinterpret_cast<const char*>(key.data()), key.size()});
   if (!hdl) {
     return;
   }
@@ -168,26 +176,14 @@ void NvmCache<C>::evictCB(folly::StringPiece key, folly::StringPiece value) {
 }
 
 template <typename C>
-NvmCache<C>::NvmCache(C& c, const Config& config, bool truncate)
+NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
     : config_(config.validate()), cache_(c) {
-  constexpr folly::StringPiece kNavyReqOrderStr =
-      "dipper_navy_req_order_shards_power";
-  constexpr folly::StringPiece kTruncateFlashCache =
-      "dipper_truncate_flash_cache";
-
-  auto dipperOptions = config_.dipperOptions;
-  bool usingNavyReqOrdering = dipperOptions.get_ptr(kNavyReqOrderStr);
-  dipperOptions[kTruncateFlashCache] = truncate;
-
-  store_ = dipper::dipperOpen(
-      dipperOptions,
-      [this](folly::StringPiece key, folly::StringPiece val) {
-        this->evictCB(key, val);
+  navyCache_ = createNavyCache(
+      config_.dipperOptions,
+      [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {
+        this->evictCB(k, v, e);
       },
-      [this](folly::StringPiece key, folly::StringPiece val) {
-        return this->compactionFilterCb(key, val);
-      },
-      !usingNavyReqOrdering);
+      truncate);
 }
 
 template <typename C>
@@ -300,6 +296,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   } else {
     iobuf = toIOBuf(std::move(dItem));
   }
+
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
@@ -310,10 +307,10 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
 
-  dipper::DipperPutFlags flags = item.isUnevictable()
-                                     ? dipper::DIPPER_PUT_NEVER_EVICT
-                                     : dipper::DIPPER_PUT_NONE;
-  dipper::DipperPutParams params(ctx.key(), val, flags);
+  navy::InsertOptions opts;
+  if (item.isUnevictable()) {
+    opts.setPermanent();
+  }
 
   if (item.isNvmClean() && item.isNvmEvicted()) {
     stats().numNvmPutFromClean.inc();
@@ -321,20 +318,22 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
 
   // On a concurrent get, we remove the key from inflight evictions and hence
   // key not being present means a concurrent get happened with an inflight
-  // eviction, and we should abandon this write to dipper since we already
+  // eviction, and we should abandon this write to navy since we already
   // reported the key doesn't exist in the cache.
   const bool executed = token.executeIfValid([&]() {
-    auto rv =
-        store_->dipperPutAsync(params, [this, putCleanup, valSize](int err) {
+    auto status = navyCache_->insertAsync(
+        makeBufferView(ctx.key()), makeBufferView(val), opts,
+        [this, putCleanup, valSize](navy::Status st, navy::BufferView) {
           putCleanup();
-          if (err == 0) {
+          if (st == navy::Status::Ok) {
             cache_.nvmPutSize_.trackValue(valSize);
           }
         });
-    if (rv != dipper::DipperStatus::OK()) {
-      stats().numNvmPutErrs.inc();
-    } else {
+
+    if (status == navy::Status::Ok) {
       guard.dismiss();
+    } else {
+      stats().numNvmPutErrs.inc();
     }
   });
 
@@ -380,22 +379,22 @@ bool NvmCache<C>::mightHaveConcurrentFill(size_t shard,
 
 template <typename C>
 void NvmCache<C>::onGetComplete(GetCtx& ctx,
-                                int error,
-                                folly::ByteRange k,
-                                folly::ByteRange val) {
+                                navy::Status status,
+                                navy::BufferView k,
+                                navy::BufferView val) {
   auto key =
       folly::StringPiece{reinterpret_cast<const char*>(k.data()), k.size()};
   auto guard = folly::makeGuard([&ctx]() { ctx.cache.removeFromFillMap(ctx); });
-  // dipper got disabled while we were fetching. If so, safely return a miss.
-  // If dipper gets disabled beyond this point, it is okay since we fetched it
+  // navy got disabled while we were fetching. If so, safely return a miss.
+  // If navy gets disabled beyond this point, it is okay since we fetched it
   // before we got disabled.
   if (!isEnabled()) {
     return;
   }
 
-  if (error != 0) {
-    if (error != ENOENT) {
-      // instead of disabling dipper, we enqueue a delete and return a miss.
+  if (status != navy::Status::Ok) {
+    // instead of disabling navy, we enqueue a delete and return a miss.
+    if (status != navy::Status::NotFound) {
       remove(key);
     }
     stats().numNvmGetMiss.inc();
@@ -410,11 +409,11 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   const DipperItem* dItem = nullptr;
   folly::IOBuf decryptedIoBuf;
   if (config_.decryptCb) {
-    auto decryptedIoBufRet = config_.decryptCb(val);
+    auto decryptedIoBufRet = config_.decryptCb({val.data(), val.size()});
     if (!decryptedIoBufRet) {
       stats().numNvmDecryptionErrors.inc();
       stats().numNvmGetMiss.inc();
-      // instead of disabling dipper, we enqueue a delete and return a miss.
+      // instead of disabling navy, we enqueue a delete and return a miss.
       remove(key);
       return;
     }
@@ -451,7 +450,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  // by the time we filled from dipper, another thread inserted in RAM. We
+  // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
   if (cache_.insertImpl(it, AllocatorApiEvent::INSERT_FROM_NVM)) {
     if (config_.memoryInsertCb) {
@@ -460,7 +459,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     it.markWentToNvm();
     ctx.setItemHandle(std::move(it));
   }
-}
+} // namespace cachelib
 
 template <typename C>
 typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
@@ -517,10 +516,10 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
 }
 
 template <typename C>
-void NvmCache<C>::disableDipper(const std::string& msg) {
+void NvmCache<C>::disableNavy(const std::string& msg) {
   if (isEnabled()) {
-    dipperEnabled_ = false;
-    XLOGF(CRITICAL, "Disabling dipper. {}", msg);
+    navyEnabled_ = false;
+    XLOGF(CRITICAL, "Disabling navy. {}", msg);
   }
 }
 
@@ -545,12 +544,15 @@ void NvmCache<C>::remove(folly::StringPiece key) {
   auto& ctx = delContexts.createContext(key, std::move(tracker));
 
   // capture array reference for delContext. it is stable
-  auto delCleanup = [&delContexts, &ctx, this](int err) {
+  auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
+                                               navy::BufferView) {
     delContexts.destroyContext(ctx);
-    if (err != 0 && err != ENOENT) {
-      // we set disable dipper since we failed to delete something
-      disableDipper(folly::sformat("Delete Failure. errno = {}", err));
+    if (status == navy::Status::Ok || status == navy::Status::NotFound) {
+      return;
     }
+    // we set disable navy since we failed to delete something
+    disableNavy(folly::sformat("Delete Failure. status = {}",
+                               static_cast<int>(status)));
   };
 
   stats().numNvmDeletes.inc();
@@ -559,38 +561,43 @@ void NvmCache<C>::remove(folly::StringPiece key) {
   // deletion.
   inflightPuts_[shard].invalidateToken(key);
 
-  dipper::DipperDeleteParams params(ctx.key());
-
   auto lock = getFillLockForShard(shard);
   cancelFillLocked(key, shard);
 
-  auto rv = store_->dipperDeleteAsync(params, delCleanup);
-  if (rv != dipper::DipperStatus::OK()) {
-    delCleanup(rv.getErrno());
+  auto status = navyCache_->removeAsync(makeBufferView(ctx.key()), delCleanup);
+  if (status != navy::Status::Ok) {
+    delCleanup(status, {});
   }
 }
 
 template <typename C>
 bool NvmCache<C>::shutDown() {
-  const auto rv = store_->shutDown();
-  dipperEnabled_ = false;
-  return rv;
+  navyEnabled_ = false;
+  try {
+    this->flushPendingOps();
+    navyCache_->persist();
+  } catch (const std::exception& e) {
+    XLOG(ERR) << "Got error persisting cache: " << e.what();
+    return false;
+  }
+  XLOG(INFO) << "Cache recovery saved to the Flash Device";
+  return true;
 }
 
 template <typename C>
 void NvmCache<C>::flushPendingOps() {
-  store_->dipperFlush();
+  navyCache_->flush();
 }
 
 template <typename C>
-bool NvmCache<C>::compactionFilterCb(folly::StringPiece /* unused */,
-                                     folly::StringPiece val) {
-  const auto* dItem = reinterpret_cast<const DipperItem*>(val.data());
-  bool expired = dItem->isExpired();
-  if (expired) {
-    stats().numNvmCompactionFiltered.inc();
-  }
-  return expired;
+std::unordered_map<std::string, double> NvmCache<C>::getStatsMap() const {
+  std::unordered_map<std::string, double> statsMap;
+  navyCache_->getCounters([&statsMap](folly::StringPiece key, double value) {
+    auto keyStr = key.str();
+    DCHECK_EQ(0, statsMap.count(keyStr));
+    statsMap.insert({std::move(keyStr), value});
+  });
+  return statsMap;
 }
 
 } // namespace cachelib

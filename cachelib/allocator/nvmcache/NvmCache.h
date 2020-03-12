@@ -11,6 +11,7 @@
 
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
+#include "cachelib/allocator/nvmcache/NavySetup.h"
 #include "cachelib/allocator/nvmcache/ReqContexts.h"
 #include "cachelib/allocator/nvmcache/TombStones.h"
 #include "cachelib/allocator/nvmcache/WaitContext.h"
@@ -111,7 +112,7 @@ class NvmCache {
       return configMap;
     }
 
-    Config validate() const {
+    Config validate() {
       const bool hasEncodeCb = !!encodeCb;
       const bool hasDecodeCb = !!decodeCb;
       if (hasEncodeCb != hasDecodeCb) {
@@ -126,14 +127,15 @@ class NvmCache {
             "Encrypt and Decrypt CBs must be both specified or both empty.");
       }
 
+      populateDefaultNavyOptions(dipperOptions);
       return *this;
     }
   };
 
   // @param c         the cache instance using nvmcache
-  // @param config    the config for dipper store
+  // @param config    the config for nvmcache
   // @param truncate  if we should truncate the nvmcache store
-  NvmCache(C& c, const Config& config, bool truncate);
+  NvmCache(C& c, Config config, bool truncate);
 
   // Look up item by key
   // @param key         key to lookup
@@ -151,9 +153,8 @@ class NvmCache {
   //                    false otherwise
   PutToken createPutToken(folly::StringPiece key);
 
-  // store the given item in dipper
-  // @param hdl         handle to cache item to store in dipper. will be not
-  //                    null
+  // store the given item in navy
+  // @param hdl         handle to cache item. should not be null
   // @param token       the put token for the item. this must have been
   //                    obtained before enqueueing the put to maintain
   //                    consistency
@@ -161,7 +162,7 @@ class NvmCache {
 
   // returns the current state of whether nvmcache is enabled or not. nvmcache
   // can be disabled if the backend implementation ends up in a corrupt state
-  bool isEnabled() const noexcept { return dipperEnabled_; }
+  bool isEnabled() const noexcept { return navyEnabled_; }
 
   // creates a delete tombstone for the key. This will ensure that all
   // concurrent gets and puts to nvmcache can synchronize with an upcoming
@@ -192,11 +193,11 @@ class NvmCache {
   void flushPendingOps();
 
   // Obtain stats in a <string -> double> representation.
-  std::unordered_map<std::string, double> getStatsMap() const {
-    return store_->getStatsMap();
-  }
+  std::unordered_map<std::string, double> getStatsMap() const;
 
-  size_t getSize() const noexcept { return store_->dipperGetSize(); }
+  size_t getSize() const noexcept {
+    return getNvmCacheSize(config_.dipperOptions);
+  }
 
  private:
   detail::Stats& stats() { return cache_.stats_; }
@@ -214,11 +215,11 @@ class NvmCache {
 
   std::unique_ptr<DipperItem> makeDipperItem(const ItemHandle& handle);
 
-  // wrap an item into a blob for writing into dipper.
+  // wrap an item into a blob for writing into navy.
   Blob makeBlob(const Item& it);
   uint32_t getStorageSizeInNvm(const Item& it);
 
-  // Holds all the necessary data to do an async dipper get
+  // Holds all the necessary data to do an async navy get
   // All of the supported operations aren't thread safe. The caller
   // needs to ensure thread safety
   struct GetCtx {
@@ -299,8 +300,8 @@ class NvmCache {
     getFillMap(key).erase(key);
   }
 
-  // Logs and disables dipper usage
-  void disableDipper(const std::string& msg);
+  // Logs and disables navy usage
+  void disableNavy(const std::string& msg);
 
   // returns true if there is a concurrent get request in flight fetching from
   // nvm.
@@ -333,24 +334,21 @@ class NvmCache {
   }
 
   void onGetComplete(GetCtx& ctx,
-                     int error,
-                     folly::ByteRange key,
-                     folly::ByteRange value);
+                     navy::Status s,
+                     navy::BufferView key,
+                     navy::BufferView value);
 
-  void evictCB(folly::StringPiece key, folly::StringPiece val);
+  void evictCB(navy::BufferView key,
+               navy::BufferView val,
+               navy::DestructorEvent e);
 
-  // callback passed down to engine that needs to filter items out when doing
-  // level compaction
-  //
-  // @param key      key for item
-  // @param val      value for item
-  //
-  // @return  True if the item should be thrown away
-  bool compactionFilterCb(folly::StringPiece key, folly::StringPiece value);
+  static navy::BufferView makeBufferView(folly::ByteRange b) {
+    return navy::BufferView{b.size(), b.data()};
+  }
 
   const Config config_;
-  C& cache_;                              //< cache allocator
-  std::atomic<bool> dipperEnabled_{true}; //< switch to turn off/on dipper
+  C& cache_;                            //< cache allocator
+  std::atomic<bool> navyEnabled_{true}; //< switch to turn off/on navy
 
   static constexpr size_t kShards = 8192;
 
@@ -370,11 +368,11 @@ class NvmCache {
   std::array<PutContexts, kShards> putContexts_;
   std::array<DelContexts, kShards> delContexts_;
   // co-ordination between in-flight evictions from cache that are not queued
-  // to dipper and in-flight gets into nvmcache that are not yet queued.
+  // to navy and in-flight gets into nvmcache that are not yet queued.
   std::array<InFlightPuts, kShards> inflightPuts_;
   std::array<TombStones, kShards> tombstones_;
 
-  std::unique_ptr<dipper::DipperStore> store_; //< dipper store
+  std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 };
 
 } // namespace cachelib

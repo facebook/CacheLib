@@ -14,19 +14,15 @@ NavyDipper::NavyDipper() {
   dir_ = folly::sformat("/tmp/nvmcache-navydipper/{}", ::getpid());
   util::makeDir(dir_);
   config_ = folly::dynamic::object;
-  config_["dipper_backend"] = "navy_dipper";
   config_["dipper_navy_recovery_path"] = dir_;
-  config_["dipper_fs_size"] = 100; /* megabytes */
+  config_["dipper_navy_file_size"] = 100 * 1024ULL * 1024ULL; /* megabytes */
   config_["dipper_navy_file_name"] = dir_ + "/navy";
   config_["dipper_navy_direct_io"] = false;
   config_["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
   config_["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
   config_["dipper_navy_lru"] = true;
   config_["dipper_navy_block_size"] = 1024;
-  config_["dipper_test_mode"] = true;
-  config_["dipper_request_ordering"] = false;
   config_["dipper_navy_req_order_shards_power"] = 10;
-  config_["dipper_num_ushards"] = 1;
   config_["dipper_navy_bighash_size_pct"] = 50;
   config_["dipper_navy_bighash_bucket_size"] = 512;
   config_["dipper_navy_small_item_max_size"] = 100;
