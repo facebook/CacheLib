@@ -85,7 +85,6 @@ class AllocatorHitStatsTest;
 template <typename AllocatorT>
 class AllocatorResizeTest;
 
-template <typename B>
 class NvmCacheTest;
 
 template <typename AllocatorT>
@@ -1729,7 +1728,6 @@ class CacheAllocator : public CacheBase {
   friend class tao::TaoApiWrapper;
 
   // tests
-  template <typename Backend>
   friend class facebook::cachelib::tests::NvmCacheTest;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;

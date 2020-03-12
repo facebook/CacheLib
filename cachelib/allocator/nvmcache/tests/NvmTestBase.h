@@ -14,19 +14,6 @@ using Item = AllocatorT::Item;
 using ItemHandle = AllocatorT::ItemHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
 
-// NavyDipper backend
-class NavyDipper {
- public:
-  NavyDipper();
-  ~NavyDipper() { util::removePath(dir_); }
-  folly::dynamic getOptions() { return config_; }
-
- private:
-  folly::dynamic config_;
-  std::string dir_;
-};
-
-template <typename B>
 class NvmCacheTest : public testing::Test {
  public:
   NvmCacheTest();
@@ -85,8 +72,7 @@ class NvmCacheTest : public testing::Test {
   }
 
  protected:
-  // type of nvmcache backend we are using
-  B backend_{};
+  folly::dynamic config_;
 
   // cache directory for the cache
   std::string cacheDir_;
@@ -110,5 +96,3 @@ class NvmCacheTest : public testing::Test {
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
-
-#include "cachelib/allocator/nvmcache/tests/NvmTestBase-inl.h"

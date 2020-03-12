@@ -10,9 +10,6 @@ namespace facebook {
 namespace cachelib {
 namespace tests {
 
-typedef ::testing::Types<NavyDipper> DipperBackendTypes;
-TYPED_TEST_CASE(NvmCacheTest, DipperBackendTypes);
-
 namespace {
 std::string genRandomStr(size_t len) {
   std::string text;
@@ -24,7 +21,7 @@ std::string genRandomStr(size_t len) {
 }
 } // namespace
 
-TYPED_TEST(NvmCacheTest, BasicGet) {
+TEST_F(NvmCacheTest, BasicGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -41,7 +38,7 @@ TYPED_TEST(NvmCacheTest, BasicGet) {
   ASSERT_TRUE(this->checkKeyExists(key, false /* ramOnly */));
 }
 
-TYPED_TEST(NvmCacheTest, EvictToDipperGet) {
+TEST_F(NvmCacheTest, EvictToDipperGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -81,7 +78,7 @@ TYPED_TEST(NvmCacheTest, EvictToDipperGet) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, EvictToDipperGetCheckCtime) {
+TEST_F(NvmCacheTest, EvictToDipperGetCheckCtime) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -112,7 +109,7 @@ TYPED_TEST(NvmCacheTest, EvictToDipperGetCheckCtime) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, EvictToDipperExpired) {
+TEST_F(NvmCacheTest, EvictToDipperExpired) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -137,7 +134,7 @@ TYPED_TEST(NvmCacheTest, EvictToDipperExpired) {
   ASSERT_FALSE(this->checkKeyExists(key, false /* ram Only */));
 }
 
-TYPED_TEST(NvmCacheTest, FilterCb) {
+TEST_F(NvmCacheTest, FilterCb) {
   auto& config = this->getConfig();
   std::string failKey = "failure";
   std::string successKey = "success";
@@ -205,7 +202,7 @@ TYPED_TEST(NvmCacheTest, FilterCb) {
 
 // Unevictable items should be kept in both dram and nvm and maintain the
 // state on dram accordingly
-TYPED_TEST(NvmCacheTest, UnEvictable) {
+TEST_F(NvmCacheTest, UnEvictable) {
   auto& nvm = this->makeCache();
   auto pid = this->poolId();
   auto key = "foo";
@@ -220,7 +217,7 @@ TYPED_TEST(NvmCacheTest, UnEvictable) {
   EXPECT_NE(nullptr, res.second);
 }
 
-TYPED_TEST(NvmCacheTest, ReadFromDipperExpired) {
+TEST_F(NvmCacheTest, ReadFromDipperExpired) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -253,7 +250,7 @@ TYPED_TEST(NvmCacheTest, ReadFromDipperExpired) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, Delete) {
+TEST_F(NvmCacheTest, Delete) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -284,7 +281,7 @@ TYPED_TEST(NvmCacheTest, Delete) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, InsertOrReplace) {
+TEST_F(NvmCacheTest, InsertOrReplace) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -323,7 +320,7 @@ TYPED_TEST(NvmCacheTest, InsertOrReplace) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, Permanent) {
+TEST_F(NvmCacheTest, Permanent) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -355,7 +352,7 @@ TYPED_TEST(NvmCacheTest, Permanent) {
   ASSERT_FALSE(nvm.find(key));
 }
 
-TYPED_TEST(NvmCacheTest, ConcurrentFills) {
+TEST_F(NvmCacheTest, ConcurrentFills) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -390,7 +387,7 @@ TYPED_TEST(NvmCacheTest, ConcurrentFills) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, NvmClean) {
+TEST_F(NvmCacheTest, NvmClean) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -458,7 +455,7 @@ TYPED_TEST(NvmCacheTest, NvmClean) {
 
 // put nvmclean entries in cache and then mark them as nvmRewrite. this should
 // write them to nvmcache.
-TYPED_TEST(NvmCacheTest, NvmEvicted) {
+TEST_F(NvmCacheTest, NvmEvicted) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -530,7 +527,7 @@ TYPED_TEST(NvmCacheTest, NvmEvicted) {
   ASSERT_EQ(nKeys, this->getStats().numNvmPutFromClean);
 }
 
-TYPED_TEST(NvmCacheTest, InspectCache) {
+TEST_F(NvmCacheTest, InspectCache) {
   auto& cache = this->cache();
   auto pid = this->poolId();
 
@@ -582,7 +579,7 @@ TYPED_TEST(NvmCacheTest, InspectCache) {
 }
 
 // same as above, but uses large items using chained items
-TYPED_TEST(NvmCacheTest, InspectCacheLarge) {
+TEST_F(NvmCacheTest, InspectCacheLarge) {
   auto& config = this->getConfig();
   config.configureChainedItems();
   auto& cache = this->makeCache();
@@ -650,7 +647,7 @@ TYPED_TEST(NvmCacheTest, InspectCacheLarge) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, WarmRoll) {
+TEST_F(NvmCacheTest, WarmRoll) {
   this->convertToShmCache();
   std::string key = "blah";
   {
@@ -684,7 +681,7 @@ TYPED_TEST(NvmCacheTest, WarmRoll) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, ColdRoll) {
+TEST_F(NvmCacheTest, ColdRoll) {
   this->convertToShmCache();
   std::string key = "blah";
   {
@@ -713,7 +710,7 @@ TYPED_TEST(NvmCacheTest, ColdRoll) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, ColdRollDropNvmCache) {
+TEST_F(NvmCacheTest, ColdRollDropNvmCache) {
   this->getConfig().setDropNvmCacheOnShmNew(true);
   this->convertToShmCache();
   std::string key = "blah";
@@ -743,7 +740,7 @@ TYPED_TEST(NvmCacheTest, ColdRollDropNvmCache) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, IceRoll) {
+TEST_F(NvmCacheTest, IceRoll) {
   this->convertToShmCache();
   std::string key1 = "blah1";
   std::string key2 = "blah2";
@@ -787,7 +784,7 @@ TYPED_TEST(NvmCacheTest, IceRoll) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, IceColdRoll) {
+TEST_F(NvmCacheTest, IceColdRoll) {
   this->convertToShmCache();
   std::string key1 = "blah1";
   std::string key2 = "blah2";
@@ -831,7 +828,7 @@ TYPED_TEST(NvmCacheTest, IceColdRoll) {
 
 // this test assumes that by default, the config we use does not move on slab
 // release.
-TYPED_TEST(NvmCacheTest, EvictSlabRelease) {
+TEST_F(NvmCacheTest, EvictSlabRelease) {
   auto& cache = this->cache();
   auto pid = this->poolId();
 
@@ -881,7 +878,7 @@ TYPED_TEST(NvmCacheTest, EvictSlabRelease) {
 
 // allocate an item that has extra bytes in the end that we use and make sure
 // that we save and restore that
-TYPED_TEST(NvmCacheTest, TrailingAllocSize) {
+TEST_F(NvmCacheTest, TrailingAllocSize) {
   auto& cache = this->cache();
   auto pid = this->poolId();
 
@@ -913,7 +910,7 @@ TYPED_TEST(NvmCacheTest, TrailingAllocSize) {
                   text.size()));
 }
 
-TYPED_TEST(NvmCacheTest, ChainedItems) {
+TEST_F(NvmCacheTest, ChainedItems) {
   auto& config = this->getConfig();
   config.configureChainedItems();
   auto& cache = this->makeCache();
@@ -979,7 +976,7 @@ TYPED_TEST(NvmCacheTest, ChainedItems) {
   verifyChainedAllcos(it);
 }
 
-TYPED_TEST(NvmCacheTest, ChainedItemsModifyAccessible) {
+TEST_F(NvmCacheTest, ChainedItemsModifyAccessible) {
   auto& config = this->getConfig();
   config.configureChainedItems();
   auto& cache = this->makeCache();
@@ -1117,7 +1114,7 @@ TYPED_TEST(NvmCacheTest, ChainedItemsModifyAccessible) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, EncodeDecode) {
+TEST_F(NvmCacheTest, EncodeDecode) {
   auto& config = this->getConfig();
   config.configureChainedItems();
   std::unordered_map<std::string, int> callbacks;
@@ -1278,7 +1275,7 @@ TYPED_TEST(NvmCacheTest, EncodeDecode) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, Encryption) {
+TEST_F(NvmCacheTest, Encryption) {
   auto& config = this->getConfig();
   config.configureChainedItems();
 
@@ -1434,7 +1431,7 @@ TYPED_TEST(NvmCacheTest, Encryption) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, NvmUptime) {
+TEST_F(NvmCacheTest, NvmUptime) {
   unsigned int time = 6;
   this->convertToShmCache();
   {
@@ -1480,7 +1477,7 @@ TYPED_TEST(NvmCacheTest, NvmUptime) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, FullAllocSize) {
+TEST_F(NvmCacheTest, FullAllocSize) {
   // Test truncated alloc sizes
   auto& config = this->getConfig();
   config.nvmConfig->truncateItemToOriginalAllocSizeInNvm = false;
@@ -1524,7 +1521,7 @@ TYPED_TEST(NvmCacheTest, FullAllocSize) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, TruncatedAllocSize) {
+TEST_F(NvmCacheTest, TruncatedAllocSize) {
   // Test truncated alloc sizes
   auto& config = this->getConfig();
   config.nvmConfig->truncateItemToOriginalAllocSizeInNvm = true;
@@ -1573,7 +1570,7 @@ TYPED_TEST(NvmCacheTest, TruncatedAllocSize) {
   }
 }
 
-TYPED_TEST(NvmCacheTest, NavyStats) {
+TEST_F(NvmCacheTest, NavyStats) {
   // Ensure we export all the stats we expect
   // Everytime we add a new stat, make sure to update this test accordingly
   auto nvmStats = this->cache().getNvmCacheStatsMap();
