@@ -845,8 +845,10 @@ TEST(BlockCache, ResetInMemBuffers) {
   {
     testing::InSequence inSeq;
     EXPECT_CALL(*policy, track(RegionId{0}));
+    EXPECT_CALL(*policy, track(RegionId{1}));
     EXPECT_CALL(*policy, reset());
     EXPECT_CALL(*policy, track(RegionId{0}));
+    EXPECT_CALL(*policy, track(RegionId{1}));
   }
 
   auto proxy = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);

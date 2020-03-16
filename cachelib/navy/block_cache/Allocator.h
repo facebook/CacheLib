@@ -97,6 +97,10 @@ class Allocator {
   Allocator(const Allocator&) = delete;
   Allocator& operator=(const Allocator&) = delete;
 
+  // Releases region associated with the region allocator by flushing the
+  // in-memory buffers and resetting the ra.
+  void flushAndReleaseRegionFromRALocked(RegionAllocator& ra, bool flushAsync);
+
   // Allocates @size bytes in region allocator @ra. If succeed (enough space),
   // returns region descriptor, size and address.
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateWith(

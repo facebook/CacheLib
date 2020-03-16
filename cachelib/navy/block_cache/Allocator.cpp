@@ -97,17 +97,11 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     if (desc.isReady()) {
       return std::make_tuple(std::move(desc), size, addr);
     }
-    // Buffer has been fully allocated. So we can schedule an async flush
-    // now to flush when the all the in-mem writes have been completed
-    regionManager_.doFlush(rid, true /* async */);
-
-    // Region is full, so we reset region allocator and get ready to
-    // get a new region below.
     XDCHECK_EQ(OpenStatus::Error, desc.status());
-    ra.reset();
-    if (!region.isPinned()) {
-      regionManager_.track(rid);
-    }
+    // Buffer has been fully allocated. Release the region by scheduling an
+    // async flush to flush all in-mem writes, and reset the region allocator
+    // to get ready to get a new region
+    flushAndReleaseRegionFromRALocked(ra, true /* async */);
     rid = RegionId{};
   }
 
@@ -141,16 +135,25 @@ void Allocator::close(RegionDescriptor&& desc) {
   regionManager_.close(std::move(desc));
 }
 
+void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
+                                                  bool flushAsync) {
+  auto rid = ra.getAllocationRegion();
+  if (rid.valid()) {
+    regionManager_.doFlush(rid, flushAsync);
+    ra.reset();
+    if (!regionManager_.getRegion(rid).isPinned()) {
+      regionManager_.track(rid);
+    }
+  }
+}
+
 void Allocator::flush() {
   if (!regionManager_.doesBufferingWrites()) {
     return;
   }
   for (auto& ra : allocators_) {
     std::lock_guard<std::mutex> lock{ra.getLock()};
-    auto rid = ra.getAllocationRegion();
-    if (rid.valid()) {
-      regionManager_.doFlush(rid, false /*async */);
-    }
+    flushAndReleaseRegionFromRALocked(ra, false /* async */);
   }
 }
 
