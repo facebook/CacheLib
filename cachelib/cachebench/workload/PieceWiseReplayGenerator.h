@@ -1,6 +1,7 @@
 #pragma once
 
 #include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
+#include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/piecewise/GenericPieces.h"
 
 #include <folly/SpinLock.h>
@@ -9,27 +10,19 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-constexpr uint64_t kInvalidRequestId = 0;
 // physical grouping size (in Bytes) for contiguous pieces
 constexpr uint64_t kCachePieceGroupSize = 16777216;
 
 class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  public:
   explicit PieceWiseReplayGenerator(StressorConfig config)
-      : ReplayGeneratorBase(config) {
-    // Insert an invalid request to be used when getReq() fails.
-    activeReqM_.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(kInvalidRequestId),
-        std::forward_as_tuple(
-            config, kInvalidRequestId, "", 1, 1, folly::none, folly::none));
-  }
+      : ReplayGeneratorBase(config) {}
 
   virtual ~PieceWiseReplayGenerator() {
     XLOG(INFO) << "Summary count of samples in workload generator: "
-               << "# of prepopulate samples: " << prepopulateSamples_
-               << ", # of postpopulate samples: " << postpopulateSamples_
-               << ", # of invalid samples: " << invalidSamples_;
+               << "# of prepopulate samples: " << prepopulateSamples_.get()
+               << ", # of postpopulate samples: " << postpopulateSamples_.get()
+               << ", # of invalid samples: " << invalidSamples_.get();
   }
 
   // getReq generates the next request from the named trace file.
@@ -113,42 +106,49 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     // bytes only. getFullHitBytes and getFullHitBodyBytes only include cache
     // hits of the full object (ie, all pieces), while getHitBytes and
     // getHitBodyBytes includes partial hits as well.
-    double getBytes{0};
-    double getHitBytes{0};
-    double getFullHitBytes{0};
-    double getBodyBytes{0};
-    double getHitBodyBytes{0};
-    double getFullHitBodyBytes{0};
+    AtomicCounter getBytes{0};
+    AtomicCounter getHitBytes{0};
+    AtomicCounter getFullHitBytes{0};
+    AtomicCounter getBodyBytes{0};
+    AtomicCounter getHitBodyBytes{0};
+    AtomicCounter getFullHitBodyBytes{0};
 
     // Object wise stats: for an object get, objGetFullHits is incremented when
     // all pieces are cache hits, while objGetHits is incremented for partial
     // hits as well.
-    uint64_t objGets{0};
-    uint64_t objGetHits{0};
-    uint64_t objGetFullHits{0};
+    AtomicCounter objGets{0};
+    AtomicCounter objGetHits{0};
+    AtomicCounter objGetFullHits{0};
   };
+
+  static size_t getShard(uint64_t requestId) { return requestId % kShards; }
 
   std::atomic<uint64_t> nextReqId_{1};
 
-  // Lock to protect file operation, activeReqM_, and stats_
-  mutable folly::SpinLock lock_;
   using LockHolder = std::lock_guard<folly::SpinLock>;
+  static constexpr size_t kShards = 1024;
 
-  // Active requests that are in processing.
-  // Mapping from requestId to ReqWrapper.
-  std::unordered_map<uint64_t, ReqWrapper> activeReqM_;
+  // Active requests that are in processing. Mapping from requestId to
+  // ReqWrapper.
+  std::unordered_map<uint64_t, ReqWrapper> activeReqM_[kShards];
 
-  uint64_t invalidSamples_{0};
-  uint64_t prepopulateSamples_{0};
-  uint64_t postpopulateSamples_{0};
+  // Lock to activeReqM_
+  mutable folly::SpinLock activeReqLock_[kShards];
+
+  // mutex for reading from the trace file concurrently.
+  mutable folly::SpinLock getLineLock_;
+
+  AtomicCounter invalidSamples_{0};
+  AtomicCounter prepopulateSamples_{0};
+  AtomicCounter postpopulateSamples_{0};
 
   PieceWiseReplayGeneratorStats stats_;
 
   const Request& getReqFromTrace();
 
-  void updatePieceProcessing(
-      std::unordered_map<uint64_t, ReqWrapper>::iterator it,
-      OpResultType result);
+  // update the piece logic to the next operation and return true if the
+  // entire sequence is done.
+  bool updatePieceProcessing(ReqWrapper& req, OpResultType result);
 };
 } // namespace cachebench
 } // namespace cachelib
