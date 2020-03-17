@@ -208,6 +208,9 @@ class CacheStressor : public Stressor {
   }
 
   void populateItem(ItemHandle& handle) {
+    if (!config_.populateItem) {
+      return;
+    }
     assert(handle);
     assert(cache_->getSize(handle) <= 4 * 1024 * 1024);
     if (cache_->consistencyCheckEnabled()) {

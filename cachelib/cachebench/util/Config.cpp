@@ -16,6 +16,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, name);
 
   JSONSetVal(configJson, enableLookaside);
+  JSONSetVal(configJson, populateItem);
   JSONSetVal(configJson, samplingIntervalMs);
 
   JSONSetVal(configJson, prepopulateCache);

@@ -78,6 +78,11 @@ struct StressorConfig : public JSONConfig {
   // follow get misses with a set
   bool enableLookaside{false};
 
+  // if enabled, initializes  an item with random bytes. For consistency mode,
+  // this option is ignored since the consistency check fills in a sequence
+  // number into the item.
+  bool populateItem{true};
+
   // interval in milliseconds between taking a snapshot of the stats
   uint64_t samplingIntervalMs{1000};
 
