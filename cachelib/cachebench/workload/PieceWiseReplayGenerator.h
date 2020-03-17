@@ -3,6 +3,8 @@
 #include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
 #include "cachelib/common/piecewise/GenericPieces.h"
 
+#include <folly/SpinLock.h>
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -129,7 +131,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   std::atomic<uint64_t> nextReqId_{1};
 
   // Lock to protect file operation, activeReqM_, and stats_
-  mutable std::mutex lock_;
+  mutable folly::SpinLock lock_;
+  using LockHolder = std::lock_guard<folly::SpinLock>;
 
   // Active requests that are in processing.
   // Mapping from requestId to ReqWrapper.

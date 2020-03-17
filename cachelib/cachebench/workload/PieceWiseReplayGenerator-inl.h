@@ -12,10 +12,11 @@ namespace cachebench {
 
 const Request& PieceWiseReplayGenerator::getReq(
     uint8_t, std::mt19937&, std::optional<uint64_t> lastRequestId) {
-  {
-    std::lock_guard<std::mutex> lock(lock_);
-    if (lastRequestId && activeReqM_.count(*lastRequestId) > 0) {
-      return activeReqM_.find(*lastRequestId)->second.req;
+  if (lastRequestId) {
+    LockHolder lock(lock_);
+    auto it = activeReqM_.find(*lastRequestId);
+    if (it != activeReqM_.end()) {
+      return it->second.req;
     }
   }
 
@@ -25,17 +26,19 @@ const Request& PieceWiseReplayGenerator::getReq(
 OpType PieceWiseReplayGenerator::getOp(uint8_t,
                                        std::mt19937&,
                                        std::optional<uint64_t> requestId) {
-  std::lock_guard<std::mutex> lock(lock_);
-  if (requestId && activeReqM_.count(*requestId) > 0) {
-    return activeReqM_.find(*requestId)->second.op;
-  } else {
-    return OpType::kGet;
+  if (requestId) {
+    LockHolder lock(lock_);
+    auto it = activeReqM_.find(*requestId);
+    if (it != activeReqM_.end()) {
+      return it->second.op;
+    }
   }
+  return OpType::kGet;
 }
 
 void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
                                             OpResultType result) {
-  std::lock_guard<std::mutex> lock(lock_);
+  LockHolder lock(lock_);
   auto it = activeReqM_.find(requestId);
 
   if (it == activeReqM_.end()) {
@@ -158,7 +161,7 @@ void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
   PieceWiseReplayGeneratorStats curStats;
 
   {
-    std::lock_guard<std::mutex> lock(lock_);
+    LockHolder lock(lock_);
     curStats = stats_;
   }
 
@@ -206,7 +209,7 @@ void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
 
 const Request& PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
-  std::lock_guard<std::mutex> lock(lock_);
+  LockHolder lock(lock_);
   while (std::getline(infile_, line)) {
     try {
       std::vector<folly::StringPiece> fields;
