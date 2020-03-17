@@ -60,6 +60,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyCleanRegions);
   JSONSetVal(configJson, navyAdmissionWriteRateMB);
   JSONSetVal(configJson, navyMaxConcurrentInserts);
+  JSONSetVal(configJson, navyDataChecksum);
 
   JSONSetVal(configJson, lru2qHotPct);
   JSONSetVal(configJson, lru2qColdPct);

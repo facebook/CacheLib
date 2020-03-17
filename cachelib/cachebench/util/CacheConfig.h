@@ -149,6 +149,10 @@ struct CacheConfig : public JSONConfig {
   // maximum pending inserts before rejecting new inserts.
   uint32_t navyMaxConcurrentInserts{1000000};
 
+  // enables data checksuming for navy. metadata checksum is enabled by
+  // default
+  bool navyDataChecksum{true};
+
   // 2Q params
   size_t lru2qHotPct{20};
   size_t lru2qColdPct{20};

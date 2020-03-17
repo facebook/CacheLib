@@ -51,6 +51,7 @@ constexpr folly::StringPiece kReinsertionProbabilityThreshold{
 constexpr folly::StringPiece kNavyRequestOrderingShards{
     "dipper_navy_req_order_shards_power"};
 constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
+constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -242,7 +243,8 @@ void setupCacheProtos(const folly::dynamic& options,
     blockCache->setBlockSize(options[kBlockSize].getInt());
     blockCache->setLayout(
         metadataSize, blockCacheSize, options[kRegionSize].getInt());
-    blockCache->setChecksum(true);
+    bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
+    blockCache->setChecksum(dataChecksum);
     if (options[kLru].getBool()) {
       blockCache->setLruEvictionPolicy();
     } else {

@@ -90,6 +90,9 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_async_threads"] =
         config_.dipperAsyncThreads;
 
+    nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
+        config_.navyDataChecksum;
+
     if (config_.dipperNavyUseMemoryDevice) {
       // nothing to do here.
     } else if (!config_.dipperDevicePath.empty()) {
