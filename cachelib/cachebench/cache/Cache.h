@@ -71,8 +71,14 @@ class Cache {
     return inconsistencyCount_.load(std::memory_order_release);
   }
 
-  void* getMemory(const ItemHandle& item) const noexcept {
+  // Return the readonly memory
+  const void* getMemory(const ItemHandle& item) const noexcept {
     return item == nullptr ? nullptr : item->getMemory();
+  }
+
+  // Return the writable memory
+  void* getWritableMemory(const ItemHandle& item) const noexcept {
+    return item == nullptr ? nullptr : item->getWritableMemory();
   }
 
   uint32_t getSize(const ItemHandle& item) const noexcept {
@@ -88,7 +94,7 @@ class Cache {
 
   template <typename Handle>
   static void setUint64ToItem(const Handle& handle, uint64_t num) {
-    std::memcpy(handle->getMemory(), &num,
+    std::memcpy(handle->getWritableMemory(), &num,
                 std::min<size_t>(sizeof(num), handle->getSize()));
   }
 

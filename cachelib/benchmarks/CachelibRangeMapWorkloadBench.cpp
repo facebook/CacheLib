@@ -2,7 +2,8 @@
 //
 // Benchmark Results on a Devvm
 // ============================================================================
-// cachelib/benchmarks/CachelibRangeMapWorkloadBench.cpprelative  time/iter  iters/s
+// cachelib/benchmarks/CachelibRangeMapWorkloadBench.cpprelative  time/iter
+// iters/s
 // ============================================================================
 // cachelib_range_map                                          49.55ms    20.18
 // std_map_on_cachelib                               10.40%   476.42ms     2.10
@@ -51,7 +52,8 @@ void insertFrozenMap(StdMap& m, folly::StringPiece name) {
   apache::thrift::frozen::freezeToString(m, frozenContent);
   auto item = cache->allocate(poolId, name, frozenContent.size());
   XDCHECK(item);
-  std::memcpy(item->getMemory(), frozenContent.data(), frozenContent.size());
+  std::memcpy(item->getWritableMemory(), frozenContent.data(),
+              frozenContent.size());
   cache->insertOrReplace(item);
 }
 

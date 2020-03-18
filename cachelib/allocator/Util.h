@@ -42,7 +42,7 @@ bool insertIOBufInCache(T& cache,
     return false;
   }
 
-  std::memcpy(parent->getMemory(), bufs.data(), bufs.length());
+  std::memcpy(parent->getWritableMemory(), bufs.data(), bufs.length());
 
   if (bufs.isChained()) {
     auto itr = bufs.begin();
@@ -57,7 +57,7 @@ bool insertIOBufInCache(T& cache,
       // copy data
       // TODO (sathya) use the extra space in this allocation to sneak more
       // bits from the next IOBuf ?
-      std::memcpy(alloc->getMemory(), itr->data(), itr->size());
+      std::memcpy(alloc->getWritableMemory(), itr->data(), itr->size());
 
       cache.addChainedItem(parent, std::move(alloc));
       XDCHECK(parent->hasChainedItem());

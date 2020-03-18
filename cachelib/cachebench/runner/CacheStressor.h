@@ -216,7 +216,7 @@ class CacheStressor : public Stressor {
     if (cache_->consistencyCheckEnabled()) {
       cache_->setUint64ToItem(handle, folly::Random::rand64(rng));
     } else {
-      std::memcpy(cache_->getMemory(handle), hardcodedString_.data(),
+      std::memcpy(cache_->getWritableMemory(handle), hardcodedString_.data(),
                   cache_->getSize(handle));
     }
   }

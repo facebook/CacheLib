@@ -44,7 +44,7 @@ Cache<Allocator>::Cache(CacheConfig config,
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
     allocatorConfig.enableMovingOnSlabRelease(
         [](Item& oldItem, Item& newItem) {
-          std::memcpy(newItem.getMemory(), oldItem.getMemory(),
+          std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
                       oldItem.getSize());
         },
         movingSync);
