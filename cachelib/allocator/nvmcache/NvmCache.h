@@ -17,6 +17,7 @@
 #include "cachelib/allocator/nvmcache/WaitContext.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Utils.h"
+#include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {
@@ -60,6 +61,7 @@ class NvmCache {
       std::function<std::unique_ptr<folly::IOBuf>(folly::ByteRange buf)>;
   using DecryptionCB =
       std::function<std::unique_ptr<folly::IOBuf>(folly::ByteRange buf)>;
+  using DeviceEncryptor = navy::DeviceEncryptor;
 
   using ItemHandle = typename C::ItemHandle;
   using DeleteTombStoneGuard = typename TombStones::Guard;
@@ -83,6 +85,10 @@ class NvmCache {
     // specified or NOT specified.
     EncryptionCB encryptCb{};
     DecryptionCB decryptCb{};
+
+    // (Optional) This enables encryption on a device level. Everything we write
+    // into the nvm device will be encrypted.
+    std::shared_ptr<navy::DeviceEncryptor> deviceEncryptor{};
 
     // Whether or not store full alloc-class sizes into NVM device.
     // If true, only store the orignal size the user requested.
@@ -122,6 +128,30 @@ class NvmCache {
       }
 
       populateDefaultNavyOptions(dipperOptions);
+
+      if (deviceEncryptor) {
+        auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
+        auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
+        if (encryptionBlockSize != blockSize) {
+          throw std::invalid_argument(folly::sformat(
+              "Encryption enabled but the encryption block granularity is set "
+              "differently than the navy block size. ecryption block size: {}, "
+              "block size: {}",
+              encryptionBlockSize,
+              blockSize));
+        }
+        auto bucketSize =
+            dipperOptions["dipper_navy_bighash_bucket_size"].getInt();
+        if (encryptionBlockSize != bucketSize) {
+          throw std::invalid_argument(folly::sformat(
+              "Encryption enabled but the encryption block granularity is set "
+              "differently than the navy big hash bucket size. ecryption block "
+              "size: {}, bucket size: {}",
+              encryptionBlockSize,
+              bucketSize));
+        }
+      }
+
       return *this;
     }
   };

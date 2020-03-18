@@ -29,6 +29,8 @@ class CacheAllocatorConfig {
   using NvmCacheDecodeCb = typename CacheType::NvmCacheT::DecodeCB;
   using NvmCacheEncryptionCb = typename CacheType::NvmCacheT::EncryptionCB;
   using NvmCacheDecryptionCb = typename CacheType::NvmCacheT::DecryptionCB;
+  using NvmCacheDeviceEncryptor =
+      typename CacheType::NvmCacheT::DeviceEncryptor;
   using MoveCb = typename CacheType::MoveCb;
   using NvmCacheConfig = typename CacheType::NvmCacheT::Config;
   using Key = typename CacheType::Key;
@@ -85,8 +87,13 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setNvmCacheDecodeCallback(NvmCacheDecodeCb cb);
 
   // enable encryption support for NvmCache
-  CacheAllocatorConfig& enableNvmCacheEncryption(
+  CacheAllocatorConfig& enableNvmCacheEncryptionLegacy(
       NvmCacheEncryptionCb encryptCb, NvmCacheDecryptionCb decryptCb);
+
+  // enable encryption support for NvmCache. This will encrypt every byte
+  // written to the device.
+  CacheAllocatorConfig& enableNvmCacheEncryption(
+      std::shared_ptr<NvmCacheDeviceEncryptor> encryptor);
 
   // return if NvmCache encryption is enabled
   bool isNvmCacheEncryptionEnabled() const;
@@ -688,7 +695,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheDecodeCallback(
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheEncryption(
+CacheAllocatorConfig<T>&
+CacheAllocatorConfig<T>::enableNvmCacheEncryptionLegacy(
     NvmCacheEncryptionCb encryptCb, NvmCacheDecryptionCb decryptCb) {
   if (!nvmConfig) {
     throw std::invalid_argument(
@@ -701,8 +709,23 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheEncryption(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheEncryption(
+    std::shared_ptr<NvmCacheDeviceEncryptor> encryptor) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmCache encrytion/decrytion callbacks can not be set unless nvmcache "
+        "is used");
+  }
+  if (!encryptor) {
+    throw std::invalid_argument("Set a nullptr encryptor is NOT allowed");
+  }
+  nvmConfig->deviceEncryptor = std::move(encryptor);
+  return *this;
+}
+
+template <typename T>
 bool CacheAllocatorConfig<T>::isNvmCacheEncryptionEnabled() const {
-  return nvmConfig && nvmConfig->encryptCb && nvmConfig->decryptCb;
+  return nvmConfig && nvmConfig->deviceEncryptor;
 }
 
 template <typename T>

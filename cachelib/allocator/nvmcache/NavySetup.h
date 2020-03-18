@@ -8,7 +8,8 @@ namespace cachelib {
 std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
     const folly::dynamic& options,
     facebook::cachelib::navy::DestructorCallback cb,
-    bool truncate);
+    bool truncate,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor);
 
 void populateDefaultNavyOptions(folly::dynamic& options);
 

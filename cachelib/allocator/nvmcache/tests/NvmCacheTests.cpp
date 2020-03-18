@@ -21,6 +21,30 @@ std::string genRandomStr(size_t len) {
 }
 } // namespace
 
+TEST_F(NvmCacheTest, Config) {
+  struct MockEncryptor : public navy::DeviceEncryptor {
+   public:
+    uint32_t encryptionBlockSize() const override { return 5555; }
+    bool encrypt(folly::MutableByteRange, uint64_t) override { return true; }
+    bool decrypt(folly::MutableByteRange, uint64_t) override { return true; }
+  };
+
+  auto config = *this->getConfig().nvmConfig;
+  ASSERT_NO_THROW(config.validate());
+
+  config.dipperOptions["dipper_navy_block_size"] = 5555;
+  config.dipperOptions["dipper_navy_bighash_bucket_size"] = 5555;
+  config.deviceEncryptor = std::make_shared<MockEncryptor>();
+  ASSERT_NO_THROW(config.validate());
+
+  config.dipperOptions["dipper_navy_block_size"] = 4444;
+  ASSERT_THROW(config.validate(), std::invalid_argument);
+
+  config.dipperOptions["dipper_navy_block_size"] = 5555;
+  config.dipperOptions["dipper_navy_bighash_bucket_size"] = 4444;
+  ASSERT_THROW(config.validate(), std::invalid_argument);
+}
+
 TEST_F(NvmCacheTest, BasicGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
@@ -1280,7 +1304,7 @@ TEST_F(NvmCacheTest, Encryption) {
   config.configureChainedItems();
 
   const folly::StringPiece text = "helloworld";
-  config.enableNvmCacheEncryption(
+  config.enableNvmCacheEncryptionLegacy(
       [&](folly::ByteRange buf) -> std::unique_ptr<folly::IOBuf> {
         if (reinterpret_cast<const DipperItem*>(buf.data())->poolId() == 1) {
           return {};

@@ -183,7 +183,8 @@ NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
       [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {
         this->evictCB(k, v, e);
       },
-      truncate);
+      truncate,
+      std::move(config.deviceEncryptor));
 }
 
 template <typename C>

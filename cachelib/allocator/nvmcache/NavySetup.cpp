@@ -109,7 +109,8 @@ folly::File openCacheFile(const std::string& fileName,
 }
 
 std::unique_ptr<cachelib::navy::Device> createDevice(
-    const folly::dynamic& options) {
+    const folly::dynamic& options,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   const auto size = getNvmCacheSize(options);
   if (usesRaidFiles(options) && usesSimpleFile(options)) {
     throw std::invalid_argument("Can't use raid and simple file together");
@@ -150,11 +151,11 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         fdvec,
         options[kBlockSize].getInt(),
         options[kRegionSize].getInt(),
-        nullptr /* encryption */);
+        std::move(encryptor));
   }
 
   if (!usesSimpleFile(options)) {
-    return cachelib::navy::createMemoryDevice(size, nullptr /* encryption */);
+    return cachelib::navy::createMemoryDevice(size, std::move(encryptor));
   }
 
   // Create a simple file device
@@ -170,7 +171,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     throw;
   }
   return cachelib::navy::createDirectIoFileDevice(
-      f.release(), options[kBlockSize].getInt(), nullptr /* encryption */);
+      f.release(), options[kBlockSize].getInt(), std::move(encryptor));
 }
 
 void setupCacheProtos(const folly::dynamic& options,
@@ -336,9 +337,14 @@ uint64_t getNvmCacheSize(const folly::dynamic& options) {
 }
 
 std::unique_ptr<navy::AbstractCache> createNavyCache(
-    const folly::dynamic& options, navy::DestructorCallback cb, bool truncate) {
+    const folly::dynamic& options,
+    navy::DestructorCallback cb,
+    bool truncate,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
+  auto device = createDevice(options, std::move(encryptor));
+
   auto proto = cachelib::navy::createCacheProto();
-  proto->setDevice(createDevice(options));
+  proto->setDevice(std::move(device));
   proto->setJobScheduler(createJobScheduler(options));
   proto->setMaxConcurrentInserts(
       options.getDefault(kMaxConcurrentInserts, 1'000'000).getInt());
@@ -372,6 +378,7 @@ void populateDefaultNavyOptions(folly::dynamic& options) {
   defs[kLru] = true;
   defs[kReadBuffer] = 4096;
   defs[kTruncateFile] = false;
+  defs[kBigHashBucketSize] = 4096;
   defs[kBigHashBucketBFSize] = 8;
   defs[kRAIDPaths] = folly::dynamic::array;
 

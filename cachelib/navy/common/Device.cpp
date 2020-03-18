@@ -15,7 +15,7 @@ using IOOperation =
 // Device on Unix file descriptor
 class FileDevice final : public Device {
  public:
-  explicit FileDevice(int fd, std::shared_ptr<DeviceEncryptor> encryptor)
+  FileDevice(int fd, std::shared_ptr<DeviceEncryptor> encryptor)
       : Device{std::move(encryptor)}, fd_{fd} {}
   // Overload for a raw device
   FileDevice(int fd,
