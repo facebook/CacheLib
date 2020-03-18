@@ -29,6 +29,40 @@ TEST(Device, BytesWritten) {
   EXPECT_EQ(14, device.getBytesWritten());
 }
 
+TEST(Device, Encryptor) {
+  class MockEncryptor : public DeviceEncryptor {
+   public:
+    uint32_t encryptionBlockSize() const override { return 1; }
+
+    bool encrypt(folly::MutableByteRange /* value */, uint64_t salt) override {
+      return salt != 10;
+    }
+
+    bool decrypt(folly::MutableByteRange /* value */, uint64_t salt) override {
+      return salt != 15;
+    }
+  };
+
+  MockDevice device{100, 1, std::make_shared<MockEncryptor>()};
+
+  device.write(0, 9, "123456789");
+  device.write(10, 9, "123456789");
+  std::array<uint8_t, 9> value;
+  device.read(0, 9, value.data());
+  EXPECT_EQ(
+      "123456789",
+      (std::string{reinterpret_cast<const char*>(value.data()), value.size()}));
+  device.read(15, 9, value.data());
+
+  MockCounterVisitor visitor;
+  EXPECT_CALL(visitor, call(_, _)).WillRepeatedly(testing::Return());
+  EXPECT_CALL(visitor,
+              call(strPiece("navy_device_encryption_errors"), testing::Eq(1)));
+  EXPECT_CALL(visitor,
+              call(strPiece("navy_device_decryption_errors"), testing::Eq(1)));
+  device.getRealDeviceRef().getCounters(toCallback(visitor));
+}
+
 TEST(Device, Latency) {
   MockDevice device{0, 1};
   EXPECT_CALL(device, readImpl(0, 1, _))
@@ -76,8 +110,6 @@ TEST(Device, IOError) {
 TEST(Device, Stats) {
   MockDevice device{0, 1};
   MockCounterVisitor visitor;
-  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p50"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p90"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p99"), 0));
@@ -86,7 +118,6 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p99999"), 0));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_read_latency_us_p999999"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_read_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p100"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p50"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p90"), 0));
@@ -98,6 +129,11 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_write_latency_us_p999999"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p100"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_encryption_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
   device.getCounters(toCallback(visitor));
 }
 
@@ -121,7 +157,8 @@ TEST(Device, RAID0IO) {
     fdvec.push_back(f.release());
   }
 
-  auto device = createDirectIoRAID0Device(fdvec, blockSize, stripeSize);
+  auto device = createDirectIoRAID0Device(
+      fdvec, blockSize, stripeSize, nullptr /* encryption */);
 
   // Simple IO
   {

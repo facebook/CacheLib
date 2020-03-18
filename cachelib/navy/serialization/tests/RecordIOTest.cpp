@@ -74,7 +74,7 @@ TEST(RecordIO, MemoryDevice) {
   std::vector<uint32_t> testSizes = {16,   33,    731,    4095,  4097,
                                      8193, 15977, 121903, 693728};
   for (size_t i = 0; i < testSizes.size(); i++) {
-    auto dev = createMemoryDevice(10 * metadataSize);
+    auto dev = createMemoryDevice(10 * metadataSize, nullptr /* encryption */);
     auto testSize = testSizes[i];
     char testChar = testSize % 26 + 'A';
     uint32_t failedIter = 0;

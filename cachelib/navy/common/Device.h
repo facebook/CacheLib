@@ -40,9 +40,12 @@ class DeviceEncryptor {
 // Pointer ownership is not passed.
 class Device {
  public:
-  Device()
+  Device() : Device{nullptr} {}
+
+  explicit Device(std::shared_ptr<DeviceEncryptor> encryptor)
       : readLatencyEstimator_{std::chrono::seconds{kDefaultWindowSize}},
-        writeLatencyEstimator_{std::chrono::seconds{kDefaultWindowSize}} {}
+        writeLatencyEstimator_{std::chrono::seconds{kDefaultWindowSize}},
+        encryptor_{std::move(encryptor)} {}
 
   virtual ~Device() = default;
 
@@ -51,29 +54,10 @@ class Device {
   virtual Buffer makeIOBuffer(uint32_t size) = 0;
 
   // Copys data of size @size from @value to device @offset
-  bool write(uint64_t offset, uint32_t size, const void* value) {
-    auto timeBegin = getSteadyClock();
-    bool result = writeImpl(offset, size, value);
-    bytesWritten_.add(result * size);
-    if (!result) {
-      writeIOErrors_.inc();
-    }
-    writeLatencyEstimator_.addValue(
-        toMicros((getSteadyClock() - timeBegin)).count());
-    return result;
-  }
+  bool write(uint64_t offset, uint32_t size, const void* value);
 
   // Reads @size bytes from device at @deviceOffset and copys to @value
-  bool read(uint64_t offset, uint32_t size, void* value) {
-    auto timeBegin = getSteadyClock();
-    bool result = readImpl(offset, size, value);
-    readLatencyEstimator_.addValue(
-        toMicros(getSteadyClock() - timeBegin).count());
-    if (!result) {
-      readIOErrors_.inc();
-    }
-    return result;
-  }
+  bool read(uint64_t offset, uint32_t size, void* value);
 
   void flush() { flushImpl(); }
 
@@ -92,17 +76,26 @@ class Device {
   mutable AtomicCounter bytesWritten_;
   mutable AtomicCounter writeIOErrors_;
   mutable AtomicCounter readIOErrors_;
+  mutable AtomicCounter encryptionErrors_;
+  mutable AtomicCounter decryptionErrors_;
   mutable folly::SlidingWindowQuantileEstimator<> readLatencyEstimator_;
   mutable folly::SlidingWindowQuantileEstimator<> writeLatencyEstimator_;
+
+  std::shared_ptr<DeviceEncryptor> encryptor_;
 };
 
 // Takes ownership of the file descriptor
-std::unique_ptr<Device> createFileDevice(int fd);
-std::unique_ptr<Device> createDirectIoFileDevice(int fd, uint32_t blockSize);
-std::unique_ptr<Device> createDirectIoRAID0Device(std::vector<int>& fdvec,
-                                                  uint32_t blockSize,
-                                                  uint32_t stripeSize);
-std::unique_ptr<Device> createMemoryDevice(uint64_t size);
+std::unique_ptr<Device> createFileDevice(
+    int fd, std::shared_ptr<DeviceEncryptor> encryptor);
+std::unique_ptr<Device> createDirectIoFileDevice(
+    int fd, uint32_t blockSize, std::shared_ptr<DeviceEncryptor> encryptor);
+std::unique_ptr<Device> createDirectIoRAID0Device(
+    std::vector<int>& fdvec,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    std::shared_ptr<DeviceEncryptor> encryptor);
+std::unique_ptr<Device> createMemoryDevice(
+    uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor);
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

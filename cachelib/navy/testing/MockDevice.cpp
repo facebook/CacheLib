@@ -3,9 +3,13 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-MockDevice::MockDevice(uint32_t deviceSize, uint32_t blockSize)
+MockDevice::MockDevice(uint32_t deviceSize,
+                       uint32_t blockSize,
+                       std::shared_ptr<DeviceEncryptor> encryptor)
     : blockSize_{blockSize},
-      device_{deviceSize == 0 ? nullptr : createMemoryDevice(deviceSize)} {
+      device_{deviceSize == 0
+                  ? nullptr
+                  : createMemoryDevice(deviceSize, std::move(encryptor))} {
   ON_CALL(*this, readImpl(testing::_, testing::_, testing::_))
       .WillByDefault(
           testing::Invoke([this](uint64_t offset, uint32_t size, void* buffer) {

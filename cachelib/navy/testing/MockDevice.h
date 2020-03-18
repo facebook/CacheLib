@@ -14,7 +14,9 @@ class MockDevice : public Device {
  public:
   // If @deviceSize is 0, constructor doesn't create a memory device.
   // User should set it manually.
-  MockDevice(uint32_t deviceSize, uint32_t blockSize);
+  MockDevice(uint32_t deviceSize,
+             uint32_t blockSize,
+             std::shared_ptr<DeviceEncryptor> encryptor = nullptr);
 
   Buffer makeIOBuffer(uint32_t size) override {
     // Implementation expected to request blocks multiple of block size

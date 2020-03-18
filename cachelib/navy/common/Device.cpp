@@ -15,10 +15,16 @@ using IOOperation =
 // Device on Unix file descriptor
 class FileDevice final : public Device {
  public:
-  explicit FileDevice(int fd) : fd_{fd} {}
+  explicit FileDevice(int fd, std::shared_ptr<DeviceEncryptor> encryptor)
+      : Device{std::move(encryptor)}, fd_{fd} {}
   // Overload for a raw device
-  FileDevice(int fd, uint32_t blockSize)
-      : fd_{fd}, raw_{true}, blockSize_{blockSize} {
+  FileDevice(int fd,
+             uint32_t blockSize,
+             std::shared_ptr<DeviceEncryptor> encryptor)
+      : Device{std::move(encryptor)},
+        fd_{fd},
+        raw_{true},
+        blockSize_{blockSize} {
     XDCHECK_GT(blockSize_, 0u);
   }
   FileDevice(const FileDevice&) = delete;
@@ -75,8 +81,12 @@ class FileDevice final : public Device {
 // RAID0 device spanning multiple files
 class RAID0Device final : public Device {
  public:
-  RAID0Device(std::vector<int>& fdvec, uint32_t blockSize, uint32_t stripeSize)
-      : fdvec_{fdvec},
+  RAID0Device(std::vector<int>& fdvec,
+              uint32_t blockSize,
+              uint32_t stripeSize,
+              std::shared_ptr<DeviceEncryptor> encryptor)
+      : Device{std::move(encryptor)},
+        fdvec_{fdvec},
         raw_{true},
         blockSize_{blockSize},
         stripeSize_(stripeSize) {
@@ -178,8 +188,11 @@ class RAID0Device final : public Device {
 // Device on memory buffer
 class MemoryDevice final : public Device {
  public:
-  explicit MemoryDevice(uint64_t size)
-      : size_{size}, buffer_{std::make_unique<uint8_t[]>(size)} {}
+  explicit MemoryDevice(uint64_t size,
+                        std::shared_ptr<DeviceEncryptor> encryptor)
+      : Device{std::move(encryptor)},
+        size_{size},
+        buffer_{std::make_unique<uint8_t[]>(size)} {}
   MemoryDevice(const MemoryDevice&) = delete;
   MemoryDevice& operator=(const MemoryDevice&) = delete;
   ~MemoryDevice() override = default;
@@ -230,34 +243,89 @@ void visitQuantileEstimator(const CounterVisitor& visitor,
 
 constexpr int Device::kDefaultWindowSize;
 
+bool Device::write(uint64_t offset, uint32_t size, const void* value) {
+  if (encryptor_) {
+    // TODO: const_cast is hazardous!!!
+    //       update Device write API to take in a mutable buffer
+    auto* mutableValue = const_cast<void*>(value);
+    auto res = encryptor_->encrypt(
+        folly::MutableByteRange{reinterpret_cast<uint8_t*>(mutableValue), size},
+        offset);
+    if (!res) {
+      encryptionErrors_.inc();
+      return false;
+    }
+  }
+
+  auto timeBegin = getSteadyClock();
+  bool result = writeImpl(offset, size, value);
+  bytesWritten_.add(result * size);
+  if (!result) {
+    writeIOErrors_.inc();
+  }
+  writeLatencyEstimator_.addValue(
+      toMicros((getSteadyClock() - timeBegin)).count());
+  return result;
+}
+
+bool Device::read(uint64_t offset, uint32_t size, void* value) {
+  auto timeBegin = getSteadyClock();
+  bool result = readImpl(offset, size, value);
+  readLatencyEstimator_.addValue(
+      toMicros(getSteadyClock() - timeBegin).count());
+  if (!result) {
+    readIOErrors_.inc();
+    return result;
+  }
+
+  if (encryptor_) {
+    auto res = encryptor_->decrypt(
+        folly::MutableByteRange{reinterpret_cast<uint8_t*>(value), size},
+        offset);
+    if (!res) {
+      decryptionErrors_.inc();
+      return false;
+    }
+  }
+  return true;
+}
+
 void Device::getCounters(const CounterVisitor& visitor) const {
-  visitor("navy_device_bytes_written", getBytesWritten());
   visitQuantileEstimator(
       visitor, readLatencyEstimator_, "navy_device_read_latency");
   visitQuantileEstimator(
       visitor, writeLatencyEstimator_, "navy_device_write_latency");
+  visitor("navy_device_bytes_written", getBytesWritten());
   visitor("navy_device_read_errors", readIOErrors_.get());
   visitor("navy_device_write_errors", writeIOErrors_.get());
+  visitor("navy_device_encryption_errors", encryptionErrors_.get());
+  visitor("navy_device_decryption_errors", decryptionErrors_.get());
 }
 
-std::unique_ptr<Device> createFileDevice(int fd) {
-  return std::make_unique<FileDevice>(fd, 0);
+std::unique_ptr<Device> createFileDevice(
+    int fd, std::shared_ptr<DeviceEncryptor> encryptor) {
+  return std::make_unique<FileDevice>(fd, 0, std::move(encryptor));
 }
 
-std::unique_ptr<Device> createDirectIoFileDevice(int fd, uint32_t blockSize) {
+std::unique_ptr<Device> createDirectIoFileDevice(
+    int fd, uint32_t blockSize, std::shared_ptr<DeviceEncryptor> encryptor) {
   XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<FileDevice>(fd, blockSize);
+  return std::make_unique<FileDevice>(fd, blockSize, std::move(encryptor));
 }
 
-std::unique_ptr<Device> createDirectIoRAID0Device(std::vector<int>& fdvec,
-                                                  uint32_t blockSize,
-                                                  uint32_t stripeSize) {
+std::unique_ptr<Device> createDirectIoRAID0Device(
+    std::vector<int>& fdvec,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    std::shared_ptr<DeviceEncryptor> encryptor) {
   XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<RAID0Device>(fdvec, blockSize, stripeSize);
+  return std::make_unique<RAID0Device>(
+      fdvec, blockSize, stripeSize, std::move(encryptor));
 }
 
-std::unique_ptr<Device> createMemoryDevice(uint64_t size) {
-  return std::make_unique<MemoryDevice>(size);
+std::unique_ptr<Device> createMemoryDevice(
+    uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor) {
+  return std::make_unique<MemoryDevice>(size, std::move(encryptor));
 }
 } // namespace navy
 } // namespace cachelib

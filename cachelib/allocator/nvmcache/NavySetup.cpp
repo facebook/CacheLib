@@ -147,11 +147,14 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       fdvec.push_back(f.release());
     } // for
     return cachelib::navy::createDirectIoRAID0Device(
-        fdvec, options[kBlockSize].getInt(), options[kRegionSize].getInt());
+        fdvec,
+        options[kBlockSize].getInt(),
+        options[kRegionSize].getInt(),
+        nullptr /* encryption */);
   }
 
   if (!usesSimpleFile(options)) {
-    return cachelib::navy::createMemoryDevice(size);
+    return cachelib::navy::createMemoryDevice(size, nullptr /* encryption */);
   }
 
   // Create a simple file device
@@ -166,8 +169,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     XLOG(ERR) << "Exception in openCacheFile: " << e.what();
     throw;
   }
-  return cachelib::navy::createDirectIoFileDevice(f.release(),
-                                                  options[kBlockSize].getInt());
+  return cachelib::navy::createDirectIoFileDevice(
+      f.release(), options[kBlockSize].getInt(), nullptr /* encryption */);
 }
 
 void setupCacheProtos(const folly::dynamic& options,

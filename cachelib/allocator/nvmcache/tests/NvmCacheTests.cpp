@@ -1709,11 +1709,13 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_write_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p999999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p100"));
+  EXPECT_TRUE(cs("navy_device_encryption_errors"));
+  EXPECT_TRUE(cs("navy_device_decryption_errors"));
 
   // there should be no additional stats
   if (nvmStats.size()) {
     for (auto kv : nvmStats) {
-      XLOG(ERR) << kv.first << kv.second;
+      XLOG(ERR) << kv.first << ", " << kv.second;
     }
   }
   EXPECT_EQ(0, nvmStats.size());

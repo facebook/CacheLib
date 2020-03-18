@@ -131,7 +131,7 @@ Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,
   Driver::Config config;
   config.scheduler = std::move(ex);
   config.largeItemCache = std::move(bc);
-  config.device = createMemoryDevice(deviceSize);
+  config.device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   config.smallItemMaxSize = kSmallItemMaxSize;
   config.smallItemCache = std::move(si);
   config.metadataSize = metadataSize;

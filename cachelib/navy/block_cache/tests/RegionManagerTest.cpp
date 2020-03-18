@@ -24,7 +24,8 @@ TEST(RegionManager, ReclaimLruAsFifo) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
@@ -49,7 +50,8 @@ TEST(RegionManager, ReclaimLru) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
@@ -69,7 +71,8 @@ TEST(RegionManager, ReclaimLru) {
 TEST(RegionManager, Recovery) {
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   folly::IOBufQueue ioq;
   {
@@ -159,7 +162,8 @@ TEST(RegionManager, ReadWrite) {
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
 
-  auto device = createMemoryDevice(kBaseOffset + kNumRegions * kRegionSize);
+  auto device = createMemoryDevice(kBaseOffset + kNumRegions * kRegionSize,
+                                   nullptr /* encryption */);
   auto devicePtr = device.get();
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
@@ -198,7 +202,8 @@ TEST(RegionManager, ReadWrite) {
 TEST(RegionManager, RecoveryLRUOrder) {
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   folly::IOBufQueue ioq;
   {

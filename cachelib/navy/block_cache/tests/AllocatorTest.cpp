@@ -27,7 +27,8 @@ TEST(Allocator, RegionSync) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{1024, 2048};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
@@ -117,7 +118,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{1024, 2048};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
@@ -221,7 +223,8 @@ TEST(Allocator, PermanentAlloc) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
@@ -328,7 +331,8 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
@@ -438,7 +442,8 @@ TEST(Allocator, OutOfRegions) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
@@ -538,7 +543,8 @@ TEST(Allocator, OutOfRegionsInMemBuffers) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
@@ -647,7 +653,8 @@ TEST(Allocator, TestInMemBufferStates) {
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device = createMemoryDevice(kNumRegions * kRegionSize);
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{1024, 2048};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};

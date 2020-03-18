@@ -341,7 +341,7 @@ TEST(BigHash, CorruptBucket) {
 TEST(BigHash, Recovery) {
   BigHash::Config config;
   config.cacheSize = 16 * 1024;
-  auto device = createMemoryDevice(config.cacheSize);
+  auto device = createMemoryDevice(config.cacheSize, nullptr /* encryption */);
   config.device = device.get();
 
   BigHash bh(std::move(config));
@@ -368,7 +368,8 @@ TEST(BigHash, RecoveryBadConfig) {
     BigHash::Config config;
     config.cacheSize = 16 * 1024;
     config.bucketSize = 4 * 1024;
-    auto device = createMemoryDevice(config.cacheSize);
+    auto device =
+        createMemoryDevice(config.cacheSize, nullptr /* encryption */);
     config.device = device.get();
 
     BigHash bh(std::move(config));
@@ -386,7 +387,8 @@ TEST(BigHash, RecoveryBadConfig) {
     // Config is different. Number of buckets the same, but size is different.
     config.cacheSize = 32 * 1024;
     config.bucketSize = 8 * 1024;
-    auto device = createMemoryDevice(config.cacheSize);
+    auto device =
+        createMemoryDevice(config.cacheSize, nullptr /* encryption */);
     config.device = device.get();
 
     BigHash bh(std::move(config));
@@ -398,7 +400,7 @@ TEST(BigHash, RecoveryBadConfig) {
 TEST(BigHash, RecoveryCorruptedData) {
   BigHash::Config config;
   config.cacheSize = 1024 * 1024;
-  auto device = createMemoryDevice(config.cacheSize);
+  auto device = createMemoryDevice(config.cacheSize, nullptr /* encryption */);
   config.device = device.get();
 
   BigHash bh(std::move(config));
@@ -491,7 +493,7 @@ TEST(BigHash, BloomFilterRecoveryFail) {
 TEST(BigHash, BloomFilter) {
   BigHash::Config config;
   setLayout(config, 128, 2);
-  auto device = createMemoryDevice(config.cacheSize);
+  auto device = createMemoryDevice(config.cacheSize, nullptr /* encryption */);
   config.device = device.get();
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
