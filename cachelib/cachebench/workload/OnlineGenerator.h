@@ -32,10 +32,6 @@ class OnlineGenerator : public GeneratorBase {
       std::mt19937& gen,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
-  OpType getOp(uint8_t pid,
-               std::mt19937& gen,
-               std::optional<uint64_t> requestId = std::nullopt) override;
-
   const std::vector<std::string>& getAllKeys() const {
     throw std::logic_error("OnlineGenerator has no keys precomputed!");
   }

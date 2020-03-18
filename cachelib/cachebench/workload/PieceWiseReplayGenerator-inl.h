@@ -25,20 +25,6 @@ const Request& PieceWiseReplayGenerator::getReq(
   return getReqFromTrace();
 }
 
-OpType PieceWiseReplayGenerator::getOp(uint8_t,
-                                       std::mt19937&,
-                                       std::optional<uint64_t> requestId) {
-  if (requestId) {
-    auto shard = getShard(*requestId);
-    LockHolder lock(activeReqLock_[shard]);
-    auto it = activeReqM_[shard].find(*requestId);
-    if (it != activeReqM_[shard].end()) {
-      return it->second.op;
-    }
-  }
-  return OpType::kGet;
-}
-
 void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
                                             OpResultType result) {
   auto shard = getShard(requestId);
@@ -50,98 +36,99 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
     return;
   }
 
-  auto& req = it->second;
-  if (req.cachePieces) {
-    bool done = updatePieceProcessing(req, result);
+  ReqWrapper& rw = it->second;
+  if (rw.cachePieces) {
+    bool done = updatePieceProcessing(rw, result);
     if (done) {
       activeReqM_[shard].erase(it);
     }
-  } else {
-    if (result == OpResultType::kGetHit ||
-        result == OpResultType::kSetSuccess ||
-        result == OpResultType::kSetFailure) {
-      // Record the cache hit stats
-      if (!isPrepopulate() && result == OpResultType::kGetHit) {
-        // We trim the fetched bytes if it's range request
-        if (req.requestRange.getRequestRange()) {
-          auto range = req.requestRange.getRequestRange();
-          size_t rangeSize =
-              range->second ? (*range->second - range->first + 1)
-                            : (req.sizes[0] - req.headerSize - range->first);
-          stats_.getHitBytes.add(rangeSize + req.headerSize);
-          stats_.getFullHitBytes.add(rangeSize + req.headerSize);
-          stats_.getHitBodyBytes.add(rangeSize);
-          stats_.getFullHitBodyBytes.add(rangeSize);
-        } else {
-          stats_.getHitBytes.add(req.sizes[0]);
-          stats_.getFullHitBytes.add(req.sizes[0]);
-          stats_.getHitBodyBytes.add(req.sizes[0] - req.headerSize);
-          stats_.getFullHitBodyBytes.add(req.sizes[0] - req.headerSize);
-        }
+    return;
+  }
 
-        stats_.objGetHits.inc();
-        stats_.objGetFullHits.inc();
+  // Now we make sure the object is not stored in pieces, and it should be
+  // stored along with the response header
+  if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
+      result == OpResultType::kSetFailure) {
+    // Record the cache hit stats
+    if (!isPrepopulate() && result == OpResultType::kGetHit) {
+      // We trim the fetched bytes if it's range request
+      if (rw.requestRange.getRequestRange()) {
+        auto range = rw.requestRange.getRequestRange();
+        size_t rangeSize = range->second
+                               ? (*range->second - range->first + 1)
+                               : (rw.sizes[0] - rw.headerSize - range->first);
+        stats_.getHitBytes.add(rangeSize + rw.headerSize);
+        stats_.getFullHitBytes.add(rangeSize + rw.headerSize);
+        stats_.getHitBodyBytes.add(rangeSize);
+        stats_.getFullHitBodyBytes.add(rangeSize);
+      } else {
+        stats_.getHitBytes.add(rw.sizes[0]);
+        stats_.getFullHitBytes.add(rw.sizes[0]);
+        stats_.getHitBodyBytes.add(rw.sizes[0] - rw.headerSize);
+        stats_.getFullHitBodyBytes.add(rw.sizes[0] - rw.headerSize);
       }
-      activeReqM_[shard].erase(it);
-    } else if (result == OpResultType::kGetMiss) {
-      // Perform set operation next
-      req.op = OpType::kSet;
-    } else {
-      XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+      stats_.objGetHits.inc();
+      stats_.objGetFullHits.inc();
     }
+    activeReqM_[shard].erase(it);
+  } else if (result == OpResultType::kGetMiss) {
+    // Perform set operation next
+    rw.req.setOp(OpType::kSet);
+  } else {
+    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
   }
 }
 
-bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& req,
+bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
                                                      OpResultType result) {
   // we are only done if we got everything.
   bool done = false;
   if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
       result == OpResultType::kSetFailure) {
     // The piece index we need to fetch next
-    auto nextPieceIndex = req.cachePieces->getCurFetchingPieceIndex();
+    auto nextPieceIndex = rw.cachePieces->getCurFetchingPieceIndex();
 
     // Record the cache hit stats
     if (!isPrepopulate() && result == OpResultType::kGetHit) {
-      if (req.isHeaderPiece) {
-        stats_.getHitBytes.add(req.sizes[0]);
+      if (rw.isHeaderPiece) {
+        stats_.getHitBytes.add(rw.sizes[0]);
         stats_.objGetHits.inc();
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
         // getRequestedSizeOfAPiece() takes care of trim if needed
         auto requestedSize =
-            req.cachePieces->getRequestedSizeOfAPiece(resultPieceIndex);
+            rw.cachePieces->getRequestedSizeOfAPiece(resultPieceIndex);
         stats_.getHitBytes.add(requestedSize);
         stats_.getHitBodyBytes.add(requestedSize);
       }
     }
 
     // For pieces that are beyond pieces number limit, we don't store them
-    if (req.cachePieces->isPieceWithinBound(nextPieceIndex) &&
+    if (rw.cachePieces->isPieceWithinBound(nextPieceIndex) &&
         nextPieceIndex < config_.maxCachePieces) {
       // first set the correct key. Header piece has already been fetched,
       // this is now a body piece.
-      req.pieceKey = GenericPieces::createPieceKey(
-          req.baseKey, nextPieceIndex, req.cachePieces->getPiecesPerGroup());
+      rw.pieceKey = GenericPieces::createPieceKey(
+          rw.baseKey, nextPieceIndex, rw.cachePieces->getPiecesPerGroup());
 
       // Set the size of the piece
-      req.sizes[0] = req.cachePieces->getSizeOfAPiece(nextPieceIndex);
+      rw.sizes[0] = rw.cachePieces->getSizeOfAPiece(nextPieceIndex);
 
       if (result == OpResultType::kGetHit) {
-        req.op = OpType::kGet; // fetch next piece
+        rw.req.setOp(OpType::kGet); // fetch next piece
       } else {
         // Once we start to set a piece, we set all subsequent pieces
-        req.op = OpType::kSet;
+        rw.req.setOp(OpType::kSet);
       }
 
       // Update the piece fetch index
-      req.isHeaderPiece = false;
-      req.cachePieces->updateFetchIndex();
+      rw.isHeaderPiece = false;
+      rw.cachePieces->updateFetchIndex();
     } else {
       // Record the cache hit stats: we got all the pieces that were requested
       if (!isPrepopulate() && result == OpResultType::kGetHit) {
-        auto requestedSize = req.cachePieces->getRequestedSize();
-        stats_.getFullHitBytes.add(requestedSize + req.headerSize);
+        auto requestedSize = rw.cachePieces->getRequestedSize();
+        stats_.getFullHitBytes.add(requestedSize + rw.headerSize);
         stats_.getFullHitBodyBytes.add(requestedSize);
         stats_.objGetFullHits.inc();
       }
@@ -150,7 +137,7 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& req,
     }
   } else if (result == OpResultType::kGetMiss) {
     // Perform set operation next for the current piece
-    req.op = OpType::kSet;
+    rw.req.setOp(OpType::kSet);
   } else {
     XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
   }

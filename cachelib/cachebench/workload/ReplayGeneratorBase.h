@@ -50,7 +50,6 @@ class ReplayGeneratorBase : public GeneratorBase {
   std::ifstream infile_;
   std::vector<std::string> keys_;
   char infileBuffer_[kIfstreamBufferSize];
-  OpType op_;
 
   const StressorConfig config_;
 };

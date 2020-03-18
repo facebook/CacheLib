@@ -54,23 +54,21 @@ const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
                                                      std::optional<uint64_t>) {
   XDCHECK_LT(poolId, keyIndicesForPool_.size());
   XDCHECK_LT(poolId, keyGenForPool_.size());
+
   size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
   if (reqs_.count(std::this_thread::get_id()) == 0) {
     std::cout << "bad id " << std::this_thread::get_id() << std::endl;
   }
+
   Request& localReq(reqs_.at(std::this_thread::get_id()));
   generateKey(poolId, idx, localReq.key);
   auto sizes = generateSize(poolId, idx);
   localReq.sizeBegin = sizes->begin();
   localReq.sizeEnd = sizes->end();
+  auto op =
+      static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
+  localReq.setOp(op);
   return localReq;
-}
-
-template <typename Distribution>
-OpType OnlineGenerator<Distribution>::getOp(uint8_t pid,
-                                            std::mt19937& gen,
-                                            std::optional<uint64_t>) {
-  return static_cast<OpType>(workloadDist_[workloadIdx(pid)].sampleOpDist(gen));
 }
 
 template <typename Distribution>

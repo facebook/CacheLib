@@ -15,7 +15,7 @@ class ReplayGenerator : public ReplayGeneratorBase {
   explicit ReplayGenerator(StressorConfig config)
       : ReplayGeneratorBase(config),
         sizes_(1),
-        req_(key_, sizes_.begin(), sizes_.end()),
+        req_(key_, sizes_.begin(), sizes_.end(), OpType::kGet),
         repeats_(1) {}
 
   virtual ~ReplayGenerator() {}
@@ -32,10 +32,6 @@ class ReplayGenerator : public ReplayGeneratorBase {
       uint8_t,
       std::mt19937&,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
-
-  OpType getOp(uint8_t,
-               std::mt19937&,
-               std::optional<uint64_t> requestId = std::nullopt) override;
 
  private:
   // current outstanding key
@@ -61,17 +57,13 @@ const Request& ReplayGenerator::getReq(uint8_t,
     throw cachelib::cachebench::EndOfTrace("");
   }
   std::getline(infile_, token, ',');
-  // TODO optype parsing
-  op_ = OpType::kGet;
+
   std::getline(infile_, token, ',');
   sizes_[0] = std::stoi(token);
   std::getline(infile_, token);
   repeats_ = std::stoi(token);
+  // TODO optype parsing
   return req_;
-}
-
-OpType ReplayGenerator::getOp(uint8_t, std::mt19937&, std::optional<uint64_t>) {
-  return op_;
 }
 
 } // namespace cachebench

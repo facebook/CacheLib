@@ -44,8 +44,15 @@ struct Request {
   Request(std::string& k,
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
+          OpType o)
+      : key(k), sizeBegin(b), sizeEnd(e), op(o) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          OpType o,
           uint64_t reqId)
-      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId) {}
+      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId), op(o) {}
 
   static std::string getUniqueKey() {
     return std::string(folly::to<std::string>(
@@ -59,6 +66,9 @@ struct Request {
       : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd) {}
   Request& operator=(Request&& r) = delete;
 
+  OpType getOp() const noexcept { return op.load(); }
+  void setOp(OpType o) noexcept { op = o; }
+
   std::string& key;
   // size iterators in case this request is
   // deemed to be a chained item.
@@ -66,7 +76,10 @@ struct Request {
   std::vector<size_t>::iterator sizeBegin;
   std::vector<size_t>::iterator sizeEnd;
 
-  std::optional<uint64_t> requestId;
+  const std::optional<uint64_t> requestId;
+
+ private:
+  std::atomic<OpType> op{OpType::kGet};
 };
 
 } // namespace cachebench

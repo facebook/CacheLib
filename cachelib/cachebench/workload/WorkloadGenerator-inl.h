@@ -33,15 +33,12 @@ const Request& WorkloadGenerator<Distribution>::getReq(
     uint8_t poolId, std::mt19937& gen, std::optional<uint64_t>) {
   XDCHECK_LT(poolId, keyIndicesForPool_.size());
   XDCHECK_LT(poolId, keyGenForPool_.size());
-  size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
-  return reqs_[idx];
-}
 
-template <typename Distribution>
-OpType WorkloadGenerator<Distribution>::getOp(uint8_t pid,
-                                              std::mt19937& gen,
-                                              std::optional<uint64_t>) {
-  return static_cast<OpType>(workloadDist_[workloadIdx(pid)].sampleOpDist(gen));
+  size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
+  auto op =
+      static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
+  reqs_[idx].setOp(op);
+  return reqs_[idx];
 }
 
 template <typename Distribution>

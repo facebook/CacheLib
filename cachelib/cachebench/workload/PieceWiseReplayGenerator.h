@@ -35,27 +35,22 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
       std::mt19937&,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
-  OpType getOp(uint8_t,
-               std::mt19937&,
-               std::optional<uint64_t> requestId = std::nullopt) override;
-
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const override;
 
  private:
   struct ReqWrapper {
-    std::string baseKey;
-    std::string pieceKey;
-    std::vector<size_t> sizes;
-    Request req;
-    OpType op;
-    std::unique_ptr<GenericPieces> cachePieces;
-    RequestRange requestRange;
-    // whether current pieceKey is header piece or body piece
+    const std::string baseKey;
+    std::string pieceKey;                       // immutable
+    std::vector<size_t> sizes;                  // mutable
+    Request req;                                // immutable except the op field
+    std::unique_ptr<GenericPieces> cachePieces; // mutable
+    RequestRange requestRange;                  // immutable
+    // whether current pieceKey is header piece or body piece, mutable
     bool isHeaderPiece;
     // response header size
-    size_t headerSize;
+    const size_t headerSize;
 
     /**
      * @param fullContentSize: byte size of the full content
@@ -71,7 +66,11 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         : baseKey(GenericPieces::escapeCacheKey(key.str())),
           pieceKey(baseKey),
           sizes(1),
-          req(pieceKey, sizes.begin(), sizes.end(), reqId),
+          req(pieceKey,
+              sizes.begin(),
+              sizes.end(),
+              OpType::kGet, // Only support get from trace for now
+              reqId),
           requestRange(rangeStart, rangeEnd),
           headerSize(responseHeaderSize) {
       if (fullContentSize < config.cachePieceSize) {
@@ -93,9 +92,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         sizes[0] = responseHeaderSize;
         isHeaderPiece = true;
       }
-
-      // Only support get from trace for now
-      op = OpType::kGet;
     }
   };
 

@@ -123,8 +123,7 @@ class OutputStressor : public Stressor {
       const auto pid = opPoolDist(gen);
       while (true) {
         const auto& req = getReq(pid, gen);
-        const OpType op = wg_.getOp(pid, gen);
-        outfile_ << req.key << "," << static_cast<uint32_t>(op) << ","
+        outfile_ << req.key << "," << static_cast<uint32_t>(req.getOp()) << ","
                  << *(req.sizeBegin) << std::endl;
       }
     }

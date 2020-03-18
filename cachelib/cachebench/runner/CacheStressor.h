@@ -353,8 +353,8 @@ class CacheStressor : public Stressor {
 
         const auto pid = opPoolDist(gen);
         const Request& req(getReq(pid, gen, lastRequestId));
+        OpType op = req.getOp();
         const std::string* key = &(req.key);
-        const OpType op = wg_->getOp(pid, gen, req.requestId);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
