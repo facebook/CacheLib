@@ -54,6 +54,17 @@ void* CacheItem<CacheTrait>::getMemory() const noexcept {
 }
 
 template <typename CacheTrait>
+void* CacheItem<CacheTrait>::getWritableMemory() const {
+  // TODO (aw7): check AccessMode, throw exception if not writable
+  // TODO (aw7): add nvm evict logic
+  if (isChainedItem()) {
+    return asChainedItem().getMemory();
+  } else {
+    return alloc_.getMemory();
+  }
+}
+
+template <typename CacheTrait>
 uint32_t CacheItem<CacheTrait>::getOffsetForMemory() const noexcept {
   return reinterpret_cast<uintptr_t>(getMemory()) -
          reinterpret_cast<uintptr_t>(this);

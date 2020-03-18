@@ -216,15 +216,28 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Fetch the key corresponding to the allocation
   const Key getKey() const noexcept;
 
-  // Usable memory for this allocation. The caller is free to do whatever he
-  // wants with it and needs to ensure concurrency for access into this
-  // piece of memory.
+  // Readonly memory for this allocation.
+  // TODO (aw7): switch the return type to 'const void*' once all the callsites
+  // are modified to use getMemory() and getWritableMemory() correctly
   void* getMemory() const noexcept;
 
-  // Cast item's memory to a user type
+  // Writable memory for this allocation. The caller is free to do whatever he
+  // wants with it and needs to ensure thread sage for access into this
+  // piece of memory.
+  void* getWritableMemory() const;
+
+  // Cast item's readonly memory to a readonly user type
+  // TODO (aw7): switch the return type to 'const T*' once all the callsites
+  // are modified to use getMemory() and getWritableMemory() correctly
   template <typename T>
   T* getMemoryAs() const noexcept {
     return reinterpret_cast<T*>(getMemory());
+  }
+
+  // Cast item's writable memory to a writable user type
+  template <typename T>
+  T* getWritableMemoryAs() noexcept {
+    return reinterpret_cast<T*>(getWritableMemory());
   }
 
   // This is the size of the memory allocation requested by the user.
