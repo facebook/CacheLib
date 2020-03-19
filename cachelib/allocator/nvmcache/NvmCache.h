@@ -52,15 +52,7 @@ class NvmCache {
   // @param it      item we have inserted
   using MemoryInsertCB = std::function<void(const Item& it)>;
 
-  // Callback to decrypt/encrypt an item. The expecation is that this
-  // should never throw. Simply return nullptr in case of an error.
-  // @param buf  buffer of data to be (de)encrypted
-  // @return iobuf   buffer of (de)encrypted content
-  //                 nullptr if (de)encryption failed
-  using EncryptionCB =
-      std::function<std::unique_ptr<folly::IOBuf>(folly::ByteRange buf)>;
-  using DecryptionCB =
-      std::function<std::unique_ptr<folly::IOBuf>(folly::ByteRange buf)>;
+  // encrypt everything written to the device and decrypt on every read
   using DeviceEncryptor = navy::DeviceEncryptor;
 
   using ItemHandle = typename C::ItemHandle;
@@ -81,11 +73,6 @@ class NvmCache {
     // memory.
     MemoryInsertCB memoryInsertCb{};
 
-    // (Optional) encrypt/decrypt payload before writing to NVM. Both must be
-    // specified or NOT specified.
-    EncryptionCB encryptCb{};
-    DecryptionCB decryptCb{};
-
     // (Optional) This enables encryption on a device level. Everything we write
     // into the nvm device will be encrypted.
     std::shared_ptr<navy::DeviceEncryptor> deviceEncryptor{};
@@ -99,8 +86,7 @@ class NvmCache {
       configMap["encodeCB"] = encodeCb ? "set" : "empty";
       configMap["decodeCb"] = decodeCb ? "set" : "empty";
       configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
-      configMap["encryptCb"] = encryptCb ? "set" : "empty";
-      configMap["decryptCb"] = decryptCb ? "set" : "empty";
+      configMap["encryption"] = deviceEncryptor ? "set" : "empty";
       configMap["truncateItemToOriginalAllocSizeInNvm"] =
           truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
       for (auto& pair : dipperOptions.items()) {
@@ -118,13 +104,6 @@ class NvmCache {
       if (hasEncodeCb != hasDecodeCb) {
         throw std::invalid_argument(
             "Encode and Decode CBs must be both specified or both empty.");
-      }
-
-      const bool hasEncryptCb = !!encryptCb;
-      const bool hasDecryptCb = !!decryptCb;
-      if (hasEncryptCb != hasDecryptCb) {
-        throw std::invalid_argument(
-            "Encrypt and Decrypt CBs must be both specified or both empty.");
       }
 
       populateDefaultNavyOptions(dipperOptions);

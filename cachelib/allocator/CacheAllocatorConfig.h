@@ -27,8 +27,6 @@ class CacheAllocatorConfig {
   using NvmCacheFilterCb = typename CacheType::NvmCacheFilterCb;
   using NvmCacheEncodeCb = typename CacheType::NvmCacheT::EncodeCB;
   using NvmCacheDecodeCb = typename CacheType::NvmCacheT::DecodeCB;
-  using NvmCacheEncryptionCb = typename CacheType::NvmCacheT::EncryptionCB;
-  using NvmCacheDecryptionCb = typename CacheType::NvmCacheT::DecryptionCB;
   using NvmCacheDeviceEncryptor =
       typename CacheType::NvmCacheT::DeviceEncryptor;
   using MoveCb = typename CacheType::MoveCb;
@@ -85,10 +83,6 @@ class CacheAllocatorConfig {
 
   // enables decoding items before they get back into ram cache
   CacheAllocatorConfig& setNvmCacheDecodeCallback(NvmCacheDecodeCb cb);
-
-  // enable encryption support for NvmCache
-  CacheAllocatorConfig& enableNvmCacheEncryptionLegacy(
-      NvmCacheEncryptionCb encryptCb, NvmCacheDecryptionCb decryptCb);
 
   // enable encryption support for NvmCache. This will encrypt every byte
   // written to the device.
@@ -691,20 +685,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheDecodeCallback(
         "NvmCache filter callback can not be set unless nvmcache is used");
   }
   nvmConfig->decodeCb = std::move(cb);
-  return *this;
-}
-
-template <typename T>
-CacheAllocatorConfig<T>&
-CacheAllocatorConfig<T>::enableNvmCacheEncryptionLegacy(
-    NvmCacheEncryptionCb encryptCb, NvmCacheDecryptionCb decryptCb) {
-  if (!nvmConfig) {
-    throw std::invalid_argument(
-        "NvmCache encrytion/decrytion callbacks can not be set unless nvmcache "
-        "is used");
-  }
-  nvmConfig->encryptCb = encryptCb;
-  nvmConfig->decryptCb = decryptCb;
   return *this;
 }
 

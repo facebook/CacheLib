@@ -285,19 +285,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
-  folly::IOBuf iobuf;
-  if (config_.encryptCb) {
-    auto iobufRet = config_.encryptCb(folly::ByteRange{
-        reinterpret_cast<const uint8_t*>(dItem.get()), dItem->totalSize()});
-    if (!iobufRet) {
-      stats().numNvmEncryptionErrors.inc();
-      return;
-    }
-    iobuf = std::move(*iobufRet);
-  } else {
-    iobuf = toIOBuf(std::move(dItem));
-  }
-
+  auto iobuf = toIOBuf(std::move(dItem));
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
@@ -407,22 +395,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  const DipperItem* dItem = nullptr;
-  folly::IOBuf decryptedIoBuf;
-  if (config_.decryptCb) {
-    auto decryptedIoBufRet = config_.decryptCb({val.data(), val.size()});
-    if (!decryptedIoBufRet) {
-      stats().numNvmDecryptionErrors.inc();
-      stats().numNvmGetMiss.inc();
-      // instead of disabling navy, we enqueue a delete and return a miss.
-      remove(key);
-      return;
-    }
-    decryptedIoBuf = std::move(*decryptedIoBufRet);
-    dItem = reinterpret_cast<const DipperItem*>(decryptedIoBuf.data());
-  } else {
-    dItem = reinterpret_cast<const DipperItem*>(val.data());
-  }
+  const DipperItem* dItem = reinterpret_cast<const DipperItem*>(val.data());
 
   // this item expired. return a miss.
   if (dItem->isExpired()) {
