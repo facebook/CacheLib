@@ -7,8 +7,6 @@
 
     "numPools": 1,
     "poolSizes": [1.0],
-    "populateItem": false,
-
 
     "dipperSizeMB": 48838,
     "dipperBackend": "navy_dipper",
@@ -40,6 +38,7 @@
       "generator": "piecewise-replay",
       "numOps": 240000000,
       "numThreads": 24,
+      "populateItem": false,
       "prepopulateCache": false,
       "traceFileName": "change_this_appropriately.csv"
     }
