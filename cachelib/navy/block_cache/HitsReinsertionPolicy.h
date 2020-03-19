@@ -63,23 +63,19 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
 
   mutable AtomicCounter itemsEvictedWithNoAccess_;
 
-  mutable folly::SlidingWindowQuantileEstimator<> hitsEstimator_{
-      kQuantileWindowSize};
-  mutable folly::SlidingWindowQuantileEstimator<> reinsertionEstimator_{
-      kQuantileWindowSize};
-  mutable folly::SlidingWindowQuantileEstimator<> hitsOnReinsertionEstimator_{
+  mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
+  mutable util::PercentileStats reinsertionEstimator_{kQuantileWindowSize};
+  mutable util::PercentileStats hitsOnReinsertionEstimator_{
       kQuantileWindowSize};
 
   // Track up to kReinsertionWindows-worth's hits. This tells us how items'
   // popularity decay over time.
-  mutable std::array<folly::SlidingWindowQuantileEstimator<>,
-                     kReinsertionWindows>
-      hitsDecayEstimator_{
-          folly::SlidingWindowQuantileEstimator<>{kQuantileWindowSize},
-          folly::SlidingWindowQuantileEstimator<>{kQuantileWindowSize},
-          folly::SlidingWindowQuantileEstimator<>{kQuantileWindowSize},
-          folly::SlidingWindowQuantileEstimator<>{kQuantileWindowSize},
-          folly::SlidingWindowQuantileEstimator<>{kQuantileWindowSize}};
+  mutable std::array<util::PercentileStats, kReinsertionWindows>
+      hitsDecayEstimator_{util::PercentileStats{kQuantileWindowSize},
+                          util::PercentileStats{kQuantileWindowSize},
+                          util::PercentileStats{kQuantileWindowSize},
+                          util::PercentileStats{kQuantileWindowSize},
+                          util::PercentileStats{kQuantileWindowSize}};
 };
 } // namespace navy
 } // namespace cachelib

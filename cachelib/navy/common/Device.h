@@ -4,6 +4,7 @@
 #include <folly/stats/QuantileEstimator.h>
 
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/common/Utils.h"
@@ -43,9 +44,7 @@ class Device {
   Device() : Device{nullptr} {}
 
   explicit Device(std::shared_ptr<DeviceEncryptor> encryptor)
-      : readLatencyEstimator_{std::chrono::seconds{kDefaultWindowSize}},
-        writeLatencyEstimator_{std::chrono::seconds{kDefaultWindowSize}},
-        encryptor_{std::move(encryptor)} {}
+      : encryptor_{std::move(encryptor)} {}
 
   virtual ~Device() = default;
 
@@ -71,15 +70,14 @@ class Device {
   virtual void flushImpl() = 0;
 
  private:
-  static constexpr int kDefaultWindowSize = 1;
-
   mutable AtomicCounter bytesWritten_;
   mutable AtomicCounter writeIOErrors_;
   mutable AtomicCounter readIOErrors_;
   mutable AtomicCounter encryptionErrors_;
   mutable AtomicCounter decryptionErrors_;
-  mutable folly::SlidingWindowQuantileEstimator<> readLatencyEstimator_;
-  mutable folly::SlidingWindowQuantileEstimator<> writeLatencyEstimator_;
+
+  mutable util::PercentileStats readLatencyEstimator_;
+  mutable util::PercentileStats writeLatencyEstimator_;
 
   std::shared_ptr<DeviceEncryptor> encryptor_;
 };

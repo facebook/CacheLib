@@ -110,17 +110,32 @@ TEST(Device, IOError) {
 TEST(Device, Stats) {
   MockDevice device{0, 1};
   MockCounterVisitor visitor;
+  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_min"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p5"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p10"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p25"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p50"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p75"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p90"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p95"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p99"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p999"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p9999"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p99999"), 0));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_read_latency_us_p999999"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p100"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_max"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_min"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p5"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p10"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p25"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p50"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p75"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p90"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p95"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p99"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p999"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p9999"), 0));
@@ -128,12 +143,9 @@ TEST(Device, Stats) {
               call(strPiece("navy_device_write_latency_us_p99999"), 0));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_write_latency_us_p999999"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p100"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_read_errors"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_encryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
   device.getCounters(toCallback(visitor));
 }
 

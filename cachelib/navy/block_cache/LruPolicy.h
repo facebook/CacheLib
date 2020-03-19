@@ -8,6 +8,7 @@
 
 #include <folly/stats/QuantileEstimator.h>
 
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -75,9 +76,9 @@ class LruPolicy final : public EvictionPolicy {
   mutable std::mutex mutex_;
 
   // various counters that are populated when we evict a region.
-  mutable folly::SlidingWindowQuantileEstimator<> secSinceInsertionEstimator_;
-  mutable folly::SlidingWindowQuantileEstimator<> secSinceAccessEstimator_;
-  mutable folly::SlidingWindowQuantileEstimator<> hitsEstimator_;
+  mutable util::PercentileStats secSinceInsertionEstimator_;
+  mutable util::PercentileStats secSinceAccessEstimator_;
+  mutable util::PercentileStats hitsEstimator_;
 };
 } // namespace navy
 } // namespace cachelib

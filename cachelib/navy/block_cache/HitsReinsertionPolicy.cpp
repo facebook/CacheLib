@@ -50,12 +50,12 @@ bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
   auto& ka = itr->second;
   const size_t hitsIdx = std::min(static_cast<size_t>(ka.numReinsertions),
                                   hitsDecayEstimator_.size() - 1);
-  hitsDecayEstimator_[hitsIdx].addValue(ka.currHits);
+  hitsDecayEstimator_[hitsIdx].trackValue(ka.currHits);
 
   if (ka.currHits < hitsThreshold_) {
     return false;
   }
-  hitsOnReinsertionEstimator_.addValue(ka.currHits);
+  hitsOnReinsertionEstimator_.trackValue(ka.currHits);
   ka.currHits = 0;
   ka.numReinsertions = safeInc(ka.numReinsertions);
   return true;
@@ -67,8 +67,8 @@ void HitsReinsertionPolicy::remove(HashedKey hk) {
   auto itr = accessMaps_[idx].find(hk.keyHash());
   if (itr != accessMaps_[idx].end()) {
     auto& ka = itr->second;
-    hitsEstimator_.addValue(ka.totalHits);
-    reinsertionEstimator_.addValue(ka.numReinsertions);
+    hitsEstimator_.trackValue(ka.totalHits);
+    reinsertionEstimator_.trackValue(ka.numReinsertions);
     if (ka.totalHits == 0) {
       itemsEvictedWithNoAccess_.inc();
     }
@@ -132,29 +132,15 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
 }
 
 void HitsReinsertionPolicy::getCounters(const CounterVisitor& visitor) const {
-  auto visitQuantileEstimator = [](const CounterVisitor& v,
-                                   folly::SlidingWindowQuantileEstimator<>& qe,
-                                   folly::StringPiece prefix) {
-    qe.flush();
-    static const std::array<const char*, 8> kStatNames{
-        "p5", "p10", "p25", "p50", "p75", "p90", "p95", "p99"};
-    static const std::array<double, 8> kQuantiles{0.05, 0.1, 0.25, 0.5,
-                                                  0.75, 0.9, 0.95, 0.99};
-    auto q = qe.estimateQuantiles(
-        folly::Range<const double*>(kQuantiles.begin(), kQuantiles.end()));
-    assert(q.quantiles.size() == kQuantiles.size());
-    for (size_t i = 0; i < kQuantiles.size(); i++) {
-      auto p = folly::sformat("navy_bc_item_{}_{}", prefix, kStatNames[i]);
-      v(p, q.quantiles[i].second);
-    }
-  };
-  visitQuantileEstimator(visitor, hitsEstimator_, "hits");
-  visitQuantileEstimator(visitor, reinsertionEstimator_, "reinsertions");
-  visitQuantileEstimator(
-      visitor, hitsOnReinsertionEstimator_, "reinsertion_hits");
+  hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_{}_{}", "hits");
+  reinsertionEstimator_.visitQuantileEstimator(
+      visitor, "navy_bc_item_{}_{}", "reinsertions");
+  hitsOnReinsertionEstimator_.visitQuantileEstimator(
+      visitor, "navy_bc_item_{}_{}", "reinsertion_hits");
   for (size_t i = 0; i < hitsDecayEstimator_.size(); i++) {
     auto name = folly::sformat("reinsertion_hits_{}", i);
-    visitQuantileEstimator(visitor, hitsDecayEstimator_[i], name);
+    hitsDecayEstimator_[i].visitQuantileEstimator(
+        visitor, "navy_bc_item_{}_{}", name);
   }
   visitor("navy_bc_item_evicted_with_no_access",
           itemsEvictedWithNoAccess_.get());

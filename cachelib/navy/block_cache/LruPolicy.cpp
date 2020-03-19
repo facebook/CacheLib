@@ -68,9 +68,9 @@ RegionId LruPolicy::evict() {
     unlink(tail_);
   }
 
-  secSinceInsertionEstimator_.addValue(secsSinceCreate);
-  secSinceAccessEstimator_.addValue(secsSinceAccess);
-  hitsEstimator_.addValue(hits);
+  secSinceInsertionEstimator_.trackValue(secsSinceCreate);
+  secSinceAccessEstimator_.trackValue(secsSinceAccess);
+  hitsEstimator_.trackValue(hits);
   return RegionId{retRegion};
 }
 
@@ -165,30 +165,13 @@ void LruPolicy::dumpList(const char* tag,
   XLOG(ERR, buf);
 }
 
-namespace {
-void visitQuantileEstimator(const CounterVisitor& visitor,
-                            folly::SlidingWindowQuantileEstimator<>& qe,
-                            folly::StringPiece name) {
-  qe.flush();
-  static const std::array<const char*, 6> kQuantileNames{"min", "p5",  "p50",
-                                                         "p90", "p99", "max"};
-  static const std::array<double, 6> kQuantiles{0, 0.05, 0.5, 0.9, 0.99, 1.0};
-  auto q = qe.estimateQuantiles(
-      folly::Range<const double*>(kQuantiles.begin(), kQuantiles.end()));
-  XDCHECK_EQ(q.quantiles.size(), kQuantiles.size());
-  for (size_t i = 0; i < kQuantiles.size(); i++) {
-    auto p = folly::sformat("{}_{}", name, kQuantileNames[i]);
-    visitor(p, q.quantiles[i].second);
-  }
-}
-} // namespace
-
 void LruPolicy::getCounters(const CounterVisitor& v) const {
-  visitQuantileEstimator(
-      v, secSinceInsertionEstimator_, "navy_bc_lru_secs_since_insertion");
-  visitQuantileEstimator(
-      v, secSinceAccessEstimator_, "navy_bc_lru_secs_since_access");
-  visitQuantileEstimator(v, hitsEstimator_, "navy_bc_lru_region_hits_estimate");
+  secSinceInsertionEstimator_.visitQuantileEstimator(
+      v, "{}_{}", "navy_bc_lru_secs_since_insertion");
+  secSinceAccessEstimator_.visitQuantileEstimator(
+      v, "{}_{}", "navy_bc_lru_secs_since_access");
+  hitsEstimator_.visitQuantileEstimator(
+      v, "{}_{}", "navy_bc_lru_region_hits_estimate");
 }
 } // namespace navy
 } // namespace cachelib

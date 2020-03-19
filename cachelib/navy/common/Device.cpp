@@ -147,8 +147,8 @@ class RAID0Device final : public Device {
                         allowedIOSize,
                         stripeStartOffset + ioOffsetInStripe);
       if (retSize != allowedIOSize) {
-        reportIOError(
-            opName, offset, size, stripe, ioOffsetInStripe, allowedIOSize);
+        reportIOError(opName, offset, size, stripe, ioOffsetInStripe,
+                      allowedIOSize);
         return false;
       }
 
@@ -222,26 +222,7 @@ class MemoryDevice final : public Device {
   const uint64_t size_{};
   std::unique_ptr<uint8_t[]> buffer_;
 };
-
-void visitQuantileEstimator(const CounterVisitor& visitor,
-                            folly::SlidingWindowQuantileEstimator<>& qe,
-                            folly::StringPiece prefix) {
-  qe.flush();
-  static const std::array<const char*, 8> kStatNames{
-      "p50", "p90", "p99", "p999", "p9999", "p99999", "p999999", "p100"};
-  static const std::array<double, 8> kQuantiles{
-      0.5, 0.9, 0.99, 0.999, 0.9999, 0.99999, 0.999999, 1.0};
-  auto q = qe.estimateQuantiles(
-      folly::Range<const double*>(kQuantiles.begin(), kQuantiles.end()));
-  XDCHECK_EQ(q.quantiles.size(), kQuantiles.size());
-  for (size_t i = 0; i < kQuantiles.size(); i++) {
-    auto p = folly::sformat("{}_us_{}", prefix, kStatNames[i]);
-    visitor(p, q.quantiles[i].second);
-  }
-}
 } // namespace
-
-constexpr int Device::kDefaultWindowSize;
 
 bool Device::write(uint64_t offset, uint32_t size, const void* value) {
   if (encryptor_) {
@@ -263,7 +244,7 @@ bool Device::write(uint64_t offset, uint32_t size, const void* value) {
   if (!result) {
     writeIOErrors_.inc();
   }
-  writeLatencyEstimator_.addValue(
+  writeLatencyEstimator_.trackValue(
       toMicros((getSteadyClock() - timeBegin)).count());
   return result;
 }
@@ -271,7 +252,7 @@ bool Device::write(uint64_t offset, uint32_t size, const void* value) {
 bool Device::read(uint64_t offset, uint32_t size, void* value) {
   auto timeBegin = getSteadyClock();
   bool result = readImpl(offset, size, value);
-  readLatencyEstimator_.addValue(
+  readLatencyEstimator_.trackValue(
       toMicros(getSteadyClock() - timeBegin).count());
   if (!result) {
     readIOErrors_.inc();
@@ -291,11 +272,11 @@ bool Device::read(uint64_t offset, uint32_t size, void* value) {
 }
 
 void Device::getCounters(const CounterVisitor& visitor) const {
-  visitQuantileEstimator(
-      visitor, readLatencyEstimator_, "navy_device_read_latency");
-  visitQuantileEstimator(
-      visitor, writeLatencyEstimator_, "navy_device_write_latency");
   visitor("navy_device_bytes_written", getBytesWritten());
+  readLatencyEstimator_.visitQuantileEstimator(visitor, "{}_us_{}",
+                                               "navy_device_read_latency");
+  writeLatencyEstimator_.visitQuantileEstimator(visitor, "{}_us_{}",
+                                                "navy_device_write_latency");
   visitor("navy_device_read_errors", readIOErrors_.get());
   visitor("navy_device_write_errors", writeIOErrors_.get());
   visitor("navy_device_encryption_errors", encryptionErrors_.get());
@@ -319,8 +300,8 @@ std::unique_ptr<Device> createDirectIoRAID0Device(
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor) {
   XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<RAID0Device>(
-      fdvec, blockSize, stripeSize, std::move(encryptor));
+  return std::make_unique<RAID0Device>(fdvec, blockSize, stripeSize,
+                                       std::move(encryptor));
 }
 
 std::unique_ptr<Device> createMemoryDevice(
