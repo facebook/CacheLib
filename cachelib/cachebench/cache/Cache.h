@@ -7,6 +7,7 @@
 #define CACHEBENCH_FB_ENV
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/facebook/admin/CacheAdmin.h"
+#include "cachelib/facebook/encryption/Encryption.h"
 #endif
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"

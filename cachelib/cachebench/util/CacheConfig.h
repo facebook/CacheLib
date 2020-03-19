@@ -160,6 +160,9 @@ struct CacheConfig : public JSONConfig {
   // by default, only store the size requested by the user into nvm cache
   bool truncateItemToOriginalAllocSizeInNvm = false;
 
+  // by default, we do not encrypt content in Navy
+  bool navyEncryption = false;
+
   explicit CacheConfig(const folly::dynamic& configJson);
 
   CacheConfig() {}

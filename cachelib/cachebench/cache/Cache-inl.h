@@ -189,6 +189,13 @@ Cache<Allocator>::Cache(CacheConfig config,
                << folly::toPrettyJson(nvmConfig.dipperOptions);
     allocatorConfig.enableNvmCache(nvmConfig);
 
+#ifdef CACHEBENCH_FB_ENV
+    if (config_.navyEncryption) {
+      allocatorConfig.enableNvmCacheEncryption(
+          std::make_shared<EncryptionHelper>(config_.dipperNavyBlock));
+    }
+#endif
+
     usesNvm_ = true;
   }
 
