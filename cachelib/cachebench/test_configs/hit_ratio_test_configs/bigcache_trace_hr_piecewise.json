@@ -7,6 +7,8 @@
 
     "numPools": 1,
     "poolSizes": [1.0],
+    "populateItem": false,
+
 
     "dipperSizeMB": 48838,
     "dipperBackend": "navy_dipper",
@@ -16,15 +18,16 @@
     "dipperNavyBlock": 4096,
     "dipperNavyUseRegionLru": false,
     "dipperNavySizeClasses": [],
-    "dipperNavyReqOrderShardsPower": 20,
+    "dipperNavyReqOrderShardsPower": 0,
     "dipperNavyBigHashSizePct": 0,
     "dipperNavyUseStackAllocation": true,
-    "dipperNavyStackAllocReadBufSizeKB": 128,
+    "dipperNavyStackAllocReadBufSizeKB": 4,
     "navyHitsReinsertionThreshold": 1,
     "navyProbabilityReinsertionThreshold": 0,
-    "navyReaderThreads": 256,
-    "navyWriterThreads": 32,
-    "navyCleanRegions": 30,
+    "navyReaderThreads": 36,
+    "navyWriterThreads": 36,
+    "navyCleanRegions": 60,
+    "navyDataChecksum": false,
 
     "lru2qHotPct": 20,
     "lru2qColdPct": 20
@@ -35,9 +38,9 @@
 
       "enableLookaside": false,
       "generator": "piecewise-replay",
-      "numOps": 1000000000,
-      "numThreads": 32,
-      "prepopulateCache": true,
-      "traceFileName": "bigcache.csv"
+      "numOps": 240000000,
+      "numThreads": 24,
+      "prepopulateCache": false,
+      "traceFileName": "change_this_appropriately.csv"
     }
 }
