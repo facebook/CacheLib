@@ -47,15 +47,14 @@ RegionDescriptor Region::openForRead() {
 // by calling the callBack function that is expected to write the buffer to
 // underlying device. If there are active writers, the caller is expected
 // to call this function again.
-bool Region::flushBuffer(
-    folly::Function<bool(RelAddress, BufferView)>&& callBack) {
+bool Region::flushBuffer(folly::Function<bool(RelAddress, Buffer)> callBack) {
   std::unique_lock<std::mutex> lock{lock_};
   if (activeWriters_ != 0) {
     return false;
   }
   if (!isFlushedLocked()) {
     lock.unlock();
-    if (callBack(RelAddress{regionId_, 0}, buffer_->view())) {
+    if (callBack(RelAddress{regionId_, 0}, buffer_->copy())) {
       lock.lock();
       flags_ |= kFlushed;
       return true;

@@ -235,7 +235,7 @@ Status BigHash::insert(HashedKey hk,
       }
     }
 
-    const auto res = writeBucket(bid, buffer.mutableView());
+    const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
@@ -322,7 +322,7 @@ Status BigHash::remove(HashedKey hk) {
       bfRebuild(bid, bucket);
     }
 
-    const auto res = writeBucket(bid, buffer.mutableView());
+    const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
@@ -404,11 +404,10 @@ Buffer BigHash::readBucket(BucketId bid) {
   return buffer;
 }
 
-bool BigHash::writeBucket(BucketId bid, MutableBufferView mutableView) {
-  auto* bucket = reinterpret_cast<Bucket*>(mutableView.data());
-  bucket->setChecksum(Bucket::computeChecksum(toView(mutableView)));
-  return device_.write(
-      getBucketOffset(bid), mutableView.size(), mutableView.data());
+bool BigHash::writeBucket(BucketId bid, Buffer buffer) {
+  auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
+  bucket->setChecksum(Bucket::computeChecksum(buffer.view()));
+  return device_.write(getBucketOffset(bid), std::move(buffer));
 }
 } // namespace navy
 } // namespace cachelib

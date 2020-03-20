@@ -149,7 +149,7 @@ class Region {
   // The callBack function is expected to write to the underlying device.
   // The callback function should return true if successfully flushed the
   // buffer, otherwise it should return false.
-  bool flushBuffer(folly::Function<bool(RelAddress, BufferView)>&& callBack);
+  bool flushBuffer(folly::Function<bool(RelAddress, Buffer)> callBack);
 
   void setPendingFlush() {
     std::lock_guard l{lock_};

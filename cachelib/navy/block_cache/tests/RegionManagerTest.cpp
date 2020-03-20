@@ -187,7 +187,7 @@ TEST(RegionManager, ReadWrite) {
   auto desc =
       RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, RegionId{1});
   auto buf = bg.gen(kSize);
-  EXPECT_TRUE(rm->write(addr, buf.view()));
+  EXPECT_TRUE(rm->write(addr, buf.copy()));
   Buffer bufRead{kSize};
   EXPECT_TRUE(rm->read(desc, addr, bufRead.mutableView()));
   EXPECT_EQ(buf.view(), bufRead.view());

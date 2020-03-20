@@ -20,10 +20,12 @@ MockDevice::MockDevice(uint32_t deviceSize,
 
   ON_CALL(*this, writeImpl(testing::_, testing::_, testing::_))
       .WillByDefault(testing::Invoke(
-          [this](uint64_t offset, uint32_t size, const void* buffer) {
+          [this](uint64_t offset, uint32_t size, const void* data) {
             XDCHECK_EQ(size % blockSize_, 0u);
             XDCHECK_EQ(offset % blockSize_, 0u);
-            return device_->write(offset, size, buffer);
+            Buffer buffer = device_->makeIOBuffer(size);
+            std::memcpy(buffer.data(), data, size);
+            return device_->write(offset, std::move(buffer));
           }));
 
   ON_CALL(*this, flushImpl()).WillByDefault(testing::Invoke([this]() {

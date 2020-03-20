@@ -285,7 +285,7 @@ TEST(BlockCache, CollisionOverwrite) {
   ASSERT_EQ(keyOnDevice, makeView("key"));
 
   std::memcpy(buf + keyOffset, "abc", 3);
-  ASSERT_TRUE(device->write(0, sizeof(buf), buf));
+  ASSERT_TRUE(device->write(0, Buffer{BufferView{sizeof(buf), buf}}));
   // Original key is not found, because it didn't pass key equality check
   EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), value));
 }
@@ -1602,15 +1602,21 @@ TEST(BlockCache, Checksum) {
 
   // Corrupt e1: header
   const char corruption[5]{"hack"};
-  EXPECT_TRUE(device->write(2 * 1024 - 8, 4, corruption));
+  EXPECT_TRUE(device->write(
+      2 * 1024 - 8,
+      Buffer{BufferView{4, reinterpret_cast<const uint8_t*>(corruption)}}));
   EXPECT_EQ(Status::DeviceError, driver->lookup(e1.key(), value));
 
   // Corrupt e2: key, reported as "key not found"
-  EXPECT_TRUE(device->write(3 * 1024 - kSizeOfEntryDesc - 4, 4, corruption));
+  EXPECT_TRUE(device->write(
+      3 * 1024 - kSizeOfEntryDesc - 4,
+      Buffer{BufferView{4, reinterpret_cast<const uint8_t*>(corruption)}}));
   EXPECT_EQ(Status::NotFound, driver->lookup(e2.key(), value));
 
   // Corrupt e3: value
-  EXPECT_TRUE(device->write(3 * 1024, 4, corruption));
+  EXPECT_TRUE(device->write(
+      3 * 1024,
+      Buffer{BufferView{4, reinterpret_cast<const uint8_t*>(corruption)}}));
   EXPECT_EQ(Status::DeviceError, driver->lookup(e3.key(), value));
 
   EXPECT_EQ(0, exPtr->getQueueSize());

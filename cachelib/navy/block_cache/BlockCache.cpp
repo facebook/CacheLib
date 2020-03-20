@@ -320,7 +320,7 @@ Status BlockCache::writeEntry(RelAddress addr,
   buffer.copyFrom(descOffset - hk.key().size(), hk.key());
   buffer.copyFrom(0, value);
 
-  if (!regionManager_.write(addr, buffer.view())) {
+  if (!regionManager_.write(addr, std::move(buffer))) {
     return Status::DeviceError;
   }
   logicalWrittenCount_.add(hk.key().size() + value.size());

@@ -84,8 +84,8 @@ void RegionManager::reset() {
 bool RegionManager::flushBuffer(const RegionId& rid) {
   std::unique_ptr<Buffer> buf;
   auto& region = getRegion(rid);
-  auto callBack = [this](RelAddress addr, BufferView bufferView) {
-    if (!deviceWrite(addr, bufferView)) {
+  auto callBack = [this](RelAddress addr, Buffer buffer) {
+    if (!deviceWrite(addr, std::move(buffer))) {
       return false;
     }
     numInMemBufWaitingFlush_.dec();
@@ -414,24 +414,25 @@ bool RegionManager::isValidIORange(uint32_t offset, uint32_t size) const {
          uint64_t{offset} + size <= regionSize_;
 }
 
-bool RegionManager::deviceWrite(RelAddress addr, BufferView buf) {
-  XDCHECK(isValidIORange(addr.offset(), buf.size()));
+bool RegionManager::deviceWrite(RelAddress addr, Buffer buf) {
+  const auto bufSize = buf.size();
+  XDCHECK(isValidIORange(addr.offset(), bufSize));
   auto physOffset = physicalOffset(addr);
-  if (!device_.write(physOffset, buf.size(), buf.data())) {
+  if (!device_.write(physOffset, std::move(buf))) {
     return false;
   }
-  physicalWrittenCount_.add(buf.size());
+  physicalWrittenCount_.add(bufSize);
   return true;
 }
 
-bool RegionManager::write(RelAddress addr, BufferView buf) {
+bool RegionManager::write(RelAddress addr, Buffer buf) {
   if (doesBufferingWrites()) {
     auto rid = addr.rid();
     auto& region = getRegion(rid);
-    region.writeToBuffer(addr.offset(), buf);
+    region.writeToBuffer(addr.offset(), buf.view());
     return true;
   }
-  return deviceWrite(addr, buf);
+  return deviceWrite(addr, std::move(buf));
 }
 
 bool RegionManager::read(const RegionDescriptor& desc,

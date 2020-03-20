@@ -114,7 +114,7 @@ class BigHash final : public Engine {
   BigHash(Config&& config, ValidConfigTag);
 
   Buffer readBucket(BucketId bid);
-  bool writeBucket(BucketId bid, MutableBufferView mutaleView);
+  bool writeBucket(BucketId bid, Buffer buffer);
 
   // The corresponding r/w bucket lock must be held during the entire
   // duration of the read and write operations. For example, during write,

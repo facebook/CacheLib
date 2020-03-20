@@ -52,10 +52,13 @@ class Device {
   // write. For example, direct IO device allocates a properly aligned buffer.
   virtual Buffer makeIOBuffer(uint32_t size) = 0;
 
-  // Copys data of size @size from @value to device @offset
-  bool write(uint64_t offset, uint32_t size, const void* value);
+  // Write buffer to the device. This call takes ownership of the buffer
+  // and de-allocates it by end of the call. @buffer must be aligned the same
+  // way as `makeIOBuffer` would return.
+  bool write(uint64_t offset, Buffer buffer);
 
   // Reads @size bytes from device at @deviceOffset and copys to @value
+  // There must be sufficient space allocated already in the mutableView.
   bool read(uint64_t offset, uint32_t size, void* value);
 
   void flush() { flushImpl(); }

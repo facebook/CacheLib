@@ -224,13 +224,12 @@ class MemoryDevice final : public Device {
 };
 } // namespace
 
-bool Device::write(uint64_t offset, uint32_t size, const void* value) {
+bool Device::write(uint64_t offset, Buffer buffer) {
+  const auto size = buffer.size();
+  void* data = buffer.data();
   if (encryptor_) {
-    // TODO: const_cast is hazardous!!!
-    //       update Device write API to take in a mutable buffer
-    auto* mutableValue = const_cast<void*>(value);
     auto res = encryptor_->encrypt(
-        folly::MutableByteRange{reinterpret_cast<uint8_t*>(mutableValue), size},
+        folly::MutableByteRange{reinterpret_cast<uint8_t*>(data), size},
         offset);
     if (!res) {
       encryptionErrors_.inc();
@@ -239,7 +238,7 @@ bool Device::write(uint64_t offset, uint32_t size, const void* value) {
   }
 
   auto timeBegin = getSteadyClock();
-  bool result = writeImpl(offset, size, value);
+  bool result = writeImpl(offset, size, data);
   bytesWritten_.add(result * size);
   if (!result) {
     writeIOErrors_.inc();

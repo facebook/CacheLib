@@ -333,7 +333,8 @@ TEST(BigHash, CorruptBucket) {
 
   // Corrupt data. Use device directly to avoid alignment checks
   uint8_t badBytes[4] = {13, 17, 19, 23};
-  device->getRealDeviceRef().write(10, sizeof(badBytes), badBytes);
+  device->getRealDeviceRef().write(
+      10, Buffer{BufferView{sizeof(badBytes), badBytes}});
 
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 }

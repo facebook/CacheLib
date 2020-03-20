@@ -54,16 +54,19 @@ class DeviceMetaDataWriter final : public RecordWriter {
     // Write the last remaining bytes to the device
     if (bufIndex_ > 0) {
       if (offset_ + kBlockSize < metadataSize_) {
-        memset(&bufferData[bufIndex_], 0, kBlockSize - bufIndex_);
-        dev_.write(offset_, kBlockSize, bufferData);
+        Buffer buffer = dev_.makeIOBuffer(kBlockSize);
+        memcpy(buffer.data(), bufferData, bufIndex_);
+        memset(buffer.data() + bufIndex_, 0, kBlockSize - bufIndex_);
+        dev_.write(offset_, std::move(buffer));
         offset_ += kBlockSize;
       }
     }
     if (offset_ + kBlockSize <= metadataSize_) {
       // Write an additional block of zeroed out memory just to make the end
       // of metadata clear
-      memset(bufferData, 0, kBlockSize);
-      dev_.write(offset_, kBlockSize, bufferData);
+      Buffer buffer = dev_.makeIOBuffer(kBlockSize);
+      memset(buffer.data(), 0, kBlockSize);
+      dev_.write(offset_, std::move(buffer));
     }
   }
 
@@ -89,7 +92,9 @@ class DeviceMetaDataWriter final : public RecordWriter {
         if (offset_ + kBlockSize > metadataSize_) {
           throw std::logic_error("exceeding metadata limit");
         }
-        if (!dev_.write(offset_, kBlockSize, bufferData)) {
+        Buffer buffer = dev_.makeIOBuffer(kBlockSize);
+        memcpy(buffer.data(), bufferData, kBlockSize);
+        if (!dev_.write(offset_, std::move(buffer))) {
           throw std::invalid_argument(
               folly::sformat("write failed: offset = {}", offset_));
         }
@@ -108,7 +113,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
   bool invalidate() override {
     Buffer invalidateBuffer{kBlockSize, kBlockSize};
     memset(invalidateBuffer.data(), 0, kBlockSize);
-    return dev_.write(0, kBlockSize, invalidateBuffer.data());
+    return dev_.write(0, std::move(invalidateBuffer));
   }
 
  private:

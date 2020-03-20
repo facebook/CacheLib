@@ -132,12 +132,13 @@ class RegionManager {
     numInMemBufActive_.dec();
   }
 
-  // writes buffer 'buf' at the 'addr'
-  // 'addr' must be the address returned by Region::open(OpenMode::Write)
-  bool write(RelAddress addr, BufferView buf);
+  // writes buffer @buf at the @addr
+  // @addr must be the address returned by Region::open(OpenMode::Write)
+  // @buf may be mutated and will be de-allocated at the end of this
+  bool write(RelAddress addr, Buffer buf);
 
-  // reads into buffer from the 'addr'
-  // 'addr' must be the address returned by Region::open(OpenMode::Read)
+  // reads into buffer from the @addr
+  // @addr must be the address returned by Region::open(OpenMode::Read)
   bool read(const RegionDescriptor& desc,
             RelAddress addr,
             MutableBufferView buf) const;
@@ -182,7 +183,7 @@ class RegionManager {
     return baseOffset_ + toAbsolute(addr).offset();
   }
 
-  bool deviceWrite(RelAddress addr, BufferView buf);
+  bool deviceWrite(RelAddress addr, Buffer buf);
 
   bool isValidIORange(uint32_t offset, uint32_t size) const;
   OpenStatus assignBufferToRegion(RegionId rid);

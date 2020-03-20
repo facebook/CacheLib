@@ -7,6 +7,7 @@
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 #include "cachelib/navy/testing/MockDevice.h"
 
@@ -22,10 +23,10 @@ TEST(Device, BytesWritten) {
       .WillOnce(testing::Return(true))
       .WillOnce(testing::Return(true))
       .WillOnce(testing::Return(false));
-  EXPECT_TRUE(device.write(0, 5, nullptr));
-  EXPECT_TRUE(device.write(0, 9, nullptr));
+  EXPECT_TRUE(device.write(0, Buffer{5}));
+  EXPECT_TRUE(device.write(0, Buffer{9}));
   EXPECT_EQ(14, device.getBytesWritten());
-  EXPECT_FALSE(device.write(0, 1, nullptr));
+  EXPECT_FALSE(device.write(0, Buffer{1}));
   EXPECT_EQ(14, device.getBytesWritten());
 }
 
@@ -45,13 +46,13 @@ TEST(Device, Encryptor) {
 
   MockDevice device{100, 1, std::make_shared<MockEncryptor>()};
 
-  device.write(0, 9, "123456789");
-  device.write(10, 9, "123456789");
+  BufferGen bufGen;
+  Buffer testBuffer = bufGen.gen(9);
+  device.write(0, testBuffer.copy());
+  device.write(10, testBuffer.copy());
   std::array<uint8_t, 9> value;
   device.read(0, 9, value.data());
-  EXPECT_EQ(
-      "123456789",
-      (std::string{reinterpret_cast<const char*>(value.data()), value.size()}));
+  EXPECT_EQ(testBuffer.view(), (BufferView{value.size(), value.data()}));
   device.read(15, 9, value.data());
 
   MockCounterVisitor visitor;
@@ -75,8 +76,10 @@ TEST(Device, Latency) {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
         return true;
       }));
+
+  Buffer buf{1};
   device.read(0, 1, nullptr);
-  device.write(0, 1, nullptr);
+  device.write(0, std::move(buf));
 
   MockCounterVisitor visitor;
   EXPECT_CALL(visitor, call(_, _)).WillRepeatedly(testing::Return());
@@ -95,8 +98,10 @@ TEST(Device, IOError) {
       .WillOnce(testing::InvokeWithoutArgs([] { return false; }));
   EXPECT_CALL(device, writeImpl(0, 1, _))
       .WillOnce(testing::InvokeWithoutArgs([] { return false; }));
+
+  Buffer buf{1};
   device.read(0, 1, nullptr);
-  device.write(0, 1, nullptr);
+  device.write(0, std::move(buf));
 
   MockCounterVisitor visitor;
   EXPECT_CALL(visitor, call(_, _)).WillRepeatedly(testing::Return());
@@ -177,7 +182,7 @@ TEST(Device, RAID0IO) {
     Buffer wbuf = device->makeIOBuffer(stripeSize);
     Buffer rbuf = device->makeIOBuffer(stripeSize);
     std::memset(wbuf.data(), 'A', stripeSize);
-    auto ret = device->write(0, stripeSize, wbuf.data());
+    auto ret = device->write(0, wbuf.copy());
     EXPECT_EQ(true, ret);
     ret = device->read(0, stripeSize, rbuf.data());
     EXPECT_EQ(true, ret);
@@ -189,7 +194,7 @@ TEST(Device, RAID0IO) {
     Buffer wbuf = device->makeIOBuffer(stripeSize);
     Buffer rbuf = device->makeIOBuffer(stripeSize);
     std::memset(wbuf.data(), 'B', stripeSize);
-    auto ret = device->write(1024, stripeSize, wbuf.data());
+    auto ret = device->write(1024, wbuf.copy());
     EXPECT_EQ(true, ret);
     ret = device->read(1024, stripeSize, rbuf.data());
     EXPECT_EQ(true, ret);
@@ -203,7 +208,7 @@ TEST(Device, RAID0IO) {
     Buffer wbuf = device->makeIOBuffer(ioSize);
     Buffer rbuf = device->makeIOBuffer(ioSize);
     std::memset(wbuf.data(), 'C', stripeSize);
-    auto ret = device->write(offset, ioSize, wbuf.data());
+    auto ret = device->write(offset, wbuf.copy());
     EXPECT_EQ(true, ret);
     ret = device->read(offset, ioSize, rbuf.data());
     EXPECT_EQ(true, ret);
@@ -217,7 +222,7 @@ TEST(Device, RAID0IO) {
     Buffer wbuf = device->makeIOBuffer(ioSize);
     Buffer rbuf = device->makeIOBuffer(ioSize);
     std::memset(wbuf.data(), 'D', ioSize);
-    auto ret = device->write(offset, ioSize, wbuf.data());
+    auto ret = device->write(offset, wbuf.copy());
     EXPECT_EQ(true, ret);
     ret = device->read(offset, ioSize, rbuf.data());
     EXPECT_EQ(true, ret);
