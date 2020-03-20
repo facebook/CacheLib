@@ -7,7 +7,9 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(${PACKAGE_NAME} C CXX)
 
@@ -20,8 +22,12 @@ set(LIB_INSTALL_DIR lib CACHE STRING
 set(CMAKE_INSTALL_DIR lib/cmake/${PACKAGE_NAME} CACHE STRING
     "The subdirectory where CMake package config files should be installed")
 
+#SET(CMAKE_CXX_FLAGS "-nostartfiles")
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+#link_directories("/usr/local/include")
 
 # includes
 set(CMAKE_MODULE_PATH
@@ -35,45 +41,53 @@ set(CMAKE_MODULE_PATH
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMake")
 
 # Find required dependencies
-find_package(Folly REQUIRED)
+find_package(Glog REQUIRED)
+find_package(Fmt REQUIRED)
+find_package(Gflags REQUIRED)
 find_package(FBThrift REQUIRED)
+find_package(Boost REQUIRED)
+find_package (Threads REQUIRED)
+find_package (Libiberty REQUIRED)
+find_package(Folly REQUIRED Glog FBThrift ${CMAKE_DL_LIBS} Threads Gflags fmt)
+
+set(GTEST_ROOT "/usr/local/include/gtest" CACHE PATH "Path to googletest")
+find_package(GTest REQUIRED)
 
 # So that all subsequent directories have access to folly and thrift
-include_directories(${FOLLY_INCLUDE_DIR})
-        #${FBTHRIFT_INCLUDE_DIR}
-
-
+include_directories(${FOLLY_INCLUDE_DIR} ${FBTHRIFT_INCLUDE_DIR} ${GTEST_INCLUDE_DIRS} ${GMOCK_INCLUDE_DIRS} ${fmt_INCLUDE_DIR})
 
 # Download and unpack googletest at configure time
-configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
-execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
-        RESULT_VARIABLE result
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
-if(result)
-    message(FATAL_ERROR "CMake step for googletest failed: ${result}")
-endif()
-execute_process(COMMAND ${CMAKE_COMMAND} --build .
-        RESULT_VARIABLE result
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
-if(result)
-    message(FATAL_ERROR "Build step for googletest failed: ${result}")
-endif()
+#configure_file(CMakeLists.txt.in googletest-download/CMakeLists.txt)
+#execute_process(COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" .
+#        RESULT_VARIABLE result
+#        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
+#if(result)
+#    message(FATAL_ERROR "CMake step for googletest failed: ${result}")
+#endif()
+#execute_process(COMMAND ${CMAKE_COMMAND} --build .
+#        RESULT_VARIABLE result
+#        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/googletest-download )
+#if(result)
+#    message(FATAL_ERROR "Build step for googletest failed: ${result}")
+#endif()
+#
+## Prevent overriding the parent project's compiler/linker
+## settings on Windows
+#set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+#
+## Add googletest directly to our build. This defines
+## the gtest and gtest_main targets.
+#add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
+#        ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
+#        EXCLUDE_FROM_ALL)
 
-# Prevent overriding the parent project's compiler/linker
-# settings on Windows
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-# Add googletest directly to our build. This defines
-# the gtest and gtest_main targets.
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/googletest-src
-        ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
-        EXCLUDE_FROM_ALL)
-
-add_subdirectory(cachelib/navy)
+enable_testing()
 
 # Now simply link your own targets against gtest, gmock,
 # etc. as appropriate
 
-enable_testing()
+add_subdirectory(cachelib/navy)
+
+
 
 

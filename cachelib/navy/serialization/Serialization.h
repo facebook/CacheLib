@@ -27,7 +27,9 @@ ThriftObject deserializeProto(RecordReader& reader) {
 
 template <typename ThriftObject>
 std::string serializeToJson(const ThriftObject& obj) {
-  return apache::thrift::SimpleJSONSerializer::serialize<std::string>(obj);
+  std::string tmp;
+  ProtoSerializer::serialize(obj,&tmp);
+  return tmp;
 }
 } // namespace navy
 } // namespace cachelib

@@ -1,5 +1,5 @@
 add_library(
-  common
+  navy_common
   
   common/Buffer.cpp
   common/Buffer.h
@@ -16,14 +16,17 @@ add_library(
 )
 
 target_link_libraries(
-  common
+  navy_common
   PUBLIC
-    thrift
     ${FOLLY_LIBRARIES}
 )
 
+#https://github.com/facebook/fbthrift/blob/master/ThriftLibrary.cmake lines 88 to 121
+
+
+thrift_object("objects" "" "cpp2" "" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization")
 add_library(
-  bighash
+  navy_bighash
 
   bighash/BigHash.cpp
   bighash/BloomFilter.cpp
@@ -33,31 +36,72 @@ add_library(
   bighash/BloomFilter.h
   bighash/Bucket.h
   bighash/BucketStorage.h
+  $<TARGET_OBJECTS:objects-cpp2-obj> 
 )
 
 target_link_libraries(
-  bighash
+  navy_bighash
   PUBLIC
-    common
-    thrift
+    navy_common
+#    thrift
     ${FOLLY_LIBRARIES}
-)
+    ${FBTHRIFT_LIBRARIES}
 
+)
 add_library(
-  serialization
+  navy_serialization
 
   serialization/Serialization.h
   serialization/RecordIO.cpp
   serialization/RecordIO.h
   serialization/objects.thrift
+  $<TARGET_OBJECTS:objects-cpp2-obj> 
 )
 
 target_link_libraries(
-  serialization
+  navy_serialization
   PUBLIC
-    common
-    thrift
+    navy_common
     ${FOLLY_LIBRARIES}
+)
+
+add_library(
+        navy_scheduler
+
+        scheduler/JobScheduler.h
+        scheduler/ThreadPoolJobScheduler.h
+        scheduler/ThreadPoolJobScheduler.cpp
+)
+
+target_link_libraries(
+        navy_scheduler
+        PUBLIC
+            navy_common
+            ${FOLLY_LIBRARIES}
+
+)
+
+add_library(
+        navy_testing
+
+        testing/BufferGen.cpp
+        testing/BufferGen.h
+        testing/Callbacks.h
+        testing/MockDevice.h
+        testing/MockDevice.cpp
+        testing/MockJobScheduler.cpp
+        testing/MockJobScheduler.h
+        testing/SeqPoints.cpp
+        testing/SeqPoints.h
+)
+
+target_link_libraries(
+        navy_testing
+        PUBLIC
+            navy_common
+            navy_scheduler
+            ${FOLLY_LIBRARIES}
+
 )
 
 add_subdirectory(bighash/tests)

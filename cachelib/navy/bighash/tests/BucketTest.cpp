@@ -270,6 +270,7 @@ TEST(Bucket, Checksum) {
 }
 
 TEST(Bucket, Iteration) {
+  EXPECT_EQ(1,1);
   Buffer buf(96 + sizeof(Bucket));
   auto& bucket = Bucket::initNew(buf.mutableView(), 0);
 
@@ -320,7 +321,12 @@ TEST(Bucket, Iteration) {
     EXPECT_TRUE(itr.done());
   }
 }
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
+GTEST_API_ int main(int argc, char **argv) {
+    testing::InitGoogleTest(&argc, argv);
+      return RUN_ALL_TESTS();
+}

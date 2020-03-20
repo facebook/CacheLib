@@ -10,14 +10,18 @@ add_executable(
 target_link_libraries(
         bighash_test_bin
 
-        ${FOLLY_LIBRARIES}
-        common
-        bighash
-        gtest_main
+        PUBLIC
+            navy_common
+            navy_bighash
+            navy_serialization
+            navy_scheduler
+            navy_testing
+            gtest
+            gmock
 )
 
 add_test(
         NAME bighash_tests
-        COMMAND ${CMAKE_CURRENT_BINARY_DIR}/bighash_test_bin
+        COMMAND bighash_test_bin
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
