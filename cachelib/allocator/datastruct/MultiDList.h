@@ -4,7 +4,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/serialize/gen-cpp2/allocator_objects_types.h"
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/datastruct/DList.h"

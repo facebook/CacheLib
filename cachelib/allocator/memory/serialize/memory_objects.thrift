@@ -1,6 +1,6 @@
 namespace cpp2 facebook.cachelib.serialization
 
-include "cachelib/allocator/datastruct/serialize/objects.thrift"
+include "cachelib/allocator/datastruct/serialize/datastruct_objects.thrift"
 
 // Adding a new "required" field will cause the cache to be dropped
 // in the next release for our users. If the field needs to be required,
@@ -22,7 +22,7 @@ struct AllocationClassObject {
   2: required i64 allocationSize, // to accommodate uint32_t allocationSize
   4: required i64 currOffset,
   8: required bool canAllocate,
-  9: SListObject freedAllocationsObject,
+  9: datastruct_objects.SListObject freedAllocationsObject,
   10: required i32 currSlabIdx,
   11: required list<i32> allocatedSlabIdxs,
   12: required list<i32> freeSlabIdxs,

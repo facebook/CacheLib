@@ -46,7 +46,7 @@
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 #include "cachelib/allocator/nvmcache/NvmCache.h"
 #include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/Exceptions.h"

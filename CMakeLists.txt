@@ -87,7 +87,5 @@ enable_testing()
 # etc. as appropriate
 
 add_subdirectory(cachelib/navy)
-
-
-
-
+add_subdirectory(cachelib/common)
+add_subdirectory(cachelib/allocator)

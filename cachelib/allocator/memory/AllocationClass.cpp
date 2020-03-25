@@ -18,7 +18,7 @@
 #include <stdexcept>
 #include <thread>
 
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 
 using namespace facebook::cachelib;
 

@@ -4,7 +4,7 @@
 
 #include <folly/logging/xlog.h>
 
-#include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/serialize/gen-cpp2/allocator_objects_types.h"
 
 namespace facebook {
 namespace cachelib {

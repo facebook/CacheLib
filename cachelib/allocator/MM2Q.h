@@ -9,7 +9,7 @@
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/datastruct/MultiDList.h"
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Mutex.h"
 

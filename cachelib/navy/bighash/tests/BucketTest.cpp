@@ -326,7 +326,3 @@ TEST(Bucket, Iteration) {
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
-GTEST_API_ int main(int argc, char **argv) {
-    testing::InitGoogleTest(&argc, argv);
-      return RUN_ALL_TESTS();
-}

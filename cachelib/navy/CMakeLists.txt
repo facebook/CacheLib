@@ -24,7 +24,7 @@ target_link_libraries(
 #https://github.com/facebook/fbthrift/blob/master/ThriftLibrary.cmake lines 88 to 121
 
 
-thrift_object("objects" "" "cpp2" "" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization")
+thrift_object("navy_objects" "" "cpp2" "" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization" "${CMAKE_CURRENT_SOURCE_DIR}/serialization")
 add_library(
   navy_bighash
 
@@ -36,7 +36,7 @@ add_library(
   bighash/BloomFilter.h
   bighash/Bucket.h
   bighash/BucketStorage.h
-  $<TARGET_OBJECTS:objects-cpp2-obj> 
+  $<TARGET_OBJECTS:navy_objects-cpp2-obj> 
 )
 
 target_link_libraries(
@@ -54,8 +54,8 @@ add_library(
   serialization/Serialization.h
   serialization/RecordIO.cpp
   serialization/RecordIO.h
-  serialization/objects.thrift
-  $<TARGET_OBJECTS:objects-cpp2-obj> 
+  serialization/navy_objects.thrift
+  $<TARGET_OBJECTS:navy_objects-cpp2-obj> 
 )
 
 target_link_libraries(
@@ -105,3 +105,4 @@ target_link_libraries(
 )
 
 add_subdirectory(bighash/tests)
+add_subdirectory(common/tests)

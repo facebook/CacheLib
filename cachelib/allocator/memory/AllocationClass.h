@@ -10,7 +10,7 @@
 #include "cachelib/allocator/memory/MemoryAllocatorStats.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 
 #include <folly/lang/Aligned.h>
 #include <folly/synchronization/DistributedMutex.h>

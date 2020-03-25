@@ -1,6 +1,6 @@
 namespace cpp2 facebook.cachelib.serialization
 
-include "cachelib/allocator/datastruct/serialize/objects.thrift"
+include "cachelib/allocator/datastruct/serialize/datastruct_objects.thrift"
 
 // Adding a new "required" field will cause the cache to be dropped
 // in the next release for our users. If the field needs to be required,
@@ -59,7 +59,7 @@ struct MMLruObject {
 
   6: required i64 insertionPoint,
   7: required i64 tailSize,
-  8: required DListObject lru,
+  8: required datastruct_objects.DListObject lru,
   9: required i64 compressedInsertionPoint,
 }
 
@@ -86,7 +86,7 @@ struct MM2QObject {
   11: i64 evictions = 0,
 
   // Warm, hot and cold lrus
-  12: required MultiDListObject lrus,
+  12: required datastruct_objects.MultiDListObject lrus,
 }
 
 struct MM2QCollection {
@@ -110,7 +110,7 @@ struct MMTinyLFUObject {
   2: i64 evictions = 0,
 
   // Warm, hot and cold lrus
-  3: required MultiDListObject lrus,
+  3: required datastruct_objects.MultiDListObject lrus,
 }
 
 struct MMTinyLFUCollection {
@@ -131,7 +131,7 @@ struct ChainedHashTableObject {
 struct MMTTLBucketObject {
   4: i64 expirationTime,
   5: i64 creationTime,
-  6: required DListObject dList,
+  6: required datastruct_objects.DListObject dList,
 }
 
 struct TTLBucketCollection {

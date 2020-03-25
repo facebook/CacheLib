@@ -13,7 +13,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 #pragma GCC diagnostic pop
 
 namespace facebook {

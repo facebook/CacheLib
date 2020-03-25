@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cachelib/allocator/CCacheAllocator.h"
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 
 namespace facebook {
 namespace cachelib {
