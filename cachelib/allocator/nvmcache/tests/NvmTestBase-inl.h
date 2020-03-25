@@ -3,7 +3,6 @@
 
 #include "cachelib/allocator/NvmCacheState.h"
 #include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
-#include "dipper/dipper_registry.h"
 
 namespace facebook {
 namespace cachelib {
@@ -34,7 +33,6 @@ NavyDipper::NavyDipper() {
 
 template <typename B>
 NvmCacheTest<B>::NvmCacheTest() {
-  facebook::dipper::registerBackend<facebook::dipper::NavyDipperFactory>();
   cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   {
     allocConfig_.enableCachePersistence(cacheDir_);
@@ -115,7 +113,7 @@ void NvmCacheTest<B>::coldRoll() {
 
 template <typename B>
 void NvmCacheTest<B>::iceRoll() {
-  // shutdown with warm roll and indicatae that we want to drop dipper
+  // shutdown with warm roll and indicatae that we want to drop navy
   if (cache_->shutDown() != LruAllocator::ShutDownStatus::kSuccess) {
     throw std::runtime_error("Failed to ice roll");
   }
