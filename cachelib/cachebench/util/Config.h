@@ -118,6 +118,8 @@ struct StressorConfig : public JSONConfig {
   uint64_t maxInconsistencyCount{50};
 
   // Trace file containing the operations for more accurate replay
+  // Supported formats include specifying an absolute filename and filename
+  // relative to the configPath
   std::string traceFileName{};
 
   // location of the path for the files referenced inside the json. If not

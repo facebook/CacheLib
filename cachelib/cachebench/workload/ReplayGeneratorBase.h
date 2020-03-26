@@ -21,15 +21,21 @@ constexpr size_t kIfstreamBufferSize = 1L << 14;
 
 class ReplayGeneratorBase : public GeneratorBase {
  public:
-  explicit ReplayGeneratorBase(StressorConfig config)
-      : infile_(config.traceFileName), config_(config) {
+  explicit ReplayGeneratorBase(StressorConfig config) : config_(config) {
     if (config.checkConsistency) {
       throw std::invalid_argument(folly::sformat(
           "Cannot replay traces with consistency checking enabled"));
     }
+    std::string file;
+    if (config.traceFileName[0] == '/') {
+      file = config.traceFileName;
+    } else {
+      file = folly::sformat("{}/{}", config.configPath, config.traceFileName);
+    }
+    infile_.open(file);
     if (infile_.fail()) {
       throw std::invalid_argument(
-          folly::sformat("could not read file: {}", config.traceFileName));
+          folly::sformat("could not read file: {}", file));
     }
     infile_.rdbuf()->pubsetbuf(infileBuffer_, kIfstreamBufferSize);
     // header
