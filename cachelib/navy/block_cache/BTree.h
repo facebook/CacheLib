@@ -410,11 +410,7 @@ class BTree : public Traits {
   // Returns the address of the entry if found and removed successfully.
   // Returns false otherwise.
   std::optional<Value> removeRecursive(
-      Key key,
-      uint32_t height,
-      void* ptr,
-      Node* parent,
-      uint32_t child);
+      Key key, uint32_t height, void* ptr, Node* parent, uint32_t child);
 
   template <typename Child>
   static void balance(Node* node,
@@ -559,11 +555,7 @@ typename BTree<K, V, T>::InsertOutput BTree<K, V, T>::insertRecursive(
 
 template <typename K, typename V, typename T>
 std::optional<V> BTree<K, V, T>::removeRecursive(
-    Key key,
-    uint32_t height,
-    void* ptr,
-    Node* parent,
-    uint32_t child) {
+    Key key, uint32_t height, void* ptr, Node* parent, uint32_t child) {
   if (height == 0) {
     auto leaf = reinterpret_cast<Leaf*>(ptr);
     auto i = leaf->find(key);
