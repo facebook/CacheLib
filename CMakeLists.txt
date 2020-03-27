@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.1 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
 # package information
 set(PACKAGE_NAME      "cachelib")
@@ -7,7 +7,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -41,6 +41,8 @@ set(CMAKE_MODULE_PATH
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMake")
 
 # Find required dependencies
+find_package(LibEvent REQUIRED)
+find_package(RT REQUIRED)
 find_package(Glog REQUIRED)
 find_package(Fmt REQUIRED)
 find_package(Gflags REQUIRED)
@@ -86,6 +88,7 @@ enable_testing()
 # Now simply link your own targets against gtest, gmock,
 # etc. as appropriate
 
+add_subdirectory(cachelib/shm)
 add_subdirectory(cachelib/navy)
 add_subdirectory(cachelib/common)
 add_subdirectory(cachelib/allocator)

@@ -8,7 +8,7 @@
 
 find_package(DoubleConversion REQUIRED)
 find_package(Glog REQUIRED)
-find_package(Boost REQUIRED filesystem regex)
+find_package(Boost REQUIRED filesystem regex context program_options)
 if(Boost_FOUND)
       include_directories(${Boost_INCLUDE_DIRS})
 endif()
@@ -27,7 +27,7 @@ find_library(
         "/usr/local/facebook/lib"
 )
 
-set(FOLLY_LIBRARIES ${FOLLY_LIBRARY} ${DOUBLE_CONVERSION_LIBRARY} ${LIBGLOG_LIBRARIES} ${LIBIBERTY_LIBRARY} ${CMAKE_DL_LIBS} Threads::Threads ${LIBGFLAGS_LIBRARY} Boost::filesystem Boost::regex ${fmt_LIBRARY})
+set(FOLLY_LIBRARIES ${FOLLY_LIBRARY} ${DOUBLE_CONVERSION_LIBRARY} ${LIBGLOG_LIBRARIES} ${LIBIBERTY_LIBRARY} ${CMAKE_DL_LIBS} Threads::Threads ${LIBGFLAGS_LIBRARY} Boost::filesystem Boost::regex Boost::context Boost::system Boost::program_options ${fmt_LIBRARY} ${LIBEVENT_LIB})
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(

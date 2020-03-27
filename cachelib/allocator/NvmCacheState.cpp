@@ -9,7 +9,7 @@
 
 #include "cachelib/allocator/CacheVersion.h"
 #include "cachelib/allocator/NvmCacheState.h"
-#include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/serialize/gen-cpp2/allocator_objects_types.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"

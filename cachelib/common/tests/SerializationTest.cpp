@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/memory_objects_types.h"
 #include "cachelib/common/Serialization.h"
 
 constexpr size_t SerializationBufferSize = 100 * 1024;
