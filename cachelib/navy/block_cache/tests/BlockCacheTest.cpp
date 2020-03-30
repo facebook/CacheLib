@@ -373,11 +373,19 @@ TEST(BlockCache, HoleStats) {
   EXPECT_CALL(*policy, track(RegionId{0}));
   EXPECT_CALL(*policy, track(RegionId{1}));
   EXPECT_CALL(*policy, track(RegionId{2}));
-  EXPECT_CALL(*policy, evict()).WillOnce(Return(RegionId{0}));
+  // EXPECT_CALL(*policy, touch(RegionId{0}));
+  // EXPECT_CALL(*policy, touch(RegionId{0}));
+  // reinsertion will evict a region and track new one.
+  EXPECT_CALL(*policy, evict())
+      .WillOnce(Return(RegionId{0}))
+      .WillOnce(Return(RegionId{1}));
+  EXPECT_CALL(*policy, track(RegionId{3}));
 
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {1024});
+  // items which are accessed once will be reinserted on reclaim
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -409,8 +417,8 @@ TEST(BlockCache, HoleStats) {
   EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
 
   // Remove 2 entries from region 2
-  EXPECT_EQ(Status::Ok, driver->remove(log[20].key()));
-  EXPECT_EQ(Status::Ok, driver->remove(log[21].key()));
+  EXPECT_EQ(Status::Ok, driver->remove(log[33].key()));
+  EXPECT_EQ(Status::Ok, driver->remove(log[34].key()));
 
   driver->getCounters([](folly::StringPiece name, double count) {
     if (name == "navy_bc_hole_count") {
@@ -420,6 +428,11 @@ TEST(BlockCache, HoleStats) {
       EXPECT_EQ(5 * 1024, count);
     }
   });
+
+  // lookup this entry from region 0 that will be soon reclaimed
+  Buffer val;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
 
   // Force reclamation on region 0. There are 4 regions and the device
   // was configured to require 1 clean region at all times
@@ -433,6 +446,9 @@ TEST(BlockCache, HoleStats) {
   // Reclaiming region 0 should have bumped down the hole count to
   // 2 remaining (from region 2)
   driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_reinsertions") {
+      EXPECT_EQ(1, count);
+    }
     if (name == "navy_bc_hole_count") {
       EXPECT_EQ(2, count);
     }

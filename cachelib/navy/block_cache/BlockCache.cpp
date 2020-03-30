@@ -200,7 +200,8 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
   // We do not guarantee time between remove and callback invocation. If a
   // value v1 was replaced with v2 user will get callbacks for both v1 and
   // v2 when they are evicted (in no particular order).
-  uint32_t evictionCount = 0;
+  uint32_t evictionCount = 0; // item that was evicted during reclaim
+  uint32_t removedItem = 0;   // item that was previously removed
   auto& region = regionManager_.getRegion(rid);
   auto offset = region.getLastEntryEndOffset();
   while (offset > 0) {
@@ -214,11 +215,20 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
     HashedKey hk{
         BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
     BufferView value{desc.valueSize, entryEnd - entrySize};
+
     const auto reinsertionRes =
         reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
-    if (reinsertionRes == ReinsertionRes::kEvicted) {
+    switch (reinsertionRes) {
+    case ReinsertionRes::kEvicted:
       evictionCount++;
+      break;
+    case ReinsertionRes::kRemoved:
+      removedItem++;
+      break;
+    case ReinsertionRes::kReinserted:
+      break;
     }
+
     if (destructorCb_ && reinsertionRes != ReinsertionRes::kReinserted) {
       destructorCb_(hk.key(),
                     value,
@@ -229,10 +239,10 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
   }
+
   XDCHECK_GE(region.getNumItems(), evictionCount);
-  uint32_t holesToAdjust = region.getNumItems() - evictionCount;
-  holeCount_.sub(holesToAdjust);
-  holeSizeTotal_.sub(holesToAdjust * regionManager_.getRegionSlotSize(rid));
+  holeCount_.sub(removedItem);
+  holeSizeTotal_.sub(removedItem * regionManager_.getRegionSlotSize(rid));
   return evictionCount;
 }
 
@@ -289,6 +299,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     reinsertionErrorCount_.inc();
     return removeItem();
   }
+
   const auto replaced = index_.replace(hk.keyHash(),
                                        encodeRelAddress(addr.add(slotSize)),
                                        encodeRelAddress(currAddr));
