@@ -17,17 +17,31 @@ find_path(
         FOLLY_INCLUDE_DIR
         NAMES "folly/String.h"
         HINTS
-        "/usr/local/facebook/include"
+        "/usr/local/include"
 )
 
 find_library(
         FOLLY_LIBRARY
         NAMES folly
         HINTS
-        "/usr/local/facebook/lib"
+        "/usr/local/lib"
 )
 
-set(FOLLY_LIBRARIES ${FOLLY_LIBRARY} ${DOUBLE_CONVERSION_LIBRARY} ${LIBGLOG_LIBRARIES} ${LIBIBERTY_LIBRARY} ${CMAKE_DL_LIBS} Threads::Threads ${LIBGFLAGS_LIBRARY} Boost::filesystem Boost::regex Boost::context Boost::system Boost::program_options ${fmt_LIBRARY} ${LIBEVENT_LIB})
+find_library(
+        FOLLY_BENCHMARK_LIBRARY
+        NAMES follybenchmark
+        HINTS
+        "/usr/local/lib"
+)
+
+find_library(
+        FOLLY_TEST_UTIL_LIBRARY
+        NAMES folly_test_util
+        HINTS
+        "/usr/local/lib"
+)
+
+set(FOLLY_LIBRARIES ${FOLLY_LIBRARY} ${FOLLY_BENCHMARK_LIBRARY} ${FOLLY_TEST_UTIL_LIBRARY} ${DOUBLE_CONVERSION_LIBRARY} ${LIBGLOG_LIBRARIES} ${LIBIBERTY_LIBRARY} ${CMAKE_DL_LIBS} Threads::Threads ${LIBGFLAGS_LIBRARY} Boost::filesystem Boost::regex Boost::context Boost::system Boost::program_options ${fmt_LIBRARY} ${LIBEVENT_LIB})
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(

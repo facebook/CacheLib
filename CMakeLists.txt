@@ -92,3 +92,10 @@ add_subdirectory(cachelib/shm)
 add_subdirectory(cachelib/navy)
 add_subdirectory(cachelib/common)
 add_subdirectory(cachelib/allocator)
+#add_subdirectory(cachelib/benchmarks)
+add_subdirectory(cachelib/datatype)
+add_subdirectory(cachelib/compact_cache)
+add_subdirectory(cachelib/cachebench)
+
+
+

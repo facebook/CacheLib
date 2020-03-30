@@ -4,7 +4,7 @@
 #include <gflags/gflags.h>
 
 // Comment out the define for FB_ENV when we build for external environments
-#define CACHEBENCH_FB_ENV
+//#define CACHEBENCH_FB_ENV
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/cachebench/fb303/FB303ThriftServer.h"
 #include "common/init/Init.h"
