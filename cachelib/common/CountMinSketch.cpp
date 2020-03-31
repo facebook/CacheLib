@@ -57,7 +57,7 @@ uint32_t CountMinSketch::calculateDepth(double probability, uint32_t maxDepth) {
 
   // From "Approximating Data with the Count-Min Data Structure" (Cormode &
   // Muthukrishnan)
-  uint32_t depth = std::ceil(std::log(1 - probability) / std::log(0.5));
+  uint32_t depth = std::ceil(std::abs(std::log(1 - probability) / std::log(2)));
   depth = std::max(1u, depth);
   if (maxDepth > 0) {
     depth = std::min(maxDepth, depth);
