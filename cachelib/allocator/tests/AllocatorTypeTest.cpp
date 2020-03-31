@@ -155,6 +155,10 @@ TYPED_TEST(BaseAllocatorTest, RebalancingWithSerialization) {
   this->testRebalancingWithSerialization();
 }
 
+TYPED_TEST(BaseAllocatorTest, FastShutdownTestWithAbortedPoolRebalancer) {
+  this->testFastShutdownWithAbortedPoolRebalancer();
+}
+
 // test item sampling by getting a random item from memory
 TYPED_TEST(BaseAllocatorTest, ItemSampling) { this->testItemSampling(); }
 

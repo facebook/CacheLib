@@ -2282,7 +2282,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
   try {
     auto releaseContext = allocator_->startSlabRelease(
         pid, victim, receiver, mode, hint,
-        [this]() -> bool { return shutDownInProgress; });
+        [this]() -> bool { return shutDownInProgress_; });
 
     // No work needed if the slab is already released
     if (releaseContext.isReleased()) {
@@ -2531,6 +2531,14 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
       return;
     }
 
+    if (shutDownInProgress_) {
+      item.unmarkMoving();
+      allocator_->abortSlabRelease(ctx);
+      throw exception::SlabReleaseAborted(
+          folly::sformat("Slab Release aborted while trying to evict"
+                         " Item: {} Pool: {}, Class: {}.",
+                         item.toString(), ctx.getPoolId(), ctx.getClassId()));
+    }
     throttleWith(throttler, [&] {
       XLOGF(WARN,
             "Spent {} seconds, slab release still trying to evict Item: {}. "
@@ -2746,6 +2754,15 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     // when checking with the AllocationClass
     itemFreed = true;
 
+    if (shutDownInProgress_) {
+      XDCHECK(!static_cast<Item*>(alloc)->isMoving());
+      allocator_->abortSlabRelease(ctx);
+      throw exception::SlabReleaseAborted(
+          folly::sformat("Slab Release aborted while still trying to mark"
+                         " as moving for Item: {}. Pool: {}, Class: {}.",
+                         static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
+                         ctx.getClassId()));
+    }
     throttleWith(throttler, [&] {
       XLOGF(WARN,
             "Spent {} seconds, slab release still trying to mark as moving for "
@@ -2939,7 +2956,7 @@ CacheAllocator<CacheTrait>::shutDown() {
   XDCHECK(!config_.cacheDir.empty());
 
   if (config_.enableFastShutdown) {
-    shutDownInProgress = true;
+    shutDownInProgress_ = true;
   }
 
   stopWorkers();

@@ -1717,7 +1717,7 @@ class CacheAllocator : public CacheBase {
   std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmAdmissionPolicy_;
 
   // indicates if the shutdown of cache is in progress or not
-  std::atomic<bool> shutDownInProgress{false};
+  std::atomic<bool> shutDownInProgress_{false};
 
   // END private members
 

@@ -3066,6 +3066,77 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testFastShutdownWithAbortedPoolRebalancer() {
+    const size_t nSlabs = 4;
+    const size_t size = nSlabs * Slab::kSize;
+    const unsigned int keyLen = 100;
+
+    uint8_t poolId;
+
+    // Test allocations. These allocations should remain after save/restore.
+    // Original lru allocator
+    std::vector<std::string> keys;
+    typename AllocatorT::Config config;
+    config.enableCachePersistence(this->cacheDir_);
+    config.setCacheSize(size);
+    {
+      std::vector<typename AllocatorT::ItemHandle> handles;
+      AllocatorT alloc(AllocatorT::SharedMemNew, config);
+      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+      const std::set<uint32_t> acSizes = {512 * 1024, 1024 * 1024};
+      poolId = alloc.addPool("foobar", numBytes, acSizes);
+      std::vector<uint32_t> sizes = {450 * 1024};
+      // Fill the pool with one allocation size
+      this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
+      for (const auto& item : alloc) {
+        auto key = item.getKey();
+        keys.push_back(key.str());
+      }
+
+      // get references to the allocated items
+      for (auto& key : keys) {
+        auto handle = alloc.find(key);
+        ASSERT_NE(nullptr, handle.get());
+        handles.push_back(std::move(handle));
+      }
+
+      // Try to allocate another allocation size. This should trigger
+      // slab rebalancer to free up a slab, but it would not succeed
+      // because all items have references
+      for (int i = 0; i < 10; i++) {
+        util::allocateAccessible(alloc, poolId, folly::sformat("foo{}", i),
+                                 900 * 1024);
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      // Wait here for the slab release to start
+      while (alloc.getSlabReleaseStats().numActiveSlabReleases == 0) {
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+
+      // Save, this should not throw
+      ASSERT_NO_THROW(alloc.shutDown());
+
+      // release the handle references that were being held
+      for (auto& h : handles) {
+        h.release();
+      }
+    }
+    /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // Restore lru allocator
+    {
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
+      ASSERT_EQ(1, alloc.getGlobalCacheStats().numAbortedSlabReleases);
+      for (auto& key : keys) {
+        auto handle = alloc.find(key);
+        ASSERT_NE(nullptr, handle.get());
+      }
+      alloc.shutDown();
+    }
+  }
+
   // test item sampling by getting a random item from memory
   void testItemSampling() {
     typename AllocatorT::Config config{};
