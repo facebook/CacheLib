@@ -11,6 +11,7 @@
 #include "cachelib/allocator/EventInterface.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MemoryMonitor.h"
+#include "cachelib/allocator/NvmAdmissionPolicy.h"
 #include "cachelib/allocator/PoolOptimizeStrategy.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/Util.h"
@@ -18,22 +19,21 @@
 
 namespace facebook {
 namespace cachelib {
-template <typename CacheType>
+
+template <typename CacheT>
 class CacheAllocatorConfig {
  public:
-  using AccessConfig = typename CacheType::AccessConfig;
-  using ChainedItemMovingSync = typename CacheType::ChainedItemMovingSync;
-  using RemoveCb = typename CacheType::RemoveCb;
-  using NvmCacheFilterCb = typename CacheType::NvmCacheFilterCb;
-  using NvmCacheEncodeCb = typename CacheType::NvmCacheT::EncodeCB;
-  using NvmCacheDecodeCb = typename CacheType::NvmCacheT::DecodeCB;
-  using NvmCacheDeviceEncryptor =
-      typename CacheType::NvmCacheT::DeviceEncryptor;
-  using MoveCb = typename CacheType::MoveCb;
-  using NvmCacheConfig = typename CacheType::NvmCacheT::Config;
-  using Key = typename CacheType::Key;
-  using EventTrackerSharedPtr =
-      std::shared_ptr<typename CacheType::EventTracker>;
+  using AccessConfig = typename CacheT::AccessConfig;
+  using ChainedItemMovingSync = typename CacheT::ChainedItemMovingSync;
+  using RemoveCb = typename CacheT::RemoveCb;
+  using NvmCacheFilterCb = typename CacheT::NvmCacheFilterCb;
+  using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
+  using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
+  using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
+  using MoveCb = typename CacheT::MoveCb;
+  using NvmCacheConfig = typename CacheT::NvmCacheT::Config;
+  using Key = typename CacheT::Key;
+  using EventTrackerSharedPtr = std::shared_ptr<typename CacheT::EventTracker>;
 
   // Set cache name as a string
   CacheAllocatorConfig& setCacheName(const std::string&);
@@ -74,6 +74,13 @@ class CacheAllocatorConfig {
                                                   uint32_t numSplits,
                                                   size_t suffixIgnoreLength,
                                                   bool useDramHitSignal);
+
+  // enable an admission policy for NvmCache. If this is set, other supported
+  // options like enableRejectFirstAP etc are overlooked.
+  //
+  // @throw std::invalid_argument if nullptr is passed.
+  CacheAllocatorConfig& setNvmCacheAdmissionPolicy(
+      std::shared_ptr<NvmAdmissionPolicy<CacheT>> policy);
 
   // enables filtering items that go into nvmcache
   CacheAllocatorConfig& setNvmCacheFilterCallback(NvmCacheFilterCb cb);
@@ -310,7 +317,7 @@ class CacheAllocatorConfig {
   // validate the config, and return itself if valid
   const CacheAllocatorConfig& validate() const {
     // we can track tail hits only if MMType is MM2Q
-    if (trackTailHits && CacheType::MMType::kId != MM2Q::kId) {
+    if (trackTailHits && CacheT::MMType::kId != MM2Q::kId) {
       throw std::invalid_argument(
           "Tail hits tracking cannot be enabled on MMTypes except MM2Q.");
     }
@@ -528,6 +535,9 @@ class CacheAllocatorConfig {
   // readers.
   MoveCb moveCb{};
 
+  // custom user provided admission policy
+  std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmCacheAP{nullptr};
+
   // user defined call back for filtering out items that go into the nvm
   // cache. this will keep certain items only in DRAM.
   NvmCacheFilterCb filterCb{};
@@ -569,8 +579,7 @@ class CacheAllocatorConfig {
   uint32_t minAllocationClassSize{72};
   bool reduceFragmentationInAllocationClass{false};
 
-  template <typename CacheTrait>
-  friend class CacheAllocator;
+  friend CacheT;
 
  private:
   void mergeWithPrefix(
@@ -650,6 +659,22 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCache(
     NvmCacheConfig config) {
   nvmConfig.assign(config);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
+    std::shared_ptr<NvmAdmissionPolicy<T>> policy) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmCache filter callback can not be set unless nvmcache is used");
+  }
+
+  if (!policy) {
+    throw std::invalid_argument("Setting a null admission policy");
+  }
+
+  nvmCacheAP = std::move(policy);
   return *this;
 }
 
@@ -1032,6 +1057,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";
   configMap["filterCb"] = filterCb ? "set" : "empty";
+  configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
+  configMap["nvmAPRejectFirst"] = rejectFirstAPNumEntries ? "set" : "empty";
   configMap["moveCb"] = moveCb ? "set" : "empty";
   configMap["enableZeroedSlabAllocs"] = std::to_string(enableZeroedSlabAllocs);
   configMap["lockMemory"] = std::to_string(lockMemory);

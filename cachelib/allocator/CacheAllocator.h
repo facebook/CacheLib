@@ -1714,7 +1714,7 @@ class CacheAllocator : public CacheBase {
   NvmCacheState nvmCacheState_;
 
   // admission policy for nvmcache
-  std::unique_ptr<NvmAdmissionPolicy<CacheT>> nvmAdmissionPolicy_;
+  std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmAdmissionPolicy_;
 
   // indicates if the shutdown of cache is in progress or not
   std::atomic<bool> shutDownInProgress{false};

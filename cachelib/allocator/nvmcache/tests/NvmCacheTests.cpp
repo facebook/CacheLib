@@ -45,6 +45,59 @@ TEST_F(NvmCacheTest, Config) {
   ASSERT_THROW(config.validate(), std::invalid_argument);
 }
 
+namespace {
+template <typename T>
+struct MockNvmAdmissionPolicy : public NvmAdmissionPolicy<T> {
+  MockNvmAdmissionPolicy() = default;
+  using Item = typename T::Item;
+  using ChainedItemIter = typename T::ChainedItemIter;
+  virtual bool accept(const Item&, folly::Range<ChainedItemIter>) override {
+    return true;
+  }
+  virtual std::unordered_map<std::string, double> getCounters() override {
+    std::unordered_map<std::string, double> ret;
+    ret["nvm_mock_policy"] = 1;
+    return ret;
+  }
+};
+} // namespace
+
+TEST_F(NvmCacheTest, APConfig) {
+  auto policy = std::make_shared<MockNvmAdmissionPolicy<AllocatorT>>();
+  {
+    auto& config = getConfig();
+    config.enableRejectFirstAPForNvm(10, 10, 1, true);
+    auto& nvm = makeCache();
+    auto ctrs = nvm.getNvmCacheStatsMap();
+    EXPECT_NE(ctrs.find("nvm_reject_first_keys_tracked"), ctrs.end());
+  }
+
+  {
+    auto& config = getConfig();
+    config.setNvmCacheAdmissionPolicy(policy);
+    ASSERT_NO_THROW(config.validate());
+    auto& nvm = makeCache();
+    auto ctrs = nvm.getNvmCacheStatsMap();
+    EXPECT_NE(ctrs.find("nvm_mock_policy"), ctrs.end());
+  }
+
+  // setting both reject first and custom ap will give custom ap the higher
+  // priority
+  {
+    auto& config = getConfig();
+    config.enableRejectFirstAPForNvm(10, 10, 1, true);
+    auto& nvm = makeCache();
+    auto ctrs = nvm.getNvmCacheStatsMap();
+    EXPECT_NE(ctrs.find("nvm_mock_policy"), ctrs.end());
+  }
+
+  {
+    auto& config = getConfig();
+    EXPECT_THROW(config.setNvmCacheAdmissionPolicy(nullptr),
+                 std::invalid_argument);
+  }
+}
+
 TEST_F(NvmCacheTest, BasicGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();

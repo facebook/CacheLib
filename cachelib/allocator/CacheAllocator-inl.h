@@ -210,11 +210,15 @@ CacheAllocator<CacheTrait>::restoreCCacheManager() {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
-  if (config_.rejectFirstAPNumEntries && config_.nvmConfig.has_value()) {
-    nvmAdmissionPolicy_ = std::make_unique<RejectFirstAP<CacheT>>(
-        config_.rejectFirstAPNumEntries, config_.rejectFirstAPNumSplits,
-        config_.rejectFirstSuffixIgnoreLength,
-        config_.rejectFirstUseDramHitSignal);
+  if (config_.nvmConfig.has_value()) {
+    if (config_.nvmCacheAP) {
+      nvmAdmissionPolicy_ = config_.nvmCacheAP;
+    } else if (config_.rejectFirstAPNumEntries) {
+      nvmAdmissionPolicy_ = std::make_shared<RejectFirstAP<CacheT>>(
+          config_.rejectFirstAPNumEntries, config_.rejectFirstAPNumSplits,
+          config_.rejectFirstSuffixIgnoreLength,
+          config_.rejectFirstUseDramHitSignal);
+    }
   }
   initStats();
   initNvmCache(dramCacheAttached);
