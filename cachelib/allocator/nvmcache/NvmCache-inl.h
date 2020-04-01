@@ -153,8 +153,19 @@ void NvmCache<C>::evictCB(navy::BufferView key,
       ? cache_.nvmLargeEvictionAgeSecs_.trackValue(lifetime)
       : cache_.nvmSmallEvictionAgeSecs_.trackValue(lifetime);
 
-  auto hdl = cache_.peek(folly::StringPiece{
-      reinterpret_cast<const char*>(key.data()), key.size()});
+  ItemHandle hdl;
+  try {
+    hdl = cache_.peek(folly::StringPiece{
+        reinterpret_cast<const char*>(key.data()), key.size()});
+  } catch (const exception::RefcountOverflow& ex) {
+    XLOGF(ERR,
+          "Refcount overflowed when trying peek at an item in "
+          "NvmCache::evictCB. key: {}, ex: {}",
+          folly::StringPiece{reinterpret_cast<const char*>(key.data()),
+                             key.size()},
+          ex.what());
+  }
+
   if (!hdl) {
     return;
   }

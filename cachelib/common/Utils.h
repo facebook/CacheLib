@@ -188,6 +188,8 @@ size_t getRSSBytes();
 // returns the current mem-available reported by the kernel. 0 means an error.
 size_t getMemAvailable();
 
+// Print stack trace for the current exception thrown
+void printExceptionStackTraces();
 } // namespace util
 } // namespace cachelib
 } // namespace facebook

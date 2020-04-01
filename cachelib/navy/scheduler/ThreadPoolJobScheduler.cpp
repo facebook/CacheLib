@@ -5,6 +5,8 @@
 #include <folly/Format.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/common/Utils.h"
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
@@ -97,7 +99,21 @@ void JobQueue::process() {
 }
 
 JobExitCode JobQueue::runJob(QueueEntry& entry) {
-  auto exitCode = entry.job();
+  auto safeJob = [&entry] {
+    try {
+      return entry.job();
+    } catch (const std::exception& ex) {
+      XLOGF(ERR, "Exception thrown from the job: {}", ex.what());
+      util::printExceptionStackTraces();
+      throw;
+    } catch (...) {
+      XLOG(ERR, "Unknown exception thrown from the job");
+      util::printExceptionStackTraces();
+      throw;
+    }
+  };
+
+  auto exitCode = safeJob();
   switch (exitCode) {
   case JobExitCode::Reschedule: {
     entry.rescheduleCount++;

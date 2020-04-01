@@ -1,5 +1,6 @@
 #include <fstream>
 #include <stdexcept>
+#include <iostream>
 
 #include <dirent.h>
 #include <sys/mman.h>
@@ -7,6 +8,8 @@
 #include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <folly/experimental/exception_tracer/ExceptionTracer.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -404,7 +407,14 @@ size_t getMemAvailable() {
     }
   }
   return 0;
-} // namespace util
+}
+
+void printExceptionStackTraces() {
+  auto exceptions = folly::exception_tracer::getCurrentExceptions();
+  for (auto& exc : exceptions) {
+    std::cerr << exc << std::endl;
+  }
+}
 
 } // namespace util
 } // namespace cachelib
