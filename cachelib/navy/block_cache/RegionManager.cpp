@@ -35,7 +35,8 @@ RegionManager::RegionManager(uint32_t numRegions,
   }
   if (doesBufferingWrites()) {
     for (uint32_t i = 0; i < numInMemBuffers_; i++) {
-      buffers_.push_back(std::make_unique<Buffer>(regionSize_));
+      buffers_.push_back(
+          std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
     }
   }
 }
@@ -82,10 +83,11 @@ void RegionManager::reset() {
 // This routine is idempotent and is safe to call multiple times until
 // detachBuffer is done.
 bool RegionManager::flushBuffer(const RegionId& rid) {
-  std::unique_ptr<Buffer> buf;
   auto& region = getRegion(rid);
-  auto callBack = [this](RelAddress addr, Buffer buffer) {
-    if (!deviceWrite(addr, std::move(buffer))) {
+  auto callBack = [this](RelAddress addr, BufferView view) {
+    auto writeBuffer = device_.makeIOBuffer(view.size());
+    writeBuffer.copyFrom(0, view);
+    if (!deviceWrite(addr, std::move(writeBuffer))) {
       return false;
     }
     numInMemBufWaitingFlush_.dec();
@@ -97,7 +99,7 @@ bool RegionManager::flushBuffer(const RegionId& rid) {
     return false;
   }
   // detach buffer can return nullptr if there are active readers
-  buf = region.detachBuffer();
+  auto buf = region.detachBuffer();
   if (buf) {
     returnBufferToPool(std::move(buf));
     return true;
