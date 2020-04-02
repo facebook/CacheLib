@@ -49,8 +49,10 @@ class PercentileStats {
     auto result = estimator_.estimateQuantiles(
         folly::Range<const double*>{kQuantiles.begin(), kQuantiles.end()});
     XDCHECK_EQ(kQuantiles.size(), result.quantiles.size());
-    return {static_cast<uint64_t>(
-                result.count == 0 ? 0 : result.sum / result.count),
+    if (result.count == 0) {
+      return {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    }
+    return {static_cast<uint64_t>(result.sum / result.count),
             static_cast<uint64_t>(result.quantiles[0].second),
             static_cast<uint64_t>(result.quantiles[1].second),
             static_cast<uint64_t>(result.quantiles[2].second),
