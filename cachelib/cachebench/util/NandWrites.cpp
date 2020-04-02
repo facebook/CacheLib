@@ -1,173 +1,369 @@
 #include "cachelib/cachebench/util/NandWrites.h"
 
 #include <algorithm>
-#include <cctype>
-#include <cstdio>
 #include <string>
+#include <vector>
 
 #include <folly/Format.h>
+#include <folly/String.h>
+#include <folly/Subprocess.h>
+#include <folly/json.h>
+#include <folly/logging/xlog.h>
 
 namespace facebook {
 namespace hw {
 
+// Simple wrapper around folly::Subprocess.
+class SubprocessWrapper : public Process {
+ public:
+  SubprocessWrapper(const std::vector<std::string>& argv,
+                    const folly::Subprocess::Options& options,
+                    const char* executable = nullptr,
+                    const std::vector<std::string>* env = nullptr)
+      : subprocess_(argv, options, executable, env) {}
+
+  virtual ~SubprocessWrapper() {}
+
+  virtual std::pair<std::string, std::string> communicate() {
+    return subprocess_.communicate();
+  }
+
+  virtual folly::ProcessReturnCode wait() { return subprocess_.wait(); }
+
+ private:
+  folly::Subprocess subprocess_;
+};
+
+std::shared_ptr<Process> ProcessFactory::createProcess(
+    const std::vector<std::string>& argv,
+    const folly::Subprocess::Options& options,
+    const char* executable,
+    const std::vector<std::string>* env) const {
+  return std::make_shared<SubprocessWrapper>(argv, options, executable, env);
+}
+
 namespace {
 
-constexpr size_t MB = 1024ULL * 1024ULL;
+void printCmd(const std::vector<std::string>& argv) {
+  auto s =
+      std::accumulate(argv.begin(),
+                      argv.end(),
+                      std::string(""),
+                      [](const auto& a, const auto& b) { return a + " " + b; });
+  XLOG(DBG) << "Running command: " << s;
+}
 
-std::string runCommand(std::string cmd) {
-  std::array<char, 128> buffer;
-  std::string output = "";
+bool runNvmeCmd(const std::shared_ptr<ProcessFactory>& processFactory,
+                const folly::StringPiece& nvmePath,
+                const std::vector<std::string>& args,
+                std::string& out) {
+  std::vector<std::string> argv{nvmePath.str()};
+  std::copy(args.begin(), args.end(), std::back_inserter(argv));
+  printCmd(argv);
 
-  FILE* pipe = popen(cmd.c_str(), "r");
-  if (!pipe) {
-    return "Cannot open!";
+  // Note that we can't just provide a command line here since then Subprocess
+  // will use the shell, and this code cannot use the shell since it is invoked
+  // by a setuid root binary in some contexts.
+  try {
+    auto proc =
+        processFactory->createProcess(argv,
+                                      folly::Subprocess::Options().pipeStdout(),
+                                      nvmePath.data(),
+                                      nullptr /* env */);
+    XDCHECK(proc);
+    const auto& [stdout, stderr] = proc->communicate();
+    const auto& rc = proc->wait();
+    bool success = rc.exitStatus() == 0;
+    if (success) {
+      XLOG(DBG) << "Got output: " << stdout;
+      out = stdout;
+    }
+    return success;
+  } catch (const folly::SubprocessSpawnError& e) {
+    XLOG(ERR) << e.what();
+    return false;
   }
-  while (!feof(pipe)) {
-    if (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
-      output += buffer.data();
+}
+
+// Get the "bytes written" line in the `nvme` output for a device, as a vector
+// of space-delimited fields.
+//
+// Runs `nvme` with the given arguments, looks for the first line containing
+// the string "ritten", and then extracts and returns the given (space
+// delimited) fields. If no matching line is found, returns an empty vector.
+std::vector<std::string> getBytesWrittenLine(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const std::vector<std::string>& args) {
+  std::string out;
+  if (!runNvmeCmd(processFactory, nvmePath, args, out)) {
+    XLOG(ERR) << "Failed to run nvme command!";
+    return {};
+  }
+
+  // The existing NandWrite code expects a line that matches the pattern
+  // /ritten/, so that's what we do here. We just use the first matching
+  // line.
+  std::vector<folly::StringPiece> lines;
+  folly::split("\n", out, lines, true /* ignoreEmpty */);
+  for (const auto& line : lines) {
+    if (line.find("ritten") != std::string::npos) {
+      std::vector<std::string> fields;
+      folly::split(" ", line, fields, true /* ignoreEmpty */);
+      return fields;
     }
   }
-  pclose(pipe);
-  return output;
+
+  XLOG(ERR) << "No matching line found in nvme output!";
+  return {};
 }
 
-uint64_t samsungWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme samsung vs-smart-add-log /dev/{} | grep ritten | awk '{{ print "
-      "$4 }}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  // output is in bytes
-  return nWrites;
+// Get the "write count" for a drive using `nvme`. Note that different vendors
+// use different units for this value, hence the "factor" argument; see the
+// functions below.
+std::optional<uint64_t> getBytesWritten(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const std::vector<std::string>& args,
+    const size_t fieldNum,
+    const uint64_t factor) {
+  std::vector<std::string> fields =
+      getBytesWrittenLine(processFactory, nvmePath, args);
+  XLOG(DBG) << "got fields: " << folly::join(",", fields);
+  if (fields.size() <= fieldNum) {
+    XLOG(ERR) << "Unexpected number of fields in line! Got " << fields.size()
+              << " fields, but expected at least " << fieldNum + 1 << ".";
+    return std::nullopt;
+  }
+  return std::stoll(fields[fieldNum], 0 /* pos */, 0 /* base */) * factor;
 }
 
-uint64_t liteonWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme liteon vs-smart-add-log /dev/{} | grep ritten | awk '{{ print $5 "
-      "}}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  // output is in bytes
-  return nWrites;
+// The output for a Samsung device looks like:
+//
+// clang-format off
+// ...
+// [015:000] PhysicallyWrittenBytes                            : 5357954930143232
+// ...
+// clang-format on
+//
+// Note that Samsung supports JSON output, but for simplicity we parse
+// all the vendor output the same way.
+std::optional<uint64_t> samsungWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  // For Samsung devices, the returned count is already in bytes.
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"samsung", "vs-smart-add-log", devicePath.str()},
+                         3 /* field num */,
+                         1 /* factor */);
 }
 
-uint64_t intelWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme intel smart-log-add /dev/{} | grep ritten | awk '{{ print $5}}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  // output is in number of 32MB pages
-  return nWrites * 32 * MB;
-}
-uint64_t seagateWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme seagate vs-smart-add-log /dev/{} | grep ritten | awk '{{print "
-      "$5}}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  return (nWrites / (1024 / 500)) * MB;
-}
-
-uint64_t skhmsWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme skhms vs-skhms-smart-log /dev/{} | grep ritten | awk '{{print "
-      "$5}}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  // output is in 512 byte pages
-  return nWrites * 512;
+// The output for a Seagate device looks like this:
+//
+// clang-format off
+// Seagate Extended SMART Information :
+// Description                             Ext-Smart-Id    Ext-Smart-Value
+// --------------------------------------------------------------------------------
+// ...
+// Physical (NAND) bytes written           60137           0x000000000000000000000002d0cdc01b
+// ...
+// clang-format on
+std::optional<uint64_t> seagateWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  // For Segate, the output is a count of 500 KiB blocks written.
+  //
+  // XXX The code in NandWrites.cpp assumes this, but the name of the attribute
+  // in the output is "bytes written" -- so which is it?
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"seagate", "vs-smart-add-log", devicePath.str()},
+                         5 /* field num */,
+                         500 * 1024 /* factor */);
 }
 
-uint64_t toshibaWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme toshiba vs-smart-add-log /dev/{} | grep ritten | awk '{{ print "
-      "$7}}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stoll(result);
-  // output is in KB
-  return (nWrites * 1024);
+// The output for a Toshiba device looks like:
+//
+// clang-format off
+// Vendor Log Page 0xCA for NVME device:nvme0 namespace-id:ffffffff
+// Total data written to NAND               : 1133997.9 GiB
+// ...
+// clang-format on
+std::optional<uint64_t> toshibaWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  // We expect the units to be one of 'KiB', 'MiB', 'GiB', or 'TiB'.
+  const auto& fields =
+      getBytesWrittenLine(processFactory,
+                          nvmePath,
+                          {"toshiba", "vs-smart-add-log", devicePath.str()});
+  // There should be 8 fields in the "data written" line.
+  constexpr size_t kExpectedFieldCount = 8;
+  if (fields.size() != kExpectedFieldCount) {
+    XLOG(ERR) << "Wrong number of fields! Got " << fields.size()
+              << " fields, but expected exactly " << kExpectedFieldCount << ".";
+    return std::nullopt;
+  }
+
+  const auto& value = std::stoll(fields[6]);
+  const auto& units = fields[7];
+  if (units == "KiB") {
+    return value * 1024;
+  } else if (units == "MiB") {
+    return value * 1024 * 1024;
+  } else if (units == "GiB") {
+    return value * 1024 * 1024 * 1024;
+  } else if (units == "TiB") {
+    return value * 1024 * 1024 * 1024 * 1024;
+  }
+
+  XLOG(ERR) << "Unrecognized units " << units << " in nvme output!";
+  return std::nullopt;
 }
 
-uint64_t wdcWriteBytes(folly::StringPiece device) {
-  auto cmd = folly::sformat(
-      "nvme wdc smart-add-log /dev/{} | grep ritten | awk '{{ print $5 }}'",
-      device);
-  std::string result = runCommand(cmd);
-  result.erase(std::remove(result.begin(), result.end(), ','), result.end());
-  result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
-  uint64_t nWrites = std::stol(result);
-  // output is in 512 byte pages
-  return nWrites * 512;
+// The output for an Intel device looks like:
+//
+// clang-format off
+// Additional Smart Log for NVME device:nvme0 namespace-id:ffffffff
+// key                               normalized raw
+// ...
+// nand_bytes_written              : 100%       sectors: 224943088
+// ...
+// clang-format on
+//
+// Note that Intel supports JSON output, but for simplicity we parse
+// all the vendor output the same way.
+std::optional<uint64_t> intelWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  // For Intel devices, the output is in number of 32 MB pages.
+  //
+  // XXX The code in NandWrites assumes that the output is a number of 32 MB
+  // pages, but the actual `nvme` output for an Intel device says "sectors" and
+  // the `nvme list` output lists a sector size of 4 KiB.
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"intel", "smart-log-add", devicePath.str()},
+                         4 /* field num */,
+                         32 * 1024 * 1024 /* factor */);
 }
 
-std::string getVendorName(folly::StringPiece device, size_t columnNum) {
-  std::string cmd = folly::sformat(
-      "nvme list | grep {} | awk '{{ print ${} }}'", device, columnNum);
-  auto s = runCommand(cmd);
-  std::transform(s.begin(), s.end(), s.begin(), ::tolower);
-  s.erase(std::remove(s.begin(), s.end(), '\n'), s.end());
-  return s;
+// I don't have access to hosts with WDC, Liteon, or SKHMS flash drives that I
+// can use to test this code, so I've left these functions commented out for
+// now.
+//
+// uint64_t wdcWriteBytes(const folly::StringPiece& device) {
+//   // For WDC, output is in 512 byte pages.
+//   return getWriteCount(device, {"wdc", "smart-add-log"}, 4) * 512;
+// }
+//
+// uint64_t liteonWriteBytes(const folly::StringPiece& device) {
+//   return getWriteCount(device, {"liteon", "vs-smart-add-log"}, 4);
+// }
+//
+// uint64_t skhmsWriteBytes(const folly::StringPiece& device) {
+//   // For SKHMS, the output is in 512 byte pages.
+//   return getWriteCount(device, {"skhms", "vs-skhms-smart-log"}, 4) * 512;
+// }
+
+std::optional<uint64_t> notImplemented(const std::string& vendorName) {
+  throw std::invalid_argument(
+      folly::sformat("Function not implemented for vendor {}", vendorName));
 }
 
-bool isValidDevice(folly::StringPiece device) {
-  for (auto c : device) {
-    // lower case alphanum is the valid combination
-    if (!std::isalnum(c) || (std::isalpha(c) && !std::islower(c))) {
-      return false;
+// Gets the output of `nvme list` for the given device.
+std::optional<std::string> getDeviceModelNumber(
+    std::shared_ptr<ProcessFactory> processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  std::string out;
+  if (!runNvmeCmd(processFactory, nvmePath, {"list", "-o", "json"}, out)) {
+    XLOG(ERR) << "Failed to run nvme command!";
+    return std::nullopt;
+  }
+
+  try {
+    const auto& obj = folly::parseJson(out);
+    const auto& devices = obj["Devices"];
+    for (const auto& device : devices) {
+      XLOG(DBG) << "Considering device " << device["DevicePath"].asString();
+      if (device["DevicePath"].asString() == devicePath) {
+        XLOG(DBG) << "Device matched, returning model number "
+                  << device["ModelNumber"].asString();
+        return device["ModelNumber"].asString();
+      }
+    }
+  } catch (const folly::json::parse_error& e) {
+    XLOG(ERR) << e.what();
+  }
+
+  // No matching device in the nvme output.
+  return std::nullopt;
+}
+
+} // anonymous namespace
+
+// TODO: add unit tests
+uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
+                        const folly::StringPiece& nvmePath,
+                        std::shared_ptr<ProcessFactory> processFactory) {
+  const auto& devicePath = folly::sformat("/dev/{}", deviceName);
+  auto modelNumber = getDeviceModelNumber(processFactory, nvmePath, devicePath);
+  if (!modelNumber) {
+    throw std::invalid_argument(
+        folly::sformat("Failed to get device info for device {}", deviceName));
+  }
+  folly::toLowerAscii(modelNumber.value());
+
+  static const std::map<std::string,
+                        std::function<std::optional<uint64_t>(
+                            const std::shared_ptr<ProcessFactory>&,
+                            const folly::StringPiece&,
+                            const folly::StringPiece&)>>
+      vendorMap{{"samsung", samsungWriteBytes},
+                {"liteon",
+                 [](const auto&, const auto&, const auto&) {
+                   return notImplemented("LITEON");
+                 }},
+                {"intel", intelWriteBytes},
+                {"seagate", seagateWriteBytes},
+                // The Seagate XM1441 doesn't include SEAGATE in the model
+                // number, but it's a Segate device.
+                {"xm1441-", seagateWriteBytes},
+                {"skhms",
+                 [](const auto&, const auto&, const auto&) {
+                   return notImplemented("SKHMS");
+                 }},
+                {"toshiba", toshibaWriteBytes},
+                {"wdc", [](const auto&, const auto&, const auto&) {
+                   return notImplemented("WDC");
+                 }}};
+  for (const auto& [vendor, func] : vendorMap) {
+    XLOG(DBG) << "Looking for vendor " << vendor << " in device model string \""
+              << modelNumber.value() << "\".";
+    if (modelNumber.value().find(vendor) != std::string::npos) {
+      XLOG(DBG) << "Matched vendor " << vendor;
+      const auto& bytesWritten = func(processFactory, nvmePath, devicePath);
+      if (!bytesWritten) {
+        // Throw an exception to maintain the same contract as the old version
+        // of this code.
+        //
+        // TODO: update the method to return an optional instead?
+        throw std::invalid_argument(folly::sformat(
+            "Failed to get bytes written for device {}", deviceName));
+      }
+      return bytesWritten.value();
     }
   }
-  return !device.empty();
-}
 
-} // namespace
-
-uint64_t nandWriteBytes(folly::StringPiece device) {
-  if (!isValidDevice(device)) {
-    throw std::invalid_argument(folly::sformat("Invalid device {}", device));
-  }
-
-  const std::string vendorA = getVendorName(device, 3);
-  const std::string vendorB = getVendorName(device, 4);
-  if (vendorA == "liteon" || vendorB == "liteon") {
-    return liteonWriteBytes(device);
-  } else if (vendorA == "samsung" || vendorB == "samsung") {
-    return samsungWriteBytes(device);
-  } else if (vendorA == "toshiba" || vendorB == "toshiba") {
-    return toshibaWriteBytes(device);
-  } else if (vendorA == "intel" || vendorB == "intel") {
-    return intelWriteBytes(device);
-  } else if (vendorA == "seagate" || vendorB == "seagate") {
-    return seagateWriteBytes(device);
-  } else if (vendorA == "wdc" || vendorB == "wdc") {
-    return wdcWriteBytes(device);
-  } else if (vendorA == "skhms" || vendorB == "skhms") {
-    return skhmsWriteBytes(device);
-  } else if (vendorA.empty() && vendorB.empty()) {
-    throw std::invalid_argument(
-        folly::sformat("Can not find information for device {}", device));
-
-  } else {
-    throw std::invalid_argument(
-        folly::sformat("Vendor {} {} not recognized", vendorA, vendorB));
-  }
+  // We got a model string but didn't match the vendor.
+  throw std::invalid_argument(folly::sformat(
+      "Vendor not recogized in device model number {}", modelNumber.value()));
 }
 
 } // namespace hw
