@@ -216,6 +216,12 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
         BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
     BufferView value{desc.valueSize, entryEnd - entrySize};
 
+    if (desc.csSelf != desc.computeChecksum()) {
+      reclaimEntryHeaderChecksumErrorCount_.inc();
+    } else if (checksumData_ && desc.cs != checksum(value)) {
+      reclaimValueChecksumErrorCount_.inc();
+    }
+
     const auto reinsertionRes =
         reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
     switch (reinsertionRes) {
@@ -363,7 +369,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   auto entryEnd = buffer.data() + buffer.size();
   auto desc = *reinterpret_cast<EntryDesc*>(entryEnd - sizeof(EntryDesc));
   if (desc.csSelf != desc.computeChecksum()) {
-    lookupChecksumErrorCount_.inc();
+    lookupEntryHeaderChecksumErrorCount_.inc();
     return Status::DeviceError;
   }
 
@@ -393,7 +399,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   value.shrink(desc.valueSize);
   if (checksumData_ && desc.cs != checksum(value.view())) {
     value.reset();
-    lookupChecksumErrorCount_.inc();
+    lookupValueChecksumErrorCount_.inc();
     return Status::DeviceError;
   }
   return Status::Ok;
@@ -429,7 +435,14 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_succ_inserts", succInsertCount_.get());
   visitor("navy_bc_lookups", lookupCount_.get());
   visitor("navy_bc_lookup_false_positives", lookupFalsePositiveCount_.get());
-  visitor("navy_bc_lookup_checksum_errors", lookupChecksumErrorCount_.get());
+  visitor("navy_bc_lookup_entry_header_checksum_errors",
+          lookupEntryHeaderChecksumErrorCount_.get());
+  visitor("navy_bc_lookup_value_checksum_errors",
+          lookupValueChecksumErrorCount_.get());
+  visitor("navy_bc_reclaim_entry_header_checksum_errors",
+          lookupEntryHeaderChecksumErrorCount_.get());
+  visitor("navy_bc_reclaim_value_checksum_errors",
+          lookupValueChecksumErrorCount_.get());
   visitor("navy_bc_succ_lookups", succLookupCount_.get());
   visitor("navy_bc_removes", removeCount_.get());
   visitor("navy_bc_succ_removes", succRemoveCount_.get());

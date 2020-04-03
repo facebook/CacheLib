@@ -197,7 +197,8 @@ class BlockCache final : public Engine {
   mutable AtomicCounter lookupCount_;
   mutable AtomicCounter succLookupCount_;
   mutable AtomicCounter lookupFalsePositiveCount_;
-  mutable AtomicCounter lookupChecksumErrorCount_;
+  mutable AtomicCounter lookupEntryHeaderChecksumErrorCount_;
+  mutable AtomicCounter lookupValueChecksumErrorCount_;
   mutable AtomicCounter removeCount_;
   mutable AtomicCounter succRemoveCount_;
   mutable AtomicCounter evictionLookupMissCounter_;
@@ -208,6 +209,8 @@ class BlockCache final : public Engine {
   mutable AtomicCounter reinsertionErrorCount_;
   mutable AtomicCounter reinsertionCount_;
   mutable AtomicCounter reinsertionBytes_;
+  mutable AtomicCounter reclaimEntryHeaderChecksumErrorCount_;
+  mutable AtomicCounter reclaimValueChecksumErrorCount_;
   mutable SizeDistribution sizeDist_;
 };
 } // namespace navy

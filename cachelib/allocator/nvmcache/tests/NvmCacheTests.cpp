@@ -1540,7 +1540,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_succ_inserts"));
   EXPECT_TRUE(cs("navy_bc_lookups"));
   EXPECT_TRUE(cs("navy_bc_lookup_false_positives"));
-  EXPECT_TRUE(cs("navy_bc_lookup_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bc_lookup_entry_header_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bc_lookup_value_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_succ_lookups"));
   EXPECT_TRUE(cs("navy_bc_removes"));
   EXPECT_TRUE(cs("navy_bc_succ_removes"));
@@ -1552,6 +1553,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reinsertions"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_bytes"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_errors"));
+  EXPECT_TRUE(cs("navy_bc_reclaim_entry_header_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bc_reclaim_value_checksum_errors"));
   for (int size = 64;;
        size = std::min(4 * 1024 * 1024, static_cast<int>(size * 1.25))) {
     EXPECT_TRUE(cs(folly::sformat("navy_bc_approx_bytes_in_size_{}", size)));
