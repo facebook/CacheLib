@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  gflags::SetUsageMessage("Welcome to the CacheBench command line utility!");
 #ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
   std::unique_ptr<FB303ThriftService> fb303_;

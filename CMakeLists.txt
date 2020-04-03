@@ -96,6 +96,8 @@ add_subdirectory(cachelib/allocator)
 add_subdirectory(cachelib/datatype)
 add_subdirectory(cachelib/compact_cache)
 add_subdirectory(cachelib/cachebench)
+add_subdirectory(cachelib/external/memcached)
+
 
 
 

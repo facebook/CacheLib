@@ -1,0 +1,66 @@
+#https://github.com/facebook/fbthrift/blob/master/ThriftLibrary.cmake lines 88 to 121
+add_library(
+  memcached
+
+assoc.h
+authfile.h
+bipbuffer.h
+cache.h
+config.h
+crawler.h
+crc32c.h
+extstore.h
+hash.h
+items.h
+itoa_ljust.h
+jenkins_hash.h
+logger.h
+memcached.h
+murmur3_hash.h
+protocol_binary.h
+restart.h
+sasl_defs.h
+slab_automove.h
+slab_automove_extstore.h
+slabs.h
+stats_prefix.h
+storage.h
+tls.h
+trace.h
+util.h
+assoc.c
+authfile.c
+bipbuffer.c
+cache.c
+crawler.c
+crc32c.c
+daemon.c
+extstore.c
+globals.c
+hash.c
+items.c
+itoa_ljust.c
+jenkins_hash.c
+logger.c
+memcached.c
+murmur3_hash.c
+restart.c
+sizes.c
+slab_automove.c
+slab_automove_extstore.c
+slabs.c
+stats_prefix.c
+storage.c
+thread.c
+timedrun.c
+tls.c
+util.c
+  )
+
+target_link_libraries(
+  memcached
+
+  PUBLIC
+  ${LIBEVENT_LIB}
+  Threads::Threads
+)

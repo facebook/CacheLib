@@ -77,6 +77,7 @@ target_link_libraries(
     navy
     ${FOLLY_LIBRARIES}
     ${FBTHRIFT_LIBRARIES}
+    memcached
 )
 target_link_libraries(
   nand_writes_util

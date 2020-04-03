@@ -2,6 +2,7 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
+#include "cachelib/cachebench/runner/MicroStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
 #include "cachelib/cachebench/runner/OutputStressor.h"
@@ -111,6 +112,11 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
+  }
+  if (stressorConfig.mode == "micro") {
+    auto generator = makeGenerator(stressorConfig);
+    return std::make_unique<MicroStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
   }
   if (stressorConfig.mode == "stdout") {
     return std::make_unique<OutputStressor<LruAllocator>>(cacheConfig,

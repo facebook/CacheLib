@@ -23,6 +23,7 @@
       "valSizeRange" : [1, 32, 10240, 409200],
       "valSizeRangeProbability" : [0.1, 0.2, 0.7],
 
+      "mode" : "micro",
       "getRatio" : 0.15,
       "setRatio" : 0.8,
       "delRatio" : 0.05,
