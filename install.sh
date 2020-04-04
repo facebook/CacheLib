@@ -3,12 +3,13 @@ BUILD_DIR=${1:-"$HOME"}
 
 pushd ${BUILD_DIR}
 #basic install
-sudo apt -y update
-sudo apt -y htop
-sudo apt-get install -y software-properties-common
-sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
-sudo apt -y update
-sudo apt install g++-7 -y
+apt -y update
+apt -y htop
+apt-get install -y software-properties-common
+add-apt-repository -y ppa:ubuntu-toolchain-r/test
+apt -y update
+apt install g++-7 -y
+apt install -y make
 
 #cmake
 curl -O -L https://github.com/Kitware/CMake/releases/download/v3.17.0/cmake-3.17.0-Linux-x86_64.tar.gz
