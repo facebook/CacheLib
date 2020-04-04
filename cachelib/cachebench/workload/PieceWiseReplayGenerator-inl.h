@@ -211,9 +211,11 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         invalidSamples_.inc();
         continue;
       }
-      // Invalid sample: cacheKey is empty, objectSize is not positive
+      // Invalid sample: cacheKey is empty, objectSize is not positive,
+      // responseSize is not positive
       if (!fields[1].compare("-") || !fields[1].compare("") ||
-          folly::to<int64_t>(fields[3].str()) <= 0) {
+          folly::to<int64_t>(fields[3].str()) <= 0 ||
+          folly::to<int64_t>(fields[4].str()) <= 0) {
         invalidSamples_.inc();
         continue;
       }
@@ -233,9 +235,22 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
       };
 
       auto fullContentSize = folly::to<size_t>(fields[3].str());
+      auto responseSize = folly::to<size_t>(fields[4].str());
       auto responseHeaderSize = folly::to<size_t>(fields[5].str());
       auto rangeStart = parseRangeField(fields[6], fullContentSize);
       auto rangeEnd = parseRangeField(fields[7], fullContentSize);
+
+      // The client connection could be terminated early because of reasons
+      // like slow client, user stops in the middle, etc.
+      // This normally happens when client sends out request for very large
+      // object without range request. Rectify such trace sample here.
+      auto responseBodySize = responseSize - responseHeaderSize;
+      if (!rangeStart.has_value() && responseBodySize < fullContentSize) {
+        // No range request setting, but responseBodySize is smaller than
+        // fullContentSize. convert the sample to range request
+        rangeStart = 0;
+        rangeEnd = responseBodySize - 1;
+      }
 
       // Record the byte wise and object wise stats that we will egress
       if (!isPrepopulate()) {
