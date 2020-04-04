@@ -12,68 +12,68 @@ find_path(
     FBTHRIFT_INCLUDE_DIR
     NAMES "thrift/lib/cpp2/Thrift.h"
     HINTS
-        "/h/bsberg/facebook/include"
+        "/usr/local/include"
 )
 find_file(
     FBTHRIFT_LIBRARY_FILE
     NAMES "ThriftLibrary.cmake"
     HINTS
-        "/h/bsberg/facebook/include/thrift"
+        "/usr/local/include/thrift"
 )
 
 find_file(
     THRIFT1
     NAMES "thrift1"
     HINTS
-        "/h/bsberg/facebook/bin"
+        "/usr/local/bin"
 )
 
 find_library(
     FBTHRIFT_CORE_LIBRARY
     NAMES thrift-core
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 
 find_library(
     THRIFTCPP2 
     NAMES thriftcpp2
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 
 find_library(
     FBTHRIFT_PROTOCOL_LIBRARY
     NAMES thriftprotocol
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 find_library(
     FBTHRIFT_PROTOCOL_LIBRARY_IMPL
     NAMES protocol
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 
 find_library(
     FBTHRIFT_FROZEN2_LIBRARY
     NAMES thriftfrozen2
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 
 find_library(
     FBTHRIFT_METADATA_LIBRARY
     NAMES thriftmetadata
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 
 find_library(
     FBTHRIFT_TRANSPORT_LIBRARY
     NAMES transport
     HINTS
-        "/h/bsberg/facebook/lib"
+        "/usr/local/lib"
 )
 set(FBTHRIFT_LIBRARIES
     ${FBTHRIFT_CORE_LIBRARY}
