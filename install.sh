@@ -8,6 +8,7 @@ apt -y htop
 apt-get install -y software-properties-common
 add-apt-repository -y ppa:ubuntu-toolchain-r/test
 apt -y update
+apt -y install g++
 apt install g++-7 -y
 apt install -y make
 
