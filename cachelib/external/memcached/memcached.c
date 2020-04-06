@@ -2927,8 +2927,8 @@ enum store_item_type do_store_item(item *it, int comm, conn *c, const uint32_t h
     if (stored == STORED) {
         c->cas = ITEM_get_cas(it);
     }
-    LOGGER_LOG(c->thread->l, LOG_MUTATIONS, LOGGER_ITEM_STORE, NULL,
-            stored, comm, ITEM_key(it), it->nkey, it->exptime, ITEM_clsid(it), c->sfd);
+    //LOGGER_LOG(c->thread->l, LOG_MUTATIONS, LOGGER_ITEM_STORE, NULL,
+    //        stored, comm, ITEM_key(it), it->nkey, it->exptime, ITEM_clsid(it), c->sfd);
 
     return stored;
 }

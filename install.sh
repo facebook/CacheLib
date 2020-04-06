@@ -74,7 +74,7 @@ make -j $(nproc)
 make install
 popd
 
-fbthrift deps
+#fbthrift deps
 #glog
 apt -y install bison libboost-all-dev flex zlib1g libgflags-dev
 [[ -d glog ]] || git clone https://github.com/google/glog.git || exit 1
