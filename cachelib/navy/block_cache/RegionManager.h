@@ -47,7 +47,9 @@ class RegionManager {
   //                          the clean pool
   // @param scheduler         JobScheduler to run reclamation jobs
   // @param regionEvictCb     Callback invoked when region evicted
+  // @param sizeClasses       list of size classes
   // @param policy            eviction policy
+  // @param numInMemBuffers   number of in memory buffers
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,

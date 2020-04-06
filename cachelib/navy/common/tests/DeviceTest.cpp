@@ -174,8 +174,11 @@ TEST(Device, RAID0IO) {
     fdvec.push_back(f.release());
   }
 
-  auto device = createDirectIoRAID0Device(
-      fdvec, blockSize, stripeSize, nullptr /* encryption */);
+  auto device = createDirectIoRAID0Device(fdvec,
+                                          blockSize,
+                                          stripeSize,
+                                          nullptr /* encryption */,
+                                          0 /* max device write size */);
 
   // Simple IO
   {

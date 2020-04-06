@@ -41,10 +41,11 @@ class DeviceEncryptor {
 // Pointer ownership is not passed.
 class Device {
  public:
-  Device() : Device{nullptr} {}
+  Device() : Device{nullptr, 0 /* max device write size */} {}
 
-  explicit Device(std::shared_ptr<DeviceEncryptor> encryptor)
-      : encryptor_{std::move(encryptor)} {}
+  explicit Device(std::shared_ptr<DeviceEncryptor> encryptor,
+                  uint32_t maxWriteSize)
+      : encryptor_{std::move(encryptor)}, maxWriteSize_(maxWriteSize) {}
 
   virtual ~Device() = default;
 
@@ -83,18 +84,24 @@ class Device {
   mutable util::PercentileStats writeLatencyEstimator_;
 
   std::shared_ptr<DeviceEncryptor> encryptor_;
+  // maxWriteSize_ 0 means no maximum write size.
+  uint32_t maxWriteSize_{0};
 };
 
 // Takes ownership of the file descriptor
 std::unique_ptr<Device> createFileDevice(
     int fd, std::shared_ptr<DeviceEncryptor> encryptor);
 std::unique_ptr<Device> createDirectIoFileDevice(
-    int fd, uint32_t blockSize, std::shared_ptr<DeviceEncryptor> encryptor);
+    int fd,
+    uint32_t blockSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
 std::unique_ptr<Device> createDirectIoRAID0Device(
     std::vector<int>& fdvec,
     uint32_t blockSize,
     uint32_t stripeSize,
-    std::shared_ptr<DeviceEncryptor> encryptor);
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
 std::unique_ptr<Device> createMemoryDevice(
     uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor);
 } // namespace navy

@@ -16,12 +16,13 @@ using IOOperation =
 class FileDevice final : public Device {
  public:
   FileDevice(int fd, std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor)}, fd_{fd} {}
+      : Device{std::move(encryptor), 0 /* max device write size */}, fd_{fd} {}
   // Overload for a raw device
   FileDevice(int fd,
              uint32_t blockSize,
-             std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor)},
+             std::shared_ptr<DeviceEncryptor> encryptor,
+             uint32_t maxDeviceWriteSize)
+      : Device{std::move(encryptor), maxDeviceWriteSize},
         fd_{fd},
         raw_{true},
         blockSize_{blockSize} {
@@ -84,8 +85,9 @@ class RAID0Device final : public Device {
   RAID0Device(std::vector<int>& fdvec,
               uint32_t blockSize,
               uint32_t stripeSize,
-              std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor)},
+              std::shared_ptr<DeviceEncryptor> encryptor,
+              uint32_t maxDeviceWriteSize)
+      : Device{std::move(encryptor), maxDeviceWriteSize},
         fdvec_{fdvec},
         raw_{true},
         blockSize_{blockSize},
@@ -190,7 +192,7 @@ class MemoryDevice final : public Device {
  public:
   explicit MemoryDevice(uint64_t size,
                         std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor)},
+      : Device{std::move(encryptor), 0 /* max device write size */},
         size_{size},
         buffer_{std::make_unique<uint8_t[]>(size)} {}
   MemoryDevice(const MemoryDevice&) = delete;
@@ -238,8 +240,19 @@ bool Device::write(uint64_t offset, Buffer buffer) {
   }
 
   auto timeBegin = getSteadyClock();
-  bool result = writeImpl(offset, size, data);
-  bytesWritten_.add(result * size);
+  auto remainingSize = size;
+  auto maxWriteSize = (maxWriteSize_ == 0) ? remainingSize : maxWriteSize_;
+  bool result = true;
+  while (remainingSize > 0) {
+    auto writeSize = std::min<size_t>(maxWriteSize, remainingSize);
+    result = writeImpl(offset, writeSize, data);
+    if (!result) {
+      break;
+    }
+    bytesWritten_.add(result * size);
+    offset += writeSize;
+    remainingSize -= writeSize;
+  }
   if (!result) {
     writeIOErrors_.inc();
   }
@@ -284,23 +297,29 @@ void Device::getCounters(const CounterVisitor& visitor) const {
 
 std::unique_ptr<Device> createFileDevice(
     int fd, std::shared_ptr<DeviceEncryptor> encryptor) {
-  return std::make_unique<FileDevice>(fd, 0, std::move(encryptor));
+  return std::make_unique<FileDevice>(fd, 0, std::move(encryptor),
+                                      0 /* max device write size */);
 }
 
 std::unique_ptr<Device> createDirectIoFileDevice(
-    int fd, uint32_t blockSize, std::shared_ptr<DeviceEncryptor> encryptor) {
+    int fd,
+    uint32_t blockSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
   XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<FileDevice>(fd, blockSize, std::move(encryptor));
+  return std::make_unique<FileDevice>(fd, blockSize, std::move(encryptor),
+                                      maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createDirectIoRAID0Device(
     std::vector<int>& fdvec,
     uint32_t blockSize,
     uint32_t stripeSize,
-    std::shared_ptr<DeviceEncryptor> encryptor) {
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
   XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<RAID0Device>(fdvec, blockSize, stripeSize,
-                                       std::move(encryptor));
+  return std::make_unique<RAID0Device>(
+      fdvec, blockSize, stripeSize, std::move(encryptor), maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createMemoryDevice(

@@ -50,6 +50,8 @@ constexpr folly::StringPiece kReinsertionProbabilityThreshold{
     "dipper_navy_reinsertion_probability_threshold"};
 constexpr folly::StringPiece kNavyRequestOrderingShards{
     "dipper_navy_req_order_shards_power"};
+constexpr folly::StringPiece kMaxDeviceWriteSize{
+    "dipper_navy_max_device_write_size"};
 constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
 
@@ -101,8 +103,8 @@ folly::File openCacheFile(const std::string& fileName,
   }
 
   if (directIO && ::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
-    throw std::system_error(
-        errno, std::system_category(), "Error fadvising cache file");
+    throw std::system_error(errno, std::system_category(),
+                            "Error fadvising cache file");
   }
 
   return f;
@@ -119,6 +121,12 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   if (usesRaidFiles(options) && options.get_ptr(kRAIDPaths)->size() <= 1) {
     throw std::invalid_argument("Raid needs more than one path");
   }
+  auto blockSize = options[kBlockSize].getInt();
+  auto maxDeviceWriteSize = options.getDefault(kMaxDeviceWriteSize, 0).getInt();
+  if (maxDeviceWriteSize > 0) {
+    maxDeviceWriteSize = alignDown(maxDeviceWriteSize, blockSize);
+  };
+
   if (usesRaidFiles(options)) {
     auto raidPaths = options.get_ptr(kRAIDPaths);
 
@@ -149,9 +157,10 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     } // for
     return cachelib::navy::createDirectIoRAID0Device(
         fdvec,
-        options[kBlockSize].getInt(),
+        blockSize,
         options[kRegionSize].getInt(),
-        std::move(encryptor));
+        std::move(encryptor),
+        maxDeviceWriteSize);
   }
 
   if (!usesSimpleFile(options)) {
@@ -171,7 +180,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     throw;
   }
   return cachelib::navy::createDirectIoFileDevice(
-      f.release(), options[kBlockSize].getInt(), std::move(encryptor));
+      f.release(), blockSize, std::move(encryptor), maxDeviceWriteSize);
 }
 
 void setupCacheProtos(const folly::dynamic& options,
@@ -245,8 +254,8 @@ void setupCacheProtos(const folly::dynamic& options,
   if (blockCacheSize > 0) {
     auto blockCache = cachelib::navy::createBlockCacheProto();
     blockCache->setBlockSize(options[kBlockSize].getInt());
-    blockCache->setLayout(
-        metadataSize, blockCacheSize, options[kRegionSize].getInt());
+    blockCache->setLayout(metadataSize, blockCacheSize,
+                          options[kRegionSize].getInt());
     bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
     blockCache->setChecksum(dataChecksum);
     if (options[kLru].getBool()) {
