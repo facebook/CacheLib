@@ -114,7 +114,8 @@ sudo apt-get -y install \
 
 [[ -d fizz ]] || git clone https://github.com/facebookincubator/fizz || exit 1
 pushd fizz
-mkdir build_ && cd build_
+[[ -d build_ ]] || mkdir build_
+cd build_
 cmake ../fizz
 make -j $(nproc)
 sudo make install
