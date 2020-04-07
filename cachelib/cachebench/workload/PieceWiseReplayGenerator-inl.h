@@ -197,6 +197,13 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
     {
       LockHolder lock(getLineLock_);
       if (!std::getline(infile_, line)) {
+        if (repeatTraceReplay_) {
+          XLOG_EVERY_MS(
+              INFO, 100'000,
+              "Reached the end of trace file. Restarting from beginning.");
+          resetTraceFileToBeginning();
+          continue;
+        }
         throw cachelib::cachebench::EndOfTrace("");
       }
     }

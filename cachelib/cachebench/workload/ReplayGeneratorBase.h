@@ -21,7 +21,8 @@ constexpr size_t kIfstreamBufferSize = 1L << 14;
 
 class ReplayGeneratorBase : public GeneratorBase {
  public:
-  explicit ReplayGeneratorBase(StressorConfig config) : config_(config) {
+  explicit ReplayGeneratorBase(StressorConfig config)
+      : config_(config), repeatTraceReplay_{config_.repeatTraceReplay} {
     if (config.checkConsistency) {
       throw std::invalid_argument(folly::sformat(
           "Cannot replay traces with consistency checking enabled"));
@@ -52,12 +53,21 @@ class ReplayGeneratorBase : public GeneratorBase {
   }
 
  protected:
+  void resetTraceFileToBeginning() {
+    infile_.clear();
+    infile_.seekg(0, std::ios::beg);
+    // header
+    std::string row;
+    std::getline(infile_, row);
+  }
+
+  const StressorConfig config_;
+  const bool repeatTraceReplay_;
+
   // ifstream pointing to the trace file
   std::ifstream infile_;
   std::vector<std::string> keys_;
   char infileBuffer_[kIfstreamBufferSize];
-
-  const StressorConfig config_;
 };
 
 } // namespace cachebench

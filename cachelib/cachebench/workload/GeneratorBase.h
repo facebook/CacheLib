@@ -30,7 +30,9 @@ class GeneratorBase {
   virtual void registerThread() {}
 
   virtual void renderStats(uint64_t /*elapsedTimeNs*/,
-                           std::ostream& /*out*/) const {}
+                           std::ostream& /*out*/) const {
+    // not implemented by default
+  }
 
   void setIsPrepopulate(bool flag) {
     isPrepopulate_.store(flag, std::memory_order_relaxed);

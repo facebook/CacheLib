@@ -133,6 +133,10 @@ struct StressorConfig : public JSONConfig {
   uint64_t cachePieceSize{65536}; // 64KB
   uint64_t maxCachePieces{32000}; // 32000 * 64KB = 2GB
 
+  // If enabled and using trace replay mode. We will repeat the trace file again
+  // and again until the number of operations specified in the test config.
+  bool repeatTraceReplay{false};
+
   // Allows multiple distributions, one corresponding to each pool of workload
   // in the cache.
   std::vector<DistributionConfig> poolDistributions;

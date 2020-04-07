@@ -1,0 +1,45 @@
+{
+    "cache_config": {
+      "cacheSizeMB": 128,
+      "htBucketPower": 24,
+      "htLockPower": 10,
+
+      "numPools": 1,
+      "poolSizes": [1.0],
+
+      "dipperSizeMB": 800,
+      "dipperBackend": "navy_dipper",
+      "dipperNavyUseMemoryDevice": true,
+      "dipperUseDirectIO": false,
+
+      "dipperNavyBlock": 4096,
+      "dipperNavyUseRegionLru": false,
+      "dipperNavySizeClasses": [],
+      "dipperNavyReqOrderShardsPower": 0,
+      "dipperNavyBigHashSizePct": 0,
+      "dipperNavyUseStackAllocation": true,
+      "dipperNavyStackAllocReadBufSizeKB": 4,
+      "navyHitsReinsertionThreshold": 1,
+      "navyProbabilityReinsertionThreshold": 0,
+      "navyReaderThreads": 36,
+      "navyWriterThreads": 36,
+      "navyCleanRegions": 10,
+      "navyDataChecksum": true,
+
+      "lru2qHotPct": 20,
+      "lru2qColdPct": 20
+    },
+    "test_config":
+      {
+        "allocator": "LRU2Q",
+
+        "enableLookaside": false,
+        "generator": "piecewise-replay",
+        "numOps": 1000000,
+        "numThreads": 12,
+        "populateItem": false,
+        "prepopulateCache": false,
+        "traceFileName": "short_bigcache_traces.csv",
+        "repeatTraceReplay": true
+      }
+  }
