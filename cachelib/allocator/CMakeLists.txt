@@ -234,8 +234,9 @@ target_link_libraries(
         PUBLIC
             navy
             cachelib_allocator
-            gtest_main
-            gmock
+            GTest::GTest
+            GTest::Main
+            ${GMOCK_LIBRARIES}
             ${FOLLY_LIBRARIES}
 )
 

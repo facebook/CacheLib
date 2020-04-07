@@ -22,7 +22,7 @@ set(LIB_INSTALL_DIR lib CACHE STRING
 set(CMAKE_INSTALL_DIR lib/cmake/${PACKAGE_NAME} CACHE STRING
     "The subdirectory where CMake package config files should be installed")
 
-#SET(CMAKE_CXX_FLAGS "-nostartfiles")
+SET(CMAKE_CXX_FLAGS "-O2")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -41,19 +41,42 @@ set(CMAKE_MODULE_PATH
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMake")
 
 # Find required dependencies
+
+find_package(fizz CONFIG REQUIRED)
+find_package(wangle CONFIG REQUIRED)
 find_package(LibEvent REQUIRED)
 find_package(RT REQUIRED)
-find_package(Glog REQUIRED)
-find_package(Fmt REQUIRED)
+find_package(fmt CONFIG REQUIRED)
 find_package(Gflags REQUIRED)
-find_package(FBThrift REQUIRED)
+find_package(yarpl CONFIG REQUIRED)
+find_package(rsocket CONFIG REQUIRED)
+find_package(FBThrift CONFIG REQUIRED)
+set(FBTHRIFT_LIBRARIES FBThrift::thriftcpp2)
+find_file(
+    FBTHRIFT_LIBRARY_FILE
+    NAMES "ThriftLibrary.cmake"
+    HINTS
+        "/usr/local/include/thrift"
+)
+include(${FBTHRIFT_LIBRARY_FILE})
+find_file(
+    THRIFT1
+    NAMES "thrift1"
+    HINTS
+        "/usr/local/bin"
+)
 find_package(Boost REQUIRED)
 find_package (Threads REQUIRED)
 find_package (Libiberty REQUIRED)
-find_package(Folly REQUIRED Glog FBThrift ${CMAKE_DL_LIBS} Threads Gflags fmt)
+find_package(Folly CONFIG REQUIRED)
+set(FOLLY_LIBRARIES Folly::folly)
+# Glog FBThrift ${CMAKE_DL_LIBS} Threads Gflags fmt)
 
-set(GTEST_ROOT "/usr/local/include/gtest" CACHE PATH "Path to googletest")
+#set(GTEST_ROOT "/usr/local/" CACHE PATH "Path to googletest")
+enable_testing()
 find_package(GTest REQUIRED)
+find_package(Gmock REQUIRED)
+find_package(glog REQUIRED)
 
 # So that all subsequent directories have access to folly and thrift
 include_directories(${FOLLY_INCLUDE_DIR} ${FBTHRIFT_INCLUDE_DIR} ${GTEST_INCLUDE_DIRS} ${GMOCK_INCLUDE_DIRS} ${fmt_INCLUDE_DIR})
@@ -83,7 +106,6 @@ include_directories(${FOLLY_INCLUDE_DIR} ${FBTHRIFT_INCLUDE_DIR} ${GTEST_INCLUDE
 #        ${CMAKE_CURRENT_BINARY_DIR}/googletest-build
 #        EXCLUDE_FROM_ALL)
 
-enable_testing()
 
 # Now simply link your own targets against gtest, gmock,
 # etc. as appropriate
@@ -97,7 +119,3 @@ add_subdirectory(cachelib/datatype)
 add_subdirectory(cachelib/compact_cache)
 add_subdirectory(cachelib/cachebench)
 add_subdirectory(cachelib/external/memcached)
-
-
-
-

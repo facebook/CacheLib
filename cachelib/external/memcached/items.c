@@ -992,43 +992,43 @@ item *do_item_get(const char *key, const size_t nkey, const uint32_t hv, conn *c
         }
     }
 
-    //if (it != NULL) {
-    //    was_found = 1;
-    //    if (item_is_flushed(it)) {
-    //        do_item_unlink(it, hv);
-    //        STORAGE_delete(c->thread->storage, it);
-    //        do_item_remove(it);
-    //        it = NULL;
-    //        pthread_mutex_lock(&c->thread->stats.mutex);
-    //        c->thread->stats.get_flushed++;
-    //        pthread_mutex_unlock(&c->thread->stats.mutex);
-    //        if (settings.verbose > 2) {
-    //            fprintf(stderr, " -nuked by flush");
-    //        }
-    //        was_found = 2;
-    //    } else if (it->exptime != 0 && it->exptime <= current_time) {
-    //        do_item_unlink(it, hv);
-    //        STORAGE_delete(c->thread->storage, it);
-    //        do_item_remove(it);
-    //        it = NULL;
-    //        pthread_mutex_lock(&c->thread->stats.mutex);
-    //        c->thread->stats.get_expired++;
-    //        pthread_mutex_unlock(&c->thread->stats.mutex);
-    //        if (settings.verbose > 2) {
-    //            fprintf(stderr, " -nuked by expire");
-    //        }
-    //        was_found = 3;
-    //    } else {
-    //        if (do_update) {
-    //            do_item_bump(c, it, hv);
-    //        }
-    //        DEBUG_REFCNT(it, '+');
-    //    }
-    //}
+    if (it != NULL) {
+        was_found = 1;
+        if (item_is_flushed(it)) {
+            do_item_unlink(it, hv);
+            STORAGE_delete(c->thread->storage, it);
+            do_item_remove(it);
+            it = NULL;
+            pthread_mutex_lock(&c->thread->stats.mutex);
+            c->thread->stats.get_flushed++;
+            pthread_mutex_unlock(&c->thread->stats.mutex);
+            if (settings.verbose > 2) {
+                fprintf(stderr, " -nuked by flush");
+            }
+            was_found = 2;
+        } else if (it->exptime != 0 && it->exptime <= current_time) {
+            do_item_unlink(it, hv);
+            STORAGE_delete(c->thread->storage, it);
+            do_item_remove(it);
+            it = NULL;
+            pthread_mutex_lock(&c->thread->stats.mutex);
+            c->thread->stats.get_expired++;
+            pthread_mutex_unlock(&c->thread->stats.mutex);
+            if (settings.verbose > 2) {
+                fprintf(stderr, " -nuked by expire");
+            }
+            was_found = 3;
+        } else {
+            if (do_update) {
+                do_item_bump(c, it, hv);
+            }
+            DEBUG_REFCNT(it, '+');
+        }
+    }
 
-    //if (settings.verbose > 2)
-    //    fprintf(stderr, "\n");
-    ///* For now this is in addition to the above verbose logging. */
+    if (settings.verbose > 2)
+        fprintf(stderr, "\n");
+    /* For now this is in addition to the above verbose logging. */
     //LOGGER_LOG(c->thread->l, LOG_FETCHERS, LOGGER_ITEM_GET, NULL, was_found, key, nkey,
     //         (it) ? ITEM_clsid(it) : 0, c->sfd);
 
@@ -1209,7 +1209,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
                     if ((search->it_flags & ITEM_ACTIVE)) {
                         itemstats[id].evicted_active++;
                     }
-                    LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EVICTION, search);
+                    //LOGGER_LOG(NULL, LOG_EVICTIONS, LOGGER_EVICTION, search);
                     STORAGE_delete(ext_storage, search);
                     do_item_unlink_nolock(search, hv);
                     removed++;

@@ -41,8 +41,9 @@ target_link_libraries(
             cachelib_datatype
             navy
             cachelib_allocator
-            gtest_main
-            gmock
+            GTest::GTest
+            GTest::Main
+            ${GMOCK_LIBRARIES}
             ${FOLLY_LIBRARIES}
 )
 

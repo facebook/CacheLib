@@ -5,6 +5,7 @@
 #include <unordered_set>
 
 #include <event.h>
+#include <time.h>
 #include <folly/Random.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
@@ -22,6 +23,9 @@ extern "C" struct conn;
 extern "C" struct item;
 extern "C" item *item_get(const char *key, const size_t nkey, conn *c, const bool do_update);
 extern "C" conn *conn_new(const int sfd, int init_state, const int event_flags, const int read_buffer_size, int transport, struct event_base *base, void *ssl);
+extern "C" item *item_alloc(char *key, size_t nkey, int flags, unsigned int exptime, int nbytes);
+extern "C" int store_item(item *item, int comm, conn* c);
+#define NREAD_SET 2
 
 
 namespace facebook {
@@ -363,7 +367,7 @@ class MicroStressor : public Stressor {
 
         const auto pid = opPoolDist(gen);
         const Request& req(getReq(pid, gen, lastRequestId));
-        const std::string* key = &(req.key);
+        std::string* key = &(req.key);
         const OpType op = wg_->getOp(pid, gen, req.requestId);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
@@ -377,7 +381,8 @@ class MicroStressor : public Stressor {
         case OpType::kSet: {
           chainedItemLock(Mode::Exclusive, *key);
           SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          result = setKey(pid, stats, key, *(req.sizeBegin));
+          result = setKey(pid, stats, key, *(req.sizeBegin), dummyMemcachedConnection);
+//          item * mc_it = item_get(key->c_str(), 1, dummyMemcachedConnection, true);
 
           throttleFn();
           break;
@@ -406,7 +411,7 @@ class MicroStressor : public Stressor {
               chainedItemUnlock(lockMode, *key);
               lockMode = Mode::Exclusive;
               chainedItemLock(lockMode, *key);
-              setKey(pid, stats, key, *(req.sizeBegin));
+              setKey(pid, stats, key, *(req.sizeBegin), dummyMemcachedConnection);
             }
           } else {
             result = OpResultType::kGetHit;
@@ -483,16 +488,23 @@ class MicroStressor : public Stressor {
 
   OpResultType setKey(PoolId pid,
                       ThroughputStats& stats,
-                      const std::string* key,
-                      size_t size) {
+                      std::string* key,
+                      size_t size,
+                      conn * c = NULL) {
     ++stats.set;
     auto it = cache_->allocate(pid, *key, size);
-    if (it == nullptr) {
+    item * memcachedItem = item_alloc(&key->at(0), key->size(), 0, 0,
+                            size + 2);
+
+    if ( memcachedItem == NULL || it == nullptr) {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
       populateItem(it);
       cache_->insertOrReplace(it);
+      if(c != NULL){
+        store_item(memcachedItem, NREAD_SET, c); 
+      }
       return OpResultType::kSetSuccess;
     }
   }
