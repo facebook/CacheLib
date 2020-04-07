@@ -33,7 +33,11 @@ export GLOG_LIBRARYDIR="/usr/local/lib"
 apt -y install bison libboost-all-dev flex zlib1g libgflags-dev
 [[ -d glog ]] || git clone https://github.com/google/glog.git || exit 1
 pushd glog
-./autogen.sh && ./configure && make -j $(nproc) && make install
+[[ -d build ]] || mkdir build
+cd build
+cmake -DCMAKE_CXX_COMPILER=g++-7 ..
+make -j $(nproc)
+make install
 popd
 
 #folly deps
@@ -84,7 +88,7 @@ popd
 #fbthrift deps
 
 
-##rsocket-cpp
+#rsocket-cpp
 [[ -d rsocket-cpp ]] || git clone https://github.com/rsocket/rsocket-cpp.git | exit 1
 pushd rsocket-cpp
 mkdir -p build
