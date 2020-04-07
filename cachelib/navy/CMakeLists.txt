@@ -134,8 +134,9 @@ target_link_libraries(
         PUBLIC
             navy
             cachelib_common
-            gtest_main
-            gmock
+            GTest::GTest
+            GTest::Main
+            ${GMOCK_LIBRARIES}
             ${FOLLY_LIBRARIES}
             ${FBTHRIFT_LIBRARIES}
 )

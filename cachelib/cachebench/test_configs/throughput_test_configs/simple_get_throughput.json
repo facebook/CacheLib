@@ -7,7 +7,7 @@
     {
       "prepopulateCache" : true,
       "numOps" : 10000000,
-      "numThreads" : 24,
+      "numThreads" : 48,
       "numKeys" : 100000,
       "distribution" :  "range",
 

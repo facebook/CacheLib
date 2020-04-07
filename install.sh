@@ -26,7 +26,15 @@ cmake . && \
 make && \
 make install
 popd
+#secret incantation
+export GLOG_LIBRARYDIR="/usr/local/lib"
 
+#glog
+apt -y install bison libboost-all-dev flex zlib1g libgflags-dev
+[[ -d glog ]] || git clone https://github.com/google/glog.git || exit 1
+pushd glog
+./autogen.sh && ./configure && make -j $(nproc) && make install
+popd
 
 #folly deps
 sudo apt-get -y install \
@@ -34,7 +42,6 @@ sudo apt-get -y install \
     libboost-all-dev \
     libevent-dev \
     libdouble-conversion-dev \
-    libgoogle-glog-dev \
     libgflags-dev \
     libiberty-dev \
     liblz4-dev \
@@ -75,12 +82,7 @@ make install
 popd
 
 #fbthrift deps
-#glog
-apt -y install bison libboost-all-dev flex zlib1g libgflags-dev
-[[ -d glog ]] || git clone https://github.com/google/glog.git || exit 1
-pushd glog
-./autogen.sh && ./configure && make -j $(nproc) && make install
-popd
+
 
 ##rsocket-cpp
 [[ -d rsocket-cpp ]] || git clone https://github.com/rsocket/rsocket-cpp.git | exit 1
@@ -98,7 +100,6 @@ sudo apt-get -y install \
     libboost-all-dev \
     libevent-dev \
     libdouble-conversion-dev \
-    libgoogle-glog-dev \
     libgflags-dev \
     libiberty-dev \
     liblz4-dev \
