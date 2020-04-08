@@ -137,15 +137,30 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
       uint64_t slabsAdvised = 0;
       PoolId poolId = result.first;
       uint64_t slabsToAdvise = result.second;
-      const auto now = util::getCurrentTimeMs();
       while (slabsAdvised < slabsToAdvise) {
         const auto classId = strategy_->pickVictimForResizing(cache_, poolId);
         if (classId == Slab::kInvalidClassId) {
           break;
         }
         try {
+          const auto now = util::getCurrentTimeMs();
+          auto stats = cache_.getPoolStats(poolId);
           cache_.releaseSlab(poolId, classId, SlabReleaseMode::kAdvise);
           ++slabsAdvised;
+          const auto elapsed_time =
+              static_cast<uint64_t>(util::getCurrentTimeMs() - now);
+          stats.numSlabsForClass(classId);
+          stats.evictionAgeForClass(classId);
+          // Log the event about the Pool which released the Slab along with
+          // the number of slabs.
+          stats_.addSlabReleaseEvent(
+              classId, Slab::kInvalidClassId, /* No Class info */
+              elapsed_time, poolId, stats.numSlabsForClass(classId),
+              0 /* receiver slabs */, stats.allocSizeForClass(classId),
+              0 /* receiver alloc size */, stats.evictionAgeForClass(classId),
+              0 /* receiver eviction age */,
+              stats.numFreeAllocsForClass(classId));
+
         } catch (const exception::SlabReleaseAborted& e) {
           XLOGF(WARN,
                 "Aborted trying to advise away a slab from pool {} for"
@@ -160,13 +175,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
               static_cast<int>(poolId), static_cast<int>(classId), e.what());
         }
       }
-      const auto elapsed_time =
-          static_cast<uint64_t>(util::getCurrentTimeMs() - now);
-      // Log the event about the Pool which released the Slab along with
-      // the number of slabs.
-      stats_.addSlabReleaseEvent(
-          Slab::kInvalidClassId, Slab::kInvalidClassId, /* No Class info */
-          elapsed_time, poolId, 0, slabsAdvised, 0, 0, 0, 0, 0);
       slabsAdvised_ += slabsAdvised;
       XLOGF(DBG, "Advised away {} slabs from Pool ID: {}, to free {} bytes",
             slabsAdvised, static_cast<int>(poolId), slabsAdvised * Slab::kSize);

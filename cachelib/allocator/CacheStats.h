@@ -194,16 +194,24 @@ struct PoolStats {
     return cacheStats.at(cid).numHits;
   }
 
+  // number of slabs in this class id
   uint64_t numSlabsForClass(ClassId cid) const {
     return mpStats.acStats.at(cid).totalSlabs();
   }
 
+  // alloc size corresponding to the class id
   uint32_t allocSizeForClass(ClassId cid) const {
     return cacheStats.at(cid).allocSize;
   }
 
+  // mm container eviction age  for the class
   uint64_t evictionAgeForClass(ClassId cid) const {
     return cacheStats.at(cid).getEvictionAge();
+  }
+
+  // total free allocs for the class
+  uint64_t numFreeAllocsForClass(ClassId cid) const {
+    return mpStats.acStats.at(cid).freeAllocs;
   }
 
   // This is the real eviction age of this pool as this number
