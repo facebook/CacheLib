@@ -2003,6 +2003,11 @@ TEST_F(NvmCacheTest, Raid0SizeChange) {
   }
 }
 
+TEST_F(NvmCacheTest, ShardHashIsNotFillMapHash) {
+  auto const shardHash = getNvmShardAndHashForKey("hello world");
+  ASSERT_NE(shardHash.first, shardHash.second);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

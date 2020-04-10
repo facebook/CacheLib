@@ -2,9 +2,9 @@
 
 #include <array>
 #include <mutex>
-#include <unordered_set>
 #include <vector>
 
+#include <folly/container/F14Map.h>
 #include <folly/dynamic.h>
 #include <folly/hash/Hash.h>
 #include <folly/json.h>
@@ -21,6 +21,9 @@
 
 namespace facebook {
 namespace cachelib {
+namespace tests {
+class NvmCacheTest;
+}
 
 // NvmCache is a key-value cache on flash. It is intended to be used
 // along with a CacheAllocator to provide a uniform API to the application
@@ -315,10 +318,10 @@ class NvmCache {
   // map of concurrent fills by key. The key is a string piece wrapper around
   // GetCtx's std::string. This makes the lookups possible without
   // constructing a string key.
-  using FillMap = std::
-      unordered_map<folly::StringPiece, std::unique_ptr<GetCtx>, folly::Hash>;
+  using FillMap =
+      folly::F14ValueMap<folly::StringPiece, std::unique_ptr<GetCtx>>;
 
-  size_t getShardForKey(folly::StringPiece key) {
+  static size_t getShardForKey(folly::StringPiece key) {
     return folly::Hash()(key) % kShards;
   }
 
@@ -376,6 +379,8 @@ class NvmCache {
   std::array<TombStones, kShards> tombstones_;
 
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
+
+  friend class tests::NvmCacheTest;
 };
 
 } // namespace cachelib

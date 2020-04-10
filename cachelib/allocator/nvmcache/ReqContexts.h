@@ -4,10 +4,10 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 
 #include <folly/Format.h>
 #include <folly/Range.h>
+#include <folly/container/F14Map.h>
 
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/PercentileStats.h"
@@ -97,7 +97,7 @@ class ContextMap {
   }
 
  private:
-  std::unordered_map<uintptr_t, std::unique_ptr<T>> map_;
+  folly::F14FastMap<uintptr_t, std::unique_ptr<T>> map_;
   std::mutex mutex_;
 };
 } // namespace detail
