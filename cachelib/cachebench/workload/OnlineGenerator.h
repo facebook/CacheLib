@@ -6,6 +6,7 @@
 
 #include <folly/Format.h>
 #include <folly/Random.h>
+#include <folly/ThreadLocal.h>
 #include <folly/logging/xlog.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
@@ -36,8 +37,6 @@ class OnlineGenerator : public GeneratorBase {
     throw std::logic_error("OnlineGenerator has no keys precomputed!");
   }
 
-  void registerThread();
-
  private:
   void generateFirstKeyIndexForPool();
   void generateKey(uint8_t poolId, size_t idx, std::string& key);
@@ -53,12 +52,10 @@ class OnlineGenerator : public GeneratorBase {
   const StressorConfig config_;
   std::vector<std::vector<size_t>> keyLengths_;
   std::vector<std::vector<std::vector<size_t>>> sizes_;
+  std::vector<size_t> dummy_;
 
-  std::unordered_map<typename std::thread::id, Request> reqs_;
-  std::unordered_map<typename std::thread::id, std::string> keys_;
   // Placeholder
   std::vector<std::string> allKeys__;
-  folly::SharedMutex registryLock_;
 
   // @firstKeyIndexForPool_ contains the first key in each pool (As represented
   // by key pool distribution). It's a convenient method for us to populate
@@ -70,6 +67,11 @@ class OnlineGenerator : public GeneratorBase {
   std::vector<std::uniform_int_distribution<uint32_t>> keyGenForPool_;
 
   std::vector<Distribution> workloadDist_;
+
+  // segments the global mutex for the ThreadLocal object
+  class Tag;
+  folly::ThreadLocal<std::string, Tag> key_;
+  folly::ThreadLocal<Request, Tag> req_;
 };
 
 } // namespace cachebench

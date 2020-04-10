@@ -8,7 +8,9 @@ namespace cachebench {
 
 template <typename Distribution>
 OnlineGenerator<Distribution>::OnlineGenerator(const StressorConfig& config)
-    : config_{config} {
+    : config_{config},
+      key_([]() { return new std::string(); }),
+      req_([&]() { return new Request(*key_, dummy_.begin(), dummy_.end()); }) {
   for (const auto& c : config_.poolDistributions) {
     if (c.keySizeRange.size() != c.keySizeRangeProbability.size() + 1) {
       throw std::invalid_argument(
@@ -31,24 +33,6 @@ OnlineGenerator<Distribution>::OnlineGenerator(const StressorConfig& config)
 }
 
 template <typename Distribution>
-void OnlineGenerator<Distribution>::registerThread() {
-  registryLock_.lock();
-  auto tid = std::this_thread::get_id();
-  keys_[tid] = std::string("");
-  reqs_.emplace(tid,
-                Request(keys_[tid], sizes_[0][0].begin(), sizes_[0][0].end()));
-  registryLock_.unlock();
-  while (true) {
-    registryLock_.lock();
-    if (reqs_.size() == config_.numThreads) {
-      registryLock_.unlock();
-      break;
-    }
-    registryLock_.unlock();
-  }
-}
-
-template <typename Distribution>
 const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
                                                      std::mt19937& gen,
                                                      std::optional<uint64_t>) {
@@ -56,19 +40,15 @@ const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
   XDCHECK_LT(poolId, keyGenForPool_.size());
 
   size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
-  if (reqs_.count(std::this_thread::get_id()) == 0) {
-    std::cout << "bad id " << std::this_thread::get_id() << std::endl;
-  }
 
-  Request& localReq(reqs_.at(std::this_thread::get_id()));
-  generateKey(poolId, idx, localReq.key);
+  generateKey(poolId, idx, req_->key);
   auto sizes = generateSize(poolId, idx);
-  localReq.sizeBegin = sizes->begin();
-  localReq.sizeEnd = sizes->end();
+  req_->sizeBegin = sizes->begin();
+  req_->sizeEnd = sizes->end();
   auto op =
       static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
-  localReq.setOp(op);
-  return localReq;
+  req_->setOp(op);
+  return *req_;
 }
 
 template <typename Distribution>

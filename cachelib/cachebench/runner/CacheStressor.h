@@ -124,6 +124,7 @@ class CacheStressor : public Stressor {
     std::cout << folly::sformat("Total {:.2f}M ops to be run",
                                 config_.numThreads * config_.numOps / 1e6)
               << std::endl;
+
     stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
@@ -228,7 +229,6 @@ class CacheStressor : public Stressor {
     std::atomic<uint64_t> totalCount = 0;
 
     auto prePopulateFn = [&]() {
-      wg_->registerThread();
       std::mt19937 gen(folly::Random::rand32());
       std::discrete_distribution<> keyPoolDist(
           config_.keyPoolDistribution.begin(),
@@ -295,9 +295,7 @@ class CacheStressor : public Stressor {
       totalCount.fetch_add(count);
     };
 
-    auto numThreads = config_.prepopulateThreads ? config_.prepopulateThreads
-                                                 : config_.numThreads;
-    auto duration = detail::executeParallel(prePopulateFn, numThreads);
+    auto duration = detail::executeParallel(prePopulateFn, config_.numThreads);
     return std::make_pair(totalCount.load(), duration);
   }
 
@@ -315,8 +313,6 @@ class CacheStressor : public Stressor {
   // @param genChainedItemValSize   randomly choose a size for chained item
   // @param stats       Throughput stats
   void stressByDiscreteDistribution(ThroughputStats& stats) {
-    wg_->registerThread();
-
     std::mt19937 gen(folly::Random::rand32());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
                                             config_.opPoolDistribution.end());

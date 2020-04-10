@@ -27,8 +27,6 @@ class WorkloadGenerator : public GeneratorBase {
   explicit WorkloadGenerator(const StressorConfig& config);
   virtual ~WorkloadGenerator() {}
 
-  void registerThread() {}
-
   const Request& getReq(
       uint8_t poolId,
       std::mt19937& gen,

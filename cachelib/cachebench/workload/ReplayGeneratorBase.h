@@ -46,8 +46,6 @@ class ReplayGeneratorBase : public GeneratorBase {
 
   virtual ~ReplayGeneratorBase() { infile_.close(); }
 
-  void registerThread() {}
-
   const std::vector<std::string>& getAllKeys() const {
     throw std::logic_error("ReplayGenerator has no keys precomputed!");
   }

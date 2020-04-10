@@ -90,10 +90,6 @@ struct StressorConfig : public JSONConfig {
   // TODO: support prepopulating Chained Items going forward
   bool prepopulateCache{false};
 
-  // number of threads to use for prepopulating the cache. 0 means the same as
-  // the numThreads below which is used for benchmarking.
-  uint64_t prepopulateThreads{0};
-
   // time to sleep between operations every 8 inserts in every threads.
   uint64_t prepopulateSleepMs{0};
 

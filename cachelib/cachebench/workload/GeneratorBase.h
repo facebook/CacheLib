@@ -26,9 +26,6 @@ class GeneratorBase {
 
   virtual const std::vector<std::string>& getAllKeys() const = 0;
 
-  // TODO: check if this can be removed
-  virtual void registerThread() {}
-
   virtual void renderStats(uint64_t /*elapsedTimeNs*/,
                            std::ostream& /*out*/) const {
     // not implemented by default

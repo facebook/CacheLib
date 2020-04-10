@@ -113,7 +113,6 @@ class OutputStressor : public Stressor {
 
  private:
   void stressByDiscreteDistribution(ThroughputStats& stats) {
-    wg_.registerThread();
     std::mt19937 gen(folly::Random::rand32());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
                                             config_.opPoolDistribution.end());
