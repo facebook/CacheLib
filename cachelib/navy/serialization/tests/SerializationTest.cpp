@@ -1,3 +1,4 @@
+#include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
 #include <gtest/gtest.h>

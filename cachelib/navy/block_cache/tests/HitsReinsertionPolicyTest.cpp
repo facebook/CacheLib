@@ -1,4 +1,5 @@
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 
 #include <gtest/gtest.h>
 

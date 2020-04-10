@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <stdexcept>
 
+#include <folly/io/IOBufQueue.h>
 #include <folly/logging/xlog.h>
 
 #pragma GCC diagnostic push
@@ -143,5 +144,43 @@ size_t Deserializer::deserialize(T& object) {
   curr_ += bytesRead;
   return bytesRead;
 }
+
+// Abstract record reader/writer interfaces. Read and write functions throw
+// std::runtime_error in case of errors.
+class RecordWriter {
+ public:
+  virtual ~RecordWriter() = default;
+  virtual void writeRecord(std::unique_ptr<folly::IOBuf> buf) = 0;
+  virtual bool invalidate() = 0;
+};
+
+class RecordReader {
+ public:
+  virtual ~RecordReader() = default;
+  virtual std::unique_ptr<folly::IOBuf> readRecord() = 0;
+  virtual bool isEnd() const = 0;
+};
+
+template <typename ThriftObject, typename SerializationProto>
+void serializeProto(const ThriftObject& obj, RecordWriter& writer) {
+  folly::IOBufQueue temp;
+  SerializationProto::template serialize(obj, &temp);
+  // Passes linked chain of IOBufs
+  writer.writeRecord(temp.move());
+}
+
+template <typename ThriftObject, typename SerializationProto>
+ThriftObject deserializeProto(RecordReader& reader) {
+  ThriftObject obj;
+  auto buf = reader.readRecord();
+  SerializationProto::template deserialize<ThriftObject>(buf.get(), obj);
+  return obj;
+}
+
+template <typename ThriftObject>
+std::string serializeToJson(const ThriftObject& obj) {
+  return apache::thrift::SimpleJSONSerializer::serialize<std::string>(obj);
+}
+
 } // namespace cachelib
 } // namespace facebook

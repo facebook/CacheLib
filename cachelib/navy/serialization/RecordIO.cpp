@@ -218,6 +218,9 @@ class DeviceMetaDataReader final : public RecordReader {
   }
 
  private:
+  // TODO get block size from device or through constructor
+  static constexpr size_t kBlockSize = 4096;
+
   Device& dev_;
   uint64_t offset_{0};
   size_t metadataSize_{0};

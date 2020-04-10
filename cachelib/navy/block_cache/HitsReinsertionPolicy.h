@@ -8,6 +8,8 @@
 #include <folly/container/F14Map.h>
 #include <folly/stats/QuantileEstimator.h>
 
+#include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 
 namespace facebook {
