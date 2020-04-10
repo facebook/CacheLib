@@ -22,9 +22,9 @@
     "dipperNavyStackAllocReadBufSizeKB": 4,
     "navyHitsReinsertionThreshold": 1,
     "navyProbabilityReinsertionThreshold": 0,
-    "navyReaderThreads": 36,
-    "navyWriterThreads": 36,
-    "navyCleanRegions": 60,
+    "navyReaderThreads": 128,
+    "navyWriterThreads": 128,
+    "navyCleanRegions": 180,
     "navyDataChecksum": false,
 
     "lru2qHotPct": 20,
