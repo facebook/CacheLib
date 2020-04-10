@@ -161,10 +161,8 @@ void BloomFilter::persist(RecordWriter& rw) {
   uint64_t bitsSize = getByteSize();
   uint64_t off = 0;
   while (off < bitsSize) {
-    Buffer buffer{kBloomFilterPersistFragmentSize, kBlockSize};
     auto nBytes = std::min(bitsSize - off, fragmentSize);
-    memcpy(buffer.data(), bits_.get() + off, nBytes);
-    auto wbuf = folly::IOBuf::takeOwnership(buffer.release(), nBytes);
+    auto wbuf = folly::IOBuf::copyBuffer(bits_.get() + off, nBytes);
     rw.writeRecord(std::move(wbuf));
     off += nBytes;
   }
@@ -173,9 +171,7 @@ void BloomFilter::persist(RecordWriter& rw) {
   off = 0;
   while (off < initSize) {
     auto nBytes = std::min(initSize - off, fragmentSize);
-    Buffer buffer{kBloomFilterPersistFragmentSize, kBlockSize};
-    memcpy(buffer.data(), init_.get() + off, nBytes);
-    auto wbuf = folly::IOBuf::takeOwnership(buffer.release(), nBytes);
+    auto wbuf = folly::IOBuf::copyBuffer(init_.get() + off, nBytes);
     rw.writeRecord(std::move(wbuf));
     off += nBytes;
   }
