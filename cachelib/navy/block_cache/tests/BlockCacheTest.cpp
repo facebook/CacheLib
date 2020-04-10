@@ -933,6 +933,7 @@ TEST(BlockCache, DestructorCallback) {
 
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
+  auto* exPtr = ex.get();
   auto config = makeConfig(*ex, std::move(policy), *device, {4096});
   config.destructorCb = toCallback(cb);
   auto engine = makeEngine(std::move(config));
@@ -971,6 +972,8 @@ TEST(BlockCache, DestructorCallback) {
 
   EXPECT_EQ(Status::Ok, driver->lookup(log[12].key(), value));
   EXPECT_EQ(log[12].value(), value.view());
+
+  exPtr->finish();
 }
 
 TEST(BlockCache, StackAllocDestructorCallback) {
@@ -1014,6 +1017,7 @@ TEST(BlockCache, StackAllocDestructorCallback) {
 
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
+  auto* exPtr = ex.get();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
   config.destructorCb = toCallback(cb);
   auto engine = makeEngine(std::move(config));
@@ -1044,6 +1048,8 @@ TEST(BlockCache, StackAllocDestructorCallback) {
   EXPECT_EQ(log[7].value(), value.view());
   EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value));
   EXPECT_EQ(log[8].value(), value.view());
+
+  exPtr->finish();
 }
 
 TEST(BlockCache, StackAllocDestructorCallbackInMemBuffers) {
@@ -1087,6 +1093,7 @@ TEST(BlockCache, StackAllocDestructorCallbackInMemBuffers) {
 
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
+  auto* exPtr = ex.get();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
   config.numInMemBuffers = 9;
   config.destructorCb = toCallback(cb);
@@ -1118,6 +1125,8 @@ TEST(BlockCache, StackAllocDestructorCallbackInMemBuffers) {
   EXPECT_EQ(log[7].value(), value.view());
   EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value));
   EXPECT_EQ(log[8].value(), value.view());
+
+  exPtr->finish();
 }
 
 TEST(BlockCache, RegionLastOffset) {
