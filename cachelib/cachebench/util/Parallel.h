@@ -16,6 +16,8 @@ std::chrono::seconds executeParallel(
 
 std::chrono::seconds executeParallel(std::function<void()> fn,
                                      size_t numThreads);
+std::chrono::seconds executeParallelWid(std::function<void(uint32_t wid)> fn,
+                                     size_t numThreads);
 } // namespace detail
 } // namespace cachebench
 } // namespace cachelib

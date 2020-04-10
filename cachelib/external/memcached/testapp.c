@@ -77,7 +77,7 @@ ssize_t ssl_write(struct conn *c, const void *buf, size_t count) {
 
 static pid_t server_pid;
 static in_port_t port;
-static struct conn *con = NULL;
+struct conn *con = NULL;
 static bool allow_closed_read = false;
 static bool enable_ssl = false;
 
@@ -660,7 +660,7 @@ static struct addrinfo *lookuphost(const char *hostname, in_port_t port)
     return ai;
 }
 
-static struct conn *connect_server(const char *hostname, in_port_t port,
+struct conn *connect_server(const char *hostname, in_port_t port,
                             bool nonblock, const bool ssl)
 {
     struct conn *c;
@@ -779,7 +779,7 @@ static enum test_return test_vperror(void) {
     return strcmp(expected, buf) == 0 ? TEST_PASS : TEST_FAIL;
 }
 
-static void send_ascii_command(const char *buf) {
+void send_ascii_command(const char *buf) {
     off_t offset = 0;
     const char* ptr = buf;
     size_t len = strlen(buf);
@@ -803,7 +803,7 @@ static void send_ascii_command(const char *buf) {
  * implementation only supports single-line responses, so if you want to use
  * it for get commands you need to implement that first ;-)
  */
-static void read_ascii_response(char *buffer, size_t size) {
+void read_ascii_response(char *buffer, size_t size) {
     off_t offset = 0;
     bool need_more = true;
     do {
@@ -2290,12 +2290,12 @@ struct testcase testcases[] = {
 /* Stub out function defined in memcached.c */
 void STATS_LOCK(void);
 void STATS_UNLOCK(void);
-void STATS_LOCK(void)
-{}
-void STATS_UNLOCK(void)
-{}
+//void STATS_LOCK(void)
+//{}
+//void STATS_UNLOCK(void)
+//{}
 
-int main(int argc, char **argv)
+int init_tester(int argc, char **argv)
 {
     int exitcode = 0;
     int ii = 0, num_cases = 0;
@@ -2316,23 +2316,23 @@ int main(int argc, char **argv)
 
     printf("1..%d\n", num_cases);
 
-    for (ii = 0; testcases[ii].description != NULL; ++ii) {
-        fflush(stdout);
-#ifndef DEBUG
-        /* the test program shouldn't run longer than 10 minutes... */
-        alarm(600);
-#endif
-        enum test_return ret = testcases[ii].function();
-        if (ret == TEST_SKIP) {
-            fprintf(stdout, "ok # SKIP %d - %s\n", ii + 1, testcases[ii].description);
-        } else if (ret == TEST_PASS) {
-            fprintf(stdout, "ok %d - %s\n", ii + 1, testcases[ii].description);
-        } else {
-            fprintf(stdout, "not ok %d - %s\n", ii + 1, testcases[ii].description);
-            exitcode = 1;
-        }
-        fflush(stdout);
-    }
+    //for (ii = 0; testcases[ii].description != NULL; ++ii) {
+    //    fflush(stdout);
+//#ifndef DEBUG
+    //    /* the test program shouldn't run longer than 10 minutes... */
+    //    alarm(600);
+//#endif
+    //    enum test_return ret = testcases[ii].function();
+    //    if (ret == TEST_SKIP) {
+    //        fprintf(stdout, "ok # SKIP %d - %s\n", ii + 1, testcases[ii].description);
+    //    } else if (ret == TEST_PASS) {
+    //        fprintf(stdout, "ok %d - %s\n", ii + 1, testcases[ii].description);
+    //    } else {
+    //        fprintf(stdout, "not ok %d - %s\n", ii + 1, testcases[ii].description);
+    //        exitcode = 1;
+    //    }
+    //    fflush(stdout);
+    //}
 
     return exitcode;
 }

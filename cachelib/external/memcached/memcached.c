@@ -101,7 +101,7 @@ static void conn_to_str(const conn *c, char *addr, char *svr_addr);
 static bool get_stats(const char *stat_type, int nkey, ADD_STAT add_stats, void *c);
 
 /* defaults */
-static void settings_init(void);
+static void settings_init(size_t size_in_mb);
 
 /* event handling, network IO */
 static void event_handler(const int fd, const short which, void *arg);
@@ -157,7 +157,7 @@ struct _mc_meta_data {
 /** file scope variables **/
 static conn *listen_conn = NULL;
 static int max_fds;
-static struct event_base *main_base;
+struct event_base *main_base = NULL;
 static struct _mc_meta_data *meta;
 static char *memory_file = NULL;
 
@@ -266,7 +266,7 @@ static void stats_reset(void) {
     item_stats_reset();
 }
 
-static void settings_init(void) {
+static void settings_init(size_t size_in_mb) {
     settings.use_cas = true;
     settings.access = 0700;
     settings.port = 11211;
@@ -286,7 +286,7 @@ static void settings_init(void) {
 #endif
     /* By default this string should be NULL for getaddrinfo() */
     settings.inter = NULL;
-    settings.maxbytes = 64 * 1024 * 1024; /* default is 64MB */
+    settings.maxbytes = size_in_mb * 1024 * 1024; /* default is 64MB */
     settings.maxconns = 1024;         /* to limit connections-related memory to about 5MB */
     settings.verbose = 0;
     settings.oldest_live = 0;
@@ -1610,6 +1610,90 @@ static void complete_update_bin(conn *c) {
     c->item = 0;
 }
 
+static void complete_update_cachebench(conn *c) {
+    protocol_binary_response_status eno = PROTOCOL_BINARY_RESPONSE_EINVAL;
+    enum store_item_type ret = NOT_STORED;
+    assert(c != NULL);
+    item *it = c->item;
+    pthread_mutex_lock(&c->thread->stats.mutex);
+    c->thread->stats.slab_stats[ITEM_clsid(it)].set_cmds++;
+    pthread_mutex_unlock(&c->thread->stats.mutex);
+
+    /* We don't actually receive the trailing two characters in the bin
+     * protocol, so we're going to just set them here */
+    if ((it->it_flags & ITEM_CHUNKED) == 0) {
+        *(ITEM_data(it) + it->nbytes - 2) = '\r';
+        *(ITEM_data(it) + it->nbytes - 1) = '\n';
+    } else {
+        assert(c->ritem);
+        item_chunk *ch = (item_chunk *) c->ritem;
+        if (ch->size == ch->used)
+            ch = ch->next;
+        assert(ch->size - ch->used >= 2);
+        ch->data[ch->used] = '\r';
+        ch->data[ch->used + 1] = '\n';
+        ch->used += 2;
+    }
+
+    ret = store_item(it, c->cmd, c);
+
+//#ifdef ENABLE_DTRACE
+//    uint64_t cas = ITEM_get_cas(it);
+//    switch (c->cmd) {
+//    case NREAD_ADD:
+//        MEMCACHED_COMMAND_ADD(c->sfd, ITEM_key(it), it->nkey,
+//                              (ret == STORED) ? it->nbytes : -1, cas);
+//        break;
+//    case NREAD_REPLACE:
+//        MEMCACHED_COMMAND_REPLACE(c->sfd, ITEM_key(it), it->nkey,
+//                                  (ret == STORED) ? it->nbytes : -1, cas);
+//        break;
+//    case NREAD_APPEND:
+//        MEMCACHED_COMMAND_APPEND(c->sfd, ITEM_key(it), it->nkey,
+//                                 (ret == STORED) ? it->nbytes : -1, cas);
+//        break;
+//    case NREAD_PREPEND:
+//        MEMCACHED_COMMAND_PREPEND(c->sfd, ITEM_key(it), it->nkey,
+//                                 (ret == STORED) ? it->nbytes : -1, cas);
+//        break;
+//    case NREAD_SET:
+//        MEMCACHED_COMMAND_SET(c->sfd, ITEM_key(it), it->nkey,
+//                              (ret == STORED) ? it->nbytes : -1, cas);
+//        break;
+//    }
+//#endif
+    if(settings.verbose > 2){
+        switch (ret) {
+        case STORED:
+            /* Stored */
+            printf("stored!\n");
+            break;
+        case EXISTS:
+            printf("exists!\n");
+            break;
+        case NOT_FOUND:
+            printf("not found!\n");
+            break;
+        case NOT_STORED:
+        case TOO_LARGE:
+        case NO_MEMORY:
+            if (c->cmd == NREAD_ADD) {
+                eno = PROTOCOL_BINARY_RESPONSE_KEY_EEXISTS;
+                printf("err exists!\n");
+
+            } else if(c->cmd == NREAD_REPLACE) {
+                eno = PROTOCOL_BINARY_RESPONSE_KEY_ENOENT;
+                 printf("err not found!\n");
+            } else {
+                eno = PROTOCOL_BINARY_RESPONSE_NOT_STORED;
+                printf("err not stored!!\n");
+            }
+        }
+    }
+    item_remove(c->item);       /* release the c->item reference */
+    c->item = 0;
+}
+
 static void write_bin_miss_response(conn *c, char *key, size_t nkey) {
     if (nkey) {
         add_bin_header(c, PROTOCOL_BINARY_RESPONSE_KEY_ENOENT,
@@ -1623,7 +1707,142 @@ static void write_bin_miss_response(conn *c, char *key, size_t nkey) {
                         NULL, 0);
     }
 }
+item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd) {
+    item *it;
+    c->cmd = cmd;
+    mc_resp resp;
+    c->resp = &resp;
 
+    int should_touch = (c->cmd == PROTOCOL_BINARY_CMD_TOUCH ||
+                        c->cmd == PROTOCOL_BINARY_CMD_GAT ||
+                        c->cmd == PROTOCOL_BINARY_CMD_GATK);
+    int should_return_key = (c->cmd == PROTOCOL_BINARY_CMD_GETK ||
+                             c->cmd == PROTOCOL_BINARY_CMD_GATK);
+    int should_return_value = (c->cmd != PROTOCOL_BINARY_CMD_TOUCH);
+    bool failed = false;
+
+    if (settings.verbose > 1) {
+        fprintf(stderr, "<%d %s ", c->sfd, should_touch ? "TOUCH" : "GET");
+        if (fwrite(key, 1, nkey, stderr)) {}
+        fputc('\n', stderr);
+    }
+
+    it = item_get(key, nkey, c, DO_UPDATE);
+
+    if (it) {
+        /* the length has two unnecessary bytes ("\r\n") */
+        //uint16_t keylen = 0;
+        //uint32_t bodylen = sizeof(rsp->message.body) + (it->nbytes - 2);
+
+        pthread_mutex_lock(&c->thread->stats.mutex);
+        if (should_touch) {
+            c->thread->stats.touch_cmds++;
+            c->thread->stats.slab_stats[ITEM_clsid(it)].touch_hits++;
+        } else {
+            c->thread->stats.get_cmds++;
+            c->thread->stats.lru_hits[it->slabs_clsid]++;
+        }
+        pthread_mutex_unlock(&c->thread->stats.mutex);
+
+        if (should_touch) {
+            MEMCACHED_COMMAND_TOUCH(c->sfd, ITEM_key(it), it->nkey,
+                                    it->nbytes, ITEM_get_cas(it));
+        } else {
+            MEMCACHED_COMMAND_GET(c->sfd, ITEM_key(it), it->nkey,
+                                  it->nbytes, ITEM_get_cas(it));
+        }
+
+        //if (c->cmd == PROTOCOL_BINARY_CMD_TOUCH) {
+        //    bodylen -= it->nbytes - 2;
+        //} else if (should_return_key) {
+        //    bodylen += nkey;
+        //    keylen = nkey;
+        //}
+
+        //add_bin_header(c, 0, sizeof(rsp->message.body), keylen, bodylen);
+        //rsp->message.header.response.cas = htonll(ITEM_get_cas(it));
+
+        // add the flags
+        //FLAGS_CONV(it, rsp->message.body.flags);
+        //rsp->message.body.flags = htonl(rsp->message.body.flags);
+        //resp_add_iov(c->resp, &rsp->message.body, sizeof(rsp->message.body));
+
+        //if (should_return_key) {
+        //    resp_add_iov(c->resp, ITEM_key(it), nkey);
+        //}
+
+        if (should_return_value) {
+            /* Add the data minus the CRLF */
+#ifdef EXTSTORE
+            if (it->it_flags & ITEM_HDR) {
+                if (_get_extstore(c, it, c->resp) != 0) {
+                    pthread_mutex_lock(&c->thread->stats.mutex);
+                    c->thread->stats.get_oom_extstore++;
+                    pthread_mutex_unlock(&c->thread->stats.mutex);
+
+                    failed = true;
+                }
+            }// else if ((it->it_flags & ITEM_CHUNKED) == 0) {
+               // resp_add_iov(c->resp, ITEM_data(it), it->nbytes - 2);
+            //} else {
+                // Allow transmit handler to find the item and expand iov's
+            //    resp_add_chunked_iov(c->resp, it, it->nbytes - 2);
+            //}
+#else
+            //if ((it->it_flags & ITEM_CHUNKED) == 0) {
+            //    resp_add_iov(c->resp, ITEM_data(it), it->nbytes - 2);
+            //} else {
+            //    resp_add_chunked_iov(c->resp, it, it->nbytes - 2);
+            //}
+#endif
+        }
+
+        if (!failed) {
+            conn_set_state(c, conn_new_cmd);
+            /* Remember this command so we can garbage collect it later */
+#ifdef EXTSTORE
+            if ((it->it_flags & ITEM_HDR) != 0 && should_return_value) {
+                // Only have extstore clean if header and returning value.
+                c->resp->item = NULL;
+            } else {
+                c->resp->item = it;
+            }
+#else
+            c->resp->item = it;
+#endif
+        } else {
+            item_remove(it);
+        }
+    } else {
+        failed = true;
+    }
+
+    if (failed) {
+        pthread_mutex_lock(&c->thread->stats.mutex);
+        if (should_touch) {
+            c->thread->stats.touch_cmds++;
+            c->thread->stats.touch_misses++;
+        } else {
+            c->thread->stats.get_cmds++;
+            c->thread->stats.get_misses++;
+        }
+        pthread_mutex_unlock(&c->thread->stats.mutex);
+
+        if (should_touch) {
+            MEMCACHED_COMMAND_TOUCH(c->sfd, key, nkey, -1, 0);
+        } else {
+            MEMCACHED_COMMAND_GET(c->sfd, key, nkey, -1, 0);
+        }
+
+        conn_set_state(c, conn_new_cmd);
+        
+    }
+
+    if (settings.detail_enabled) {
+        stats_prefix_record_get(key, nkey, NULL != it);
+    }
+    return it;
+}
 static void process_bin_get_or_touch(conn *c, char *extbuf) {
     item *it;
 
@@ -2472,6 +2691,108 @@ static void process_bin_update(conn *c, char *extbuf) {
     c->rlbytes = vlen;
     conn_set_state(c, conn_nread);
     c->substate = bin_read_set_value;
+}
+
+item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *c, int cmd) {
+    //protocol_binary_request_set* req = (void *)extbuf;
+    c->protocol = binary_prot;
+    item *it;
+    assert(c != NULL);
+
+    /* fix byteorder in the request */
+    if (settings.verbose > 1) {
+        int ii;
+        if (cmd == PROTOCOL_BINARY_CMD_ADD) {
+            fprintf(stderr, "<%d ADD ", c->sfd);
+        } else if (cmd == PROTOCOL_BINARY_CMD_SET) {
+            fprintf(stderr, "<%d SET ", c->sfd);
+        } else {
+            fprintf(stderr, "<%d REPLACE ", c->sfd);
+        }
+        for (ii = 0; ii < nkey; ++ii) {
+            fprintf(stderr, "%c", key[ii]);
+        }
+
+        fprintf(stderr, " Value len is %d", vlen);
+        fprintf(stderr, "\n");
+    }
+
+    if (settings.detail_enabled) {
+        stats_prefix_record_set(key, nkey);
+    }
+
+    it = item_alloc(key, nkey, 0,
+            0, vlen+2);
+
+    if (it == 0) {
+        enum store_item_type status;
+        if (! item_size_ok(nkey, 0, vlen + 2)) {
+            printf("alloc TOO_LARGE\n");
+            //write_bin_error(c, PROTOCOL_BINARY_RESPONSE_E2BIG, NULL, vlen);
+            status = TOO_LARGE;
+        } else {
+            printf("alloc NO_MEMORY\n");
+            //out_of_memory(c, "SERVER_ERROR Out of memory allocating item");
+            /* This error generating method eats the swallow value. Add here. */
+            //c->sbytes = vlen;
+            status = NO_MEMORY;
+        }
+        /* FIXME: losing c->cmd since it's translated below. refactor? */
+        //LOGGER_LOG(c->thread->l, LOG_MUTATIONS, LOGGER_ITEM_STORE,
+          //      NULL, status, 0, key, nkey, req->message.body.expiration,
+            //    ITEM_clsid(it), c->sfd);
+
+        /* Avoid stale data persisting in cache because we failed alloc.
+         * Unacceptable for SET. Anywhere else too? */
+        if (c->cmd == PROTOCOL_BINARY_CMD_SET) {
+            it = item_get(key, nkey, c, DONT_UPDATE);
+            if (it) {
+                item_unlink(it);
+                STORAGE_delete(c->thread->storage, it);
+                item_remove(it);
+            }
+        }
+
+        /* swallow the data line */
+        conn_set_state(c, conn_swallow);
+        return it;
+    }
+
+    //ITEM_set_cas(it, c->binary_header.request.cas);
+
+    switch (cmd) {
+        case PROTOCOL_BINARY_CMD_ADD:
+            c->cmd = NREAD_ADD;
+            break;
+        case PROTOCOL_BINARY_CMD_SET:
+            c->cmd = NREAD_SET;
+            break;
+        case PROTOCOL_BINARY_CMD_REPLACE:
+            c->cmd = NREAD_REPLACE;
+            break;
+        default:
+            assert(0);
+    }
+
+    if (ITEM_get_cas(it) != 0) {
+        c->cmd = NREAD_CAS;
+    }
+
+    c->item = it;
+#ifdef NEED_ALIGN
+    if (it->it_flags & ITEM_CHUNKED) {
+        c->ritem = ITEM_schunk(it);
+    } else {
+        c->ritem = ITEM_data(it);
+    }
+#else
+    c->ritem = val;//ITEM_data(it);
+#endif
+    c->rlbytes = vlen;
+    conn_set_state(c, conn_nread);
+    c->substate = bin_read_set_value;
+    complete_update_cachebench(c);
+    return it;
 }
 
 static void process_bin_append_prepend(conn *c) {
@@ -8705,7 +9026,7 @@ static int _mc_meta_load_cb(const char *tag, void *ctx, void *data) {
     return reuse_mmap;
 }
 
-int init_memcached(int argc, char ** argv){
+int init_memcached(int argc, char ** argv, size_t size_in_mb, uint32_t nthreads){
     int c;
     bool lock_memory = false;
     bool do_daemonize = false;
@@ -8731,6 +9052,7 @@ int init_memcached(int argc, char ** argv){
     uint32_t tocrawl;
     uint32_t slab_sizes[MAX_NUMBER_OF_SLAB_CLASSES];
     bool use_slab_sizes = false;
+
     char *slab_sizes_unparsed = NULL;
     bool slab_chunk_size_changed = false;
     // struct for restart code. Initialized up here so we can curry
@@ -8897,7 +9219,8 @@ int init_memcached(int argc, char ** argv){
     signal(SIGUSR1, sig_usrhandler);
 
     /* init settings */
-    settings_init();
+    settings_init(size_in_mb);
+    settings.num_threads = nthreads;
     verify_default("hash_algorithm", hash_type == MURMUR3_HASH);
 #ifdef EXTSTORE
     settings.ext_item_size = 512;
@@ -10286,6 +10609,18 @@ int init_memcached(int argc, char ** argv){
     //}
     return EXIT_SUCCESS;
 }
+
+int memcached_event_loop(bool * stop_main_loop){
+    int retval = EXIT_SUCCESS;
+    while (!(*stop_main_loop)) {
+        if (event_base_loop(main_base, EVLOOP_ONCE) != 0) {
+            retval = EXIT_FAILURE;
+            break;
+        }
+    }
+    return retval;
+}
+
 int stop_memcached(){
     fprintf(stderr, "Gracefully stopping\n");
     stop_threads();
