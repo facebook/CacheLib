@@ -44,6 +44,22 @@ std::chrono::seconds executeParallel(std::function<void()> fn,
   return std::chrono::duration_cast<std::chrono::seconds>(
       std::chrono::steady_clock::now() - startTime);
 }
+
+std::chrono::seconds executeParallelWid(std::function<void(uint32_t wid)> fn,
+                                     size_t numThreads) {
+  numThreads = std::max(numThreads, 1UL);
+  auto startTime = std::chrono::steady_clock::now();
+  std::vector<std::thread> processingThreads;
+  for (size_t i = 0; i < numThreads; i++) {
+    processingThreads.emplace_back([&fn, i]() { fn(i); });
+  }
+  for (auto& t : processingThreads) {
+    t.join();
+  }
+
+  return std::chrono::duration_cast<std::chrono::seconds>(
+      std::chrono::steady_clock::now() - startTime);
+}
 } // namespace detail
 } // namespace cachebench
 } // namespace cachelib

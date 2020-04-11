@@ -261,8 +261,9 @@ item *do_item_alloc(char *key, const size_t nkey, const unsigned int flags,
 
     unsigned int id = slabs_clsid(ntotal);
     unsigned int hdr_id = 0;
-    if (id == 0)
+    if (id == 0){
         return 0;
+    }
 
     /* This is a large item. Allocate a header object now, lazily allocate
      *  chunks while reading the upload.
@@ -1697,7 +1698,6 @@ int stop_lru_maintainer_thread(void) {
 
 int start_lru_maintainer_thread(void *arg) {
     int ret;
-
     pthread_mutex_lock(&lru_maintainer_lock);
     do_run_lru_maintainer_thread = 1;
     settings.lru_maintainer_thread = true;

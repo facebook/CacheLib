@@ -16,16 +16,29 @@
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
+#include "cachelib/external/memcached/protocol_binary.h"
 
-extern "C" int init_memcached(int argc, char ** argv);
+extern "C" int init_memcached(int argc, char ** argv, size_t size_in_mb, uint32_t nthreads);
 extern "C" int stop_memcached();
 extern "C" struct conn;
 extern "C" struct item;
 extern "C" item *item_get(const char *key, const size_t nkey, conn *c, const bool do_update);
 extern "C" conn *conn_new(const int sfd, int init_state, const int event_flags, const int read_buffer_size, int transport, struct event_base *base, void *ssl);
 extern "C" item *item_alloc(char *key, size_t nkey, int flags, unsigned int exptime, int nbytes);
+extern "C" item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *c, int cmd);
+extern "C" item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd);
 extern "C" int store_item(item *item, int comm, conn* c);
-#define NREAD_SET 2
+extern "C" struct LIBEVENT_THREAD;
+extern "C" struct LIBEVENT_THREAD * threads;
+extern "C" void bind_thread_helper(conn * c, uint32_t wid);
+extern "C" struct event_base * main_base;
+extern "C" int memcached_event_loop(bool * stop_main_loop);
+extern "C" char *stats_prefix_dump(int *length);
+extern "C" conn * connect_server(const char *hostname, in_port_t port,bool nonblock, const bool ssl);
+extern "C" void send_ascii_command(const char *buf);
+extern "C" void read_ascii_response(char *buffer, size_t size);
+extern "C" int init_tester(int argc, char **argv);
+extern "C" struct conn * con;
 
 
 namespace facebook {
@@ -49,53 +62,16 @@ class MicroStressor : public Stressor {
         throughputStats_(config_.numThreads),
         wg_(std::move(generator)),
         hardcodedString_(genHardcodedString()) {
-    if(init_memcached(0, NULL) == EXIT_SUCCESS){
+    // threads and main_base are UNSAFE until this is called!
+    if(init_memcached(0, NULL, cacheConfig.cacheSizeMB, config_.numThreads) == EXIT_SUCCESS &&
+            init_tester(0, NULL) == EXIT_SUCCESS){
         memcached_running_ = true;
     }
-    main_base_dummy_ = event_init();
-    // if either consistency check is enabled or if we want to move
-    // items during slab release, we want readers and writers to chained
-    // allocs to be synchronized
-    typename CacheT::ChainedItemMovingSync movingSync;
-    if (config_.usesChainedItems() &&
-        (cacheConfig.moveOnSlabRelease || config_.checkConsistency)) {
-      lockEnabled_ = true;
 
-      struct CacheStressSyncObj : public CacheT::SyncObj {
-        MicroStressor& stressor;
-        std::string key;
-
-        CacheStressSyncObj(MicroStressor& s, std::string itemKey)
-            : stressor(s), key(std::move(itemKey)) {
-          stressor.chainedItemLock(Mode::Exclusive, key);
-        }
-        ~CacheStressSyncObj() override {
-          stressor.chainedItemUnlock(Mode::Exclusive, key);
-        }
-      };
-      movingSync = [this](typename CacheT::Item::Key key) {
-        return std::make_unique<CacheStressSyncObj>(*this, key.str());
-      };
-    }
-
-    cache_ = std::make_unique<CacheT>(cacheConfig, movingSync);
-    if (config_.opPoolDistribution.size() > cache_->numPools()) {
-      throw std::invalid_argument(folly::sformat(
-          "more pools specified in the test than in the cache. "
-          "test: {}, cache: {}",
-          config_.opPoolDistribution.size(), cache_->numPools()));
-    }
-    if (config_.keyPoolDistribution.size() != cache_->numPools()) {
-      throw std::invalid_argument(folly::sformat(
-          "different number of pools in the test from in the cache. "
-          "test: {}, cache: {}",
-          config_.keyPoolDistribution.size(), cache_->numPools()));
-    }
-
-    if (config_.checkConsistency) {
-      cache_->enableConsistencyCheck(wg_->getAllKeys());
-    }
     // Fill up the cache with specified key/value distribution
+    memcached_loop_ = std::thread([loop=&stop_memcached_loop_]() {
+                memcached_event_loop(loop);
+    });
     if (config_.prepopulateCache) {
       try {
         auto ret = prepopulateCache();
@@ -103,21 +79,12 @@ class MicroStressor : public Stressor {
                                     ret.first,
                                     ret.second.count() / 60.)
                   << std::endl;
-        for (auto pid : cache_->poolIds()) {
-          auto numItems = cache_->getPoolStats(pid).numItems();
-          std::cout << folly::sformat("Pool {}: {:,} keys in RAM",
-                                      static_cast<int>(pid), numItems)
-                    << std::endl;
-        }
-
         // wait for all the cache operations for prepopulation to complete.
-        if (!cache_->isRamOnly()) {
-          cache_->flushNvmCache();
-        }
 
-        std::cout << "== Cache Stats ==" << std::endl;
-        cache_->getStats().render(std::cout);
+        //std::cout << "== Cache Stats ==" << std::endl;
+        //cache_->getStats().render(std::cout);
         std::cout << std::endl;
+        int l;
       } catch (const cachebench::EndOfTrace& ex) {
         std::cout << "End of trace encountered during prepopulaiton, "
                      "attempting to continue..."
@@ -141,11 +108,14 @@ class MicroStressor : public Stressor {
     stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
+        conn * c = conn_new(i,0,0,1024,0,main_base,NULL);
+        bind_thread_helper(c, i);
         workers.push_back(
-            std::thread([this, throughputStats = &throughputStats_.at(i)]() {
-              stressByDiscreteDistribution(*throughputStats);
+            std::thread([this, throughputStats = &throughputStats_.at(i), c=c]() {
+              stressByDiscreteDistribution(*throughputStats, c);
             }));
       }
+
       for (auto& worker : workers) {
         worker.join();
       }
@@ -154,6 +124,9 @@ class MicroStressor : public Stressor {
           std::chrono::nanoseconds{std::chrono::system_clock::now() -
                                    startTime_}
               .count();
+      stop_memcached_loop_ = true;
+      std::cout << "waiting for mc" << std::endl;
+      memcached_loop_.join();
     });
   }
 
@@ -162,7 +135,7 @@ class MicroStressor : public Stressor {
     if (stressWorker_.joinable()) {
       stressWorker_.join();
     }
-    if (memcached_running_ && stop_memcached() == EXIT_SUCCESS){
+    if (memcached_running_  && stop_memcached() == EXIT_SUCCESS){
         memcached_running_ = false;
     }
   }
@@ -172,7 +145,7 @@ class MicroStressor : public Stressor {
     return startTime_;
   }
 
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  Stats getCacheStats() const override { Stats tmp; return tmp;}
 
   ThroughputStats aggregateThroughputStats() const override {
     if (throughputStats_.empty()) {
@@ -224,24 +197,16 @@ class MicroStressor : public Stressor {
     }
   }
 
-  void populateItem(ItemHandle& handle) {
-    assert(handle);
-    assert(cache_->getSize(handle) <= 4 * 1024 * 1024);
-    if (cache_->consistencyCheckEnabled()) {
-      cache_->setUint64ToItem(handle, folly::Random::rand64(rng));
-    } else {
-      std::memcpy(cache_->getMemory(handle), hardcodedString_.data(),
-                  cache_->getSize(handle));
-    }
-  }
-
   // Fill the cache and make sure all pools are full.
   // It's the generator's resposibility of providing keys that obey to the
   // distribution
   std::pair<size_t, std::chrono::seconds> prepopulateCache() {
     std::atomic<uint64_t> totalCount = 0;
 
-    auto prePopulateFn = [&]() {
+    auto prePopulateFn = [&](uint32_t wid) {
+      conn * c = conn_new(wid,0,0,1024,0,main_base,NULL);
+      bind_thread_helper(c, wid);
+
       std::mt19937 gen(folly::Random::rand32());
       std::discrete_distribution<> keyPoolDist(
           config_.keyPoolDistribution.begin(),
@@ -252,32 +217,15 @@ class MicroStressor : public Stressor {
 
       // in some cases eviction will never happen. To avoid infinite loop in
       // this case, we use continuousCacheHits as the signal of cache full
-      std::unordered_map<PoolId, size_t> continuousCacheHits;
-
-      while (fullPools.size() < cache_->numPools()) {
+      size_t continuousCacheHits;
+      while (true) {
         // get a pool according to keyPoolDistribution
-        auto pid = keyPoolDist(gen);
-        if (fullPools.count(pid) > 0) {
-          // it's a known full pool, skip it
-          continue;
-        }
-
-        // getPoolStats is expensive to fetch on every iteration and can
-        // serialize the cache creation. So check the eviction count every 10k
-        // insertions
-        if (count % 10000 == 0 &&
-            cache_->getPoolStats(pid).numEvictions() > 0) {
-          // it's a new found full pool, record it and reselect one
-          fullPools.insert(pid);
-          continue;
-        }
-
-        // now we have a good pool, get a request
-        const Request& req = getReq(pid, gen, lastRequestId);
-        if (cache_->find(req.key)) {
+        const Request& req = getReq(wid%config_.opPoolDistribution.size(), gen, lastRequestId);
+        item * mc_it =process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
+        if (mc_it) {
           // Treat 1000 continuous cache hits as cache full
-          if (++continuousCacheHits[pid] > 1000) {
-            fullPools.insert(pid);
+          if (++continuousCacheHits > 1000) {
+            break;
           }
 
           if (req.requestId) {
@@ -287,30 +235,29 @@ class MicroStressor : public Stressor {
         }
 
         // cache miss. Allocate and write to cache
-        continuousCacheHits[pid] = 0;
+        continuousCacheHits = 0;
 
         // req contains a new key, set it to cache
-        const auto allocHandle =
-            cache_->allocate(pid, req.key, req.key.size() + *(req.sizeBegin));
-        if (allocHandle) {
-          cache_->insertOrReplace(allocHandle);
-          // We throttle in case we are using flash so that we dont drop
-          // evictions to flash by inserting at a very high rate.
-          if (!cache_->isRamOnly() && count % 8 == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-          }
-          count++;
-          if (req.requestId) {
-            wg_->notifyResult(*req.requestId, OpResultType::kSetSuccess);
-          }
+        item * memcachedItem = process_cachebench_set(&req.key.at(0), req.key.size(), &hardcodedString_.at(0), *(req.sizeBegin) + 2, c, PROTOCOL_BINARY_CMD_SET);
+        if (! memcachedItem){
+            std::cout << "mc OOM" << std::endl;
+            break;
         }
-      }
+        count++;
+        if(count > .1*config_.numKeys){
+            //TODO fix prepop to be more clever
+            break;
+        }
+        if (req.requestId) {
+          wg_->notifyResult(*req.requestId, OpResultType::kSetSuccess);
+        }
+        }
       totalCount.fetch_add(count);
     };
 
     auto numThreads = config_.prepopulateThreads ? config_.prepopulateThreads
                                                  : config_.numThreads;
-    auto duration = detail::executeParallel(prePopulateFn, numThreads);
+    auto duration = detail::executeParallelWid(prePopulateFn, numThreads);
     return std::make_pair(totalCount.load(), duration);
   }
 
@@ -327,7 +274,7 @@ class MicroStressor : public Stressor {
   // @param genChainedItemLen   randomly chooses length for the chain to append
   // @param genChainedItemValSize   randomly choose a size for chained item
   // @param stats       Throughput stats
-  void stressByDiscreteDistribution(ThroughputStats& stats) {
+  void stressByDiscreteDistribution(ThroughputStats& stats, conn * c) {
     wg_->registerThread();
 
     std::mt19937 gen(folly::Random::rand32());
@@ -339,8 +286,7 @@ class MicroStressor : public Stressor {
 
     const bool needDelay = opDelayBatch != 0 && opDelayNs != 0;
     uint64_t opCounter = 0;
-    conn * dummyMemcachedConnection = conn_new(0,0,0,1024,0,main_base_dummy_,NULL);
-    auto throttleFn = [&] {
+        auto throttleFn = [&] {
       if (needDelay && ++opCounter == opDelayBatch) {
         opCounter = 0;
         std::this_thread::sleep_for(opDelay);
@@ -349,20 +295,9 @@ class MicroStressor : public Stressor {
 
     std::optional<uint64_t> lastRequestId = std::nullopt;
     for (uint64_t i = 0;
-         i < config_.numOps &&
-         cache_->getInconsistencyCount() < config_.maxInconsistencyCount &&
-         !cache_->isNvmCacheDisabled() && !shouldTestStop();
+         i < config_.numOps && !shouldTestStop();
          ++i) {
       try {
-#ifndef NDEBUG
-        auto checkCnt = [](int cnt) {
-          if (cnt != 0) {
-            throw std::runtime_error(folly::sformat("Refcount leak {}", cnt));
-          }
-        };
-        checkCnt(cache_->getHandleCountForThread());
-        SCOPE_EXIT { checkCnt(cache_->getHandleCountForThread()); };
-#endif
         ++stats.ops;
 
         const auto pid = opPoolDist(gen);
@@ -379,28 +314,23 @@ class MicroStressor : public Stressor {
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          result = setKey(pid, stats, key, *(req.sizeBegin), dummyMemcachedConnection);
-//          item * mc_it = item_get(key->c_str(), 1, dummyMemcachedConnection, true);
-
+          result = setKey(pid, stats, key, *(req.sizeBegin), c);
           throttleFn();
           break;
         }
+        case OpType::kAddChained:
         case OpType::kLoneGet:
         case OpType::kGet: {
           ++stats.get;
 
           Mode lockMode = Mode::Shared;
 
-          chainedItemLock(lockMode, *key);
-          SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
           // TODO currently pure lookaside, we should
           // add a distribution over sequences of requests/access patterns
           // e.g. get-no-set and set-no-get
-          auto it = cache_->find(*key, AccessMode::kRead);
-          item * mc_it = item_get(key->c_str(), 1, dummyMemcachedConnection, true);
-          if (it == nullptr) {
+          item * mc_it = process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
+
+          if (mc_it == nullptr) {
             ++stats.getMiss;
             result = OpResultType::kGetMiss;
 
@@ -408,10 +338,7 @@ class MicroStressor : public Stressor {
               // allocate and insert on miss
               // upgrade access privledges, (lock_upgrade is not
               // appropriate here)
-              chainedItemUnlock(lockMode, *key);
-              lockMode = Mode::Exclusive;
-              chainedItemLock(lockMode, *key);
-              setKey(pid, stats, key, *(req.sizeBegin), dummyMemcachedConnection);
+              setKey(pid, stats, key, *(req.sizeBegin), c);
             }
           } else {
             result = OpResultType::kGetHit;
@@ -421,51 +348,12 @@ class MicroStressor : public Stressor {
           break;
         }
         case OpType::kDel: {
+          //TODO implement deletes, use the model below
           ++stats.del;
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          auto res = cache_->remove(*key);
-          if (res == CacheT::RemoveRes::kNotFoundInRam) {
-            ++stats.delNotFound;
-          }
-          throttleFn();
-          break;
-        }
-        case OpType::kAddChained: {
-          ++stats.get;
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          auto it = cache_->findForWriteForTest(*key, AccessMode::kRead);
-          if (!it) {
-            ++stats.getMiss;
-
-            ++stats.set;
-            it = cache_->allocate(pid, *key, *(req.sizeBegin));
-            if (!it) {
-              ++stats.setFailure;
-              break;
-            }
-            populateItem(it);
-            cache_->insertOrReplace(it);
-          }
-          XDCHECK(req.sizeBegin + 1 != req.sizeEnd);
-          bool chainSuccessful = false;
-          for (auto j = req.sizeBegin + 1; j != req.sizeEnd; j++) {
-            ++stats.addChained;
-
-            const auto size = *j;
-            auto child = cache_->allocateChainedItem(it, size);
-            if (!child) {
-              ++stats.addChainedFailure;
-              continue;
-            }
-            chainSuccessful = true;
-            populateItem(child);
-            cache_->addChainedItem(it, std::move(child));
-          }
-          if (chainSuccessful && cache_->consistencyCheckEnabled()) {
-            cache_->trackChainChecksum(it);
-          }
+          //auto res = cache_->remove(*key);
+          //if (res == CacheT::RemoveRes::kNotFoundInRam) {
+          //  ++stats.delNotFound;
+          //}
           throttleFn();
           break;
         }
@@ -490,21 +378,14 @@ class MicroStressor : public Stressor {
                       ThroughputStats& stats,
                       std::string* key,
                       size_t size,
-                      conn * c = NULL) {
+                      conn * c) {
     ++stats.set;
-    auto it = cache_->allocate(pid, *key, size);
-    item * memcachedItem = item_alloc(&key->at(0), key->size(), 0, 0,
-                            size + 2);
+    item * memcachedItem = process_cachebench_set(&key->at(0), key->size(), &hardcodedString_.at(0), size + 2, c, PROTOCOL_BINARY_CMD_SET);
 
-    if ( memcachedItem == NULL || it == nullptr) {
+    if ( memcachedItem == NULL ) {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
-      populateItem(it);
-      cache_->insertOrReplace(it);
-      if(c != NULL){
-        store_item(memcachedItem, NREAD_SET, c); 
-      }
       return OpResultType::kSetSuccess;
     }
   }
@@ -512,13 +393,8 @@ class MicroStressor : public Stressor {
   const Request& getReq(const PoolId& pid,
                         std::mt19937& gen,
                         std::optional<uint64_t>& lastRequestId) {
-    while (true) {
       const Request& req(wg_->getReq(pid, gen, lastRequestId));
-      if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
-        continue;
-      }
       return req;
-    }
   }
 
   const StressorConfig config_;
@@ -536,16 +412,16 @@ class MicroStressor : public Stressor {
   // memorize rng to improve random performance
   folly::ThreadLocalPRNG rng;
 
-  const std::string hardcodedString_;
+  std::string hardcodedString_;
 
-  std::unique_ptr<CacheT> cache_;
 
   std::thread stressWorker_;
 
   std::chrono::time_point<std::chrono::system_clock> startTime_;
   uint64_t testDurationNs_{0};
   bool memcached_running_{false};
-  struct event_base * main_base_dummy_;
+  bool stop_memcached_loop_{false};
+  std::thread memcached_loop_;
 };
 } // namespace cachebench
 } // namespace cachelib

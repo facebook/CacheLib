@@ -23,6 +23,7 @@
 
 #define ITEMS_PER_ALLOC 64
 
+
 /* An item in the connection queue. */
 enum conn_queue_item_modes {
     queue_new_conn,   /* brand new connection. */
@@ -79,7 +80,7 @@ unsigned int item_lock_hashpower;
  * Each libevent instance has a wakeup pipe, which other threads
  * can use to signal that they've put a new connection on its queue.
  */
-static LIBEVENT_THREAD *threads;
+LIBEVENT_THREAD *threads = NULL;
 
 /*
  * Number of worker threads that have finished setting themselves up.
@@ -242,7 +243,7 @@ void stop_threads(void) {
     // Close all connections then let the workers finally exit.
     if (settings.verbose > 0)
         fprintf(stderr, "closing connections\n");
-    conn_close_all();
+    //conn_close_all();
     pthread_mutex_unlock(&worker_hang_lock);
     if (settings.verbose > 0)
         fprintf(stderr, "reaping worker threads\n");
@@ -498,6 +499,10 @@ static void *worker_libevent(void *arg) {
 
     event_base_free(me->base);
     return NULL;
+}
+
+void bind_thread_helper(conn * c, uint32_t wid){
+    c->thread = threads + wid;
 }
 
 

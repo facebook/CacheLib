@@ -55,6 +55,7 @@ thread.c
 timedrun.c
 tls.c
 util.c
+testapp.c
   )
 
 target_link_libraries(

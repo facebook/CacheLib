@@ -854,7 +854,7 @@ void slab_stats_aggregate(struct thread_stats *stats, struct slab_stats *out);
 void append_stat(const char *name, ADD_STAT add_stats, conn *c,
                  const char *fmt, ...);
 
-int init_memcached(int argc, char ** argv);
+int init_memcached(int argc, char ** argv, size_t cache_size_mb, uint32_t nthreads);
 int stop_memcached();
 
 
