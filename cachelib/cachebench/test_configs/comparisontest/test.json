@@ -1,0 +1,34 @@
+{
+  "cache_config" : {
+    "cacheSizeMB": 8192,
+    "poolRebalanceIntervalSec" : 0,
+    "moveOnSlabRelease" : false,
+
+    "numPools" : 2,
+    "poolSizes" : [0.5, 0.5]
+  },
+  "test_config" : {
+      "enableLookaside" : true,
+      "prepopulateCache" : true,
+      "numOps" : 10000000,
+      "numThreads" : 32,
+      "numKeys" : 1000000,
+
+      "popDistFile": "assoc_altoona1_follower_pop.json",
+      "valSizeDistFile": "assoc_altoona1_follower_sizes.json",
+
+      "opDelayBatch" : 1,
+      "opDelayNs" : 200,
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "loneGetRatio": 0.025,
+      "getRatio": 0.975,
+      "setRatio" : 0.0,
+      "delRatio" : 0.0,
+      "keyPoolDistribution": [0.5, 0.5],
+      "opPoolDistribution" : [0.5, 0.5],
+      "mode": "micro"
+    }
+}
