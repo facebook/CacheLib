@@ -23,6 +23,7 @@ set(CMAKE_INSTALL_DIR lib/cmake/${PACKAGE_NAME} CACHE STRING
     "The subdirectory where CMake package config files should be installed")
 
 SET(CMAKE_CXX_FLAGS "-O2")
+SET(CMAKE_C_FLAGS "-O2")
 SET(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb")
 SET(CMAKE_C_FLAGS_DEBUG "-g")
 
