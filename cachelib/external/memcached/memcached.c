@@ -1610,7 +1610,7 @@ static void complete_update_bin(conn *c) {
     c->item = 0;
 }
 
-static void complete_update_cachebench(conn *c) {
+static void complete_update_cachebench(conn *c, size_t vlen) {
     protocol_binary_response_status eno = PROTOCOL_BINARY_RESPONSE_EINVAL;
     enum store_item_type ret = NOT_STORED;
     assert(c != NULL);
@@ -1626,13 +1626,15 @@ static void complete_update_cachebench(conn *c) {
         *(ITEM_data(it) + it->nbytes - 1) = '\n';
     } else {
         assert(c->ritem);
-        item_chunk *ch = (item_chunk *) c->ritem;
-        if (ch->size == ch->used)
-            ch = ch->next;
-        assert(ch->size - ch->used >= 2);
-        ch->data[ch->used] = '\r';
-        ch->data[ch->used + 1] = '\n';
-        ch->used += 2;
+        //item_chunk *ch = (item_chunk *) c->ritem;
+        //if (ch->size == ch->used)
+        //    ch = ch->next;
+        //assert(ch->size - ch->used >= 2);
+        //ch->data[ch->used] = '\r';
+        c->ritem[vlen-2] = '\r';
+//        ch->data[ch->used + 1] = '\n';
+        c->ritem[vlen-1] = '\n';
+        //ch->used += 2;
     }
 
     ret = store_item(it, c->cmd, c);
@@ -2791,7 +2793,7 @@ item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *
     c->rlbytes = vlen;
     conn_set_state(c, conn_nread);
     c->substate = bin_read_set_value;
-    complete_update_cachebench(c);
+    complete_update_cachebench(c, vlen);
     return it;
 }
 
