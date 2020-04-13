@@ -170,6 +170,7 @@ class BigHash final : public Engine {
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter bfFalsePositiveCount_;
   mutable AtomicCounter bfProbeCount_;
+  mutable AtomicCounter bfRebuildCount_;
   mutable AtomicCounter bfRejectCount_;
   mutable AtomicCounter checksumErrorCount_;
   mutable SizeDistribution sizeDist_;

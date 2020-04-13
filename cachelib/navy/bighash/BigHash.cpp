@@ -136,6 +136,8 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_physical_written", physicalWrittenCount_.get());
   visitor("navy_bh_io_errors", ioErrorCount_.get());
   visitor("navy_bh_bf_false_positive_pct", bfFalsePositivePct());
+  visitor("navy_bh_bf_lookups", bfProbeCount_.get());
+  visitor("navy_bh_bf_rebuilds", bfRebuildCount_.get());
   visitor("navy_bh_checksum_errors", checksumErrorCount_.get());
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {
@@ -360,6 +362,7 @@ void BigHash::bfBuildUninitialized(BucketId bid, const Bucket* bucket) {
 }
 
 void BigHash::bfRebuild(BucketId bid, const Bucket* bucket) {
+  bfRebuildCount_.inc();
   XDCHECK(bloomFilter_);
   bloomFilter_->clear(bid.index());
   auto itr = bucket->getFirst();
