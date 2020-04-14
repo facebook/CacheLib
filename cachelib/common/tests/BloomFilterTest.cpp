@@ -112,8 +112,10 @@ TEST(BloomFilter, SharedCollision) {
 }
 
 TEST(BloomFilter, InvalidArgs) {
-  auto makeFilter = [] { BloomFilter bf{2, 2, 3 /* not power of two */}; };
-  EXPECT_THROW(makeFilter(), std::invalid_argument);
+  EXPECT_NO_THROW(BloomFilter(2, 2, 3));
+  EXPECT_THROW(BloomFilter(0, 2, 2), std::invalid_argument);
+  EXPECT_THROW(BloomFilter(2, 0, 2), std::invalid_argument);
+  EXPECT_THROW(BloomFilter(2, 2, 0), std::invalid_argument);
 }
 
 TEST(BloomFilter, InitBits) {

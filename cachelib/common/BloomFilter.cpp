@@ -43,8 +43,7 @@ BloomFilter::BloomFilter(uint32_t numFilters,
       seeds_(numHashes),
       bits_{std::make_unique<uint8_t[]>(getByteSize())},
       init_{std::make_unique<uint8_t[]>(bitsToBytes(numFilters))} {
-  if (numFilters == 0 || numHashes == 0 || hashTableBitSize == 0 ||
-      !folly::isPowTwo(hashTableBitSize)) {
+  if (numFilters == 0 || numHashes == 0 || hashTableBitSize == 0) {
     throw std::invalid_argument("invalid bloom filter params");
   }
   // Don't have to worry about @bits_ and @init_ memory:
@@ -63,9 +62,9 @@ void BloomFilter::set(uint32_t idx, uint64_t key) {
   auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
-    auto bucket =
-        facebook::cachelib::combineHashes(key, seed) & (hashTableBitSize_ - 1);
-    bitSet(filterPtr, firstBit + bucket);
+    auto bitNum =
+        facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
+    bitSet(filterPtr, firstBit + bitNum);
     firstBit += hashTableBitSize_;
   }
 }
@@ -79,9 +78,9 @@ bool BloomFilter::couldExist(uint32_t idx, uint64_t key) const {
   auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
-    auto bucket =
-        facebook::cachelib::combineHashes(key, seed) & (hashTableBitSize_ - 1);
-    if (!bitGet(filterPtr, firstBit + bucket)) {
+    auto bitNum =
+        facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
+    if (!bitGet(filterPtr, firstBit + bitNum)) {
       return false;
     }
     firstBit += hashTableBitSize_;
