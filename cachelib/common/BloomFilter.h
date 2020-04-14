@@ -5,12 +5,11 @@
 #include <stdexcept>
 #include <vector>
 
-#include <folly/io/RecordIO.h>
-#include "cachelib/navy/serialization/RecordIO.h"
+#include "cachelib/common/Serialization.h"
+#include "cachelib/common/gen-cpp2/BloomFilter_types.h"
 
 namespace facebook {
 namespace cachelib {
-namespace navy {
 // BigHash uses bloom filters (BF) to reduce number of IO. We want to maintain
 // BF for every bucket, because we want to rebuild it on every remove to keep
 // its filtering properties. By default, the bloom filter is initialized to
@@ -41,7 +40,10 @@ class BloomFilter {
   BloomFilter(BloomFilter&&) = default;
   BloomFilter& operator=(BloomFilter&&) = default;
 
+  template <typename SerializationProto>
   void persist(RecordWriter& rw);
+
+  template <typename SerializationProto>
   void recover(RecordReader& rw);
 
   // reset the whole bloom filter to default state where the init bits are set
@@ -74,6 +76,11 @@ class BloomFilter {
     return bits_.get() + idx * filterByteSize_;
   }
 
+  void serializeBits(RecordWriter& rw, size_t fragmentSize);
+  void deserializeBits(RecordReader& rr);
+
+  static constexpr uint32_t kPersistFragmentSize = 1024 * 1024;
+
   const uint32_t numFilters_{};
   const size_t hashTableBitSize_{};
   const size_t filterByteSize_{};
@@ -82,6 +89,41 @@ class BloomFilter {
   // Bucket bloom filter initialized flags
   std::unique_ptr<uint8_t[]> init_;
 };
-} // namespace navy
+
+template <typename SerializationProto>
+void BloomFilter::persist(RecordWriter& rw) {
+  serialization::BloomFilterPersistentData bd;
+  bd.numFilters = numFilters_;
+  bd.hashTableBitSize = hashTableBitSize_;
+  bd.filterByteSize = filterByteSize_;
+  bd.fragmentSize = kPersistFragmentSize;
+  bd.seeds.resize(seeds_.size());
+  for (uint32_t i = 0; i < seeds_.size(); i++) {
+    bd.seeds[i] = seeds_[i];
+  }
+  facebook::cachelib::serializeProto<serialization::BloomFilterPersistentData,
+                                     SerializationProto>(bd, rw);
+  serializeBits(rw, bd.fragmentSize);
+}
+
+template <typename SerializationProto>
+void BloomFilter::recover(RecordReader& rr) {
+  const auto bd = facebook::cachelib::deserializeProto<
+      serialization::BloomFilterPersistentData,
+      SerializationProto>(rr);
+  if (numFilters_ != static_cast<uint32_t>(bd.numFilters) ||
+      hashTableBitSize_ != static_cast<uint64_t>(bd.hashTableBitSize) ||
+      filterByteSize_ != static_cast<uint64_t>(bd.filterByteSize) ||
+      static_cast<uint32_t>(bd.fragmentSize) != kPersistFragmentSize) {
+    throw std::invalid_argument(
+        "Could not recover BloomFilter. Invalid BloomFilter.");
+  }
+
+  for (uint32_t i = 0; i < bd.seeds.size(); i++) {
+    seeds_[i] = bd.seeds[i];
+  }
+  deserializeBits(rr);
+}
+
 } // namespace cachelib
 } // namespace facebook

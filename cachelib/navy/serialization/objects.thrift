@@ -61,11 +61,3 @@ struct BigHashPersistentData {
   6: required i64 numBuckets = 0,
   7: map<i64, i64> sizeDist,
 }
-
-struct BloomFilterPersistentData {
-  1: required i32 numFilters = 0;
-  2: required i64 hashTableBitSize = 0;
-  3: required i64 filterByteSize = 0;
-  4: required i32 fragmentSize = 0;
-  5: required list<i64> seeds;
-}

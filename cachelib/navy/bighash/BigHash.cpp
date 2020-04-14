@@ -159,7 +159,8 @@ void BigHash::persist(RecordWriter& rw) {
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
-    bloomFilter_->persist(rw);
+    bloomFilter_->persist<ProtoSerializer>(rw);
+    XLOG(INFO, "bloom filter persist done");
   }
 
   XLOG(INFO, "Finished bighash persist");
@@ -190,7 +191,8 @@ bool BigHash::recover(RecordReader& rr) {
     itemCount_.set(pd.itemCount);
     sizeDist_ = SizeDistribution{pd.sizeDist};
     if (bloomFilter_) {
-      bloomFilter_->recover(rr);
+      bloomFilter_->recover<ProtoSerializer>(rr);
+      XLOG(INFO, "Recovered bloom filter");
     }
   } catch (const std::exception& e) {
     XLOGF(ERR, "Exception: {}", e.what());

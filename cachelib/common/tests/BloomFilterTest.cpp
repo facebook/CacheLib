@@ -1,9 +1,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
-#include "cachelib/navy/bighash/BloomFilter.h"
-#include "cachelib/navy/common/Hash.h"
 
 namespace facebook {
 namespace cachelib {
@@ -154,6 +153,9 @@ TEST(BloomFilter, InitBits) {
     EXPECT_TRUE(bf.couldExist(1, 100 + i));
   }
 }
+
+// TODO add persist/recover tests here
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

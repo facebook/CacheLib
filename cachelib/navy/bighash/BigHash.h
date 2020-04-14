@@ -6,7 +6,7 @@
 #include <folly/SharedMutex.h>
 
 #include "cachelib/common/AtomicCounter.h"
-#include "cachelib/navy/bighash/BloomFilter.h"
+#include "cachelib/common/BloomFilter.h"
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"

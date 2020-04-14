@@ -1,15 +1,11 @@
 #include <cassert>
 #include <cstring>
 
+#include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
-#include "cachelib/navy/bighash/BloomFilter.h"
-#include "cachelib/navy/common/Hash.h"
-#include "cachelib/navy/common/Utils.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
-namespace navy {
 namespace {
 size_t byteIndex(size_t bitIdx) { return bitIdx >> 3u; }
 
@@ -30,10 +26,13 @@ bool bitGet(const uint8_t* ptr, size_t bitIdx) {
   return ptr[byteIndex(bitIdx)] & bitMask(bitIdx);
 }
 
-size_t bitsToBytes(size_t bits) { return powTwoAlign(bits, 8) >> 3u; }
+size_t bitsToBytes(size_t bits) {
+  // align to closest 8 byte
+  return ((bits + 7ULL) & ~(7ULL)) >> 3u;
+}
 } // namespace
 
-constexpr uint32_t kBloomFilterPersistFragmentSize = 1024 * 1024;
+constexpr uint32_t BloomFilter::kPersistFragmentSize;
 
 BloomFilter::BloomFilter(uint32_t numFilters,
                          uint32_t numHashes,
@@ -106,20 +105,35 @@ bool BloomFilter::getInitBit(uint32_t idx) {
   return bitGet(init_.get(), idx);
 }
 
-void BloomFilter::recover(RecordReader& rr) {
-  auto bd = deserializeProto<serialization::BloomFilterPersistentData>(rr);
-  if (numFilters_ != static_cast<uint32_t>(bd.numFilters) ||
-      hashTableBitSize_ != static_cast<uint64_t>(bd.hashTableBitSize) ||
-      filterByteSize_ != static_cast<uint64_t>(bd.filterByteSize) ||
-      static_cast<uint32_t>(bd.fragmentSize) !=
-          kBloomFilterPersistFragmentSize) {
-    throw std::invalid_argument(
-        "Could not recover BloomFilter. Invalid BloomFilter.");
+void BloomFilter::reset() {
+  // make the bits indicate that no keys are set
+  std::memset(bits_.get(), 0, getByteSize());
+
+  // set all buckets to init state
+  std::memset(init_.get(), 0xff, bitsToBytes(numFilters_));
+}
+
+void BloomFilter::serializeBits(RecordWriter& rw, size_t fragmentSize) {
+  uint64_t bitsSize = getByteSize();
+  uint64_t off = 0;
+  while (off < bitsSize) {
+    auto nBytes = std::min(bitsSize - off, fragmentSize);
+    auto wbuf = folly::IOBuf::copyBuffer(bits_.get() + off, nBytes);
+    rw.writeRecord(std::move(wbuf));
+    off += nBytes;
   }
 
-  for (uint32_t i = 0; i < bd.seeds.size(); i++) {
-    seeds_[i] = bd.seeds[i];
+  auto initSize = bitsToBytes(numFilters_);
+  off = 0;
+  while (off < initSize) {
+    auto nBytes = std::min(initSize - off, fragmentSize);
+    auto wbuf = folly::IOBuf::copyBuffer(init_.get() + off, nBytes);
+    rw.writeRecord(std::move(wbuf));
+    off += nBytes;
   }
+}
+
+void BloomFilter::deserializeBits(RecordReader& rr) {
   auto bitsSize = getByteSize();
   uint64_t off = 0;
   while (off < bitsSize) {
@@ -143,49 +157,7 @@ void BloomFilter::recover(RecordReader& rr) {
     memcpy(init_.get() + off, initBuf->data(), initBuf->length());
     off += initBuf->length();
   }
-  XLOG(INFO, "Recovered bloom filter");
 }
 
-void BloomFilter::persist(RecordWriter& rw) {
-  serialization::BloomFilterPersistentData bd;
-  bd.numFilters = numFilters_;
-  bd.hashTableBitSize = hashTableBitSize_;
-  bd.filterByteSize = filterByteSize_;
-  bd.fragmentSize = kBloomFilterPersistFragmentSize;
-  bd.seeds.resize(seeds_.size());
-  for (uint32_t i = 0; i < seeds_.size(); i++) {
-    bd.seeds[i] = seeds_[i];
-  }
-  serializeProto(bd, rw);
-  uint64_t fragmentSize = bd.fragmentSize;
-  uint64_t bitsSize = getByteSize();
-  uint64_t off = 0;
-  while (off < bitsSize) {
-    auto nBytes = std::min(bitsSize - off, fragmentSize);
-    auto wbuf = folly::IOBuf::copyBuffer(bits_.get() + off, nBytes);
-    rw.writeRecord(std::move(wbuf));
-    off += nBytes;
-  }
-
-  auto initSize = bitsToBytes(numFilters_);
-  off = 0;
-  while (off < initSize) {
-    auto nBytes = std::min(initSize - off, fragmentSize);
-    auto wbuf = folly::IOBuf::copyBuffer(init_.get() + off, nBytes);
-    rw.writeRecord(std::move(wbuf));
-    off += nBytes;
-  }
-  XLOG(INFO, "bloom filter persist done");
-}
-
-void BloomFilter::reset() {
-  // make the bits indicate that no keys are set
-  std::memset(bits_.get(), 0, getByteSize());
-
-  // set all buckets to init state
-  std::memset(init_.get(), 0xff, bitsToBytes(numFilters_));
-}
-
-} // namespace navy
 } // namespace cachelib
 } // namespace facebook
