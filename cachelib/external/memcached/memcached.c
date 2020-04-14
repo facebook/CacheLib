@@ -69,6 +69,7 @@ static int new_socket(struct addrinfo *ai);
 static ssize_t tcp_read(conn *arg, void *buf, size_t count);
 static ssize_t tcp_sendmsg(conn *arg, struct msghdr *msg, int flags);
 static ssize_t tcp_write(conn *arg, void *buf, size_t count);
+static void reset_cmd_handler(conn *c);
 
 enum try_read_result {
     READ_DATA_RECEIVED,
@@ -109,7 +110,7 @@ static void conn_close(conn *c);
 static void conn_init(void);
 static bool update_event(conn *c, const int new_flags);
 static void complete_nread(conn *c);
-static void process_command(conn *c, char *command);
+void process_command(conn *c, char *command);
 static void write_and_free(conn *c, char *buf, int bytes);
 static void write_bin_error(conn *c, protocol_binary_response_status err,
                             const char *errstr, int swallow);
@@ -305,7 +306,7 @@ static void settings_init(size_t size_in_mb) {
     settings.binding_protocol = negotiating_prot;
     settings.item_size_max = 1024 * 1024; /* The famous 1MB upper limit. */
     settings.slab_page_size = 1024 * 1024; /* chunks are split from 1MB pages. */
-    settings.slab_chunk_size_max = settings.slab_page_size / 2;
+    settings.slab_chunk_size_max = settings.slab_page_size ;/// 2;
     settings.sasl = false;
     settings.maxconns_fast = true;
     settings.lru_crawler = false;
@@ -1694,6 +1695,7 @@ static void complete_update_cachebench(conn *c, size_t vlen) {
     }
     item_remove(c->item);       /* release the c->item reference */
     c->item = 0;
+    reset_cmd_handler(c);
 }
 
 static void write_bin_miss_response(conn *c, char *key, size_t nkey) {
@@ -1709,7 +1711,7 @@ static void write_bin_miss_response(conn *c, char *key, size_t nkey) {
                         NULL, 0);
     }
 }
-item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd) {
+int process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd) {
     item *it;
     c->cmd = cmd;
     mc_resp resp;
@@ -1730,7 +1732,9 @@ item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd) {
     }
 
     it = item_get(key, nkey, c, DO_UPDATE);
+    uint32_t hv;
 
+    int retval = it == NULL ? EXIT_FAILURE : EXIT_SUCCESS;
     if (it) {
         /* the length has two unnecessary bytes ("\r\n") */
         //uint16_t keylen = 0;
@@ -1843,8 +1847,18 @@ item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd) {
     if (settings.detail_enabled) {
         stats_prefix_record_get(key, nkey, NULL != it);
     }
-    return it;
+    conn_release_items(c);
+    reset_cmd_handler(c);
+
+    if(it != NULL){
+        hv = hash(ITEM_key(it), it->nkey);
+        item_lock(hv);
+        refcount_decr(it);
+        item_unlock(hv);
+    }
+    return retval;
 }
+
 static void process_bin_get_or_touch(conn *c, char *extbuf) {
     item *it;
 
@@ -2760,7 +2774,7 @@ item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *
         return it;
     }
 
-    //ITEM_set_cas(it, c->binary_header.request.cas);
+    ITEM_set_cas(it, c->binary_header.request.cas);
 
     switch (cmd) {
         case PROTOCOL_BINARY_CMD_ADD:
@@ -2779,7 +2793,6 @@ item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *
     if (ITEM_get_cas(it) != 0) {
         c->cmd = NREAD_CAS;
     }
-
     c->item = it;
 #ifdef NEED_ALIGN
     if (it->it_flags & ITEM_CHUNKED) {
@@ -2788,10 +2801,12 @@ item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *
         c->ritem = ITEM_data(it);
     }
 #else
-    c->ritem = val;//ITEM_data(it);
+    c->ritem = ITEM_data(it);
 #endif
     c->rlbytes = vlen;
-    conn_set_state(c, conn_nread);
+    pthread_mutex_lock(&c->thread->stats.mutex);
+    c->thread->stats.bytes_read += vlen;
+    pthread_mutex_unlock(&c->thread->stats.mutex);
     c->substate = bin_read_set_value;
     complete_update_cachebench(c, vlen);
     return it;
@@ -4266,6 +4281,21 @@ static inline int _get_extstore(conn *c, item *it, mc_resp *resp) {
     return 0;
 }
 #endif
+
+item * conn_fetch_resp_item(conn * c){
+    if(c && c->resp){
+        return c->resp->item;
+    }
+    return NULL;
+}
+
+item * conn_fetch_item(conn * c){
+    if(c){
+        return c->item;
+    }
+    return NULL;
+}
+
 
 /* ntokens is overwritten here... shrug.. */
 static inline void process_get_command(conn *c, token_t *tokens, size_t ntokens, bool return_cas, bool should_touch) {
@@ -6349,7 +6379,7 @@ static void process_refresh_certs_command(conn *c, token_t *tokens, const size_t
 // we can't drop out and back in again.
 // Leaving this note here to spend more time on a fix when necessary, or if an
 // opportunity becomes obvious.
-static void process_command(conn *c, char *command) {
+void process_command(conn *c, char *command) {
 
     token_t tokens[MAX_TOKENS];
     size_t ntokens;

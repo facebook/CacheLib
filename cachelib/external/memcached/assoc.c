@@ -184,7 +184,7 @@ void assoc_delete(const char *key, const size_t nkey, const uint32_t hv) {
     }
     /* Note:  we never actually get here.  the callers don't delete things
        they can't find. */
-    assert(*before != 0);
+    //assert(*before != 0);
 }
 
 

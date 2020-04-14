@@ -26,7 +26,7 @@ extern "C" item *item_get(const char *key, const size_t nkey, conn *c, const boo
 extern "C" conn *conn_new(const int sfd, int init_state, const int event_flags, const int read_buffer_size, int transport, struct event_base *base, void *ssl);
 extern "C" item *item_alloc(char *key, size_t nkey, int flags, unsigned int exptime, int nbytes);
 extern "C" item * process_cachebench_set(char * key, int nkey, char * val, int vlen, conn *c, int cmd);
-extern "C" item * process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd);
+extern "C" int process_cachebench_get_or_touch(char * key, int nkey, conn *c, int cmd);
 extern "C" int store_item(item *item, int comm, conn* c);
 extern "C" struct LIBEVENT_THREAD;
 extern "C" struct LIBEVENT_THREAD * threads;
@@ -39,6 +39,9 @@ extern "C" void send_ascii_command(const char *buf);
 extern "C" void read_ascii_response(char *buffer, size_t size);
 extern "C" int init_tester(int argc, char **argv);
 extern "C" struct conn * con;
+extern "C" item * conn_fetch_item(conn * c);
+extern "C" item * conn_fetch_resp_item(conn * c);
+extern "C" void process_command(conn *c, char * command);
 
 
 namespace facebook {
@@ -135,7 +138,7 @@ class MicroStressor : public Stressor {
     if (stressWorker_.joinable()) {
       stressWorker_.join();
     }
-    if (memcached_running_  && stop_memcached() == EXIT_SUCCESS){
+    if (memcached_running_){//  && stop_memcached() == EXIT_SUCCESS){
         memcached_running_ = false;
     }
   }
@@ -221,8 +224,8 @@ class MicroStressor : public Stressor {
       while (true) {
         // get a pool according to keyPoolDistribution
         const Request& req = getReq(wid%config_.opPoolDistribution.size(), gen, lastRequestId);
-        item * mc_it =process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
-        if (mc_it) {
+        int found = process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
+        if (found == EXIT_SUCCESS) {
           // Treat 1000 continuous cache hits as cache full
           if (++continuousCacheHits > 1000) {
             break;
@@ -236,7 +239,6 @@ class MicroStressor : public Stressor {
 
         // cache miss. Allocate and write to cache
         continuousCacheHits = 0;
-
         // req contains a new key, set it to cache
         item * memcachedItem = process_cachebench_set(&req.key.at(0), req.key.size(), &hardcodedString_.at(0), *(req.sizeBegin) + 2, c, PROTOCOL_BINARY_CMD_SET);
         if (! memcachedItem){
@@ -328,9 +330,8 @@ class MicroStressor : public Stressor {
           // TODO currently pure lookaside, we should
           // add a distribution over sequences of requests/access patterns
           // e.g. get-no-set and set-no-get
-          item * mc_it = process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
-
-          if (mc_it == nullptr) {
+          int found = process_cachebench_get_or_touch(&req.key.at(0), req.key.size(), c, PROTOCOL_BINARY_CMD_GET);
+          if (found == EXIT_FAILURE) {
             ++stats.getMiss;
             result = OpResultType::kGetMiss;
 
@@ -378,8 +379,10 @@ class MicroStressor : public Stressor {
                       ThroughputStats& stats,
                       std::string* key,
                       size_t size,
-                      conn * c) {
+                      conn * c
+                      ) {
     ++stats.set;
+    
     item * memcachedItem = process_cachebench_set(&key->at(0), key->size(), &hardcodedString_.at(0), size + 2, c, PROTOCOL_BINARY_CMD_SET);
 
     if ( memcachedItem == NULL ) {
