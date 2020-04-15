@@ -138,7 +138,6 @@ class BigHash final : public Engine {
 
   double bfFalsePositivePct() const;
   void bfRebuild(BucketId bid, const Bucket* bucket);
-  void bfBuildUninitialized(BucketId bid, const Bucket* bucket);
   bool bfReject(BucketId bid, uint64_t keyHash) const;
 
   // Use birthday paradox to estimate number of mutexes given number of parallel

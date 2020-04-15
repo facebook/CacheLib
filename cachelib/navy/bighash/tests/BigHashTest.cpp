@@ -569,6 +569,9 @@ TEST(BigHash, BloomFilterRecoveryRebuild) {
 
     BigHash bh(std::move(config));
     EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat"), {}));
+    Buffer value;
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
+    EXPECT_EQ(1, bh.bfRejectCount());
     auto rw = createMemoryRecordWriter(queue);
     bh.persist(*rw);
 

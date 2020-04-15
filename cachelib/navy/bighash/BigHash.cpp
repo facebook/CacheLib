@@ -226,12 +226,10 @@ Status BigHash::insert(HashedKey hk,
     removed = bucket->remove(hk, destructorCb_);
     evicted = bucket->insert(hk, value, destructorCb_);
 
-    // TODO: we compute this before writing the bucket becase when
-    //       encryption is enabled, we will mutate the data passed
-    //       in. This will be updated to be more explicit about the
-    //       data being transferred to another component.
+    // rebuild / fix the bloom filter before we move the buffer to do the
+    // actual write
     if (bloomFilter_) {
-      if (removed + evicted == 0 && bloomFilter_->getInitBit(bid.index())) {
+      if (removed + evicted == 0) {
         // In case nothing was removed or evicted, we can just add
         bloomFilter_->set(bid.index(), hk.keyHash());
       } else {
@@ -243,6 +241,7 @@ Status BigHash::insert(HashedKey hk,
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
+        bloomFilter_->setInitBit(bid.index());
       }
       ioErrorCount_.inc();
       return Status::DeviceError;
@@ -282,7 +281,6 @@ Status BigHash::lookup(HashedKey hk, Buffer& value) {
     }
 
     bucket = reinterpret_cast<Bucket*>(buffer.data());
-    bfBuildUninitialized(bid, bucket);
   }
 
   auto valueView = bucket->find(hk);
@@ -313,7 +311,6 @@ Status BigHash::remove(HashedKey hk) {
 
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
     if (!bucket->remove(hk, destructorCb_)) {
-      bfBuildUninitialized(bid, bucket);
       bfFalsePositiveCount_.inc();
       return Status::NotFound;
     }
@@ -330,6 +327,7 @@ Status BigHash::remove(HashedKey hk) {
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
+        bloomFilter_->setInitBit(bid.index());
       }
       ioErrorCount_.inc();
       return Status::DeviceError;
@@ -357,22 +355,16 @@ bool BigHash::bfReject(BucketId bid, uint64_t keyHash) const {
   return false;
 }
 
-void BigHash::bfBuildUninitialized(BucketId bid, const Bucket* bucket) {
-  if (bloomFilter_ && !bloomFilter_->getInitBit(bid.index())) {
-    bfRebuild(bid, bucket);
-  }
-}
-
 void BigHash::bfRebuild(BucketId bid, const Bucket* bucket) {
   bfRebuildCount_.inc();
   XDCHECK(bloomFilter_);
   bloomFilter_->clear(bid.index());
+  bloomFilter_->setInitBit(bid.index());
   auto itr = bucket->getFirst();
   while (!itr.done()) {
     bloomFilter_->set(bid.index(), itr.keyHash());
     itr = bucket->getNext(itr);
   }
-  bloomFilter_->setInitBit(bid.index());
 }
 
 void BigHash::flush() {
@@ -394,11 +386,10 @@ Buffer BigHash::readBucket(BucketId bid) {
 
   const auto checksumSuccess =
       Bucket::computeChecksum(buffer.view()) == bucket->getChecksum();
-  // We can only know for certain this is a valid checksum error if bloom filter
-  // is already initialized. Otherwise, it could very well be because we're
-  // reading the bucket for the first time.
-  if (!checksumSuccess && bloomFilter_ &&
-      bloomFilter_->getInitBit(bid.index())) {
+  // we only read a bucket if the bloom filter indicates that the bucket could
+  // have the element. Hence, if check sum errors out and bloom filter is
+  // enabled, record the checksum error
+  if (!checksumSuccess && bloomFilter_) {
     checksumErrorCount_.inc();
   }
 
