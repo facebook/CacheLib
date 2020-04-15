@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cstring>
 
+#include <folly/lang/Bits.h>
+
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
 
@@ -26,7 +28,36 @@ size_t bitsToBytes(size_t bits) {
   // align to closest 8 byte
   return ((bits + 7ULL) & ~(7ULL)) >> 3u;
 }
+
+std::pair<uint32_t, size_t> findOptimalParams(size_t elementCount,
+                                              double fpProb) {
+  double minM = std::numeric_limits<double>::infinity();
+  size_t minK = 0;
+  for (size_t k = 1; k < 30; ++k) {
+    double currM = (-static_cast<double>(k) * elementCount) /
+                   std::log(1 - std::pow(fpProb, 1.0 / k));
+
+    if (currM < minM) {
+      minM = currM;
+      minK = k;
+    }
+  }
+
+  return std::make_pair(minK, static_cast<size_t>(minM));
+}
+
 } // namespace
+
+BloomFilter BloomFilter::makeBloomFilter(uint32_t numFilters,
+                                         size_t elementCount,
+                                         double fpProb) {
+  auto [numHashes, tableSize] = findOptimalParams(elementCount, fpProb);
+
+  // table size denotes the total bits across all hash functions and
+  // BloomFilter constructor takes bits per hash function.
+  const size_t bitsPerFilter = tableSize / numHashes;
+  return BloomFilter{numFilters, numHashes, bitsPerFilter};
+}
 
 constexpr uint32_t BloomFilter::kPersistFragmentSize;
 

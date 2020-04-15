@@ -10,11 +10,6 @@
 
 namespace facebook {
 namespace cachelib {
-// BigHash uses bloom filters (BF) to reduce number of IO. We want to maintain
-// BF for every bucket, because we want to rebuild it on every remove to keep
-// its filtering properties. By default, the bloom filter is initialized to
-// indicate that BigHash is empty and couldExist would return false.
-//
 // Think of it as an array of BF. User does BF operations referencing BF with
 // an index. It solves problem of lots of small BFs: allocated one-by-one BFs
 // have large overhead. By default, the bloom filter is initialized to
@@ -27,29 +22,21 @@ class BloomFilter {
   // hash value into a table of @hashTableBitSize bits (must be power of 2).
   // Each small BF takes rounded up to byte @numHashes * @hashTableBitSize bits.
   //
-  // Experiments showed that if we have 16 bytes for BF with 25 entries, then
-  // optimal number of hash functions is 4 and false positive rate below 10%.
-  // See details:
-  // https://fb.facebook.com/groups/522950611436641/permalink/579237922474576/
   //
   // Throws std::exception if invalid arguments.
   BloomFilter(uint32_t numFilters, uint32_t numHashes, size_t hashTableBitSize);
+
+  // calculates the optimal numHashes and hashTableBitSize for the fbProb and
+  // creates one.
+  static BloomFilter makeBloomFilter(uint32_t numFilters,
+                                     size_t elementCount,
+                                     double fpProb);
 
   // Not copyable, bacause assumed to have huge memory footprint
   BloomFilter(const BloomFilter&) = delete;
   BloomFilter& operator=(const BloomFilter&) = delete;
   BloomFilter(BloomFilter&&) = default;
   BloomFilter& operator=(BloomFilter&&) = default;
-
-  template <typename SerializationProto>
-  void persist(RecordWriter& rw);
-
-  template <typename SerializationProto>
-  void recover(RecordReader& rw);
-
-  // reset the whole bloom filter to default state where the init bits are set
-  // and filter bits are set to return false
-  void reset();
 
   // For all BF operations below:
   // @idx   Index of BF to make op on
@@ -62,11 +49,31 @@ class BloomFilter {
   // Zeroes BF for idx to indicate all elements exist.
   void clear(uint32_t idx);
 
+  // reset the whole bloom filter to default state where the init bits are set
+  // and filter bits are set to return false
+  void reset();
 
   // number of unique filters
   uint32_t numFilters() const { return numFilters_; }
 
+  // number of hash functions per filter
+  uint32_t numHashes() const { return seeds_.size(); }
+
+  // number of bits per filter
+  size_t numBitsPerFilter() const { return filterByteSize_ * 8ULL; }
+
+  // overall byte footprint of the array of filters.
   size_t getByteSize() const { return numFilters_ * filterByteSize_; }
+
+  // serialize and deserialize the bloom filter into a suitable buffer and
+  // serialization format. the serialization format is used for storing the
+  // configuration parameters. the buffer is filled with the serialized
+  // confiuguration followed by the actual bits.
+  template <typename SerializationProto>
+  void persist(RecordWriter& rw);
+
+  template <typename SerializationProto>
+  void recover(RecordReader& rw);
 
  private:
   uint8_t* getFilterBytes(uint32_t idx) const {

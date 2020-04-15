@@ -1,3 +1,4 @@
+#include <folly/Random.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -7,6 +8,25 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+TEST(BloomFilter, OptimalParams) {
+  {
+    auto bf = BloomFilter::makeBloomFilter(1000, 25, 0.1);
+
+    EXPECT_EQ(1000, bf.numFilters());
+    // this disagrees with the observation in NavySetup.cpp that 4 hashes with
+    // 16 bytes per filter is good for 25 elems and 0.1 fp rate
+    EXPECT_EQ(120, bf.numBitsPerFilter());
+    EXPECT_EQ(3, bf.numHashes());
+  }
+
+  {
+    auto bf = BloomFilter::makeBloomFilter(6, 200'000'000, 0.02);
+    EXPECT_EQ(6, bf.numFilters());
+    EXPECT_EQ(1630310280, bf.numBitsPerFilter());
+    EXPECT_EQ(6, bf.numHashes());
+  }
+}
 
 TEST(BloomFilter, Reset) {
   BloomFilter bf{4, 2, 4};

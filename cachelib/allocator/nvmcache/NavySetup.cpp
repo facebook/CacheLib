@@ -225,6 +225,11 @@ void setupCacheProtos(const folly::dynamic& options,
     bigHash->setLayout(bigHashCacheOffset, bigHashCacheSize, bucketSize);
 
     // Bucket Bloom filter size, bytes
+    //
+    // Experiments showed that if we have 16 bytes for BF with 25 entries,
+    // then optimal number of hash functions is 4 and false positive rate
+    // below 10%. See details:
+    // https://fb.facebook.com/groups/522950611436641/permalink/579237922474576/
     const auto bfSize = options.getDefault(kBigHashBucketBFSize, 8).getInt();
     if (bfSize > 0) {
       // We set 4 hash function unconditionally. This seems to be the best

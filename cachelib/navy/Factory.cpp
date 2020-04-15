@@ -112,6 +112,9 @@ class BigHashProtoImpl final : public BigHashProto {
     config_.bucketSize = bucketSize;
   }
 
+  // BigHash uses bloom filters (BF) to reduce number of IO. We want to maintain
+  // BF for every bucket, because we want to rebuild it on every remove to keep
+  // its filtering properties.
   void setBloomFilter(uint32_t numHashes, uint32_t hashTableBitSize) override {
     // Want to make @setLayout and Bloom filter setup independent.
     bloomFilterEnabled_ = true;
