@@ -2,6 +2,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <folly/Random.h>
+
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
 
@@ -25,6 +27,62 @@ TEST(BloomFilter, OptimalParams) {
     EXPECT_EQ(6, bf.numFilters());
     EXPECT_EQ(1630310280, bf.numBitsPerFilter());
     EXPECT_EQ(6, bf.numHashes());
+  }
+}
+
+TEST(BloomFilter, Default) {
+  BloomFilter bf{};
+
+  EXPECT_EQ(0, bf.numFilters());
+  EXPECT_EQ(0, bf.numBitsPerFilter());
+  EXPECT_EQ(0, bf.numHashes());
+  EXPECT_EQ(0, bf.getByteSize());
+
+  auto key = folly::Random::rand64();
+  EXPECT_TRUE(bf.couldExist(1, key));
+  EXPECT_TRUE(bf.couldExist(1, key + 1));
+
+  bf.set(1, key);
+  EXPECT_TRUE(bf.couldExist(1, key));
+  EXPECT_TRUE(bf.couldExist(1, key + 1));
+}
+
+// add some keys, move and verify the move transfers the state
+TEST(BloomFilter, Move) {
+  uint32_t numFilters = 10;
+  BloomFilter bf = BloomFilter::makeBloomFilter(numFilters, 1000, 0.01);
+  auto numHashes = bf.numHashes();
+  auto numBits = bf.numBitsPerFilter();
+  std::vector<uint64_t> addedKeys;
+
+  auto idx = [&](uint64_t key) { return key % numHashes; };
+  for (int i = 0; i < 1000; i++) {
+    auto key = folly::Random::rand64();
+    bf.set(idx(key), key);
+    EXPECT_TRUE(bf.couldExist(idx(key), key));
+    addedKeys.push_back(key);
+  }
+
+  std::vector<uint64_t> nonExistentKeys;
+  while (nonExistentKeys.size() < addedKeys.size()) {
+    auto key = folly::Random::rand64();
+    if (!bf.couldExist(idx(key), key)) {
+      nonExistentKeys.push_back(key);
+    }
+  }
+
+  auto newBf = std::move(bf);
+  EXPECT_EQ(0, bf.numHashes());
+
+  EXPECT_EQ(numFilters, newBf.numFilters());
+  EXPECT_EQ(numBits, newBf.numBitsPerFilter());
+  EXPECT_EQ(numHashes, newBf.numHashes());
+  for (auto k : addedKeys) {
+    EXPECT_TRUE(newBf.couldExist(idx(k), k));
+  }
+
+  for (auto k : nonExistentKeys) {
+    EXPECT_FALSE(newBf.couldExist(idx(k), k));
   }
 }
 

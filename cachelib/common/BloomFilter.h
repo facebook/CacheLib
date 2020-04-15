@@ -18,6 +18,9 @@ namespace cachelib {
 // Thread safe if user guards operations to an idx.
 class BloomFilter {
  public:
+  // empty bloom filter that always returns true
+  BloomFilter() = default;
+
   // Creates @numFilters BFs. Each small BF uses @numHashes hash functions, maps
   // hash value into a table of @hashTableBitSize bits (must be power of 2).
   // Each small BF takes rounded up to byte @numHashes * @hashTableBitSize bits.
@@ -35,8 +38,23 @@ class BloomFilter {
   // Not copyable, bacause assumed to have huge memory footprint
   BloomFilter(const BloomFilter&) = delete;
   BloomFilter& operator=(const BloomFilter&) = delete;
-  BloomFilter(BloomFilter&&) = default;
-  BloomFilter& operator=(BloomFilter&&) = default;
+
+  // move sets the seeds to be empty and hence ensures that apis return the
+  // appropriate result of an uninitialized bloom filter
+  BloomFilter(BloomFilter&& other) noexcept
+      : numFilters_(other.numFilters_),
+        hashTableBitSize_(other.hashTableBitSize_),
+        filterByteSize_(other.filterByteSize_),
+        seeds_(std::exchange(other.seeds_, {})),
+        bits_(std::exchange(other.bits_, nullptr)) {}
+
+  BloomFilter& operator=(BloomFilter&& other) {
+    if (this != &other) {
+      this->~BloomFilter();
+      new (this) BloomFilter(std::move(other));
+    }
+    return *this;
+  }
 
   // For all BF operations below:
   // @idx   Index of BF to make op on
@@ -77,6 +95,7 @@ class BloomFilter {
 
  private:
   uint8_t* getFilterBytes(uint32_t idx) const {
+    XDCHECK(bits_);
     return bits_.get() + idx * filterByteSize_;
   }
 

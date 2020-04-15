@@ -81,10 +81,10 @@ BloomFilter::BloomFilter(uint32_t numFilters,
 }
 
 void BloomFilter::set(uint32_t idx, uint64_t key) {
-  XDCHECK_LT(idx, numFilters_);
-  auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
+    auto* filterPtr = getFilterBytes(idx);
+    XDCHECK_LT(idx, numFilters_);
     auto bitNum =
         facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
     bitSet(filterPtr, firstBit + bitNum);
@@ -93,10 +93,11 @@ void BloomFilter::set(uint32_t idx, uint64_t key) {
 }
 
 bool BloomFilter::couldExist(uint32_t idx, uint64_t key) const {
-  XDCHECK_LT(idx, numFilters_);
-  auto* filterPtr = getFilterBytes(idx);
   size_t firstBit = 0;
   for (auto seed : seeds_) {
+    XDCHECK_LT(idx, numFilters_);
+    // compiler should be able to hoist this out.
+    const auto* filterPtr = getFilterBytes(idx);
     auto bitNum =
         facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
     if (!bitGet(filterPtr, firstBit + bitNum)) {
@@ -108,13 +109,17 @@ bool BloomFilter::couldExist(uint32_t idx, uint64_t key) const {
 }
 
 void BloomFilter::clear(uint32_t idx) {
-  XDCHECK_LT(idx, numFilters_);
-  std::memset(getFilterBytes(idx), 0, filterByteSize_);
+  if (bits_) {
+    XDCHECK_LT(idx, numFilters_);
+    std::memset(getFilterBytes(idx), 0, filterByteSize_);
+  }
 }
 
 void BloomFilter::reset() {
-  // make the bits indicate that no keys are set
-  std::memset(bits_.get(), 0, getByteSize());
+  if (bits_) {
+    // make the bits indicate that no keys are set
+    std::memset(bits_.get(), 0, getByteSize());
+  }
 }
 
 void BloomFilter::serializeBits(RecordWriter& rw, size_t fragmentSize) {
