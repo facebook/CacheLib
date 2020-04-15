@@ -17,9 +17,10 @@ namespace cachelib {
 //
 // Think of it as an array of BF. User does BF operations referencing BF with
 // an index. It solves problem of lots of small BFs: allocated one-by-one BFs
-// have large overhead.
+// have large overhead. By default, the bloom filter is initialized to
+// indicate that it is empty and couldExist would return false.
 //
-// Thread safe if user guards operations to a bucket.
+// Thread safe if user guards operations to an idx.
 class BloomFilter {
  public:
   // Creates @numFilters BFs. Each small BF uses @numHashes hash functions, maps
@@ -54,19 +55,15 @@ class BloomFilter {
   // @idx   Index of BF to make op on
   // @key   Integer key to set/test. In fact, hash of byte string.
   //
-  // Doesn't check bounds, like vector. Only asserts. @set and @couldExist have
-  // not effect if bucket is not initialized (@set actually sets bit, but until
-  // bucket marked "initialized" @couldExist returns only true).
+  // Doesn't check bounds, like vector. Only asserts.
   void set(uint32_t idx, uint64_t key);
   bool couldExist(uint32_t idx, uint64_t key) const;
 
-  // Zeroes BF and clears "initialized" bit.
+  // Zeroes BF for idx to indicate all elements exist.
   void clear(uint32_t idx);
 
-  // Sets "initialized" bit. Only initialized filters tested.
-  void setInitBit(uint32_t idx);
-  bool getInitBit(uint32_t idx);
 
+  // number of unique filters
   uint32_t numFilters() const { return numFilters_; }
 
   size_t getByteSize() const { return numFilters_ * filterByteSize_; }
@@ -86,8 +83,6 @@ class BloomFilter {
   const size_t filterByteSize_{};
   std::vector<uint64_t> seeds_;
   std::unique_ptr<uint8_t[]> bits_;
-  // Bucket bloom filter initialized flags
-  std::unique_ptr<uint8_t[]> init_;
 };
 
 template <typename SerializationProto>

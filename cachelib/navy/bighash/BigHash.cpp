@@ -241,7 +241,6 @@ Status BigHash::insert(HashedKey hk,
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
-        bloomFilter_->setInitBit(bid.index());
       }
       ioErrorCount_.inc();
       return Status::DeviceError;
@@ -327,7 +326,6 @@ Status BigHash::remove(HashedKey hk) {
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
-        bloomFilter_->setInitBit(bid.index());
       }
       ioErrorCount_.inc();
       return Status::DeviceError;
@@ -359,7 +357,6 @@ void BigHash::bfRebuild(BucketId bid, const Bucket* bucket) {
   bfRebuildCount_.inc();
   XDCHECK(bloomFilter_);
   bloomFilter_->clear(bid.index());
-  bloomFilter_->setInitBit(bid.index());
   auto itr = bucket->getFirst();
   while (!itr.done()) {
     bloomFilter_->set(bid.index(), itr.keyHash());

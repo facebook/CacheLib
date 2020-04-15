@@ -12,14 +12,12 @@ TEST(BloomFilter, Reset) {
   BloomFilter bf{4, 2, 4};
   EXPECT_EQ(4, bf.getByteSize());
   for (uint32_t i = 0; i < 4; i++) {
-    bf.setInitBit(i);
     for (uint64_t key = 0; key < 10; key++) {
       bf.set(i, key);
     }
   }
 
   for (uint32_t i = 0; i < 4; i++) {
-    EXPECT_TRUE(bf.getInitBit(i));
     for (uint64_t key = 0; key < 10; key++) {
       EXPECT_TRUE(bf.couldExist(i, key));
     }
@@ -29,7 +27,6 @@ TEST(BloomFilter, Reset) {
 
   // reset should make the bloom filter return negative on all keys
   for (uint32_t i = 0; i < 4; i++) {
-    EXPECT_TRUE(bf.getInitBit(i));
     for (uint64_t key = 0; key < 10; key++) {
       EXPECT_FALSE(bf.couldExist(i, key));
     }
@@ -41,7 +38,6 @@ TEST(BloomFilter, SimpleCollision) {
   EXPECT_EQ(4, bf.getByteSize());
   for (uint32_t i = 0; i < 4; i++) {
     bf.set(i, 1);
-    bf.setInitBit(i);
     {
       uint64_t key = 1;
       EXPECT_EQ(0, facebook::cachelib::combineHashes(key, hashInt(0)) % 4);
@@ -70,14 +66,12 @@ TEST(BloomFilter, SimpleCollision) {
       EXPECT_FALSE(bf.couldExist(i, 3));
     }
     bf.clear(i);
-    EXPECT_FALSE(bf.getInitBit(i));
-    EXPECT_TRUE(bf.couldExist(i, 1));
+    EXPECT_FALSE(bf.couldExist(i, 1));
   }
 }
 
 TEST(BloomFilter, SharedCollision) {
   BloomFilter bf{1, 2, 4};
-  bf.setInitBit(0);
   EXPECT_EQ(1, bf.getByteSize());
   EXPECT_EQ(0, facebook::cachelib::combineHashes(1, hashInt(0)) %
                    4); // Bit 0 in 1st hash table
@@ -118,7 +112,7 @@ TEST(BloomFilter, InvalidArgs) {
   EXPECT_THROW(BloomFilter(2, 2, 0), std::invalid_argument);
 }
 
-TEST(BloomFilter, InitBits) {
+TEST(BloomFilter, Clear) {
   BloomFilter bf{2, 2, 4};
 
   // By default every filter is assumed valid
@@ -131,14 +125,11 @@ TEST(BloomFilter, InitBits) {
   bf.clear(1);
 
   for (uint32_t i = 0; i < 16; i++) {
-    EXPECT_TRUE(bf.couldExist(1, 100 + i));
-  }
-  bf.set(1, 100);
-  for (uint32_t i = 0; i < 16; i++) {
-    EXPECT_TRUE(bf.couldExist(1, 100 + i));
+    EXPECT_FALSE(bf.couldExist(1, 100 + i));
   }
 
-  bf.setInitBit(1);
+  bf.set(1, 100);
+
   EXPECT_TRUE(bf.couldExist(1, 100));
   EXPECT_TRUE(bf.couldExist(1, 103)); // False positive
   for (uint32_t i = 1; i < 16; i++) {
@@ -150,9 +141,8 @@ TEST(BloomFilter, InitBits) {
   // Clear resets init bit. We can tell this because we set key after clear
   // and we don't see effect of it set.
   bf.clear(1);
-  EXPECT_FALSE(bf.getInitBit(1));
   for (uint32_t i = 0; i < 16; i++) {
-    EXPECT_TRUE(bf.couldExist(1, 100 + i));
+    EXPECT_FALSE(bf.couldExist(1, 100 + i));
   }
 }
 

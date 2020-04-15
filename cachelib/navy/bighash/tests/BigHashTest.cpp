@@ -466,14 +466,11 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   EXPECT_CALL(*device, readImpl(_, _, _)).Times(0);
   config.device = device.get();
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
-  auto* bf = config.bloomFilter.get();
 
   BigHash bh(std::move(config));
 
-  EXPECT_TRUE(bf->getInitBit(0));
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
-  EXPECT_TRUE(bf->getInitBit(0));
 
   // After a bad recovery, filters will not be affected
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -486,9 +483,7 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
 
-  EXPECT_TRUE(bf->getInitBit(0));
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
-  EXPECT_TRUE(bf->getInitBit(0));
 }
 
 TEST(BigHash, BloomFilter) {
@@ -588,16 +583,13 @@ TEST(BigHash, BloomFilterRecoveryRebuild) {
     EXPECT_CALL(*device, readImpl(128, 128, _)).Times(0);
     config.device = device.get();
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
-    auto* bf = config.bloomFilter.get();
 
     BigHash bh(std::move(config));
     auto rr = createMemoryRecordReader(queue);
     ASSERT_TRUE(bh.recover(*rr));
 
-    EXPECT_TRUE(bf->getInitBit(0));
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(1, bh.bfRejectCount());
-    EXPECT_TRUE(bf->getInitBit(0));
 
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(2, bh.bfRejectCount());
@@ -606,9 +598,7 @@ TEST(BigHash, BloomFilterRecoveryRebuild) {
     EXPECT_EQ(3, bh.bfRejectCount());
 
     // Test lookup, second bucket
-    EXPECT_TRUE(bf->getInitBit(1));
     EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
-    EXPECT_TRUE(bf->getInitBit(1));
     EXPECT_EQ(4, bh.bfRejectCount());
     EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
     EXPECT_EQ(5, bh.bfRejectCount());
