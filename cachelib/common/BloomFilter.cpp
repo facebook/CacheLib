@@ -140,7 +140,7 @@ void BloomFilter::serializeBits(RecordWriter& rw, size_t fragmentSize) {
   off = 0;
   while (off < initSize) {
     auto nBytes = std::min(initSize - off, fragmentSize);
-    auto wbuf = folly::IOBuf::copyBuffer(fakeInitBits.get() + off, nBytes);
+    auto wbuf = folly::IOBuf::copyBuffer(fakeInitBits.get(), nBytes);
     rw.writeRecord(std::move(wbuf));
     off += nBytes;
   }
