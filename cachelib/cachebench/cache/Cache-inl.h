@@ -196,6 +196,13 @@ Cache<Allocator>::Cache(CacheConfig config,
     }
 #endif
 
+    if (config_.memoryOnlyTTL > 0) {
+      allocatorConfig.setNvmCacheFilterCallback(
+          [this](auto& item, auto /* chainedItemRange */) {
+            return item.getConfiguredTTL() < config_.memoryOnlyTTL;
+          });
+    }
+
     usesNvm_ = true;
   }
 

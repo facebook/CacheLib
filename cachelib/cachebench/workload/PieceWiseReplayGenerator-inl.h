@@ -246,6 +246,7 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
       auto responseHeaderSize = folly::to<size_t>(fields[5].str());
       auto rangeStart = parseRangeField(fields[6], fullContentSize);
       auto rangeEnd = parseRangeField(fields[7], fullContentSize);
+      auto ttl = folly::to<uint32_t>(fields[8].str());
 
       // The client connection could be terminated early because of reasons
       // like slow client, user stops in the middle, etc.
@@ -287,7 +288,8 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
                                                        fullContentSize,
                                                        responseHeaderSize,
                                                        rangeStart,
-                                                       rangeEnd));
+                                                       rangeEnd,
+                                                       ttl));
       return activeReqM_[shard].find(reqId)->second.req;
     } catch (const std::exception& e) {
       XLOG(ERR) << "Processing line: " << line

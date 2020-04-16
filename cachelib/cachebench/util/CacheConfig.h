@@ -163,6 +163,11 @@ struct CacheConfig : public JSONConfig {
   // by default, we do not encrypt content in Navy
   bool navyEncryption = false;
 
+  // Don't write to flash if cache TTL is smaller than this value.
+  // Not used when its value is 0.
+  // In seconds.
+  uint32_t memoryOnlyTTL{0};
+
   explicit CacheConfig(const folly::dynamic& configJson);
 
   CacheConfig() {}

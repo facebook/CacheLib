@@ -51,8 +51,14 @@ struct Request {
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
           OpType o,
+          uint32_t ttl,
           uint64_t reqId)
-      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId), op(o) {}
+      : key(k),
+        sizeBegin(b),
+        sizeEnd(e),
+        ttlSecs(ttl),
+        requestId(reqId),
+        op(o) {}
 
   static std::string getUniqueKey() {
     return std::string(folly::to<std::string>(
@@ -75,6 +81,9 @@ struct Request {
   // If not chained, the size is *sizeBegin
   std::vector<size_t>::iterator sizeBegin;
   std::vector<size_t>::iterator sizeEnd;
+
+  // TTL in seconds.
+  const uint32_t ttlSecs{0};
 
   const std::optional<uint64_t> requestId;
 

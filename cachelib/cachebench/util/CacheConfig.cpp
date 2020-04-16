@@ -68,6 +68,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);
 
+  JSONSetVal(configJson, memoryOnlyTTL);
+
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below

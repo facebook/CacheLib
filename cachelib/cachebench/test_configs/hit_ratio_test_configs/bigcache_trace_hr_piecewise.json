@@ -29,7 +29,9 @@
     "navyDataChecksum": false,
 
     "lru2qHotPct": 20,
-    "lru2qColdPct": 20
+    "lru2qColdPct": 20,
+
+    "memoryOnlyTTL": 7200
   },
   "test_config":
     {

@@ -62,7 +62,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
                         size_t fullContentSize,
                         size_t responseHeaderSize,
                         folly::Optional<uint64_t> rangeStart,
-                        folly::Optional<uint64_t> rangeEnd)
+                        folly::Optional<uint64_t> rangeEnd,
+                        uint32_t ttl)
         : baseKey(GenericPieces::escapeCacheKey(key.str())),
           pieceKey(baseKey),
           sizes(1),
@@ -70,6 +71,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
               sizes.begin(),
               sizes.end(),
               OpType::kGet, // Only support get from trace for now
+              ttl,
               reqId),
           requestRange(rangeStart, rangeEnd),
           headerSize(responseHeaderSize) {

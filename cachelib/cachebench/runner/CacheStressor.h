@@ -277,8 +277,8 @@ class CacheStressor : public Stressor {
         continuousCacheHits[pid] = 0;
 
         // req contains a new key, set it to cache
-        const auto allocHandle =
-            cache_->allocate(pid, req.key, req.key.size() + *(req.sizeBegin));
+        const auto allocHandle = cache_->allocate(
+            pid, req.key, req.key.size() + *(req.sizeBegin), req.ttlSecs);
         if (allocHandle) {
           cache_->insertOrReplace(allocHandle);
           // We throttle in case we are using flash so that we dont drop
@@ -363,7 +363,7 @@ class CacheStressor : public Stressor {
         case OpType::kSet: {
           chainedItemLock(Mode::Exclusive, *key);
           SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          result = setKey(pid, stats, key, *(req.sizeBegin));
+          result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs);
 
           throttleFn();
           break;
@@ -391,7 +391,7 @@ class CacheStressor : public Stressor {
               chainedItemUnlock(lockMode, *key);
               lockMode = Mode::Exclusive;
               chainedItemLock(lockMode, *key);
-              setKey(pid, stats, key, *(req.sizeBegin));
+              setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs);
             }
           } else {
             result = OpResultType::kGetHit;
@@ -420,7 +420,7 @@ class CacheStressor : public Stressor {
             ++stats.getMiss;
 
             ++stats.set;
-            it = cache_->allocate(pid, *key, *(req.sizeBegin));
+            it = cache_->allocate(pid, *key, *(req.sizeBegin), req.ttlSecs);
             if (!it) {
               ++stats.setFailure;
               break;
@@ -469,9 +469,10 @@ class CacheStressor : public Stressor {
   OpResultType setKey(PoolId pid,
                       ThroughputStats& stats,
                       const std::string* key,
-                      size_t size) {
+                      size_t size,
+                      uint32_t ttlSecs) {
     ++stats.set;
-    auto it = cache_->allocate(pid, *key, size);
+    auto it = cache_->allocate(pid, *key, size, ttlSecs);
     if (it == nullptr) {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
