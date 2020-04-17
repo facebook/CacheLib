@@ -546,8 +546,8 @@ TEST(BigHash, BloomFilter) {
   EXPECT_EQ(6, bh.bfRejectCount());
 }
 
-// Lookup and remove rebuilds BF on first access to the bucket
-TEST(BigHash, BloomFilterRecoveryRebuild) {
+// persist the bighash and ensure recovery has the bloom filter
+TEST(BigHash, BloomFilterRecovery) {
   std::unique_ptr<Device> actual;
   folly::IOBufQueue queue;
 

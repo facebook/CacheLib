@@ -161,6 +161,13 @@ class RecordReader {
   virtual bool isEnd() const = 0;
 };
 
+// record reader and write implemmentations that use a folly io queue as
+// backing medium.
+std::unique_ptr<RecordWriter> createMemoryRecordWriter(
+    folly::IOBufQueue& ioQueue);
+std::unique_ptr<RecordReader> createMemoryRecordReader(
+    folly::IOBufQueue& ioQueue);
+
 template <typename ThriftObject, typename SerializationProto>
 void serializeProto(const ThriftObject& obj, RecordWriter& writer) {
   folly::IOBufQueue temp;

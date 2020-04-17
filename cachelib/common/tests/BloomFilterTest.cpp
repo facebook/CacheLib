@@ -6,6 +6,7 @@
 
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
@@ -224,7 +225,110 @@ TEST(BloomFilter, Clear) {
   }
 }
 
-// TODO add persist/recover tests here
+TEST(BloomFilter, PersistRecoverWithInvalidParams) {
+  const size_t numFilters = 10;
+  const size_t bitsPerFilter = 16;
+  const size_t numHash = 1;
+  const int numKeys = 1024;
+
+  auto makeBf = [=]() {
+    BloomFilter bf{numFilters, 1, 8};
+    for (int i = 0; i < numKeys; i++) {
+      auto key = folly::Random::rand64();
+      auto idx = folly::Random::rand64() % numFilters;
+      bf.set(idx, key);
+    }
+
+    folly::IOBufQueue queue;
+    auto rw = createMemoryRecordWriter(queue);
+    bf.persist<apache::thrift::BinarySerializer>(*rw);
+    return queue;
+  };
+
+  // recovery with incorrect params should fail
+  {
+    {
+      auto queue = makeBf();
+      auto rr = createMemoryRecordReader(queue);
+      BloomFilter bf(numFilters + 1, numHash, bitsPerFilter);
+      ASSERT_THROW(bf.recover<apache::thrift::BinarySerializer>(*rr),
+                   std::invalid_argument);
+    }
+    {
+      auto queue = makeBf();
+      auto rr = createMemoryRecordReader(queue);
+      BloomFilter bf(numFilters, numHash + 1, bitsPerFilter);
+      ASSERT_THROW(bf.recover<apache::thrift::BinarySerializer>(*rr),
+                   std::invalid_argument);
+    }
+    {
+      auto queue = makeBf();
+      auto rr = createMemoryRecordReader(queue);
+      BloomFilter bf(numFilters, numHash, bitsPerFilter + 8);
+      ASSERT_THROW(bf.recover<apache::thrift::BinarySerializer>(*rr),
+                   std::invalid_argument);
+    }
+  }
+}
+
+void testPersistRecoveryWithParams(uint32_t numFilters,
+                                   size_t bitsPerFilterHash,
+                                   uint32_t numHash) {
+  const int numKeys = 1024;
+
+  std::vector<std::pair<size_t, uint64_t>> keysAdded;
+  std::vector<std::pair<size_t, uint64_t>> keysNotPresent;
+  folly::IOBufQueue queue;
+  {
+    BloomFilter bf{numFilters, numHash, bitsPerFilterHash};
+    for (int i = 0; i < numKeys; i++) {
+      auto key = folly::Random::rand64();
+      auto idx = folly::Random::rand64() % numFilters;
+      bf.set(idx, key);
+      keysAdded.push_back(std::make_pair(idx, key));
+    }
+
+    while (keysNotPresent.size() < numKeys) {
+      auto key = folly::Random::rand64();
+      auto idx = folly::Random::rand64() % numFilters;
+      if (!bf.couldExist(idx, key)) {
+        keysNotPresent.push_back(std::make_pair(idx, key));
+      }
+    }
+
+    auto rw = createMemoryRecordWriter(queue);
+    bf.persist<apache::thrift::BinarySerializer>(*rw);
+  }
+
+  auto rr = createMemoryRecordReader(queue);
+  BloomFilter bf(numFilters, numHash, bitsPerFilterHash);
+  bf.recover<apache::thrift::BinarySerializer>(*rr);
+
+  EXPECT_EQ(bf.numHashes(), numHash);
+  EXPECT_EQ(bf.numBitsPerFilter(), bitsPerFilterHash * numHash);
+  EXPECT_EQ(bf.numFilters(), numFilters);
+  for (const auto& p : keysAdded) {
+    EXPECT_TRUE(bf.couldExist(p.first, p.second));
+  }
+
+  for (const auto& p : keysNotPresent) {
+    EXPECT_FALSE(bf.couldExist(p.first, p.second));
+  }
+}
+
+TEST(BloomFilter, PersistRecoveryValidLarge) {
+  const size_t numFilters = 1e7;
+  const size_t bitsPerFilterHash = 1024;
+  const size_t numHash = 1;
+  testPersistRecoveryWithParams(numFilters, bitsPerFilterHash, numHash);
+}
+
+TEST(BloomFilter, PersistRecoveryValid) {
+  const size_t numFilters = 10;
+  const size_t bitsPerFilterHash = 1024;
+  const size_t numHash = 1;
+  testPersistRecoveryWithParams(numFilters, bitsPerFilterHash, numHash);
+}
 
 } // namespace navy
 } // namespace cachelib

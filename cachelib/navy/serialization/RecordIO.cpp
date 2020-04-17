@@ -228,35 +228,6 @@ class DeviceMetaDataReader final : public RecordReader {
   Buffer buffer_{kBlockSize, kBlockSize};
 };
 
-class MemoryRecordWriter final : public RecordWriter {
- public:
-  explicit MemoryRecordWriter(folly::IOBufQueue& ioQueue) : ioQueue_{ioQueue} {}
-  ~MemoryRecordWriter() override = default;
-
-  void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
-    buf->coalesce();
-    ioQueue_.append(std::move(buf));
-  }
-  bool invalidate() override { return false; }
-
- private:
-  folly::IOBufQueue& ioQueue_;
-};
-
-class MemoryRecordReader final : public RecordReader {
- public:
-  explicit MemoryRecordReader(folly::IOBufQueue& ioQueue) : ioQueue_{ioQueue} {}
-  ~MemoryRecordReader() override = default;
-
-  std::unique_ptr<folly::IOBuf> readRecord() override {
-    return ioQueue_.pop_front();
-  }
-
-  bool isEnd() const override { return ioQueue_.empty(); }
-
- private:
-  folly::IOBufQueue& ioQueue_;
-};
 } // namespace
 
 std::unique_ptr<RecordWriter> createMetadataRecordWriter(Device& dev,
@@ -277,15 +248,6 @@ std::unique_ptr<RecordReader> createFileRecordReader(int fd) {
   return std::make_unique<FileRecordReader>(fd);
 }
 
-std::unique_ptr<RecordWriter> createMemoryRecordWriter(
-    folly::IOBufQueue& ioQueue) {
-  return std::make_unique<MemoryRecordWriter>(ioQueue);
-}
-
-std::unique_ptr<RecordReader> createMemoryRecordReader(
-    folly::IOBufQueue& ioQueue) {
-  return std::make_unique<MemoryRecordReader>(ioQueue);
-}
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
