@@ -218,11 +218,16 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         invalidSamples_.inc();
         continue;
       }
+
+      auto fullContentSizeT = folly::tryTo<size_t>(fields[3]);
+      auto responseSizeT = folly::tryTo<size_t>(fields[4]);
+      auto ttlT = folly::tryTo<uint32_t>(fields[8]);
       // Invalid sample: cacheKey is empty, objectSize is not positive,
-      // responseSize is not positive
+      // responseSize is not positive, ttl is not positive
       if (!fields[1].compare("-") || !fields[1].compare("") ||
-          folly::to<int64_t>(fields[3].str()) <= 0 ||
-          folly::to<int64_t>(fields[4].str()) <= 0) {
+          !fullContentSizeT.hasValue() || fullContentSizeT.value() == 0 ||
+          !responseSizeT.hasValue() || responseSizeT.value() == 0 ||
+          !ttlT.hasValue() || ttlT.value() == 0) {
         invalidSamples_.inc();
         continue;
       }
@@ -241,12 +246,12 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         return result;
       };
 
-      auto fullContentSize = folly::to<size_t>(fields[3].str());
-      auto responseSize = folly::to<size_t>(fields[4].str());
-      auto responseHeaderSize = folly::to<size_t>(fields[5].str());
+      auto fullContentSize = fullContentSizeT.value();
+      auto responseSize = responseSizeT.value();
+      auto ttl = ttlT.value();
+      auto responseHeaderSize = folly::to<size_t>(fields[5]);
       auto rangeStart = parseRangeField(fields[6], fullContentSize);
       auto rangeEnd = parseRangeField(fields[7], fullContentSize);
-      auto ttl = folly::to<uint32_t>(fields[8].str());
 
       // The client connection could be terminated early because of reasons
       // like slow client, user stops in the middle, etc.
