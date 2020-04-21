@@ -149,7 +149,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
     }
   }
 
-  value.size() > kSmallObjectThreshold
+  value.size() > navySmallItemThreshold_
       ? cache_.nvmLargeEvictionAgeSecs_.trackValue(lifetime)
       : cache_.nvmSmallEvictionAgeSecs_.trackValue(lifetime);
 
@@ -188,7 +188,9 @@ void NvmCache<C>::evictCB(navy::BufferView key,
 
 template <typename C>
 NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
-    : config_(config.validate()), cache_(c) {
+    : config_(config.validate()),
+      cache_(c),
+      navySmallItemThreshold_{getSmallItemThreshold(config_.dipperOptions)} {
   navyCache_ = createNavyCache(
       config_.dipperOptions,
       [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {

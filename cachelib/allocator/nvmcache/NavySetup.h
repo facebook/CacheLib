@@ -15,5 +15,10 @@ void populateDefaultNavyOptions(folly::dynamic& options);
 
 uint64_t getNvmCacheSize(const folly::dynamic& options);
 
+// returns the size threshold for small engine vs large engine. If small
+// engine is disabled, returns 0 to indicate all objects will be in large
+// engine.
+uint64_t getSmallItemThreshold(const folly::dynamic& options);
+
 } // namespace cachelib
 } // namespace facebook

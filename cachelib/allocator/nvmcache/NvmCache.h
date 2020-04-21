@@ -358,8 +358,8 @@ class NvmCache {
 
   static constexpr size_t kShards = 8192;
 
-  // threshold of classifying an object as large based on navy as the engine.
-  static constexpr size_t kSmallObjectThreshold = 2048;
+  // threshold of classifying an item as large based on navy as the engine.
+  const size_t navySmallItemThreshold_{};
 
   // a map of all pending fills to prevent thundering herds
   struct {

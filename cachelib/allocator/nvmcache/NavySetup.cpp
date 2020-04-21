@@ -400,5 +400,9 @@ void populateDefaultNavyOptions(folly::dynamic& options) {
   return;
 }
 
+uint64_t getSmallItemThreshold(const folly::dynamic& options) {
+  return options.getDefault(kSmallItemMaxSize, 0).getInt();
+}
+
 } // namespace cachelib
 } // namespace facebook
