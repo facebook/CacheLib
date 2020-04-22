@@ -1693,7 +1693,8 @@ class CacheAllocator : public CacheBase {
   mutable util::PercentileStats nvmInsertLatency_;
   mutable util::PercentileStats nvmRemoveLatency_;
 
-  // percentile stats for various nvm cache statistics
+  // percentile stats for various cache statistics
+  mutable util::PercentileStats ramEvictionAgeSecs_;
   mutable util::PercentileStats nvmSmallEvictionAgeSecs_;
   mutable util::PercentileStats nvmLargeEvictionAgeSecs_;
   mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;

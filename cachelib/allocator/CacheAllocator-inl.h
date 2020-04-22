@@ -765,6 +765,12 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         folly::sformat("cannot release this item: {}", it.toString()));
   }
 
+  if (ctx == RemoveContext::kEviction) {
+    const auto timeNow = util::getCurrentTimeSec();
+    const auto lifetime = timeNow - it.getCreationTime();
+    ramEvictionAgeSecs_.trackValue(lifetime);
+  }
+
   const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
   (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, it));
@@ -3168,6 +3174,7 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmLookupLatencyNs = nvmLookupLatency_.estimate();
   ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
   ret.nvmRemoveLatencyNs = nvmRemoveLatency_.estimate();
+  ret.ramEvictionAgeSecs = ramEvictionAgeSecs_.estimate();
   ret.nvmSmallEvictionAgeSecs = nvmSmallEvictionAgeSecs_.estimate();
   ret.nvmLargeEvictionAgeSecs = nvmLargeEvictionAgeSecs_.estimate();
   ret.nvmEvictionSecondsPastExpiry = nvmEvictionSecondsPastExpiry_.estimate();

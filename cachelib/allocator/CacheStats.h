@@ -381,11 +381,12 @@ struct GlobalCacheStats {
   uint64_t numEvictionFailureFromMoving{0};
   uint64_t numEvictionFailureFromParentMoving{0};
 
-  // latency stats of various cachelib operations
+  // latency and percentile stats of various cachelib operations
   util::PercentileStats::Estimates allocateLatencyNs{};
   util::PercentileStats::Estimates nvmLookupLatencyNs{};
   util::PercentileStats::Estimates nvmInsertLatencyNs{};
   util::PercentileStats::Estimates nvmRemoveLatencyNs{};
+  util::PercentileStats::Estimates ramEvictionAgeSecs{};
   util::PercentileStats::Estimates nvmSmallEvictionAgeSecs{};
   util::PercentileStats::Estimates nvmLargeEvictionAgeSecs{};
   util::PercentileStats::Estimates nvmEvictionSecondsPastExpiry{};
