@@ -51,14 +51,17 @@ ClassId LruTailAgeStrategy::pickVictim(
   }
 
   // the oldest projected age among the victims
-  return *std::max_element(victims.begin(), victims.end(),
-                           [&](ClassId a, ClassId b) {
-                             return poolEvictionAgeStats.getProjectedAge(a) <
-                                    poolEvictionAgeStats.getProjectedAge(b);
-                           });
+  return *std::max_element(
+      victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
+        return (poolEvictionAgeStats.getProjectedAge(a) *
+                    (config.getWeight ? config.getWeight(a) : 1.0) <
+                poolEvictionAgeStats.getProjectedAge(b) *
+                    (config.getWeight ? config.getWeight(b) : 1.0));
+      });
 }
 
 ClassId LruTailAgeStrategy::pickReceiver(
+    const Config& config,
     PoolId pid,
     const PoolStats& stats,
     ClassId victim,
@@ -74,8 +77,10 @@ ClassId LruTailAgeStrategy::pickReceiver(
   // the youngest age among the potenital receivers
   return *std::min_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
-        return poolEvictionAgeStats.getOldestElementAge(a) <
-               poolEvictionAgeStats.getOldestElementAge(b);
+        return (poolEvictionAgeStats.getOldestElementAge(a) *
+                    (config.getWeight ? config.getWeight(a) : 1.0) <
+                poolEvictionAgeStats.getOldestElementAge(b) *
+                    (config.getWeight ? config.getWeight(b) : 1.0));
       });
 }
 
@@ -99,30 +104,31 @@ RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
 
   RebalanceContext ctx;
   ctx.victimClassId = pickVictim(config, pid, poolStats, poolEvictionAgeStats);
-  ctx.receiverClassId =
-      pickReceiver(pid, poolStats, ctx.victimClassId, poolEvictionAgeStats);
-
+  ctx.receiverClassId = pickReceiver(config, pid, poolStats, ctx.victimClassId,
+                                     poolEvictionAgeStats);
   if (ctx.victimClassId == ctx.receiverClassId ||
       ctx.victimClassId == Slab::kInvalidClassId ||
       ctx.receiverClassId == Slab::kInvalidClassId) {
     return kNoOpContext;
   }
 
-  const auto victimProjectedTailAge =
-      poolEvictionAgeStats.getProjectedAge(ctx.victimClassId);
-  const auto receiverTailAge =
-      poolEvictionAgeStats.getOldestElementAge(ctx.receiverClassId);
+  if (!config.getWeight) {
+    const auto victimProjectedTailAge =
+        poolEvictionAgeStats.getProjectedAge(ctx.victimClassId);
+    const auto receiverTailAge =
+        poolEvictionAgeStats.getOldestElementAge(ctx.receiverClassId);
 
-  XLOGF(DBG, "Rebalancing: receiver = {}, receiverTailAge = {}, victim = {}",
-        static_cast<int>(ctx.receiverClassId), receiverTailAge,
-        static_cast<int>(ctx.victimClassId));
+    XLOGF(DBG, "Rebalancing: receiver = {}, receiverTailAge = {}, victim = {}",
+          static_cast<int>(ctx.receiverClassId), receiverTailAge,
+          static_cast<int>(ctx.victimClassId));
 
-  const auto improvement = victimProjectedTailAge - receiverTailAge;
-  if (victimProjectedTailAge < receiverTailAge ||
-      improvement < config.minTailAgeDifference ||
-      improvement < config.tailAgeDifferenceRatio *
-                        static_cast<long double>(victimProjectedTailAge)) {
-    return kNoOpContext;
+    const auto improvement = victimProjectedTailAge - receiverTailAge;
+    if (victimProjectedTailAge < receiverTailAge ||
+        improvement < config.minTailAgeDifference ||
+        improvement < config.tailAgeDifferenceRatio *
+                          static_cast<long double>(victimProjectedTailAge)) {
+      return kNoOpContext;
+    }
   }
 
   // start a hold off so that the receiver does not become a victim soon
@@ -133,11 +139,9 @@ RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
 
 ClassId LruTailAgeStrategy::pickVictimImpl(const CacheBase& cache, PoolId pid) {
   const auto config = getConfigCopy();
-  return pickVictim(
-      config,
-      pid,
-      cache.getPoolStats(pid),
-      cache.getPoolEvictionAgeStats(pid, config.slabProjectionLength));
+  const auto poolEvictionAgeStats =
+      cache.getPoolEvictionAgeStats(pid, config.slabProjectionLength);
+  return pickVictim(config, pid, cache.getPoolStats(pid), poolEvictionAgeStats);
 }
 } // namespace cachelib
 } // namespace facebook

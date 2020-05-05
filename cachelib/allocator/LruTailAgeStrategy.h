@@ -29,6 +29,13 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // how many slabs worth of items do we project to determine a victim.
     unsigned int slabProjectionLength{1};
 
+    // Weight function can be changed as config parameter. By default,
+    // weight function is null, and no weighted tail age is computed.
+    // If the weight function is set, tailAgeDifferenceRatio and
+    // minTailAgeDifference are ignored
+    using WeightFn = std::function<double(const ClassId id)>;
+    WeightFn getWeight = {};
+
     size_t getFreeMemThreshold() const noexcept {
       return numSlabsFreeMem * Slab::kSize;
     }
@@ -36,6 +43,13 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     Config() noexcept {}
     Config(double ratio, unsigned int _minSlabs) noexcept
         : tailAgeDifferenceRatio(ratio), minSlabs{_minSlabs} {}
+    Config(
+        double ratio,
+        unsigned int _minSlabs,
+        const std::function<double(const ClassId& id)>& weightFunction) noexcept
+        : tailAgeDifferenceRatio(ratio),
+          minSlabs{_minSlabs},
+          getWeight(weightFunction) {}
   };
 
   // Update the config. This will not affect the current rebalancing, but
@@ -67,7 +81,8 @@ class LruTailAgeStrategy : public RebalanceStrategy {
                      const PoolStats& stats,
                      const PoolEvictionAgeStats& poolEvictionAgeStats);
 
-  ClassId pickReceiver(PoolId pid,
+  ClassId pickReceiver(const Config& config,
+                       PoolId pid,
                        const PoolStats& stats,
                        ClassId victim,
                        const PoolEvictionAgeStats& poolEvictionAgeStats) const;

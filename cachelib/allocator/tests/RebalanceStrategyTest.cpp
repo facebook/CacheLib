@@ -219,6 +219,78 @@ class RebalanceStrategyTest : public testing::Test {
     initAllocatorConfigForStrategy(config, FreeMem);
     doWork(config, false);
   }
+
+  void testLruTailAgeWithWeights() {
+    // 1. Create a pool with two allocation classes, one class with small weight
+    // and another one with greater weight.
+    // 2. Allocate until one is full
+    // 3. Allocate from the other to trigger alloc failures
+    // 4. validate that rebalance happened: allocation class with smaller weight
+    // should get a slab from the other allocation class with greater weight
+    typename AllocatorT::Config allocatorConfig;
+    allocatorConfig.setCacheSize(10 * Slab::kSize);
+
+    /* Weight for allocation class 0 is 0.2 */
+    const ClassId receiver = static_cast<ClassId>(0);
+    const ClassId victim = static_cast<ClassId>(1);
+
+    LruTailAgeStrategy::Config weightedlruConfig;
+    weightedlruConfig.getWeight = [](ClassId classId) -> double {
+      return (classId == 0) ? 0.2 : 1.0;
+    };
+    allocatorConfig.enablePoolRebalancing(
+        std::make_shared<LruTailAgeStrategy>(weightedlruConfig),
+        std::chrono::seconds{1});
+
+    auto cache = std::make_unique<AllocatorT>(allocatorConfig);
+    const std::set<uint32_t> allocSizes{10000, 100000};
+
+    const auto pid = cache->addPool(
+        "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+
+    /* Attempt to fill bigger allocation class */
+    std::vector<typename AllocatorT::ItemHandle> handlesBigItems;
+    for (int handleCount = 0;; ++handleCount) {
+      auto handle = util::allocateAccessible(
+          *cache, pid, folly::sformat("key_{}", handleCount), 50000);
+      if (!handle) {
+        break;
+      }
+      handlesBigItems.push_back(std::move(handle));
+    }
+
+    /* Attempt to fill smaller allocation class */
+    std::vector<typename AllocatorT::ItemHandle> handlesSmallItems;
+    for (int handleCount2 = 0;; ++handleCount2) {
+      auto handle2 = util::allocateAccessible(
+          *cache, pid, folly::sformat("keySmall_{}", handleCount2), 1);
+      if (!handle2) {
+        break;
+      }
+      handlesSmallItems.push_back(std::move(handle2));
+    }
+
+    handlesBigItems.clear();
+    handlesSmallItems.clear();
+
+    /* Let rebalancer run for a couple seconds in the background */
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+    const auto& rebalancerEvents =
+        cache->getAllSlabReleaseEvents(pid).rebalancerEvents;
+
+    ASSERT_TRUE(rebalancerEvents.size() > 0);
+
+    for (const auto& event : rebalancerEvents) {
+      /* Ensure all rebalances happen from the origin and destination class
+       * we expected */
+      ASSERT_NE(event.to, event.from);
+      ASSERT_EQ(event.from, victim);
+      ASSERT_EQ(event.to, receiver);
+      ASSERT_EQ(event.pid, pid);
+      ASSERT_TRUE(event.sequenceNum >= 0);
+    }
+  }
 };
 
 TYPED_TEST_CASE(RebalanceStrategyTest, AllocatorTypes);
@@ -237,6 +309,10 @@ TYPED_TEST(RebalanceStrategyTest, FreeAllocsPoolRebalancer) {
 TYPED_TEST_CASE(RebalanceStrategyTest, AllocatorTypes);
 TYPED_TEST(RebalanceStrategyTest, testPoolRebalancerStats) {
   this->runPoolRebalancerStatsTest();
+}
+
+TYPED_TEST(RebalanceStrategyTest, WeightedLruTailAgeRebalancer) {
+  this->testLruTailAgeWithWeights();
 }
 
 using RebalanceStrategy2QTest = RebalanceStrategyTest<Lru2QAllocator>;
