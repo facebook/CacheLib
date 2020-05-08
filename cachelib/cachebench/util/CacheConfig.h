@@ -163,6 +163,9 @@ struct CacheConfig : public JSONConfig {
   // by default, we do not encrypt content in Navy
   bool navyEncryption = false;
 
+  // number of navy in-memory buffers
+  uint32_t navyNumInmemBuffers{0};
+
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.
   // In seconds.

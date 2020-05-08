@@ -118,6 +118,10 @@ Cache<Allocator>::Cache(CacheConfig config,
       }
     }
 
+    if (config_.navyNumInmemBuffers > 0) {
+      nvmConfig.dipperOptions["dipper_navy_num_in_mem_buffers"] =
+          config_.navyNumInmemBuffers;
+    }
     nvmConfig.dipperOptions["dipper_navy_file_size"] =
         config_.dipperSizeMB * MB;
 
