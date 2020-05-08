@@ -6,6 +6,7 @@
 #include <utility>
 
 #include <folly/SharedMutex.h>
+#include <tsl/sparse_map.h>
 
 #include "cachelib/navy/block_cache/BTree.h"
 #include "cachelib/navy/serialization/RecordIO.h"
@@ -51,8 +52,7 @@ class Index {
 
   // Overwrites existing
   // If the entry was successfully overwritten, LookupResult.found() returns
-  // true and LookupResult.value() returns the address of the entry that was
-  // just overwritten.
+  // true and LookupResult.value() returns the old value.
   LookupResult insert(uint64_t key, uint32_t value);
 
   // Replace old value with new value if there exists the key with the identical
@@ -78,7 +78,7 @@ class Index {
   static constexpr uint32_t kNumBuckets{64 * 1024};
   static constexpr uint32_t kNumMutexes{1024};
 
-  using Map = BTree<uint32_t, uint32_t, BTreeTraits<30, 60, 90>>;
+  using Map = tsl::sparse_map<uint32_t, uint32_t>;
 
   static uint32_t bucket(uint64_t hash) {
     return (hash >> 32) & (kNumBuckets - 1);
