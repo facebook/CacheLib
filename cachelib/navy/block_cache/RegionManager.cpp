@@ -102,6 +102,10 @@ bool RegionManager::flushBuffer(const RegionId& rid) {
   auto buf = region.detachBuffer();
   if (buf) {
     returnBufferToPool(std::move(buf));
+    // Flush completed, track the region if not pinned
+    if (!region.isPinned()) {
+      track(rid);
+    }
     return true;
   }
   return false;
@@ -170,8 +174,14 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
 }
 
 void RegionManager::doFlush(RegionId rid, bool async) {
-  // Not applicable if not configured to use in-memory buffers
+  // applicable only if configured to use in-memory buffers
   if (!doesBufferingWrites()) {
+    // If in-memory buffering is not enabled, nothing to flush and
+    // track the region if not pinned. If in-memory buffer is enabled
+    // tracking is started after flush is successful.
+    if (!getRegion(rid).isPinned()) {
+      track(rid);
+    }
     return;
   }
 

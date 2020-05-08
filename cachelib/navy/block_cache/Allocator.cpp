@@ -141,9 +141,6 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
   if (rid.valid()) {
     regionManager_.doFlush(rid, flushAsync);
     ra.reset();
-    if (!regionManager_.getRegion(rid).isPinned()) {
-      regionManager_.track(rid);
-    }
   }
 }
 
