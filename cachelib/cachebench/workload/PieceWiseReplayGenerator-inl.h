@@ -50,7 +50,7 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
   if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
       result == OpResultType::kSetFailure) {
     // Record the cache hit stats
-    if (!isPrepopulate() && result == OpResultType::kGetHit) {
+    if (result == OpResultType::kGetHit) {
       // We trim the fetched bytes if it's range request
       if (rw.requestRange.getRequestRange()) {
         auto range = rw.requestRange.getRequestRange();
@@ -89,7 +89,7 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
     auto nextPieceIndex = rw.cachePieces->getCurFetchingPieceIndex();
 
     // Record the cache hit stats
-    if (!isPrepopulate() && result == OpResultType::kGetHit) {
+    if (result == OpResultType::kGetHit) {
       if (rw.isHeaderPiece) {
         stats_.getHitBytes.add(rw.sizes[0]);
         stats_.objGetHits.inc();
@@ -126,7 +126,7 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
       rw.cachePieces->updateFetchIndex();
     } else {
       // Record the cache hit stats: we got all the pieces that were requested
-      if (!isPrepopulate() && result == OpResultType::kGetHit) {
+      if (result == OpResultType::kGetHit) {
         auto requestedSize = rw.cachePieces->getRequestedSize();
         stats_.getFullHitBytes.add(requestedSize + rw.headerSize);
         stats_.getFullHitBodyBytes.add(requestedSize);
@@ -206,7 +206,8 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         }
         throw cachelib::cachebench::EndOfTrace("");
       }
-    }
+    } // scope for lock
+    samples_.inc();
 
     try {
       std::vector<folly::StringPiece> fields;
@@ -266,21 +267,16 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
       }
 
       // Record the byte wise and object wise stats that we will egress
-      if (!isPrepopulate()) {
-        if (rangeStart) {
-          size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
-                                      : (fullContentSize - *rangeStart);
-          stats_.getBytes.add(rangeSize + responseHeaderSize);
-          stats_.getBodyBytes.add(rangeSize);
-        } else {
-          stats_.getBytes.add(fullContentSize + responseHeaderSize);
-          stats_.getBodyBytes.add(fullContentSize);
-        }
-        stats_.objGets.inc();
-        postpopulateSamples_.inc();
+      if (rangeStart) {
+        size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
+                                    : (fullContentSize - *rangeStart);
+        stats_.getBytes.add(rangeSize + responseHeaderSize);
+        stats_.getBodyBytes.add(rangeSize);
       } else {
-        prepopulateSamples_.inc();
+        stats_.getBytes.add(fullContentSize + responseHeaderSize);
+        stats_.getBodyBytes.add(fullContentSize);
       }
+      stats_.objGets.inc();
 
       auto reqId = nextReqId_++;
       auto shard = getShard(reqId);

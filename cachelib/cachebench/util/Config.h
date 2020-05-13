@@ -86,13 +86,6 @@ struct StressorConfig : public JSONConfig {
   // interval in milliseconds between taking a snapshot of the stats
   uint64_t samplingIntervalMs{1000};
 
-  // if enabled, the cache will be filled up before test is run
-  // TODO: support prepopulating Chained Items going forward
-  bool prepopulateCache{false};
-
-  // time to sleep between operations every 8 inserts in every threads.
-  uint64_t prepopulateSleepMs{0};
-
   // If enabled, stressor will verify operations' results are consistent.
   bool checkConsistency{false};
 

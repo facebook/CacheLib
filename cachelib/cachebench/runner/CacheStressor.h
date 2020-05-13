@@ -78,38 +78,6 @@ class CacheStressor : public Stressor {
     if (config_.checkConsistency) {
       cache_->enableConsistencyCheck(wg_->getAllKeys());
     }
-    // Fill up the cache with specified key/value distribution
-    if (config_.prepopulateCache) {
-      wg_->setIsPrepopulate(true);
-      try {
-        std::cout << "Starting cache prepopulate" << std::endl;
-        auto ret = prepopulateCache();
-        std::cout << folly::sformat("Inserted {:,} keys in {:.2f} mins",
-                                    ret.first,
-                                    ret.second.count() / 60.)
-                  << std::endl;
-        for (auto pid : cache_->poolIds()) {
-          auto numItems = cache_->getPoolStats(pid).numItems();
-          std::cout << folly::sformat("Pool {}: {:,} keys in RAM",
-                                      static_cast<int>(pid), numItems)
-                    << std::endl;
-        }
-
-        // wait for all the cache operations for prepopulation to complete.
-        if (!cache_->isRamOnly()) {
-          cache_->flushNvmCache();
-        }
-
-        std::cout << "== Cache Stats ==" << std::endl;
-        cache_->getStats().render(std::cout);
-        std::cout << std::endl;
-      } catch (const cachebench::EndOfTrace& ex) {
-        std::cout << "End of trace encountered during prepopulaiton, "
-                     "attempting to continue..."
-                  << std::endl;
-      }
-    }
-    wg_->setIsPrepopulate(false);
   }
 
   ~CacheStressor() override { finish(); }
@@ -220,83 +188,6 @@ class CacheStressor : public Stressor {
       std::memcpy(cache_->getWritableMemory(handle), hardcodedString_.data(),
                   cache_->getSize(handle));
     }
-  }
-
-  // Fill the cache and make sure all pools are full.
-  // It's the generator's resposibility of providing keys that obey to the
-  // distribution
-  std::pair<size_t, std::chrono::seconds> prepopulateCache() {
-    std::atomic<uint64_t> totalCount = 0;
-
-    auto prePopulateFn = [&]() {
-      std::mt19937 gen(folly::Random::rand32());
-      std::discrete_distribution<> keyPoolDist(
-          config_.keyPoolDistribution.begin(),
-          config_.keyPoolDistribution.end());
-      size_t count = 0;
-      std::unordered_set<PoolId> fullPools;
-      std::optional<uint64_t> lastRequestId = std::nullopt;
-
-      // in some cases eviction will never happen. To avoid infinite loop in
-      // this case, we use continuousCacheHits as the signal of cache full
-      std::unordered_map<PoolId, size_t> continuousCacheHits;
-
-      while (fullPools.size() < cache_->numPools()) {
-        // get a pool according to keyPoolDistribution
-        auto pid = keyPoolDist(gen);
-        if (fullPools.count(pid) > 0) {
-          // it's a known full pool, skip it
-          continue;
-        }
-
-        // getPoolStats is expensive to fetch on every iteration and can
-        // serialize the cache creation. So check the eviction count every 10k
-        // insertions
-        if (count % 10000 == 0 &&
-            cache_->getPoolStats(pid).numEvictions() > 0) {
-          // it's a new found full pool, record it and reselect one
-          fullPools.insert(pid);
-          continue;
-        }
-
-        // now we have a good pool, get a request
-        const Request& req = getReq(pid, gen, lastRequestId);
-        if (cache_->find(req.key)) {
-          // Treat 1000 continuous cache hits as cache full
-          if (++continuousCacheHits[pid] > 1000) {
-            fullPools.insert(pid);
-          }
-
-          if (req.requestId) {
-            wg_->notifyResult(*req.requestId, OpResultType::kGetHit);
-          }
-          continue;
-        }
-
-        // cache miss. Allocate and write to cache
-        continuousCacheHits[pid] = 0;
-
-        // req contains a new key, set it to cache
-        const auto allocHandle = cache_->allocate(
-            pid, req.key, req.key.size() + *(req.sizeBegin), req.ttlSecs);
-        if (allocHandle) {
-          cache_->insertOrReplace(allocHandle);
-          // We throttle in case we are using flash so that we dont drop
-          // evictions to flash by inserting at a very high rate.
-          if (!cache_->isRamOnly() && count % 8 == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-          }
-          count++;
-          if (req.requestId) {
-            wg_->notifyResult(*req.requestId, OpResultType::kSetSuccess);
-          }
-        }
-      }
-      totalCount.fetch_add(count);
-    };
-
-    auto duration = detail::executeParallel(prePopulateFn, config_.numThreads);
-    return std::make_pair(totalCount.load(), duration);
   }
 
   // Runs a number of operations on the cache allocator. The actual

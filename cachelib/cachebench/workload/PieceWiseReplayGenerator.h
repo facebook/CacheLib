@@ -20,8 +20,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   virtual ~PieceWiseReplayGenerator() {
     XLOG(INFO) << "Summary count of samples in workload generator: "
-               << "# of prepopulate samples: " << prepopulateSamples_.get()
-               << ", # of postpopulate samples: " << postpopulateSamples_.get()
+               << ", # of samples: " << samples_.get()
                << ", # of invalid samples: " << invalidSamples_.get();
   }
 
@@ -137,8 +136,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   mutable folly::SpinLock getLineLock_;
 
   AtomicCounter invalidSamples_{0};
-  AtomicCounter prepopulateSamples_{0};
-  AtomicCounter postpopulateSamples_{0};
+  AtomicCounter samples_{0};
 
   PieceWiseReplayGeneratorStats stats_;
 

@@ -30,17 +30,6 @@ class GeneratorBase {
                            std::ostream& /*out*/) const {
     // not implemented by default
   }
-
-  void setIsPrepopulate(bool flag) {
-    isPrepopulate_.store(flag, std::memory_order_relaxed);
-  }
-
-  bool isPrepopulate() const {
-    return isPrepopulate_.load(std::memory_order_relaxed);
-  }
-
- private:
-  std::atomic<bool> isPrepopulate_{false};
 };
 
 } // namespace cachebench
