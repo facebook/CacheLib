@@ -52,7 +52,11 @@ namespace cachelib {
  * - Size of L1 and L2 arrays - S, suggested value: 1024
  * - Number of warm entries - W, suggested value: 8
  * - Hotness multiplier - M, suggested value: 30
- *
+ * - initial L1 threshold - This indicates the threshold for qualifying for L2.
+ *   Important thing to remember is that this threshold is per each thread.
+ *   If a key is accessed X times, each of the N threads in the service will
+ *   get about X/N accesses. So, the item may not qualify for L2 easily if the
+ *   initial L1 threshold is too high.
  *
  * Note on thread safety: The data structures should not be accessed from
  * multiple threads, each server thread should maintain its own thread-local
@@ -63,11 +67,13 @@ class HotHashDetector {
  public:
   HotHashDetector(size_t numBuckets,
                   size_t numWarmItems,
-                  size_t hotnessMultiplier)
+                  size_t hotnessMultiplier,
+                  uint32_t initialL1Threshold = kInitialL1Threshold)
       : numBuckets_{numBuckets},
         numWarmItems_{numWarmItems},
         hotnessMultiplier_{hotnessMultiplier},
         bucketsMask_{numBuckets - 1},
+        l1Threshold_{initialL1Threshold},
         l1Vector_(numBuckets),
         l2Vector_(numBuckets) {
     // Enforce that the number of buckets is a power of two.
@@ -114,7 +120,7 @@ class HotHashDetector {
   const size_t numWarmItems_;      // See algorithm description at the top.
   const size_t hotnessMultiplier_; // See algorithm description at the top.
   const size_t bucketsMask_;
-  size_t l1Threshold_ = kInitialL1Threshold; // Threshold for qualifying for L2
+  size_t l1Threshold_; // Threshold for qualifying for L2
   std::vector<uint32_t> l1Vector_;
   std::vector<L2Record> l2Vector_;
   size_t maintenanceInterval_; // In units of bumpHash() invocations.
