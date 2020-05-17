@@ -5739,6 +5739,10 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   void testConfigValidation() {
     typename AllocatorT::Config config;
     using MMType = typename AllocatorT::MMType;
+    // posix shm can only be enabld if cache persistence is enabled
+    EXPECT_THROW(config.usePosixForShm(), std::invalid_argument);
+    config.enableCachePersistence(this->cacheDir_);
+    EXPECT_NO_THROW(config.usePosixForShm());
 
     MarginalHitsStrategy::Config strategyConfig{};
     auto strategy = std::make_shared<MarginalHitsStrategy>(strategyConfig);

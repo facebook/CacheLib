@@ -158,7 +158,9 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& enableCachePersistence(std::string directory,
                                                void* baseAddr = nullptr);
 
-  // uses posix shm segments insteaad of the default sys-v shm segments.
+  // uses posix shm segments instead of the default sys-v shm segments.
+  // @throw std::invalid_argument if called without enabling
+  // cachePersistence()
   CacheAllocatorConfig& usePosixForShm();
 
   // This controls whether or not removing expired items on calling find()
@@ -812,9 +814,11 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableCachePersistence(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::usePosixForShm() {
-  if (!cacheDir.empty()) {
-    usePosixShm = true;
+  if (cacheDir.empty()) {
+    throw std::invalid_argument(
+        "Posix shm can be set only when cache persistence is enabled");
   }
+  usePosixShm = true;
   return *this;
 }
 
@@ -1005,6 +1009,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
 
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
+  configMap["posixShm"] = usePosixShm ? "set" : "empty";
 
   configMap["defaultAllocSizes"] = "";
   // Stringify std::set
