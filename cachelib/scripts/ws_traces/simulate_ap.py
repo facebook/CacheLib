@@ -119,6 +119,15 @@ def add_options_parser():
     )
 
     parser.add_option(
+        "",
+        "--access-history-use-counts",
+        dest="access_history_use_counts",
+        help="if use count for dynanmic features, if set to False, use bloomfilter",
+        action="store_true",
+        default=True,
+    )
+
+    parser.add_option(
         "-o",
         "--output-dir",
         dest="output_dir",

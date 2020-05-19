@@ -13,9 +13,9 @@ from sklearn.metrics import auc, roc_curve
 
 
 # Max number of rows used for training & testing
-MAX_ROWS = int(2 * 1e6)
+MAX_ROWS = int(5 * 1e6)
 # Percentage of chunks to be tracked for generating training data
-CHUNK_SAMPLE_RATIO = 0.01
+CHUNK_SAMPLE_RATIO = 0.02
 # [LabelConfig] admit (label = 1) if past number of accesses >= LABEL_REJECTX
 LABEL_REJECTX = 1
 # [LabelConfig] admit (label = 1) if
@@ -24,12 +24,19 @@ LABEL_FUTURE_ACCESS_THRESHOLD = 2
 
 
 def build_dataset_for_training(
-    tracefile, region, sample_ratio, eviction_age, global_feature_map_path=None
+    tracefile,
+    region,
+    sample_ratio,
+    eviction_age,
+    access_history_use_counts=True,
+    global_feature_map_path=None,
 ):
     accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
         tracefile, global_feature_map_path
     )
-    dynamicFeatures = dfeature.DynamicFeatures(utils.ACCESS_HISTORY_COUNT)
+    dynamicFeatures = dfeature.DynamicFeatures(
+        utils.ACCESS_HISTORY_COUNT, access_history_use_counts
+    )
     extractor = feature_extractor.FeatureExtractor(
         eviction_age, CHUNK_SAMPLE_RATIO, dynamicFeatures
     )

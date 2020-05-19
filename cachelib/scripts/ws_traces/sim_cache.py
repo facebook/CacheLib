@@ -39,7 +39,9 @@ class LIRSItem(object):
 
 
 class LIRSCache(object):
-    def __init__(self, num_elems, bait_factor, ap, filter_count):
+    def __init__(
+        self, num_elems, bait_factor, ap, filter_count, access_history_use_counts
+    ):
         self.cache_size = num_elems
         self.cache = OrderedDict()
 
@@ -65,7 +67,9 @@ class LIRSCache(object):
         self.un_accessed_eviction_age_cum = 0
 
         # for ml admission policy
-        self.dynamic_features = dyn_features.DynamicFeatures(filter_count)
+        self.dynamic_features = dyn_features.DynamicFeatures(
+            filter_count, access_history_use_counts
+        )
 
     def str(self):
         return "size={} vals={} baits={}".format(
@@ -187,7 +191,7 @@ class QueueItem(object):
 
 
 class QueueCache(object):
-    def __init__(self, lru, num_elems, ap, filter_count):
+    def __init__(self, lru, num_elems, ap, filter_count, access_history_use_counts):
         self.lru = lru
         self.cache_size = num_elems
         self.cache = OrderedDict()
@@ -199,7 +203,9 @@ class QueueCache(object):
         self.un_accessed_evictions = 0
         self.un_accessed_eviction_age_cum = 0
         # dynamic features, which have to be update on each request
-        self.dynamic_features = dyn_features.DynamicFeatures(filter_count)
+        self.dynamic_features = dyn_features.DynamicFeatures(
+            filter_count, access_history_use_counts
+        )
         # queue for batch admissions
         self.admit_buffer = {}
 
@@ -580,10 +586,20 @@ def simulate_cache_driver(options, args):
     logjson["AdmissionPolicy"] = apname
 
     if options.lirs:
-        cache = LIRSCache(num_cache_elems, 1.0, ap, options.learned_ap_filter_count)
+        cache = LIRSCache(
+            num_cache_elems,
+            1.0,
+            ap,
+            options.learned_ap_filter_count,
+            options.access_history_use_counts,
+        )
     else:
         cache = QueueCache(
-            use_lru, num_cache_elems, ap, options.learned_ap_filter_count
+            use_lru,
+            num_cache_elems,
+            ap,
+            options.learned_ap_filter_count,
+            options.access_history_use_counts,
         )
 
     stats = simulate_cache(cache, accesses, sampling_ratio)

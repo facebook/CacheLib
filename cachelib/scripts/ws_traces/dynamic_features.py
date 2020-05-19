@@ -8,14 +8,16 @@ HOUR_IN_SECONDS = 3600
 
 
 class DynamicFeatures:
-    # revised bloom filter implementation: record number of occurrence
-    # instead of "has occured" flag
+    """access history features"""
 
-    def __init__(self, hours):
+    def __init__(self, hours, access_history_use_counts=True):
         self.history = deque()  # queue broken down by hour slots.
         self.timestamps = deque()  # timestamps in seconds
         self.hours = hours
         self.last_access_time = {}
+
+        # if access_history_use_counts is set to true, only if_accessed flag is returned
+        self.access_history_use_counts = access_history_use_counts
 
     def updateFeatures(self, key, ts):
         # empty startup or past 1 hr: start a new set
@@ -32,20 +34,25 @@ class DynamicFeatures:
         # update time since last access
         self.last_access_time[key] = ts
 
-    # only gets a single key's bloom-filter features
+    # only gets a single key's access history features
     def getFeature(self, key):
-        feature = [
-            s[key] for s in self.history
-        ]  # return how many times the key has been accessed in each bucket
+        if self.access_history_use_counts:
+            feature = [
+                s[key] for s in self.history
+            ]  # return how many times the key has been accessed in each bucket
+        else:
+            feature = [
+                s[key] > 0 for s in self.history
+            ]  # return if key has been accessed in each bucket
 
         feature.extend([0] * max(0, (self.hours - len(self.history))))
         return feature
 
-    # only gets bloom-filter features
+    # only gets access history features
     def getFeatures(self, keys):
         features = []
         for key in keys:
-            features.append(self.getFeature(key))
+            features.append(self.getFeature(key, self.access_history_use_counts))
         return features
 
     def getLastAccessDistance(self, key, ts):
