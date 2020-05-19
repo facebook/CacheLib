@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 
 import datetime
+import json
+import os
 from enum import Enum, unique
+
+import pandas as pd
 
 
 @unique
@@ -24,6 +28,17 @@ NS_STR = "userNamespace"
 USER_STR = "userName"
 
 PUT_OPS = [OpType.PUT_PERM, OpType.PUT_TEMP]
+# Used for unknown feature values to be consistent with
+# prod config https://fburl.com/diffusion/clfwewx7
+MAX_INT = 4294967295
+
+# MODEL CONFIG
+ACCESS_HISTORY_COUNT = 6
+FEATURES = [f"bf_{i}" for i in range(0, ACCESS_HISTORY_COUNT)] + [
+    "op",
+    "namespace",
+    "user",
+]
 
 
 class KeyFeatures(object):
@@ -54,7 +69,13 @@ class KeyFeatures(object):
         return self.__str__()
 
     def toList(self):
-        return [self.op.value, self.pipeline, self.namespace, self.user]
+        """Used in training and simulation for ML admission policies
+
+        `pipeline` feature is not used in ML model due to it has too many categories to
+        be encoded for production inference, as well as its collinearity with
+        namespace and user, therefore omitted here.
+        """
+        return [self.op.value, self.namespace, self.user]
 
 
 class BlkAccess(object):
@@ -256,7 +277,25 @@ def write_feature_encoding_to_file(f, m):
 
 # read the processed file and return a dictionary of key to all its BlkAccess
 # sorted by access time.
-def read_processed_file(f):
+def read_processed_file(f, global_feature_map_path=None):
+    """Read processd files and generate accesses
+
+    Parameters:
+        f : str
+            processed trace path
+        global_feature_map_path : str
+            if provided, will perform feature mapping between local sampled trace and
+            globel (cross-cluster) traces; This can be skipped when focussing on single
+            cluster training/inference，but is critical to delopyment of production
+            models to multiple clusters.
+    """
+    local_map_path = os.path.dirname(f)
+    sample_ratio = int(os.path.basename(f).split("_")[-1].split(".")[0])
+
+    if global_feature_map_path:
+        (local_maps, global_maps) = get_feature_maps(
+            local_map_path, global_feature_map_path, sample_ratio
+        )
     print("Reading from file ", f)
     accesses = {}
     start_ts = None
@@ -275,9 +314,30 @@ def read_processed_file(f):
                 f = None
                 if len(parts) >= 8:
                     op = int(parts[4])
+
+                    # if global_feature_map_path is provided, we map from local sampled
+                    # feature index to global index provided to production model
+                    if global_feature_map_path:
+                        val = local_maps["namespace"][int(parts[6])]
+                        namespace = (
+                            global_maps["namespace"][val]
+                            if val in global_maps["namespace"]
+                            else MAX_INT
+                        )
+
+                        val = local_maps["user"][int(parts[7])]
+                        user = (
+                            global_maps["user"][val]
+                            if val in global_maps["user"]
+                            else MAX_INT
+                        )
+                    else:
+                        namespace = int(parts[6])
+                        user = int(parts[7])
+
+                    # pipeline is not used by prod model, therefore no need to transform
                     pipeline = int(parts[5])
-                    namespace = int(parts[6])
-                    user = int(parts[7])
+
                     f = KeyFeatures(op, pipeline, namespace, user)
 
                 # compute the time window of the trace
@@ -297,8 +357,18 @@ def read_processed_file(f):
 
 
 # read the processed file and return  list of (k, BlkAccess) sorted by access time.
-def read_processed_file_list_accesses(f):
-    k_accesses, start_ts, end_ts = read_processed_file(f)
+def read_processed_file_list_accesses(f, global_feature_map_path=None):
+    """Read processd files and generate accesses sorted by time
+
+    Parameters:
+        f : str
+            processed trace path
+        global_feature_map_path : str
+            if provided, will perform feature mapping between local sampled trace and
+            globel (cross-cluster) trace; This is critical to delopy production models,
+            but can be skipped for research purposes
+    """
+    k_accesses, start_ts, end_ts = read_processed_file(f, global_feature_map_path)
     accesses = []
 
     for k in k_accesses:
@@ -364,3 +434,28 @@ def mb_per_sec(chunks, time_secs, sampling_ratio):
         / (time_secs * 1024 * 1024 * sampling_ratio),
         2,
     )
+
+
+def get_feature_maps(local_map_path, global_map_path, sample_ratio):
+    """load local feature map and global feature map for prod model
+
+    Local map is generated when sampling trace in a single cluster,
+    e.g. `processed_all_features_1.0.users`;
+    Global map is the feature mapping maintained for prod model;
+
+    To ensure the prod model translates incoming feature strings to
+    the correct internal integter representation,
+    transformation is essential before training.
+    """
+    local_maps = {}
+    for feature in ["namespace", "user"]:
+        df = pd.read_csv(
+            f"{local_map_path}/processed_all_features_{sample_ratio}.0.{feature}s",
+            sep=" ",
+            header=None,
+        )
+        local_maps[feature] = dict(zip(df[1], df[0]))
+    ## load global string to index feature mappings
+    with open(global_map_path) as f:
+        global_maps = json.load(f)
+    return (local_maps, global_maps)

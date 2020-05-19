@@ -20,8 +20,8 @@ Part 2: admission policy
 1. WriteRateRejectAP    defualt         (write_mbps <> 0)
 2. AcceptAll            defualt         (write_mbps == 0)
 3. RejectXAP            --rejectx_ap   (ap_threshold, ap_probability, write_mbps)
-4. LearnedAP            --learned_ap   (learned_ap_model, ap_threshold,
-                                        learned_ap_filter_count)
+4. LearnedAP            --learned_ap   (learned_ap_model_path,
+                                        ap_threshold, learned_ap_filter_count)
                                         (not applicable to lirs)
 5. CoinFlipAP           --coinflip_ap  (ap_probability)
 
@@ -101,8 +101,8 @@ def add_options_parser():
 
     parser.add_option(
         "",
-        "--learned-ap-model",
-        dest="learned_ap_model",
+        "--learned-ap-model-path",
+        dest="learned_ap_model_path",
         help="Set the file that stores the learned admission policy's model",
         action="store",
         type="string",
@@ -123,6 +123,14 @@ def add_options_parser():
         "--output-dir",
         dest="output_dir",
         help="Destination directory for results",
+        default="",
+    )
+
+    parser.add_option(
+        "",
+        "--global-feature-map-path",
+        dest="global_feature_map_path",
+        help="Path storing globel feature maps",
         default="",
     )
 

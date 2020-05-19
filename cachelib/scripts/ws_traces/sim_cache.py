@@ -225,10 +225,8 @@ class QueueCache(object):
     def insert(self, key, ts, keyfeaturelist):
         # record features
         self.admit_buffer[key] = self.dynamic_features.getFeature(key)
-        self.admit_buffer[key].append(
-            self.dynamic_features.getLastAccessDistance(key, ts)
-        )
-        self.admit_buffer[key].extend(keyfeaturelist)  # .toList()
+
+        self.admit_buffer[key].extend(keyfeaturelist)
         if len(self.admit_buffer) < ADMIT_BUFFER_LIMIT:
             # still space
             return
@@ -327,14 +325,15 @@ class CoinFlipAP(object):
 
 # learned admission policy
 class LearnedAP(object):
-    def __init__(self, modelPath, threshold):
+    def __init__(self, threshold, model_path):
+        assert model_path
         self.threshold = threshold
-        self.gbm = lgb.Booster(model_file=modelPath)
+        self.gbm = lgb.Booster(model_file=model_path)
 
     def batchAccept(self, batch, ts):
         features = np.array(list(batch.values()))
         # result:
-        # dynF0 .. dynF11 lAD kf1 kf2 kf3 size
+        # dynF0 .. dynF5 kf1 kf2 kf3
         predictions = self.gbm.predict(features)
         decisions = dict(
             zip(batch.keys(), [pred > self.threshold for pred in predictions])
@@ -492,7 +491,9 @@ def simulate_cache_driver(options, args):
 
     input_file_name = tracefile[: -len(".trace")].split("/")[-1]
     out_file_name = "{}/{}_cache_perf.txt".format(output_dir, input_file_name)
-    accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(tracefile)
+    accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
+        tracefile, options.global_feature_map_path
+    )
 
     trace_duration_secs = round(end_ts - start_ts, 2)
     sampling_ratio = float(input_file_name.split(".")[0].split("_")[-1])
@@ -553,11 +554,11 @@ def simulate_cache_driver(options, args):
             )
             apname = "RejectFirstWriteRate"
     elif options.learned_ap:
-        assert options.learned_ap_model and options.ap_threshold
-        ap = LearnedAP(options.learned_ap_model, options.ap_threshold)
+        assert options.learned_ap_model_path and options.ap_threshold
+        ap = LearnedAP(options.ap_threshold, model_path=options.learned_ap_model_path)
         print(
             "Learned AP with model:",
-            options.learned_ap_model,
+            options.learned_ap_model_path,
             "threshold:",
             options.ap_threshold,
         )
@@ -615,3 +616,4 @@ def simulate_cache_driver(options, args):
     with open(out_file_name, "w+") as out:
         logjson["options"] = str(logjson["options"])
         json.dump(logjson, out)
+    return logjson

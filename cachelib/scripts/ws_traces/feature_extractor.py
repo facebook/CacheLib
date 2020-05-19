@@ -70,9 +70,6 @@ class FeatureExtractor:
                 "samplingTime": ts,
                 "keyFeatures": keyFeatures,
                 "bloomfilters": self.dynamicFeatures.getFeature(key),
-                "lastAccessDistance": self.dynamicFeatures.getLastAccessDistance(
-                    key, ts
-                ),
             }
             if key in self.labelGather:
                 self.labelGather[key].append(newFeatureLabel)
@@ -93,7 +90,6 @@ class FeatureExtractor:
                     # each row consists of label,dynamiceFeatures,keyFeatures
                     labels.append(featureLabel["label"])
                     featuretupel = featureLabel["bloomfilters"].copy()
-                    featuretupel.append(featureLabel["lastAccessDistance"])
                     featuretupel.extend(featureLabel["keyFeatures"].toList())
                     features.append(featuretupel)
         return (np.array(labels), np.asarray(features))
