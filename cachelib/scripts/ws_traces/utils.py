@@ -5,6 +5,7 @@ import json
 import os
 from enum import Enum, unique
 
+import numpy as np
 import pandas as pd
 
 
@@ -434,6 +435,16 @@ def mb_per_sec(chunks, time_secs, sampling_ratio):
         / (time_secs * 1024 * 1024 * sampling_ratio),
         2,
     )
+
+
+def find_nearest(array, value):
+    """get index of the value in a list that are closest to target value
+
+    Used for selecting probability thresholds given target recall
+    """
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
 
 
 def get_feature_maps(local_map_path, global_map_path, sample_ratio):
