@@ -31,8 +31,26 @@ class AccessTrackerTest : public ::testing::TestWithParam<bool> {
 
   // Start from the first tick of the bucket so that test cases
   // are not disturbed by randomization.
-  void initializeTicks(size_t ticksPerBucket) {
+  void initializeTicks(size_t ticksPerBucket,
+                       size_t numBuckets,
+                       size_t numTicksPerBucket) {
     ticks = initialTicks - initialTicks % ticksPerBucket;
+
+    // If the initial bucket is numBuckets - 1, advance it (to bucket 0).
+    //
+    // When trying to update the mostRecnet bucket, if the current bucket
+    // index is 1 bucket before the mostRecent bucket, we would assume
+    // that a race happened and the current time is actually at the next
+    // bucket. We we would use the next bucket.
+    // Historically we initialize the mostRecent bucket to 0. This brings
+    // an issue if the initial time starts at bucket numBuckets - 1.
+    // For the first hour, it would think it is very close to the next
+    // bucket for up to an entire hour.
+    // Making this change in the unit test elimiates the gap while
+    // we consider a fix for the history issue.
+    if ((ticks / numTicksPerBucket) % numBuckets == numBuckets - 1) {
+      ticks += numTicksPerBucket;
+    }
   }
 
   AccessTracker::TickerFct getCurrentTick{[&] { return ticks; }};
@@ -54,7 +72,8 @@ TEST_P(AccessTrackerTest, simpleTestCase) {
   // Moves to a new bucket every two accesses.
   config.numTicksPerBucket = 2;
   config.getCurrentTick = std::move(getCurrentTick);
-  initializeTicks(config.numTicksPerBucket);
+  initializeTicks(
+      config.numTicksPerBucket, config.numBuckets, config.numTicksPerBucket);
   auto tracker = AccessTracker(std::move(config));
 
   // The count is taken after the access tracking vector is returned.
@@ -63,48 +82,48 @@ TEST_P(AccessTrackerTest, simpleTestCase) {
   // the most recent admission.
   folly::StringPiece key0 = "key0";
   // Bucket 0.
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {0, 0, 0});
   // key0: {1, 0, 0}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 0, 0});
   advanceTicks();
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 0, 0});
   // key0: {2, 0, 0}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {2, 0, 0});
   advanceTicks();
 
   // Bucket 1.
   folly::StringPiece key1 = "key1";
   // different keys are not affected.
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {0, 0, 0});
   // key1: {0, 1, 0}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {1, 0, 0});
   advanceTicks();
 
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {1, 0, 0});
   // key1: {0, 2, 0}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {2, 0, 0});
   advanceTicks();
 
   // Bucket 2.
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {0, 0, 2});
   // key0: {2, 0, 1}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 0, 2});
-  advanceTicks();
-  // key0: {2, 0, 2}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {2, 0, 2});
   advanceTicks();
 
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 0, 2});
+  // key0: {2, 0, 2}
+  advanceTicks();
   // Bucket 3.
   // Rotated, first 0 is discarded.
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 2, 0});
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {0, 2, 0});
   advanceTicks();
   // key0: {2, 0, 2, 1}
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {2, 2, 0});
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 2, 0});
   advanceTicks();
   // key0: {2, 0, 2, 2}
 
   // Bucket 4.
   // counts in bucket 1 was cleared and reset at last record.
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {1, 2, 2});
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key0), {0, 2, 2});
   advanceTicks();
   // key0: {2, 0, 2, 2, 1}
   // The other key's buckets were moved forward as well.
-  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {1, 0, 0});
+  assertVecEq(tracker.recordAndPopulateAccessFeatures(key1), {0, 0, 0});
   // key1: {0, 2, 0, 0, 1}
 }
 

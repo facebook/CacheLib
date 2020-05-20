@@ -32,52 +32,50 @@ AccessTracker::AccessTracker(Config config)
 // and return in a vector.
 std::vector<double> AccessTracker::recordAndPopulateAccessFeatures(
     folly::StringPiece key) {
-  const auto bucketIdx = getCurrentBucketIndex();
+  updateMostRecentAccessedBucket();
   const auto hashVal =
       folly::hash::SpookyHashV2::Hash64(key.data(), key.size(), kRandomSeed);
+  const auto mostRecentBucketIdx =
+      mostRecentAccessedBucket_.load(std::memory_order_relaxed);
+
   std::vector<double> features(config_.numBuckets);
-  // Current bucket.
-  features[0] = updateAndGetCurrentBucket(bucketIdx, hashVal);
-  // Extract values from previous buckets.
-  // features[i]: count for bucket number (bucketIdx - i).
-  for (size_t i = 1; i < config_.numBuckets; i++) {
-    const auto idx = rotatedIdx(bucketIdx + config_.numBuckets - i);
+  // Extract values from buckets.
+  // features[i]: count for bucket number (mostRecentBucket - i).
+  for (size_t i = 0; i < config_.numBuckets; i++) {
+    const auto idx = rotatedIdx(mostRecentBucketIdx + config_.numBuckets - i);
     LockHolder l(locks_[idx]);
     features[i] = getBucketAccessCount(idx, hashVal);
+    // Count the current access.
+    if (idx == mostRecentBucketIdx) {
+      updateBucket(mostRecentBucketIdx, hashVal);
+    }
   }
   return features;
 }
 
-// Update the current bucket access count for the accessed key.
-// Return the updated access count.
-// If this is the first time entering a new bucket, the oldest
+// Update the most recent accessed bucket.
+// If updated, this is the first time entering a new bucket, the oldest
 // bucket's count would be cleared, keeping the number of buckets
 // constant at config_.numBuckets.
-double AccessTracker::updateAndGetCurrentBucket(size_t bucketIdx,
-                                                uint64_t hashVal) {
-  bool newBucket = false;
+void AccessTracker::updateMostRecentAccessedBucket() {
+  const auto bucketIdx = getCurrentBucketIndex();
   while (true) {
     auto mostRecent = mostRecentAccessedBucket_.load(std::memory_order_relaxed);
     // if we are in the border of currently tracked bucket, we don't need to
     // reset the data. we assume that all threads accessing this don't run for
     // more than 2 buckets.
     if (bucketIdx == mostRecent || rotatedIdx(bucketIdx + 1) == mostRecent) {
-      break;
+      return;
     }
 
     const bool success = mostRecentAccessedBucket_.compare_exchange_strong(
         mostRecent, bucketIdx);
     if (success) {
-      newBucket = true;
-      break;
+      LockHolder l(locks_[bucketIdx]);
+      resetBucket(bucketIdx);
+      return;
     }
   }
-  LockHolder l(locks_[bucketIdx]);
-  if (newBucket) {
-    resetBucket(bucketIdx);
-  }
-  updateBucket(bucketIdx, hashVal);
-  return getBucketAccessCount(bucketIdx, hashVal);
 }
 
 double AccessTracker::getBucketAccessCount(size_t idx, uint64_t hashVal) const {

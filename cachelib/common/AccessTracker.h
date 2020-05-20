@@ -99,12 +99,8 @@ class AccessTracker {
   // rotate raw bucket index to fit into the output.
   size_t rotatedIdx(size_t bucket) const { return bucket % config_.numBuckets; }
 
-  // record the access into the current bucket.
-  //
-  // @param bucketIdx rotated index of the current bucket.
-  // @param hashVal the hashed value of accessed key.
-  // @return the updated count of the bucket the key belongs.
-  double updateAndGetCurrentBucket(size_t bucketIdx, uint64_t hashVal);
+  // Update the most recent accessed bucket.
+  void updateMostRecentAccessedBucket();
 
   // Get current access count of the value from one bucket.
   //
