@@ -18,7 +18,7 @@
   },
   "test_config" :
     {
-      "prepopulateCache" : false,
+      
       "distribution" : "range",
       "checkConsistency" : false,
 

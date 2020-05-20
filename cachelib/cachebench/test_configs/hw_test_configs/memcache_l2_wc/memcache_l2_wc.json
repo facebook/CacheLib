@@ -49,8 +49,8 @@
         "valSizeDistFile": "memcache_twmemcache.ltw.ireland_sizes.json"
       }
     ],
-    "prepopulateCache": true,
-    "prepopulateSleepMs": 5,
+    
+    
     "opDelayNs": 5000000,
     "opDelayBatch": 1
   }

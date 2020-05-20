@@ -45,8 +45,8 @@
         "valSizeDistFile": "memcache_twmemcache.ltw.oregon_sizes.json"
       }
     ],
-    "prepopulateCache": true,
-    "prepopulateSleepMs": 5,
+    
+    
     "opDelayNs": 1000,
     "opDelayBatch": 1
   }

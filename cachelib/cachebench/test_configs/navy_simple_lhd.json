@@ -15,7 +15,7 @@
     {
       "allocator": "LHD",
 
-      "prepopulateCache" : true,
+      
       "distribution" :  "range",
 
       "numOps" : 100000,

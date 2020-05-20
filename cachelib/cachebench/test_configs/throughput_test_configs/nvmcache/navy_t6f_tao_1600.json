@@ -49,9 +49,9 @@
     "dipperDevicePath": "/dev/nvme0n1"
   },
   "test_config": {
-    "prepopulateCache": true,
+    
     "distribution": "range",
-    "prepopulateSleepMs": 5,
+    
     "numOps": 20000000,
     "numThreads": 500,
     "numKeys": 800000000,

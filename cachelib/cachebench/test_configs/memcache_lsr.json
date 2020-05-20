@@ -7,7 +7,7 @@
     {
       "name": "lsr",
 
-      "prepopulateCache": true,
+      
       "numOps": 10000000,
       "numThreads": 32,
       "numKeys": 2753184,

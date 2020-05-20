@@ -50,8 +50,8 @@
     "nvmCacheReadBufSize": 8192
   },
   "test_config": {
-    "prepopulateCache": true,
-    "prepopulateSleepMs": 5,
+    
+    
     "distribution": "range",
     "numOps": 20000000,
     "numThreads": 300,

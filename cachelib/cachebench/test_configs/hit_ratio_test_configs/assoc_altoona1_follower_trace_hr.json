@@ -9,7 +9,7 @@
       "generator": "replay", 
       "numOps": 240000000, 
       "numThreads": 1, 
-      "prepopulateCache": true, 
+       
       "traceFileName": "assoc_altoona1_follower.csv"
     }
  

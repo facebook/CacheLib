@@ -7,7 +7,7 @@
   },
   "test_config" : 
     {
-      "prepopulateCache" : true,
+      
 
       "numOps" : 500000000,
       "numThreads" : 48,
@@ -23,5 +23,4 @@
       "getRatio" : 0.99,
       "setRatio" : 0.01
     }
- 
 }

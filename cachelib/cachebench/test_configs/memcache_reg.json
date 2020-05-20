@@ -7,7 +7,7 @@
     {
       "name": "reg",
 
-      "prepopulateCache": true,
+      
       "numOps": 10000000,
       "numThreads": 32,
       "numKeys": 232160,

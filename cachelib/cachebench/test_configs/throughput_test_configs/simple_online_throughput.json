@@ -6,7 +6,7 @@
   "test_config" : 
     {
       "generator" : "online",
-      "prepopulateCache" : true,
+      
       "numOps" : 10000000,
       "numThreads" : 48,
       "numKeys" : 90000,

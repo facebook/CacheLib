@@ -7,7 +7,7 @@
     {
       "name": "memcache get only",
 
-      "prepopulateCache": true,
+      
       "numOps": 10000000,
       "numThreads": 48,
       "numKeys": 10000000,

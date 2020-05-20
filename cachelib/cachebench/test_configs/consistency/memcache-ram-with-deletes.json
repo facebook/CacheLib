@@ -5,7 +5,7 @@
     "moveOnSlabRelease" : true
   },
   "test_config" : {
-      "prepopulateCache" : true,
+      
       "checkConsistency" : true,
 
       "numOps" : 50000000,

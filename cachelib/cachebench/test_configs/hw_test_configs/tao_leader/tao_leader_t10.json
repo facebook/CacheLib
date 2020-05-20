@@ -107,8 +107,6 @@
         "setRatio": 0.0,
         "valSizeDistFile": "assoc_altoona_leader_sizes.json"
       }
-    ],
-    "prepopulateCache": true,
-    "prepopulateSleepMs": 5
+    ]
   }
 }

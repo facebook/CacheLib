@@ -23,7 +23,7 @@
       "numKeys": 65345659, 
       "numOps": 5000000, 
       "numThreads": 48, 
-      "prepopulateCache": true, 
+       
       "setRatio": 0.0, 
       "valSizeDistFile": "assoc_altoona_leader_sizes.json"
     }

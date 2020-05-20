@@ -22,8 +22,8 @@
     "dipperDevicePath": "/dev/md0"
   },
   "test_config": {
-    "prepopulateCache": false,
-    "prepopulateSleepMs": 5,
+    
+    
     "distribution": "range",
     "enableLookaside": true,
     "numOps": 2000000,

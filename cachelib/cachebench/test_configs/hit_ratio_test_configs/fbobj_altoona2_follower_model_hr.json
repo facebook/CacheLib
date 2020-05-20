@@ -23,7 +23,7 @@
       "numOps": 5000000, 
       "numThreads": 48, 
       "popDistFile": "fbobj_altoona2_follower_pop.json", 
-      "prepopulateCache": true, 
+       
       "setRatio": 0.0, 
       "valSizeDistFile": "fbobj_altoona2_follower_sizes.json"
     }

@@ -9,7 +9,7 @@
   },
   "test_config" : 
     {
-      "prepopulateCache" : true,
+      
 
       "numOps" : 500000000,
       "numThreads" : 48,

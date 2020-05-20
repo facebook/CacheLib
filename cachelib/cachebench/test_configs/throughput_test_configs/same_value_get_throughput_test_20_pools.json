@@ -9,7 +9,7 @@
   },
   "test_config" : {
       "samplingIntervalMs" : 60000,
-      "prepopulateCache" : true,
+      
 
       "numOps" : 10000000,
       "numThreads" : 48,

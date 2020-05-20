@@ -5,7 +5,7 @@
   },
   "test_config" : 
     {
-      "prepopulateCache" : true,
+      
       "enableLookaside" : true,
       "numOps" : 260000000,
       "numThreads" : 1,

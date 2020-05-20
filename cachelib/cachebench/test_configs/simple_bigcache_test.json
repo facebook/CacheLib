@@ -38,7 +38,7 @@
         "numOps": 1000000,
         "numThreads": 12,
         "populateItem": false,
-        "prepopulateCache": false,
+        
         "traceFileName": "short_bigcache_traces.csv",
         "repeatTraceReplay": true
       }

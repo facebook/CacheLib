@@ -13,7 +13,7 @@
   },
   "test_config" :
     {
-      "prepopulateCache" : true,
+      
       "checkConsistency" : true,
 
       "numOps" : 30000000,

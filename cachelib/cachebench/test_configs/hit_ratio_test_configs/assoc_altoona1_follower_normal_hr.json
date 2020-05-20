@@ -23,7 +23,7 @@
       "numKeys": 23458726, 
       "numOps": 5000000, 
       "numThreads": 48, 
-      "prepopulateCache": true, 
+       
       "setRatio": 0.0, 
       "valSizeDistFile": "assoc_altoona1_follower_sizes.json"
     }

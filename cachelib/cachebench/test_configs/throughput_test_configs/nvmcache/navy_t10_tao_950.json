@@ -49,9 +49,9 @@
     "dipperDevicePath": "/dev/md0"
   },
   "test_config": {
-    "prepopulateCache": true,
+    
     "distribution": "range",
-    "prepopulateSleepMs": 5,
+    
     "numOps": 20000000,
     "numThreads": 300,
     "numKeys": 500000000,

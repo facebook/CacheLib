@@ -42,7 +42,7 @@
       "numOps": 240000000,
       "numThreads": 24,
       "populateItem": false,
-      "prepopulateCache": false,
+      
       "traceFileName": "change_this_appropriately.csv"
     }
 }
