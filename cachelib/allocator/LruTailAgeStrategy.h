@@ -33,7 +33,8 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // weight function is null, and no weighted tail age is computed.
     // If the weight function is set, tailAgeDifferenceRatio and
     // minTailAgeDifference are ignored
-    using WeightFn = std::function<double(const ClassId id)>;
+    using WeightFn =
+        std::function<double(const ClassId id, const unsigned int nClasses)>;
     WeightFn getWeight = {};
 
     size_t getFreeMemThreshold() const noexcept {
@@ -43,10 +44,9 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     Config() noexcept {}
     Config(double ratio, unsigned int _minSlabs) noexcept
         : tailAgeDifferenceRatio(ratio), minSlabs{_minSlabs} {}
-    Config(
-        double ratio,
-        unsigned int _minSlabs,
-        const std::function<double(const ClassId& id)>& weightFunction) noexcept
+    Config(double ratio,
+           unsigned int _minSlabs,
+           const WeightFn& weightFunction) noexcept
         : tailAgeDifferenceRatio(ratio),
           minSlabs{_minSlabs},
           getWeight(weightFunction) {}
