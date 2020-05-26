@@ -8,6 +8,7 @@
 #include <folly/dynamic.h>
 #include <folly/hash/Hash.h>
 #include <folly/json.h>
+#include <folly/synchronization/Baton.h>
 
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
