@@ -30,6 +30,16 @@ class GeneratorBase {
                            std::ostream& /*out*/) const {
     // not implemented by default
   }
+
+  void markShutdown() { isShutdown_.store(true, std::memory_order_relaxed); }
+
+ protected:
+  bool shouldShutdown() const {
+    return isShutdown_.load(std::memory_order_relaxed);
+  }
+
+ private:
+  std::atomic<bool> isShutdown_{false};
 };
 
 } // namespace cachebench

@@ -196,12 +196,6 @@ class CacheStressor : public Stressor {
   //
   // Throughput and Hit/Miss rates are tracked here as well
   //
-  // @param genOp       randomly generate operations
-  // @param genOpPool   randomly choose a pool to run this op in
-  //                    this pretty much only works for allocate
-  // @param genValSize  randomly chooses a size
-  // @param genChainedItemLen   randomly chooses length for the chain to append
-  // @param genChainedItemValSize   randomly choose a size for chained item
   // @param stats       Throughput stats
   void stressByDiscreteDistribution(ThroughputStats& stats) {
     std::mt19937 gen(folly::Random::rand32());
@@ -355,6 +349,8 @@ class CacheStressor : public Stressor {
         break;
       }
     }
+
+    wg_->markShutdown();
   }
 
   OpResultType setKey(PoolId pid,

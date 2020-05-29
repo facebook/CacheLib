@@ -56,6 +56,30 @@ struct DistributionConfig : public JSONConfig {
   bool usesChainedItems() const { return addChainedRatio > 0; }
 };
 
+struct ReplayGeneratorConfig : public JSONConfig {
+  ReplayGeneratorConfig() {}
+
+  explicit ReplayGeneratorConfig(const folly::dynamic& configJson);
+
+  // serializeMode determines how/whether we serialize requests with same
+  // key for replaying. Need to be one of the 3:
+  // strict: requests for same key are serialized, so they are processed
+  //         sequentially
+  // relaxed: requests for same key with certain time interval are serialized
+  // none: no guarantee
+  enum class SerializeMode {
+    strict = 0,
+    relaxed,
+    none,
+  };
+  std::string replaySerializationMode{"strict"};
+
+  // The time interval threshold when replaySerializationMode is relaxed.
+  uint64_t relaxedSerialIntervalMs{500};
+
+  SerializeMode getSerializationMode() const;
+};
+
 struct StressorConfig : public JSONConfig {
   // by default everything is stress test. When @mode == "integration",
   // the test case specified in @name will control how to create a cache and run
@@ -71,6 +95,9 @@ struct StressorConfig : public JSONConfig {
   // distributions to use.  Default is RangeDistribution
   // which uses specified piecewise constant distributions
   std::string distribution{};
+
+  // Valid when generator is replay generator
+  ReplayGeneratorConfig replayGeneratorConfig;
 
   // name identifying the type of the stressor.
   std::string name;

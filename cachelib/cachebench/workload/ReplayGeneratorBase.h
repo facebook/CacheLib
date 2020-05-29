@@ -21,7 +21,7 @@ constexpr size_t kIfstreamBufferSize = 1L << 14;
 
 class ReplayGeneratorBase : public GeneratorBase {
  public:
-  explicit ReplayGeneratorBase(StressorConfig config)
+  explicit ReplayGeneratorBase(const StressorConfig& config)
       : config_(config), repeatTraceReplay_{config_.repeatTraceReplay} {
     if (config.checkConsistency) {
       throw std::invalid_argument(folly::sformat(

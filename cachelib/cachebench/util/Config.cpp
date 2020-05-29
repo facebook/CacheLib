@@ -49,10 +49,15 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
     poolDistributions.push_back(DistributionConfig(configJson, configPath));
   }
 
+  if (configJson.count("replayGeneratorConfig")) {
+    replayGeneratorConfig =
+        ReplayGeneratorConfig{configJson["replayGeneratorConfig"]};
+  }
+
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 392>();
+  checkCorrectSize<StressorConfig, 432>();
 }
 
 bool StressorConfig::usesChainedItems() const {
@@ -143,6 +148,33 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
   }
 
   checkCorrectSize<DistributionConfig, 352>();
+}
+
+ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
+  JSONSetVal(configJson, replaySerializationMode);
+  JSONSetVal(configJson, relaxedSerialIntervalMs);
+
+  if (replaySerializationMode != "strict" &&
+      replaySerializationMode != "relaxed" &&
+      replaySerializationMode != "none") {
+    throw std::invalid_argument(folly::sformat(
+        "Unsupported request serialization mode: {}", replaySerializationMode));
+  }
+
+  checkCorrectSize<ReplayGeneratorConfig, 40>();
+}
+
+ReplayGeneratorConfig::SerializeMode
+ReplayGeneratorConfig::getSerializationMode() const {
+  if (replaySerializationMode == "relaxed") {
+    return ReplayGeneratorConfig::SerializeMode::relaxed;
+  }
+
+  if (replaySerializationMode == "none") {
+    return ReplayGeneratorConfig::SerializeMode::none;
+  }
+
+  return ReplayGeneratorConfig::SerializeMode::strict;
 }
 
 } // namespace cachebench

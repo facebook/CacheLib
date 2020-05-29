@@ -4,7 +4,7 @@
 
 namespace {
 constexpr uint32_t kTraceNumFields = 10;
-
+constexpr uint32_t kProducerConsumerWaitTimeUs = 5;
 } // namespace
 
 namespace facebook {
@@ -13,40 +13,66 @@ namespace cachebench {
 
 const Request& PieceWiseReplayGenerator::getReq(
     uint8_t, std::mt19937&, std::optional<uint64_t> lastRequestId) {
-  if (lastRequestId) {
-    auto shard = getShard(*lastRequestId);
-    LockHolder lock(activeReqLock_[shard]);
-    auto it = activeReqM_[shard].find(*lastRequestId);
-    if (it != activeReqM_[shard].end()) {
-      return it->second.req;
+  auto& activeReqQ = getTLReqQueue();
+
+  // Spin until the queue has a value
+  while (activeReqQ.isEmpty()) {
+    if (isEndOfFile_.load(std::memory_order_relaxed) || shouldShutdown()) {
+      throw cachelib::cachebench::EndOfTrace("");
+    } else {
+      // Wait a while to allow traceGenThread_ to process new samples.
+      queueConsumerWaitCounts_.inc();
+      std::this_thread::sleep_for(
+          std::chrono::microseconds(kProducerConsumerWaitTimeUs));
     }
   }
 
-  return getReqFromTrace();
+  auto reqWrapper = activeReqQ.frontPtr();
+  bool isNewReq = true;
+  if (lastRequestId) {
+    XCHECK_LE(*lastRequestId, reqWrapper->req.requestId.value());
+    if (*lastRequestId == reqWrapper->req.requestId.value()) {
+      isNewReq = false;
+    }
+  }
+
+  // Record the byte wise and object wise stats that we will egress
+  // when it's a new request
+  if (isNewReq) {
+    if (reqWrapper->requestRange.getRequestRange()) {
+      auto rangeStart = reqWrapper->requestRange.getRequestRange()->first;
+      auto rangeEnd = reqWrapper->requestRange.getRequestRange()->second;
+      size_t rangeSize = rangeEnd ? (*rangeEnd - rangeStart + 1)
+                                  : (reqWrapper->fullObjectSize - rangeStart);
+      stats_.getBytes.add(rangeSize + reqWrapper->headerSize);
+      stats_.getBodyBytes.add(rangeSize);
+    } else {
+      stats_.getBytes.add(reqWrapper->fullObjectSize + reqWrapper->headerSize);
+      stats_.getBodyBytes.add(reqWrapper->fullObjectSize);
+    }
+    stats_.objGets.inc();
+  }
+
+  return reqWrapper->req;
 }
 
 void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
                                             OpResultType result) {
-  auto shard = getShard(requestId);
-  LockHolder lock(activeReqLock_[shard]);
-  auto it = activeReqM_[shard].find(requestId);
+  auto& activeReqQ = getTLReqQueue();
+  auto& rw = *(activeReqQ.frontPtr());
+  XCHECK_EQ(rw.req.requestId.value(), requestId);
 
-  if (it == activeReqM_[shard].end()) {
-    XLOG(INFO) << "Request id not found: " << requestId;
-    return;
-  }
-
-  ReqWrapper& rw = it->second;
+  // Object is stored in pieces
   if (rw.cachePieces) {
     bool done = updatePieceProcessing(rw, result);
     if (done) {
-      activeReqM_[shard].erase(it);
+      activeReqQ.popFront();
     }
     return;
   }
 
-  // Now we make sure the object is not stored in pieces, and it should be
-  // stored along with the response header
+  // Now we know the object is not stored in pieces, and it should be stored
+  // along with the response header
   if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
       result == OpResultType::kSetFailure) {
     // Record the cache hit stats
@@ -70,7 +96,7 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
       stats_.objGetHits.inc();
       stats_.objGetFullHits.inc();
     }
-    activeReqM_[shard].erase(it);
+    activeReqQ.popFront();
   } else if (result == OpResultType::kGetMiss) {
     // Perform set operation next
     rw.req.setOp(OpType::kSet);
@@ -191,22 +217,20 @@ void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
         getFullSuccessRate);
 }
 
-const Request& PieceWiseReplayGenerator::getReqFromTrace() {
+void PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
   while (true) {
-    {
-      LockHolder lock(getLineLock_);
-      if (!std::getline(infile_, line)) {
-        if (repeatTraceReplay_) {
-          XLOG_EVERY_MS(
-              INFO, 100'000,
-              "Reached the end of trace file. Restarting from beginning.");
-          resetTraceFileToBeginning();
-          continue;
-        }
-        throw cachelib::cachebench::EndOfTrace("");
+    if (!std::getline(infile_, line)) {
+      if (repeatTraceReplay_) {
+        XLOG_EVERY_MS(
+            INFO, 100'000,
+            "Reached the end of trace file. Restarting from beginning.");
+        resetTraceFileToBeginning();
+        continue;
       }
-    } // scope for lock
+      isEndOfFile_.store(true, std::memory_order_relaxed);
+      break;
+    }
     samples_.inc();
 
     try {
@@ -266,36 +290,41 @@ const Request& PieceWiseReplayGenerator::getReqFromTrace() {
         rangeEnd = responseBodySize - 1;
       }
 
-      // Record the byte wise and object wise stats that we will egress
-      if (rangeStart) {
-        size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
-                                    : (fullContentSize - *rangeStart);
-        stats_.getBytes.add(rangeSize + responseHeaderSize);
-        stats_.getBodyBytes.add(rangeSize);
-      } else {
-        stats_.getBytes.add(fullContentSize + responseHeaderSize);
-        stats_.getBodyBytes.add(fullContentSize);
-      }
-      stats_.objGets.inc();
+      auto shard = getShard(fields[1]);
+      // Spin until the queue has room
+      while (!activeReqQ_[shard]->write(config_,
+                                        nextReqId_,
+                                        fields[1],
+                                        fullContentSize,
+                                        responseHeaderSize,
+                                        rangeStart,
+                                        rangeEnd,
+                                        ttl)) {
+        if (shouldShutdown()) {
+          LOG(INFO) << "Forced to stop, terminate reading trace file!";
+          return;
+        }
 
-      auto reqId = nextReqId_++;
-      auto shard = getShard(reqId);
-      LockHolder l(activeReqLock_[shard]);
-      activeReqM_[shard].emplace(std::piecewise_construct,
-                                 std::forward_as_tuple(reqId),
-                                 std::forward_as_tuple(config_,
-                                                       reqId,
-                                                       fields[1],
-                                                       fullContentSize,
-                                                       responseHeaderSize,
-                                                       rangeStart,
-                                                       rangeEnd,
-                                                       ttl));
-      return activeReqM_[shard].find(reqId)->second.req;
+        queueProducerWaitCounts_.inc();
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(kProducerConsumerWaitTimeUs));
+      }
+
+      ++nextReqId_;
     } catch (const std::exception& e) {
       XLOG(ERR) << "Processing line: " << line
                 << ", causes exception: " << e.what();
     }
+  }
+}
+
+uint32_t PieceWiseReplayGenerator::getShard(folly::StringPiece key) {
+  if (mode_ == ReplayGeneratorConfig::SerializeMode::strict) {
+    return folly::hash::SpookyHashV2::Hash32(key.begin(), key.size(), 0) %
+           numShards_;
+  } else {
+    // TODO: implement the relaxed mode
+    return folly::Random::rand32(numShards_);
   }
 }
 

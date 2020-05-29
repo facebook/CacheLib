@@ -1,10 +1,11 @@
 #pragma once
 
+#include <folly/ProducerConsumerQueue.h>
+#include <folly/ThreadLocal.h>
+
 #include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/piecewise/GenericPieces.h"
-
-#include <folly/SpinLock.h>
 
 namespace facebook {
 namespace cachelib {
@@ -12,13 +13,31 @@ namespace cachebench {
 
 // physical grouping size (in Bytes) for contiguous pieces
 constexpr uint64_t kCachePieceGroupSize = 16777216;
+constexpr uint32_t kMaxRequestQueueSize = 10000;
 
 class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  public:
-  explicit PieceWiseReplayGenerator(StressorConfig config)
-      : ReplayGeneratorBase(config) {}
+  explicit PieceWiseReplayGenerator(const StressorConfig& config)
+      : ReplayGeneratorBase(config),
+        mode_(config_.replayGeneratorConfig.getSerializationMode()),
+        numShards_(config.numThreads),
+        activeReqQ_(config.numThreads) {
+    for (uint32_t i = 0; i < numShards_; ++i) {
+      activeReqQ_[i] =
+          std::make_unique<folly::ProducerConsumerQueue<ReqWrapper>>(
+              kMaxRequestQueueSize);
+    }
+
+    traceGenThread_ = std::thread([this]() { getReqFromTrace(); });
+  }
 
   virtual ~PieceWiseReplayGenerator() {
+    traceGenThread_.join();
+
+    XLOG(INFO) << "ProducerConsumerQueue Stats: producer waits: "
+               << queueProducerWaitCounts_.get()
+               << ", consumer waits: " << queueConsumerWaitCounts_.get();
+
     XLOG(INFO) << "Summary count of samples in workload generator: "
                << ", # of samples: " << samples_.get()
                << ", # of invalid samples: " << invalidSamples_.get();
@@ -41,15 +60,19 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  private:
   struct ReqWrapper {
     const std::string baseKey;
-    std::string pieceKey;                       // immutable
-    std::vector<size_t> sizes;                  // mutable
-    Request req;                                // immutable except the op field
-    std::unique_ptr<GenericPieces> cachePieces; // mutable
-    RequestRange requestRange;                  // immutable
+    std::string pieceKey;
+    std::vector<size_t> sizes;
+    // Its internal key is a reference to pieceKey.
+    // Immutable except the op field
+    Request req;
+    std::unique_ptr<GenericPieces> cachePieces;
+    const RequestRange requestRange;
     // whether current pieceKey is header piece or body piece, mutable
     bool isHeaderPiece;
     // response header size
     const size_t headerSize;
+    // The size of the complete object, excluding response header.
+    const size_t fullObjectSize;
 
     /**
      * @param fullContentSize: byte size of the full content
@@ -73,7 +96,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
               ttl,
               reqId),
           requestRange(rangeStart, rangeEnd),
-          headerSize(responseHeaderSize) {
+          headerSize(responseHeaderSize),
+          fullObjectSize(fullContentSize) {
       if (fullContentSize < config.cachePieceSize) {
         // The entire object is stored along with the response header.
         // We always fetch the full content first, then trim the
@@ -118,33 +142,58 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     AtomicCounter objGetFullHits{0};
   };
 
-  static size_t getShard(uint64_t requestId) { return requestId % kShards; }
+  const ReplayGeneratorConfig::SerializeMode mode_{
+      ReplayGeneratorConfig::SerializeMode::strict};
 
-  std::atomic<uint64_t> nextReqId_{1};
+  uint64_t nextReqId_{1};
 
-  using LockHolder = std::lock_guard<folly::SpinLock>;
-  static constexpr size_t kShards = 1024;
+  // # of shards is equal to the # of stressor threads
+  const uint32_t numShards_;
 
-  // Active requests that are in processing. Mapping from requestId to
-  // ReqWrapper.
-  std::unordered_map<uint64_t, ReqWrapper> activeReqM_[kShards];
+  // Used to assign tlStickyIdx_
+  std::atomic<uint32_t> incrementalIdx_{0};
 
-  // Lock to activeReqM_
-  mutable folly::SpinLock activeReqLock_[kShards];
+  // A sticky index assigned to each stressor threads that calls into
+  // the generator.
+  folly::ThreadLocalPtr<uint32_t> tlStickyIdx_;
 
-  // mutex for reading from the trace file concurrently.
-  mutable folly::SpinLock getLineLock_;
+  // Request queues for each stressor threads, one queue per thread.
+  // The first request in the queue is the active request in processing.
+  // Vector size is equal to the # of stressor threads;
+  // tlStickyIdx_ is used to index.
+  std::vector<std::unique_ptr<folly::ProducerConsumerQueue<ReqWrapper>>>
+      activeReqQ_;
+
+  // The thread used to process trace file and generate workloads for each
+  // activeReqQ_ queue.
+  std::thread traceGenThread_;
+  std::atomic<bool> isEndOfFile_{false};
+
+  AtomicCounter queueProducerWaitCounts_{0};
+  AtomicCounter queueConsumerWaitCounts_{0};
 
   AtomicCounter invalidSamples_{0};
   AtomicCounter samples_{0};
 
   PieceWiseReplayGeneratorStats stats_;
 
-  const Request& getReqFromTrace();
+  void getReqFromTrace();
 
   // update the piece logic to the next operation and return true if the
   // entire sequence is done.
   bool updatePieceProcessing(ReqWrapper& req, OpResultType result);
+
+  // Return the shard for the key.
+  uint32_t getShard(folly::StringPiece key);
+
+  folly::ProducerConsumerQueue<ReqWrapper>& getTLReqQueue() {
+    if (!tlStickyIdx_.get()) {
+      tlStickyIdx_.reset(new uint32_t(incrementalIdx_++));
+    }
+
+    XCHECK_LT(*tlStickyIdx_, numShards_);
+    return *activeReqQ_[*tlStickyIdx_];
+  }
 };
 } // namespace cachebench
 } // namespace cachelib
