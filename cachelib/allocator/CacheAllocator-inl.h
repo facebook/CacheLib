@@ -1140,7 +1140,7 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem) {
   // responsibility to invalidate them. The move can only fail after this
   // statement if the old item has been removed or replaced, in which case it
   // should be fine for it to be left in an inconsistent state.
-  config_.moveCb(oldItem, *newHandle);
+  config_.moveCb(oldItem, *newHandle, std::nullopt);
 
   // Inside the access container's lock, this checks if the old item is
   // accessible and its refcount is zero. If the item is not accessible,
@@ -1233,12 +1233,12 @@ bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem) {
     return false;
   }
   XDCHECK_EQ(newHandle->getSize(), oldItem.getSize());
-  XDCHECK_EQ(reinterpret_cast<uintptr_t>(
-                 &newHandle->asChainedItem().getParentItem(compressor_)),
+  auto parentPtr = parentHandle.get();
+  XDCHECK_EQ(reinterpret_cast<uintptr_t>(parentPtr),
              reinterpret_cast<uintptr_t>(&oldItem.getParentItem(compressor_)));
 
   // Invoke the move callback to fix up any user data related to the chain
-  config_.moveCb(oldItem, *newHandle);
+  config_.moveCb(oldItem, *newHandle, parentPtr);
 
   // Replace the new item in the position of the old one before both in the
   // parent's chain and the MMContainer.
