@@ -23,10 +23,6 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
   BlockCacheProtoImpl() = default;
   ~BlockCacheProtoImpl() override = default;
 
-  void setBlockSize(uint32_t blockSize) override {
-    config_.blockSize = blockSize;
-  }
-
   void setLayout(uint64_t baseOffset,
                  uint64_t size,
                  uint32_t regionSize) override {

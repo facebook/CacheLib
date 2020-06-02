@@ -262,7 +262,6 @@ void setupCacheProtos(const folly::dynamic& options,
 
   if (blockCacheSize > 0) {
     auto blockCache = cachelib::navy::createBlockCacheProto();
-    blockCache->setBlockSize(options[kBlockSize].getInt());
     blockCache->setLayout(metadataSize, blockCacheSize,
                           options[kRegionSize].getInt());
     bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();

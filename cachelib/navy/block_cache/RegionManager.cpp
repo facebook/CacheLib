@@ -464,6 +464,8 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reclaim", reclaimCount_.get());
   visitor("navy_bc_reclaim_time", reclaimTimeCountUs_.get());
   visitor("navy_bc_evicted", evictedCount_.get());
+  visitor("navy_bc_num_regions", numRegions_ - numFree_);
+  visitor("navy_bc_num_clean_regions", cleanRegions_.size());
   visitor("navy_bc_pinned_regions", pinnedCount_.get());
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());

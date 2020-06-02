@@ -25,9 +25,6 @@ class BlockCacheProto {
  public:
   virtual ~BlockCacheProto() = default;
 
-  // IO is performed on blocks and offsets multiple of @blockSize.
-  virtual void setBlockSize(uint32_t blockSize) = 0;
-
   // Set cache layout. Cache will start at @baseOffset and will be @size bytes
   // on the device. @regionSize is the region size (bytes).
   virtual void setLayout(uint64_t baseOffset,

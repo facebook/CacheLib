@@ -64,6 +64,29 @@ TEST(Device, Encryptor) {
   device.getRealDeviceRef().getCounters(toCallback(visitor));
 }
 
+TEST(Device, EncryptorFail) {
+  class MockEncryptor : public DeviceEncryptor {
+   public:
+    uint32_t encryptionBlockSize() const override { return 512; }
+
+    bool encrypt(folly::MutableByteRange /* value */, uint64_t salt) override {
+      return salt != 10;
+    }
+
+    bool decrypt(folly::MutableByteRange /* value */, uint64_t salt) override {
+      return salt != 15;
+    }
+  };
+
+  try {
+    MockDevice device{100, 1024, std::make_shared<MockEncryptor>()};
+  } catch (const std::invalid_argument& e) {
+    EXPECT_EQ(
+        e.what(),
+        std::string("Invalid ioAlignSize 1024 encryption block size 512"));
+  }
+}
+
 TEST(Device, Latency) {
   // Device size must be at least 1 because we try to write 1 byte to it
   MockDevice device{1, 1};

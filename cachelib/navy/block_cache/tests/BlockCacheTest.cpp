@@ -3,6 +3,7 @@
 #include <future>
 #include <vector>
 
+#include <folly/File.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -38,13 +39,13 @@ std::unique_ptr<JobScheduler> makeJobScheduler() {
 BlockCache::Config makeConfig(JobScheduler& scheduler,
                               std::unique_ptr<EvictionPolicy> policy,
                               Device& device,
-                              std::vector<uint32_t> sizeClasses) {
+                              std::vector<uint32_t> sizeClasses,
+                              uint64_t cacheSize = kDeviceSize) {
   BlockCache::Config config;
   config.scheduler = &scheduler;
-  config.blockSize = 1024;
   config.regionSize = kRegionSize;
   config.sizeClasses = std::move(sizeClasses);
-  config.cacheSize = kDeviceSize;
+  config.cacheSize = cacheSize;
   config.device = &device;
   config.evictionPolicy = std::move(policy);
   return config;
@@ -544,6 +545,73 @@ TEST(BlockCache, RegionUnderflowInMemBuffers) {
   Buffer value;
   EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
   EXPECT_EQ(e.value(), value.view());
+}
+
+// This test enables in memory buffers and inserts items of size 208. With
+// Alloc alignment of 512 and device size of 64K, we should be able to store
+// 128 items. Read them back and make sure they are same as what were inserted.
+TEST(BlockCache, SmallAllocAlignment) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {});
+  config.numInMemBuffers = 4;
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  std::vector<CacheEntry> log;
+  BufferGen bg;
+  Status status;
+  int cnt = 0;
+  do {
+    CacheEntry e{bg.gen(8), bg.gen(200)};
+    status = driver->insert(e.key(), e.value(), {});
+    if (status == Status::Ok) {
+      cnt++;
+    }
+    log.push_back(std::move(e));
+  } while (status == Status::Ok);
+  EXPECT_EQ(cnt, 128);
+  for (int i = 0; i < cnt; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+}
+
+// This test enables in memory buffers and inserts items of size 1708. Each
+// item spans multiple alloc aligned size of 512 bytes. With
+// Alloc alignment of 512 and device size of 64K, we should be able to store
+// 32 items. Read them back and make sure they are same as what were inserted.
+TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {});
+  config.numInMemBuffers = 4;
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  std::vector<CacheEntry> log;
+  BufferGen bg;
+  Status status;
+  int cnt = 0;
+  do {
+    CacheEntry e{bg.gen(8), bg.gen(1700)};
+    status = driver->insert(e.key(), e.value(), {});
+    if (status == Status::Ok) {
+      cnt++;
+    }
+    log.push_back(std::move(e));
+  } while (status == Status::Ok);
+  EXPECT_EQ(cnt, 32);
+  for (int i = 0; i < cnt; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
 }
 
 TEST(BlockCache, StackAllocReclaim) {
@@ -1304,6 +1372,185 @@ TEST(BlockCache, Recovery) {
     EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
     EXPECT_EQ(log[i].value(), value.view());
   }
+}
+
+// This test does the following
+// 1. Test creation of BlockCache with BlockCache::kMinAllocAlignSize aligned
+//    slot sizes fail when in memory buffers are not enabled
+// 2. Test the following order of operations succeed when in memory buffers
+//    are enabled and slot sizes are BlockCache::kMinAllocAlignSize aligned
+//    * create with two class-sizes of size 3K and 6.5K
+//    * insert 12 items in two different regions
+//    * lookup the 12 items to make sure they are in the cache
+//    * flush the device
+//    * lookup again to make sure the 12 items still exist
+//    * persist the cache
+//    * recover the cache
+//    * lookup the 12 items again to make sure they still exist
+//
+TEST(BlockCache, SmallerSlotSizesWithInMemBuffers) {
+  std::vector<uint32_t> hits(4);
+  std::vector<uint32_t> sizeClasses = {6 * BlockCache::kMinAllocAlignSize,
+                                       13 * BlockCache::kMinAllocAlignSize};
+  {
+    auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+    auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+
+    size_t metadataSize = 3 * 1024 * 1024;
+    auto ex = makeJobScheduler();
+    auto config = makeConfig(*ex, std::move(policy), *device, sizeClasses);
+    config.numInMemBuffers = 0;
+    try {
+      auto engine = makeEngine(std::move(config), metadataSize);
+    } catch (const std::invalid_argument& e) {
+      EXPECT_EQ(e.what(), std::string("invalid size class: 3072"));
+    }
+  }
+  const uint64_t myDeviceSize = 16 * 1024 * 1024;
+  auto device = createMemoryDevice(myDeviceSize, nullptr /* encryption */);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto ex = makeJobScheduler();
+  auto config =
+      makeConfig(*ex, std::move(policy), *device, sizeClasses, myDeviceSize);
+  config.numInMemBuffers = 4;
+  auto engine = makeEngine(std::move(config), metadataSize);
+  auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
+                           metadataSize);
+
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  // Allocate 3 regions
+  for (size_t i = 0; i < 2; i++) {
+    for (size_t j = 0; j < 5; j++) {
+      CacheEntry e{bg.gen(8), bg.gen(2700)};
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+      log.push_back(std::move(e));
+    }
+  }
+  for (size_t j = 0; j < 3; j++) {
+    CacheEntry e{bg.gen(8), bg.gen(5700)};
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+    log.push_back(std::move(e));
+  }
+  for (size_t i = 0; i < 12; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+
+  driver->flush();
+  for (size_t i = 0; i < 12; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+  driver->persist();
+  driver->reset();
+  EXPECT_TRUE(driver->recover());
+  for (size_t i = 0; i < 12; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+}
+
+// Create devices with various sizes and verify that the alloc align size
+// is equal to expected size. Some of the device size are not 2 power aligned
+// and is expected to get aligned alloc size.
+TEST(BlockCache, testAllocAlignSizesInMemBuffers) {
+  std::vector<uint32_t> hits(4);
+
+  std::vector<std::pair<size_t, uint32_t>> testSizes = {
+      {4 * 1024 * 1024, BlockCache::kMinAllocAlignSize},
+      {5UL * 1024 * 1024 * 1024, BlockCache::kMinAllocAlignSize},
+      {8UL * 1024 * 1024 * 1024 * 1024,
+       static_cast<uint32_t>(8UL * 1024 * 1024 * 1024 * 1024 >> 32)},
+      {745UL * 4 * 1024 * 1024 * 1024, 1024},
+      {1370UL * 4 * 1024 * 1024 * 1024, 2048},
+      {1800UL * 4 * 1024 * 1024 * 1024, 2048},
+      {2900UL * 4 * 1024 * 1024 * 1024, 4096}};
+
+  for (size_t i = 0; i < testSizes.size(); i++) {
+    auto deviceSize = testSizes[i].first;
+    int fd = open("/dev/null", O_RDWR);
+    auto device = createDirectIoFileDevice(fd, deviceSize, 4096, nullptr, 0);
+    auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+    auto ex = makeJobScheduler();
+    auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
+    config.numInMemBuffers = 4;
+    auto blockCache = std::make_unique<BlockCache>(std::move(config));
+    EXPECT_EQ(blockCache->getAllocAlignSize(), testSizes[i].second);
+  }
+}
+
+// This test creates a cache based on RAID devices with in-memory buffers
+// DISABLED, inserts some items and persists the cache. Then creates
+// a cache with the same RAID device with in-memory buffers ENABLED and
+// tries to recover it. Verifies that the recovery fails because enabling
+// in-memory buffers makes alloc align size to be
+// 512(BlockCache::kMinAllocAlignSize) and the cache at the persist has
+// 4K as the alloc align size.
+//
+// We cannot use memory device for this test because we need a way to persist
+// and recover by using different "driver". And this is not possible with
+// in-memory devices. It has to be a file based device where the device
+// name is known
+//
+TEST(BlockCache, PersistRecoverWithInMemBuffers) {
+  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
+
+  int deviceSize = 16 * 1024 * 1024;
+  int ioAlignSize = 4096;
+  int fd = open(filePath.c_str(), O_RDWR | O_CREAT);
+  auto device =
+      createDirectIoFileDevice(fd, deviceSize, ioAlignSize, nullptr, 0);
+
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  {
+    testing::InSequence inSeq;
+    EXPECT_CALL(*policy, track(RegionId{0}));
+    EXPECT_CALL(*policy, track(RegionId{1}));
+  }
+
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto ex = makeJobScheduler();
+  auto config =
+      makeConfig(*ex, std::move(policy), *device, {4096, 8192}, deviceSize);
+  config.numInMemBuffers = 0;
+  auto engine = makeEngine(std::move(config), metadataSize);
+  auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
+                           metadataSize);
+
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  // Allocate 3 regions
+  for (size_t i = 0; i < 3; i++) {
+    for (size_t j = 0; j < 4; j++) {
+      CacheEntry e{bg.gen(8), bg.gen(3200)};
+      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+      log.push_back(std::move(e));
+    }
+  }
+
+  driver->persist();
+
+  int newFd = open(filePath.c_str(), O_RDWR | O_CREAT);
+  auto newDevice =
+      createDirectIoFileDevice(newFd, deviceSize, ioAlignSize, nullptr, 0);
+  auto newPolicy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto newEx = makeJobScheduler();
+  auto newConfig = makeConfig(*newEx, std::move(newPolicy), *newDevice,
+                              {4096, 8192}, deviceSize);
+  newConfig.numInMemBuffers = 4;
+  auto newEngine = makeEngine(std::move(newConfig), metadataSize);
+  auto newDriver = makeDriver(std::move(newEngine), std::move(newEx),
+                              std::move(newDevice), metadataSize);
+  // recovery should fail because we have enabled in memory buffers which would
+  // change the min alloc alignment to 512.
+  EXPECT_FALSE(newDriver->recover());
 }
 
 TEST(BlockCache, HoleStatsRecovery) {

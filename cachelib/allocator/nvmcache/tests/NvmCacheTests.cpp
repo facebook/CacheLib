@@ -1544,6 +1544,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lookup_value_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_succ_lookups"));
   EXPECT_TRUE(cs("navy_bc_removes"));
+  EXPECT_TRUE(cs("navy_bc_num_regions"));
+  EXPECT_TRUE(cs("navy_bc_num_clean_regions"));
   EXPECT_TRUE(cs("navy_bc_succ_removes"));
   EXPECT_TRUE(cs("navy_bc_eviction_lookup_misses"));
   EXPECT_TRUE(cs("navy_bc_alloc_errors"));

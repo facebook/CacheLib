@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/CompilerUtils.h"
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/Index.h"
@@ -32,8 +33,6 @@ class BlockCache final : public Engine {
     DestructorCallback destructorCb;
     // Checksum data read/written
     bool checksum{false};
-    // Device block size, bytes
-    uint32_t blockSize{1024};
     // Base offset and size (in bytes) of cache on the device
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
@@ -57,10 +56,6 @@ class BlockCache final : public Engine {
 
     uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
-    uint32_t getReadBufferSize() const {
-      return readBufferSize ? readBufferSize : blockSize;
-    }
-
     // Checks invariants. Throws exception if failed.
     Config& validate();
   };
@@ -82,9 +77,24 @@ class BlockCache final : public Engine {
 
   void getCounters(const CounterVisitor& visitor) const override;
 
+  uint32_t getAllocAlignSize() const {
+    XDCHECK(folly::isPowTwo(allocAlignSize_));
+    return allocAlignSize_;
+  }
+  // The minimum alloc alignment size can be as small as 1. Since the
+  // test cases have very small device size, they will end up with alloc
+  // alignment size of 1 (if determined as device_size >> 32 ) and we may
+  // not be able to test the "alloc alignment size" feature correctly.
+  // Since the real devices are not going to be that small, this is a
+  // reasonable minimum size. This can be lowered to 256 or 128 in future,
+  // if needed.
+  static constexpr uint32_t kMinAllocAlignSize = 512;
+
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
   static constexpr uint32_t kFormatVersion = 11;
+  // This should be at least the nextTwoPow(sizeof(EntryDesc)).
+  static constexpr uint32_t kDefReadBufferSize = 4096;
 
   // When modify @EntryDesc layout, don't forget to bump @kFormatVersion!
   struct EntryDesc {
@@ -140,21 +150,24 @@ class BlockCache final : public Engine {
   // Tries to recover cache. Throws std::exception on failure.
   void tryRecover(RecordReader& rr);
 
-  // returns the size aligned to device IO alignment size.
-  uint32_t getAlignedSize(uint32_t size) const {
-    return device_.getIOAlignedSize(size);
-  }
+  // The alloc alignment indicates the granularity of read/write. This
+  // granuality is less than the device io alignment size that can be supported
+  // when in memory buffers are used. Without the in memory buffers the
+  // minimum granularity would be the device io alignment size.
+  uint32_t calcAllocAlignSize() const;
 
-  // returns current device alignment size
-  uint32_t getAlignmentSize() const { return device_.getIOAlignmentSize(); }
+  // returns size aligned to alloc alignment size
+  uint32_t getAlignedSize(uint32_t size) const {
+    return powTwoAlign(size, allocAlignSize_);
+  }
 
   uint32_t encodeRelAddress(RelAddress addr) const {
     XDCHECK_NE(addr.offset(), 0u); // See @decodeRelAddress
-    return regionManager_.toAbsolute(addr).offset() / getAlignmentSize();
+    return regionManager_.toAbsolute(addr).offset() / allocAlignSize_;
   }
 
   AbsAddress decodeAbsAddress(uint32_t code) const {
-    return AbsAddress{static_cast<uint64_t>(code) * getAlignmentSize()};
+    return AbsAddress{static_cast<uint64_t>(code) * allocAlignSize_};
   }
 
   RelAddress decodeRelAddress(uint32_t code) const {
@@ -176,11 +189,21 @@ class BlockCache final : public Engine {
                                       uint32_t entrySize,
                                       RelAddress currAddr);
 
+  void validate(Config& config, uint32_t deviceIOAlignSize) const;
+
   const serialization::BlockCacheConfig config_;
   const DestructorCallback destructorCb_;
   const bool checksumData_{};
   // reference to the under-lying device.
   const Device& device_;
+  // Indicates if in memory buffers are enabled or not
+  const bool inMemBuffersEnabled_{false};
+  // alloc alignment size indicates the granularity of entry sizes on device.
+  // When in memory buffers are not enabled, this would
+  // be same as device IO alignment size. When in memory buffers are enabled,
+  // this can be as small as 1 and is determined by the size of the device
+  // and size of the address (which is 32-bits).
+  const uint32_t allocAlignSize_{};
   const uint32_t readBufferSize_{};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
