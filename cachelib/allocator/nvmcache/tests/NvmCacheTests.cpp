@@ -1571,6 +1571,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_physical_written"));
 
   // navy::LruPolicy
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_avg"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_min"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p5"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p10"));
@@ -1585,6 +1586,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p99999"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_p999999"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_max"));
+  EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_avg"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_min"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p5"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p10"));
@@ -1599,6 +1601,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p99999"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_p999999"));
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_access_max"));
+  EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_avg"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_min"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p5"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p10"));
@@ -1643,6 +1646,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_bytes_written"));
   EXPECT_TRUE(cs("navy_device_read_errors"));
   EXPECT_TRUE(cs("navy_device_write_errors"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_avg"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_min"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p5"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p10"));
@@ -1657,6 +1661,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_read_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p999999"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_max"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_avg"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_min"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p5"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p10"));

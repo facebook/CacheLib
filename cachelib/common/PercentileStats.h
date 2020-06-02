@@ -73,6 +73,7 @@ class PercentileStats {
                               folly::StringPiece fmt,
                               folly::StringPiece prefix) {
     auto rst = estimate();
+    visitor(folly::sformat(fmt, prefix, "avg"), rst.avg);
     visitor(folly::sformat(fmt, prefix, "min"), rst.p0);
     visitor(folly::sformat(fmt, prefix, "p5"), rst.p5);
     visitor(folly::sformat(fmt, prefix, "p10"), rst.p10);
