@@ -114,7 +114,7 @@ class BlockCache final : public Engine {
   BlockCache(Config&& config, ValidConfigTag);
 
   // Entry disk size (with aux data and aligned)
-  static uint32_t serializedSize(uint32_t keySize, uint32_t valueSize);
+  uint32_t serializedSize(uint32_t keySize, uint32_t valueSize, bool aligned);
 
   // Read and write are time consuming. It doesn't worth inlining them from
   // the performance point of view, but makes sense to track them for perf:
@@ -140,13 +140,21 @@ class BlockCache final : public Engine {
   // Tries to recover cache. Throws std::exception on failure.
   void tryRecover(RecordReader& rr);
 
+  // returns the size aligned to device IO alignment size.
+  uint32_t getAlignedSize(uint32_t size) const {
+    return device_.getIOAlignedSize(size);
+  }
+
+  // returns current device alignment size
+  uint32_t getAlignmentSize() const { return device_.getIOAlignmentSize(); }
+
   uint32_t encodeRelAddress(RelAddress addr) const {
     XDCHECK_NE(addr.offset(), 0u); // See @decodeRelAddress
-    return regionManager_.toAbsolute(addr).offset() / blockSize_;
+    return regionManager_.toAbsolute(addr).offset() / getAlignmentSize();
   }
 
   AbsAddress decodeAbsAddress(uint32_t code) const {
-    return AbsAddress{code * blockSize_};
+    return AbsAddress{static_cast<uint64_t>(code) * getAlignmentSize()};
   }
 
   RelAddress decodeRelAddress(uint32_t code) const {
@@ -171,9 +179,8 @@ class BlockCache final : public Engine {
   const serialization::BlockCacheConfig config_;
   const DestructorCallback destructorCb_;
   const bool checksumData_{};
-  // Must be 64 bits because we multiply 32 bit block offset by it to get
-  // 64 bit byte offset.
-  const uint64_t blockSize_{};
+  // reference to the under-lying device.
+  const Device& device_;
   const uint32_t readBufferSize_{};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm

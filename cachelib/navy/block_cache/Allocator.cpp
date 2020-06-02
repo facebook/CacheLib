@@ -19,10 +19,8 @@ void RegionAllocator::setAllocationRegion(RegionId rid) {
 
 void RegionAllocator::reset() { rid_ = RegionId{}; }
 
-Allocator::Allocator(RegionManager& regionManager, uint32_t blockSize)
-    : regionManager_{regionManager},
-      blockSize_{blockSize},
-      permItemAllocator_{0 /* classId */} {
+Allocator::Allocator(RegionManager& regionManager)
+    : regionManager_{regionManager}, permItemAllocator_{0 /* classId */} {
   const auto& sizeClasses = regionManager_.getSizeClasses();
   if (sizeClasses.size() > Region::kClassIdMax + 1) {
     throw std::invalid_argument{"too many size classes"};
@@ -38,19 +36,11 @@ Allocator::Allocator(RegionManager& regionManager, uint32_t blockSize)
   }
 }
 
-uint32_t Allocator::alignOnBlock(uint32_t size) const {
-  size = powTwoAlign(size, blockSize_);
-  if (size > regionManager_.regionSize()) {
-    return 0;
-  }
-  return size;
-}
-
 uint32_t Allocator::getSlotSizeAndClass(uint32_t size, uint32_t& sc) const {
   const auto& sizeClasses = regionManager_.getSizeClasses();
   sc = 0;
   if (sizeClasses.empty()) {
-    return alignOnBlock(size);
+    return size;
   } else {
     auto it = std::lower_bound(sizeClasses.begin(), sizeClasses.end(), size);
     if (it == sizeClasses.end()) {
@@ -66,13 +56,12 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
   RegionAllocator* ra = nullptr;
   if (permanent) {
     ra = &permItemAllocator_;
-    size = alignOnBlock(size);
   } else {
     uint32_t sc = 0;
     size = getSlotSizeAndClass(size, sc);
     ra = &allocators_[sc];
   }
-  if (size == 0) {
+  if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
                            RelAddress());
   }

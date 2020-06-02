@@ -7,7 +7,6 @@ namespace navy {
 RegionManager::RegionManager(uint32_t numRegions,
                              uint64_t regionSize,
                              uint64_t baseOffset,
-                             uint32_t blockSize,
                              Device& device,
                              uint32_t numCleanRegions,
                              JobScheduler& scheduler,
@@ -18,7 +17,6 @@ RegionManager::RegionManager(uint32_t numRegions,
     : numRegions_{numRegions},
       regionSize_{regionSize},
       baseOffset_{baseOffset},
-      blockSize_{blockSize},
       device_{device},
       policy_{std::move(policy)},
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
@@ -28,7 +26,6 @@ RegionManager::RegionManager(uint32_t numRegions,
       evictCb_{evictCb},
       sizeClasses_{sizeClasses},
       numInMemBuffers_{numInMemBuffers} {
-  XDCHECK_EQ(regionSize_ % blockSize_, 0u);
   XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
@@ -422,8 +419,7 @@ void RegionManager::detectFree() {
 }
 
 bool RegionManager::isValidIORange(uint32_t offset, uint32_t size) const {
-  return offset % blockSize_ == 0 && size % blockSize_ == 0 &&
-         uint64_t{offset} + size <= regionSize_;
+  return static_cast<uint64_t>(offset) + size <= regionSize_;
 }
 
 bool RegionManager::deviceWrite(RelAddress addr, Buffer buf) {

@@ -29,7 +29,7 @@ TEST(RegionManager, ReclaimLruAsFifo) {
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
+  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
 
@@ -55,7 +55,7 @@ TEST(RegionManager, ReclaimLru) {
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
+  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
 
@@ -83,7 +83,7 @@ TEST(RegionManager, Recovery) {
         [](RegionId, uint32_t, BufferView) { return 0; }};
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
     // Get 3 regions, assign and allocate
@@ -124,7 +124,7 @@ TEST(RegionManager, Recovery) {
         [](RegionId, uint32_t, BufferView) { return 0; }};
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
     auto rr = createMemoryRecordReader(ioq);
@@ -171,7 +171,6 @@ TEST(RegionManager, ReadWrite) {
   auto rm = std::make_unique<RegionManager>(kNumRegions,
                                             kRegionSize,
                                             kBaseOffset,
-                                            1024,
                                             *device,
                                             1,
                                             ex,
@@ -213,7 +212,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
         [](RegionId, uint32_t, BufferView) { return 0; }};
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
     // Get all free regions. Mark 1 and 2 clean (num entries == 0), 0 and 3
@@ -248,7 +247,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
         [](RegionId, uint32_t, BufferView) { return 0; }};
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
     auto rr = createMemoryRecordReader(ioq);

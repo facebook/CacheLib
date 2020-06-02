@@ -32,11 +32,11 @@ TEST(Allocator, RegionSync) {
   std::vector<uint32_t> sizeClasses{1024, 2048};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
+  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
 
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(4, rm->numFree());
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -124,10 +124,9 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1);
-
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(4, rm->numFree());
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -229,10 +228,10 @@ TEST(Allocator, PermanentAlloc) {
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
+  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(0, ex.getQueueSize());
 
   RelAddress addr;
@@ -338,9 +337,9 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1);
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(0, ex.getQueueSize());
 
   RelAddress addr;
@@ -449,10 +448,10 @@ TEST(Allocator, OutOfRegions) {
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
   auto evictCb1 = evictCb;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0, 1024,
+  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(0, ex.getQueueSize());
 
   RelAddress addr;
@@ -551,9 +550,9 @@ TEST(Allocator, OutOfRegionsInMemBuffers) {
   MockJobScheduler ex;
   auto evictCb1 = evictCb;
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1);
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(0, ex.getQueueSize());
 
   RelAddress addr;
@@ -660,9 +659,9 @@ TEST(Allocator, TestInMemBufferStates) {
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, 1024, *device, 1, ex, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1);
-  Allocator allocator{*rm, 1024};
+  Allocator allocator{*rm};
   EXPECT_EQ(4, rm->numFree());
   EXPECT_EQ(0, ex.getQueueSize());
 

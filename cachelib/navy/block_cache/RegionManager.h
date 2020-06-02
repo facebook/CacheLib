@@ -41,7 +41,6 @@ class RegionManager {
   // @param numRegions        number of regions
   // @param regionSize        size of the region
   // @param baseOffset        base offset of the region
-  // @param blockSize         block size
   // @param device            reference to device
   // @param numCleanRegions   How many regions reclamator maintains in
   //                          the clean pool
@@ -53,7 +52,6 @@ class RegionManager {
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
-                uint32_t blockSize,
                 Device& device,
                 uint32_t numCleanRegions,
                 JobScheduler& scheduler,
@@ -86,8 +84,6 @@ class RegionManager {
   uint64_t pinnedCount() const { return pinnedCount_.get(); }
 
   uint64_t regionSize() const { return regionSize_; }
-
-  uint32_t blockSize() const { return blockSize_; }
 
   // Gets a free region if any left
   RegionId getFree();
@@ -196,7 +192,6 @@ class RegionManager {
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};
   const uint64_t baseOffset_{};
-  const uint32_t blockSize_{};
   Device& device_;
   const std::unique_ptr<EvictionPolicy> policy_;
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;

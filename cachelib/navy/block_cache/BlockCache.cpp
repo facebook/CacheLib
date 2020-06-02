@@ -63,16 +63,19 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
     : config_{serializeConfig(config)},
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
-      blockSize_{config.blockSize},
+      device_{*config.device},
       readBufferSize_{config.getReadBufferSize()},
-      regionManager_{
-          config.getNumRegions(), config.regionSize,
-          config.cacheBaseOffset, config.blockSize,
-          *config.device,         config.cleanRegionsPool,
-          *config.scheduler,      bindThis(&BlockCache::onRegionReclaim, *this),
-          config.sizeClasses,     std::move(config.evictionPolicy),
-          config.numInMemBuffers},
-      allocator_{regionManager_, config.blockSize},
+      regionManager_{config.getNumRegions(),
+                     config.regionSize,
+                     config.cacheBaseOffset,
+                     *config.device,
+                     config.cleanRegionsPool,
+                     *config.scheduler,
+                     bindThis(&BlockCache::onRegionReclaim, *this),
+                     config.sizeClasses,
+                     std::move(config.evictionPolicy),
+                     config.numInMemBuffers},
+      allocator_{regionManager_},
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
@@ -80,17 +83,18 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XDCHECK_NE(readBufferSize_, 0u);
 }
 
-uint32_t BlockCache::serializedSize(uint32_t keySize, uint32_t valueSize) {
-  return sizeof(EntryDesc) + keySize + valueSize;
+uint32_t BlockCache::serializedSize(uint32_t keySize,
+                                    uint32_t valueSize,
+                                    bool ioAligned) {
+  uint32_t size = sizeof(EntryDesc) + keySize + valueSize;
+  return ioAligned ? getAlignedSize(size) : size;
 }
 
 Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
-  RelAddress addr;
-  uint32_t slotSize = 0;
-  RegionDescriptor desc{OpenStatus::Retry};
-
-  std::tie(desc, slotSize, addr) = allocator_.allocate(
-      serializedSize(hk.key().size(), value.size()), opt.permanent);
+  // explicitly align if permanent item or not using size classes.
+  bool ioAligned = opt.permanent || config_.sizeClasses.empty();
+  uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
+  auto [desc, slotSize, addr] = allocator_.allocate(size, opt.permanent);
   switch (desc.status()) {
   case OpenStatus::Error:
     allocErrorCount_.inc();
@@ -208,10 +212,10 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
     auto entryEnd = buffer.data() + offset;
     auto desc =
         *reinterpret_cast<const EntryDesc*>(entryEnd - sizeof(EntryDesc));
-    const auto entrySize = slotSize > 0
-                               ? slotSize
-                               : allocator_.alignOnBlock(serializedSize(
-                                     desc.keySize, desc.valueSize));
+    const auto entrySize =
+        slotSize > 0
+            ? slotSize
+            : serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
     HashedKey hk{
         BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
     BufferView value{desc.valueSize, entryEnd - entrySize};
@@ -276,12 +280,11 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return removeItem();
   }
 
-  RelAddress addr;
-  uint32_t slotSize = 0;
-  RegionDescriptor desc{OpenStatus::Retry};
-
-  std::tie(desc, slotSize, addr) = allocator_.allocate(
-      serializedSize(hk.key().size(), value.size()), false /* permanent */);
+  // explicitly align if not using size classes.
+  bool ioAligned = config_.sizeClasses.empty();
+  uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
+  auto [desc, slotSize, addr] =
+      allocator_.allocate(size, false /* permanent */);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;
@@ -322,8 +325,9 @@ Status BlockCache::writeEntry(RelAddress addr,
                               uint32_t slotSize,
                               HashedKey hk,
                               BufferView value) {
-  XDCHECK_EQ(slotSize % blockSize_, 0u);
   XDCHECK_LE(addr.offset() + slotSize, regionManager_.regionSize());
+  XDCHECK_EQ(slotSize % getAlignmentSize(), 0ULL)
+      << folly::sformat("alignSize={}, size={}", getAlignmentSize(), slotSize);
   auto buffer = regionManager_.makeIOBuffer(slotSize);
 
   // Copy descriptor and the key to the end
@@ -358,8 +362,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     size = std::min(readBufferSize_, addr.offset());
   }
 
-  XDCHECK_EQ(size % blockSize_, 0ULL)
-      << folly::sformat("blockSize={}, size={}", blockSize_, size);
+  XDCHECK_EQ(size % getAlignmentSize(), 0ULL)
+      << folly::sformat("alignSize={}, size={}", getAlignmentSize(), size);
 
   auto buffer = regionManager_.makeIOBuffer(size);
   if (!regionManager_.read(readDesc, addr.sub(size), buffer.mutableView())) {
@@ -381,18 +385,18 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
 
   if (permanent || !allocator_.isSizeClassAllocator()) {
     // Update slot size to actual, defined by key and value size
-    size =
-        allocator_.alignOnBlock(serializedSize(desc.keySize, desc.valueSize));
+    size = serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
     if (buffer.size() > size) {
-      // Read more than actual size. Do not re-read, but reallocate the buffer.
-      buffer = Buffer{BufferView{desc.valueSize, entryEnd - size}};
+      // Read more than actual size. Trim the invalid data in the beginning
+      buffer.trimStart(buffer.size() - size);
     } else if (buffer.size() < size) {
       // Read less than actual size. Read again with proper buffer.
       buffer = regionManager_.makeIOBuffer(size);
-      if (!regionManager_.read(
-              readDesc, addr.sub(size), buffer.mutableView())) {
+      if (!regionManager_.read(readDesc, addr.sub(size),
+                               buffer.mutableView())) {
         return Status::DeviceError;
       }
+      XDCHECK(buffer.size() == size);
     }
   }
   value = std::move(buffer);

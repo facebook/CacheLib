@@ -56,18 +56,12 @@ class Allocator {
   //
   // @param regionManager     Used to get eviction information and for
   //                          locking regions
-  // @param blockSize         Device block size, bytes
-  //
   // Throws std::exception if invalid arguments
-  Allocator(RegionManager& regionManager, uint32_t blockSize);
+  explicit Allocator(RegionManager& regionManager);
 
   bool isSizeClassAllocator() const {
     return regionManager_.getSizeClasses().size() > 0;
   }
-
-  // Aligns to block size. Returns 0 if @size more than region. It is slot size
-  // for stack allocation.
-  uint32_t alignOnBlock(uint32_t size) const;
 
   // Allocates and opens for writing.
   //
@@ -113,8 +107,6 @@ class Allocator {
   }
 
   RegionManager& regionManager_;
-
-  const uint32_t blockSize_{};
 
   // Corresponding RegionAllocators (see regionManager_.sizeClasses_)
   std::vector<RegionAllocator> allocators_;
