@@ -215,18 +215,22 @@ TEST(BigHash, DestructorCallback) {
 TEST(BigHash, Reset) {
   BigHash::Config config;
   size_t bucketCount = 2;
-  setLayout(config, 128, bucketCount);
+  constexpr uint32_t alignSize = 128;
+  setLayout(config, alignSize, bucketCount);
 
   auto bf = std::make_unique<BloomFilter>(bucketCount, 2, 4);
   config.bloomFilter = std::move(bf);
 
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.cacheSize, alignSize);
   auto readFirstBucket = [& dev = device->getRealDeviceRef()] {
     // Read only the bucket after the initial generation and checksum fields
     // since the former can change with reset() while the latter can change
     // with every write.
-    Buffer buf{92};
-    dev.read(8, 92, buf.data());
+    Buffer buf{alignSize, alignSize};
+    dev.read(0, alignSize, buf.data());
+    buf.trimStart(8);
+    buf.shrink(92);
     return buf;
   };
   config.device = device.get();
@@ -319,8 +323,10 @@ TEST(BigHash, RemoveNotFound) {
 TEST(BigHash, CorruptBucket) {
   // Write a bucket, then corrupt a byte so we won't be able to read it
   BigHash::Config config;
-  setLayout(config, 128, 2);
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+  constexpr uint32_t alignSize = 128;
+  setLayout(config, alignSize, 2);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.cacheSize, alignSize);
   config.device = device.get();
 
   BigHash bh(std::move(config));
@@ -333,8 +339,10 @@ TEST(BigHash, CorruptBucket) {
 
   // Corrupt data. Use device directly to avoid alignment checks
   uint8_t badBytes[4] = {13, 17, 19, 23};
-  device->getRealDeviceRef().write(
-      10, Buffer{BufferView{sizeof(badBytes), badBytes}});
+
+  Buffer badBuf{alignSize, alignSize};
+  memcpy(badBuf.data(), badBytes, sizeof(badBytes));
+  device->getRealDeviceRef().write(0, std::move(badBuf));
 
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 }

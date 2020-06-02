@@ -41,25 +41,66 @@ class DeviceEncryptor {
 // Pointer ownership is not passed.
 class Device {
  public:
-  Device() : Device{nullptr, 0 /* max device write size */} {}
+  explicit Device(uint64_t size)
+      : Device{size, nullptr, 0 /* max device write size */} {}
 
-  explicit Device(std::shared_ptr<DeviceEncryptor> encryptor,
-                  uint32_t maxWriteSize)
-      : encryptor_{std::move(encryptor)}, maxWriteSize_(maxWriteSize) {}
+  Device(uint64_t size,
+         std::shared_ptr<DeviceEncryptor> encryptor,
+         uint32_t maxWriteSize)
+      : Device(size, encryptor, kDefaultAlignmentSize, maxWriteSize) {}
 
+  // Device constructor
+  //
+  // @param size          total size of the device
+  // @param encryptor     entryption object
+  // @param ioAlignSize   alignment size for IO operations
+  // @param maxWriteSize  max device write size
+  Device(uint64_t size,
+         std::shared_ptr<DeviceEncryptor> encryptor,
+         uint32_t ioAlignSize,
+         uint32_t maxWriteSize)
+      : size_(size),
+        ioAlignmentSize_{ioAlignSize},
+        maxWriteSize_(maxWriteSize),
+        encryptor_{std::move(encryptor)} {
+    if (ioAlignSize == 0) {
+      throw std::invalid_argument(
+          folly::sformat("Invalid ioAlignSize {}", ioAlignSize, size));
+    }
+    if (encryptor_ && encryptor_->encryptionBlockSize() != ioAlignSize) {
+      throw std::invalid_argument(
+          folly::sformat("Invalid ioAlignSize {} encryption block size {}",
+                         ioAlignSize, encryptor_->encryptionBlockSize()));
+    }
+    if (maxWriteSize_ % ioAlignmentSize_ != 0) {
+      throw std::invalid_argument(folly::sformat(
+          "Invalid max write size {} ioAlignSize {}", maxWriteSize_, size));
+    }
+  }
   virtual ~Device() = default;
+
+  size_t getIOAlignedSize(size_t size) const {
+    return powTwoAlign(size, ioAlignmentSize_);
+  }
 
   // Create an IO buffer of at least @size bytes that can be used for read and
   // write. For example, direct IO device allocates a properly aligned buffer.
-  virtual Buffer makeIOBuffer(uint32_t size) = 0;
+  Buffer makeIOBuffer(size_t size) {
+    return Buffer{getIOAlignedSize(size), ioAlignmentSize_};
+  }
 
   // Write buffer to the device. This call takes ownership of the buffer
   // and de-allocates it by end of the call. @buffer must be aligned the same
   // way as `makeIOBuffer` would return.
+  // @offset and @size must be ioAligmentSize_ aligned
+  // @offset + @size must be less than or equal to device size_
   bool write(uint64_t offset, Buffer buffer);
 
   // Reads @size bytes from device at @deviceOffset and copys to @value
   // There must be sufficient space allocated already in the mutableView.
+  // @offset and @size must be ioAligmentSize_ aligned
+  // @offset + @size must be less than or equal to device size_
+  // address in @value must be ioAligmentSize_ aligned
   bool read(uint64_t offset, uint32_t size, void* value);
 
   void flush() { flushImpl(); }
@@ -67,6 +108,12 @@ class Device {
   uint64_t getBytesWritten() const { return bytesWritten_.get(); }
 
   void getCounters(const CounterVisitor& visitor) const;
+
+  // returns the size of the device. All IO operations must be from [0, size)
+  uint64_t getSize() const { return size_; }
+
+  // returns the alignment size for device io operations
+  uint32_t getIOAlignmentSize() const { return ioAlignmentSize_; }
 
  protected:
   virtual bool writeImpl(uint64_t offset, uint32_t size, const void* value) = 0;
@@ -83,27 +130,42 @@ class Device {
   mutable util::PercentileStats readLatencyEstimator_;
   mutable util::PercentileStats writeLatencyEstimator_;
 
+  // size of the device. All offsets for write/read should be contained
+  // below this.
+  const uint64_t size_{0};
+
+  // alignment granularity for the offsets and size to read/write calls.
+  const uint32_t ioAlignmentSize_{kDefaultAlignmentSize};
+
+  // When write-io is issued, it is broken down into writeImpl calls at
+  // this granularity. maxWriteSize_ 0 means no maximum write size.
+  const uint32_t maxWriteSize_{0};
+
   std::shared_ptr<DeviceEncryptor> encryptor_;
-  // maxWriteSize_ 0 means no maximum write size.
-  uint32_t maxWriteSize_{0};
+
+  static constexpr uint32_t kDefaultAlignmentSize{1};
 };
 
-// Takes ownership of the file descriptor
-std::unique_ptr<Device> createFileDevice(
-    int fd, std::shared_ptr<DeviceEncryptor> encryptor);
 std::unique_ptr<Device> createDirectIoFileDevice(
     int fd,
-    uint32_t blockSize,
+    uint64_t size,
+    uint32_t ioAlignSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
 std::unique_ptr<Device> createDirectIoRAID0Device(
-    std::vector<int>& fdvec,
-    uint32_t blockSize,
+    std::vector<int>& fdVec,
+    uint64_t size, // size of each device in the RAID
+    uint32_t ioAlignSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
+// Default ioAlignSize size for Memory Device is 1. In our tests, we create
+// Devices with different ioAlignSize sizes using memory device. So we need
+// a way to set a different ioAlignSize size for memory devices.
 std::unique_ptr<Device> createMemoryDevice(
-    uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor);
+    uint64_t size,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t ioAlignSize = 1);
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

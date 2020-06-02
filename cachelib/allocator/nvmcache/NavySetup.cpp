@@ -155,16 +155,20 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       }
       fdvec.push_back(f.release());
     } // for
-    return cachelib::navy::createDirectIoRAID0Device(
-        fdvec,
-        blockSize,
-        options[kRegionSize].getInt(),
-        std::move(encryptor),
-        maxDeviceWriteSize);
+    auto device =
+        cachelib::navy::createDirectIoRAID0Device(fdvec,
+                                                  options[kFileSize].getInt(),
+                                                  blockSize,
+                                                  options[kRegionSize].getInt(),
+                                                  std::move(encryptor),
+                                                  maxDeviceWriteSize);
+    XDCHECK_EQ(device->getSize(), size);
+    return device;
   }
 
   if (!usesSimpleFile(options)) {
-    return cachelib::navy::createMemoryDevice(size, std::move(encryptor));
+    return cachelib::navy::createMemoryDevice(size, std::move(encryptor),
+                                              blockSize);
   }
 
   // Create a simple file device
@@ -180,7 +184,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     throw;
   }
   return cachelib::navy::createDirectIoFileDevice(
-      f.release(), blockSize, std::move(encryptor), maxDeviceWriteSize);
+      f.release(), size, blockSize, std::move(encryptor), maxDeviceWriteSize);
 }
 
 void setupCacheProtos(const folly::dynamic& options,

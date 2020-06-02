@@ -65,7 +65,8 @@ TEST(Device, Encryptor) {
 }
 
 TEST(Device, Latency) {
-  MockDevice device{0, 1};
+  // Device size must be at least 1 because we try to write 1 byte to it
+  MockDevice device{1, 1};
   EXPECT_CALL(device, readImpl(0, 1, _))
       .WillOnce(testing::InvokeWithoutArgs([] {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
@@ -93,7 +94,8 @@ TEST(Device, Latency) {
 }
 
 TEST(Device, IOError) {
-  MockDevice device{0, 1};
+  // Device size must be at least 1 because we try to write 1 byte to it
+  MockDevice device{1, 1};
   EXPECT_CALL(device, readImpl(0, 1, _))
       .WillOnce(testing::InvokeWithoutArgs([] { return false; }));
   EXPECT_CALL(device, writeImpl(0, 1, _))
@@ -165,7 +167,7 @@ TEST(Device, RAID0IO) {
                                     filePath + "/CACHE2", filePath + "/CACHE3"};
 
   int size = 4 * 1024 * 1024;
-  int blockSize = 4096;
+  int ioAlignSize = 4096;
   int stripeSize = 8192;
 
   std::vector<int> fdvec;
@@ -177,17 +179,20 @@ TEST(Device, RAID0IO) {
   }
 
   auto device = createDirectIoRAID0Device(fdvec,
-                                          blockSize,
+                                          size,
+                                          ioAlignSize,
                                           stripeSize,
                                           nullptr /* encryption */,
                                           0 /* max device write size */);
+
+  EXPECT_EQ(fdvec.size() * size, device->getSize());
 
   // Simple IO
   {
     Buffer wbuf = device->makeIOBuffer(stripeSize);
     Buffer rbuf = device->makeIOBuffer(stripeSize);
     std::memset(wbuf.data(), 'A', stripeSize);
-    auto ret = device->write(0, wbuf.copy());
+    auto ret = device->write(0, wbuf.copy(ioAlignSize));
     EXPECT_EQ(true, ret);
     ret = device->read(0, stripeSize, rbuf.data());
     EXPECT_EQ(true, ret);
@@ -199,9 +204,9 @@ TEST(Device, RAID0IO) {
     Buffer wbuf = device->makeIOBuffer(stripeSize);
     Buffer rbuf = device->makeIOBuffer(stripeSize);
     std::memset(wbuf.data(), 'B', stripeSize);
-    auto ret = device->write(1024, wbuf.copy());
+    auto ret = device->write(ioAlignSize, wbuf.copy(ioAlignSize));
     EXPECT_EQ(true, ret);
-    ret = device->read(1024, stripeSize, rbuf.data());
+    ret = device->read(ioAlignSize, stripeSize, rbuf.data());
     EXPECT_EQ(true, ret);
     auto rc = std::memcmp(wbuf.data(), rbuf.data(), stripeSize);
     EXPECT_EQ(0, rc);
@@ -209,11 +214,11 @@ TEST(Device, RAID0IO) {
   // IO spans several stripes
   {
     auto ioSize = 10 * stripeSize;
-    auto offset = stripeSize * 7 + 2048;
+    auto offset = stripeSize * 7 + ioAlignSize;
     Buffer wbuf = device->makeIOBuffer(ioSize);
     Buffer rbuf = device->makeIOBuffer(ioSize);
     std::memset(wbuf.data(), 'C', stripeSize);
-    auto ret = device->write(offset, wbuf.copy());
+    auto ret = device->write(offset, wbuf.copy(ioAlignSize));
     EXPECT_EQ(true, ret);
     ret = device->read(offset, ioSize, rbuf.data());
     EXPECT_EQ(true, ret);
@@ -223,11 +228,11 @@ TEST(Device, RAID0IO) {
   // IO size < stripeSize
   {
     auto ioSize = stripeSize / 2;
-    auto offset = stripeSize * 22 + 512;
+    auto offset = stripeSize * 22 + ioAlignSize;
     Buffer wbuf = device->makeIOBuffer(ioSize);
     Buffer rbuf = device->makeIOBuffer(ioSize);
     std::memset(wbuf.data(), 'D', ioSize);
-    auto ret = device->write(offset, wbuf.copy());
+    auto ret = device->write(offset, wbuf.copy(ioAlignSize));
     EXPECT_EQ(true, ret);
     ret = device->read(offset, ioSize, rbuf.data());
     EXPECT_EQ(true, ret);

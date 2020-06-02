@@ -14,15 +14,9 @@ class MockDevice : public Device {
  public:
   // If @deviceSize is 0, constructor doesn't create a memory device.
   // User should set it manually.
-  MockDevice(uint32_t deviceSize,
-             uint32_t blockSize,
+  MockDevice(uint64_t deviceSize,
+             uint32_t ioAlignSize,
              std::shared_ptr<DeviceEncryptor> encryptor = nullptr);
-
-  Buffer makeIOBuffer(uint32_t size) override {
-    // Implementation expected to request blocks multiple of block size
-    XDCHECK_EQ(size % blockSize_, 0u);
-    return Buffer{size, blockSize_};
-  }
 
   MOCK_METHOD3(readImpl, bool(uint64_t, uint32_t, void*));
   MOCK_METHOD3(writeImpl, bool(uint64_t, uint32_t, const void*));
@@ -37,7 +31,6 @@ class MockDevice : public Device {
   std::unique_ptr<Device> releaseRealDevice() { return std::move(device_); }
 
  private:
-  const uint32_t blockSize_{};
   std::unique_ptr<Device> device_;
 };
 } // namespace navy

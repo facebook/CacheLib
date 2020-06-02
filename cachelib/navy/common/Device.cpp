@@ -1,4 +1,5 @@
 #include <cstring>
+#include <numeric>
 
 #include <folly/Format.h>
 
@@ -15,33 +16,19 @@ using IOOperation =
 // Device on Unix file descriptor
 class FileDevice final : public Device {
  public:
-  FileDevice(int fd, std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor), 0 /* max device write size */}, fd_{fd} {}
-  // Overload for a raw device
   FileDevice(int fd,
-             uint32_t blockSize,
+             uint64_t size,
+             uint32_t ioAlignSize,
              std::shared_ptr<DeviceEncryptor> encryptor,
              uint32_t maxDeviceWriteSize)
-      : Device{std::move(encryptor), maxDeviceWriteSize},
-        fd_{fd},
-        raw_{true},
-        blockSize_{blockSize} {
-    XDCHECK_GT(blockSize_, 0u);
-  }
+      : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
+        fd_{fd} {}
   FileDevice(const FileDevice&) = delete;
   FileDevice& operator=(const FileDevice&) = delete;
 
   ~FileDevice() override {
     if (fd_ >= 0) {
       ::close(fd_);
-    }
-  }
-
-  Buffer makeIOBuffer(uint32_t size) override {
-    if (raw_) {
-      return Buffer{powTwoAlign(size, blockSize_), blockSize_};
-    } else {
-      return Buffer{size};
     }
   }
 
@@ -75,26 +62,23 @@ class FileDevice final : public Device {
   }
 
   const int fd_{-1};
-  const bool raw_{false};
-  const uint32_t blockSize_{};
 };
 
 // RAID0 device spanning multiple files
 class RAID0Device final : public Device {
  public:
   RAID0Device(std::vector<int>& fdvec,
-              uint32_t blockSize,
+              uint64_t size,
+              uint32_t ioAlignSize,
               uint32_t stripeSize,
               std::shared_ptr<DeviceEncryptor> encryptor,
               uint32_t maxDeviceWriteSize)
-      : Device{std::move(encryptor), maxDeviceWriteSize},
+      : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
         fdvec_{fdvec},
-        raw_{true},
-        blockSize_{blockSize},
         stripeSize_(stripeSize) {
-    XDCHECK_GT(blockSize_, 0u);
+    XDCHECK_GT(ioAlignSize, 0u);
     XDCHECK_GT(stripeSize_, 0u);
-    XDCHECK_GE(stripeSize_, blockSize_);
+    XDCHECK_GE(stripeSize_, ioAlignSize);
   }
   RAID0Device(const RAID0Device&) = delete;
   RAID0Device& operator=(const RAID0Device&) = delete;
@@ -102,14 +86,6 @@ class RAID0Device final : public Device {
   ~RAID0Device() override {
     for (const auto fd : fdvec_) {
       ::close(fd);
-    }
-  }
-
-  Buffer makeIOBuffer(uint32_t size) override {
-    if (raw_) {
-      return Buffer{powTwoAlign(size, blockSize_), blockSize_};
-    } else {
-      return Buffer{size};
     }
   }
 
@@ -182,8 +158,6 @@ class RAID0Device final : public Device {
   }
 
   const std::vector<int> fdvec_{};
-  const bool raw_{false};
-  const uint32_t blockSize_{};
   const uint32_t stripeSize_{};
 };
 
@@ -191,28 +165,26 @@ class RAID0Device final : public Device {
 class MemoryDevice final : public Device {
  public:
   explicit MemoryDevice(uint64_t size,
-                        std::shared_ptr<DeviceEncryptor> encryptor)
-      : Device{std::move(encryptor), 0 /* max device write size */},
-        size_{size},
+                        std::shared_ptr<DeviceEncryptor> encryptor,
+                        uint32_t ioAlignSize)
+      : Device{size, std::move(encryptor), ioAlignSize,
+               0 /* max device write size */},
         buffer_{std::make_unique<uint8_t[]>(size)} {}
   MemoryDevice(const MemoryDevice&) = delete;
   MemoryDevice& operator=(const MemoryDevice&) = delete;
   ~MemoryDevice() override = default;
 
-  Buffer makeIOBuffer(uint32_t size) override { return Buffer{size}; }
-
  private:
   bool writeImpl(uint64_t offset,
                  uint32_t size,
                  const void* value) noexcept override {
-    XDCHECK_LE(offset + size, size_);
+    XDCHECK_LE(offset + size, getSize());
     std::memcpy(buffer_.get() + offset, value, size);
     return true;
   }
 
   bool readImpl(uint64_t offset, uint32_t size, void* value) override {
-    XDCHECK_LE(offset + size, size_);
-    (void)size_;
+    XDCHECK_LE(offset + size, getSize());
     std::memcpy(value, buffer_.get() + offset, size);
     return true;
   }
@@ -221,15 +193,17 @@ class MemoryDevice final : public Device {
     // Noop
   }
 
-  const uint64_t size_{};
   std::unique_ptr<uint8_t[]> buffer_;
 };
 } // namespace
 
 bool Device::write(uint64_t offset, Buffer buffer) {
   const auto size = buffer.size();
+  XDCHECK_LE(offset + buffer.size(), size_);
   void* data = buffer.data();
+  XDCHECK_EQ(reinterpret_cast<uint64_t>(data) % ioAlignmentSize_, 0ul);
   if (encryptor_) {
+    XCHECK_EQ(offset % encryptor_->encryptionBlockSize(), 0ul);
     auto res = encryptor_->encrypt(
         folly::MutableByteRange{reinterpret_cast<uint8_t*>(data), size},
         offset);
@@ -245,6 +219,8 @@ bool Device::write(uint64_t offset, Buffer buffer) {
   bool result = true;
   while (remainingSize > 0) {
     auto writeSize = std::min<size_t>(maxWriteSize, remainingSize);
+    XDCHECK_EQ(offset % ioAlignmentSize_, 0ul);
+    XDCHECK_EQ(writeSize % ioAlignmentSize_, 0ul);
     result = writeImpl(offset, writeSize, data);
     if (!result) {
       break;
@@ -262,6 +238,10 @@ bool Device::write(uint64_t offset, Buffer buffer) {
 }
 
 bool Device::read(uint64_t offset, uint32_t size, void* value) {
+  XDCHECK_EQ(reinterpret_cast<uint64_t>(value) % ioAlignmentSize_, 0ul);
+  XDCHECK_EQ(offset % ioAlignmentSize_, 0ul);
+  XDCHECK_EQ(size % ioAlignmentSize_, 0ul);
+  XDCHECK_LE(offset + size, size_);
   auto timeBegin = getSteadyClock();
   bool result = readImpl(offset, size, value);
   readLatencyEstimator_.trackValue(
@@ -272,6 +252,7 @@ bool Device::read(uint64_t offset, uint32_t size, void* value) {
   }
 
   if (encryptor_) {
+    XCHECK_EQ(offset % encryptor_->encryptionBlockSize(), 0ul);
     auto res = encryptor_->decrypt(
         folly::MutableByteRange{reinterpret_cast<uint8_t*>(value), size},
         offset);
@@ -296,35 +277,41 @@ void Device::getCounters(const CounterVisitor& visitor) const {
 }
 
 std::unique_ptr<Device> createFileDevice(
-    int fd, std::shared_ptr<DeviceEncryptor> encryptor) {
-  return std::make_unique<FileDevice>(fd, 0, std::move(encryptor),
+    int fd, uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor) {
+  return std::make_unique<FileDevice>(fd, size, 0, std::move(encryptor),
                                       0 /* max device write size */);
 }
 
 std::unique_ptr<Device> createDirectIoFileDevice(
     int fd,
-    uint32_t blockSize,
+    uint64_t size,
+    uint32_t ioAlignSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize) {
-  XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<FileDevice>(fd, blockSize, std::move(encryptor),
-                                      maxDeviceWriteSize);
+  XDCHECK(folly::isPowTwo(ioAlignSize));
+  return std::make_unique<FileDevice>(fd, size, ioAlignSize,
+                                      std::move(encryptor), maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createDirectIoRAID0Device(
     std::vector<int>& fdvec,
-    uint32_t blockSize,
+    uint64_t size, // size of each device in the RAID
+    uint32_t ioAlignSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize) {
-  XDCHECK(folly::isPowTwo(blockSize));
-  return std::make_unique<RAID0Device>(
-      fdvec, blockSize, stripeSize, std::move(encryptor), maxDeviceWriteSize);
+  XDCHECK(folly::isPowTwo(ioAlignSize));
+  return std::make_unique<RAID0Device>(fdvec, fdvec.size() * size, ioAlignSize,
+                                       stripeSize, std::move(encryptor),
+                                       maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createMemoryDevice(
-    uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor) {
-  return std::make_unique<MemoryDevice>(size, std::move(encryptor));
+    uint64_t size,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t ioAlignSize) {
+  return std::make_unique<MemoryDevice>(size, std::move(encryptor),
+                                        ioAlignSize);
 }
 } // namespace navy
 } // namespace cachelib
