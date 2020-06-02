@@ -85,7 +85,7 @@ class Device {
 
   // Create an IO buffer of at least @size bytes that can be used for read and
   // write. For example, direct IO device allocates a properly aligned buffer.
-  Buffer makeIOBuffer(size_t size) {
+  Buffer makeIOBuffer(size_t size) const {
     return Buffer{getIOAlignedSize(size), ioAlignmentSize_};
   }
 
@@ -102,6 +102,13 @@ class Device {
   // @offset + @size must be less than or equal to device size_
   // address in @value must be ioAligmentSize_ aligned
   bool read(uint64_t offset, uint32_t size, void* value);
+
+  // Reads @size bytes from device at @deviceOffset into a Buffer allocated
+  // If the offset is not aligned or size is not aligned for device IO
+  // alignment, they both are aligned to do the read operation successfully
+  // from the device and then Buffer is adjusted to return only the size
+  // bytes from offset.
+  Buffer read(uint64_t offset, uint32_t size);
 
   void flush() { flushImpl(); }
 
@@ -129,6 +136,8 @@ class Device {
 
   mutable util::PercentileStats readLatencyEstimator_;
   mutable util::PercentileStats writeLatencyEstimator_;
+
+  bool readInternal(uint64_t offset, uint32_t size, void* value);
 
   // size of the device. All offsets for write/read should be contained
   // below this.

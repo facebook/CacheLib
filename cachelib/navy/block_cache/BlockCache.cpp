@@ -328,7 +328,7 @@ Status BlockCache::writeEntry(RelAddress addr,
   XDCHECK_LE(addr.offset() + slotSize, regionManager_.regionSize());
   XDCHECK_EQ(slotSize % getAlignmentSize(), 0ULL)
       << folly::sformat("alignSize={}, size={}", getAlignmentSize(), slotSize);
-  auto buffer = regionManager_.makeIOBuffer(slotSize);
+  auto buffer = device_.makeIOBuffer(slotSize);
 
   // Copy descriptor and the key to the end
   size_t descOffset = buffer.size() - sizeof(EntryDesc);
@@ -365,8 +365,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   XDCHECK_EQ(size % getAlignmentSize(), 0ULL)
       << folly::sformat("alignSize={}, size={}", getAlignmentSize(), size);
 
-  auto buffer = regionManager_.makeIOBuffer(size);
-  if (!regionManager_.read(readDesc, addr.sub(size), buffer.mutableView())) {
+  auto buffer = regionManager_.read(readDesc, addr.sub(size), size);
+  if (buffer.isNull()) {
     return Status::DeviceError;
   }
 
@@ -391,12 +391,10 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
       buffer.trimStart(buffer.size() - size);
     } else if (buffer.size() < size) {
       // Read less than actual size. Read again with proper buffer.
-      buffer = regionManager_.makeIOBuffer(size);
-      if (!regionManager_.read(readDesc, addr.sub(size),
-                               buffer.mutableView())) {
+      buffer = regionManager_.read(readDesc, addr.sub(size), size);
+      if (buffer.isNull()) {
         return Status::DeviceError;
       }
-      XDCHECK(buffer.size() == size);
     }
   }
   value = std::move(buffer);

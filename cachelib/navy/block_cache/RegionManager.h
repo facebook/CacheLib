@@ -114,10 +114,6 @@ class RegionManager {
                       uint32_t(aa.offset() % regionSize_)};
   }
 
-  Buffer makeIOBuffer(uint32_t size) const {
-    return device_.makeIOBuffer(size);
-  }
-
   // Assign a buffer from buffer pool
   std::unique_ptr<Buffer> claimBufferFromPool();
 
@@ -135,11 +131,13 @@ class RegionManager {
   // @buf may be mutated and will be de-allocated at the end of this
   bool write(RelAddress addr, Buffer buf);
 
-  // reads into buffer from the @addr
+  // returns a buffer with data read from the device the @addr of size bytes
   // @addr must be the address returned by Region::open(OpenMode::Read)
-  bool read(const RegionDescriptor& desc,
-            RelAddress addr,
-            MutableBufferView buf) const;
+  //
+  // On success the returned buffer will have same size as "size" argument.
+  // Caller must check the size of the buffer returned to determine if this
+  // succeeded or not.
+  Buffer read(const RegionDescriptor& desc, RelAddress addr, size_t size) const;
 
   // flushes all in memory buffers to the device and then issues device flush
   void flush();

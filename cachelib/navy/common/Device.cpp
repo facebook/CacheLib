@@ -237,7 +237,13 @@ bool Device::write(uint64_t offset, Buffer buffer) {
   return result;
 }
 
-bool Device::read(uint64_t offset, uint32_t size, void* value) {
+// reads size number of bytes from the device from the offset into value.
+// Both offset and size are expected to be aligned for device IO operations.
+// If successful and encryptor_ is defined, size bytes from
+// validDataOffsetInValue offset in value are decrypted.
+//
+// returns true if successful, false otherwise.
+bool Device::readInternal(uint64_t offset, uint32_t size, void* value) {
   XDCHECK_EQ(reinterpret_cast<uint64_t>(value) % ioAlignmentSize_, 0ul);
   XDCHECK_EQ(offset % ioAlignmentSize_, 0ul);
   XDCHECK_EQ(size % ioAlignmentSize_, 0ul);
@@ -262,6 +268,37 @@ bool Device::read(uint64_t offset, uint32_t size, void* value) {
     }
   }
   return true;
+}
+
+// This API reads size bytes from the Device from offset in to a Buffer and
+// returns the Buffer. If offset and size are not aligned to device's
+// ioAlignmentSize_, IO aligned offset and IO aligned size are determined
+// and passed to device read. Upon successful read from the device, the
+// buffer is adjusted to return the intended data by trimming the data in
+// the front and back.
+// An empty buffer is returned in case of error and the caller must check
+// the buffer size returned with size passed in to check for errors.
+Buffer Device::read(uint64_t offset, uint32_t size) {
+  XDCHECK_LE(offset + size, size_);
+  uint64_t readOffset =
+      offset & ~(static_cast<uint64_t>(ioAlignmentSize_) - 1ul);
+  uint64_t readPrefixSize =
+      offset & (static_cast<uint64_t>(ioAlignmentSize_) - 1ul);
+  auto readSize = getIOAlignedSize(readPrefixSize + size);
+  auto buffer = makeIOBuffer(readSize);
+  bool result = readInternal(readOffset, readSize, buffer.data());
+  if (!result) {
+    return Buffer{};
+  }
+  buffer.trimStart(readPrefixSize);
+  buffer.shrink(size);
+  return buffer;
+}
+
+// This API reads size bytes from the Device from the offset offset into
+// value. Both offset and size are expected to be IO aligned.
+bool Device::read(uint64_t offset, uint32_t size, void* value) {
+  return readInternal(offset, size, value);
 }
 
 void Device::getCounters(const CounterVisitor& visitor) const {

@@ -235,12 +235,11 @@ JobExitCode RegionManager::startReclaim() {
         // Hence, it's safe to access @Region without lock.
         if (region.getNumItems() != 0) {
           XDCHECK(!region.hasBuffer());
-          auto buffer = makeIOBuffer(regionSize());
           auto desc = RegionDescriptor::makeReadDescriptor(
               OpenStatus::Ready, RegionId{rid}, true /* physRead */);
-          if (!read(desc, RelAddress{rid, 0}, buffer.mutableView())) {
+          auto buffer = read(desc, RelAddress{rid, 0}, regionSize());
+          if (buffer.size() != regionSize()) {
             XLOGF(ERR, "Failed to read region {} during reclaim", rid.index());
-            buffer = Buffer{};
           }
           doEviction(rid, buffer.view());
         }
@@ -443,20 +442,20 @@ bool RegionManager::write(RelAddress addr, Buffer buf) {
   return deviceWrite(addr, std::move(buf));
 }
 
-bool RegionManager::read(const RegionDescriptor& desc,
-                         RelAddress addr,
-                         MutableBufferView buf) const {
+Buffer RegionManager::read(const RegionDescriptor& desc,
+                           RelAddress addr,
+                           size_t size) const {
   if (doesBufferingWrites() && !desc.isPhysReadMode()) {
+    auto buffer = Buffer(size);
     auto rid = addr.rid();
     auto& region = getRegion(rid);
     XDCHECK(region.hasBuffer());
-    region.readFromBuffer(addr.offset(), buf);
-    return true;
+    region.readFromBuffer(addr.offset(), buffer.mutableView());
+    return buffer;
   }
-  XDCHECK(isValidIORange(addr.offset(), buf.size()));
-  auto physOffset = physicalOffset(addr);
-  auto r = device_.read(physOffset, buf.size(), buf.data());
-  return r;
+  XDCHECK(isValidIORange(addr.offset(), size));
+
+  return device_.read(physicalOffset(addr), size);
 }
 
 void RegionManager::flush() { device_.flush(); }

@@ -187,8 +187,8 @@ TEST(RegionManager, ReadWrite) {
       RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, RegionId{1});
   auto buf = bg.gen(kSize);
   EXPECT_TRUE(rm->write(addr, buf.copy()));
-  Buffer bufRead{kSize};
-  EXPECT_TRUE(rm->read(desc, addr, bufRead.mutableView()));
+  auto bufRead = rm->read(desc, addr, kSize);
+  EXPECT_TRUE(bufRead.size() == kSize);
   EXPECT_EQ(buf.view(), bufRead.view());
 
   // Check device directly at the offset we expect data to be written
