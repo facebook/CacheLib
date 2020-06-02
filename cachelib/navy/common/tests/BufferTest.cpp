@@ -38,6 +38,26 @@ TEST(Buffer, Test) {
   EXPECT_EQ(makeView("123"), b1Copy.view());
 }
 
+TEST(Buffer, TestWithTrim) {
+  auto b1 = Buffer{makeView("123hello world")};
+  b1.trimStart(3);
+  auto v1 = b1.view().slice(3, 5);
+  EXPECT_EQ(makeView("lo wo"), v1);
+  auto b2 = Buffer{v1};
+  EXPECT_EQ(makeView("lo wo"), b2.view());
+  b1 = Buffer{makeView("12345")};
+  EXPECT_EQ(makeView("12345"), b1.view());
+  auto b3 = std::move(b1);
+  EXPECT_TRUE(b1.isNull());
+  EXPECT_EQ(makeView("12345"), b3.view());
+  b3.shrink(3);
+  b1 = std::move(b3);
+  EXPECT_EQ(makeView("123"), b1.view());
+  auto b1Copy = b1.copy();
+  EXPECT_EQ(makeView("123"), b1.view());
+  EXPECT_EQ(makeView("123"), b1Copy.view());
+}
+
 TEST(Buffer, ToStringText) {
   auto v = makeView("abc 10");
   auto s = toString(v);
@@ -99,6 +119,13 @@ TEST(Buffer, CopyFrom) {
   EXPECT_EQ(makeView("1abc5"), buf.view());
 }
 
+TEST(Buffer, CopyFromWithTrim) {
+  Buffer buf{makeView("000012345")};
+  buf.trimStart(4);
+  buf.copyFrom(1, makeView("abc"));
+  EXPECT_EQ(makeView("1abc5"), buf.view());
+}
+
 TEST(Buffer, MutableView) {
   Buffer buf{makeView("12345")};
 
@@ -107,6 +134,18 @@ TEST(Buffer, MutableView) {
 
   for (size_t i = 0; i < buf.size(); i++) {
     EXPECT_EQ('b', buf.data()[i]) << i;
+  }
+}
+
+TEST(Buffer, MutableViewWithTrim) {
+  Buffer buf{makeView("aa12345")};
+
+  buf.trimStart(2);
+  auto mutableView = buf.mutableView();
+  std::fill(mutableView.data(), mutableView.dataEnd(), 'c');
+
+  for (size_t i = 0; i < buf.size(); i++) {
+    EXPECT_EQ('c', buf.data()[i]) << i;
   }
 }
 

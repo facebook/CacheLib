@@ -82,11 +82,11 @@ class Buffer {
   Buffer() = default;
 
   explicit Buffer(BufferView view) : Buffer{view.size()} {
-    view.copyTo(data_.get());
+    view.copyTo(data());
   }
 
   Buffer(BufferView view, size_t alignment) : Buffer{view.size(), alignment} {
-    view.copyTo(data_.get());
+    view.copyTo(data());
   }
 
   explicit Buffer(size_t size) : size_{size}, data_{allocate(size)} {}
@@ -102,44 +102,43 @@ class Buffer {
   Buffer(Buffer&&) noexcept = default;
   Buffer& operator=(Buffer&&) noexcept = default;
 
-  BufferView view() const { return BufferView{size_, data_.get()}; }
+  BufferView view() const { return BufferView{size_, data()}; }
 
-  MutableBufferView mutableView() {
-    return MutableBufferView{size_, data_.get()};
-  }
+  MutableBufferView mutableView() { return MutableBufferView{size_, data()}; }
 
   bool isNull() const { return data_ == nullptr; }
 
-  const uint8_t* data() const { return data_.get(); }
+  const uint8_t* data() const { return data_.get() + dataStartOffset_; }
 
-  uint8_t* data() { return data_.get(); }
+  uint8_t* data() { return data_.get() + dataStartOffset_; }
 
   size_t size() const { return size_; }
 
-  Buffer copy() const {
-    Buffer buf{size_};
-    if (data_) {
-      XDCHECK_NE(buf.data_, nullptr);
-      std::memcpy(buf.data_.get(), data_.get(), size_);
-    }
-    return buf;
+  // copy copies size_ number of bytes from dataOffsetStart_ to a new buffer
+  // and returns the new buffer
+  Buffer copy(size_t alignment = 0) const {
+    return (alignment == 0) ? copyInternal(Buffer{size_})
+                            : copyInternal(Buffer{size_, alignment});
   }
 
-  Buffer copy(size_t alignment) const {
-    Buffer buf{size_, alignment};
-    if (data_) {
-      XDCHECK_NE(buf.data_, nullptr);
-      std::memcpy(buf.data_.get(), data_.get(), size_);
-    }
-    return buf;
-  }
-
-  void copyFrom(size_t offset, BufferView data) {
-    XDCHECK_LE(offset + data.size(), size_);
+  void copyFrom(size_t offset, BufferView view) {
+    XDCHECK_LE(offset + view.size(), size_);
     XDCHECK_NE(data_, nullptr);
-    if (data.data() != nullptr) {
-      std::memcpy(data_.get() + offset, data.data(), data.size());
+    if (view.data() != nullptr) {
+      std::memcpy(data() + offset, view.data(), view.size());
     }
+  }
+
+  // Adjust the data start offset forwards to include less valid data
+  // This moves the data pointer forwards so that the first amount bytes are no
+  // longer considered valid data.  The caller is responsible for ensuring that
+  // amount is less than or equal to the actual data length.
+  //
+  // This does not modify any actual data in the buffer.
+  void trimStart(size_t amount) {
+    XDCHECK_LE(amount, size_);
+    dataStartOffset_ += amount;
+    size_ -= amount;
   }
 
   // Shrink buffer logical size (doesn't reallocate)
@@ -160,6 +159,14 @@ class Buffer {
   }
 
  private:
+  Buffer copyInternal(Buffer buf) const {
+    if (data_) {
+      XDCHECK_NE(buf.data_, nullptr);
+      std::memcpy(buf.data(), data(), size_);
+    }
+    return buf;
+  }
+
   static uint8_t* allocate(size_t size) {
     auto ptr = reinterpret_cast<uint8_t*>(std::malloc(size));
     if (!ptr) {
@@ -178,7 +185,16 @@ class Buffer {
     return ptr;
   }
 
+  // size_ represents the size of valid data in the data_, i.e., "size_" number
+  // of bytes from startOffset in data_ are considered valid in the Buffer
   size_t size_{};
+
+  // dataStartOffset_ is the offset in data_ where the actual(user-interested)
+  // data starts. This helps in skipping past unnecessary data in the buffer
+  // without havingto copy it. There could be unnecessary data in the buffer
+  // due to read/write from/to a block-aligned address when the actual data
+  // starts somewhere in the middle(ie not at the block aligned address).
+  size_t dataStartOffset_{0};
   std::unique_ptr<uint8_t[], BufferDeleter> data_{};
 };
 
