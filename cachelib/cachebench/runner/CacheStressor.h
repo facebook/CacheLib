@@ -8,7 +8,6 @@
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
-#include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Parallel.h"
@@ -117,6 +116,11 @@ class CacheStressor : public Stressor {
     if (stressWorker_.joinable()) {
       stressWorker_.join();
     }
+  }
+
+  void abort() override {
+    wg_->markShutdown();
+    Stressor::abort();
   }
 
   std::chrono::time_point<std::chrono::system_clock> startTime()
@@ -349,8 +353,6 @@ class CacheStressor : public Stressor {
         break;
       }
     }
-
-    wg_->markShutdown();
   }
 
   OpResultType setKey(PoolId pid,

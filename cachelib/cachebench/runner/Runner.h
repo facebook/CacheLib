@@ -16,10 +16,14 @@ class Runner {
                   uint64_t progressInterval);
   bool run();
 
+  void abort() { stressor_->abort(); }
+
  private:
   CacheBenchConfig config_;
   const std::string& progressStatsFile_;
   const uint64_t progressInterval_;
+
+  std::unique_ptr<Stressor> stressor_;
 };
 } // namespace cachebench
 } // namespace cachelib

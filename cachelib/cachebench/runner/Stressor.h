@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <memory>
+
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Config.h"
 
@@ -43,6 +46,20 @@ class Stressor {
 
   virtual void start() = 0;
   virtual void finish() = 0;
+  virtual void abort() { stopTest(); }
+
+ protected:
+  // check whether the load test should stop. e.g. user interrupt the
+  // cachebench.
+  bool shouldTestStop() { return stopped_.load(std::memory_order_acquire); }
+
+  // Called when stop request from user is captured. instead of stop the load
+  // test immediately, the method sets the state "stopped_" to true. Actual
+  // stop logic is in somewhere else.
+  void stopTest() { stopped_.store(true, std::memory_order_release); }
+
+ private:
+  std::atomic<bool> stopped_{false};
 };
 } // namespace cachebench
 } // namespace cachelib

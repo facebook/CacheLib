@@ -4,8 +4,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include "cachelib/cachebench/runner/TestStopper.h"
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {

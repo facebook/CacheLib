@@ -12,7 +12,6 @@
 #endif
 
 #include "cachelib/cachebench/runner/Runner.h"
-#include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/common/Utils.h"
 
 DEFINE_string(json_test_config,
@@ -37,27 +36,21 @@ DEFINE_int32(fb303_port,
              "If valid, this will disable ODSL export.");
 #endif
 
+std::unique_ptr<facebook::cachelib::cachebench::Runner> gRunner;
+
 void sigint_handler(int sig_num) {
   switch (sig_num) {
   case SIGINT:
   case SIGTERM:
-    facebook::cachelib::cachebench::stopTest();
+    if (gRunner) {
+      gRunner->abort();
+    }
     break;
   }
 }
 
 int main(int argc, char** argv) {
   using namespace facebook::cachelib::cachebench;
-
-  // Handle signals properly
-  struct sigaction act;
-  memset(&act, 0, sizeof(struct sigaction));
-  act.sa_handler = &sigint_handler;
-  act.sa_flags = SA_RESETHAND;
-  if (sigaction(SIGINT, &act, nullptr) == -1) {
-    std::cout << "Failed to register a SIGINT handler" << std::endl;
-    return 1;
-  }
 
 #ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
@@ -72,15 +65,26 @@ int main(int argc, char** argv) {
   folly::init(&argc, &argv, true);
 #endif
 
+  gRunner = std::make_unique<Runner>(
+      FLAGS_json_test_config, FLAGS_progress_stats_file, FLAGS_progress);
+
+  // Handle signals properly
+  struct sigaction act;
+  memset(&act, 0, sizeof(struct sigaction));
+  act.sa_handler = &sigint_handler;
+  act.sa_flags = SA_RESETHAND;
+  if (sigaction(SIGINT, &act, nullptr) == -1) {
+    std::cout << "Failed to register a SIGINT handler" << std::endl;
+    return 1;
+  }
+
   // make sure the test end before timeout
   folly::EventBase eb;
   if (FLAGS_timeout_seconds > 0) {
-    eb.runAfterDelay([]() { stopTest(); }, FLAGS_timeout_seconds * 1000);
+    eb.runAfterDelay([]() { gRunner->abort(); }, FLAGS_timeout_seconds * 1000);
   }
 
-  Runner runner{FLAGS_json_test_config, FLAGS_progress_stats_file,
-                FLAGS_progress};
-  if (!runner.run()) {
+  if (!gRunner->run()) {
     return 1;
   }
   return 0;

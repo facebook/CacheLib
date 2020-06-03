@@ -8,7 +8,6 @@
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
-#include "cachelib/cachebench/runner/TestStopper.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"
 
