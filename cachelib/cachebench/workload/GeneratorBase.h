@@ -2,6 +2,8 @@
 
 #include <atomic>
 
+#include "cachelib/cachebench/util/Request.h"
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {

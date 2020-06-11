@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <folly/dynamic.h>
@@ -39,6 +40,14 @@ struct JSONConfig {
   }
 
   template <typename ValType>
+  static void setMapValImpl(
+      std::unordered_map<uint32_t, std::vector<ValType>>& field,
+      const folly::dynamic& key,
+      std::vector<ValType>&& vals) {
+    field[key.asInt()] = vals;
+  }
+
+  template <typename ValType>
   static void setValImpl(std::vector<ValType>& field,
                          const folly::dynamic& val) {
     if (val.isArray()) {
@@ -47,6 +56,22 @@ struct JSONConfig {
         ValType tmp;
         setValImpl(tmp, v);
         field.push_back(tmp);
+      }
+    }
+  }
+
+  template <typename KeyType, typename ValType>
+  static void setValImpl(
+      std::unordered_map<KeyType, std::vector<ValType>>& field,
+      const folly::dynamic& val) {
+    if (val.isObject()) {
+      field.clear();
+      for (const auto& pair : val.items()) {
+        if (pair.second.isArray()) {
+          std::vector<ValType> tmp;
+          setValImpl(tmp, pair.second);
+          setMapValImpl(field, pair.first, std::move(tmp));
+        }
       }
     }
   }

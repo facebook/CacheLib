@@ -1,15 +1,147 @@
 #include "folly/String.h"
 
 #include "cachelib/cachebench/util/Exceptions.h"
+#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 
 namespace {
-constexpr uint32_t kTraceNumFields = 10;
 constexpr uint32_t kProducerConsumerWaitTimeUs = 5;
 } // namespace
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+void PieceWiseReplayGeneratorStats::recordAccess(
+    size_t getBytes,
+    size_t getBodyBytes,
+    const std::vector<std::string>& extraFields) {
+  recordStats(recordAccessInternal, extraFields, getBytes, getBodyBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordAccessInternal(InternalStats& stats,
+                                                         size_t getBytes,
+                                                         size_t getBodyBytes) {
+  stats.getBytes.add(getBytes);
+  stats.getBodyBytes.add(getBodyBytes);
+  stats.objGets.inc();
+}
+
+void PieceWiseReplayGeneratorStats::recordNonPieceHit(
+    size_t hitBytes,
+    size_t hitBodyBytes,
+    const std::vector<std::string>& extraFields) {
+  recordStats(recordNonPieceHitInternal, extraFields, hitBytes, hitBodyBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordNonPieceHitInternal(
+    InternalStats& stats, size_t hitBytes, size_t hitBodyBytes) {
+  stats.getHitBytes.add(hitBytes);
+  stats.getFullHitBytes.add(hitBytes);
+  stats.getHitBodyBytes.add(hitBodyBytes);
+  stats.getFullHitBodyBytes.add(hitBodyBytes);
+  stats.objGetHits.inc();
+  stats.objGetFullHits.inc();
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceHeaderHit(
+    size_t pieceBytes, const std::vector<std::string>& extraFields) {
+  recordStats(recordPieceHeaderHitInternal, extraFields, pieceBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceHeaderHitInternal(
+    InternalStats& stats, size_t pieceBytes) {
+  stats.getHitBytes.add(pieceBytes);
+  stats.objGetHits.inc();
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceBodyHit(
+    size_t pieceBytes, const std::vector<std::string>& extraFields) {
+  recordStats(recordPieceBodyHitInternal, extraFields, pieceBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceBodyHitInternal(
+    InternalStats& stats, size_t pieceBytes) {
+  stats.getHitBytes.add(pieceBytes);
+  stats.getHitBodyBytes.add(pieceBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceFullHit(
+    size_t headerBytes,
+    size_t bodyBytes,
+    const std::vector<std::string>& extraFields) {
+  recordStats(recordPieceFullHitInternal, extraFields, headerBytes, bodyBytes);
+}
+
+void PieceWiseReplayGeneratorStats::recordPieceFullHitInternal(
+    InternalStats& stats, size_t headerBytes, size_t bodyBytes) {
+  stats.getFullHitBytes.add(headerBytes + bodyBytes);
+  stats.getFullHitBodyBytes.add(bodyBytes);
+  stats.objGetFullHits.inc();
+}
+
+void PieceWiseReplayGeneratorStats::renderStats(uint64_t elapsedTimeNs,
+                                                std::ostream& out) const {
+  out << std::endl << "== PieceWiseReplayGenerator Stats ==" << std::endl;
+
+  const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
+
+  // Output the overall stats
+  out << "= Overall stats =" << std::endl;
+  renderStatsInternal(stats_, elapsedSecs, out);
+
+  // Output stats broken down by extra field
+  for (const auto& [fieldNum, fieldValues] : extraStatsIndexM_) {
+    out << "= Breakdown stats for extra field " << fieldNum << " ="
+        << std::endl;
+    for (const auto& [fieldValue, fieldStatIdx] : fieldValues) {
+      out << "Stats for field value " << fieldValue << ": " << std::endl;
+      renderStatsInternal(extraStatsV_[fieldStatIdx], elapsedSecs, out);
+    }
+  }
+}
+
+void PieceWiseReplayGeneratorStats::renderStatsInternal(
+    const InternalStats& stats, double elapsedSecs, std::ostream& out) {
+  out << folly::sformat("{:10}: {:.2f} million", "Total Processed Samples",
+                        stats.objGets.get() / 1e6)
+      << std::endl;
+
+  auto safeDiv = [](auto nr, auto dr) {
+    return dr == 0 ? 0.0 : 100.0 * nr / dr;
+  };
+
+  const uint64_t getBytesPerSec = stats.getBytes.get() / 1024 / elapsedSecs;
+  const double getBytesSuccessRate =
+      safeDiv(stats.getHitBytes.get(), stats.getBytes.get());
+  const double getBytesFullSuccessRate =
+      safeDiv(stats.getFullHitBytes.get(), stats.getBytes.get());
+
+  const uint64_t getBodyBytesPerSec =
+      stats.getBodyBytes.get() / 1024 / elapsedSecs;
+  const double getBodyBytesSuccessRate =
+      safeDiv(stats.getHitBodyBytes.get(), stats.getBodyBytes.get());
+  const double getBodyBytesFullSuccessRate =
+      safeDiv(stats.getFullHitBodyBytes.get(), stats.getBodyBytes.get());
+
+  const uint64_t getPerSec = stats.objGets.get() / elapsedSecs;
+  const double getSuccessRate =
+      safeDiv(stats.objGetHits.get(), stats.objGets.get());
+  const double getFullSuccessRate =
+      safeDiv(stats.objGetFullHits.get(), stats.objGets.get());
+
+  auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
+                      double v2, folly::StringPiece k3, double v3) {
+    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%, {:10}: {:6.2f}%",
+                          k1, v1, k2, v2, k3, v3)
+        << std::endl;
+  };
+  outFn("getBytes(KB)", getBytesPerSec, "success", getBytesSuccessRate,
+        "full success", getBytesFullSuccessRate);
+  outFn("getBodyBytes(KB)", getBodyBytesPerSec, "success",
+        getBodyBytesSuccessRate, "full success", getBodyBytesFullSuccessRate);
+  outFn("objectGet", getPerSec, "success", getSuccessRate, "full success",
+        getFullSuccessRate);
+}
 
 const Request& PieceWiseReplayGenerator::getReq(
     uint8_t, std::mt19937&, std::optional<uint64_t> lastRequestId) {
@@ -39,18 +171,22 @@ const Request& PieceWiseReplayGenerator::getReq(
   // Record the byte wise and object wise stats that we will egress
   // when it's a new request
   if (isNewReq) {
+    size_t getBytes;
+    size_t getBodyBytes;
     if (reqWrapper->requestRange.getRequestRange()) {
       auto rangeStart = reqWrapper->requestRange.getRequestRange()->first;
       auto rangeEnd = reqWrapper->requestRange.getRequestRange()->second;
       size_t rangeSize = rangeEnd ? (*rangeEnd - rangeStart + 1)
                                   : (reqWrapper->fullObjectSize - rangeStart);
-      stats_.getBytes.add(rangeSize + reqWrapper->headerSize);
-      stats_.getBodyBytes.add(rangeSize);
+
+      getBytes = rangeSize + reqWrapper->headerSize;
+      getBodyBytes = rangeSize;
     } else {
-      stats_.getBytes.add(reqWrapper->fullObjectSize + reqWrapper->headerSize);
-      stats_.getBodyBytes.add(reqWrapper->fullObjectSize);
+      getBytes = reqWrapper->fullObjectSize + reqWrapper->headerSize;
+      getBodyBytes = reqWrapper->fullObjectSize;
     }
-    stats_.objGets.inc();
+
+    stats_.recordAccess(getBytes, getBodyBytes, reqWrapper->extraFields);
   }
 
   return reqWrapper->req;
@@ -77,24 +213,22 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
       result == OpResultType::kSetFailure) {
     // Record the cache hit stats
     if (result == OpResultType::kGetHit) {
-      // We trim the fetched bytes if it's range request
+      size_t hitBytes;
+      size_t hitBodyBytes;
       if (rw.requestRange.getRequestRange()) {
+        // We trim the fetched bytes if it's range request
         auto range = rw.requestRange.getRequestRange();
         size_t rangeSize = range->second
                                ? (*range->second - range->first + 1)
                                : (rw.sizes[0] - rw.headerSize - range->first);
-        stats_.getHitBytes.add(rangeSize + rw.headerSize);
-        stats_.getFullHitBytes.add(rangeSize + rw.headerSize);
-        stats_.getHitBodyBytes.add(rangeSize);
-        stats_.getFullHitBodyBytes.add(rangeSize);
+        hitBytes = rangeSize + rw.headerSize;
+        hitBodyBytes = rangeSize;
       } else {
-        stats_.getHitBytes.add(rw.sizes[0]);
-        stats_.getFullHitBytes.add(rw.sizes[0]);
-        stats_.getHitBodyBytes.add(rw.sizes[0] - rw.headerSize);
-        stats_.getFullHitBodyBytes.add(rw.sizes[0] - rw.headerSize);
+        hitBytes = rw.sizes[0];
+        hitBodyBytes = rw.sizes[0] - rw.headerSize;
       }
-      stats_.objGetHits.inc();
-      stats_.objGetFullHits.inc();
+
+      stats_.recordNonPieceHit(hitBytes, hitBodyBytes, rw.extraFields);
     }
     activeReqQ.popFront();
   } else if (result == OpResultType::kGetMiss) {
@@ -117,15 +251,13 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
     // Record the cache hit stats
     if (result == OpResultType::kGetHit) {
       if (rw.isHeaderPiece) {
-        stats_.getHitBytes.add(rw.sizes[0]);
-        stats_.objGetHits.inc();
+        stats_.recordPieceHeaderHit(rw.sizes[0], rw.extraFields);
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
         // getRequestedSizeOfAPiece() takes care of trim if needed
         auto requestedSize =
             rw.cachePieces->getRequestedSizeOfAPiece(resultPieceIndex);
-        stats_.getHitBytes.add(requestedSize);
-        stats_.getHitBodyBytes.add(requestedSize);
+        stats_.recordPieceBodyHit(requestedSize, rw.extraFields);
       }
     }
 
@@ -154,9 +286,7 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
       // Record the cache hit stats: we got all the pieces that were requested
       if (result == OpResultType::kGetHit) {
         auto requestedSize = rw.cachePieces->getRequestedSize();
-        stats_.getFullHitBytes.add(requestedSize + rw.headerSize);
-        stats_.getFullHitBodyBytes.add(requestedSize);
-        stats_.objGetFullHits.inc();
+        stats_.recordPieceFullHit(rw.headerSize, requestedSize, rw.extraFields);
       }
       // we are done
       done = true;
@@ -168,53 +298,6 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
     XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
   }
   return done;
-}
-
-void PieceWiseReplayGenerator::renderStats(uint64_t elapsedTimeNs,
-                                           std::ostream& out) const {
-  out << std::endl << "== PieceWiseReplayGenerator Stats ==" << std::endl;
-
-  // Output the stats
-  out << folly::sformat("{:10}: {:.2f} million", "Total Processed Samples",
-                        stats_.objGets.get() / 1e6)
-      << std::endl;
-
-  auto safeDiv = [](auto nr, auto dr) {
-    return dr == 0 ? 0.0 : 100.0 * nr / dr;
-  };
-
-  const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
-  const uint64_t getBytesPerSec = stats_.getBytes.get() / 1024 / elapsedSecs;
-  const double getBytesSuccessRate =
-      safeDiv(stats_.getHitBytes.get(), stats_.getBytes.get());
-  const double getBytesFullSuccessRate =
-      safeDiv(stats_.getFullHitBytes.get(), stats_.getBytes.get());
-
-  const uint64_t getBodyBytesPerSec =
-      stats_.getBodyBytes.get() / 1024 / elapsedSecs;
-  const double getBodyBytesSuccessRate =
-      safeDiv(stats_.getHitBodyBytes.get(), stats_.getBodyBytes.get());
-  const double getBodyBytesFullSuccessRate =
-      safeDiv(stats_.getFullHitBodyBytes.get(), stats_.getBodyBytes.get());
-
-  const uint64_t getPerSec = stats_.objGets.get() / elapsedSecs;
-  const double getSuccessRate =
-      safeDiv(stats_.objGetHits.get(), stats_.objGets.get());
-  const double getFullSuccessRate =
-      safeDiv(stats_.objGetFullHits.get(), stats_.objGets.get());
-
-  auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
-                      double v2, folly::StringPiece k3, double v3) {
-    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%, {:10}: {:6.2f}%",
-                          k1, v1, k2, v2, k3, v3)
-        << std::endl;
-  };
-  outFn("getBytes(KB)", getBytesPerSec, "success", getBytesSuccessRate,
-        "full success", getBytesFullSuccessRate);
-  outFn("getBodyBytes(KB)", getBodyBytesPerSec, "success",
-        getBodyBytesSuccessRate, "full success", getBodyBytesFullSuccessRate);
-  outFn("objectGet", getPerSec, "success", getSuccessRate, "full success",
-        getFullSuccessRate);
 }
 
 void PieceWiseReplayGenerator::getReqFromTrace() {
@@ -235,18 +318,19 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
     try {
       std::vector<folly::StringPiece> fields;
-      // Line format:
-      // timestamp, cacheKey, OpType, objectSize, responseSize,
-      // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate
       folly::split(",", line, fields);
-      if (fields.size() != kTraceNumFields) {
+      if (fields.size() !=
+          SampleFields::TOTAL_FIELDS +
+              config_.replayGeneratorConfig.numAggregationFields) {
         invalidSamples_.inc();
         continue;
       }
 
-      auto fullContentSizeT = folly::tryTo<size_t>(fields[3]);
-      auto responseSizeT = folly::tryTo<size_t>(fields[4]);
-      auto ttlT = folly::tryTo<uint32_t>(fields[8]);
+      auto fullContentSizeT =
+          folly::tryTo<size_t>(fields[SampleFields::OBJECT_SIZE]);
+      auto responseSizeT =
+          folly::tryTo<size_t>(fields[SampleFields::RESPONSE_SIZE]);
+      auto ttlT = folly::tryTo<uint32_t>(fields[SampleFields::TTL]);
       // Invalid sample: cacheKey is empty, objectSize is not positive,
       // responseSize is not positive, ttl is not positive
       if (!fields[1].compare("-") || !fields[1].compare("") ||
@@ -274,9 +358,17 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       auto fullContentSize = fullContentSizeT.value();
       auto responseSize = responseSizeT.value();
       auto ttl = ttlT.value();
-      auto responseHeaderSize = folly::to<size_t>(fields[5]);
-      auto rangeStart = parseRangeField(fields[6], fullContentSize);
-      auto rangeEnd = parseRangeField(fields[7], fullContentSize);
+      auto responseHeaderSize =
+          folly::to<size_t>(fields[SampleFields::RESPONSE_HEADER_SIZE]);
+      auto rangeStart =
+          parseRangeField(fields[SampleFields::RANGE_START], fullContentSize);
+      auto rangeEnd =
+          parseRangeField(fields[SampleFields::RANGE_END], fullContentSize);
+
+      std::vector<std::string> extraFields;
+      for (size_t i = SampleFields::TOTAL_FIELDS; i < fields.size(); ++i) {
+        extraFields.push_back(fields[i].str());
+      }
 
       // The client connection could be terminated early because of reasons
       // like slow client, user stops in the middle, etc.
@@ -290,16 +382,17 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         rangeEnd = responseBodySize - 1;
       }
 
-      auto shard = getShard(fields[1]);
+      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_,
                                         nextReqId_,
-                                        fields[1],
+                                        fields[SampleFields::CACHE_KEY],
                                         fullContentSize,
                                         responseHeaderSize,
                                         rangeStart,
                                         rangeEnd,
-                                        ttl)) {
+                                        ttl,
+                                        std::move(extraFields))) {
         if (shouldShutdown()) {
           LOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;

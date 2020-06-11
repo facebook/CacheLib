@@ -77,6 +77,17 @@ struct ReplayGeneratorConfig : public JSONConfig {
   // The time interval threshold when replaySerializationMode is relaxed.
   uint64_t relaxedSerialIntervalMs{500};
 
+  // # of extra fields in trace sample that we track broken down stats.
+  // These fields are placed after existing fields:
+  // https://fburl.com/diffusion/hl3qerc9
+  uint32_t numAggregationFields{0};
+  // For each aggregation field, we track the statistics broken down by
+  // specific aggregation values. this map specifies the values for which
+  // stats are aggregated by per field.
+  // Mapping: field index in the aggregation fields (starting at 0) -->
+  // list of values we track for that field
+  std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
+
   SerializeMode getSerializationMode() const;
 };
 
