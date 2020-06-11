@@ -145,6 +145,87 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungDevice) {
             5357954930143232);
 }
 
+TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungPM983aDevice) {
+  constexpr auto& kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "10105120",
+      "Index" : 0,
+      "ModelNumber" : "WDC CL SN720 SDAQNTW-512G-1020",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "200405805037",
+      "UsedBytes" : 512110190592,
+      "MaximumLBA" : 1000215216,
+      "PhysicalSize" : 512110190592,
+      "SectorSize" : 512
+    },
+    {
+      "DevicePath" : "/dev/nvme1n1",
+      "Firmware" : "EDW73F2Q",
+      "Index" : 1,
+      "ModelNumber" : "MZ1LB960HBJR-000FB",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "S5XBNE0N300490",
+      "UsedBytes" : 497998016512,
+      "MaximumLBA" : 122096646,
+      "PhysicalSize" : 500107862016,
+      "SectorSize" : 4096
+    },
+    {
+      "DevicePath" : "/dev/nvme2n1",
+      "Firmware" : "EDW73F2Q",
+      "Index" : 2,
+      "ModelNumber" : "MZ1LB960HBJR-000FB",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "S5XBNE0N300481",
+      "UsedBytes" : 498003058688,
+      "MaximumLBA" : 122096646,
+      "PhysicalSize" : 500107862016,
+      "SectorSize" : 4096
+    }
+  ]
+})EOF";
+
+  constexpr auto& kSmartLogOutput = R"EOF(
+[015:000] PhysicallyWrittenBytes                            : 35061362294784
+[031:016] Physically Read Bytes                             : 82979098025984
+[037:032] Bad NAND Block Count (Raw Value)                  : 0
+[039:038] Bad NAND Block Count (Normalized Value)           : 100
+[047:040] Uncorrectable Read Error Count                    : 0
+[055:048] Soft ECC Error Count                              : 0
+[059:056] SSD End to end Correction Count (Detected Errors) : 0
+[063:060] SSD End to end Correction Count (Corrected Errors): 0
+[064:064] System Data Percentage Used                       : 0
+[068:065] User Data Erase Count (Min)                       : 9
+[072:069] User Data Erase Count (Max)                       : 42
+[080:073] Refresh Count                                     : 0
+[086:081] Program Fail Count (Raw Value)                    : 0
+[088:087] Program Fail Count (Normalized Value)             : 100
+[094:089] User Data Erase Fail Count (Raw Value)            : 0
+[096:095] User Data Erase Fail Count (Normalized Value)     : 100
+[102:097] System Area Erase Fail Count (Raw Value)          : 0
+[104:103] System Area Erase Fail Count (Normalized value)   : 100
+[105:105] Thermal Throttling Status                         : 0
+[106:106] Thermal Throttling Count                          : 0
+[108:107] PHY Error Count                                   : 0
+[110:109] Bad DLLP Count                                    : 0
+[112:111] Bad TLP Count                                     : 0
+[114:113] Reserved                                          : 0
+[118:115] Incomplete Shutdowns                              : 0
+[119:119] % Free Blocks                                     : 1
+[121:120] PCIe Correctable Error Count (RTS)                : 0
+[123:122] PCIe Correctable Error Count (RRS)                : 0
+[131:124] XOR Recovery Count                                : 0
+)EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "samsung", "vs-smart-add-log", "/dev/nvme1n1"},
+        kSmartLogOutput}});
+  EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_), 35061362294784);
+}
+
 TEST_F(NandWritesTest, nandWriteBytes_handlesSeagateDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [

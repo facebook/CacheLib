@@ -326,6 +326,9 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
                             const folly::StringPiece&,
                             const folly::StringPiece&)>>
       vendorMap{{"samsung", samsungWriteBytes},
+                {"mz1lb960hbjr-", samsungWriteBytes},
+                // The Samsung PM983a doesn't include Samsung in the model
+                // number at this time, but it's a Samsung device.
                 {"liteon",
                  [](const auto&, const auto&, const auto&) {
                    return notImplemented("LITEON");
