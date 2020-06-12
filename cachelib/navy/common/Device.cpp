@@ -200,13 +200,11 @@ class MemoryDevice final : public Device {
 bool Device::write(uint64_t offset, Buffer buffer) {
   const auto size = buffer.size();
   XDCHECK_LE(offset + buffer.size(), size_);
-  void* data = buffer.data();
+  uint8_t* data = reinterpret_cast<uint8_t*>(buffer.data());
   XDCHECK_EQ(reinterpret_cast<uint64_t>(data) % ioAlignmentSize_, 0ul);
   if (encryptor_) {
     XCHECK_EQ(offset % encryptor_->encryptionBlockSize(), 0ul);
-    auto res = encryptor_->encrypt(
-        folly::MutableByteRange{reinterpret_cast<uint8_t*>(data), size},
-        offset);
+    auto res = encryptor_->encrypt(folly::MutableByteRange{data, size}, offset);
     if (!res) {
       encryptionErrors_.inc();
       return false;
@@ -227,6 +225,7 @@ bool Device::write(uint64_t offset, Buffer buffer) {
     }
     bytesWritten_.add(result * size);
     offset += writeSize;
+    data += writeSize;
     remainingSize -= writeSize;
   }
   if (!result) {

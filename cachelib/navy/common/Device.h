@@ -148,6 +148,9 @@ class Device {
 
   // When write-io is issued, it is broken down into writeImpl calls at
   // this granularity. maxWriteSize_ 0 means no maximum write size.
+  // maxWriteSize_ option allows splitting the large writes to smaller
+  // writes so that the device read latency is not adversely impacted by
+  // large device writes
   const uint32_t maxWriteSize_{0};
 
   std::shared_ptr<DeviceEncryptor> encryptor_;

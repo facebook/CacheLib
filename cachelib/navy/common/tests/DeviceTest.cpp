@@ -1,6 +1,7 @@
 #include <thread>
 
 #include <folly/File.h>
+#include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -179,6 +180,32 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
   device.getCounters(toCallback(visitor));
+}
+
+TEST(Device, MaxWriteSize) {
+  auto filePath = folly::sformat("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());
+
+  int deviceSize = 16 * 1024;
+  int ioAlignSize = 1024;
+  int fd = open(filePath.c_str(), O_RDWR | O_CREAT);
+  auto device =
+      createDirectIoFileDevice(fd, deviceSize, ioAlignSize, nullptr, 1024);
+  uint32_t bufSize = 4 * 1024;
+  Buffer wbuf = device->makeIOBuffer(bufSize);
+  Buffer rbuf = device->makeIOBuffer(bufSize);
+  auto wdata = wbuf.data();
+  for (uint32_t i = 0; i < bufSize; i++) {
+    wdata[i] = folly::Random::rand32() % 64;
+  }
+  auto ret = device->write(0, wbuf.copy(ioAlignSize));
+  EXPECT_EQ(true, ret);
+
+  ret = device->read(0, bufSize, rbuf.data());
+  EXPECT_EQ(true, ret);
+  auto rdata = rbuf.data();
+  for (uint32_t i = 0; i < bufSize; i++) {
+    EXPECT_EQ(wdata[i], rdata[i]);
+  }
 }
 
 TEST(Device, RAID0IO) {
