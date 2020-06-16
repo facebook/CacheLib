@@ -1094,6 +1094,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       stringifyRebalanceStrategy(poolAdviseStrategy);
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
+  configMap["eventTracker"] = eventTracker ? "set" : "empty";
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),
