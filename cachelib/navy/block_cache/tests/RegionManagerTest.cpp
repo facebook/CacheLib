@@ -182,12 +182,21 @@ TEST(RegionManager, ReadWrite) {
   constexpr uint32_t kLocalOffset = 3 * 1024;
   constexpr uint32_t kSize = 1024;
   BufferGen bg;
-  RelAddress addr{RegionId{1}, kLocalOffset};
-  auto desc =
-      RegionDescriptor::makeWriteDescriptor(OpenStatus::Ready, RegionId{1});
+  RegionId rid;
+  // do reclaim couple of times to get RegionId of 1
+  rm->startReclaim();
+  rm->getCleanRegion(rid);
+  rm->startReclaim();
+  rm->getCleanRegion(rid);
+
+  auto& region = rm->getRegion(rid);
+  auto [wDesc, addr] = region.openAndAllocate(4 * kSize);
+  EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(kSize);
-  EXPECT_TRUE(rm->write(addr, buf.copy()));
-  auto bufRead = rm->read(desc, addr, kSize);
+  auto wAddr = RelAddress{rid, kLocalOffset};
+  EXPECT_TRUE(rm->write(wAddr, buf.copy()));
+  auto rDesc = rm->openForRead(rid, 1);
+  auto bufRead = rm->read(rDesc, wAddr, kSize);
   EXPECT_TRUE(bufRead.size() == kSize);
   EXPECT_EQ(buf.view(), bufRead.view());
 

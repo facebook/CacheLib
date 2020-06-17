@@ -237,7 +237,8 @@ JobExitCode RegionManager::startReclaim() {
           XDCHECK(!region.hasBuffer());
           auto desc = RegionDescriptor::makeReadDescriptor(
               OpenStatus::Ready, RegionId{rid}, true /* physRead */);
-          auto buffer = read(desc, RelAddress{rid, 0}, regionSize());
+          auto buffer =
+              read(desc, RelAddress{rid, 0}, region.getLastEntryEndOffset());
           if (buffer.size() != regionSize()) {
             XLOGF(ERR, "Failed to read region {} during reclaim", rid.index());
           }
@@ -445,10 +446,12 @@ bool RegionManager::write(RelAddress addr, Buffer buf) {
 Buffer RegionManager::read(const RegionDescriptor& desc,
                            RelAddress addr,
                            size_t size) const {
+  auto rid = addr.rid();
+  auto& region = getRegion(rid);
+  // Do not expect to read beyond what was already written
+  XDCHECK_LE(addr.offset() + size, region.getLastEntryEndOffset());
   if (doesBufferingWrites() && !desc.isPhysReadMode()) {
     auto buffer = Buffer(size);
-    auto rid = addr.rid();
-    auto& region = getRegion(rid);
     XDCHECK(region.hasBuffer());
     region.readFromBuffer(addr.offset(), buffer.mutableView());
     return buffer;
