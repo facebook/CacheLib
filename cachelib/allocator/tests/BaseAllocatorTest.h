@@ -5916,6 +5916,54 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       }
     }
   }
+
+  // changing cache name should  not affect the persistence
+  void testAttachWithDifferentName() {
+    typename AllocatorT::Config config;
+
+    std::vector<uint32_t> sizes;
+    uint8_t poolId;
+
+    const size_t nSlabs = 20;
+    config.setCacheSize(nSlabs * Slab::kSize);
+    const unsigned int keyLen = 100;
+    auto creationTime = 0;
+    config.enableCachePersistence(this->cacheDir_);
+    config.cacheName = "foobar";
+
+    // Test allocations. These allocations should remain after save/restore.
+    // Original lru allocator
+    std::vector<std::string> keys;
+    {
+      AllocatorT alloc(AllocatorT::SharedMemNew, config);
+      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+      poolId = alloc.addPool("foobar", numBytes);
+      sizes = this->getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
+      this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
+      for (const auto& item : alloc) {
+        auto key = item.getKey();
+        keys.push_back(key.str());
+      }
+
+      creationTime = alloc.getCacheCreationTime();
+
+      // save
+      alloc.shutDown();
+    }
+
+    /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(3));
+
+    // Restore lru allocator, check creation time.
+    {
+      config.cacheName = "helloworld";
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
+      ASSERT_EQ(creationTime, alloc.getCacheCreationTime());
+      for (auto& key : keys) {
+        auto handle = alloc.find(typename AllocatorT::Key{key});
+        ASSERT_NE(nullptr, handle.get());
+      }
+    }
+  }
 };
 } // namespace tests
 } // namespace cachelib

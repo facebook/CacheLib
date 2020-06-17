@@ -64,6 +64,10 @@ TYPED_TEST(BaseAllocatorTest, AttachDetachOnExit) {
   this->testAttachDetachOnExit();
 }
 
+TYPED_TEST(BaseAllocatorTest, AttachWithDifferentCacheName) {
+  this->testAttachWithDifferentName();
+}
+
 TYPED_TEST(BaseAllocatorTest, CleanupDirRemoved) {
   this->testCacheCleanupDirRemoved();
 }
