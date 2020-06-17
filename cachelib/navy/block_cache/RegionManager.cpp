@@ -237,9 +237,9 @@ JobExitCode RegionManager::startReclaim() {
           XDCHECK(!region.hasBuffer());
           auto desc = RegionDescriptor::makeReadDescriptor(
               OpenStatus::Ready, RegionId{rid}, true /* physRead */);
-          auto buffer =
-              read(desc, RelAddress{rid, 0}, region.getLastEntryEndOffset());
-          if (buffer.size() != regionSize()) {
+          auto sizeToRead = region.getLastEntryEndOffset();
+          auto buffer = read(desc, RelAddress{rid, 0}, sizeToRead);
+          if (buffer.size() != sizeToRead) {
             throw std::runtime_error(folly::sformat(
                 "Failed to read region {} during reclaim", rid.index()));
           } else {
