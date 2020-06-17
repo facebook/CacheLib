@@ -240,9 +240,11 @@ JobExitCode RegionManager::startReclaim() {
           auto buffer =
               read(desc, RelAddress{rid, 0}, region.getLastEntryEndOffset());
           if (buffer.size() != regionSize()) {
-            XLOGF(ERR, "Failed to read region {} during reclaim", rid.index());
+            throw std::runtime_error(folly::sformat(
+                "Failed to read region {} during reclaim", rid.index()));
+          } else {
+            doEviction(rid, buffer.view());
           }
-          doEviction(rid, buffer.view());
         }
         releaseEvictedRegion(rid, startTime);
         return JobExitCode::Done;
