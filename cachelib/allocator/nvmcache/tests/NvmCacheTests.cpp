@@ -1568,6 +1568,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   // navy::RegionManager
   EXPECT_TRUE(cs("navy_bc_reclaim"));
   EXPECT_TRUE(cs("navy_bc_reclaim_time"));
+  EXPECT_TRUE(cs("navy_bc_region_reclaim_errors"));
   EXPECT_TRUE(cs("navy_bc_evicted"));
   EXPECT_TRUE(cs("navy_bc_pinned_regions"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));

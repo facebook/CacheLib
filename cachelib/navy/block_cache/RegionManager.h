@@ -197,6 +197,7 @@ class RegionManager {
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter pinnedCount_;
   mutable AtomicCounter physicalWrittenCount_;
+  mutable AtomicCounter reclaimRegionErrors_;
 
   mutable std::mutex cleanRegionsMutex_;
   std::vector<RegionId> cleanRegions_;

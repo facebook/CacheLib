@@ -240,8 +240,16 @@ JobExitCode RegionManager::startReclaim() {
           auto sizeToRead = region.getLastEntryEndOffset();
           auto buffer = read(desc, RelAddress{rid, 0}, sizeToRead);
           if (buffer.size() != sizeToRead) {
-            throw std::runtime_error(folly::sformat(
-                "Failed to read region {} during reclaim", rid.index()));
+            // T68874972: We know this can happen today due to this bug.
+            // For now, we will log this error and also bump a stat while we
+            // work on a proper fix with proper tests.
+            XLOGF(ERR,
+                  "Failed to read region {} during reclaim. Region size to "
+                  "read: {}, Actually read: {}",
+                  rid.index(),
+                  sizeToRead,
+                  buffer.size());
+            reclaimRegionErrors_.inc();
           } else {
             doEviction(rid, buffer.view());
           }
@@ -468,6 +476,7 @@ void RegionManager::flush() { device_.flush(); }
 void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reclaim", reclaimCount_.get());
   visitor("navy_bc_reclaim_time", reclaimTimeCountUs_.get());
+  visitor("navy_bc_region_reclaim_errors", reclaimRegionErrors_.get());
   visitor("navy_bc_evicted", evictedCount_.get());
   visitor("navy_bc_num_regions", numRegions_ - numFree_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
