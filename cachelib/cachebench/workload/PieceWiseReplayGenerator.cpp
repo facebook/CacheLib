@@ -330,13 +330,29 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
           folly::tryTo<size_t>(fields[SampleFields::OBJECT_SIZE]);
       auto responseSizeT =
           folly::tryTo<size_t>(fields[SampleFields::RESPONSE_SIZE]);
+      auto responseHeaderSizeT =
+          folly::tryTo<size_t>(fields[SampleFields::RESPONSE_HEADER_SIZE]);
       auto ttlT = folly::tryTo<uint32_t>(fields[SampleFields::TTL]);
       // Invalid sample: cacheKey is empty, objectSize is not positive,
-      // responseSize is not positive, ttl is not positive
+      // responseSize is not positive, responseHeaderSize is not positive,
+      // ttl is not positive
       if (!fields[1].compare("-") || !fields[1].compare("") ||
           !fullContentSizeT.hasValue() || fullContentSizeT.value() == 0 ||
           !responseSizeT.hasValue() || responseSizeT.value() == 0 ||
+          !responseHeaderSizeT.hasValue() || responseHeaderSizeT.value() == 0 ||
           !ttlT.hasValue() || ttlT.value() == 0) {
+        invalidSamples_.inc();
+        continue;
+      }
+
+      auto fullContentSize = fullContentSizeT.value();
+      auto responseSize = responseSizeT.value();
+      auto responseHeaderSize = responseHeaderSizeT.value();
+      auto ttl = ttlT.value();
+      // When responseSize and responseHeaderSize is equal, it's most probably
+      // a HEAD request. Simply ignore such requests for now.
+      // TODO: better handling non-GET requests
+      if (responseSize == responseHeaderSize) {
         invalidSamples_.inc();
         continue;
       }
@@ -354,21 +370,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
         return result;
       };
-
-      auto fullContentSize = fullContentSizeT.value();
-      auto responseSize = responseSizeT.value();
-      auto ttl = ttlT.value();
-      auto responseHeaderSize =
-          folly::to<size_t>(fields[SampleFields::RESPONSE_HEADER_SIZE]);
       auto rangeStart =
           parseRangeField(fields[SampleFields::RANGE_START], fullContentSize);
       auto rangeEnd =
           parseRangeField(fields[SampleFields::RANGE_END], fullContentSize);
-
-      std::vector<std::string> extraFields;
-      for (size_t i = SampleFields::TOTAL_FIELDS; i < fields.size(); ++i) {
-        extraFields.push_back(fields[i].str());
-      }
 
       // The client connection could be terminated early because of reasons
       // like slow client, user stops in the middle, etc.
@@ -380,6 +385,11 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         // fullContentSize. convert the sample to range request
         rangeStart = 0;
         rangeEnd = responseBodySize - 1;
+      }
+
+      std::vector<std::string> extraFields;
+      for (size_t i = SampleFields::TOTAL_FIELDS; i < fields.size(); ++i) {
+        extraFields.push_back(fields[i].str());
       }
 
       auto shard = getShard(fields[SampleFields::CACHE_KEY]);
