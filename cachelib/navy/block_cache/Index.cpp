@@ -18,12 +18,12 @@ Index::LookupResult Index::lookup(uint64_t key) const {
   auto it = map.find(k);
   if (it != map.end()) {
     lr.found_ = true;
-    lr.value_ = it->second;
+    lr.record_ = it->second;
   }
   return lr;
 }
 
-Index::LookupResult Index::insert(uint64_t key, uint32_t value) {
+Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
   LookupResult lr;
   auto b = bucket(key);
   auto k = subkey(key);
@@ -33,25 +33,27 @@ Index::LookupResult Index::insert(uint64_t key, uint32_t value) {
   auto it = map.find(k);
   if (it != map.end()) {
     lr.found_ = true;
-    lr.value_ = it->second;
-    // tsl::sparse_map doesn't allow `it->second = v` syntax
-    it.value() = value;
+    lr.record_ = it->second;
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    it.value().address = address;
   } else {
-    map.emplace(key, value);
+    map.try_emplace(key, address);
   }
   return lr;
 }
 
-bool Index::replace(uint64_t key, uint32_t newValue, uint32_t oldValue) {
+bool Index::replaceIfMatch(uint64_t key,
+                           uint32_t newAddress,
+                           uint32_t oldAddress) {
   auto b = bucket(key);
   auto k = subkey(key);
   auto& map = buckets_[b];
 
   std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
   auto it = map.find(k);
-  if (it != map.end() && it->second == oldValue) {
-    // tsl::sparse_map doesn't allow `it->second = v`
-    it.value() = newValue;
+  if (it != map.end() && it->second.address == oldAddress) {
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    it.value().address = newAddress;
     return true;
   }
   return false;
@@ -67,23 +69,20 @@ Index::LookupResult Index::remove(uint64_t key) {
   auto it = map.find(k);
   if (it != map.end()) {
     lr.found_ = true;
-    lr.value_ = it->second;
+    lr.record_ = it->second;
     map.erase(it);
-  } else {
-    lr.found_ = false;
-    lr.value_ = 0;
   }
   return lr;
 }
 
-bool Index::remove(uint64_t key, uint32_t value) {
+bool Index::removeIfMatch(uint64_t key, uint32_t address) {
   auto b = bucket(key);
   auto k = subkey(key);
   auto& map = buckets_[b];
 
   std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
   auto it = map.find(k);
-  if (it != map.end() && it->second == value) {
+  if (it != map.end() && it->second.address == address) {
     map.erase(it);
     return true;
   }
@@ -106,6 +105,7 @@ size_t Index::computeSize() const {
   return size;
 }
 
+// Todo (aw7): check if other fields needs persist and recover
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
@@ -114,7 +114,7 @@ void Index::persist(RecordWriter& rw) const {
     for (const auto& [key, value] : buckets_[i]) {
       serialization::IndexEntry entry;
       entry.key = key;
-      entry.value = value;
+      entry.value = value.address;
       bucket.entries.push_back(entry);
     }
     // Serialize bucket then clear contents to reuse memory.
@@ -134,7 +134,7 @@ void Index::recover(RecordReader& rr) {
                          id)};
     }
     for (auto& entry : bucket.entries) {
-      buckets_[id].emplace(entry.key, entry.value);
+      buckets_[id].try_emplace(entry.key, entry.value);
     }
   }
 }

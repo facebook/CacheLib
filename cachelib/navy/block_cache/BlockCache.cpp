@@ -153,8 +153,8 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
         index_.insert(hk.keyHash(), encodeRelAddress(addr.add(slotSize)));
     // We replaced an existing key in the index
     if (lr.found()) {
-      holeSizeTotal_.add(
-          regionManager_.getRegionSlotSize(decodeRelAddress(lr.value()).rid()));
+      holeSizeTotal_.add(regionManager_.getRegionSlotSize(
+          decodeRelAddress(lr.address()).rid()));
       holeCount_.inc();
       insertHashCollisionCount_.inc();
     }
@@ -178,7 +178,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   // If relative address has offset 0, the entry actually belongs to the
   // previous region (this is address of its end). To compensate for this, we
   // subtract 1 before conversion and add after to relative address.
-  auto addrEnd = decodeRelAddress(lr.value());
+  auto addrEnd = decodeRelAddress(lr.address());
   // Between acquring @seqNumber and @openForRead reclamation may start. There
   // are two options what can happen in @openForRead:
   //  - Reclamation in progress and open will fail because access mask disables
@@ -217,7 +217,7 @@ Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
   auto lr = index_.remove(hk.keyHash());
   if (lr.found()) {
-    auto addr = decodeRelAddress(lr.value());
+    auto addr = decodeRelAddress(lr.address());
     holeSizeTotal_.add(regionManager_.getRegionSlotSize(addr.rid()));
     holeCount_.inc();
     succRemoveCount_.inc();
@@ -301,14 +301,14 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
       reinsertionPolicy_->remove(hk);
     }
     sizeDist_.removeSize(entrySize);
-    if (index_.remove(hk.keyHash(), encodeRelAddress(currAddr))) {
+    if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       return ReinsertionRes::kEvicted;
     }
     return ReinsertionRes::kRemoved;
   };
 
   const auto lr = index_.lookup(hk.keyHash());
-  if (!lr.found() || decodeRelAddress(lr.value()) != currAddr) {
+  if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
     sizeDist_.removeSize(entrySize);
     return ReinsertionRes::kRemoved;
@@ -347,9 +347,10 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return removeItem();
   }
 
-  const auto replaced = index_.replace(hk.keyHash(),
-                                       encodeRelAddress(addr.add(slotSize)),
-                                       encodeRelAddress(currAddr));
+  const auto replaced =
+      index_.replaceIfMatch(hk.keyHash(),
+                            encodeRelAddress(addr.add(slotSize)),
+                            encodeRelAddress(currAddr));
   if (!replaced) {
     reinsertionErrorCount_.inc();
     return removeItem();

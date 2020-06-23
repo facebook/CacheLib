@@ -6,6 +6,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/Format.h>
+#include <folly/Portability.h>
 #include <folly/Random.h>
 #include <folly/container/F14Map.h>
 #include <tsl/sparse_map.h>
@@ -14,6 +15,21 @@
 
 using namespace facebook::cachelib::navy;
 using namespace facebook::cachelib::navy::details;
+
+struct FOLLY_PACK_ATTR Record {
+  uint32_t address{0};
+  uint16_t size{0};
+  uint8_t currentHits{0};
+  uint8_t totalHits{0};
+
+  Record& operator++() {
+    address += 3;
+    ++currentHits;
+    ++totalHits;
+    return *this;
+  }
+};
+static_assert(8 == sizeof(Record), "Record size is 8 bytes");
 
 template <typename Key, typename Value>
 using BTreeMap = BTree<Key, Value, BTreeTraits<30, 60, 90>>;
@@ -147,6 +163,7 @@ size_t pageBytesBTree64 = 0;
 size_t pageBytesStd64 = 0;
 size_t pageBytesF14_64 = 0;
 size_t pageBytesTsl64 = 0;
+size_t pageBytesTslRec = 0;
 
 auto btreeMap_u32 = makeBTreeMap<uint32_t, uint32_t>(pageBytesBTree32);
 auto stdMap_u32 =
@@ -161,6 +178,7 @@ auto stdMap_u64 =
 auto f14Map_u64 =
     makeMap<folly::F14ValueMap<uint32_t, uint64_t>>(pageBytesF14_64);
 auto tslMap_u64 = makeMap<SparseMap<uint32_t, uint64_t>>(pageBytesTsl64);
+auto tslMap_record = makeMap<SparseMap<uint32_t, Record>>(pageBytesTslRec);
 
 BENCHMARK_PARAM(btreeLookupBench, btreeMap_u32)
 BENCHMARK_RELATIVE_PARAM(mapLookupBench, stdMap_u32)
@@ -173,33 +191,36 @@ BENCHMARK_PARAM(btreeLookupBench, btreeMap_u64)
 BENCHMARK_RELATIVE_PARAM(mapLookupBench, stdMap_u64)
 BENCHMARK_RELATIVE_PARAM(mapLookupBench, f14Map_u64)
 BENCHMARK_RELATIVE_PARAM(mapLookupBench, tslMap_u64)
+BENCHMARK_RELATIVE_PARAM(mapLookupBench, tslMap_record)
 
 #if 0
 ============================================================================
 cachelib/benchmarks/HashMapBenchmark.cpp        relative  time/iter  iters/s
 ============================================================================
-btreeLookupBench(btreeMap_u32)                             766.48ns    1.30M
-mapLookupBench(stdMap_u32)                       601.88%   127.35ns    7.85M
-mapLookupBench(f14Map_u32)                      1686.61%    45.45ns   22.00M
-mapLookupBench(tslMap_u32)                      1220.87%    62.78ns   15.93M
+btreeLookupBench(btreeMap_u32)                             635.42ns    1.57M
+mapLookupBench(stdMap_u32)                       495.48%   128.24ns    7.80M
+mapLookupBench(f14Map_u32)                      1637.18%    38.81ns   25.77M
+mapLookupBench(tslMap_u32)                      1056.81%    60.13ns   16.63M
 ----------------------------------------------------------------------------
-btreeLookupBench(btreeMap_u64)                             606.92ns    1.65M
-mapLookupBench(stdMap_u64)                       435.46%   139.37ns    7.17M
-mapLookupBench(f14Map_u64)                      1029.85%    58.93ns   16.97M
-mapLookupBench(tslMap_u64)                       957.23%    63.40ns   15.77M
+btreeLookupBench(btreeMap_u64)                             660.51ns    1.51M
+mapLookupBench(stdMap_u64)                       445.00%   148.43ns    6.74M
+mapLookupBench(f14Map_u64)                      1147.49%    57.56ns   17.37M
+mapLookupBench(tslMap_u64)                       960.95%    68.73ns   14.55M
+mapLookupBench(tslMap_record)                   1638.63%    40.31ns   24.81M
 ============================================================================
 Memory footprint for 800,000 entries:
 Map            Page Bytes       Accurate Bytes
 ----------------------------------------------------------------------------
-btreeMap_u32:   8,478,720       6,615,936
-f14Map_u32  :  12,787,712       8,388,640
-stdMap_u32  :  24,289,280
-tslMap_u32  :   5,570,560
+btreeMap_u32:   8,560,640       6,640,000
+f14Map_u32  :  12,800,000       8,388,640
+stdMap_u32  :  24,285,184
+tslMap_u32  :   5,574,656
 ----------------------------------------------------------------------------
-btreeMap_u64:   10,190,848       10,529,792
-f14Map_u64  :   21,135,360       16,777,248
-stdMap_u64  :   30,199,808
+btreeMap_u64:   10,186,752       10,506,624
+f14Map_u64  :   21,139,456       16,777,248
+stdMap_u64  :   30,203,904
 tslMap_u64  :   11,034,624
+tslMap_record:   6,217,728
 ====================================END=====================================
 #endif
 
@@ -228,6 +249,7 @@ int main(int /* argc */, char** /* argv */) {
                                   pageBytesF14_64, accBytesF14_64);
   auto stdInfo64 = folly::sformat("stdMap_u64  :   {:,}", pageBytesStd64);
   auto tslInfo64 = folly::sformat("tslMap_u64  :   {:,}", pageBytesTsl64);
+  auto tslInfoRec = folly::sformat("tslMap_record:   {:,}", pageBytesTslRec);
 
   std::cout << folly::sformat("Memory footprint for {:,} entries:", kNumKeys)
             << std::endl;
@@ -244,6 +266,7 @@ int main(int /* argc */, char** /* argv */) {
   std::cout << f14Info64 << std::endl;
   std::cout << stdInfo64 << std::endl;
   std::cout << tslInfo64 << std::endl;
+  std::cout << tslInfoRec << std::endl;
 
   std::cout << folly::sformat("{:=^*}", 76, "END") << std::endl;
   return 0;

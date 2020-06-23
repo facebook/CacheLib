@@ -29,42 +29,42 @@ TEST(Index, Recovery) {
   newIndex.recover(*rr);
   for (auto& entry : log) {
     auto lookupResult = newIndex.lookup(entry.first);
-    EXPECT_EQ(entry.second, lookupResult.value());
+    EXPECT_EQ(entry.second, lookupResult.address());
   }
 }
 
 TEST(Index, ReplaceExact) {
   Index index;
   // Empty value should fail in replace
-  EXPECT_FALSE(index.replace(111, 3333, 2222));
+  EXPECT_FALSE(index.replaceIfMatch(111, 3333, 2222));
   EXPECT_FALSE(index.lookup(111).found());
 
   index.insert(111, 4444);
   EXPECT_TRUE(index.lookup(111).found());
-  EXPECT_EQ(4444, index.lookup(111).value());
+  EXPECT_EQ(4444, index.lookup(111).address());
 
   // Old value mismatch should fail in replace
-  EXPECT_FALSE(index.replace(111, 3333, 2222));
-  EXPECT_EQ(4444, index.lookup(111).value());
+  EXPECT_FALSE(index.replaceIfMatch(111, 3333, 2222));
+  EXPECT_EQ(4444, index.lookup(111).address());
 
-  EXPECT_TRUE(index.replace(111, 3333, 4444));
-  EXPECT_EQ(3333, index.lookup(111).value());
+  EXPECT_TRUE(index.replaceIfMatch(111, 3333, 4444));
+  EXPECT_EQ(3333, index.lookup(111).address());
 }
 
 TEST(Index, RemoveExact) {
   Index index;
   // Empty value should fail in replace
-  EXPECT_FALSE(index.remove(111, 4444));
+  EXPECT_FALSE(index.removeIfMatch(111, 4444));
 
   index.insert(111, 4444);
   EXPECT_TRUE(index.lookup(111).found());
-  EXPECT_EQ(4444, index.lookup(111).value());
+  EXPECT_EQ(4444, index.lookup(111).address());
 
   // Old value mismatch should fail in replace
-  EXPECT_FALSE(index.remove(111, 2222));
-  EXPECT_EQ(4444, index.lookup(111).value());
+  EXPECT_FALSE(index.removeIfMatch(111, 2222));
+  EXPECT_EQ(4444, index.lookup(111).address());
 
-  EXPECT_TRUE(index.remove(111, 4444));
+  EXPECT_TRUE(index.removeIfMatch(111, 4444));
   EXPECT_FALSE(index.lookup(111).found());
 }
 } // namespace tests

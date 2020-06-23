@@ -5,6 +5,7 @@
 #include <shared_mutex>
 #include <utility>
 
+#include <folly/Portability.h>
 #include <folly/SharedMutex.h>
 #include <tsl/sparse_map.h>
 
@@ -32,42 +33,76 @@ class Index {
   // std::exception on failure.
   void recover(RecordReader& rr);
 
+  struct FOLLY_PACK_ATTR ItemRecord {
+    uint32_t address{0};
+    uint16_t size{0}; /* unused */
+    uint8_t currentHits{0};
+    uint8_t totalHits{0};
+    ItemRecord(uint32_t _address = 0,
+               uint16_t _size = 0,
+               uint8_t _currentHits = 0,
+               uint8_t _totalHits = 0)
+        : address(_address),
+          size(_size),
+          currentHits(_currentHits),
+          totalHits(_totalHits) {}
+  };
+  static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
+
   struct LookupResult {
     friend class Index;
 
     bool found() const { return found_; }
 
-    bool removed() const { return found(); }
-
-    uint32_t value() const {
+    ItemRecord record() const {
       XDCHECK(found_);
-      return value_;
+      return record_;
+    }
+
+    uint32_t address() const {
+      XDCHECK(found_);
+      return record_.address;
+    }
+
+    uint16_t size() const {
+      XDCHECK(found_);
+      return record_.size;
+    }
+
+    uint8_t currentHits() const {
+      XDCHECK(found_);
+      return record_.currentHits;
+    }
+
+    uint8_t totalHits() const {
+      XDCHECK(found_);
+      return record_.totalHits;
     }
 
    private:
-    uint32_t value_{};
+    ItemRecord record_;
     bool found_{false};
   };
+
   LookupResult lookup(uint64_t key) const;
 
   // Overwrites existing
   // If the entry was successfully overwritten, LookupResult.found() returns
-  // true and LookupResult.value() returns the old value.
-  LookupResult insert(uint64_t key, uint32_t value);
+  // true and LookupResult.record() returns the old record.
+  LookupResult insert(uint64_t key, uint32_t address);
 
-  // Replace old value with new value if there exists the key with the identical
-  // old value. Return true if replaced.
-  bool replace(uint64_t key, uint32_t newValue, uint32_t oldValue);
+  // Replace old address with new address if there exists the key with the
+  // identical old address. Return true if replaced.
+  bool replaceIfMatch(uint64_t key, uint32_t newAddress, uint32_t oldAddress);
 
   // If the entry was successfully removed, LookupResult.found() returns true
-  // and LookupResult.value() returns the address of the entry that was just
-  // found.
+  // and LookupResult.record() returns the record that was just found.
   // If the entry wasn't found, then LookupResult.found() returns false.
   LookupResult remove(uint64_t key);
 
-  // Only remove if both key and value match.
+  // Only remove if both key and address match.
   // Return true if removed successfully, false otherwise.
-  bool remove(uint64_t key, uint32_t value);
+  bool removeIfMatch(uint64_t key, uint32_t address);
 
   void reset();
 
@@ -78,7 +113,7 @@ class Index {
   static constexpr uint32_t kNumBuckets{64 * 1024};
   static constexpr uint32_t kNumMutexes{1024};
 
-  using Map = tsl::sparse_map<uint32_t, uint32_t>;
+  using Map = tsl::sparse_map<uint32_t, ItemRecord>;
 
   static uint32_t bucket(uint64_t hash) {
     return (hash >> 32) & (kNumBuckets - 1);
