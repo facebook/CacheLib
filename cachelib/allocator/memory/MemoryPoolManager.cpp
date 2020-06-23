@@ -23,7 +23,7 @@ MemoryPoolManager::MemoryPoolManager(
   }
   // Check if nextPoolid is restored properly or not. If not restored,
   // throw error
-  if (!object.__isset.nextPoolId) {
+  if (!object.nextPoolId_ref().has_value()) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
         " nextPoolId is not set");
