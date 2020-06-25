@@ -31,7 +31,6 @@ class CacheAllocatorConfig {
   using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
   using MoveCb = typename CacheT::MoveCb;
-  using NewMoveCb = typename CacheT::NewMoveCb;
   using NvmCacheConfig = typename CacheT::NvmCacheT::Config;
   using Key = typename CacheT::Key;
   using EventTrackerSharedPtr = std::shared_ptr<typename CacheT::EventTracker>;
@@ -251,21 +250,9 @@ class CacheAllocatorConfig {
   // we move slab memory around. Come talk to Cache Library team if you think
   // this can help your service.
   CacheAllocatorConfig& enableMovingOnSlabRelease(
-      NewMoveCb cb,
-      ChainedItemMovingSync sync = {},
-      uint32_t movingAttemptsLimit = 10);
-
-  CacheAllocatorConfig& enableMovingOnSlabRelease(
       MoveCb cb,
       ChainedItemMovingSync sync = {},
-      uint32_t movingAttemptsLimit = 10) {
-    return enableMovingOnSlabRelease(
-        [cb = std::move(cb)](Item& oldIt, Item& newIt, std ::optional<Item*>) {
-          cb(oldIt, newIt);
-        },
-        sync,
-        movingAttemptsLimit);
-  }
+      uint32_t movingAttemptsLimit = 10);
 
   // This customizes how many items we try to evict before giving up.
   // We may fail to evict if someone else (another thread) is using an item.
@@ -549,7 +536,7 @@ class CacheAllocatorConfig {
   // providing a movingSync and do explicit synchronization just in the
   // moveCb if needed to protect the data being moved with concurrent
   // readers.
-  NewMoveCb moveCb{};
+  MoveCb moveCb{};
 
   // custom user provided admission policy
   std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmCacheAP{nullptr};
@@ -958,7 +945,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolResizing(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableMovingOnSlabRelease(
-    NewMoveCb cb, ChainedItemMovingSync sync, uint32_t movingAttemptsLimit) {
+    MoveCb cb, ChainedItemMovingSync sync, uint32_t movingAttemptsLimit) {
   moveCb = cb;
   movingSync = sync;
   movingTries = movingAttemptsLimit;

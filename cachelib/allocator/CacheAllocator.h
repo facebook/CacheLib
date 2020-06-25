@@ -156,14 +156,10 @@ class CacheAllocator : public CacheBase {
 
   // call back to execute when moving an item, this could be a simple memcpy
   // or something more complex.
-  using OldMoveCb = std::function<void(Item& oldItem, Item& newItem)>;
-
-  // New API with an optional parent item pointer if the item being moved is
-  // chained.
-  using NewMoveCb = std::function<void(
+  // An optional parentItem pointer is provided if the item being moved is a
+  // chained item.
+  using MoveCb = std::function<void(
       Item& oldItem, Item& newItem, std::optional<Item*> parentItem)>;
-
-  using MoveCb = OldMoveCb;
 
   // call back type that is executed when the cache item is removed
   // (evicted / freed)
