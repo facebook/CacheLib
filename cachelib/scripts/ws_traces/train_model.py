@@ -34,6 +34,12 @@ def build_dataset_for_training(
     accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
         tracefile, global_feature_map_path
     )
+    return build_dataset_from_accesses(
+        eviction_age, access_history_use_counts, accesses
+    )
+
+
+def build_dataset_from_accesses(eviction_age, access_history_use_counts, accesses):
     dynamicFeatures = dfeature.DynamicFeatures(
         utils.ACCESS_HISTORY_COUNT, access_history_use_counts
     )

@@ -41,6 +41,29 @@ FEATURES = [f"bf_{i}" for i in range(0, ACCESS_HISTORY_COUNT)] + [
     "user",
 ]
 
+# translate keywords in dict results into file result for
+# unified downstream processing.
+OP_TIME = "op_time"
+KEYWORD_MAP = {
+    "block_id": KEY_STR,
+    "offset": OFF_STR,
+    "io_size": IOSIZE_STR,
+    "op_name": OP_STR,
+    "pipeline_name": PIPELINE_STR,
+    "user_name": USER_STR,
+    "user_namespace": NS_STR,
+    # This captures the timestamp.
+    "op_time": OP_TIME,
+}
+
+# default values if a key is not present.
+DEFAULT_MAP = {
+    "offset": 0,
+    "pipeline_name": "NOT_SET",
+    "user_name": "NOT_SET",
+    "user_namespace": "NOT_SET",
+}
+
 
 class KeyFeatures(object):
     # helps reduce memory footprint
@@ -219,16 +242,24 @@ def process_line_and_add(accesses, keys, users, namespaces, pipelines, l, sample
         if sample_rate < 100 and hash(k) % 100 > sample_rate:
             return
 
-        ukey = lookup_or_add_uuid(keys, k)
-        # first time we are seeing this
-        if ukey not in accesses:
-            accesses[ukey] = KeyAndAccesses(ukey)
-
-        a = process_line(users, namespaces, pipelines, kvs, timestamp)
-        accesses[ukey].addAccess(a)
+        process_line_kvs_and_add(
+            accesses, keys, users, namespaces, pipelines, timestamp, kvs, k
+        )
     except (IndexError, ValueError, KeyError) as e:
         print("Error in line: ", parts, e)
         return
+
+
+def process_line_kvs_and_add(
+    accesses, keys, users, namespaces, pipelines, timestamp, kvs, k
+):
+    ukey = lookup_or_add_uuid(keys, k)
+    # first time we are seeing this
+    if ukey not in accesses:
+        accesses[ukey] = KeyAndAccesses(ukey)
+
+    a = process_line(users, namespaces, pipelines, kvs, timestamp)
+    accesses[ukey].addAccess(a)
 
 
 def read_tracefile(f, sample_rate):
@@ -274,6 +305,36 @@ def write_feature_encoding_to_file(f, m):
     with open(f, "w") as of:
         for k, v in m.items():
             print("{} {}".format(k, v), file=of)
+
+
+def read_dict_results(results):
+    """Read results in the form of a list of dicts.
+    The element in the list (dict) represents one sample aggregated over a certain flush time interval.
+    The dict has the following entries:
+        op_count: integer count of how many samples are aggregated within the interval.
+        sample_rate: the sample rate from which the sample is drawn. We assume the sample_rate is the same across all samples for now.
+        TODO (@haouwx): Address different sample rates.
+        op_time: unix timestamp when the sample was first generated.
+        block_id, offset, user_name, io_size, op_name, pipeline_name, user_namepsace:
+            Features. See KEYWORD_MAP for how they translate to the features in the file format case.
+    """
+    count = 0
+    accesses = {}
+    users = {}  # encoding of users to ints
+    namespaces = {}  # encoding of namespaces to ints
+    pipelines = {}  # encoding of pipelines to ints
+    keys = {}  # set of all keys
+    for row in results:
+        op_ct = row["op_count"]
+        while op_ct > 0:
+            count += 1
+            op_ct -= 1
+            process_row_and_add(accesses, keys, users, namespaces, pipelines, row)
+
+    for k in accesses:
+        accesses[k].sortAccesses()
+    print("Read {} accesses and found {} keys".format(count, len(accesses)))
+    return accesses, users, namespaces, pipelines
 
 
 # read the processed file and return a dictionary of key to all its BlkAccess
@@ -470,3 +531,38 @@ def get_feature_maps(local_map_path, global_map_path, sample_ratio):
     with open(global_map_path) as f:
         global_maps = json.load(f)
     return (local_maps, global_maps)
+
+
+def process_row_and_add(accesses, keys, users, namespaces, pipelines, row):
+    try:
+        kvs = {
+            KEYWORD_MAP[key]: row[key]
+            if key in row.keys() and len(str(row[key]).strip()) > 0
+            else DEFAULT_MAP[key]
+            for key in KEYWORD_MAP.keys()
+        }
+        process_line_kvs_and_add(
+            accesses,
+            keys,
+            users,
+            namespaces,
+            pipelines,
+            kvs[OP_TIME],
+            kvs,
+            kvs[KEY_STR],
+        )
+    except (IndexError, ValueError, KeyError) as e:
+        print("Error in line: ", row, e)
+        return
+
+
+def flatten_accesses(k_accesses):
+    """
+    Given accesses as a map from key -> list<access>, return list<pair<key, access>> sorted by time.
+    """
+    accesses = []
+    for k in k_accesses:
+        for a in k_accesses[k].accesses:
+            accesses.append((k, a))
+    accesses.sort(key=lambda a: float(a[1].ts), reverse=False)
+    return accesses
