@@ -431,12 +431,7 @@ def read_processed_file_list_accesses(f, global_feature_map_path=None):
             but can be skipped for research purposes
     """
     k_accesses, start_ts, end_ts = read_processed_file(f, global_feature_map_path)
-    accesses = []
-
-    for k in k_accesses:
-        for a in k_accesses[k].accesses:
-            accesses.append((k, a))
-    accesses.sort(key=lambda a: float(a[1].ts), reverse=False)
+    accesses = flatten_accesses(k_accesses)
 
     return accesses, start_ts, end_ts
 
