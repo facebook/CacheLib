@@ -43,8 +43,8 @@ Cache<Allocator>::Cache(CacheConfig config,
 
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
     allocatorConfig.enableMovingOnSlabRelease(
-        [](Item& oldItem, Item& newItem, std::optional<Item*> parentPtr) {
-          XDCHECK(oldItem.isChainedItem() == (parentPtr != std::nullopt));
+        [](Item& oldItem, Item& newItem, Item* parentPtr) {
+          XDCHECK(oldItem.isChainedItem() == (parentPtr != nullptr));
           std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
                       oldItem.getSize());
         },

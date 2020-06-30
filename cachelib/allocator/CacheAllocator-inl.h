@@ -1140,7 +1140,7 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem) {
   // responsibility to invalidate them. The move can only fail after this
   // statement if the old item has been removed or replaced, in which case it
   // should be fine for it to be left in an inconsistent state.
-  config_.moveCb(oldItem, *newHandle, std::nullopt);
+  config_.moveCb(oldItem, *newHandle, nullptr);
 
   // Inside the access container's lock, this checks if the old item is
   // accessible and its refcount is zero. If the item is not accessible,

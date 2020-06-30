@@ -884,8 +884,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setCacheSize(3 * Slab::kSize);
 
     std::set<std::string> movedKeys;
-    auto moveCb = [&](const Item& oldItem, Item&,
-                      std::optional<Item*> /* parentPtr */) {
+    auto moveCb = [&](const Item& oldItem, Item&, Item* /* parentPtr */) {
       movedKeys.insert(oldItem.getKey().str());
     };
 
@@ -3251,7 +3250,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.enableMovingOnSlabRelease(
         [](typename AllocatorT::Item& oldItem,
            typename AllocatorT::Item& newItem,
-           std::optional<typename AllocatorT::Item*> /* parentPtr */) {
+           typename AllocatorT::Item* /* parentPtr */) {
           memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
                  oldItem.getSize());
         });
@@ -3323,14 +3322,13 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
   // Try moving a single item from one slab to another
   void testMoveItem(bool testEviction) {
-    const auto moveCb =
-        [](typename AllocatorT::Item& oldItem,
-           typename AllocatorT::Item& newItem,
-           std::optional<typename AllocatorT::Item*> /* parentPtr */) {
-          // Simple move callback
-          memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
-                 oldItem.getSize());
-        };
+    const auto moveCb = [](typename AllocatorT::Item& oldItem,
+                           typename AllocatorT::Item& newItem,
+                           typename AllocatorT::Item* /* parentPtr */) {
+      // Simple move callback
+      memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+             oldItem.getSize());
+    };
 
     const int numSlabs = 2;
 
@@ -3863,14 +3861,13 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   void testUnevictableItems() {
-    const auto moveCb =
-        [](typename AllocatorT::Item& oldItem,
-           typename AllocatorT::Item& newItem,
-           std::optional<typename AllocatorT::Item*> /* parentPtr */) {
-          // Simple move callback
-          memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
-                 oldItem.getSize());
-        };
+    const auto moveCb = [](typename AllocatorT::Item& oldItem,
+                           typename AllocatorT::Item& newItem,
+                           typename AllocatorT::Item* /* parentPtr */) {
+      // Simple move callback
+      memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+             oldItem.getSize());
+    };
 
     const int numSlabs = 2;
 
@@ -3927,14 +3924,13 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   void testUnevictableItemsWithMoving() {
-    const auto moveCb =
-        [](typename AllocatorT::Item& oldItem,
-           typename AllocatorT::Item& newItem,
-           std::optional<typename AllocatorT::Item*> /* parentPtr */) {
-          // Simple move callback
-          memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
-                 oldItem.getSize());
-        };
+    const auto moveCb = [](typename AllocatorT::Item& oldItem,
+                           typename AllocatorT::Item& newItem,
+                           typename AllocatorT::Item* /* parentPtr */) {
+      // Simple move callback
+      memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+             oldItem.getSize());
+    };
 
     const int numSlabs = 3;
 
@@ -4681,29 +4677,28 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         });
 
     std::atomic<uint64_t> numMoves{0};
-    config.enableMovingOnSlabRelease(
-        [&](Item& oldItem, Item& newItem, std::optional<Item*> parentPtr) {
-          assert(oldItem.getSize() == newItem.getSize());
+    config.enableMovingOnSlabRelease([&](Item& oldItem, Item& newItem,
+                                         Item* parentPtr) {
+      assert(oldItem.getSize() == newItem.getSize());
 
-          // If parentPtr is present, the item has to be a chained item.
-          if (parentPtr != std::nullopt) {
-            ASSERT_TRUE(oldItem.isChainedItem());
-            uint8_t* buf = reinterpret_cast<uint8_t*>(oldItem.getMemory());
-            uint8_t* parentBuf =
-                reinterpret_cast<uint8_t*>((*parentPtr)->getMemory());
-            // Make sure we are on the right parent.
-            for (int k = 0; k < 100; k++) {
-              ASSERT_EQ(buf[k], (k + (*parentBuf)) % 256);
-            }
-          } else {
-            // If parentPtr is missing, the item mustn't be a chained item.
-            ASSERT_FALSE(oldItem.isChainedItem());
-          }
+      // If parentPtr is present, the item has to be a chained item.
+      if (parentPtr != nullptr) {
+        ASSERT_TRUE(oldItem.isChainedItem());
+        uint8_t* buf = reinterpret_cast<uint8_t*>(oldItem.getMemory());
+        uint8_t* parentBuf = reinterpret_cast<uint8_t*>(parentPtr->getMemory());
+        // Make sure we are on the right parent.
+        for (int k = 0; k < 100; k++) {
+          ASSERT_EQ(buf[k], (k + (*parentBuf)) % 256);
+        }
+      } else {
+        // If parentPtr is missing, the item mustn't be a chained item.
+        ASSERT_FALSE(oldItem.isChainedItem());
+      }
 
-          std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
-                      oldItem.getSize());
-          ++numMoves;
-        });
+      std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+                  oldItem.getSize());
+      ++numMoves;
+    });
 
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
@@ -4851,7 +4846,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       }
     };
     config.enableMovingOnSlabRelease(
-        [](Item&, Item&, std::optional<Item*>) {},
+        [](Item&, Item&, Item*) {},
         [](typename Item::Key key) { return TestSyncObj::genSync(key); });
 
     AllocatorT alloc(config);
@@ -4904,8 +4899,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     };
     std::atomic<uint64_t> numMoves{0};
     config.enableMovingOnSlabRelease(
-        [&](Item& oldItem, Item& newItem,
-            std::optional<Item*> /* parentPtr */) {
+        [&](Item& oldItem, Item& newItem, Item* /* parentPtr */) {
           assert(oldItem.getSize() == newItem.getSize());
           std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
                       oldItem.getSize());

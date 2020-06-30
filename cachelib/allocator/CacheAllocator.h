@@ -158,8 +158,8 @@ class CacheAllocator : public CacheBase {
   // or something more complex.
   // An optional parentItem pointer is provided if the item being moved is a
   // chained item.
-  using MoveCb = std::function<void(
-      Item& oldItem, Item& newItem, std::optional<Item*> parentItem)>;
+  using MoveCb =
+      std::function<void(Item& oldItem, Item& newItem, Item* parentItem)>;
 
   // call back type that is executed when the cache item is removed
   // (evicted / freed)
