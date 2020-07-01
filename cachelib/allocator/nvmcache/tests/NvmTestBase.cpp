@@ -48,9 +48,7 @@ AllocatorT& NvmCacheTest::makeCache() {
   return *cache_;
 }
 
-NvmCacheTest::~NvmCacheTest() {
-  util::removePath(cacheDir_);
-}
+NvmCacheTest::~NvmCacheTest() { util::removePath(cacheDir_); }
 
 bool NvmCacheTest::checkKeyExists(folly::StringPiece key, bool ramOnly) {
   return ramOnly ? cache_->peek(key) != nullptr : fetch(key, false) != nullptr;

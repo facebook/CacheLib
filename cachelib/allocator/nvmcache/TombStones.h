@@ -94,6 +94,5 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   std::unordered_map<uint64_t, uint64_t> keys_;
 };
 
-
 } // namespace cachelib
 } // namespace facebook

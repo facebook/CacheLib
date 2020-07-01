@@ -53,5 +53,5 @@ class PoolResizeStrategy : public RebalanceStrategy {
   // age.
   const unsigned int minSlabsPerAllocClass_{1};
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook

@@ -235,7 +235,7 @@ class DList {
   // size of the list
   size_t size_{0};
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook
 
 #include "cachelib/allocator/datastruct/DList-inl.h"

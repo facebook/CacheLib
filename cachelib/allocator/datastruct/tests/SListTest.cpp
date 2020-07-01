@@ -67,9 +67,9 @@ class CACHELIB_PACKED_ATTR SListNode {
  private:
   void* content_;
 };
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

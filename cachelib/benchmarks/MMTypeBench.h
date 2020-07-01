@@ -3,8 +3,8 @@
 #include <memory>
 #include <vector>
 
-#include <folly/Random.h>
 #include <cachelib/allocator/Cache.h>
+#include <folly/Random.h>
 
 namespace facebook {
 namespace cachelib {
@@ -240,6 +240,6 @@ void MMTypeBench<MMType>::benchRecordAccessWrite(unsigned int /* numNodes */,
     c->recordAccess(*node, AccessMode::kWrite);
   }
 }
-}
-}
-}
+} // namespace benchmarks
+} // namespace cachelib
+} // namespace facebook

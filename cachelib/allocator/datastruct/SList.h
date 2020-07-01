@@ -226,7 +226,7 @@ class SList {
   T* head_{nullptr};
   T* tail_{nullptr};
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook
 
 #include "cachelib/allocator/datastruct/SList-inl.h"

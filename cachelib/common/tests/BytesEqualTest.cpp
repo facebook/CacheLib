@@ -1,12 +1,11 @@
 #include <functional>
-#include <vector>
-#include <string>
 #include <iostream>
 #include <limits>
+#include <string>
+#include <vector>
 
-
-#include <gtest/gtest.h>
 #include <folly/Random.h>
+#include <gtest/gtest.h>
 
 #include "cachelib/common/BytesEqual.h"
 
@@ -65,13 +64,9 @@ void testAllAlignment(bool equal) {
   ASSERT_EQ(byte_align, std::numeric_limits<uint64_t>::max());
 }
 
-TEST(bytesEqual, alignment_equal) {
-  testAllAlignment(true);
-}
+TEST(bytesEqual, alignment_equal) { testAllAlignment(true); }
 
-TEST(bytesEqual, alignment_notequal) {
-  testAllAlignment(false);
-}
+TEST(bytesEqual, alignment_notequal) { testAllAlignment(false); }
 
 TEST(bytesEqual, randomCmp) {
 #ifdef FOLLY_SANITIZE_ADDRESS

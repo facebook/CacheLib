@@ -39,5 +39,5 @@ class FreeMemStrategy : public RebalanceStrategy {
  private:
   const Config config_;
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook

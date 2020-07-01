@@ -32,9 +32,9 @@ class DListNode {
 
   DListHook<DListNode> hook_{};
 };
-}
-}
-}
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

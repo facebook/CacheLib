@@ -93,5 +93,5 @@ struct MPStats {
     return ret + (slabsUnAllocated + freeSlabs) * Slab::kSize;
   }
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook

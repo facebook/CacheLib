@@ -56,7 +56,6 @@ class MarginalHitsStrategy : public RebalanceStrategy {
   ClassId pickVictimImpl(const CacheBase& cache, PoolId pid) override final;
 
  private:
-
   // compute delta of tail hits for every class in this pool
   std::unordered_map<ClassId, double> computeClassMarginalHits(
       PoolId pid, const PoolStats& poolStats);

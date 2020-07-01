@@ -643,7 +643,7 @@ const typename T::HandleMaker
   }
   return typename T::Handle{t};
 };
-}
-}
+} // namespace cachelib
+} // namespace facebook
 
 #include "cachelib/allocator/ChainedHashTable-inl.h"

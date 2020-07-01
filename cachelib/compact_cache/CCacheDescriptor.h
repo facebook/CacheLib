@@ -186,5 +186,5 @@ struct CompactCacheDescriptor {
    * size, i.e VariableSizedValueDescriptor is used. */
   constexpr static bool kValuesFixedSize = ValueDescriptor::kFixedSize;
 };
-} // cachelib
-} // facebook
+} // namespace cachelib
+} // namespace facebook

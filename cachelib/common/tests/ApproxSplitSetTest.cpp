@@ -1,12 +1,11 @@
 #include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/ApproxSplitSet.h"
 
-#include <vector>
 #include <thread>
+#include <vector>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-
 
 namespace facebook {
 namespace cachelib {

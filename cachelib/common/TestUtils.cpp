@@ -42,7 +42,7 @@ constexpr uint64_t kDefaultTimeoutSecs = 30;
   return ::testing::AssertionFailure();
 }
 
-} // anonymous
+} // namespace
 
 /*
  * This variant is for test functions that take no arguments.

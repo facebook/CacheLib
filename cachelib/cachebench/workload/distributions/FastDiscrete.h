@@ -30,7 +30,8 @@ class FastDiscreteDistribution {
                            size_t right,
                            std::vector<size_t> sizes,
                            std::vector<double> probs,
-                           size_t numBuckets = 2048) : leftOffset_(left) {
+                           size_t numBuckets = 2048)
+      : leftOffset_(left) {
     double totalWeight = std::accumulate(probs.begin(), probs.end(), 0.0);
     double totalObjects = std::accumulate(sizes.begin(), sizes.end(), 0.0);
     bucketWeight_ = totalWeight / numBuckets;
@@ -75,7 +76,8 @@ class FastDiscreteDistribution {
   size_t operator()(RNG& gen) {
     size_t bucket = bucketDistribution_(gen);
     size_t objectInBucket = insideBucketDistributions_[bucket](gen);
-    return (scalingFactor_ * (bucketOffsets_[bucket] + objectInBucket))+leftOffset_;
+    return (scalingFactor_ * (bucketOffsets_[bucket] + objectInBucket)) +
+           leftOffset_;
   }
 
   void summarize() {

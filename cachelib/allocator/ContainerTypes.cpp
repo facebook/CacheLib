@@ -11,5 +11,5 @@ const int MMTinyLFU::kId = 3;
 
 // AccessType
 const int ChainedHashTable::kId = 1;
-}
-}
+} // namespace cachelib
+} // namespace facebook

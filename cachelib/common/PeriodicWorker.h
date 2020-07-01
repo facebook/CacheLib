@@ -112,5 +112,5 @@ class PeriodicWorker {
   /* The main worker loop that handles the work periodically */
   void loop(void);
 };
-} // cachelib
-} // facebook
+} // namespace cachelib
+} // namespace facebook

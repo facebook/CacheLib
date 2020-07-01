@@ -262,5 +262,5 @@ struct FixedLruBucket {
     memcpy(destPtr, srcPtr, sizeof(T));
   }
 };
-} // cachelib
-} // facebook
+} // namespace cachelib
+} // namespace facebook
