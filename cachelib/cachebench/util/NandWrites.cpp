@@ -135,6 +135,9 @@ std::optional<uint64_t> getBytesWritten(
               << " fields, but expected at least " << fieldNum + 1 << ".";
     return std::nullopt;
   }
+  fields[fieldNum].erase(
+      std::remove(fields[fieldNum].begin(), fields[fieldNum].end(), ','),
+      fields[fieldNum].end());
   return std::stoll(fields[fieldNum], 0 /* pos */, 0 /* base */) * factor;
 }
 
@@ -157,6 +160,25 @@ std::optional<uint64_t> samsungWriteBytes(
                          nvmePath,
                          {"samsung", "vs-smart-add-log", devicePath.str()},
                          3 /* field num */,
+                         1 /* factor */);
+}
+
+// The output for a LiteOn device looks like:
+//
+// clang-format off
+// ...
+// Physical(NAND) bytes written                  : 157,035,510,104,064
+// ...
+// clang-format on
+std::optional<uint64_t> liteonWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece& nvmePath,
+    const folly::StringPiece& devicePath) {
+  // For LiteOn devices, the returned count is already in bytes.
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"liteon", "vs-smart-add-log", devicePath.str()},
+                         4 /* field num */,
                          1 /* factor */);
 }
 
@@ -262,10 +284,6 @@ std::optional<uint64_t> intelWriteBytes(
 //   return getWriteCount(device, {"wdc", "smart-add-log"}, 4) * 512;
 // }
 //
-// uint64_t liteonWriteBytes(const folly::StringPiece& device) {
-//   return getWriteCount(device, {"liteon", "vs-smart-add-log"}, 4);
-// }
-//
 // uint64_t skhmsWriteBytes(const folly::StringPiece& device) {
 //   // For SKHMS, the output is in 512 byte pages.
 //   return getWriteCount(device, {"skhms", "vs-skhms-smart-log"}, 4) * 512;
@@ -320,28 +338,23 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
   }
   folly::toLowerAscii(modelNumber.value());
 
-  static const std::map<std::string,
-                        std::function<std::optional<uint64_t>(
-                            const std::shared_ptr<ProcessFactory>&,
-                            const folly::StringPiece&,
-                            const folly::StringPiece&)>>
+  static const std::map<std::string, std::function<std::optional<uint64_t>(
+                                         const std::shared_ptr<ProcessFactory>&,
+                                         const folly::StringPiece&,
+                                         const folly::StringPiece&)>>
       vendorMap{{"samsung", samsungWriteBytes},
                 {"mz1lb960hbjr-", samsungWriteBytes},
                 // The Samsung PM983a doesn't include Samsung in the model
                 // number at this time, but it's a Samsung device.
-                {"liteon",
-                 [](const auto&, const auto&, const auto&) {
-                   return notImplemented("LITEON");
-                 }},
+                {"liteon", liteonWriteBytes},
+                {"ssstc", liteonWriteBytes},
                 {"intel", intelWriteBytes},
                 {"seagate", seagateWriteBytes},
                 // The Seagate XM1441 doesn't include SEAGATE in the model
                 // number, but it's a Segate device.
                 {"xm1441-", seagateWriteBytes},
-                {"skhms",
-                 [](const auto&, const auto&, const auto&) {
-                   return notImplemented("SKHMS");
-                 }},
+                {"skhms", [](const auto&, const auto&,
+                             const auto&) { return notImplemented("SKHMS"); }},
                 {"toshiba", toshibaWriteBytes},
                 {"wdc", [](const auto&, const auto&, const auto&) {
                    return notImplemented("WDC");

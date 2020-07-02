@@ -339,6 +339,83 @@ NAND Over-temperature Count              : 0 %
   EXPECT_EQ(nandWriteBytes("nvme0n1", kNvmePath, mockFactory_),
             1217620007190528);
 }
+TEST_F(NandWritesTest, nandWriteBytes_handlesLiteonDevice) {
+  constexpr auto& kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "1CET6105",
+      "Index" : 0,
+      "ModelNumber" : "KXD51LN11T92 TOSHIBA",
+      "ProductName" : "Non-Volatile memory controller: Toshiba America Info Systems Device 0x0119",
+      "SerialNumber" : "69DS10OHT7RQ",
+      "UsedBytes" : 1920383078400,
+      "MaximumLBA" : 468843606,
+      "PhysicalSize" : 1920383410176,
+      "SectorSize" : 4096
+    },
+    {
+      "DevicePath" : "/dev/nvme1n1",
+      "Firmware" : "CMWF2P3",
+      "Index" : 1,
+      "ModelNumber" : "SSSTC EPX-KW960",
+      "ProductName" : "Non-Volatile memory controller: Vendor 0x1e95 Device 0x23a0",
+      "SerialNumber" : "002303560014FA0B",
+      "UsedBytes" : 498103652352,
+      "MaximumLBA" : 122096646,
+      "PhysicalSize" : 500107862016,
+      "SectorSize" : 4096
+    },
+    {
+      "DevicePath" : "/dev/nvme2n1",
+      "Firmware" : "CMWF2P3",
+      "Index" : 2,
+      "ModelNumber" : "SSSTC EPX-KW960",
+      "ProductName" : "Non-Volatile memory controller: Vendor 0x1e95 Device 0x23a0",
+      "SerialNumber" : "002303560014FA0C",
+      "UsedBytes" : 498110795776,
+      "MaximumLBA" : 122096646,
+      "PhysicalSize" : 500107862016,
+      "SectorSize" : 4096
+    }
+
+  ]
+})EOF";
+
+  constexpr auto& kSmartLogOutput = R"EOF(
+Physical(NAND) bytes written                  : 157,035,510,104,064
+Physical(NAND) bytes read                     : 158,313,163,558,912
+Bad NAND block count(normalized)              : 0
+Bad NAND block count(raw)                     : 0
+XOR Recovery count                            : 0
+Uncorrectable read error count                : 0
+Soft ECC error count                          : 0
+SSD End to end detected errors counts         : 0
+SSD End to end corrected errors counts        : 0
+System data % used                            : 0
+User data erase counts maximum                : 142
+User data erase counts minimum                : 109
+Refresh count                                 : 0
+Program fail count(normalized)                : 100
+Program fail count(raw)                       : 0
+User data erase fail count(normalized)        : 100
+User data erase fail count(raw)               : 0
+System area erase fail count(normalized)      : 100
+System area erase fail count(raw)             : 0
+Thermal throttling status                     : 0
+Thermal throttling count                      : 0
+PCIe Correctable Error count                  : 53
+Incomplete shutdowns                          : 0
+% Free Blocks                                 : 100
+)EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "liteon", "vs-smart-add-log", "/dev/nvme1n1"},
+        kSmartLogOutput}});
+  EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_),
+            157035510104064);
+}
 
 TEST_F(NandWritesTest, nandWriteBytes_handlesIntelDevice) {
   constexpr auto& kListOutput = R"EOF({
