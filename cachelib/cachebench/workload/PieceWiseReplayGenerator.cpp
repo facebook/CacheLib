@@ -349,11 +349,12 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       auto responseSize = responseSizeT.value();
       auto responseHeaderSize = responseHeaderSizeT.value();
       auto ttl = ttlT.value();
-      // When responseSize and responseHeaderSize is equal, it's most probably
-      // a HEAD request. Simply ignore such requests for now.
+      // When responseSize and responseHeaderSize is equal, responseBodySize
+      // becomes 0 which can make range calculation incorrect. Simply ignore
+      // such requests for now.
       // TODO: better handling non-GET requests
       if (responseSize == responseHeaderSize) {
-        invalidSamples_.inc();
+        nonGetSamples_.inc();
         continue;
       }
 
@@ -375,16 +376,24 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       auto rangeEnd =
           parseRangeField(fields[SampleFields::RANGE_END], fullContentSize);
 
-      // The client connection could be terminated early because of reasons
-      // like slow client, user stops in the middle, etc.
-      // This normally happens when client sends out request for very large
-      // object without range request. Rectify such trace sample here.
+      // Perform range size check, and rectify the range when responseBodySize
+      // is obviously too small.
       auto responseBodySize = responseSize - responseHeaderSize;
-      if (!rangeStart.has_value() && responseBodySize < fullContentSize) {
+      if (!rangeStart.has_value()) {
         // No range request setting, but responseBodySize is smaller than
-        // fullContentSize. convert the sample to range request
-        rangeStart = 0;
-        rangeEnd = responseBodySize - 1;
+        // fullContentSize. Convert the sample to range request.
+        if (responseBodySize < fullContentSize) {
+          rangeStart = 0;
+          rangeEnd = responseBodySize - 1;
+        }
+      } else {
+        // The sample is range request, but range size is larger than
+        // responseBodySize. Rectify the range end.
+        size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
+                                    : (fullContentSize - *rangeStart);
+        if (responseBodySize < rangeSize) {
+          rangeEnd = responseBodySize + *rangeStart - 1;
+        }
       }
 
       std::vector<std::string> extraFields;

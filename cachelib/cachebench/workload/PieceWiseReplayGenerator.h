@@ -154,8 +154,12 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
                << ", consumer waits: " << queueConsumerWaitCounts_.get();
 
     XLOG(INFO) << "Summary count of samples in workload generator: "
-               << ", # of samples: " << samples_.get()
-               << ", # of invalid samples: " << invalidSamples_.get();
+               << "# of samples: " << samples_.get()
+               << ", # of invalid samples: " << invalidSamples_.get()
+               << ", # of non-get samples: " << nonGetSamples_.get()
+               << ". Total invalid sample ratio: "
+               << (double)(invalidSamples_.get() + nonGetSamples_.get()) /
+                      samples_.get();
   }
 
   // getReq generates the next request from the named trace file.
@@ -290,6 +294,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   AtomicCounter queueConsumerWaitCounts_{0};
 
   AtomicCounter invalidSamples_{0};
+  AtomicCounter nonGetSamples_{0};
   AtomicCounter samples_{0};
 
   void getReqFromTrace();
