@@ -34,29 +34,33 @@ class FileDevice final : public Device {
 
  private:
   bool writeImpl(uint64_t offset, uint32_t size, const void* value) override {
-    bool success = ::pwrite(fd_, value, size, offset) == size;
-    if (!success) {
-      reportIOError("write", offset, size);
+    ssize_t bytesWritten = ::pwrite(fd_, value, size, offset);
+    if (bytesWritten != size) {
+      reportIOError("write", offset, size, bytesWritten);
     }
-    return success;
+    return bytesWritten == size;
   }
 
   bool readImpl(uint64_t offset, uint32_t size, void* value) override {
-    bool success = ::pread(fd_, value, size, offset) == size;
-    if (!success) {
-      reportIOError("read", offset, size);
+    ssize_t bytesRead = ::pread(fd_, value, size, offset);
+    if (bytesRead != size) {
+      reportIOError("read", offset, size, bytesRead);
     }
-    return success;
+    return bytesRead == size;
   }
 
   void flushImpl() override { ::fsync(fd_); }
 
-  void reportIOError(const char* opName, uint64_t offset, uint32_t size) {
+  void reportIOError(const char* opName,
+                     uint64_t offset,
+                     uint32_t size,
+                     ssize_t ioRet) {
     XLOGF(ERR,
-          "IO error: {} offset={} size={} errno={} ({})",
+          "IO error: {} offset={} size={} ret={} errno={} ({})",
           opName,
           offset,
           size,
+          ioRet,
           errno,
           std::strerror(errno));
   }
@@ -120,13 +124,26 @@ class RAID0Device final : public Device {
       uint32_t ioOffsetInStripe = offset % stripeSize_;
       uint32_t allowedIOSize = std::min(size, stripeSize_ - ioOffsetInStripe);
 
-      auto retSize = io(fdvec_[fdIdx],
-                        buf,
-                        allowedIOSize,
-                        stripeStartOffset + ioOffsetInStripe);
+      ssize_t retSize = io(fdvec_[fdIdx],
+                           buf,
+                           allowedIOSize,
+                           stripeStartOffset + ioOffsetInStripe);
       if (retSize != allowedIOSize) {
-        reportIOError(opName, offset, size, stripe, ioOffsetInStripe,
-                      allowedIOSize);
+        XLOGF(
+            ERR,
+            "IO error: {} logicalOffset={} logicalIOSize={} stripeSize={} "
+            "stripe={} offsetInStripe={} stripeIOSize={} ret={} errno={} ({})",
+            opName,
+            offset,
+            size,
+            stripeSize_,
+            stripe,
+            ioOffsetInStripe,
+            allowedIOSize,
+            retSize,
+            errno,
+            std::strerror(errno));
+
         return false;
       }
 
@@ -135,26 +152,6 @@ class RAID0Device final : public Device {
       buf += allowedIOSize;
     }
     return true;
-  }
-
-  void reportIOError(const char* opName,
-                     uint64_t logicalOffset,
-                     uint32_t logicalIOSize,
-                     uint32_t stripe,
-                     uint32_t stripeOffset,
-                     uint32_t stripeIOSize) {
-    XLOGF(ERR,
-          "IO error: {} logicalOffset {} logicalIOSize {} stripeSize {} "
-          "stripe {} stripeOffset {} stripeIOSize {} errno {} ({})",
-          opName,
-          logicalOffset,
-          logicalIOSize,
-          stripeSize_,
-          stripe,
-          stripeOffset,
-          stripeIOSize,
-          errno,
-          std::strerror(errno));
   }
 
   const std::vector<int> fdvec_{};
