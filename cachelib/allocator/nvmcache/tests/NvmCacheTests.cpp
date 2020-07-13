@@ -1572,6 +1572,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_evicted"));
   EXPECT_TRUE(cs("navy_bc_pinned_regions"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
+  EXPECT_TRUE(cs("navy_bc_external_fragmentation"));
 
   // navy::LruPolicy
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_avg"));

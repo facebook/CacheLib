@@ -171,6 +171,10 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
 }
 
 void RegionManager::doFlush(RegionId rid, bool async) {
+  // We're wasiting the remaining bytes of a region, so track it for stats
+  externalFragmentation_.add(regionSize_ -
+                             getRegion(rid).getLastEntryEndOffset());
+
   // applicable only if configured to use in-memory buffers
   if (!doesBufferingWrites()) {
     // If in-memory buffering is not enabled, nothing to flush and
@@ -318,6 +322,9 @@ void RegionManager::close(RegionDescriptor&& desc) {
 void RegionManager::releaseEvictedRegion(RegionId rid,
                                          std::chrono::nanoseconds startTime) {
   auto& region = getRegion(rid);
+  // Subtract the wasted bytes in the end since we're reclaiming this region now
+  externalFragmentation_.sub(regionSize_ - region.getLastEntryEndOffset());
+
   // Permanent item region (pinned) should not be reclaimed
   XDCHECK(!region.isPinned());
   // Full barrier because is we cannot have seqNumber_.fetch_add() re-ordered
@@ -411,11 +418,15 @@ void RegionManager::detectFree() {
       break;
     }
   }
+
   // Track all regions that are not free
+  // Also bump external fragmentation stats for all used regions
   for (uint32_t i = 0; i < numRegions_ - numFree_; i++) {
     if (!regions_[i]->isPinned()) {
       track(RegionId{i});
     }
+    externalFragmentation_.add(regionSize_ -
+                               getRegion(RegionId{i}).getLastEntryEndOffset());
   }
   // Move all regions with items to the LRU head. Clean regions with 0 items
   // will group in the LRU tail.
@@ -481,6 +492,7 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_num_regions", numRegions_ - numFree_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
   visitor("navy_bc_pinned_regions", pinnedCount_.get());
+  visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());
   visitor("navy_bc_inmem_waiting_flush", numInMemBufWaitingFlush_.get());

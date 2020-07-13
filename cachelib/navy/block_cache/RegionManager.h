@@ -195,6 +195,8 @@ class RegionManager {
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;
   uint32_t numFree_{};
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
+  mutable AtomicCounter externalFragmentation_;
+
   mutable AtomicCounter pinnedCount_;
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
