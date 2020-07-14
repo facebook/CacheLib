@@ -294,6 +294,10 @@ struct GlobalCacheStats {
   // number of such calls being a miss in the cache.
   uint64_t numCacheGetMiss{0};
 
+  // number of such calls being an expiry in the cache. This is also included
+  // in the numCacheGetMiss stats above.
+  uint64_t numCacheGetExpiries{0};
+
   // number of nvm gets
   uint64_t numNvmGets{0};
 

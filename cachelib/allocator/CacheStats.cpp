@@ -35,6 +35,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   // std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
+  ret.numCacheGetExpiries = numCacheGetExpiries.get();
 
   ret.numNvmGets = numNvmGets.get();
   ret.numNvmGetMiss = numNvmGetMiss.get();

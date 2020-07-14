@@ -1768,6 +1768,7 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
     if (handle->isExpired()) {
       // update cache miss stats if the item has already been expired.
       stats_.numCacheGetMiss.inc();
+      stats_.numCacheGetExpiries.inc();
       // remove the item if it is expired
       if (config_.reapExpiredItemsOnFind) {
         removeImpl(*handle, true /* removeFromNvm */,

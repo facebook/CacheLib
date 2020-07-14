@@ -23,6 +23,10 @@ struct Stats {
   // number of such calls being a miss in the cache.
   TLCounter numCacheGetMiss{0};
 
+  // number of such calls being an expiry in the cache. This is also included
+  // in the numCacheGetMiss stats above.
+  TLCounter numCacheGetExpiries{0};
+
   // number of nvm gets
   TLCounter numNvmGets{0};
 
