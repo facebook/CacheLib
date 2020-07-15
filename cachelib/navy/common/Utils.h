@@ -27,7 +27,7 @@ inline std::chrono::microseconds toMicros(std::chrono::nanoseconds t) {
 }
 
 inline size_t powTwoAlign(size_t size, size_t boundary) {
-  XDCHECK(folly::isPowTwo(boundary));
+  XDCHECK(folly::isPowTwo(boundary)) << boundary;
   return (size + (boundary - 1)) & ~(boundary - 1);
 }
 

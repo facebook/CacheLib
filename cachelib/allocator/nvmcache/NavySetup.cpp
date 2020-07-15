@@ -54,6 +54,9 @@ constexpr folly::StringPiece kMaxDeviceWriteSize{
     "dipper_navy_max_device_write_size"};
 constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
+// TODO: clean this up after T68874972 is resolved.
+constexpr folly::StringPiece kReleaseBugFixForT68874972{
+    "dipper_navy_release_bugfix_for_T68874972"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -110,88 +113,12 @@ folly::File openCacheFile(const std::string& fileName,
   return f;
 }
 
-std::unique_ptr<cachelib::navy::Device> createDevice(
-    const folly::dynamic& options,
-    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
-  const auto size = getNvmCacheSize(options);
-  if (usesRaidFiles(options) && usesSimpleFile(options)) {
-    throw std::invalid_argument("Can't use raid and simple file together");
-  }
-
-  if (usesRaidFiles(options) && options.get_ptr(kRAIDPaths)->size() <= 1) {
-    throw std::invalid_argument("Raid needs more than one path");
-  }
-  auto blockSize = options[kBlockSize].getInt();
-  auto maxDeviceWriteSize = options.getDefault(kMaxDeviceWriteSize, 0).getInt();
-  if (maxDeviceWriteSize > 0) {
-    maxDeviceWriteSize = alignDown(maxDeviceWriteSize, blockSize);
-  };
-
-  if (usesRaidFiles(options)) {
-    auto raidPaths = options.get_ptr(kRAIDPaths);
-
-    // File paths are opened in the increasing order of the
-    // path string. This ensures that RAID0 stripes aren't
-    // out of order even if the caller changes the order of
-    // the file paths. We can recover the cache as long as all
-    // the paths are specified, regardless of the order.
-    std::vector<std::string> paths;
-    for (const auto& file : *raidPaths) {
-      paths.push_back(file.getString());
-    }
-    std::sort(paths.begin(), paths.end());
-
-    std::vector<int> fdvec;
-    for (const auto& path : paths) {
-      folly::File f;
-      try {
-        f = openCacheFile(path,
-                          options[kFileSize].getInt(),
-                          options[kDirectIO].getBool(),
-                          options[kTruncateFile].getBool());
-      } catch (const std::exception& e) {
-        XLOG(ERR) << "Exception in openCacheFile: " << path << e.what();
-        throw;
-      }
-      fdvec.push_back(f.release());
-    } // for
-    auto device =
-        cachelib::navy::createDirectIoRAID0Device(fdvec,
-                                                  options[kFileSize].getInt(),
-                                                  blockSize,
-                                                  options[kRegionSize].getInt(),
-                                                  std::move(encryptor),
-                                                  maxDeviceWriteSize);
-    XDCHECK_EQ(device->getSize(), size);
-    return device;
-  }
-
-  if (!usesSimpleFile(options)) {
-    return cachelib::navy::createMemoryDevice(size, std::move(encryptor),
-                                              blockSize);
-  }
-
-  // Create a simple file device
-  auto fileName = options.get_ptr(kFileName);
-  folly::File f;
-  try {
-    f = openCacheFile(fileName->getString(),
-                      size,
-                      options[kDirectIO].getBool(),
-                      options[kTruncateFile].getBool());
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in openCacheFile: " << e.what();
-    throw;
-  }
-  return cachelib::navy::createDirectIoFileDevice(
-      f.release(), size, blockSize, std::move(encryptor), maxDeviceWriteSize);
-}
-
 void setupCacheProtos(const folly::dynamic& options,
+                      const navy::Device& device,
                       cachelib::navy::CacheProto& proto) {
-  const uint64_t totalCacheSize = getNvmCacheSize(options);
+  const uint64_t totalCacheSize = device.getSize();
 
-  auto blockSize = options[kBlockSize].getInt();
+  auto ioAlignSize = device.getIOAlignmentSize();
   auto getDefaultMetadataSize = [](size_t size, size_t alignment) {
     XDCHECK(folly::isPowTwo(alignment));
     auto mask = ~(alignment - 1);
@@ -200,9 +127,9 @@ void setupCacheProtos(const folly::dynamic& options,
   uint64_t metadataSize =
       options
           .getDefault(kDeviceMetadataSize,
-                      getDefaultMetadataSize(totalCacheSize, blockSize))
+                      getDefaultMetadataSize(totalCacheSize, ioAlignSize))
           .getInt();
-  metadataSize = alignUp(metadataSize, blockSize);
+  metadataSize = alignUp(metadataSize, ioAlignSize);
 
   if (metadataSize >= totalCacheSize) {
     throw std::invalid_argument{
@@ -214,7 +141,13 @@ void setupCacheProtos(const folly::dynamic& options,
   uint64_t blockCacheSize = 0;
   const auto bigHashPctSize = options.get_ptr(kBigHashSizePct);
   if (bigHashPctSize && bigHashPctSize->getInt() > 0) {
-    const auto bucketSize = options[kBigHashBucketSize].getInt();
+    const auto bucketSize =
+        static_cast<uint32_t>(options[kBigHashBucketSize].getInt());
+    if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
+      throw std::invalid_argument(
+          folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
+                         bucketSize, ioAlignSize));
+    }
 
     // If enabled, BigHash's storage starts after BlockCache's.
     const auto sizeReservedForBigHash =
@@ -261,9 +194,15 @@ void setupCacheProtos(const folly::dynamic& options,
   }
 
   if (blockCacheSize > 0) {
+    auto regionSize = static_cast<uint32_t>(options[kRegionSize].getInt());
+    if (regionSize != alignUp(regionSize, ioAlignSize)) {
+      throw std::invalid_argument(
+          folly::sformat("Region size: {} is not aligned to ioAlignSize: {}",
+                         regionSize, ioAlignSize));
+    }
+
     auto blockCache = cachelib::navy::createBlockCacheProto();
-    blockCache->setLayout(metadataSize, blockCacheSize,
-                          options[kRegionSize].getInt());
+    blockCache->setLayout(metadataSize, blockCacheSize, regionSize);
     bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
     blockCache->setChecksum(dataChecksum);
     if (options[kLru].getBool()) {
@@ -341,16 +280,94 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
         readerThreads, writerThreads);
   }
 }
-
 } // namespace
 
-uint64_t getNvmCacheSize(const folly::dynamic& options) {
+std::unique_ptr<cachelib::navy::Device> createDevice(
+    const folly::dynamic& options,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
+  if (usesRaidFiles(options) && usesSimpleFile(options)) {
+    throw std::invalid_argument("Can't use raid and simple file together");
+  }
+
+  if (usesRaidFiles(options) && options.get_ptr(kRAIDPaths)->size() <= 1) {
+    throw std::invalid_argument("Raid needs more than one path");
+  }
+  auto blockSize = options[kBlockSize].getInt();
+  auto maxDeviceWriteSize = options.getDefault(kMaxDeviceWriteSize, 0).getInt();
+  if (maxDeviceWriteSize > 0) {
+    maxDeviceWriteSize = alignDown(maxDeviceWriteSize, blockSize);
+  };
+
   if (usesRaidFiles(options)) {
     auto raidPaths = options.get_ptr(kRAIDPaths);
-    return raidPaths->size() * options[kFileSize].getInt();
+
+    // File paths are opened in the increasing order of the
+    // path string. This ensures that RAID0 stripes aren't
+    // out of order even if the caller changes the order of
+    // the file paths. We can recover the cache as long as all
+    // the paths are specified, regardless of the order.
+    std::vector<std::string> paths;
+    for (const auto& file : *raidPaths) {
+      paths.push_back(file.getString());
+    }
+    std::sort(paths.begin(), paths.end());
+
+    auto fdSize = static_cast<uint64_t>(options[kFileSize].getInt());
+    std::vector<int> fdvec;
+    for (const auto& path : paths) {
+      folly::File f;
+      try {
+        f = openCacheFile(path,
+                          fdSize,
+                          options[kDirectIO].getBool(),
+                          options[kTruncateFile].getBool());
+      } catch (const std::exception& e) {
+        XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
+                  << ". Errno: " << errno;
+        throw;
+      }
+      fdvec.push_back(f.release());
+    }
+
+    // Align down device size to ensure each device is aligned to stripe size
+    auto stripeSize = static_cast<uint64_t>(options[kRegionSize].getInt());
+    auto releaseBugFixForT68874972 =
+        options.getDefault(kReleaseBugFixForT68874972, true).getBool();
+    if (releaseBugFixForT68874972) {
+      fdSize = alignDown(fdSize, stripeSize);
+    }
+
+    auto device =
+        cachelib::navy::createDirectIoRAID0Device(fdvec,
+                                                  fdSize,
+                                                  blockSize,
+                                                  stripeSize,
+                                                  std::move(encryptor),
+                                                  maxDeviceWriteSize,
+                                                  releaseBugFixForT68874972);
+    return device;
   }
-  // Simple file or memory
-  return options[kFileSize].getInt();
+
+  const auto singleFileSize = options[kFileSize].getInt();
+  if (usesSimpleFile(options)) {
+    // Create a simple file device
+    auto fileName = options.get_ptr(kFileName);
+    folly::File f;
+    try {
+      f = openCacheFile(fileName->getString(),
+                        singleFileSize,
+                        options[kDirectIO].getBool(),
+                        options[kTruncateFile].getBool());
+    } catch (const std::exception& e) {
+      XLOG(ERR) << "Exception in openCacheFile: " << e.what();
+      throw;
+    }
+    return cachelib::navy::createDirectIoFileDevice(
+        f.release(), singleFileSize, blockSize, std::move(encryptor),
+        maxDeviceWriteSize);
+  }
+  return cachelib::navy::createMemoryDevice(singleFileSize,
+                                            std::move(encryptor), blockSize);
 }
 
 std::unique_ptr<navy::AbstractCache> createNavyCache(
@@ -361,6 +378,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   auto device = createDevice(options, std::move(encryptor));
 
   auto proto = cachelib::navy::createCacheProto();
+  auto* devicePtr = device.get();
   proto->setDevice(std::move(device));
   proto->setJobScheduler(createJobScheduler(options));
   proto->setMaxConcurrentInserts(
@@ -370,7 +388,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   setAdmissionPolicy(options, *proto);
   proto->setDestructorCallback(cb);
 
-  setupCacheProtos(options, *proto);
+  setupCacheProtos(options, *devicePtr, *proto);
 
   auto cache = createCache(std::move(proto));
   XDCHECK(cache != nullptr);

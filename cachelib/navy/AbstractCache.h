@@ -111,6 +111,9 @@ class AbstractCache {
   // Reports counters for monitoring/alerting purposes. Invokes @visitor for
   // every counter with key name and value.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
+
+  // Return how big the cache size is in bytes
+  virtual uint64_t getSize() const = 0;
 };
 } // namespace navy
 } // namespace cachelib

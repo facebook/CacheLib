@@ -72,17 +72,28 @@ class FileDevice final : public Device {
 class RAID0Device final : public Device {
  public:
   RAID0Device(std::vector<int>& fdvec,
-              uint64_t size,
+              uint64_t fdSize,
               uint32_t ioAlignSize,
               uint32_t stripeSize,
               std::shared_ptr<DeviceEncryptor> encryptor,
-              uint32_t maxDeviceWriteSize)
-      : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
+              uint32_t maxDeviceWriteSize,
+              bool releaseBugFixForT68874972)
+      : Device{fdSize * fdvec.size(), std::move(encryptor), ioAlignSize,
+               maxDeviceWriteSize},
         fdvec_{fdvec},
         stripeSize_(stripeSize) {
     XDCHECK_GT(ioAlignSize, 0u);
     XDCHECK_GT(stripeSize_, 0u);
     XDCHECK_GE(stripeSize_, ioAlignSize);
+    XDCHECK_EQ(0u, stripeSize_ % 2) << stripeSize_;
+    XDCHECK_EQ(0u, stripeSize_ % ioAlignSize)
+        << stripeSize_ << ", " << ioAlignSize;
+    if (releaseBugFixForT68874972 && fdSize % stripeSize != 0) {
+      throw std::invalid_argument(
+          folly::sformat("Invalid size because individual device size: {} is "
+                         "not aligned to stripe size: {}",
+                         fdSize, stripeSize));
+    }
   }
   RAID0Device(const RAID0Device&) = delete;
   RAID0Device& operator=(const RAID0Device&) = delete;
@@ -332,11 +343,12 @@ std::unique_ptr<Device> createDirectIoRAID0Device(
     uint32_t ioAlignSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize) {
+    uint32_t maxDeviceWriteSize,
+    bool releaseBugFixForT68874972) {
   XDCHECK(folly::isPowTwo(ioAlignSize));
-  return std::make_unique<RAID0Device>(fdvec, fdvec.size() * size, ioAlignSize,
-                                       stripeSize, std::move(encryptor),
-                                       maxDeviceWriteSize);
+  return std::make_unique<RAID0Device>(fdvec, size, ioAlignSize, stripeSize,
+                                       std::move(encryptor), maxDeviceWriteSize,
+                                       releaseBugFixForT68874972);
 }
 
 std::unique_ptr<Device> createMemoryDevice(

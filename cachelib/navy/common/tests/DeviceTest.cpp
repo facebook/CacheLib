@@ -233,7 +233,8 @@ TEST(Device, RAID0IO) {
                                           ioAlignSize,
                                           stripeSize,
                                           nullptr /* encryption */,
-                                          0 /* max device write size */);
+                                          0 /* max device write size */,
+                                          true /* clean up after T68874972 */);
 
   EXPECT_EQ(fdvec.size() * size, device->getSize());
 
@@ -289,6 +290,51 @@ TEST(Device, RAID0IO) {
     auto rc = std::memcmp(wbuf.data(), rbuf.data(), ioSize);
     EXPECT_EQ(0, rc);
   }
+}
+
+TEST(Device, RAID0IOAlignment) {
+  // The goal of this test is to ensure we cannot create a RAID0 device
+  // if each individual device is not aligned to stripe size. This is to
+  // test against a bug that was uncovered in T68874972.
+  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
+  util::makeDir(filePath);
+  SCOPE_EXIT { util::removePath(filePath); };
+
+  std::vector<std::string> files = {filePath + "/CACHE0", filePath + "/CACHE1",
+                                    filePath + "/CACHE2", filePath + "/CACHE3"};
+
+  int size = 4 * 1024 * 1024;
+  int ioAlignSize = 4096;
+  int stripeSize = 8192;
+
+  std::vector<int> fdvec;
+  for (const auto& file : files) {
+    auto f = folly::File(file.c_str(), O_RDWR | O_CREAT);
+    auto ret = ::fallocate(f.fd(), 0, 0, size);
+    EXPECT_EQ(0, ret);
+    fdvec.push_back(f.release());
+  }
+
+  // Update individual device size to something smaller but the overall size
+  // of all the devices is still aligned on stripe size.
+  size = 2 * 1024 * 1024 + stripeSize / fdvec.size();
+  ASSERT_THROW(createDirectIoRAID0Device(fdvec,
+                                         size,
+                                         ioAlignSize,
+                                         stripeSize,
+                                         nullptr /* encryption */,
+                                         0 /* max device write size */,
+                                         true /* clean up after T68874972 */),
+               std::invalid_argument);
+
+  ASSERT_NO_THROW(
+      createDirectIoRAID0Device(fdvec,
+                                size,
+                                ioAlignSize,
+                                stripeSize,
+                                nullptr /* encryption */,
+                                0 /* max device write size */,
+                                false /* clean up after T68874972 */));
 }
 } // namespace tests
 } // namespace navy

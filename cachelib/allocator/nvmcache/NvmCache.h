@@ -202,9 +202,7 @@ class NvmCache {
   // Obtain stats in a <string -> double> representation.
   std::unordered_map<std::string, double> getStatsMap() const;
 
-  size_t getSize() const noexcept {
-    return getNvmCacheSize(config_.dipperOptions);
-  }
+  size_t getSize() const noexcept { return navyCache_->getSize(); }
 
  private:
   detail::Stats& stats() { return cache_.stats_; }

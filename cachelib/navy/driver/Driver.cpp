@@ -319,6 +319,8 @@ bool Driver::recover() {
   return recovered;
 }
 
+uint64_t Driver::getSize() const { return device_->getSize(); }
+
 void Driver::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_inserts", insertCount_.get());
   visitor("navy_succ_inserts", succInsertCount_.get());

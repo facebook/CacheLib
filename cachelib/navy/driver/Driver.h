@@ -56,6 +56,7 @@ class Driver final : public AbstractCache {
   void persist() const override;
   bool recover() override;
 
+  uint64_t getSize() const override;
   void getCounters(const CounterVisitor& visitor) const override;
 
  private:
