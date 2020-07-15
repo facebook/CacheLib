@@ -137,8 +137,11 @@ void setupCacheProtos(const folly::dynamic& options,
                        metadataSize,
                        totalCacheSize)};
   }
+
   proto.setMetadataSize(metadataSize);
   uint64_t blockCacheSize = 0;
+
+  // Set up BigHash if enabled
   const auto bigHashPctSize = options.get_ptr(kBigHashSizePct);
   if (bigHashPctSize && bigHashPctSize->getInt() > 0) {
     const auto bucketSize =
@@ -184,15 +187,14 @@ void setupCacheProtos(const folly::dynamic& options,
     }
     blockCacheSize = bigHashCacheOffset - metadataSize;
     XLOG(ERR) << "metadataSize: " << metadataSize
-              << " blockCacheSize: " << blockCacheSize
               << " bigHashCacheOffset: " << bigHashCacheOffset
               << " bigHashCacheSize: " << bigHashCacheSize;
   } else {
     blockCacheSize = totalCacheSize - metadataSize;
-    XLOG(ERR) << "metadataSize: " << metadataSize
-              << " blockCacheSize: " << blockCacheSize << ". No Bighash";
+    XLOG(ERR) << "metadataSize: " << metadataSize << ". No bighash.";
   }
 
+  // Set up BlockCache if enabled
   if (blockCacheSize > 0) {
     auto regionSize = static_cast<uint32_t>(options[kRegionSize].getInt());
     if (regionSize != alignUp(regionSize, ioAlignSize)) {
@@ -201,8 +203,23 @@ void setupCacheProtos(const folly::dynamic& options,
                          regionSize, ioAlignSize));
     }
 
+    // Adjust starting size of block cache to ensure it is aligned to region
+    // size which is what we use for the stripe size when using RAID0Device.
+    uint64_t blockCacheOffset = metadataSize;
+    if (options.getDefault(kReleaseBugFixForT68874972, true).getBool() &&
+        usesRaidFiles(options)) {
+      auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
+      auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
+      XDCHECK_LT(cacheSizeAdjustment, blockCacheSize);
+      blockCacheSize -= cacheSizeAdjustment;
+      blockCacheOffset = adjustedBlockCacheOffset;
+    }
+
+    XLOG(ERR) << "blockcache: starting offset: " << blockCacheOffset
+              << ", block cache size: " << blockCacheSize;
+
     auto blockCache = cachelib::navy::createBlockCacheProto();
-    blockCache->setLayout(metadataSize, blockCacheSize, regionSize);
+    blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
     bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
     blockCache->setChecksum(dataChecksum);
     if (options[kLru].getBool()) {
