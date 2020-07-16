@@ -212,7 +212,7 @@ TEST_F(ChainedHashTest, IteratorWithThrottler) {
 
   facebook::cachelib::util::Throttler::Config config;
   config.sleepMs = 200;
-  config.sleepIntervalMs = 5;
+  config.workMs = 5;
   auto iter1 = c.begin(config);
 
   // get total time of iteration with throttler
