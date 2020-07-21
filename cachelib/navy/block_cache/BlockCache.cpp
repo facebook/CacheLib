@@ -517,11 +517,11 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
 void BlockCache::persist(RecordWriter& rw) {
   XLOG(INFO, "Starting block cache persist");
   auto config = config_;
-  config.sizeDist = sizeDist_.getSnapshot();
+  *config.sizeDist_ref() = sizeDist_.getSnapshot();
   config.allocAlignSize = allocAlignSize_;
   config.set_holeCount(holeCount_.get());
   config.set_holeSizeTotal(holeSizeTotal_.get());
-  config.reinsertionPolicyEnabled = (reinsertionPolicy_ != nullptr);
+  *config.reinsertionPolicyEnabled_ref() = (reinsertionPolicy_ != nullptr);
   serializeProto(config, rw);
   regionManager_.persist(rw);
   index_.persist(rw);
@@ -554,14 +554,14 @@ void BlockCache::tryRecover(RecordReader& rr) {
     XLOGF(ERR, "Recovery config: {}", configStr.c_str());
     throw std::invalid_argument("Recovery config does not match cache config");
   }
-  sizeDist_ = SizeDistribution{config.sizeDist};
-  holeCount_.set(config.holeCount);
-  holeSizeTotal_.set(config.holeSizeTotal);
+  sizeDist_ = SizeDistribution{*config.sizeDist_ref()};
+  holeCount_.set(*config.holeCount_ref());
+  holeSizeTotal_.set(*config.holeSizeTotal_ref());
   regionManager_.recover(rr);
   index_.recover(rr);
   // Reinsertion policy is optional. So only try to recover if we had it
   // enabled in the last run of Navy.
-  if (config.reinsertionPolicyEnabled && reinsertionPolicy_) {
+  if (*config.reinsertionPolicyEnabled_ref() && reinsertionPolicy_) {
     reinsertionPolicy_->recover(rr);
   }
 }

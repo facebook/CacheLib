@@ -406,7 +406,7 @@ TEST_F(SListTest, TestRestoreListWarmRollFromOldFormat) {
       deserializer.deserialize<serialization::SListObject>();
   EXPECT_EQ(state.size, newFromOld.size);
   EXPECT_EQ(state.compressedHead, newFromOld.compressedHead);
-  EXPECT_EQ(-1, newFromOld.compressedTail);
+  EXPECT_EQ(-1, *newFromOld.compressedTail_ref());
 
   SListImpl list2{newFromOld, SListNode::PtrCompressor{}};
   auto it = list2.begin();
@@ -432,7 +432,7 @@ TEST_F(SListTest, TestRestoreListNoTail) {
   list1.insert(node1);
 
   auto state = list1.saveState();
-  state.compressedTail = -1;
+  *state.compressedTail_ref() = -1;
   SListImpl list2{state, SListNode::PtrCompressor{}};
   auto it = list2.begin();
   EXPECT_EQ(*it, node1);
@@ -462,7 +462,7 @@ TEST_F(SListTest, TestInvalidRestore) {
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
   invalidState = state;
-  invalidState.compressedTail = 0;
+  *invalidState.compressedTail_ref() = 0;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
 

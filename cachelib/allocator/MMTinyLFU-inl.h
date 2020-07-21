@@ -281,9 +281,9 @@ serialization::MMTinyLFUObject MMTinyLFU::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMTinyLFUConfig configObject;
   configObject.lruRefreshTime = config_.lruRefreshTime;
-  configObject.lruRefreshRatio = config_.lruRefreshRatio;
+  *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
   configObject.updateOnWrite = config_.updateOnWrite;
-  configObject.updateOnRead = config_.updateOnRead;
+  *configObject.updateOnRead_ref() = config_.updateOnRead;
   configObject.windowToCacheSizeRatio = config_.windowToCacheSizeRatio;
   configObject.tinySizePercent = config_.tinySizePercent;
   // TODO: May be save/restore the counters.

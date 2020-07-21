@@ -623,7 +623,7 @@ TEST_F(MM2QTest, TailTrackingEnabledCheck) {
 
   {
     serialization::MM2QObject serializedData;
-    EXPECT_FALSE(serializedData.tailTrackingEnabled);
+    EXPECT_FALSE(*serializedData.tailTrackingEnabled_ref());
     serializedData.config.hotSizePercent = 10;
     serializedData.config.coldSizePercent = 20;
     serializedData.lrus = lrus;

@@ -287,10 +287,10 @@ serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState() const
     noexcept {
   serialization::MMLruConfig configObject;
   configObject.lruRefreshTime = config_.lruRefreshTime;
-  configObject.lruRefreshRatio = config_.lruRefreshRatio;
+  *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
   configObject.updateOnWrite = config_.updateOnWrite;
-  configObject.updateOnRead = config_.updateOnRead;
-  configObject.tryLockUpdate = config_.tryLockUpdate;
+  *configObject.updateOnRead_ref() = config_.updateOnRead;
+  *configObject.tryLockUpdate_ref() = config_.tryLockUpdate;
   configObject.lruInsertionPointSpec = config_.lruInsertionPointSpec;
 
   serialization::MMLruObject object;

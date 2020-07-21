@@ -171,7 +171,7 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
     freeSlabs_.push_back(getSlabForIdx(freeSlabIdx));
   }
 
-  for (auto advisedSlabIdx : object.advisedSlabIdxs) {
+  for (auto advisedSlabIdx : *object.advisedSlabIdxs_ref()) {
     // The slab headers in previous release did not have advised flag
     // set in the slab header. To avoid memory locking from touching
     // advised slab pages, we'd have to cold roll. To avoid cold roll
@@ -483,7 +483,7 @@ serialization::SlabAllocatorObject SlabAllocator::saveState() {
     object.freeSlabIdxs.push_back(slabIdx(slab));
   }
   for (auto slab : advisedSlabs_) {
-    object.advisedSlabIdxs.push_back(slabIdx(slab));
+    object.advisedSlabIdxs_ref()->push_back(slabIdx(slab));
   }
 
   object.slabSize = Slab::kSize;

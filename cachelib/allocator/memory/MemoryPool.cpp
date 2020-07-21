@@ -57,9 +57,10 @@ MemoryPool::MemoryPool(const serialization::MemoryPoolObject& object,
       slabAllocator_(alloc),
       acSizes_(createMcSizesFromSerialized(object)),
       ac_(createMcFromSerialized(object, getId(), alloc)),
-      curSlabsAdvised_{static_cast<uint64_t>(object.numSlabsAdvised)},
-      nSlabResize_{static_cast<unsigned int>(object.numSlabResize)},
-      nSlabRebalance_{static_cast<unsigned int>(object.numSlabRebalance)} {
+      curSlabsAdvised_{static_cast<uint64_t>(*object.numSlabsAdvised_ref())},
+      nSlabResize_{static_cast<unsigned int>(*object.numSlabResize_ref())},
+      nSlabRebalance_{
+          static_cast<unsigned int>(*object.numSlabRebalance_ref())} {
   if (!slabAllocator_.isRestorable()) {
     throw std::logic_error(
         "Memory Pool can not be restored with this slab allocator");
@@ -317,9 +318,9 @@ serialization::MemoryPoolObject MemoryPool::saveState() const {
     object.ac.push_back(allocClass->saveState());
   }
 
-  object.numSlabResize = nSlabResize_;
-  object.numSlabRebalance = nSlabRebalance_;
-  object.numSlabsAdvised = curSlabsAdvised_;
+  *object.numSlabResize_ref() = nSlabResize_;
+  *object.numSlabRebalance_ref() = nSlabRebalance_;
+  *object.numSlabsAdvised_ref() = curSlabsAdvised_;
 
   return object;
 }

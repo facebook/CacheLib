@@ -85,7 +85,7 @@ AllocationClass::AllocationClass(
       currOffset_(static_cast<uint32_t>(object.currOffset)),
       currSlab_(s.getSlabForIdx(object.currSlabIdx)),
       slabAlloc_(s),
-      freedAllocations_(object.freedAllocationsObject,
+      freedAllocations_(*object.freedAllocationsObject_ref(),
                         slabAlloc_.createPtrCompressor<FreeAlloc>()),
       canAllocate_(object.canAllocate) {
   if (!slabAlloc_.isRestorable()) {
@@ -666,7 +666,7 @@ serialization::AllocationClassObject AllocationClass::saveState() const {
   for (auto slab : freeSlabs_) {
     object.freeSlabIdxs.push_back(slabAlloc_.slabIdx(slab));
   }
-  object.freedAllocationsObject = freedAllocations_.saveState();
+  *object.freedAllocationsObject_ref() = freedAllocations_.saveState();
   object.canAllocate = canAllocate_;
   return object;
 }

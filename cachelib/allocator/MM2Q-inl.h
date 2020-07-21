@@ -6,7 +6,7 @@ template <typename T, MM2Q::Hook<T> T::*HookPtr>
 MM2Q::Container<T, HookPtr>::Container(const serialization::MM2QObject& object,
                                        PtrCompressor compressor)
     : lru_(object.lrus, compressor),
-      tailTrackingEnabled_(object.tailTrackingEnabled),
+      tailTrackingEnabled_(*object.tailTrackingEnabled_ref()),
       config_(object.config) {
   // We need to adjust list positions if the previous version does not have
   // tail lists (WarmTail & ColdTail), in order to potentially avoid cold roll
@@ -330,16 +330,16 @@ serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState() const
     noexcept {
   serialization::MM2QConfig configObject;
   configObject.lruRefreshTime = config_.lruRefreshTime;
-  configObject.lruRefreshRatio = config_.lruRefreshRatio;
+  *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
   configObject.updateOnWrite = config_.updateOnWrite;
-  configObject.updateOnRead = config_.updateOnRead;
+  *configObject.updateOnRead_ref() = config_.updateOnRead;
   configObject.hotSizePercent = config_.hotSizePercent;
   configObject.coldSizePercent = config_.coldSizePercent;
-  configObject.rebalanceOnRecordAccess = config_.rebalanceOnRecordAccess;
+  *configObject.rebalanceOnRecordAccess_ref() = config_.rebalanceOnRecordAccess;
 
   serialization::MM2QObject object;
   object.config = configObject;
-  object.tailTrackingEnabled = tailTrackingEnabled_;
+  *object.tailTrackingEnabled_ref() = tailTrackingEnabled_;
   object.lrus = lru_.saveState();
   return object;
 }

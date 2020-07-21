@@ -131,10 +131,10 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
           [this](Item* it) -> ItemHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{metadata_.cacheCreationTime},
+      cacheCreationTime_{*metadata_.cacheCreationTime_ref()},
       nvmCacheState_{config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
                      config_.isNvmCacheTruncateAllocSizeEnabled()} {
-  for (auto pid : metadata_.compactCachePools) {
+  for (auto pid : *metadata_.compactCachePools_ref()) {
     isCompactCachePool_[pid] = true;
   }
 
@@ -2876,31 +2876,31 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   }
 
   metadata_.allocatorVersion = kCachelibVersion;
-  metadata_.ramFormatVersion = kCacheRamFormatVersion;
-  metadata_.cacheCreationTime = static_cast<int64_t>(cacheCreationTime_);
+  *metadata_.ramFormatVersion_ref() = kCacheRamFormatVersion;
+  *metadata_.cacheCreationTime_ref() = static_cast<int64_t>(cacheCreationTime_);
   metadata_.mmType = MMType::kId;
   metadata_.accessType = AccessType::kId;
 
-  metadata_.compactCachePools.clear();
+  metadata_.compactCachePools_ref()->clear();
   const auto pools = getPoolIds();
   {
     folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
     for (PoolId pid : pools) {
       for (unsigned int cid = 0; cid < (*stats_.fragmentationSize)[pid].size();
            ++cid) {
-        metadata_.fragmentationSize[pid][cid] =
+        metadata_.fragmentationSize_ref()[pid][cid] =
             (*stats_.fragmentationSize)[pid][cid].get();
       }
       if (isCompactCachePool_[pid]) {
-        metadata_.compactCachePools.push_back(pid);
+        metadata_.compactCachePools_ref()->push_back(pid);
       }
     }
   }
 
-  metadata_.numPermanentItems = stats_.numPermanentItems.get();
-  metadata_.numChainedParentItems = stats_.numChainedParentItems.get();
-  metadata_.numChainedChildItems = stats_.numChainedChildItems.get();
-  metadata_.numAbortedSlabReleases = stats_.numAbortedSlabReleases.get();
+  *metadata_.numPermanentItems_ref() = stats_.numPermanentItems.get();
+  *metadata_.numChainedParentItems_ref() = stats_.numChainedParentItems.get();
+  *metadata_.numChainedChildItems_ref() = stats_.numChainedChildItems.get();
+  *metadata_.numAbortedSlabReleases_ref() = stats_.numAbortedSlabReleases.get();
 
   auto serializeMMContainers = [](MMContainers& mmContainers) {
     MMSerializationTypeContainer state;
@@ -3067,10 +3067,10 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
   // TODO:
   // Once everyone is on v8 or later, remove the outter if.
   if (kCachelibVersion > 8) {
-    if (meta.ramFormatVersion != kCacheRamFormatVersion) {
+    if (*meta.ramFormatVersion_ref() != kCacheRamFormatVersion) {
       throw std::runtime_error(
           folly::sformat("Expected cache ram format version {}. But found {}.",
-                         kCacheRamFormatVersion, meta.ramFormatVersion));
+                         kCacheRamFormatVersion, *meta.ramFormatVersion_ref()));
     }
   }
 
@@ -3112,7 +3112,7 @@ void CacheAllocator<CacheTrait>::initStats() {
   stats_.init();
 
   // deserialize the fragmentation size of each thread.
-  for (const auto& pid : metadata_.fragmentationSize) {
+  for (const auto& pid : *metadata_.fragmentationSize_ref()) {
     for (const auto& cid : pid.second) {
       (*stats_.fragmentationSize)[pid.first][cid.first].set(
           static_cast<uint64_t>(cid.second));
@@ -3120,11 +3120,11 @@ void CacheAllocator<CacheTrait>::initStats() {
   }
 
   // deserialize item counter stats
-  stats_.numPermanentItems.set(metadata_.numPermanentItems);
-  stats_.numChainedParentItems.set(metadata_.numChainedParentItems);
-  stats_.numChainedChildItems.set(metadata_.numChainedChildItems);
+  stats_.numPermanentItems.set(*metadata_.numPermanentItems_ref());
+  stats_.numChainedParentItems.set(*metadata_.numChainedParentItems_ref());
+  stats_.numChainedChildItems.set(*metadata_.numChainedChildItems_ref());
   stats_.numAbortedSlabReleases.set(
-      static_cast<uint64_t>(metadata_.numAbortedSlabReleases));
+      static_cast<uint64_t>(*metadata_.numAbortedSlabReleases_ref()));
 }
 
 template <typename CacheTrait>

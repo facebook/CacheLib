@@ -227,7 +227,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
       ht_{config_.getNumBuckets(), memStart, compressor, config_.getHasher(),
           false /* resetMem */},
       locks_{config_.getLocksPower(), config_.getHasher()},
-      numKeys_(object.numKeys) {
+      numKeys_(*object.numKeys_ref()) {
   if (config_.getBucketsPower() != static_cast<uint32_t>(object.bucketsPower)) {
     throw std::invalid_argument(folly::sformat(
         "Hashtable bucket power not compatible. old = {}, new = {}",
@@ -245,11 +245,11 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
   // checking hasher magic id not equal to 0 is to ensure it'll be
   // a warm roll going from a cachelib without hasher magic id to
   // one with a magic id
-  if (object.hasherMagicId != 0 &&
-      object.hasherMagicId != config_.getHasher()->getMagicId()) {
+  if (*object.hasherMagicId_ref() != 0 &&
+      *object.hasherMagicId_ref() != config_.getHasher()->getMagicId()) {
     throw std::invalid_argument(folly::sformat(
         "Hash object's ID mismatch. expected = {}, actual = {}",
-        object.hasherMagicId, config_.getHasher()->getMagicId()));
+        *object.hasherMagicId_ref(), config_.getHasher()->getMagicId()));
   }
 }
 
@@ -463,8 +463,8 @@ ChainedHashTable::Container<T, HookPtr, LockT>::saveState() const {
   serialization::ChainedHashTableObject object;
   object.bucketsPower = config_.getBucketsPower();
   object.locksPower = config_.getLocksPower();
-  object.numKeys = numKeys_;
-  object.hasherMagicId = config_.getHasher()->getMagicId();
+  *object.numKeys_ref() = numKeys_;
+  *object.hasherMagicId_ref() = config_.getHasher()->getMagicId();
   return object;
 }
 

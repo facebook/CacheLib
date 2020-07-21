@@ -41,7 +41,7 @@ MemoryAllocator::MemoryAllocator(
                                  object.allocSizes.end()},
               object.enableZeroedSlabAllocs,
               disableCoredump,
-              object.lockMemory),
+              *object.lockMemory_ref()),
       slabAllocator_(object.slabAllocator,
                      memoryStart,
                      memSize,
@@ -121,7 +121,7 @@ serialization::MemoryAllocatorObject MemoryAllocator::saveState() {
   object.allocSizes.insert(config_.allocSizes.begin(),
                            config_.allocSizes.end());
   object.enableZeroedSlabAllocs = config_.enableZeroedSlabAllocs;
-  object.lockMemory = config_.lockMemory;
+  *object.lockMemory_ref() = config_.lockMemory;
   object.slabAllocator = slabAllocator_.saveState();
   object.memoryPoolManager = memoryPoolManager_.saveState();
   return object;

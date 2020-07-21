@@ -15,7 +15,7 @@ MemoryPoolManager::MemoryPoolManager(SlabAllocator& slabAlloc)
 MemoryPoolManager::MemoryPoolManager(
     const serialization::MemoryPoolManagerObject& object,
     SlabAllocator& slabAlloc)
-    : nextPoolId_(object.nextPoolId), slabAlloc_(slabAlloc) {
+    : nextPoolId_(*object.nextPoolId_ref()), slabAlloc_(slabAlloc) {
   if (!slabAlloc_.isRestorable()) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
@@ -30,23 +30,23 @@ MemoryPoolManager::MemoryPoolManager(
   }
 
   // Number of items in pools must be same as nextPoolId, if not throw error
-  if (object.pools.size() != static_cast<size_t>(nextPoolId_)) {
+  if (object.pools_ref()->size() != static_cast<size_t>(nextPoolId_)) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
         "pools size is not equal to nextPoolId");
   }
   size_t slabsAdvised = 0;
-  for (size_t i = 0; i < object.pools.size(); ++i) {
-    pools_[i].reset(new MemoryPool(object.pools[i], slabAlloc_));
+  for (size_t i = 0; i < object.pools_ref()->size(); ++i) {
+    pools_[i].reset(new MemoryPool(object.pools_ref()[i], slabAlloc_));
     slabsAdvised += pools_[i]->getCurrSlabAdvised();
   }
-  for (const auto& kv : object.poolsByName) {
+  for (const auto& kv : *object.poolsByName_ref()) {
     poolsByName_.insert(kv);
   }
 
   // Number items in the poolsByName map must be same as nextPoolId, if not
   // throw error
-  if (object.poolsByName.size() != static_cast<size_t>(nextPoolId_)) {
+  if (object.poolsByName_ref()->size() != static_cast<size_t>(nextPoolId_)) {
     throw std::logic_error(
         "Memory Pool Manager can not be restored,"
         "poolsByName size is not equal to nextPoolId");
@@ -143,11 +143,11 @@ serialization::MemoryPoolManagerObject MemoryPoolManager::saveState() const {
 
   object.set_pools({});
   for (PoolId i = 0; i < nextPoolId_; ++i) {
-    object.pools.push_back(pools_[i]->saveState());
+    object.pools_ref()->push_back(pools_[i]->saveState());
   }
   object.set_poolsByName({});
   for (const auto& kv : poolsByName_) {
-    object.poolsByName.insert(kv);
+    object.poolsByName_ref()->insert(kv);
   }
   object.set_nextPoolId(nextPoolId_);
 
