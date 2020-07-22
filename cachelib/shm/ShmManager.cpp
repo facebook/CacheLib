@@ -49,6 +49,23 @@ ShmManager::ShmManager(const std::string& dir, bool usePosix)
     util::throwSystemError(ENOTDIR);
   }
 
+  // someone indicated by creating our special file that we need to drop the
+  // segments.
+  const auto dropFileName = pathName(controlDir_, kDropFile);
+  const bool dropSegments = util::getStatIfExists(dropFileName, nullptr);
+
+  SCOPE_EXIT {
+    if (dropSegments) {
+      // now that we have decided to drop the segments, remove the file. If file
+      // gets removed for some reason, that is okay since we have already
+      // reinitialized the metadata file.
+      try {
+        util::removePath(dropFileName);
+      } catch (...) {
+      }
+    }
+  };
+
   mode_t metaFileMode = 0;
   if (!util::getStatIfExists(metaFile, &metaFileMode)) {
     // does not exist. create an empty one. If during shutdown, this does not
@@ -62,11 +79,6 @@ ShmManager::ShmManager(const std::string& dir, bool usePosix)
     util::throwSystemError(EISDIR);
   }
 
-  // someone indicated by creating our special file that we need to drop the
-  // segments.
-  const auto dropFileName = pathName(controlDir_, kDropFile);
-  const bool dropSegments = util::getStatIfExists(dropFileName, nullptr);
-
   // if file exists, init from it if needed.
   const bool reattach = dropSegments ? false : initFromFile();
   if (!reattach) {
@@ -78,15 +90,6 @@ ShmManager::ShmManager(const std::string& dir, bool usePosix)
   // truncate the file so that unless we shutdown clean, we dont re-attach
   // from it.
   createEmptyMetadataFile(metaFile);
-  if (dropSegments) {
-    // now that we have decided to drop the segments, remove the file. If file
-    // gets removed for some reason, that is okay since we have already
-    // reinitialized the metadata file.
-    try {
-      util::removePath(dropFileName);
-    } catch (...) {
-    }
-  }
 }
 
 bool ShmManager::initFromFile() {
