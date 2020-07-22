@@ -234,7 +234,6 @@ void ShmManagerTest::testDropFile(bool posix) {
   // now try to attach and that should fail.
   {
     ShmManager s(cacheDir, posix);
-    // must be present still
     ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
     ASSERT_THROW(s.attachShm(segmentName), std::invalid_argument);
     auto m = s.createShm(segmentName, size, addr);
@@ -250,6 +249,26 @@ void ShmManagerTest::testDropFile(bool posix) {
     auto m = s.attachShm(segmentName, addr);
     checkMemory(m.addr, m.size, magicVal);
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
+  }
+
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir));
+  std::ofstream(cacheDir + "/ColdRoll");
+  ASSERT_TRUE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
+
+  // a new start should also delete the cold roll file
+  {
+    facebook::cachelib::util::removePath(cacheDir + "/metadata");
+    ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/metadata"));
+
+    ShmManager s(cacheDir, posix);
+    // Cold roll file should no longer exist
+    ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
+  }
+
+  // now try to attach and that should fail due to previous cold roll
+  {
+    ShmManager s(cacheDir, posix);
+    ASSERT_THROW(s.attachShm(segmentName), std::invalid_argument);
   }
 }
 
