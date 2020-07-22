@@ -219,7 +219,6 @@ bool Device::write(uint64_t offset, Buffer buffer) {
     }
   }
 
-  auto timeBegin = getSteadyClock();
   auto remainingSize = size;
   auto maxWriteSize = (maxWriteSize_ == 0) ? remainingSize : maxWriteSize_;
   bool result = true;
@@ -227,7 +226,12 @@ bool Device::write(uint64_t offset, Buffer buffer) {
     auto writeSize = std::min<size_t>(maxWriteSize, remainingSize);
     XDCHECK_EQ(offset % ioAlignmentSize_, 0ul);
     XDCHECK_EQ(writeSize % ioAlignmentSize_, 0ul);
+
+    auto timeBegin = getSteadyClock();
     result = writeImpl(offset, writeSize, data);
+    writeLatencyEstimator_.trackValue(
+        toMicros((getSteadyClock() - timeBegin)).count());
+
     if (!result) {
       break;
     }
@@ -239,8 +243,6 @@ bool Device::write(uint64_t offset, Buffer buffer) {
   if (!result) {
     writeIOErrors_.inc();
   }
-  writeLatencyEstimator_.trackValue(
-      toMicros((getSteadyClock() - timeBegin)).count());
   return result;
 }
 
