@@ -315,19 +315,6 @@ CacheAllocator<CacheTrait>::allocate(PoolId poolId,
 }
 
 template <typename CacheTrait>
-template <typename DataType, typename... Args>
-DataType CacheAllocator<CacheTrait>::allocate(PoolId poolId,
-                                              typename Item::Key key,
-                                              Args&&... args) {
-  const auto size = DataType::computeStorageSize(args...);
-  auto handle = allocate(poolId, key, size);
-  if (handle) {
-    return DataType{std::move(handle), std::forward<Args>(args)...};
-  }
-  return DataType::fromItemHandle(nullptr);
-}
-
-template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::allocatePermanent(PoolId poolId,
                                               typename Item::Key key,

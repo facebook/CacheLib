@@ -271,11 +271,6 @@ class CacheAllocator : public CacheBase {
                       uint32_t ttlSecs = 0,
                       uint32_t creationTime = 0);
 
-  // Construct a DataType directly
-  // Same as above but do not support ttl. Item size is computed automatically
-  template <typename DataType, typename... Args>
-  DataType allocate(PoolId id, Key key, Args&&... args);
-
   // same as allocate except this allocates an item unevictable from cache
   ItemHandle allocatePermanent(PoolId id, Key key, uint32_t size);
 
@@ -371,11 +366,6 @@ class CacheAllocator : public CacheBase {
   // @throw std::invalid_argument if the handle is already accessible.
   bool insert(const ItemHandle& handle);
 
-  template <typename DataType>
-  bool insert(const DataType& handle) {
-    return insert(handle.viewItemHandle());
-  }
-
   // Replaces the allocated handle into the AccessContainer, making it
   // accessible for everyone. If an existing handle is already in the
   // container, remove that handle. This needs to be the handle that the caller
@@ -390,12 +380,6 @@ class CacheAllocator : public CacheBase {
   // @return handle to the old item that had been replaced
   ItemHandle insertOrReplace(const ItemHandle& handle);
 
-  // same as insertOrReplace
-  template <typename DataType>
-  ItemHandle insertOrReplace(const DataType& handle) {
-    return insertOrReplace(handle.viewItemHandle());
-  }
-
   // look up an item by its key across the nvm cache as well if enabled.
   //
   // @param key         the key for lookup
@@ -405,15 +389,6 @@ class CacheAllocator : public CacheBase {
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
   ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
-
-  // same as find except this returns a DataType handle
-  //
-  // @return      the proper data structure handle to the item if found,
-  //              or nullptr otherwise
-  template <typename DataType>
-  DataType find(Key key, AccessMode mode = AccessMode::kRead) {
-    return DataType::fromItemHandle(find(key, mode));
-  }
 
   // look up an item by its key. But we only want to retrieve meta information
   // with regarding to the key and will not access the content or use a

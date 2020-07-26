@@ -19,18 +19,20 @@ class FixedSizeArrayTest : public ::testing::Test {
 
     // Allocate a new array and populate some data and insert
     {
-      auto array =
-          cache->template allocate<Array>(pid, "array", 100 /* numElements */);
+      auto array = Array{
+          cache->allocate(pid, "array",
+                          Array::computeStorageSize(100 /* numElements */)),
+          100 /* numElements */};
       ASSERT_FALSE(array.isNullItemHandle());
       for (uint32_t i = 0; i < array.size(); ++i) {
         array[i] = i;
       }
-      cache->insertOrReplace(array);
+      cache->insertOrReplace(array.viewItemHandle());
     }
 
     // Look up for this array and verify data is the same
     {
-      auto array = cache->template find<Array>("array");
+      auto array = Array::fromItemHandle(cache->find("array"));
       ASSERT_FALSE(array.isNullItemHandle());
       for (uint32_t i = 0; i < array.size(); ++i) {
         ASSERT_EQ(array[i], i);
@@ -39,7 +41,7 @@ class FixedSizeArrayTest : public ::testing::Test {
 
     // Test out of range access
     {
-      auto array = cache->template find<Array>("array");
+      auto array = Array::fromItemHandle(cache->find("array"));
       ASSERT_FALSE(array.isNullItemHandle());
 
       // operator[] does not do bounds cheecking
@@ -55,7 +57,9 @@ class FixedSizeArrayTest : public ::testing::Test {
     const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
 
     auto array =
-        cache->template allocate<Array>(pid, "array", 100 /* numElements */);
+        Array{cache->allocate(pid, "array",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array.isNullItemHandle());
 
     // Use iterator to populate the array
@@ -98,11 +102,15 @@ class FixedSizeArrayTest : public ::testing::Test {
     const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
 
     auto array1 =
-        cache->template allocate<Array>(pid, "array1", 100 /* numElements */);
+        Array{cache->allocate(pid, "array1",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array1.isNullItemHandle());
 
     auto array2 =
-        cache->template allocate<Array>(pid, "array2", 100 /* numElements */);
+        Array{cache->allocate(pid, "array2",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array2.isNullItemHandle());
 
     ASSERT_EQ("array1", array1.viewItemHandle().getKey());
@@ -119,21 +127,27 @@ class FixedSizeArrayTest : public ::testing::Test {
     const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
 
     auto array1 =
-        cache->template allocate<Array>(pid, "array1", 100 /* numElements */);
+        Array{cache->allocate(pid, "array1",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array1.isNullItemHandle());
     for (auto& element : array1) {
       element = 0;
     }
 
     auto array2 =
-        cache->template allocate<Array>(pid, "array2", 100 /* numElements */);
+        Array{cache->allocate(pid, "array2",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array2.isNullItemHandle());
     for (auto& element : array2) {
       element = 1;
     }
 
     auto array3 =
-        cache->template allocate<Array>(pid, "array3", 100 /* numElements */);
+        Array{cache->allocate(pid, "array3",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     ASSERT_FALSE(array3.isNullItemHandle());
     for (auto& element : array3) {
       element = 0;
@@ -164,8 +178,10 @@ class FixedSizeArrayTest : public ::testing::Test {
 
     // Test copying to std containers
     {
-      auto array =
-          cache->template allocate<Array>(pid, "array", 100 /* numElements */);
+      auto array = Array{
+          cache->allocate(pid, "array",
+                          Array::computeStorageSize(100 /* numElements */)),
+          100 /* numElements */};
 
       // Insert into a vector by back_insert_iterator
       std::vector<int> anotherVector;
@@ -199,8 +215,10 @@ class FixedSizeArrayTest : public ::testing::Test {
         anotherArray[i] = i;
       }
 
-      auto array =
-          cache->template allocate<Array>(pid, "array", anotherArray.size());
+      auto array = Array{
+          cache->allocate(pid, "array",
+                          Array::computeStorageSize(100 /* numElements */)),
+          100 /* numElements */};
       for (auto& element : array) {
         element = 0;
       }
@@ -215,7 +233,9 @@ class FixedSizeArrayTest : public ::testing::Test {
     auto cache = DataTypeTest::createCache<AllocatorT>();
     const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
     auto array =
-        cache->template allocate<Array>(pid, "array", 100 /* numElements */);
+        Array{cache->allocate(pid, "array",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
 
     std::generate(array.begin(), array.end(),
                   [n = 0]() mutable { return n++; });
@@ -231,7 +251,9 @@ class FixedSizeArrayTest : public ::testing::Test {
     auto cache = DataTypeTest::createCache<AllocatorT>();
     const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
     auto array =
-        cache->template allocate<Array>(pid, "array", 100 /* numElements */);
+        Array{cache->allocate(pid, "array",
+                              Array::computeStorageSize(100 /* numElements */)),
+              100 /* numElements */};
     std::generate(array.begin(), array.end(),
                   [n = 0]() mutable { return n++; });
 

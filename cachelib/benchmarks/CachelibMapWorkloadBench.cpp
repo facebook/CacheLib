@@ -64,7 +64,7 @@ void setup() {
   // insert CachelibMap into cache
   {
     auto m = CachelibMap::create(*cache, poolId, kClMap);
-    cache->insert(m);
+    cache->insert(m.viewItemHandle());
   }
 
   // insert StdUnorderedMap

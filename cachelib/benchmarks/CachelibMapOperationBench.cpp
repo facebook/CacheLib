@@ -41,7 +41,7 @@ void setupClMap() {
     const auto res = m.insert(i, v);
     XDCHECK(res);
   }
-  cache->insert(m);
+  cache->insert(m.viewItemHandle());
 }
 
 void setupUnorderedStdMap() {

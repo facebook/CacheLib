@@ -75,7 +75,7 @@ void setup() {
   // insert CachelibRangeMap into cache
   {
     auto m = CachelibRangeMap::create(*cache, poolId, kClMap);
-    cache->insert(m);
+    cache->insert(m.viewItemHandle());
   }
 
   // insert StdMap
