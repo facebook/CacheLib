@@ -9,7 +9,6 @@
 #include <folly/SharedMutex.h>
 #include <tsl/sparse_map.h>
 
-#include "cachelib/navy/block_cache/BTree.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook {
