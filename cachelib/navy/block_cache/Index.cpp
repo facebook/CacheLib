@@ -8,14 +8,58 @@ namespace cachelib {
 namespace navy {
 constexpr uint32_t Index::kNumBuckets; // Link error otherwise
 
+namespace {
+// increase val if no overflow, otherwise do nothing
+uint8_t safeInc(uint8_t val) {
+  if (val < std::numeric_limits<uint8_t>::max()) {
+    return val + 1;
+  }
+  return val;
+}
+} // namespace
+
+Index::LookupResult Index::touch(uint64_t key) {
+  LookupResult lr;
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+
+  auto it = map.find(subkey(key));
+  if (it != map.end()) {
+    lr.found_ = true;
+    lr.record_ = it->second;
+
+    it.value().totalHits = safeInc(lr.record_.totalHits);
+    it.value().currentHits = safeInc(lr.record_.currentHits);
+  }
+  return lr;
+}
+
+void Index::setCurrentHits(uint64_t key, uint8_t val) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+
+  auto it = map.find(subkey(key));
+  if (it != map.end()) {
+    it.value().currentHits = val;
+  }
+}
+
+void Index::setTotalHits(uint64_t key, uint8_t val) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+
+  auto it = map.find(subkey(key));
+  if (it != map.end()) {
+    it.value().totalHits = val;
+  }
+}
+
 Index::LookupResult Index::lookup(uint64_t key) const {
   LookupResult lr;
-  auto b = bucket(key);
-  auto k = subkey(key);
-  const auto& map = buckets_[b];
+  const auto& map = getMap(key);
+  auto lock = std::shared_lock{getMutex(key)};
 
-  std::shared_lock<folly::SharedMutex> lock{getMutex(b)};
-  auto it = map.find(k);
+  auto it = map.find(subkey(key));
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
@@ -25,17 +69,17 @@ Index::LookupResult Index::lookup(uint64_t key) const {
 
 Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
   LookupResult lr;
-  auto b = bucket(key);
-  auto k = subkey(key);
-  auto& map = buckets_[b];
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
 
-  std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  auto it = map.find(k);
+  auto it = map.find(subkey(key));
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = address;
+    it.value().currentHits = 0;
+    it.value().totalHits = 0;
   } else {
     map.try_emplace(key, address);
   }
@@ -45,15 +89,14 @@ Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
 bool Index::replaceIfMatch(uint64_t key,
                            uint32_t newAddress,
                            uint32_t oldAddress) {
-  auto b = bucket(key);
-  auto k = subkey(key);
-  auto& map = buckets_[b];
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
 
-  std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  auto it = map.find(k);
+  auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == oldAddress) {
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = newAddress;
+    it.value().currentHits = 0;
     return true;
   }
   return false;
@@ -61,12 +104,10 @@ bool Index::replaceIfMatch(uint64_t key,
 
 Index::LookupResult Index::remove(uint64_t key) {
   LookupResult lr;
-  auto b = bucket(key);
-  auto k = subkey(key);
-  auto& map = buckets_[b];
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
 
-  std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  auto it = map.find(k);
+  auto it = map.find(subkey(key));
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
@@ -76,12 +117,10 @@ Index::LookupResult Index::remove(uint64_t key) {
 }
 
 bool Index::removeIfMatch(uint64_t key, uint32_t address) {
-  auto b = bucket(key);
-  auto k = subkey(key);
-  auto& map = buckets_[b];
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
 
-  std::lock_guard<folly::SharedMutex> lock{getMutex(b)};
-  auto it = map.find(k);
+  auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == address) {
     map.erase(it);
     return true;
@@ -91,7 +130,7 @@ bool Index::removeIfMatch(uint64_t key, uint32_t address) {
 
 void Index::reset() {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    std::lock_guard<folly::SharedMutex> lock{getMutex(i)};
+    auto lock = std::lock_guard{getMutexOfBucket(i)};
     buckets_[i].clear();
   }
 }
@@ -99,7 +138,7 @@ void Index::reset() {
 size_t Index::computeSize() const {
   size_t size = 0;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    std::shared_lock<folly::SharedMutex> lock{getMutex(i)};
+    auto lock = std::lock_guard{getMutexOfBucket(i)};
     size += buckets_[i].size();
   }
   return size;
@@ -111,10 +150,13 @@ void Index::persist(RecordWriter& rw) const {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     bucket.bucketId = i;
     // Convert index entries to thrift objects
-    for (const auto& [key, value] : buckets_[i]) {
+    for (const auto& [key, record] : buckets_[i]) {
       serialization::IndexEntry entry;
-      entry.key = key;
-      entry.value = value.address;
+      entry.key_ref() = key;
+      entry.address_ref() = record.address;
+      entry.size_ref() = record.size;
+      entry.totalHits_ref() = record.totalHits;
+      entry.currentHits_ref() = record.currentHits;
       bucket.entries.push_back(entry);
     }
     // Serialize bucket then clear contents to reuse memory.
@@ -134,7 +176,11 @@ void Index::recover(RecordReader& rr) {
                          id)};
     }
     for (auto& entry : bucket.entries) {
-      buckets_[id].try_emplace(entry.key, entry.value);
+      buckets_[id].try_emplace(*entry.key_ref(),
+                               *entry.address_ref(),
+                               *entry.size_ref(),
+                               *entry.totalHits_ref(),
+                               *entry.currentHits_ref());
     }
   }
 }

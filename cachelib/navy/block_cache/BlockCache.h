@@ -81,6 +81,7 @@ class BlockCache final : public Engine {
     XDCHECK(folly::isPowTwo(allocAlignSize_));
     return allocAlignSize_;
   }
+
   // The minimum alloc alignment size can be as small as 1. Since the
   // test cases have very small device size, they will end up with alloc
   // alignment size of 1 (if determined as device_size >> 32 ) and we may

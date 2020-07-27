@@ -116,6 +116,9 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
+  if (reinsertionPolicy_) {
+    reinsertionPolicy_->setIndex(&index_);
+  }
   validate(config, device_.getIOAlignmentSize());
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
@@ -160,9 +163,6 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
     }
     succInsertCount_.inc();
     sizeDist_.addSize(slotSize);
-    if (reinsertionPolicy_) {
-      reinsertionPolicy_->track(hk);
-    }
   }
   allocator_.close(std::move(desc));
   return status;
@@ -215,15 +215,15 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
 
 Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
+  if (reinsertionPolicy_) {
+    reinsertionPolicy_->remove(hk);
+  }
   auto lr = index_.remove(hk.keyHash());
   if (lr.found()) {
     auto addr = decodeRelAddress(lr.address());
     holeSizeTotal_.add(regionManager_.getRegionSlotSize(addr.rid()));
     holeCount_.inc();
     succRemoveCount_.inc();
-    if (reinsertionPolicy_) {
-      reinsertionPolicy_->remove(hk);
-    }
     return Status::Ok;
   }
   return Status::NotFound;

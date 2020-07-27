@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/serialization/Serialization.h"
@@ -11,8 +12,8 @@ class ReinsertionPolicy {
  public:
   virtual ~ReinsertionPolicy() = default;
 
-  // Start tracking a key for reinsertion.
-  virtual void track(HashedKey hk) = 0;
+  // pass in the index
+  virtual void setIndex(Index* index) = 0;
 
   // Touch an item every time we access it. User must track
   // an item before touching it. Touching without tracking

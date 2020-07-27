@@ -15,7 +15,7 @@ class ProbabilisticReinsertionPolicy : public ReinsertionPolicy {
   explicit ProbabilisticReinsertionPolicy(uint32_t probability)
       : probability_{probability} {}
 
-  void track(HashedKey /* hk */) override {}
+  void setIndex(Index* /* index */) override {}
 
   void touch(HashedKey /* hk */) override {}
 

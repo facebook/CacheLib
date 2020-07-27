@@ -11,9 +11,14 @@ TEST(Serialization, Serialize) {
   serialization::IndexBucket bucket;
   bucket.bucketId = 0;
   bucket.entries.resize(5);
-  for (size_t j = 0; j < bucket.entries.size(); j++) {
-    bucket.entries[j].key = j;
-    bucket.entries[j].value = j * 10;
+  uint8_t i = 0;
+  for (auto& entry : *bucket.entries_ref()) {
+    entry.key_ref() = i;
+    entry.address_ref() = i * 10;
+    entry.size_ref() = i * 100;
+    entry.totalHits_ref() = i + 1;
+    entry.currentHits_ref() = i + 2;
+    ++i;
   }
 
   serialization::Region region;
@@ -31,10 +36,16 @@ TEST(Serialization, Serialize) {
   auto deserializedBucket = deserializeProto<serialization::IndexBucket>(*rr);
   EXPECT_EQ(deserializedBucket.bucketId, bucket.bucketId);
   EXPECT_EQ(deserializedBucket.entries.size(), 5);
-  for (size_t i = 0; i < 5; i++) {
-    EXPECT_EQ(i, deserializedBucket.entries[i].key);
-    EXPECT_EQ(i * 10, deserializedBucket.entries[i].value);
+
+  i = 0;
+  for (auto& entry : *deserializedBucket.entries_ref()) {
+    EXPECT_EQ(i, *entry.key_ref());
+    EXPECT_EQ(i * 10, *entry.address_ref());
+    EXPECT_EQ(i * 100, *entry.size_ref());
+    EXPECT_EQ(i + 1, *entry.totalHits_ref());
+    EXPECT_EQ(i + 2, *entry.currentHits_ref());
     EXPECT_FALSE(rr->isEnd());
+    ++i;
   }
 
   auto deserializedRegion = deserializeProto<serialization::Region>(*rr);

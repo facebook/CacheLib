@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <shared_mutex>
 #include <utility>
@@ -33,18 +34,23 @@ class Index {
   void recover(RecordReader& rr);
 
   struct FOLLY_PACK_ATTR ItemRecord {
+    // encoded address
     uint32_t address{0};
+    // encoded item size
     uint16_t size{0}; /* unused */
-    uint8_t currentHits{0};
+    // total hits during this item's entire lifetime in cache
     uint8_t totalHits{0};
+    // hits during the current window for this item (e.g. before re-admission)
+    uint8_t currentHits{0};
+
     ItemRecord(uint32_t _address = 0,
                uint16_t _size = 0,
-               uint8_t _currentHits = 0,
-               uint8_t _totalHits = 0)
+               uint8_t _totalHits = 0,
+               uint8_t _currentHits = 0)
         : address(_address),
           size(_size),
-          currentHits(_currentHits),
-          totalHits(_totalHits) {}
+          totalHits(_totalHits),
+          currentHits(_currentHits) {}
   };
   static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
 
@@ -83,6 +89,12 @@ class Index {
     bool found_{false};
   };
 
+  // touch existing record
+  // If the entry was found, LookupResult.found() returns true and
+  // LookupResult.record() returns the old record. The touch operation will be
+  // increase the current and total hits.
+  LookupResult touch(uint64_t key);
+
   LookupResult lookup(uint64_t key) const;
 
   // Overwrites existing
@@ -103,6 +115,10 @@ class Index {
   // Return true if removed successfully, false otherwise.
   bool removeIfMatch(uint64_t key, uint32_t address);
 
+  void setCurrentHits(uint64_t key, uint8_t val);
+
+  void setTotalHits(uint64_t key, uint8_t val);
+
   void reset();
 
   // Walks buckets and computes total index entry count
@@ -120,9 +136,19 @@ class Index {
 
   static uint32_t subkey(uint64_t hash) { return hash & 0xffffffffu; }
 
-  folly::SharedMutex& getMutex(uint32_t bucket) const {
+  folly::SharedMutex& getMutexOfBucket(uint32_t bucket) const {
     XDCHECK(folly::isPowTwo(kNumMutexes));
     return mutex_[bucket & (kNumMutexes - 1)];
+  }
+
+  folly::SharedMutex& getMutex(uint64_t hash) const {
+    auto b = bucket(hash);
+    return getMutexOfBucket(b);
+  }
+
+  Map& getMap(uint64_t hash) const {
+    auto b = bucket(hash);
+    return buckets_[b];
   }
 
   // Experiments with 64 byte alignment didn't show any throughput test
