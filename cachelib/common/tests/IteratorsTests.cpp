@@ -6,7 +6,6 @@
 #include "cachelib/common/Iterators.h"
 
 using namespace facebook::cachelib::detail;
-using namespace folly;
 
 namespace {
 struct IntArrayIterator

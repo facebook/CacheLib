@@ -5,8 +5,6 @@
 
 #include "cachelib/common/Utils.h"
 
-using namespace ::testing;
-
 namespace facebook {
 namespace cachelib {
 TEST(NavySetupTest, RAID0DeviceSize) {

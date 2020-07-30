@@ -8,7 +8,6 @@
 
 namespace facebook {
 namespace cachelib {
-using namespace ::testing;
 
 class AccessTrackerTest : public ::testing::TestWithParam<bool> {
  protected:
