@@ -6,6 +6,7 @@
 
 #include "cachelib/common/CountMinSketch.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -45,7 +46,7 @@ uint32_t CountMinSketchBase<UINT>::calculateWidth(double error,
 
   // From "Approximating Data with the Count-Min Data Structure" (Cormode &
   // Muthukrishnan)
-  uint32_t width = std::ceil(2 / error);
+  uint32_t width = narrow_cast<uint32_t>(std::ceil(2 / error));
   if (maxWidth > 0) {
     width = std::min(maxWidth, width);
   }
@@ -63,7 +64,8 @@ uint32_t CountMinSketchBase<UINT>::calculateDepth(double probability,
 
   // From "Approximating Data with the Count-Min Data Structure" (Cormode &
   // Muthukrishnan)
-  uint32_t depth = std::ceil(std::abs(std::log(1 - probability) / std::log(2)));
+  uint32_t depth = narrow_cast<uint32_t>(
+      std::ceil(std::abs(std::log(1 - probability) / std::log(2))));
   depth = std::max(1u, depth);
   if (maxDepth > 0) {
     depth = std::min(maxDepth, depth);
@@ -108,7 +110,7 @@ void CountMinSketchBase<UINT>::decayCountsBy(double decay) {
   // Delete previous table and reinitialize
   uint64_t tableSize = width_ * depth_;
   for (uint64_t i = 0; i < tableSize; i++) {
-    table_[i] *= decay;
+    table_[i] = narrow_cast<UINT>(table_[i] * decay);
   }
 }
 

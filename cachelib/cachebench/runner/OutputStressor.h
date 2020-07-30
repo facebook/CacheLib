@@ -118,7 +118,7 @@ class OutputStressor : public Stressor {
     for (uint64_t i = 0; i < config_.numOps; ++i) {
       ++stats.ops;
 
-      const auto pid = opPoolDist(gen);
+      const auto pid = static_cast<PoolId>(opPoolDist(gen));
       while (true) {
         const auto& req = getReq(pid, gen);
         outfile_ << req.key << "," << static_cast<uint32_t>(req.getOp()) << ","

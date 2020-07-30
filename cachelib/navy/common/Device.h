@@ -1,7 +1,6 @@
 #pragma once
 
 #include <folly/io/IOBuf.h>
-#include <folly/stats/QuantileEstimator.h>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"

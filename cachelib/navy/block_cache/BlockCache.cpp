@@ -208,7 +208,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
     return Status::Retry;
   default:
     // Open region never returns other statuses than above
-    XDCHECK(!"unreachable");
+    XDCHECK(false) << "unreachable";
     return Status::DeviceError;
   }
 }

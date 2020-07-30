@@ -14,7 +14,7 @@ FB303ThriftService::FB303ThriftService(int port)
   try {
     auto handler = std::make_shared<FB303ThriftHandler>();
     server->setInterface(handler);
-    server->setPort(port);
+    server->setPort(static_cast<uint16_t>(port));
     service_.addThriftService(server, handler.get(), port);
     service_.go(false /* don't wait */);
     started_ = true;

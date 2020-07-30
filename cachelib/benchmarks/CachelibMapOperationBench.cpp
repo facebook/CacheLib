@@ -53,10 +53,11 @@ void setupUnorderedStdMap() {
 
 void setupClHashtable() {
   // Gives 50% more room to the hash table
-  const uint32_t htSize =
-      CachelibHashTable::computeStorageSize(FLAGS_num_keys * 1.5);
+  const uint32_t htSize = CachelibHashTable::computeStorageSize(
+      static_cast<size_t>(FLAGS_num_keys * 1.5));
   uint8_t* buffer = new uint8_t[htSize];
-  clHashtable.reset(new (buffer) CachelibHashTable(FLAGS_num_keys * 1.5));
+  clHashtable.reset(new (buffer) CachelibHashTable(
+      static_cast<size_t>(FLAGS_num_keys * 1.5)));
   for (int32_t i = 0; i < FLAGS_num_keys; ++i) {
     clHashtable->insertOrReplace(i, {0, 0});
   }

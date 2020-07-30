@@ -244,7 +244,7 @@ TEST_F(MemoryAllocatorTest, GetAllocInfo) {
     }
   }
 
-  auto invalidPoolId = *m.getPoolIds().rbegin() + 1;
+  PoolId invalidPoolId = *m.getPoolIds().rbegin() + 1;
   ASSERT_THROW(m.getPool(invalidPoolId), std::invalid_argument);
   ASSERT_THROW(m.getAllocationClassId(invalidPoolId, getRandomAllocSize()),
                std::invalid_argument);
@@ -474,7 +474,7 @@ TEST_F(MemoryAllocatorTest, ResizePool) {
   ASSERT_EQ(p1, m.getPoolId(poolName1));
   ASSERT_EQ(p2, m.getPoolId(poolName2));
 
-  const auto invalidPoolId = p2 + 1;
+  const PoolId invalidPoolId = p2 + 1;
   ASSERT_THROW(m.getPool(invalidPoolId), std::invalid_argument);
 
   ASSERT_TRUE(m.resizePools(p1, p2, Slab::kSize));
@@ -508,7 +508,7 @@ TEST_F(MemoryAllocatorTest, GrowShrinkPool) {
   ASSERT_EQ(p1, m.getPoolId(poolName1));
   ASSERT_EQ(p2, m.getPoolId(poolName2));
 
-  const auto invalidPoolId = p2 + 1;
+  const PoolId invalidPoolId = p2 + 1;
   ASSERT_THROW(m.getPool(invalidPoolId), std::invalid_argument);
   // we shouldn't be able to resize our pools beyond
   // the memory in slab allocator has. Currently we have two pools taking

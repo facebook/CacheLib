@@ -1,9 +1,12 @@
 #pragma once
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include "cachelib/cachebench/fb303/if/gen-cpp2/FB303Service.h"
 #include "common/fb303/cpp/FacebookBase2.h"
 #include "common/services/cpp/ServiceFramework.h"
 #include "thrift/lib/cpp2/server/ThriftServer.h"
+#pragma GCC diagnostic pop
 
 namespace facebook {
 namespace cachelib {

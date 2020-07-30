@@ -49,7 +49,7 @@ void HighRefcountStressor::testLoop() {
       // Item was likely evicted during slab release. Try to allocate a new
       // one. It's fine to fail as the small alloc class may not have any
       // slab left.
-      it = cache_->allocate(0 /* pid */, "high_refcount", 1 /* size */);
+      it = cache_->allocate(PoolId{0} /* pid */, "high_refcount", 1 /* size */);
       if (it) {
         cache_->insertOrReplace(it);
       }

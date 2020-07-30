@@ -34,7 +34,8 @@ void FastShutdownStressor::start() {
     for (uint32_t i = 0; i < nslabs; i++) {
       for (uint32_t j = 0; j < numSmallAllocs; j++) {
         auto it = cache_->allocate(
-            0, folly::sformat("key_{}", i * numSmallAllocs + j), 5);
+            static_cast<uint8_t>(0),
+            folly::sformat("key_{}", i * numSmallAllocs + j), 5);
         if (it) {
           cache_->insertOrReplace(it);
           v.push_back(std::move(it));
@@ -68,7 +69,7 @@ void FastShutdownStressor::start() {
       int count = 0;
       // This should trigger rebalancer to release a slab from class id 0.
       while (count < 20) {
-        auto it1 = cache_->allocate(0, "nkey1", 50);
+        auto it1 = cache_->allocate(static_cast<uint8_t>(0), "nkey1", 50);
         if (it1) {
           cache_->insertOrReplace(it1);
           break;

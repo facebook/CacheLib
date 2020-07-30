@@ -104,7 +104,7 @@ void htRead() {
   HT* ht = nullptr;
   std::vector<uint32_t> searchKeys;
   BENCHMARK_SUSPEND {
-    const size_t htSize = size * 1.1;
+    const size_t htSize = static_cast<size_t>(size * 1.1);
     const size_t htStorageSize = HT::computeStorageSize(htSize);
     buffer = std::make_unique<uint8_t[]>(htStorageSize);
     ht = new (buffer.get()) HT(htSize);

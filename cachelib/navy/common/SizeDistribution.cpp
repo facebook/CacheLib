@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cassert>
 
+#include "cachelib/common/Utils.h"
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
@@ -12,7 +14,7 @@ std::vector<uint64_t> generateSizes(uint64_t min, uint64_t max, double factor) {
   std::vector<uint64_t> sizes;
   while (min < max) {
     sizes.push_back(min);
-    min *= factor;
+    min = util::narrow_cast<uint64_t>(min * factor);
   }
   sizes.push_back(max);
   return sizes;

@@ -6,7 +6,6 @@
 #include <vector>
 
 #include <folly/container/F14Map.h>
-#include <folly/stats/QuantileEstimator.h>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"

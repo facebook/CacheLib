@@ -6,8 +6,6 @@
 #include <thread>
 #include <vector>
 
-#include <folly/stats/QuantileEstimator.h>
-
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/common/Utils.h"

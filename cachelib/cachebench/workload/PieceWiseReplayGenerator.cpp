@@ -110,20 +110,22 @@ void PieceWiseReplayGeneratorStats::renderStatsInternal(
     return dr == 0 ? 0.0 : 100.0 * nr / dr;
   };
 
-  const uint64_t getBytesPerSec = stats.getBytes.get() / 1024 / elapsedSecs;
+  const uint64_t getBytesPerSec =
+      util::narrow_cast<uint64_t>(stats.getBytes.get() / 1024 / elapsedSecs);
   const double getBytesSuccessRate =
       safeDiv(stats.getHitBytes.get(), stats.getBytes.get());
   const double getBytesFullSuccessRate =
       safeDiv(stats.getFullHitBytes.get(), stats.getBytes.get());
 
-  const uint64_t getBodyBytesPerSec =
-      stats.getBodyBytes.get() / 1024 / elapsedSecs;
+  const uint64_t getBodyBytesPerSec = util::narrow_cast<uint64_t>(
+      stats.getBodyBytes.get() / 1024 / elapsedSecs);
   const double getBodyBytesSuccessRate =
       safeDiv(stats.getHitBodyBytes.get(), stats.getBodyBytes.get());
   const double getBodyBytesFullSuccessRate =
       safeDiv(stats.getFullHitBodyBytes.get(), stats.getBodyBytes.get());
 
-  const uint64_t getPerSec = stats.objGets.get() / elapsedSecs;
+  const uint64_t getPerSec =
+      util::narrow_cast<uint64_t>(stats.objGets.get() / elapsedSecs);
   const double getSuccessRate =
       safeDiv(stats.objGetHits.get(), stats.objGets.get());
   const double getFullSuccessRate =

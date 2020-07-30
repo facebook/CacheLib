@@ -73,21 +73,24 @@ class PercentileStats {
                               folly::StringPiece fmt,
                               folly::StringPiece prefix) {
     auto rst = estimate();
-    visitor(folly::sformat(fmt, prefix, "avg"), rst.avg);
-    visitor(folly::sformat(fmt, prefix, "min"), rst.p0);
-    visitor(folly::sformat(fmt, prefix, "p5"), rst.p5);
-    visitor(folly::sformat(fmt, prefix, "p10"), rst.p10);
-    visitor(folly::sformat(fmt, prefix, "p25"), rst.p25);
-    visitor(folly::sformat(fmt, prefix, "p50"), rst.p50);
-    visitor(folly::sformat(fmt, prefix, "p75"), rst.p75);
-    visitor(folly::sformat(fmt, prefix, "p90"), rst.p90);
-    visitor(folly::sformat(fmt, prefix, "p95"), rst.p95);
-    visitor(folly::sformat(fmt, prefix, "p99"), rst.p99);
-    visitor(folly::sformat(fmt, prefix, "p999"), rst.p999);
-    visitor(folly::sformat(fmt, prefix, "p9999"), rst.p9999);
-    visitor(folly::sformat(fmt, prefix, "p99999"), rst.p99999);
-    visitor(folly::sformat(fmt, prefix, "p999999"), rst.p999999);
-    visitor(folly::sformat(fmt, prefix, "max"), rst.p100);
+    visitor(folly::sformat(fmt, prefix, "avg"), static_cast<double>(rst.avg));
+    visitor(folly::sformat(fmt, prefix, "min"), static_cast<double>(rst.p0));
+    visitor(folly::sformat(fmt, prefix, "p5"), static_cast<double>(rst.p5));
+    visitor(folly::sformat(fmt, prefix, "p10"), static_cast<double>(rst.p10));
+    visitor(folly::sformat(fmt, prefix, "p25"), static_cast<double>(rst.p25));
+    visitor(folly::sformat(fmt, prefix, "p50"), static_cast<double>(rst.p50));
+    visitor(folly::sformat(fmt, prefix, "p75"), static_cast<double>(rst.p75));
+    visitor(folly::sformat(fmt, prefix, "p90"), static_cast<double>(rst.p90));
+    visitor(folly::sformat(fmt, prefix, "p95"), static_cast<double>(rst.p95));
+    visitor(folly::sformat(fmt, prefix, "p99"), static_cast<double>(rst.p99));
+    visitor(folly::sformat(fmt, prefix, "p999"), static_cast<double>(rst.p999));
+    visitor(folly::sformat(fmt, prefix, "p9999"),
+            static_cast<double>(rst.p9999));
+    visitor(folly::sformat(fmt, prefix, "p99999"),
+            static_cast<double>(rst.p99999));
+    visitor(folly::sformat(fmt, prefix, "p999999"),
+            static_cast<double>(rst.p999999));
+    visitor(folly::sformat(fmt, prefix, "max"), static_cast<double>(rst.p100));
   }
 
  private:
@@ -106,7 +109,7 @@ class LatencyTracker {
       auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
                            std::chrono::steady_clock::now() - begin_)
                            .count();
-      stats_->trackValue(diffNanos);
+      stats_->trackValue(static_cast<double>(diffNanos));
     }
   }
 

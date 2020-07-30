@@ -382,13 +382,13 @@ TEST_F(MM2QTest, SegmentStress) {
         const auto errorMargin = 2;
 
         const unsigned int actualColdPercent =
-            (c.getEvictionAgeStat(0).coldQueueStat.size) * 100.0 / inLru.size();
+            (c.getEvictionAgeStat(0).coldQueueStat.size) * 100 / inLru.size();
         EXPECT_TRUE(actualColdPercent >= coldSizePercent - errorMargin &&
                     actualColdPercent <= coldSizePercent + errorMargin)
             << "Actual: " << actualColdPercent
             << ", Expected: " << coldSizePercent;
         const unsigned int actualHotPercent =
-            c.getEvictionAgeStat(0).hotQueueStat.size * 100.0 / inLru.size();
+            c.getEvictionAgeStat(0).hotQueueStat.size * 100 / inLru.size();
         EXPECT_TRUE(actualHotPercent >= hotSizePercent - errorMargin &&
                     actualHotPercent <= hotSizePercent + errorMargin)
             << "Actual: " << actualHotPercent

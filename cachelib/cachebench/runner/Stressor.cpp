@@ -5,6 +5,7 @@
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
 #include "cachelib/cachebench/runner/OutputStressor.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -26,18 +27,19 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
 void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
 
-  const uint64_t setPerSec = set / elapsedSecs;
+  const uint64_t setPerSec = util::narrow_cast<uint64_t>(set / elapsedSecs);
   const double setSuccessRate =
       set == 0 ? 0.0 : 100.0 * (set - setFailure) / set;
 
-  const uint64_t getPerSec = get / elapsedSecs;
+  const uint64_t getPerSec = util::narrow_cast<uint64_t>(get / elapsedSecs);
   const double getSuccessRate = get == 0 ? 0.0 : 100.0 * (get - getMiss) / get;
 
-  const uint64_t delPerSec = del / elapsedSecs;
+  const uint64_t delPerSec = util::narrow_cast<uint64_t>(del / elapsedSecs);
   const double delSuccessRate =
       del == 0 ? 0.0 : 100.0 * (del - delNotFound) / del;
 
-  const uint64_t addChainedPerSec = addChained / elapsedSecs;
+  const uint64_t addChainedPerSec =
+      util::narrow_cast<uint64_t>(addChained / elapsedSecs);
   const double addChainedSuccessRate =
       addChained == 0 ? 0.0
                       : 100.0 * (addChained - addChainedFailure) / addChained;

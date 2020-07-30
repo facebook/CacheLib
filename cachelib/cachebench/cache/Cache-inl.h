@@ -224,7 +224,7 @@ Cache<Allocator>::Cache(CacheConfig config,
   const size_t numBytes = cache_->getCacheMemoryStats().cacheSize;
   for (uint64_t i = 0; i < config_.numPools; ++i) {
     const double& ratio = config_.poolSizes[i];
-    const size_t poolSize = numBytes * ratio;
+    const size_t poolSize = static_cast<size_t>(numBytes * ratio);
     typename Allocator::MMConfig mmConfig =
         makeMMConfig<typename Allocator::MMConfig>(config_);
     const PoolId pid = cache_->addPool(
@@ -312,7 +312,7 @@ template <typename Allocator>
 Stats Cache<Allocator>::getStats() const {
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
   for (size_t pid = 1; pid < pools_.size(); pid++) {
-    aggregate += cache_->getPoolStats(pid);
+    aggregate += cache_->getPoolStats(static_cast<PoolId>(pid));
   }
 
   const auto cacheStats = cache_->getGlobalCacheStats();
@@ -355,7 +355,9 @@ Stats Cache<Allocator>::getStats() const {
   // nvm stats from navy
   if (config_.dipperBackend == "navy_dipper" && !navyStats.empty()) {
     auto lookup = [&navyStats](const std::string& key) {
-      return navyStats.find(key) != navyStats.end() ? navyStats.at(key) : 0;
+      return navyStats.find(key) != navyStats.end()
+                 ? static_cast<uint64_t>(navyStats.at(key))
+                 : 0;
     };
     ret.numNvmItems = lookup("navy_bh_items") + lookup("navy_bc_items");
     ret.numNvmBytesWritten = lookup("navy_device_bytes_written");
@@ -365,7 +367,8 @@ Stats Cache<Allocator>::getStats() const {
     }
     double bhLogicalBytes = lookup("navy_bh_logical_written");
     double bcLogicalBytes = lookup("navy_bc_logical_written");
-    ret.numNvmLogicalBytesWritten = bhLogicalBytes + bcLogicalBytes;
+    ret.numNvmLogicalBytesWritten =
+        static_cast<size_t>(bhLogicalBytes + bcLogicalBytes);
     ret.nvmReadLatencyMicrosP50 = lookup("navy_device_read_latency_us_p50");
     ret.nvmReadLatencyMicrosP90 = lookup("navy_device_read_latency_us_p90");
     ret.nvmReadLatencyMicrosP99 = lookup("navy_device_read_latency_us_p99");

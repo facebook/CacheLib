@@ -236,7 +236,7 @@ class CacheStressor : public Stressor {
 #endif
         ++stats.ops;
 
-        const auto pid = opPoolDist(gen);
+        const auto pid = static_cast<PoolId>(opPoolDist(gen));
         const Request& req(getReq(pid, gen, lastRequestId));
         OpType op = req.getOp();
         const std::string* key = &(req.key);

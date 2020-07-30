@@ -11,7 +11,9 @@ namespace cachelib {
 namespace {
 size_t byteIndex(size_t bitIdx) { return bitIdx >> 3u; }
 
-uint8_t bitMask(size_t bitIdx) { return 1u << (bitIdx & 7u); }
+uint8_t bitMask(size_t bitIdx) {
+  return static_cast<uint8_t>(1u << (bitIdx & 7u));
+}
 
 // @bitSet, @bitGet are helper functions to test and set bit.
 // @bitIndex is an arbitrary large bit index to test/set. @ptr points to the

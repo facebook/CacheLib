@@ -172,7 +172,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     // check the pool name by its pool ID
     const int numGetPoolNameTry = 10000;
     for (unsigned int i = 0; i < numGetPoolNameTry; ++i) {
-      const auto pid = folly::Random::rand32(0, numPools);
+      const auto pid = static_cast<PoolId>(folly::Random::rand32(0, numPools));
       ASSERT_EQ(poolsNames[pid], alloc.getPoolStats(pid).poolName);
     }
   }

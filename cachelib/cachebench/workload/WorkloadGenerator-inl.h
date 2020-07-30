@@ -35,8 +35,8 @@ const Request& WorkloadGenerator<Distribution>::getReq(
   XDCHECK_LT(poolId, keyGenForPool_.size());
 
   size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
-  auto op =
-      static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
+  auto op = util::narrow_cast<OpType>(
+      workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
   reqs_[idx].setOp(op);
   return reqs_[idx];
 }
@@ -49,7 +49,8 @@ void WorkloadGenerator<Distribution>::generateKeys() {
     std::uniform_int_distribution<char> charDis('a', 'z');
     std::mt19937 gen(folly::Random::rand32());
     for (uint64_t i = start; i < end; i++) {
-      auto keySize = workloadDist_[pid].sampleKeySizeDist(gen);
+      size_t keySize =
+          util::narrow_cast<size_t>(workloadDist_[pid].sampleKeySizeDist(gen));
       keys_[i].resize(keySize);
       for (auto& c : keys_[i]) {
         c = charDis(gen);
@@ -61,7 +62,7 @@ void WorkloadGenerator<Distribution>::generateKeys() {
   std::chrono::seconds keyGenDuration(0);
   keys_.resize(config_.numKeys);
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
-    pid = workloadIdx(i);
+    pid = util::narrow_cast<uint8_t>(workloadIdx(i));
     size_t numKeysForPool =
         firstKeyIndexForPool_[i + 1] - firstKeyIndexForPool_[i];
     totalKeys += numKeysForPool;
@@ -102,10 +103,13 @@ void WorkloadGenerator<Distribution>::generateReqs() {
     for (size_t j = firstKeyIndexForPool_[i]; j < firstKeyIndexForPool_[i + 1];
          j++) {
       std::vector<size_t> chainSizes;
-      chainSizes.push_back(workloadDist_[idx].sampleValDist(gen));
-      int chainLen = workloadDist_[idx].sampleChainedLenDist(gen);
+      chainSizes.push_back(
+          util::narrow_cast<size_t>(workloadDist_[idx].sampleValDist(gen)));
+      int chainLen =
+          util::narrow_cast<int>(workloadDist_[idx].sampleChainedLenDist(gen));
       for (int k = 0; k < chainLen; k++) {
-        chainSizes.push_back(workloadDist_[idx].sampleChainedValDist(gen));
+        chainSizes.push_back(util::narrow_cast<size_t>(
+            workloadDist_[idx].sampleChainedValDist(gen)));
       }
       sizes_.emplace_back(chainSizes);
       auto reqSizes = sizes_.end() - 1;
@@ -122,7 +126,8 @@ void WorkloadGenerator<Distribution>::generateFirstKeyIndexForPool() {
   firstKeyIndexForPool_.push_back(0);
   for (auto prob : config_.keyPoolDistribution) {
     accumProb += prob;
-    firstKeyIndexForPool_.push_back(config_.numKeys * accumProb / sumProb);
+    firstKeyIndexForPool_.push_back(
+        util::narrow_cast<uint32_t>(config_.numKeys * accumProb / sumProb));
   }
 }
 
@@ -139,13 +144,14 @@ void WorkloadGenerator<Distribution>::generateKeyDistributions() {
     size_t idx = workloadIdx(i);
 
     size_t numOpsForPool = std::min<size_t>(
-        config_.numOps * config_.numThreads * config_.opPoolDistribution[i],
+        util::narrow_cast<size_t>(config_.numOps * config_.numThreads *
+                                  config_.opPoolDistribution[i]),
         std::numeric_limits<uint32_t>::max());
     std::cout << folly::sformat("Generating {:.2f}M sampled accesses",
                                 numOpsForPool / 1e6)
               << std::endl;
     keyGenForPool_.push_back(std::uniform_int_distribution<uint32_t>(
-        0, static_cast<uint32_t>(numOpsForPool) - 1));
+        0, util::narrow_cast<uint32_t>(numOpsForPool) - 1));
     keyIndicesForPool_.push_back(std::vector<uint32_t>(numOpsForPool));
 
     duration += detail::executeParallel(
@@ -157,7 +163,7 @@ void WorkloadGenerator<Distribution>::generateKeyDistributions() {
             do {
               idx = std::round(popDist(gen));
             } while (idx < left || idx > right);
-            keyIndicesForPool_[i][j] = idx;
+            keyIndicesForPool_[i][j] = util::narrow_cast<uint32_t>(idx);
           }
         },
         config_.numThreads, numOpsForPool);

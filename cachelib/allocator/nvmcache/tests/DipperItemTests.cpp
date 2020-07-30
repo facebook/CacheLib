@@ -12,7 +12,7 @@ std::string genRandomStr(size_t len) {
   std::string s;
   s.reserve(len);
   for (size_t i = 0; i < len; i++) {
-    char c = folly::Random::rand32(1, 256);
+    char c = static_cast<char>(folly::Random::rand32(1, 256));
     s.push_back(c);
   }
   return s;

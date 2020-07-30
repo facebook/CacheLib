@@ -15,11 +15,15 @@
 
 #include <folly/Benchmark.h>
 #include <folly/container/EvictingCacheMap.h>
-#include <thrift/lib/cpp2/frozen/FrozenUtil.h>
 
-#include "cachelib/allocator/CacheAllocator.h"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#include <thrift/lib/cpp2/frozen/FrozenUtil.h>
 #include "cachelib/benchmarks/gen-cpp2/DataTypeBench_layouts.h"
 #include "cachelib/benchmarks/gen-cpp2/DataTypeBench_types.h"
+#pragma GCC diagnostic pop
+
+#include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/datatype/RangeMap.h"
 
 DEFINE_int32(num_keys, 100, "number of keys used to populate the maps");

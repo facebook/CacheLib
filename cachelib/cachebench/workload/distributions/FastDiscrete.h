@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "cachelib/common/Utils.h"
+
 /* sampling object id and object size from a Zipf-like distribution
  (aka the independent reference model (IRM))
 
@@ -49,9 +51,11 @@ class FastDiscreteDistribution {
       if (weightSeen + probs[i] >= bucketWeight_) {
         // interpolate, update bucket, reset
         double bucketPct = (bucketWeight_ - weightSeen) / probs[i];
-        objectsSeen += bucketPct * sizes[i];
+        objectsSeen +=
+            facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
         objectsSeen = std::max(1UL, objectsSeen);
-        sizes[i] -= bucketPct * sizes[i];
+        sizes[i] -=
+            facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
         probs[i] -= bucketPct * probs[i];
         buckets.push_back(objectsSeen);
         if (bucketOffsets_.size() > 0) {
@@ -75,8 +79,10 @@ class FastDiscreteDistribution {
   template <typename RNG>
   size_t operator()(RNG& gen) {
     size_t bucket = bucketDistribution_(gen);
-    size_t objectInBucket = insideBucketDistributions_[bucket](gen);
-    return (scalingFactor_ * (bucketOffsets_[bucket] + objectInBucket)) +
+    size_t objectInBucket = facebook::cachelib::util::narrow_cast<size_t>(
+        insideBucketDistributions_[bucket](gen));
+    return facebook::cachelib::util::narrow_cast<size_t>(
+               (scalingFactor_ * (bucketOffsets_[bucket] + objectInBucket))) +
            leftOffset_;
   }
 

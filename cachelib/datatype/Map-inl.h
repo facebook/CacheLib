@@ -219,7 +219,7 @@ auto expandHashTable(
     double factor = 2.0) {
   XDCHECK_LT(1.0, factor) << "hash table can only grow not shrink";
   const size_t newCapacity =
-      static_cast<size_t>(oldHashTable->capacity()) * factor;
+      static_cast<size_t>(oldHashTable->capacity() * factor);
   return copyHashTable<K, C>(cache, oldHashTable, newCapacity);
 }
 } // namespace detail

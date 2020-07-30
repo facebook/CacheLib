@@ -92,10 +92,10 @@ double DynamicRandomAP::genF(const HashedKey& hk) const {
                      : key.size();
     uint64_t h =
         folly::hash::SpookyHashV2::Hash64(key.data(), len, 0 /* seed */);
-    return fdiv(h,
+    return fdiv(static_cast<double>(h),
                 static_cast<double>(std::numeric_limits<decltype(h)>::max()));
   }
-  return fdiv(rg_(), rg_.max());
+  return fdiv(static_cast<double>(rg_()), static_cast<double>(rg_.max()));
 }
 
 void DynamicRandomAP::reset() {
@@ -132,7 +132,8 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
     curTargetRate = (targetWrittenTomorrow - bytesWritten) / kSecondsInDay;
   }
   params_.curTargetRate = curTargetRate;
-  params_.probabilityFactor *= clampFactorChange(fdiv(curTargetRate, curRate));
+  params_.probabilityFactor *= clampFactorChange(
+      fdiv(static_cast<double>(curTargetRate), static_cast<double>(curRate)));
   params_.bytesWrittenLastUpdate = bytesWritten;
 }
 
@@ -161,8 +162,8 @@ DynamicRandomAP::ThrottleParams DynamicRandomAP::getThrottleParams() const {
 
 void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   auto params = getThrottleParams();
-  visitor("navy_ap_write_rate_target", targetRate_);
-  visitor("navy_ap_write_rate_current", params.curTargetRate);
+  visitor("navy_ap_write_rate_target", static_cast<double>(targetRate_));
+  visitor("navy_ap_write_rate_current", static_cast<double>(params.curTargetRate));
 }
 } // namespace navy
 } // namespace cachelib

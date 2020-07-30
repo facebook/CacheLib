@@ -6,7 +6,11 @@
 #include <vector>
 
 #include "cachelib/common/Serialization.h"
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include "cachelib/common/gen-cpp2/BloomFilter_types.h"
+#pragma GCC diagnostic pop
 
 namespace facebook {
 namespace cachelib {
@@ -75,7 +79,7 @@ class BloomFilter {
   uint32_t numFilters() const { return numFilters_; }
 
   // number of hash functions per filter
-  uint32_t numHashes() const { return seeds_.size(); }
+  uint32_t numHashes() const { return static_cast<uint32_t>(seeds_.size()); }
 
   // number of bits per filter
   size_t numBitsPerFilter() const { return filterByteSize_ * 8ULL; }

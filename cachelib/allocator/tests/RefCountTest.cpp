@@ -276,7 +276,7 @@ template <typename T,
           uint8_t FlagBit3>
 void RefCountTest::testMultiThreaded() {
   const T maxCount = RefCountWithFlags<T, Bits>::getMaxRefCount();
-  T startCount = Bits > 25 ? maxCount - 1e6 : 0;
+  T startCount = Bits > 25 ? maxCount - 1'000'000 : 0;
   RefCountWithFlags<T, Bits> ref{startCount};
 
   const T remaining = maxCount - startCount;

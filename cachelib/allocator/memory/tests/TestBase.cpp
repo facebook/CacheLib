@@ -121,7 +121,8 @@ std::string SlabAllocatorTestBase::getRandomStr(unsigned int len) {
   for (unsigned int i = 0; i < len; i++) {
     unsigned int index =
         folly::Random::rand32() % (sizeof(start) / sizeof(start[0]));
-    const char c = (start[index] + (folly::Random::rand32() % size[index]));
+    const char c = (start[index] +
+                    static_cast<char>((folly::Random::rand32() % size[index])));
     s += c;
   }
   assert(s.length() == len);
@@ -130,7 +131,7 @@ std::string SlabAllocatorTestBase::getRandomStr(unsigned int len) {
 
 std::set<uint32_t> SlabAllocatorTestBase::getRandomPow2AllocSizes(
     unsigned int n) {
-  unsigned int numBits = log2(Slab::kSize);
+  unsigned int numBits = static_cast<unsigned int>(log2(Slab::kSize));
   // at least 128 bytes
   const unsigned int minNumBits = 7;
   if (n + minNumBits > numBits) {

@@ -16,7 +16,7 @@ std::string generateRandomString() {
   static std::uniform_int_distribution<> genChar(0, 255);
   std::string ret;
   for (int i = 0; i < kMaxKeySize; i++) {
-    ret.push_back(genChar(gen));
+    ret.push_back(static_cast<char>(genChar(gen)));
   }
   return ret;
 }

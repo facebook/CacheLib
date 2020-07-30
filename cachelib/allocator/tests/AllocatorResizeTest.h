@@ -1122,7 +1122,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         if (slabsInUseByPool > 0) {
           for (unsigned int classId = 0; classId < numSizes; classId++) {
             try {
-              alloc.releaseSlab(poolId, classId, SlabReleaseMode::kAdvise);
+              alloc.releaseSlab(poolId, static_cast<ClassId>(classId),
+                                SlabReleaseMode::kAdvise);
             } catch (const std::invalid_argument&) {
             }
           }

@@ -240,8 +240,8 @@ void setupCacheProtos(const folly::dynamic& options,
     blockCache->setCleanRegionsPool(
         options.getDefault(kCleanRegions, 1).getInt());
 
-    const uint8_t reinsertionHitsThreshold =
-        options.getDefault(kReinsertionHitsThreshold, 0).getInt();
+    const uint8_t reinsertionHitsThreshold = static_cast<uint8_t>(
+        options.getDefault(kReinsertionHitsThreshold, 0).getInt());
     if (reinsertionHitsThreshold > 0) {
       blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
     }

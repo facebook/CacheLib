@@ -2,6 +2,8 @@
 #include <chrono>
 #include <iostream>
 
+#include "cachelib/common/Utils.h"
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -95,10 +97,13 @@ void OnlineGenerator<Distribution>::generateSizes() {
     sizes_.emplace_back();
     for (size_t j = 0; j < (1 << 15); j++) {
       std::vector<size_t> chainSizes;
-      chainSizes.push_back(workloadDist_[idx].sampleValDist(gen));
-      int chainLen = workloadDist_[idx].sampleChainedLenDist(gen);
+      chainSizes.push_back(
+          util::narrow_cast<size_t>(workloadDist_[idx].sampleValDist(gen)));
+      int chainLen =
+          util::narrow_cast<int>(workloadDist_[idx].sampleChainedLenDist(gen));
       for (int k = 0; k < chainLen; k++) {
-        chainSizes.push_back(workloadDist_[idx].sampleChainedValDist(gen));
+        chainSizes.push_back(util::narrow_cast<size_t>(
+            workloadDist_[idx].sampleChainedValDist(gen)));
       }
       sizes_[idx].emplace_back(chainSizes);
     }
@@ -113,7 +118,8 @@ void OnlineGenerator<Distribution>::generateFirstKeyIndexForPool() {
   firstKeyIndexForPool_.push_back(0);
   for (auto prob : config_.keyPoolDistribution) {
     accumProb += prob;
-    firstKeyIndexForPool_.push_back(config_.numKeys * accumProb / sumProb);
+    firstKeyIndexForPool_.push_back(
+        util::narrow_cast<uint64_t>(config_.numKeys * accumProb / sumProb));
   }
 }
 
@@ -130,7 +136,8 @@ void OnlineGenerator<Distribution>::generateKeyDistributions() {
     size_t idx = workloadIdx(i);
 
     size_t numOpsForPool = std::min<size_t>(
-        config_.numOps * config_.numThreads * config_.opPoolDistribution[i],
+        util::narrow_cast<size_t>(config_.numOps * config_.numThreads *
+                                  config_.opPoolDistribution[i]),
         std::numeric_limits<uint32_t>::max());
     std::cout << folly::sformat("Generating {:.2f}M sampled accesses",
                                 numOpsForPool / 1e6)
@@ -144,9 +151,9 @@ void OnlineGenerator<Distribution>::generateKeyDistributions() {
           std::mt19937 gen(folly::Random::rand32());
           auto popDist = workloadDist_[idx].getPopDist(left, right);
           for (uint64_t j = start; j < end; j++) {
-            double idx;
+            uint32_t idx;
             do {
-              idx = std::round(popDist(gen));
+              idx = util::narrow_cast<uint32_t>(std::round(popDist(gen)));
             } while (idx < left || idx > right);
             keyIndicesForPool_[i][j] = idx;
           }

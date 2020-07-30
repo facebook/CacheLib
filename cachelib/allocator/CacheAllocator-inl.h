@@ -2068,8 +2068,10 @@ void CacheAllocator<CacheTrait>::overridePoolConfig(PoolId pid,
   for (unsigned int cid = 0; cid < pool.getNumClassId(); ++cid) {
     MMConfig mmConfig = config;
     mmConfig.addExtraConfig(
-        config_.trackTailHits ? pool.getAllocationClass(cid).getAllocsPerSlab()
-                              : 0);
+        config_.trackTailHits
+            ? pool.getAllocationClass(static_cast<ClassId>(cid))
+                  .getAllocsPerSlab()
+            : 0);
     DCHECK_NOTNULL(evictableMMContainers_[pid][cid].get());
     DCHECK_NOTNULL(unevictableMMContainers_[pid][cid].get());
     evictableMMContainers_[pid][cid]->setConfig(mmConfig);
@@ -2082,9 +2084,11 @@ void CacheAllocator<CacheTrait>::createMMContainers(const PoolId pid,
                                                     MMConfig config) {
   auto& pool = allocator_->getPool(pid);
   for (unsigned int cid = 0; cid < pool.getNumClassId(); ++cid) {
-    config.addExtraConfig(config_.trackTailHits
-                              ? pool.getAllocationClass(cid).getAllocsPerSlab()
-                              : 0);
+    config.addExtraConfig(
+        config_.trackTailHits
+            ? pool.getAllocationClass(static_cast<ClassId>(cid))
+                  .getAllocsPerSlab()
+            : 0);
     evictableMMContainers_[pid][cid].reset(
         new MMContainer(config, compressor_));
     unevictableMMContainers_[pid][cid].reset(
@@ -2875,7 +2879,7 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     for (PoolId pid : pools) {
       for (unsigned int cid = 0; cid < (*stats_.fragmentationSize)[pid].size();
            ++cid) {
-        metadata_.fragmentationSize_ref()[pid][cid] =
+        metadata_.fragmentationSize_ref()[pid][static_cast<ClassId>(cid)] =
             (*stats_.fragmentationSize)[pid][cid].get();
       }
       if (isCompactCachePool_[pid]) {
@@ -3027,10 +3031,10 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
   MMContainers mmContainers;
 
   for (auto& kvPool : container.pools) {
-    unsigned int i = kvPool.first;
+    auto i = static_cast<PoolId>(kvPool.first);
     auto& pool = getPool(i);
     for (auto& kv : kvPool.second) {
-      unsigned int j = kv.first;
+      auto j = static_cast<ClassId>(kv.first);
       MMContainerPtr ptr =
           std::make_unique<typename MMContainerPtr::element_type>(kv.second,
                                                                   compressor);

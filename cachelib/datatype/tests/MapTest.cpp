@@ -710,7 +710,7 @@ class MapTest : public ::testing::Test {
     for (uint32_t key = 0; key < numKey; ++key) {
       auto v = Value::create(size);
       for (uint32_t i = 0; i < v->len; ++i) {
-        v->data[i] = key;
+        v->data[i] = static_cast<uint8_t>(key);
       }
       ASSERT_TRUE(map.insert(key, *v));
     }
@@ -760,7 +760,7 @@ class MapTest : public ::testing::Test {
     for (uint32_t key = 0; key < numKey; ++key) {
       auto v = Value::create(size);
       for (uint32_t i = 0; i < v->len; ++i) {
-        v->data[i] = key;
+        v->data[i] = static_cast<uint8_t>(key);
       }
       ASSERT_TRUE(map.insert(key, *v));
     }
@@ -817,7 +817,7 @@ class MapTest : public ::testing::Test {
     for (uint32_t key = 0; key < numKey; ++key) {
       auto v = Value::create(size);
       for (uint32_t i = 0; i < v->len; ++i) {
-        v->data[i] = key;
+        v->data[i] = static_cast<uint8_t>(key);
       }
       ASSERT_TRUE(map.insert(key, *v));
     }

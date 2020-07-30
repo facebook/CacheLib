@@ -46,7 +46,7 @@ static uint32_t getRandomAllocSize(double val) {
   } else if (val > kMaxAllocSize) {
     return kMaxAllocSize;
   } else {
-    return std::round(val);
+    return static_cast<uint32_t>(std::round(val));
   }
 }
 

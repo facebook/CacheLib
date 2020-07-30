@@ -23,10 +23,10 @@ struct SimpleRebalanceStrategy : public RebalanceStrategy {
     ClassId cid = Slab::kInvalidClassId;
     uint64_t maxActiveAllocs = 0;
     for (size_t i = 0; i < poolStats.mpStats.acStats.size(); ++i) {
-      const auto& acStats = poolStats.mpStats.acStats[i];
+      const auto& acStats = poolStats.mpStats.acStats[static_cast<ClassId>(i)];
       if (maxActiveAllocs < acStats.activeAllocs) {
         maxActiveAllocs = acStats.activeAllocs;
-        cid = i;
+        cid = static_cast<ClassId>(i);
       }
     }
     return cid;

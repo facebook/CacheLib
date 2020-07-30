@@ -190,6 +190,17 @@ size_t getMemAvailable();
 
 // Print stack trace for the current exception thrown
 void printExceptionStackTraces();
+
+// Return max or min value if the double is outside of type's range
+template <typename T>
+T narrow_cast(double i) {
+  if (i > static_cast<double>(std::numeric_limits<T>::max())) {
+    return std::numeric_limits<T>::max();
+  } else if (i < static_cast<double>(std::numeric_limits<T>::min())) {
+    return std::numeric_limits<T>::min();
+  }
+  return static_cast<T>(i);
+}
 } // namespace util
 } // namespace cachelib
 } // namespace facebook

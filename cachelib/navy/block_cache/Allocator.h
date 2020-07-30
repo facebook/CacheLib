@@ -19,7 +19,7 @@ namespace navy {
 // has to sync access.
 class RegionAllocator {
  public:
-  explicit RegionAllocator(uint32_t classId) : classId_{classId} {}
+  explicit RegionAllocator(uint16_t classId) : classId_{classId} {}
 
   RegionAllocator(const RegionAllocator&) = delete;
   RegionAllocator& operator=(const RegionAllocator&) = delete;
@@ -36,12 +36,12 @@ class RegionAllocator {
   // Resets allocator (releases used region)
   void reset();
 
-  uint32_t classId() const { return classId_; }
+  uint16_t classId() const { return classId_; }
 
   std::mutex& getLock() const { return mutex_; }
 
  private:
-  const uint32_t classId_{};
+  const uint16_t classId_{};
 
   // The current region id from which we are allocating
   RegionId rid_;

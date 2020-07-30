@@ -89,7 +89,7 @@ void benchmarkCompare(Compare compare,
 std::vector<std::uint8_t> createMonotonic(std::uint64_t bytes) {
   auto vector = std::vector<std::uint8_t>{};
   for (auto i = std::uint64_t{0}; i < bytes; ++i) {
-    vector.push_back(i);
+    vector.push_back(static_cast<std::uint8_t>(i));
   }
   return vector;
 }

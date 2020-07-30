@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#pragma GCC diagnostic pop
+
 #include "cachelib/common/Serialization.h"
 
 constexpr size_t SerializationBufferSize = 100 * 1024;

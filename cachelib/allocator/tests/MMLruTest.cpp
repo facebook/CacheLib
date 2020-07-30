@@ -347,7 +347,7 @@ TEST_F(MMLruTest, InsertionPointBasic) {
 TEST_F(MMLruTest, InsertionPointStress) {
   // given an insertion point spec, run a finite number of random operations
   // on it and ensure that the tail sizes match what we expect it to be.
-  auto doStressTest = [&](unsigned int lruInsertionPointSpec) {
+  auto doStressTest = [&](uint8_t lruInsertionPointSpec) {
     MMLru::Config config;
     config.lruRefreshTime = 0;
     config.lruInsertionPointSpec = lruInsertionPointSpec;

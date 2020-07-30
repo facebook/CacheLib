@@ -84,13 +84,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         int classId =
             allocator->getPool(poolId).getAllocationClassId(kItemSize);
         ASSERT_EQ(nItems,
-                  stats.cacheStats[classId + 1].containerStat.numLockByInserts);
+                  stats.cacheStats[static_cast<ClassId>(classId + 1)]
+                      .containerStat.numLockByInserts);
         ASSERT_EQ(nItems / 3,
-                  stats.cacheStats[classId + 1].containerStat.numHotAccesses);
+                  stats.cacheStats[static_cast<ClassId>(classId + 1)]
+                      .containerStat.numHotAccesses);
         ASSERT_EQ(nItems / 3,
-                  stats.cacheStats[classId + 1].containerStat.numColdAccesses);
+                  stats.cacheStats[static_cast<ClassId>(classId + 1)]
+                      .containerStat.numColdAccesses);
         ASSERT_EQ(nItems / 3,
-                  stats.cacheStats[classId + 1].containerStat.numWarmAccesses);
+                  stats.cacheStats[static_cast<ClassId>(classId + 1)]
+                      .containerStat.numWarmAccesses);
       }
 
       auto before = allocator->getGlobalCacheStats();
@@ -1928,9 +1932,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     const std::string keyPrefix = "key";
     const uint32_t itemSize = 100;
-    const uint32_t numItems = 100;
+    const uint8_t numItems = 100;
 
-    for (uint32_t i = 0; i < numItems; ++i) {
+    for (uint8_t i = 0; i < numItems; ++i) {
       const std::string key = keyPrefix + folly::to<std::string>(i);
       auto item = util::allocateAccessible(alloc, poolId, key, itemSize);
       uint8_t* data = reinterpret_cast<uint8_t*>(item->getWritableMemory());
@@ -4392,7 +4396,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         /* sleep override */
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        ClassId cid = i;
+        ClassId cid = static_cast<ClassId>(i);
         alloc.releaseSlab(pid, cid, SlabReleaseMode::kRebalance);
 
         ++i;
@@ -4723,7 +4727,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           }
           uint8_t* parentBuf =
               reinterpret_cast<uint8_t*>(itemHandle->getWritableMemory());
-          (*parentBuf) = i;
+          (*parentBuf) = static_cast<uint8_t>(i);
           alloc.insert(itemHandle);
 
           for (unsigned int j = 0; j < 10; ++j) {
@@ -4734,7 +4738,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
             uint8_t* buf =
                 reinterpret_cast<uint8_t*>(childItem->getWritableMemory());
             for (uint8_t k = 0; k < 100; ++k) {
-              buf[k] = (k + i) % 256;
+              buf[k] = static_cast<uint8_t>((k + i) % 256);
             }
 
             alloc.addChainedItem(itemHandle, std::move(childItem));
@@ -4752,7 +4756,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         /* sleep override */
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        ClassId cid = i;
+        ClassId cid = static_cast<ClassId>(i);
         alloc.releaseSlab(pid, cid, SlabReleaseMode::kRebalance);
 
         ++i;
@@ -4967,7 +4971,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         /* sleep override */
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        ClassId cid = i;
+        ClassId cid = static_cast<ClassId>(i);
         alloc.releaseSlab(pid, cid, SlabReleaseMode::kRebalance);
 
         ++i;

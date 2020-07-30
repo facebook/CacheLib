@@ -8,7 +8,7 @@ Serializer::Serializer(uint8_t* begin, const uint8_t* const end)
 size_t Serializer::bytesRemaining() const noexcept {
   XDCHECK_GE(reinterpret_cast<uintptr_t>(end_),
              reinterpret_cast<uintptr_t>(curr_));
-  return end_ - curr_;
+  return static_cast<size_t>(end_ - curr_);
 }
 
 size_t Serializer::writeToBuffer(std::unique_ptr<folly::IOBuf> ioBuf) {
@@ -36,7 +36,7 @@ Deserializer::Deserializer(const uint8_t* begin, const uint8_t* const end)
 size_t Deserializer::bytesRemaining() const noexcept {
   XDCHECK_GE(reinterpret_cast<uintptr_t>(end_),
              reinterpret_cast<uintptr_t>(curr_));
-  return end_ - curr_;
+  return static_cast<size_t>(end_ - curr_);
 }
 
 namespace {
