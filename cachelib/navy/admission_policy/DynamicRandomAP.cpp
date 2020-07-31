@@ -163,7 +163,8 @@ DynamicRandomAP::ThrottleParams DynamicRandomAP::getThrottleParams() const {
 void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   auto params = getThrottleParams();
   visitor("navy_ap_write_rate_target", static_cast<double>(targetRate_));
-  visitor("navy_ap_write_rate_current", static_cast<double>(params.curTargetRate));
+  visitor("navy_ap_write_rate_current",
+          static_cast<double>(params.curTargetRate));
 }
 } // namespace navy
 } // namespace cachelib
