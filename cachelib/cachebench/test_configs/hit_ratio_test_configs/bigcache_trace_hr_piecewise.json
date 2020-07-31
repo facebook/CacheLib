@@ -31,6 +31,7 @@
     "lru2qHotPct": 20,
     "lru2qColdPct": 20,
 
+    "truncateItemToOriginalAllocSizeInNvm": true,
     "memoryOnlyTTL": 7200
   },
   "test_config":
@@ -42,7 +43,7 @@
       "numOps": 240000000,
       "numThreads": 24,
       "populateItem": false,
-      
+
       "traceFileName": "change_this_appropriately.csv"
     }
 }
