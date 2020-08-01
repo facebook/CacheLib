@@ -1,0 +1,14 @@
+
+
+cachelib/allocator/datastruct/serialize/gen-cpp2/
+cachelib/allocator/memory/serialize/gen-cpp2/
+cachelib/allocator/serialize/gen-cpp2/
+cachelib/allocator/datastruct/tests/gen-cpp2/
+cachelib/benchmarks/gen-cpp2/
+cachelib/common/gen-cpp2/
+cachelib/navy/serialization/gen-cpp2/
+cachelib/shm/gen-cpp2/
+
+*.o
+*~
+
