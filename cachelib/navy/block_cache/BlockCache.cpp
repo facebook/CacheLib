@@ -193,9 +193,6 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
     if (status == Status::Ok) {
       regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
-      if (reinsertionPolicy_) {
-        reinsertionPolicy_->touch(hk);
-      }
     }
     regionManager_.close(std::move(desc));
     lookupCount_.inc();
@@ -215,9 +212,6 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
 
 Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
-  if (reinsertionPolicy_) {
-    reinsertionPolicy_->remove(hk);
-  }
   auto lr = index_.remove(hk.keyHash());
   if (lr.found()) {
     auto addr = decodeRelAddress(lr.address());
@@ -297,9 +291,6 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
   auto removeItem = [this, hk, entrySize, currAddr] {
-    if (reinsertionPolicy_) {
-      reinsertionPolicy_->remove(hk);
-    }
     sizeDist_.removeSize(entrySize);
     if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       return ReinsertionRes::kEvicted;
@@ -307,7 +298,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   };
 
-  const auto lr = index_.lookup(hk.keyHash());
+  const auto lr = index_.peek(hk.keyHash());
   if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
     sizeDist_.removeSize(entrySize);
@@ -508,6 +499,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
 
   // Allocator visits region manager
   allocator_.getCounters(visitor);
+  index_.getCounters(visitor);
 
   if (reinsertionPolicy_) {
     reinsertionPolicy_->getCounters(visitor);

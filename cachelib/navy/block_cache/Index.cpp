@@ -18,7 +18,18 @@ uint8_t safeInc(uint8_t val) {
 }
 } // namespace
 
-Index::LookupResult Index::touch(uint64_t key) {
+void Index::setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+
+  auto it = map.find(subkey(key));
+  if (it != map.end()) {
+    it.value().currentHits = currentHits;
+    it.value().totalHits = totalHits;
+  }
+}
+
+Index::LookupResult Index::lookup(uint64_t key) {
   LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
@@ -27,34 +38,13 @@ Index::LookupResult Index::touch(uint64_t key) {
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
-
     it.value().totalHits = safeInc(lr.record_.totalHits);
     it.value().currentHits = safeInc(lr.record_.currentHits);
   }
   return lr;
 }
 
-void Index::setCurrentHits(uint64_t key, uint8_t val) {
-  auto& map = getMap(key);
-  auto lock = std::lock_guard{getMutex(key)};
-
-  auto it = map.find(subkey(key));
-  if (it != map.end()) {
-    it.value().currentHits = val;
-  }
-}
-
-void Index::setTotalHits(uint64_t key, uint8_t val) {
-  auto& map = getMap(key);
-  auto lock = std::lock_guard{getMutex(key)};
-
-  auto it = map.find(subkey(key));
-  if (it != map.end()) {
-    it.value().totalHits = val;
-  }
-}
-
-Index::LookupResult Index::lookup(uint64_t key) const {
+Index::LookupResult Index::peek(uint64_t key) const {
   LookupResult lr;
   const auto& map = getMap(key);
   auto lock = std::shared_lock{getMutex(key)};
@@ -76,6 +66,7 @@ Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
+    trackRemove(it->second.totalHits);
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = address;
     it.value().currentHits = 0;
@@ -102,6 +93,13 @@ bool Index::replaceIfMatch(uint64_t key,
   return false;
 }
 
+void Index::trackRemove(uint8_t totalHits) {
+  hitsEstimator_.trackValue(totalHits);
+  if (totalHits == 0) {
+    unAccessedItems_.inc();
+  }
+}
+
 Index::LookupResult Index::remove(uint64_t key) {
   LookupResult lr;
   auto& map = getMap(key);
@@ -111,6 +109,8 @@ Index::LookupResult Index::remove(uint64_t key) {
   if (it != map.end()) {
     lr.found_ = true;
     lr.record_ = it->second;
+
+    trackRemove(it->second.totalHits);
     map.erase(it);
   }
   return lr;
@@ -122,6 +122,7 @@ bool Index::removeIfMatch(uint64_t key, uint32_t address) {
 
   auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == address) {
+    trackRemove(it->second.totalHits);
     map.erase(it);
     return true;
   }
@@ -183,6 +184,11 @@ void Index::recover(RecordReader& rr) {
                                *entry.currentHits_ref());
     }
   }
+}
+
+void Index::getCounters(const CounterVisitor& visitor) const {
+  hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_{}_{}", "hits");
+  visitor("navy_bc_item_removed_with_no_access", unAccessedItems_.get());
 }
 } // namespace navy
 } // namespace cachelib

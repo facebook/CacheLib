@@ -15,19 +15,8 @@ class ReinsertionPolicy {
   // pass in the index
   virtual void setIndex(Index* index) = 0;
 
-  // Touch an item every time we access it. User must track
-  // an item before touching it. Touching without tracking
-  // results in no-op.
-  virtual void touch(HashedKey hk) = 0;
-
   // Determine whether or not we should keep this key around longer in cache.
   virtual bool shouldReinsert(HashedKey hk) = 0;
-
-  // Remove a key from tracking. If key not found, no-op.
-  virtual void remove(HashedKey hk) = 0;
-
-  // Reset the state of this policy to when it was first initialized.
-  virtual void reset() = 0;
 
   // Persist metadata associated with this policy.
   virtual void persist(RecordWriter& rw) = 0;

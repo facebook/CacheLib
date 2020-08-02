@@ -8,32 +8,15 @@ namespace navy {
 HitsReinsertionPolicy::HitsReinsertionPolicy(uint8_t hitsThreshold)
     : hitsThreshold_{hitsThreshold} {}
 
-void HitsReinsertionPolicy::touch(HashedKey hk) {
-  XDCHECK(index_);
-  index_->touch(hk.keyHash());
-}
-
 bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
   XDCHECK(index_);
-  const auto lr = index_->lookup(hk.keyHash());
+  const auto lr = index_->peek(hk.keyHash());
   if (!lr.found() || lr.currentHits() < hitsThreshold_) {
     return false;
   }
 
   hitsOnReinsertionEstimator_.trackValue(lr.currentHits());
-  index_->setCurrentHits(hk.keyHash(), 0);
   return true;
-}
-
-void HitsReinsertionPolicy::remove(HashedKey hk) {
-  XDCHECK(index_);
-  const auto lr = index_->lookup(hk.keyHash());
-  if (lr.found()) {
-    hitsEstimator_.trackValue(lr.totalHits());
-    if (lr.totalHits() == 0) {
-      itemsEvictedWithNoAccess_.inc();
-    }
-  }
 }
 
 void HitsReinsertionPolicy::persist(RecordWriter& rw) {
@@ -64,24 +47,20 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
       auto key = kv.key_ref();
       auto totalHits = static_cast<uint8_t>(*stats->totalHits_ref());
       auto currHits = static_cast<uint8_t>(*stats->currHits_ref());
-      index_->setTotalHits(*key, totalHits);
-      index_->setCurrentHits(*key, currHits);
+      index_->setHits(*key, currHits, totalHits);
     }
   }
 }
 
 void HitsReinsertionPolicy::getCounters(const CounterVisitor& visitor) const {
-  hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_{}_{}", "hits");
   hitsOnReinsertionEstimator_.visitQuantileEstimator(
       visitor, "navy_bc_item_{}_{}", "reinsertion_hits");
-  visitor("navy_bc_item_evicted_with_no_access",
-          itemsEvictedWithNoAccess_.get());
 }
 
 HitsReinsertionPolicy::AccessStats HitsReinsertionPolicy::getAccessStats(
     HashedKey hk) const {
   XDCHECK(index_);
-  const auto lr = index_->lookup(hk.keyHash());
+  const auto lr = index_->peek(hk.keyHash());
   if (lr.found()) {
     return AccessStats{lr.totalHits(), lr.currentHits()};
   }

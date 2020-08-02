@@ -17,15 +17,9 @@ class ProbabilisticReinsertionPolicy : public ReinsertionPolicy {
 
   void setIndex(Index* /* index */) override {}
 
-  void touch(HashedKey /* hk */) override {}
-
   bool shouldReinsert(HashedKey /* hk */) override {
     return folly::Random::rand32() % 100 < probability_;
   }
-
-  void remove(HashedKey /* hk */) override {}
-
-  void reset() override {}
 
   void persist(RecordWriter& /* rw */) override {}
 

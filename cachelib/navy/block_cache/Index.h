@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <shared_mutex>
@@ -8,8 +9,11 @@
 
 #include <folly/Portability.h>
 #include <folly/SharedMutex.h>
+#include <folly/stats/QuantileEstimator.h>
 #include <tsl/sparse_map.h>
 
+#include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook {
@@ -20,6 +24,9 @@ namespace navy {
 // but we do not want people to rely on that).
 class Index {
  public:
+  // Specify 1 second window size for quantile estimator.
+  static constexpr std::chrono::seconds kQuantileWindowSize{1};
+
   Index() = default;
   Index(const Index&) = delete;
   Index& operator=(const Index&) = delete;
@@ -89,13 +96,11 @@ class Index {
     bool found_{false};
   };
 
-  // touch existing record
-  // If the entry was found, LookupResult.found() returns true and
-  // LookupResult.record() returns the old record. The touch operation will be
-  // increase the current and total hits.
-  LookupResult touch(uint64_t key);
+  // get value and update tracking counters
+  LookupResult lookup(uint64_t key);
 
-  LookupResult lookup(uint64_t key) const;
+  // get value without updating tracking counters
+  LookupResult peek(uint64_t key) const;
 
   // Overwrites existing
   // If the entry was successfully overwritten, LookupResult.found() returns
@@ -115,14 +120,14 @@ class Index {
   // Return true if removed successfully, false otherwise.
   bool removeIfMatch(uint64_t key, uint32_t address);
 
-  void setCurrentHits(uint64_t key, uint8_t val);
-
-  void setTotalHits(uint64_t key, uint8_t val);
+  void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits);
 
   void reset();
 
   // Walks buckets and computes total index entry count
   size_t computeSize() const;
+
+  void getCounters(const CounterVisitor& visitor) const;
 
  private:
   static constexpr uint32_t kNumBuckets{64 * 1024};
@@ -151,11 +156,16 @@ class Index {
     return buckets_[b];
   }
 
+  void trackRemove(uint8_t totalHits);
+
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[kNumMutexes]};
   std::unique_ptr<Map[]> buckets_{new Map[kNumBuckets]};
+
+  mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
+  mutable AtomicCounter unAccessedItems_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");

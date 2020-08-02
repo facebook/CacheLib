@@ -76,21 +76,21 @@ TEST(Index, Hits) {
 
   // Hits after inserting should be 0
   index.insert(key, 0);
-  EXPECT_EQ(0, index.lookup(key).totalHits());
-  EXPECT_EQ(0, index.lookup(key).currentHits());
+  EXPECT_EQ(0, index.peek(key).totalHits());
+  EXPECT_EQ(0, index.peek(key).currentHits());
 
-  // Hits after touch should increase
-  index.touch(key);
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(1, index.lookup(key).currentHits());
+  // Hits after lookup should increase
+  index.lookup(key);
+  EXPECT_EQ(1, index.peek(key).totalHits());
+  EXPECT_EQ(1, index.peek(key).currentHits());
 
-  index.setCurrentHits(key, 0);
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(0, index.lookup(key).currentHits());
+  index.setHits(key, 2, 5);
+  EXPECT_EQ(5, index.peek(key).totalHits());
+  EXPECT_EQ(2, index.peek(key).currentHits());
 
-  index.touch(key);
-  EXPECT_EQ(2, index.lookup(key).totalHits());
-  EXPECT_EQ(1, index.lookup(key).currentHits());
+  index.lookup(key);
+  EXPECT_EQ(6, index.peek(key).totalHits());
+  EXPECT_EQ(3, index.peek(key).currentHits());
 
   index.remove(key);
   EXPECT_FALSE(index.lookup(key).found());
@@ -106,34 +106,34 @@ TEST(Index, HitsAfterUpdate) {
 
   // Hits after inserting should be 0
   index.insert(key, 0);
-  EXPECT_EQ(0, index.lookup(key).totalHits());
-  EXPECT_EQ(0, index.lookup(key).currentHits());
+  EXPECT_EQ(0, index.peek(key).totalHits());
+  EXPECT_EQ(0, index.peek(key).currentHits());
 
-  // Hits after touch should increase
-  index.touch(key);
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(1, index.lookup(key).currentHits());
+  // Hits after lookup should increase
+  index.lookup(key);
+  EXPECT_EQ(1, index.peek(key).totalHits());
+  EXPECT_EQ(1, index.peek(key).currentHits());
 
   // re-insert
   index.insert(key, 3);
   // hits should be cleared after insert
-  EXPECT_EQ(0, index.lookup(key).totalHits());
-  EXPECT_EQ(0, index.lookup(key).currentHits());
+  EXPECT_EQ(0, index.peek(key).totalHits());
+  EXPECT_EQ(0, index.peek(key).currentHits());
 
-  index.touch(key);
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(1, index.lookup(key).currentHits());
+  index.lookup(key);
+  EXPECT_EQ(1, index.peek(key).totalHits());
+  EXPECT_EQ(1, index.peek(key).currentHits());
 
   EXPECT_FALSE(index.replaceIfMatch(key, 100, 0));
   // hits should not be cleared after failed replaceIfMatch()
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(1, index.lookup(key).currentHits());
+  EXPECT_EQ(1, index.peek(key).totalHits());
+  EXPECT_EQ(1, index.peek(key).currentHits());
 
   EXPECT_TRUE(index.replaceIfMatch(key, 100, 3));
   // After success replaceIfMatch(), totalHits should be kept but currentHits
   // should be cleared
-  EXPECT_EQ(1, index.lookup(key).totalHits());
-  EXPECT_EQ(0, index.lookup(key).currentHits());
+  EXPECT_EQ(1, index.peek(key).totalHits());
+  EXPECT_EQ(0, index.peek(key).currentHits());
 }
 
 TEST(Index, HitsUpperBound) {
@@ -142,11 +142,11 @@ TEST(Index, HitsUpperBound) {
 
   index.insert(key, 0);
   for (int i = 0; i < 1000; i++) {
-    index.touch(key);
+    index.lookup(key);
   }
 
-  EXPECT_EQ(255, index.lookup(key).totalHits());
-  EXPECT_EQ(255, index.lookup(key).currentHits());
+  EXPECT_EQ(255, index.peek(key).totalHits());
+  EXPECT_EQ(255, index.peek(key).currentHits());
 }
 
 TEST(Index, ThreadSafe) {
@@ -154,19 +154,19 @@ TEST(Index, ThreadSafe) {
   const uint64_t key = 1314;
   index.insert(key, 0);
 
-  auto touch = [&]() { index.touch(key); };
+  auto lookup = [&]() { index.lookup(key); };
 
   std::vector<std::thread> threads;
   for (int i = 0; i < 200; i++) {
-    threads.emplace_back(std::thread(touch));
+    threads.emplace_back(std::thread(lookup));
   }
 
   for (auto& t : threads) {
     t.join();
   }
 
-  EXPECT_EQ(200, index.lookup(key).totalHits());
-  EXPECT_EQ(200, index.lookup(key).currentHits());
+  EXPECT_EQ(200, index.peek(key).totalHits());
+  EXPECT_EQ(200, index.peek(key).currentHits());
 }
 
 } // namespace tests

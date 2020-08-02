@@ -1534,6 +1534,22 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_req_order_curr_spool_size"));
 
   // navy::BlockCache
+  EXPECT_TRUE(cs("navy_bc_item_removed_with_no_access"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_avg"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_min"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p5"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p10"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p25"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p50"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p75"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p90"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p95"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p99"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p999"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p9999"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p99999"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_p999999"));
+  EXPECT_TRUE(cs("navy_bc_item_hits_max"));
   EXPECT_TRUE(cs("navy_bc_items"));
   EXPECT_TRUE(cs("navy_bc_inserts"));
   EXPECT_TRUE(cs("navy_bc_insert_hash_collisions"));

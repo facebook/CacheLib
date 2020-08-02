@@ -5,9 +5,8 @@
 #include <mutex>
 #include <vector>
 
-#include <folly/container/F14Map.h>
+#include <folly/stats/QuantileEstimator.h>
 
-#include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 
@@ -29,14 +28,7 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
 
   void setIndex(Index* index) override { index_ = index; }
 
-  void touch(HashedKey hk) override;
-
   bool shouldReinsert(HashedKey hk) override;
-
-  // must be called before index.remove(hk)
-  void remove(HashedKey hk) override;
-
-  void reset() override {}
 
   void persist(RecordWriter& rw) override;
 
@@ -51,18 +43,12 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
   // Each access map is guarded by its own lock. We shard 1K ways.
   static constexpr size_t kNumLocks = (2 << 10);
 
-  // Specify 1 second window size for quantile estimator.
-  static constexpr std::chrono::seconds kQuantileWindowSize{1};
-
   const uint8_t hitsThreshold_{};
 
   Index* index_;
 
-  mutable AtomicCounter itemsEvictedWithNoAccess_;
-
-  mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
   mutable util::PercentileStats hitsOnReinsertionEstimator_{
-      kQuantileWindowSize};
+      Index::kQuantileWindowSize};
 };
 } // namespace navy
 } // namespace cachelib
