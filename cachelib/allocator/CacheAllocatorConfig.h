@@ -481,7 +481,7 @@ class CacheAllocatorConfig {
 
   // enables a faster mechanism to reap the expired items when they are
   // smaller fraction of the cost.
-  bool reaperSlabWalkMode{false};
+  bool reaperSlabWalkMode{true};
 
   // interval during which we adjust dynamically the refresh ratio.
   std::chrono::milliseconds mmReconfigureInterval{0};
