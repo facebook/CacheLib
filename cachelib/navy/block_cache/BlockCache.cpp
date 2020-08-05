@@ -48,7 +48,7 @@ void BlockCache::validate(BlockCache::Config& config,
     throw std::invalid_argument("invalid region size");
   }
   auto shiftWidth =
-      facebook::cachelib::NumBits<typeof(RelAddress().offset())>::value;
+      facebook::cachelib::NumBits<__typeof__(RelAddress().offset())>::value;
   if (config.cacheSize > static_cast<uint64_t>(deviceIOAlignSize)
                              << shiftWidth) {
     throw std::invalid_argument(
@@ -72,7 +72,7 @@ uint32_t BlockCache::calcAllocAlignSize() const {
   // Shift the total device size by <RelAddressWidth-in-bits>,
   // to determine the size of the alloc alignment the device can support
   auto shiftWidth =
-      facebook::cachelib::NumBits<typeof(RelAddress().offset())>::value;
+      facebook::cachelib::NumBits<__typeof__(RelAddress().offset())>::value;
 
   uint32_t allocAlignSize =
       static_cast<uint32_t>(device_.getSize() >> shiftWidth);
