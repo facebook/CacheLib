@@ -344,7 +344,7 @@ void CachelibRangeMapStressor::readEntries(TestMap& map) {
     auto res = map.lookup(kv.key);
     if (res == map.end()) {
       throw std::runtime_error(folly::sformat(
-          "Bug: Key '{}' in a range disappeared from map", kv.key));
+          "Bug: Key '{}' in a range disappeared from map", &kv.key));
     }
   }
 }
