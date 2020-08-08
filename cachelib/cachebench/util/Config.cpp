@@ -83,7 +83,7 @@ CacheBenchConfig::CacheBenchConfig(const std::string& path) {
   std::cout << "===JSON Config===" << std::endl;
   std::cout << configString << std::endl;
 
-  auto configJson = folly::parseJson(configString);
+  auto configJson = folly::parseJson(folly::json::stripComments(configString));
   auto& testConfigJson = configJson["test_config"];
   if (testConfigJson.getDefault("configPath", "").empty()) {
     // strip out the file name at the end to get  the directory.

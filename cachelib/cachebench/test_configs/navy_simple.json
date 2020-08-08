@@ -1,3 +1,5 @@
+// @nolint
+// Just a simple navy config meant for quick local testing on avy changes
 {
   "cache_config" : {
     "cacheSizeMB" : 128,
@@ -12,9 +14,9 @@
     "dipperBackend" : "navy_dipper",
     "dipperNavyUseMemoryDevice": true
   },
-  "test_config" : 
+  "test_config" :
     {
-      
+
 
       "numOps" : 1000000,
       "numThreads" : 16,
@@ -39,5 +41,5 @@
       "keyPoolDistribution": [0.5, 0.5],
       "opPoolDistribution" : [0.5, 0.5]
     }
- 
+
 }
