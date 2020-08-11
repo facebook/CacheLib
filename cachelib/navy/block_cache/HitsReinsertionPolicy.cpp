@@ -42,7 +42,7 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
     // bigcache host running on Navy for release 144 or prior releases.
     XDCHECK(trackerData.deprecated_data_ref()->empty());
 
-    for (auto& kv : trackerData.data) {
+    for (auto& kv : *trackerData.data_ref()) {
       auto stats = kv.stats_ref();
       auto key = kv.key_ref();
       auto totalHits = static_cast<uint8_t>(*stats->totalHits_ref());
