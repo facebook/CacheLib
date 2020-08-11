@@ -79,6 +79,12 @@ class GenericPieces {
     }
   }
 
+  // Return the byte size of all pieces
+  uint64_t getTotalSize() const {
+    return getLastByteOffsetOfLastPiece() - startPieceIndex_ * getPieceSize() +
+           1;
+  }
+
   uint64_t getRequestedSizeOfAPiece(uint64_t pieceIndex) const {
     if (startPieceIndex_ == endPieceIndex_) {
       XDCHECK_EQ(pieceIndex, startPieceIndex_);

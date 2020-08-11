@@ -170,23 +170,20 @@ const Request& PieceWiseReplayGenerator::getReq(
     }
   }
 
-  // Record the byte wise and object wise stats that we will egress
+  // Record the byte wise and object wise stats that we will fetch
   // when it's a new request
   if (isNewReq) {
     size_t getBytes;
     size_t getBodyBytes;
-    if (reqWrapper->requestRange.getRequestRange()) {
-      auto rangeStart = reqWrapper->requestRange.getRequestRange()->first;
-      auto rangeEnd = reqWrapper->requestRange.getRequestRange()->second;
-      size_t rangeSize = rangeEnd ? (*rangeEnd - rangeStart + 1)
-                                  : (reqWrapper->fullObjectSize - rangeStart);
-
-      getBytes = rangeSize + reqWrapper->headerSize;
-      getBodyBytes = rangeSize;
+    if (reqWrapper->cachePieces) {
+      // Fetch all relevant pieces, e.g., for range request of 5-150k, we
+      // will fetch 3 pieces (assuming 64k piece): 0-64k, 64-128k, 128-192k
+      getBodyBytes = reqWrapper->cachePieces->getTotalSize();
     } else {
-      getBytes = reqWrapper->fullObjectSize + reqWrapper->headerSize;
+      // We fetch the whole object no matter it's range request or not.
       getBodyBytes = reqWrapper->fullObjectSize;
     }
+    getBytes = getBodyBytes + reqWrapper->headerSize;
 
     stats_.recordAccess(getBytes, getBodyBytes, reqWrapper->extraFields);
   }
@@ -215,23 +212,11 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
       result == OpResultType::kSetFailure) {
     // Record the cache hit stats
     if (result == OpResultType::kGetHit) {
-      size_t hitBytes;
-      size_t hitBodyBytes;
-      if (rw.requestRange.getRequestRange()) {
-        // We trim the fetched bytes if it's range request
-        auto range = rw.requestRange.getRequestRange();
-        size_t rangeSize = range->second
-                               ? (*range->second - range->first + 1)
-                               : (rw.sizes[0] - rw.headerSize - range->first);
-        hitBytes = rangeSize + rw.headerSize;
-        hitBodyBytes = rangeSize;
-      } else {
-        hitBytes = rw.sizes[0];
-        hitBodyBytes = rw.sizes[0] - rw.headerSize;
-      }
-
+      size_t hitBytes = rw.sizes[0];
+      size_t hitBodyBytes = rw.sizes[0] - rw.headerSize;
       stats_.recordNonPieceHit(hitBytes, hitBodyBytes, rw.extraFields);
     }
+
     activeReqQ.popFront();
   } else if (result == OpResultType::kGetMiss) {
     // Perform set operation next
@@ -256,14 +241,14 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
         stats_.recordPieceHeaderHit(rw.sizes[0], rw.extraFields);
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
-        // getRequestedSizeOfAPiece() takes care of trim if needed
-        auto requestedSize =
-            rw.cachePieces->getRequestedSizeOfAPiece(resultPieceIndex);
-        stats_.recordPieceBodyHit(requestedSize, rw.extraFields);
+        // We always fetch a complete piece.
+        auto pieceSize = rw.cachePieces->getSizeOfAPiece(resultPieceIndex);
+        stats_.recordPieceBodyHit(pieceSize, rw.extraFields);
       }
     }
 
-    // For pieces that are beyond pieces number limit, we don't store them
+    // For pieces that are beyond pieces number limit (config_.maxCachePieces),
+    // we don't store them
     if (rw.cachePieces->isPieceWithinBound(nextPieceIndex) &&
         nextPieceIndex < config_.maxCachePieces) {
       // first set the correct key. Header piece has already been fetched,
@@ -275,7 +260,8 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
       rw.sizes[0] = rw.cachePieces->getSizeOfAPiece(nextPieceIndex);
 
       if (result == OpResultType::kGetHit) {
-        rw.req.setOp(OpType::kGet); // fetch next piece
+        // Fetch next piece
+        rw.req.setOp(OpType::kGet);
       } else {
         // Once we start to set a piece, we set all subsequent pieces
         rw.req.setOp(OpType::kSet);
@@ -286,10 +272,13 @@ bool PieceWiseReplayGenerator::updatePieceProcessing(ReqWrapper& rw,
       rw.cachePieces->updateFetchIndex();
     } else {
       // Record the cache hit stats: we got all the pieces that were requested
+      // TODO: for pieces beyond config_.maxCachePieces, we still record as
+      // full hit bytes, may need to change in the future.
       if (result == OpResultType::kGetHit) {
-        auto requestedSize = rw.cachePieces->getRequestedSize();
-        stats_.recordPieceFullHit(rw.headerSize, requestedSize, rw.extraFields);
+        auto totalSize = rw.cachePieces->getTotalSize();
+        stats_.recordPieceFullHit(rw.headerSize, totalSize, rw.extraFields);
       }
+
       // we are done
       done = true;
     }

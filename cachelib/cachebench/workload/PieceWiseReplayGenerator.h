@@ -34,7 +34,7 @@ class PieceWiseReplayGeneratorStats {
     extraStatsV_ = std::vector<InternalStats>(extraStatsCount);
   }
 
-  // Record stats for a get request access
+  // Record both byte-wise and object-wise stats for a get request access
   void recordAccess(size_t getBytes,
                     size_t getBodyBytes,
                     const std::vector<std::string>& extraFields);
