@@ -2,11 +2,15 @@
 
 import datetime
 import json
+import logging
 import os
 from enum import Enum, unique
 
 import numpy as np
 import pandas as pd
+
+
+logger = logging.getLogger(__name__)
 
 
 @unique
@@ -171,6 +175,25 @@ class KeyAndAccesses(object):
         self.accesses.sort(key=lambda a: a.ts, reverse=False)
 
 
+class EncodingDicts(object):
+    """
+    Feature encodings (dict of str -> int) for a batch of traces
+    """
+
+    def __init__(self):
+        # encoding of keys (BLOCKID)
+        self.keys = {}
+        self.users = {}
+        self.namespaces = {}
+        self.pipelines = {}
+
+        # dict from encoded keys to KeyAndAccesses
+        self.accesses = {}
+
+        # number of total traces
+        self.count = 0
+
+
 def process_line(users, namespaces, pipelines, kvs, timestamp):
     size = kvs[IOSIZE_STR]
     f = extract_features(users, namespaces, pipelines, kvs)
@@ -307,7 +330,7 @@ def write_feature_encoding_to_file(f, m):
             print("{} {}".format(k, v), file=of)
 
 
-def read_dict_results(results):
+def read_dict_results(results, encoding):
     """Read results in the form of a list of dicts.
     The element in the list (dict) represents one sample aggregated over a certain flush time interval.
     The dict has the following entries:
@@ -319,22 +342,27 @@ def read_dict_results(results):
             Features. See KEYWORD_MAP for how they translate to the features in the file format case.
     """
     count = 0
-    accesses = {}
-    users = {}  # encoding of users to ints
-    namespaces = {}  # encoding of namespaces to ints
-    pipelines = {}  # encoding of pipelines to ints
-    keys = {}  # set of all keys
     for row in results:
         op_ct = row["op_count"]
         while op_ct > 0:
             count += 1
             op_ct -= 1
-            process_row_and_add(accesses, keys, users, namespaces, pipelines, row)
+            process_row_and_add(
+                encoding.accesses,
+                encoding.keys,
+                encoding.users,
+                encoding.namespaces,
+                encoding.pipelines,
+                row,
+            )
+            if count % 1000000 == 0:
+                logger.info("Processed {} rows.".format(count))
+            encoding.count += 1
 
-    for k in accesses:
-        accesses[k].sortAccesses()
-    print("Read {} accesses and found {} keys".format(count, len(accesses)))
-    return accesses, users, namespaces, pipelines
+    logger.info(
+        "Read {} accesses and accumulated {} keys".format(count, len(encoding.accesses))
+    )
+    return encoding
 
 
 # read the processed file and return a dictionary of key to all its BlkAccess

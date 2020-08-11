@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import logging
 import os
 import random
 
@@ -10,6 +11,9 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from sklearn.metrics import auc, roc_curve
+
+
+logger = logging.getLogger(__name__)
 
 
 # Max number of rows used for training & testing
@@ -40,13 +44,16 @@ def build_dataset_for_training(
 
 
 def build_dataset_from_accesses(eviction_age, access_history_use_counts, accesses):
+    logger.info("#### Start building dataset")
     dynamicFeatures = dfeature.DynamicFeatures(
         utils.ACCESS_HISTORY_COUNT, access_history_use_counts
     )
     extractor = feature_extractor.FeatureExtractor(
         eviction_age, CHUNK_SAMPLE_RATIO, dynamicFeatures
     )
+    logger.info("##### Start running feature extractor")
     extractor.run(accesses)
+    logger.info("###### Finished running feature extractor")
 
     # create final model based on split train/test, which enables early stopping
     (labels, features) = extractor.createFeatureTable()

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
+import logging
 import random
 
 import numpy as np
+
+
+logger = logging.getLogger(__name__)
 
 
 LOGGING_COUNT = 100000
@@ -18,11 +22,26 @@ class FeatureExtractor:
 
     def __init__(self, flashEvictionAge, samplingProb, dfeature):
         self.featureGather = {}
+        # dict from key (blk_id, chunk_id) to a list of featureLabels.
+        # A featureLabel contains the feature from data, past accesses and the label (future accesses)
         self.labelGather = {}
+        # Sampling probability for chunks.
         self.samplingProb = samplingProb
+        # Eviction age in seconds that defines the future accesses' interval
         self.flashEvictionAge = flashEvictionAge
+        # Latest timestamp of the processed traces.
         self.latestTimestamp = 0
+        # Access histories
         self.dynamicFeatures = dfeature
+
+        # To efficiently update the label, we define a sliding window on each key's list of featureLabels.
+        # This window tracks the data points for the last lookahead interval defined by flashEvictionAge.
+        # The "label" field of the featureLabels in this time window is the number of accesses between the current sample and the next picked sample.
+        # The "label" field of the featureLabels outside this time window is the number of future accesses in the entire lookahead window.
+        # The sliding window for key k starts at self.labelGather[k][self.slidingWindowIdx[k]] and ends at the end of self.labelGather[k]
+        self.slidingWindowIdx = {}
+        # The number of accesses in the sliding window for a certain key.
+        self.accumulatedAccesses = {}
 
     def run(self, accesses):
         """
@@ -44,7 +63,13 @@ class FeatureExtractor:
             # track progress
             if (idx + 1) % LOGGING_COUNT == 0:
                 progress = round(idx / len(accesses), 4) * 100
-                print(f"#Access: {idx+1}. {progress} %")
+                logger.info(f"#Access: {idx+1}. {progress} %")
+
+        logger.info("# Closing out sliding windows")
+        # Close out the sliding windows
+        for key in self.labelGather.keys():
+            while self.slidingWindowIdx[key] < len(self.labelGather[key]):
+                self._slideWindow(key)
 
     def processRequest(self, key, ts, keyFeatures):
         # update internal timestamp
@@ -56,25 +81,34 @@ class FeatureExtractor:
 
         # update labels
         if key in self.labelGather:
-            # update previous access
             featureList = self.labelGather[key]
-            for idx, feature in enumerate(featureList):
-                if (ts - feature["samplingTime"]) < self.flashEvictionAge:
-                    # within flash eviction age
-                    self.labelGather[key][idx]["label"] += 1
+
+            # Slide the window
+            while (
+                self.slidingWindowIdx[key] < len(featureList)
+                and ts - featureList[self.slidingWindowIdx[key]]["samplingTime"]
+                >= self.flashEvictionAge
+            ):
+                self._slideWindow(key)
+
+            if ts - featureList[-1]["samplingTime"] < self.flashEvictionAge:
+                self.labelGather[key][-1]["label"] += 1
+                self.accumulatedAccesses[key] += 1
 
         # randlomly add new access to dataset
         if random.random() < self.samplingProb:
             newFeatureLabel = {
-                "label": 0,
-                "samplingTime": ts,
-                "keyFeatures": keyFeatures,
+                "label": 0,  # number of occurrances in the future eviction_age interval
+                "samplingTime": ts,  # the time this sample is generated
+                "keyFeatures": keyFeatures,  # the features
                 "bloomfilters": self.dynamicFeatures.getFeature(key),
             }
             if key in self.labelGather:
                 self.labelGather[key].append(newFeatureLabel)
             else:
                 self.labelGather[key] = [newFeatureLabel]
+                self.slidingWindowIdx[key] = 0
+                self.accumulatedAccesses[key] = 0
 
         # update dynamic features for each access, this is independent of sampling
         self.dynamicFeatures.updateFeatures(key, ts)
@@ -93,3 +127,12 @@ class FeatureExtractor:
                     featuretupel.extend(featureLabel["keyFeatures"].toList())
                     features.append(featuretupel)
         return (np.array(labels), np.asarray(features))
+
+    def _slideWindow(self, key):
+        self.accumulatedAccesses[key] -= self.labelGather[key][
+            self.slidingWindowIdx[key]
+        ]["label"]
+        self.labelGather[key][self.slidingWindowIdx[key]][
+            "label"
+        ] += self.accumulatedAccesses[key]
+        self.slidingWindowIdx[key] += 1
