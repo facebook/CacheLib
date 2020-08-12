@@ -3777,9 +3777,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Start reaper, we should not crash
     allocator.startNewReaper(std::chrono::milliseconds{1},
-                             true /* slabWalkMode */,
                              util::Throttler::Config::makeNoThrottleConfig(),
-                             1000000 /* reapIterationEachTime */,
                              false /* waitUntilEvictions */);
 
     // Loop until we have reaped at least one iteration

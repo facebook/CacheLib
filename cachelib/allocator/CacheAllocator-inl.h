@@ -278,8 +278,8 @@ void CacheAllocator<CacheTrait>::initWorkers() {
   }
 
   if (config_.itemsReaperEnabled()) {
-    startNewReaper(config_.reaperInterval, config_.reaperSlabWalkMode,
-                   config_.reaperConfig, config_.reapIterationEachTime,
+    startNewReaper(config_.reaperInterval,
+                   config_.reaperConfig,
                    config_.reaperWaitUntilEvictions);
   }
 
@@ -3314,12 +3314,9 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
     std::chrono::milliseconds interval,
-    bool slabWalkMode,
     util::Throttler::Config reaperThrottleConfig,
-    unsigned int reapIterationEachTime,
     bool waitUntilEvictions) {
-  return startNewWorker("Reaper", reaper_, interval, slabWalkMode,
-                        reaperThrottleConfig, reapIterationEachTime,
+  return startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig,
                         !config_.disableEviction &&
                             waitUntilEvictions /* waitUntilEvictions */);
 }

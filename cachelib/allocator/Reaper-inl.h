@@ -16,7 +16,7 @@ void Reaper<CacheT>::work() {
     }
   }
 
-  slabWalkMode_ ? reapSlabWalkMode() : reapUsingIterator();
+  reapSlabWalkMode();
 }
 
 template <typename CacheT>
@@ -33,30 +33,6 @@ template <typename CacheT>
 uint64_t Reaper<CacheT>::TraversalStats::getAvgTraversalTimeMs(
     uint64_t numTraversals) const {
   return numTraversals ? totalTraversalTimeMs_ / numTraversals : 0;
-}
-
-template <typename CacheT>
-void Reaper<CacheT>::reapUsingIterator() {
-  // if we have completed an iteration, restart
-  if (iter_ == cache_.end()) {
-    auto curr = util::getCurrentTimeMs();
-    traversalStats_.recordTraversalTime(
-        curr > lastIterCreateTimeMs_ ? curr - lastIterCreateTimeMs_ : 0);
-    lastIterCreateTimeMs_ = curr;
-    iter_ = cache_.begin(throttlerConfig_);
-  }
-
-  // each work period, only check maxIteration_ number of items
-  for (uint32_t i = 0; i < maxIteration_ && iter_ != cache_.end();
-       ++i, ++iter_) {
-    numVisitedItems_.fetch_add(1, std::memory_order_relaxed);
-    const auto& handle = iter_.asHandle();
-    // if iterator is expired, then remove it
-    if (handle->isExpired() &&
-        ReaperAPIWrapper<CacheT>::removeIfExpired(cache_, handle)) {
-      numReapedItems_.fetch_add(1, std::memory_order_relaxed);
-    }
-  }
 }
 
 template <typename CacheT>
@@ -133,15 +109,10 @@ void Reaper<CacheT>::reapSlabWalkMode() {
 
 template <typename CacheT>
 Reaper<CacheT>::Reaper(Cache& cache,
-                       bool slabWalk,
                        const util::Throttler::Config& config,
-                       uint32_t maxIteration,
                        bool waitUntilEvictions)
     : cache_(cache),
-      slabWalkMode_(slabWalk),
-      iter_(cache_.end()),
       throttlerConfig_(config),
-      maxIteration_(maxIteration),
       waitUntilEvictions_(waitUntilEvictions) {}
 
 template <typename CacheT>

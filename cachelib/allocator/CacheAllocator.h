@@ -735,9 +735,7 @@ class CacheAllocator : public CacheBase {
                           std::shared_ptr<RebalanceStrategy> strategy,
                           std::function<void()> postWorkHandler);
   bool startNewReaper(std::chrono::milliseconds interval,
-                      bool slabWalkMode,
                       util::Throttler::Config reaperThrottleConfig,
-                      unsigned int reapIterationEachTime,
                       bool waitUntilEvictions);
 
   // Stop existing workers
