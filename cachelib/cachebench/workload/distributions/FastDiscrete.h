@@ -57,7 +57,7 @@ class FastDiscreteDistribution {
         sizes[i] -=
             facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
         probs[i] -= bucketPct * probs[i];
-        buckets.push_back(objectsSeen);
+        buckets.push_back(objectsSeen*scalingFactor_);
         if (bucketOffsets_.size() > 0) {
           bucketOffsets_.push_back(bucketOffsets_.back() + objectsSeen);
         }
@@ -82,7 +82,7 @@ class FastDiscreteDistribution {
     size_t objectInBucket = facebook::cachelib::util::narrow_cast<size_t>(
         insideBucketDistributions_[bucket](gen));
     return facebook::cachelib::util::narrow_cast<size_t>(
-               (scalingFactor_ * (bucketOffsets_[bucket] + objectInBucket))) +
+               (bucketOffsets_[bucket] + objectInBucket)) +
            leftOffset_;
   }
 
