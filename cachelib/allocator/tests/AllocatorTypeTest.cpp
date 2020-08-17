@@ -180,11 +180,7 @@ TYPED_TEST(BaseAllocatorTest, AllocateWithTTL) { this->testAllocateWithTTL(); }
 TYPED_TEST(BaseAllocatorTest, ExpiredFind) { this->testExpiredFind(); }
 
 TYPED_TEST(BaseAllocatorTest, AllocateWithItemsReaper) {
-  this->testAllocateWithItemsReaper(false);
-}
-
-TYPED_TEST(BaseAllocatorTest, AllocateWithItemsReaperSlabWalk) {
-  this->testAllocateWithItemsReaper(true);
+  this->testAllocateWithItemsReaper();
 }
 
 TYPED_TEST(BaseAllocatorTest, ReaperNoWaitUntilEvictions) {

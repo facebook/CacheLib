@@ -21,9 +21,6 @@ DEFINE_uint64(size_bytes,
 DEFINE_uint32(reaper_interval_s,
               1,
               "time to sleep between each reaping period");
-DEFINE_uint32(reaper_iterations,
-              10000,
-              "number of iterations per reaper period");
 DEFINE_uint32(reaper_sleep_time_ms, 10, "reaper throttler sleep time");
 DEFINE_uint32(reaper_sleep_interval_ms, 5, "reaper throttler sleep interval");
 DEFINE_uint32(print_interval_ms,
@@ -72,8 +69,7 @@ int main(int argc, char** argv) {
   lruConfig.setCacheSize(FLAGS_size_bytes);
   lruConfig.setAccessConfig(accessConfig);
   lruConfig.enableItemReaperInBackground(
-      std::chrono::milliseconds{FLAGS_reaper_iterations},
-      FLAGS_reaper_iterations,
+      std::chrono::milliseconds{FLAGS_reaper_interval_s},
       util::Throttler::Config{FLAGS_reaper_sleep_time_ms,
                               FLAGS_reaper_sleep_interval_ms});
   assert(lruConfig.itemsReaperEnabled());

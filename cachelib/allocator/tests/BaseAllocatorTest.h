@@ -1145,7 +1145,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // set up a small cache so that we can actually reap faster.
     config.setAccessConfig({8, 8});
     config.enableCachePersistence(this->cacheDir_);
-    config.enableItemReaperInBackground(std::chrono::seconds(1), 10, {}, false);
+    config.enableItemReaperInBackground(std::chrono::seconds(1), {}, false);
     std::vector<typename AllocatorT::Key> keys;
     {
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
@@ -3593,18 +3593,14 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
               allocator.getGlobalCacheStats().numCacheGetMiss);
   }
 
-  void testAllocateWithItemsReaper(bool useSlabWalkReaper) {
+  void testAllocateWithItemsReaper() {
     const int numSlabs = 2;
 
     // set up allocator for itemsReaper test
     typename AllocatorT::Config config;
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
     config.setItemReaperOnFind(false);
-    config.enableItemReaperInBackground(
-        std::chrono::seconds{1}, 1000 /* iterationPerRound */, {}, false);
-    if (useSlabWalkReaper) {
-      config.enableSlabWalkReaper();
-    }
+    config.enableItemReaperInBackground(std::chrono::seconds{1}, {}, false);
 
     AllocatorT allocator(config);
 
@@ -3694,8 +3690,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     typename AllocatorT::Config config;
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
-    config.enableItemReaperInBackground(
-        std::chrono::seconds{1}, 1000 /* iterationPerRound */, {}, false);
+    config.enableItemReaperInBackground(std::chrono::seconds{1}, {}, false);
 
     AllocatorT allocator(config);
 
