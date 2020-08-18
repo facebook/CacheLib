@@ -68,6 +68,21 @@ TYPED_TEST(BaseAllocatorTest, AttachWithDifferentCacheName) {
   this->testAttachWithDifferentName();
 }
 
+TYPED_TEST(BaseAllocatorTest, AttachWithLargerSizeSysV) {
+  this->testAttachWithDifferentSize(false, false);
+}
+
+TYPED_TEST(BaseAllocatorTest, AttachWithLargerSizePosix) {
+  this->testAttachWithDifferentSize(true, false);
+}
+TYPED_TEST(BaseAllocatorTest, AttachWithSmallerSizeSysV) {
+  this->testAttachWithDifferentSize(false, true);
+}
+
+TYPED_TEST(BaseAllocatorTest, AttachWithSmallerSizePosix) {
+  this->testAttachWithDifferentSize(true, true);
+}
+
 TYPED_TEST(BaseAllocatorTest, CleanupDirRemoved) {
   this->testCacheCleanupDirRemoved();
 }

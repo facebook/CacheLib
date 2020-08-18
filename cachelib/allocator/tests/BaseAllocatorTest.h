@@ -5955,6 +5955,61 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       }
     }
   }
+
+  // changing size should cause attach to fail.
+  void testAttachWithDifferentSize(bool usePosix, bool smaller) {
+    typename AllocatorT::Config config;
+    config.enableCachePersistence(this->cacheDir_);
+    if (usePosix) {
+      config.usePosixForShm();
+    }
+
+    std::vector<uint32_t> sizes;
+    uint8_t poolId;
+
+    const size_t nSlabsOriginal = 20;
+    const size_t nSlabsNew = smaller ? nSlabsOriginal - 5 : nSlabsOriginal + 5;
+    config.setCacheSize(nSlabsOriginal * Slab::kSize);
+    const unsigned int keyLen = 100;
+    config.enableCachePersistence(this->cacheDir_);
+    config.cacheName = "foobar";
+
+    // Test allocations. These allocations should remain after save/restore.
+    // Original lru allocator
+    std::vector<std::string> keys;
+    {
+      AllocatorT alloc(AllocatorT::SharedMemNew, config);
+      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+      poolId = alloc.addPool("foobar", numBytes);
+      sizes = this->getValidAllocSizes(alloc, poolId, nSlabsOriginal, keyLen);
+      this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
+      for (const auto& item : alloc) {
+        auto key = item.getKey();
+        keys.push_back(key.str());
+      }
+
+      // save
+      alloc.shutDown();
+    }
+
+    // Restore lru allocator with correct size
+    {
+      config.setCacheSize(nSlabsOriginal * Slab::kSize);
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
+      for (const auto& key : keys) {
+        auto it = alloc.find(key);
+        ASSERT_NE(it, nullptr);
+      }
+      alloc.shutDown();
+    }
+
+    // Restore lru allocator with size different than previous.
+    {
+      config.setCacheSize(nSlabsNew * Slab::kSize);
+      ASSERT_THROW(AllocatorT(AllocatorT::SharedMemAttach, config),
+                   std::invalid_argument);
+    }
+  }
 };
 } // namespace tests
 } // namespace cachelib
