@@ -5,6 +5,7 @@
 
 #include <folly/logging/xlog.h>
 
+#include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/SysVShmSegment.h"
@@ -74,14 +75,40 @@ class ShmSegment {
   // @param  addr     the address to be attached at. If nullptr, the segment
   //                  will be mapped at a random address chosen by the kernel
   //
+  // @param alignment if no addr is passedd and alignment is non-zero, the
+  //                  address mapped will be aligned to this size. Must be power
+  //                  of two.
+  //
   // @return true if the mapping was successful, false otherwise. Upon
   // success, getCurrentMapping can be used to fetch the details of the
   // address mapping
-  bool mapAddress(void* addr) {
+  bool mapAddress(void* addr, size_t alignment = 1) {
     if (isMapped() || !segment_->isActive()) {
       return false;
     }
 
+    // ignore alignment if address is already specified. but fail on assert
+    // builds.
+    if (!addr) {
+      if (alignment == 0 || !folly::isPowTwo(alignment)) {
+        // if alignment is passed, it should be valid non-zero power of two
+        // value and if address is also passed
+        return false;
+      } else {
+        // address was not set and alignment args are sane.  We first mmap an
+        // area of memory that is sufficiently larger and use that to get an
+        // aligned address that we will later remap below.  The reason for mmap
+        // such a large memory area upfront is because we need to ensure that
+        // starting from the aligned address we will not have any overlaps with
+        // other mappings. we map with PROT_NONE because we do not intend to
+        // read or write until after we remap it onto our shared memory
+        addr = cachelib::util::mmapAlignedZeroedMemory(
+            alignment, segment_->getSize(), true /* need-access */);
+        XDCHECK_EQ(reinterpret_cast<uint64_t>(addr) & (alignment - 1), 0ULL);
+      }
+    }
+
+    XDCHECK_NE(alignment, 0ULL);
     void* retAddr = segment_->mapAddress(addr);
     XDCHECK(retAddr == addr || addr == nullptr);
     mapping_ = ShmAddr{retAddr, segment_->getSize()};

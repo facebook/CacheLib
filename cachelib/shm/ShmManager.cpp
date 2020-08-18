@@ -281,7 +281,7 @@ ShmAddr ShmManager::createShm(const std::string& shmName,
   }
 
   DCHECK(newSeg);
-  if (!newSeg->mapAddress(addr)) {
+  if (!newSeg->mapAddress(addr, opts.alignment)) {
     throw std::invalid_argument(
         folly::sformat("Unable to map shared memory segment after create: "
                        "name: {}, size: {}, addr: {}",
@@ -331,7 +331,7 @@ ShmAddr ShmManager::attachShm(const std::string& shmName,
   DCHECK(shmIt != segments_.end());
 
   auto& shm = *shmIt->second;
-  if (shm.isMapped() || !shm.mapAddress(addr)) {
+  if (shm.isMapped() || !shm.mapAddress(addr, opts.alignment)) {
     throw std::invalid_argument(
         folly::sformat("Unable to map shared memory segment after attach:"
                        " name: {}, addr: {}, mapped: {}",

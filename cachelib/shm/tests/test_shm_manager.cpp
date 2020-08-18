@@ -2,9 +2,11 @@
 #include <fstream>
 
 #include <folly/FileUtil.h>
+#include <folly/Random.h>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"
+#include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/ShmManager.h"
 #include "cachelib/shm/SysVShmSegment.h"
 #include "cachelib/shm/tests/common.h"
@@ -54,6 +56,7 @@ class ShmManagerTest : public ShmTestBase {
   void testInvalidMetaFile(bool posix);
   void testEmptyMetaFile(bool posix);
   void testSegments(bool posix);
+  void testMappingAlignment(bool posix);
   void testStaticCleanup(bool posix);
   void testDropFile(bool posix);
   void testInvalidType(bool posix);
@@ -838,3 +841,67 @@ void ShmManagerTest::testAttachReadOnly(bool posix) {
 TEST_F(ShmManagerTestPosix, AttachReadOnly) { testAttachReadOnly(true); }
 
 TEST_F(ShmManagerTestSysV, AttachReadOnly) { testAttachReadOnly(false); }
+
+// test to ensure that segments can be created with a new cache dir, attached
+// from existing cache dir, segments can be deleted and recreated using the
+// same cache dir if they have not been attached to already.
+void ShmManagerTest::testMappingAlignment(bool posix) {
+  // pid-X to keep it unique so we dont collude with other tests
+  int num = 0;
+  const std::string segmentPrefix = std::to_string(::getpid());
+  const std::string seg1 = segmentPrefix + "-" + std::to_string(num++);
+  const std::string seg2 = segmentPrefix + "-" + std::to_string(num++);
+  const char magicVal1 = 'f';
+  const char magicVal2 = 'n';
+
+  {
+    ShmManager s(cacheDir, posix);
+    facebook::cachelib::ShmSegmentOpts opts;
+    opts.alignment = 1ULL << folly::Random::rand32(0, 18);
+    segmentsToDestroy.push_back(seg1);
+    auto m1 = s.createShm(seg1, getRandomSize(), nullptr, opts);
+    ASSERT_EQ(reinterpret_cast<uint64_t>(m1.addr) & (opts.alignment - 1), 0);
+    writeToMemory(m1.addr, m1.size, magicVal1);
+    checkMemory(m1.addr, m1.size, magicVal1);
+    // invalid alignment should throw
+    opts.alignment = folly::Random::rand32(1 << 23, 1 << 24);
+    ASSERT_THROW(s.createShm(seg2, getRandomSize(), nullptr, opts),
+                 std::invalid_argument);
+    ASSERT_THROW(s.getShmByName(seg2), std::invalid_argument);
+
+    auto addr = getNewUnmappedAddr();
+    // alignment option is ignored when using explicit address
+    opts.alignment = folly::Random::rand32(1 << 23, 1 << 24);
+    auto m2 = s.createShm(seg2, getRandomSize(), addr, opts);
+    ASSERT_EQ(m2.addr, addr);
+    writeToMemory(m2.addr, m2.size, magicVal2);
+    checkMemory(m2.addr, m2.size, magicVal2);
+    s.shutDown();
+  }
+
+  // try to attach
+  {
+    ShmManager s(cacheDir, posix);
+
+    // can choose a different alignemnt
+    facebook::cachelib::ShmSegmentOpts opts;
+    opts.alignment = 1ULL << folly::Random::rand32(18, 22);
+    // attach
+    auto m1 = s.attachShm(seg1, nullptr, opts);
+    ASSERT_EQ(reinterpret_cast<uint64_t>(m1.addr) & (opts.alignment - 1), 0);
+    checkMemory(m1.addr, m1.size, magicVal1);
+
+    // alignment can be enabled on previously explicitly mapped segments
+    opts.alignment = 1ULL << folly::Random::rand32(1, 22);
+    auto m2 = s.attachShm(seg2, nullptr, opts);
+    ASSERT_EQ(reinterpret_cast<uint64_t>(m2.addr) & (opts.alignment - 1), 0);
+    checkMemory(m2.addr, m2.size, magicVal2);
+  };
+}
+TEST_F(ShmManagerTestPosix, TestMappingAlignment) {
+  testMappingAlignment(true);
+}
+
+TEST_F(ShmManagerTestSysV, TestMappingAlignment) {
+  testMappingAlignment(false);
+}

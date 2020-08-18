@@ -24,6 +24,7 @@ enum PageSizeT {
 struct ShmSegmentOpts {
   PageSizeT pageSize{PageSizeT::NORMAL};
   bool readOnly{false};
+  size_t alignment{1}; // alignment for mapping.
 
   explicit ShmSegmentOpts(PageSizeT p) : pageSize(p) {}
   explicit ShmSegmentOpts(PageSizeT p, bool ro) : pageSize(p), readOnly(ro) {}

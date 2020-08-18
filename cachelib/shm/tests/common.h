@@ -75,6 +75,7 @@ class ShmTest : public ShmTestBase {
   void testCreateAttach(bool posix);
   void testAttachReadOnly(bool posix);
   void testMapping(bool posix);
+  void testMappingAlignment(bool posix);
   void testLifetime(bool posix);
   void testPageSize(PageSizeT, bool posix);
 };

@@ -129,7 +129,7 @@ void setShmIfNecessary(uint64_t bytes) {
 }
 
 void* align(size_t alignment, size_t size, void*& ptr, size_t& space) {
-  assert((alignment & (alignment - 1)) == 0);
+  XDCHECK(folly::isPowTwo(alignment));
   const size_t alignmentMask = ~(alignment - 1);
   auto alignedPtr = reinterpret_cast<uint8_t*>(
       (reinterpret_cast<uintptr_t>(ptr) & alignmentMask));
@@ -165,7 +165,7 @@ void* mmapAlignedZeroedMemory(size_t alignment,
   void* memory = mmap(nullptr, newBytes, protFlag, mapFlag, -1, 0);
   if (memory != MAP_FAILED) {
     auto alignedMemory = align(alignment, numBytes, memory, newBytes);
-    assert(alignedMemory != nullptr);
+    XDCHECK_NE(alignedMemory, nullptr);
     return alignedMemory;
   }
   throw std::system_error(errno, std::system_category(), "Cannot mmap");
@@ -190,7 +190,7 @@ size_t getNumResidentPages(const void* memory, size_t len) {
     throw std::invalid_argument(
         folly::sformat("addr {} is not page aligned", memory));
   }
-  assert(isPageAlignedAddr(memory));
+  XDCHECK(isPageAlignedAddr(memory));
   const size_t numPages = getNumPages(len);
 
   // TODO this could be a large allocation. may be break it up if it matters.
@@ -208,8 +208,8 @@ size_t getNumResidentPages(const void* memory, size_t len) {
 
 size_t getPageSize() noexcept {
   static long pagesize = sysconf(_SC_PAGESIZE);
-  assert(pagesize != -1);
-  assert(pagesize > 0);
+  XDCHECK_NE(pagesize, -1);
+  XDCHECK_GT(pagesize, 0);
   return pagesize;
 }
 

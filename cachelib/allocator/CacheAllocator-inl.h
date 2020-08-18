@@ -159,45 +159,29 @@ CacheAllocator<CacheTrait>::~CacheAllocator() {
 template <typename CacheTrait>
 std::unique_ptr<MemoryAllocator>
 CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
-  // We first mmap an area of memory that is our cache size and use that to
-  // an aligned address that we will later remap to a shared memory segment.
-  // The reason for mmap such a large memory area upfront is because we need
-  // to ensure that starting from the aligned address we will not have any
-  // overlaps with other mappings. Hence we map with PROT_NONE because we do
-  // not intend to read or write until after we remap it onto our shared memory
-  auto addr = config_.slabMemoryBaseAddr == nullptr
-                  ? util::mmapAlignedZeroedMemory(sizeof(Slab), config_.size,
-                                                  true /* readOnly */)
-                  : config_.slabMemoryBaseAddr;
-  try {
-    return std::make_unique<MemoryAllocator>(
-        getAllocatorConfig(config_),
-        shmManager_->createShm(detail::kShmCacheName, config_.size, addr).addr,
-        config_.size);
-  } catch (...) {
-    munmap(addr, config_.size);
-    throw;
-  }
+  ShmSegmentOpts opts;
+  opts.alignment = sizeof(Slab);
+  return std::make_unique<MemoryAllocator>(
+      getAllocatorConfig(config_),
+      shmManager_
+          ->createShm(detail::kShmCacheName, config_.size,
+                      config_.slabMemoryBaseAddr, opts)
+          .addr,
+      config_.size);
 }
 
 template <typename CacheTrait>
 std::unique_ptr<MemoryAllocator>
 CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
-  // See comments in createNewMemoryAllocator
-  auto addr = config_.slabMemoryBaseAddr == nullptr
-                  ? util::mmapAlignedZeroedMemory(sizeof(Slab), config_.size,
-                                                  true /* readOnly */)
-                  : config_.slabMemoryBaseAddr;
-  try {
-    return std::make_unique<MemoryAllocator>(
-        deserializer_->deserialize<MemoryAllocator::SerializationType>(),
-        shmManager_->attachShm(detail::kShmCacheName, addr).addr,
-        config_.size,
-        config_.disableFullCoredump);
-  } catch (...) {
-    munmap(addr, config_.size);
-    throw;
-  }
+  ShmSegmentOpts opts;
+  opts.alignment = sizeof(Slab);
+  return std::make_unique<MemoryAllocator>(
+      deserializer_->deserialize<MemoryAllocator::SerializationType>(),
+      shmManager_
+          ->attachShm(detail::kShmCacheName, config_.slabMemoryBaseAddr, opts)
+          .addr,
+      config_.size,
+      config_.disableFullCoredump);
 }
 
 template <typename CacheTrait>

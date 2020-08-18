@@ -1,3 +1,5 @@
+#include <folly/Random.h>
+
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
@@ -215,6 +217,29 @@ void ShmTest::testMapping(bool posix) {
 TEST_F(ShmTestPosix, Mapping) { testMapping(true); }
 
 TEST_F(ShmTestSysV, Mapping) { testMapping(false); }
+
+void ShmTest::testMappingAlignment(bool posix) {
+  { // create a segment
+    ShmSegment s(ShmNew, segmentName, shmSize, posix);
+
+    // 0 alignment is wrong.
+    ASSERT_FALSE(s.mapAddress(nullptr, 0));
+    // alignment that is not a power of two is wrong.
+    ASSERT_FALSE(
+        s.mapAddress(nullptr, folly::Random::rand32(1 << 20, 1 << 21)));
+    size_t alignment = 1ULL << (folly::Random::rand32(0, 22));
+    ASSERT_TRUE(s.mapAddress(nullptr, alignment));
+    ASSERT_TRUE(s.isMapped());
+    auto m = s.getCurrentMapping();
+    ASSERT_EQ(reinterpret_cast<uint64_t>(m.addr) & (alignment - 1), 0);
+    ASSERT_EQ(m.size, shmSize);
+    writeToMemory(m.addr, m.size, 'k');
+  }
+}
+
+TEST_F(ShmTestPosix, MappingAlignment) { testMappingAlignment(true); }
+
+TEST_F(ShmTestSysV, MappingAlignment) { testMappingAlignment(false); }
 
 void ShmTest::testLifetime(bool posix) {
   const size_t safeSize = getRandomSize();
