@@ -111,7 +111,7 @@ def train_lgbm_model(region, model_df, model_name, model_path=None):
     gbm = lgb.train(
         params,
         lgb_train,
-        num_boost_round=600,
+        num_boost_round=500,
         valid_sets=lgb_eval,
         verbose_eval=False,
         early_stopping_rounds=25,
