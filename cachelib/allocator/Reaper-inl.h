@@ -5,17 +5,6 @@ namespace cachelib {
 
 template <typename CacheT>
 void Reaper<CacheT>::work() {
-  if (waitUntilEvictions_) {
-    const auto pools = ReaperAPIWrapper<CacheT>::getRegularPoolIds(cache_);
-    uint64_t numEvictions = 0;
-    for (PoolId pid : pools) {
-      numEvictions += cache_.getPoolStats(pid).numEvictions();
-    }
-    if (numEvictions == 0) {
-      return;
-    }
-  }
-
   reapSlabWalkMode();
 }
 
@@ -108,12 +97,8 @@ void Reaper<CacheT>::reapSlabWalkMode() {
 }
 
 template <typename CacheT>
-Reaper<CacheT>::Reaper(Cache& cache,
-                       const util::Throttler::Config& config,
-                       bool waitUntilEvictions)
-    : cache_(cache),
-      throttlerConfig_(config),
-      waitUntilEvictions_(waitUntilEvictions) {}
+Reaper<CacheT>::Reaper(Cache& cache, const util::Throttler::Config& config)
+    : cache_(cache), throttlerConfig_(config) {}
 
 template <typename CacheT>
 Reaper<CacheT>::~Reaper() {

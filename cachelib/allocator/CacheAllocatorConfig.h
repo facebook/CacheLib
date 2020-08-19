@@ -170,9 +170,7 @@ class CacheAllocatorConfig {
   // This turns on a background worker that periodically scans through the
   // access container and look for expired items and remove them.
   CacheAllocatorConfig& enableItemReaperInBackground(
-      std::chrono::milliseconds interval,
-      util::Throttler::Config config = {},
-      bool waitUntilEvictions = true);
+      std::chrono::milliseconds interval, util::Throttler::Config config = {});
 
   // Enables free memory monitoring. This lets CacheAllocator shrink the cache
   // size when the system is under memory pressure. Cache will grow back when
@@ -465,11 +463,6 @@ class CacheAllocatorConfig {
 
   // time to sleep between each reaping period.
   std::chrono::milliseconds reaperInterval{};
-
-  // if true, reaper activates only after evictions happened. If evictions
-  // disabled (@disableEviction), this is ignored and reaper doesn't wait for
-  // evictions to happen (like this flag is false).
-  bool reaperWaitUntilEvictions{true};
 
   // interval during which we adjust dynamically the refresh ratio.
   std::chrono::milliseconds mmReconfigureInterval{0};
@@ -820,12 +813,9 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setItemReaperOnFind(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableItemReaperInBackground(
-    std::chrono::milliseconds interval,
-    util::Throttler::Config config,
-    bool waitUntilEvictions) {
+    std::chrono::milliseconds interval, util::Throttler::Config config) {
   reaperInterval = interval;
   reaperConfig = config;
-  reaperWaitUntilEvictions = waitUntilEvictions;
   return *this;
 }
 
@@ -1026,8 +1016,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memUpperLimit"] = std::to_string(memUpperLimit);
   configMap["reapExpiredItemsOnFind"] = std::to_string(reapExpiredItemsOnFind);
   configMap["reaperInterval"] = util::toString(reaperInterval);
-  configMap["reaperWaitUntilEvictions"] =
-      std::to_string(reaperWaitUntilEvictions);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["cacheWorkerPostWorkHandler"] =
       (cacheWorkerPostWorkHandler ? "set" : "empty");

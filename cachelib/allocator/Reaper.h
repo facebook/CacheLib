@@ -35,10 +35,7 @@ class Reaper : public PeriodicWorker {
   // this initialized an itemsReaper to check expired itemsReaper
   // @param cache               instance of the cache
   // @param config              throttler config during iteration
-  // @param waitUntilEvictions  reaper shall wait until there're evictions
-  Reaper(Cache& cache,
-         const util::Throttler::Config& config,
-         bool waitUntilEvictions);
+  Reaper(Cache& cache, const util::Throttler::Config& config);
 
   ~Reaper();
 
@@ -77,9 +74,6 @@ class Reaper : public PeriodicWorker {
   Cache& cache_;
 
   const util::Throttler::Config throttlerConfig_;
-
-  // By default, iterator will not reap until evictions happen
-  const bool waitUntilEvictions_{false};
 
   TraversalStats traversalStats_;
 

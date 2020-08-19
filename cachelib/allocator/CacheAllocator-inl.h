@@ -262,9 +262,7 @@ void CacheAllocator<CacheTrait>::initWorkers() {
   }
 
   if (config_.itemsReaperEnabled()) {
-    startNewReaper(config_.reaperInterval,
-                   config_.reaperConfig,
-                   config_.reaperWaitUntilEvictions);
+    startNewReaper(config_.reaperInterval, config_.reaperConfig);
   }
 
   if (config_.poolOptimizerEnabled()) {
@@ -3298,11 +3296,8 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
     std::chrono::milliseconds interval,
-    util::Throttler::Config reaperThrottleConfig,
-    bool waitUntilEvictions) {
-  return startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig,
-                        !config_.disableEviction &&
-                            waitUntilEvictions /* waitUntilEvictions */);
+    util::Throttler::Config reaperThrottleConfig) {
+  return startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig);
 }
 
 template <typename CacheTrait>
