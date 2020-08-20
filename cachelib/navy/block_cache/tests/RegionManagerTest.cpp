@@ -1,7 +1,7 @@
 #include "cachelib/navy/block_cache/RegionManager.h"
 
 #include "cachelib/navy/block_cache/LruPolicy.h"
-#include "cachelib/navy/block_cache/tests/MockPolicy.h"
+#include "cachelib/navy/block_cache/tests/TestHelpers.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/MockDevice.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
@@ -78,6 +78,10 @@ TEST(RegionManager, Recovery) {
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<MockPolicy>(&hits);
+    EXPECT_CALL(*policy, track(RegionId{0}));
+    EXPECT_CALL(*policy, track(RegionId{1}));
+    EXPECT_CALL(*policy, track(RegionId{2}));
+    EXPECT_CALL(*policy, track(RegionId{3}));
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
         [](RegionId, uint32_t, BufferView) { return 0; }};
@@ -86,10 +90,6 @@ TEST(RegionManager, Recovery) {
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
-    // Get 3 regions, assign and allocate
-    for (uint32_t i = 0; i < 3; i++) {
-      EXPECT_EQ(RegionId{i}, rm->getFree());
-    }
     // Empty region, like it was evicted and reclaimed
     rm->getRegion(RegionId{0}).setClassId(0);
     rm->getRegion(RegionId{1}).setClassId(0);
@@ -107,17 +107,19 @@ TEST(RegionManager, Recovery) {
 
     auto rw = createMemoryRecordWriter(ioq);
     rm->persist(*rw);
-
-    // Change region manager after persistence
-    EXPECT_EQ(RegionId{3}, rm->getFree());
   }
 
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<MockPolicy>(&hits);
-    EXPECT_CALL(*policy, track(RegionId{0}));
-    EXPECT_CALL(*policy, track(RegionId{2}));
-    // Do not touch empty region 0
+    // Region 0 - 3 will be tracked at least once since the first time
+    // is when RegionManager is initialized. When the RM is recovered,
+    // Region 1 will not be tracked since it is pinned.
+    EXPECT_CALL(*policy, track(RegionId{0})).Times(2);
+    EXPECT_CALL(*policy, track(RegionId{1})).Times(1);
+    EXPECT_CALL(*policy, track(RegionId{2})).Times(2);
+    EXPECT_CALL(*policy, track(RegionId{3})).Times(2);
+    // Only touch region 2 since region 1 is pinned
     EXPECT_CALL(*policy, touch(RegionId{2}));
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
@@ -129,8 +131,6 @@ TEST(RegionManager, Recovery) {
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
-    auto rid = rm->getFree();
-    EXPECT_EQ(3, rid.index());
 
     EXPECT_EQ(0, rm->getRegion(RegionId{0}).getClassId());
     EXPECT_FALSE(rm->getRegion(RegionId{0}).isPinned());
@@ -185,9 +185,13 @@ TEST(RegionManager, ReadWrite) {
   RegionId rid;
   // do reclaim couple of times to get RegionId of 1
   rm->startReclaim();
-  rm->getCleanRegion(rid);
+  ASSERT_TRUE(ex.runFirst());
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(0, rid.index());
   rm->startReclaim();
-  rm->getCleanRegion(rid);
+  ASSERT_TRUE(ex.runFirst());
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(1, rid.index());
 
   auto& region = rm->getRegion(rid);
   auto [wDesc, addr] = region.openAndAllocate(4 * kSize);
@@ -224,14 +228,8 @@ TEST(RegionManager, RecoveryLRUOrder) {
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
         sizeClasses, std::move(policy), 0);
 
-    // Get all free regions. Mark 1 and 2 clean (num entries == 0), 0 and 3
-    // used. After recovery, LRU should return clean before used, in order
-    // of index.
-    for (uint32_t i = 0; i < 4; i++) {
-      EXPECT_EQ(RegionId{i}, rm->getFree());
-    }
-    EXPECT_EQ(0, rm->numFree());
-
+    // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
+    // should return clean before used, in order of index.
     rm->getRegion(RegionId{0}).setClassId(1);
     for (int i = 0; i < 10; i++) {
       auto [desc, addr] = rm->getRegion(RegionId{0}).openAndAllocate(200);
@@ -262,7 +260,6 @@ TEST(RegionManager, RecoveryLRUOrder) {
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
 
-    EXPECT_EQ(0, rm->numFree());
     EXPECT_EQ(RegionId{1}, rm->evict());
     EXPECT_EQ(RegionId{2}, rm->evict());
     EXPECT_EQ(RegionId{0}, rm->evict());

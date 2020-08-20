@@ -85,11 +85,6 @@ class RegionManager {
 
   uint64_t regionSize() const { return regionSize_; }
 
-  // Gets a free region if any left
-  RegionId getFree();
-
-  uint32_t numFree() const { return numFree_; }
-
   // Gets a region to evict
   RegionId evict();
 
@@ -184,8 +179,10 @@ class RegionManager {
   bool isValidIORange(uint32_t offset, uint32_t size) const;
   OpenStatus assignBufferToRegion(RegionId rid);
 
-  // Detects @numFree_ and tracks appropriate regions. Called during recovery.
-  void detectFree();
+  // Initialize the eviction policy. Even on a clean start, we will track all
+  // the regions. The difference is that these regions will have no items in
+  // them and can be evicted right away.
+  void initEvictionPolicy();
 
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};
@@ -193,7 +190,6 @@ class RegionManager {
   Device& device_;
   const std::unique_ptr<EvictionPolicy> policy_;
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;
-  uint32_t numFree_{};
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter externalFragmentation_;
 

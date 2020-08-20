@@ -20,7 +20,6 @@ RegionManager::RegionManager(uint32_t numRegions,
       device_{device},
       policy_{std::move(policy)},
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
-      numFree_{numRegions},
       numCleanRegions_{numCleanRegions},
       scheduler_{scheduler},
       evictCb_{evictCb},
@@ -36,15 +35,7 @@ RegionManager::RegionManager(uint32_t numRegions,
           std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
     }
   }
-}
-
-RegionId RegionManager::getFree() {
-  RegionId rid;
-  if (numFree_ > 0) {
-    rid = RegionId(numRegions_ - numFree_);
-    numFree_--;
-  }
-  return rid;
+  initEvictionPolicy();
 }
 
 RegionId RegionManager::evict() {
@@ -59,21 +50,24 @@ RegionId RegionManager::evict() {
 }
 
 void RegionManager::reset() {
-  policy_->reset();
   for (uint32_t i = 0; i < numRegions_; i++) {
     regions_[i]->reset();
   }
   {
     std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
-    numFree_ = numRegions_;
     // Reset is inherently single threaded. All pending jobs, including
     // reclaims, have to be finished first.
     XDCHECK_EQ(reclaimsScheduled_, 0u);
     cleanRegions_.clear();
   }
+
   // Will be set back to true if no regions to reclaim found
   outOfRegions_.store(false, std::memory_order_release);
   seqNumber_.store(0, std::memory_order_release);
+
+  // Reset eviction policy
+  policy_->reset();
+  initEvictionPolicy();
 }
 
 // Caller is expected to call flushBuffer until true is returned.
@@ -210,17 +204,7 @@ void RegionManager::doFlush(RegionId rid, bool async) {
 // Tries to get a free region first, otherwise evicts one and schedules region
 // cleanup job (which will add the region to the clean list).
 JobExitCode RegionManager::startReclaim() {
-  RegionId rid;
-  {
-    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
-    rid = getFree();
-    if (rid.valid()) {
-      reclaimsScheduled_--;
-      cleanRegions_.push_back(rid);
-      return JobExitCode::Done;
-    }
-  }
-  rid = evict();
+  auto rid = evict();
   if (!rid.valid()) {
     outOfRegions_.store(true, std::memory_order_release);
     return JobExitCode::Done;
@@ -400,37 +384,26 @@ void RegionManager::recover(RecordReader& rr) {
     }
   }
 
-  // TODO we don't presereve the eviction policy information across restarts
-  // and reinit the tracking.
-  detectFree();
+  // Reset policy and reinitialize it per the recovered state
+  policy_->reset();
+  initEvictionPolicy();
 }
 
-void RegionManager::detectFree() {
+void RegionManager::initEvictionPolicy() {
   XDCHECK_GT(numRegions_, 0u);
-  std::lock_guard<std::mutex> crlock{cleanRegionsMutex_};
-  numFree_ = 0;
-  // Increment @numFree_ for every consecutive region starting from the back of
-  // the array that has @lastEntryEndOffset == 0.
-  for (uint32_t i = numRegions_; i-- > 0;) {
-    if (regions_[i]->getNumItems() == 0) {
-      numFree_++;
-    } else {
-      break;
-    }
-  }
 
-  // Track all regions that are not free
-  // Also bump external fragmentation stats for all used regions
-  for (uint32_t i = 0; i < numRegions_ - numFree_; i++) {
+  // Track and bump external fragmentation stats for each region
+  for (uint32_t i = 0; i < numRegions_; i++) {
     if (!regions_[i]->isPinned()) {
       track(RegionId{i});
     }
     externalFragmentation_.add(regionSize_ -
                                getRegion(RegionId{i}).getLastEntryEndOffset());
   }
-  // Move all regions with items to the LRU head. Clean regions with 0 items
-  // will group in the LRU tail.
-  for (uint32_t i = 0; i < numRegions_ - numFree_; i++) {
+
+  // Move all regions with items to the LRU head. Empty regions with 0 items
+  // will group in the eviction policy's tail.
+  for (uint32_t i = 0; i < numRegions_; i++) {
     if (!regions_[i]->isPinned()) {
       if (regions_[i]->getNumItems() != 0) {
         touch(RegionId{i});
@@ -489,7 +462,7 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reclaim_time", reclaimTimeCountUs_.get());
   visitor("navy_bc_region_reclaim_errors", reclaimRegionErrors_.get());
   visitor("navy_bc_evicted", evictedCount_.get());
-  visitor("navy_bc_num_regions", numRegions_ - numFree_);
+  visitor("navy_bc_num_regions", numRegions_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
   visitor("navy_bc_pinned_regions", pinnedCount_.get());
   visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
