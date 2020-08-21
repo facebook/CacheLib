@@ -21,6 +21,7 @@
     "rebalanceStrategy": "tail-age",
     "rebalanceMinRatio": 0.1,
     "rebalanceMinSlabs": 2,
+    "navyNumInmemBuffers": 30,
     "dipperNavyUseStackAllocation": true
 
   }, 
