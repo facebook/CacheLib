@@ -3715,7 +3715,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
     EXPECT_EQ(1, stats.numReapedItems);
     EXPECT_LE(stats.lastTraversalTimeMs, util::getCurrentTimeMs() - startTime);
-    EXPECT_GT(stats.lastTraversalTimeMs, 0);
   }
 
   void testReaperOutOfBound() {
