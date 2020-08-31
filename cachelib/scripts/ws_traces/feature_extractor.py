@@ -22,7 +22,7 @@ class FeatureExtractor:
 
     def __init__(self, flashEvictionAge, samplingProb, dfeature):
         self.featureGather = {}
-        # dict from key (blk_id, chunk_id) to a list of featureLabels.
+        # dict from key (blk_id, chunk_id, hostname) to a list of featureLabels.
         # A featureLabel contains the feature from data, past accesses and the label (future accesses)
         self.labelGather = {}
         # Sampling probability for chunks.
@@ -43,6 +43,9 @@ class FeatureExtractor:
         # The number of accesses in the sliding window for a certain key.
         self.accumulatedAccesses = {}
 
+        # debugging information for how many hosts per block_id spans.
+        self.blkId_hosts = {}
+
     def run(self, accesses):
         """
         Main function for FeatureExtractor.
@@ -58,7 +61,11 @@ class FeatureExtractor:
         for idx, (blkId, access) in enumerate(accesses):
             # iterate over each chunk of this request
             for chunkId in access.chunks():
-                key = (blkId, chunkId)
+                key = (blkId, chunkId, access.hostname)
+                if blkId not in self.blkId_hosts.keys():
+                    self.blkId_hosts[blkId] = {access.hostname}
+                else:
+                    self.blkId_hosts[blkId].add(access.hostname)
                 self.processRequest(key, access.ts, access.features)
             # track progress
             if (idx + 1) % LOGGING_COUNT == 0:
@@ -70,6 +77,13 @@ class FeatureExtractor:
         for key in self.labelGather.keys():
             while self.slidingWindowIdx[key] < len(self.labelGather[key]):
                 self._slideWindow(key)
+
+        hosts = [len(self.blkId_hosts[k]) for k in self.blkId_hosts.keys()]
+        hosts = np.array(hosts)
+        logger.info("avg host: {}".format(np.mean(hosts)))
+        logger.info("min: {}".format(np.min(hosts)))
+        logger.info("max: {}".format(np.max(hosts)))
+        logger.info("std: {}".format(np.std(hosts)))
 
     def processRequest(self, key, ts, keyFeatures):
         # update internal timestamp

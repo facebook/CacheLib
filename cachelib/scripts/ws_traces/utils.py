@@ -31,6 +31,7 @@ OP_STR = "op"
 PIPELINE_STR = "pipelineName"
 NS_STR = "userNamespace"
 USER_STR = "userName"
+HOSTNAME_STR = "hostname"
 
 PUT_OPS = [OpType.PUT_PERM, OpType.PUT_TEMP]
 # Used for unknown feature values to be consistent with
@@ -50,12 +51,13 @@ FEATURES = [f"bf_{i}" for i in range(0, ACCESS_HISTORY_COUNT)] + [
 OP_TIME = "op_time"
 KEYWORD_MAP = {
     "block_id": KEY_STR,
-    "offset": OFF_STR,
+    "io_offset": OFF_STR,
     "io_size": IOSIZE_STR,
     "op_name": OP_STR,
     "pipeline_name": PIPELINE_STR,
     "user_name": USER_STR,
     "user_namespace": NS_STR,
+    "host_name": HOSTNAME_STR,
     # This captures the timestamp.
     "op_time": OP_TIME,
 }
@@ -112,7 +114,7 @@ class BlkAccess(object):
     MAX_BLOCK_SIZE = 8 * 1024 * 1024
 
     # helps reduce memory footprint
-    __slots__ = ["ts", "offset", "endoffset", "c", "features"]
+    __slots__ = ["ts", "offset", "endoffset", "c", "features", "hostname"]
 
     @staticmethod
     def roundDownToBlockBegin(off):
@@ -124,13 +126,14 @@ class BlkAccess(object):
 
     # offsets can be in the middle of a block. round them to the alignment to
     # emulate caching at a chunk level
-    def __init__(self, offset, size, time, features=None):
+    def __init__(self, offset, size, time, host_name, features=None):
         self.ts = time
         self.offset = BlkAccess.roundDownToBlockBegin(offset)
         self.endoffset = BlkAccess.roundUpToBlockEnd(offset + size - 1)
         # list of chunks
         self.c = []
         self.features = features
+        self.hostname = host_name
 
     def __str__(self):
         return "offset={}, size={}, ts={}, features={}".format(
@@ -186,6 +189,7 @@ class EncodingDicts(object):
         self.users = {}
         self.namespaces = {}
         self.pipelines = {}
+        self.hostnames = {}
 
         # dict from encoded keys to KeyAndAccesses
         self.accesses = {}
@@ -194,15 +198,16 @@ class EncodingDicts(object):
         self.count = 0
 
 
-def process_line(users, namespaces, pipelines, kvs, timestamp):
+def process_line(users, namespaces, pipelines, hostnames, kvs, timestamp):
     size = kvs[IOSIZE_STR]
     f = extract_features(users, namespaces, pipelines, kvs)
 
     offset = 0
     if f and f.op not in PUT_OPS:
         offset = kvs[OFF_STR]
+    hostname = lookup_or_add_uuid(hostnames, kvs[HOSTNAME_STR])
 
-    return BlkAccess(int(offset), int(size), float(timestamp), f)
+    return BlkAccess(int(offset), int(size), float(timestamp), int(hostname), f)
 
 
 # lookup k in m. If not present, generate a uuid and add it to map, return
@@ -235,7 +240,9 @@ def extract_features(users, namespaces, pipelines, kvs):
     return KeyFeatures(op, pipeline, namespace, user)
 
 
-def process_line_and_add(accesses, keys, users, namespaces, pipelines, l, sample_rate):
+def process_line_and_add(
+    accesses, keys, users, namespaces, pipelines, hostnames, l, sample_rate
+):
     # Format is the following:
     # V0813 00:05:45.956594 BLOCKID=<blkid> OFFSET=<offset> IOSIZE=<size> ...
     # we assume a dummy year just to parse and generate time points at seconds
@@ -265,8 +272,11 @@ def process_line_and_add(accesses, keys, users, namespaces, pipelines, l, sample
         if sample_rate < 100 and hash(k) % 100 > sample_rate:
             return
 
+        # traces from file may not have hostname field. Fill in a default since they are from the same host.
+        if HOSTNAME_STR not in kvs.keys():
+            kvs[HOSTNAME_STR] = "hostname"
         process_line_kvs_and_add(
-            accesses, keys, users, namespaces, pipelines, timestamp, kvs, k
+            accesses, keys, users, namespaces, pipelines, hostnames, timestamp, kvs, k
         )
     except (IndexError, ValueError, KeyError) as e:
         print("Error in line: ", parts, e)
@@ -274,14 +284,14 @@ def process_line_and_add(accesses, keys, users, namespaces, pipelines, l, sample
 
 
 def process_line_kvs_and_add(
-    accesses, keys, users, namespaces, pipelines, timestamp, kvs, k
+    accesses, keys, users, namespaces, pipelines, hostnames, timestamp, kvs, k
 ):
     ukey = lookup_or_add_uuid(keys, k)
     # first time we are seeing this
     if ukey not in accesses:
         accesses[ukey] = KeyAndAccesses(ukey)
 
-    a = process_line(users, namespaces, pipelines, kvs, timestamp)
+    a = process_line(users, namespaces, pipelines, hostnames, kvs, timestamp)
     accesses[ukey].addAccess(a)
 
 
@@ -292,12 +302,13 @@ def read_tracefile(f, sample_rate):
     users = {}  # encoding of users to ints
     namespaces = {}  # encoding of namespaces to ints
     pipelines = {}  # encoding of pipelines to ints
+    hostnames = {}  # encoding of hostnames to ints
     with open(f, "r") as of:
         keys = {}
         for l in of:
             count += 1
             process_line_and_add(
-                accesses, keys, users, namespaces, pipelines, l, sample_rate
+                accesses, keys, users, namespaces, pipelines, hostnames, l, sample_rate
             )
 
     for k in accesses:
@@ -353,6 +364,7 @@ def read_dict_results(results, encoding):
                 encoding.users,
                 encoding.namespaces,
                 encoding.pipelines,
+                encoding.hostnames,
                 row,
             )
             if count % 1000000 == 0:
@@ -436,7 +448,7 @@ def read_processed_file(f, global_feature_map_path=None):
 
                 if k not in accesses:
                     accesses[k] = KeyAndAccesses(k)
-                accesses[k].addAccess(BlkAccess(off, size, ts, f))
+                accesses[k].addAccess(BlkAccess(off, size, ts, "hostname", f))
             except (ValueError, IndexError):
                 print("Error in parsing line ", l, parts)
 
@@ -556,7 +568,7 @@ def get_feature_maps(local_map_path, global_map_path, sample_ratio):
     return (local_maps, global_maps)
 
 
-def process_row_and_add(accesses, keys, users, namespaces, pipelines, row):
+def process_row_and_add(accesses, keys, users, namespaces, pipelines, hostnames, row):
     try:
         kvs = {
             KEYWORD_MAP[key]: row[key]
@@ -570,12 +582,13 @@ def process_row_and_add(accesses, keys, users, namespaces, pipelines, row):
             users,
             namespaces,
             pipelines,
+            hostnames,
             kvs[OP_TIME],
             kvs,
             kvs[KEY_STR],
         )
     except (IndexError, ValueError, KeyError) as e:
-        print("Error in line: ", row, e)
+        logger.info("Error in line: ", row, e)
         return
 
 
