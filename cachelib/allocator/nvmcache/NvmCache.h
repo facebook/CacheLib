@@ -16,6 +16,7 @@
 #include "cachelib/allocator/nvmcache/ReqContexts.h"
 #include "cachelib/allocator/nvmcache/TombStones.h"
 #include "cachelib/allocator/nvmcache/WaitContext.h"
+#include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"

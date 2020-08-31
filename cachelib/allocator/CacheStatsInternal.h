@@ -152,6 +152,9 @@ struct Stats {
   // Eviction failures because this item is being moved
   AtomicCounter evictFailMove{0};
 
+  // Number of permanent item put in NVM cache.
+  AtomicCounter numNvmPermItems{0};
+
   void init();
 
   void populateGlobalCacheStats(GlobalCacheStats& ret) const;

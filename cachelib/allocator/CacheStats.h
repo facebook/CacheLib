@@ -423,6 +423,8 @@ struct GlobalCacheStats {
 
   // current active handles outstanding
   uint64_t numActiveHandles;
+
+  uint64_t numNvmPermItems{0};
 };
 
 struct CacheMemoryStats {

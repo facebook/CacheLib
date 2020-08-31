@@ -1046,15 +1046,6 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
     if (!replaced || replaced->isNvmClean()) {
       nvmCache_->remove(handle->getKey());
     }
-
-    // if we are dealing with permanent item, we need to keep it in sync with
-    // nvmcache.  mark the put as in-flight. If not, nvmcache will drop it.
-    // Also set the item as nvmclean so that when it gets replaced, we always
-    // issue a remove to blow away the corresponding copy in nvm.
-    if (handle->isUnevictable()) {
-      handle->markNvmClean();
-      nvmCache_->put(handle, nvmCache_->createPutToken(handle->getKey()));
-    }
   }
 
   handle.unmarkNascent();
@@ -1323,17 +1314,17 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
-  if (item.isEvictable()) {
-    if (config_.filterCb && config_.filterCb(item, chainedItemRange)) {
-      stats_.numNvmRejectsByFilterCb.inc();
-      return false;
-    }
-    if (nvmAdmissionPolicy_ &&
-        !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
-      stats_.numNvmRejectsByAP.inc();
-      return false;
-    }
+
+  if (config_.filterCb && config_.filterCb(item, chainedItemRange)) {
+    stats_.numNvmRejectsByFilterCb.inc();
+    return false;
   }
+  if (nvmAdmissionPolicy_ &&
+      !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
+    stats_.numNvmRejectsByAP.inc();
+    return false;
+  }
+
   return true;
 }
 

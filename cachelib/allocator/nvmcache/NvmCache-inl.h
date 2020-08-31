@@ -311,6 +311,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
 
   navy::InsertOptions opts;
   if (item.isUnevictable()) {
+    stats().numNvmPermItems.inc();
     opts.setPermanent();
   }
 

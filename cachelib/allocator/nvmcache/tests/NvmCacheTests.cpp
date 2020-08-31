@@ -277,8 +277,7 @@ TEST_F(NvmCacheTest, FilterCb) {
   EXPECT_TRUE(this->checkKeyExists(unEvictableKey, false /*ram Only*/));
 }
 
-// Unevictable items should be kept in both dram and nvm and maintain the
-// state on dram accordingly
+// Unevictable items should be kept in DRAM
 TEST_F(NvmCacheTest, UnEvictable) {
   auto& nvm = this->makeCache();
   auto pid = this->poolId();
@@ -288,10 +287,9 @@ TEST_F(NvmCacheTest, UnEvictable) {
   auto it = nvm.allocatePermanent(pid, key, allocSize);
   ASSERT_NE(nullptr, it);
   nvm.insertOrReplace(it);
-  ASSERT_TRUE(it->isNvmClean());
   auto res = this->inspectCache(key);
   EXPECT_NE(nullptr, res.first);
-  EXPECT_NE(nullptr, res.second);
+  EXPECT_EQ(nullptr, res.second);
 }
 
 TEST_F(NvmCacheTest, ReadFromDipperExpired) {
@@ -395,38 +393,6 @@ TEST_F(NvmCacheTest, InsertOrReplace) {
     auto val = *(int*)it->getMemory();
     ASSERT_EQ(0x5a5a5a5a, val);
   }
-}
-
-TEST_F(NvmCacheTest, Permanent) {
-  auto& nvm = this->cache();
-  auto pid = this->poolId();
-
-  std::string key = "foobar";
-  {
-    auto hdl = nvm.allocatePermanent(pid, key, 100);
-    ASSERT_TRUE(hdl->isUnevictable());
-    nvm.insertOrReplace(hdl);
-  }
-
-  ASSERT_TRUE(nvm.find(key)->isUnevictable());
-
-  this->removeFromRamForTesting(key);
-  {
-    auto hdl = nvm.find(key);
-    hdl.wait();
-    ASSERT_TRUE(hdl);
-    ASSERT_TRUE(hdl->isUnevictable());
-  }
-
-  this->removeFromNvmForTesting(key);
-  {
-    auto hdl = nvm.find(key);
-    ASSERT_TRUE(hdl);
-    ASSERT_TRUE(hdl->isUnevictable());
-  }
-
-  this->removeFromRamForTesting(key);
-  ASSERT_FALSE(nvm.find(key));
 }
 
 TEST_F(NvmCacheTest, ConcurrentFills) {
