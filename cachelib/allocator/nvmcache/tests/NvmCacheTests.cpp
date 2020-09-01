@@ -243,7 +243,7 @@ TEST_F(NvmCacheTest, FilterCb) {
   {
     auto it = nvm.allocate(pid, successKey, allocSize);
     auto it2 = nvm.allocate(pid, failKey, allocSize);
-    auto it3 = nvm.allocatePermanent(pid, unEvictableKey, allocSize);
+    auto it3 = nvm.allocatePermanent_deprecated(pid, unEvictableKey, allocSize);
     ASSERT_NE(nullptr, it2);
     ASSERT_NE(nullptr, it);
     ASSERT_NE(nullptr, it3);
@@ -284,7 +284,7 @@ TEST_F(NvmCacheTest, UnEvictable) {
   auto key = "foo";
 
   size_t allocSize = 15 * 1024;
-  auto it = nvm.allocatePermanent(pid, key, allocSize);
+  auto it = nvm.allocatePermanent_deprecated(pid, key, allocSize);
   ASSERT_NE(nullptr, it);
   nvm.insertOrReplace(it);
   auto res = this->inspectCache(key);

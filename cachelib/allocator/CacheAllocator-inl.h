@@ -298,9 +298,9 @@ CacheAllocator<CacheTrait>::allocate(PoolId poolId,
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::allocatePermanent(PoolId poolId,
-                                              typename Item::Key key,
-                                              uint32_t size) {
+CacheAllocator<CacheTrait>::allocatePermanent_deprecated(PoolId poolId,
+                                                         typename Item::Key key,
+                                                         uint32_t size) {
   if (!config_.moveCb && (poolRebalancer_ || poolResizer_ || memMonitor_)) {
     throw std::invalid_argument(
         "Without move callback, we cannot allocate unevictable items when one "

@@ -272,7 +272,9 @@ class CacheAllocator : public CacheBase {
                       uint32_t creationTime = 0);
 
   // same as allocate except this allocates an item unevictable from cache
-  ItemHandle allocatePermanent(PoolId id, Key key, uint32_t size);
+  // We are in the process of deprecating this API and remove support for
+  // permanent items.
+  ItemHandle allocatePermanent_deprecated(PoolId id, Key key, uint32_t size);
 
   // Allocate a chained item
   //

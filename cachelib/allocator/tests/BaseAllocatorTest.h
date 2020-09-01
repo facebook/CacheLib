@@ -49,7 +49,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         ASSERT_NE(nullptr, handle);
       }
       for (unsigned int i = nItems; i < 2 * nItems; ++i) {
-        auto handle = allocator->allocatePermanent(
+        auto handle = allocator->allocatePermanent_deprecated(
             poolId, folly::to<std::string>(i), kItemSize);
         ASSERT_NE(nullptr, handle);
         allocator->insert(handle);
@@ -3841,7 +3841,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_TRUE(findItem(false, allocator, handle.get()));
     }
     for (unsigned int i = nItems; i < 2 * nItems; ++i) {
-      auto handle = allocator.allocatePermanent(
+      auto handle = allocator.allocatePermanent_deprecated(
           poolId, folly::to<std::string>(i), kItemSize);
       ASSERT_NE(nullptr, handle);
       ASSERT_TRUE(handle->isUnevictable());
@@ -3881,7 +3881,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::ItemHandle> unevictableItems;
     for (unsigned int i = 0; i < 100; ++i) {
       auto key = "unevictable_" + folly::to<std::string>(i);
-      auto handle = allocator.allocatePermanent(poolId, key, kItemSize);
+      auto handle =
+          allocator.allocatePermanent_deprecated(poolId, key, kItemSize);
       if (!handle) {
         break;
       }
@@ -3943,7 +3944,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Fill one slab worth of memory with unevictable items
     for (unsigned int i = 0; i < itemsPerSlab; ++i) {
       auto key = "unevictable_" + folly::to<std::string>(i);
-      auto handle = allocator.allocatePermanent(poolId, key, kItemSize);
+      auto handle =
+          allocator.allocatePermanent_deprecated(poolId, key, kItemSize);
       ASSERT_NE(nullptr, handle);
       ASSERT_TRUE(allocator.insert(handle));
     }
@@ -4712,7 +4714,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
           typename AllocatorT::ItemHandle itemHandle;
           if (i % 2 == 0) {
-            itemHandle = alloc.allocatePermanent(pid, key, sizes[0]);
+            itemHandle = alloc.allocatePermanent_deprecated(pid, key, sizes[0]);
           } else {
             itemHandle = alloc.allocate(pid, key, sizes[0]);
           }
@@ -5044,7 +5046,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     std::vector<typename AllocatorT::ItemHandle> handles;
     for (unsigned int i = 0; i < nItems; ++i) {
       ASSERT_EQ(allocator.getGlobalCacheStats().numPermanentItems, i);
-      auto handle = allocator.allocatePermanent(
+      auto handle = allocator.allocatePermanent_deprecated(
           poolId, folly::to<std::string>(i), kItemSize);
       ASSERT_NE(nullptr, handle);
       ASSERT_TRUE(handle->isUnevictable());
@@ -5055,7 +5057,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // 2. Allocte and remove
     for (unsigned int i = 0; i < 2 * nItems; ++i) {
-      auto handle = allocator.allocatePermanent(
+      auto handle = allocator.allocatePermanent_deprecated(
           poolId, folly::to<std::string>(i), kItemSize);
       ASSERT_EQ(allocator.getGlobalCacheStats().numPermanentItems, nItems + 1);
       allocator.remove(handle->getKey());
@@ -5169,7 +5171,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     int itemSize = 100;
     auto addFn = [&](std::string keyPrefix) {
       for (int j = 0; j < perICount; j++) {
-        auto handle = alloc.allocatePermanent(
+        auto handle = alloc.allocatePermanent_deprecated(
             pid, keyPrefix + folly::to<std::string>(j), itemSize);
         ASSERT_NE(nullptr, handle);
         ASSERT_TRUE(handle->isUnevictable());
@@ -5235,8 +5237,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
       // Allocate permanent items
       for (int i = 0; i < pItemCount; i++) {
-        auto handle =
-            alloc.allocatePermanent(poolId, folly::to<std::string>(i), 10);
+        auto handle = alloc.allocatePermanent_deprecated(
+            poolId, folly::to<std::string>(i), 10);
         ASSERT_NE(nullptr, handle);
         ASSERT_TRUE(handle->isUnevictable());
         alloc.insert(handle);
@@ -5420,7 +5422,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     };
 
     {
-      auto parent = alloc.allocatePermanent(poolId, "permanent", 10000);
+      auto parent =
+          alloc.allocatePermanent_deprecated(poolId, "permanent", 10000);
       for (unsigned int i = 0; i < 10; ++i) {
         auto c = alloc.allocateChainedItem(parent, 10000);
         ASSERT_NE(nullptr, c);
@@ -5472,7 +5475,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
 
     // Replace with another permanet parnet is fine
-    auto parent2 = alloc.allocatePermanent(poolId, "permanent", 10000);
+    auto parent2 =
+        alloc.allocatePermanent_deprecated(poolId, "permanent", 10000);
     ASSERT_NE(nullptr, parent2);
     ASSERT_NO_THROW(alloc.transferChainAndReplace(parent, parent2));
     ASSERT_FALSE(parent->hasChainedItem());
