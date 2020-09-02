@@ -244,6 +244,27 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
     auto entryEnd = buffer.data() + offset;
     auto desc =
         *reinterpret_cast<const EntryDesc*>(entryEnd - sizeof(EntryDesc));
+    if (desc.csSelf != desc.computeChecksum()) {
+      reclaimEntryHeaderChecksumErrorCount_.inc();
+      XLOGF(ERR,
+            "Item header checksum mismatch. Region {} is likely corrupted. "
+            "Expected:{}, Actual: {}",
+            rid.index(),
+            desc.csSelf,
+            desc.computeChecksum());
+      if (slotSize == 0) {
+        XLOGF(
+            ERR,
+            "Stack allocation mode. So we need to abort reclaim for Region {}",
+            rid.index());
+        break;
+      } else {
+        XDCHECK_GE(offset, slotSize);
+        offset -= slotSize;
+        continue;
+      }
+    }
+
     const auto entrySize =
         slotSize > 0
             ? slotSize
@@ -251,10 +272,9 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
     HashedKey hk{
         BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
     BufferView value{desc.valueSize, entryEnd - entrySize};
-
-    if (desc.csSelf != desc.computeChecksum()) {
-      reclaimEntryHeaderChecksumErrorCount_.inc();
-    } else if (checksumData_ && desc.cs != checksum(value)) {
+    if (checksumData_ && desc.cs != checksum(value)) {
+      // We do not need to abort here since the EntryDesc checksum was good, so
+      // we can safely proceed to read the next entry.
       reclaimValueChecksumErrorCount_.inc();
     }
 
@@ -476,9 +496,9 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_lookup_value_checksum_errors",
           lookupValueChecksumErrorCount_.get());
   visitor("navy_bc_reclaim_entry_header_checksum_errors",
-          lookupEntryHeaderChecksumErrorCount_.get());
+          reclaimEntryHeaderChecksumErrorCount_.get());
   visitor("navy_bc_reclaim_value_checksum_errors",
-          lookupValueChecksumErrorCount_.get());
+          reclaimValueChecksumErrorCount_.get());
   visitor("navy_bc_succ_lookups", succLookupCount_.get());
   visitor("navy_bc_removes", removeCount_.get());
   visitor("navy_bc_succ_removes", succRemoveCount_.get());

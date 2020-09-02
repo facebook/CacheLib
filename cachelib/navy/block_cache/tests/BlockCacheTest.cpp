@@ -461,6 +461,204 @@ TEST(BlockCache, HoleStats) {
   });
 }
 
+TEST(BlockCache, ReclaimCorruption) {
+  // This test verifies two behaviors in BlockCache regarding corruption during
+  // reclaim. In the case of an item's entry header corruption, we must abort
+  // the reclaim as we don't have a way to ensure we will safely proceed to read
+  // the next entry. In the case of an item's value corruption, we can bump the
+  // error stat and proceed to the next item.
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  auto device = std::make_unique<MockDevice>(kDeviceSize, 1 /* ioAlignment */,
+                                             nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device,
+                           {} /* specify stack allocation */);
+  config.checksum = true;
+  config.numInMemBuffers = 1;
+  // items which are accessed once will be reinserted on reclaim
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  // Allow any number of writes in between and after our expected writes
+  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(testing::AtLeast(0));
+
+  // Note even tho this item's value is corrupted, we would have aborted
+  // the reclaim before we got here. So we will not bump the value checksum
+  // error stat on this.
+  EXPECT_CALL(*device, writeImpl(0, 16384, _))
+      .WillOnce(testing::Invoke(
+          [&device](uint64_t offset, uint32_t size, const void* data) {
+            // Note that all items are aligned to 512 bytes in in-mem buffer
+            // stacked mode, and we write around 800 bytes, so each is aligned
+            // to 1024 bytes
+            Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
+            std::memcpy(buffer.data(), reinterpret_cast<const uint8_t*>(data),
+                        size);
+            // Mutate a byte in the beginning to corrupt 3rd item's value
+            buffer.data()[1024 * 2 + 300] += 1;
+            // Mutate a byte in the end to corrupt 5th item's header
+            buffer.data()[1024 * 4 + 1010] += 1;
+            // Mutate a byte in the beginning to corrupt 7th item's value
+            buffer.data()[1024 * 6 + 300] += 1;
+            // Mutate a byte in the beginning to corrupt 9th item's value
+            buffer.data()[1024 * 8 + 300] += 1;
+            return device->getRealDeviceRef().write(offset, std::move(buffer));
+          }));
+
+  // Allocator region fills every 16 inserts.
+  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3});
+  expectRegionsTrackedInSequence(mp, {0, 1, 2});
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  for (size_t j = 0; j < 3; j++) {
+    for (size_t i = 0; i < 16; i++) {
+      CacheEntry e{bg.gen(8), bg.gen(800)};
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), {}, nullptr));
+      log.push_back(std::move(e));
+    }
+    driver->flush();
+  }
+  // Verify we have one header checksum error and two value checksum errors
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_reclaim") {
+      EXPECT_EQ(4, count);
+    }
+  });
+
+  // Force reclamation on region 0 by allocating region 3. There are 4 regions
+  // and the device was configured to require 1 clean region at all times
+  expectRegionsEvictedInSequence(mp, {0});
+  expectRegionsTrackedInSequence(mp, {3});
+  {
+    CacheEntry e{bg.gen(8), bg.gen(800)};
+    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}, nullptr));
+    log.push_back(std::move(e));
+  }
+  driver->flush();
+
+  // Verify we have one header checksum error and two value checksum errors
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_reclaim") {
+      EXPECT_EQ(5, count);
+    }
+    if (name == "navy_bc_reclaim_entry_header_checksum_errors") {
+      EXPECT_EQ(1, count);
+    }
+    if (name == "navy_bc_reclaim_value_checksum_errors") {
+      EXPECT_EQ(2, count);
+    }
+  });
+}
+
+TEST(BlockCache, ReclaimCorruptionSizeClass) {
+  // This test verifies two behaviors in BlockCache regarding corruption during
+  // reclaim. In the case of an item's entry header corruption, we must abort
+  // the reclaim as we don't have a way to ensure we will safely proceed to read
+  // the next entry. In the case of an item's value corruption, we can bump the
+  // error stat and proceed to the next item.
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  auto device = std::make_unique<MockDevice>(kDeviceSize, 1 /* ioAlignment */,
+                                             nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device,
+                           {1024} /* specify size class */);
+  config.checksum = true;
+  // items which are accessed once will be reinserted on reclaim
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  // Allow any number of writes in between and after our expected writes
+  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(testing::AtLeast(0));
+
+  EXPECT_CALL(*device, writeImpl(0, _, _))
+      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
+                                          const void* data) {
+        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
+        // Skip 500 bytes at the beginning to ensure the value is corrupted
+        std::memcpy(buffer.data() + 500,
+                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
+        return device->getRealDeviceRef().write(offset, std::move(buffer));
+      }));
+  EXPECT_CALL(*device, writeImpl(2048, _, _))
+      .WillOnce(testing::Invoke(
+          [&device](uint64_t offset, uint32_t size, const void* data) {
+            Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
+            // Skip 500 bytes at the end to ensure the header is corrupted
+            std::memcpy(buffer.data(), data, size - 500);
+            return device->getRealDeviceRef().write(offset, std::move(buffer));
+          }));
+  EXPECT_CALL(*device, writeImpl(4096, _, _))
+      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
+                                          const void* data) {
+        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
+        // Skip 500 bytes at the beginning to ensure the value is corrupted
+        std::memcpy(buffer.data() + 500,
+                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
+        return device->getRealDeviceRef().write(offset, std::move(buffer));
+      }));
+  EXPECT_CALL(*device, writeImpl(8192, _, _))
+      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
+                                          const void* data) {
+        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
+        // Skip 500 bytes at the beginning to ensure the value is corrupted
+        std::memcpy(buffer.data() + 500,
+                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
+        return device->getRealDeviceRef().write(offset, std::move(buffer));
+      }));
+
+  // Allocator region fills every 16 inserts.
+  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3});
+  expectRegionsTrackedInSequence(mp, {0, 1});
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  for (size_t j = 0; j < 3; j++) {
+    for (size_t i = 0; i < 16; i++) {
+      CacheEntry e{bg.gen(8), bg.gen(800)};
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), {}, nullptr));
+      log.push_back(std::move(e));
+    }
+    driver->flush();
+  }
+  // Verify we have one header checksum error and two value checksum errors
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_reclaim") {
+      EXPECT_EQ(4, count);
+    }
+  });
+
+  // Force reclamation on region 0 by allocating region 3. There are 4 regions
+  // and the device was configured to require 1 clean region at all times
+  expectRegionsEvictedInSequence(mp, {0});
+  expectRegionsTrackedInSequence(mp, {2});
+  {
+    CacheEntry e{bg.gen(8), bg.gen(800)};
+    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}, nullptr));
+    log.push_back(std::move(e));
+  }
+  driver->flush();
+
+  // Verify we have one header checksum error and two value checksum errors
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_reclaim") {
+      EXPECT_EQ(5, count);
+    }
+    if (name == "navy_bc_reclaim_entry_header_checksum_errors") {
+      EXPECT_EQ(1, count);
+    }
+    if (name == "navy_bc_reclaim_value_checksum_errors") {
+      EXPECT_EQ(3, count);
+    }
+  });
+}
+
 TEST(BlockCache, StackAlloc) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
