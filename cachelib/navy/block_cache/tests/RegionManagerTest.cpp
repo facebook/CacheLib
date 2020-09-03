@@ -78,10 +78,13 @@ TEST(RegionManager, Recovery) {
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<MockPolicy>(&hits);
-    EXPECT_CALL(*policy, track(RegionId{0}));
-    EXPECT_CALL(*policy, track(RegionId{1}));
-    EXPECT_CALL(*policy, track(RegionId{2}));
-    EXPECT_CALL(*policy, track(RegionId{3}));
+    {
+      testing::InSequence s;
+      EXPECT_CALL(*policy, track(RegionId{0}));
+      EXPECT_CALL(*policy, track(RegionId{1}));
+      EXPECT_CALL(*policy, track(RegionId{2}));
+      EXPECT_CALL(*policy, track(RegionId{3}));
+    }
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
         [](RegionId, uint32_t, BufferView) { return 0; }};
@@ -115,12 +118,16 @@ TEST(RegionManager, Recovery) {
     // Region 0 - 3 will be tracked at least once since the first time
     // is when RegionManager is initialized. When the RM is recovered,
     // Region 1 will not be tracked since it is pinned.
-    EXPECT_CALL(*policy, track(RegionId{0})).Times(2);
-    EXPECT_CALL(*policy, track(RegionId{1})).Times(1);
-    EXPECT_CALL(*policy, track(RegionId{2})).Times(2);
-    EXPECT_CALL(*policy, track(RegionId{3})).Times(2);
-    // Only touch region 2 since region 1 is pinned
-    EXPECT_CALL(*policy, touch(RegionId{2}));
+    {
+      testing::InSequence s;
+      // First all regions are tracked when region manager is created
+      expectRegionsTracked(*policy, {0, 1, 2, 3});
+      EXPECT_CALL(*policy, reset());
+
+      // Region 1 is not tracked as it is pinned. Region 2 is tracked
+      // at last since it is not non-empty.
+      expectRegionsTracked(*policy, {0, 3, 2});
+    }
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
         [](RegionId, uint32_t, BufferView) { return 0; }};

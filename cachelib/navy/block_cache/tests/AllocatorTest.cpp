@@ -18,10 +18,6 @@ namespace tests {
 TEST(Allocator, RegionSync) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy.get();
-  expectRegionsTrackedInSequence(mp, {0, 1, 2, 3, 0, 1, 2});
-  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3, 0});
-
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =
@@ -101,10 +97,6 @@ TEST(Allocator, RegionSync) {
 TEST(Allocator, RegionSyncInMemBuffers) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy.get();
-  expectRegionsTrackedInSequence(mp, {0, 1, 2, 3, 0, 1, 2});
-  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3, 0});
-
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =
@@ -205,9 +197,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
 TEST(Allocator, PermanentAlloc) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy.get();
-  expectRegionsTrackedInSequence(mp, {0, 1, 2, 3, 2});
-  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3, 2});
+  expectRegionsTracked(*policy, {0, 1, 2, 3, 2});
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
@@ -314,12 +304,7 @@ TEST(Allocator, PermanentAlloc) {
 TEST(Allocator, PermanentAllocInMemBuffers) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy.get();
-  expectRegionsTrackedInSequence(mp, {0, 1, 2, 3, 2, 3});
-  // We set the last eviction to fail because we haven't flushed region 2 yet,
-  // and do not have anything in the eviction policy to evict.
-  expectRegionsEvictedInSequence(mp, {0, 1, 2, 3, RegionId{}.index()});
-
+  auto& mp = *policy;
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =
@@ -334,6 +319,8 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
   Allocator allocator{*rm};
   EXPECT_EQ(0, ex.getQueueSize());
 
+  // Only 2 and 3 will be tracked as 0 and 1 will be pinned regions
+  expectRegionsTracked(mp, {2, 3});
   RelAddress addr;
   uint32_t slotSize = 0;
   // Allocate a permanent item. Region 0 is permanent region and never tracked.
@@ -409,7 +396,10 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
   EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
   // This allocation will request a clean region (rid: 3), and then we will
-  // enqueue to reclaim a region but will fail
+  // enqueue to reclaim a region but will fail. We set the last eviction to fail
+  // because we haven't flushed region 2 yet, and do not have anything in the
+  // eviction policy to evict.
+  mockRegionsEvicted(mp, {RegionId{}.index()});
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
@@ -457,10 +447,6 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
 TEST(Allocator, TestInMemBufferStates) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy.get();
-  expectRegionsTrackedInSequence(mp, {0, 1, 2, 3, 0});
-  expectRegionsEvictedInSequence(mp, {0, 1, 2});
-
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =

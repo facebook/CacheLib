@@ -392,22 +392,26 @@ void RegionManager::recover(RecordReader& rr) {
 void RegionManager::initEvictionPolicy() {
   XDCHECK_GT(numRegions_, 0u);
 
-  // Track and bump external fragmentation stats for each region
+  // First track all empty regions
   for (uint32_t i = 0; i < numRegions_; i++) {
     if (!regions_[i]->isPinned()) {
-      track(RegionId{i});
+      if (regions_[i]->getNumItems() == 0) {
+        track(RegionId{i});
+      }
     }
     externalFragmentation_.add(regionSize_ -
                                getRegion(RegionId{i}).getLastEntryEndOffset());
   }
 
-  // Move all regions with items to the LRU head. Empty regions with 0 items
-  // will group in the eviction policy's tail.
+  // Now track all non-empty regions. This should ensure empty regions are
+  // pushed to the bottom for both LRU and FIFO policies.
   for (uint32_t i = 0; i < numRegions_; i++) {
     if (!regions_[i]->isPinned()) {
       if (regions_[i]->getNumItems() != 0) {
-        touch(RegionId{i});
+        track(RegionId{i});
       }
+      externalFragmentation_.add(
+          regionSize_ - getRegion(RegionId{i}).getLastEntryEndOffset());
     }
   }
 }

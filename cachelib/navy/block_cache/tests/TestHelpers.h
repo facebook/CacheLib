@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
+#include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
 
 namespace facebook {
@@ -19,14 +20,26 @@ class MockPolicy : public EvictionPolicy {
     using testing::Invoke;
     using testing::Return;
 
-    ON_CALL(*this, track(_)).WillByDefault(Return());
+    ON_CALL(*this, track(_)).WillByDefault(Invoke([this](RegionId rid) {
+      fifo_.track(rid);
+    }));
     ON_CALL(*this, touch(_)).WillByDefault(Invoke([this](RegionId rid) {
       hits_[rid.index()]++;
+      fifo_.touch(rid);
+    }));
+    ON_CALL(*this, evict()).WillByDefault(Invoke([this] {
+      return fifo_.evict();
     }));
     ON_CALL(*this, reset()).WillByDefault(Invoke([this]() {
       std::fill(hits_.begin(), hits_.end(), 0);
+      fifo_.reset();
     }));
-    ON_CALL(*this, memorySize()).WillByDefault(Return(0));
+    ON_CALL(*this, memorySize()).WillByDefault(Invoke([this] {
+      return fifo_.memorySize();
+    }));
+    ON_CALL(*this, getCounters(_))
+        .WillByDefault(
+            Invoke([this](const CounterVisitor& v) { fifo_.getCounters(v); }));
   }
 
   MOCK_METHOD1(track, void(RegionId rid));
@@ -38,15 +51,16 @@ class MockPolicy : public EvictionPolicy {
 
  private:
   std::vector<uint32_t>& hits_;
+  FifoPolicy fifo_;
 };
 
 // Return uint32_t of the invalid region id
 inline uint32_t getInvalidRegionId() { return RegionId{}.index(); }
 
 // Expect regions specified to be tracked exactly once and in order
-inline void expectRegionsTrackedInSequence(MockPolicy& policy,
-                                           std::vector<uint32_t> regionIds,
-                                           bool sticky = true) {
+inline void expectRegionsTracked(MockPolicy& policy,
+                                 std::vector<uint32_t> regionIds,
+                                 bool sticky = true) {
   testing::InSequence s;
   for (auto id : regionIds) {
     EXPECT_CALL(policy, track(RegionId{id})).RetiresOnSaturation();
@@ -59,9 +73,9 @@ inline void expectRegionsTrackedInSequence(MockPolicy& policy,
 }
 
 // Expect regions specified to be touched exactly once and in order
-inline void expectRegionsTouchedInSequence(MockPolicy& policy,
-                                           std::vector<uint32_t> regionIds,
-                                           bool sticky = true) {
+inline void expectRegionsTouched(MockPolicy& policy,
+                                 std::vector<uint32_t> regionIds,
+                                 bool sticky = true) {
   testing::InSequence s;
   for (auto id : regionIds) {
     EXPECT_CALL(policy, touch(RegionId{id})).RetiresOnSaturation();
@@ -74,9 +88,9 @@ inline void expectRegionsTouchedInSequence(MockPolicy& policy,
 }
 
 // Expect regions specified to be evicted exactly once and in order
-inline void expectRegionsEvictedInSequence(MockPolicy& policy,
-                                           std::vector<uint32_t> regionIds,
-                                           bool sticky = true) {
+inline void mockRegionsEvicted(MockPolicy& policy,
+                               std::vector<uint32_t> regionIds,
+                               bool sticky = true) {
   testing::InSequence s;
   for (auto id : regionIds) {
     EXPECT_CALL(policy, evict())
