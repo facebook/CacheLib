@@ -60,9 +60,6 @@ void RegionManager::reset() {
     XDCHECK_EQ(reclaimsScheduled_, 0u);
     cleanRegions_.clear();
   }
-
-  // Will be set back to true if no regions to reclaim found
-  outOfRegions_.store(false, std::memory_order_release);
   seqNumber_.store(0, std::memory_order_release);
 
   // Reset eviction policy
@@ -137,9 +134,6 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
       cleanRegions_.pop_back();
       status = OpenStatus::Ready;
     } else {
-      if (outOfRegions_.load(std::memory_order_acquire)) {
-        return OpenStatus::Error;
-      }
       status = OpenStatus::Retry;
     }
     auto plannedClean = cleanRegions_.size() + reclaimsScheduled_;
@@ -149,10 +143,8 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
     }
   }
   for (uint32_t i = 0; i < newSched; i++) {
-    if (!outOfRegions_.load(std::memory_order_acquire)) {
-      scheduler_.enqueue(
-          [this] { return startReclaim(); }, "reclaim", JobType::Reclaim);
-    }
+    scheduler_.enqueue(
+        [this] { return startReclaim(); }, "reclaim", JobType::Reclaim);
   }
   if (doesBufferingWrites() && status == OpenStatus::Ready) {
     status = assignBufferToRegion(rid);
@@ -206,8 +198,7 @@ void RegionManager::doFlush(RegionId rid, bool async) {
 JobExitCode RegionManager::startReclaim() {
   auto rid = evict();
   if (!rid.valid()) {
-    outOfRegions_.store(true, std::memory_order_release);
-    return JobExitCode::Done;
+    return JobExitCode::Reschedule;
   }
   scheduler_.enqueue(
       [this, rid] {

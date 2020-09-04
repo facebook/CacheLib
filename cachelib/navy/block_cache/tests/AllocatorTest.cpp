@@ -396,21 +396,23 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
   EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
   // This allocation will request a clean region (rid: 3), and then we will
-  // enqueue to reclaim a region but will fail. We set the last eviction to fail
-  // because we haven't flushed region 2 yet, and do not have anything in the
-  // eviction policy to evict.
-  mockRegionsEvicted(mp, {RegionId{}.index()});
+  // enqueue to reclaim a region but will fail as (rid: 2) hasn't been flushed
+  // yet. After the first reclaim job fails, we will flush and then the reclaim
+  // of (rid: 2) will succeed.
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
     // This reclaim will fail since the eviction will return an invalid rid
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
+    EXPECT_FALSE(ex.runFirstIf("reclaim"));
     EXPECT_TRUE(ex.runFirstIf("flush"));
-
+    // Reclaim is retried and succeeds this time around
+    EXPECT_TRUE(ex.runFirstIf("reclaim"));
+    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
     rm->close(std::move(desc));
   }
+
 
   // Finish allocating region 3
   for (uint32_t i = 0; i < 3; i++) {
@@ -421,26 +423,19 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
     rm->close(std::move(desc));
   }
 
-  // Fail to allocate and trigger reclaimation of region 2 and also flushing of
-  // region 3
+  // Allocate an item from region 2. Now we will try to evict (rid: 3),
+  // which will fail since it has yet to be flushed. Then we'll run
+  // the flush job and then run the reclaim again.
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_FALSE(desc.isReady());
-    //
-    // TODO: This is a bug. If we get here, we will not be able to reclaim
-    // any more regions, because outOfRegion_ is marked true, and previous
-    // reclaim jobs already failed. This bug can happen if we have fewer
-    // than "clean regions" left, but there is nothing in the eviction policy
-    // we can evict (e.g. because we haven't flushed them yet). It's impossible
-    // to get into in production, but it is nonetheless a real bug.
-    //
-    // EXPECT_EQ(2, ex.getQueueSize());
-    // EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    // EXPECT_EQ(2, ex.getQueueSize());
-    // EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
+    EXPECT_TRUE(desc.isReady());
+    EXPECT_EQ(RegionId{2}, addr.rid());
+    EXPECT_FALSE(ex.runFirstIf("reclaim"));
     EXPECT_TRUE(ex.runFirstIf("flush"));
-    EXPECT_EQ(0, ex.getQueueSize());
+    EXPECT_TRUE(ex.runFirstIf("reclaim"));
+    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
+    rm->close(std::move(desc));
   }
 }
 

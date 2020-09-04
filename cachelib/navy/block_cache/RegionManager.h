@@ -200,7 +200,6 @@ class RegionManager {
   mutable std::mutex cleanRegionsMutex_;
   std::vector<RegionId> cleanRegions_;
   const uint32_t numCleanRegions_{};
-  std::atomic<bool> outOfRegions_{false};
 
   std::atomic<uint64_t> seqNumber_{0};
 

@@ -713,11 +713,11 @@ TEST(BlockCache, RegionUnderflowInMemBuffers) {
 
 // This test enables in memory buffers and inserts items of size 208. With
 // Alloc alignment of 512 and device size of 64K, we should be able to store
-// 128 items. Read them back and make sure they are same as what were inserted.
+// 96 items since we have to keep one region free at all times. Read them back
+// and make sure they are same as what were inserted.
 TEST(BlockCache, SmallAllocAlignment) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto& mp = *policy;
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
@@ -725,21 +725,37 @@ TEST(BlockCache, SmallAllocAlignment) {
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
-  mockRegionsEvicted(mp, {0, 1, 2, 3, getInvalidRegionId()});
   std::vector<CacheEntry> log;
   BufferGen bg;
   Status status;
-  int cnt = 0;
-  do {
+  for (size_t i = 0; i < 96; i++) {
     CacheEntry e{bg.gen(8), bg.gen(200)};
     status = driver->insert(e.key(), e.value(), {});
-    if (status == Status::Ok) {
-      cnt++;
-    }
+    EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
-  } while (status == Status::Ok);
-  EXPECT_EQ(cnt, 128);
-  for (int i = 0; i < cnt; i++) {
+  }
+  for (size_t i = 0; i < 96; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+  return;
+
+  // One more allocation should trigger reclaim
+  {
+    CacheEntry e{bg.gen(8), bg.gen(10)};
+    status = driver->insert(e.key(), e.value(), {});
+    EXPECT_EQ(Status::Ok, status);
+    log.push_back(std::move(e));
+  }
+  driver->flush();
+
+  // Verify the first 32 items are now reclaimed and the others are still there
+  for (size_t i = 0; i < 32; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+  }
+  for (size_t i = 32; i < log.size(); i++) {
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
     EXPECT_EQ(log[i].value(), value.view());
@@ -749,11 +765,11 @@ TEST(BlockCache, SmallAllocAlignment) {
 // This test enables in memory buffers and inserts items of size 1708. Each
 // item spans multiple alloc aligned size of 512 bytes. With
 // Alloc alignment of 512 and device size of 64K, we should be able to store
-// 32 items. Read them back and make sure they are same as what were inserted.
+// 24 items with one region always evicted to be free.
+// Read them back and make sure they are same as what were inserted.
 TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto& mp = *policy;
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
@@ -761,21 +777,37 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
-  mockRegionsEvicted(mp, {0, 1, 2, 3, getInvalidRegionId()});
   std::vector<CacheEntry> log;
   BufferGen bg;
   Status status;
-  int cnt = 0;
-  do {
+  for (size_t i = 0; i < 24; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1700)};
     status = driver->insert(e.key(), e.value(), {});
-    if (status == Status::Ok) {
-      cnt++;
-    }
+    EXPECT_EQ(Status::Ok, status);
     log.push_back(std::move(e));
-  } while (status == Status::Ok);
-  EXPECT_EQ(cnt, 32);
-  for (int i = 0; i < cnt; i++) {
+  }
+  for (size_t i = 0; i < 24; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+  return;
+
+  // One more allocation should trigger reclaim
+  {
+    CacheEntry e{bg.gen(8), bg.gen(10)};
+    status = driver->insert(e.key(), e.value(), {});
+    EXPECT_EQ(Status::Ok, status);
+    log.push_back(std::move(e));
+  }
+  driver->flush();
+
+  // Verify the first 8 items are now reclaimed and the others are still there
+  for (size_t i = 0; i < 8; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+  }
+  for (size_t i = 8; i < log.size(); i++) {
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
     EXPECT_EQ(log[i].value(), value.view());
