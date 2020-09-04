@@ -793,7 +793,6 @@ TEST(BlockCache, StackAllocReclaim) {
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
-
   BufferGen bg;
   // Fill region 0
   { // 2k
