@@ -120,10 +120,10 @@ TEST(RegionManager, Recovery) {
     // Region 1 will not be tracked since it is pinned.
     {
       testing::InSequence s;
+      EXPECT_CALL(*policy, reset());
       // First all regions are tracked when region manager is created
       expectRegionsTracked(*policy, {0, 1, 2, 3});
       EXPECT_CALL(*policy, reset());
-
       // Region 1 is not tracked as it is pinned. Region 2 is tracked
       // at last since it is not non-empty.
       expectRegionsTracked(*policy, {0, 3, 2});
@@ -266,6 +266,86 @@ TEST(RegionManager, RecoveryLRUOrder) {
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
+
+    EXPECT_EQ(RegionId{1}, rm->evict());
+    EXPECT_EQ(RegionId{2}, rm->evict());
+    EXPECT_EQ(RegionId{0}, rm->evict());
+    EXPECT_EQ(RegionId{3}, rm->evict());
+    EXPECT_EQ(RegionId{}, rm->evict()); // Invalid
+  }
+}
+
+TEST(RegionManager, Fragmentation) {
+  constexpr uint32_t kNumRegions = 4;
+  constexpr uint32_t kRegionSize = 4 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+
+  folly::IOBufQueue ioq;
+  uint32_t fragmentationSize = 2 * kRegionSize;
+  {
+    auto policy = std::make_unique<LruPolicy>(kNumRegions);
+    // size class doesn't actually matter here since we're directly allocating
+    // ourselves in the test
+    std::vector<uint32_t> sizeClasses{4096};
+    RegionEvictCallback evictCb{
+        [](RegionId, uint32_t, BufferView) { return 0; }};
+    MockJobScheduler ex;
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
+        sizeClasses, std::move(policy), 0);
+
+    // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
+    // should return clean before used, in order of index.
+    rm->getRegion(RegionId{0}).setClassId(1);
+    for (int i = 0; i < 10; i++) {
+      auto [desc, addr] = rm->getRegion(RegionId{0}).openAndAllocate(200);
+      rm->getRegion(RegionId{0}).close(std::move(desc));
+      fragmentationSize -= 200;
+    }
+    rm->getRegion(RegionId{1}).setClassId(0);
+    rm->getRegion(RegionId{2}).setClassId(0);
+    rm->getRegion(RegionId{3}).setClassId(2);
+    for (int i = 0; i < 20; i++) {
+      auto [desc, addr] = rm->getRegion(RegionId{3}).openAndAllocate(150);
+      rm->getRegion(RegionId{3}).close(std::move(desc));
+      fragmentationSize -= 150;
+    }
+
+    // Even though we allocated, but we haven't tracked any. So fragmentation
+    // stats are still zero.
+    rm->getCounters([](folly::StringPiece name, double count) {
+      if (name == "navy_bc_external_fragmentation") {
+        EXPECT_EQ(0, count);
+      }
+    });
+
+    auto rw = createMemoryRecordWriter(ioq);
+    rm->persist(*rw);
+  }
+
+  {
+    auto policy = std::make_unique<LruPolicy>(kNumRegions);
+    std::vector<uint32_t> sizeClasses{4096};
+    RegionEvictCallback evictCb{
+        [](RegionId, uint32_t, BufferView) { return 0; }};
+    MockJobScheduler ex;
+    auto rm = std::make_unique<RegionManager>(
+        kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
+        sizeClasses, std::move(policy), 0);
+
+    rm->getCounters([](folly::StringPiece name, double count) {
+      if (name == "navy_bc_external_fragmentation") {
+        EXPECT_EQ(0, count);
+      }
+    });
+    auto rr = createMemoryRecordReader(ioq);
+    rm->recover(*rr);
+    rm->getCounters([fragmentationSize](folly::StringPiece name, double count) {
+      if (name == "navy_bc_external_fragmentation") {
+        EXPECT_EQ(fragmentationSize, count);
+      }
+    });
 
     EXPECT_EQ(RegionId{1}, rm->evict());
     EXPECT_EQ(RegionId{2}, rm->evict());

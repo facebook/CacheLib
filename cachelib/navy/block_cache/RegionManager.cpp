@@ -35,7 +35,7 @@ RegionManager::RegionManager(uint32_t numRegions,
           std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
     }
   }
-  initEvictionPolicy();
+  resetEvictionPolicy();
 }
 
 RegionId RegionManager::evict() {
@@ -63,8 +63,7 @@ void RegionManager::reset() {
   seqNumber_.store(0, std::memory_order_release);
 
   // Reset eviction policy
-  policy_->reset();
-  initEvictionPolicy();
+  resetEvictionPolicy();
 }
 
 // Caller is expected to call flushBuffer until true is returned.
@@ -158,8 +157,7 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
 
 void RegionManager::doFlush(RegionId rid, bool async) {
   // We're wasiting the remaining bytes of a region, so track it for stats
-  externalFragmentation_.add(regionSize_ -
-                             getRegion(rid).getLastEntryEndOffset());
+  externalFragmentation_.add(getRegion(rid).getFragmentationSize());
 
   // applicable only if configured to use in-memory buffers
   if (!doesBufferingWrites()) {
@@ -298,7 +296,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
                                          std::chrono::nanoseconds startTime) {
   auto& region = getRegion(rid);
   // Subtract the wasted bytes in the end since we're reclaiming this region now
-  externalFragmentation_.sub(regionSize_ - region.getLastEntryEndOffset());
+  externalFragmentation_.sub(getRegion(rid).getFragmentationSize());
 
   // Permanent item region (pinned) should not be reclaimed
   XDCHECK(!region.isPinned());
@@ -376,22 +374,24 @@ void RegionManager::recover(RecordReader& rr) {
   }
 
   // Reset policy and reinitialize it per the recovered state
-  policy_->reset();
-  initEvictionPolicy();
+  resetEvictionPolicy();
 }
 
-void RegionManager::initEvictionPolicy() {
+void RegionManager::resetEvictionPolicy() {
   XDCHECK_GT(numRegions_, 0u);
 
-  // First track all empty regions
+  policy_->reset();
+  externalFragmentation_.set(0);
+
+  // Go through all the regions, restore fragmentation size, and track all empty
+  // regions
   for (uint32_t i = 0; i < numRegions_; i++) {
+    externalFragmentation_.add(regions_[i]->getFragmentationSize());
     if (!regions_[i]->isPinned()) {
       if (regions_[i]->getNumItems() == 0) {
         track(RegionId{i});
       }
     }
-    externalFragmentation_.add(regionSize_ -
-                               getRegion(RegionId{i}).getLastEntryEndOffset());
   }
 
   // Now track all non-empty regions. This should ensure empty regions are
@@ -401,8 +401,6 @@ void RegionManager::initEvictionPolicy() {
       if (regions_[i]->getNumItems() != 0) {
         track(RegionId{i});
       }
-      externalFragmentation_.add(
-          regionSize_ - getRegion(RegionId{i}).getLastEntryEndOffset());
     }
   }
 }

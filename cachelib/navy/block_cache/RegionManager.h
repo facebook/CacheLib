@@ -182,7 +182,7 @@ class RegionManager {
   // Initialize the eviction policy. Even on a clean start, we will track all
   // the regions. The difference is that these regions will have no items in
   // them and can be evicted right away.
-  void initEvictionPolicy();
+  void resetEvictionPolicy();
 
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};

@@ -112,6 +112,16 @@ class Region {
     return numItems_;
   }
 
+  // If this region is actively used, then the fragmentation
+  // is the bytes at the end of the region that's not used.
+  uint32_t getFragmentationSize() const {
+    std::lock_guard<std::mutex> l{lock_};
+    if (numItems_) {
+      return regionSize_ - lastEntryEndOffset_;
+    }
+    return 0;
+  }
+
   // Write buf to attached buffer at offset 'offset'
   void writeToBuffer(uint32_t offset, BufferView buf);
 

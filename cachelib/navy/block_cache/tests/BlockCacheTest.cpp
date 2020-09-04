@@ -1808,7 +1808,6 @@ TEST(BlockCache, RecoveryBadConfig) {
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-    EXPECT_CALL(*policy, reset()).Times(0);
     size_t metadataSize = 3 * 1024 * 1024;
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
@@ -1824,7 +1823,6 @@ TEST(BlockCache, RecoveryBadConfig) {
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-    EXPECT_CALL(*policy, reset()).Times(0);
     size_t metadataSize = 3 * 1024 * 1024;
     auto deviceSize = metadataSize + kDeviceSize;
     auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
@@ -1842,11 +1840,6 @@ TEST(BlockCache, RecoveryBadConfig) {
 TEST(BlockCache, RecoveryCorruptedData) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  {
-    testing::InSequence inSeq;
-    EXPECT_CALL(*policy, reset()).Times(0);
-  }
-
   std::unique_ptr<Driver> driver;
   {
     size_t metadataSize = 3 * 1024 * 1024;
