@@ -413,7 +413,6 @@ TEST(Allocator, PermanentAllocInMemBuffers) {
     rm->close(std::move(desc));
   }
 
-
   // Finish allocating region 3
   for (uint32_t i = 0; i < 3; i++) {
     RegionDescriptor desc{OpenStatus::Retry};
