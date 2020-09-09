@@ -220,6 +220,195 @@ class RebalanceStrategyTest : public testing::Test {
     doWork(config, false);
   }
 
+  /**
+   * Helper function to run a single test scenario of rebalancing with the
+   * optional weight function. The function will assert and fail the test if
+   * expectingRebalance or smallAcVictim is wrong.
+   *
+   * Parameters
+   *
+   * - nBigFinds execute these many finds (hits) on big AC
+   * - nSmallFinds execute these many finds (hits) on small AC
+   * - expectingRebalance true if rebalancing should move slabs between ACs
+   *        false if no slab movement is expected
+   * - smallAcVictim true if rebalancing should take a slab from smaller AC
+   *        false if rebalancing should take a slab from the large AC
+   * - weightFactor 0 for disabling the use of weight function
+   *        > 0 for a simple weight function based on input factor
+   */
+  void testHitsPerSlabWithWeights() {
+    auto testFn = [](unsigned nBigFinds, unsigned nSmallFinds,
+                     bool expectingRebalance, bool smallAcVictim,
+                     uint32_t weightFactor) {
+      typename AllocatorT::Config allocatorConfig;
+      constexpr auto kCacheSlabs = 10;
+      allocatorConfig.setCacheSize((kCacheSlabs + 1) * Slab::kSize);
+
+      const ClassId smallAC = static_cast<ClassId>(0);
+      const ClassId largeAC = static_cast<ClassId>(1);
+      HitsPerSlabStrategy::Config weightedHitsConfig;
+
+      const auto kFactor = weightFactor != 0 ? weightFactor : 1000;
+      weightedHitsConfig.minDiff = 1;
+      weightedHitsConfig.diffRatio = 0;
+
+      if (weightFactor) {
+        weightedHitsConfig.getWeight =
+            [kFactor](const AllocInfo& allocInfo) -> double {
+          return (allocInfo.allocSize + kFactor - 1) / kFactor;
+        };
+
+        // Asserts for testing the simple weight function
+        ASSERT_TRUE(weightedHitsConfig.getWeight(AllocInfo{0, smallAC, 1}) ==
+                    1);
+        ASSERT_TRUE(
+            weightedHitsConfig.getWeight(AllocInfo{0, smallAC, kFactor}) == 1);
+        ASSERT_TRUE(weightedHitsConfig.getWeight(
+                        AllocInfo{0, smallAC, kFactor + 1}) == 2);
+        ASSERT_TRUE(weightedHitsConfig.getWeight(
+                        AllocInfo{0, smallAC, kFactor * 4}) == 4);
+      }
+
+      auto rebalancer =
+          std::make_shared<HitsPerSlabStrategy>(weightedHitsConfig);
+
+      allocatorConfig.enablePoolRebalancing(
+          std::make_shared<HitsPerSlabStrategy>(weightedHitsConfig),
+          std::chrono::seconds{1000});
+
+      const auto kBigItemSz = kFactor * 9;
+      const auto kSmallItemSz = kFactor / 2;
+
+      auto cache = std::make_unique<AllocatorT>(allocatorConfig);
+      const std::set<uint32_t> allocSizes{kSmallItemSz + 128, kBigItemSz + 128};
+      const auto pid = cache->addPool(
+          "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+
+      /* Fill half the slabs with big items */
+      const auto kTargetSlabs = kCacheSlabs / 2;
+      std::vector<typename AllocatorT::ItemHandle> handlesBigItems;
+      for (unsigned i = 0;
+           cache->getPoolStats(pid).numSlabsForClass(largeAC) < kTargetSlabs;
+           ++i) {
+        auto handle = util::allocateAccessible(
+            *cache, pid, folly::sformat("key_{}", i), kBigItemSz);
+        if (!handle) {
+          break;
+        }
+        handlesBigItems.push_back(std::move(handle));
+      }
+
+      /* Fill the 2nd half with small items */
+      std::vector<typename AllocatorT::ItemHandle> handlesSmallItems;
+      for (unsigned i = 0;
+           cache->getPoolStats(pid).numSlabsForClass(smallAC) < kTargetSlabs;
+           ++i) {
+        auto handle = util::allocateAccessible(
+            *cache, pid, folly::sformat("keySmall_{}", i), kSmallItemSz);
+        if (!handle) {
+          break;
+        }
+        handlesSmallItems.push_back(std::move(handle));
+      }
+
+      const auto filledBig = handlesBigItems.size();
+      const auto filledSmall = handlesSmallItems.size();
+      handlesBigItems.clear();
+      handlesSmallItems.clear();
+
+      // Run the rebalancer once to init pool stats
+      auto ctx = rebalancer->pickVictimAndReceiver((CacheBase&)*cache, pid);
+
+      unsigned id = 0;
+      // Allocate a few more item from each AC to mark the AC with evictions
+      // AC with no eviction will not receive a slab in rebalancing
+      size_t nEvicts = cache->getPoolStats(pid).numEvictions();
+      while (nEvicts == cache->getPoolStats(pid).numEvictions()) {
+        auto handle = util::allocateAccessible(
+            *cache, pid, folly::sformat("keyE_{}", ++id), kBigItemSz);
+      }
+
+      nEvicts = cache->getPoolStats(pid).numEvictions();
+      while (nEvicts == cache->getPoolStats(pid).numEvictions()) {
+        auto handle = util::allocateAccessible(
+            *cache, pid, folly::sformat("keySmallE_{}", ++id), 1);
+      }
+
+      // Generate nBigFinds, nSmallFinds hits on the ACs
+      for (unsigned i = 0, f = 0; f < nBigFinds; i = (i + 1) % filledBig) {
+        auto handle = cache->find(folly::sformat("key_{}", i));
+        if (handle) {
+          f++;
+        }
+      }
+      for (unsigned i = 0, f = 0; f < nSmallFinds; i = (i + 1) % filledSmall) {
+        auto handle = cache->find(folly::sformat("keySmall_{}", i));
+        if (handle) {
+          f++;
+        }
+      }
+
+      ctx = rebalancer->pickVictimAndReceiver((CacheBase&)*cache, pid);
+
+      if (expectingRebalance) {
+        ASSERT_TRUE(ctx.victimClassId != ctx.receiverClassId);
+        ASSERT_TRUE(ctx.victimClassId != Slab::kInvalidClassId);
+        ASSERT_TRUE(ctx.receiverClassId != Slab::kInvalidClassId);
+
+        if (smallAcVictim) {
+          ASSERT_EQ(ctx.victimClassId, smallAC);
+          ASSERT_EQ(ctx.receiverClassId, largeAC);
+        } else {
+          ASSERT_EQ(ctx.victimClassId, largeAC);
+          ASSERT_EQ(ctx.receiverClassId, smallAC);
+        }
+      } else {
+        ASSERT_TRUE(ctx.victimClassId == Slab::kInvalidClassId);
+        ASSERT_TRUE(ctx.receiverClassId == Slab::kInvalidClassId);
+      }
+    };
+
+    ////////////////////////////////////////////////
+    // Test HitsPerSlabStrategy without weights
+    ////////////////////////////////////////////////
+
+    // Equal hits no expected rebalance
+    testFn(100, 100, false /* no rebalance */, true, 0);
+
+    // Small hits rebalnce from large
+    testFn(0, 1000, true /* rebalance */, false /* from big */, 0);
+
+    // Large hits rebalance from small
+    testFn(1000, 0, true /* rebalance */, true /* from small */, 0);
+
+    ////////////////////////////////////////////////
+    // Test HitsPerSlabStrategy with weights
+    ////////////////////////////////////////////////
+
+    // large hits rebalance from small
+    testFn(6000, 0, true /* rebalnce */, true /* from small */, 1500 * 10);
+
+    // Equal hits rebalance from small (large weigh more)
+    testFn(1000, 1000, true /* rebalance */, true /* from small */, 1000);
+
+    // Small hits rebalnce from large
+    testFn(0, 1000, true /* rebalance */, false /* from large */, 1500 * 10);
+
+    // 1:5 large:small hits with 1:10 weight in favor of large
+    // small:
+    //  hits = 159
+    //  hits / projected slabs (n - 1): 159 / (5 - 1) = 39
+    // large
+    //  hits 20 * weight 10 = 200
+    //  hits / curr slab:  200 / 5 = 40
+    // large 40 hits/slab > small 39 hits/slab -> rebalnce from small to large
+    testFn(20, 159, true /* rebalance */, true /* from small */, 1000);
+
+    // With 1 more hit based on above calculation, projected h/slab of viction
+    // will be 40 as well therefore no rebalancing.
+    testFn(20, 160, false /* rebalance */, true /* from small */, 1000);
+  }
+
   void testLruTailAgeWithWeights() {
     // 1. Create a pool with two allocation classes, one class with small weight
     // and another one with greater weight.
@@ -310,6 +499,10 @@ TYPED_TEST(RebalanceStrategyTest, FreeAllocsPoolRebalancer) {
 TYPED_TEST_CASE(RebalanceStrategyTest, AllocatorTypes);
 TYPED_TEST(RebalanceStrategyTest, testPoolRebalancerStats) {
   this->runPoolRebalancerStatsTest();
+}
+
+TYPED_TEST(RebalanceStrategyTest, WeightedHitsPerSlabRebalancer) {
+  this->testHitsPerSlabWithWeights();
 }
 
 TYPED_TEST(RebalanceStrategyTest, WeightedLruTailAgeRebalancer) {

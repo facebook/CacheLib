@@ -58,12 +58,19 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
 
   return *std::min_element(
       victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
-        return poolState.at(a).projectedDeltaHitsPerSlab(stats) <
-               poolState.at(b).projectedDeltaHitsPerSlab(stats);
+        double weight_a = config.getWeight
+                              ? config.getWeight(makeAllocInfo(pid, a, stats))
+                              : 1;
+        double weight_b = config.getWeight
+                              ? config.getWeight(makeAllocInfo(pid, b, stats))
+                              : 1;
+        return poolState.at(a).projectedDeltaHitsPerSlab(stats) * weight_a <
+               poolState.at(b).projectedDeltaHitsPerSlab(stats) * weight_b;
       });
 }
 
-ClassId HitsPerSlabStrategy::pickReceiver(PoolId pid,
+ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
+                                          PoolId pid,
                                           const PoolStats& stats,
                                           ClassId victim) const {
   auto receivers = stats.getClassIds();
@@ -81,11 +88,17 @@ ClassId HitsPerSlabStrategy::pickReceiver(PoolId pid,
     return Slab::kInvalidClassId;
   }
 
-  return *std::max_element(receivers.begin(), receivers.end(),
-                           [&](ClassId a, ClassId b) {
-                             return poolState.at(a).deltaHitsPerSlab(stats) <
-                                    poolState.at(b).deltaHitsPerSlab(stats);
-                           });
+  return *std::max_element(
+      receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
+        double weight_a = config.getWeight
+                              ? config.getWeight(makeAllocInfo(pid, a, stats))
+                              : 1;
+        double weight_b = config.getWeight
+                              ? config.getWeight(makeAllocInfo(pid, b, stats))
+                              : 1;
+        return poolState.at(a).deltaHitsPerSlab(stats) * weight_a <
+               poolState.at(b).deltaHitsPerSlab(stats) * weight_b;
+      });
 }
 
 RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
@@ -105,7 +118,7 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
 
   RebalanceContext ctx;
   ctx.victimClassId = pickVictim(config, cache, pid, poolStats);
-  ctx.receiverClassId = pickReceiver(pid, poolStats, ctx.victimClassId);
+  ctx.receiverClassId = pickReceiver(config, pid, poolStats, ctx.victimClassId);
 
   if (ctx.victimClassId == ctx.receiverClassId ||
       ctx.victimClassId == Slab::kInvalidClassId ||
@@ -114,10 +127,20 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   }
 
   auto& poolState = getPoolState(pid);
+  double weightVictim = 1;
+  double weightReceiver = 1;
+  if (config.getWeight) {
+    weightReceiver =
+        config.getWeight(makeAllocInfo(pid, ctx.receiverClassId, poolStats));
+    weightVictim =
+        config.getWeight(makeAllocInfo(pid, ctx.victimClassId, poolStats));
+  }
   const auto victimProjectedDeltaHitsPerSlab =
-      poolState.at(ctx.victimClassId).projectedDeltaHitsPerSlab(poolStats);
+      poolState.at(ctx.victimClassId).projectedDeltaHitsPerSlab(poolStats) *
+      weightVictim;
   const auto receiverDeltaHitsPerSlab =
-      poolState.at(ctx.receiverClassId).deltaHitsPerSlab(poolStats);
+      poolState.at(ctx.receiverClassId).deltaHitsPerSlab(poolStats) *
+      weightReceiver;
 
   XLOGF(DBG,
         "Rebalancing: receiver = {}, receiver delta hits per slab = {}, victim "

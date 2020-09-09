@@ -23,6 +23,10 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     // minimum tail age for an allocation class to be eligible to be a victim
     unsigned int minLruTailAge{0};
 
+    // optionial weight function based on allocation class size
+    using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
+    WeightFn getWeight = {};
+
     size_t getFreeMemThreshold() const noexcept {
       return numSlabsFreeMem * Slab::kSize;
     }
@@ -36,6 +40,14 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
         : diffRatio(ratio),
           minSlabs(_minSlabs),
           minLruTailAge(_minLruTailAge) {}
+    Config(double ratio,
+           unsigned int _minSlabs,
+           unsigned int _minLruTailAge,
+           const WeightFn& weightFunction) noexcept
+        : diffRatio(ratio),
+          minSlabs(_minSlabs),
+          minLruTailAge(_minLruTailAge),
+          getWeight(weightFunction) {}
   };
 
   // Update the config. This will not affect the current rebalancing, but
@@ -62,12 +74,19 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
   ClassId pickVictimImpl(const CacheBase& cache, PoolId pid) override final;
 
  private:
+  static AllocInfo makeAllocInfo(PoolId pid,
+                                 ClassId cid,
+                                 const PoolStats& stats) {
+    return AllocInfo{pid, cid, stats.allocSizeForClass(cid)};
+  }
+
   ClassId pickVictim(const Config& config,
                      const CacheBase& cache,
                      PoolId pid,
                      const PoolStats& stats);
 
-  ClassId pickReceiver(PoolId pid,
+  ClassId pickReceiver(const Config& config,
+                       PoolId pid,
                        const PoolStats& stats,
                        ClassId victim) const;
 
