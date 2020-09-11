@@ -35,8 +35,8 @@ const Request& WorkloadGenerator<Distribution>::getReq(
   XDCHECK_LT(poolId, keyGenForPool_.size());
 
   size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
-  auto op = util::narrow_cast<OpType>(
-      workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
+  auto op =
+      static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
   reqs_[idx].setOp(op);
   return reqs_[idx];
 }

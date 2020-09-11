@@ -75,7 +75,7 @@ class RangeDistribution {
   }
 
  private:
-  const DistributionConfig& config_;
+  const DistributionConfig config_;
   std::discrete_distribution<uint8_t> opDist_;
   std::piecewise_constant_distribution<double> valSizeDist_;
 

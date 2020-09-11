@@ -42,7 +42,7 @@ class WorkloadGenerator : public GeneratorBase {
   // if there is only one workloadDistribution, use it for everything.
   size_t workloadIdx(size_t i) { return workloadDist_.size() > 1 ? i : 0; }
 
-  const StressorConfig& config_;
+  const StressorConfig config_;
   std::vector<std::string> keys_;
   std::vector<std::vector<size_t>> sizes_;
   std::vector<Request> reqs_;

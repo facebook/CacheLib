@@ -72,7 +72,7 @@ class NormalDistribution {
   }
 
  private:
-  const DistributionConfig& config_;
+  const DistributionConfig config_;
   std::discrete_distribution<uint8_t> opDist_;
   std::discrete_distribution<size_t> valSizeDist_;
 
