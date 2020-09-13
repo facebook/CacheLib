@@ -127,7 +127,7 @@ TEST(ItemHandleTest, WaitContext_set_waitSemiFuture) {
   EXPECT_FALSE(called);
   run.post();
   EXPECT_FALSE(called);
-  hdl = future.getVia(&evb);
+  hdl = std::move(future).getVia(&evb);
   EXPECT_TRUE(called);
   hdl.reset();
 
@@ -156,7 +156,7 @@ TEST(ItemHandleTest, WaitContext_set_waitSemiFuture_ready) {
                     })
                     .via(&evb);
   EXPECT_FALSE(called);
-  future.getVia(&evb);
+  std::move(future).getVia(&evb);
   EXPECT_TRUE(called);
 }
 
