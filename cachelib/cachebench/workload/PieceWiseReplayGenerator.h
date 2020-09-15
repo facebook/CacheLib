@@ -7,6 +7,10 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/piecewise/GenericPieces.h"
 
+#include "cachelib/common/PercentileStats.h"
+
+#include <chrono>
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -57,6 +61,9 @@ class PieceWiseReplayGeneratorStats {
                           size_t bodyBytes,
                           const std::vector<std::string>& extraFields);
 
+  // Record latency of request
+  void recordRequestLatency(double value);
+
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
 
  private:
@@ -94,6 +101,7 @@ class PieceWiseReplayGeneratorStats {
   // into extraStatsV_
   std::map<uint32_t, std::map<std::string, uint32_t>> extraStatsIndexM_;
   std::vector<InternalStats> extraStatsV_;
+  mutable util::PercentileStats reqLatencyStats_;
 
   template <typename F, typename... Args>
   void recordStats(F& func,
@@ -212,6 +220,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     const size_t fullObjectSize;
     // Extra fields for this request sample other than the SampleFields
     const std::vector<std::string> extraFields;
+
+    std::chrono::time_point<std::chrono::steady_clock> begin_;
 
     /**
      * @param fullContentSize: byte size of the full content

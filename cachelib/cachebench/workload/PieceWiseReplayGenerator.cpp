@@ -79,6 +79,10 @@ void PieceWiseReplayGeneratorStats::recordPieceFullHitInternal(
   stats.objGetFullHits.inc();
 }
 
+void PieceWiseReplayGeneratorStats::recordRequestLatency(double value) {
+  reqLatencyStats_.trackValue(value);
+}
+
 void PieceWiseReplayGeneratorStats::renderStats(uint64_t elapsedTimeNs,
                                                 std::ostream& out) const {
   out << std::endl << "== PieceWiseReplayGenerator Stats ==" << std::endl;
@@ -88,6 +92,28 @@ void PieceWiseReplayGeneratorStats::renderStats(uint64_t elapsedTimeNs,
   // Output the overall stats
   out << "= Overall stats =" << std::endl;
   renderStatsInternal(stats_, elapsedSecs, out);
+
+  // request latency
+  out << "= Request Latency =" << std::endl;
+  folly::StringPiece latCat = "Total Request Latency";
+
+  auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
+                        uint64_t diffNanos) {
+    double diffUs = static_cast<double>(diffNanos) / 1000.0;
+    out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, diffUs);
+  };
+
+  auto ret = reqLatencyStats_.estimate();
+
+  fmtLatency(latCat, "avg", ret.avg);
+  fmtLatency(latCat, "p50", ret.p50);
+  fmtLatency(latCat, "p90", ret.p90);
+  fmtLatency(latCat, "p99", ret.p99);
+  fmtLatency(latCat, "p999", ret.p999);
+  fmtLatency(latCat, "p9999", ret.p9999);
+  fmtLatency(latCat, "p99999", ret.p99999);
+  fmtLatency(latCat, "p999999", ret.p999999);
+  fmtLatency(latCat, "p100", ret.p100);
 
   // Output stats broken down by extra field
   for (const auto& [fieldNum, fieldValues] : extraStatsIndexM_) {
@@ -173,6 +199,8 @@ const Request& PieceWiseReplayGenerator::getReq(
   // Record the byte wise and object wise stats that we will fetch
   // when it's a new request
   if (isNewReq) {
+    reqWrapper->begin_ = std::chrono::steady_clock::now();
+
     size_t getBytes;
     size_t getBodyBytes;
     if (reqWrapper->cachePieces) {
@@ -201,6 +229,10 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
   if (rw.cachePieces) {
     bool done = updatePieceProcessing(rw, result);
     if (done) {
+      auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                           std::chrono::steady_clock::now() - rw.begin_)
+                           .count();
+      stats_.recordRequestLatency(static_cast<double>(diffNanos));
       activeReqQ.popFront();
     }
     return;
@@ -216,7 +248,10 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
       size_t hitBodyBytes = rw.sizes[0] - rw.headerSize;
       stats_.recordNonPieceHit(hitBytes, hitBodyBytes, rw.extraFields);
     }
-
+    auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                         std::chrono::steady_clock::now() - rw.begin_)
+                         .count();
+    stats_.recordRequestLatency(static_cast<double>(diffNanos));
     activeReqQ.popFront();
   } else if (result == OpResultType::kGetMiss) {
     // Perform set operation next
