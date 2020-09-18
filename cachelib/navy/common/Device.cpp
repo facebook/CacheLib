@@ -1,6 +1,7 @@
 #include <cstring>
 #include <numeric>
 
+#include <folly/File.h>
 #include <folly/Format.h>
 
 #include "cachelib/navy/common/Device.h"
@@ -16,25 +17,21 @@ using IOOperation =
 // Device on Unix file descriptor
 class FileDevice final : public Device {
  public:
-  FileDevice(int fd,
+  FileDevice(folly::File file,
              uint64_t size,
              uint32_t ioAlignSize,
              std::shared_ptr<DeviceEncryptor> encryptor,
              uint32_t maxDeviceWriteSize)
       : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
-        fd_{fd} {}
+        file_{std::move(file)} {}
   FileDevice(const FileDevice&) = delete;
   FileDevice& operator=(const FileDevice&) = delete;
 
-  ~FileDevice() override {
-    if (fd_ >= 0) {
-      ::close(fd_);
-    }
-  }
+  ~FileDevice() override {}
 
  private:
   bool writeImpl(uint64_t offset, uint32_t size, const void* value) override {
-    ssize_t bytesWritten = ::pwrite(fd_, value, size, offset);
+    ssize_t bytesWritten = ::pwrite(file_.fd(), value, size, offset);
     if (bytesWritten != size) {
       reportIOError("write", offset, size, bytesWritten);
     }
@@ -42,14 +39,14 @@ class FileDevice final : public Device {
   }
 
   bool readImpl(uint64_t offset, uint32_t size, void* value) override {
-    ssize_t bytesRead = ::pread(fd_, value, size, offset);
+    ssize_t bytesRead = ::pread(file_.fd(), value, size, offset);
     if (bytesRead != size) {
       reportIOError("read", offset, size, bytesRead);
     }
     return bytesRead == size;
   }
 
-  void flushImpl() override { ::fsync(fd_); }
+  void flushImpl() override { ::fsync(file_.fd()); }
 
   void reportIOError(const char* opName,
                      uint64_t offset,
@@ -65,22 +62,22 @@ class FileDevice final : public Device {
           std::strerror(errno));
   }
 
-  const int fd_{-1};
+  const folly::File file_{};
 };
 
 // RAID0 device spanning multiple files
 class RAID0Device final : public Device {
  public:
-  RAID0Device(std::vector<int>& fdvec,
+  RAID0Device(std::vector<folly::File> fvec,
               uint64_t fdSize,
               uint32_t ioAlignSize,
               uint32_t stripeSize,
               std::shared_ptr<DeviceEncryptor> encryptor,
               uint32_t maxDeviceWriteSize,
               bool releaseBugFixForT68874972)
-      : Device{fdSize * fdvec.size(), std::move(encryptor), ioAlignSize,
+      : Device{fdSize * fvec.size(), std::move(encryptor), ioAlignSize,
                maxDeviceWriteSize},
-        fdvec_{fdvec},
+        fvec_{std::move(fvec)},
         stripeSize_(stripeSize) {
     XDCHECK_GT(ioAlignSize, 0u);
     XDCHECK_GT(stripeSize_, 0u);
@@ -98,11 +95,7 @@ class RAID0Device final : public Device {
   RAID0Device(const RAID0Device&) = delete;
   RAID0Device& operator=(const RAID0Device&) = delete;
 
-  ~RAID0Device() override {
-    for (const auto fd : fdvec_) {
-      ::close(fd);
-    }
-  }
+  ~RAID0Device() override {}
 
  private:
   bool writeImpl(uint64_t offset, uint32_t size, const void* value) override {
@@ -116,8 +109,8 @@ class RAID0Device final : public Device {
   }
 
   void flushImpl() override {
-    for (const auto fd : fdvec_) {
-      ::fsync(fd);
+    for (const auto& f : fvec_) {
+      ::fsync(f.fd());
     }
   }
 
@@ -130,12 +123,12 @@ class RAID0Device final : public Device {
 
     while (size > 0) {
       uint64_t stripe = offset / stripeSize_;
-      uint32_t fdIdx = stripe % fdvec_.size();
-      uint64_t stripeStartOffset = (stripe / fdvec_.size()) * stripeSize_;
+      uint32_t fdIdx = stripe % fvec_.size();
+      uint64_t stripeStartOffset = (stripe / fvec_.size()) * stripeSize_;
       uint32_t ioOffsetInStripe = offset % stripeSize_;
       uint32_t allowedIOSize = std::min(size, stripeSize_ - ioOffsetInStripe);
 
-      ssize_t retSize = io(fdvec_[fdIdx],
+      ssize_t retSize = io(fvec_[fdIdx].fd(),
                            buf,
                            allowedIOSize,
                            stripeStartOffset + ioOffsetInStripe);
@@ -165,7 +158,7 @@ class RAID0Device final : public Device {
     return true;
   }
 
-  const std::vector<int> fdvec_{};
+  const std::vector<folly::File> fvec_{};
   const uint32_t stripeSize_{};
 };
 
@@ -323,24 +316,27 @@ void Device::getCounters(const CounterVisitor& visitor) const {
 }
 
 std::unique_ptr<Device> createFileDevice(
-    int fd, uint64_t size, std::shared_ptr<DeviceEncryptor> encryptor) {
-  return std::make_unique<FileDevice>(fd, size, 0, std::move(encryptor),
+    folly::File file,
+    uint64_t size,
+    std::shared_ptr<DeviceEncryptor> encryptor) {
+  return std::make_unique<FileDevice>(std::move(file), size, 0,
+                                      std::move(encryptor),
                                       0 /* max device write size */);
 }
 
 std::unique_ptr<Device> createDirectIoFileDevice(
-    int fd,
+    folly::File file,
     uint64_t size,
     uint32_t ioAlignSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize) {
   XDCHECK(folly::isPowTwo(ioAlignSize));
-  return std::make_unique<FileDevice>(fd, size, ioAlignSize,
+  return std::make_unique<FileDevice>(std::move(file), size, ioAlignSize,
                                       std::move(encryptor), maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createDirectIoRAID0Device(
-    std::vector<int>& fdvec,
+    std::vector<folly::File> fvec,
     uint64_t size, // size of each device in the RAID
     uint32_t ioAlignSize,
     uint32_t stripeSize,
@@ -348,9 +344,9 @@ std::unique_ptr<Device> createDirectIoRAID0Device(
     uint32_t maxDeviceWriteSize,
     bool releaseBugFixForT68874972) {
   XDCHECK(folly::isPowTwo(ioAlignSize));
-  return std::make_unique<RAID0Device>(fdvec, size, ioAlignSize, stripeSize,
-                                       std::move(encryptor), maxDeviceWriteSize,
-                                       releaseBugFixForT68874972);
+  return std::make_unique<RAID0Device>(
+      std::move(fvec), size, ioAlignSize, stripeSize, std::move(encryptor),
+      maxDeviceWriteSize, releaseBugFixForT68874972);
 }
 
 std::unique_ptr<Device> createMemoryDevice(

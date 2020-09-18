@@ -1649,7 +1649,8 @@ TEST(BlockCache, testAllocAlignSizesInMemBuffers) {
   for (size_t i = 0; i < testSizes.size(); i++) {
     auto deviceSize = testSizes[i].first;
     int fd = open("/dev/null", O_RDWR);
-    auto device = createDirectIoFileDevice(fd, deviceSize, 4096, nullptr, 0);
+    folly::File f = folly::File(fd);
+    auto device = createDirectIoFileDevice(std::move(f), deviceSize, 4096, nullptr, 0);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
     auto ex = makeJobScheduler();
     auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
@@ -1678,8 +1679,9 @@ TEST(BlockCache, PersistRecoverWithInMemBuffers) {
   int deviceSize = 16 * 1024 * 1024;
   int ioAlignSize = 4096;
   int fd = open(filePath.c_str(), O_RDWR | O_CREAT);
-  auto device =
-      createDirectIoFileDevice(fd, deviceSize, ioAlignSize, nullptr, 0);
+  folly::File f = folly::File(fd);
+  auto device = createDirectIoFileDevice(std::move(f), deviceSize, ioAlignSize,
+                                         nullptr, 0);
 
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
@@ -1706,8 +1708,9 @@ TEST(BlockCache, PersistRecoverWithInMemBuffers) {
   driver->persist();
 
   int newFd = open(filePath.c_str(), O_RDWR | O_CREAT);
-  auto newDevice =
-      createDirectIoFileDevice(newFd, deviceSize, ioAlignSize, nullptr, 0);
+  folly::File newF = folly::File(newFd);
+  auto newDevice = createDirectIoFileDevice(std::move(newF), deviceSize,
+                                            ioAlignSize, nullptr, 0);
   auto newPolicy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto newEx = makeJobScheduler();
   auto newConfig = makeConfig(*newEx, std::move(newPolicy), *newDevice,

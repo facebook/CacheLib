@@ -188,8 +188,9 @@ TEST(Device, MaxWriteSize) {
   int deviceSize = 16 * 1024;
   int ioAlignSize = 1024;
   int fd = open(filePath.c_str(), O_RDWR | O_CREAT);
-  auto device =
-      createDirectIoFileDevice(fd, deviceSize, ioAlignSize, nullptr, 1024);
+  folly::File f = folly::File(fd);
+  auto device = createDirectIoFileDevice(
+      std::move(f), deviceSize, ioAlignSize, nullptr, 1024);
   uint32_t bufSize = 4 * 1024;
   Buffer wbuf = device->makeIOBuffer(bufSize);
   Buffer rbuf = device->makeIOBuffer(bufSize);
@@ -220,15 +221,15 @@ TEST(Device, RAID0IO) {
   int ioAlignSize = 4096;
   int stripeSize = 8192;
 
-  std::vector<int> fdvec;
+  std::vector<folly::File> fvec;
   for (const auto& file : files) {
     auto f = folly::File(file.c_str(), O_RDWR | O_CREAT);
     auto ret = ::fallocate(f.fd(), 0, 0, size);
     EXPECT_EQ(0, ret);
-    fdvec.push_back(f.release());
+    fvec.push_back(std::move(f));
   }
-
-  auto device = createDirectIoRAID0Device(fdvec,
+  auto vecSize = fvec.size();
+  auto device = createDirectIoRAID0Device(std::move(fvec),
                                           size,
                                           ioAlignSize,
                                           stripeSize,
@@ -236,7 +237,7 @@ TEST(Device, RAID0IO) {
                                           0 /* max device write size */,
                                           true /* clean up after T68874972 */);
 
-  EXPECT_EQ(fdvec.size() * size, device->getSize());
+  EXPECT_EQ(vecSize * size, device->getSize());
 
   // Simple IO
   {
@@ -307,18 +308,18 @@ TEST(Device, RAID0IOAlignment) {
   int ioAlignSize = 4096;
   int stripeSize = 8192;
 
-  std::vector<int> fdvec;
+  std::vector<folly::File> fvec;
   for (const auto& file : files) {
     auto f = folly::File(file.c_str(), O_RDWR | O_CREAT);
     auto ret = ::fallocate(f.fd(), 0, 0, size);
     EXPECT_EQ(0, ret);
-    fdvec.push_back(f.release());
+    fvec.push_back(std::move(f));
   }
 
   // Update individual device size to something smaller but the overall size
   // of all the devices is still aligned on stripe size.
-  size = 2 * 1024 * 1024 + stripeSize / fdvec.size();
-  ASSERT_THROW(createDirectIoRAID0Device(fdvec,
+  size = 2 * 1024 * 1024 + stripeSize / fvec.size();
+  ASSERT_THROW(createDirectIoRAID0Device(std::move(fvec),
                                          size,
                                          ioAlignSize,
                                          stripeSize,
@@ -328,7 +329,7 @@ TEST(Device, RAID0IOAlignment) {
                std::invalid_argument);
 
   ASSERT_NO_THROW(
-      createDirectIoRAID0Device(fdvec,
+      createDirectIoRAID0Device(std::move(fvec),
                                 size,
                                 ioAlignSize,
                                 stripeSize,

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <folly/io/IOBuf.h>
+#include <folly/File.h>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
@@ -158,13 +159,13 @@ class Device {
 };
 
 std::unique_ptr<Device> createDirectIoFileDevice(
-    int fd,
+    folly::File f,
     uint64_t size,
     uint32_t ioAlignSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
 std::unique_ptr<Device> createDirectIoRAID0Device(
-    std::vector<int>& fdVec,
+    std::vector<folly::File> fVec,
     uint64_t size, // size of each device in the RAID
     uint32_t ioAlignSize,
     uint32_t stripeSize,

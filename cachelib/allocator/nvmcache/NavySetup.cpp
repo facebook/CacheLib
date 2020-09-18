@@ -330,7 +330,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     std::sort(paths.begin(), paths.end());
 
     auto fdSize = static_cast<uint64_t>(options[kFileSize].getInt());
-    std::vector<int> fdvec;
+    std::vector<folly::File> fileVec;
     for (const auto& path : paths) {
       folly::File f;
       try {
@@ -343,7 +343,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
                   << ". Errno: " << errno;
         throw;
       }
-      fdvec.push_back(f.release());
+      fileVec.push_back(std::move(f));
     }
 
     // Align down device size to ensure each device is aligned to stripe size
@@ -355,7 +355,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     }
 
     auto device =
-        cachelib::navy::createDirectIoRAID0Device(fdvec,
+        cachelib::navy::createDirectIoRAID0Device(std::move(fileVec),
                                                   fdSize,
                                                   blockSize,
                                                   stripeSize,
@@ -380,7 +380,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       throw;
     }
     return cachelib::navy::createDirectIoFileDevice(
-        f.release(), singleFileSize, blockSize, std::move(encryptor),
+        std::move(f), singleFileSize, blockSize, std::move(encryptor),
         maxDeviceWriteSize);
   }
   return cachelib::navy::createMemoryDevice(singleFileSize,
