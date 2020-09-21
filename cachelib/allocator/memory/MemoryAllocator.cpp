@@ -183,6 +183,10 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
                        maxSize, Slab::kSize));
   }
 
+  if (factor <= 1.0) {
+    throw std::invalid_argument(folly::sformat("invalid factor {}", factor));
+  }
+
   // Returns the next chunk size. Uses the previous size and factor to select a
   // size that increases the number of chunks per slab by at least one to reduce
   // slab wastage. Also increases the chunk size to the maximum that maintains
@@ -193,8 +197,13 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
     // Increment by incFactor until we have a new number of chunks per slab.
     uint32_t newSize = prevSize;
     do {
+      auto tmpPrevSize = newSize;
       newSize = util::getAlignedSize(static_cast<uint32_t>(newSize * incFactor),
                                      kAlignment);
+      if (newSize == tmpPrevSize) {
+        throw std::invalid_argument(
+            folly::sformat("invalid incFactor {}", incFactor));
+      }
     } while (Slab::kSize / newSize == Slab::kSize / prevSize);
     // Now make sure we're selecting the maximum chunk size while maintaining
     // the number of chunks per slab.
@@ -222,8 +231,13 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
     if (reduceFragmentation) {
       size = nextSize(size, factor);
     } else {
+      auto prevSize = size;
       size = util::getAlignedSize(static_cast<uint32_t>(size * factor),
                                   kAlignment);
+      if (prevSize == size) {
+        throw std::invalid_argument(
+            folly::sformat("invalid incFactor {}", factor));
+      }
     }
   }
 

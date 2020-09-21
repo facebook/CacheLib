@@ -575,6 +575,9 @@ class MemoryAllocator {
   // @return    std::set of allocation sizes that all fit within maxSize.
   //
   // @throw std::invalid_argument if the maxSize is more than the slab size.
+  // @throw std::invalid_argument if the factor is <= 1.0
+  // @throw std::invalid_argument if the factor is not incrementing large
+  //                              enough when reduceFragmentation is enabled
 
   static std::set<uint32_t> generateAllocSizes(
       double factor = 1.25,

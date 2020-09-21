@@ -751,3 +751,17 @@ TEST_F(SlabAllocatorTest, TestAlignedSize) {
     EXPECT_EQ(72, util::getAlignedSize(i, 8));
   }
 }
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesWithBadFactor) {
+  uint32_t minSize = 64;
+  uint32_t maxSize = 104;
+  ASSERT_THROW(
+      MemoryAllocator::generateAllocSizes(1.01, maxSize, minSize, false),
+      std::invalid_argument);
+  ASSERT_THROW(
+      MemoryAllocator::generateAllocSizes(1.01, maxSize, minSize, true),
+      std::invalid_argument);
+  ASSERT_THROW(
+      MemoryAllocator::generateAllocSizes(0.90, maxSize, minSize, true),
+      std::invalid_argument);
+}
