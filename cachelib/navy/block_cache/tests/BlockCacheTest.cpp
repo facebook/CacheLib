@@ -1650,7 +1650,8 @@ TEST(BlockCache, testAllocAlignSizesInMemBuffers) {
     auto deviceSize = testSizes[i].first;
     int fd = open("/dev/null", O_RDWR);
     folly::File f = folly::File(fd);
-    auto device = createDirectIoFileDevice(std::move(f), deviceSize, 4096, nullptr, 0);
+    auto device =
+        createDirectIoFileDevice(std::move(f), deviceSize, 4096, nullptr, 0);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
     auto ex = makeJobScheduler();
     auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
