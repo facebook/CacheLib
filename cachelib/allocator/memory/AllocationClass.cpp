@@ -463,7 +463,7 @@ void AllocationClass::waitUntilAllFreed(const Slab* slab) {
   }};
   while (!allFreed(slab)) {
     if (t.throttle() && t.numThrottles() % 128) {
-      XLOG(ERR, "still waiting for all slabs released");
+      XLOG(WARN, "still waiting for all slabs released");
     }
   }
 }

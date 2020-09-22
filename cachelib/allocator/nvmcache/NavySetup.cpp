@@ -86,8 +86,8 @@ folly::File openCacheFile(const std::string& fileName,
                           uint64_t size,
                           bool directIO,
                           bool truncate) {
-  XLOG(ERR) << "Cache file: " << fileName << " size: " << size
-            << " direct IO: " << directIO << " truncate: " << truncate;
+  XLOG(INFO) << "Cache file: " << fileName << " size: " << size
+             << " direct IO: " << directIO << " truncate: " << truncate;
   if (fileName.empty()) {
     throw std::invalid_argument("File name is empty");
   }
@@ -186,12 +186,12 @@ void setupCacheProtos(const folly::dynamic& options,
       throw std::invalid_argument("NVM cache size is not big enough!");
     }
     blockCacheSize = bigHashCacheOffset - metadataSize;
-    XLOG(ERR) << "metadataSize: " << metadataSize
-              << " bigHashCacheOffset: " << bigHashCacheOffset
-              << " bigHashCacheSize: " << bigHashCacheSize;
+    XLOG(INFO) << "metadataSize: " << metadataSize
+               << " bigHashCacheOffset: " << bigHashCacheOffset
+               << " bigHashCacheSize: " << bigHashCacheSize;
   } else {
     blockCacheSize = totalCacheSize - metadataSize;
-    XLOG(ERR) << "metadataSize: " << metadataSize << ". No bighash.";
+    XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";
   }
 
   // Set up BlockCache if enabled
@@ -215,8 +215,8 @@ void setupCacheProtos(const folly::dynamic& options,
       blockCacheOffset = adjustedBlockCacheOffset;
     }
 
-    XLOG(ERR) << "blockcache: starting offset: " << blockCacheOffset
-              << ", block cache size: " << blockCacheSize;
+    XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
+               << ", block cache size: " << blockCacheSize;
 
     auto blockCache = cachelib::navy::createBlockCacheProto();
     blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
@@ -416,7 +416,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   }
 
   if (!cache->recover()) {
-    XLOG(ERR) << "No recovery data found. Continuing with clean cache.";
+    XLOG(WARN) << "No recovery data found. Continuing with clean cache.";
   }
   return cache;
 }
