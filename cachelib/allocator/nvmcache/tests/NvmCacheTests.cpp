@@ -51,10 +51,12 @@ struct MockNvmAdmissionPolicy : public NvmAdmissionPolicy<T> {
   MockNvmAdmissionPolicy() = default;
   using Item = typename T::Item;
   using ChainedItemIter = typename T::ChainedItemIter;
-  virtual bool accept(const Item&, folly::Range<ChainedItemIter>) override {
+
+ protected:
+  virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) override {
     return true;
   }
-  virtual std::unordered_map<std::string, double> getCounters() override {
+  virtual std::unordered_map<std::string, double> getCountersImpl() override {
     std::unordered_map<std::string, double> ret;
     ret["nvm_mock_policy"] = 1;
     return ret;

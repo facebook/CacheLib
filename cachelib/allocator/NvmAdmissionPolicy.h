@@ -2,6 +2,8 @@
 
 #include <folly/Range.h>
 #include "cachelib/common/ApproxSplitSet.h"
+#include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/PercentileStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -12,8 +14,56 @@ class NvmAdmissionPolicy {
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
   virtual ~NvmAdmissionPolicy() = default;
-  virtual bool accept(const Item&, folly::Range<ChainedItemIter>) = 0;
-  virtual std::unordered_map<std::string, double> getCounters() = 0;
+
+  // The method that the outside class calls to get the admission decision.
+  // It captures the common logics (e.g statistics) then
+  // delicates the detailed implementation to subclasses.
+  virtual bool accept(const Item& item,
+                      folly::Range<ChainedItemIter> chainItem) final {
+    util::LatencyTracker overallTracker(overallLatency_);
+    overallCount_.inc();
+    const bool decision = acceptImpl(item, chainItem);
+    if (decision) {
+      accepted_.inc();
+    } else {
+      rejected_.inc();
+    }
+    return decision;
+  }
+
+  // The method that exposes statuses.
+  virtual std::unordered_map<std::string, double> getCounters() final {
+    auto ctrs = getCountersImpl();
+    ctrs["nvm_ap_called"] = overallCount_.get();
+    ctrs["nvm_ap_accepted"] = accepted_.get();
+    ctrs["nvm_ap_rejected"] = rejected_.get();
+    visitLatencyStats(ctrs, overallLatency_, "nvm_ap_overall_latency");
+    return ctrs;
+  }
+
+ protected:
+  // Implement this method for the detailed admission decision logic.
+  virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) = 0;
+  // Implementation specific statistics.
+  // Please include a prefix/postfix with the name of implementation to avoid
+  // collision with base level stats.
+  virtual std::unordered_map<std::string, double> getCountersImpl() = 0;
+
+  void visitLatencyStats(std::unordered_map<std::string, double>& map,
+                         util::PercentileStats& latency,
+                         const folly::StringPiece keyword) {
+    util::CounterVisitor visitor = [&map](folly::StringPiece name,
+                                          double count) {
+      map[name.toString()] = count / 1000;
+    };
+    latency.visitQuantileEstimator(visitor, "{}_us_{}", keyword);
+  }
+
+ private:
+  util::PercentileStats overallLatency_;
+  AtomicCounter overallCount_{0};
+  AtomicCounter accepted_{0};
+  AtomicCounter rejected_{0};
 };
 
 template <typename Cache>
@@ -29,8 +79,9 @@ class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
         suffixIgnoreLength_{suffixIgnoreLength},
         useDramHitSignal_{useDramHitSignal} {}
 
-  virtual bool accept(const Item& it,
-                      folly::Range<ChainedItemIter>) final override {
+ protected:
+  virtual bool acceptImpl(const Item& it,
+                          folly::Range<ChainedItemIter>) final override {
     const bool wasDramHit =
         useDramHitSignal_ && it.getLastAccessTime() > it.getCreationTime();
 
@@ -44,25 +95,26 @@ class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
     // the first time, we insert and track.
     bool seenBefore = tracker_.insert(keyHash);
     if (!seenBefore && wasDramHit) {
-      ++admitsByDramHits_;
+      admitsByDramHits_.inc();
     }
 
     return seenBefore || wasDramHit;
   }
 
-  virtual std::unordered_map<std::string, double> getCounters() final override {
+  virtual std::unordered_map<std::string, double> getCountersImpl()
+      final override {
     std::unordered_map<std::string, double> ctrs;
     ctrs["nvm_reject_first_keys_tracked"] = tracker_.numKeysTracked();
     ctrs["nvm_reject_first_tracking_window_secs"] =
         tracker_.trackingWindowDurationSecs();
-    ctrs["nvm_reject_first_admits_by_dram_hit"] = admitsByDramHits_;
+    ctrs["nvm_reject_first_admits_by_dram_hit"] = admitsByDramHits_.get();
     return ctrs;
   }
 
  private:
   ApproxSplitSet tracker_;
   const size_t suffixIgnoreLength_;
-  std::atomic<uint64_t> admitsByDramHits_{0};
+  AtomicCounter admitsByDramHits_{0};
   const bool useDramHitSignal_{true};
 };
 } // namespace cachelib
