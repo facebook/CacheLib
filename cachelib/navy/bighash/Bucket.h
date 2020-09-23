@@ -67,6 +67,8 @@ class FOLLY_PACK_ATTR Bucket {
 
   uint32_t size() const { return storage_.numAllocations(); }
 
+  uint32_t remainingBytes() const { return storage_.remainingCapacity(); }
+
   // Look up for the value corresponding to a key.
   // BufferView::isNull() == true if not found.
   BufferView find(HashedKey hk) const;

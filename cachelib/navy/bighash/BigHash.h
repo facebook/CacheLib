@@ -173,6 +173,7 @@ class BigHash final : public Engine {
   mutable AtomicCounter bfRejectCount_;
   mutable AtomicCounter checksumErrorCount_;
   mutable SizeDistribution sizeDist_;
+  mutable AtomicCounter usedSizeBytes_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");

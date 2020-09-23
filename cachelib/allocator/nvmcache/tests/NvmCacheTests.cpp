@@ -1621,6 +1621,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bh_bf_lookups"));
   EXPECT_TRUE(cs("navy_bh_bf_rebuilds"));
   EXPECT_TRUE(cs("navy_bh_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bh_used_size_bytes"));
   for (int size = 64;; size = std::min(1024, static_cast<int>(size * 1.25))) {
     EXPECT_TRUE(cs(folly::sformat("navy_bh_approx_bytes_in_size_{}", size)));
     if (size == 1024) {

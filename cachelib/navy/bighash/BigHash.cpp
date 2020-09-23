@@ -112,6 +112,7 @@ void BigHash::reset() {
   bfProbeCount_.set(0);
   checksumErrorCount_.set(0);
   sizeDist_.reset();
+  usedSizeBytes_.set(0);
 }
 
 double BigHash::bfFalsePositivePct() const {
@@ -139,6 +140,7 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_bf_lookups", bfProbeCount_.get());
   visitor("navy_bh_bf_rebuilds", bfRebuildCount_.get());
   visitor("navy_bh_checksum_errors", checksumErrorCount_.get());
+  visitor("navy_bh_used_size_bytes", usedSizeBytes_.get());
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {
     auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
@@ -211,9 +213,11 @@ Status BigHash::insert(HashedKey hk,
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 
-  unsigned int removed{0};
-  unsigned int evicted{0};
+  uint32_t removed{0};
+  uint32_t evicted{0};
 
+  uint32_t oldRemainingBytes = 0;
+  uint32_t newRemainingBytes = 0;
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
     auto buffer = readBucket(bid);
@@ -223,8 +227,10 @@ Status BigHash::insert(HashedKey hk,
     }
 
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
+    oldRemainingBytes = bucket->remainingBytes();
     removed = bucket->remove(hk, destructorCb_);
     evicted = bucket->insert(hk, value, destructorCb_);
+    newRemainingBytes = bucket->remainingBytes();
 
     // rebuild / fix the bloom filter before we move the buffer to do the
     // actual write
@@ -247,6 +253,11 @@ Status BigHash::insert(HashedKey hk,
     }
   }
 
+  if (oldRemainingBytes < newRemainingBytes) {
+    usedSizeBytes_.sub(newRemainingBytes - oldRemainingBytes);
+  } else {
+    usedSizeBytes_.add(oldRemainingBytes - newRemainingBytes);
+  }
   sizeDist_.addSize(hk.key().size() + value.size());
   itemCount_.add(1);
   itemCount_.sub(evicted + removed);
@@ -296,6 +307,8 @@ Status BigHash::remove(HashedKey hk) {
   const auto bid = getBucketId(hk);
   removeCount_.inc();
 
+  uint32_t oldRemainingBytes = 0;
+  uint32_t newRemainingBytes = 0;
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
     if (bfReject(bid, hk.keyHash())) {
@@ -309,10 +322,12 @@ Status BigHash::remove(HashedKey hk) {
     }
 
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
+    oldRemainingBytes = bucket->remainingBytes();
     if (!bucket->remove(hk, destructorCb_)) {
       bfFalsePositiveCount_.inc();
       return Status::NotFound;
     }
+    newRemainingBytes = bucket->remainingBytes();
 
     // TODO: we compute this before writing the bucket becase when
     //       encryption is enabled, we will mutate the data passed
@@ -332,6 +347,8 @@ Status BigHash::remove(HashedKey hk) {
     }
   }
 
+  XDCHECK_LE(oldRemainingBytes, newRemainingBytes);
+  usedSizeBytes_.sub(newRemainingBytes - oldRemainingBytes);
   itemCount_.dec();
 
   // We do not bump logicalWrittenCount_ because logically a
