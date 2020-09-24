@@ -9,8 +9,6 @@
 
 #include "cachelib/common/PercentileStats.h"
 
-#include <chrono>
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -61,8 +59,7 @@ class PieceWiseReplayGeneratorStats {
                           size_t bodyBytes,
                           const std::vector<std::string>& extraFields);
 
-  // Record latency of request
-  void recordRequestLatency(double value);
+  util::LatencyTracker makeLatencyTracker();
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
 
@@ -220,8 +217,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     const size_t fullObjectSize;
     // Extra fields for this request sample other than the SampleFields
     const std::vector<std::string> extraFields;
-
-    std::chrono::time_point<std::chrono::steady_clock> begin_;
+    // Tracker to record request level latency
+    util::LatencyTracker latencyTracker_;
 
     /**
      * @param fullContentSize: byte size of the full content

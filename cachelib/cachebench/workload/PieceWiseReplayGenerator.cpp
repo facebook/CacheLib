@@ -79,8 +79,8 @@ void PieceWiseReplayGeneratorStats::recordPieceFullHitInternal(
   stats.objGetFullHits.inc();
 }
 
-void PieceWiseReplayGeneratorStats::recordRequestLatency(double value) {
-  reqLatencyStats_.trackValue(value);
+util::LatencyTracker PieceWiseReplayGeneratorStats::makeLatencyTracker() {
+  return util::LatencyTracker(reqLatencyStats_);
 }
 
 void PieceWiseReplayGeneratorStats::renderStats(uint64_t elapsedTimeNs,
@@ -199,8 +199,8 @@ const Request& PieceWiseReplayGenerator::getReq(
   // Record the byte wise and object wise stats that we will fetch
   // when it's a new request
   if (isNewReq) {
-    reqWrapper->begin_ = std::chrono::steady_clock::now();
-
+    // Start tracking request latency
+    reqWrapper->latencyTracker_ = stats_.makeLatencyTracker();
     size_t getBytes;
     size_t getBodyBytes;
     if (reqWrapper->cachePieces) {
@@ -229,10 +229,6 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
   if (rw.cachePieces) {
     bool done = updatePieceProcessing(rw, result);
     if (done) {
-      auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::steady_clock::now() - rw.begin_)
-                           .count();
-      stats_.recordRequestLatency(static_cast<double>(diffNanos));
       activeReqQ.popFront();
     }
     return;
@@ -248,10 +244,6 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
       size_t hitBodyBytes = rw.sizes[0] - rw.headerSize;
       stats_.recordNonPieceHit(hitBytes, hitBodyBytes, rw.extraFields);
     }
-    auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                         std::chrono::steady_clock::now() - rw.begin_)
-                         .count();
-    stats_.recordRequestLatency(static_cast<double>(diffNanos));
     activeReqQ.popFront();
   } else if (result == OpResultType::kGetMiss) {
     // Perform set operation next

@@ -104,6 +104,7 @@ class LatencyTracker {
  public:
   explicit LatencyTracker(PercentileStats& stats)
       : stats_(&stats), begin_(std::chrono::steady_clock::now()) {}
+  LatencyTracker() {}
   ~LatencyTracker() {
     if (stats_) {
       auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
