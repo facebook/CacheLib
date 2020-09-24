@@ -25,10 +25,6 @@ TYPED_TEST(BaseAllocatorTest, EvictionsWithActiveHandles) {
   this->testEvictionsWithActiveHandles();
 }
 
-TYPED_TEST(BaseAllocatorTest, TestMMapFileAllocator) {
-  this->testMMapFileAllocator();
-}
-
 // test the free callback, which should only be invoked once the item is removed
 // and the last handle is dropped
 TYPED_TEST(BaseAllocatorTest, Removals) { this->testRemovals(); }

@@ -539,32 +539,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                                         numBytes * 5);
   }
 
-  // basic test to the memory backed file mode.
-  void testMMapFileAllocator() {
-    // create an allocator worth 100 slabs.
-    typename AllocatorT::Config config;
-    const size_t cacheSize = 100 * Slab::kSize;
-    config.setCacheSize(cacheSize);
-    AllocatorT alloc(AllocatorT::MMapFile, config,
-                     this->createFileForAllocator(cacheSize));
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
-    auto poolId = alloc.addPool("default", numBytes);
-
-    // try to allocate as much as possible and ensure that even when we run more
-    // than twice the size of the cache, we are able to allocate by recycling
-    // the memory. To do this, we first ensure we have a minimum number of
-    // allocations across a set of sizes.
-    const unsigned int nSizes = 10;
-    const unsigned int keyLen = 100;
-    const auto sizes = this->getValidAllocSizes(alloc, poolId, nSizes, keyLen);
-
-    // at this point, the cache should be full. we dont own any references to
-    // the item and we should be able to allocate by recycling.
-    this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
-    this->ensureAllocsOnlyFromEvictions(alloc, poolId, sizes, keyLen,
-                                        numBytes * 5);
-  }
-
   // fill up the memory and test that making further allocations causes
   // evictions from the cache even in the presence of long outstanding
   // handles.

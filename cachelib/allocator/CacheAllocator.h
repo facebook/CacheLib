@@ -29,7 +29,6 @@
 #include "cachelib/allocator/ChainedAllocs.h"
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/allocator/KAllocation.h"
-#include "cachelib/allocator/MemoryMappedFile.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
 #include "cachelib/allocator/NvmCacheState.h"
@@ -210,7 +209,6 @@ class CacheAllocator : public CacheBase {
   enum SharedMemNewT { SharedMemNew };
   // Attach to a persisted shared memory segment
   enum SharedMemAttachT { SharedMemAttach };
-  enum MMapFileT { MMapFile };
 
   // instantiates a cache allocator on heap memory
   //
@@ -228,18 +226,6 @@ class CacheAllocator : public CacheBase {
   //
   // @throw std::invalid_argument if cannot restore successful
   CacheAllocator(SharedMemAttachT, Config config);
-
-  // instantiates a cache allocator on memory mapped file. This is not advised
-  // to be used by anyone. Caller needs to guarantee that the file exists and
-  // is of the appropriate size as config.size and is zeroed out.
-  //
-  // Cache can not be persisted in this mode. the internal memory  allocator
-  // is instantiated on the memory mapped file.
-  //
-  // @param config        the configuration for the whole cache allocator
-  // @param file          the path to the file that is to be used for the
-  //                      cache.
-  CacheAllocator(MMapFileT, Config config, const std::string& file);
 
   // Shared segments will be detached upon destruction
   ~CacheAllocator() override;
@@ -1583,9 +1569,6 @@ class CacheAllocator : public CacheBase {
 
   // configs for the access container and the mm container.
   const MMConfig mmConfig_{};
-
-  // represents a file backed memory allocator.
-  MemoryMappedFile mmapFile_{};
 
   // the memory allocator for allocating out of the available memory.
   std::unique_ptr<MemoryAllocator> allocator_;

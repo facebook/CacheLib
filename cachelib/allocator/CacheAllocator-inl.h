@@ -36,33 +36,6 @@ CacheAllocator<CacheTrait>::CacheAllocator(Config config)
 }
 
 template <typename CacheTrait>
-CacheAllocator<CacheTrait>::CacheAllocator(MMapFileT,
-                                           Config config,
-                                           const std::string& file)
-    : isOnShm_{false},
-      config_(config.validate()),
-      mmapFile_(file, config_.size),
-      allocator_(std::make_unique<MemoryAllocator>(
-          getAllocatorConfig(config_), mmapFile_.addr(), mmapFile_.size())),
-      compactCacheManager_(std::make_unique<CCacheManager>(*allocator_)),
-      compressor_(createPtrCompressor()),
-      accessContainer_(std::make_unique<AccessContainer>(
-          config_.accessConfig,
-          compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
-      chainedItemAccessContainer_(std::make_unique<AccessContainer>(
-          config_.chainedItemAccessConfig,
-          compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
-      chainedItemLocks_(config_.chainedItemsLockPower,
-                        std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{util::getCurrentTimeSec()},
-      nvmCacheState_{config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
-                     config_.isNvmCacheTruncateAllocSizeEnabled()} {
-  initCommon(false);
-}
-
-template <typename CacheTrait>
 CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
     : isOnShm_{true},
       config_(config.validate()),
