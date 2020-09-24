@@ -130,6 +130,17 @@ class LatencyTracker {
     return *this;
   }
 
+  // Collect latency status contributed by any LatencyTracker into a map.
+  // The collector transforms the unit from nanoseconds to microseconds.
+  static void visitLatencyStatsUs(std::unordered_map<std::string, double>& map,
+                                  PercentileStats& latency,
+                                  const folly::StringPiece keyword) {
+    CounterVisitor visitor = [&map](folly::StringPiece name, double count) {
+      map[name.toString()] = count / 1000;
+    };
+    latency.visitQuantileEstimator(visitor, "{}_us_{}", keyword);
+  }
+
  private:
   PercentileStats* stats_{nullptr};
   std::chrono::time_point<std::chrono::steady_clock> begin_;
