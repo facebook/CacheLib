@@ -16,6 +16,9 @@
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheStats.h"
 
+#include <folly/lang/Align.h>
+#include <folly/synchronization/DistributedMutex.h>
+
 namespace facebook {
 namespace cachelib {
 
@@ -218,7 +221,7 @@ class MM2Q {
   struct Container {
    private:
     using LruList = MultiDList<T, HookPtr>;
-    using Mutex = folly::SpinLock;
+    using Mutex = folly::DistributedMutex;
     using LockHolder = std::unique_lock<Mutex>;
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
@@ -356,8 +359,7 @@ class MM2Q {
     bool isEmpty() const noexcept { return size() == 0; }
 
     size_t size() const noexcept {
-      LockHolder l(lruMutex_);
-      return lru_.size();
+      return lruMutex_->lock_combine([this]() { return lru_.size(); });
     }
 
     // Returns the eviction age stats. See CacheStats.h for details
@@ -476,7 +478,7 @@ class MM2Q {
     // protects all operations on the lru. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
     // time.
-    mutable Mutex lruMutex_;
+    mutable folly::cacheline_aligned<Mutex> lruMutex_;
 
     // the lru
     LruList lru_{LruType::NumTypes, PtrCompressor{}};

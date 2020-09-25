@@ -35,7 +35,7 @@ bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
       markAccessed(node);
     }
 
-    auto func = [&]() {
+    auto func = [this, &node, curr]() {
       reconfigureLocked(curr);
       ensureNotInsertionPoint(node);
       ++numLockByRecordAccesses_;

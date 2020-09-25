@@ -30,52 +30,59 @@ bool MM2Q::Container<T, HookPtr>::recordAccess(T& node,
   // check if the node is still being memory managed
   if (node.isInMMContainer() &&
       (curr >= getUpdateTime(node) + config_.lruRefreshTime)) {
-    LockHolder l(lruMutex_, std::defer_lock);
-    if (config_.tryLockUpdate) {
-      l.try_lock();
-    } else {
-      l.lock();
-    }
-    if (!l.owns_lock()) {
-      return false;
-    }
-    reconfigureLocked(curr);
-    ++numLockByRecordAccesses_;
-    if (!node.isInMMContainer()) {
-      return false;
-    }
-    if (isHot(node)) {
-      lru_.getList(LruType::Hot).moveToHead(node);
-      ++numHotAccesses_;
-    } else if (isCold(node)) {
-      if (inTail(node)) {
-        unmarkTail(node);
-        lru_.getList(LruType::ColdTail).remove(node);
-        ++numColdTailAccesses_;
-      } else {
-        lru_.getList(LruType::Cold).remove(node);
+    auto func = [&]() {
+      reconfigureLocked(curr);
+      ++numLockByRecordAccesses_;
+      if (!node.isInMMContainer()) {
+        return false;
       }
-      lru_.getList(LruType::Warm).linkAtHead(node);
-      unmarkCold(node);
-      ++numColdAccesses_;
-      // only rebalance if config says so. recordAccess is called mostly on
-      // latency sensitive cache get operations.
-      if (config_.rebalanceOnRecordAccess) {
-        rebalance();
-      }
-    } else {
-      if (inTail(node)) {
-        unmarkTail(node);
-        lru_.getList(LruType::WarmTail).remove(node);
+      if (isHot(node)) {
+        lru_.getList(LruType::Hot).moveToHead(node);
+        ++numHotAccesses_;
+      } else if (isCold(node)) {
+        if (inTail(node)) {
+          unmarkTail(node);
+          lru_.getList(LruType::ColdTail).remove(node);
+          ++numColdTailAccesses_;
+        } else {
+          lru_.getList(LruType::Cold).remove(node);
+        }
         lru_.getList(LruType::Warm).linkAtHead(node);
-        ++numWarmTailAccesses_;
+        unmarkCold(node);
+        ++numColdAccesses_;
+        // only rebalance if config says so. recordAccess is called mostly on
+        // latency sensitive cache get operations.
+        if (config_.rebalanceOnRecordAccess) {
+          rebalance();
+        }
       } else {
-        lru_.getList(LruType::Warm).moveToHead(node);
+        if (inTail(node)) {
+          unmarkTail(node);
+          lru_.getList(LruType::WarmTail).remove(node);
+          lru_.getList(LruType::Warm).linkAtHead(node);
+          ++numWarmTailAccesses_;
+        } else {
+          lru_.getList(LruType::Warm).moveToHead(node);
+        }
+        ++numWarmAccesses_;
       }
-      ++numWarmAccesses_;
+      setUpdateTime(node, curr);
+      return true;
+    };
+
+    // if the tryLockUpdate optimization is on, and we were able to grab the
+    // lock, execute the critical section and return true, else return false
+    //
+    // if the tryLockUpdate optimization is off, we always execute the critical
+    // section and return true
+    if (config_.tryLockUpdate) {
+      if (auto lck = LockHolder{*lruMutex_, std::try_to_lock}) {
+        return func();
+      }
+      return false;
     }
-    setUpdateTime(node, curr);
-    return true;
+
+    return lruMutex_->lock_combine(func);
   }
   return false;
 }
@@ -83,8 +90,9 @@ bool MM2Q::Container<T, HookPtr>::recordAccess(T& node,
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 cachelib::EvictionAgeStat MM2Q::Container<T, HookPtr>::getEvictionAgeStat(
     uint64_t projectedLength) const noexcept {
-  LockHolder l(lruMutex_);
-  return getEvictionAgeStatLocked(projectedLength);
+  return lruMutex_->lock_combine([this, projectedLength]() {
+    return getEvictionAgeStatLocked(projectedLength);
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
@@ -182,27 +190,47 @@ void MM2Q::Container<T, HookPtr>::rebalance() noexcept {
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 bool MM2Q::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
-  LockHolder l(lruMutex_);
-  ++numLockByInserts_;
-  if (node.isInMMContainer()) {
-    return false;
-  }
+  return lruMutex_->lock_combine([this, &node, currTime]() {
+    ++numLockByInserts_;
+    if (node.isInMMContainer()) {
+      return false;
+    }
 
-  markHot(node);
-  unmarkCold(node);
-  unmarkTail(node);
-  lru_.getList(LruType::Hot).linkAtHead(node);
-  rebalance();
+    markHot(node);
+    unmarkCold(node);
+    unmarkTail(node);
+    lru_.getList(LruType::Hot).linkAtHead(node);
+    rebalance();
 
-  node.markInMMContainer();
-  setUpdateTime(node, currTime);
-  return true;
+    node.markInMMContainer();
+    setUpdateTime(node, currTime);
+    return true;
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 typename MM2Q::Container<T, HookPtr>::Iterator
 MM2Q::Container<T, HookPtr>::getEvictionIterator() const noexcept {
-  LockHolder l(lruMutex_);
+  // we cannot use combined critical sections with folly::DistributedMutex here
+  // because the lock is held for the lifetime of the eviction iterator.  In
+  // other words, the abstraction of the iterator just does not lend itself well
+  // to combinable critical sections as the user can hold the lock for an
+  // arbitrary amount of time outside a lambda-friendly piece of code (eg. they
+  // can return the iterator from functions, pass it to functions, etc)
+  //
+  // it would be theoretically possible to refactor this interface into
+  // something like the following to allow combining
+  //
+  //    mm2q.withEvictionIterator([&](auto iterator) {
+  //      // user code
+  //    });
+  //
+  // at the time of writing it is unclear if the gains from combining are
+  // reasonable justification for the codemod required to achieve combinability
+  // as we don't expect this critical section to be the hotspot in user code.
+  // This is however subject to change at some time in the future as and when
+  // this assertion becomes false.
+  LockHolder l(*lruMutex_);
   return Iterator{std::move(l), lru_.rbegin()};
 }
 
@@ -229,29 +257,31 @@ void MM2Q::Container<T, HookPtr>::setConfig(const Config& newConfig) {
     throw std::invalid_argument(
         "Cannot turn off tailHitsTracking (cache drop needed)");
   }
-  LockHolder l(lruMutex_);
-  config_ = newConfig;
-  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
-                             ? std::numeric_limits<Time>::max()
-                             : static_cast<Time>(util::getCurrentTimeSec()) +
-                                   config_.mmReconfigureIntervalSecs.count();
+
+  lruMutex_->lock_combine([this, &newConfig]() {
+    config_ = newConfig;
+    nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
+                               ? std::numeric_limits<Time>::max()
+                               : static_cast<Time>(util::getCurrentTimeSec()) +
+                                     config_.mmReconfigureIntervalSecs.count();
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 typename MM2Q::Config MM2Q::Container<T, HookPtr>::getConfig() const {
-  LockHolder l(lruMutex_);
-  return config_;
+  return lruMutex_->lock_combine([this]() { return config_; });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 bool MM2Q::Container<T, HookPtr>::remove(T& node) noexcept {
-  LockHolder l(lruMutex_);
-  ++numLockByRemoves_;
-  if (!node.isInMMContainer()) {
-    return false;
-  }
-  removeLocked(node);
-  return true;
+  return lruMutex_->lock_combine([this, &node]() {
+    ++numLockByRemoves_;
+    if (!node.isInMMContainer()) {
+      return false;
+    }
+    removeLocked(node);
+    return true;
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
@@ -268,36 +298,37 @@ void MM2Q::Container<T, HookPtr>::remove(Iterator& it) noexcept {
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 bool MM2Q::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
-  LockHolder l(lruMutex_);
-  if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
-    return false;
-  }
-  const auto updateTime = getUpdateTime(oldNode);
+  return lruMutex_->lock_combine([this, &oldNode, &newNode]() {
+    if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
+      return false;
+    }
+    const auto updateTime = getUpdateTime(oldNode);
 
-  LruType type = getLruType(oldNode);
-  lru_.getList(type).replace(oldNode, newNode);
-  switch (type) {
-  case LruType::Hot:
-    markHot(newNode);
-    break;
-  case LruType::ColdTail:
-    markTail(newNode); // pass through to also mark cold
-  case LruType::Cold:
-    markCold(newNode);
-    break;
-  case LruType::WarmTail:
-    markTail(newNode);
-    break; // warm is indicated by not marking hot or cold
-  case LruType::Warm:
-    break;
-  case LruType::NumTypes:
-    XDCHECK(false);
-  }
+    LruType type = getLruType(oldNode);
+    lru_.getList(type).replace(oldNode, newNode);
+    switch (type) {
+    case LruType::Hot:
+      markHot(newNode);
+      break;
+    case LruType::ColdTail:
+      markTail(newNode); // pass through to also mark cold
+    case LruType::Cold:
+      markCold(newNode);
+      break;
+    case LruType::WarmTail:
+      markTail(newNode);
+      break; // warm is indicated by not marking hot or cold
+    case LruType::Warm:
+      break;
+    case LruType::NumTypes:
+      XDCHECK(false);
+    }
 
-  oldNode.unmarkInMMContainer();
-  newNode.markInMMContainer();
-  setUpdateTime(newNode, updateTime);
-  return true;
+    oldNode.unmarkInMMContainer();
+    newNode.markInMMContainer();
+    setUpdateTime(newNode, updateTime);
+    return true;
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
@@ -346,23 +377,41 @@ serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState() const
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 MMContainerStat MM2Q::Container<T, HookPtr>::getStats() const noexcept {
-  LockHolder l(lruMutex_);
-  auto* tail = lru_.size() == 0 ? nullptr : lru_.rbegin().get();
-  auto computeWeightedAccesses = [&](size_t warm, size_t cold) {
-    return (warm * config_.getWarmSizePercent() +
-            cold * config_.coldSizePercent) /
-           100;
-  };
-  return {lru_.size(),
-          tail == nullptr ? 0 : getUpdateTime(*tail),
-          numLockByInserts_,
-          numLockByRecordAccesses_,
-          numLockByRemoves_,
-          config_.lruRefreshTime,
-          numHotAccesses_,
-          numColdAccesses_,
-          numWarmAccesses_,
-          computeWeightedAccesses(numWarmTailAccesses_, numColdTailAccesses_)};
+  return lruMutex_->lock_combine([this]() {
+    auto* tail = lru_.size() == 0 ? nullptr : lru_.rbegin().get();
+    auto computeWeightedAccesses = [&](size_t warm, size_t cold) {
+      return (warm * config_.getWarmSizePercent() +
+              cold * config_.coldSizePercent) /
+             100;
+    };
+
+    // note that in the analagous code in MMLru, we return an instance of
+    // std::array<std::uint64_t, 6> and construct the MMContainerStat instance
+    // outside the lock with some other data that is not required to be read
+    // under a lock.  This is done there to take advantage of
+    // folly::DistributedMutex's return-value inlining feature which coalesces
+    // the write from the critical section with the atomic operations required
+    // as part of the internal synchronization mechanism.  That then transfers
+    // the synchronization signal as well as the return value in one single
+    // cacheline invalidation message.  At the time of writing this decision was
+    // based on an implementation-detail aware to the author - 48 bytes can be
+    // coalesced with the synchronization signal in folly::DistributedMutex.
+    //
+    // we cannot do that here because this critical section returns more data
+    // than can be coalesced internally by folly::DistributedMutex (> 48 bytes).
+    // So we construct and return the entire object under the lock.
+    return MMContainerStat{
+        lru_.size(),
+        tail == nullptr ? 0 : getUpdateTime(*tail),
+        numLockByInserts_,
+        numLockByRecordAccesses_,
+        numLockByRemoves_,
+        config_.lruRefreshTime,
+        numHotAccesses_,
+        numColdAccesses_,
+        numWarmAccesses_,
+        computeWeightedAccesses(numWarmTailAccesses_, numColdTailAccesses_)};
+  });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
