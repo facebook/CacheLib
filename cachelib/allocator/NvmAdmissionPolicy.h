@@ -37,7 +37,8 @@ class NvmAdmissionPolicy {
     ctrs["nvm_ap_called"] = overallCount_.get();
     ctrs["nvm_ap_accepted"] = accepted_.get();
     ctrs["nvm_ap_rejected"] = rejected_.get();
-    visitLatencyStats(ctrs, overallLatency_, "nvm_ap_overall_latency");
+    util::LatencyTracker::visitLatencyStatsUs(
+        ctrs, overallLatency_, "nvm_ap_overall_latency");
     return ctrs;
   }
 
@@ -48,16 +49,6 @@ class NvmAdmissionPolicy {
   // Please include a prefix/postfix with the name of implementation to avoid
   // collision with base level stats.
   virtual std::unordered_map<std::string, double> getCountersImpl() = 0;
-
-  void visitLatencyStats(std::unordered_map<std::string, double>& map,
-                         util::PercentileStats& latency,
-                         const folly::StringPiece keyword) {
-    util::CounterVisitor visitor = [&map](folly::StringPiece name,
-                                          double count) {
-      map[name.toString()] = count / 1000;
-    };
-    latency.visitQuantileEstimator(visitor, "{}_us_{}", keyword);
-  }
 
  private:
   util::PercentileStats overallLatency_;
