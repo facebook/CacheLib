@@ -243,22 +243,12 @@ std::unique_ptr<DipperItem> NvmCache<C>::makeDipperItem(const ItemHandle& hdl) {
 
     const size_t bufSize = DipperItem::estimateVariableSize(blobs);
     return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-        poolId,
-        item.getCreationTime(),
-        item.getExpiryTime(),
-        blobs,
-        item.isUnevictable() ? DipperItemFlags::UNEVICTABLE
-                             : DipperItemFlags::NONE));
+        poolId, item.getCreationTime(), item.getExpiryTime(), blobs));
   } else {
     Blob blob = makeBlob(item);
     const size_t bufSize = DipperItem::estimateVariableSize(blob);
     return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-        poolId,
-        item.getCreationTime(),
-        item.getExpiryTime(),
-        blob,
-        item.isUnevictable() ? DipperItemFlags::UNEVICTABLE
-                             : DipperItemFlags::NONE));
+        poolId, item.getCreationTime(), item.getExpiryTime(), blob));
   }
 }
 
@@ -271,7 +261,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   // for regular items that can only write to nvmcache upon eviction, we
   // should not be recording a write for an nvmclean item unless it is marked
   // as evicted from nvmcache.
-  if (item.isEvictable() && item.isNvmClean() && !item.isNvmEvicted()) {
+  if (item.isNvmClean() && !item.isNvmEvicted()) {
     throw std::runtime_error(folly::sformat(
         "Item is not nvm evicted and nvm clean {}", item.toString()));
   }
@@ -309,10 +299,8 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
 
-  navy::InsertOptions opts;
   if (item.isUnevictable()) {
     stats().numNvmPermItems.inc();
-    opts.setPermanent();
   }
 
   if (item.isNvmClean() && item.isNvmEvicted()) {
@@ -325,7 +313,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   // reported the key doesn't exist in the cache.
   const bool executed = token.executeIfValid([&]() {
     auto status = navyCache_->insertAsync(
-        makeBufferView(ctx.key()), makeBufferView(val), opts,
+        makeBufferView(ctx.key()), makeBufferView(val),
         [this, putCleanup, valSize](navy::Status st, navy::BufferView) {
           putCleanup();
           if (st == navy::Status::Ok) {
@@ -460,9 +448,9 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
   stats().numNvmAllocAttempts.inc();
   // use the original alloc size to allocate, but make sure that the usable
   // size matches the pBlob's size
-  auto it = cache_.allocateInternal(
-      dItem.poolId(), key, pBlob.origAllocSize, dItem.getCreationTime(),
-      dItem.getExpiryTime(), dItem.isUnevictable());
+  auto it = cache_.allocateInternal(dItem.poolId(), key, pBlob.origAllocSize,
+                                    dItem.getCreationTime(),
+                                    dItem.getExpiryTime(), false);
   if (!it) {
     return nullptr;
   }

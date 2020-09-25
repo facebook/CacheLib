@@ -38,7 +38,7 @@ TEST(Allocator, RegionSync) {
   for (uint32_t i = 0; i < 3; i++) {
     if (i == 0) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_EQ(OpenStatus::Retry, desc.status());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
       EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
@@ -48,7 +48,7 @@ TEST(Allocator, RegionSync) {
     EXPECT_EQ(0, ex.getQueueSize());
     {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
       EXPECT_EQ(0, addr.offset());
@@ -59,7 +59,7 @@ TEST(Allocator, RegionSync) {
     // 15 allocs exhaust region's space. No reclaims scheduled.
     for (uint32_t j = 0; j < 15; j++) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
       EXPECT_EQ(1024 * (j + 1), addr.offset());
@@ -80,7 +80,7 @@ TEST(Allocator, RegionSync) {
   EXPECT_EQ(0, ex.getQueueSize());
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+    std::tie(desc, slotSize, addr) = allocator.allocate(1024);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
     EXPECT_EQ(0, addr.offset());
@@ -116,7 +116,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   for (uint32_t i = 0; i < 3; i++) {
     if (i == 0) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_EQ(OpenStatus::Retry, desc.status());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
       EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
@@ -126,7 +126,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     EXPECT_EQ(0, ex.getQueueSize());
     {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_TRUE(desc.isReady());
       if (i > 0) {
         EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -145,7 +145,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     // 15 allocs exhaust region's space. No reclaims scheduled.
     for (uint32_t j = 0; j < 15; j++) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(desc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
       EXPECT_EQ(1024 * (j + 1), addr.offset());
@@ -177,7 +177,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   EXPECT_EQ(0, ex.getQueueSize());
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+    std::tie(desc, slotSize, addr) = allocator.allocate(1024);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
     EXPECT_EQ(0, addr.offset());
@@ -192,250 +192,6 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   // @numItems and @lastEntryEndOffset are updated synchronously, validate them
   EXPECT_EQ(1, rm->getRegion(RegionId{3}).getNumItems());
   EXPECT_EQ(1024, rm->getRegion(RegionId{3}).getLastEntryEndOffset());
-}
-
-TEST(Allocator, PermanentAlloc) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<MockPolicy>(&hits);
-  expectRegionsTracked(*policy, {0, 1, 2, 3, 2});
-
-  constexpr uint32_t kNumRegions = 4;
-  constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device =
-      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-
-  std::vector<uint32_t> sizeClasses{4096};
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
-                                            *device, 1, ex, std::move(evictCb),
-                                            sizeClasses, std::move(policy), 0);
-  Allocator allocator{*rm};
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  RelAddress addr;
-  uint32_t slotSize = 0;
-  // Allocate a permanent item. Region 0 is permanent region and never tracked.
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_EQ(OpenStatus::Retry, desc.status());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-  }
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    EXPECT_EQ(0, addr.offset());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-
-  // Check stack allocation strategy for permanent items
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(8 * 1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    EXPECT_EQ(1024, addr.offset());
-    rm->close(std::move(desc));
-  }
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(6 * 1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    EXPECT_EQ(9 * 1024, addr.offset());
-    rm->close(std::move(desc));
-  }
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    EXPECT_EQ(15 * 1024, addr.offset());
-    // No reclamation scheduled
-    EXPECT_EQ(0, ex.getQueueSize());
-    rm->close(std::move(desc));
-  }
-
-  // This will trigger reclamation of region 2. Region 1 will be left partially
-  // written.
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{1}, addr.rid());
-    EXPECT_EQ(0, addr.offset());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-
-  // Now allocate region full of regular items and check that region 2 will be
-  // put for tracking.
-  for (uint32_t i = 0; i < 4; i++) {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{2}, addr.rid());
-    rm->close(std::move(desc));
-  }
-  EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-
-  // This allocation will request a clean region (rid: 3) and put region 2 for
-  // tracking. After we make one allocation, we will again reclaim region 2 as
-  // it is the only region avaiable for reclaim (others are pinned).
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{3}, addr.rid());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-}
-
-TEST(Allocator, PermanentAllocInMemBuffers) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<MockPolicy>(&hits);
-  auto& mp = *policy;
-  constexpr uint32_t kNumRegions = 4;
-  constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device =
-      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-
-  std::vector<uint32_t> sizeClasses{4096};
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1);
-  Allocator allocator{*rm};
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  // Only 2 and 3 will be tracked as 0 and 1 will be pinned regions
-  expectRegionsTracked(mp, {2, 3});
-  RelAddress addr;
-  uint32_t slotSize = 0;
-  // Allocate a permanent item. Region 0 is permanent region and never tracked.
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_EQ(OpenStatus::Retry, desc.status());
-  }
-
-  EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    EXPECT_EQ(0, addr.offset());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-  // Check stack allocation strategy for permanent items
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(8 * 1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    rm->close(std::move(desc));
-  }
-  EXPECT_EQ(1024, addr.offset());
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(6 * 1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    rm->close(std::move(desc));
-  }
-  EXPECT_EQ(9 * 1024, addr.offset());
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{0}, addr.rid());
-    rm->close(std::move(desc));
-  }
-  EXPECT_EQ(15 * 1024, addr.offset());
-  // No reclamation scheduled
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  // This will trigger reclamation
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, true);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    EXPECT_TRUE(ex.runFirstIf("flush"));
-    EXPECT_EQ(RegionId{1}, addr.rid());
-    EXPECT_EQ(0, addr.offset());
-    rm->close(std::move(desc));
-  }
-
-  // Now allocate region full of regular items and check that region 2 will be
-  // put for tracking.
-  for (uint32_t i = 0; i < 4; i++) {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{2}, addr.rid());
-    rm->close(std::move(desc));
-  }
-  EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-
-  // This allocation will request a clean region (rid: 3), and then we will
-  // enqueue to reclaim a region but will fail as (rid: 2) hasn't been flushed
-  // yet. After the first reclaim job fails, we will flush and then the reclaim
-  // of (rid: 2) will succeed.
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{3}, addr.rid());
-    // This reclaim will fail since the eviction will return an invalid rid
-    EXPECT_FALSE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("flush"));
-    // Reclaim is retried and succeeds this time around
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-
-  // Finish allocating region 3
-  for (uint32_t i = 0; i < 3; i++) {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{3}, addr.rid());
-    rm->close(std::move(desc));
-  }
-
-  // Allocate an item from region 2. Now we will try to evict (rid: 3),
-  // which will fail since it has yet to be flushed. Then we'll run
-  // the flush job and then run the reclaim again.
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{2}, addr.rid());
-    EXPECT_FALSE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("flush"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
 }
 
 TEST(Allocator, TestInMemBufferStates) {
@@ -459,7 +215,7 @@ TEST(Allocator, TestInMemBufferStates) {
   uint32_t slotSize = 0;
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+    std::tie(desc, slotSize, addr) = allocator.allocate(1024);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
   }
   EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -469,7 +225,7 @@ TEST(Allocator, TestInMemBufferStates) {
     RegionDescriptor rdesc{OpenStatus::Error};
     {
       RegionDescriptor wdesc{OpenStatus::Retry};
-      std::tie(wdesc, slotSize, addr) = allocator.allocate(1024, false);
+      std::tie(wdesc, slotSize, addr) = allocator.allocate(1024);
       EXPECT_TRUE(wdesc.isReady());
       EXPECT_EQ(0, wdesc.id().index());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -479,7 +235,7 @@ TEST(Allocator, TestInMemBufferStates) {
       EXPECT_TRUE(rdesc.isReady());
       for (uint32_t j = 0; j < 15; j++) {
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+        std::tie(desc, slotSize, addr) = allocator.allocate(1024);
         EXPECT_TRUE(desc.isReady());
         EXPECT_EQ(0, desc.id().index());
         rm->close(std::move(desc));
@@ -487,7 +243,7 @@ TEST(Allocator, TestInMemBufferStates) {
       EXPECT_EQ(0, ex.getQueueSize());
       {
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) = allocator.allocate(1024, false);
+        std::tie(desc, slotSize, addr) = allocator.allocate(1024);
         EXPECT_EQ(OpenStatus::Ready, desc.status());
         EXPECT_EQ(1, desc.id().index());
         rm->close(std::move(desc));

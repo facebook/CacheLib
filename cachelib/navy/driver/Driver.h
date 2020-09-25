@@ -42,10 +42,9 @@ class Driver final : public AbstractCache {
   Driver& operator=(const Driver&) = delete;
   ~Driver() override;
 
-  Status insert(BufferView key, BufferView value, InsertOptions opt) override;
+  Status insert(BufferView key, BufferView value) override;
   Status insertAsync(BufferView key,
                      BufferView value,
-                     InsertOptions opt,
                      InsertCallback cb) override;
   Status lookup(BufferView key, Buffer& value) override;
   Status lookupAsync(BufferView key, LookupCallback cb) override;
@@ -69,12 +68,10 @@ class Driver final : public AbstractCache {
   // Select engine to insert key/value. Returns a pair:
   //   - first: engine to insert key/value
   //   - second: the other engine to remove key
-  std::pair<Engine&, Engine&> select(BufferView key,
-                                     BufferView value,
-                                     InsertOptions opt) const;
+  std::pair<Engine&, Engine&> select(BufferView key, BufferView value) const;
   void updateLookupStats(Status status) const;
   Status removeHashedKey(HashedKey hk);
-  bool admissionTest(HashedKey hk, BufferView value, bool permanent) const;
+  bool admissionTest(HashedKey hk, BufferView value) const;
 
   const uint32_t smallItemMaxSize_{};
   const uint32_t maxConcurrentInserts_{};

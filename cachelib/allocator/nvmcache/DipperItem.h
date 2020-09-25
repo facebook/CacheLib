@@ -9,11 +9,6 @@
 namespace facebook {
 namespace cachelib {
 
-enum class DipperItemFlags : uint8_t {
-  NONE = 0,
-  UNEVICTABLE = 1U << 0,
-};
-
 // encapsulates an item's payload and its original allocation size. We need to
 // preserve the original allocation size and at the same time copy all the
 // bytes of an item's allocation.
@@ -34,24 +29,18 @@ class FOLLY_PACK_ATTR DipperItem {
   // @param id            pool id for the original item
   // @param creationTime  creation time for the item in cache
   // @param blobs         vector of blobs
-  // @param flags         flags for the item
   //
   // @throw std::out_of_range if the total size of the blobs exceeds 4GB.
   DipperItem(PoolId id,
              uint32_t creationTime,
              uint32_t expTime,
-             const std::vector<Blob>& blobs,
-             DipperItemFlags flags);
+             const std::vector<Blob>& blobs);
 
   //  same as the above, but handles for a single blob without having to
   //  instantiate a vector
   //
   // @throw std::out_of_range if the total size of blob exceeds 4GB.
-  DipperItem(PoolId id,
-             uint32_t creationTime,
-             uint32_t expTime,
-             Blob blob,
-             DipperItemFlags flags);
+  DipperItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob);
 
   // A custom new that allocates DipperItem with extra
   // bytes space at the end for data
@@ -89,11 +78,6 @@ class FOLLY_PACK_ATTR DipperItem {
   //
   // @throw std::invalid_argument if the index is out of range.
   Blob getBlob(size_t index) const;
-
-  // @return if this item is marked as un-evictable
-  bool isUnevictable() const noexcept {
-    return flags_ & static_cast<uint8_t>(DipperItemFlags::UNEVICTABLE);
-  }
 
   // return true if the item is expired
   bool isExpired() const noexcept;
@@ -149,7 +133,6 @@ class FOLLY_PACK_ATTR DipperItem {
    */
 
   const PoolId id_;             // pool id of the cache item
-  const uint8_t flags_;         // flags for the item
   const uint32_t creationTime_; // creation time in seconds since epoch
   const uint32_t expTime_;      // seconds since epoch when the item expires
   const size_t numBlobs_;       // total number of blobs
