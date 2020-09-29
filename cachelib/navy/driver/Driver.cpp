@@ -48,19 +48,20 @@ Driver::~Driver() {
 }
 
 std::pair<Engine&, Engine&> Driver::select(BufferView key,
-                                           BufferView value) const {
-  if (key.size() + value.size() < smallItemMaxSize_) {
+                                           BufferView value,
+                                           InsertOptions opt) const {
+  if (key.size() + value.size() < smallItemMaxSize_ && !opt.permanent) {
     return {*smallItemCache_, *largeItemCache_};
   } else {
     return {*largeItemCache_, *smallItemCache_};
   }
 }
 
-Status Driver::insert(BufferView key, BufferView value) {
+Status Driver::insert(BufferView key, BufferView value, InsertOptions opt) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};
   auto status = insertAsync(
-      key, value, [&done, &cbStatus](Status s, BufferView /* key */) {
+      key, value, opt, [&done, &cbStatus](Status s, BufferView /* key */) {
         cbStatus = s;
         done.post();
       });
@@ -71,7 +72,9 @@ Status Driver::insert(BufferView key, BufferView value) {
   return cbStatus;
 }
 
-bool Driver::admissionTest(HashedKey hk, BufferView value) const {
+bool Driver::admissionTest(HashedKey hk,
+                           BufferView value,
+                           bool permanent) const {
   // If this parcel makes our memory above the limit, we reject it and
   // revert back increment we made. We can't split check and increment!
   // We can't check value before - it will over admit things. Same with
@@ -79,6 +82,9 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   size_t parcelSize = hk.key().size() + value.size();
   auto currParcelMemory = parcelMemory_.add_fetch(parcelSize);
   auto currConcurrentInserts = concurrentInserts_.add_fetch(1);
+  if (permanent) {
+    return true;
+  }
 
   if (!admissionPolicy_ || admissionPolicy_->accept(hk, value)) {
     if (currConcurrentInserts <= maxConcurrentInserts_) {
@@ -103,6 +109,7 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
 
 Status Driver::insertAsync(BufferView key,
                            BufferView value,
+                           InsertOptions opt,
                            InsertCallback cb) {
   insertCount_.inc();
 
@@ -113,14 +120,14 @@ Status Driver::insertAsync(BufferView key,
     return Status::Rejected;
   }
 
-  if (!admissionTest(hk, value)) {
+  if (!admissionTest(hk, value, opt.permanent)) {
     return Status::Rejected;
   }
 
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, value]() mutable {
-        auto selection = select(hk.key(), value);
-        auto status = selection.first.insert(hk, value);
+      [this, cb = std::move(cb), hk, value, opt]() mutable {
+        auto selection = select(hk.key(), value, opt);
+        auto status = selection.first.insert(hk, value, opt);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }

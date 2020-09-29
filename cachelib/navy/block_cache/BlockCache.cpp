@@ -131,11 +131,11 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
   return ioAligned ? getAlignedSize(size) : size;
 }
 
-Status BlockCache::insert(HashedKey hk, BufferView value) {
+Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
   // explicitly align if permanent item or not using size classes.
-  bool ioAligned = config_.sizeClasses_ref()->empty();
+  bool ioAligned = opt.permanent || config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
-  auto [desc, slotSize, addr] = allocator_.allocate(size);
+  auto [desc, slotSize, addr] = allocator_.allocate(size, opt.permanent);
   switch (desc.status()) {
   case OpenStatus::Error:
     allocErrorCount_.inc();
@@ -332,7 +332,8 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   // explicitly align if not using size classes.
   bool ioAligned = config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
-  auto [desc, slotSize, addr] = allocator_.allocate(size);
+  auto [desc, slotSize, addr] =
+      allocator_.allocate(size, false /* permanent */);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;
@@ -402,8 +403,11 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
                              RelAddress addr,
                              HashedKey expected,
                              Buffer& value) {
+  // Because region opened for read, nobody will reclaim it or modify. Safe
+  // without locks.
+  auto permanent = regionManager_.getRegion(addr.rid()).isPinned();
   uint32_t size = 0;
-  if (allocator_.isSizeClassAllocator()) {
+  if (!permanent && allocator_.isSizeClassAllocator()) {
     size = regionManager_.getRegionSlotSize(addr.rid());
   } else {
     size = std::min(readBufferSize_, addr.offset());
@@ -433,7 +437,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     return Status::NotFound;
   }
 
-  if (!allocator_.isSizeClassAllocator()) {
+  if (permanent || !allocator_.isSizeClassAllocator()) {
     // Update slot size to actual, defined by key and value size
     size = serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
     if (buffer.size() > size) {

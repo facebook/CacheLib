@@ -20,7 +20,7 @@ void RegionAllocator::setAllocationRegion(RegionId rid) {
 void RegionAllocator::reset() { rid_ = RegionId{}; }
 
 Allocator::Allocator(RegionManager& regionManager)
-    : regionManager_{regionManager} {
+    : regionManager_{regionManager}, permItemAllocator_{0 /* classId */} {
   const auto& sizeClasses = regionManager_.getSizeClasses();
   if (sizeClasses.size() > Region::kClassIdMax + 1) {
     throw std::invalid_argument{"too many size classes"};
@@ -52,11 +52,15 @@ uint32_t Allocator::getSlotSizeAndClass(uint32_t size, uint32_t& sc) const {
 }
 
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size) {
-  uint32_t sc = 0;
-  size = getSlotSizeAndClass(size, sc);
-  RegionAllocator* ra = &allocators_[sc];
-
+    uint32_t size, bool permanent) {
+  RegionAllocator* ra = nullptr;
+  if (permanent) {
+    ra = &permItemAllocator_;
+  } else {
+    uint32_t sc = 0;
+    size = getSlotSizeAndClass(size, sc);
+    ra = &allocators_[sc];
+  }
   if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
                            RelAddress());
@@ -100,8 +104,14 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
 
   // we got a region fresh off of reclaim. Need to initialize it.
   auto& region = regionManager_.getRegion(rid);
-
-  region.setClassId(ra.classId());
+  if (isPermanentAllocator(ra)) {
+    // Pin immediately. We want to persist this region as pinned even if it
+    // is not full.
+    regionManager_.pin(region);
+    XDCHECK(region.isPinned());
+  } else {
+    region.setClassId(ra.classId());
+  }
 
   // Replace with a reclaimed region and allocate
   ra.setAllocationRegion(rid);

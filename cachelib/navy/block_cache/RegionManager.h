@@ -74,7 +74,14 @@ class RegionManager {
 
   const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
 
+  void pin(Region& region) {
+    region.setPinned();
+    pinnedCount_.inc();
+  }
+
   void doFlush(RegionId rid, bool async);
+
+  uint64_t pinnedCount() const { return pinnedCount_.get(); }
 
   uint64_t regionSize() const { return regionSize_; }
 
@@ -146,7 +153,7 @@ class RegionManager {
 
   uint32_t getRegionSlotSize(RegionId rid) const {
     const auto& region = getRegion(rid);
-    if (sizeClasses_.empty()) {
+    if (sizeClasses_.empty() || region.isPinned()) {
       return 0;
     }
     return sizeClasses_[region.getClassId()];
@@ -186,6 +193,7 @@ class RegionManager {
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter externalFragmentation_;
 
+  mutable AtomicCounter pinnedCount_;
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 

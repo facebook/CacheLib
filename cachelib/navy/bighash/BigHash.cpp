@@ -207,7 +207,9 @@ bool BigHash::recover(RecordReader& rr) {
   return true;
 }
 
-Status BigHash::insert(HashedKey hk, BufferView value) {
+Status BigHash::insert(HashedKey hk,
+                       BufferView value,
+                       InsertOptions /* opt */) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 

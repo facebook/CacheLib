@@ -8,7 +8,9 @@ namespace navy {
 class NoopEngine final : public Engine {
  public:
   ~NoopEngine() override = default;
-  Status insert(HashedKey /* hk */, BufferView /* value */) override {
+  Status insert(HashedKey /* hk */,
+                BufferView /* value */,
+                InsertOptions /* opt */) override {
     return Status::Rejected;
   }
   Status lookup(HashedKey /* hk */, Buffer& /* value */) override {

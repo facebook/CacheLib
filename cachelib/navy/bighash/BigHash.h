@@ -73,7 +73,9 @@ class BigHash final : public Engine {
 
   // Inserts key and value into BigHash. This will replace an existing
   // key if found. If it failed to write, it will return DeviceError.
-  Status insert(HashedKey hk, BufferView value) override;
+  Status insert(HashedKey hk,
+                BufferView value,
+                InsertOptions /* opt */) override;
 
   // Removes an entry from BigHash if found. Ok on success, NotFound on miss,
   // and DeviceError on error.

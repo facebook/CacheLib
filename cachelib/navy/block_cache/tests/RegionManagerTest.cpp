@@ -100,11 +100,13 @@ TEST(RegionManager, Recovery) {
       auto [desc, addr] = rm->getRegion(RegionId{1}).openAndAllocate(101);
       rm->getRegion(RegionId{1}).close(std::move(desc));
     }
+    rm->pin(rm->getRegion(RegionId{1}));
     rm->getRegion(RegionId{2}).setClassId(1);
     for (int i = 0; i < 30; i++) {
       auto [desc, addr] = rm->getRegion(RegionId{2}).openAndAllocate(101);
       rm->getRegion(RegionId{2}).close(std::move(desc));
     }
+    EXPECT_EQ(1, rm->pinnedCount());
 
     auto rw = createMemoryRecordWriter(ioq);
     rm->persist(*rw);
@@ -115,16 +117,17 @@ TEST(RegionManager, Recovery) {
     auto policy = std::make_unique<MockPolicy>(&hits);
     // Region 0 - 3 will be tracked at least once since the first time
     // is when RegionManager is initialized. When the RM is recovered,
+    // Region 1 will not be tracked since it is pinned.
     {
       testing::InSequence s;
       EXPECT_CALL(*policy, reset());
       // First all regions are tracked when region manager is created
       expectRegionsTracked(*policy, {0, 1, 2, 3});
       EXPECT_CALL(*policy, reset());
-      // Non-empty regions are tracked at last.
-      expectRegionsTracked(*policy, {0, 3, 1, 2});
+      // Region 1 is not tracked as it is pinned. Region 2 is tracked
+      // at last since it is not non-empty.
+      expectRegionsTracked(*policy, {0, 3, 2});
     }
-
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
         [](RegionId, uint32_t, BufferView) { return 0; }};
@@ -137,21 +140,27 @@ TEST(RegionManager, Recovery) {
     rm->recover(*rr);
 
     EXPECT_EQ(0, rm->getRegion(RegionId{0}).getClassId());
+    EXPECT_FALSE(rm->getRegion(RegionId{0}).isPinned());
     EXPECT_EQ(0, rm->getRegion(RegionId{0}).getLastEntryEndOffset());
     EXPECT_EQ(0, rm->getRegion(RegionId{0}).getNumItems());
 
-    EXPECT_EQ(0, rm->getRegion(RegionId{1}).getClassId());
+    // @getClassId has assert on permanent
+    EXPECT_TRUE(rm->getRegion(RegionId{1}).isPinned());
     EXPECT_EQ(2020, rm->getRegion(RegionId{1}).getLastEntryEndOffset());
     EXPECT_EQ(20, rm->getRegion(RegionId{1}).getNumItems());
 
     EXPECT_EQ(1, rm->getRegion(RegionId{2}).getClassId());
+    EXPECT_FALSE(rm->getRegion(RegionId{2}).isPinned());
     EXPECT_EQ(3030, rm->getRegion(RegionId{2}).getLastEntryEndOffset());
     EXPECT_EQ(30, rm->getRegion(RegionId{2}).getNumItems());
 
     // this is a region that was not assigned to anything.
     EXPECT_EQ(Region::kClassIdMax, rm->getRegion(RegionId{3}).getClassId());
+    EXPECT_FALSE(rm->getRegion(RegionId{3}).isPinned());
     EXPECT_EQ(0, rm->getRegion(RegionId{3}).getLastEntryEndOffset());
     EXPECT_EQ(0, rm->getRegion(RegionId{3}).getNumItems());
+
+    EXPECT_EQ(1, rm->pinnedCount());
   }
 }
 

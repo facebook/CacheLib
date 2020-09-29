@@ -12,7 +12,7 @@ class Engine {
 
   // If insert is failed, previous item (if existed) is not affected and
   // remains available via lookup.
-  virtual Status insert(HashedKey hk, BufferView value) = 0;
+  virtual Status insert(HashedKey hk, BufferView value, InsertOptions opt) = 0;
 
   virtual Status lookup(HashedKey hk, Buffer& value) = 0;
 
