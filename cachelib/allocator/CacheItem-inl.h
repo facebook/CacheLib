@@ -26,13 +26,7 @@ CacheItem<CacheTrait>::CacheItem(Key key,
                                  uint32_t size,
                                  uint32_t creationTime,
                                  uint32_t expiryTime)
-#if FOLLY_X64
-    : creationTime_(creationTime), expiryTime_(expiryTime), alloc_(key, size) {
-}
-#elif FOLLY_AARCH64
-    : expiryTime_(expiryTime), creationTime_(creationTime), alloc_(key, size) {
-}
-#endif
+    : creationTime_(creationTime), expiryTime_(expiryTime), alloc_(key, size) {}
 
 template <typename CacheTrait>
 CacheItem<CacheTrait>::CacheItem(Key key, uint32_t size, uint32_t creationTime)
