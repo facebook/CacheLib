@@ -3,9 +3,9 @@
     "cacheSizeMB" : 5120,
     "poolRebalanceIntervalSec" : 0
   },
-  "test_config" : 
+  "test_config" :
     {
-      
+
       "numOps" : 10000000,
       "numThreads" : 48,
       "numKeys" : 100000,
@@ -22,5 +22,5 @@
       "delRatio" : 0.0,
       "addChainedRatio" : 0.0
     }
- 
+
 }

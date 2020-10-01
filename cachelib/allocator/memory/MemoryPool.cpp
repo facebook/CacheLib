@@ -219,20 +219,8 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
   return classId;
 }
 
-Slab* MemoryPool::getSlab() noexcept {
+Slab* MemoryPool::getSlabLocked() noexcept {
   {
-    // atomically see if we can acquire a slab by checking if we have
-    // reached the limit by size. If not, then they can be acquired from
-    // either the slab allocator or our free list. It is important to check
-    // this before we grab it from the slab allocator or free list. Things
-    // that release slab, bump down the currSlabAllocSize_ after actually
-    // releasing and adding it to free list or slab allocator.
-    if (allSlabsAllocated()) {
-      return nullptr;
-    }
-
-    LockHolder l(lock_);
-
     // check again after getting the lock.
     if (allSlabsAllocated()) {
       return nullptr;
@@ -271,8 +259,28 @@ void* MemoryPool::allocate(uint32_t size) {
     return alloc;
   }
 
+  // atomically see if we can acquire a slab by checking if we have
+  // reached the limit by size. If not, then they can be acquired from
+  // either the slab allocator or our free list. It is important to check
+  // this before we grab it from the slab allocator or free list. Things
+  // that release slab, bump down the currSlabAllocSize_ after actually
+  // releasing and adding it to free list or slab allocator.
+  if (allSlabsAllocated()) {
+    return nullptr;
+  }
+
+  // TODO: introduce a new sharded lock by allocation class id for this slow
+  // path Currently this would also serialize the slow paths of two different
+  // allocation class ids that need slab to initiate an allocation.
+  LockHolder l(lock_);
+  alloc = ac.allocate();
+  if (alloc != nullptr) {
+    currAllocSize_ += allocSize;
+    return alloc;
+  }
+
   // see if we have a slab to add to the allocation class.
-  auto slab = getSlab();
+  auto slab = getSlabLocked();
   if (slab == nullptr) {
     // out of memory
     return nullptr;

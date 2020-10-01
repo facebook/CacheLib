@@ -293,7 +293,7 @@ class MemoryPool {
 
   // get a slab for use based on the activeSize and maxSize. returns nullptr
   // if out of slab memory.
-  Slab* getSlab() noexcept;
+  Slab* getSlabLocked() noexcept;
 
   // create allocation classes corresponding to the pool's configuration.
   ACVector createAllocationClasses() const;
