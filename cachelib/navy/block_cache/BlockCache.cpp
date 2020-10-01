@@ -39,8 +39,8 @@ BlockCache::Config& BlockCache::Config::validate() {
   return *this;
 }
 
-void BlockCache::validate(BlockCache::Config& config,
-                          uint32_t deviceIOAlignSize) const {
+void BlockCache::validate(BlockCache::Config& config) const {
+  uint32_t deviceIOAlignSize = calcAllocAlignSize();
   if (!folly::isPowTwo(deviceIOAlignSize)) {
     throw std::invalid_argument("invalid block size");
   }
@@ -119,7 +119,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   if (reinsertionPolicy_) {
     reinsertionPolicy_->setIndex(&index_);
   }
-  validate(config, device_.getIOAlignmentSize());
+  validate(config);
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 }

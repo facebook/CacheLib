@@ -116,23 +116,28 @@ class NvmCache {
       if (deviceEncryptor) {
         auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
         auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
-        if (encryptionBlockSize != blockSize) {
+        if (blockSize % encryptionBlockSize != 0) {
           throw std::invalid_argument(folly::sformat(
-              "Encryption enabled but the encryption block granularity is set "
-              "differently than the navy block size. ecryption block size: {}, "
+              "Encryption enabled but the encryption block granularity is not "
+              "aligned to the navy block size. ecryption block size: {}, "
               "block size: {}",
               encryptionBlockSize,
               blockSize));
         }
-        auto bucketSize =
-            dipperOptions["dipper_navy_bighash_bucket_size"].getInt();
-        if (encryptionBlockSize != bucketSize) {
-          throw std::invalid_argument(folly::sformat(
-              "Encryption enabled but the encryption block granularity is set "
-              "differently than the navy big hash bucket size. ecryption block "
-              "size: {}, bucket size: {}",
-              encryptionBlockSize,
-              bucketSize));
+        if (dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0)
+                .getInt() > 0) {
+          auto bucketSize =
+              dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
+                  .getInt();
+          if (bucketSize % encryptionBlockSize != 0) {
+            throw std::invalid_argument(
+                folly::sformat("Encryption enabled but the encryption block "
+                               "granularity is not aligned to the navy "
+                               "big hash bucket size. ecryption block "
+                               "size: {}, bucket size: {}",
+                               encryptionBlockSize,
+                               bucketSize));
+          }
         }
       }
 

@@ -190,7 +190,7 @@ class BlockCache final : public Engine {
                                       uint32_t entrySize,
                                       RelAddress currAddr);
 
-  void validate(Config& config, uint32_t deviceIOAlignSize) const;
+  void validate(Config& config) const;
 
   const serialization::BlockCacheConfig config_;
   const DestructorCallback destructorCb_;
