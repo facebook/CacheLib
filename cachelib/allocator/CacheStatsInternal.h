@@ -149,6 +149,11 @@ struct Stats {
   // container
   AtomicCounter evictFailAC{0};
 
+  // Eviction failures because this item has a potential concurrent fill
+  // from nvm cache. For consistency reason, we cannot evict it. Refer
+  // to NvmCache.h for more details.
+  AtomicCounter evictFailConcurrentFill{0};
+
   // Eviction failures because this item is being moved
   AtomicCounter evictFailMove{0};
 

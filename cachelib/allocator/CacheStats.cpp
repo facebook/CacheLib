@@ -84,6 +84,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numRefcountOverflow = numRefcountOverflow.get();
 
   ret.numEvictionFailureFromAccessContainer = evictFailAC.get();
+  ret.numEvictionFailureFromConcurrentFill = evictFailConcurrentFill.get();
   ret.numEvictionFailureFromParentAccessContainer = evictFailParentAC.get();
   ret.numEvictionFailureFromMoving = evictFailMove.get();
   ret.numEvictionFailureFromParentMoving = evictFailParentMove.get();

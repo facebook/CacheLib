@@ -1316,6 +1316,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
   // stalling eviction.
   if (evictToNvmCache && !token.isValid()) {
     ++itr;
+    stats_.evictFailConcurrentFill.inc();
     return ItemHandle{};
   }
 
@@ -1388,6 +1389,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
 
   // if token is invalid, return. iterator is already advanced.
   if (evictToNvmCache && !token.isValid()) {
+    stats_.evictFailConcurrentFill.inc();
     return ItemHandle{};
   }
 
