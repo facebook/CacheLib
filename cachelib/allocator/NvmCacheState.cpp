@@ -20,7 +20,6 @@ namespace cachelib {
 namespace {
 const folly::StringPiece kNvmCacheState = "NvmCacheState";
 const folly::StringPiece kShouldDropNvmCache = "IceRoll";
-const folly::StringPiece kLegacySafeShutDown = "SafeShutDown";
 
 bool fileExists(const std::string& file) {
   return util::getStatIfExists(file, nullptr);
@@ -51,12 +50,6 @@ void saveMetadata(const folly::File& file,
   folly::RecordIOWriter rw{std::move(shutDownFile)};
   rw.write(std::move(metadataIoBuf));
 }
-
-void saveMetadata(folly::StringPiece fileName,
-                  const serialization::NvmCacheMetadata& metadata) {
-  folly::File shutDownFile{fileName, O_CREAT | O_RDWR | O_TRUNC};
-  saveMetadata(shutDownFile, metadata);
-}
 } // namespace
 
 NvmCacheState::NvmCacheState(const std::string& cacheDir,
@@ -86,53 +79,20 @@ NvmCacheState::NvmCacheState(const std::string& cacheDir,
 }
 
 void NvmCacheState::restoreState() {
-  if (fileExists(getFileNameFor(kNvmCacheState))) {
-    restoreStateNew();
-  } else {
-    restoreStateLegacy();
-  }
-}
-
-void NvmCacheState::restoreStateNew() {
   // Read previous instance state from nvm state file
   try {
     shouldDropNvmCache_ = fileExists(getFileNameFor(kShouldDropNvmCache));
 
+    if (!fileExists(getFileNameFor(kNvmCacheState))) {
+      // No nvm cache state supplied, we return early. Nvm cache will still be
+      // started afresh due to wasCleanshutDown_ == false
+      return;
+    }
+
     auto metadata = loadMetadata(getFileNameFor(kNvmCacheState));
     wasCleanshutDown_ = *metadata.safeShutDown_ref();
 
-    if (wasCleanshutDown_ && !shouldDropNvmCache_) {
-      if (*metadata.nvmFormatVersion_ref() == kCacheNvmFormatVersion &&
-          encryptionEnabled_ == *metadata.encryptionEnabled_ref() &&
-          truncateAllocSize_ == *metadata.truncateAllocSize_ref()) {
-        creationTime_ = *metadata.creationTime_ref();
-      } else {
-        XLOGF(ERR,
-              "Expected nvm format version {}, but found {}. Expected "
-              "encryption to be {}, but found {}. Expected truncateAllocSize "
-              "to be {}, but found {}. Dropping NvmCache",
-              kCacheNvmFormatVersion, *metadata.nvmFormatVersion_ref(),
-              encryptionEnabled_ ? "true" : "false",
-              *metadata.encryptionEnabled_ref() ? "true" : "false",
-              truncateAllocSize_ ? "true" : "false",
-              *metadata.truncateAllocSize_ref() ? "true" : "false");
-        shouldDropNvmCache_ = true;
-      }
-    }
-  } catch (const std::exception& ex) {
-    XLOGF(ERR, "unable to deserialize nvm metadata file: {}", ex.what());
-    shouldDropNvmCache_ = true;
-  }
-}
-
-void NvmCacheState::restoreStateLegacy() {
-  // Remove legacy support when everyone is on allocator version V11
-  try {
-    shouldDropNvmCache_ = fileExists(getFileNameFor(kShouldDropNvmCache));
-    wasCleanshutDown_ = fileExists(getFileNameFor(kLegacySafeShutDown));
-
-    if (wasCleanshutDown_ && !shouldDropNvmCache_) {
-      auto metadata = loadMetadata(getFileNameFor(kLegacySafeShutDown));
+    if (!shouldStartFresh()) {
       if (*metadata.nvmFormatVersion_ref() == kCacheNvmFormatVersion &&
           encryptionEnabled_ == *metadata.encryptionEnabled_ref() &&
           truncateAllocSize_ == *metadata.truncateAllocSize_ref()) {
@@ -167,34 +127,15 @@ bool NvmCacheState::wasCleanShutDown() const { return wasCleanshutDown_; }
 time_t NvmCacheState::getCreationTime() const { return creationTime_; }
 
 void NvmCacheState::clearPrevState() {
-  auto removeFn = [](folly::StringPiece file) {
-    if (::unlink(file.data()) != 0 && errno != ENOENT) {
-      util::throwSystemError(errno, "Failed to delete dipper run file");
-    }
-  };
-
-  // Remove legacy support when everyone is on allocator version V11
-  removeFn(getFileNameFor(kLegacySafeShutDown));
-
-  removeFn(getFileNameFor(kShouldDropNvmCache));
+  if (::unlink(kShouldDropNvmCache.data()) != 0 && errno != ENOENT) {
+    util::throwSystemError(errno, "Failed to delete dipper run file");
+  }
   XDCHECK(metadataFile_);
   ftruncate(metadataFile_->fd(), 0);
 }
 
 void NvmCacheState::markSafeShutDown() {
-  markSafeShutDownNew();
-
-  try {
-    markSafeShutDownLegacy();
-  } catch (const std::exception& ex) {
-    XLOGF(ERR, "Unable to execute legacy safe shut down code path. Ex: {}",
-          ex.what());
-  }
-}
-
-void NvmCacheState::markSafeShutDownNew() {
   XDCHECK(metadataFile_);
-
   serialization::NvmCacheMetadata metadata;
   *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
   *metadata.creationTime_ref() = creationTime_;
@@ -202,20 +143,6 @@ void NvmCacheState::markSafeShutDownNew() {
   *metadata.encryptionEnabled_ref() = encryptionEnabled_;
   *metadata.truncateAllocSize_ref() = truncateAllocSize_;
   saveMetadata(*metadataFile_, metadata);
-}
-
-void NvmCacheState::markSafeShutDownLegacy() {
-  // Remove legacy support when everyone is on allocactor version V11
-  std::string fileName = getFileNameFor(kLegacySafeShutDown);
-  if (fileExists(fileName)) {
-    throw std::invalid_argument("clean shutdown file already exists");
-  }
-  serialization::NvmCacheMetadata metadata;
-  *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-  *metadata.creationTime_ref() = creationTime_;
-  *metadata.encryptionEnabled_ref() = encryptionEnabled_;
-  *metadata.truncateAllocSize_ref() = truncateAllocSize_;
-  saveMetadata(fileName, metadata);
 }
 
 std::string NvmCacheState::getFileNameFor(folly::StringPiece name) const {

@@ -58,11 +58,6 @@ class NvmCacheState {
   std::string getFileNameFor(folly::StringPiece name) const;
 
   void restoreState();
-  void restoreStateNew();
-  void restoreStateLegacy();
-
-  void markSafeShutDownNew();
-  void markSafeShutDownLegacy();
 
   // the directory identifying the state
   const std::string cacheDir_;
