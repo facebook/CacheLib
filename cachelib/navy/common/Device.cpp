@@ -73,8 +73,7 @@ class RAID0Device final : public Device {
               uint32_t ioAlignSize,
               uint32_t stripeSize,
               std::shared_ptr<DeviceEncryptor> encryptor,
-              uint32_t maxDeviceWriteSize,
-              bool releaseBugFixForT68874972)
+              uint32_t maxDeviceWriteSize)
       : Device{fdSize * fvec.size(), std::move(encryptor), ioAlignSize,
                maxDeviceWriteSize},
         fvec_{std::move(fvec)},
@@ -85,7 +84,7 @@ class RAID0Device final : public Device {
     XDCHECK_EQ(0u, stripeSize_ % 2) << stripeSize_;
     XDCHECK_EQ(0u, stripeSize_ % ioAlignSize)
         << stripeSize_ << ", " << ioAlignSize;
-    if (releaseBugFixForT68874972 && fdSize % stripeSize != 0) {
+    if (fdSize % stripeSize != 0) {
       throw std::invalid_argument(
           folly::sformat("Invalid size because individual device size: {} is "
                          "not aligned to stripe size: {}",
@@ -341,12 +340,11 @@ std::unique_ptr<Device> createDirectIoRAID0Device(
     uint32_t ioAlignSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize,
-    bool releaseBugFixForT68874972) {
+    uint32_t maxDeviceWriteSize) {
   XDCHECK(folly::isPowTwo(ioAlignSize));
-  return std::make_unique<RAID0Device>(
-      std::move(fvec), size, ioAlignSize, stripeSize, std::move(encryptor),
-      maxDeviceWriteSize, releaseBugFixForT68874972);
+  return std::make_unique<RAID0Device>(std::move(fvec), size, ioAlignSize,
+                                       stripeSize, std::move(encryptor),
+                                       maxDeviceWriteSize);
 }
 
 std::unique_ptr<Device> createMemoryDevice(

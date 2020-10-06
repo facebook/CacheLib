@@ -54,9 +54,6 @@ constexpr folly::StringPiece kMaxDeviceWriteSize{
     "dipper_navy_max_device_write_size"};
 constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
-// TODO: clean this up after T68874972 is resolved.
-constexpr folly::StringPiece kReleaseBugFixForT68874972{
-    "dipper_navy_release_bugfix_for_T68874972"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -206,8 +203,7 @@ void setupCacheProtos(const folly::dynamic& options,
     // Adjust starting size of block cache to ensure it is aligned to region
     // size which is what we use for the stripe size when using RAID0Device.
     uint64_t blockCacheOffset = metadataSize;
-    if (options.getDefault(kReleaseBugFixForT68874972, true).getBool() &&
-        usesRaidFiles(options)) {
+    if (usesRaidFiles(options)) {
       auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
       auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
       XDCHECK_LT(cacheSizeAdjustment, blockCacheSize);
@@ -348,11 +344,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
 
     // Align down device size to ensure each device is aligned to stripe size
     auto stripeSize = static_cast<uint64_t>(options[kRegionSize].getInt());
-    auto releaseBugFixForT68874972 =
-        options.getDefault(kReleaseBugFixForT68874972, true).getBool();
-    if (releaseBugFixForT68874972) {
-      fdSize = alignDown(fdSize, stripeSize);
-    }
+    fdSize = alignDown(fdSize, stripeSize);
 
     auto device =
         cachelib::navy::createDirectIoRAID0Device(std::move(fileVec),
@@ -360,8 +352,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
                                                   blockSize,
                                                   stripeSize,
                                                   std::move(encryptor),
-                                                  maxDeviceWriteSize,
-                                                  releaseBugFixForT68874972);
+                                                  maxDeviceWriteSize);
     return device;
   }
 

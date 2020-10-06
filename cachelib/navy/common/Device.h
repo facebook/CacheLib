@@ -170,8 +170,7 @@ std::unique_ptr<Device> createDirectIoRAID0Device(
     uint32_t ioAlignSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize,
-    bool releaseBugFixForT68874972);
+    uint32_t maxDeviceWriteSize);
 // Default ioAlignSize size for Memory Device is 1. In our tests, we create
 // Devices with different ioAlignSize sizes using memory device. So we need
 // a way to set a different ioAlignSize size for memory devices.

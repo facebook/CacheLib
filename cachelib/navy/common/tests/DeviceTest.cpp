@@ -234,8 +234,7 @@ TEST(Device, RAID0IO) {
                                           ioAlignSize,
                                           stripeSize,
                                           nullptr /* encryption */,
-                                          0 /* max device write size */,
-                                          true /* clean up after T68874972 */);
+                                          0 /* max device write size */);
 
   EXPECT_EQ(vecSize * size, device->getSize());
 
@@ -324,18 +323,8 @@ TEST(Device, RAID0IOAlignment) {
                                          ioAlignSize,
                                          stripeSize,
                                          nullptr /* encryption */,
-                                         0 /* max device write size */,
-                                         true /* clean up after T68874972 */),
+                                         0 /* max device write size */),
                std::invalid_argument);
-
-  ASSERT_NO_THROW(
-      createDirectIoRAID0Device(std::move(fvec),
-                                size,
-                                ioAlignSize,
-                                stripeSize,
-                                nullptr /* encryption */,
-                                0 /* max device write size */,
-                                false /* clean up after T68874972 */));
 }
 } // namespace tests
 } // namespace navy
