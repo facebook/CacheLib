@@ -27,7 +27,6 @@ ClassId LruTailAgeStrategy::pickVictim(
     PoolId pid,
     const PoolStats& poolStats,
     const PoolEvictionAgeStats& poolEvictionAgeStats) {
-  auto numClasses = poolStats.cacheStats.size();
   auto victims = poolStats.getClassIds();
 
   // ignore allocation classes that have fewer than the threshold of slabs.
@@ -55,9 +54,13 @@ ClassId LruTailAgeStrategy::pickVictim(
   return *std::max_element(
       victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
         return (poolEvictionAgeStats.getProjectedAge(a) *
-                    (config.getWeight ? config.getWeight(a, numClasses) : 1.0) <
+                    (config.getWeight
+                         ? config.getWeight(makeAllocInfo(pid, a, poolStats))
+                         : 1.0) <
                 poolEvictionAgeStats.getProjectedAge(b) *
-                    (config.getWeight ? config.getWeight(b, numClasses) : 1.0));
+                    (config.getWeight
+                         ? config.getWeight(makeAllocInfo(pid, b, poolStats))
+                         : 1.0));
       });
 }
 
@@ -67,7 +70,6 @@ ClassId LruTailAgeStrategy::pickReceiver(
     const PoolStats& stats,
     ClassId victim,
     const PoolEvictionAgeStats& poolEvictionAgeStats) const {
-  auto numClasses = stats.cacheStats.size();
   auto receivers = stats.getClassIds();
   receivers.erase(victim);
 
@@ -80,9 +82,13 @@ ClassId LruTailAgeStrategy::pickReceiver(
   return *std::min_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
         return (poolEvictionAgeStats.getOldestElementAge(a) *
-                    (config.getWeight ? config.getWeight(a, numClasses) : 1.0) <
+                    (config.getWeight
+                         ? config.getWeight(makeAllocInfo(pid, a, stats))
+                         : 1.0) <
                 poolEvictionAgeStats.getOldestElementAge(b) *
-                    (config.getWeight ? config.getWeight(b, numClasses) : 1.0));
+                    (config.getWeight
+                         ? config.getWeight(makeAllocInfo(pid, b, stats))
+                         : 1.0));
       });
 }
 

@@ -424,9 +424,8 @@ class RebalanceStrategyTest : public testing::Test {
     const ClassId victim = static_cast<ClassId>(1);
 
     LruTailAgeStrategy::Config weightedlruConfig;
-    weightedlruConfig.getWeight = [](ClassId classId,
-                                     unsigned int nClasses) -> double {
-      return (((classId == 0) ? 0.4 : 1.0) / nClasses);
+    weightedlruConfig.getWeight = [](const AllocInfo& allocInfo) -> double {
+      return ((allocInfo.classId == 0) ? 0.4 : 1.0);
     };
     allocatorConfig.enablePoolRebalancing(
         std::make_shared<LruTailAgeStrategy>(weightedlruConfig),

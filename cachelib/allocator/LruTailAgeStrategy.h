@@ -33,8 +33,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // weight function is null, and no weighted tail age is computed.
     // If the weight function is set, tailAgeDifferenceRatio and
     // minTailAgeDifference are ignored
-    using WeightFn =
-        std::function<double(const ClassId id, const unsigned int nClasses)>;
+    using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
     WeightFn getWeight = {};
 
     size_t getFreeMemThreshold() const noexcept {
@@ -46,10 +45,10 @@ class LruTailAgeStrategy : public RebalanceStrategy {
         : tailAgeDifferenceRatio(ratio), minSlabs{_minSlabs} {}
     Config(double ratio,
            unsigned int _minSlabs,
-           const WeightFn& weightFunction) noexcept
+           const WeightFn& _getWeight) noexcept
         : tailAgeDifferenceRatio(ratio),
           minSlabs{_minSlabs},
-          getWeight(weightFunction) {}
+          getWeight(_getWeight) {}
   };
 
   // Update the config. This will not affect the current rebalancing, but
@@ -76,6 +75,12 @@ class LruTailAgeStrategy : public RebalanceStrategy {
   ClassId pickVictimImpl(const CacheBase& cache, PoolId pid) override final;
 
  private:
+  static AllocInfo makeAllocInfo(PoolId pid,
+                                 ClassId cid,
+                                 const PoolStats& stats) {
+    return AllocInfo{pid, cid, stats.allocSizeForClass(cid)};
+  }
+
   ClassId pickVictim(const Config& config,
                      PoolId pid,
                      const PoolStats& stats,
