@@ -206,6 +206,8 @@ class BlockCache final : public Engine {
   // and size of the address (which is 32-bits).
   const uint32_t allocAlignSize_{};
   const uint32_t readBufferSize_{};
+  // number of bytes in a region
+  const uint64_t regionSize_{};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset 0

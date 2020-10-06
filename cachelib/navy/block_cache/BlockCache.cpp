@@ -102,6 +102,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       readBufferSize_{config.readBufferSize < kDefReadBufferSize
                           ? kDefReadBufferSize
                           : config.readBufferSize},
+      regionSize_{config.regionSize},
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,
@@ -579,13 +580,42 @@ void BlockCache::tryRecover(RecordReader& rr) {
 }
 
 bool BlockCache::isValidRecoveryData(
-    const serialization::BlockCacheConfig& config) const {
-  return config_.cacheBaseOffset == config.cacheBaseOffset &&
-         config_.cacheSize == config.cacheSize &&
-         static_cast<int32_t>(allocAlignSize_) == config.allocAlignSize &&
-         config_.sizeClasses == config.sizeClasses &&
-         config_.checksum == config.checksum &&
-         config_.version == config.version;
+    const serialization::BlockCacheConfig& recoveredConfig) const {
+  if (!(*config_.cacheBaseOffset_ref() ==
+            *recoveredConfig.cacheBaseOffset_ref() &&
+        static_cast<int32_t>(allocAlignSize_) ==
+            *recoveredConfig.allocAlignSize_ref() &&
+        *config_.sizeClasses_ref() == *recoveredConfig.sizeClasses_ref() &&
+        *config_.checksum_ref() == *recoveredConfig.checksum_ref())) {
+    return false;
+  }
+  // TOOD: this is to handle alignment change on cache size from v11 to v12 and
+  // beyond. Clean this up after BlockCache everywhere is on v12, and restore
+  // the above block in the comments.
+  // Forward warm-roll for v11 going forward to v12+
+  if (*config_.version_ref() > *recoveredConfig.version_ref() &&
+      *config_.version_ref() >= 12 && *recoveredConfig.version_ref() == 11) {
+    XLOGF(INFO,
+          "Handling warm roll upgrade from Navy v11 to v12+. Old cache size: "
+          "{}, New cache size: {}",
+          *recoveredConfig.cacheSize_ref(),
+          *config_.cacheSize_ref());
+    return *config_.cacheSize_ref() / regionSize_ ==
+           *recoveredConfig.cacheSize_ref() / regionSize_;
+  }
+  // Backward warm-roll. This is for v12+ rolling back to v11
+  if (*config_.version_ref() < *recoveredConfig.version_ref() &&
+      *config_.version_ref() == 11 && *recoveredConfig.version_ref() >= 12) {
+    XLOGF(INFO,
+          "Handling warm roll downgrade from Navy v12+ to v11. Old cache size: "
+          "{}, New cache size: {}",
+          *recoveredConfig.cacheSize_ref(),
+          *config_.cacheSize_ref());
+    return *config_.cacheSize_ref() / regionSize_ ==
+           *recoveredConfig.cacheSize_ref() / regionSize_;
+  }
+  return *config_.cacheSize_ref() == *recoveredConfig.cacheSize_ref() &&
+         *config_.version_ref() == *recoveredConfig.version_ref();
 }
 
 serialization::BlockCacheConfig BlockCache::serializeConfig(
