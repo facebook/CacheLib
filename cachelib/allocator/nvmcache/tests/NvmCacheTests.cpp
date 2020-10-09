@@ -71,7 +71,7 @@ TEST_F(NvmCacheTest, APConfig) {
     config.enableRejectFirstAPForNvm(10, 10, 1, true);
     auto& nvm = makeCache();
     auto ctrs = nvm.getNvmCacheStatsMap();
-    EXPECT_NE(ctrs.find("nvm_reject_first_keys_tracked"), ctrs.end());
+    EXPECT_NE(ctrs.find("ap.reject_first_keys_tracked"), ctrs.end());
   }
 
   {

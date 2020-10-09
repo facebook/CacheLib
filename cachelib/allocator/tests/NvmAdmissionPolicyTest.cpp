@@ -61,18 +61,18 @@ TEST(NvmAdmissionPolicyTests, InvalidAPTests) {
   ap.accept(item0, dummyChainedItem);
   auto ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["nvm_mock_failed_policy"], 1);
-  EXPECT_EQ(ctrs["nvm_ap_called"], 1);
-  EXPECT_EQ(ctrs["nvm_ap_accepted"], 1);
-  EXPECT_EQ(ctrs["nvm_ap_rejected"], 0);
+  EXPECT_EQ(ctrs["ap.called"], 1);
+  EXPECT_EQ(ctrs["ap.accepted"], 1);
+  EXPECT_EQ(ctrs["ap.rejected"], 0);
 
   const Cache::Item item1{"key1"};
   // Reject.
   ap.accept(item1, dummyChainedItem);
   ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["nvm_mock_failed_policy"], 1);
-  EXPECT_EQ(ctrs["nvm_ap_called"], 2);
-  EXPECT_EQ(ctrs["nvm_ap_accepted"], 1);
-  EXPECT_EQ(ctrs["nvm_ap_rejected"], 1);
+  EXPECT_EQ(ctrs["ap.called"], 2);
+  EXPECT_EQ(ctrs["ap.accepted"], 1);
+  EXPECT_EQ(ctrs["ap.rejected"], 1);
 
   const Cache::Item item2{"key 2"};
   // Throw.

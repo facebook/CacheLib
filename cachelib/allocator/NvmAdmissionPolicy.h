@@ -34,11 +34,11 @@ class NvmAdmissionPolicy {
   // The method that exposes statuses.
   virtual std::unordered_map<std::string, double> getCounters() final {
     auto ctrs = getCountersImpl();
-    ctrs["nvm_ap_called"] = overallCount_.get();
-    ctrs["nvm_ap_accepted"] = accepted_.get();
-    ctrs["nvm_ap_rejected"] = rejected_.get();
+    ctrs["ap.called"] = overallCount_.get();
+    ctrs["ap.accepted"] = accepted_.get();
+    ctrs["ap.rejected"] = rejected_.get();
     util::LatencyTracker::visitLatencyStatsUs(
-        ctrs, overallLatency_, "nvm_ap_overall_latency");
+        ctrs, overallLatency_, "ap.latency");
     return ctrs;
   }
 
@@ -95,10 +95,10 @@ class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
   virtual std::unordered_map<std::string, double> getCountersImpl()
       final override {
     std::unordered_map<std::string, double> ctrs;
-    ctrs["nvm_reject_first_keys_tracked"] = tracker_.numKeysTracked();
-    ctrs["nvm_reject_first_tracking_window_secs"] =
+    ctrs["ap.reject_first_keys_tracked"] = tracker_.numKeysTracked();
+    ctrs["ap.reject_first_tracking_window_secs"] =
         tracker_.trackingWindowDurationSecs();
-    ctrs["nvm_reject_first_admits_by_dram_hit"] = admitsByDramHits_.get();
+    ctrs["ap.reject_first_admits_by_dram_hit"] = admitsByDramHits_.get();
     return ctrs;
   }
 
