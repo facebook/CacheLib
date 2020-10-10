@@ -14,13 +14,20 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 namespace tests {
+namespace {
+const Region kRegion0{RegionId{0}, 100};
+const Region kRegion1{RegionId{1}, 100};
+const Region kRegion2{RegionId{2}, 100};
+const Region kRegion3{RegionId{3}, 100};
+}
+
 TEST(RegionManager, ReclaimLruAsFifo) {
   auto policy = std::make_unique<LruPolicy>(4);
   auto& ep = *policy;
-  ep.track(RegionId{0});
-  ep.track(RegionId{1});
-  ep.track(RegionId{2});
-  ep.track(RegionId{3});
+  ep.track(kRegion0);
+  ep.track(kRegion1);
+  ep.track(kRegion2);
+  ep.track(kRegion3);
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
@@ -34,19 +41,19 @@ TEST(RegionManager, ReclaimLruAsFifo) {
                                             sizeClasses, std::move(policy), 0);
 
   // without touch, the first region inserted is reclaimed
-  EXPECT_EQ(0, rm->evict().index());
-  EXPECT_EQ(1, rm->evict().index());
-  EXPECT_EQ(2, rm->evict().index());
-  EXPECT_EQ(3, rm->evict().index());
+  EXPECT_EQ(kRegion0.id(), rm->evict());
+  EXPECT_EQ(kRegion1.id(), rm->evict());
+  EXPECT_EQ(kRegion2.id(), rm->evict());
+  EXPECT_EQ(kRegion3.id(), rm->evict());
 }
 
 TEST(RegionManager, ReclaimLru) {
   auto policy = std::make_unique<LruPolicy>(4);
   auto& ep = *policy;
-  ep.track(RegionId{0});
-  ep.track(RegionId{1});
-  ep.track(RegionId{2});
-  ep.track(RegionId{3});
+  ep.track(kRegion0);
+  ep.track(kRegion1);
+  ep.track(kRegion2);
+  ep.track(kRegion3);
 
   constexpr uint32_t kNumRegions = 4;
   constexpr uint32_t kRegionSize = 4 * 1024;
@@ -59,13 +66,13 @@ TEST(RegionManager, ReclaimLru) {
                                             *device, 1, ex, std::move(evictCb),
                                             sizeClasses, std::move(policy), 0);
 
-  rm->touch(RegionId{0});
-  rm->touch(RegionId{1});
+  rm->touch(kRegion0.id());
+  rm->touch(kRegion1.id());
 
-  EXPECT_EQ(2, rm->evict().index());
-  EXPECT_EQ(3, rm->evict().index());
-  EXPECT_EQ(0, rm->evict().index());
-  EXPECT_EQ(1, rm->evict().index());
+  EXPECT_EQ(kRegion2.id(), rm->evict());
+  EXPECT_EQ(kRegion3.id(), rm->evict());
+  EXPECT_EQ(kRegion0.id(), rm->evict());
+  EXPECT_EQ(kRegion1.id(), rm->evict());
 }
 
 TEST(RegionManager, Recovery) {
@@ -78,13 +85,7 @@ TEST(RegionManager, Recovery) {
   {
     std::vector<uint32_t> hits(4);
     auto policy = std::make_unique<MockPolicy>(&hits);
-    {
-      testing::InSequence s;
-      EXPECT_CALL(*policy, track(RegionId{0}));
-      EXPECT_CALL(*policy, track(RegionId{1}));
-      EXPECT_CALL(*policy, track(RegionId{2}));
-      EXPECT_CALL(*policy, track(RegionId{3}));
-    }
+    expectRegionsTracked(*policy, {0, 1, 2, 3});
     std::vector<uint32_t> sizeClasses{4096};
     RegionEvictCallback evictCb{
         [](RegionId, uint32_t, BufferView) { return 0; }};

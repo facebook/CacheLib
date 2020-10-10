@@ -54,7 +54,6 @@ TEST(Region, BufferAttachDetach) {
   b = r.detachBuffer();
   EXPECT_FALSE(r.hasBuffer());
 }
-
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

@@ -19,6 +19,7 @@ struct Region {
   3: required i32 classId = 0,
   4: required i32 numItems = 0,
   5: required bool pinned = false,
+  6: i32 priority = 0,
 }
 
 struct RegionData {

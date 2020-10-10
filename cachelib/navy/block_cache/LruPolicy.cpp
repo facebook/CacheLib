@@ -35,7 +35,8 @@ void LruPolicy::touch(RegionId rid) {
   }
 }
 
-void LruPolicy::track(RegionId rid) {
+void LruPolicy::track(const Region& region) {
+  auto rid = region.id();
   XDCHECK(rid.valid());
   auto i = rid.index();
   std::lock_guard<std::mutex> lock{mutex_};

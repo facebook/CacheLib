@@ -7,6 +7,7 @@
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
+#include "cachelib/navy/block_cache/Region.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
 
 namespace facebook {
@@ -20,8 +21,8 @@ class MockPolicy : public EvictionPolicy {
     using testing::Invoke;
     using testing::Return;
 
-    ON_CALL(*this, track(_)).WillByDefault(Invoke([this](RegionId rid) {
-      fifo_.track(rid);
+    ON_CALL(*this, track(_)).WillByDefault(Invoke([this](const Region& region) {
+      fifo_.track(region);
     }));
     ON_CALL(*this, touch(_)).WillByDefault(Invoke([this](RegionId rid) {
       hits_[rid.index()]++;
@@ -42,7 +43,7 @@ class MockPolicy : public EvictionPolicy {
             Invoke([this](const CounterVisitor& v) { fifo_.getCounters(v); }));
   }
 
-  MOCK_METHOD1(track, void(RegionId rid));
+  MOCK_METHOD1(track, void(const Region& region));
   MOCK_METHOD1(touch, void(RegionId rid));
   MOCK_METHOD0(evict, RegionId());
   MOCK_METHOD0(reset, void());
@@ -54,6 +55,20 @@ class MockPolicy : public EvictionPolicy {
   FifoPolicy fifo_;
 };
 
+// @param arg     Region
+// @param rid     RegionId
+MATCHER_P(EqRegion, rid, "region's id should be equal to rid") {
+  return arg.id().index() == rid.index();
+}
+
+// @param arg     Region
+// @param rid     RegionId
+// @param pri     Region's priority
+MATCHER_P2(EqRegionPri, rid, pri, "region should have the same id and pri") {
+  return arg.id().index() == rid.index() &&
+         arg.getPriority() == static_cast<uint32_t>(pri);
+}
+
 // Return uint32_t of the invalid region id
 inline uint32_t getInvalidRegionId() { return RegionId{}.index(); }
 
@@ -63,7 +78,7 @@ inline void expectRegionsTracked(MockPolicy& policy,
                                  bool sticky = true) {
   testing::InSequence s;
   for (auto id : regionIds) {
-    EXPECT_CALL(policy, track(RegionId{id})).RetiresOnSaturation();
+    EXPECT_CALL(policy, track(EqRegion(RegionId{id}))).RetiresOnSaturation();
   }
   if (sticky) {
     EXPECT_CALL(policy, track(testing::_)).Times(0);

@@ -91,7 +91,7 @@ class RegionManager {
   void touch(RegionId rid) { policy_->touch(rid); }
 
   // Calling track on tracked regions is noop
-  void track(RegionId rid) { policy_->track(rid); }
+  void track(RegionId rid);
 
   void reset();
 

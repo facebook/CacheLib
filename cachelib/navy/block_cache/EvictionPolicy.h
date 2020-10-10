@@ -3,6 +3,7 @@
 #include <chrono>
 #include <memory>
 
+#include "cachelib/navy/block_cache/Region.h"
 #include "cachelib/navy/block_cache/Types.h"
 #include "cachelib/navy/common/Types.h"
 
@@ -14,7 +15,8 @@ class EvictionPolicy {
   virtual ~EvictionPolicy() = default;
 
   // Add a new region for tracking
-  virtual void track(RegionId id) = 0;
+  // @param region    region to be tracked
+  virtual void track(const Region& region) = 0;
 
   // Touch (record a hit) this region
   virtual void touch(RegionId id) = 0;

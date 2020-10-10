@@ -49,6 +49,12 @@ RegionId RegionManager::evict() {
   return rid;
 }
 
+void RegionManager::track(RegionId rid) {
+  auto& region = getRegion(rid);
+  XDCHECK_EQ(rid, region.id());
+  policy_->track(region);
+}
+
 void RegionManager::reset() {
   for (uint32_t i = 0; i < numRegions_; i++) {
     regions_[i]->reset();
@@ -344,6 +350,7 @@ void RegionManager::persist(RecordWriter& rw) const {
     } else {
       regionProto.classId = regions_[i]->getClassId();
     }
+    regionProto.priority_ref() = regions_[i]->getPriority();
     regionProto.numItems = regions_[i]->getNumItems();
   }
   serializeProto(regionData, rw);

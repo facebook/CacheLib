@@ -5,9 +5,9 @@ namespace cachelib {
 namespace navy {
 FifoPolicy::FifoPolicy() { XLOG(INFO, "FIFO policy"); }
 
-void FifoPolicy::track(RegionId rid) {
+void FifoPolicy::track(const Region& region) {
   std::lock_guard<std::mutex> lock{mutex_};
-  queue_.push_back(rid);
+  queue_.push_back(region.id());
 }
 
 RegionId FifoPolicy::evict() {

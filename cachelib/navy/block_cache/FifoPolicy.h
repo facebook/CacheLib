@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <mutex>
+#include <set>
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 
@@ -17,7 +18,7 @@ class FifoPolicy final : public EvictionPolicy {
   ~FifoPolicy() override = default;
 
   void touch(RegionId /* rid */) override {}
-  void track(RegionId rid) override;
+  void track(const Region& region) override;
   RegionId evict() override;
   void reset() override;
 

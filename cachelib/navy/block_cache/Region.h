@@ -50,6 +50,7 @@ class Region {
       : regionId_{rid},
         regionSize_{regionSize},
         classId_{static_cast<uint16_t>(d.classId)},
+        priority_{static_cast<uint16_t>(*d.priority_ref())},
         lastEntryEndOffset_{static_cast<uint32_t>(d.lastEntryEndOffset)},
         numItems_{static_cast<uint32_t>(d.numItems)} {}
 
@@ -90,6 +91,17 @@ class Region {
     XDCHECK(!isPinned());
     std::lock_guard<std::mutex> l{lock_};
     return classId_;
+  }
+
+  // Assign this region a priority. The meaning of priority
+  // is dependent on the eviction policy we choose.
+  void setPriority(uint16_t priority) {
+    std::lock_guard<std::mutex> l{lock_};
+    priority_ = priority;
+  }
+  uint16_t getPriority() const {
+    std::lock_guard<std::mutex> l{lock_};
+    return priority_;
   }
 
   // Set this region as pinned (i.e. non-evictable)
@@ -209,6 +221,7 @@ class Region {
   const uint64_t regionSize_{0};
 
   uint16_t classId_{kClassIdMax};
+  uint16_t priority_{0};
   uint16_t flags_{0};
   uint32_t activePhysReaders_{0};
   uint32_t activeInMemReaders_{0};

@@ -26,7 +26,7 @@ class LruPolicy final : public EvictionPolicy {
   ~LruPolicy() override {}
 
   void touch(RegionId rid) override;
-  void track(RegionId rid) override;
+  void track(const Region& region) override;
   RegionId evict() override;
   void reset() override;
   size_t memorySize() const override;
