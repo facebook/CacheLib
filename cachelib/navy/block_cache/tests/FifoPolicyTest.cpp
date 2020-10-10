@@ -40,6 +40,73 @@ TEST(EvictionPolicy, FifoReset) {
   policy.reset();
   EXPECT_EQ(RegionId{}, policy.evict());
 }
+
+TEST(EvictionPolicy, SegmentedFifoSimple) {
+  Region region0{RegionId{0}, 100};
+  Region region1{RegionId{1}, 100};
+  Region region2{RegionId{2}, 100};
+  Region region3{RegionId{3}, 100};
+  region0.setPriority(1);
+  region1.setPriority(1);
+  region2.setPriority(1);
+  region3.setPriority(1);
+
+  SegmentedFifoPolicy policy{{1, 1}};
+
+  policy.track(region0); // {[0], []}
+  policy.track(region1); // {[0], [1]}
+  policy.track(region2); // {[0, 1], [2]}
+  policy.track(region3); // {[0, 1], [2, 3]}
+
+  EXPECT_EQ(region0.id(), policy.evict());
+  EXPECT_EQ(region1.id(), policy.evict());
+  EXPECT_EQ(region2.id(), policy.evict());
+  EXPECT_EQ(region3.id(), policy.evict());
+  EXPECT_EQ(RegionId{}, policy.evict());
+}
+
+TEST(EvictionPolicy, SegmentedFifoBadConfig) {
+  ASSERT_THROW((SegmentedFifoPolicy{{1, 0, 1}}), std::invalid_argument);
+  ASSERT_THROW((SegmentedFifoPolicy{{1, 0}}), std::invalid_argument);
+  ASSERT_THROW((SegmentedFifoPolicy{{0}}), std::invalid_argument);
+  ASSERT_THROW((SegmentedFifoPolicy{{}}), std::invalid_argument);
+}
+
+TEST(EvictionPolicy, SegmentedFifoRebalance) {
+  Region region0{RegionId{0}, 100};
+  Region region1{RegionId{1}, 100};
+  Region region2{RegionId{2}, 100};
+  Region region3{RegionId{3}, 100};
+  region0.setPriority(2);
+  region1.setPriority(1);
+  region2.setPriority(0);
+  region3.setPriority(2);
+
+  SegmentedFifoPolicy policy{{1, 1, 1}};
+
+  // Region 0 has highest pri, but it will be rebalanced into the lowest
+  // priority segment
+  policy.track(region0); // {[0], [], []}
+  EXPECT_EQ(region0.id(), policy.evict());
+
+  policy.track(region0); // {[0], [], []}
+  policy.track(region1); // {[0, 1], [], []}
+  policy.track(region2); // {[0, 1, 2], [], []}
+  policy.track(region3); // {[0, 1, 2], [], [3]}
+
+  EXPECT_EQ(region0.id(), policy.evict());
+  EXPECT_EQ(region1.id(), policy.evict());
+  EXPECT_EQ(region2.id(), policy.evict());
+
+  region1.setPriority((1));
+  region2.setPriority((1));
+  policy.track(region1); // {[3, 1], [], []}
+  policy.track(region2); // {[3, 1, 2], [], []}
+
+  EXPECT_EQ(region3.id(), policy.evict());
+  EXPECT_EQ(region1.id(), policy.evict());
+  EXPECT_EQ(region2.id(), policy.evict());
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib
