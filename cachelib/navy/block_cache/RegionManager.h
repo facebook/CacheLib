@@ -49,6 +49,7 @@ class RegionManager {
   // @param sizeClasses       list of size classes
   // @param policy            eviction policy
   // @param numInMemBuffers   number of in memory buffers
+  // @Param numPriorities     max number of priorities allowed for regions
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -58,7 +59,8 @@ class RegionManager {
                 RegionEvictCallback evictCb,
                 std::vector<uint32_t> sizeClasses,
                 std::unique_ptr<EvictionPolicy> policy,
-                uint32_t numInMemBuffers);
+                uint32_t numInMemBuffers,
+                uint16_t numPriorities);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -184,6 +186,7 @@ class RegionManager {
   // them and can be evicted right away.
   void resetEvictionPolicy();
 
+  const uint16_t numPriorities_{};
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};
   const uint64_t baseOffset_{};

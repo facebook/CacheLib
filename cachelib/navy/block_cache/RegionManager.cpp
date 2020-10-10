@@ -13,8 +13,10 @@ RegionManager::RegionManager(uint32_t numRegions,
                              RegionEvictCallback evictCb,
                              std::vector<uint32_t> sizeClasses,
                              std::unique_ptr<EvictionPolicy> policy,
-                             uint32_t numInMemBuffers)
-    : numRegions_{numRegions},
+                             uint32_t numInMemBuffers,
+                             uint16_t numPriorities)
+    : numPriorities_{numPriorities},
+      numRegions_{numRegions},
       regionSize_{regionSize},
       baseOffset_{baseOffset},
       device_{device},
@@ -370,6 +372,12 @@ void RegionManager::recover(RecordReader& rr) {
         static_cast<uint32_t>(regionProto.lastEntryEndOffset) > regionSize_) {
       throw std::invalid_argument(
           "Could not recover RegionManager. Invalid RegionId.");
+    }
+    // To handle compatibility between different priorities. If the current
+    // setup has fewer priorities than the last run, automatically downgrade
+    // all higher priorties to the current max.
+    if (numPriorities_ > 0 && regionProto.priority_ref() >= numPriorities_) {
+      regionProto.priority_ref() = numPriorities_ - 1;
     }
     regions_[index] = std::make_unique<Region>(
         regionProto,

@@ -18,7 +18,10 @@ constexpr uint64_t kMinSizeDistribution = 64;
 constexpr double kSizeDistributionGranularityFactor = 1.25;
 } // namespace
 
+constexpr uint32_t BlockCache::kMinAllocAlignSize;
 constexpr uint32_t BlockCache::kFormatVersion;
+constexpr uint32_t BlockCache::kDefReadBufferSize;
+constexpr uint16_t BlockCache::kDefaultItemPriority;
 
 BlockCache::Config& BlockCache::Config::validate() {
   XDCHECK_NE(scheduler, nullptr);
@@ -35,6 +38,9 @@ BlockCache::Config& BlockCache::Config::validate() {
   }
   if (getNumRegions() < sizeClasses.size() + cleanRegionsPool) {
     throw std::invalid_argument("not enough space on device");
+  }
+  if (numPriorities == 0) {
+    throw std::invalid_argument("allocator must have at least one priority");
   }
   return *this;
 }
@@ -94,6 +100,7 @@ BlockCache::BlockCache(Config&& config)
 
 BlockCache::BlockCache(Config&& config, ValidConfigTag)
     : config_{serializeConfig(config)},
+      numPriorities_{config.numPriorities},
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
       device_{*config.device},
@@ -112,8 +119,9 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      bindThis(&BlockCache::onRegionReclaim, *this),
                      config.sizeClasses,
                      std::move(config.evictionPolicy),
-                     config.numInMemBuffers},
-      allocator_{regionManager_},
+                     config.numInMemBuffers,
+                     config.numPriorities},
+      allocator_{regionManager_, config.numPriorities},
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
@@ -136,7 +144,11 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
   // explicitly align if permanent item or not using size classes.
   bool ioAligned = opt.permanent || config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
-  auto [desc, slotSize, addr] = allocator_.allocate(size, opt.permanent);
+
+  // All newly inserted items are assigned with the lowest priority
+  auto [desc, slotSize, addr] =
+      allocator_.allocate(size, opt.permanent, kDefaultItemPriority);
+
   switch (desc.status()) {
   case OpenStatus::Error:
     allocErrorCount_.inc();
@@ -330,11 +342,20 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return removeItem();
   }
 
+  // Priority of an re-inserted item is determined by its past accesses
+  // since the time it was last (re)inserted.
+  // TODO: this should be made configurable by having the reinsertion
+  //       policy return a priority rank for an item.
+  uint16_t priority =
+      numPriorities_ == 0
+          ? kDefaultItemPriority
+          : std::min<uint16_t>(lr.currentHits(), numPriorities_ - 1);
+
   // explicitly align if not using size classes.
   bool ioAligned = config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   auto [desc, slotSize, addr] =
-      allocator_.allocate(size, false /* permanent */);
+      allocator_.allocate(size, false /* permanent */, priority);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;

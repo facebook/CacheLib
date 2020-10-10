@@ -19,20 +19,37 @@ void RegionAllocator::setAllocationRegion(RegionId rid) {
 
 void RegionAllocator::reset() { rid_ = RegionId{}; }
 
-Allocator::Allocator(RegionManager& regionManager)
-    : regionManager_{regionManager}, permItemAllocator_{0 /* classId */} {
+Allocator::Allocator(RegionManager& regionManager, uint16_t numPriorities)
+    : regionManager_{regionManager},
+      permItemAllocator_{0 /* classId */, 0 /* priority */} {
   const auto& sizeClasses = regionManager_.getSizeClasses();
   if (sizeClasses.size() > Region::kClassIdMax + 1) {
     throw std::invalid_argument{"too many size classes"};
   }
+
+  auto createAllocators = [](uint16_t numClasses, uint16_t numPris) {
+    XLOGF(INFO,
+          "Enable priority-based allocation for Allocator. Number of "
+          "priorities: {}",
+          numPris);
+    std::vector<std::vector<RegionAllocator>> allocators;
+    for (uint16_t i = 0; i < numClasses; i++) {
+      std::vector<RegionAllocator> priAllocators;
+      for (uint16_t j = 0; j < numPris; j++) {
+        priAllocators.emplace_back(i /* classId */, j /* priority */);
+      }
+      allocators.push_back(std::move(priAllocators));
+    }
+    return allocators;
+  };
+
   if (sizeClasses.empty()) {
     XLOG(INFO, "Allocator type: stack");
-    allocators_.emplace_back(0 /* classId */);
+    allocators_ = createAllocators(1, numPriorities);
   } else {
-    XLOG(INFO, "Allocator type: size classes");
-    for (size_t i = 0; i < sizeClasses.size(); i++) {
-      allocators_.emplace_back(i /* classId */);
-    }
+    XLOGF(INFO, "Allocator type: size classes: {}", sizeClasses.size());
+    allocators_ = createAllocators(static_cast<uint16_t>(sizeClasses.size()),
+                                   numPriorities);
   }
 }
 
@@ -52,14 +69,15 @@ uint32_t Allocator::getSlotSizeAndClass(uint32_t size, uint32_t& sc) const {
 }
 
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size, bool permanent) {
+    uint32_t size, bool permanent, uint16_t priority) {
   RegionAllocator* ra = nullptr;
   if (permanent) {
     ra = &permItemAllocator_;
   } else {
     uint32_t sc = 0;
     size = getSlotSizeAndClass(size, sc);
-    ra = &allocators_[sc];
+    XDCHECK_LT(priority, allocators_[sc].size());
+    ra = &allocators_[sc][priority];
   }
   if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
@@ -104,6 +122,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
 
   // we got a region fresh off of reclaim. Need to initialize it.
   auto& region = regionManager_.getRegion(rid);
+  region.setPriority(ra.priority());
   if (isPermanentAllocator(ra)) {
     // Pin immediately. We want to persist this region as pinned even if it
     // is not full.
@@ -137,17 +156,21 @@ void Allocator::flush() {
   if (!regionManager_.doesBufferingWrites()) {
     return;
   }
-  for (auto& ra : allocators_) {
-    std::lock_guard<std::mutex> lock{ra.getLock()};
-    flushAndReleaseRegionFromRALocked(ra, false /* async */);
+  for (auto& ras : allocators_) {
+    for (auto& ra : ras) {
+      std::lock_guard<std::mutex> lock{ra.getLock()};
+      flushAndReleaseRegionFromRALocked(ra, false /* async */);
+    }
   }
 }
 
 void Allocator::reset() {
   regionManager_.reset();
-  for (auto& ra : allocators_) {
-    std::lock_guard<std::mutex> lock{ra.getLock()};
-    ra.reset();
+  for (auto& ras : allocators_) {
+    for (auto& ra : ras) {
+      std::lock_guard<std::mutex> lock{ra.getLock()};
+      ra.reset();
+    }
   }
 }
 

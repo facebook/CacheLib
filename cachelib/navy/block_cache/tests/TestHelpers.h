@@ -57,16 +57,22 @@ class MockPolicy : public EvictionPolicy {
 
 // @param arg     Region
 // @param rid     RegionId
-MATCHER_P(EqRegion, rid, "region's id should be equal to rid") {
+MATCHER_P(EqRegion, rid, "region should have the same id") {
   return arg.id().index() == rid.index();
 }
 
 // @param arg     Region
 // @param rid     RegionId
 // @param pri     Region's priority
-MATCHER_P2(EqRegionPri, rid, pri, "region should have the same id and pri") {
+MATCHER_P2(EqRegion, rid, pri, "region should have the same id and pri") {
   return arg.id().index() == rid.index() &&
          arg.getPriority() == static_cast<uint32_t>(pri);
+}
+
+// @param arg     Region
+// @param pri     Region's priority
+MATCHER_P(EqRegionPri, pri, "region should have the same pri") {
+  return arg.getPriority() == static_cast<uint32_t>(pri);
 }
 
 // Return uint32_t of the invalid region id

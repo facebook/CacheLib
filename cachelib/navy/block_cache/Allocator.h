@@ -19,13 +19,17 @@ namespace navy {
 // has to sync access.
 class RegionAllocator {
  public:
-  explicit RegionAllocator(uint16_t classId) : classId_{classId} {}
+  // @param classId   size class this region allocator is associated with
+  // @param priority  priority this region allocator is associated with
+  explicit RegionAllocator(uint16_t classId, uint16_t priority)
+      : classId_{classId}, priority_{priority} {}
 
   RegionAllocator(const RegionAllocator&) = delete;
   RegionAllocator& operator=(const RegionAllocator&) = delete;
   RegionAllocator(RegionAllocator&& other) noexcept
-      : classId_{other.classId_}, rid_{other.rid_} {}
-  RegionAllocator& operator=(RegionAllocator&& other) = default;
+      : classId_{other.classId_},
+        priority_{other.priority_},
+        rid_{other.rid_} {}
 
   // Set new region to allocate from. Region allocator has to be reset before
   // calling this.
@@ -37,11 +41,13 @@ class RegionAllocator {
   void reset();
 
   uint16_t classId() const { return classId_; }
+  uint16_t priority() const { return priority_; }
 
   std::mutex& getLock() const { return mutex_; }
 
  private:
   const uint16_t classId_{};
+  const uint16_t priority_{};
 
   // The current region id from which we are allocating
   RegionId rid_;
@@ -56,8 +62,10 @@ class Allocator {
   //
   // @param regionManager     Used to get eviction information and for
   //                          locking regions
+  // @param numPriorities     Specifies how many priorities this allocator
+  //                          supports
   // Throws std::exception if invalid arguments
-  explicit Allocator(RegionManager& regionManager);
+  explicit Allocator(RegionManager& regionManager, uint16_t numPriorities);
 
   bool isSizeClassAllocator() const {
     return regionManager_.getSizeClasses().size() > 0;
@@ -65,8 +73,9 @@ class Allocator {
 
   // Allocates and opens for writing.
   //
-  // @param size              Allocation size
-  // @param permanent         Indicates if the allocation is permanent or not
+  // @param size          Allocation size
+  // @param permanent     Indicates if the allocation is permanent or not
+  // @param priority      Specifies how important this allocation is
   //
   // Returns a tuple containing region descriptor, allocated slotSize and
   // allocated address
@@ -75,8 +84,11 @@ class Allocator {
   //  - Ready   Fills @addr and @slotSize
   //  - Retry   Retry later, reclamation is running
   //  - Error   Can't allocate this size even later (hard failure)
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(uint32_t size,
-                                                              bool permanent);
+  // When allocating with a priority, the priority must NOT exceed the
+  // max priority which is (@numPriorities - 1) specified when constructing
+  // this allocator.
+  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(
+      uint32_t size, bool permanent, uint16_t priority);
   void close(RegionDescriptor&& rid);
 
   void reset();
@@ -107,9 +119,8 @@ class Allocator {
   }
 
   RegionManager& regionManager_;
-
   // Corresponding RegionAllocators (see regionManager_.sizeClasses_)
-  std::vector<RegionAllocator> allocators_;
+  std::vector<std::vector<RegionAllocator>> allocators_;
   RegionAllocator permItemAllocator_;
 };
 } // namespace navy

@@ -2156,6 +2156,130 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
     EXPECT_EQ(entry.value(), value.view());
   }
 }
+
+TEST(BlockCache, UsePriorities) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto deviceSize = metadataSize + kRegionSize * 6;
+  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config =
+      makeConfig(*ex, std::move(policy), *device, {}, kRegionSize * 6);
+  config.numPriorities = 3;
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  // Enable in-mem buffer so size align on 512 bytes boundary
+  config.numInMemBuffers = 3;
+  config.cleanRegionsPool = 3;
+  auto engine = makeEngine(std::move(config), metadataSize);
+  auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
+                           metadataSize);
+
+  std::vector<CacheEntry> log;
+  BufferGen bg;
+
+  EXPECT_CALL(mp, track(_)).Times(4);
+  EXPECT_CALL(mp, track(EqRegionPri(1)));
+  EXPECT_CALL(mp, track(EqRegionPri(2)));
+
+  // Populate 4 regions to trigger eviction
+  for (size_t i = 0; i < 4; i++) {
+    for (size_t j = 0; j < 4; j++) {
+      // This should give us a 4KB payload due to 512 byte alignment
+      CacheEntry e{bg.gen(8), bg.gen(3800)};
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), {}, nullptr));
+      log.push_back(std::move(e));
+    }
+    driver->flush();
+    if (i == 0) {
+      Buffer value;
+      // Look up 2nd item twice, so we'll reinsert it with pri-1
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      // Look up 3rd item three times, so we'll reinsert it with pri-2
+      // Note that we reinsert with pri-2, because any hits larger than
+      // max priority will be assigned the max priority.
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    }
+  }
+
+  // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
+  {
+    Buffer value;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+  }
+}
+
+TEST(BlockCache, UsePrioritiesSizeClass) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto deviceSize = metadataSize + kRegionSize * 6;
+  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {2048, 4096},
+                           kRegionSize * 6);
+  config.numPriorities = 3;
+  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  // Enable in-mem buffer so size align on 512 bytes boundary
+  config.numInMemBuffers = 3;
+  config.cleanRegionsPool = 3;
+  auto engine = makeEngine(std::move(config), metadataSize);
+  auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
+                           metadataSize);
+
+  std::vector<CacheEntry> log;
+  BufferGen bg;
+
+  EXPECT_CALL(mp, track(_)).Times(4);
+  EXPECT_CALL(mp, track(EqRegionPri(1)));
+  EXPECT_CALL(mp, track(EqRegionPri(2)));
+
+  // Populate 4 regions to trigger eviction
+  for (size_t i = 0; i < 2; i++) {
+    for (size_t j = 0; j < 4; j++) {
+      // This should give us a 4KB payload
+      CacheEntry e{bg.gen(8), bg.gen(3800)};
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), {}, nullptr));
+      log.push_back(std::move(e));
+    }
+    driver->flush();
+    for (size_t j = 0; j < 8; j++) {
+      // This should give us a 2KB payload
+      CacheEntry e{bg.gen(8), bg.gen(1800)};
+      EXPECT_EQ(Status::Ok,
+                driver->insertAsync(e.key(), e.value(), {}, nullptr));
+      log.push_back(std::move(e));
+    }
+    driver->flush();
+    if (i == 0) {
+      Buffer value;
+      // Look up 2nd item twice, so we'll reinsert it with pri-1
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      // Look up 3rd item three times, so we'll reinsert it with pri-2
+      // Note that we reinsert with pri-2, because any hits larger than
+      // max priority will be assigned the max priority.
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    }
+  }
+
+  // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
+  {
+    Buffer value;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+  }
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

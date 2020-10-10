@@ -29,10 +29,10 @@ class BlockCache final : public Engine {
  public:
   // See CacheProto for details
   struct Config {
-    Device* device;
+    Device* device{};
     DestructorCallback destructorCb;
     // Checksum data read/written
-    bool checksum{false};
+    bool checksum{};
     // Base offset and size (in bytes) of cache on the device
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
@@ -45,14 +45,19 @@ class BlockCache final : public Engine {
     // Region size, bytes
     uint64_t regionSize{16 * 1024 * 1024};
     // See AbstractCacheProto::setReadBufferSize
-    uint32_t readBufferSize{0};
+    uint32_t readBufferSize{};
     // Job scheduler for background tasks
-    JobScheduler* scheduler{nullptr};
+    JobScheduler* scheduler{};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
     // Number of in-memory buffers wherer writes are buffered before flushed
     // on to the device
-    uint32_t numInMemBuffers{0};
+    uint32_t numInMemBuffers{};
+
+    // Number of pririorities. Items of the same priority will be put into
+    // the same reigon. The effect of priorities will be up to the particular
+    // eviction policy. There must be at least one priority
+    uint16_t numPriorities{1};
 
     uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
@@ -96,6 +101,8 @@ class BlockCache final : public Engine {
   static constexpr uint32_t kFormatVersion = 11;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
+  // Default priority for an item inserted into block cache
+  static constexpr uint16_t kDefaultItemPriority = 0;
 
   // When modify @EntryDesc layout, don't forget to bump @kFormatVersion!
   struct EntryDesc {
@@ -193,6 +200,7 @@ class BlockCache final : public Engine {
   void validate(Config& config) const;
 
   const serialization::BlockCacheConfig config_;
+  const uint16_t numPriorities_{};
   const DestructorCallback destructorCb_;
   const bool checksumData_{};
   // reference to the under-lying device.
