@@ -137,6 +137,9 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_navy_direct_io"] =
         config_.dipperUseDirectIO;
     nvmConfig.dipperOptions["dipper_navy_lru"] = config_.dipperNavyUseRegionLru;
+    nvmConfig.dipperOptions["dipper_navy_sfifo_segment_ratio"] =
+        folly::dynamic::array(config_.navySegmentedFifoSegmentRatio.begin(),
+                              config_.navySegmentedFifoSegmentRatio.end());
     nvmConfig.dipperOptions["dipper_navy_block_size"] = config_.dipperNavyBlock;
     nvmConfig.dipperOptions["dipper_navy_region_size"] = 16 * MB;
 

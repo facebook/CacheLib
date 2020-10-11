@@ -43,6 +43,11 @@ class BlockCacheProto {
   // Sets FIFO eviction policy.
   virtual void setFifoEvictionPolicy() = 0;
 
+  // Sets SegmentedFIFO eviction policy.
+  // @segmentRatio  ratio of the size of each segment.
+  virtual void setSegmentedFifoEvictionPolicy(
+      std::vector<unsigned int> segmentRatio) = 0;
+
   // (Optional) Size classes list. Stack allocator used if not set.
   virtual void setSizeClasses(std::vector<uint32_t> sizeClasses) = 0;
 

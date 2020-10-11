@@ -54,6 +54,8 @@ constexpr folly::StringPiece kMaxDeviceWriteSize{
     "dipper_navy_max_device_write_size"};
 constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
+constexpr folly::StringPiece kSegmentedFifoSegmentRatio{
+    "dipper_navy_sfifo_segment_ratio"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -218,11 +220,21 @@ void setupCacheProtos(const folly::dynamic& options,
     blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
     bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
     blockCache->setChecksum(dataChecksum);
-    if (options[kLru].getBool()) {
+
+    auto configSegmentRatio =
+        options.getDefault(kSegmentedFifoSegmentRatio, folly::dynamic::array);
+    if (configSegmentRatio.size() > 0) {
+      std::vector<unsigned int> segmentRatio;
+      for (const auto& ratio : configSegmentRatio) {
+        segmentRatio.push_back(ratio.getInt());
+      }
+      blockCache->setSegmentedFifoEvictionPolicy(std::move(segmentRatio));
+    } else if (options[kLru].getBool()) {
       blockCache->setLruEvictionPolicy();
     } else {
       blockCache->setFifoEvictionPolicy();
     }
+
     if (options.get_ptr(kSizeClasses) && !options[kSizeClasses].empty()) {
       std::vector<uint32_t> sizeClasses;
       for (const auto& sc : options[kSizeClasses]) {

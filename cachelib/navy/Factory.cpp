@@ -42,11 +42,27 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
       throw std::logic_error("layout is not set");
     }
     auto numRegions = config_.getNumRegions();
+    if (config_.evictionPolicy) {
+      throw std::invalid_argument("There's already an eviction policy set");
+    }
     config_.evictionPolicy = std::make_unique<LruPolicy>(numRegions);
   }
 
   void setFifoEvictionPolicy() override {
+    if (config_.evictionPolicy) {
+      throw std::invalid_argument("There's already an eviction policy set");
+    }
     config_.evictionPolicy = std::make_unique<FifoPolicy>();
+  }
+
+  void setSegmentedFifoEvictionPolicy(
+      std::vector<unsigned int> segmentRatio) override {
+    if (config_.evictionPolicy) {
+      throw std::invalid_argument("There's already an eviction policy set");
+    }
+    config_.numPriorities = static_cast<uint16_t>(segmentRatio.size());
+    config_.evictionPolicy =
+        std::make_unique<SegmentedFifoPolicy>(std::move(segmentRatio));
   }
 
   void setSizeClasses(std::vector<uint32_t> sizeClasses) override {

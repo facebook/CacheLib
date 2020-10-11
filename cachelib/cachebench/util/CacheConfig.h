@@ -89,6 +89,10 @@ struct CacheConfig : public JSONConfig {
   // If true, Navy will use region-based LRU. False it will be using FIFO.
   bool dipperNavyUseRegionLru{true};
 
+  // If non-empty, specifies the ratio of each segment.
+  // @dipperNavyUseRegionLru must be false.
+  std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
+
   // Navy specific: size classes. Must be multiples of @dipperNavyBlock.
   std::vector<uint64_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
                                               4 * 512,  6 * 512,  8 * 512,

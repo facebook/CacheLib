@@ -1,0 +1,32 @@
+{
+    "cache_config" : {
+      "cacheSizeMB": 128,
+      "dipperSizeMB": 600,
+      "poolRebalanceIntervalSec" : 1,
+      "moveOnSlabRelease" : true,
+
+      "allocFactor" : 2.0,
+      "dipperNavyBigHashSizePct": 0,
+      "navyCleanRegions" : 10,
+      "navyNumInmemBuffers" : 10,
+      "navyHitsReinsertionThreshold": 1,
+      "dipperNavyUseRegionLru": false,
+      "navySegmentedFifoSegmentRatio": [1, 1, 2],
+      "dipperNavyUseStackAllocation": true,
+      "dipperUseDirectIO": false,
+      "dipperBackend" : "navy_dipper",
+      "dipperNavyUseMemoryDevice": true
+    },
+    "test_config" :
+      {
+          "allocator": "LRU",
+          "enableLookaside": false,
+          "generator": "piecewise-replay",
+          "numOps": 1000000,
+          "numThreads": 12,
+          "populateItem": false,
+          "prepopulateCache": false,
+          "traceFileName": "short_bigcache_traces.csv",
+          "repeatTraceReplay": true
+      }
+  }
