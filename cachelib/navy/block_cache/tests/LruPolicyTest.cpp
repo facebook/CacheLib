@@ -17,7 +17,7 @@ const Region kRegion0{RegionId{0}, 100};
 const Region kRegion1{RegionId{1}, 100};
 const Region kRegion2{RegionId{2}, 100};
 const Region kRegion3{RegionId{3}, 100};
-}
+} // namespace
 
 TEST(EvictionPolicy, LruOrder) {
   LruPolicy policy{0};

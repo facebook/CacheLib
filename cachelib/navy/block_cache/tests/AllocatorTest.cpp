@@ -220,9 +220,9 @@ TEST(Allocator, PermanentAlloc) {
   std::vector<uint32_t> sizeClasses{4096};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
   MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(kNumRegions, kRegionSize, 0,
-                                            *device, 1, ex, std::move(evictCb),
-                                            sizeClasses, std::move(policy), 0, 0);
+  auto rm = std::make_unique<RegionManager>(
+      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
+      sizeClasses, std::move(policy), 0, 0);
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
 
