@@ -117,7 +117,7 @@ bool ShmManager::initFromFile() {
   }
 
   if (static_cast<bool>(usePosix_) ^
-      (object.shmVal == static_cast<int8_t>(ShmVal::POSIX))) {
+      (*object.shmVal_ref() == static_cast<int8_t>(ShmVal::SHM_POSIX))) {
     throw std::invalid_argument(
         folly::sformat("Invalid value for attach. ShmVal: {}", object.shmVal));
   }
@@ -146,8 +146,8 @@ typename ShmManager::ShutDownRes ShmManager::writeActiveSegmentsToFile() {
 
   serialization::ShmManagerObject object;
 
-  object.shmVal = usePosix_ ? static_cast<int>(ShmVal::POSIX)
-                            : static_cast<int>(ShmVal::SYS_V);
+  object.shmVal_ref() = usePosix_ ? static_cast<int>(ShmVal::SHM_POSIX)
+                                  : static_cast<int>(ShmVal::SHM_SYS_V);
 
   for (const auto& kv : nameToKey_) {
     const auto& name = kv.first;

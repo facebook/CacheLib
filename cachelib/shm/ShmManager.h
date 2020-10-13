@@ -134,7 +134,7 @@ class ShmManager {
       const std::string& cacheDir, const std::string& segName, bool posix);
 
  private:
-  enum class ShmVal : int8_t { SYS_V = 1, POSIX, INVALID };
+  enum class ShmVal : int8_t { SHM_SYS_V = 1, SHM_POSIX, SHM_INVALID };
 
   // if metadata file exists, truncates it. If it does not exist, creates an
   // empty one. Throws system_error if an error occurred.
