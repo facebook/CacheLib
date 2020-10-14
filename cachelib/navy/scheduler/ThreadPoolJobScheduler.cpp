@@ -4,6 +4,7 @@
 
 #include <folly/Format.h>
 #include <folly/logging/xlog.h>
+#include <folly/system/ThreadName.h>
 
 #include "cachelib/common/Utils.h"
 
@@ -170,7 +171,12 @@ ThreadPoolExecutor::ThreadPoolExecutor(uint32_t numThreads,
   workers_.reserve(numThreads);
   for (uint32_t i = 0; i < numThreads; i++) {
     queues_[i] = std::make_unique<JobQueue>();
-    workers_.emplace_back([& q = queues_[i]] { q->process(); });
+    workers_.emplace_back(
+        [& q = queues_[i],
+         threadName = folly::sformat("navy_{}_{}", name.subpiece(0, 6), i)] {
+          folly::setThreadName(threadName);
+          q->process();
+        });
   }
 }
 
