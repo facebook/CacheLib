@@ -204,15 +204,20 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
         throw std::invalid_argument(
             folly::sformat("invalid incFactor {}", incFactor));
       }
+
+      if (newSize > Slab::kSize) {
+        return newSize;
+      }
     } while (Slab::kSize / newSize == Slab::kSize / prevSize);
     // Now make sure we're selecting the maximum chunk size while maintaining
     // the number of chunks per slab.
-    const uint32_t perslab = static_cast<uint32_t>(Slab::kSize) / newSize;
-    const uint32_t maxChunkSize = static_cast<uint32_t>(Slab::kSize) / perslab;
+    const uint32_t perSlab = static_cast<uint32_t>(Slab::kSize) / newSize;
+    XDCHECK_GT(perSlab, 0ULL);
+    const uint32_t maxChunkSize = static_cast<uint32_t>(Slab::kSize) / perSlab;
     // Align down to maintain perslab
     newSize = maxChunkSize - maxChunkSize % kAlignment;
-    assert(newSize % kAlignment == 0);
-    assert(static_cast<uint32_t>(Slab::kSize) / newSize == perslab);
+    XDCHECK_EQ(newSize % kAlignment, 0ULL);
+    XDCHECK_EQ(static_cast<uint32_t>(Slab::kSize) / newSize, perSlab);
     return newSize;
   };
 

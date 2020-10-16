@@ -32,6 +32,10 @@ struct CacheConfig : public JSONConfig {
   uint64_t lruIpSpec{0};
 
   double allocFactor{1.5};
+  // maximum alloc size generated using the alloc factor above.
+  size_t maxAllocSize{1024 * 1024};
+  size_t minAllocSize{64};
+
   std::vector<uint64_t> allocSizes{};
 
   // These specify the number of pools and how keys will

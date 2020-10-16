@@ -52,8 +52,8 @@ Cache<Allocator>::Cache(CacheConfig config,
   }
 
   if (config_.allocSizes.empty()) {
-    allocatorConfig.setDefaultAllocSizes(
-        util::generateAllocSizes(config_.allocFactor));
+    allocatorConfig.setDefaultAllocSizes(util::generateAllocSizes(
+        config_.allocFactor, config_.maxAllocSize, config_.minAllocSize, true));
   } else {
     std::set<uint32_t> allocSizes;
     for (uint64_t s : config_.allocSizes) {
