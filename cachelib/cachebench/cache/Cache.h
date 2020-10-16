@@ -2,6 +2,7 @@
 #include <atomic>
 
 #include <folly/hash/Hash.h>
+#include <gflags/gflags.h>
 
 // Comment out the define for FB_ENV when we build for external environments
 #define CACHEBENCH_FB_ENV
@@ -17,6 +18,8 @@
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
+
+DECLARE_bool(report_api_latency);
 
 namespace facebook {
 namespace cachelib {
@@ -184,6 +187,10 @@ class Cache {
 
   ItemHandle find(Key key, AccessMode mode = AccessMode::kRead) {
     auto findFn = [&]() {
+      util::LatencyTracker tracker;
+      if (FLAGS_report_api_latency) {
+        tracker = util::LatencyTracker(cacheFindLatency_);
+      }
       // find from cache and wait for the result to be ready.
       auto it = cache_->find(key, mode);
       it.wait();
@@ -331,6 +338,9 @@ class Cache {
   const uint64_t nandBytesBegin_{0};
 
   bool shouldCleanupFiles_{false};
+
+  // latency stats of cachelib APIs inside cachebench
+  mutable util::PercentileStats cacheFindLatency_;
 };
 
 // Specializations are required for each MMType

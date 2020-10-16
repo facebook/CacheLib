@@ -1,4 +1,9 @@
 #pragma once
+#include <gflags/gflags.h>
+#include "cachelib/common/PercentileStats.h"
+
+DECLARE_bool(report_api_latency);
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -28,6 +33,10 @@ struct Stats {
   uint64_t numNvmBytesWritten{0};
   uint64_t numNvmNandBytesWritten{0};
   uint64_t numNvmLogicalBytesWritten{0};
+
+  util::PercentileStats::Estimates cacheAllocateLatencyNs;
+  util::PercentileStats::Estimates cacheFindLatencyNs;
+
   double nvmReadLatencyMicrosP50{0};
   double nvmReadLatencyMicrosP90{0};
   double nvmReadLatencyMicrosP99{0};
@@ -85,6 +94,30 @@ struct Stats {
       out << folly::sformat("Cache Gets    : {:,}", numCacheGets) << std::endl;
       out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
+
+      if (FLAGS_report_api_latency) {
+        auto printLatencies =
+            [&out](folly::StringPiece cat,
+                   const util::PercentileStats::Estimates& latency) {
+              auto fmtLatency = [&out, &cat](folly::StringPiece pct,
+                                             double val) {
+                out << folly::sformat("{:20} {:8} : {:>10.2f} ns\n", cat, pct,
+                                      val);
+              };
+
+              fmtLatency("p50", latency.p50);
+              fmtLatency("p90", latency.p90);
+              fmtLatency("p99", latency.p99);
+              fmtLatency("p999", latency.p999);
+              fmtLatency("p9999", latency.p9999);
+              fmtLatency("p99999", latency.p99999);
+              fmtLatency("p999999", latency.p999999);
+              fmtLatency("p100", latency.p100);
+            };
+
+        printLatencies("Cache Find API latency", cacheFindLatencyNs);
+        printLatencies("Cache Allocate API latency", cacheAllocateLatencyNs);
+      }
     }
 
     if (numNvmGets > 0 || numNvmDeletes > 0 || numNvmPuts > 0) {

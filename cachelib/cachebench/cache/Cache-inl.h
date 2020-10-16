@@ -6,6 +6,7 @@
 #include <folly/Format.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
+#include <gflags/gflags.h>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/cachebench/util/NandWrites.h"
@@ -354,6 +355,9 @@ Stats Cache<Allocator>::getStats() const {
 
   ret.inconsistencyCount = getInconsistencyCount();
   ret.isNvmCacheDisabled = isNvmCacheDisabled();
+
+  ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
+  ret.cacheFindLatencyNs = cacheFindLatency_.estimate();
 
   // nvm stats from navy
   if (config_.dipperBackend == "navy_dipper" && !navyStats.empty()) {
