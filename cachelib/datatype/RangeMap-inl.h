@@ -98,6 +98,27 @@ BufferAddr BinaryIndex<Key>::remove(Key key) {
 }
 
 template <typename Key>
+uint32_t BinaryIndex<Key>::removeBefore(Key key, DeleteCB deleteCB) {
+  auto* cur = begin();
+  uint32_t count = 0;
+  while (cur != end() && cur->key < key) {
+    deleteCB(cur->addr);
+    ++count;
+    ++cur;
+  }
+  if (count == 0) {
+    return 0;
+  }
+
+  if (cur != end()) {
+    XDCHECK_LT(cur, end());
+    std::memmove(begin(), begin() + count, (end() - cur) * sizeof(Entry));
+  }
+  numEntries_ -= count;
+  return count;
+}
+
+template <typename Key>
 void BinaryIndex<Key>::insertInternal(Key key, BufferAddr addr) {
   XDCHECK_LT(numEntries(), capacity());
 
@@ -236,6 +257,17 @@ bool RangeMap<K, V, C>::remove(const EntryKey& key) {
     compact();
   }
   return true;
+}
+
+template <typename K, typename V, typename C>
+uint32_t RangeMap<K, V, C>::removeBefore(const EntryKey& key) {
+  auto* index = handle_->template getMemoryAs<BinaryIndex>();
+  auto count = index->removeBefore(
+      key, [this](auto addr) { bufferManager_.remove(addr); });
+  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+    compact();
+  }
+  return count;
 }
 
 template <typename K, typename V, typename C>

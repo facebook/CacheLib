@@ -164,6 +164,46 @@ TEST(BinaryIndex, Remove) {
   EXPECT_FALSE(bi->remove(1));
 }
 
+TEST(BinaryIndex, RemoveBefore) {
+  using BI = detail::BinaryIndex<uint64_t>;
+  auto storageSize = BI::computeStorageSize(3);
+  std::unique_ptr<uint8_t[]> buffer = std::make_unique<uint8_t[]>(storageSize);
+  auto* bi = BI::createNewIndex(buffer.get(), 3);
+  auto deleteFunc = [](auto) {};
+
+  EXPECT_EQ(3, bi->capacity());
+
+  bi->insert(1, makeAddr(1, 1));
+  bi->insert(2, makeAddr(2, 2));
+  bi->insert(3, makeAddr(3, 3));
+  EXPECT_EQ(3, bi->numEntries());
+  EXPECT_TRUE(bi->overLimit());
+
+  EXPECT_EQ(3, bi->removeBefore(10, deleteFunc));
+
+  bi->insert(1, makeAddr(1, 1));
+  bi->insert(2, makeAddr(2, 2));
+  bi->insert(3, makeAddr(3, 3));
+  EXPECT_EQ(3, bi->numEntries());
+
+  EXPECT_EQ(0, bi->removeBefore(0, deleteFunc));
+
+  EXPECT_EQ(2, bi->removeBefore(3, deleteFunc));
+  EXPECT_EQ(bi->end(), bi->lookup(1));
+  EXPECT_EQ(bi->end(), bi->lookup(2));
+  EXPECT_EQ(makeAddr(3, 3), bi->lookup(3)->addr);
+  EXPECT_EQ(1, bi->numEntries());
+  EXPECT_FALSE(bi->overLimit());
+
+  EXPECT_EQ(1, bi->removeBefore(5, deleteFunc));
+  EXPECT_EQ(bi->begin(), bi->end());
+  EXPECT_EQ(0, bi->numEntries());
+  EXPECT_EQ(bi->end(), bi->lookup(1));
+  EXPECT_EQ(bi->end(), bi->lookup(2));
+  EXPECT_EQ(bi->end(), bi->lookup(3));
+  EXPECT_FALSE(bi->overLimit());
+}
+
 TEST(BinaryIndex, LookupLowerbound) {
   using BI = detail::BinaryIndex<uint64_t>;
   auto storageSize = BI::computeStorageSize(3);
@@ -412,6 +452,11 @@ TEST(RangeMap, Compaction) {
   EXPECT_TRUE(rm.insert(8, 88));
   EXPECT_TRUE(rm.insert(9, 99));
   EXPECT_EQ(7, rm.size());
+  EXPECT_EQ(16, rm.capacity());
+  EXPECT_EQ(412, rm.sizeInBytes());
+
+  EXPECT_EQ(3, rm.removeBefore(6));
+  EXPECT_EQ(4, rm.size());
   EXPECT_EQ(16, rm.capacity());
   EXPECT_EQ(412, rm.sizeInBytes());
 }

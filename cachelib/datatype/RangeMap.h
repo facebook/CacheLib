@@ -87,8 +87,13 @@ class RangeMap {
   InsertOrReplaceResult insertOrReplace(const EntryKey& key,
                                         const EntryValue& value);
 
-  // Remove key. False if not found.
+  // Remove key. False if not found. Calling remove invalidates any iterators
+  // that point to (key) or later elements.
   bool remove(const EntryKey& key);
+
+  // Removes keys less than the provided key, which does not
+  // necessarily need to exist. Returns number of elements deleted.
+  uint32_t removeBefore(const EntryKey& key);
 
   // Return an iterator for this key. Can iterate in sorted order.
   // itr == end() if not found.
@@ -192,6 +197,8 @@ class FOLLY_PACK_ATTR BinaryIndex {
     BufferAddr addr{};
   };
 
+  typedef std::function<void(BufferAddr)> DeleteCB;
+
   static uint32_t computeStorageSize(uint32_t capacity);
 
   static BinaryIndex* createNewIndex(void* buffer, uint32_t capacity);
@@ -213,6 +220,10 @@ class FOLLY_PACK_ATTR BinaryIndex {
 
   // Return addr removed if exists. Null addr otherwise.
   BufferAddr remove(Key key);
+
+  // Removes index entries before key. returns the count of items removed
+  // and addrRet returns a list of buffer addresses to free
+  uint32_t removeBefore(Key key, DeleteCB deleteCB);
 
   Entry* begin() { return entries_; }
   Entry* end() { return entries_ + numEntries_; }
