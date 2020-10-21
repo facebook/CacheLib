@@ -63,6 +63,12 @@ class PieceWiseReplayGeneratorStats {
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
 
+  // Record total bytes we ingress
+  void recordBytesIngress(size_t bytesIngress);
+
+  // Record total bytes we egress
+  void recordBytesEgress(size_t bytesEgress);
+
  private:
   struct InternalStats {
     // Byte wise stats: getBytes, getHitBytes and getFullHitBytes record the
@@ -71,12 +77,16 @@ class PieceWiseReplayGeneratorStats {
     // bytes only. getFullHitBytes and getFullHitBodyBytes only include cache
     // hits of the full object (ie, all pieces), while getHitBytes and
     // getHitBodyBytes includes partial hits as well.
+    // totalIngressBytes record all bytes we fetch from upstream, and
+    // totalEgressBytes record all bytes we send out to downstream.
     AtomicCounter getBytes{0};
     AtomicCounter getHitBytes{0};
     AtomicCounter getFullHitBytes{0};
     AtomicCounter getBodyBytes{0};
     AtomicCounter getHitBodyBytes{0};
     AtomicCounter getFullHitBodyBytes{0};
+    AtomicCounter totalIngressBytes{0};
+    AtomicCounter totalEgressBytes{0};
 
     // Object wise stats: for an object get, objGetFullHits is incremented when
     // all pieces are cache hits, while objGetHits is incremented for partial

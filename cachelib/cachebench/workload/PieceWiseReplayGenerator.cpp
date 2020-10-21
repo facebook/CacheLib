@@ -83,6 +83,14 @@ util::LatencyTracker PieceWiseReplayGeneratorStats::makeLatencyTracker() {
   return util::LatencyTracker(reqLatencyStats_);
 }
 
+void PieceWiseReplayGeneratorStats::recordBytesIngress(size_t bytesIngress) {
+  stats_.totalIngressBytes.add(bytesIngress);
+}
+
+void PieceWiseReplayGeneratorStats::recordBytesEgress(size_t bytesEgress) {
+  stats_.totalEgressBytes.add(bytesEgress);
+}
+
 void PieceWiseReplayGeneratorStats::renderStats(uint64_t elapsedTimeNs,
                                                 std::ostream& out) const {
   out << std::endl << "== PieceWiseReplayGenerator Stats ==" << std::endl;
@@ -157,6 +165,16 @@ void PieceWiseReplayGeneratorStats::renderStatsInternal(
   const double getFullSuccessRate =
       safeDiv(stats.objGetFullHits.get(), stats.objGets.get());
 
+  const uint64_t egressBytesPerSec = util::narrow_cast<uint64_t>(
+      stats.totalEgressBytes.get() / 1024 / elapsedSecs);
+
+  const uint64_t ingressBytesPerSec = util::narrow_cast<uint64_t>(
+      stats.totalIngressBytes.get() / 1024 / elapsedSecs);
+
+  const double successRateByTotalTraffic =
+      safeDiv(stats.totalEgressBytes.get() - stats.totalIngressBytes.get(),
+              stats.totalEgressBytes.get());
+
   auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
                       double v2, folly::StringPiece k3, double v3) {
     out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%, {:10}: {:6.2f}%",
@@ -169,6 +187,11 @@ void PieceWiseReplayGeneratorStats::renderStatsInternal(
         getBodyBytesSuccessRate, "full success", getBodyBytesFullSuccessRate);
   outFn("objectGet", getPerSec, "success", getSuccessRate, "full success",
         getFullSuccessRate);
+  out << folly::sformat("{:10}: {:9,}/s, {:10}: {:9,}/s, {:10}: {:6.2f}%",
+                        "egressBytes(KB)", egressBytesPerSec,
+                        "ingressBytes(KB)", ingressBytesPerSec, "success",
+                        successRateByTotalTraffic)
+      << std::endl;
 }
 
 const Request& PieceWiseReplayGenerator::getReq(
@@ -214,6 +237,20 @@ const Request& PieceWiseReplayGenerator::getReq(
     getBytes = getBodyBytes + reqWrapper->headerSize;
 
     stats_.recordAccess(getBytes, getBodyBytes, reqWrapper->extraFields);
+
+    // Record egress bytes
+    size_t bytesEgress;
+    if (reqWrapper->requestRange.getRequestRange()) {
+      auto rangeStart = reqWrapper->requestRange.getRequestRange()->first;
+      auto rangeEnd = reqWrapper->requestRange.getRequestRange()->second;
+      auto rangeSize = rangeEnd ? (*rangeEnd - rangeStart + 1)
+                                : (reqWrapper->fullObjectSize - rangeStart);
+
+      bytesEgress = rangeSize + reqWrapper->headerSize;
+    } else {
+      bytesEgress = reqWrapper->fullObjectSize + reqWrapper->headerSize;
+    }
+    stats_.recordBytesEgress(bytesEgress);
   }
 
   return reqWrapper->req;
@@ -224,6 +261,14 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
   auto& activeReqQ = getTLReqQueue();
   auto& rw = *(activeReqQ.frontPtr());
   XCHECK_EQ(rw.req.requestId.value(), requestId);
+
+  // Record ingress bytes if we just performed set operation, since what we set
+  // in cache must come from upstream
+  if (result == OpResultType::kSetSuccess ||
+      result == OpResultType::kSetFailure) {
+    auto bytesIngress = *(rw.req.sizeBegin);
+    stats_.recordBytesIngress(bytesIngress);
+  }
 
   // Object is stored in pieces
   if (rw.cachePieces) {
