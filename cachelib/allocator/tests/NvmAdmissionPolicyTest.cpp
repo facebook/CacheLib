@@ -4,8 +4,6 @@
 
 #include <gtest/gtest.h>
 
-using namespace ::testing;
-
 namespace facebook {
 namespace cachelib {
 namespace tests {
