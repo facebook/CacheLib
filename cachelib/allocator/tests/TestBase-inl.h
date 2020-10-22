@@ -7,9 +7,9 @@ namespace tests {
 template <typename AllocatorT>
 std::string AllocatorTest<AllocatorT>::getRandomNewKey(AllocatorT& alloc,
                                                        unsigned int keyLen) {
-  auto key = getRandomStr(keyLen);
+  auto key = facebook::cachelib::test_util::getRandomAsciiStr(keyLen);
   while (alloc.find(key) != nullptr) {
-    key = getRandomStr(keyLen);
+    key = facebook::cachelib::test_util::getRandomAsciiStr(keyLen);
   }
   return key;
 }

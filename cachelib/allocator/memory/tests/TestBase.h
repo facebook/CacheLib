@@ -5,6 +5,7 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
+#include "cachelib/common/TestUtils.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -93,19 +94,21 @@ class SlabAllocatorTestBase : public AllocTestBase {
     return allocator;
   }
 
-  static uint32_t getRandomAllocSize();
-
-  // generates a random string of random length up 50 chars and at least 10
-  // chars;
-  static std::string getRandomStr();
-  static std::string getRandomStr(unsigned int len);
-
-  // generate n random allocation sizes that are powers of two.
-  static std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n);
-  // generate n random allocation sizes.
-  static std::set<uint32_t> getRandomAllocSizes(
-      unsigned int n, size_t minSize = Slab::kMinAllocSize);
+  static std::string getRandomStr() {
+    unsigned int len = folly::Random::rand32() % 40 + 10;
+    return facebook::cachelib::test_util::getRandomAsciiStr(len);
+  }
 };
+
+// Returns a random allocation size in the range [kReservedSize, Slab::kSize]
+uint32_t getRandomAllocSize();
+
+// generate n random allocation sizes that are powers of two.
+std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n);
+
+// generate n random allocation sizes.
+std::set<uint32_t> getRandomAllocSizes(unsigned int n,
+                                       size_t minSize = Slab::kMinAllocSize);
 
 } // namespace tests
 } // namespace cachelib

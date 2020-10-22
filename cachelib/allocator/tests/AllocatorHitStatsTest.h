@@ -14,6 +14,7 @@
 #include <folly/Random.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/common/TestUtils.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -79,7 +80,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     for (unsigned int i = 0; i < numItems; ++i) {
       const auto keyLen = folly::Random::rand32(10, 100);
       const auto allocSize = folly::Random::rand32(100, 1024 * 1024 - 1000);
-      auto str = getRandomStr(keyLen);
+      auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
       auto handle = util::allocateAccessible(alloc, poolId, str, allocSize);
     }
 
@@ -162,7 +163,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     const auto poolSize = cacheSize / (numPools * 2);
     for (int i = 0; i < numPools; ++i) {
       const auto poolNameLen = folly::Random::rand32(10, 100);
-      auto poolName = getRandomStr(poolNameLen);
+      auto poolName = cachelib::test_util::getRandomAsciiStr(poolNameLen);
       const auto pid = alloc.addPool(poolName, poolSize);
       poolsNames.insert({pid, poolName});
     }
@@ -236,7 +237,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     while (keys.size() != nKeys) {
       const auto keyLen = folly::Random::rand32(10, 100);
       const auto allocSize = folly::Random::rand32(100, 1024 * 1024 - 1000);
-      auto str = getRandomStr(keyLen);
+      auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
       ++initialAllocs;
       auto handle = util::allocateAccessible(alloc, poolId, str, allocSize);
       if (handle) {
@@ -272,7 +273,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
 
         for (unsigned int i = 0; i < numMiss; i++) {
           const auto keyLen = folly::Random::rand32(101, 200);
-          auto str = getRandomStr(keyLen);
+          auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
           auto handle = alloc.find(str);
         }
 
@@ -281,7 +282,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
         for (unsigned int i = 0; i < numValidAllocsPerThread; i++) {
           const auto keyLen = folly::Random::rand32(10, 100);
           const auto allocSize = folly::Random::rand32(100, 1024 * 1024 - 1000);
-          auto str = getRandomStr(keyLen);
+          auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
           auto handle =
               util::allocateAccessible(alloc, poolId2, str, allocSize);
           if (handle) {
@@ -298,7 +299,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
           // use valid alloc size. invalid alloc size is not measured per alloc
           // size
           const auto allocSize = folly::Random::rand32(100, 1024 * 1024 - 1000);
-          auto str = getRandomStr(keyLen);
+          auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
           try {
             auto handle =
                 util::allocateAccessible(alloc, poolId2, str, allocSize);
@@ -317,7 +318,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
         for (unsigned int i = 0; i < numInValidSizePerThread; i++) {
           const auto allocSize =
               folly::Random::rand32(10 * 1024 * 1024, 12 * 1024 * 1024);
-          auto str = getRandomStr(keyLen);
+          auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
           try {
             auto handle =
                 util::allocateAccessible(alloc, poolId2, str, allocSize);

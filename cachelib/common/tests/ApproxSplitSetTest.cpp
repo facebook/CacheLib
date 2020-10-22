@@ -1,9 +1,10 @@
-#include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/ApproxSplitSet.h"
+#include "cachelib/common/TestUtils.h"
 
 #include <thread>
 #include <vector>
 
+#include <folly/Hash.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -11,9 +12,7 @@ namespace facebook {
 namespace cachelib {
 namespace tests {
 
-std::string getRandomStr(unsigned int len) {
-  return SlabAllocatorTestBase::getRandomStr(len);
-}
+using facebook::cachelib::test_util::getRandomAsciiStr;
 
 uint64_t makeHash(const std::string& k) {
   return folly::hash::SpookyHashV2::Hash64(k.data(), k.size(), 0);
@@ -23,7 +22,7 @@ TEST(ApproxSplitSet, Basic) {
   ApproxSplitSet s{6, 2};
   std::vector<std::string> keys;
   for (int i = 0; i < 6; i++) {
-    keys.push_back(getRandomStr(16));
+    keys.push_back(getRandomAsciiStr(16));
     EXPECT_FALSE(s.insert(makeHash(keys[i])));
   }
   for (int i = 3; i < 6; i++) {
@@ -31,7 +30,7 @@ TEST(ApproxSplitSet, Basic) {
   }
   // Add one more. First split is dropped. Because of this adding keys[0]
   // again will not actually add anything (looks like first insert).
-  keys.push_back(getRandomStr(16));
+  keys.push_back(getRandomAsciiStr(16));
   EXPECT_FALSE(s.insert(makeHash(keys[6])));
   EXPECT_FALSE(s.insert(makeHash(keys[0])));
   EXPECT_TRUE(s.insert(makeHash(keys[6])));
@@ -50,7 +49,7 @@ TEST(ApproxSplitSet, Reset) {
   };
 
   for (int i = 0; i < 6; i++) {
-    keys.push_back(getRandomStr(16));
+    keys.push_back(getRandomAsciiStr(16));
     EXPECT_FALSE(s.insert(makeHash(keys[i])));
   }
 
@@ -63,7 +62,7 @@ TEST(ApproxSplitSet, Reset) {
 
   s.reset();
   for (int i = 0; i < 6; i++) {
-    keys.push_back(getRandomStr(16));
+    keys.push_back(getRandomAsciiStr(16));
     EXPECT_FALSE(s.insert(makeHash(keys[i])));
   }
   for (int i = 3; i < 6; i++) {
@@ -76,7 +75,7 @@ TEST(ApproxSplitSet, Counters) {
 
   std::vector<std::string> keys;
   for (int i = 0; i < 6; i++) {
-    keys.push_back(getRandomStr(16));
+    keys.push_back(getRandomAsciiStr(16));
     EXPECT_FALSE(s.insert(makeHash(keys[i])));
   }
 
@@ -90,7 +89,7 @@ TEST(ApproxSplitSet, Counters) {
 
   // Add one more. First split is dropped. Because of this adding keys[0]
   // again will not actually add anything (looks like first insert).
-  keys.push_back(getRandomStr(16));
+  keys.push_back(getRandomAsciiStr(16));
   EXPECT_FALSE(s.insert(makeHash(keys[6])));
   EXPECT_FALSE(s.insert(makeHash(keys[0])));
   EXPECT_TRUE(s.insert(makeHash(keys[6])));

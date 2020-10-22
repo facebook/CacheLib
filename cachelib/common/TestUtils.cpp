@@ -1,9 +1,15 @@
 #include <chrono>
 #include <thread>
 
+#include <folly/Random.h>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/common/TestUtils.h"
+
+namespace facebook {
+namespace cachelib {
+namespace test_util {
 
 namespace {
 
@@ -69,3 +75,23 @@ bool eventuallyZero(std::function<int(bool)> test) {
       },
       kDefaultTimeoutSecs);
 }
+
+std::string getRandomAsciiStr(unsigned int len) {
+  std::string s;
+  static const char start[] = {'a', 'A', '0'};
+  static const int size[] = {26, 26, 10};
+
+  for (unsigned int i = 0; i < len; i++) {
+    unsigned int index =
+        folly::Random::rand32() % (sizeof(start) / sizeof(start[0]));
+    const char c = (start[index] +
+                    static_cast<char>((folly::Random::rand32() % size[index])));
+    s += c;
+  }
+  XDCHECK_EQ(s.length(), len);
+  return s;
+}
+
+} // namespace test_util
+} // namespace cachelib
+} // namespace facebook

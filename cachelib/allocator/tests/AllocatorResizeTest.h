@@ -68,7 +68,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
-    const auto acSizes = this->getRandomPow2AllocSizes(numSizes);
+    const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
     ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
@@ -167,7 +167,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
-    const auto acSizes = this->getRandomPow2AllocSizes(numSizes);
+    const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
     ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
@@ -303,7 +303,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
-    const auto acSizes = this->getRandomPow2AllocSizes(numSizes);
+    const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
     ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
@@ -377,7 +377,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
-    const auto acSizes = this->getRandomPow2AllocSizes(numSizes);
+    const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     const size_t delta = poolResizeSlabsPerIter * Slab::kSize * expectedIters;
 

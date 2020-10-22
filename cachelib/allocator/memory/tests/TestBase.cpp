@@ -5,6 +5,9 @@
 
 using namespace facebook::cachelib::tests;
 
+namespace facebook {
+namespace cachelib {
+namespace tests {
 /* static */
 bool AllocTestBase::isSameSlabList(const std::vector<Slab*>& slabs1,
                                    const SlabAllocator& a1,
@@ -97,10 +100,7 @@ bool AllocTestBase::isSameMemoryAllocator(const MemoryAllocator& m1,
          isSameMemoryPoolManager(m1.memoryPoolManager_, m2.memoryPoolManager_);
 }
 
-/**
- * Returns a random allocation size in the range [kReservedSize, Slab::kSize]
- */
-uint32_t SlabAllocatorTestBase::getRandomAllocSize() {
+uint32_t getRandomAllocSize() {
   // Reserve some space for the intrusive list's hook
   constexpr uint32_t kReservedSize = 8;
   assert(Slab::kSize >= kReservedSize);
@@ -108,29 +108,7 @@ uint32_t SlabAllocatorTestBase::getRandomAllocSize() {
          kReservedSize;
 }
 
-std::string SlabAllocatorTestBase::getRandomStr() {
-  unsigned int len = folly::Random::rand32() % 40 + 10;
-  return getRandomStr(len);
-}
-
-std::string SlabAllocatorTestBase::getRandomStr(unsigned int len) {
-  std::string s;
-  static const char start[] = {'a', 'A', '0'};
-  static const int size[] = {26, 26, 10};
-
-  for (unsigned int i = 0; i < len; i++) {
-    unsigned int index =
-        folly::Random::rand32() % (sizeof(start) / sizeof(start[0]));
-    const char c = (start[index] +
-                    static_cast<char>((folly::Random::rand32() % size[index])));
-    s += c;
-  }
-  assert(s.length() == len);
-  return s;
-}
-
-std::set<uint32_t> SlabAllocatorTestBase::getRandomPow2AllocSizes(
-    unsigned int n) {
+std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n) {
   unsigned int numBits = static_cast<unsigned int>(log2(Slab::kSize));
   // at least 128 bytes
   const unsigned int minNumBits = 7;
@@ -148,8 +126,7 @@ std::set<uint32_t> SlabAllocatorTestBase::getRandomPow2AllocSizes(
 }
 
 // get n random allocation sizes which are at least minSize bytes long.
-std::set<uint32_t> SlabAllocatorTestBase::getRandomAllocSizes(unsigned int n,
-                                                              size_t minSize) {
+std::set<uint32_t> getRandomAllocSizes(unsigned int n, size_t minSize) {
   std::set<uint32_t> s;
   while (s.size() != n) {
     auto size = getRandomAllocSize();
@@ -159,3 +136,7 @@ std::set<uint32_t> SlabAllocatorTestBase::getRandomAllocSizes(unsigned int n,
   }
   return s;
 }
+
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook

@@ -200,7 +200,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_THROW(util::allocateAccessible(alloc, poolId1, "", sizes1[0]),
                  std::invalid_argument);
     ASSERT_THROW(util::allocateAccessible(alloc, poolId1,
-                                          this->getRandomStr(256), sizes1[0]),
+                                          test_util::getRandomAsciiStr(256),
+                                          sizes1[0]),
                  std::invalid_argument);
     ASSERT_THROW(
         util::allocateAccessible(alloc, poolId1, {nullptr, 10}, sizes1[0]),
@@ -2700,7 +2701,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         for (auto size : sizes) {
           const auto maxlen = std::min(maxInvalidKeyLen, size - 1);
           const unsigned int invalidKeyLen = folly::Random::rand32(256, maxlen);
-          const auto key = this->getRandomStr(invalidKeyLen);
+          const auto key = test_util::getRandomAsciiStr(invalidKeyLen);
           // to ensure that we do the same allocations as what is currently in
           // the cache, we ensure that whatever random invalid key size we pick,
           // we subtract that from previous alloc sizes we computed.

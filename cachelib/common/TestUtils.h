@@ -1,6 +1,12 @@
 #pragma once
 
 #include <functional>
+#include <set>
+#include <string>
+
+namespace facebook {
+namespace cachelib {
+namespace test_util {
 
 /**
  * Calls test() repeatedly until it returns true or timeout secs have elapsed
@@ -16,5 +22,13 @@ bool eventuallyTrue(std::function<bool(void)> test, uint64_t timeoutSecs = 60);
  */
 bool eventuallyZero(std::function<int(bool)> test);
 
+// generates a random string of random length up 50 chars and at least 10
+// chars;
+std::string getRandomAsciiStr(unsigned int len);
+
+} // namespace test_util
+} // namespace cachelib
+} // namespace facebook
+
 #define ASSERT_EVENTUALLY_TRUE(fn, ...) \
-  ASSERT_TRUE(eventuallyTrue(fn, ##__VA_ARGS__))
+  ASSERT_TRUE(facebook::cachelib::test_util::eventuallyTrue(fn, ##__VA_ARGS__))
