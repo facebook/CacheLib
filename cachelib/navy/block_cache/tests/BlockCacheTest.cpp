@@ -711,6 +711,32 @@ TEST(BlockCache, RegionUnderflowInMemBuffers) {
   EXPECT_EQ(e.value(), value.view());
 }
 
+TEST(BlockCache, SmallReadBuffer) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<NiceMock<MockDevice>>(
+      kDeviceSize, 4096 /* io alignment size */);
+  EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _));
+  EXPECT_CALL(*device, readImpl(0, 8192, _)).Times(2);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {});
+  config.numInMemBuffers = 4;
+  // Small read buffer. We will automatically align to 8192 when we read.
+  config.readBufferSize = 5120; // 5KB
+
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  CacheEntry e{bg.gen(8), bg.gen(5800)};
+  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}, nullptr));
+  driver->flush();
+
+  Buffer value;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+  EXPECT_EQ(e.value(), value.view());
+}
+
 // This test enables in memory buffers and inserts items of size 208. With
 // Alloc alignment of 512 and device size of 64K, we should be able to store
 // 96 items since we have to keep one region free at all times. Read them back

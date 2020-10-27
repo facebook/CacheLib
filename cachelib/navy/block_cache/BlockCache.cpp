@@ -60,9 +60,6 @@ void BlockCache::validate(BlockCache::Config& config) const {
     throw std::invalid_argument(
         folly::sformat("can't address cache with {} bits", shiftWidth));
   }
-  if (config.readBufferSize % deviceIOAlignSize != 0) {
-    throw std::invalid_argument("invalid read buffer size");
-  }
   for (auto& sc : config.sizeClasses) {
     if (sc == 0 || sc % allocAlignSize_ != 0 ||
         sc < folly::nextPowTwo(sizeof(EntryDesc)) || sc > config.regionSize) {
