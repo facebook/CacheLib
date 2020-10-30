@@ -38,6 +38,7 @@ class OnlineGenerator : public GeneratorBase {
   }
 
  private:
+  uint64_t getKeyIdx(uint8_t poolId, std::mt19937_64& gen);
   void generateFirstKeyIndexForPool();
   void generateKey(uint8_t poolId, size_t idx, std::string& key);
   void generateKeyLengths();
@@ -53,10 +54,12 @@ class OnlineGenerator : public GeneratorBase {
   const StressorConfig config_;
 
   // size distributions per pool, where each pool has a vector of chain sizes
-  // per idx.
+  // per idx. This is pre-generated to always generate the same size
+  // corresponding to a key idx
   std::vector<std::vector<std::vector<size_t>>> sizes_;
 
-  // key sizes prepopulated per pool.
+  // key sizes prepopulated per pool. These are populated in advance to ensure
+  // the size corresponding to a key id is always the same.
   std::vector<std::vector<size_t>> keyLengths_;
 
   // used for thread local intialization
@@ -65,10 +68,13 @@ class OnlineGenerator : public GeneratorBase {
   // @firstKeyIndexForPool_ contains the first key in each pool (As represented
   // by key pool distribution).
   std::vector<uint64_t> firstKeyIndexForPool_;
-  std::vector<std::vector<uint32_t>> keyIndicesForPool_;
-  std::vector<std::uniform_int_distribution<uint32_t>> keyGenForPool_;
 
+  using PopDistT = typename Distribution::PopDistT;
+  // overall workload distribution per pool
   std::vector<Distribution> workloadDist_;
+
+  // popularity distribution for keys per pool
+  std::vector<PopDistT> workloadPopDist_;
 
   // thread local copy of key and  request to return as a part of getReq
   class Tag;

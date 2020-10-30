@@ -38,13 +38,10 @@ template <typename Distribution>
 const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
                                                      std::mt19937_64& gen,
                                                      std::optional<uint64_t>) {
-  XDCHECK_LT(poolId, keyIndicesForPool_.size());
-  XDCHECK_LT(poolId, keyGenForPool_.size());
+  size_t keyIdx = getKeyIdx(poolId, gen);
 
-  size_t idx = keyIndicesForPool_[poolId][keyGenForPool_[poolId](gen)];
-
-  generateKey(poolId, idx, req_->key);
-  auto sizes = generateSize(poolId, idx);
+  generateKey(poolId, keyIdx, req_->key);
+  auto sizes = generateSize(poolId, keyIdx);
   req_->sizeBegin = sizes->begin();
   req_->sizeEnd = sizes->end();
   auto op =
@@ -58,9 +55,13 @@ void OnlineGenerator<Distribution>::generateKeyLengths() {
   std::mt19937_64 gen(folly::Random::rand64());
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
     keyLengths_.emplace_back();
-    for (int j = 0; j < (1 << 15); j++) {
-      keyLengths_.back().emplace_back(
-          workloadDist_[workloadIdx(i)].sampleKeySizeDist(gen));
+    for (size_t j = 0; j < kNumUniqueKeyLengths; j++) {
+      // we generate keys uniquely identified by size_t bits.
+      auto keySize =
+          std::max(util::narrow_cast<size_t>(
+                       workloadDist_[workloadIdx(i)].sampleKeySizeDist(gen)),
+                   sizeof(size_t));
+      keyLengths_.back().emplace_back(keySize);
     }
   }
 }
@@ -69,13 +70,14 @@ template <typename Distribution>
 void OnlineGenerator<Distribution>::generateKey(uint8_t pid,
                                                 size_t idx,
                                                 std::string& key) {
-  key.clear();
-  // All keys are printable lower case english alphabet.
-  auto keySize = keyLengths_[pid][idx % keyLengths_[pid].size()];
-  keySize = keySize < sizeof(idx) ? 0 : keySize - sizeof(idx);
-  key.resize(keySize + sizeof(idx));
-  // pack
-  char* idxChars = reinterpret_cast<char*>(&idx);
+  // All keys are printable lower case english alphabet. we need to ensure the
+  // key lengths are consistent for an idx.
+  const auto keySize = keyLengths_[pid][idx % keyLengths_[pid].size()];
+  XDCHECK_GE(keySize, sizeof(idx));
+  key.resize(keySize);
+
+  // write the idx into the key and pad any additional bytes with same bytes.
+  auto* idxChars = reinterpret_cast<char*>(&idx);
   std::memcpy(key.data(), idxChars, sizeof(idx));
   // pad (deterministically)
   for (size_t i = sizeof(idx); i < keySize; i++) {
@@ -86,15 +88,17 @@ void OnlineGenerator<Distribution>::generateKey(uint8_t pid,
 template <typename Distribution>
 typename std::vector<std::vector<size_t>>::iterator
 OnlineGenerator<Distribution>::generateSize(uint8_t pid, size_t idx) {
-  return sizes_[pid].begin() + idx % sizes_[pid].size();
+  return sizes_[workloadIdx(pid)].begin() +
+         idx % sizes_[workloadIdx(pid)].size();
 }
 
 template <typename Distribution>
 void OnlineGenerator<Distribution>::generateSizes() {
   std::mt19937_64 gen(folly::Random::rand64());
+  // populate this per pool if there is a pool specific workload distribution.
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
-    size_t idx = workloadIdx(i);
     sizes_.emplace_back();
+    size_t idx = workloadIdx(i);
     for (size_t j = 0; j < kNumUniqueSizes; j++) {
       std::vector<size_t> chainSizes;
       chainSizes.push_back(
@@ -124,47 +128,26 @@ void OnlineGenerator<Distribution>::generateFirstKeyIndexForPool() {
 }
 
 template <typename Distribution>
+uint64_t OnlineGenerator<Distribution>::getKeyIdx(uint8_t poolId,
+                                                  std::mt19937_64& gen) {
+  size_t left = firstKeyIndexForPool_[poolId];
+  size_t right = firstKeyIndexForPool_[poolId + 1] - 1;
+  uint64_t ret;
+  do {
+    ret =
+        util::narrow_cast<uint64_t>(std::round(workloadPopDist_[poolId](gen)));
+  } while (ret < left || ret > right);
+  return ret;
+}
+
+template <typename Distribution>
 void OnlineGenerator<Distribution>::generateKeyDistributions() {
-  // We are trying to generate a gaussian distribution for each pool's part
-  // in the overall cache ops. To keep the amount of memory finite, we only
-  // generate a max of 4 billion op traces across all the pools and replay
-  // the same when we need longer traces.
-  std::chrono::seconds duration{0};
   for (uint64_t i = 0; i < config_.opPoolDistribution.size(); i++) {
     auto left = firstKeyIndexForPool_[i];
     auto right = firstKeyIndexForPool_[i + 1] - 1;
-    size_t idx = workloadIdx(i);
-
-    size_t numOpsForPool = std::min<size_t>(
-        util::narrow_cast<size_t>(config_.numOps * config_.numThreads *
-                                  config_.opPoolDistribution[i]),
-        std::numeric_limits<uint32_t>::max());
-    std::cout << folly::sformat("Generating {:.2f}M sampled accesses",
-                                numOpsForPool / 1e6)
-              << std::endl;
-    keyGenForPool_.push_back(std::uniform_int_distribution<uint32_t>(
-        0, static_cast<uint32_t>(numOpsForPool) - 1));
-    keyIndicesForPool_.push_back(std::vector<uint32_t>(numOpsForPool));
-
-    duration += detail::executeParallel(
-        [&, this](size_t start, size_t end) {
-          std::mt19937 gen(folly::Random::rand32());
-          auto popDist = workloadDist_[idx].getPopDist(left, right);
-          for (uint64_t j = start; j < end; j++) {
-            uint32_t idx;
-            do {
-              idx = util::narrow_cast<uint32_t>(std::round(popDist(gen)));
-            } while (idx < left || idx > right);
-            keyIndicesForPool_[i][j] = idx;
-          }
-        },
-        config_.numThreads,
-        numOpsForPool);
+    workloadPopDist_.push_back(
+        workloadDist_[workloadIdx(i)].getPopDist(left, right));
   }
-
-  std::cout << folly::sformat("Generated access patterns in {:.2f} mins",
-                              duration.count() / 60.)
-            << std::endl;
 }
 
 } // namespace cachebench
