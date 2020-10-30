@@ -10,6 +10,7 @@ namespace cachelib {
 namespace cachebench {
 class DiscreteDistribution {
  public:
+  using PopDistT = FastDiscreteDistribution;
   DiscreteDistribution(const DistributionConfig& c)
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
@@ -62,8 +63,8 @@ class DiscreteDistribution {
     return keySizeDist_(gen);
   }
 
-  FastDiscreteDistribution getPopDist(size_t left, size_t right) {
-    return FastDiscreteDistribution(
+  PopDistT getPopDist(size_t left, size_t right) {
+    return PopDistT(
         left, right, config_.popularityBuckets, config_.popularityWeights);
   }
 

@@ -24,7 +24,7 @@ TEST(WorkloadGeneratorTest, Simple) {
   workloadConfig.valSizeRange = std::vector<double>{10.0, 10.1};
 
   WorkloadGenerator<RangeDistribution> keygen{config};
-  std::mt19937 gen;
+  std::mt19937_64 gen;
   for (int i = 0; i < 1500; ++i) {
     const Request& r(keygen.getReq(0, gen));
     EXPECT_EQ(10, *(r.sizeBegin));

@@ -76,6 +76,12 @@ class FastDiscreteDistribution {
     }
   }
 
+  FastDiscreteDistribution(FastDiscreteDistribution&&) = default;
+  FastDiscreteDistribution& operator=(FastDiscreteDistribution&&) = default;
+  FastDiscreteDistribution(const FastDiscreteDistribution&) = default;
+  FastDiscreteDistribution& operator=(const FastDiscreteDistribution&) =
+      default;
+
   template <typename RNG>
   size_t operator()(RNG& gen) {
     size_t bucket = bucketDistribution_(gen);
@@ -86,7 +92,7 @@ class FastDiscreteDistribution {
            leftOffset_;
   }
 
-  void summarize() {
+  void summarize() const {
     size_t count(0);
     std::cout << "Bucket Weight: " << bucketWeight_ << std::endl;
     std::cout << "Buckets:" << std::endl;
@@ -97,10 +103,11 @@ class FastDiscreteDistribution {
   }
 
  private:
-  std::vector<uint64_t> bucketOffsets_;
-  size_t leftOffset_;
-  double scalingFactor_;
-  double bucketWeight_;
-  std::uniform_int_distribution<size_t> bucketDistribution_;
-  std::vector<std::uniform_int_distribution<size_t>> insideBucketDistributions_;
+  std::vector<uint64_t> bucketOffsets_{};
+  size_t leftOffset_{};
+  double scalingFactor_{};
+  double bucketWeight_{};
+  std::uniform_int_distribution<size_t> bucketDistribution_{};
+  std::vector<std::uniform_int_distribution<size_t>>
+      insideBucketDistributions_{};
 };

@@ -181,7 +181,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // it expects a comma separated file (possibly with a header)
   const Request& getReq(
       uint8_t,
-      std::mt19937&,
+      std::mt19937_64&,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   void notifyResult(uint64_t requestId, OpResultType result) override;

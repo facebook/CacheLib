@@ -29,7 +29,7 @@ class WorkloadGenerator : public GeneratorBase {
 
   const Request& getReq(
       uint8_t poolId,
-      std::mt19937& gen,
+      std::mt19937_64& gen,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   const std::vector<std::string>& getAllKeys() const override { return keys_; }

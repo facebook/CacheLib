@@ -10,6 +10,7 @@ namespace cachelib {
 namespace cachebench {
 class NormalDistribution {
  public:
+  using PopDistT = std::normal_distribution<double>;
   NormalDistribution(const DistributionConfig& c)
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
@@ -64,7 +65,7 @@ class NormalDistribution {
     return keySizeDist_(gen);
   }
 
-  std::normal_distribution<double> getPopDist(size_t left, size_t right) {
+  PopDistT getPopDist(size_t left, size_t right) {
     double mu = (left + right) * 0.5;
     // TODO In general, could have different keyFrequency factor besides 2
     double sigma = (right - left) * .5 / 2;

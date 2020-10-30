@@ -195,7 +195,7 @@ void PieceWiseReplayGeneratorStats::renderStatsInternal(
 }
 
 const Request& PieceWiseReplayGenerator::getReq(
-    uint8_t, std::mt19937&, std::optional<uint64_t> lastRequestId) {
+    uint8_t, std::mt19937_64&, std::optional<uint64_t> lastRequestId) {
   auto& activeReqQ = getTLReqQueue();
 
   // Spin until the queue has a value

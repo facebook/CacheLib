@@ -19,7 +19,7 @@ class GeneratorBase {
   // @param lastRequestId generator may generate next request based on last
   // request, e.g., piecewise caching in bigcache.
   virtual const Request& getReq(uint8_t /*poolId*/,
-                                std::mt19937& /*gen*/,
+                                std::mt19937_64& /*gen*/,
                                 std::optional<uint64_t> /*lastRequestId*/) = 0;
 
   // Notify the workload generator about the result of the request.

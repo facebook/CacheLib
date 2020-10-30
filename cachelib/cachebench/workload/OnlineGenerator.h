@@ -30,7 +30,7 @@ class OnlineGenerator : public GeneratorBase {
 
   const Request& getReq(
       uint8_t poolId,
-      std::mt19937& gen,
+      std::mt19937_64& gen,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   const std::vector<std::string>& getAllKeys() const {
@@ -46,32 +46,37 @@ class OnlineGenerator : public GeneratorBase {
   typename std::vector<std::vector<size_t>>::iterator generateSize(
       uint8_t poolId, size_t idx);
   void generateKeyDistributions();
+
   // if there is only one workloadDistribution, use it for everything.
   size_t workloadIdx(size_t i) { return workloadDist_.size() > 1 ? i : 0; }
 
   const StressorConfig config_;
-  std::vector<std::vector<size_t>> keyLengths_;
+
+  // size distributions per pool, where each pool has a vector of chain sizes
+  // per idx.
   std::vector<std::vector<std::vector<size_t>>> sizes_;
+
+  // key sizes prepopulated per pool.
+  std::vector<std::vector<size_t>> keyLengths_;
+
+  // used for thread local intialization
   std::vector<size_t> dummy_;
 
-  // Placeholder
-  std::vector<std::string> allKeys__;
-
   // @firstKeyIndexForPool_ contains the first key in each pool (As represented
-  // by key pool distribution). It's a convenient method for us to populate
-  // @keyIndicesForPoo_ which contains all the key indices that each operation
-  // in a pool. @keyGenForPool_ contains uniform distributions to select indices
-  // contained in @keyIndicesForPool_.
+  // by key pool distribution).
   std::vector<uint64_t> firstKeyIndexForPool_;
   std::vector<std::vector<uint32_t>> keyIndicesForPool_;
   std::vector<std::uniform_int_distribution<uint32_t>> keyGenForPool_;
 
   std::vector<Distribution> workloadDist_;
 
-  // segments the global mutex for the ThreadLocal object
+  // thread local copy of key and  request to return as a part of getReq
   class Tag;
   folly::ThreadLocal<std::string, Tag> key_;
   folly::ThreadLocal<Request, Tag> req_;
+
+  static constexpr size_t kNumUniqueKeyLengths{1ULL << 15};
+  static constexpr size_t kNumUniqueSizes{1ULL << 15};
 };
 
 } // namespace cachebench

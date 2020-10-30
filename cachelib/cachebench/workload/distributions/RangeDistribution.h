@@ -14,6 +14,7 @@ namespace cachebench {
 // probabilities, but will still require O(buckets) time to sample.
 class RangeDistribution {
  public:
+  using PopDistT = std::normal_distribution<double>;
   RangeDistribution(const DistributionConfig& c)
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
@@ -67,7 +68,7 @@ class RangeDistribution {
     return keySizeDist_(gen);
   }
 
-  std::normal_distribution<double> getPopDist(size_t left, size_t right) {
+  PopDistT getPopDist(size_t left, size_t right) {
     double mu = (left + right) * 0.5;
     // TODO In general, could have different keyFrequency factor besides 2
     double sigma = (right - left) * .5 / 2;

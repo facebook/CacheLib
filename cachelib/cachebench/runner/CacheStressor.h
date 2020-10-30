@@ -202,7 +202,7 @@ class CacheStressor : public Stressor {
   //
   // @param stats       Throughput stats
   void stressByDiscreteDistribution(ThroughputStats& stats) {
-    std::mt19937 gen(folly::Random::rand32());
+    std::mt19937_64 gen(folly::Random::rand64());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
                                             config_.opPoolDistribution.end());
     const uint64_t opDelayBatch = config_.opDelayBatch;
@@ -373,7 +373,7 @@ class CacheStressor : public Stressor {
   }
 
   const Request& getReq(const PoolId& pid,
-                        std::mt19937& gen,
+                        std::mt19937_64& gen,
                         std::optional<uint64_t>& lastRequestId) {
     while (true) {
       const Request& req(wg_->getReq(pid, gen, lastRequestId));

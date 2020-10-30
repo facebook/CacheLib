@@ -30,7 +30,7 @@ WorkloadGenerator<Distribution>::WorkloadGenerator(const StressorConfig& config)
 
 template <typename Distribution>
 const Request& WorkloadGenerator<Distribution>::getReq(
-    uint8_t poolId, std::mt19937& gen, std::optional<uint64_t>) {
+    uint8_t poolId, std::mt19937_64& gen, std::optional<uint64_t>) {
   XDCHECK_LT(poolId, keyIndicesForPool_.size());
   XDCHECK_LT(poolId, keyGenForPool_.size());
 
@@ -47,7 +47,7 @@ void WorkloadGenerator<Distribution>::generateKeys() {
   auto fn = [pid, this](size_t start, size_t end) {
     // All keys are printable lower case english alphabet.
     std::uniform_int_distribution<char> charDis('a', 'z');
-    std::mt19937 gen(folly::Random::rand32());
+    std::mt19937_64 gen(folly::Random::rand64());
     for (uint64_t i = start; i < end; i++) {
       size_t keySize =
           util::narrow_cast<size_t>(workloadDist_[pid].sampleKeySizeDist(gen));
@@ -97,7 +97,7 @@ template <typename Distribution>
 void WorkloadGenerator<Distribution>::generateReqs() {
   generateFirstKeyIndexForPool();
   generateKeys();
-  std::mt19937 gen(folly::Random::rand32());
+  std::mt19937_64 gen(folly::Random::rand64());
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
     size_t idx = workloadIdx(i);
     for (size_t j = firstKeyIndexForPool_[i]; j < firstKeyIndexForPool_[i + 1];
@@ -156,7 +156,7 @@ void WorkloadGenerator<Distribution>::generateKeyDistributions() {
 
     duration += detail::executeParallel(
         [&, this](size_t start, size_t end) {
-          std::mt19937 gen(folly::Random::rand32());
+          std::mt19937_64 gen(folly::Random::rand64());
           auto popDist = workloadDist_[idx].getPopDist(left, right);
           for (uint64_t j = start; j < end; j++) {
             double idx;

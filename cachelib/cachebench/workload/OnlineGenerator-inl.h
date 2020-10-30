@@ -36,7 +36,7 @@ OnlineGenerator<Distribution>::OnlineGenerator(const StressorConfig& config)
 
 template <typename Distribution>
 const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
-                                                     std::mt19937& gen,
+                                                     std::mt19937_64& gen,
                                                      std::optional<uint64_t>) {
   XDCHECK_LT(poolId, keyIndicesForPool_.size());
   XDCHECK_LT(poolId, keyGenForPool_.size());
@@ -55,7 +55,7 @@ const Request& OnlineGenerator<Distribution>::getReq(uint8_t poolId,
 
 template <typename Distribution>
 void OnlineGenerator<Distribution>::generateKeyLengths() {
-  std::mt19937 gen(folly::Random::rand32());
+  std::mt19937_64 gen(folly::Random::rand64());
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
     keyLengths_.emplace_back();
     for (int j = 0; j < (1 << 15); j++) {
@@ -91,11 +91,11 @@ OnlineGenerator<Distribution>::generateSize(uint8_t pid, size_t idx) {
 
 template <typename Distribution>
 void OnlineGenerator<Distribution>::generateSizes() {
-  std::mt19937 gen(folly::Random::rand32());
+  std::mt19937_64 gen(folly::Random::rand64());
   for (size_t i = 0; i < config_.keyPoolDistribution.size(); i++) {
     size_t idx = workloadIdx(i);
     sizes_.emplace_back();
-    for (size_t j = 0; j < (1 << 15); j++) {
+    for (size_t j = 0; j < kNumUniqueSizes; j++) {
       std::vector<size_t> chainSizes;
       chainSizes.push_back(
           util::narrow_cast<size_t>(workloadDist_[idx].sampleValDist(gen)));

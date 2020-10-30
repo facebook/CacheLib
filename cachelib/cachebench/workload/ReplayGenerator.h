@@ -30,7 +30,7 @@ class ReplayGenerator : public ReplayGeneratorBase {
   // TODO: not thread safe, can only work with single threaded stressor
   const Request& getReq(
       uint8_t,
-      std::mt19937&,
+      std::mt19937_64&,
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
  private:
@@ -46,7 +46,7 @@ class ReplayGenerator : public ReplayGeneratorBase {
 };
 
 const Request& ReplayGenerator::getReq(uint8_t,
-                                       std::mt19937&,
+                                       std::mt19937_64&,
                                        std::optional<uint64_t>) {
   if (--repeats_ > 0) {
     return req_;
