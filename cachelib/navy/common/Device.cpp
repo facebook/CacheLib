@@ -52,14 +52,11 @@ class FileDevice final : public Device {
                      uint64_t offset,
                      uint32_t size,
                      ssize_t ioRet) {
-    XLOGF(ERR,
-          "IO error: {} offset={} size={} ret={} errno={} ({})",
-          opName,
-          offset,
-          size,
-          ioRet,
-          errno,
-          std::strerror(errno));
+    XLOG_EVERY_N_THREAD(
+        ERR, 1000,
+        folly::sformat("IO error: {} offset={} size={} ret={} errno={} ({})",
+                       opName, offset, size, ioRet, errno,
+                       std::strerror(errno)));
   }
 
   const folly::File file_{};
@@ -132,20 +129,22 @@ class RAID0Device final : public Device {
                            allowedIOSize,
                            stripeStartOffset + ioOffsetInStripe);
       if (retSize != allowedIOSize) {
-        XLOGF(
-            ERR,
-            "IO error: {} logicalOffset={} logicalIOSize={} stripeSize={} "
-            "stripe={} offsetInStripe={} stripeIOSize={} ret={} errno={} ({})",
-            opName,
-            offset,
-            size,
-            stripeSize_,
-            stripe,
-            ioOffsetInStripe,
-            allowedIOSize,
-            retSize,
-            errno,
-            std::strerror(errno));
+        XLOG_EVERY_N_THREAD(
+            ERR, 1000,
+            folly::sformat(
+                "IO error: {} logicalOffset={} logicalIOSize={} stripeSize={} "
+                "stripe={} offsetInStripe={} stripeIOSize={} ret={} errno={} "
+                "({})",
+                opName,
+                offset,
+                size,
+                stripeSize_,
+                stripe,
+                ioOffsetInStripe,
+                allowedIOSize,
+                retSize,
+                errno,
+                std::strerror(errno)));
 
         return false;
       }
