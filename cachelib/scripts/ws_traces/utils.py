@@ -198,28 +198,55 @@ class EncodingDicts(object):
         self.count = 0
 
 
-def process_line(users, namespaces, pipelines, hostnames, kvs, timestamp):
+def process_line(
+    users, namespaces, pipelines, hostnames, kvs, timestamp, fixed_features
+):
     size = kvs[IOSIZE_STR]
-    f = extract_features(users, namespaces, pipelines, kvs)
+    f = extract_features(users, namespaces, pipelines, kvs, fixed_features)
 
     offset = 0
     if f and f.op not in PUT_OPS:
         offset = kvs[OFF_STR]
-    hostname = lookup_or_add_uuid(hostnames, kvs[HOSTNAME_STR])
+    # Always discover new hostnames.
+    hostname = lookup_uuid(hostnames, kvs[HOSTNAME_STR], False)
 
     return BlkAccess(int(offset), int(size), float(timestamp), int(hostname), f)
 
 
-# lookup k in m. If not present, generate a uuid and add it to map, return
-# uuid
-def lookup_or_add_uuid(m, k):
+def _lookup_or_add_uuid(m, k):
+    """
+    lookup k in m. If not present, generate a uuid and add it to map, return
+    uuid
+    """
     if k not in m:
         v = len(m)
         m[k] = v
     return int(m[k])
 
 
-def extract_features(users, namespaces, pipelines, kvs):
+def _lookup_or_get_uuid(m, k):
+    """
+    lookup k in m. If not present, return MAX_INT.
+    """
+    if k not in m:
+        return MAX_INT
+    else:
+        return int(m[k])
+
+
+def lookup_uuid(m, k, fixed):
+    """
+    Lookup k in m.
+    If fixed is True, m would be immutable and absent value maps to MAX_INT.
+    If fixed is False, m would be mutated as values seen for the first time are added.
+    """
+    if fixed:
+        return _lookup_or_get_uuid(m, k)
+    else:
+        return _lookup_or_add_uuid(m, k)
+
+
+def extract_features(users, namespaces, pipelines, kvs, fixed):
     def get_or_not_set(kvs, key):
         return kvs[key].strip("\n") if key in kvs else "NOT_SET"
 
@@ -234,9 +261,9 @@ def extract_features(users, namespaces, pipelines, kvs):
     else:
         op = OpType.UNKNOWN.value
 
-    pipeline = lookup_or_add_uuid(pipelines, str_pipeline)
-    namespace = lookup_or_add_uuid(namespaces, str_namespace)
-    user = lookup_or_add_uuid(users, str_user)
+    pipeline = lookup_uuid(pipelines, str_pipeline, fixed)
+    namespace = lookup_uuid(namespaces, str_namespace, fixed)
+    user = lookup_uuid(users, str_user, fixed)
     return KeyFeatures(op, pipeline, namespace, user)
 
 
@@ -276,7 +303,16 @@ def process_line_and_add(
         if HOSTNAME_STR not in kvs.keys():
             kvs[HOSTNAME_STR] = "hostname"
         process_line_kvs_and_add(
-            accesses, keys, users, namespaces, pipelines, hostnames, timestamp, kvs, k
+            accesses,
+            keys,
+            users,
+            namespaces,
+            pipelines,
+            hostnames,
+            timestamp,
+            kvs,
+            k,
+            False,
         )
     except (IndexError, ValueError, KeyError) as e:
         print("Error in line: ", parts, e)
@@ -284,14 +320,31 @@ def process_line_and_add(
 
 
 def process_line_kvs_and_add(
-    accesses, keys, users, namespaces, pipelines, hostnames, timestamp, kvs, k
+    accesses,
+    keys,
+    users,
+    namespaces,
+    pipelines,
+    hostnames,
+    timestamp,
+    kvs,
+    k,
+    fixed_features,
 ):
-    ukey = lookup_or_add_uuid(keys, k)
+    ukey = lookup_uuid(keys, k, False)
     # first time we are seeing this
     if ukey not in accesses:
         accesses[ukey] = KeyAndAccesses(ukey)
 
-    a = process_line(users, namespaces, pipelines, hostnames, kvs, timestamp)
+    a = process_line(
+        users,
+        namespaces,
+        pipelines,
+        hostnames,
+        kvs,
+        timestamp,
+        fixed_features,
+    )
     accesses[ukey].addAccess(a)
 
 
@@ -341,7 +394,7 @@ def write_feature_encoding_to_file(f, m):
             print("{} {}".format(k, v), file=of)
 
 
-def read_dict_results(results, encoding):
+def read_dict_results(results, encoding, fixed_features):
     """Read results in the form of a list of dicts.
     The element in the list (dict) represents one sample aggregated over a certain flush time interval.
     The dict has the following entries:
@@ -351,6 +404,8 @@ def read_dict_results(results, encoding):
         op_time: unix timestamp when the sample was first generated.
         block_id, offset, user_name, io_size, op_name, pipeline_name, user_namepsace:
             Features. See KEYWORD_MAP for how they translate to the features in the file format case.
+    @param encoding The encodings of the traces, including categorical feature maps and the map from block_id to traces.
+    @param fixed_features If set to True, we would only decode the traces using the feature maps already in the encoding instead of constructing new categorical feature maps.
     """
     count = 0
     for row in results:
@@ -366,6 +421,7 @@ def read_dict_results(results, encoding):
                 encoding.pipelines,
                 encoding.hostnames,
                 row,
+                fixed_features,
             )
             if count % 1000000 == 0:
                 logger.info("Processed {} rows.".format(count))
@@ -408,7 +464,7 @@ def read_processed_file(f, global_feature_map_path=None):
             try:
                 parts = l.split(" ")
                 parts = [p.strip("\n") for p in parts]
-                k = lookup_or_add_uuid(key_map, parts[0])
+                k = lookup_uuid(key_map, parts[0], False)
                 off = int(parts[1])
                 size = int(parts[2])
                 ts = float(parts[3])
@@ -568,7 +624,9 @@ def get_feature_maps(local_map_path, global_map_path, sample_ratio):
     return (local_maps, global_maps)
 
 
-def process_row_and_add(accesses, keys, users, namespaces, pipelines, hostnames, row):
+def process_row_and_add(
+    accesses, keys, users, namespaces, pipelines, hostnames, row, fixed_features
+):
     try:
         kvs = {
             KEYWORD_MAP[key]: row[key]
@@ -586,6 +644,7 @@ def process_row_and_add(accesses, keys, users, namespaces, pipelines, hostnames,
             kvs[OP_TIME],
             kvs,
             kvs[KEY_STR],
+            fixed_features,
         )
     except (IndexError, ValueError, KeyError) as e:
         logger.info("Error in line: ", row, e)

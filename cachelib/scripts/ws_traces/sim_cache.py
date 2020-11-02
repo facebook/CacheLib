@@ -331,10 +331,15 @@ class CoinFlipAP(object):
 
 # learned admission policy
 class LearnedAP(object):
-    def __init__(self, threshold, model_path):
-        assert model_path
+    def __init__(self, threshold, model_path=None, model_thrift=None):
+        assert bool(model_path) != bool(model_thrift)
         self.threshold = threshold
-        self.gbm = lgb.Booster(model_file=model_path)
+        if model_path:
+            self.gbm = lgb.Booster(model_file=model_path)
+        else:
+            self.gbm = lgb.Booster(
+                model_str=model_thrift.parametersUnion.get_lightGBM().model_str
+            )
 
     def batchAccept(self, batch, ts):
         features = np.array(list(batch.values()))
@@ -480,6 +485,10 @@ def simulate_cache(cache, accesses, sampling_ratio):
 
 
 def simulate_cache_driver(options, args):
+    if options.wsa_ap:
+        assert len(args) == 3
+        model_thrift = args[1]
+        accesses = args[2]
     print(options)
     use_lru = not (options.fifo or options.lirs)
     assert use_lru or options.lirs or options.fifo
@@ -497,11 +506,16 @@ def simulate_cache_driver(options, args):
 
     input_file_name = tracefile[: -len(".trace")].split("/")[-1]
     out_file_name = "{}/{}_cache_perf.txt".format(output_dir, input_file_name)
-    accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
-        tracefile, options.global_feature_map_path
-    )
 
-    trace_duration_secs = round(end_ts - start_ts, 2)
+    if options.wsa_ap:
+        assert accesses
+        trace_duration_secs = round(accesses[-1][1].ts - accesses[0][1].ts)
+    else:
+        accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
+            tracefile, options.global_feature_map_path
+        )
+        trace_duration_secs = round(end_ts - start_ts, 2)
+
     sampling_ratio = float(input_file_name.split(".")[0].split("_")[-1])
 
     # filter out just get accesses
@@ -574,6 +588,15 @@ def simulate_cache_driver(options, args):
         ap = CoinFlipAP(options.ap_probability)
         print("CoinFlip AP with probability:", options.ap_probability)
         apname = "CoinFlip-P"
+    elif options.wsa_ap:
+        ap = LearnedAP(options.ap_threshold, model_thrift=model_thrift)
+        print(
+            "WSA AP with model:",
+            options.model_name,
+            "threshold:",
+            options.ap_threshold,
+        )
+        apname = "LearnedAP-Regression-WSA"
 
     else:
         if scaled_write_mbps != 0:
