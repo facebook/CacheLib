@@ -747,11 +747,13 @@ TEST_F(MemoryPoolTest, SlabRelease) {
   // advised away leaving no free slabs for allocation.
   auto prePoolSize = mp.getPoolSize();
   auto preUsedPoolSize = getCurrentSlabAllocSize(mp);
+  ASSERT_EQ(mp.getPoolSize(), mp.getPoolUsableSize());
   testSlabReleaseInMode(SlabReleaseMode::kAdvise);
   ASSERT_TRUE(mp.allSlabsAllocated());
   auto advisedAwaySize = mp.getStats().numSlabAdvise * Slab::kSize;
   // The pool size reduces by number of advised away slabs
-  ASSERT_EQ(prePoolSize - advisedAwaySize, mp.getUsablePoolSize());
+  ASSERT_EQ(prePoolSize - advisedAwaySize, mp.getPoolUsableSize());
+  ASSERT_EQ(advisedAwaySize, mp.getPoolAdvisedSize());
   // The used pool size also reduces by number of advised away slabs
   ASSERT_EQ(preUsedPoolSize - advisedAwaySize, getCurrentSlabAllocSize(mp));
 
@@ -765,6 +767,8 @@ TEST_F(MemoryPoolTest, SlabRelease) {
     ASSERT_FALSE(mp.allSlabsAllocated());
     // The pool size is back to before advising away
     ASSERT_EQ(prePoolSize, mp.getPoolSize());
+    ASSERT_EQ(prePoolSize, mp.getPoolUsableSize());
+    ASSERT_EQ(0, mp.getPoolAdvisedSize());
     // Since the reclaimed slabs go to free pool, the used size doesn't change.
     ASSERT_EQ(preUsedPoolSize - advisedAwaySize, getCurrentSlabAllocSize(mp));
   }

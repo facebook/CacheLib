@@ -153,7 +153,7 @@ class MemoryPoolManager {
     size_t sum = 0;
     folly::SharedMutex::WriteHolder l(lock_);
     for (PoolId id = 0; id < nextPoolId_; id++) {
-      sum += pools_[id]->getCurrSlabAdvised() * Slab::kSize;
+      sum += pools_[id]->getPoolAdvisedSize();
     }
     return sum;
   }

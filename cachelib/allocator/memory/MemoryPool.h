@@ -66,10 +66,17 @@ class MemoryPool {
   // the configured size of the pool.
   size_t getPoolSize() const noexcept { return maxSize_; }
 
+  // return the current size of the pool that has been already advised. Note
+  // include the configured advised size if advising has not
+  // caught up.
+  size_t getPoolAdvisedSize() const noexcept {
+    return curSlabsAdvised_ * Slab::kSize;
+  }
+
   // return the usable size of the pool.
   // Usable pool size is configured pool size minus advised away size
-  size_t getUsablePoolSize() const noexcept {
-    auto advisedSize = curSlabsAdvised_ * Slab::kSize;
+  size_t getPoolUsableSize() const noexcept {
+    auto advisedSize = getPoolAdvisedSize();
     return maxSize_ <= advisedSize ? 0 : maxSize_ - advisedSize;
   }
 
@@ -83,13 +90,13 @@ class MemoryPool {
   // dynamically.
   bool overLimit() const noexcept {
     auto getCurrentUsedAndAdvisedSize =
-        getCurrentUsedSize() + curSlabsAdvised_ * Slab::kSize;
+        getCurrentUsedSize() + getPoolAdvisedSize();
     return getCurrentUsedAndAdvisedSize > maxSize_;
   }
 
   // returns the size of memory currently unallocated in this pool
   size_t getUnAllocatedSlabMemory() const noexcept {
-    auto totalAllocSize = currSlabAllocSize_ + curSlabsAdvised_ * Slab::kSize;
+    auto totalAllocSize = currSlabAllocSize_ + getPoolAdvisedSize();
     return totalAllocSize > maxSize_ ? 0 : maxSize_ - totalAllocSize;
   }
 
@@ -105,7 +112,7 @@ class MemoryPool {
   // allocation class corresponding to some allocation class can still have
   // free memory available.
   bool allSlabsAllocated() const noexcept {
-    auto currAdvisedSize = curSlabsAdvised_ * Slab::kSize;
+    auto currAdvisedSize = getPoolAdvisedSize();
     return (currSlabAllocSize_ + currAdvisedSize + Slab::kSize) > maxSize_;
   }
 
@@ -273,14 +280,14 @@ class MemoryPool {
   }
 
   // returns the number of slabs currently advised away
-  uint64_t getCurrSlabAdvised() const { return curSlabsAdvised_; }
+  uint64_t getNumSlabsAdvised() const { return curSlabsAdvised_; }
 
   // set the number of slabs advised away. This is called only when
   // we have no slabs to advise away or reclaim but number of slabs
   // advised in across the pools need to be rebalanced.
   //
   // @param value  new value for the curSlabsAdvised_
-  void setCurrSlabAdvised(uint64_t value) { curSlabsAdvised_ = value; }
+  void setNumSlabsAdvised(uint64_t value) { curSlabsAdvised_ = value; }
 
  private:
   // container for storing a vector of AllocationClass.
@@ -369,7 +376,7 @@ class MemoryPool {
   // grabbing the mutex.
   const ACVector ac_;
 
-  // Currently advised away Slabs in the pool
+  // Current configuration of advised away Slabs in the pool
   std::atomic<uint64_t> curSlabsAdvised_{0};
 
   // number of slabs we released for resizes and rebalances

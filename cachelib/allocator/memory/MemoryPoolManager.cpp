@@ -38,7 +38,7 @@ MemoryPoolManager::MemoryPoolManager(
   size_t slabsAdvised = 0;
   for (size_t i = 0; i < object.pools_ref()->size(); ++i) {
     pools_[i].reset(new MemoryPool(object.pools_ref()[i], slabAlloc_));
-    slabsAdvised += pools_[i]->getCurrSlabAdvised();
+    slabsAdvised += pools_[i]->getNumSlabsAdvised();
   }
   for (const auto& kv : *object.poolsByName_ref()) {
     poolsByName_.insert(kv);
@@ -254,7 +254,7 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
     // it do not reflect in the subsequent calculations.
     numSlabsInUse[id] = pools_[id]->getCurrentUsedSize() / Slab::kSize;
     totalSlabsInUse += numSlabsInUse[id];
-    totalSlabsAdvised += pools_[id]->getCurrSlabAdvised();
+    totalSlabsAdvised += pools_[id]->getNumSlabsAdvised();
   }
   PoolAdviseReclaimData results;
   results.advise = false;
@@ -269,7 +269,7 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
     // No need to advise-away or reclaim any new slabs.
     // Just rebalance the advised away slabs in each pool
     for (auto& target : poolAdviseTargets) {
-      pools_[target.first]->setCurrSlabAdvised(target.second);
+      pools_[target.first]->setNumSlabsAdvised(target.second);
     }
     return results;
   }
@@ -282,7 +282,7 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
         break;
       }
       uint64_t slabsToAdvise = poolAdviseTargets[id];
-      uint64_t currSlabsAdvised = pools_[id]->getCurrSlabAdvised();
+      uint64_t currSlabsAdvised = pools_[id]->getNumSlabsAdvised();
       if (slabsToAdvise <= currSlabsAdvised) {
         continue;
       }
@@ -298,7 +298,7 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
         break;
       }
       auto slabsToAdvise = poolAdviseTargets[id];
-      auto currSlabsAdvised = pools_[id]->getCurrSlabAdvised();
+      auto currSlabsAdvised = pools_[id]->getNumSlabsAdvised();
       if (slabsToAdvise >= currSlabsAdvised) {
         continue;
       }

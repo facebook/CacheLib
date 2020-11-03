@@ -516,11 +516,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 8 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 8 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
 
       auto delta = 25 * Slab::kSize;
       ASSERT_TRUE(alloc.resizePools(poolId1, poolId2, delta));
@@ -529,21 +529,21 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes / 2);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 23 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 3 * numBytes / 2);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 73 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
 
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes / 2);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 23 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 1);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 1);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 3 * numBytes / 2);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 72 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 3);
     }
   }
 
@@ -603,11 +603,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 12);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 12);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 12);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 12);
 
       for (int i = 0; i < 6; i++) {
         this->fillUpOneSlab(alloc, poolId2, allocSizes[0], keyLen);
@@ -616,21 +616,21 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 12);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 12);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 12);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 12);
 
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 8);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 8);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 16);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 16);
       // shutdown and make sure that the advised slabs in
       // each pool remain same after restore
       alloc.shutDown();
@@ -645,11 +645,11 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       AllocatorT alloc(AllocatorT::SharedMemAttach, config);
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 12 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 8);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 8);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 16);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 16);
     }
   }
 
@@ -712,15 +712,15 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 3 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 3 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 2);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 2);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 6 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrSlabAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 4);
 
       alloc.shrinkPool(poolId2, numBytes);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
@@ -742,30 +742,30 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 2 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 0);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 0 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 0);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 0);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 5 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrSlabAdvised(), 5);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 5);
       alloc.shutDown();
     }
     {
       AllocatorT alloc(AllocatorT::SharedMemAttach, config);
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 2 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), 0);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 0 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 0);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 0);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 5 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrSlabAdvised(), 5);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 5);
     }
   }
 
@@ -834,15 +834,15 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 17 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 17 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 3);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 3);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 34 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrSlabAdvised(), 6);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 6);
 
       // fill up and wait for memory monitor to run few times.
       for (int i = 0; i < 3; i++) {
@@ -856,15 +856,15 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId1).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId1).getCurrSlabAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId1).getNumSlabsAdvised(), 4);
 
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId2).getCurrSlabAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId2).getNumSlabsAdvised(), 4);
 
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 46 * Slab::kSize);
-      ASSERT_EQ(alloc.getPool(poolId3).getCurrSlabAdvised(), 4);
+      ASSERT_EQ(alloc.getPool(poolId3).getNumSlabsAdvised(), 4);
     }
   }
 
@@ -1029,7 +1029,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         ASSERT_EQ(alloc.getPool(poolIds[i]).getPoolSize(), numBytes);
         ASSERT_EQ(alloc.getPool(poolIds[i]).getCurrentAllocSize(),
                   (slabsPerPool / 2) * Slab::kSize);
-        ASSERT_EQ(alloc.getPool(poolIds[i]).getCurrSlabAdvised(),
+        ASSERT_EQ(alloc.getPool(poolIds[i]).getNumSlabsAdvised(),
                   slabsPerPool / 2);
       }
       alloc.shutDown();
@@ -1040,7 +1040,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         ASSERT_EQ(alloc.getPool(poolIds[i]).getPoolSize(), numBytes);
         ASSERT_EQ(alloc.getPool(poolIds[i]).getCurrentAllocSize(),
                   (slabsPerPool / 2) * Slab::kSize);
-        ASSERT_EQ(alloc.getPool(poolIds[i]).getCurrSlabAdvised(),
+        ASSERT_EQ(alloc.getPool(poolIds[i]).getNumSlabsAdvised(),
                   slabsPerPool / 2);
       }
     }

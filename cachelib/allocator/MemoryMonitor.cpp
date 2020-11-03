@@ -104,7 +104,7 @@ size_t MemoryMonitor::getPoolUsedSlabs(PoolId poolId) const noexcept {
 }
 
 size_t MemoryMonitor::getPoolSlabs(PoolId poolId) const noexcept {
-  return bytesToSlabs(cache_.getPool(poolId).getUsablePoolSize());
+  return bytesToSlabs(cache_.getPool(poolId).getPoolUsableSize());
 }
 
 size_t MemoryMonitor::getTotalSlabs() const noexcept {
