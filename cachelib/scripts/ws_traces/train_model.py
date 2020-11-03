@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import logging
-import os
 import random
 
 import cachelib.scripts.ws_traces.dynamic_features as dfeature
@@ -10,7 +9,6 @@ import cachelib.scripts.ws_traces.utils as utils
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.metrics import auc, roc_curve
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +68,7 @@ def build_dataset_from_accesses(eviction_age, access_history_use_counts, accesse
     return model_df
 
 
-def train_lgbm_model(region, model_df, model_name, model_path=None):
+def train_test_split(model_df):
     # split training validation set with ratio 4:1
     train_test_split = int(model_df.shape[0] * 0.8)
 
@@ -84,14 +82,19 @@ def train_lgbm_model(region, model_df, model_name, model_path=None):
         model_df.loc[train_test_split:, "label"] > LABEL_FUTURE_ACCESS_THRESHOLD
     ) & (model_df.loc[train_test_split:, "missSize"] >= LABEL_REJECTX)
 
-    lgb_train = lgb.Dataset(X_train, y_train)
+    return X_train, y_train, X_test, y_test
 
-    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+
+def train_lgbm_model(X_train, y_train, X_test, y_test):
 
     # basic model training hyperparameters
     # hyperparameters are chosen based on experience & offline tuning
     # Model AUC is gernerally above 0.95 (good enough), therefore the performance
     # is more bounded by framing the right objective than training the model.
+
+    lgb_train = lgb.Dataset(X_train, y_train)
+    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+
     params = {
         "boosting_type": "gbdt",
         "objective": "binary",
@@ -116,16 +119,4 @@ def train_lgbm_model(region, model_df, model_name, model_path=None):
         verbose_eval=False,
         early_stopping_rounds=25,
     )
-
-    y_pred_test = gbm.predict(X_test)
-    fpr, tpr, thresholds = roc_curve(y_test, y_pred_test)
-
-    auc_score = auc(fpr, tpr)
-    print(f"{region}: {round(auc_score,4)}")
-
-    # store model to disk
-    if model_path:
-        os.makedirs(model_path, exist_ok=True)
-        gbm.save_model(f"{model_path}/{model_name}")
-
-    return gbm, auc_score, X_test, y_test
+    return gbm
