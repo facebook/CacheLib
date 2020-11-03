@@ -2165,7 +2165,9 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   PoolStats ret;
   ret.isCompactCache = isCompactCache;
   ret.poolName = allocator_->getPoolName(poolId);
-  ret.poolSize = getPool(poolId).getPoolSize();
+  ret.poolSize = pool.getPoolSize();
+  ret.poolUsableSize = pool.getPoolUsableSize();
+  ret.poolAdvisedSize = pool.getPoolAdvisedSize();
   ret.cacheStats = std::move(cacheStats);
   ret.mpStats = std::move(mpStats);
   ret.numPoolGetHits = totalHits;

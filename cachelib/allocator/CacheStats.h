@@ -145,6 +145,13 @@ struct PoolStats {
   // total pool size assigned by users when adding pool.
   uint64_t poolSize;
 
+  // total size of the pool that is actively usable, taking advising into
+  // account
+  uint64_t poolUsableSize;
+
+  // total size of the pool that is set to be advised away.
+  uint64_t poolAdvisedSize;
+
   // container stats that provide evictions etc.
   std::unordered_map<ClassId, CacheStat> cacheStats;
 
