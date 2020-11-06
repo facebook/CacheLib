@@ -1,5 +1,9 @@
 #include "cachelib/cachebench/workload/PieceWiseCache.h"
 
+namespace {
+constexpr double kGB = 1024.0 * 1024 * 1024;
+}
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -160,20 +164,21 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
     return dr == 0 ? 0.0 : 100.0 * nr / dr;
   };
 
-  const uint64_t getBytesPerSec =
-      util::narrow_cast<uint64_t>(stats.getBytes.get() / 1024 / elapsedSecs);
+  const double getBytesGB = stats.getBytes.get() / kGB;
+  const double getBytesGBPerSec = getBytesGB / elapsedSecs;
   const double getBytesSuccessRate =
       safeDiv(stats.getHitBytes.get(), stats.getBytes.get());
   const double getBytesFullSuccessRate =
       safeDiv(stats.getFullHitBytes.get(), stats.getBytes.get());
 
-  const uint64_t getBodyBytesPerSec = util::narrow_cast<uint64_t>(
-      stats.getBodyBytes.get() / 1024 / elapsedSecs);
+  const double getBodyBytesGB = stats.getBodyBytes.get() / kGB;
+  const double getBodyBytesGBPerSec = getBodyBytesGB / elapsedSecs;
   const double getBodyBytesSuccessRate =
       safeDiv(stats.getHitBodyBytes.get(), stats.getBodyBytes.get());
   const double getBodyBytesFullSuccessRate =
       safeDiv(stats.getFullHitBodyBytes.get(), stats.getBodyBytes.get());
 
+  const uint64_t get = stats.objGets.get();
   const uint64_t getPerSec =
       util::narrow_cast<uint64_t>(stats.objGets.get() / elapsedSecs);
   const double getSuccessRate =
@@ -181,32 +186,41 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
   const double getFullSuccessRate =
       safeDiv(stats.objGetFullHits.get(), stats.objGets.get());
 
-  const uint64_t egressBytesPerSec = util::narrow_cast<uint64_t>(
-      stats.totalEgressBytes.get() / 1024 / elapsedSecs);
+  const double egressBytesGB = stats.totalEgressBytes.get() / kGB;
+  const double egressBytesGBPerSec = egressBytesGB / elapsedSecs;
 
-  const uint64_t ingressBytesPerSec = util::narrow_cast<uint64_t>(
-      stats.totalIngressBytes.get() / 1024 / elapsedSecs);
+  const double ingressBytesGB = stats.totalIngressBytes.get() / kGB;
+  const double ingressBytesGBPerSec = ingressBytesGB / elapsedSecs;
 
   const double successRateByTotalTraffic =
       safeDiv(stats.totalEgressBytes.get() - stats.totalIngressBytes.get(),
               stats.totalEgressBytes.get());
 
-  auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
-                      double v2, folly::StringPiece k3, double v3) {
-    out << folly::sformat("{:10}: {:9,}/s, {:10}: {:6.2f}%, {:10}: {:6.2f}%",
-                          k1, v1, k2, v2, k3, v3)
+  auto outFn = [&out](folly::StringPiece k0, double v0, folly::StringPiece k1,
+                      double v1, folly::StringPiece k2, double v2,
+                      folly::StringPiece k3, double v3) {
+    out << folly::sformat(
+               "{:12}: {:6.2f} GB, {:18}: {:6.2f} GB/s, {:8}: {:6.2f}%, {:10}: "
+               "{:6.2f}%",
+               k0, v0, k1, v1, k2, v2, k3, v3)
         << std::endl;
   };
-  outFn("getBytes(KB)", getBytesPerSec, "success", getBytesSuccessRate,
-        "full success", getBytesFullSuccessRate);
-  outFn("getBodyBytes(KB)", getBodyBytesPerSec, "success",
-        getBodyBytesSuccessRate, "full success", getBodyBytesFullSuccessRate);
-  outFn("objectGet", getPerSec, "success", getSuccessRate, "full success",
-        getFullSuccessRate);
-  out << folly::sformat("{:10}: {:9,}/s, {:10}: {:9,}/s, {:10}: {:6.2f}%",
-                        "egressBytes(KB)", egressBytesPerSec,
-                        "ingressBytes(KB)", ingressBytesPerSec, "success",
-                        successRateByTotalTraffic)
+  outFn("getBytes", getBytesGB, "getBytesPerSec", getBytesGBPerSec, "success",
+        getBytesSuccessRate, "full success", getBytesFullSuccessRate);
+  outFn("getBodyBytes", getBodyBytesGB, "getBodyBytesPerSec",
+        getBodyBytesGBPerSec, "success", getBodyBytesSuccessRate,
+        "full success", getBodyBytesFullSuccessRate);
+  out << folly::sformat(
+             "{:12}: {:6.2f} GB, {:12}: {:6.2f} GB, {:18}: {:6.2f} GB/s, "
+             "{:18}: {:6.2f} GB/s, {:8}: {:6.2f}%",
+             "egressBytes", egressBytesGB, "ingressBytes", ingressBytesGB,
+             "egressBytesPerSec", egressBytesGBPerSec, "ingressBytesPerSec",
+             ingressBytesGBPerSec, "success", successRateByTotalTraffic)
+      << std::endl;
+  out << folly::sformat(
+             "{:12}: {:9,}, {:18}: {:8,} /s, {:8}: {:6.2f}%, {:10}: {:6.2f}%",
+             "objectGet", get, "objectGetPerSec", getPerSec, "success",
+             getSuccessRate, "full success", getFullSuccessRate)
       << std::endl;
 }
 
