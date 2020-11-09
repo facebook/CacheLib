@@ -81,17 +81,16 @@ Cache<Allocator>::Cache(CacheConfig config,
   });
 
   // Set up Navy
-  if (!config_.dipperBackend.empty()) {
-    CHECK_EQ(config_.dipperBackend, "navy_dipper");
-
+  if (config_.dipperSizeMB) {
     typename Allocator::NvmCacheConfig nvmConfig;
     nvmConfig.dipperOptions = folly::dynamic::object;
-    nvmConfig.dipperOptions["dipper_backend"] = config_.dipperBackend;
-    nvmConfig.dipperOptions["dipper_force_reinit"] = true;
 
+    nvmConfig.dipperOptions["dipper_navy_file_size"] =
+        config_.dipperSizeMB * MB;
+
+    nvmConfig.dipperOptions["dipper_force_reinit"] = true;
     nvmConfig.dipperOptions["dipper_async_threads"] =
         config_.dipperAsyncThreads;
-
     nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
         config_.navyDataChecksum;
 
@@ -124,8 +123,6 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.dipperOptions["dipper_navy_num_in_mem_buffers"] =
           config_.navyNumInmemBuffers;
     }
-    nvmConfig.dipperOptions["dipper_navy_file_size"] =
-        config_.dipperSizeMB * MB;
 
     if (config_.dipperNavyReqOrderShardsPower != 0) {
       nvmConfig.dipperOptions["dipper_navy_req_order_shards_power"] =
@@ -268,7 +265,7 @@ Cache<Allocator>::~Cache() {
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();
 
-    if (!config_.dipperBackend.empty() && shouldCleanupFiles_) {
+    if (shouldCleanupFiles_) {
       util::removePath(config_.dipperFilePath);
     }
   } catch (...) {
@@ -360,7 +357,7 @@ Stats Cache<Allocator>::getStats() const {
   ret.cacheFindLatencyNs = cacheFindLatency_.estimate();
 
   // nvm stats from navy
-  if (config_.dipperBackend == "navy_dipper" && !navyStats.empty()) {
+  if (config_.dipperSizeMB && !navyStats.empty()) {
     auto lookup = [&navyStats](const std::string& key) {
       return navyStats.find(key) != navyStats.end()
                  ? static_cast<uint64_t>(navyStats.at(key))

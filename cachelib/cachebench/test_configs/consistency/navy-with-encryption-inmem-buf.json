@@ -9,7 +9,6 @@
     "allocFactor" : 2.0,
     "dipperSizeMB" : 1024,
     "dipperUseDirectIO": false,
-    "dipperBackend" : "navy_dipper",
     "dipperNavyUseMemoryDevice": true,
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBlock": 4096,

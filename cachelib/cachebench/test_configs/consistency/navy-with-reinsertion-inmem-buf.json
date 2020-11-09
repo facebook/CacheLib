@@ -8,7 +8,6 @@
     "navyProbabilityReinsertionThreshold": 50,
     "dipperSizeMB" : 512,
     "dipperUseDirectIO": false,
-    "dipperBackend" : "navy_dipper",
     "navyNumInmemBuffers": 30,
     "dipperNavyUseMemoryDevice": true
   },

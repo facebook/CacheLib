@@ -9,7 +9,6 @@
       "allocFactor" : 10,
   
       "dipperSizeMB" : 512,
-      "dipperBackend" : "navy_dipper",
       "dipperNavyUseMemoryDevice": true
     },
     "test_config" : 

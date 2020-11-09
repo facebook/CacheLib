@@ -12,7 +12,6 @@
     "dipperNavyBigHashBucketSize" : 4096,
     "dipperNavyBigHashSizePct" : 65,
 
-    "dipperBackend" : "navy_dipper",
     "dipperUseDirectIO": true,
     "dipperNavyBigHashBloomFilterSize": 0
   },

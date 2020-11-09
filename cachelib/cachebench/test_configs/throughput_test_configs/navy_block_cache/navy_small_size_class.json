@@ -21,7 +21,6 @@
       "navyNumInmemBuffers": 0,
 
       "dipperSizeMB" : 2048,
-      "dipperBackend" : "navy_dipper",
       "dipperNavyBigHashSizePct" : 0,
       "dipperNavyUseMemoryDevice": true
     },

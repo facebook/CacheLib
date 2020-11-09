@@ -8,7 +8,6 @@
     "poolSizes" : [0.3, 0.7],
 
     "dipperSizeMB" : 512,
-    "dipperBackend" : "navy_dipper",
     "dipperNavyUseMemoryDevice": true
   },
   "test_config" : 

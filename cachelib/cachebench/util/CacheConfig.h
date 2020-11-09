@@ -47,10 +47,6 @@ struct CacheConfig : public JSONConfig {
   // overall size of the dipper resources
   uint64_t dipperSizeMB{0};
 
-  // What dipper backend to use. Currently only support navydipper. default
-  // disabled
-  std::string dipperBackend{""};
-
   // uses a user specified file for caching. If the path specified is a file,
   // then navy uses that directly. If the path specificied is a directory, we
   // will create a file inside with appropriate size . If a directory is

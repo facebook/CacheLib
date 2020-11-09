@@ -11,7 +11,6 @@
       4194304
     ],
     "dipperSizeMB": 950000,
-    "dipperBackend": "navy_dipper",
     "dipperUseDirectIO": true,
     "dipperAsyncThreads": 64,
     "dipperNavyBigHashSizePct": 0,

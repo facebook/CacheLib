@@ -5,7 +5,6 @@
     "moveOnSlabRelease" : true,
 
     "dipperSizeMB" : 512,
-    "dipperBackend" : "navy_dipper",
     "dipperUseDirectIO": false,
     "dipperNavyUseMemoryDevice": true
   },
