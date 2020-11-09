@@ -45,7 +45,7 @@
       819200
     ],
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperDevicePath": "/dev/nvme0n1"
+    "dipperFilePath": "/dev/nvme0n1"
   },
   "test_config": {
     

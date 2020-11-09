@@ -5,8 +5,7 @@
     "moveOnSlabRelease" : true,
 
     "dipperSizeMB" : 512,
-    "dipperUseDirectIO": false,
-    "dipperNavyUseMemoryDevice": true
+    "dipperUseDirectIO": false
   },
   "test_config" : 
     {

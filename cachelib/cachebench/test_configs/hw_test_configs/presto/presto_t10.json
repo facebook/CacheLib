@@ -18,7 +18,7 @@
     "dipperNavyBlock": 4096,
     "dipperNavySizeClasses": [],
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperDevicePath": "/dev/md0"
+    "dipperFilePath": "/dev/md0"
   },
   "test_config": {
     

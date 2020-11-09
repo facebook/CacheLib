@@ -57,22 +57,12 @@ struct CacheConfig : public JSONConfig {
   // overall size of the dipper resources
   uint64_t dipperSizeMB{0};
 
-  // uses a user specified file for caching. If the path specified is a file,
-  // then navy uses that directly. If the path specificied is a directory, we
-  // will create a file inside with appropriate size . If a directory is
-  // specified by user, cachebench cleans it up at exit. If it is a file,
-  // cachebench preserves the file upon exit
+  // uses a user specified file for caching. If the path specified is a file
+  // or raw device, then navy uses that directly. If the path specificied is a
+  // directory, we will create a file inside with appropriate size . If a
+  // directory is specified by user, cachebench cleans it up at exit. If it is
+  // a file, cachebench preserves the file upon exit
   std::string dipperFilePath{};
-
-  // optional path to a device for bigdipper mode. When this is used, we
-  // treat device path and file path as is and use them directly for big
-  // dipper operations. If this is not specified, we use the file path as
-  // device path as well by creating  a new file inside that.
-  std::string dipperDevicePath{""};
-
-  // if set, disregards the file path and device path. Uses the in-memory
-  // device
-  bool dipperNavyUseMemoryDevice{false};
 
   // list of device identifiers for the device path that can be used to
   // monitor the physical write amplification. If empty, physical write amp is
@@ -91,7 +81,7 @@ struct CacheConfig : public JSONConfig {
   uint64_t dipperAsyncThreads{48};
 
   // only for big dipper.
-  uint64_t dipperBucketSizeKB{};
+  uint64_t dipperBucketSizeKB{4096};
 
   // Navy specific: device block size, bytes.
   uint64_t dipperNavyBlock{512};

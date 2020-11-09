@@ -7,8 +7,7 @@
     "allocFactor" : 2.0,
     "navyProbabilityReinsertionThreshold": 50,
     "dipperSizeMB" : 512,
-    "dipperUseDirectIO": false,
-    "dipperNavyUseMemoryDevice": true
+    "dipperUseDirectIO": false
   },
   "test_config" :
     {

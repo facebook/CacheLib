@@ -2,7 +2,7 @@
   "cache_config": {
     "cacheSizeMB": 22248,
     "dipperAsyncThreads": 128,
-    "dipperDevicePath": "/dev/md0",
+    "dipperFilePath": "/dev/md0",
     "writeAmpDeviceList": [
       "nvme1n1",
       "nvme2n1"

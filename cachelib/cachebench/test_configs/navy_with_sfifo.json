@@ -14,8 +14,7 @@
       "dipperNavyUseRegionLru": false,
       "navySegmentedFifoSegmentRatio": [1, 1, 2],
       "dipperNavyUseStackAllocation": true,
-      "dipperUseDirectIO": false,
-      "dipperNavyUseMemoryDevice": true
+      "dipperUseDirectIO": false
     },
     "test_config" : {
         "enableLookaside": false,

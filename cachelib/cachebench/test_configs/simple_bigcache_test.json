@@ -9,7 +9,6 @@
       "poolSizes": [1.0],
 
       "dipperSizeMB": 800,
-      "dipperNavyUseMemoryDevice": true,
       "dipperUseDirectIO": false,
 
       "dipperNavyBlock": 4096,

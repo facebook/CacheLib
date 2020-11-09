@@ -94,13 +94,7 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
         config_.navyDataChecksum;
 
-    if (config_.dipperNavyUseMemoryDevice) {
-      // nothing to do here.
-    } else if (!config_.dipperDevicePath.empty()) {
-      nvmConfig.dipperOptions["dipper_navy_file_name"] =
-          config_.dipperDevicePath;
-    } else {
-      CHECK(!config_.dipperFilePath.empty());
+    if (!config_.dipperFilePath.empty()) {
       // if we get a directory, create a file. we will clean it up. If we
       // already have a file, user provided it. So we will also keep it around
       // after the tests.

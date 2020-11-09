@@ -8,8 +8,7 @@
       "poolSizes" : [0.3, 0.7],
       "allocFactor" : 10,
   
-      "dipperSizeMB" : 512,
-      "dipperNavyUseMemoryDevice": true
+      "dipperSizeMB" : 512
     },
     "test_config" : 
       {

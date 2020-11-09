@@ -6,7 +6,7 @@
     "allocFactor" : 2.0,
 
     "dipperFilePath": "/dev/shm/cachebench",
-    "dipperDevicePath": "/dev/nvme0n1p1",
+    "dipperFilePath": "/dev/nvme0n1p1",
 
     "dipperSizeMB" : 900000,
     "dipperNavyBigHashBucketSize" : 4096,

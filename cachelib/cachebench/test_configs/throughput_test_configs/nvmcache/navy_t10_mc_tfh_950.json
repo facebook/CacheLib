@@ -45,7 +45,7 @@
       819200
     ],
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperDevicePath": "/dev/md0",
+    "dipperFilePath": "/dev/md0",
     "nvmCacheReadBufSize": 8192
   },
   "test_config": {

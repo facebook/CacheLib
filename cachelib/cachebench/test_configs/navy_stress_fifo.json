@@ -5,8 +5,7 @@
     "moveOnSlabRelease" : false,
 
     "dipperSizeMB" : 512,
-    "dipperNavyUseRegionLru": false,
-    "dipperNavyUseMemoryDevice": true
+    "dipperNavyUseRegionLru": false
   },
   "test_config" : 
     {
