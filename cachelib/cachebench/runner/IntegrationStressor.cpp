@@ -340,7 +340,7 @@ void CachelibRangeMapStressor::readEntries(TestMap& map) {
   auto key1 = folly::Random::rand32(keys.size() / 100);
   auto key2 = key1 + folly::Random::rand32(keys.size() - key1);
   auto range = map.rangeLookupApproximate(key1, key2);
-  for (auto& kv : range) {
+  for (const auto& kv : range) {
     auto res = map.lookup(kv.key);
     if (res == map.end()) {
       throw std::runtime_error(folly::sformat(
