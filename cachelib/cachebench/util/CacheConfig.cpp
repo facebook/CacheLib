@@ -8,6 +8,7 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 CacheConfig::CacheConfig(const folly::dynamic& configJson) {
+  JSONSetVal(configJson, allocator);
   JSONSetVal(configJson, cacheSizeMB);
   JSONSetVal(configJson, poolRebalanceIntervalSec);
   JSONSetVal(configJson, moveOnSlabRelease);
@@ -25,6 +26,10 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, lruUpdateOnRead);
   JSONSetVal(configJson, tryLockUpdate);
   JSONSetVal(configJson, lruIpSpec);
+
+  JSONSetVal(configJson, lru2qHotPct);
+  JSONSetVal(configJson, lru2qColdPct);
+
   JSONSetVal(configJson, allocFactor);
   JSONSetVal(configJson, maxAllocSize);
   JSONSetVal(configJson, minAllocSize);
@@ -64,10 +69,6 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyAdmissionWriteRateMB);
   JSONSetVal(configJson, navyMaxConcurrentInserts);
   JSONSetVal(configJson, navyDataChecksum);
-
-  JSONSetVal(configJson, lru2qHotPct);
-  JSONSetVal(configJson, lru2qColdPct);
-
   JSONSetVal(configJson, navyNumInmemBuffers);
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);
@@ -77,7 +78,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 560>();
+  checkCorrectSize<CacheConfig, 584>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

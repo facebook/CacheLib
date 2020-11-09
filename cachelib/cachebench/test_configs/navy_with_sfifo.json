@@ -1,5 +1,6 @@
 {
     "cache_config" : {
+      "allocator": "LRU",
       "cacheSizeMB": 128,
       "dipperSizeMB": 600,
       "poolRebalanceIntervalSec" : 1,
@@ -16,16 +17,14 @@
       "dipperUseDirectIO": false,
       "dipperNavyUseMemoryDevice": true
     },
-    "test_config" :
-      {
-          "allocator": "LRU",
-          "enableLookaside": false,
-          "generator": "piecewise-replay",
-          "numOps": 1000000,
-          "numThreads": 12,
-          "populateItem": false,
-          "prepopulateCache": false,
-          "traceFileName": "short_bigcache_traces.csv",
-          "repeatTraceReplay": true
+    "test_config" : {
+        "enableLookaside": false,
+        "generator": "piecewise-replay",
+        "numOps": 1000000,
+        "numThreads": 12,
+        "populateItem": false,
+        "prepopulateCache": false,
+        "traceFileName": "short_bigcache_traces.csv",
+        "repeatTraceReplay": true
       }
   }

@@ -1,5 +1,6 @@
 {
   "cache_config": {
+    "allocator": "LRU2Q",
     "cacheSizeMB": 2058,
     "htBucketPower": 24,
     "htLockPower": 10,
@@ -35,7 +36,6 @@
   },
   "test_config":
     {
-      "allocator": "LRU2Q",
 
       "enableLookaside": false,
       "generator": "piecewise-replay",

@@ -9,7 +9,6 @@ namespace cachelib {
 namespace cachebench {
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, mode);
-  JSONSetVal(configJson, allocator);
   JSONSetVal(configJson, generator);
   JSONSetVal(configJson, distribution);
 
@@ -57,7 +56,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 496>();
+  checkCorrectSize<StressorConfig, 464>();
 }
 
 bool StressorConfig::usesChainedItems() const {

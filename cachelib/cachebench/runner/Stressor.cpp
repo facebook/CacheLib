@@ -105,11 +105,11 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     CacheConfig cacheConfig, StressorConfig stressorConfig) {
   if (stressorConfig.mode == "stress") {
     auto generator = makeGenerator(stressorConfig);
-    if (stressorConfig.allocator == "LRU" || stressorConfig.allocator.empty()) {
+    if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
       return std::make_unique<CacheStressor<LruAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
-    } else if (stressorConfig.allocator == "LRU2Q") {
+    } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }

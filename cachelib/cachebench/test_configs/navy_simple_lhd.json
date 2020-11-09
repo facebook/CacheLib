@@ -1,5 +1,6 @@
 {
   "cache_config" : {
+    "allocator": "LHD",
     "cacheSizeMB" : 128,
     "poolRebalanceIntervalSec" : 1,
     "moveOnSlabRelease" : false,
@@ -12,9 +13,6 @@
   },
   "test_config" : 
     {
-      "allocator": "LHD",
-
-      
       "distribution" :  "range",
 
       "numOps" : 100000,

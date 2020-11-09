@@ -96,8 +96,7 @@ struct StressorConfig : public JSONConfig {
   // the test case specified in @name will control how to create a cache and run
   // the test. The other settings, except @numOps, will not take any effect.
   std::string mode{"stress"};
-  // by defaullt, lru allocator
-  std::string allocator{"LRU"};
+
   // Which workload generator to use, default is
   // workload generator which samples from some distribution
   // but "replay" allows replaying a production trace, for example.

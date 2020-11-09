@@ -7,6 +7,9 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 struct CacheConfig : public JSONConfig {
+  // by defaullt, lru allocator. can be set to LRU-2Q.
+  std::string allocator{"LRU"};
+
   uint64_t cacheSizeMB{0};
   uint64_t poolRebalanceIntervalSec{0};
   std::string rebalanceStrategy;
@@ -24,12 +27,19 @@ struct CacheConfig : public JSONConfig {
   // time to sleep between MMContainer reconfigures
   uint64_t mmReconfigureIntervalSecs{0};
 
+  // LRU and 2Q params
   uint64_t lruRefreshSec{60};
   double lruRefreshRatio{0.1};
   bool lruUpdateOnWrite{false};
   bool lruUpdateOnRead{true};
   bool tryLockUpdate{false};
+
+  // LRU param
   uint64_t lruIpSpec{0};
+
+  // 2Q params
+  size_t lru2qHotPct{20};
+  size_t lru2qColdPct{20};
 
   double allocFactor{1.5};
   // maximum alloc size generated using the alloc factor above.
@@ -156,10 +166,6 @@ struct CacheConfig : public JSONConfig {
   // enables data checksuming for navy. metadata checksum is enabled by
   // default
   bool navyDataChecksum{true};
-
-  // 2Q params
-  size_t lru2qHotPct{20};
-  size_t lru2qColdPct{20};
 
   // by default, only store the size requested by the user into nvm cache
   bool truncateItemToOriginalAllocSizeInNvm = false;
