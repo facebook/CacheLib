@@ -1,7 +1,6 @@
 #include <folly/portability/GTest.h>
 
 #include "cachelib/common/piecewise/RequestRange.h"
-#include "common/logging/logging.h"
 
 using facebook::cachelib::RequestRange;
 
