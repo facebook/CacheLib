@@ -1,26 +1,26 @@
 #!/bin/sh
 
 NAME=folly
-REPO=https://github.com/facebook/folly.git
 
 die()
 {
 	base=$(basename "0")
-	echo "$base: error: $* (tmpdir = $tmpdir)" >&2
+	echo "$base: error: $*" >&2
 	exit 1
 }
 
-tmpdir=$(mktemp -t -d  cachelib.prereqs.$NAME.XXXXXX) || die "failed to create temporary directory"
-cd "$tmpdir" || die "faied to CD into $tmpdir"
-git clone  "$REPO" || die "failed to clone '$NAME' repository $REPO"
-basedir=$(basename "$REPO" .git)
-cd "$basedir" && mkdir _build && cd _build \
-	|| die "failed to create build directory"
-cmake .. || die "cmake failed"
+dir=$(dirname "$0")
+cd "$dir/.." || die "failed to change-dir into $dir/.."
+test -d cachelib || die "failed to change-dir to expected root directory"
+
+
+./contrib/update-submodules.sh || die "failed to update git-submodules"
+
+mkdir -p "build-$NAME" || die "failed to create build-$NAME directory"
+cd "build-$NAME" || die "'cd' failed"
+
+cmake ../cachelib/external/$NAME || die "cmake failed"
 make -j || die "make failed"
 sudo make install || die "make install failed"
-
-cd /tmp
-rm -fr "$tmpdir" || die "failed to remove temporary build directory"
 
 echo "$NAME library is now installed"
