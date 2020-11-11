@@ -28,12 +28,12 @@ detect_os()
 build_debian_10()
 {
 ./contrib//prerequisites-debian10.sh \
+	&& ./contrib/install-sparsemap.sh \
 	&& ./contrib/install-fmt.sh \
 	&& ./contrib/install-folly.sh \
 	&& ./contrib/install-fizz.sh \
 	&& ./contrib/install-wangle.sh \
 	&& ./contrib/install-fbthrift.sh \
-	&& ./contrib/install-sparsemap.sh \
 	|| die "failed to install/build dependencies for Debian"
 }
 
@@ -43,11 +43,11 @@ build_centos_8()
    &&./contrib/install-googleflags.sh \
    && ./contrib/install-googlelog.sh \
    && ./contrib/install-fmt.sh \
+   && ./contrib/install-sparsemap.sh \
    && ./contrib/install-folly.sh \
    && ./contrib/install-fizz.sh \
    && ./contrib/install-wangle.sh \
    && ./contrib/install-fbthrift.sh \
-   && ./contrib/install-sparsemap.sh \
   || die "failed to install/build dependencies for CentOS-8"
 }
 
@@ -55,12 +55,12 @@ build_ubuntu_18()
 {
   ./contrib//prerequisites-ubuntu18.sh \
    && ./contrib/install-googletest.sh \
+   && ./contrib/install-sparsemap.sh \
    && ./contrib/install-fmt.sh \
    && ./contrib/install-folly.sh \
    && ./contrib/install-fizz.sh \
    && ./contrib/install-wangle.sh \
    && ./contrib/install-fbthrift.sh \
-   && ./contrib/install-sparsemap.sh \
   || die "failed to install/build dependencies for Ubuntu-18"
 }
 
