@@ -15,6 +15,7 @@ add_library (cachelib_cachebench
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
+  ./workload/PieceWiseCache.cpp
   ./workload/PieceWiseReplayGenerator.cpp
   )
 add_dependencies(cachelib_cachebench thrift_generated_files)
