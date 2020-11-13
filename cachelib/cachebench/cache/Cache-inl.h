@@ -189,12 +189,9 @@ Cache<Allocator>::Cache(CacheConfig config,
                << folly::toPrettyJson(nvmConfig.dipperOptions);
     allocatorConfig.enableNvmCache(nvmConfig);
 
-#ifdef CACHEBENCH_FB_ENV
-    if (config_.navyEncryption) {
-      allocatorConfig.enableNvmCacheEncryption(
-          std::make_shared<EncryptionHelper>(config_.dipperNavyBlock));
+    if (config_.navyEncryption && config_.createEncryptor) {
+      allocatorConfig.enableNvmCacheEncryption(config_.createEncryptor());
     }
-#endif
 
     if (config_.memoryOnlyTTL > 0) {
       allocatorConfig.setNvmCacheFilterCallback(
@@ -227,23 +224,10 @@ Cache<Allocator>::Cache(CacheConfig config,
         nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
         true /* ensureSufficientMem */);
     pools_.push_back(pid);
+  }
 
-#ifdef CACHEBENCH_FB_ENV
-    CacheAdmin::Config adminConfig;
-
-    // These tell us how the cache is doing. Upload them to make evaluating
-    // workloads easier.
-    adminConfig.serviceDataStatsInterval = std::chrono::seconds{30};
-    adminConfig.poolsStatsInterval = std::chrono::seconds{30};
-    adminConfig.poolRebalancerStatsInterval = std::chrono::seconds{30};
-    adminConfig.acStatsInterval = std::chrono::seconds{30};
-
-    // Following stats are for production services so we don't need them.
-    adminConfig.allocatorConfigInterval = std::chrono::seconds{0};
-    adminConfig.itemStatsInterval = std::chrono::seconds{0};
-    adminConfig.globalOdsInterval = std::chrono::seconds{0};
-    admin_ = std::make_unique<CacheAdmin>(*cache_, adminConfig);
-#endif
+  if (config_.cacheMonitorFactory) {
+    monitor_ = config_.cacheMonitorFactory->create(*cache_);
   }
 
   cleanupGuard.dismiss();
@@ -252,9 +236,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 template <typename Allocator>
 Cache<Allocator>::~Cache() {
   try {
-#ifdef CACHEBENCH_FB_ENV
-    admin_.reset();
-#endif
+    monitor_.reset();
 
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();

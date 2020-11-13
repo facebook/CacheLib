@@ -1,19 +1,30 @@
-#include <folly/init/Init.h>
+#include <memory>
+#include <thread>
+
 #include <folly/io/async/EventBase.h>
 #include <folly/logging/LoggerDB.h>
 #include <gflags/gflags.h>
 
-// Comment out the define for FB_ENV when we build for external environments
-#define CACHEBENCH_FB_ENV
-#ifdef CACHEBENCH_FB_ENV
-#include "cachelib/cachebench/fb303/FB303ThriftServer.h"
-#include "cachelib/cachebench/odsl_exporter/OdslExporter.h"
-#include "common/init/Init.h"
-#endif
-
 #include "cachelib/cachebench/runner/Runner.h"
 #include "cachelib/common/Utils.h"
 
+#ifdef CACHEBENCH_FB_ENV
+#include "cachelib/cachebench/facebook/FbDep.h"
+#include "cachelib/cachebench/facebook/fb303/FB303ThriftServer.h"
+#include "cachelib/cachebench/facebook/odsl_exporter/OdslExporter.h"
+#include "common/init/Init.h"
+#else
+#include <folly/init/Init.h>
+#include <gflags/gflags.h>
+#endif
+
+#ifdef CACHEBENCH_FB_ENV
+DEFINE_bool(export_to_ods, true, "Upload cachelib stats to ODS");
+DEFINE_int32(fb303_port,
+             0,
+             "Port for cachebench fb303 service. If 0, do not export to fb303. "
+             "If valid, this will disable ODSL export.");
+#endif
 DEFINE_string(json_test_config,
               "",
               "path to test config. If empty, use default setting");
@@ -28,24 +39,46 @@ DEFINE_int32(timeout_seconds,
              0,
              "Maximum allowed seconds for running test. 0 means no timeout");
 
-#ifdef CACHEBENCH_FB_ENV
-DEFINE_bool(export_to_ods, true, "Upload cachelib stats to ODS");
-DEFINE_int32(fb303_port,
-             0,
-             "Port for cachebench fb303 service. If 0, do not export to fb303. "
-             "If valid, this will disable ODSL export.");
-#endif
-
-std::unique_ptr<facebook::cachelib::cachebench::Runner> gRunner;
+struct sigaction act;
+std::unique_ptr<facebook::cachelib::cachebench::Runner> runnerInstance;
+std::unique_ptr<std::thread> stopperThread;
 
 void sigint_handler(int sig_num) {
   switch (sig_num) {
   case SIGINT:
-  case SIGTERM:
-    if (gRunner) {
-      gRunner->abort();
+  case SIGTERM: {
+    if (runnerInstance) {
+      runnerInstance->abort();
     }
     break;
+  }
+  }
+}
+
+void setupSignalHandler() {
+  memset(&act, 0, sizeof(struct sigaction));
+  act.sa_handler = &sigint_handler;
+  act.sa_flags = SA_RESETHAND;
+  if (sigaction(SIGINT, &act, nullptr) == -1) {
+    std::cout << "Failed to register a SIGINT handler" << std::endl;
+    std::exit(1);
+  }
+}
+
+void setupTimeoutHandler() {
+  if (FLAGS_timeout_seconds > 0) {
+    stopperThread.reset(new std::thread([] {
+      folly::EventBase eb;
+      eb.runAfterDelay(
+          []() {
+            if (runnerInstance) {
+              runnerInstance->abort();
+            }
+          },
+          FLAGS_timeout_seconds * 1000);
+      eb.loopForever();
+    }));
+    stopperThread->detach();
   }
 }
 
@@ -61,30 +94,22 @@ int main(int argc, char** argv) {
   } else if (FLAGS_fb303_port > 0) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
+  auto configCustomizer = customizeCacheConfigForFacebook;
+  std::cout << "Welcome to FB-internal version of cachebench" << std::endl;
 #else
   folly::init(&argc, &argv, true);
+  auto configCustomizer = [](CacheConfig c) { return c; };
+  std::cout << "Welcome to OSS version of cachebench" << std::endl;
 #endif
 
-  gRunner = std::make_unique<Runner>(
-      FLAGS_json_test_config, FLAGS_progress_stats_file, FLAGS_progress);
+  runnerInstance.reset(new facebook::cachelib::cachebench::Runner{
+      FLAGS_json_test_config, FLAGS_progress_stats_file, FLAGS_progress,
+      configCustomizer});
 
-  // Handle signals properly
-  struct sigaction act;
-  memset(&act, 0, sizeof(struct sigaction));
-  act.sa_handler = &sigint_handler;
-  act.sa_flags = SA_RESETHAND;
-  if (sigaction(SIGINT, &act, nullptr) == -1) {
-    std::cout << "Failed to register a SIGINT handler" << std::endl;
-    return 1;
-  }
+  setupSignalHandler();
+  setupTimeoutHandler();
 
-  // make sure the test end before timeout
-  folly::EventBase eb;
-  if (FLAGS_timeout_seconds > 0) {
-    eb.runAfterDelay([]() { gRunner->abort(); }, FLAGS_timeout_seconds * 1000);
-  }
-
-  if (!gRunner->run()) {
+  if (!runnerInstance->run()) {
     return 1;
   }
   return 0;

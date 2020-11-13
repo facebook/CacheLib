@@ -4,12 +4,6 @@
 #include <folly/hash/Hash.h>
 #include <gflags/gflags.h>
 
-// Comment out the define for FB_ENV when we build for external environments
-#define CACHEBENCH_FB_ENV
-#ifdef CACHEBENCH_FB_ENV
-#include "cachelib/facebook/admin/CacheAdmin.h"
-#include "cachelib/facebook/encryption/Encryption.h"
-#endif
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
@@ -155,9 +149,7 @@ class Cache {
   }
 
   void shutDown() {
-#ifdef CACHEBENCH_FB_ENV
-    admin_.reset();
-#endif
+    monitor_.reset();
     cache_->shutDown();
   }
 
@@ -326,9 +318,7 @@ class Cache {
   std::atomic<unsigned int> inconsistencyCount_{0};
   std::unique_ptr<ValueTracker> valueTracker_;
   std::unique_ptr<Allocator> cache_;
-#ifdef CACHEBENCH_FB_ENV
-  std::unique_ptr<CacheAdmin> admin_;
-#endif
+  std::unique_ptr<CacheMonitor> monitor_;
   std::vector<PoolId> pools_;
   std::atomic<bool> usesNvm_{false};
   std::unordered_map<std::string, std::atomic<bool>> invalidKeys_;

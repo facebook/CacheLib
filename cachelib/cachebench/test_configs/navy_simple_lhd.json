@@ -10,7 +10,7 @@
 
     "dipperSizeMB" : 512
   },
-  "test_config" : 
+  "test_config" :
     {
       "distribution" :  "range",
 
@@ -36,5 +36,5 @@
       "keyPoolDistribution": [0.5, 0.5],
       "opPoolDistribution" : [0.5, 0.5]
     }
- 
+
 }

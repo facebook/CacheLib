@@ -7,14 +7,16 @@ namespace cachelib {
 namespace cachebench {
 Runner::Runner(const std::string& configPath,
                const std::string& progressStatsFile,
-               uint64_t progressInterval)
+               uint64_t progressInterval,
+               std::function<CacheConfig(CacheConfig)> customizeCacheConfig)
     : config_{configPath},
+      customizeCacheConfig_{std::move(customizeCacheConfig)},
       progressStatsFile_{progressStatsFile},
       progressInterval_{progressInterval} {}
 
 bool Runner::run() {
-  stressor_ =
-      Stressor::makeStressor(config_.getCacheConfig(), config_.getTestConfig());
+  stressor_ = Stressor::makeStressor(
+      customizeCacheConfig_(config_.getCacheConfig()), config_.getTestConfig());
   ProgressTracker tracker{*stressor_, progressStatsFile_};
 
   stressor_->start();

@@ -35,7 +35,6 @@
   },
   "test_config":
     {
-
       "enableLookaside": false,
       "generator": "piecewise-replay",
       "numOps": 240000000,

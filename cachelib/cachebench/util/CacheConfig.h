@@ -1,11 +1,27 @@
 #pragma once
 
+#include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
+#include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+// Monitor that is set up after CacheAllocator is created and
+// destroyed before CacheAllocator is shut down.
+class CacheMonitor {
+ public:
+  virtual ~CacheMonitor() = default;
+};
+
+class CacheMonitorFactory {
+ public:
+  virtual ~CacheMonitorFactory() = default;
+  virtual std::unique_ptr<CacheMonitor> create(LruAllocator& cache) = 0;
+  virtual std::unique_ptr<CacheMonitor> create(Lru2QAllocator& cache) = 0;
+};
+
 struct CacheConfig : public JSONConfig {
   // by defaullt, lru allocator. can be set to LRU-2Q.
   std::string allocator{"LRU"};
@@ -170,6 +186,18 @@ struct CacheConfig : public JSONConfig {
   // Not used when its value is 0.
   // In seconds.
   uint32_t memoryOnlyTTL{0};
+
+  //
+  // Options below are not to be populated with JSON
+  //
+
+  // User is free to implement any encryption that conforms to this API
+  // If supplied, all payloads into Navy will be encrypted.
+  std::function<std::shared_ptr<navy::DeviceEncryptor>()> createEncryptor;
+
+  // User can implement a structure that polls stats from CacheAllocator
+  // and saves the states to a backend/file/place they prefer.
+  std::shared_ptr<CacheMonitorFactory> cacheMonitorFactory;
 
   explicit CacheConfig(const folly::dynamic& configJson);
 
