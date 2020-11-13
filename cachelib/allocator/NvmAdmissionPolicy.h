@@ -31,6 +31,8 @@ class NvmAdmissionPolicy {
     return decision;
   }
 
+  virtual bool accept(const std::string& /* key */) { return true; }
+
   // The method that exposes statuses.
   virtual std::unordered_map<std::string, double> getCounters() final {
     auto ctrs = getCountersImpl();
