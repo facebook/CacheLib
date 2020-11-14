@@ -193,6 +193,13 @@ Cache<Allocator>::Cache(CacheConfig config,
       allocatorConfig.enableNvmCacheEncryption(config_.createEncryptor());
     }
 
+    if (!config_.mlNvmAdmissionPolicy.empty() && config_.createMlPolicy) {
+      allocatorConfig.setNvmCacheAdmissionPolicy(
+          std::shared_ptr<NvmAdmissionPolicy<Allocator>>(
+              reinterpret_cast<NvmAdmissionPolicy<Allocator>*>(
+                  config_.createMlPolicy())));
+    }
+
     if (config_.memoryOnlyTTL > 0) {
       allocatorConfig.setNvmCacheFilterCallback(
           [this](auto& item, auto /* chainedItemRange */) {

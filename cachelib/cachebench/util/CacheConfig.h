@@ -187,6 +187,13 @@ struct CacheConfig : public JSONConfig {
   // In seconds.
   uint32_t memoryOnlyTTL{0};
 
+  // If enabled, we will use nvm admission policy tuned for ML use cases
+  std::string mlNvmAdmissionPolicy{""};
+
+  // This must be non-empty if @mlNvmAdmissionPolicy is true. We specify
+  // a location for the ML model using this argument.
+  std::string mlNvmAdmissionPolicyLocation{""};
+
   //
   // Options below are not to be populated with JSON
   //
@@ -194,6 +201,12 @@ struct CacheConfig : public JSONConfig {
   // User is free to implement any encryption that conforms to this API
   // If supplied, all payloads into Navy will be encrypted.
   std::function<std::shared_ptr<navy::DeviceEncryptor>()> createEncryptor;
+
+  // User will implement a function that returns NvmAdmissionPolicy.
+  // The reason we return as a "void*" is because the interface is a virtual
+  // template class, and the actual type is determined by @allocator in
+  // this config.
+  std::function<void*()> createMlPolicy;
 
   // User can implement a structure that polls stats from CacheAllocator
   // and saves the states to a backend/file/place they prefer.
