@@ -3096,9 +3096,17 @@ CacheAllocator<CacheTrait>::findChainedItem(const Item& parent) const {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ChainedAllocs
 CacheAllocator<CacheTrait>::viewAsChainedAllocs(const ItemHandle& parent) {
+  XDCHECK(parent);
   auto handle = parent.clone();
-  if (!handle || !handle->hasChainedItem()) {
-    throw std::invalid_argument("Parent does not have chained items");
+  if (!handle) {
+    throw std::invalid_argument("Failed to clone item handle");
+  }
+
+  if (!handle->hasChainedItem()) {
+    throw std::invalid_argument(
+        folly::sformat("Failed to materialize chain. Parent does not have "
+                       "chained items. Parent: {}",
+                       parent->toString()));
   }
 
   auto l = chainedItemLocks_.lockShared(handle->getKey());
