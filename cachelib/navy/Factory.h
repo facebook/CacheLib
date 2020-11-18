@@ -94,6 +94,34 @@ class BigHashProto {
                               uint32_t hashTableBitSize) = 0;
 };
 
+// Kangaroo engine proto. kangaroo is used to cache small objects (under 2KB)
+// more efficiently than BigHash by itself.
+// User sets up this proto object and passes it to CacheProto::setKangaroo.
+class KangarooProto {
+ public:
+  virtual ~KangarooProto() = default;
+
+  // Set cache layout. Cache will start at @baseOffset and will be @size bytes
+  // on the device. Kangaroo divides its device spcae into a number of fixed size
+  // buckets, represented by @bucketSize. All IO happens on bucket-size
+  // granularity.
+  virtual void setLayout(uint64_t baseOffset,
+                         uint64_t size,
+                         uint32_t bucketSize) = 0;
+
+  // Enable Bloom filter with @numHashes hash functions, each mapped into an
+  // bit array of @hashTableBitSize bits.
+  virtual void setBloomFilter(uint32_t numHashes,
+                              uint32_t hashTableBitSize) = 0;
+
+  // Enable part of cache space to be log
+  virtual void setLog(uint32_t logSize, 
+                      uint32_t threshold,
+                      uint32_t physicalPartitions,
+                      uint32_t indexPartitionsPerPhysical,
+                      uint32_t avgSmallObjectSize) = 0;
+};
+
 // Cache object prototype. Setup cache desired parameters and pass proto to
 // @createCache function.
 class CacheProto {
@@ -118,6 +146,10 @@ class CacheProto {
 
   // Set up big hash engine.
   virtual void setBigHash(std::unique_ptr<BigHashProto> proto,
+                          uint32_t smallItemMaxSize) = 0;
+
+  // Set up kangaroo engine.
+  virtual void setKangaroo(std::unique_ptr<KangarooProto> proto,
                           uint32_t smallItemMaxSize) = 0;
 
   // Set JobScheduler for async function calls.
@@ -147,6 +179,7 @@ class CacheProto {
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto();
 std::unique_ptr<BigHashProto> createBigHashProto();
+std::unique_ptr<KangarooProto> createKangarooProto();
 std::unique_ptr<CacheProto> createCacheProto();
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
 } // namespace navy

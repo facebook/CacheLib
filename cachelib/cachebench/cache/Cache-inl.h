@@ -156,6 +156,26 @@ Cache<Allocator>::Cache(CacheConfig config,
           config_.dipperNavySmallItemMaxSize;
     }
 
+    if (config_.dipperNavyKangarooSizePct > 0) {
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_size_pct"] =
+          config_.dipperNavyKangarooSizePct;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_bucket_size"] =
+          config_.dipperNavyKangarooBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_bucket_bf_size"] =
+          config_.dipperNavyBloomFilterPerBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
+          config_.dipperNavySmallItemMaxSize;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_size_pct"] =
+          config_.dipperNavyKangarooLogSizePct;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_threshold"] =
+          config_.dipperNavyKangarooLogThreshold;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_physical_partitions"] =
+          config_.dipperNavyKangarooLogPhysicalPartitions;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_index_per_physical_partitions"] =
+          config.dipperNavyKangarooLogIndexPerPhysicalPartitions;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_avg_small_obj_size"] =
+          config.dipperNavyKangarooLogAvgSmallObjectSize;
+    }
     nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
         config_.dipperNavyParcelMemoryMB;
 

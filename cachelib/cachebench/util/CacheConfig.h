@@ -173,6 +173,30 @@ struct CacheConfig : public JSONConfig {
   // default
   bool navyDataChecksum{true};
 
+  // Determines how much of the device is given to kangaroo engine in Navy
+  uint64_t dipperNavyKangarooSizePct = 0;
+
+  // Kangaroo Bucket Size determines how big each bucket is and what
+  // is the phsyical write granularity onto the device.
+  uint64_t dipperNavyKangarooBucketSize = 4096;
+
+  // Determines how much of the device is given to kangaroo log
+  uint64_t dipperNavyKangarooLogSizePct = 0;
+
+  // Kangaroo threshold for objects to be moved from log to a bucket
+  uint64_t dipperNavyKangarooLogThreshold = 2;
+
+  // Number of physical partitions for Log, makes indexing smaller, increases
+  // buffer space
+  uint64_t dipperNavyKangarooLogPhysicalPartitions = 1;
+
+  // Number of index partitions per physical partitions, allows for smaller index
+  uint64_t dipperNavyKangarooLogIndexPerPhysicalPartitions = 1;
+
+  // Estimate for avg small object size, underestimate slightly better, determines
+  // how many slots for each index partition
+  uint64_t dipperNavyKangarooLogAvgSmallObjectSize = 100;
+
   // by default, only store the size requested by the user into nvm cache
   bool truncateItemToOriginalAllocSizeInNvm = false;
 

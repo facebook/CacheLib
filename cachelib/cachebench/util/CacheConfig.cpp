@@ -71,6 +71,14 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);
 
+  JSONSetVal(configJson, dipperNavyKangarooSizePct);
+  JSONSetVal(configJson, dipperNavyKangarooBucketSize);
+  JSONSetVal(configJson, dipperNavyKangarooLogSizePct);
+  JSONSetVal(configJson, dipperNavyKangarooLogThreshold);
+  JSONSetVal(configJson, dipperNavyKangarooLogPhysicalPartitions);
+  JSONSetVal(configJson, dipperNavyKangarooLogIndexPerPhysicalPartitions);
+  JSONSetVal(configJson, dipperNavyKangarooLogAvgSmallObjectSize);
+
   JSONSetVal(configJson, memoryOnlyTTL);
 
   JSONSetVal(configJson, mlNvmAdmissionPolicy);
