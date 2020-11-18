@@ -313,6 +313,72 @@ TEST(BlockCache, AllocClasses) {
   }
 }
 
+TEST(BlockCache, SmallAllocClass) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {512});
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  for (size_t i = 0; i < 32; i++) {
+    CacheEntry e{bg.gen(8), bg.gen(300)};
+    // Insert synchronously to ensure ordering is respected
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+    log.push_back(std::move(e));
+  }
+
+  // Verify reading the first item is correct
+  {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log.begin()->key(), value));
+    EXPECT_EQ(log.begin()->value(), value.view());
+  }
+
+  // Verify reading the last item is correct
+  {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log.rbegin()->key(), value));
+    EXPECT_EQ(log.rbegin()->value(), value.view());
+  }
+}
+
+TEST(BlockCache, UnalignedAllocClass) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {700});
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  std::vector<CacheEntry> log;
+  for (size_t i = 0; i < 20; i++) {
+    CacheEntry e{bg.gen(8), bg.gen(300)};
+    // Insert synchronously to ensure ordering is respected
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), {}));
+    log.push_back(std::move(e));
+  }
+
+  // Verify reading the first item is correct
+  {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log.begin()->key(), value));
+    EXPECT_EQ(log.begin()->value(), value.view());
+  }
+
+  // Verify reading the last item is correct
+  {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log.rbegin()->key(), value));
+    EXPECT_EQ(log.rbegin()->value(), value.view());
+  }
+}
+
 TEST(BlockCache, SimpleReclaim) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
@@ -717,11 +783,13 @@ TEST(BlockCache, SmallReadBuffer) {
   auto device = std::make_unique<NiceMock<MockDevice>>(
       kDeviceSize, 4096 /* io alignment size */);
   EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _));
-  EXPECT_CALL(*device, readImpl(0, 8192, _)).Times(2);
+  EXPECT_CALL(*device, readImpl(0, 8192, _));
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
   config.numInMemBuffers = 4;
   // Small read buffer. We will automatically align to 8192 when we read.
+  // This is no longer useful with index saving the object sizes.
+  // Remove after we deprecate read buffer from Navy
   config.readBufferSize = 5120; // 5KB
 
   auto engine = makeEngine(std::move(config));
@@ -1594,7 +1662,7 @@ TEST(BlockCache, Recovery) {
 TEST(BlockCache, SmallerSlotSizesWithInMemBuffers) {
   std::vector<uint32_t> hits(4);
   std::vector<uint32_t> sizeClasses = {6 * BlockCache::kMinAllocAlignSize,
-                                       13 * BlockCache::kMinAllocAlignSize};
+                                       14 * BlockCache::kMinAllocAlignSize};
   {
     auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);

@@ -19,6 +19,7 @@ constexpr double kSizeDistributionGranularityFactor = 1.25;
 } // namespace
 
 constexpr uint32_t BlockCache::kMinAllocAlignSize;
+constexpr uint32_t BlockCache::kMaxItemSize;
 constexpr uint32_t BlockCache::kFormatVersion;
 constexpr uint32_t BlockCache::kDefReadBufferSize;
 constexpr uint16_t BlockCache::kDefaultItemPriority;
@@ -138,9 +139,14 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
 }
 
 Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
-  // explicitly align if permanent item or not using size classes.
+  // Explicitly align if permanent item or not using size classes.
   bool ioAligned = opt.permanent || config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
+  if (size > kMaxItemSize) {
+    allocErrorCount_.inc();
+    insertCount_.inc();
+    return Status::Rejected;
+  }
 
   // All newly inserted items are assigned with the lowest priority
   auto [desc, slotSize, addr] =
@@ -162,8 +168,9 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
   // region would not be reclaimed and index never gets an invalid entry.
   const auto status = writeEntry(addr, slotSize, hk, value);
   if (status == Status::Ok) {
-    const auto lr =
-        index_.insert(hk.keyHash(), encodeRelAddress(addr.add(slotSize)));
+    const auto lr = index_.insert(hk.keyHash(),
+                                  encodeRelAddress(addr.add(slotSize)),
+                                  encodeSizeHint(slotSize));
     // We replaced an existing key in the index
     if (lr.found()) {
       holeSizeTotal_.add(regionManager_.getRegionSlotSize(
@@ -199,7 +206,8 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   RegionDescriptor desc = regionManager_.openForRead(addrEnd.rid(), seqNumber);
   switch (desc.status()) {
   case OpenStatus::Ready: {
-    auto status = readEntry(desc, addrEnd, hk, value);
+    auto status =
+        readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
     if (status == Status::Ok) {
       regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
@@ -420,25 +428,43 @@ Status BlockCache::writeEntry(RelAddress addr,
 
 Status BlockCache::readEntry(const RegionDescriptor& readDesc,
                              RelAddress addr,
+                             uint32_t approxSize,
                              HashedKey expected,
                              Buffer& value) {
   // Because region opened for read, nobody will reclaim it or modify. Safe
   // without locks.
   auto permanent = regionManager_.getRegion(addr.rid()).isPinned();
-  uint32_t size = 0;
   if (!permanent && allocator_.isSizeClassAllocator()) {
-    size = regionManager_.getRegionSlotSize(addr.rid());
+    // For size class, we always use slot size because the item layout is:
+    // | --- value --- | --- empty --- | --- header --- |
+    // We must read the full alloc size to get both value and header
+    approxSize = regionManager_.getRegionSlotSize(addr.rid());
   } else {
-    size = std::min(readBufferSize_, addr.offset());
+    // For stack alloc mode , the item layout is as thus
+    // | --- value --- | --- empty --- | --- header --- |
+    // But the size itself is determined by serializedSize(), so
+    // we will try to read exactly that size or just slightly over.
+
+    // We may not have a size if we have upgraded from an older Navy which
+    // didn't store size in its index.
+    // TODO: remove the below logic once v12 has rolled out
+    if (approxSize == 0) {
+      approxSize = readBufferSize_;
+    }
+    // Because we either use a predefined read buffer size, or align the size
+    // up by kMinAllocAlignSize, our size might be bigger than the actual item
+    // size. So we need to ensure we're not reading past the region's beginning.
+    approxSize = std::min(approxSize, addr.offset());
   }
-  XDCHECK_EQ(size % allocAlignSize_, 0ULL)
-      << folly::sformat(" alignSize={}, size={}", allocAlignSize_, size);
+
+  XDCHECK_EQ(approxSize % allocAlignSize_, 0ULL) << folly::sformat(
+      " alignSize={}, approxSize={}", allocAlignSize_, approxSize);
 
   // Because we are going to look for EntryDesc in the buffer read, the buffer
   // must be atleast as big as EntryDesc aligned to next 2 power
-  XDCHECK_GE(size, folly::nextPowTwo(sizeof(EntryDesc)));
+  XDCHECK_GE(approxSize, folly::nextPowTwo(sizeof(EntryDesc)));
 
-  auto buffer = regionManager_.read(readDesc, addr.sub(size), size);
+  auto buffer = regionManager_.read(readDesc, addr.sub(approxSize), approxSize);
   if (buffer.isNull()) {
     return Status::DeviceError;
   }
@@ -458,7 +484,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
 
   if (permanent || !allocator_.isSizeClassAllocator()) {
     // Update slot size to actual, defined by key and value size
-    size = serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
+    uint32_t size =
+        serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
     if (buffer.size() > size) {
       // Read more than actual size. Trim the invalid data in the beginning
       buffer.trimStart(buffer.size() - size);

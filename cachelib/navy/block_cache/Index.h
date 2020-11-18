@@ -43,19 +43,20 @@ class Index {
   struct FOLLY_PACK_ATTR ItemRecord {
     // encoded address
     uint32_t address{0};
-    // encoded item size
-    uint16_t size{0}; /* unused */
+    // a hint for the item size. It is the responsibility of the caller
+    // to translate this hint back into a usable size.
+    uint16_t sizeHint{0};
     // total hits during this item's entire lifetime in cache
     uint8_t totalHits{0};
     // hits during the current window for this item (e.g. before re-admission)
     uint8_t currentHits{0};
 
     ItemRecord(uint32_t _address = 0,
-               uint16_t _size = 0,
+               uint16_t _sizeHint = 0,
                uint8_t _totalHits = 0,
                uint8_t _currentHits = 0)
         : address(_address),
-          size(_size),
+          sizeHint(_sizeHint),
           totalHits(_totalHits),
           currentHits(_currentHits) {}
   };
@@ -76,9 +77,9 @@ class Index {
       return record_.address;
     }
 
-    uint16_t size() const {
+    uint16_t sizeHint() const {
       XDCHECK(found_);
-      return record_.size;
+      return record_.sizeHint;
     }
 
     uint8_t currentHits() const {
@@ -102,13 +103,17 @@ class Index {
   // get value without updating tracking counters
   LookupResult peek(uint64_t key) const;
 
-  // Overwrites existing
-  // If the entry was successfully overwritten, LookupResult.found() returns
-  // true and LookupResult.record() returns the old record.
-  LookupResult insert(uint64_t key, uint32_t address);
+  // Overwrites existing key if exists with new address and size, and it also
+  // will reset hits counting. If the entry was successfully overwritten,
+  // LookupResult.found() returns true and LookupResult.record() returns the old
+  // record.
+  LookupResult insert(uint64_t key, uint32_t address, uint16_t sizeHint);
 
   // Replace old address with new address if there exists the key with the
-  // identical old address. Return true if replaced.
+  // identical old address. Current hits will be reset after successful replace.
+  // All other fields in the record is retained.
+  //
+  // Return true if replaced.
   bool replaceIfMatch(uint64_t key, uint32_t newAddress, uint32_t oldAddress);
 
   // If the entry was successfully removed, LookupResult.found() returns true

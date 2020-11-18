@@ -3,7 +3,7 @@ namespace cpp2 facebook.cachelib.navy.serialization
 struct IndexEntry {
   1: required i32 key = 0,
   2: required i32 address = 0,
-  3: i16 size = 0,
+  3: i16 sizeHint = 0,
   4: byte totalHits = 0,
   5: byte currentHits = 0,
 }
