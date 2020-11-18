@@ -709,8 +709,10 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
 
   if (ctx == RemoveContext::kEviction) {
     const auto timeNow = util::getCurrentTimeSec();
-    const auto lifetime = timeNow - it.getCreationTime();
-    ramEvictionAgeSecs_.trackValue(lifetime);
+    const auto refreshTime = timeNow - it.getLastAccessTime();
+    const auto lifeTime = timeNow - it.getCreationTime();
+    ramEvictionAgeSecs_.trackValue(refreshTime);
+    ramItemLifeTimeSecs_.trackValue(lifeTime);
   }
 
   const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
@@ -3125,6 +3127,7 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
   ret.nvmRemoveLatencyNs = nvmRemoveLatency_.estimate();
   ret.ramEvictionAgeSecs = ramEvictionAgeSecs_.estimate();
+  ret.ramItemLifeTimeSecs = ramItemLifeTimeSecs_.estimate();
   ret.nvmSmallEvictionAgeSecs = nvmSmallEvictionAgeSecs_.estimate();
   ret.nvmLargeEvictionAgeSecs = nvmLargeEvictionAgeSecs_.estimate();
   ret.nvmEvictionSecondsPastExpiry = nvmEvictionSecondsPastExpiry_.estimate();
