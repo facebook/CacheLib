@@ -519,6 +519,9 @@ class MM2Q {
     // Reads may be racy.
     Config config_{};
 
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
+
     FRIEND_TEST(MM2QTest, DetailedTest);
     FRIEND_TEST(MM2QTest, DeserializeToMoreLists);
     FRIEND_TEST(MM2QTest, TailHits);

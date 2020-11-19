@@ -544,6 +544,9 @@ class MMTinyLFU {
     // The next time to reconfigure the container.
     std::atomic<Time> nextReconfigureTime_{};
 
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
+
     // Config for this lru.
     // Write access to the MMTinyLFU Config is serialized.
     // Reads may be racy.

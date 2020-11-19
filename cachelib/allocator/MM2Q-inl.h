@@ -423,10 +423,11 @@ void MM2Q::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
 
   // update LRU refresh time
   auto stat = getEvictionAgeStatLocked(0);
-  auto lruRefreshTime =
+  auto lruRefreshTime = std::min(
       std::max(config_.defaultLruRefreshTime,
                static_cast<uint32_t>(stat.warmQueueStat.oldestElementAge *
-                                     config_.lruRefreshRatio));
+                                     config_.lruRefreshRatio)),
+      kLruRefreshTimeCap);
   config_.lruRefreshTime = lruRefreshTime;
 }
 

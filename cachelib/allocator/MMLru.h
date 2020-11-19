@@ -385,6 +385,9 @@ class MMLru {
     // Reads may be racy.
     Config config_{};
 
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
+
     FRIEND_TEST(MMLruTest, Reconfigure);
   };
 };
