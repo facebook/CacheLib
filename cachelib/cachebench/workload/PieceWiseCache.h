@@ -61,14 +61,28 @@ class PieceWiseCacheStats {
 
  private:
   struct InternalStats {
-    // Byte wise stats: getBytes, getHitBytes and getFullHitBytes record the
-    // bytes of the whole response (body + response header), while
-    // getBodyBytes, getHitBodyBytes and getFullHitBodyBytes record the body
-    // bytes only. getFullHitBytes and getFullHitBodyBytes only include cache
-    // hits of the full object (ie, all pieces), while getHitBytes and
-    // getHitBodyBytes includes partial hits as well.
-    // totalIngressBytes record all bytes we fetch from upstream, and
-    // totalEgressBytes record all bytes we send out to downstream.
+    // Byte wise stats:
+    // getBytes: record both body and header bytes we fetch from cache and
+    //           upstream;
+    // getHitBytes: record both body and header bytes we fetch from cache;
+    // getFullHitBytes: similar to getHitBytes, but only if all bytes for the
+    //                  request are cache hits, i.e., excluding partial hits
+
+    // getBodyBytes: similar to getBytes, but only for body bytes
+    // getHitBodyBytes: similar to getHitBytes, but only for body bytes
+    // getFullHitBodyBytes: similar to getFullHitBytes, but only for body bytes
+    //
+    // totalIngressBytes: record both body and header bytes we fetch from
+    //                    upstream. Note we fetch both the header (which might
+    //                    have been a hit) and the remaining part of missing
+    //                    pieces
+    // totalEgressBytes: record both body and header bytes we send out to
+    //                   downstream. Note we trim the bytes fetched from cache
+    //                   and/or upstream to for egress match request range
+    //
+    // For example, for range request of 0-50k (assuming 64k piece size), we
+    // will fetch the first complete piece, but egress only 0-50k bytes; so
+    // getBytes = 64k+header, getBodyBytes = 64k, totalEgressBytes = 50001
     AtomicCounter getBytes{0};
     AtomicCounter getHitBytes{0};
     AtomicCounter getFullHitBytes{0};
@@ -136,10 +150,14 @@ class PieceWiseCacheStats {
                                   std::ostream& out);
 };
 
-// For piecewise caching, a raw request spawns into one or multiple piece
-// requests against the cache. The class wraps the struct Request (which
-// represents a single request against cache), and maintains the raw request
-// (identified by baseKey) with its piece request (identified by pieceKey).
+// For piecewise caching, an object is stored as multiple pieces (one header
+// piece + several body pieces) if its size is larger than cachePieceSize;
+// otherwise, it's stored as a single piece.
+// Therefore, a raw request spawns into one or multiple piece requests against
+// the cache.
+// The class wraps the struct Request (which represents a single request against
+// cache), and maintains the raw request (identified by baseKey) with its piece
+// request (identified by pieceKey).
 struct PieceWiseReqWrapper {
   const std::string baseKey;
   std::string pieceKey;
@@ -183,8 +201,11 @@ struct PieceWiseReqWrapper {
 };
 
 // The class adapts/updates the PieceWiseReqWrapper to its next operation and/or
-// next piece based on the piecewise logic, and maintains the
-// PieceWiseCacheStats for all processings.
+// next piece based on the piecewise logic, and maintains PieceWiseCacheStats
+// for all processings.
+// For piecewise caching, we always fetch/store a complete piece from/to
+// the cache, and then trim the fetched pieces accordingly for egress to match
+// the request range.
 class PieceWiseCacheAdapter {
  public:
   // @param maxCachePieces: maximum # of cache pieces we store for a single
