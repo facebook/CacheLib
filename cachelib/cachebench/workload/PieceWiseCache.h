@@ -170,7 +170,7 @@ struct PieceWiseReqWrapper {
   std::unique_ptr<GenericPieces> cachePieces;
   const RequestRange requestRange;
   // whether current pieceKey is header piece or body piece, mutable
-  bool isHeaderPiece;
+  bool isHeaderPiece{false};
   // response header size
   const size_t headerSize;
   // The size of the complete object, excluding response header.
@@ -193,6 +193,7 @@ struct PieceWiseReqWrapper {
   // @param extraFieldV: Extra fields used for stats aggregation
   explicit PieceWiseReqWrapper(uint64_t cachePieceSize,
                                uint64_t reqId,
+                               OpType opType,
                                folly::StringPiece key,
                                size_t fullContentSize,
                                size_t responseHeaderSize,
@@ -200,6 +201,8 @@ struct PieceWiseReqWrapper {
                                folly::Optional<uint64_t> rangeEnd,
                                uint32_t ttl,
                                std::vector<std::string>&& extraFieldV);
+
+  PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };
 
 // The class adapts/updates the PieceWiseReqWrapper to its next operation and/or

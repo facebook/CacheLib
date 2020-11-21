@@ -226,6 +226,7 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
 
 PieceWiseReqWrapper::PieceWiseReqWrapper(uint64_t cachePieceSize,
                                          uint64_t reqId,
+                                         OpType opType,
                                          folly::StringPiece key,
                                          size_t fullContentSize,
                                          size_t responseHeaderSize,
@@ -236,12 +237,7 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(uint64_t cachePieceSize,
     : baseKey(GenericPieces::escapeCacheKey(key.str())),
       pieceKey(baseKey),
       sizes(1),
-      req(pieceKey,
-          sizes.begin(),
-          sizes.end(),
-          OpType::kGet, // Only support get from trace for now
-          ttl,
-          reqId),
+      req(pieceKey, sizes.begin(), sizes.end(), opType, ttl, reqId),
       requestRange(rangeStart, rangeEnd),
       headerSize(responseHeaderSize),
       fullObjectSize(fullContentSize),
@@ -264,6 +260,32 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(uint64_t cachePieceSize,
     pieceKey = GenericPieces::createPieceHeaderKey(baseKey);
     sizes[0] = responseHeaderSize;
     isHeaderPiece = true;
+  }
+}
+
+PieceWiseReqWrapper::PieceWiseReqWrapper(const PieceWiseReqWrapper& other)
+    : baseKey(other.baseKey),
+      pieceKey(other.pieceKey),
+      sizes(other.sizes),
+      req(pieceKey,
+          sizes.begin(),
+          sizes.end(),
+          other.req.getOp(),
+          other.req.ttlSecs,
+          other.req.requestId.value()),
+      requestRange(other.requestRange),
+      isHeaderPiece(other.isHeaderPiece),
+      headerSize(other.headerSize),
+      fullObjectSize(other.fullObjectSize),
+      extraFields(other.extraFields) {
+  if (other.cachePieces) {
+    cachePieces = std::make_unique<GenericPieces>(
+        baseKey,
+        other.cachePieces->getPieceSize(),
+        kCachePieceGroupSize / other.cachePieces->getPieceSize(),
+        fullObjectSize,
+        &requestRange);
+    cachePieces->setFetchIndex(other.cachePieces->getCurFetchingPieceIndex());
   }
 }
 

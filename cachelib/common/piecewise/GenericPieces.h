@@ -55,6 +55,10 @@ class GenericPieces {
    */
   void updateFetchIndex() { curFetchingPieceIndex_ += 1; }
 
+  void setFetchIndex(uint64_t pieceIndex) {
+    curFetchingPieceIndex_ = pieceIndex;
+  }
+
   uint64_t getFirstByteOffsetOfCurPiece() const {
     return curFetchingPieceIndex_ * getPieceSize();
   }

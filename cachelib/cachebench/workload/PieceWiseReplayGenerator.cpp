@@ -162,6 +162,8 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_.cachePieceSize,
                                         nextReqId_,
+                                        OpType::kGet, // Only support get from
+                                                      // trace for now
                                         fields[SampleFields::CACHE_KEY],
                                         fullContentSize,
                                         responseHeaderSize,
