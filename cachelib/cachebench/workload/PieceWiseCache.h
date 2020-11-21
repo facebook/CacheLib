@@ -17,6 +17,46 @@ constexpr uint64_t kCachePieceGroupSize = 16777216;
 
 class PieceWiseCacheStats {
  public:
+  struct InternalStats {
+    // Byte wise stats:
+    // getBytes: record both body and header bytes we fetch from cache and
+    //           upstream;
+    // getHitBytes: record both body and header bytes we fetch from cache;
+    // getFullHitBytes: similar to getHitBytes, but only if all bytes for the
+    //                  request are cache hits, i.e., excluding partial hits
+
+    // getBodyBytes: similar to getBytes, but only for body bytes
+    // getHitBodyBytes: similar to getHitBytes, but only for body bytes
+    // getFullHitBodyBytes: similar to getFullHitBytes, but only for body bytes
+    //
+    // totalIngressBytes: record both body and header bytes we fetch from
+    //                    upstream. Note we fetch both the header (which might
+    //                    have been a hit) and the remaining part of missing
+    //                    pieces
+    // totalEgressBytes: record both body and header bytes we send out to
+    //                   downstream. Note we trim the bytes fetched from cache
+    //                   and/or upstream to for egress match request range
+    //
+    // For example, for range request of 0-50k (assuming 64k piece size), we
+    // will fetch the first complete piece, but egress only 0-50k bytes; so
+    // getBytes = 64k+header, getBodyBytes = 64k, totalEgressBytes = 50001
+    AtomicCounter getBytes{0};
+    AtomicCounter getHitBytes{0};
+    AtomicCounter getFullHitBytes{0};
+    AtomicCounter getBodyBytes{0};
+    AtomicCounter getHitBodyBytes{0};
+    AtomicCounter getFullHitBodyBytes{0};
+    AtomicCounter totalIngressBytes{0};
+    AtomicCounter totalEgressBytes{0};
+
+    // Object wise stats: for an object get, objGetFullHits is incremented when
+    // all pieces are cache hits, while objGetHits is incremented for partial
+    // hits as well.
+    AtomicCounter objGets{0};
+    AtomicCounter objGetHits{0};
+    AtomicCounter objGetFullHits{0};
+  };
+
   // @param numAggregationFields: # of aggregation fields in trace sample
   // @param statsPerAggField: list of values we track for each aggregation field
   // Example: numAggregationFields: 2; statsPerAggField: {0: [X, Y]; 1: [Z]}
@@ -59,47 +99,9 @@ class PieceWiseCacheStats {
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
 
+  const InternalStats& getInternalStats() const { return stats_; }
+
  private:
-  struct InternalStats {
-    // Byte wise stats:
-    // getBytes: record both body and header bytes we fetch from cache and
-    //           upstream;
-    // getHitBytes: record both body and header bytes we fetch from cache;
-    // getFullHitBytes: similar to getHitBytes, but only if all bytes for the
-    //                  request are cache hits, i.e., excluding partial hits
-
-    // getBodyBytes: similar to getBytes, but only for body bytes
-    // getHitBodyBytes: similar to getHitBytes, but only for body bytes
-    // getFullHitBodyBytes: similar to getFullHitBytes, but only for body bytes
-    //
-    // totalIngressBytes: record both body and header bytes we fetch from
-    //                    upstream. Note we fetch both the header (which might
-    //                    have been a hit) and the remaining part of missing
-    //                    pieces
-    // totalEgressBytes: record both body and header bytes we send out to
-    //                   downstream. Note we trim the bytes fetched from cache
-    //                   and/or upstream to for egress match request range
-    //
-    // For example, for range request of 0-50k (assuming 64k piece size), we
-    // will fetch the first complete piece, but egress only 0-50k bytes; so
-    // getBytes = 64k+header, getBodyBytes = 64k, totalEgressBytes = 50001
-    AtomicCounter getBytes{0};
-    AtomicCounter getHitBytes{0};
-    AtomicCounter getFullHitBytes{0};
-    AtomicCounter getBodyBytes{0};
-    AtomicCounter getHitBodyBytes{0};
-    AtomicCounter getFullHitBodyBytes{0};
-    AtomicCounter totalIngressBytes{0};
-    AtomicCounter totalEgressBytes{0};
-
-    // Object wise stats: for an object get, objGetFullHits is incremented when
-    // all pieces are cache hits, while objGetHits is incremented for partial
-    // hits as well.
-    AtomicCounter objGets{0};
-    AtomicCounter objGetHits{0};
-    AtomicCounter objGetFullHits{0};
-  };
-
   // Overall hit rate stats
   InternalStats stats_;
 
