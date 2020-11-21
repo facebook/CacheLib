@@ -22,6 +22,9 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(232, cp.getRequestedSizeOfAPiece(3));
   EXPECT_EQ(1000, cp.getTotalSize());
   EXPECT_EQ(1000, cp.getRequestedSize());
+  EXPECT_EQ(1000, cp.getRemainingBytes());
+  cp.updateFetchIndex();
+  EXPECT_EQ(744, cp.getRemainingBytes());
 
   // Spanning multiple pieces
   hr = RequestRange(260, 759);
@@ -40,6 +43,9 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(248, cp.getRequestedSizeOfAPiece(2));
   EXPECT_EQ(512, cp.getTotalSize());
   EXPECT_EQ(500, cp.getRequestedSize());
+  EXPECT_EQ(512, cp.getRemainingBytes());
+  cp.updateFetchIndex();
+  EXPECT_EQ(256, cp.getRemainingBytes());
 
   // All in one piece
   hr = RequestRange(800, 995);
@@ -55,6 +61,9 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(196, cp.getRequestedSizeOfAPiece(3));
   EXPECT_EQ(232, cp.getTotalSize());
   EXPECT_EQ(196, cp.getRequestedSize());
+  EXPECT_EQ(232, cp.getRemainingBytes());
+  cp.updateFetchIndex();
+  EXPECT_EQ(0, cp.getRemainingBytes());
 
   // No end specified
   hr = RequestRange(400, folly::none);
@@ -72,6 +81,9 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(232, cp.getRequestedSizeOfAPiece(3));
   EXPECT_EQ(744, cp.getTotalSize());
   EXPECT_EQ(600, cp.getRequestedSize());
+  EXPECT_EQ(744, cp.getRemainingBytes());
+  cp.updateFetchIndex();
+  EXPECT_EQ(488, cp.getRemainingBytes());
 
   // Specified end is way past actual end
   hr = RequestRange(400, 56789);
@@ -89,4 +101,7 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(232, cp.getRequestedSizeOfAPiece(3));
   EXPECT_EQ(744, cp.getTotalSize());
   EXPECT_EQ(600, cp.getRequestedSize());
+  EXPECT_EQ(744, cp.getRemainingBytes());
+  cp.updateFetchIndex();
+  EXPECT_EQ(488, cp.getRemainingBytes());
 }

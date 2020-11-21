@@ -63,6 +63,13 @@ class GenericPieces {
     return std::min((endPieceIndex_ + 1) * pieceSize_ - 1, fullBodyLen_ - 1);
   }
 
+  uint64_t getRemainingBytes() const {
+    if (curFetchingPieceIndex_ > endPieceIndex_) {
+      return 0;
+    }
+    return getLastByteOffsetOfLastPiece() - getFirstByteOffsetOfCurPiece() + 1;
+  }
+
   uint64_t getPieceSize() const { return pieceSize_; }
   uint64_t getPiecesPerGroup() const { return numPiecesPerGroup_; }
 

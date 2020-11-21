@@ -220,8 +220,6 @@ class PieceWiseCacheAdapter {
   // @return true if all ops for the request are done.
   bool updateNonPieceProcessing(PieceWiseReqWrapper& rw, OpResultType result);
 
-  void recordIngressBytes(const PieceWiseReqWrapper& rw, OpResultType result);
-
   PieceWiseCacheStats stats_;
 
   const uint64_t maxCachePieces_;

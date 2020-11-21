@@ -319,8 +319,6 @@ bool PieceWiseCacheAdapter::processReq(PieceWiseReqWrapper& rw,
 
 bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
                                                   OpResultType result) {
-  recordIngressBytes(rw, result);
-
   // we are only done if we have got everything.
   bool done = false;
   if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
@@ -364,19 +362,40 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
       rw.isHeaderPiece = false;
       rw.cachePieces->updateFetchIndex();
     } else {
-      // Record the cache hit stats: we have got all the pieces that are
-      // requested.
-      // TODO: for pieces beyond maxCachePieces_, we still record as
-      // full hit bytes here, which we may need to change in the future.
       if (result == OpResultType::kGetHit) {
-        auto totalSize = rw.cachePieces->getTotalSize();
-        stats_.recordPieceFullHit(rw.headerSize, totalSize, rw.extraFields);
+        if (!rw.cachePieces->isPieceWithinBound(nextPieceIndex)) {
+          // We have got all the pieces that are requested, record the full
+          // cache hit stats
+          auto totalSize = rw.cachePieces->getTotalSize();
+          stats_.recordPieceFullHit(rw.headerSize, totalSize, rw.extraFields);
+        } else {
+          // The remaining pieces are beyond maxCachePieces_, we don't store
+          // them in cache and fetch them from upstream directly
+          if (nextPieceIndex >= maxCachePieces_) {
+            stats_.recordBytesIngress(rw.headerSize +
+                                      rw.cachePieces->getRemainingBytes());
+          }
+        }
       }
 
       // we are done
       done = true;
     }
   } else if (result == OpResultType::kGetMiss) {
+    // Record ingress bytes since we will fetch the bytes from upstream.
+    size_t bytesIngress;
+    if (rw.isHeaderPiece) {
+      bytesIngress = rw.headerSize + rw.cachePieces->getRemainingBytes();
+    } else {
+      // Note we advance the piece index ahead of time, so
+      // getCurFetchingPieceIndex() returns the next piece index
+      auto missPieceIndex = rw.cachePieces->getCurFetchingPieceIndex() - 1;
+      bytesIngress = rw.headerSize +
+                     rw.cachePieces->getSizeOfAPiece(missPieceIndex) +
+                     rw.cachePieces->getRemainingBytes();
+    }
+    stats_.recordBytesIngress(bytesIngress);
+
     // Perform set operation next for the current piece
     rw.req.setOp(OpType::kSet);
   } else {
@@ -387,8 +406,6 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
 
 bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
                                                      OpResultType result) {
-  recordIngressBytes(rw, result);
-
   // we are only done if we got everything.
   bool done = false;
 
@@ -404,6 +421,9 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
     // we are done
     done = true;
   } else if (result == OpResultType::kGetMiss) {
+    // Record ingress bytes since we will fetch the bytes from upstream.
+    stats_.recordBytesIngress(rw.sizes[0]);
+
     // Perform set operation next
     rw.req.setOp(OpType::kSet);
   } else {
@@ -411,16 +431,6 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
   }
 
   return done;
-}
-
-void PieceWiseCacheAdapter::recordIngressBytes(const PieceWiseReqWrapper& rw,
-                                               OpResultType result) {
-  // Record ingress bytes if we just performed set operation, since what we set
-  // in cache must come from upstream
-  if (result == OpResultType::kSetSuccess ||
-      result == OpResultType::kSetFailure) {
-    stats_.recordBytesIngress(*(rw.req.sizeBegin));
-  }
 }
 
 } // namespace cachebench
