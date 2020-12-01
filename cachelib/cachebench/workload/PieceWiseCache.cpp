@@ -33,18 +33,18 @@ void PieceWiseCacheStats::recordAccess(
     size_t getBodyBytes,
     size_t egressBytes,
     const std::vector<std::string>& extraFields) {
-  // TODO: support egress bytes counting for agg fields
-  stats_.totalEgressBytes.add(egressBytes);
-
-  recordStats(recordAccessInternal, extraFields, getBytes, getBodyBytes);
+  recordStats(recordAccessInternal, extraFields, getBytes, getBodyBytes,
+              egressBytes);
 }
 
 void PieceWiseCacheStats::recordAccessInternal(InternalStats& stats,
                                                size_t getBytes,
-                                               size_t getBodyBytes) {
+                                               size_t getBodyBytes,
+                                               size_t egressBytes) {
   stats.getBytes.add(getBytes);
   stats.getBodyBytes.add(getBodyBytes);
   stats.objGets.inc();
+  stats.totalEgressBytes.add(egressBytes);
 }
 
 void PieceWiseCacheStats::recordNonPieceHit(
@@ -102,8 +102,14 @@ void PieceWiseCacheStats::recordPieceFullHitInternal(InternalStats& stats,
   stats.objGetFullHits.inc();
 }
 
-void PieceWiseCacheStats::recordBytesIngress(size_t bytesIngress) {
-  stats_.totalIngressBytes.add(bytesIngress);
+void PieceWiseCacheStats::recordIngressBytesInternal(InternalStats& stats,
+                                                     size_t ingressBytes) {
+  stats.totalIngressBytes.add(ingressBytes);
+}
+
+void PieceWiseCacheStats::recordIngressBytes(
+    size_t ingressBytes, const std::vector<std::string>& extraFields) {
+  recordStats(recordIngressBytesInternal, extraFields, ingressBytes);
 }
 
 util::PercentileStats& PieceWiseCacheStats::getLatencyStatsObject() {
@@ -192,8 +198,9 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
   const double ingressBytesGB = stats.totalIngressBytes.get() / kGB;
   const double ingressBytesGBPerSec = ingressBytesGB / elapsedSecs;
 
-  const double successRateByTotalTraffic =
-      safeDiv(stats.totalEgressBytes.get() - stats.totalIngressBytes.get(),
+  const double ingressEgressRatio =
+      safeDiv(static_cast<int64_t>(stats.totalEgressBytes.get()) -
+                  static_cast<int64_t>(stats.totalIngressBytes.get()),
               stats.totalEgressBytes.get());
 
   auto outFn = [&out](folly::StringPiece k0, double v0, folly::StringPiece k1,
@@ -215,10 +222,10 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
              "{:18}: {:6.2f} GB/s, {:8}: {:6.2f}%",
              "egressBytes", egressBytesGB, "ingressBytes", ingressBytesGB,
              "egressBytesPerSec", egressBytesGBPerSec, "ingressBytesPerSec",
-             ingressBytesGBPerSec, "success", successRateByTotalTraffic)
+             ingressBytesGBPerSec, "ingressEgressratio", ingressEgressRatio)
       << std::endl;
   out << folly::sformat(
-             "{:12}: {:9,}, {:18}: {:8,} /s, {:8}: {:6.2f}%, {:10}: {:6.2f}%",
+             "{:12}: {:10,}, {:18}: {:8,} /s, {:8}: {:6.2f}%, {:10}: {:6.2f}%",
              "objectGet", get, "objectGetPerSec", getPerSec, "success",
              getSuccessRate, "full success", getFullSuccessRate)
       << std::endl;
@@ -394,8 +401,9 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
           // The remaining pieces are beyond maxCachePieces_, we don't store
           // them in cache and fetch them from upstream directly
           if (nextPieceIndex >= maxCachePieces_) {
-            stats_.recordBytesIngress(rw.headerSize +
-                                      rw.cachePieces->getRemainingBytes());
+            stats_.recordIngressBytes(
+                rw.headerSize + rw.cachePieces->getRemainingBytes(),
+                rw.extraFields);
           }
         }
       }
@@ -405,18 +413,18 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
     }
   } else if (result == OpResultType::kGetMiss) {
     // Record ingress bytes since we will fetch the bytes from upstream.
-    size_t bytesIngress;
+    size_t ingressBytes;
     if (rw.isHeaderPiece) {
-      bytesIngress = rw.headerSize + rw.cachePieces->getRemainingBytes();
+      ingressBytes = rw.headerSize + rw.cachePieces->getRemainingBytes();
     } else {
       // Note we advance the piece index ahead of time, so
       // getCurFetchingPieceIndex() returns the next piece index
       auto missPieceIndex = rw.cachePieces->getCurFetchingPieceIndex() - 1;
-      bytesIngress = rw.headerSize +
+      ingressBytes = rw.headerSize +
                      rw.cachePieces->getSizeOfAPiece(missPieceIndex) +
                      rw.cachePieces->getRemainingBytes();
     }
-    stats_.recordBytesIngress(bytesIngress);
+    stats_.recordIngressBytes(ingressBytes, rw.extraFields);
 
     // Perform set operation next for the current piece
     rw.req.setOp(OpType::kSet);
@@ -444,7 +452,7 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
     done = true;
   } else if (result == OpResultType::kGetMiss) {
     // Record ingress bytes since we will fetch the bytes from upstream.
-    stats_.recordBytesIngress(rw.sizes[0]);
+    stats_.recordIngressBytes(rw.sizes[0], rw.extraFields);
 
     // Perform set operation next
     rw.req.setOp(OpType::kSet);

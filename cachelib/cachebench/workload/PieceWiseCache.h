@@ -92,8 +92,9 @@ class PieceWiseCacheStats {
                           size_t bodyBytes,
                           const std::vector<std::string>& extraFields);
 
-  // Record total bytes we ingress
-  void recordBytesIngress(size_t bytesIngress);
+  // Record bytes ingress from upstream
+  void recordIngressBytes(size_t ingressBytes,
+                          const std::vector<std::string>& extraFields);
 
   util::PercentileStats& getLatencyStatsObject();
 
@@ -135,7 +136,8 @@ class PieceWiseCacheStats {
 
   static void recordAccessInternal(InternalStats& stats,
                                    size_t getBytes,
-                                   size_t getBodyBytes);
+                                   size_t getBodyBytes,
+                                   size_t egressBytes);
   static void recordNonPieceHitInternal(InternalStats& stats,
                                         size_t hitBytes,
                                         size_t hitBodyBytes);
@@ -146,7 +148,8 @@ class PieceWiseCacheStats {
   static void recordPieceFullHitInternal(InternalStats& stats,
                                          size_t headerBytes,
                                          size_t bodyBytes);
-
+  static void recordIngressBytesInternal(InternalStats& stats,
+                                         size_t ingressBytes);
   static void renderStatsInternal(const InternalStats& stats,
                                   double elapsedSecs,
                                   std::ostream& out);
