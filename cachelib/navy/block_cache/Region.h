@@ -83,12 +83,10 @@ class Region {
 
   // Associate this region with a RegionAllocator
   void setClassId(uint16_t classId) {
-    XDCHECK(!isPinned());
     std::lock_guard<std::mutex> l{lock_};
     classId_ = classId;
   }
   uint16_t getClassId() const {
-    XDCHECK(!isPinned());
     std::lock_guard<std::mutex> l{lock_};
     return classId_;
   }
@@ -102,16 +100,6 @@ class Region {
   uint16_t getPriority() const {
     std::lock_guard<std::mutex> l{lock_};
     return priority_;
-  }
-
-  // Set this region as pinned (i.e. non-evictable)
-  void setPinned() {
-    std::lock_guard<std::mutex> l{lock_};
-    flags_ |= kPinned;
-  }
-  bool isPinned() const {
-    std::lock_guard<std::mutex> l{lock_};
-    return (flags_ & kPinned) != 0;
   }
 
   uint32_t getLastEntryEndOffset() const {

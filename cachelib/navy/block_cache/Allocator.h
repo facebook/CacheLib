@@ -74,8 +74,8 @@ class Allocator {
   // Allocates and opens for writing.
   //
   // @param size          Allocation size
-  // @param permanent     Indicates if the allocation is permanent or not
   // @param priority      Specifies how important this allocation is
+  // @param size              Allocation size
   //
   // Returns a tuple containing region descriptor, allocated slotSize and
   // allocated address
@@ -88,7 +88,8 @@ class Allocator {
   // max priority which is (@numPriorities - 1) specified when constructing
   // this allocator.
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(
-      uint32_t size, bool permanent, uint16_t priority);
+      uint32_t size, uint16_t priority);
+
   void close(RegionDescriptor&& rid);
 
   void reset();
@@ -114,14 +115,9 @@ class Allocator {
 
   uint32_t getSlotSizeAndClass(uint32_t size, uint32_t& sc) const;
 
-  bool isPermanentAllocator(const RegionAllocator& ra) const {
-    return &ra == &permItemAllocator_;
-  }
-
   RegionManager& regionManager_;
   // Corresponding RegionAllocators (see regionManager_.sizeClasses_)
   std::vector<std::vector<RegionAllocator>> allocators_;
-  RegionAllocator permItemAllocator_;
 };
 } // namespace navy
 } // namespace cachelib

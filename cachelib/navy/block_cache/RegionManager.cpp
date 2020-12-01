@@ -97,10 +97,8 @@ bool RegionManager::flushBuffer(const RegionId& rid) {
   auto buf = region.detachBuffer();
   if (buf) {
     returnBufferToPool(std::move(buf));
-    // Flush completed, track the region if not pinned
-    if (!region.isPinned()) {
-      track(rid);
-    }
+    // Flush completed, track the region
+    track(rid);
     return true;
   }
   return false;
@@ -170,11 +168,9 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   // applicable only if configured to use in-memory buffers
   if (!doesBufferingWrites()) {
     // If in-memory buffering is not enabled, nothing to flush and
-    // track the region if not pinned. If in-memory buffer is enabled
+    // track the region. If in-memory buffer is enabled
     // tracking is started after flush is successful.
-    if (!getRegion(rid).isPinned()) {
-      track(rid);
-    }
+    track(rid);
     return;
   }
 
@@ -306,8 +302,6 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // Subtract the wasted bytes in the end since we're reclaiming this region now
   externalFragmentation_.sub(getRegion(rid).getFragmentationSize());
 
-  // Permanent item region (pinned) should not be reclaimed
-  XDCHECK(!region.isPinned());
   // Full barrier because is we cannot have seqNumber_.fetch_add() re-ordered
   // below region.reset(). It is similar to the full barrier in openForRead.
   seqNumber_.fetch_add(1, std::memory_order_acq_rel);
@@ -346,7 +340,7 @@ void RegionManager::persist(RecordWriter& rw) const {
     auto& regionProto = regionData.regions[i];
     regionProto.regionId = i;
     regionProto.lastEntryEndOffset = regions_[i]->getLastEntryEndOffset();
-    regionProto.pinned = regions_[i]->isPinned();
+    regionProto.pinned_ref() = false;
     if (regionProto.pinned) {
       regionProto.classId = 0;
     } else {
@@ -383,9 +377,6 @@ void RegionManager::recover(RecordReader& rr) {
         regionProto,
         RegionId{static_cast<uint32_t>(regionProto.regionId)},
         regionData.regionSize);
-    if (regionProto.pinned) {
-      pin(*regions_[index]);
-    }
   }
 
   // Reset policy and reinitialize it per the recovered state
@@ -402,20 +393,16 @@ void RegionManager::resetEvictionPolicy() {
   // regions
   for (uint32_t i = 0; i < numRegions_; i++) {
     externalFragmentation_.add(regions_[i]->getFragmentationSize());
-    if (!regions_[i]->isPinned()) {
-      if (regions_[i]->getNumItems() == 0) {
-        track(RegionId{i});
-      }
+    if (regions_[i]->getNumItems() == 0) {
+      track(RegionId{i});
     }
   }
 
   // Now track all non-empty regions. This should ensure empty regions are
   // pushed to the bottom for both LRU and FIFO policies.
   for (uint32_t i = 0; i < numRegions_; i++) {
-    if (!regions_[i]->isPinned()) {
-      if (regions_[i]->getNumItems() != 0) {
-        track(RegionId{i});
-      }
+    if (regions_[i]->getNumItems() != 0) {
+      track(RegionId{i});
     }
   }
 }
@@ -472,7 +459,6 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_evicted", evictedCount_.get());
   visitor("navy_bc_num_regions", numRegions_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
-  visitor("navy_bc_pinned_regions", pinnedCount_.get());
   visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());

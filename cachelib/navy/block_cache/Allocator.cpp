@@ -20,8 +20,7 @@ void RegionAllocator::setAllocationRegion(RegionId rid) {
 void RegionAllocator::reset() { rid_ = RegionId{}; }
 
 Allocator::Allocator(RegionManager& regionManager, uint16_t numPriorities)
-    : regionManager_{regionManager},
-      permItemAllocator_{0 /* classId */, 0 /* priority */} {
+    : regionManager_{regionManager} {
   const auto& sizeClasses = regionManager_.getSizeClasses();
   if (sizeClasses.size() > Region::kClassIdMax + 1) {
     throw std::invalid_argument{"too many size classes"};
@@ -69,22 +68,17 @@ uint32_t Allocator::getSlotSizeAndClass(uint32_t size, uint32_t& sc) const {
 }
 
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size, bool permanent, uint16_t priority) {
-  RegionAllocator* ra = nullptr;
-  if (permanent) {
-    ra = &permItemAllocator_;
-  } else {
-    uint32_t sc = 0;
-    size = getSlotSizeAndClass(size, sc);
-    XDCHECK_LT(priority, allocators_[sc].size());
-    ra = &allocators_[sc][priority];
-  }
+    uint32_t size, uint16_t priority) {
+  uint32_t sc = 0;
+  size = getSlotSizeAndClass(size, sc);
+  XDCHECK_LT(priority, allocators_[sc].size());
+  RegionAllocator* ra = &allocators_[sc][priority];
   if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
                            RelAddress());
   }
   return allocateWith(*ra, size);
-}
+} // namespace cachelib
 
 // Allocates using region allocator @ra. If region is full, we take another
 // from the clean list (regions ready for allocation) If the clean list is
@@ -123,14 +117,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   // we got a region fresh off of reclaim. Need to initialize it.
   auto& region = regionManager_.getRegion(rid);
   region.setPriority(ra.priority());
-  if (isPermanentAllocator(ra)) {
-    // Pin immediately. We want to persist this region as pinned even if it
-    // is not full.
-    regionManager_.pin(region);
-    XDCHECK(region.isPinned());
-  } else {
-    region.setClassId(ra.classId());
-  }
+  region.setClassId(ra.classId());
 
   // Replace with a reclaimed region and allocate
   ra.setAllocationRegion(rid);

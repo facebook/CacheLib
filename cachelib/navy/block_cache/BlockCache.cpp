@@ -138,9 +138,8 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
   return ioAligned ? getAlignedSize(size) : size;
 }
 
-Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
-  // Explicitly align if permanent item or not using size classes.
-  bool ioAligned = opt.permanent || config_.sizeClasses.empty();
+Status BlockCache::insert(HashedKey hk, BufferView value) {
+  bool ioAligned = config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   if (size > kMaxItemSize) {
     allocErrorCount_.inc();
@@ -149,8 +148,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value, InsertOptions opt) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto [desc, slotSize, addr] =
-      allocator_.allocate(size, opt.permanent, kDefaultItemPriority);
+  auto [desc, slotSize, addr] = allocator_.allocate(size, kDefaultItemPriority);
 
   switch (desc.status()) {
   case OpenStatus::Error:
@@ -359,8 +357,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   // explicitly align if not using size classes.
   bool ioAligned = config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
-  auto [desc, slotSize, addr] =
-      allocator_.allocate(size, false /* permanent */, priority);
+  auto [desc, slotSize, addr] = allocator_.allocate(size, priority);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;
@@ -433,8 +430,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
                              Buffer& value) {
   // Because region opened for read, nobody will reclaim it or modify. Safe
   // without locks.
-  auto permanent = regionManager_.getRegion(addr.rid()).isPinned();
-  if (!permanent && allocator_.isSizeClassAllocator()) {
+  if (allocator_.isSizeClassAllocator()) {
     // For size class, we always use slot size because the item layout is:
     // | --- value --- | --- empty --- | --- header --- |
     // We must read the full alloc size to get both value and header
@@ -482,7 +478,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     return Status::NotFound;
   }
 
-  if (permanent || !allocator_.isSizeClassAllocator()) {
+  if (!allocator_.isSizeClassAllocator()) {
     // Update slot size to actual, defined by key and value size
     uint32_t size =
         serializedSize(desc.keySize, desc.valueSize, true /* aligned */);

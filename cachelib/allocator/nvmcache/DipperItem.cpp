@@ -27,10 +27,8 @@ Blob DipperItem::getBlob(size_t index) const {
 DipperItem::DipperItem(PoolId id,
                        uint32_t creationTime,
                        uint32_t expTime,
-                       const std::vector<Blob>& blobs,
-                       DipperItemFlags flags)
+                       const std::vector<Blob>& blobs)
     : id_(id),
-      flags_(static_cast<uint8_t>(flags)),
       creationTime_(creationTime),
       expTime_(expTime),
       numBlobs_(blobs.size()) {
@@ -59,13 +57,8 @@ DipperItem::DipperItem(PoolId id,
 DipperItem::DipperItem(PoolId id,
                        uint32_t creationTime,
                        uint32_t expTime,
-                       Blob blob,
-                       DipperItemFlags flags)
-    : id_(id),
-      flags_(static_cast<uint8_t>(flags)),
-      creationTime_(creationTime),
-      expTime_(expTime),
-      numBlobs_(1) {
+                       Blob blob)
+    : id_(id), creationTime_(creationTime), expTime_(expTime), numBlobs_(1) {
   auto& blobInfo = getBlobInfo(0);
   if (blob.data.size() >
       std::numeric_limits<decltype(blobInfo.endOffset)>::max()) {

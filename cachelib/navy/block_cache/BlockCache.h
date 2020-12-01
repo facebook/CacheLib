@@ -70,7 +70,7 @@ class BlockCache final : public Engine {
   BlockCache& operator=(const BlockCache&) = delete;
   ~BlockCache() override = default;
 
-  Status insert(HashedKey hk, BufferView value, InsertOptions opt) override;
+  Status insert(HashedKey hk, BufferView value) override;
   Status lookup(HashedKey hk, Buffer& value) override;
   Status remove(HashedKey hk) override;
 
