@@ -12,10 +12,8 @@ NvmCacheTest::NvmCacheTest() {
   cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   util::makeDir(cacheDir_);
   config_ = folly::dynamic::object;
-  config_["dipper_navy_recovery_path"] = cacheDir_;
   config_["dipper_navy_file_size"] = 100 * 1024ULL * 1024ULL; /* megabytes */
   config_["dipper_navy_file_name"] = cacheDir_ + "/navy";
-  config_["dipper_navy_direct_io"] = false;
   config_["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
   config_["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
   config_["dipper_navy_lru"] = true;

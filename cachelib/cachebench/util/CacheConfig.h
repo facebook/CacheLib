@@ -87,9 +87,6 @@ struct CacheConfig : public JSONConfig {
   // specified as any /dev that could point to a logical raid device.
   std::vector<std::string> writeAmpDeviceList{};
 
-  // if enabled passes down the appropriate options to use DirectIO
-  bool dipperUseDirectIO{true};
-
   // bloom filter size for big dipper configuration.
   uint64_t dipperBloomSizeMB{1024};
 

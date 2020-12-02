@@ -126,8 +126,6 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.dipperOptions["dipper_request_ordering"] = true;
     }
 
-    nvmConfig.dipperOptions["dipper_navy_direct_io"] =
-        config_.dipperUseDirectIO;
     nvmConfig.dipperOptions["dipper_navy_lru"] = config_.dipperNavyUseRegionLru;
     nvmConfig.dipperOptions["dipper_navy_sfifo_segment_ratio"] =
         folly::dynamic::array(config_.navySegmentedFifoSegmentRatio.begin(),
