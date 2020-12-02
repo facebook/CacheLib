@@ -212,6 +212,7 @@ void setupCacheProtos(const folly::dynamic& options,
       blockCacheSize -= cacheSizeAdjustment;
       blockCacheOffset = adjustedBlockCacheOffset;
     }
+    blockCacheSize = alignDown(blockCacheSize, regionSize);
 
     XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
                << ", block cache size: " << blockCacheSize;

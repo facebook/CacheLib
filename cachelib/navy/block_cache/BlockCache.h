@@ -59,7 +59,9 @@ class BlockCache final : public Engine {
     // eviction policy. There must be at least one priority
     uint16_t numPriorities{1};
 
-    uint32_t getNumRegions() const { return cacheSize / regionSize; }
+    uint32_t getNumRegions() const {
+      return cacheSize / regionSize;
+    }
 
     // Checks invariants. Throws exception if failed.
     Config& validate();
@@ -103,7 +105,7 @@ class BlockCache final : public Engine {
 
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 11;
+  static constexpr uint32_t kFormatVersion = 12;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache

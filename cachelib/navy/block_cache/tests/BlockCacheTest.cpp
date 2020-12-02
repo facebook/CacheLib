@@ -1639,6 +1639,158 @@ TEST(BlockCache, Recovery) {
   }
 }
 
+TEST(BlockCache, RecoveryWithDifferentCacheSize) {
+  // Test this is a warm roll for changing cache size, we can remove this once
+  // everyone is on V12 and beyond
+  class MockRecordWriter : public RecordWriter {
+   public:
+    explicit MockRecordWriter(folly::IOBufQueue& ioq)
+        : rw_{createMemoryRecordWriter(ioq)} {
+      ON_CALL(*this, writeRecord(_))
+          .WillByDefault(Invoke([this](std::unique_ptr<folly::IOBuf> iobuf) {
+            rw_->writeRecord(std::move(iobuf));
+          }));
+    }
+
+    MOCK_METHOD1(writeRecord, void(std::unique_ptr<folly::IOBuf>));
+
+    bool invalidate() override { return rw_->invalidate(); }
+
+   private:
+    std::unique_ptr<RecordWriter> rw_;
+  };
+
+  std::vector<uint32_t> hits(4);
+  size_t metadataSize = 3 * 1024 * 1024;
+  auto deviceSize = metadataSize + kDeviceSize;
+  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+
+  std::vector<std::string> keys;
+  folly::IOBufQueue originalMetadata;
+  folly::IOBufQueue largerSizeMetadata;
+  folly::IOBufQueue largerSizeOldVersionMetadata;
+  {
+    auto config = makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits),
+                             *device, {kRegionSize});
+    auto engine = makeEngine(std::move(config), metadataSize);
+
+    auto numItems = kDeviceSize / kRegionSize;
+    for (uint64_t i = 0; i < numItems; i++) {
+      auto key = folly::sformat("key_{}", i);
+      while (true) {
+        if (Status::Ok ==
+            engine->insert(
+                makeHK(BufferView{key.size(),
+                                  reinterpret_cast<uint8_t*>(key.data())}),
+                makeView("value"))) {
+          break;
+        }
+        // Runs the async job to get a free region
+        ex->finish();
+      }
+      // Do not keep track of the key in the first region, since it will
+      // be evicted to maintain one clean region.
+      if (i > 0) {
+        keys.push_back(key);
+      }
+    }
+    // We'll evict the first region to maintain one clean region
+    ex->finish();
+
+    for (auto& key : keys) {
+      Buffer buffer;
+      ASSERT_EQ(Status::Ok,
+                engine->lookup(
+                    makeHK(BufferView{key.size(),
+                                      reinterpret_cast<uint8_t*>(key.data())}),
+                    buffer));
+    }
+
+    auto rw1 = createMemoryRecordWriter(originalMetadata);
+    engine->persist(*rw1);
+
+    // We will make sure we write a larger cache size into the record
+    MockRecordWriter rw2{largerSizeMetadata};
+    EXPECT_CALL(rw2, writeRecord(_))
+        .Times(testing::AtLeast(1))
+        .WillOnce(Invoke([&rw2](std::unique_ptr<folly::IOBuf> iobuf) {
+          Deserializer deserializer{iobuf->data(),
+                                    iobuf->data() + iobuf->length()};
+          auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
+          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          serializeProto(c, rw2);
+        }));
+    engine->persist(rw2);
+
+    // We will make sure we write a larger cache size and dummy version v11
+    MockRecordWriter rw3{largerSizeOldVersionMetadata};
+    EXPECT_CALL(rw3, writeRecord(_))
+        .Times(testing::AtLeast(1))
+        .WillOnce(Invoke([&rw3](std::unique_ptr<folly::IOBuf> iobuf) {
+          Deserializer deserializer{iobuf->data(),
+                                    iobuf->data() + iobuf->length()};
+          auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
+          c.version_ref() = 11;
+          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          serializeProto(c, rw3);
+        }));
+    engine->persist(rw3);
+  }
+
+  // Recover with the right size
+  {
+    auto config = makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits),
+                             *device, {kRegionSize});
+    auto engine = makeEngine(std::move(config), metadataSize);
+    auto rr = createMemoryRecordReader(originalMetadata);
+    ASSERT_TRUE(engine->recover(*rr));
+
+    // All the keys should be present
+    for (auto& key : keys) {
+      Buffer buffer;
+      ASSERT_EQ(Status::Ok,
+                engine->lookup(
+                    makeHK(BufferView{key.size(),
+                                      reinterpret_cast<uint8_t*>(key.data())}),
+                    buffer));
+    }
+  }
+
+  // Recover with larger size
+  {
+    auto config = makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits),
+                             *device, {kRegionSize});
+    // Uncomment this after BlockCache everywhere is on v12, and remove
+    // the below recover test
+    // ASSERT_THROW(makeEngine(std::move(config), metadataSize),
+    //              std::invalid_argument);
+    auto engine = makeEngine(std::move(config), metadataSize);
+    auto rr = createMemoryRecordReader(largerSizeMetadata);
+    ASSERT_FALSE(engine->recover(*rr));
+  }
+
+  // Recover with larger size but from v11 which should be a warm roll
+  // Remove this after BlockCache everywhere is on v12
+  {
+    auto config = makeConfig(*ex, std::make_unique<NiceMock<MockPolicy>>(&hits),
+                             *device, {kRegionSize});
+    auto engine = makeEngine(std::move(config), metadataSize);
+    auto rr = createMemoryRecordReader(largerSizeOldVersionMetadata);
+    ASSERT_TRUE(engine->recover(*rr));
+
+    // All the keys should be present
+    for (auto& key : keys) {
+      Buffer buffer;
+      ASSERT_EQ(Status::Ok,
+                engine->lookup(
+                    makeHK(BufferView{key.size(),
+                                      reinterpret_cast<uint8_t*>(key.data())}),
+                    buffer));
+    }
+  }
+}
+
 // This test does the following
 // 1. Test creation of BlockCache with BlockCache::kMinAllocAlignSize aligned
 //    slot sizes fail when in memory buffers are not enabled
