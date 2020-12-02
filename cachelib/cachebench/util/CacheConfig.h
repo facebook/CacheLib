@@ -87,14 +87,8 @@ struct CacheConfig : public JSONConfig {
   // specified as any /dev that could point to a logical raid device.
   std::vector<std::string> writeAmpDeviceList{};
 
-  // bloom filter size for big dipper configuration.
-  uint64_t dipperBloomSizeMB{1024};
-
   // number of asynchronous workers for dipper.
   uint64_t dipperAsyncThreads{48};
-
-  // only for big dipper.
-  uint64_t dipperBucketSizeKB{4096};
 
   // Navy specific: device block size, bytes.
   uint64_t dipperNavyBlock{512};
@@ -180,8 +174,7 @@ struct CacheConfig : public JSONConfig {
   uint32_t navyNumInmemBuffers{0};
 
   // Don't write to flash if cache TTL is smaller than this value.
-  // Not used when its value is 0.
-  // In seconds.
+  // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};
 
   // If enabled, we will use nvm admission policy tuned for ML use cases
