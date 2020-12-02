@@ -3128,8 +3128,8 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmRemoveLatencyNs = nvmRemoveLatency_.estimate();
   ret.ramEvictionAgeSecs = ramEvictionAgeSecs_.estimate();
   ret.ramItemLifeTimeSecs = ramItemLifeTimeSecs_.estimate();
-  ret.nvmSmallEvictionAgeSecs = nvmSmallEvictionAgeSecs_.estimate();
-  ret.nvmLargeEvictionAgeSecs = nvmLargeEvictionAgeSecs_.estimate();
+  ret.nvmSmallLifetimeSecs = nvmSmallLifetimeSecs_.estimate();
+  ret.nvmLargeLifetimeSecs = nvmLargeLifetimeSecs_.estimate();
   ret.nvmEvictionSecondsPastExpiry = nvmEvictionSecondsPastExpiry_.estimate();
   ret.nvmEvictionSecondsToExpiry = nvmEvictionSecondsToExpiry_.estimate();
   ret.nvmPutSize = nvmPutSize_.estimate();

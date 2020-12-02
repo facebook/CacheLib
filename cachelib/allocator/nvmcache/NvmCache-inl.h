@@ -150,8 +150,8 @@ void NvmCache<C>::evictCB(navy::BufferView key,
   }
 
   value.size() > navySmallItemThreshold_
-      ? cache_.nvmLargeEvictionAgeSecs_.trackValue(lifetime)
-      : cache_.nvmSmallEvictionAgeSecs_.trackValue(lifetime);
+      ? cache_.nvmLargeLifetimeSecs_.trackValue(lifetime)
+      : cache_.nvmSmallLifetimeSecs_.trackValue(lifetime);
 
   ItemHandle hdl;
   try {
