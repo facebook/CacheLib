@@ -59,9 +59,7 @@ class BlockCache final : public Engine {
     // eviction policy. There must be at least one priority
     uint16_t numPriorities{1};
 
-    uint32_t getNumRegions() const {
-      return cacheSize / regionSize;
-    }
+    uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
     // Checks invariants. Throws exception if failed.
     Config& validate();
