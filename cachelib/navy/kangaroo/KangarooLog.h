@@ -70,6 +70,11 @@ class KangarooLog  {
   void flush();
 
   void reset();
+  
+  double falsePositivePct() const;
+  double extraReadsPct() const;
+  double fragmentationPct() const;
+
 
   // TODO: persist and recover not implemented
 
@@ -129,7 +134,7 @@ class KangarooLog  {
   void cleanSegment(LogSegmentId lsid);
   void cleanSegmentsLoop(uint64_t threadId);
   bool shouldWakeCompaction(uint64_t threadId);
-  void moveBucket(HashedKey hk);
+  void moveBucket(HashedKey hk, uint64_t count);
 
   // Use birthday paradox to estimate number of mutexes given number of parallel
   // queries and desired probability of lock collision.
@@ -190,6 +195,19 @@ class KangarooLog  {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter checksumErrorCount_;
+  mutable AtomicCounter flushPageReads_;
+  mutable AtomicCounter flushFalsePageReads_;
+  mutable AtomicCounter flushLogSegmentsCount_;
+  mutable AtomicCounter moveBucketCalls_;
+  mutable AtomicCounter notFoundInLogIndex_;
+  mutable AtomicCounter foundInLogIndex_;
+  mutable AtomicCounter indexSegmentMismatch_;
+  mutable AtomicCounter replaceIndexInsert_;
+  mutable AtomicCounter indexReplacementReinsertions_;
+  mutable AtomicCounter indexReinsertions_;
+  mutable AtomicCounter indexReinsertionFailed_;
+  mutable AtomicCounter moveBucketSuccessfulRets_;
+  mutable AtomicCounter thresholdNotHit_;
 
 };
 } // namespace navy

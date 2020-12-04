@@ -192,11 +192,12 @@ KangarooLog::KangarooLog(Config&& config, ValidConfigTag)
       setMultiInsertCb_{config.setMultiInsertCallback},
       threshold_{config.threshold} {
   XLOGF(INFO,
-        "Kangaroo Log created: size: {}, read size: {}, segment size: {}, base offset: {}",
+        "Kangaroo Log created: size: {}, read size: {}, segment size: {}, base offset: {}, pages per partition {}",
         logSize_,
         pageSize_,
         segmentSize_,
-        logBaseOffset_);
+        logBaseOffset_,
+	pagesPerPartition_);
   for (uint64_t i = 0; i < logIndexPartitions_; i++) {
     index_[i] = new LogIndex(config.numIndexPartitionSlots, setNumberCallback_);
   }
@@ -226,7 +227,7 @@ bool KangarooLog::shouldWakeCompaction(uint64_t threadId) {
   return killThread_;
 }
 
-void KangarooLog::moveBucket(HashedKey hk) {
+void KangarooLog::moveBucket(HashedKey hk, uint64_t count) {
   ObjectInfo oi{hk};
   Buffer buffer;
   BufferView valueView;
@@ -267,31 +268,49 @@ void KangarooLog::moveBucket(HashedKey hk) {
       return oi;
     }
     page = reinterpret_cast<LogBucket*>(buffer.data());
+    flushPageReads_.inc();
   
     oi.status = page->findTag(tag, oi.key, oi.value);
     if (oi.status != Status::Ok) {
       indexIt = index_[indexPartition]->getNext(indexIt);
       oi.status = Status::Retry;
     } else if (setNumberCallback_(oi.key.keyHash()) != bid) {
+      Status ret;
       {
         std::unique_lock<folly::SharedMutex> indexLock{logIndexMutexs_[indexPartition]};
-        index_[indexPartition]->insert(oi.key, lpid, oi.hits);
+        ret = index_[indexPartition]->insert(oi.key, lpid, oi.hits);
       }
-      oi.status = Status::Retry;
+      if (ret == Status::NotFound) {
+        indexReplacementReinsertions_.inc();
+        ret = Status::Ok;
+      }
+      if (ret != Status::Ok) {
+	indexReinsertionFailed_.inc();
+      }
+      indexReinsertions_.inc();
+      count--;
+      flushFalsePageReads_.inc();
+      if (count < threshold_) {
+      	oi.status = Status::Rejected;
+      } else {
+        oi.status = Status::Retry;
+      }
       indexIt = index_[indexPartition]->getNext(indexIt);
       return oi;
     }
     oi.status = Status::Ok;
     indexIt = index_[indexPartition]->getNext(indexIt);
+    moveBucketSuccessfulRets_.inc();
     return oi;
   };
   
   ReadmitCallback readmit = [&](ObjectInfo oi){
     uint64_t physicalPartition = getPhysicalPartition(lpid);
-    /*if (nextLsidsToClean_[physicalPartition] != getSegmentId(lpid) && oi.hits) {
+    moveBucketSuccessfulRets_.sub(1);
+    if (nextLsidsToClean_[physicalPartition] != getSegmentId(lpid) && oi.hits) {
       std::unique_lock<folly::SharedMutex> indexLock{logIndexMutexs_[indexPartition]};
       index_[indexPartition]->insert(oi.key, lpid);
-    }*/
+    }
   };
 
   setMultiInsertCb_(hk, cb, readmit);
@@ -318,8 +337,10 @@ void KangarooLog::cleanSegment(LogSegmentId lsid) {
       }
       if (!lpid.isValid()) {
         it = log_seg.getNext(it);
+        notFoundInLogIndex_.inc();
         continue;
       }
+      foundInLogIndex_.inc();
 
       // best effort count (remove could come and decrease 
       // but that should be rare)
@@ -332,10 +353,12 @@ void KangarooLog::cleanSegment(LogSegmentId lsid) {
         // evict key because set doesn't meet threshold 
         {
           std::unique_lock<folly::SharedMutex> indexLock{logIndexMutexs_[indexPartition]};
-          index_[indexPartition]->remove(it.key());
+          index_[indexPartition]->remove(it.key(), lpid);
         }
+	thresholdNotHit_.inc();
       } else {
-        moveBucket(it.key());
+        moveBucket(it.key(), count);
+	moveBucketCalls_.inc();
       }
       it = log_seg.getNext(it);
     }
@@ -348,19 +371,52 @@ void KangarooLog::cleanSegmentsLoop(uint64_t threadId) {
       std::unique_lock<std::mutex> lock{writeSetsMutex_};
       writeSetsCv_.wait(lock, [&](){ return shouldWakeCompaction(threadId); });
     }
+    writeSetsCv_.notify_all();
     if (killThread_) {
       return;
     }
-    writeSetsCv_.notify_all();
     cleanSegment(nextLsidsToClean_[nextCleaningPartition_[threadId]]);
     nextLsidsToClean_[nextCleaningPartition_[threadId]] = getNextLsid(nextLsidsToClean_[nextCleaningPartition_[threadId]]);
     nextCleaningPartition_[threadId]++;
+    flushLogSegmentsCount_.inc();
+    /*if (flushLogSegmentsCount_.get() % 10000 == 0) {
+	XLOGF(INFO, "Flushed {} log segments which made {} move bucket calls and dropped {} from thresholding. False reads {} / total reads {}",
+			flushLogSegmentsCount_.get(), 
+			moveBucketCalls_.get(),
+			thresholdNotHit_.get(),
+			flushFalsePageReads_.get(),
+			flushPageReads_.get());
+	XLOGF(INFO, "Found {} and did not find {} keys in log, mismatch {}", 
+			foundInLogIndex_.get(), notFoundInLogIndex_.get(), indexSegmentMismatch_.get());
+	XLOGF(INFO, "Successful / Total removes {} /{}", succRemoveCount_.get(), removeCount_.get());
+	XLOGF(INFO, "Total inserts {}, succ inserts {}, replacement inserts {}",
+		insertCount_.get(), succInsertCount_.get(), replaceIndexInsert_.get());
+	XLOGF(INFO, "Total reinserts {}, replacement reinserts {}, failed {}",
+		indexReinsertions_.get(), indexReplacementReinsertions_.get(), indexReinsertionFailed_.get());
+	XLOGF(INFO, "Total objects moved to sets {}", moveBucketSuccessfulRets_.get());
+	XLOGF(INFO, "False positives index {} from lookups ({}) and removes ({})", 
+			keyCollisionCount_.get(), lookupCount_.get(), removeCount_.get());
+    }*/
     // wake up any insert requests waiting for space
     flushLogCv_.notify_all();
   }
 }
+
+double KangarooLog::falsePositivePct() const {
+  return 100. * keyCollisionCount_.get() / (lookupCount_.get() + removeCount_.get());
+}
+
+double KangarooLog::extraReadsPct() const {
+  return 100. * flushFalsePageReads_.get() / flushPageReads_.get();
+}
+
+double KangarooLog::fragmentationPct() const {
+  auto found = foundInLogIndex_.get();
+  return 100. * found / (notFoundInLogIndex_.get() + found);
+}
   
 Status KangarooLog::lookup(HashedKey hk, Buffer& value) {
+  lookupCount_.inc();
   uint64_t indexPartition = getIndexPartition(hk);
   LogPageId lpid;
   {
@@ -424,6 +480,13 @@ Status KangarooLog::insert(HashedKey hk,
     uint64_t indexPartition = getIndexPartition(hk);
     std::unique_lock<folly::SharedMutex> lock{logIndexMutexs_[indexPartition]};
     auto ret = index_[indexPartition]->insert(hk, lpid);
+    if (ret == Status::NotFound) {
+      replaceIndexInsert_.inc();
+      ret = Status::Ok;
+    } 
+    if (ret == Status::Ok) {
+      succInsertCount_.inc();
+    }
     return ret;
   }
   
@@ -437,14 +500,58 @@ Status KangarooLog::insert(HashedKey hk,
 Status KangarooLog::remove(HashedKey hk) {
   uint64_t indexPartition = getIndexPartition(hk);
   removeCount_.inc();
+  LogPageId lpid;
 
-  Status status;
-  
   {
     std::unique_lock<folly::SharedMutex> lock{logIndexMutexs_[indexPartition]};
-    status = index_[indexPartition]->remove(hk);
+    lpid = index_[indexPartition]->lookup(hk, false);
+  }
+  if (!lpid.isValid()) {
+    return Status::NotFound;
   }
 
+  Buffer buffer;
+  BufferView valueView;
+  LogBucket* page;
+  {
+    std::shared_lock<folly::SharedMutex> lock{getMutexFromPage(lpid)};
+
+    // check if page is buffered in memory and read it
+    Status ret = lookupBuffered(hk, buffer, lpid);
+    if (ret == Status::Ok) {
+      Status status;
+      {
+	std::unique_lock<folly::SharedMutex> lock{logIndexMutexs_[indexPartition]};
+	status = index_[indexPartition]->remove(hk, lpid);
+      }
+      if (status == Status::Ok) {
+	succRemoveCount_.inc();
+      }
+      return status;
+    } else if (ret == Status::Retry) {
+      buffer = readLogPage(lpid);
+      if (buffer.isNull()) {
+        ioErrorCount_.inc();
+        return Status::DeviceError;
+      }
+    } else {
+      return ret;
+    }
+  }
+
+  page = reinterpret_cast<LogBucket*>(buffer.data());
+  
+  valueView = page->find(hk);
+  if (valueView.isNull()) {
+    keyCollisionCount_.inc();
+    return Status::NotFound;
+  }
+  
+  Status status;
+  {
+    std::unique_lock<folly::SharedMutex> lock{logIndexMutexs_[indexPartition]};
+    status = index_[indexPartition]->remove(hk, lpid);
+  }
   if (status == Status::Ok) {
     succRemoveCount_.inc();
   }
@@ -488,6 +595,7 @@ Status KangarooLog::lookupBuffered(HashedKey hk,
     }
     view = currentLogSegments_[partition]->find(hk, lpid);
     if (view.isNull()) {
+      keyCollisionCount_.inc();
       return Status::NotFound;
     }
     value = Buffer{view};

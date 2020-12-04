@@ -23,7 +23,7 @@ class LogIndexEntry {
     return !(*this == rhs);
   }
 
-  void incrementHits() { if (hits_ < (1 << 3 - 1)) {hits_++;} }
+  void incrementHits() { if (hits_ < ((1 << 3) - 1)) {hits_++;} }
   uint32_t hits() { return hits_; }
   uint32_t tag() { return tag_; }
   void invalidate() { valid_ = 0; hits_ = 1; }

@@ -47,11 +47,17 @@ Status LogIndex::insert(HashedKey hk, LogPageId lpid, uint8_t hits) {
   LogIndexEntry* entry = &index_[(offset + increment) % numSlots_];
   while (increment < numSlots_) {
     if (entry->tag() == tag || !entry->isValid()) {
+      Status ret;
+      if (entry->isValid()) {
+      	ret = Status::NotFound;
+      } else {
+	ret = Status::Ok;
+      }
       entry->tag_ = tag;
       entry->flash_index_ = lpid.index();
       entry->valid_ = 1;
       entry->hits_ = hits;
-      return Status::Ok;
+      return ret;
     }
     increment++;
     entry = &index_[(offset + increment) % numSlots_];
@@ -59,13 +65,13 @@ Status LogIndex::insert(HashedKey hk, LogPageId lpid, uint8_t hits) {
   return Status::Rejected;
 }
 
-Status LogIndex::remove(HashedKey hk) {
+Status LogIndex::remove(HashedKey hk, LogPageId lpid) {
   const auto offset = getLogIndexOffset(hk); 
   uint32_t increment = 0;
   uint32_t tag = createTag(hk);
   LogIndexEntry* entry = &index_[(offset + increment) % numSlots_];
   while (increment < numSlots_) {
-    if (entry->isValid() && entry->tag() == tag) {
+    if (entry->isValid() && entry->tag() == tag && lpid == entry->page()) {
       entry->invalidate();
       if (!index_[(offset + increment + 1) % numSlots_].continueIteration()) {
         entry->clear();

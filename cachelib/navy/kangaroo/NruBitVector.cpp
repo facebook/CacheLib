@@ -11,7 +11,7 @@ namespace navy {
 namespace {
 uint32_t bitMask(uint32_t bitIdx) {return (1u << (bitIdx & 31u));}
 
-bool bitSet(uint32_t& bits, uint32_t bitIdx) {bits |= bitMask(bitIdx);}
+void bitSet(uint32_t& bits, uint32_t bitIdx) {bits |= bitMask(bitIdx);}
 bool bitGet(uint32_t& bits, uint32_t bitIdx) {return bits & bitMask(bitIdx);}
 } // namespace
 

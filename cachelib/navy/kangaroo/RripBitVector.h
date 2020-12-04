@@ -44,7 +44,7 @@ class RripBitVector {
 
  private:
   const uint32_t numVectors_{};
-  const uint32_t vectorSize_ = 2;
+  const uint32_t vectorSize_ = 4;
   std::unique_ptr<uint32_t[]> bits_;
 };
 } // namespace navy

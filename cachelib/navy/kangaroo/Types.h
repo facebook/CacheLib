@@ -2,6 +2,8 @@
 
 #include <functional>
 
+#include <cachelib/navy/common/Hash.h>
+
 namespace facebook {
 namespace cachelib {
 namespace navy {

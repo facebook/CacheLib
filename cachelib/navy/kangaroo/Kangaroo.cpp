@@ -181,7 +181,7 @@ void Kangaroo::insertMultipleObjectsToKangarooBucket(HashedKey hk,
         succInsertCount_.inc();
       } else if (oi.status != Status::Retry) {
         if (oi.hits) {
-          //readmit(oi);
+          readmit(oi);
           readmitInsertCount_.inc();
         }
       }
@@ -225,6 +225,11 @@ void Kangaroo::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_io_errors", ioErrorCount_.get());
   visitor("navy_bh_bf_false_positive_pct", bfFalsePositivePct());
   visitor("navy_bh_checksum_errors", checksumErrorCount_.get());
+  if (log_) {
+    visitor("navy_klog_false_positive_pct", log_->falsePositivePct());
+    visitor("navy_klog_fragmentation_pct", log_->fragmentationPct());
+    visitor("navy_klog_extra_reads_pct", log_->extraReadsPct());
+  }
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {
     auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
@@ -295,30 +300,30 @@ Status Kangaroo::insert(HashedKey hk,
   const auto bid = getKangarooBucketId(hk);
   insertCount_.inc();
 
-  /*if (insertCount_.get() % 1000000 == 0) {
+  /*if (insertCount_.get() % 10000000 == 0) {
     XLOG(INFO, "Insert Counters");
-    XLOG(INFO, "\t total {}", succInsertCount_.get());
-    XLOG(INFO, "\t log {}", logInsertCount_.get());
-    XLOG(INFO, "\t set {}", setInsertCount_.get());
-    XLOG(INFO, "\t readmission ", readmitInsertCount_.get());
+    XLOGF(INFO, "\t total {} / {}", succInsertCount_.get(), insertCount_.get());
+    XLOGF(INFO, "\t log {}", logInsertCount_.get());
+    XLOGF(INFO, "\t set {}", setInsertCount_.get());
+    XLOGF(INFO, "\t readmission {}", readmitInsertCount_.get());
     
     XLOG(INFO, "Hit Counters");
     XLOG(INFO, "\t total", succLookupCount_.get(), "/ ", lookupCount_.get());
-    XLOG(INFO, "\t log {}", logHits_.get());
-    XLOG(INFO, "\t set {}", setHits_.get());
+    XLOGF(INFO, "\t log {}", logHits_.get());
+    XLOGF(INFO, "\t set {}", setHits_.get());
 
     XLOG(INFO, "# Items Counters");
-    XLOG(INFO, "\t total {}", itemCount_.get());
-    XLOG(INFO, "\t log {}", logItemCount_.get());
-    XLOG(INFO, "\t set {}", setItemCount_.get());
+    XLOGF(INFO, "\t total {}", itemCount_.get());
+    XLOGF(INFO, "\t log {}", logItemCount_.get());
+    XLOGF(INFO, "\t set {}", setItemCount_.get());
   }*/
   
   if (log_) {
     Status ret = log_->insert(hk, value);
     if (ret == Status::Ok) {
       sizeDist_.addSize(hk.key().size() + value.size());
+      succInsertCount_.inc();
     }
-    succInsertCount_.inc();
     logInsertCount_.inc();
     itemCount_.inc();
     logItemCount_.inc();

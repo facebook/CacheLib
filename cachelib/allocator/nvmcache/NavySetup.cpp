@@ -217,7 +217,6 @@ void setupCacheProtos(const folly::dynamic& options,
     
     const auto logPctSize = options.getDefault(kKangarooLogSizePct, 0);
     const auto sizeReservedForLog = kangarooCacheSize * logPctSize.getInt() / 100ul;
-    const uint64_t logSize = alignDown(sizeReservedForLog, bucketSize * 64);
 
     auto kangaroo = cachelib::navy::createKangarooProto();
     kangaroo->setLayout(kangarooCacheOffset, kangarooCacheSize, 
@@ -235,9 +234,10 @@ void setupCacheProtos(const folly::dynamic& options,
     }
     
     // Enable log if requested
-    if (logSize > 0) {
+    if (sizeReservedForLog > 0) {
       const auto threshold = options.getDefault(kKangarooLogThreshold, 1).getInt();
       const auto physicalPart = options[kKangarooLogPhysicalPartitions].getInt();
+      const uint64_t logSize = alignDown(sizeReservedForLog, bucketSize * 64 * physicalPart);
       const auto indexPerPhysical = options[kKangarooLogIndexPerPhysicalPartitions].getInt();
       const auto avgObjectSize = options.getDefault(kKangarooLogAvgSmallObjectSize, 100).getInt();
       kangaroo->setLog(logSize, threshold, physicalPart, indexPerPhysical, avgObjectSize);
