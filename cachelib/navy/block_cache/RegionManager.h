@@ -214,9 +214,10 @@ class RegionManager {
   mutable AtomicCounter reclaimTimeCountUs_;
   mutable AtomicCounter evictedCount_;
 
-  // stats to keep track of inmem buffer usage
+  // Stats to keep track of inmem buffer usage
   mutable AtomicCounter numInMemBufActive_;
   mutable AtomicCounter numInMemBufWaitingFlush_;
+  mutable AtomicCounter numInMemBufFlushRetires_;
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;

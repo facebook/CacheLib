@@ -2415,6 +2415,69 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
     EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
   }
 }
+
+TEST(BlockCache, DeviceFlushFailure) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
+
+  testing::InSequence inSeq;
+  EXPECT_CALL(*device, writeImpl(_, _, _))
+      .Times(5)
+      .WillRepeatedly(Return(false));
+  EXPECT_CALL(*device, writeImpl(_, _, _)).WillOnce(Return(true));
+
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {});
+  config.numInMemBuffers = 4;
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  CacheEntry e{bg.gen(8), bg.gen(800)};
+  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  driver->flush();
+
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_inmem_flush_retries") {
+      EXPECT_EQ(5, count);
+    }
+  });
+}
+
+TEST(BlockCache, DeviceFlushFailureAsync) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
+
+  testing::InSequence inSeq;
+  EXPECT_CALL(*device, writeImpl(_, _, _))
+      .Times(5)
+      .WillRepeatedly(Return(false));
+
+  // Will be called twice as the second flush is a sync flush from
+  // driver->flush()
+  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(2).WillOnce(Return(true));
+
+  auto ex = makeJobScheduler();
+  auto config =
+      makeConfig(*ex, std::move(policy), *device, {16 * 1024 /* size class */});
+  config.numInMemBuffers = 4;
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  CacheEntry e{bg.gen(8), bg.gen(800)};
+  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
+  driver->flush();
+
+  driver->getCounters([](folly::StringPiece name, double count) {
+    if (name == "navy_bc_inmem_flush_retries") {
+      EXPECT_EQ(5, count);
+    }
+  });
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

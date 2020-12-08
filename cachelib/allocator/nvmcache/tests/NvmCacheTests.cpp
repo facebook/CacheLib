@@ -1556,6 +1556,9 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_evicted"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
   EXPECT_TRUE(cs("navy_bc_external_fragmentation"));
+  EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
+  EXPECT_TRUE(cs("navy_bc_inmem_active"));
+  EXPECT_TRUE(cs("navy_bc_inmem_flush_retries"));
 
   // navy::LruPolicy
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_avg"));
@@ -1603,8 +1606,6 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p99999"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p999999"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_max"));
-  EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
-  EXPECT_TRUE(cs("navy_bc_inmem_active"));
 
   // navy::BigHash
   EXPECT_TRUE(cs("navy_bh_items"));

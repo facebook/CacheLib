@@ -182,12 +182,18 @@ void RegionManager::doFlush(RegionId rid, bool async) {
           if (flushBuffer(rid)) {
             return JobExitCode::Done;
           }
+          numInMemBufFlushRetires_.inc();
           return JobExitCode::Reschedule;
         },
         "flush",
         JobType::Flush);
   } else {
     while (!flushBuffer(rid)) {
+      numInMemBufFlushRetires_.inc();
+
+      // We intentionally sleep here to slow it down since this is only
+      // triggered on shutdown. On failures, we will sleep a bit before
+      // retrying to avoid maxing out cpu.
       /* sleep override */
       std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }
@@ -463,6 +469,7 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());
   visitor("navy_bc_inmem_waiting_flush", numInMemBufWaitingFlush_.get());
+  visitor("navy_bc_inmem_flush_retries", numInMemBufFlushRetires_.get());
   policy_->getCounters(visitor);
 }
 } // namespace navy
