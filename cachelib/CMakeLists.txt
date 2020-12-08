@@ -1,0 +1,319 @@
+# https://cmake.org/examples/
+# CMakeLists files in this project can
+# refer to the root source directory of the project as ${HELLO_SOURCE_DIR} and
+# to the root binary directory of the project as ${HELLO_BINARY_DIR}.
+
+cmake_minimum_required (VERSION 3.10)
+
+## TODO: get version from variable
+project (CacheLib VERSION 0.1)
+
+#configure_file(cachelib/cachelib_config.h.in cachelib_config.h)
+
+set(CACHELIB_MAJOR_VERSION 0)
+set(CACHELIB_MINOR_VERSION 1)
+set(CACHELIB_PATCH_VERSION 0)
+set(CACHELIB_VERSION
+ ${CACHELIB_MAJOR_VERSION}.${CACHELIB_MINOR_VERSION}.${CACHELIB_PATCH_VERSION})
+
+set(PACKAGE_NAME      "cachelib")
+set(PACKAGE_VERSION   "${CACHELIB_VERSION}")
+set(PACKAGE_STRING    "${PACKAGE_NAME} ${PACKAGE_VERSION}")
+set(PACKAGE_TARNAME   "${PACKAGE_NAME}-${PACKAGE_VERSION}")
+set(PACKAGE_BUGREPORT "https://github.com/facebook/TBD")
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+
+set(BIN_INSTALL_DIR bin CACHE STRING
+    "The subdirectory where binaries should be installed")
+set(INCLUDE_INSTALL_DIR include CACHE STRING
+    "The subdirectory where header files should be installed")
+set(LIB_INSTALL_DIR lib CACHE STRING
+    "The subdirectory where libraries should be installed")
+set(CMAKE_INSTALL_DIR lib/cmake/cachelib CACHE STRING
+    "The subdirectory where CMake package config files should be installed")
+
+# When installing the library (and dependencies like folly) in a non-default
+# prefix, this will let projects linking against *.so to find libfolly.so
+# automatically.
+#set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}")
+##https://gitlab.kitware.com/cmake/community/-/wikis/doc/cmake/RPATH-handling
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib/cachelib/")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
+
+set(CACHELIB_HOME ${CMAKE_CURRENT_SOURCE_DIR})
+set(CACHELIB_BUILD ${CMAKE_CURRENT_BINARY_DIR})
+
+# Add root dir so qualified includes work.
+# E.g. #include "cachelib/allocator/foobar.h"
+include_directories(${CACHELIB_HOME}/..)
+include_directories(${CACHELIB_BUILD}/..)
+include_directories(${CACHELIB_BUILD})
+
+# Set directory of the Find$x.cmake files to properly include dependencies
+set(CMAKE_MODULE_PATH
+  "${CACHELIB_HOME}/cmake"
+  ${CMAKE_MODULE_PATH})
+
+# specify the C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+
+set(CMAKE_THREAD_PREFER_PTHREAD ON)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
+find_package(Boost REQUIRED COMPONENTS
+             system filesystem regex context)
+find_package(Sodium REQUIRED)
+find_package(Gflags REQUIRED)
+find_package(Glog REQUIRED)
+find_package(GTest REQUIRED)
+find_package(GMock REQUIRED)
+find_package(folly CONFIG REQUIRED)
+find_package(fizz CONFIG REQUIRED)
+find_package(fmt CONFIG REQUIRED)
+find_package(wangle CONFIG REQUIRED)
+find_package(Zlib REQUIRED)
+find_package(Zstd REQUIRED)
+find_package(FBThrift REQUIRED) # must come after wangle
+
+
+# FBThrift - generates h/cpp files from .*thrift files
+find_program(FBTHRIFT1 thrift1
+  DOC "Facebook's fork of apache thrift")
+if(NOT FBTHRIFT1)
+    message(FATAL_ERROR "thrift1 not found!")
+endif()
+
+
+add_custom_target(thrift_generated_files)
+
+
+
+function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
+  # Get the basename of the first source file
+  get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
+
+  #message(STATUS "Adding test: ${TEST_PREFIX}-${TEST_NAME}"
+  #" source: ${SOURCE_FILE} additional libraries: ${ARGN}")
+
+  add_executable("${TEST_PREFIX}-${TEST_NAME}" "${SOURCE_FILE}")
+  target_link_libraries("${TEST_PREFIX}-${TEST_NAME}" "${ARGN}")
+endfunction()
+
+
+#add_custom_command(
+#  OUTPUT
+#    gen-cpp2/BloomFilter_constants.cpp
+#    gen-cpp2/BloomFilter_constants.h
+#    gen-cpp2/BloomFilter_data.cpp
+#    gen-cpp2/BloomFilter_data.h
+#    gen-cpp2/BloomFilter_metadata.cpp
+#    gen-cpp2/BloomFilter_metadata.h
+#    gen-cpp2/BloomFilter_types.cpp
+#    gen-cpp2/BloomFilter_types_custom_protocol.h
+#    gen-cpp2/BloomFilter_types.h
+#    gen-cpp2/BloomFilter_types.tcc
+#    gen-cpp2/BloomFilter_layouts.cpp
+#    gen-cpp2/BloomFilter_layouts.h
+#  COMMAND
+#    ${FBTHRIFT1} -o ${CMAKE_CURRENT_BINARY_DIR} --gen mstch_cpp2:frozen2
+#                 -I ${CACHELIB_HOME} BloomFilter.thrift
+#  DEPENDS
+#    BloomFilter.thrift
+#  WORKING_DIRECTORY
+#    ${CMAKE_CURRENT_SOURCE_DIR}
+#)
+#add_custom_target(common_thrift_files
+#  DEPENDS
+#     gen-cpp2/BloomFilter_constants.cpp
+#     #${XBLOOM_THRIFT_FILES}
+#  )
+#add_dependencies(thrift_generated_files common_thrift_files)
+function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
+
+  # Get the basename of the thrift file
+  get_filename_component(THRIFT_BASENAME "${THRIFT_RELATIVE_PATH}" NAME)
+
+  # Get the basename of the thrift file (without extension)
+  get_filename_component(THRIFT_BASENAME_NO_EXT
+                         "${THRIFT_RELATIVE_PATH}" NAME_WE)
+
+  # Get the relative-directory of the thrift file (if any)
+  get_filename_component(THRIFT_REL_DIR "${THRIFT_RELATIVE_PATH}" DIRECTORY)
+
+  #message(STATUS "add-thrift:  PREFIX: ${PREFIX} REL_PATH:"
+  #" ${THRIFT_RELATIVE_PATH}   BASENAME: ${THRIFT_BASENAME}"
+  #"  REL_DIR: ${THRIFT_REL_DIR} current_source_dir: "
+  # "${CMAKE_CURRENT_SOURCE_DIR}   cur-bin-dir: ${CMAKE_CURRENT_BINARY_DIR}")
+
+
+  if (THRIFT_REL_DIR)
+    # Create the sub-directory in the binary directory
+    # (e.g. for "allocator/serialize/objects.thrift", create the "serizlize"
+    # under "build/allocator/serialize" , where the "gen-cpp2" directory will
+    # be created). Reldir might be empty.
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${THRIFT_REL_DIR}")
+
+    # HACK ALERT, see below
+    string(APPEND THRIFT_REL_DIR "/")
+  endif()
+
+  # Generate a list of expected output files.
+  # NOTE: the list is tightly-coupled with the cpp flavor
+  # generated by 'thrift1'.
+  set(${PREFIX}_THRIFT_FILES "constants.cpp"
+    "constants.h"
+    "data.cpp"
+    "data.h"
+    "metadata.cpp"
+    "metadata.h"
+    "types.cpp"
+    "types_custom_protocol.h"
+    "types.h"
+    "types.tcc"
+    )
+
+  # The thrift cpp option "frozen2"
+  # (e.g. "thrift1 --gen mstch_cpp2:frozen2 ...")
+  # generates two additional files. The "json" option does not.
+  if (CPP_OPTION STREQUAL "frozen2")
+    list(APPEND ${PREFIX}_THRIFT_FILES
+      "layouts.h"
+      "layouts.cpp")
+  endif()
+
+
+  string(LENGTH "${CMAKE_BINARY_DIR}" "FOOJ")
+  #message(STATUS "*** FOOJ: ${FOOJ}")
+  string(SUBSTRING "${CMAKE_CURRENT_BINARY_DIR}" "${FOOJ}" -1 "FOOP")
+  #message(STATUS "*** FOOP: ${FOOP}")
+  string(CONCAT FOOM "${CMAKE_BINARY_DIR}"
+                     "/cachelib" "${FOOP}/${THRIFT_REL_DIR}")
+  #message(STATUS "*** FOOM: ${FOOM}")
+  string(CONCAT FOOX "${FOOM}" "gen-cpp2")
+  #message(STATUS "*** FOOX: ${FOOX}")
+  message(STATUS "*** OUTDIR: ${CMAKE_CURRENT_BINARY_DIR}/${THRIFT_REL_DIR} ")
+  file(MAKE_DIRECTORY "${FOOM}")
+
+  #message(STATUS "thrift suffixes: ${${PREFIX}_THRIFT_FILES}")
+
+  #HACK ALERT: there is NO slash after "${THRIFT_REL_DIR}" as it might
+  #  be empty. if it's not empty, the slash was added above.
+  #list(TRANSFORM ${PREFIX}_THRIFT_FILES PREPEND
+  #             "${THRIFT_REL_DIR}gen-cpp2/${THRIFT_BASENAME_NO_EXT}_")
+
+  message(STATUS "before: ${${PREFIX}_THRIFT_FILES}")
+  #string(REGEX REPLACE "([^;]+)"
+  #       "${THRIFT_REL_DIR}gen-cpp2/${THRIFT_BASENAME_NO_EXT}_\\1"
+  #       TMP "${${PREFIX}_THRIFT_FILES}")
+  string(REGEX REPLACE "([^;]+)" "${FOOX}/${THRIFT_BASENAME_NO_EXT}_\\1"
+                       TMP "${${PREFIX}_THRIFT_FILES}")
+
+  message(STATUS "after: ${TMP}")
+  set(${PREFIX}_THRIFT_FILES "${TMP}")
+
+  message(STATUS "thrift files: ${${PREFIX}_THRIFT_FILES}")
+
+  add_custom_command(
+    OUTPUT
+       ${${PREFIX}_THRIFT_FILES}
+    COMMAND
+       ${FBTHRIFT1} -o ${FOOM} --gen mstch_cpp2:${CPP_OPTION}
+                    -I ${CACHELIB_HOME}/.. ${THRIFT_BASENAME}
+    DEPENDS
+       ${THRIFT_RELATIVE_PATH}
+   WORKING_DIRECTORY
+       ${CMAKE_CURRENT_SOURCE_DIR}/${THRIFT_REL_DIR}
+   )
+
+ add_custom_target(${PREFIX}_thrift_target
+   DEPENDS ${${PREFIX}_THRIFT_FILES})
+
+ add_dependencies(thrift_generated_files ${PREFIX}_thrift_target)
+
+ # HACK ALERT: transfer the list of files to the parent's (caller's) scope
+ set(${PREFIX}_THRIFT_FILES "${${PREFIX}_THRIFT_FILES}" PARENT_SCOPE)
+endfunction()
+
+
+add_subdirectory (common)
+add_subdirectory (shm)
+add_subdirectory (navy)
+add_subdirectory (allocator)
+add_subdirectory (datatype)
+add_subdirectory (compact_cache)
+add_subdirectory (benchmarks)
+add_subdirectory (cachebench)
+
+# Install the source header files
+install(DIRECTORY cachelib
+  DESTINATION ${INCLUDE_INSTALL_DIR}
+  FILES_MATCHING PATTERN "*.h"
+  PATTERN "external" EXCLUDE
+  PATTERN "tests" EXCLUDE
+  PATTERN "benchmarks" EXCLUDE
+  PATTERN "cachebench" EXCLUDE
+  PATTERN "scripts" EXCLUDE
+  PATTERN "cmake" EXCLUDE
+)
+
+# Install the thrift-generated header files
+install(
+  DIRECTORY
+    ${CACHELIB_BUILD}/
+  DESTINATION
+    include
+  FILES_MATCHING
+    PATTERN "gen-cpp2/*.h"
+    PATTERN "gen-cpp2/*.tcc"
+    PATTERN "tests" EXCLUDE
+    PATTERN "*.dir" EXCLUDE
+    PATTERN "CMakeFiles" EXCLUDE
+)
+
+
+# Install CMake package configuration files for cachelib
+# TODO: @ONLY?
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+  cmake/cachelib-config.cmake.in
+  cachelib-config.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_DIR}
+  PATH_VARS
+    INCLUDE_INSTALL_DIR
+    CMAKE_INSTALL_DIR
+)
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/cachelib-config.cmake
+  DESTINATION ${CMAKE_INSTALL_DIR}
+)
+
+add_library(cachelib INTERFACE)
+target_link_libraries(cachelib INTERFACE
+     cachelib_common
+     cachelib_shm
+     cachelib_navy
+     cachelib_allocator
+     )
+target_include_directories(
+  cachelib
+  INTERFACE
+    $<INSTALL_INTERFACE:${INCLUDE_INSTALL_DIR}>
+    )
+target_compile_features(cachelib_common INTERFACE cxx_std_17)
+
+install(TARGETS
+     cachelib
+     EXPORT cachelib-exports
+     DESTINATION ${LIB_INSTALL_DIR}
+  )
+
+install(EXPORT cachelib-exports
+        FILE cachelib-targets.cmake
+        #NAMESPACE cachelib::
+        DESTINATION ${CMAKE_INSTALL_DIR})
