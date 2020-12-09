@@ -1039,6 +1039,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem) {
   XDCHECK(config_.moveCb);
+  util::LatencyTracker tracker{moveRegularLatency_};
 
   if (!oldItem.isAccessible() || oldItem.isExpired()) {
     return false;
@@ -1129,6 +1130,7 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem) {
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem) {
   XDCHECK(config_.moveCb);
+  util::LatencyTracker tracker{moveChainedLatency_};
 
   // This item has been unlinked from its parent and we're the only
   // owner of it, so we're done here
@@ -3123,6 +3125,8 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
 
   ret.numItems = accessContainer_->getStats().numKeys;
   ret.allocateLatencyNs = allocateLatency_.estimate();
+  ret.moveChainedLatencyNs = moveChainedLatency_.estimate();
+  ret.moveRegularLatencyNs = moveRegularLatency_.estimate();
   ret.nvmLookupLatencyNs = nvmLookupLatency_.estimate();
   ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
   ret.nvmRemoveLatencyNs = nvmRemoveLatency_.estimate();

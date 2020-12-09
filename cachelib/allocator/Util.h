@@ -69,7 +69,7 @@ bool insertIOBufInCache(T& cache,
 }
 
 // Allocates and inserts an item in the cache without initializing the memory.
-// Typically used for tests where we dont have synchrnous readers/writers.
+// Typically used for tests where we dont have synchronous readers/writers.
 //
 // @param cache     the cache to make the allocations from
 // @param poolId    the pool id for allocation
