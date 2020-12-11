@@ -54,14 +54,14 @@ class MM2Q {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
+        : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
+                 *configState.updateOnWrite_ref(),
                  *configState.updateOnRead_ref(),
                  *configState.tryLockUpdate_ref(),
                  *configState.rebalanceOnRecordAccess_ref(),
-                 configState.hotSizePercent,
-                 configState.coldSizePercent) {}
+                 *configState.hotSizePercent_ref(),
+                 *configState.coldSizePercent_ref()) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,

@@ -28,7 +28,7 @@ class CCacheMetadata {
   CCacheMetadata() : keySize_(0), valueSize_(0) {}
 
   CCacheMetadata(const SerializationType& object)
-      : keySize_(object.keySize), valueSize_(object.valueSize) {}
+      : keySize_(*object.keySize_ref()), valueSize_(*object.valueSize_ref()) {}
 
   template <typename CCacheT>
   void initializeOrVerify() {
@@ -49,8 +49,8 @@ class CCacheMetadata {
 
   SerializationType saveState() {
     SerializationType object;
-    object.keySize = keySize_;
-    object.valueSize = valueSize_;
+    *object.keySize_ref() = keySize_;
+    *object.valueSize_ref() = valueSize_;
     return object;
   }
 

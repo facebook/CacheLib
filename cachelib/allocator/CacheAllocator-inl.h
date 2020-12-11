@@ -2820,11 +2820,11 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
         "There are still slabs being released at the moment");
   }
 
-  metadata_.allocatorVersion = kCachelibVersion;
+  *metadata_.allocatorVersion_ref() = kCachelibVersion;
   *metadata_.ramFormatVersion_ref() = kCacheRamFormatVersion;
   *metadata_.cacheCreationTime_ref() = static_cast<int64_t>(cacheCreationTime_);
-  metadata_.mmType = MMType::kId;
-  metadata_.accessType = AccessType::kId;
+  *metadata_.mmType_ref() = MMType::kId;
+  *metadata_.accessType_ref() = AccessType::kId;
 
   metadata_.compactCachePools_ref()->clear();
   const auto pools = getPoolIds();
@@ -3019,15 +3019,15 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
     }
   }
 
-  if (meta.accessType != AccessType::kId) {
+  if (*meta.accessType_ref() != AccessType::kId) {
     throw std::invalid_argument(
-        folly::sformat("Expected {}, got {} for AccessType", meta.accessType,
-                       AccessType::kId));
+        folly::sformat("Expected {}, got {} for AccessType",
+                       *meta.accessType_ref(), AccessType::kId));
   }
 
-  if (meta.mmType != MMType::kId) {
-    throw std::invalid_argument(folly::sformat("Expected {}, got {} for MMType",
-                                               meta.mmType, MMType::kId));
+  if (*meta.mmType_ref() != MMType::kId) {
+    throw std::invalid_argument(folly::sformat(
+        "Expected {}, got {} for MMType", *meta.mmType_ref(), MMType::kId));
   }
   return meta;
 }

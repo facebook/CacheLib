@@ -62,13 +62,13 @@ class MMTinyLFU {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
+        : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
+                 *configState.updateOnWrite_ref(),
                  *configState.updateOnRead_ref(),
                  *configState.tryLockUpdate_ref(),
-                 configState.windowToCacheSizeRatio,
-                 configState.tinySizePercent) {}
+                 *configState.windowToCacheSizeRatio_ref(),
+                 *configState.tinySizePercent_ref()) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,

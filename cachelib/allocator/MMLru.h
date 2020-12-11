@@ -40,12 +40,13 @@ class MMLru {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
-                 *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
-                 *configState.updateOnRead_ref(),
-                 *configState.tryLockUpdate_ref(),
-                 static_cast<uint8_t>(configState.lruInsertionPointSpec)) {}
+        : Config(
+              *configState.lruRefreshTime_ref(),
+              *configState.lruRefreshRatio_ref(),
+              *configState.updateOnWrite_ref(),
+              *configState.updateOnRead_ref(),
+              *configState.tryLockUpdate_ref(),
+              static_cast<uint8_t>(*configState.lruInsertionPointSpec_ref())) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time, updateOnW, updateOnR, false, 0) {}

@@ -228,10 +228,11 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
           false /* resetMem */},
       locks_{config_.getLocksPower(), config_.getHasher()},
       numKeys_(*object.numKeys_ref()) {
-  if (config_.getBucketsPower() != static_cast<uint32_t>(object.bucketsPower)) {
+  if (config_.getBucketsPower() !=
+      static_cast<uint32_t>(*object.bucketsPower_ref())) {
     throw std::invalid_argument(folly::sformat(
         "Hashtable bucket power not compatible. old = {}, new = {}",
-        object.bucketsPower,
+        *object.bucketsPower_ref(),
         config.getBucketsPower()));
   }
 
@@ -461,8 +462,8 @@ ChainedHashTable::Container<T, HookPtr, LockT>::saveState() const {
   }
 
   serialization::ChainedHashTableObject object;
-  object.bucketsPower = config_.getBucketsPower();
-  object.locksPower = config_.getLocksPower();
+  *object.bucketsPower_ref() = config_.getBucketsPower();
+  *object.locksPower_ref() = config_.getLocksPower();
   *object.numKeys_ref() = numKeys_;
   *object.hasherMagicId_ref() = config_.getHasher()->getMagicId();
   return object;

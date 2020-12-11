@@ -78,18 +78,20 @@ class DList {
   // @param compressor          PtrCompressor object
   DList(const DListObject& object, PtrCompressor compressor)
       : compressor_(std::move(compressor)),
-        head_(compressor_.unCompress(CompressedPtr{object.compressedHead})),
-        tail_(compressor_.unCompress(CompressedPtr{object.compressedTail})),
-        size_(object.size) {}
+        head_(compressor_.unCompress(
+            CompressedPtr{*object.compressedHead_ref()})),
+        tail_(compressor_.unCompress(
+            CompressedPtr{*object.compressedTail_ref()})),
+        size_(*object.size_ref()) {}
 
   /**
    * Exports the current state as a thrift object for later restoration.
    */
   DListObject saveState() const {
     DListObject state;
-    state.compressedHead = compressor_.compress(head_).saveState();
-    state.compressedTail = compressor_.compress(tail_).saveState();
-    state.size = size_;
+    *state.compressedHead_ref() = compressor_.compress(head_).saveState();
+    *state.compressedTail_ref() = compressor_.compress(tail_).saveState();
+    *state.size_ref() = size_;
     return state;
   }
 

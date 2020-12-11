@@ -5,14 +5,14 @@ namespace cachelib {
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 MM2Q::Container<T, HookPtr>::Container(const serialization::MM2QObject& object,
                                        PtrCompressor compressor)
-    : lru_(object.lrus, compressor),
+    : lru_(*object.lrus_ref(), compressor),
       tailTrackingEnabled_(*object.tailTrackingEnabled_ref()),
-      config_(object.config) {
+      config_(*object.config_ref()) {
   // We need to adjust list positions if the previous version does not have
   // tail lists (WarmTail & ColdTail), in order to potentially avoid cold roll
-  if (object.lrus.lists.size() < LruType::NumTypes) {
+  if (object.lrus_ref()->lists_ref()->size() < LruType::NumTypes) {
     XDCHECK_EQ(false, tailTrackingEnabled_);
-    XDCHECK_EQ(object.lrus.lists.size() + 2, LruType::NumTypes);
+    XDCHECK_EQ(object.lrus_ref()->lists_ref()->size() + 2, LruType::NumTypes);
     lru_.insertEmptyListAt(LruType::WarmTail, compressor);
     lru_.insertEmptyListAt(LruType::ColdTail, compressor);
   }
@@ -360,18 +360,18 @@ template <typename T, MM2Q::Hook<T> T::*HookPtr>
 serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState() const
     noexcept {
   serialization::MM2QConfig configObject;
-  configObject.lruRefreshTime = config_.lruRefreshTime;
+  *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
-  configObject.updateOnWrite = config_.updateOnWrite;
+  *configObject.updateOnWrite_ref() = config_.updateOnWrite;
   *configObject.updateOnRead_ref() = config_.updateOnRead;
-  configObject.hotSizePercent = config_.hotSizePercent;
-  configObject.coldSizePercent = config_.coldSizePercent;
+  *configObject.hotSizePercent_ref() = config_.hotSizePercent;
+  *configObject.coldSizePercent_ref() = config_.coldSizePercent;
   *configObject.rebalanceOnRecordAccess_ref() = config_.rebalanceOnRecordAccess;
 
   serialization::MM2QObject object;
-  object.config = configObject;
+  *object.config_ref() = configObject;
   *object.tailTrackingEnabled_ref() = tailTrackingEnabled_;
-  object.lrus = lru_.saveState();
+  *object.lrus_ref() = lru_.saveState();
   return object;
 }
 

@@ -12,11 +12,11 @@ template <typename T, MMLru::Hook<T> T::*HookPtr>
 MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
                                         PtrCompressor compressor)
     : compressor_(std::move(compressor)),
-      lru_(object.lru, compressor_),
+      lru_(*object.lru_ref(), compressor_),
       insertionPoint_(compressor_.unCompress(
-          CompressedPtr{object.compressedInsertionPoint})),
-      tailSize_(object.tailSize),
-      config_(object.config) {}
+          CompressedPtr{*object.compressedInsertionPoint_ref()})),
+      tailSize_(*object.tailSize_ref()),
+      config_(*object.config_ref()) {}
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
 bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
@@ -286,19 +286,19 @@ template <typename T, MMLru::Hook<T> T::*HookPtr>
 serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState() const
     noexcept {
   serialization::MMLruConfig configObject;
-  configObject.lruRefreshTime = config_.lruRefreshTime;
+  *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
-  configObject.updateOnWrite = config_.updateOnWrite;
+  *configObject.updateOnWrite_ref() = config_.updateOnWrite;
   *configObject.updateOnRead_ref() = config_.updateOnRead;
   *configObject.tryLockUpdate_ref() = config_.tryLockUpdate;
-  configObject.lruInsertionPointSpec = config_.lruInsertionPointSpec;
+  *configObject.lruInsertionPointSpec_ref() = config_.lruInsertionPointSpec;
 
   serialization::MMLruObject object;
-  object.config = configObject;
-  object.compressedInsertionPoint =
+  *object.config_ref() = configObject;
+  *object.compressedInsertionPoint_ref() =
       compressor_.compress(insertionPoint_).saveState();
-  object.tailSize = tailSize_;
-  object.lru = lru_.saveState();
+  *object.tailSize_ref() = tailSize_;
+  *object.lru_ref() = lru_.saveState();
   return object;
 }
 

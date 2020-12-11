@@ -42,7 +42,7 @@ class MultiDList {
   // @param object              saved MultiDList object
   // @param compressor          PtrCompressor object
   MultiDList(const MultiDListObject& object, PtrCompressor compressor) {
-    for (const auto& list : object.lists) {
+    for (const auto& list : *object.lists_ref()) {
       lists_.emplace_back(std::make_unique<SingleDList>(list, compressor));
     }
   }
@@ -53,7 +53,7 @@ class MultiDList {
   MultiDListObject saveState() const {
     MultiDListObject state;
     for (const auto& listPtr : lists_) {
-      state.lists.emplace_back(listPtr->saveState());
+      state.lists_ref()->emplace_back(listPtr->saveState());
     }
     return state;
   }
