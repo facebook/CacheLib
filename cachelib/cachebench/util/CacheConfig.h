@@ -87,6 +87,9 @@ struct CacheConfig : public JSONConfig {
   // specified as any /dev that could point to a logical raid device.
   std::vector<std::string> writeAmpDeviceList{};
 
+  // if enabled passes down the appropriate options to use DirectIO
+  bool dipperUseDirectIO{true};
+
   // number of asynchronous workers for dipper.
   uint64_t dipperAsyncThreads{48};
 

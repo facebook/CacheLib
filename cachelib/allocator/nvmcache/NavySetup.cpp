@@ -1,14 +1,10 @@
-#include <libgen.h>
-#include <linux/magic.h>
-#include <sys/vfs.h>
+#include "cachelib/allocator/nvmcache/NavySetup.h"
+#include "cachelib/navy/Factory.h"
+#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 #include <folly/File.h>
 #include <folly/logging/xlog.h>
-
-#include <cachelib/allocator/nvmcache/NavySetup.h>
-#include <cachelib/navy/Factory.h>
-#include <cachelib/navy/block_cache/HitsReinsertionPolicy.h>
-#include <cachelib/navy/scheduler/ThreadPoolJobScheduler.h>
 
 namespace facebook {
 namespace cachelib {
@@ -24,6 +20,7 @@ constexpr folly::StringPiece kAdmissionWriteRate{"dipper_navy_adm_write_rate"};
 constexpr folly::StringPiece kAdmissionSuffixLen{
     "dipper_navy_adm_suffix_length"};
 constexpr folly::StringPiece kBlockSize{"dipper_navy_block_size"};
+constexpr folly::StringPiece kDirectIO{"dipper_navy_direct_io"};
 constexpr folly::StringPiece kFileName{"dipper_navy_file_name"};
 constexpr folly::StringPiece kRAIDPaths{"dipper_navy_raid_paths"};
 constexpr folly::StringPiece kDeviceMetadataSize{"dipper_navy_metadata_size"};
@@ -82,55 +79,21 @@ bool usesRaidFiles(const folly::dynamic& options) {
   return raidPaths && (raidPaths->size() > 0);
 }
 
-// tmpfs does not support O_DIRECT. In many test systems, /tmp could be
-// mounted as tmpfs and open would fail if O_DIRECT is used. This is annoying
-// since O_DIRECT has no implication for tmpfs anyways.  if we can
-// conclusively say the file name is on a tmpfs or shm mount, we will skip
-// passing O_DIRECT to avoid failures in openCacheFile, which defaults to
-// using O_DIRECT.
-//
-// @param fileName  file path to test. This can be non-existent file, but the
-//                  parent directory must be present
-//
-// @return  true of O_DIRECT is supported and false if O_DIRECT is not
-//          required or unsupported. This can have false positives, but no false
-//          negatives.
-bool supportsODirect(const std::string& fileName) {
-  struct statfs info;
-  XDCHECK_LE(static_cast<int>(fileName.length()), PATH_MAX);
-  std::array<char, PATH_MAX> path;
-  // the input file name might not be present and need to be created. So we
-  // check the file system type of the directory.
-  std::memcpy(path.data(), fileName.c_str(), strlen(fileName.c_str()));
-  char* dir = ::dirname(path.data());
-  XDCHECK_NE(dir, nullptr);
-
-  // can't fetch fs type, default to using O_DIRECT and failing if
-  // unsupported.
-  if (::statfs(dir, &info) != 0) {
-    return true;
-  }
-
-  // avoid o_direct if we know the type is tmpfs. This should cover /dev/shm
-  // and any mounted filesystems on tmpfs.
-  return info.f_type != TMPFS_MAGIC;
-}
-
 // Open cache file @fileName and set it size to @size.
 // Throws std::system_error if failed.
 folly::File openCacheFile(const std::string& fileName,
                           uint64_t size,
+                          bool directIO,
                           bool truncate) {
   XLOG(INFO) << "Cache file: " << fileName << " size: " << size
-             << " truncate: " << truncate;
+             << " direct IO: " << directIO << " truncate: " << truncate;
   if (fileName.empty()) {
     throw std::invalid_argument("File name is empty");
   }
-  bool useODirect = supportsODirect(fileName);
-
-  // create file if it does not exist and open it in direct io mode always.
-  const int flags = (O_RDWR | O_CREAT) | (useODirect ? O_DIRECT : 0);
-
+  int flags{O_RDWR | O_CREAT};
+  if (directIO) {
+    flags |= O_DIRECT;
+  }
   auto f = folly::File(fileName.c_str(), flags);
   // TODO detect if file exists and is of expected size. If not,
   // automatically fallocate the file or ftruncate the file.
@@ -141,7 +104,7 @@ folly::File openCacheFile(const std::string& fileName,
         folly::sformat("failed fallocate with size {}", size));
   }
 
-  if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
+  if (directIO && ::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
     throw std::system_error(errno, std::system_category(),
                             "Error fadvising cache file");
   }
@@ -380,7 +343,10 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     for (const auto& path : paths) {
       folly::File f;
       try {
-        f = openCacheFile(path, fdSize, options[kTruncateFile].getBool());
+        f = openCacheFile(path,
+                          fdSize,
+                          options[kDirectIO].getBool(),
+                          options[kTruncateFile].getBool());
       } catch (const std::exception& e) {
         XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
                   << ". Errno: " << errno;
@@ -411,6 +377,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     try {
       f = openCacheFile(fileName->getString(),
                         singleFileSize,
+                        options[kDirectIO].getBool(),
                         options[kTruncateFile].getBool());
     } catch (const std::exception& e) {
       XLOG(ERR) << "Exception in openCacheFile: " << e.what();
@@ -461,6 +428,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
 void populateDefaultNavyOptions(folly::dynamic& options) {
   // default values for some of the options if they are not already present.
   folly::dynamic defs = folly::dynamic::object;
+  defs[kDirectIO] = true;
   defs[kBlockSize] = 4096;
   defs[kRegionSize] = 16 * 1024 * 1024;
   defs[kLru] = true;
