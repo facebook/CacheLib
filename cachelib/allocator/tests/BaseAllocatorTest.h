@@ -2989,6 +2989,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       config.setRemoveCallback(removeCb);
       config.setCacheSize(size);
       config.enableCachePersistence(this->cacheDir_);
+      config.disableFastShutdownMode();
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
       const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
       poolId = alloc.addPool("foobar", numBytes);
