@@ -440,6 +440,19 @@ TEST_F(LruAllocatorTest, MoveItem) { this->testMoveItem(true); }
 TEST_F(Lru2QAllocatorTest, MoveItem) { this->testMoveItem(true); }
 TEST_F(TinyLFUAllocatorTest, MoveItem) { this->testMoveItem(false); }
 
+// Try moving a single item from one slab to another while a separate thread
+// has a ref count to the slab to be released for some time. This tests the
+// retry logic.
+TEST_F(LruAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(true);
+}
+TEST_F(Lru2QAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(true);
+}
+TEST_F(TinyLFUAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(false);
+}
+
 // Test fragmentation size stats
 TEST_F(LruAllocatorTest, FragmentationSizeStat) {
   this->testFragmentationSize();

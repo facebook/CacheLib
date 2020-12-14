@@ -3299,8 +3299,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(current, fragmentationForOneSmallItem + fragmentationForOneItem);
   }
 
-  // Try moving a single item from one slab to another
-  void testMoveItem(bool testEviction) {
+  using ReleaseSlabFunc =
+      std::function<void(AllocatorT&, const AllocInfo&, void*)>;
+  void testMoveItemHelper(bool testEviction, ReleaseSlabFunc releaseSlabFunc) {
     const auto moveCb = [](typename AllocatorT::Item& oldItem,
                            typename AllocatorT::Item& newItem,
                            typename AllocatorT::Item* /* parentPtr */) {
@@ -3313,7 +3314,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Request numSlabs + 1 slabs so that we get numSlabs usable slabs
     typename AllocatorT::Config config;
-    config.enableMovingOnSlabRelease(moveCb);
+    config.enableMovingOnSlabRelease(moveCb, {} /* ChainedItemsMoveSync */,
+                                     -1 /* movingAttemptsLimit */);
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
     AllocatorT allocator(config);
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
@@ -3357,11 +3359,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     void* sourceAlloc =
         static_cast<void*>(allocator.findInternal("slab1_key0").get());
     const auto allocInfo = allocator.getAllocInfo(sourceAlloc);
-    allocator.releaseSlab(allocInfo.poolId,
-                          allocInfo.classId,
-                          SlabReleaseMode::kResize,
-                          sourceAlloc);
-    ASSERT_EQ(allocator.getSlabReleaseStats().numSlabReleaseForResize, 1);
+
+    releaseSlabFunc(allocator, allocInfo, sourceAlloc);
 
     // Check that the new handle points to the expected location
     const auto newHandle = allocator.find("slab1_key0");
@@ -3396,6 +3395,62 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           util::allocateAccessible(allocator, poolId, "test_key", kItemSize);
       ASSERT_EQ(handle.get(), expectedAlloc);
     }
+  }
+
+  // Try moving a single item from one slab to another
+  void testMoveItem(bool testEviction) {
+    auto releaseSlabFunc = [](AllocatorT& allocator,
+                              const AllocInfo& allocInfo,
+                              void* sourceAlloc) {
+      allocator.releaseSlab(allocInfo.poolId,
+                            allocInfo.classId,
+                            SlabReleaseMode::kResize,
+                            sourceAlloc);
+      ASSERT_EQ(allocator.getSlabReleaseStats().numSlabReleaseForResize, 1);
+    };
+
+    testMoveItemHelper(testEviction, std::move(releaseSlabFunc));
+  }
+
+  // Try moving a single item from one slab to another while a separate thread
+  // has a ref count to the slab to be released for some time. This tests the
+  // retry logic.
+  void testMoveItemRetryWithRefCount(bool testEviction) {
+    auto releaseSlabFunc = [](AllocatorT& allocator,
+                              const AllocInfo& allocInfo,
+                              void* sourceAlloc) {
+      std::atomic<bool> holdItemHandle{false};
+
+      // Spin up a thread and take a hold on the item handle
+      // from second slab and sleep for sometime, so that
+      // the main thread attempting the slabRelease will
+      // continue retrying in a loop for sometime.
+      std::thread otherThread([&]() {
+        const auto tempHandle = allocator.find("slab1_key0");
+        holdItemHandle = true;
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      });
+
+      // Wait for the otherThread to take a refcount on a cache item
+      // from second slab, which we are trying to move to another slab.
+      while (!holdItemHandle) {
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+      allocator.releaseSlab(allocInfo.poolId,
+                            allocInfo.classId,
+                            SlabReleaseMode::kResize,
+                            sourceAlloc);
+      otherThread.join();
+
+      XLOG(INFO, "Number of move retry attempts: ",
+           allocator.getSlabReleaseStats().numMoveAttempts);
+      ASSERT_GT(allocator.getSlabReleaseStats().numMoveAttempts, 1);
+      ASSERT_EQ(allocator.getSlabReleaseStats().numMoveSuccesses, 1);
+    };
+
+    testMoveItemHelper(testEviction, std::move(releaseSlabFunc));
   }
 
   void testAllocateWithoutEviction() {
