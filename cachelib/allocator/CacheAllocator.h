@@ -89,6 +89,8 @@ class NvmCacheTest;
 
 template <typename AllocatorT>
 class PoolOptimizeStrategyTest;
+
+class NvmAdmissionPolicyTest;
 } // namespace tests
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
@@ -1740,6 +1742,7 @@ class CacheAllocator : public CacheBase {
   friend class facebook::cachelib::tests::AllocatorResizeTest;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::PoolOptimizeStrategyTest;
+  friend class facebook::cachelib::tests::NvmAdmissionPolicyTest;
 
   // benchmarks
   template <typename Allocator>

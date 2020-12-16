@@ -176,6 +176,12 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
           config_.rejectFirstSuffixIgnoreLength,
           config_.rejectFirstUseDramHitSignal);
     }
+    if (config_.nvmAdmissionMinTTL > 0) {
+      if (!nvmAdmissionPolicy_) {
+        nvmAdmissionPolicy_ = std::make_shared<NvmAdmissionPolicy<CacheT>>();
+      }
+      nvmAdmissionPolicy_->initMinTTL(config_.nvmAdmissionMinTTL);
+    }
   }
   initStats();
   initNvmCache(dramCacheAttached);

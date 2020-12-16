@@ -14,7 +14,6 @@ class NvmAdmissionPolicy {
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
   virtual ~NvmAdmissionPolicy() = default;
-
   // The method that the outside class calls to get the admission decision.
   // It captures the common logics (e.g statistics) then
   // delicates the detailed implementation to subclasses.
@@ -22,6 +21,13 @@ class NvmAdmissionPolicy {
                       folly::Range<ChainedItemIter> chainItem) final {
     util::LatencyTracker overallTracker(overallLatency_);
     overallCount_.inc();
+
+    auto minTTL = minTTL_.load(std::memory_order_relaxed);
+    if (minTTL > 0 && item.getConfiguredTTL() < minTTL) {
+      ttlRejected_.inc();
+      return false;
+    }
+
     const bool decision = acceptImpl(item, chainItem);
     if (decision) {
       accepted_.inc();
@@ -30,6 +36,21 @@ class NvmAdmissionPolicy {
     }
     return decision;
   }
+
+  // Set minTTL. This method should be called only once.
+  virtual void initMinTTL(const uint64_t minTTL) final {
+    auto initValue = minTTL_.load(std::memory_order_relaxed);
+    if (initValue > 0) {
+      throw std::invalid_argument(
+          "minTTL should be initialized to non-zero only once.");
+    }
+    auto success = minTTL_.compare_exchange_strong(initValue, minTTL);
+    if (!success) {
+      throw std::invalid_argument("Setting minTTL failed.");
+    }
+  }
+
+  virtual uint64_t getMinTTL() const final { return minTTL_; }
 
   virtual bool accept(const std::string& /* key */) { return true; }
 
@@ -41,22 +62,31 @@ class NvmAdmissionPolicy {
     ctrs["ap.rejected"] = rejected_.get();
     util::LatencyTracker::visitLatencyStatsUs(
         ctrs, overallLatency_, "ap.latency");
+    ctrs["ap.ttlRejected"] = ttlRejected_.get();
     return ctrs;
   }
 
  protected:
   // Implement this method for the detailed admission decision logic.
-  virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) = 0;
+  // By default this accepts all items.
+  virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) {
+    return true;
+  }
   // Implementation specific statistics.
   // Please include a prefix/postfix with the name of implementation to avoid
   // collision with base level stats.
-  virtual std::unordered_map<std::string, double> getCountersImpl() = 0;
+  virtual std::unordered_map<std::string, double> getCountersImpl() {
+    return {};
+  }
 
  private:
   util::PercentileStats overallLatency_;
   AtomicCounter overallCount_{0};
   AtomicCounter accepted_{0};
   AtomicCounter rejected_{0};
+  AtomicCounter ttlRejected_{0};
+  // The minimum TTL to an item need to have to be accepted.
+  std::atomic<uint64_t> minTTL_{0};
 };
 
 template <typename Cache>

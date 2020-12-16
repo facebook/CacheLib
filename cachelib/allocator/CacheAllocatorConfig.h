@@ -273,6 +273,11 @@ class CacheAllocatorConfig {
   // starts
   CacheAllocatorConfig& setEventTracker(EventTrackerSharedPtr&&);
 
+  // Set the minimum TTL for an item to be admitted into NVM cache.
+  // If nvmAdmissionMinTTL is set to be positive, any item with configured TTL
+  // smaller than this will always be rejected by NvmAdmissionPolicy.
+  CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
+
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
   bool poolResizingEnabled() const noexcept {
@@ -562,6 +567,9 @@ class CacheAllocatorConfig {
   uint32_t maxAllocationClassSize{Slab::kSize};
   uint32_t minAllocationClassSize{72};
   bool reduceFragmentationInAllocationClass{false};
+  // The minimum TTL an item need to have in order to be admitted into NVM
+  // cache.
+  uint64_t nvmAdmissionMinTTL{0};
 
   friend CacheT;
 
@@ -651,7 +659,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
     std::shared_ptr<NvmAdmissionPolicy<T>> policy) {
   if (!nvmConfig) {
     throw std::invalid_argument(
-        "NvmCache filter callback can not be set unless nvmcache is used");
+        "NvmCache admission policy callback can not be set unless nvmcache is "
+        "used");
   }
 
   if (!policy) {
@@ -947,6 +956,18 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
+    uint64_t ttl) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmAdmissionMinTTL can not be set unless nvmcache is used");
+  }
+
+  nvmAdmissionMinTTL = ttl;
+  return *this;
+}
+
+template <typename T>
 bool CacheAllocatorConfig<T>::validateStrategy(
     const std::shared_ptr<RebalanceStrategy>& strategy) const {
   if (!strategy) {
@@ -1044,6 +1065,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
   configMap["eventTracker"] = eventTracker ? "set" : "empty";
+  configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),
