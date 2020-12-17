@@ -166,11 +166,6 @@ class CacheAllocator : public CacheBase {
   // (evicted / freed)
   using RemoveCb = std::function<void(const RemoveCbData& data)>;
 
-  // returns true for items that will have to be filtered out so that they
-  // dont get pushed to nvm cache.
-  using NvmCacheFilterCb =
-      std::function<bool(const Item&, folly::Range<ChainedItemIter>)>;
-
   // the holder for the item when we hand it to the caller. This ensures
   // that the reference count is maintained when the caller is done with the
   // item. The ItemHandle provides a getMemory() and getKey() interface. The

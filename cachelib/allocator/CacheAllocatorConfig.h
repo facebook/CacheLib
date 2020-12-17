@@ -26,7 +26,6 @@ class CacheAllocatorConfig {
   using AccessConfig = typename CacheT::AccessConfig;
   using ChainedItemMovingSync = typename CacheT::ChainedItemMovingSync;
   using RemoveCb = typename CacheT::RemoveCb;
-  using NvmCacheFilterCb = typename CacheT::NvmCacheFilterCb;
   using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
   using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
@@ -82,9 +81,6 @@ class CacheAllocatorConfig {
   // @throw std::invalid_argument if nullptr is passed.
   CacheAllocatorConfig& setNvmCacheAdmissionPolicy(
       std::shared_ptr<NvmAdmissionPolicy<CacheT>> policy);
-
-  // enables filtering items that go into nvmcache
-  CacheAllocatorConfig& setNvmCacheFilterCallback(NvmCacheFilterCb cb);
 
   // enables encoding items before they go into nvmcache
   CacheAllocatorConfig& setNvmCacheEncodeCallback(NvmCacheEncodeCb cb);
@@ -527,10 +523,6 @@ class CacheAllocatorConfig {
   // custom user provided admission policy
   std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmCacheAP{nullptr};
 
-  // user defined call back for filtering out items that go into the nvm
-  // cache. this will keep certain items only in DRAM.
-  NvmCacheFilterCb filterCb{};
-
   // Config for nvmcache type
   folly::Optional<NvmCacheConfig> nvmConfig;
 
@@ -668,17 +660,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
   }
 
   nvmCacheAP = std::move(policy);
-  return *this;
-}
-
-template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheFilterCallback(
-    NvmCacheFilterCb cb) {
-  if (!nvmConfig) {
-    throw std::invalid_argument(
-        "NvmCache filter callback can not be set unless nvmcache is used");
-  }
-  filterCb = std::move(cb);
   return *this;
 }
 
@@ -1045,7 +1026,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["movingTries"] = std::to_string(movingTries);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";
-  configMap["filterCb"] = filterCb ? "set" : "empty";
   configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
   configMap["nvmAPRejectFirst"] = rejectFirstAPNumEntries ? "set" : "empty";
   configMap["moveCb"] = moveCb ? "set" : "empty";

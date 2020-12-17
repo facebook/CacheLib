@@ -1277,10 +1277,6 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
 
-  if (config_.filterCb && config_.filterCb(item, chainedItemRange)) {
-    stats_.numNvmRejectsByFilterCb.inc();
-    return false;
-  }
   if (nvmAdmissionPolicy_ &&
       !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
     stats_.numNvmRejectsByAP.inc();
