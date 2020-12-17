@@ -200,12 +200,7 @@ Cache<Allocator>::Cache(CacheConfig config,
                   config_.createMlPolicy())));
     }
 
-    if (config_.memoryOnlyTTL > 0) {
-      allocatorConfig.setNvmCacheFilterCallback(
-          [this](auto& item, auto /* chainedItemRange */) {
-            return item.getConfiguredTTL() < config_.memoryOnlyTTL;
-          });
-    }
+    allocatorConfig.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
 
     usesNvm_ = true;
   }

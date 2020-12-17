@@ -205,7 +205,6 @@ TEST_F(NvmAdmissionPolicyTest, CacheAllocatorConfigInitTest) {
   EXPECT_EQ(this->getNvmAdmissionPolicy(cache), nullptr);
 
   Config config1;
-
   this->enableNvmConfig(config1);
   // Null nvmAP with positive ttl creates a nvmAP.
   config1.setNvmAdmissionMinTTL(1);
