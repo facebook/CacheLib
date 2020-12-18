@@ -1826,12 +1826,62 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
     throw std::invalid_argument("null item handle for converting to IOBUf");
   }
 
-  auto* item = handle.get();
+  Item* item = handle.get();
   const uint32_t dataOffset = item->getOffsetForMemory();
-  folly::IOBuf ioBuf{folly::IOBuf::TAKE_OWNERSHIP, item,
 
-                     // Since we'll be moving the IOBuf data pointer forward by
-                     // dataOffset, we need to adjust the IOBuf length
+  using ConvertChainedItem = std::function<std::unique_ptr<folly::IOBuf>(
+      Item * item, ChainedItem & chainedItem)>;
+  folly::IOBuf iobuf;
+  ConvertChainedItem converter;
+
+  // based on current refcount and threshold from config
+  // determine to use a new ItemHandle for each chain items
+  // or use shared ItemHandle for all chain items
+  if (item->getRefCount() > config_.thresholdForConvertingToIOBuf) {
+    auto sharedHdl = std::make_shared<ItemHandle>(std::move(handle));
+
+    iobuf = folly::IOBuf{
+        folly::IOBuf::TAKE_OWNERSHIP, item,
+
+        // Since we'll be moving the IOBuf data pointer forward
+        // by dataOffset, we need to adjust the IOBuf length
+        // accordingly
+        dataOffset + item->getSize(),
+
+        [](void*, void* userData) {
+          auto* hdl = reinterpret_cast<std::shared_ptr<ItemHandle>*>(userData);
+          delete hdl;
+        } /* freeFunc */,
+        new std::shared_ptr<ItemHandle>{sharedHdl} /* userData for freeFunc */};
+
+    if (item->hasChainedItem()) {
+      converter = [sharedHdl](Item*, ChainedItem& chainedItem) {
+        const uint32_t chainedItemDataOffset = chainedItem.getOffsetForMemory();
+
+        return folly::IOBuf::takeOwnership(
+            &chainedItem,
+
+            // Since we'll be moving the IOBuf data pointer forward by
+            // dataOffset,
+            // we need to adjust the IOBuf length accordingly
+            chainedItemDataOffset + chainedItem.getSize(),
+
+            [](void*, void* userData) {
+              auto* hdl =
+                  reinterpret_cast<std::shared_ptr<ItemHandle>*>(userData);
+              delete hdl;
+            } /* freeFunc */,
+            new std::shared_ptr<ItemHandle>{
+                sharedHdl} /* userData for freeFunc */);
+      };
+    }
+
+  } else {
+    iobuf =
+        folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, item,
+
+                     // Since we'll be moving the IOBuf data pointer forward
+                     // by dataOffset, we need to adjust the IOBuf length
                      // accordingly
                      dataOffset + item->getSize(),
 
@@ -1841,48 +1891,50 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
                            .reset();
                      } /* freeFunc */,
                      this /* userData for freeFunc */};
-  handle.release();
+    handle.release();
 
-  ioBuf.trimStart(dataOffset);
-  ioBuf.markExternallySharedOne();
+    if (item->hasChainedItem()) {
+      converter = [this](Item* parentItem, ChainedItem& chainedItem) {
+        const uint32_t chainedItemDataOffset = chainedItem.getOffsetForMemory();
+
+        // Each IOBuf converted from a child item will hold one additional
+        // refcount on the parent item. This ensures that as long as the user
+        // holds any IOBuf pointing anywhere in the chain, the whole chain
+        // will not be evicted from cache.
+        //
+        // We can safely bump the refcount on the parent here only because
+        // we already have an item handle on the parent (which has just been
+        // moved into the IOBuf above). Normally, the only place we can
+        // bump an item handle safely is through the AccessContainer.
+        acquire(parentItem).release();
+
+        return folly::IOBuf::takeOwnership(
+            &chainedItem,
+
+            // Since we'll be moving the IOBuf data pointer forward by
+            // dataOffset,
+            // we need to adjust the IOBuf length accordingly
+            chainedItemDataOffset + chainedItem.getSize(),
+
+            [](void* buf, void* userData) {
+              auto* cache = reinterpret_cast<decltype(this)>(userData);
+              auto* child = reinterpret_cast<ChainedItem*>(buf);
+              auto* parent = &child->getParentItem(cache->compressor_);
+              ItemHandle{parent, *cache}.reset();
+            } /* freeFunc */,
+            this /* userData for freeFunc */);
+      };
+    }
+  }
+
+  iobuf.trimStart(dataOffset);
+  iobuf.markExternallySharedOne();
 
   if (item->hasChainedItem()) {
     auto appendHelper = [&](ChainedItem& chainedItem) {
-      // TODO: need to handle the case with regarding to moving during
-      //       slab rebalancing. If there is an outstanding IOBuf point
-      //       to a chained item, that chained item cannot be moved during
-      //       a slab release.
-
       const uint32_t chainedItemDataOffset = chainedItem.getOffsetForMemory();
 
-      // Each IOBuf converted from a child item will hold one additional
-      // refcount on the parent item. This ensures that as long as the user
-      // holds any IOBuf pointing anywhere in the chain, the whole chain
-      // will not be evicted from cache.
-      //
-      // We can safely bump the refcount on the parent here only because
-      // we already have an item handle on the parent (which has just been
-      // moved into the IOBuf above). Normally, the only place we can
-      // bump an item handle safely is through the AccessContainer.
-      //
-      // TODO change this to a clone that only takes an ItemHandle and calls
-      // acquire on it.
-      acquire(item).release();
-      auto nextChain = folly::IOBuf::takeOwnership(
-          &chainedItem,
-
-          // Since we'll be moving the IOBuf data pointer forward by
-          // dataOffset,
-          // we need to adjust the IOBuf length accordingly
-          chainedItemDataOffset + chainedItem.getSize(),
-
-          [](void* buf, void* userData) {
-            auto* cache = reinterpret_cast<decltype(this)>(userData);
-            auto* child = reinterpret_cast<ChainedItem*>(buf);
-            auto* parent = &child->getParentItem(cache->compressor_);
-            ItemHandle{parent, *cache}.reset();
-          } /* freeFunc */,
-          this /* userData for freeFunc */);
+      auto nextChain = converter(item, chainedItem);
 
       nextChain->trimStart(chainedItemDataOffset);
       nextChain->markExternallySharedOne();
@@ -1895,13 +1947,13 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
       //
       //      In memory: parent -> C -> B -> A
       //      In IOBuf:  parent -> A -> B -> C
-      ioBuf.appendChain(std::move(nextChain));
+      iobuf.appendChain(std::move(nextChain));
     };
 
     forEachChainedItem(*item, std::move(appendHelper));
   }
 
-  return ioBuf;
+  return iobuf;
 }
 
 template <typename CacheTrait>

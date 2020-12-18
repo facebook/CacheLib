@@ -251,9 +251,15 @@ class CacheAllocatorConfig {
   // before you start customizing this option.
   CacheAllocatorConfig& setEvictionSearchLimit(uint32_t limit);
 
-  // This throttles various internal operations in cachelib. It may help improve
-  // latency in allocation and find paths. Come talk to Cache Library team if
-  // you find yourself customizing this.
+  // Specify a threshold for per-item outstanding references, beyond which,
+  // shared_ptr will be allocated instead of handles to support having  more
+  // outstanding iobuf
+  // The default behavior is always using handles
+  CacheAllocatorConfig& setRefcountThresholdForConvertingToIOBuf(uint32_t);
+
+  // This throttles various internal operations in cachelib. It may help
+  // improve latency in allocation and find paths. Come talk to Cache
+  // Library team if you find yourself customizing this.
   CacheAllocatorConfig& setThrottlerConfig(util::Throttler::Config config);
 
   // Disable eviction. Not recommended unless you want to use cachelib as
@@ -484,6 +490,11 @@ class CacheAllocatorConfig {
   // the number of tries to search for an item to evict
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
+
+  // If refcount is larger than this threshold, we will use shared_ptr
+  // for handles in IOBuf chains.
+  unsigned int thresholdForConvertingToIOBuf{
+      std::numeric_limits<unsigned int>::max()};
 
   // number of attempts to move an item before giving up and try to
   // evict the item
@@ -916,6 +927,14 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEvictionSearchLimit(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>&
+CacheAllocatorConfig<T>::setRefcountThresholdForConvertingToIOBuf(
+    uint32_t threshold) {
+  thresholdForConvertingToIOBuf = threshold;
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setThrottlerConfig(
     util::Throttler::Config config) {
   throttleConfig = config;
@@ -1023,6 +1042,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       (cacheWorkerPostWorkHandler ? "set" : "empty");
   configMap["disableEviction"] = std::to_string(disableEviction);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
+  configMap["thresholdForConvertingToIOBuf"] =
+      std::to_string(thresholdForConvertingToIOBuf);
   configMap["movingTries"] = std::to_string(movingTries);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";

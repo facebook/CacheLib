@@ -126,6 +126,10 @@ TYPED_TEST(BaseAllocatorTest, IterateWithEvictions) {
 
 TYPED_TEST(BaseAllocatorTest, IOBufItemHandle) { this->testIOBufItemHandle(); }
 
+TYPED_TEST(BaseAllocatorTest, IOBufSharedItemHandle) {
+  this->testIOBufSharedItemHandleWithChainedItems();
+}
+
 TYPED_TEST(BaseAllocatorTest, IOBufItemHandleForChainedItems) {
   this->testIOBufItemHandleForChainedItems();
 }

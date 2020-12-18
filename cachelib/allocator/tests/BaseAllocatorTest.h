@@ -1954,6 +1954,66 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testIOBufSharedItemHandleWithChainedItems() {
+    std::atomic<int> itemsRemoved{0};
+    auto removeCb = [&itemsRemoved](const typename AllocatorT::RemoveCbData&) {
+      ++itemsRemoved;
+    };
+
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+    config.setCacheSize(10 * Slab::kSize);
+    config.setRemoveCallback(removeCb);
+    config.setRefcountThresholdForConvertingToIOBuf(0);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    std::set<uint32_t> allocSizes{10000};
+    auto poolId = alloc.addPool("foobar", numBytes, allocSizes);
+
+    {
+      auto parent = util::allocateAccessible(alloc, poolId, "parent", 100);
+      *reinterpret_cast<char*>(parent->getWritableMemory()) = 'p';
+      for (unsigned int i = 0; i < 1000; ++i) {
+        auto chained = alloc.allocateChainedItem(parent, 100);
+        ASSERT_EQ(2, alloc.getNumActiveHandles());
+
+        *reinterpret_cast<int*>(chained->getWritableMemory()) = i;
+        alloc.addChainedItem(parent, std::move(chained));
+      }
+      ASSERT_EQ(1, alloc.getNumActiveHandles());
+    }
+
+    auto ioBuf = std::make_unique<folly::IOBuf>(
+        alloc.convertToIOBuf(alloc.find("parent")));
+    ASSERT_EQ(1, alloc.getNumActiveHandles());
+
+    // Confirm we have all the chained item iobufs
+    {
+      ASSERT_EQ(*ioBuf->data(), 'p');
+      ASSERT_EQ(ioBuf->length(), 100);
+
+      auto* curr = ioBuf->next();
+      for (unsigned int i = 0; i < 1000; ++i) {
+        ASSERT_NE(nullptr, curr);
+        ASSERT_EQ(*reinterpret_cast<const int*>(curr->data()), i);
+        curr = curr->next();
+        ASSERT_EQ(curr->length(), 100);
+      }
+    }
+
+    // Remove the parent item and start popping IOBufs
+    // the remove callback should not be triggered until
+    // all ioBufs have been dropped
+    alloc.remove("parent");
+    for (unsigned int i = 0; i < 1000 + 1; ++i) {
+      ASSERT_NE(nullptr, ioBuf);
+      ASSERT_EQ(0, itemsRemoved);
+      ioBuf = ioBuf->pop();
+    }
+    ASSERT_EQ(1, itemsRemoved);
+    ASSERT_EQ(0, alloc.getNumActiveHandles());
+  }
+
   // Make sure we can convert a chain of cached items into a chain of IOBufs
   void testIOBufItemHandleForChainedItems() {
     std::atomic<int> itemsRemoved{0};
