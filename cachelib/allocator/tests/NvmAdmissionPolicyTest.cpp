@@ -4,6 +4,7 @@
 #include "cachelib/allocator/CacheAllocatorConfig.h"
 #include "cachelib/allocator/CacheTraits.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
+#include "cachelib/allocator/tests/NvmTestUtils.h"
 
 #include <gtest/gtest.h>
 
@@ -57,26 +58,8 @@ class NvmAdmissionPolicyTest : public testing::Test {
  protected:
   void enableNvmConfig(CacheAllocatorConfig<CacheAllocator<Cache>>& config) {
     CacheAllocator<Cache>::NvmCacheT::Config nvmConfig;
-    nvmConfig.dipperOptions = getDipperOptions();
+    nvmConfig.dipperOptions = utils::getNvmTestConfig("/tmp");
     config.enableNvmCache(nvmConfig);
-  }
-
-  folly::dynamic getDipperOptions() {
-    std::string cacheDir_ = "/tmp";
-    folly::dynamic config_ = folly::dynamic::object;
-    config_["dipper_navy_recovery_path"] = cacheDir_;
-    config_["dipper_navy_file_size"] = 100 * 1024ULL * 1024ULL; /* megabytes */
-    config_["dipper_navy_file_name"] = cacheDir_ + "/navy";
-    config_["dipper_navy_direct_io"] = false;
-    config_["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
-    config_["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
-    config_["dipper_navy_lru"] = true;
-    config_["dipper_navy_block_size"] = 1024;
-    config_["dipper_navy_req_order_shards_power"] = 10;
-    config_["dipper_navy_bighash_size_pct"] = 50;
-    config_["dipper_navy_bighash_bucket_size"] = 1024;
-    config_["dipper_navy_small_item_max_size"] = 100;
-    return config_;
   }
 };
 
