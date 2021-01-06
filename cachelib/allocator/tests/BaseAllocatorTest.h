@@ -6001,6 +6001,52 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testRebalanceWakeupAfterAllocFailure() {
+    typename AllocatorT::Config config;
+    const size_t nSlabs = 3;
+    config.setCacheSize(nSlabs * Slab::kSize);
+    // set a very long rebalance interval: 20 seconds
+    config.enablePoolRebalancing(std::make_shared<RebalanceStrategy>(),
+                                 std::chrono::seconds{20});
+    AllocatorT alloc(config);
+
+    // smaller items (e.g. 128) will cause longer time to evict in test mode,
+    // to save testing time, use 1MB for smallSize and 3MB for largeSize
+    const auto smallSize = 1024 * 1024;
+    const auto largeSize = 3 * 1024 * 1024;
+    const auto poolId =
+        alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
+                      {smallSize + 100, largeSize + 100});
+    // Allocate until the smaller objects fill up the cache
+    // keeps handles in the vector to avoid eviction
+    std::vector<typename AllocatorT::ItemHandle> handles;
+    for (int i = 0;; i++) {
+      auto handle = util::allocateAccessible(
+          alloc, poolId, folly::sformat("small_{}", i), smallSize);
+      if (handle == nullptr) {
+        break;
+      }
+      handles.push_back(std::move(handle));
+    }
+
+    // clear handles so it will start to evict items
+    handles.clear();
+
+    // first time alloc failure will trigger rebalancer initialization
+    EXPECT_EQ(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+
+    std::this_thread::sleep_for(std::chrono::seconds{1});
+    // trigger the slab rebalance
+    EXPECT_EQ(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+
+    std::this_thread::sleep_for(std::chrono::seconds{1});
+    // have available slab now
+    EXPECT_NE(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+  }
+
   // changing cache name should  not affect the persistence
   void testAttachWithDifferentName() {
     typename AllocatorT::Config config;

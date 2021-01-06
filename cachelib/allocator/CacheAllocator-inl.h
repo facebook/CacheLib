@@ -341,6 +341,10 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
 
   } else { // failed to allocate memory.
     (*stats_.allocFailures)[pid][cid].inc();
+    // wake up rebalancer
+    if (poolRebalancer_) {
+      poolRebalancer_->wakeUp();
+    }
   }
 
   if (auto eventTracker = getEventTracker()) {

@@ -71,6 +71,15 @@ class PeriodicWorker {
     return runCount_.load(std::memory_order_relaxed);
   }
 
+  /* Wake up the worker */
+  void wakeUp() noexcept {
+    {
+      std::unique_lock<std::timed_mutex> l(lock_);
+      wakeUp_ = true;
+    }
+    cond_.notify_one();
+  }
+
  protected:
   /* Has the work been asked to be stopped?
    *
@@ -99,6 +108,11 @@ class PeriodicWorker {
    * off as false by default, and is flipped to true by the stop(ping)
    * thread */
   bool shouldStopWork_ = false;
+
+  /* State to track whether the worker thread should wake up from sleep. This
+   * starts off as false by default, and is flipped to true by the wakeUp call
+   */
+  bool wakeUp_ = false;
 
   /* Condition variable to signal stopper or worker thread */
   std::condition_variable_any cond_{};

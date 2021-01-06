@@ -29,7 +29,7 @@ PeriodicWorker::~PeriodicWorker() {
 
 void PeriodicWorker::loop(void) {
   /* Wait for interval_ time before executing work again */
-  auto breakOut = [this]() { return shouldStopWork_; };
+  auto breakOut = [this]() { return wakeUp_ || shouldStopWork_; };
 
   LockHolder l(lock_);
   preWork();
@@ -41,6 +41,7 @@ void PeriodicWorker::loop(void) {
     runCount_.fetch_add(1, std::memory_order_relaxed);
     l.lock();
     cond_.wait_until(l, getSysClock(timeoutMs), breakOut);
+    wakeUp_ = false;
   }
 
   postWork();

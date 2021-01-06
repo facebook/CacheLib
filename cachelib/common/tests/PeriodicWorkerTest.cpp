@@ -208,6 +208,24 @@ TEST(periodic_worker, stop) {
   }
 }
 
+TEST(periodic_worker, wakeUp) {
+  IncWork w(SHORT_WORK_TIME);
+  w.update_prev();
+
+  auto didSomeWorkSinceLastCheck = std::bind(&IncWork::state_has_changed, &w);
+
+  const std::chrono::seconds sleep_interval(30);
+  bool success = w.start(sleep_interval);
+  EXPECT_TRUE(success);
+  EXPECT_TRUE(eventuallyTrue(didSomeWorkSinceLastCheck, 1));
+
+  w.wakeUp();
+  EXPECT_TRUE(eventuallyTrue(didSomeWorkSinceLastCheck, 1));
+
+  success = w.stop(std::chrono::seconds(0));
+  EXPECT_TRUE(success);
+}
+
 enum class Stage : int8_t {
   NONE,
   PREWORK_COMPLETE,
