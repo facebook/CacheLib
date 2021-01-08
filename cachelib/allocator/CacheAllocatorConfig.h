@@ -469,7 +469,7 @@ class CacheAllocatorConfig {
   util::Throttler::Config reaperConfig{};
 
   // time to sleep between each reaping period.
-  std::chrono::milliseconds reaperInterval{};
+  std::chrono::milliseconds reaperInterval{5000};
 
   // interval during which we adjust dynamically the refresh ratio.
   std::chrono::milliseconds mmReconfigureInterval{0};

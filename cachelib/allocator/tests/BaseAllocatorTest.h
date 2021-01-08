@@ -1165,6 +1165,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setCacheSize(10 * Slab::kSize);
     config.enableCachePersistence(this->cacheDir_);
     config.configureChainedItems();
+    config.reaperInterval = std::chrono::seconds(0);
 
     // Disable slab rebalancing
     config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
@@ -3625,6 +3626,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // set this to false to ensure that items are not removed when they are
     // expired.
     config.setItemReaperOnFind(false);
+    config.reaperInterval = std::chrono::milliseconds(0);
     AllocatorT allocator(config);
 
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
@@ -3815,6 +3817,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     const int numSlabs = 2;
 
     typename AllocatorT::Config config;
+    // start with no reaper
+    config.reaperInterval = std::chrono::seconds(0);
     config.enableCachePersistence(this->cacheDir_,
                                   ((void*)(uintptr_t)0x7e0000000000));
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
