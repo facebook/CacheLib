@@ -27,7 +27,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")
-set(INCLUDE_INSTALL_DIR include CACHE STRING
+set(INCLUDE_INSTALL_DIR include/cachelib CACHE STRING
     "The subdirectory where header files should be installed")
 set(LIB_INSTALL_DIR lib CACHE STRING
     "The subdirectory where libraries should be installed")
@@ -251,7 +251,14 @@ add_subdirectory (benchmarks)
 add_subdirectory (cachebench)
 
 # Install the source header files
-install(DIRECTORY cachelib
+install(
+  DIRECTORY
+    allocator
+    common
+    compact_cache
+    datatype
+    navy
+    shm
   DESTINATION ${INCLUDE_INSTALL_DIR}
   FILES_MATCHING PATTERN "*.h"
   PATTERN "external" EXCLUDE
@@ -265,9 +272,9 @@ install(DIRECTORY cachelib
 # Install the thrift-generated header files
 install(
   DIRECTORY
-    ${CACHELIB_BUILD}/
+    ${CACHELIB_BUILD}/cachelib/
   DESTINATION
-    include
+    ${INCLUDE_INSTALL_DIR}
   FILES_MATCHING
     PATTERN "gen-cpp2/*.h"
     PATTERN "gen-cpp2/*.tcc"
