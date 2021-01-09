@@ -1,14 +1,13 @@
 #pragma once
 
-#include "cachelib/navy/AbstractCache.h"
-#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
-#include "cachelib/navy/common/Device.h"
-
-#include "cachelib/navy/scheduler/JobScheduler.h"
-
 #include <chrono>
 #include <memory>
 #include <vector>
+
+#include "cachelib/navy/AbstractCache.h"
+#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
+#include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {

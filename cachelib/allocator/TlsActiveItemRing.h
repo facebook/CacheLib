@@ -1,10 +1,9 @@
 #pragma once
-#include <array>
-#include <utility>
-
+#include <folly/logging/xlog.h>
 #include <sys/mman.h>
 
-#include <folly/logging/xlog.h>
+#include <array>
+#include <utility>
 
 namespace facebook {
 namespace cachelib {

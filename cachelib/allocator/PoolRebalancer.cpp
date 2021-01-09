@@ -1,9 +1,9 @@
 #include "cachelib/allocator/PoolRebalancer.h"
 
+#include <folly/logging/xlog.h>
+
 #include <stdexcept>
 #include <thread>
-
-#include <folly/logging/xlog.h>
 
 namespace facebook {
 namespace cachelib {

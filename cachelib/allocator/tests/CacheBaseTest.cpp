@@ -1,6 +1,6 @@
-#include <memory>
-
 #include <gtest/gtest.h>
+
+#include <memory>
 
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/tests/TestBase.h"

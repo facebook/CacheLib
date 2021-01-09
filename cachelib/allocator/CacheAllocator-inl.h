@@ -1614,9 +1614,8 @@ CacheAllocator<CacheTrait>::getMMContainer(const Item& item) const {
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::MMContainer&
-CacheAllocator<CacheTrait>::getEvictableMMContainer(PoolId pid,
-                                                    ClassId cid) const
-    noexcept {
+CacheAllocator<CacheTrait>::getEvictableMMContainer(
+    PoolId pid, ClassId cid) const noexcept {
   XDCHECK_LT(static_cast<size_t>(pid), evictableMMContainers_.size());
   XDCHECK_LT(static_cast<size_t>(cid), evictableMMContainers_[pid].size());
   return *evictableMMContainers_[pid][cid];
@@ -1624,9 +1623,8 @@ CacheAllocator<CacheTrait>::getEvictableMMContainer(PoolId pid,
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::MMContainer&
-CacheAllocator<CacheTrait>::getUnevictableMMContainer(PoolId pid,
-                                                      ClassId cid) const
-    noexcept {
+CacheAllocator<CacheTrait>::getUnevictableMMContainer(
+    PoolId pid, ClassId cid) const noexcept {
   XDCHECK_LT(static_cast<size_t>(pid), unevictableMMContainers_.size());
   XDCHECK_LT(static_cast<size_t>(cid), unevictableMMContainers_[pid].size());
   return *unevictableMMContainers_[pid][cid];
@@ -2086,8 +2084,8 @@ void CacheAllocator<CacheTrait>::createMMContainers(const PoolId pid,
 }
 
 template <typename CacheTrait>
-PoolId CacheAllocator<CacheTrait>::getPoolId(folly::StringPiece name) const
-    noexcept {
+PoolId CacheAllocator<CacheTrait>::getPoolId(
+    folly::StringPiece name) const noexcept {
   return allocator_->getPoolId(name.str());
 }
 
@@ -2297,8 +2295,8 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
 }
 
 template <typename CacheTrait>
-SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats() const
-    noexcept {
+SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats()
+    const noexcept {
   std::lock_guard<std::mutex> l(workersMutex_);
   return SlabReleaseStats{stats_.numActiveSlabReleases.get(),
                           stats_.numReleasedForRebalance.get(),

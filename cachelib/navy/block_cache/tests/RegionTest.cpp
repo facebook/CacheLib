@@ -1,6 +1,6 @@
-#include "cachelib/navy/block_cache/Region.h"
-
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/block_cache/Region.h"
 
 namespace facebook {
 namespace cachelib {

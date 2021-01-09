@@ -1,9 +1,9 @@
 #pragma once
-#include <mutex>
-#include <unordered_map>
-
 #include <folly/lang/Align.h>
 #include <glog/logging.h>
+
+#include <mutex>
+#include <unordered_map>
 
 namespace facebook {
 namespace cachelib {

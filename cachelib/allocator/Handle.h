@@ -1,12 +1,12 @@
 #pragma once
 
-#include <iostream>
-#include <mutex>
-
 #include <folly/Function.h>
 #include <folly/fibers/Baton.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
+
+#include <iostream>
+#include <mutex>
 
 #include "cachelib/allocator/nvmcache/WaitContext.h"
 

@@ -1,8 +1,8 @@
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 
-#include <numeric>
-
 #include <folly/Format.h>
+
+#include <numeric>
 
 namespace facebook {
 namespace cachelib {

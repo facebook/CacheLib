@@ -1,8 +1,7 @@
-#include "cachelib/navy/block_cache/FifoPolicy.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 
 namespace facebook {

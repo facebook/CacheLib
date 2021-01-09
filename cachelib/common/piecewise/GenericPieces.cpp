@@ -1,10 +1,10 @@
 #include "cachelib/common/piecewise/GenericPieces.h"
 
-#include <vector>
-
 #include <folly/Conv.h>
 #include <folly/String.h>
 #include <folly/logging/xlog.h>
+
+#include <vector>
 
 namespace facebook {
 namespace cachelib {

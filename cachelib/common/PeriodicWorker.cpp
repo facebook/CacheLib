@@ -1,10 +1,10 @@
 #include "cachelib/common/PeriodicWorker.h"
 
-#include <chrono>
-
 #include <folly/Memory.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
+
+#include <chrono>
 
 namespace {
 

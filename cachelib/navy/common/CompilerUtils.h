@@ -1,12 +1,12 @@
 #pragma once
 
+#include <folly/CppAttributes.h>
+#include <folly/Portability.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
-
-#include <folly/CppAttributes.h>
-#include <folly/Portability.h>
 
 namespace facebook {
 namespace cachelib {

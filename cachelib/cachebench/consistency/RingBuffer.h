@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <thread>
-
-#include <folly/logging/xlog.h>
 
 namespace facebook {
 namespace cachelib {

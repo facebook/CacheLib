@@ -61,11 +61,11 @@
 // ----------------------------------------------------------------------------
 // ============================================================================
 
-#include <algorithm>
-#include <cstdint>
-
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
+
+#include <algorithm>
+#include <cstdint>
 
 #include "cachelib/datatype/Map.h"
 

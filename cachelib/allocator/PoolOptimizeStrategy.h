@@ -1,8 +1,7 @@
 #pragma once
 
-#include "cachelib/allocator/memory/Slab.h"
-
 #include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/memory/Slab.h"
 
 namespace facebook {
 namespace cachelib {

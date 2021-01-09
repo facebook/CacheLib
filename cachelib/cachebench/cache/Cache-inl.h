@@ -1,12 +1,11 @@
-#include <iostream>
-
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #include <folly/Format.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <iostream>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/cachebench/util/NandWrites.h"

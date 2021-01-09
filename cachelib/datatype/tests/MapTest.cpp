@@ -1,14 +1,12 @@
-#include "cachelib/datatype/Map.h"
-
 #include <folly/Random.h>
+
+#include <algorithm>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/tests/TestBase.h"
-#include "cachelib/datatype/tests/DataTypeTest.h"
-
 #include "cachelib/datatype/Buffer.h"
-
-#include <algorithm>
+#include "cachelib/datatype/Map.h"
+#include "cachelib/datatype/tests/DataTypeTest.h"
 
 namespace facebook {
 namespace cachelib {
@@ -104,8 +102,8 @@ TEST(HashTable, Hash) {
 
 TEST(HashTable, Collision) {
   struct NoopHash : public Hash {
-    uint32_t operator()(const void* buf, size_t /* unsed */) const
-        noexcept override {
+    uint32_t operator()(const void* buf,
+                        size_t /* unsed */) const noexcept override {
       return *reinterpret_cast<const uint32_t*>(buf);
     }
     int getMagicId() const noexcept override { return 2; }
@@ -187,8 +185,8 @@ TEST(HashTable, Collision) {
 
 TEST(HashTable, Boundary) {
   struct NoopHash : public Hash {
-    uint32_t operator()(const void* buf, size_t /* unsed */) const
-        noexcept override {
+    uint32_t operator()(const void* buf,
+                        size_t /* unsed */) const noexcept override {
       return *reinterpret_cast<const uint32_t*>(buf);
     }
     int getMagicId() const noexcept override { return 2; }

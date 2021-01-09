@@ -1,11 +1,10 @@
-#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <chrono>
 #include <thread>
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
-
+#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Buffer.h"
 
 namespace facebook {

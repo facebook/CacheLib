@@ -1,11 +1,10 @@
-#include "cachelib/navy/driver/Driver.h"
-
-#include <unordered_map>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <unordered_map>
+
 #include "cachelib/navy/common/Hash.h"
+#include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"

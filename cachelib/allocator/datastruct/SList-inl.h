@@ -79,8 +79,8 @@ void SList<T, HookPtr>::Iterator::goForward() noexcept {
 }
 
 template <typename T, SListHook<T> T::*HookPtr>
-typename SList<T, HookPtr>::Iterator& SList<T, HookPtr>::Iterator::
-operator++() noexcept {
+typename SList<T, HookPtr>::Iterator&
+SList<T, HookPtr>::Iterator::operator++() noexcept {
   XDCHECK(curr_ != nullptr);
   if (curr_ != nullptr) {
     goForward();

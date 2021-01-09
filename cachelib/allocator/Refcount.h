@@ -1,16 +1,15 @@
 #pragma once
 
-#include <cstdint>
-#include <cstdlib>
-
-#include <limits>
-#include <stdexcept>
-#include <type_traits>
-
 #include <folly/CPortability.h>
 #include <folly/Likely.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/Asm.h>
+
+#include <cstdint>
+#include <cstdlib>
+#include <limits>
+#include <stdexcept>
+#include <type_traits>
 
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Exceptions.h"

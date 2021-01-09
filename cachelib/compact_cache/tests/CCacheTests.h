@@ -7,7 +7,9 @@
 
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
 #include <memory>
+
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 #define BUCKETS_PER_CHUNK 64

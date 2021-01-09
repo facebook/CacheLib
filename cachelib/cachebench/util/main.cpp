@@ -1,7 +1,7 @@
-#include <iostream>
-
 #include <folly/Format.h>
 #include <folly/Range.h>
+
+#include <iostream>
 
 #include "cachelib/cachebench/util/NandWrites.h"
 

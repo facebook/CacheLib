@@ -1,10 +1,10 @@
-#include <thread>
-
 #include <folly/File.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <thread>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"

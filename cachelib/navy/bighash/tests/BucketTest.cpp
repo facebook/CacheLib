@@ -1,8 +1,7 @@
-#include "cachelib/navy/bighash/Bucket.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 

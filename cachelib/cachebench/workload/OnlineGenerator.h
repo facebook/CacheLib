@@ -1,13 +1,13 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <vector>
-
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/ThreadLocal.h>
 #include <folly/logging/xlog.h>
+
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Config.h"

@@ -1,10 +1,11 @@
+#include <folly/Random.h>
+
+#include <memory>
+#include <random>
+
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
-
-#include <folly/Random.h>
-#include <memory>
-#include <random>
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

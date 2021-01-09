@@ -1,9 +1,9 @@
+#include <gtest/gtest.h>
+
 #include <thread>
 
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/serialization/RecordIO.h"
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {

@@ -1,8 +1,9 @@
 
+#include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
+
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/allocator/NvmCacheState.h"
-#include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
 #include "cachelib/allocator/tests/NvmTestUtils.h"
 
 namespace facebook {

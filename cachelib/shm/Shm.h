@@ -1,9 +1,9 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <memory>
 #include <system_error>
-
-#include <folly/logging/xlog.h>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"

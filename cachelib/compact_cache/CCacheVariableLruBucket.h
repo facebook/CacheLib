@@ -1,9 +1,9 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <algorithm>
 #include <utility>
-
-#include <folly/logging/xlog.h>
 
 /**
  * @file ccache_variable_lru_bucket.h

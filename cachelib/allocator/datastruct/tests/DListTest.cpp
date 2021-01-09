@@ -1,6 +1,6 @@
-#include <memory>
-
 #include <gtest/gtest.h>
+
+#include <memory>
 
 #include "cachelib/allocator/datastruct/DList.h"
 

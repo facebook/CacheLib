@@ -1,9 +1,9 @@
-#include "cachelib/common/Mutex.h"
+#include <folly/SharedMutex.h>
+#include <gtest/gtest.h>
 
 #include <thread>
 
-#include <folly/SharedMutex.h>
-#include <gtest/gtest.h>
+#include "cachelib/common/Mutex.h"
 
 namespace facebook {
 namespace cachelib {

@@ -56,22 +56,22 @@ void MultiDList<T, HookPtr>::Iterator::initToValidRBeginFrom(
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename MultiDList<T, HookPtr>::Iterator& MultiDList<T, HookPtr>::Iterator::
-operator++() noexcept {
+typename MultiDList<T, HookPtr>::Iterator&
+MultiDList<T, HookPtr>::Iterator::operator++() noexcept {
   goForward();
   return *this;
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename MultiDList<T, HookPtr>::Iterator& MultiDList<T, HookPtr>::Iterator::
-operator--() noexcept {
+typename MultiDList<T, HookPtr>::Iterator&
+MultiDList<T, HookPtr>::Iterator::operator--() noexcept {
   goBackward();
   return *this;
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin() const
-    noexcept {
+typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin()
+    const noexcept {
   return MultiDList<T, HookPtr>::Iterator(*this);
 }
 
@@ -85,8 +85,8 @@ typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin(
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rend() const
-    noexcept {
+typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rend()
+    const noexcept {
   auto it = MultiDList<T, HookPtr>::Iterator(*this);
   it.reset();
   return it;

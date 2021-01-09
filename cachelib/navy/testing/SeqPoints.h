@@ -1,12 +1,12 @@
 #pragma once
 
-#include "cachelib/navy/common/CompilerUtils.h"
-
 #include <condition_variable>
 #include <cstdint>
 #include <map>
 #include <mutex>
 #include <string>
+
+#include "cachelib/navy/common/CompilerUtils.h"
 
 namespace facebook {
 namespace cachelib {

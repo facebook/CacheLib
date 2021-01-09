@@ -1,10 +1,10 @@
 #pragma once
 
+#include <folly/Random.h>
+
 #include <atomic>
 #include <iostream>
 #include <unordered_set>
-
-#include <folly/Random.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"

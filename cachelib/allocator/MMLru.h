@@ -11,14 +11,13 @@
 #include <folly/lang/Aligned.h>
 #include <folly/synchronization/DistributedMutex.h>
 
+#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/datastruct/DList.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Mutex.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/CacheStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -298,8 +297,8 @@ class MMLru {
     }
 
    private:
-    EvictionAgeStat getEvictionAgeStatLocked(uint64_t projectedLength) const
-        noexcept;
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
 
     static Time getUpdateTime(const T& node) noexcept {
       return (node.*HookPtr).getUpdateTime();

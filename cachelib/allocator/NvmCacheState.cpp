@@ -1,7 +1,7 @@
-#include <fstream>
-
 #include <folly/io/RecordIO.h>
 #include <folly/logging/xlog.h>
+
+#include <fstream>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>

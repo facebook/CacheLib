@@ -283,8 +283,8 @@ bool MMLru::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
-serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState() const
-    noexcept {
+serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState()
+    const noexcept {
   serialization::MMLruConfig configObject;
   *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;

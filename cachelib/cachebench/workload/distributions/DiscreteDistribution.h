@@ -1,8 +1,8 @@
 #pragma once
 #include <folly/Format.h>
+
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"
-
 #include "cachelib/cachebench/workload/distributions/FastDiscrete.h"
 
 namespace facebook {

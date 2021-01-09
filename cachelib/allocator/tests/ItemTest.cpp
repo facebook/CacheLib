@@ -1,10 +1,9 @@
-#include "cachelib/allocator/tests/TestBase.h"
-
 #include <future>
 #include <mutex>
 #include <thread>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 using Item = facebook::cachelib::LruAllocator::Item;
 using ChainedItem = facebook::cachelib::LruAllocator::ChainedItem;

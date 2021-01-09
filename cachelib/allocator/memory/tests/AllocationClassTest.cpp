@@ -1,16 +1,16 @@
-#include <gtest/gtest.h>
-#include "cachelib/allocator/memory/tests/TestBase.h"
-
-#include "cachelib/allocator/memory/AllocationClass.h"
-#include "cachelib/allocator/memory/Slab.h"
-#include "cachelib/allocator/memory/SlabAllocator.h"
-#include "cachelib/common/Serialization.h"
-
 #include <folly/Random.h>
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <memory>
 #include <random>
 #include <vector>
+
+#include "cachelib/allocator/memory/AllocationClass.h"
+#include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/allocator/memory/SlabAllocator.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
+#include "cachelib/common/Serialization.h"
 
 using namespace facebook::cachelib::tests;
 using namespace facebook::cachelib;

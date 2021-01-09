@@ -1,10 +1,10 @@
 #pragma once
 
+#include <folly/SharedMutex.h>
+
 #include <array>
 #include <memory>
 #include <unordered_map>
-
-#include <folly/SharedMutex.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"

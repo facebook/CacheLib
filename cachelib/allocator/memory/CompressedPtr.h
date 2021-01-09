@@ -1,8 +1,8 @@
 #pragma once
 
-#include <memory>
-
 #include <folly/logging/xlog.h>
+
+#include <memory>
 
 #include "cachelib/allocator/memory/Slab.h"
 

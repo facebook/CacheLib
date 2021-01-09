@@ -1,14 +1,12 @@
 #pragma once
-#include <memory>
-#include <vector>
-
-#include <gtest/gtest.h>
-
-#include <folly/Random.h>
-
 #include <cachelib/allocator/Cache.h>
 #include <cachelib/allocator/datastruct/DList.h>
 #include <cachelib/common/Time.h>
+#include <folly/Random.h>
+#include <gtest/gtest.h>
+
+#include <memory>
+#include <vector>
 
 namespace facebook {
 namespace cachelib {

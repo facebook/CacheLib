@@ -1,8 +1,8 @@
 #pragma once
 
-#include <atomic>
-
 #include <folly/logging/xlog.h>
+
+#include <atomic>
 
 #include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
 

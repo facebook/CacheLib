@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/dynamic.h>
+#include <folly/json.h>
+
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <folly/dynamic.h>
-#include <folly/json.h>
 
 #define JSONSetVal(configJson, field)             \
   do {                                            \

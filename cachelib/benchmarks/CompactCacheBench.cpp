@@ -1,8 +1,8 @@
-#include <random>
-
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 #include <gflags/gflags.h>
+
+#include <random>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/compact_cache/CCacheCreator.h"

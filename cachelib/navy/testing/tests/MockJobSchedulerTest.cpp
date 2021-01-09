@@ -1,8 +1,7 @@
-#include "cachelib/navy/testing/MockJobScheduler.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/navy/testing/MockJobScheduler.h"
 #include "cachelib/navy/testing/SeqPoints.h"
 
 namespace facebook {

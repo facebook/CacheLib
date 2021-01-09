@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/stats/QuantileEstimator.h>
+
 #include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <vector>
-
-#include <folly/stats/QuantileEstimator.h>
 
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"

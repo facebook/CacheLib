@@ -33,8 +33,8 @@ CacheItem<CacheTrait>::CacheItem(Key key, uint32_t size, uint32_t creationTime)
     : CacheItem(key, size, creationTime, 0 /* expiryTime_ */) {}
 
 template <typename CacheTrait>
-const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey() const
-    noexcept {
+const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
+    const noexcept {
   return alloc_.getKey();
 }
 
@@ -467,8 +467,8 @@ void CacheChainedItem<CacheTrait>::appendChain(
 
 template <typename CacheTrait>
 typename CacheChainedItem<CacheTrait>::ChainedItem*
-CacheChainedItem<CacheTrait>::getNext(const PtrCompressor& compressor) const
-    noexcept {
+CacheChainedItem<CacheTrait>::getNext(
+    const PtrCompressor& compressor) const noexcept {
   return getPayload().getNext(compressor);
 }
 

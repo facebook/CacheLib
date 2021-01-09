@@ -1,12 +1,12 @@
+#include <folly/Random.h>
+#include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <random>
 #include <unordered_map>
 #include <vector>
-
-#include <folly/Random.h>
-#include <gtest/gtest.h>
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/MemoryPool.h"

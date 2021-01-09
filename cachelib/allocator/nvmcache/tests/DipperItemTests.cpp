@@ -1,6 +1,5 @@
-#include <gtest/gtest.h>
-
 #include <folly/Random.h>
+#include <gtest/gtest.h>
 
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 namespace facebook {

@@ -1,9 +1,9 @@
+#include <folly/io/RecordIO.h>
 #include <gtest/gtest.h>
 
 #include <fstream>
 #include <thread>
 
-#include <folly/io/RecordIO.h>
 #include "cachelib/allocator/CacheVersion.h"
 #include "cachelib/allocator/NvmCacheState.h"
 #include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"

@@ -80,7 +80,8 @@ void AccessTracker::updateMostRecentAccessedBucket() {
 
 double AccessTracker::getBucketAccessCount(size_t idx, uint64_t hashVal) const {
   return config_.useCounts ? counts_.at(idx).getCount(hashVal)
-                           : (filters_.couldExist(idx, hashVal)) ? 1 : 0;
+         : (filters_.couldExist(idx, hashVal)) ? 1
+                                               : 0;
 }
 
 void AccessTracker::updateBucket(size_t idx, uint64_t hashVal) {

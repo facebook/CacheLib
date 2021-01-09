@@ -1,10 +1,11 @@
 #include "cachelib/allocator/nvmcache/NavySetup.h"
-#include "cachelib/navy/Factory.h"
-#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
-#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 #include <folly/File.h>
 #include <folly/logging/xlog.h>
+
+#include "cachelib/navy/Factory.h"
+#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 namespace facebook {
 namespace cachelib {

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <vector>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <vector>
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"

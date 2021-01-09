@@ -1,7 +1,8 @@
-#include "cachelib/navy/block_cache/LruPolicy.h"
-
 #include <gtest/gtest.h>
+
 #include <thread>
+
+#include "cachelib/navy/block_cache/LruPolicy.h"
 
 namespace facebook {
 namespace cachelib {

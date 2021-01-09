@@ -1,13 +1,14 @@
 
+#include "cachelib/navy/block_cache/BlockCache.h"
+
+#include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
+
 #include <algorithm>
 #include <cstring>
 #include <numeric>
 #include <utility>
 
-#include <folly/ScopeGuard.h>
-#include <folly/logging/xlog.h>
-
-#include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/common/Hash.h"
 
 namespace facebook {

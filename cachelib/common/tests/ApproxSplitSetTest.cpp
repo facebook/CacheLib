@@ -1,12 +1,12 @@
-#include "cachelib/common/ApproxSplitSet.h"
-#include "cachelib/common/TestUtils.h"
+#include <folly/Hash.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <thread>
 #include <vector>
 
-#include <folly/Hash.h>
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include "cachelib/common/ApproxSplitSet.h"
+#include "cachelib/common/TestUtils.h"
 
 namespace facebook {
 namespace cachelib {

@@ -1,14 +1,12 @@
-#include "cachelib/datatype/RangeMap.h"
-
 #include <folly/Random.h>
+
+#include <algorithm>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/tests/TestBase.h"
-#include "cachelib/datatype/tests/DataTypeTest.h"
-
 #include "cachelib/datatype/Buffer.h"
-
-#include <algorithm>
+#include "cachelib/datatype/RangeMap.h"
+#include "cachelib/datatype/tests/DataTypeTest.h"
 
 namespace facebook {
 namespace cachelib {

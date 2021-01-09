@@ -1,10 +1,9 @@
 #include "cachelib/shm/SysVShmSegment.h"
 
-#include <sys/mman.h>
-#include <sys/shm.h>
-
 #include <folly/hash/Hash.h>
 #include <folly/logging/xlog.h>
+#include <sys/mman.h>
+#include <sys/shm.h>
 
 #include "cachelib/common/Utils.h"
 

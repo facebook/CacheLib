@@ -1,8 +1,8 @@
-#include "cachelib/navy/serialization/RecordIO.h"
-
 #include <folly/File.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook {
 namespace cachelib {

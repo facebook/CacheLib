@@ -1,15 +1,14 @@
 #include "cachelib/allocator/memory/SlabAllocator.h"
 
+#include <folly/Likely.h>
+#include <folly/Random.h>
+#include <folly/logging/xlog.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 
 #include <chrono>
 #include <memory>
 #include <stdexcept>
-
-#include <folly/Likely.h>
-#include <folly/Random.h>
-#include <folly/logging/xlog.h>
 
 #include "cachelib/common/Utils.h"
 
@@ -412,16 +411,16 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
   return slab;
 }
 
-SlabHeader* SlabAllocator::getSlabHeader(const Slab* const slab) const
-    noexcept {
+SlabHeader* SlabAllocator::getSlabHeader(
+    const Slab* const slab) const noexcept {
   if (isValidSlab(slab)) {
     return getSlabHeader(slabIdx(slab));
   }
   return nullptr;
 }
 
-bool SlabAllocator::isMemoryInSlab(const void* ptr, const Slab* slab) const
-    noexcept {
+bool SlabAllocator::isMemoryInSlab(const void* ptr,
+                                   const Slab* slab) const noexcept {
   if (!isValidSlab(slab)) {
     return false;
   }

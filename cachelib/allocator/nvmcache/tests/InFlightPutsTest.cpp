@@ -1,8 +1,8 @@
-#include <thread>
-#include <vector>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <thread>
+#include <vector>
 
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
 

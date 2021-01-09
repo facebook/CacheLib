@@ -125,9 +125,8 @@ cachelib::EvictionAgeStat MM2Q::Container<T, HookPtr>::getEvictionAgeStatLocked(
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
-uint32_t MM2Q::Container<T, HookPtr>::getOldestAgeLocked(LruType lruType,
-                                                         Time currentTime) const
-    noexcept {
+uint32_t MM2Q::Container<T, HookPtr>::getOldestAgeLocked(
+    LruType lruType, Time currentTime) const noexcept {
   auto it = lru_.rbegin(lruType);
   return it != lru_.rend() ? currentTime - getUpdateTime(*it) : 0;
 }
@@ -357,8 +356,8 @@ void MM2Q::Container<T, HookPtr>::adjustTail(LruType list) {
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
-serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState() const
-    noexcept {
+serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState()
+    const noexcept {
   serialization::MM2QConfig configObject;
   *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;

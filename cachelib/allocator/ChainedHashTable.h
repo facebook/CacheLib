@@ -1,10 +1,10 @@
 #pragma once
 
+#include <folly/Optional.h>
+
 #include <cstdint>
 #include <map>
 #include <type_traits>
-
-#include <folly/Optional.h>
 
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
@@ -636,8 +636,8 @@ template <typename T,
           typename ChainedHashTable::Hook<T> T::*HookPtr,
           typename LockT>
 const typename T::HandleMaker
-    ChainedHashTable::Container<T, HookPtr, LockT>::kDefaultHandleMaker = [
-    ](T* t) -> typename T::Handle {
+    ChainedHashTable::Container<T, HookPtr, LockT>::kDefaultHandleMaker =
+        [](T* t) -> typename T::Handle {
   if (t) {
     t->incRef();
   }

@@ -1,10 +1,9 @@
-#include "cachelib/navy/bighash/BigHash.h"
-
-#include <map>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <map>
+
+#include "cachelib/navy/bighash/BigHash.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
@@ -225,7 +224,7 @@ TEST(BigHash, Reset) {
 
   auto device =
       std::make_unique<NiceMock<MockDevice>>(config.cacheSize, alignSize);
-  auto readFirstBucket = [& dev = device->getRealDeviceRef()] {
+  auto readFirstBucket = [&dev = device->getRealDeviceRef()] {
     // Read only the bucket after the initial generation and checksum fields
     // since the former can change with reset() while the latter can change
     // with every write.

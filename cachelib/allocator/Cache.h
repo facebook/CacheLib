@@ -1,9 +1,9 @@
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <mutex>
 #include <unordered_map>
-
-#include <gtest/gtest_prod.h>
 
 #include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/allocator/CacheStats.h"

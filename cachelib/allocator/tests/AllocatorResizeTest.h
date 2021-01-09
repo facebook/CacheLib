@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/Random.h>
 
 #include <algorithm>
 #include <mutex>
@@ -8,12 +8,10 @@
 #include <thread>
 #include <vector>
 
-#include <folly/Random.h>
-
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/PoolResizeStrategy.h"
+#include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/common/PeriodicWorker.h"
-
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 namespace {

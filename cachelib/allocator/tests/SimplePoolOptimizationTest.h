@@ -1,9 +1,9 @@
 #pragma once
 
-#include <future>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <future>
 
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/PoolOptimizer.h"

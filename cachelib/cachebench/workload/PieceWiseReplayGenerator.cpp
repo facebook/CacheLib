@@ -1,7 +1,7 @@
-#include "folly/String.h"
+#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 
 #include "cachelib/cachebench/util/Exceptions.h"
-#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
+#include "folly/String.h"
 
 namespace {
 constexpr uint32_t kProducerConsumerWaitTimeUs = 5;

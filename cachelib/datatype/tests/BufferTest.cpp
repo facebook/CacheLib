@@ -1,10 +1,9 @@
-#include "cachelib/datatype/Buffer.h"
-
 #include <folly/Random.h>
 #include <gmock/gmock.h>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/datatype/Buffer.h"
 #include "cachelib/datatype/tests/DataTypeTest.h"
 
 namespace facebook {

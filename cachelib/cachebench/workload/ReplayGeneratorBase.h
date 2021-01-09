@@ -1,15 +1,15 @@
 #pragma once
 
+#include <folly/Format.h>
+#include <folly/Random.h>
+#include <folly/logging/xlog.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include <folly/Format.h>
-#include <folly/Random.h>
-#include <folly/logging/xlog.h>
 
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"

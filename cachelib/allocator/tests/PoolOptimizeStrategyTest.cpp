@@ -1,11 +1,10 @@
-#include "cachelib/allocator/tests/TestBase.h"
-
 #include <folly/Random.h>
 
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/MarginalHitsOptimizeStrategy.h"
 #include "cachelib/allocator/PoolOptimizeStrategy.h"
+#include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 namespace facebook {

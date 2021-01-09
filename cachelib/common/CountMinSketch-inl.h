@@ -1,8 +1,8 @@
 
+#include <folly/Format.h>
+
 #include <cmath>
 #include <limits>
-
-#include <folly/Format.h>
 
 #include "cachelib/common/CountMinSketch.h"
 #include "cachelib/common/Hash.h"

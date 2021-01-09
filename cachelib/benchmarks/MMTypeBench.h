@@ -1,10 +1,10 @@
 #pragma once
 
-#include <memory>
-#include <vector>
-
 #include <cachelib/allocator/Cache.h>
 #include <folly/Random.h>
+
+#include <memory>
+#include <vector>
 
 namespace facebook {
 namespace cachelib {

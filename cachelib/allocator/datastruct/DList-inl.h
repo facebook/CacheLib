@@ -151,8 +151,8 @@ void DList<T, HookPtr>::Iterator::goBackward() noexcept {
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename DList<T, HookPtr>::Iterator& DList<T, HookPtr>::Iterator::
-operator++() noexcept {
+typename DList<T, HookPtr>::Iterator&
+DList<T, HookPtr>::Iterator::operator++() noexcept {
   XDCHECK(curr_ != nullptr);
   if (curr_ != nullptr) {
     goForward();
@@ -161,8 +161,8 @@ operator++() noexcept {
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename DList<T, HookPtr>::Iterator& DList<T, HookPtr>::Iterator::
-operator--() noexcept {
+typename DList<T, HookPtr>::Iterator&
+DList<T, HookPtr>::Iterator::operator--() noexcept {
   XDCHECK(curr_ != nullptr);
   if (curr_ != nullptr) {
     goBackward();
@@ -177,8 +177,8 @@ typename DList<T, HookPtr>::Iterator DList<T, HookPtr>::begin() const noexcept {
 }
 
 template <typename T, DListHook<T> T::*HookPtr>
-typename DList<T, HookPtr>::Iterator DList<T, HookPtr>::rbegin() const
-    noexcept {
+typename DList<T, HookPtr>::Iterator DList<T, HookPtr>::rbegin()
+    const noexcept {
   return DList<T, HookPtr>::Iterator(tail_, Iterator::Direction::FROM_TAIL,
                                      *this);
 }

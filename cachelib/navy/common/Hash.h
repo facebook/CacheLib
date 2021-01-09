@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cachelib/navy/common/Buffer.h"
-
 #include <cstdint>
+
+#include "cachelib/navy/common/Buffer.h"
 
 namespace facebook {
 namespace cachelib {

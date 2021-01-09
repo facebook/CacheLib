@@ -1,9 +1,8 @@
-#include <atomic>
-
-#include <sys/mman.h>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+
+#include <atomic>
 
 #include "cachelib/common/FastStats.h"
 #include "cachelib/common/Utils.h"

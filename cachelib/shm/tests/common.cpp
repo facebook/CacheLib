@@ -1,7 +1,8 @@
+#include "cachelib/shm/tests/common.h"
+
 #include <folly/Random.h>
 
 #include "cachelib/shm/ShmCommon.h"
-#include "cachelib/shm/tests/common.h"
 
 namespace facebook {
 namespace cachelib {

@@ -1,13 +1,12 @@
-#include "cachelib/navy/testing/SeqPoints.h"
-
-#include "cachelib/navy/common/Utils.h"
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <atomic>
 #include <string>
 #include <thread>
 
-#include <gmock/gmock.h>
-#include <gtest/gtest.h>
+#include "cachelib/navy/common/Utils.h"
+#include "cachelib/navy/testing/SeqPoints.h"
 
 namespace facebook {
 namespace cachelib {

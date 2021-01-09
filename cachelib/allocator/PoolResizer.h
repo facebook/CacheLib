@@ -3,10 +3,9 @@
 #include <atomic>
 
 #include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/SlabReleaseStats.h"
 #include "cachelib/common/PeriodicWorker.h"
-
-#include "cachelib/allocator/RebalanceStrategy.h"
 
 namespace facebook {
 namespace cachelib {

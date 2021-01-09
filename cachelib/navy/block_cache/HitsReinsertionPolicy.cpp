@@ -1,6 +1,6 @@
-#include <folly/logging/xlog.h>
-
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+
+#include <folly/logging/xlog.h>
 
 namespace facebook {
 namespace cachelib {

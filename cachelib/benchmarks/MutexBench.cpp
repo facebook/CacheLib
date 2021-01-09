@@ -1,3 +1,12 @@
+#include <folly/Benchmark.h>
+#include <folly/Format.h>
+#include <folly/Random.h>
+#include <folly/SpinLock.h>
+#include <folly/init/Init.h>
+#include <folly/portability/Asm.h>
+#include <gflags/gflags.h>
+#include <sys/resource.h>
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -7,16 +16,6 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
-
-#include <sys/resource.h>
-
-#include <folly/Benchmark.h>
-#include <folly/Format.h>
-#include <folly/Random.h>
-#include <folly/SpinLock.h>
-#include <folly/init/Init.h>
-#include <folly/portability/Asm.h>
-#include <gflags/gflags.h>
 
 #include "cachelib/allocator/datastruct/DList.h"
 #include "cachelib/common/Mutex.h"

@@ -1,8 +1,8 @@
 #pragma once
-#include <string>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <string>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/memory/Slab.h"

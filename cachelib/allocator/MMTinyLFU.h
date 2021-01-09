@@ -435,8 +435,8 @@ class MMTinyLFU {
     }
 
    private:
-    EvictionAgeStat getEvictionAgeStatLocked(uint64_t projectedLength) const
-        noexcept;
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
 
     static Time getUpdateTime(const T& node) noexcept {
       return (node.*HookPtr).getUpdateTime();

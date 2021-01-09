@@ -1,8 +1,8 @@
-#include <set>
-#include <thread>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <set>
+#include <thread>
 
 #include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
 

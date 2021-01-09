@@ -1,10 +1,10 @@
 #include "cachelib/common/hothash/HotHashDetector.h"
 
-#include <algorithm>
-#include <deque>
-
 #include <folly/Likely.h>
 #include <glog/logging.h>
+
+#include <algorithm>
+#include <deque>
 
 namespace facebook {
 namespace cachelib {

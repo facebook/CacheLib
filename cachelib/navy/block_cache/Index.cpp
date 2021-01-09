@@ -1,6 +1,7 @@
+#include "cachelib/navy/block_cache/Index.h"
+
 #include <folly/Format.h>
 
-#include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {

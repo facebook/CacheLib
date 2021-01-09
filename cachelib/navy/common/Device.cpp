@@ -1,10 +1,10 @@
-#include <cstring>
-#include <numeric>
+#include "cachelib/navy/common/Device.h"
 
 #include <folly/File.h>
 #include <folly/Format.h>
 
-#include "cachelib/navy/common/Device.h"
+#include <cstring>
+#include <numeric>
 
 namespace facebook {
 namespace cachelib {

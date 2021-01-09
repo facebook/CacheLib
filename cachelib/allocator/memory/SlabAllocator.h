@@ -1,16 +1,17 @@
 #pragma once
 
+#include <sys/mman.h>
+
 #include <atomic>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
-#include <sys/mman.h>
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
+
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #pragma GCC diagnostic pop
 #include <folly/logging/xlog.h>
@@ -150,8 +151,8 @@ class SlabAllocator {
 
   // returns the SlabHeader for the memory address or nullptr if the memory
   // is invalid. Hotly accessed for getting alloc info
-  FOLLY_ALWAYS_INLINE SlabHeader* getSlabHeader(const void* memory) const
-      noexcept {
+  FOLLY_ALWAYS_INLINE SlabHeader* getSlabHeader(
+      const void* memory) const noexcept {
     const auto* slab = getSlabForMemory(memory);
     if (LIKELY(isValidSlab(slab))) {
       const auto slabIndex = static_cast<SlabIdx>(slab - slabMemoryStart_);
@@ -189,8 +190,8 @@ class SlabAllocator {
   // returns the slab in which the memory resides, irrespective of the
   // validity of the memory. The caller can use isValidSlab to check if the
   // returned slab is valid.
-  FOLLY_ALWAYS_INLINE const Slab* getSlabForMemory(const void* memory) const
-      noexcept {
+  FOLLY_ALWAYS_INLINE const Slab* getSlabForMemory(
+      const void* memory) const noexcept {
     // returns the closest slab boundary for the memory address.
     return reinterpret_cast<const Slab*>(reinterpret_cast<uintptr_t>(memory) &
                                          kAddressMask);
@@ -325,8 +326,8 @@ class SlabAllocator {
   }
 
   // this is for pointer compression.
-  FOLLY_ALWAYS_INLINE SlabHeader* getSlabHeader(unsigned int slabIndex) const
-      noexcept {
+  FOLLY_ALWAYS_INLINE SlabHeader* getSlabHeader(
+      unsigned int slabIndex) const noexcept {
     return reinterpret_cast<SlabHeader*>(memoryStart_) + slabIndex;
   }
 

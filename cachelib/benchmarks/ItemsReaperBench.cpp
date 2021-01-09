@@ -1,13 +1,12 @@
-#include <iomanip>
-
-#include <sys/resource.h>
-#include <sys/time.h>
-
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
 #include <folly/init/Init.h>
 #include <folly/lang/Bits.h>
 #include <folly/logging/xlog.h>
+#include <sys/resource.h>
+#include <sys/time.h>
+
+#include <iomanip>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/TestUtils.h"

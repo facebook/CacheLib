@@ -1,8 +1,8 @@
-#include "cachelib/common/Cohort.h"
-
 #include <folly/Random.h>
 #include <folly/synchronization/Baton.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/common/Cohort.h"
 
 namespace facebook {
 namespace cachelib {

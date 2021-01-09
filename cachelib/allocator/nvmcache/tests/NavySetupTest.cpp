@@ -1,8 +1,7 @@
-#include "cachelib/allocator/nvmcache/NavySetup.h"
-
 #include <folly/File.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/allocator/nvmcache/NavySetup.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {

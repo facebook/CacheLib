@@ -1,15 +1,15 @@
 #pragma once
 
+#include <folly/CPortability.h>
+#include <folly/Likely.h>
+#include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
+
 #include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <utility>
-
-#include <folly/CPortability.h>
-#include <folly/Likely.h>
-#include <folly/ScopeGuard.h>
-#include <folly/logging/xlog.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -1044,8 +1044,8 @@ class CacheAllocator : public CacheBase {
   MMContainer& getEvictableMMContainer(PoolId pid, ClassId cid) const noexcept;
 
   // same as above, but return the unevictable mm container
-  MMContainer& getUnevictableMMContainer(PoolId pid, ClassId cid) const
-      noexcept;
+  MMContainer& getUnevictableMMContainer(PoolId pid,
+                                         ClassId cid) const noexcept;
 
   // create a new cache allocation. The allocation can be initialized
   // appropriately and made accessible through insert or insertOrReplace.

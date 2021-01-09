@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <random>
 
 #include "cachelib/cachebench/util/Config.h"

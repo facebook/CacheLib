@@ -4,9 +4,8 @@
 
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheStats.h"
-#include "cachelib/allocator/SlabReleaseStats.h"
-
 #include "cachelib/allocator/RebalanceStrategy.h"
+#include "cachelib/allocator/SlabReleaseStats.h"
 #include "cachelib/common/PeriodicWorker.h"
 
 namespace facebook {

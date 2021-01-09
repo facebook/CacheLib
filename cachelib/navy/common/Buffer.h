@@ -1,5 +1,7 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -8,7 +10,6 @@
 #include <stdexcept>
 #include <string>
 
-#include <folly/logging/xlog.h>
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {

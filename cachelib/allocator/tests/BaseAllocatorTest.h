@@ -1,5 +1,7 @@
 #pragma once
 
+#include <folly/Random.h>
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -8,8 +10,6 @@
 #include <set>
 #include <thread>
 #include <vector>
-
-#include <folly/Random.h>
 
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"

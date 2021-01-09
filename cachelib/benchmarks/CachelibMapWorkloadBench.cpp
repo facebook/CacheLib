@@ -1,13 +1,14 @@
 // Benchmark for measuring RMW workload with cachelib::Map
 
-#include <random>
-
 #include <folly/Benchmark.h>
 #include <folly/container/EvictingCacheMap.h>
+
+#include <random>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <thrift/lib/cpp2/frozen/FrozenUtil.h>
+
 #include "cachelib/benchmarks/gen-cpp2/DataTypeBench_layouts.h"
 #include "cachelib/benchmarks/gen-cpp2/DataTypeBench_types.h"
 #pragma GCC diagnostic pop

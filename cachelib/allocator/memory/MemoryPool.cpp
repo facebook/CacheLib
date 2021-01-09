@@ -1,10 +1,10 @@
 #include "cachelib/allocator/memory/MemoryPool.h"
 
-#include "cachelib/allocator/memory/AllocationClass.h"
-#include "cachelib/allocator/memory/SlabAllocator.h"
-
 #include <algorithm>
 #include <string>
+
+#include "cachelib/allocator/memory/AllocationClass.h"
+#include "cachelib/allocator/memory/SlabAllocator.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"

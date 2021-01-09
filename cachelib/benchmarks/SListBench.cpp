@@ -1,7 +1,7 @@
-#include <vector>
-
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+
+#include <vector>
 
 #include "cachelib/allocator/datastruct/SList.h"
 

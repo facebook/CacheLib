@@ -1,9 +1,9 @@
 #include "cachelib/allocator/FreeMemStrategy.h"
 
+#include <folly/logging/xlog.h>
+
 #include <algorithm>
 #include <functional>
-
-#include <folly/logging/xlog.h>
 
 #include "cachelib/allocator/Util.h"
 

@@ -1,9 +1,9 @@
 #pragma once
 
+#include <folly/SharedMutex.h>
+
 #include <chrono>
 #include <stdexcept>
-
-#include <folly/SharedMutex.h>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/BloomFilter.h"

@@ -1,8 +1,8 @@
 #pragma once
-#include <atomic>
-
 #include <folly/hash/Hash.h>
 #include <gflags/gflags.h>
+
+#include <atomic>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"

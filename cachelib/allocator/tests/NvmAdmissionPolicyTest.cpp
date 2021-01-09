@@ -1,12 +1,12 @@
 // Copyright 2004-present Facebook. All Rights Reserved.
 
+#include <gtest/gtest.h>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/CacheAllocatorConfig.h"
 #include "cachelib/allocator/CacheTraits.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
 #include "cachelib/allocator/tests/NvmTestUtils.h"
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {

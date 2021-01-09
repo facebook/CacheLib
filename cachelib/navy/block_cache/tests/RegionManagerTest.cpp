@@ -1,14 +1,13 @@
-#include "cachelib/navy/block_cache/RegionManager.h"
+#include <gtest/gtest.h>
+
+#include <vector>
 
 #include "cachelib/navy/block_cache/LruPolicy.h"
+#include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/MockDevice.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
-
-#include <vector>
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {

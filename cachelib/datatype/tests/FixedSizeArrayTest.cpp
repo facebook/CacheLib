@@ -1,9 +1,8 @@
-#include "cachelib/datatype/FixedSizeArray.h"
+#include <folly/small_vector.h>
 
 #include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/datatype/FixedSizeArray.h"
 #include "cachelib/datatype/tests/DataTypeTest.h"
-
-#include <folly/small_vector.h>
 
 namespace facebook {
 namespace cachelib {

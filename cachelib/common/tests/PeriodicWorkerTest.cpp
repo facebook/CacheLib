@@ -1,7 +1,7 @@
+#include <gtest/gtest.h>
+
 #include <map>
 #include <thread>
-
-#include <gtest/gtest.h>
 
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Time.h"

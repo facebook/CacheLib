@@ -1,8 +1,9 @@
-#include "cachelib/cachebench/consistency/ValueHistory.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 #include <cctype>
+
+#include "cachelib/cachebench/consistency/ValueHistory.h"
 
 namespace facebook {
 namespace cachelib {

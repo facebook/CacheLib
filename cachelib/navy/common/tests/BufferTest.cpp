@@ -1,9 +1,9 @@
-#include "cachelib/navy/common/Buffer.h"
+#include <folly/Format.h>
+#include <gtest/gtest.h>
 
 #include <string>
 
-#include <folly/Format.h>
-#include <gtest/gtest.h>
+#include "cachelib/navy/common/Buffer.h"
 
 namespace facebook {
 namespace cachelib {

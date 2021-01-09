@@ -1,7 +1,7 @@
 // Benchmark for measuring individual operations of cachelib::Map
-#include <array>
-
 #include <folly/Benchmark.h>
+
+#include <array>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/datatype/Map.h"

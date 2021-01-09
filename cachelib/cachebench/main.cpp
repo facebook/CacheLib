@@ -1,9 +1,9 @@
-#include <memory>
-#include <thread>
-
 #include <folly/io/async/EventBase.h>
 #include <folly/logging/LoggerDB.h>
 #include <gflags/gflags.h>
+
+#include <memory>
+#include <thread>
 
 #include "cachelib/cachebench/runner/Runner.h"
 #include "cachelib/common/Utils.h"

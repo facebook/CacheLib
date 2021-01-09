@@ -1,10 +1,10 @@
 #pragma once
 
+#include <folly/SharedMutex.h>
+
 #include <cstdint>
 #include <thread>
 #include <unordered_map>
-
-#include <folly/SharedMutex.h>
 
 namespace facebook {
 namespace cachelib {

@@ -1,24 +1,23 @@
 #pragma once
 
-#include <atomic>
-#include <utility>
-
 #include <folly/CPortability.h>
 #include <folly/String.h>
 
+#include <atomic>
+#include <utility>
+
+#include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheChainedItemIterator.h"
+#include "cachelib/allocator/Handle.h"
+#include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/Refcount.h"
+#include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/allocator/datastruct/SList.h"
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Mutex.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/Handle.h"
-#include "cachelib/allocator/KAllocation.h"
-#include "cachelib/allocator/Refcount.h"
-#include "cachelib/allocator/TypedHandle.h"
 
 namespace facebook {
 

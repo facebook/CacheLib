@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/Optional.h>
+
 #include <functional>
 #include <memory>
 #include <set>
 #include <string>
-
-#include <folly/Optional.h>
 
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/EventInterface.h"

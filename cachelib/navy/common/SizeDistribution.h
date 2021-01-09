@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <atomic>
 #include <cstdint>
 #include <map>
 #include <vector>
-
-#include <folly/logging/xlog.h>
 
 #include "cachelib/common/AtomicCounter.h"
 

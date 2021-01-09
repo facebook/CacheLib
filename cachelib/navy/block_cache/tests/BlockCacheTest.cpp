@@ -1,12 +1,11 @@
-#include "cachelib/navy/block_cache/BlockCache.h"
-
-#include <future>
-#include <vector>
-
 #include <folly/File.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <future>
+#include <vector>
+
+#include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 #include "cachelib/navy/common/Hash.h"

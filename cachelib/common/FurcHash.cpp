@@ -1,6 +1,6 @@
-#include <cstdint>
-
 #include <folly/logging/xlog.h>
+
+#include <cstdint>
 
 #include "cachelib/common/Hash.h"
 
