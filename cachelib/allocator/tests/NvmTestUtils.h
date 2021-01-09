@@ -12,7 +12,6 @@ inline folly::dynamic getNvmTestConfig(const std::string& cacheDir) {
   config["dipper_navy_recovery_path"] = cacheDir;
   config["dipper_navy_file_size"] = 100 * 1024ULL * 1024ULL; /* megabytes */
   config["dipper_navy_file_name"] = cacheDir + "/navy";
-  config["dipper_navy_direct_io"] = false;
   config["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
   config["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
   config["dipper_navy_lru"] = true;
