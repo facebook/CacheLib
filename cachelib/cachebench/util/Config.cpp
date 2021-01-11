@@ -154,6 +154,7 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, replaySerializationMode);
   JSONSetVal(configJson, relaxedSerialIntervalMs);
   JSONSetVal(configJson, numAggregationFields);
+  JSONSetVal(configJson, numExtraFields);
   JSONSetVal(configJson, statsPerAggField);
 
   if (replaySerializationMode != "strict" &&

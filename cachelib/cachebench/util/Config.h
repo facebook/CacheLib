@@ -81,6 +81,11 @@ struct ReplayGeneratorConfig : public JSONConfig {
   // These fields are placed after existing fields:
   // https://fburl.com/diffusion/hl3qerc9
   uint32_t numAggregationFields{0};
+
+  // # of extra fields after the defined fields and numAggregationFields in
+  // trace sample. E.g., additional ML features can be put here
+  uint32_t numExtraFields{0};
+
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which
   // stats are aggregated by per field.

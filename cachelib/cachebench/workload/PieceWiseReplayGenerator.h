@@ -79,7 +79,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // timestamp, cacheKey, OpType, objectSize, responseSize,
   // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate.
   // (extra fields might exist defined by
-  // config_.replayGeneratorConfig.numAggregationFields)
+  // config_.replayGeneratorConfig.numAggregationFields and
+  // config_.replayGeneratorConfig.numExtraFields)
   enum SampleFields {
     TIMESTAMP = 0,
     CACHE_KEY,

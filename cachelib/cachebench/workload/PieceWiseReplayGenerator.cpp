@@ -78,7 +78,8 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       folly::split(",", line, fields);
       if (fields.size() !=
           SampleFields::TOTAL_FIELDS +
-              config_.replayGeneratorConfig.numAggregationFields) {
+              config_.replayGeneratorConfig.numAggregationFields +
+              config_.replayGeneratorConfig.numExtraFields) {
         invalidSamples_.inc();
         continue;
       }
