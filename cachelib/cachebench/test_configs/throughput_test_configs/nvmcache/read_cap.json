@@ -18,7 +18,7 @@
   "test_config" :
     {
       
-      "distribution" : "range",
+      "distribution" : "normal",
       "checkConsistency" : false,
 
       "numOps" : 30000000,

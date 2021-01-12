@@ -54,6 +54,12 @@ struct DistributionConfig : public JSONConfig {
   double loneSetRatio{0.0};
 
   bool usesChainedItems() const { return addChainedRatio > 0; }
+
+  // for continuous value sizes, the probability is expressed per interval
+  // instead of per value size range.
+  bool hasDiscreteValueSizes() const {
+    return valSizeRange.size() == valSizeRangeProbability.size();
+  }
 };
 
 struct ReplayGeneratorConfig : public JSONConfig {
@@ -106,9 +112,12 @@ struct StressorConfig : public JSONConfig {
   // workload generator which samples from some distribution
   // but "replay" allows replaying a production trace, for example.
   std::string generator{};
-  // When using sampling based methods, which
-  // distributions to use.  Default is RangeDistribution
-  // which uses specified piecewise constant distributions
+
+  // When using sampling based methods, which distributions to use.  Default
+  // is NormalDistribution which uses specified piecewise constant
+  // distributions for value sizes and normal distribution for popularity.
+  // Another option is to use DiscreteDistribution that uses discrete
+  // popularity buckets for key popularity
   std::string distribution{};
 
   // Valid when generator is replay generator

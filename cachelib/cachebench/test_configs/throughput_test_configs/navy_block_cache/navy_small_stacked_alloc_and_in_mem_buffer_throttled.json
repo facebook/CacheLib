@@ -28,7 +28,7 @@
         "numOps" : 100000000,
         "numThreads" : 48,
         "numKeys" : 100000,
-        "distribution" :  "range",
+        "distribution" :  "normal",
 
         // Peak throughput possible: 10000 sets per thread
         "opDelayBatch": 10,

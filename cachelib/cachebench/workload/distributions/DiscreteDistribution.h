@@ -11,7 +11,7 @@ namespace cachebench {
 class DiscreteDistribution {
  public:
   using PopDistT = FastDiscreteDistribution;
-  DiscreteDistribution(const DistributionConfig& c)
+  explicit DiscreteDistribution(const DistributionConfig& c)
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
                  config_.addChainedRatio, config_.loneGetRatio,

@@ -51,7 +51,7 @@
   "test_config": {
     
     
-    "distribution": "range",
+    "distribution": "normal",
     "numOps": 20000000,
     "numThreads": 300,
     "numKeys": 500000000,

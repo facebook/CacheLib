@@ -15,7 +15,6 @@
 #include "cachelib/cachebench/workload/GeneratorBase.h"
 #include "cachelib/cachebench/workload/distributions/DiscreteDistribution.h"
 #include "cachelib/cachebench/workload/distributions/NormalDistribution.h"
-#include "cachelib/cachebench/workload/distributions/RangeDistribution.h"
 
 namespace facebook {
 namespace cachelib {
