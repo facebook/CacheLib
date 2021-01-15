@@ -12,7 +12,7 @@
   },
   "test_config" :
     {
-      "distribution" :  "normal",
+      
 
       "numOps" : 100000,
       "numThreads" : 16,

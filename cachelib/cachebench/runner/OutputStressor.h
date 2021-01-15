@@ -25,7 +25,7 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-template <typename Allocator, typename Generator = WorkloadGenerator<>>
+template <typename Allocator, typename Generator = WorkloadGenerator>
 class OutputStressor : public Stressor {
  public:
   using CacheT = Cache<Allocator>;

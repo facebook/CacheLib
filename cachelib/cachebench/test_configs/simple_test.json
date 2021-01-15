@@ -12,7 +12,7 @@
       "numOps" : 100000,
       "numThreads" : 32,
       "numKeys" : 1000000,
-      "distribution" :  "normal",
+      
 
       "opDelayBatch" : 1,
       "opDelayNs" : 200,

@@ -1,4 +1,5 @@
 #pragma once
+
 #include <chrono>
 #include <functional>
 #include <thread>
@@ -8,7 +9,8 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 namespace detail {
-std::chrono::seconds executeParallel(
+
+inline std::chrono::seconds executeParallel(
     std::function<void(size_t start, size_t end)> fn,
     size_t numThreads,
     size_t count,
@@ -33,8 +35,8 @@ std::chrono::seconds executeParallel(
       std::chrono::steady_clock::now() - startTime);
 }
 
-std::chrono::seconds executeParallel(std::function<void()> fn,
-                                     size_t numThreads) {
+inline std::chrono::seconds executeParallel(std::function<void()> fn,
+                                            size_t numThreads) {
   numThreads = std::max(numThreads, 1UL);
   auto startTime = std::chrono::steady_clock::now();
   std::vector<std::thread> processingThreads;

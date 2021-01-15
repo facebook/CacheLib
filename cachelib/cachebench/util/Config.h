@@ -57,8 +57,12 @@ struct DistributionConfig : public JSONConfig {
 
   // for continuous value sizes, the probability is expressed per interval
   // instead of per value size range.
-  bool hasDiscreteValueSizes() const {
+  bool usesDiscreteValueSizes() const {
     return valSizeRange.size() == valSizeRangeProbability.size();
+  }
+
+  bool usesDiscretePopularity() const {
+    return popularityBuckets.size() && popularityWeights.size();
   }
 };
 
@@ -112,13 +116,6 @@ struct StressorConfig : public JSONConfig {
   // workload generator which samples from some distribution
   // but "replay" allows replaying a production trace, for example.
   std::string generator{};
-
-  // When using sampling based methods, which distributions to use.  Default
-  // is NormalDistribution which uses specified piecewise constant
-  // distributions for value sizes and normal distribution for popularity.
-  // Another option is to use DiscreteDistribution that uses discrete
-  // popularity buckets for key popularity
-  std::string distribution{};
 
   // Valid when generator is replay generator
   ReplayGeneratorConfig replayGeneratorConfig;

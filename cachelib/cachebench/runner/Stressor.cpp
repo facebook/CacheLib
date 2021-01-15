@@ -74,26 +74,13 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   // TODO: Remove the empty() check once we label workload-based configs
   // properly
   if (config.generator.empty() || config.generator == "workload") {
-    if (config.distribution == "normal") {
-      return std::make_unique<WorkloadGenerator<NormalDistribution>>(config);
-    } else if (config.distribution == "workload" ||
-               // TODO: Remove the empty() check once we label workload-based
-               // configs properly
-               config.distribution.empty()) {
-      return std::make_unique<WorkloadGenerator<>>(config);
-    }
+    return std::make_unique<WorkloadGenerator>(config);
   } else if (config.generator == "online") {
-    if (config.distribution == "normal") {
-      return std::make_unique<OnlineGenerator<NormalDistribution>>(config);
-    } else if (config.distribution == "workload" ||
-               config.distribution.empty()) {
-      return std::make_unique<OnlineGenerator<>>(config);
-    }
+    return std::make_unique<OnlineGenerator>(config);
+
   } else {
     throw std::invalid_argument("Invalid config");
   }
-  // WorkloadGenerator as default
-  return std::make_unique<WorkloadGenerator<>>(config);
 }
 } // namespace
 

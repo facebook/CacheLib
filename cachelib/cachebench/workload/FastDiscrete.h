@@ -1,4 +1,6 @@
 #pragma once
+#include <folly/logging/xlog.h>
+
 #include <algorithm>
 #include <iostream>
 #include <random>
@@ -7,15 +9,47 @@
 
 #include "cachelib/common/Utils.h"
 
-/* sampling object id and object size from a Zipf-like distribution
- (aka the independent reference model (IRM))
+namespace facebook {
+namespace cachelib {
+namespace cachebench {
 
- Multiple objects with similar rates are grouped together for more efficient
- sampling. Two level sampling process: first skewed sample to select the rate,
- then uniform sample within rate to select object.
-*/
+// generic distribution that uses a random number generator to generate a 64
+// bit number fitting the configured distribution.
+class Distribution {
+ public:
+  virtual ~Distribution() {}
+  virtual size_t operator()(std::mt19937_64& gen) = 0;
+};
 
-class FastDiscreteDistribution {
+// Wrapper around std::normal_distribution
+class NormalDistribution final : public Distribution {
+ public:
+  NormalDistribution(double mean, double stdDev, size_t left, size_t right)
+      : left_(left), right_(right), dist_(mean, stdDev) {}
+
+  size_t operator()(std::mt19937_64& gen) override {
+    double v;
+    do {
+      v = std::round(dist_(gen));
+    } while (v < left_ || v > right_);
+    XDCHECK_GE(v, left_);
+    XDCHECK_LE(v, right_);
+    return cachelib::util::narrow_cast<size_t>(v);
+  }
+
+ private:
+  const size_t left_;
+  const size_t right_;
+  std::normal_distribution<double> dist_;
+};
+
+// sampling object id and object size from a Zipf-like distribution
+// (aka the independent reference model (IRM))
+//
+// Multiple objects with similar rates are grouped together for more efficient
+// sampling. Two level sampling process: first skewed sample to select the rate,
+// then uniform sample within rate to select object.
+class FastDiscreteDistribution final : public Distribution {
  public:
   FastDiscreteDistribution() {}
   // This distribution expects a list of buckets (sizes) and weights (probs).
@@ -33,7 +67,7 @@ class FastDiscreteDistribution {
                            std::vector<size_t> sizes,
                            std::vector<double> probs,
                            size_t numBuckets = 2048)
-      : leftOffset_(left) {
+      : leftOffset_(left), rightOffset_(right) {
     double totalWeight = std::accumulate(probs.begin(), probs.end(), 0.0);
     double totalObjects = std::accumulate(sizes.begin(), sizes.end(), 0.0);
     bucketWeight_ = totalWeight / numBuckets;
@@ -82,14 +116,16 @@ class FastDiscreteDistribution {
   FastDiscreteDistribution& operator=(const FastDiscreteDistribution&) =
       default;
 
-  template <typename RNG>
-  size_t operator()(RNG& gen) {
+  size_t operator()(std::mt19937_64& gen) override {
     size_t bucket = bucketDistribution_(gen);
     size_t objectInBucket = facebook::cachelib::util::narrow_cast<size_t>(
         insideBucketDistributions_[bucket](gen));
-    return facebook::cachelib::util::narrow_cast<size_t>(
-               (bucketOffsets_[bucket] + objectInBucket)) +
-           leftOffset_;
+    auto ret = facebook::cachelib::util::narrow_cast<size_t>(
+                   (bucketOffsets_[bucket] + objectInBucket)) +
+               leftOffset_;
+    XDCHECK_LE(ret, rightOffset_);
+    XDCHECK_GE(ret, leftOffset_);
+    return ret;
   }
 
   void summarize() const {
@@ -104,10 +140,15 @@ class FastDiscreteDistribution {
 
  private:
   std::vector<uint64_t> bucketOffsets_{};
-  size_t leftOffset_{};
+  const size_t leftOffset_{};
+  const size_t rightOffset_{};
   double scalingFactor_{};
   double bucketWeight_{};
   std::uniform_int_distribution<size_t> bucketDistribution_{};
   std::vector<std::uniform_int_distribution<size_t>>
       insideBucketDistributions_{};
 };
+
+} // namespace cachebench
+} // namespace cachelib
+} // namespace facebook

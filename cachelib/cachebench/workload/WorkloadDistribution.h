@@ -3,20 +3,26 @@
 
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"
-#include "cachelib/cachebench/workload/distributions/FastDiscrete.h"
+#include "cachelib/cachebench/workload/FastDiscrete.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-class NormalDistribution {
+
+// Implementation that controls overall workloa distribution. The following
+// are modeled
+// 1. op distribution to identify the type of operation
+// 2. popularity of key distribution  (discrete popularity and normal
+//    dist)
+// 3. key size, value size and chained item sizes.
+class WorkloadDistribution {
  public:
-  using PopDistT = std::normal_distribution<double>;
-  explicit NormalDistribution(const DistributionConfig& c)
+  explicit WorkloadDistribution(const DistributionConfig& c)
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
                  config_.addChainedRatio, config_.loneGetRatio,
                  config_.loneSetRatio}),
-        useDiscreteValSizes_(config_.hasDiscreteValueSizes()),
+        useDiscreteValSizes_(config_.usesDiscreteValueSizes()),
         valSizeDiscreteDist_{initDiscreteValSize(config_)},
         valSizePiecewiseDist_{initPiecewiseValSize(config_)},
         chainedValDist_(config_.chainedItemValSizeRange.begin(),
@@ -43,13 +49,9 @@ class NormalDistribution {
     }
   }
 
-  template <typename RNG>
-  uint8_t sampleOpDist(RNG& gen) {
-    return opDist_(gen);
-  }
+  uint8_t sampleOpDist(std::mt19937_64& gen) { return opDist_(gen); }
 
-  template <typename RNG>
-  double sampleValDist(RNG& gen) {
+  double sampleValDist(std::mt19937_64& gen) {
     if (useDiscreteValSizes_) {
       size_t idx = valSizeDiscreteDist_(gen);
       return config_.valSizeRange[idx];
@@ -58,25 +60,28 @@ class NormalDistribution {
     }
   }
 
-  template <typename RNG>
-  double sampleChainedValDist(RNG& gen) {
+  double sampleChainedValDist(std::mt19937_64& gen) {
     return chainedValDist_(gen);
   }
-  template <typename RNG>
-  double sampleChainedLenDist(RNG& gen) {
+
+  double sampleChainedLenDist(std::mt19937_64& gen) {
     return chainedLenDist_(gen);
   }
 
-  template <typename RNG>
-  double sampleKeySizeDist(RNG& gen) {
-    return keySizeDist_(gen);
-  }
+  double sampleKeySizeDist(std::mt19937_64& gen) { return keySizeDist_(gen); }
 
-  PopDistT getPopDist(size_t left, size_t right) {
-    double mu = (left + right) * 0.5;
-    // TODO In general, could have different keyFrequency factor besides 2
-    double sigma = (right - left) * .5 / 2;
-    return std::normal_distribution<double>(mu, sigma);
+  // unlike other sources, we let the workload generator directly make copies
+  // of the base popularity distribution and sample from that.
+  std::unique_ptr<Distribution> getPopDist(size_t left, size_t right) const {
+    if (config_.usesDiscretePopularity()) {
+      return std::make_unique<FastDiscreteDistribution>(
+          left, right, config_.popularityBuckets, config_.popularityWeights);
+    } else {
+      // TODO In general, could have different keyFrequency factor besides 2
+      double mu = (left + right) * 0.5;
+      double sigma = (right - left) * .5 / 2;
+      return std::make_unique<NormalDistribution>(mu, sigma, left, right);
+    }
   }
 
  private:

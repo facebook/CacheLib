@@ -18,7 +18,7 @@
       "numOps" : 30000000,
       "numThreads" : 40,
       "numKeys" : 10000000,
-      "distribution" :  "normal",
+      
 
       "keySizeRange" : [1, 8],
       "keySizeRangeProbability" : [1.0],

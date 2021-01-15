@@ -14,14 +14,12 @@
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
-#include "cachelib/cachebench/workload/distributions/DiscreteDistribution.h"
-#include "cachelib/cachebench/workload/distributions/NormalDistribution.h"
+#include "cachelib/cachebench/workload/WorkloadDistribution.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-template <typename Distribution = DiscreteDistribution>
 class OnlineGenerator : public GeneratorBase {
  public:
   explicit OnlineGenerator(const StressorConfig& config);
@@ -45,7 +43,7 @@ class OnlineGenerator : public GeneratorBase {
   void generateSizes();
   typename std::vector<std::vector<size_t>>::iterator generateSize(
       uint8_t poolId, size_t idx);
-  void generateKeyDistributions();
+  void generateKeyWorkloadDistributions();
 
   // if there is only one workloadDistribution, use it for everything.
   size_t workloadIdx(size_t i) { return workloadDist_.size() > 1 ? i : 0; }
@@ -68,12 +66,11 @@ class OnlineGenerator : public GeneratorBase {
   // by key pool distribution).
   std::vector<uint64_t> firstKeyIndexForPool_;
 
-  using PopDistT = typename Distribution::PopDistT;
   // overall workload distribution per pool
-  std::vector<Distribution> workloadDist_;
+  std::vector<WorkloadDistribution> workloadDist_;
 
   // popularity distribution for keys per pool
-  std::vector<PopDistT> workloadPopDist_;
+  std::vector<std::unique_ptr<Distribution>> workloadPopDist_;
 
   // thread local copy of key and  request to return as a part of getReq
   class Tag;
@@ -87,5 +84,3 @@ class OnlineGenerator : public GeneratorBase {
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook
-
-#include "cachelib/cachebench/workload/OnlineGenerator-inl.h"
