@@ -565,6 +565,26 @@ TEST(RangeMap, RangeLookupApprox) {
   }
   EXPECT_EQ(10, i);
 }
+
+TEST(RangeMap, LargeMap) {
+  using RM = RangeMap<uint64_t, uint64_t, LruAllocator>;
+
+  auto cache = createCache();
+
+  // Allocate everything from cache to we will fail to allocate range map
+  std::vector<LruAllocator::ItemHandle> handles;
+  for (int i = 0;; i++) {
+    auto handle = cache->allocate(0, folly::sformat("key_{}", i), 100'000);
+    if (!handle) {
+      break;
+    }
+    handles.push_back(std::move(handle));
+  }
+
+  auto rm = RM::create(*cache, 0, "range_map", 100'000 /* entries */,
+                       1024 * 1024ul - 100 /* storage bytes */);
+  EXPECT_TRUE(rm.isNullItemHandle());
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

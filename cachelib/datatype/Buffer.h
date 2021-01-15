@@ -4,6 +4,7 @@
 
 #include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/DataTypes.h"
@@ -272,20 +273,35 @@ class BufferManager {
   // @param BufferAddr  the location of the allocation in the new buffer
   using CompactionCB = std::function<void(void*, BufferAddr)>;
 
+  // Maximum size for a single chained item.
+  // TODO: This is just under 1MB to allow some room for the chained item header
+  //       and buffer header. We may make this configurable if needed.
+  static constexpr uint32_t kMaxBufferCapacity = 1024 * 1024 - 100;
+
   BufferManager() = default;
 
   // Construct a null BufferManager
   /* implicit */ BufferManager(std::nullptr_t) : BufferManager() {}
 
   // Construct a new BufferManager
-  // @throw std::bad_alloc if failing to add a new buffer
+  // @throw cachelib::exceptions::OutOfMemory if failing to add a new buffer
+  //        std::invalid_argument if initialCapacity is bigger than the max
   BufferManager(CacheType& cache,
                 const ItemHandle& parent,
                 uint32_t initialCapacity)
       : cache_(&cache), parent_(&parent) {
+    if (initialCapacity > kMaxBufferCapacity) {
+      throw std::invalid_argument(
+          folly::sformat("A buffer's max capacity is {}, but requested "
+                         "initialCapacity is: {}",
+                         kMaxBufferCapacity, initialCapacity));
+    }
+
     auto* buffer = addNewBuffer(initialCapacity);
     if (!buffer) {
-      throw std::bad_alloc();
+      throw cachelib::exception::OutOfMemory(
+          folly::sformat("Couldn't allocate a new buffer for parent item: {}",
+                         parent->toString()));
     }
   }
 
@@ -380,11 +396,6 @@ class BufferManager {
   const ItemHandle* parent_{nullptr};
   std::vector<Item*> buffers_{};
   // END private members
-
-  // Maximum size for a single chained item.
-  // TODO: This is just under 1MB to allow some room for the chained item header
-  //       and buffer header. Proper follow up tracked in T37573713
-  static constexpr uint32_t kMaxBufferCapacity = 1024 * 1024 - 100;
 
   // This is the factor of expansion we use to grow our initiial chained item
   static constexpr uint32_t kExpansionFactor = 2;

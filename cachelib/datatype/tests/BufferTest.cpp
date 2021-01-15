@@ -321,6 +321,46 @@ class BufferManagerTest : public ::testing::Test {
     EXPECT_EQ(0, memcmp(mgrClone.buffers_[1]->getMemory(), data.data() + 1, 2));
     EXPECT_NE(mgr.buffers_[1]->getMemory(), mgrClone.buffers_[1]->getMemory());
   }
+
+  void testInitialCapacity() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.setDefaultAllocSizes(util::generateAllocSizes(2, 1024 * 1024));
+    auto cache = std::make_unique<AllocatorT>(config);
+    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const auto pid = cache->addPool("default", numBytes);
+
+    using BufferManager = detail::BufferManager<AllocatorT>;
+
+    {
+      auto parent = cache->allocate(pid, "my_parent", 0);
+      ASSERT_NO_THROW(
+          (BufferManager{*cache, parent, BufferManager::kMaxBufferCapacity}));
+    }
+    {
+      auto parent = cache->allocate(pid, "my_parent", 0);
+      ASSERT_THROW((BufferManager{*cache, parent,
+                                  BufferManager::kMaxBufferCapacity + 1}),
+                   std::invalid_argument);
+    }
+    {
+      // Allocate all memory so buffer manager creation will fail
+      std::vector<typename AllocatorT::ItemHandle> handles;
+      for (int i = 0;; i++) {
+        auto handle = cache->allocate(pid,
+                                      folly::sformat("key_{}", i),
+                                      BufferManager::kMaxBufferCapacity);
+        if (!handle) {
+          break;
+        }
+        handles.push_back(std::move(handle));
+      }
+      auto parent = cache->allocate(pid, "my_parent", 0);
+      ASSERT_THROW(
+          (BufferManager{*cache, parent, BufferManager::kMaxBufferCapacity}),
+          cachelib::exception::OutOfMemory);
+    }
+  }
 };
 TYPED_TEST_CASE(BufferManagerTest, AllocatorTypes);
 TYPED_TEST(BufferManagerTest, FixedSize) { this->testFixedSize(); }
@@ -328,6 +368,7 @@ TYPED_TEST(BufferManagerTest, VariableSize) { this->testVariableSize(); }
 TYPED_TEST(BufferManagerTest, UpperBound) { this->testUpperBound(); }
 TYPED_TEST(BufferManagerTest, Clone) { this->testClone(); }
 TYPED_TEST(BufferManagerTest, MaxBufferSize) { this->testMaxBufferSize(); }
+TYPED_TEST(BufferManagerTest, InitialCapacity) { this->testInitialCapacity(); }
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

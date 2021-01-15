@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "cachelib/allocator/TypedHandle.h"
+#include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/Buffer.h"
@@ -47,8 +48,9 @@ class RangeMap {
   // @param key     key for the item in cache
   // @param numEntries   number of entries this map can contain initially
   // @param numBytes     number of bytes allocated for value storage initially
-  // @return  valid cachelib::RangeMap on success,
-  //          cachelib::RangeMap::isNullItemHandle() == true on failure
+  // @return  valid cachelib::RangeMap on success
+  // @throw   cachelib::exception::OutOfMemory if failing to allocate an index
+  //          or a buffer associated with the map
   static RangeMap create(Cache& cache,
                          PoolId pid,
                          typename Cache::Key key,
