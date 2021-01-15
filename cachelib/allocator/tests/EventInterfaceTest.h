@@ -145,6 +145,28 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
       eventTrackerPtr->check(AllocatorApiEvent::INSERT_OR_REPLACE, key2,
                              AllocatorApiResult::INSERTED, valueSize, ttl);
     }
+
+    {
+      const auto key3 = this->getRandomNewKey(alloc, keyLen);
+      auto handle = alloc.allocate(pid, key3, valueSize, ttl);
+      ASSERT_NE(handle, nullptr);
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
+
+      auto handle2 = alloc.allocateChainedItem(handle, valueSize);
+      ASSERT_NE(handle2, nullptr);
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE_CHAINED, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
+
+      // Passing in a null parent handle will not record an event, since it's
+      // an invalid use of API and is a no-op.
+      ASSERT_THROW(alloc.allocateChainedItem({}, valueSize),
+                   std::invalid_argument);
+      // Event recorded is still the same as the previou one, indicating no
+      // event was recorded.
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE_CHAINED, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
+    }
   }
 
   // make some allocations without evictions and ensure that we are able to

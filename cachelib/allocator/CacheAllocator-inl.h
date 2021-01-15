@@ -361,6 +361,11 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
                                                 uint32_t size) {
+  if (!parent) {
+    throw std::invalid_argument(
+        "Cannot call allocate chained item with a empty parent handle!");
+  }
+
   auto it = allocateChainedItemInternal(parent, size);
   if (it && it->isUnevictable()) {
     stats_.numPermanentItems.inc();
@@ -379,10 +384,6 @@ typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::allocateChainedItemInternal(
     const ItemHandle& parent, uint32_t size) {
   util::LatencyTracker tracker{allocateLatency_};
-
-  if (!parent) {
-    return ItemHandle{};
-  }
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
 
