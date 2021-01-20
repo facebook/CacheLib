@@ -35,49 +35,51 @@ install(TARGETS cachelib_navy
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
 
-add_library(navy_test_support
-  testing/BufferGen.cpp
-  testing/MockDevice.cpp
-  testing/MockJobScheduler.cpp
-  testing/SeqPoints.cpp
+if (BUILD_TESTS)
+  add_library(navy_test_support
+    testing/BufferGen.cpp
+    testing/MockDevice.cpp
+    testing/MockJobScheduler.cpp
+    testing/SeqPoints.cpp
+    )
+  add_dependencies(navy_test_support thrift_generated_files)
+  target_link_libraries(navy_test_support
+    cachelib_navy
+    gmock
+    glog
+    gflags
+    gtest
+    gtest_main
   )
-add_dependencies(navy_test_support thrift_generated_files)
-target_link_libraries(navy_test_support
-  cachelib_navy
-  gmock
-  glog
-  gflags
-  gtest
-  gtest_main
-)
 
 
-function (ADD_TEST SOURCE_FILE)
-   generic_add_test("navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}")
-endfunction()
+  function (ADD_TEST SOURCE_FILE)
+     generic_add_test("navy-test" "${SOURCE_FILE}" navy_test_support "${ARGN}")
+  endfunction()
 
-add_test (common/tests/BufferTest.cpp)
-add_test (common/tests/HashTest.cpp)
-add_test (common/tests/UtilsTest.cpp)
-add_test (bighash/tests/BucketStorageTest.cpp)
-add_test (bighash/tests/BucketTest.cpp)
-add_test (admission_policy/tests/DynamicRandomAPTest.cpp)
-add_test (admission_policy/tests/RejectRandomAPTest.cpp)
-add_test (block_cache/tests/FifoPolicyTest.cpp)
-add_test (block_cache/tests/HitsReinsertionPolicyTest.cpp)
-add_test (block_cache/tests/IndexTest.cpp)
-add_test (block_cache/tests/LruPolicyTest.cpp)
-add_test (block_cache/tests/RegionTest.cpp)
-add_test (serialization/tests/RecordIOTest.cpp)
-add_test (serialization/tests/SerializationTest.cpp)
-add_test (scheduler/tests/OrderedThreadPoolJobSchedulerTest.cpp)
-add_test (scheduler/tests/ThreadPoolJobSchedulerTest.cpp)
-add_test (driver/tests/DriverTest.cpp)
-add_test (common/tests/DeviceTest.cpp)
-add_test (block_cache/tests/AllocatorTest.cpp)
-add_test (block_cache/tests/RegionManagerTest.cpp)
-add_test (testing/tests/BufferGenTest.cpp)
-add_test (testing/tests/MockJobSchedulerTest.cpp)
-add_test (testing/tests/SeqPointsTest.cpp)
-add_test (block_cache/tests/BlockCacheTest.cpp)
-add_test (bighash/tests/BigHashTest.cpp)
+  add_test (common/tests/BufferTest.cpp)
+  add_test (common/tests/HashTest.cpp)
+  add_test (common/tests/UtilsTest.cpp)
+  add_test (bighash/tests/BucketStorageTest.cpp)
+  add_test (bighash/tests/BucketTest.cpp)
+  add_test (admission_policy/tests/DynamicRandomAPTest.cpp)
+  add_test (admission_policy/tests/RejectRandomAPTest.cpp)
+  add_test (block_cache/tests/FifoPolicyTest.cpp)
+  add_test (block_cache/tests/HitsReinsertionPolicyTest.cpp)
+  add_test (block_cache/tests/IndexTest.cpp)
+  add_test (block_cache/tests/LruPolicyTest.cpp)
+  add_test (block_cache/tests/RegionTest.cpp)
+  add_test (serialization/tests/RecordIOTest.cpp)
+  add_test (serialization/tests/SerializationTest.cpp)
+  add_test (scheduler/tests/OrderedThreadPoolJobSchedulerTest.cpp)
+  add_test (scheduler/tests/ThreadPoolJobSchedulerTest.cpp)
+  add_test (driver/tests/DriverTest.cpp)
+  add_test (common/tests/DeviceTest.cpp)
+  add_test (block_cache/tests/AllocatorTest.cpp)
+  add_test (block_cache/tests/RegionManagerTest.cpp)
+  add_test (testing/tests/BufferGenTest.cpp)
+  add_test (testing/tests/MockJobSchedulerTest.cpp)
+  add_test (testing/tests/SeqPointsTest.cpp)
+  add_test (block_cache/tests/BlockCacheTest.cpp)
+  add_test (bighash/tests/BigHashTest.cpp)
+endif()

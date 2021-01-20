@@ -24,16 +24,6 @@ target_link_libraries(cachelib_cachebench
   gflags
 )
 
-add_library (cachebench_test_support INTERFACE )
-target_link_libraries (cachebench_test_support INTERFACE
-  cachelib_cachebench
-  gmock
-  glog
-  gflags
-  gtest
-  gtest_main
-)
-
 add_executable (cachebench main.cpp)
 target_link_libraries(cachebench cachelib_cachebench)
 
@@ -48,14 +38,27 @@ install(
 )
 
 
-function (ADD_TEST SOURCE_FILE)
-   generic_add_test("cachebench-test" "${SOURCE_FILE}"
-                    cachebench_test_support "${ARGN}")
-endfunction()
+if (BUILD_TESTS)
+  add_library (cachebench_test_support INTERFACE )
+  target_link_libraries (cachebench_test_support INTERFACE
+    cachelib_cachebench
+    gmock
+    glog
+    gflags
+    gtest
+    gtest_main
+  )
 
-add_test (workload/tests/WorkloadGeneratorTest.cpp)
-add_test (consistency/tests/RingBufferTest.cpp)
-add_test (consistency/tests/ShortThreadIdTest.cpp)
-add_test (consistency/tests/ValueHistoryTest.cpp)
-add_test (consistency/tests/ValueTrackerTest.cpp)
-add_test (util/tests/NandWritesTest.cpp)
+
+  function (ADD_TEST SOURCE_FILE)
+     generic_add_test("cachebench-test" "${SOURCE_FILE}"
+                      cachebench_test_support "${ARGN}")
+  endfunction()
+
+  add_test (workload/tests/WorkloadGeneratorTest.cpp)
+  add_test (consistency/tests/RingBufferTest.cpp)
+  add_test (consistency/tests/ShortThreadIdTest.cpp)
+  add_test (consistency/tests/ValueHistoryTest.cpp)
+  add_test (consistency/tests/ValueTrackerTest.cpp)
+  add_test (util/tests/NandWritesTest.cpp)
+endif()

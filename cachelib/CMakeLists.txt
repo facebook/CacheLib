@@ -24,6 +24,8 @@ set(PACKAGE_BUGREPORT "https://github.com/facebook/TBD")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+option(BUILD_TESTS "If enabled, compile the tests." ON)
+
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")

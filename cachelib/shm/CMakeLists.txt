@@ -16,23 +16,25 @@ install(TARGETS cachelib_shm
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
 
-add_library (shm_test_support
-  tests/common.cpp)
-target_link_libraries (shm_test_support INTERFACE
-  cachelib_shm
-  gmock
-  glog
-  gflags
-  gtest
-  gtest_main
-)
+if (BUILD_TESTS)
+  add_library (shm_test_support
+    tests/common.cpp)
+  target_link_libraries (shm_test_support INTERFACE
+    cachelib_shm
+    gmock
+    glog
+    gflags
+    gtest
+    gtest_main
+  )
 
-function (ADD_TEST SOURCE_FILE)
-   generic_add_test("shm-test" "${SOURCE_FILE}" shm_test_support "${ARGN}")
-endfunction()
+  function (ADD_TEST SOURCE_FILE)
+     generic_add_test("shm-test" "${SOURCE_FILE}" shm_test_support "${ARGN}")
+  endfunction()
 
-add_test (tests/test_page_size.cpp)
-add_test (tests/test_posix.cpp)
-add_test (tests/test_shm.cpp)
-add_test (tests/test_shm_manager.cpp)
-add_test (tests/test_sysv.cpp)
+  add_test (tests/test_page_size.cpp)
+  add_test (tests/test_posix.cpp)
+  add_test (tests/test_shm.cpp)
+  add_test (tests/test_shm_manager.cpp)
+  add_test (tests/test_sysv.cpp)
+endif()
