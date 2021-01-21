@@ -97,6 +97,8 @@ class Driver final : public AbstractCache {
   mutable AtomicCounter rejectedConcurrentInsertsCount_;
   mutable AtomicCounter rejectedParcelMemoryCount_;
   mutable AtomicCounter rejectedBytes_;
+  mutable AtomicCounter acceptedCount_;
+  mutable AtomicCounter acceptedBytes_;
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter parcelMemory_; // In bytes
   mutable AtomicCounter concurrentInserts_;

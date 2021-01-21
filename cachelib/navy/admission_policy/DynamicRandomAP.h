@@ -6,6 +6,7 @@
 #include <random>
 #include <stdexcept>
 
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 
 namespace facebook {
@@ -85,7 +86,11 @@ class DynamicRandomAP final : public AdmissionPolicy {
   struct ValidConfigTag {};
   struct ThrottleParams {
     double probabilityFactor{1};
+    // The rate we can write at, given how much we've written since the host
+    // started, from a quota standpoint.
     uint64_t curTargetRate{0};
+    // The rate that we observe since the last parameter update.
+    uint64_t observedCurRate_{0};
     uint64_t bytesWrittenLastUpdate{0};
     std::chrono::seconds updateTime{0};
   };
@@ -98,6 +103,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   double clampFactorChange(double change) const;
   double genF(const HashedKey& hk) const;
 
+  // The rate we are configered to write on average over a day.
   const uint64_t targetRate_{};
   const std::chrono::seconds updateInterval_{};
   const uint32_t baseProbabilityMultiplier_{};
@@ -113,6 +119,9 @@ class DynamicRandomAP final : public AdmissionPolicy {
   std::chrono::seconds startupTime_{0};
   mutable folly::SharedMutex mutex_;
   ThrottleParams params_;
+
+  // baseProbability distrbution on the items that are tested on accept.
+  mutable util::PercentileStats baseProbStats_;
 };
 } // namespace navy
 } // namespace cachelib

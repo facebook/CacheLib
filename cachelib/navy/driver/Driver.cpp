@@ -84,6 +84,8 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   if (!admissionPolicy_ || admissionPolicy_->accept(hk, value)) {
     if (currConcurrentInserts <= maxConcurrentInserts_) {
       if (currParcelMemory <= maxParcelMemory_) {
+        acceptedCount_.inc();
+        acceptedBytes_.add(parcelSize);
         return true;
       } else {
         rejectedParcelMemoryCount_.inc();
@@ -327,6 +329,8 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
           rejectedConcurrentInsertsCount_.get());
   visitor("navy_rejected_parcel_memory", rejectedParcelMemoryCount_.get());
   visitor("navy_rejected_bytes", rejectedBytes_.get());
+  visitor("navy_accepted_bytes", acceptedBytes_.get());
+  visitor("navy_accepted", acceptedCount_.get());
   visitor("navy_io_errors", ioErrorCount_.get());
   visitor("navy_parcel_memory", parcelMemory_.get());
   visitor("navy_concurrent_inserts", concurrentInserts_.get());

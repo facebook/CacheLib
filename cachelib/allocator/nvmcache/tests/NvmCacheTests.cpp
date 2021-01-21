@@ -1420,6 +1420,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_io_errors"));
   EXPECT_TRUE(cs("navy_parcel_memory"));
   EXPECT_TRUE(cs("navy_concurrent_inserts"));
+  EXPECT_TRUE(cs("navy_accepted"));
+  EXPECT_TRUE(cs("navy_accepted_bytes"));
 
   // navy::OrderedThreadPoolJobScheduler
   EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));
