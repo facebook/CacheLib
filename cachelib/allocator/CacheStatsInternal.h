@@ -2,6 +2,7 @@
 #include <array>
 #include <numeric>
 
+#include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/AtomicCounter.h"
 
@@ -120,6 +121,27 @@ struct Stats {
 
   // allocations with invalid parameters
   AtomicCounter invalidAllocs{0};
+
+  // latency stats of various cachelib operations
+  mutable util::PercentileStats allocateLatency_;
+  mutable util::PercentileStats moveChainedLatency_;
+  mutable util::PercentileStats moveRegularLatency_;
+  mutable util::PercentileStats nvmLookupLatency_;
+  mutable util::PercentileStats nvmInsertLatency_;
+  mutable util::PercentileStats nvmRemoveLatency_;
+
+  // percentile stats for various cache statistics
+  mutable util::PercentileStats ramEvictionAgeSecs_;
+  mutable util::PercentileStats ramItemLifeTimeSecs_;
+  mutable util::PercentileStats nvmSmallLifetimeSecs_;
+  mutable util::PercentileStats nvmLargeLifetimeSecs_;
+  mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
+  mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
+
+  // This tracks in each window what are the percentiles of the sizes of
+  // items that we have written to flash. This is at-the-moment view of what
+  // we're currently writing into flash.
+  mutable util::PercentileStats nvmPutSize_;
 
   using PerPoolClassAtomicCounters =
       std::array<std::array<AtomicCounter, MemoryAllocator::kMaxClasses>,

@@ -301,7 +301,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              uint32_t creationTime,
                                              uint32_t expiryTime,
                                              bool unevictable) {
-  util::LatencyTracker tracker{allocateLatency_};
+  util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
 
@@ -383,7 +383,7 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::allocateChainedItemInternal(
     const ItemHandle& parent, uint32_t size) {
-  util::LatencyTracker tracker{allocateLatency_};
+  util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
 
@@ -722,8 +722,8 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     const auto timeNow = util::getCurrentTimeSec();
     const auto refreshTime = timeNow - it.getLastAccessTime();
     const auto lifeTime = timeNow - it.getCreationTime();
-    ramEvictionAgeSecs_.trackValue(refreshTime);
-    ramItemLifeTimeSecs_.trackValue(lifeTime);
+    stats_.ramEvictionAgeSecs_.trackValue(refreshTime);
+    stats_.ramItemLifeTimeSecs_.trackValue(lifeTime);
   }
 
   const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
@@ -1051,7 +1051,7 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
                                                  ItemHandle& newItemHdl) {
   XDCHECK(config_.moveCb);
-  util::LatencyTracker tracker{moveRegularLatency_};
+  util::LatencyTracker tracker{stats_.moveRegularLatency_};
 
   if (!oldItem.isAccessible() || oldItem.isExpired()) {
     return false;
@@ -1130,7 +1130,7 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
                                                  ItemHandle& newItemHdl) {
   XDCHECK(config_.moveCb);
-  util::LatencyTracker tracker{moveChainedLatency_};
+  util::LatencyTracker tracker{stats_.moveChainedLatency_};
 
   // This item has been unlinked from its parent and we're the only
   // owner of it, so we're done here
@@ -3245,19 +3245,6 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   stats_.populateGlobalCacheStats(ret);
 
   ret.numItems = accessContainer_->getStats().numKeys;
-  ret.allocateLatencyNs = allocateLatency_.estimate();
-  ret.moveChainedLatencyNs = moveChainedLatency_.estimate();
-  ret.moveRegularLatencyNs = moveRegularLatency_.estimate();
-  ret.nvmLookupLatencyNs = nvmLookupLatency_.estimate();
-  ret.nvmInsertLatencyNs = nvmInsertLatency_.estimate();
-  ret.nvmRemoveLatencyNs = nvmRemoveLatency_.estimate();
-  ret.ramEvictionAgeSecs = ramEvictionAgeSecs_.estimate();
-  ret.ramItemLifeTimeSecs = ramItemLifeTimeSecs_.estimate();
-  ret.nvmSmallLifetimeSecs = nvmSmallLifetimeSecs_.estimate();
-  ret.nvmLargeLifetimeSecs = nvmLargeLifetimeSecs_.estimate();
-  ret.nvmEvictionSecondsPastExpiry = nvmEvictionSecondsPastExpiry_.estimate();
-  ret.nvmEvictionSecondsToExpiry = nvmEvictionSecondsToExpiry_.estimate();
-  ret.nvmPutSize = nvmPutSize_.estimate();
 
   const uint64_t currTime = util::getCurrentTimeSec();
   ret.ramUpTime = currTime - cacheCreationTime_;

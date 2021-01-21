@@ -8,13 +8,13 @@
 #include <string>
 
 #include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/EventInterface.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
 #include "cachelib/allocator/PoolOptimizeStrategy.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/Util.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Throttler.h"
 
 namespace facebook {

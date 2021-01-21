@@ -1,4 +1,4 @@
-#include "cachelib/allocator/tests/EventInterfaceTest.h"
+#include "cachelib/common/tests/EventInterfaceTest.h"
 
 #include "cachelib/allocator/tests/TestBase.h"
 

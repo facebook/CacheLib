@@ -1682,28 +1682,6 @@ class CacheAllocator : public CacheBase {
   mutable util::FastStats<int64_t> handleCount_{};
 
   mutable detail::Stats stats_{};
-
-  // latency stats of various cachelib operations
-  mutable util::PercentileStats allocateLatency_;
-  mutable util::PercentileStats moveChainedLatency_;
-  mutable util::PercentileStats moveRegularLatency_;
-  mutable util::PercentileStats nvmLookupLatency_;
-  mutable util::PercentileStats nvmInsertLatency_;
-  mutable util::PercentileStats nvmRemoveLatency_;
-
-  // percentile stats for various cache statistics
-  mutable util::PercentileStats ramEvictionAgeSecs_;
-  mutable util::PercentileStats ramItemLifeTimeSecs_;
-  mutable util::PercentileStats nvmSmallLifetimeSecs_;
-  mutable util::PercentileStats nvmLargeLifetimeSecs_;
-  mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
-  mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
-
-  // This tracks in each window what are the percentiles of the sizes of
-  // items that we have written to flash. This is at-the-moment view of what
-  // we're currently writing into flash.
-  mutable util::PercentileStats nvmPutSize_;
-
   // allocator's items reaper to evict expired items in bg checking
   std::unique_ptr<Reaper<CacheT>> reaper_;
 
@@ -1723,8 +1701,8 @@ class CacheAllocator : public CacheBase {
 
   // Make this friend to give access to acquire and release
   friend ItemHandle;
-  friend NvmCacheT;
   friend ReaperAPIWrapper<CacheT>;
+  friend class CacheAPIWrapperForNvm<CacheT>;
   friend class tao::TaoApiWrapper;
 
   // tests
