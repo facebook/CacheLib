@@ -8,6 +8,7 @@
 
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
+#include "gtest/gtest_prod.h"
 
 namespace facebook {
 namespace cachelib {
@@ -101,6 +102,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   void updateThrottleParams(std::chrono::seconds curTime);
   ThrottleParams getThrottleParams() const;
   double clampFactorChange(double change) const;
+  double clampFactor(double factor) const;
   double genF(const HashedKey& hk) const;
 
   // The rate we are configered to write on average over a day.
@@ -122,6 +124,11 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
   // baseProbability distrbution on the items that are tested on accept.
   mutable util::PercentileStats baseProbStats_;
+
+  // probabilityFactor would always be in [lowerBound_, upperBound_]
+  static constexpr double kLowerBound_{0.001};
+  static constexpr double kUpperBound_{10.0};
+  FRIEND_TEST(DynamicRandomAPTest, StayInRange);
 };
 } // namespace navy
 } // namespace cachelib

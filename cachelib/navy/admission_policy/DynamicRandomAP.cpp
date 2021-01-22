@@ -13,6 +13,13 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+namespace {
+// Clamp the input into range [lower, upper]
+double clamp(double input, double lower, double upper) {
+  return std::min(std::max(input, lower), upper);
+}
+} // namespace
 DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
   if (targetRate == 0) {
     throw std::invalid_argument{folly::sformat(
@@ -61,8 +68,9 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
   reset();
   XLOGF(INFO,
         "DynamicRandomAP: target rate {} byte/s, update interval {} s. "
-        "maxChange {}, minChange {}.",
-        targetRate_, updateInterval_.count(), maxChange_, minChange_);
+        "maxChange {}, minChange {}, kUpperBound_ {}, kLowerBound_ {}.",
+        targetRate_, updateInterval_.count(), maxChange_, minChange_,
+        kUpperBound_, kLowerBound_);
 }
 
 bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
@@ -141,25 +149,24 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
     curTargetRate = (targetWrittenTomorrow - bytesWritten) / kSecondsInDay;
   }
   params_.curTargetRate = curTargetRate;
-  params_.probabilityFactor *=
-      clampFactorChange(fdiv(static_cast<double>(curTargetRate),
-                             static_cast<double>(params_.observedCurRate_)));
+  auto rawProbFactor = fdiv(static_cast<double>(curTargetRate),
+                            static_cast<double>(params_.observedCurRate_));
+  params_.probabilityFactor =
+      clampFactor(params_.probabilityFactor * clampFactorChange(rawProbFactor));
   XLOGF(INFO,
-        "DynamicRandomAP: curr rate {} bytes/s, curr target rate {} bytes/s. "
-        "probFactor {}.",
-        params_.observedCurRate_, curTargetRate, params_.probabilityFactor);
+        "observed current write rate = {}, target current write rate = {}, "
+        "rawProbFactor = {}, probFactor = {} .",
+        params_.observedCurRate_, curTargetRate, rawProbFactor,
+        params_.probabilityFactor);
   params_.bytesWrittenLastUpdate = bytesWritten;
 }
 
 double DynamicRandomAP::clampFactorChange(double change) const {
-  // Avoid changing probability factor too drastically
-  if (change < minChange_) {
-    return minChange_;
-  }
-  if (change > maxChange_) {
-    return maxChange_;
-  }
-  return change;
+  return clamp(change, minChange_, maxChange_);
+}
+
+double DynamicRandomAP::clampFactor(double factor) const {
+  return clamp(factor, kLowerBound_, kUpperBound_);
 }
 
 double DynamicRandomAP::getBaseProbability(uint64_t size) const {

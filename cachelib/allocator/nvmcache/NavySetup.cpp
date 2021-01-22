@@ -56,6 +56,8 @@ constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
 constexpr folly::StringPiece kSegmentedFifoSegmentRatio{
     "dipper_navy_sfifo_segment_ratio"};
+constexpr folly::StringPiece kNavyItemBaseSize{
+    "dipper_navy_dynamic_random_base_size"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -293,8 +295,11 @@ void setAdmissionPolicy(const folly::dynamic& options,
     size_t admissionSuffixLen = options.get_ptr(kAdmissionSuffixLen)
                                     ? options[kAdmissionSuffixLen].getInt()
                                     : 0;
+    uint32_t itemBaseSize = options.get_ptr(kNavyItemBaseSize)
+                                ? options[kNavyItemBaseSize].getInt()
+                                : 0;
     proto.setDynamicRandomAdmissionPolicy(options[kAdmissionWriteRate].getInt(),
-                                          admissionSuffixLen);
+                                          admissionSuffixLen, itemBaseSize);
   } else {
     throw std::invalid_argument{folly::sformat("invalid policy name {}", name)};
   }

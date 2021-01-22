@@ -10,8 +10,14 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-namespace tests {
-TEST(DynamicRandomAP, AboveTarget) {
+
+namespace {
+struct WrittenBytes {
+  uint64_t bytes;
+};
+} // namespace
+
+TEST(DynamicRandomAPTest, AboveTarget) {
   DynamicRandomAP::Config config;
   config.targetRate = 1;
   config.updateInterval = std::chrono::seconds{1};
@@ -50,7 +56,7 @@ TEST(DynamicRandomAP, AboveTarget) {
   EXPECT_GE(accepted, acceptedNew);
 }
 
-TEST(DynamicRandomAP, BelowTarget) {
+TEST(DynamicRandomAPTest, BelowTarget) {
   DynamicRandomAP::Config config;
   config.targetRate = 1000;
   config.updateInterval = std::chrono::seconds{1};
@@ -89,7 +95,7 @@ TEST(DynamicRandomAP, BelowTarget) {
   EXPECT_LE(accepted, acceptedNew);
 }
 
-TEST(DynamicRandomAP, BelowTargetSuffix) {
+TEST(DynamicRandomAPTest, BelowTargetSuffix) {
   DynamicRandomAP::Config config;
   config.targetRate = 1000;
   config.updateInterval = std::chrono::seconds{1};
@@ -137,14 +143,45 @@ TEST(DynamicRandomAP, BelowTargetSuffix) {
   EXPECT_FALSE(ap.accept(makeHK("\xbc"), makeView("value")));
 }
 
-TEST(DynamicRandomAP, BadConfig) {
+TEST(DynamicRandomAPTest, BadConfig) {
   DynamicRandomAP::Config config;
   config.targetRate = 1000;
   config.updateInterval = std::chrono::seconds{1};
   config.probabilitySeed = 0;
   EXPECT_THROW(DynamicRandomAP(std::move(config)), std::invalid_argument);
 }
-} // namespace tests
+
+// Make sure that the probabilityFactor always stay in the range.
+TEST(DynamicRandomAPTest, StayInRange) {
+  WrittenBytes wb;
+  DynamicRandomAP::Config config;
+  config.targetRate = 34 * 1024 * 1024;
+  config.updateInterval = std::chrono::seconds{60};
+  std::chrono::seconds time{getSteadyClockSeconds()};
+
+  config.fnBytesWritten = [&] { return wb.bytes; };
+  auto ap = facebook::cachelib::navy::DynamicRandomAP(std::move(config));
+  auto checkInRange = [](DynamicRandomAP& ap) {
+    auto params = ap.getThrottleParams();
+    ASSERT_LE(params.probabilityFactor, ap.kUpperBound_);
+    ASSERT_GE(params.probabilityFactor, ap.kLowerBound_);
+  };
+
+  for (size_t i = 0; i < 50000; i++) {
+    wb.bytes += 1 * 1024 * 1024 * config.updateInterval.count();
+    time = time + config.updateInterval;
+    ap.updateThrottleParams(time);
+    checkInRange(ap);
+  }
+
+  for (size_t i = 0; i < 50000; i++) {
+    wb.bytes += 1000 * 1024 * 1024 * config.updateInterval.count();
+    time = time + config.updateInterval;
+    ap.updateThrottleParams(time);
+    checkInRange(ap);
+  }
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
