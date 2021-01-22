@@ -59,8 +59,9 @@ void setupSignalHandler() {
   memset(&act, 0, sizeof(struct sigaction));
   act.sa_handler = &sigint_handler;
   act.sa_flags = SA_RESETHAND;
-  if (sigaction(SIGINT, &act, nullptr) == -1) {
-    std::cout << "Failed to register a SIGINT handler" << std::endl;
+  if (sigaction(SIGINT, &act, nullptr) == -1 ||
+      sigaction(SIGTERM, &act, nullptr) == -1) {
+    std::cout << "Failed to register SIGINT&SIGTERM handler" << std::endl;
     std::exit(1);
   }
 }
