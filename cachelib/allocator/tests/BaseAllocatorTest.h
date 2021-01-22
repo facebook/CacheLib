@@ -1,6 +1,7 @@
 #pragma once
 
 #include <folly/Random.h>
+#include <folly/synchronization/Baton.h>
 
 #include <algorithm>
 #include <chrono>
@@ -5115,6 +5116,125 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     lookupFn("hello");
     lookupFn("world");
     lookupFn("yolo");
+  }
+
+  // while a chained item could be moved, try to transfer its parent and
+  // validate that move succeeds correctly.
+  void testTransferChainWhileMoving() {
+    // create an allocator worth 10 slabs.
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+
+    // allocate enough size to make sure evictions never occur
+    config.setCacheSize(200 * Slab::kSize);
+
+    using Item = typename AllocatorT::Item;
+
+    std::atomic<uint64_t> numRemovedKeys{0};
+    config.setRemoveCallback(
+        [&](const typename AllocatorT::RemoveCbData&) { ++numRemovedKeys; });
+
+    std::string movingKey = "helloworldmoving";
+    // we will use the acquisition of mutex as an indicator of whether item is
+    // close to being moved and use it to swap the parent.
+    std::mutex m;
+    struct TestSyncObj : public AllocatorT::SyncObj {
+      TestSyncObj(std::mutex& m,
+                  std::atomic<bool>& firstTime,
+                  folly::Baton<>& startedMoving,
+                  folly::Baton<>& changedParent)
+          : l(m) {
+        if (!firstTime) {
+          return;
+        }
+        firstTime = false;
+        startedMoving.post();
+        changedParent.wait();
+      }
+
+      std::lock_guard<std::mutex> l;
+    };
+
+    // used to track if the moving sync is executed upon the first time after
+    // allocation so that the baton logic is executed only once.
+    std::atomic<bool> firstTimeMovingSync{true};
+
+    // baton to indicate that the move process has started so that we can
+    // switch the parent
+    folly::Baton<> startedMoving;
+    // baton to indicate that the parent has been switched so that the move
+    // process can proceed
+    folly::Baton<> changedParent;
+
+    const size_t numMovingAttempts = 100;
+    std::atomic<uint64_t> numMoves{0};
+    config.enableMovingOnSlabRelease(
+        [&](Item& oldItem, Item& newItem, Item* /* parentPtr */) {
+          XDCHECK_EQ(oldItem.getSize(), newItem.getSize());
+          XDCHECK_EQ(oldItem.getKey(), newItem.getKey());
+          std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+                      oldItem.getSize());
+          ++numMoves;
+        },
+        [&m, &startedMoving, &changedParent,
+         &firstTimeMovingSync](typename Item::Key key) {
+          XLOG(ERR) << "Moving" << key;
+          return std::make_unique<TestSyncObj>(m, firstTimeMovingSync,
+                                               startedMoving, changedParent);
+        },
+        numMovingAttempts);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const auto poolSize = numBytes;
+
+    const std::set<uint32_t> allocSizes = {250, 2050};
+    const auto pid = alloc.addPool("one", poolSize, allocSizes);
+
+    void* childPtr = nullptr;
+    {
+      auto parent = alloc.allocate(pid, movingKey, 1000);
+      auto child = alloc.allocateChainedItem(parent, 200);
+      childPtr = child.get();
+      alloc.addChainedItem(parent, std::move(child));
+      alloc.insertOrReplace(parent);
+    }
+
+    XLOG(INFO) << childPtr;
+    // Release slab corresponding to the child to trigger a move
+    auto releaseFn = [&alloc, childPtr, pid] {
+      alloc.releaseSlab(pid, alloc.getAllocInfo(childPtr).classId,
+                        SlabReleaseMode::kRebalance, childPtr);
+    };
+
+    auto slabRelease = std::async(releaseFn);
+
+    startedMoving.wait();
+
+    // we know moving sync is held now.
+    {
+      auto newParent = alloc.allocate(pid, movingKey, 600);
+      auto parent = alloc.find(movingKey);
+      alloc.transferChainAndReplace(parent, newParent);
+    }
+
+    // indicate that we changed the parent. This should abort the current
+    // moving attempt, re-allocate the item and eventually succeed in moving.
+    changedParent.post();
+
+    // wait for slab release to complete.
+    slabRelease.wait();
+
+    EXPECT_EQ(numMoves, 1);
+    auto slabReleaseStats = alloc.getSlabReleaseStats();
+    EXPECT_EQ(slabReleaseStats.numMoveAttempts, 2);
+    EXPECT_EQ(slabReleaseStats.numMoveSuccesses, 1);
+
+    auto handle = alloc.find(movingKey);
+    auto chainedAllocs = alloc.viewAsChainedAllocs(handle);
+    for (const auto& c : chainedAllocs.getChain()) {
+      EXPECT_NE(&c, childPtr);
+    }
   }
 
   // Test stats count on permanent allocation is correct

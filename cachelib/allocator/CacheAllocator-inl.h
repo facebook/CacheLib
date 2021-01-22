@@ -1149,6 +1149,16 @@ bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
     return false;
   }
 
+  // once we have the moving sync and valid parent for the old item, check if
+  // the original allocation was made correctly. If not, we destroy the
+  // allocation to indicate a retry to moving logic above.
+  if (reinterpret_cast<uintptr_t>(
+          &newItemHdl->asChainedItem().getParentItem(compressor_)) !=
+      reinterpret_cast<uintptr_t>(&parentHandle->asChainedItem())) {
+    newItemHdl.reset();
+    return false;
+  }
+
   XDCHECK_EQ(reinterpret_cast<uintptr_t>(
                  &newItemHdl->asChainedItem().getParentItem(compressor_)),
              reinterpret_cast<uintptr_t>(&parentHandle->asChainedItem()));
@@ -2387,14 +2397,17 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
       return true;
     }
 
+    if (!newItemHdl) {
+      // try to allocate again if it previously wasn't successful
+      newItemHdl = allocateNewItemForOldItem(oldItem);
+    }
+
+    // if we have a valid handle, try to move, if not, we retry.
     if (newItemHdl) {
       isMoved = tryMovingForSlabRelease(oldItem, newItemHdl);
       if (isMoved) {
         break;
       }
-    } else {
-      // try to allocate again if it previously wasn't successful
-      newItemHdl = allocateNewItemForOldItem(oldItem);
     }
 
     throttleWith(throttler, [&] {

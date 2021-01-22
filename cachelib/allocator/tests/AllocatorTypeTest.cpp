@@ -260,6 +260,10 @@ TYPED_TEST(BaseAllocatorTest, AddChainedItemMultiThreadWithMovingAndSync) {
   this->testAddChainedItemMultithreadWithMovingAndSync();
 }
 
+TYPED_TEST(BaseAllocatorTest, TransferChainWhileMoving) {
+  this->testTransferChainWhileMoving();
+}
+
 TYPED_TEST(BaseAllocatorTest, AddAndPopChainedItemMultithread) {
   this->testAddAndPopChainedItemMultithread();
 }
