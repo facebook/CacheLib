@@ -154,9 +154,12 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         }
       }
 
-      std::vector<std::string> extraFields;
-      for (size_t i = SampleFields::TOTAL_FIELDS; i < fields.size(); ++i) {
-        extraFields.push_back(fields[i].str());
+      std::vector<std::string> statsAggFields;
+      for (size_t i = SampleFields::TOTAL_FIELDS;
+           i < SampleFields::TOTAL_FIELDS +
+                   config_.replayGeneratorConfig.numAggregationFields;
+           ++i) {
+        statsAggFields.push_back(fields[i].str());
       }
 
       auto shard = getShard(fields[SampleFields::CACHE_KEY]);
@@ -171,7 +174,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         rangeStart,
                                         rangeEnd,
                                         ttl,
-                                        std::move(extraFields))) {
+                                        std::move(statsAggFields))) {
         if (shouldShutdown()) {
           LOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;

@@ -72,29 +72,29 @@ class PieceWiseCacheStats {
   void recordAccess(size_t getBytes,
                     size_t getBodyBytes,
                     size_t bytesEgress,
-                    const std::vector<std::string>& extraFields);
+                    const std::vector<std::string>& statsAggFields);
 
   // Record cache hit for objects that are not stored in pieces
   void recordNonPieceHit(size_t hitBytes,
                          size_t hitBodyBytes,
-                         const std::vector<std::string>& extraFields);
+                         const std::vector<std::string>& statsAggFields);
 
   // Record cache hit for a header piece
   void recordPieceHeaderHit(size_t pieceBytes,
-                            const std::vector<std::string>& extraFields);
+                            const std::vector<std::string>& statsAggFields);
 
   // Record cache hit for a body piece
   void recordPieceBodyHit(size_t pieceBytes,
-                          const std::vector<std::string>& extraFields);
+                          const std::vector<std::string>& statsAggFields);
 
   // Record full hit stats for piece wise caching
   void recordPieceFullHit(size_t headerBytes,
                           size_t bodyBytes,
-                          const std::vector<std::string>& extraFields);
+                          const std::vector<std::string>& statsAggFields);
 
   // Record bytes ingress from upstream
   void recordIngressBytes(size_t ingressBytes,
-                          const std::vector<std::string>& extraFields);
+                          const std::vector<std::string>& statsAggFields);
 
   util::PercentileStats& getLatencyStatsObject();
 
@@ -178,8 +178,9 @@ struct PieceWiseReqWrapper {
   const size_t headerSize;
   // The size of the complete object, excluding response header.
   const size_t fullObjectSize;
-  // Extra fields for this request sample other than the SampleFields
-  const std::vector<std::string> extraFields;
+  // Additional stats aggregation fields for this request sample other
+  // than the SampleFields
+  const std::vector<std::string> statsAggFields;
 
   // Tracker to record the start/end of request. Initialize it at the
   // start of request processing.
@@ -193,7 +194,7 @@ struct PieceWiseReqWrapper {
   // @param rangeStart: start of the range if it's range request
   // @param rangeEnd: end of the range if it's range request
   // @param ttl: ttl of the content for caching
-  // @param extraFieldV: Extra fields used for stats aggregation
+  // @param statsAggFieldV: extra fields used for stats aggregation
   explicit PieceWiseReqWrapper(uint64_t cachePieceSize,
                                uint64_t reqId,
                                OpType opType,
@@ -203,7 +204,7 @@ struct PieceWiseReqWrapper {
                                folly::Optional<uint64_t> rangeStart,
                                folly::Optional<uint64_t> rangeEnd,
                                uint32_t ttl,
-                               std::vector<std::string>&& extraFieldV);
+                               std::vector<std::string>&& statsAggFieldV);
 
   PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };
