@@ -38,7 +38,10 @@ class CacheAllocatorConfig {
   // Set cache name as a string
   CacheAllocatorConfig& setCacheName(const std::string&);
 
-  // Set cache size in bytes
+  // Set cache size in bytes. If size is smaller than 60GB (64'424'509'440),
+  // then we will enable full coredump. Otherwise, we will disable it. The
+  // reason we disable full coredump for large cache is because it takes a
+  // long time to dump, and also we might not have enough local storage.
   CacheAllocatorConfig& setCacheSize(size_t _size);
 
   // Set default allocation sizes for a cache pool
@@ -596,6 +599,10 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheName(
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheSize(size_t _size) {
   size = _size;
+  constexpr size_t maxCacheSizeWithCoredump = 64'424'509'440; // 60GB
+  if (size <= maxCacheSizeWithCoredump) {
+    return setFullCoredump(true);
+  }
   return *this;
 }
 
