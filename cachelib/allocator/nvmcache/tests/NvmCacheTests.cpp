@@ -1569,6 +1569,7 @@ TEST_F(NvmCacheTest, NavyStats) {
 
   // navy::Device
   EXPECT_TRUE(cs("navy_device_bytes_written"));
+  EXPECT_TRUE(cs("navy_device_bytes_read"));
   EXPECT_TRUE(cs("navy_device_read_errors"));
   EXPECT_TRUE(cs("navy_device_write_errors"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_avg"));

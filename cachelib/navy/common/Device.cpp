@@ -256,7 +256,7 @@ bool Device::readInternal(uint64_t offset, uint32_t size, void* value) {
     readIOErrors_.inc();
     return result;
   }
-
+  bytesRead_.add(size);
   if (encryptor_) {
     XCHECK_EQ(offset % encryptor_->encryptionBlockSize(), 0ul);
     auto res = encryptor_->decrypt(
@@ -303,6 +303,7 @@ bool Device::read(uint64_t offset, uint32_t size, void* value) {
 
 void Device::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_device_bytes_written", getBytesWritten());
+  visitor("navy_device_bytes_read", getBytesRead());
   readLatencyEstimator_.visitQuantileEstimator(visitor, "{}_us_{}",
                                                "navy_device_read_latency");
   writeLatencyEstimator_.visitQuantileEstimator(visitor, "{}_us_{}",
