@@ -11,12 +11,6 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
-namespace {
-struct WrittenBytes {
-  uint64_t bytes;
-};
-} // namespace
-
 TEST(DynamicRandomAPTest, AboveTarget) {
   DynamicRandomAP::Config config;
   config.targetRate = 1;
@@ -153,13 +147,13 @@ TEST(DynamicRandomAPTest, BadConfig) {
 
 // Make sure that the probabilityFactor always stay in the range.
 TEST(DynamicRandomAPTest, StayInRange) {
-  WrittenBytes wb;
   DynamicRandomAP::Config config;
   config.targetRate = 34 * 1024 * 1024;
   config.updateInterval = std::chrono::seconds{60};
   std::chrono::seconds time{getSteadyClockSeconds()};
 
-  config.fnBytesWritten = [&] { return wb.bytes; };
+  uint64_t bytesWritten{0};
+  config.fnBytesWritten = [&bytesWritten]() { return bytesWritten; };
   auto ap = facebook::cachelib::navy::DynamicRandomAP(std::move(config));
   auto checkInRange = [](DynamicRandomAP& ap) {
     auto params = ap.getThrottleParams();
@@ -168,18 +162,45 @@ TEST(DynamicRandomAPTest, StayInRange) {
   };
 
   for (size_t i = 0; i < 50000; i++) {
-    wb.bytes += 1 * 1024 * 1024 * config.updateInterval.count();
+    bytesWritten += 1 * 1024 * 1024 * config.updateInterval.count();
     time = time + config.updateInterval;
     ap.updateThrottleParams(time);
     checkInRange(ap);
   }
 
   for (size_t i = 0; i < 50000; i++) {
-    wb.bytes += 1000 * 1024 * 1024 * config.updateInterval.count();
+    bytesWritten += 1000 * 1024 * 1024 * config.updateInterval.count();
     time = time + config.updateInterval;
     ap.updateThrottleParams(time);
     checkInRange(ap);
   }
+}
+
+// Make sure that the probabilityFactor is adjusted towards the max cap instead
+// of the current write rate.
+TEST(DynamicRandomAPTest, RespectMaxWriteRate) {
+  DynamicRandomAP::Config config;
+  config.targetRate = 70 * 1024 * 1024;
+  config.maxRate = 80 * 1024 * 1024;
+  config.updateInterval = std::chrono::seconds{36000};
+  std::chrono::seconds time{getSteadyClockSeconds()};
+
+  uint64_t bytesWritten{0};
+  config.fnBytesWritten = [&bytesWritten]() { return bytesWritten; };
+  auto ap = facebook::cachelib::navy::DynamicRandomAP(std::move(config));
+
+  // Write 36000 byte in 10 hours.
+  bytesWritten = 36000;
+  time = time + config.updateInterval;
+  ap.updateThrottleParams(time);
+  // Observed write rate 1
+  // Untrimmed current target write rate should be 98.75MB/s, but the
+  // probabilityFactor should adjust towards 80MB/s
+  // rawFactor should be 1.14 instead of 1.41
+  // Since the factor shouldn't be clamped, we can check the factor is in range.
+  auto params = ap.getThrottleParams();
+  ASSERT_LE(params.probabilityFactor * params.observedCurRate_, config.maxRate);
+  ASSERT_EQ(params.curTargetRate, config.maxRate);
 }
 
 } // namespace navy

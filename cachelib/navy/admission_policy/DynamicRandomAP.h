@@ -65,6 +65,11 @@ class DynamicRandomAP final : public AdmissionPolicy {
     // admits/rejects by the hash
     size_t deterministicKeyHashSuffixLength{0};
 
+    // The max write rate target.
+    // If the target write rate caluclated by write budget exceeds this, use
+    // this rate as the target to adjust.
+    uint64_t maxRate{80 * 1024 * 1024};
+
     // Throws if invalid config
     Config& validate();
   };
@@ -107,6 +112,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
   // The rate we are configered to write on average over a day.
   const uint64_t targetRate_{};
+  // The rate we are confiigured to write at most.
+  const uint64_t maxRate_{};
   const std::chrono::seconds updateInterval_{};
   const uint32_t baseProbabilityMultiplier_{};
   const double probabilitySeed_{};
@@ -129,6 +136,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   static constexpr double kLowerBound_{0.001};
   static constexpr double kUpperBound_{10.0};
   FRIEND_TEST(DynamicRandomAPTest, StayInRange);
+  FRIEND_TEST(DynamicRandomAPTest, RespectMaxWriteRate);
 };
 } // namespace navy
 } // namespace cachelib

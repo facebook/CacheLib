@@ -55,6 +55,7 @@ DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
 
 DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
     : targetRate_{config.targetRate},
+      maxRate_{config.maxRate},
       updateInterval_{config.updateInterval},
       baseProbabilityMultiplier_{folly::findLastSet(config.baseSize)},
       probabilitySeed_{config.probabilitySeed},
@@ -148,16 +149,25 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
     // currently written @bytesWritten.
     curTargetRate = (targetWrittenTomorrow - bytesWritten) / kSecondsInDay;
   }
+
+  if (curTargetRate > maxRate_) {
+    curTargetRate = maxRate_;
+    XLOGF(INFO,
+          "max write rate {} will be used because target current write rate {} "
+          "exceeds it.",
+          maxRate_, curTargetRate);
+  }
   params_.curTargetRate = curTargetRate;
+
   auto rawProbFactor = fdiv(static_cast<double>(curTargetRate),
                             static_cast<double>(params_.observedCurRate_));
   params_.probabilityFactor =
       clampFactor(params_.probabilityFactor * clampFactorChange(rawProbFactor));
-  XLOGF(INFO,
-        "observed current write rate = {}, target current write rate = {}, "
-        "rawProbFactor = {}, probFactor = {} .",
-        params_.observedCurRate_, curTargetRate, rawProbFactor,
-        params_.probabilityFactor);
+  XLOG_EVERY_MS(INFO, 60000)
+      << "observed current write rate = " << params_.observedCurRate_
+      << ", target current rate = " << curTargetRate
+      << " rawProbFactor = " << rawProbFactor
+      << ", probFactor = " << params_.probabilityFactor;
   params_.bytesWrittenLastUpdate = bytesWritten;
 }
 
@@ -183,13 +193,15 @@ DynamicRandomAP::ThrottleParams DynamicRandomAP::getThrottleParams() const {
 
 void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   auto params = getThrottleParams();
-  visitor("navy_ap_write_rate_target", static_cast<double>(targetRate_));
-  visitor("navy_ap_write_rate_current",
+  visitor("navy_ap_write_rate_target_configured",
+          static_cast<double>(targetRate_));
+  visitor("navy_ap_write_rate_max_configured", static_cast<double>(maxRate_));
+  visitor("navy_ap_write_rate_adjusted_target",
           static_cast<double>(params.curTargetRate));
   visitor("navy_ap_prob_factor_x100", params_.probabilityFactor * 100);
   baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_{}_{}",
                                         "baseProb_x100");
-  visitor("navy_observed_cur_rate",
+  visitor("navy_ap_write_rate_observed",
           static_cast<double>(params_.observedCurRate_));
 }
 } // namespace navy
