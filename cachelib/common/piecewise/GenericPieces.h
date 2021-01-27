@@ -39,6 +39,8 @@ class GenericPieces {
                 uint64_t fullBodyLen,
                 const RequestRange* range);
 
+  void resetFromRequestRange(const RequestRange& range);
+
   /**
    * We fetch one piece at a time and keep track of that piece
    * number here.
