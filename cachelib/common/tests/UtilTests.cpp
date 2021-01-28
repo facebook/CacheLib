@@ -155,24 +155,6 @@ TEST(Util, SysctlTests) {
 }
 
 TEST(Util, MemAvailable) { EXPECT_GT(util::getMemAvailable(), 0); }
-
-TEST(Util, MemRSS) {
-  auto val = util::getRSSBytes();
-  EXPECT_GT(val, 0);
-  const size_t len = 500 * 1024 * 1024;
-  void* ptr = ::mmap(nullptr, len, PROT_WRITE | PROT_READ,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  EXPECT_NE(MAP_FAILED, ptr);
-  SCOPE_EXIT { ::munmap(ptr, len); };
-  std::memset(ptr, 5, len);
-  // sleep to let the stat catch up.
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  auto newVal = util::getRSSBytes();
-  EXPECT_GT(newVal, val);
-  EXPECT_GE(newVal - val, len)
-      << folly::sformat("newVal= {}, val = {}, len = {}", newVal, val, len);
-}
-
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
