@@ -4,6 +4,7 @@
 #include <folly/Likely.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/Asm.h>
+#include <folly/synchronization/SanitizeThread.h>
 
 #include <cstdint>
 #include <cstdlib>
