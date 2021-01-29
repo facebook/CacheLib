@@ -689,13 +689,18 @@ class CacheAllocator : public CacheBase {
   //
   // precondition:  serialization must happen without any reader or writer
   // present. Any modification of this object afterwards will result in an
-  // invalid, inconsistent state for the serialized data.
+  // invalid, inconsistent state for the serialized data. There must not be
+  // any outstanding active handles
   //
   // @throw   std::invalid_argument if the cache allocator isn't using shared
   //          memory
   // @throw   std::logic_error if any component is not restorable.
-  // @return  A @a ShutDownStatus value indicating the result of the shutDown
-  // operation.
+  // @return  A ShutDownStatus value indicating the result of the shutDown
+  //          operation.
+  //          kSuccess - successfully shut down and can be re-attached
+  //          kFailed - failure due to outstanding active handle or error with
+  //                    cache dir
+  //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
   ShutDownStatus shutDown();
 
   // Stop existing ones (if any) and create new workers

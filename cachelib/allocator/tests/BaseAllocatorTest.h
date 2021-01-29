@@ -1246,6 +1246,23 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                  std::exception);
   }
 
+  void testShutDownWithActiveHandles() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.enableCachePersistence(this->cacheDir_);
+    config.configureChainedItems();
+
+    // Create a new cache allocator and save it properly
+    AllocatorT alloc(AllocatorT::SharedMemNew, config);
+    auto pid = alloc.addPool("foobar", alloc.getCacheMemoryStats().cacheSize);
+
+    auto handle = util::allocateAccessible(alloc, pid, "key", 10);
+    ASSERT_NE(nullptr, handle);
+    ASSERT_EQ(AllocatorT::ShutDownStatus::kFailed, alloc.shutDown());
+    handle.reset();
+    ASSERT_EQ(AllocatorT::ShutDownStatus::kSuccess, alloc.shutDown());
+  }
+
   void testAttachDetachOnExit() {
     typename AllocatorT::Config config;
     config.setCacheSize(10 * Slab::kSize);
@@ -3026,88 +3043,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(0, newStats.cacheStats[classId].numEvictions());
   }
 
-  void testRebalancingWithSerialization() {
-    std::set<std::string> evictedKeys;
-    auto removeCb =
-        [&evictedKeys](const typename AllocatorT::RemoveCbData& data) {
-          if (data.context == RemoveContext::kEviction) {
-            const auto key = data.item.getKey();
-            evictedKeys.insert({key.data(), key.size()});
-          }
-        };
-
-    const size_t nSlabs = 20;
-    const size_t size = nSlabs * Slab::kSize;
-    const unsigned int keyLen = 100;
-
-    std::vector<uint32_t> sizes;
-    uint8_t poolId;
-
-    // Test allocations. These allocations should remain after save/restore.
-    // Original lru allocator
-    std::vector<typename AllocatorT::Key> keys;
-    {
-      typename AllocatorT::Config config;
-      config.setRemoveCallback(removeCb);
-      config.setCacheSize(size);
-      config.enableCachePersistence(this->cacheDir_);
-      config.disableFastShutdownMode();
-      AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
-      poolId = alloc.addPool("foobar", numBytes);
-      sizes = this->getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
-      this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
-      for (const auto& item : alloc) {
-        auto key = item.getKey();
-        keys.push_back(key);
-      }
-
-      std::vector<typename AllocatorT::ItemHandle> handles;
-      for (auto& key : keys) {
-        auto handle = alloc.find(key);
-        ASSERT_NE(nullptr, handle.get());
-        handles.push_back(std::move(handle));
-      }
-
-      // Try to serialize while releasing a slab. This should fail.
-      const uint8_t classId =
-          alloc.getAllocInfo(handles[0]->getMemory()).classId;
-      auto slabRelease = std::async(std::launch::async, [&] {
-        alloc.releaseSlab(poolId, classId, SlabReleaseMode::kRebalance,
-                          handles[0]->getMemory());
-      });
-
-      // Wait here for the slab release to start
-      while (alloc.getSlabReleaseStats().numActiveSlabReleases == 0) {
-        /* sleep override */
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      // Save, this should throw
-      ASSERT_THROW(alloc.shutDown(), std::logic_error);
-
-      handles.clear();
-      slabRelease.wait();
-
-      // This should succeed
-      ASSERT_NO_THROW(alloc.shutDown());
-    }
-
-    // Restore lru allocator, evicted keys should no longer be found in the
-    // allocator
-    {
-      typename AllocatorT::Config config;
-      config.setCacheSize(size);
-      config.enableCachePersistence(this->cacheDir_);
-
-      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
-      for (auto& key : evictedKeys) {
-        auto handle = alloc.find(key);
-        ASSERT_EQ(nullptr, handle);
-      }
-    }
-  }
-
   void testFastShutdownWithAbortedPoolRebalancer() {
     const size_t nSlabs = 4;
     const size_t size = nSlabs * Slab::kSize;
@@ -3157,13 +3092,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
 
-      // Save, this should not throw
-      ASSERT_NO_THROW(alloc.shutDown());
+      // Save, this should stop any workers. However, this would fail since we
+      // are holding active handles. But this is good enough to test that
+      // shutdown aborts any active blocking rebalancer.
+      ASSERT_EQ(alloc.shutDown(), AllocatorT::ShutDownStatus::kFailed);
+
+      EXPECT_EQ(0, alloc.getSlabReleaseStats().numActiveSlabReleases);
 
       // release the handle references that were being held
-      for (auto& h : handles) {
-        h.release();
-      }
+      handles.clear();
+
+      ASSERT_EQ(alloc.shutDown(), AllocatorT::ShutDownStatus::kSuccess);
     }
     /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(3));
 

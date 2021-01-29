@@ -170,10 +170,6 @@ TYPED_TEST(BaseAllocatorTest, RebalancingWithItemsAlreadyRemoved) {
   this->testRebalancingWithItemsAlreadyRemoved();
 }
 
-TYPED_TEST(BaseAllocatorTest, RebalancingWithSerialization) {
-  this->testRebalancingWithSerialization();
-}
-
 TYPED_TEST(BaseAllocatorTest, FastShutdownTestWithAbortedPoolRebalancer) {
   this->testFastShutdownWithAbortedPoolRebalancer();
 }
@@ -207,6 +203,10 @@ TYPED_TEST(BaseAllocatorTest, ReaperOutOfBound) {
 }
 
 TYPED_TEST(BaseAllocatorTest, ReaperShutDown) { this->testReaperShutDown(); }
+
+TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {
+  this->testShutDownWithActiveHandles();
+}
 
 TYPED_TEST(BaseAllocatorTest, UnevictableItems) {
   this->testUnevictableItems();

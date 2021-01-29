@@ -3046,6 +3046,14 @@ CacheAllocator<CacheTrait>::shutDown() {
   }
 
   stopWorkers();
+
+  const auto handleCount = getNumActiveHandles();
+  if (handleCount != 0) {
+    XLOGF(ERR, "Found {} active handles while shutting down cache. aborting",
+          handleCount);
+    return ShutDownStatus::kFailed;
+  }
+
   const auto nvmShutDownStatusOpt = saveNvmCache();
   saveRamCache();
   const auto shmShutDownStatus = shmManager_->shutDown();
