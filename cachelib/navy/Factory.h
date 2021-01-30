@@ -141,13 +141,19 @@ class CacheProto {
   // rate in bytes/s. setBlockCache is a dependency and must be called before
   // this.
   // targetRate: rate in bytes/s
+  //
   // deterministicKeyHashSuffixLength: length of suffix in key to be ignored
-  // when hashing for probability. itemBaseSize: base size of baseProbability
-  // calculation.
+  // when hashing for probability.
+  //
+  // itemBaseSize: base size of baseProbability calculation.
+  //
+  // maxRate: max rate at which Navy can write without saturation which
+  // negatively affects latency.
   virtual void setDynamicRandomAdmissionPolicy(
       uint64_t targetRate,
       size_t deterministicKeyHashSuffixLength = 0,
-      uint32_t itemBaseSize = 0) = 0;
+      uint32_t itemBaseSize = 0,
+      uint64_t maxRate = 0) = 0;
 };
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto();

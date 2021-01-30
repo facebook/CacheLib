@@ -202,7 +202,8 @@ class CacheProtoImpl final : public CacheProto {
 
   void setDynamicRandomAdmissionPolicy(uint64_t targetRate,
                                        size_t deterministicKeyHashSuffixLength,
-                                       uint32_t itemBaseSize) override {
+                                       uint32_t itemBaseSize,
+                                       uint64_t maxRate) override {
     DynamicRandomAP::Config apConfig;
     apConfig.targetRate = targetRate;
     apConfig.fnBytesWritten = [device = config_.device.get()]() {
@@ -213,6 +214,9 @@ class CacheProtoImpl final : public CacheProto {
         deterministicKeyHashSuffixLength;
     if (itemBaseSize > 0) {
       apConfig.baseSize = itemBaseSize;
+    }
+    if (maxRate > 0) {
+      apConfig.maxRate = maxRate;
     }
     config_.admissionPolicy =
         std::make_unique<DynamicRandomAP>(std::move(apConfig));
