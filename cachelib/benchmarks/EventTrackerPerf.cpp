@@ -1,3 +1,14 @@
+/*
+============================================================================
+cachelib/benchmarks/EventTrackerPerf.cpp        relative  time/iter  iters/s
+============================================================================
+Find                                                       263.03ms     3.80
+FindWithWSA                                      100.55%   273.41ms     3.66
+Allocate                                                   783.73ms     1.28
+AllocateWithWSA                                   99.16%   790.35ms     1.27
+============================================================================
+*/
+
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 
@@ -60,19 +71,49 @@ void runFindOps(std::shared_ptr<FakeWsaTracker> tracker) {
 
   BENCHMARK_SUSPEND { cache.reset(); }
 }
+
+void runAllocateOps(std::shared_ptr<FakeWsaTracker> tracker) {
+  BENCHMARK_SUSPEND {
+    LruAllocator::Config config;
+
+    config.setCacheSize(500ul * 1024ul * 1024ul); // 500 MB
+
+    // 16 million buckets, 1 million locks
+    LruAllocator::AccessConfig accessConfig{24 /* buckets power */,
+                                            20 /* locks power */};
+    config.setAccessConfig(accessConfig);
+    config.configureChainedItems(accessConfig);
+
+    if (tracker) {
+      config.setEventTracker(std::move(tracker));
+    }
+
+    cache = std::make_unique<LruAllocator>(config);
+    cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  }
+
+  for (int i = 0; i < 100'000; i++) {
+    std::string key{folly::sformat("{}", i)};
+    auto hdl = cache->allocate(0, key, 100);
+    for (int j = 0; j < 10; j++) {
+      auto c = cache->allocateChainedItem(hdl, 100);
+      cache->addChainedItem(hdl, std::move(c));
+    }
+    cache->insert(hdl);
+  }
+
+  BENCHMARK_SUSPEND { cache.reset(); }
+}
 } // namespace
 
-/*
-============================================================================
-cachelib/benchmarks/EventTrackerPerf.cpp        relative  time/iter  iters/s
-============================================================================
-Find                                                       298.91ms     3.35
-FindWithWSA                                      100.23%   298.24ms     3.35
-============================================================================
-*/
 BENCHMARK(Find) { runFindOps(nullptr); }
 BENCHMARK_RELATIVE(FindWithWSA) {
   runFindOps(std::make_shared<FakeWsaTracker>());
+}
+
+BENCHMARK(Allocate) { runAllocateOps(nullptr); }
+BENCHMARK_RELATIVE(AllocateWithWSA) {
+  runAllocateOps(std::make_shared<FakeWsaTracker>());
 }
 
 int main(int argc, char** argv) {
