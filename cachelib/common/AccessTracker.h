@@ -13,8 +13,10 @@
 
 namespace facebook {
 namespace cachelib {
-
-class AccessTracker {
+namespace detail {
+// Template type for CMS
+template <typename CMS>
+class AccessTrackerBase {
  public:
   using TickerFct = folly::Function<size_t()>;
   struct Config {
@@ -59,7 +61,7 @@ class AccessTracker {
     double bfFalsePositiveRate{0.02};
   };
 
-  explicit AccessTracker(Config config);
+  explicit AccessTrackerBase(Config config);
 
   // Record access for the key to the current bucket.
   //
@@ -70,23 +72,32 @@ class AccessTracker {
 
   size_t getNumBuckets() const noexcept { return config_.numBuckets; }
 
-  AccessTracker(const AccessTracker& other) = delete;
-  AccessTracker& operator=(const AccessTracker& other) = delete;
+  AccessTrackerBase(const AccessTrackerBase& other) = delete;
+  AccessTrackerBase& operator=(const AccessTrackerBase& other) = delete;
 
-  AccessTracker(AccessTracker&& other) noexcept
+  AccessTrackerBase(AccessTrackerBase&& other) noexcept
       : config_(std::move(other.config_)),
         mostRecentAccessedBucket_(other.mostRecentAccessedBucket_.load()),
         filters_(std::move(other.filters_)),
         counts_(std::exchange(other.counts_, {})),
         locks_(std::exchange(other.locks_, {})) {}
 
-  AccessTracker& operator=(AccessTracker&& other) {
+  AccessTrackerBase& operator=(AccessTrackerBase&& other) {
     if (this != &other) {
-      this->~AccessTracker();
-      new (this) AccessTracker(std::move(other));
+      this->~AccessTrackerBase();
+      new (this) AccessTrackerBase(std::move(other));
     }
     return *this;
   }
+
+  size_t getByteSize() const noexcept {
+    return filters_.getByteSize() +
+           (counts_.empty() ? 0 : counts_.size() * counts_.at(0).getByteSize());
+  }
+
+  // Get number of accesses in each bucket.
+  // count[i]: number of accesses in the (current - i) bucket.
+  std::vector<uint64_t> getRotatedAccessCounts();
 
  private:
   // this means we can have the estimate be off by 0.001% of max
@@ -106,18 +117,18 @@ class AccessTracker {
   //
   // @param idx bucket index.
   // @param hashVal the value to look up
-  double getBucketAccessCount(size_t idx, uint64_t hashVal) const;
+  double getBucketAccessCountLocked(size_t idx, uint64_t hashVal) const;
 
   // Record the access of the value to a bucket
   //
   // @param idx bucket index.
   // @param hashval the value to look up.
-  void updateBucket(size_t idx, uint64_t hashVal);
+  void updateBucketLocked(size_t idx, uint64_t hashVal);
 
   // Reset the access count of the bucket. Used when bucket rotation happens.
   //
   // @param idx bucket index.
-  void resetBucket(size_t idx);
+  void resetBucketLocked(size_t idx);
 
   Config config_;
 
@@ -130,12 +141,20 @@ class AccessTracker {
   BloomFilter filters_;
 
   // CMS tracking for counts
-  std::vector<util::CountMinSketch> counts_;
+  std::vector<CMS> counts_;
 
   using LockHolder = std::lock_guard<folly::SpinLock>;
   // locks protecting each hour of the filters_ or counts_
   std::vector<folly::SpinLock> locks_;
+
+  std::vector<uint64_t> itemCounts_;
 };
+} // namespace detail
+
+using AccessTracker = detail::AccessTrackerBase<util::CountMinSketch>;
+using AccessTracker8 = detail::AccessTrackerBase<util::CountMinSketch8>;
+using AccessTracker16 = detail::AccessTrackerBase<util::CountMinSketch16>;
 
 } // namespace cachelib
 } // namespace facebook
+#include "cachelib/common/AccessTracker-inl.h"
