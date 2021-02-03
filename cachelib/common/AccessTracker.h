@@ -63,12 +63,24 @@ class AccessTrackerBase {
 
   explicit AccessTrackerBase(Config config);
 
-  // Record access for the key to the current bucket.
-  //
+  // 1. The access count of the accessed key in the current
+  // bucket is incremented.
+  // 2. Collect the most recent config_.numBuckets access counts
+  // and return in a vector.
   // @param key accessed key.
   // @return vector of length config_.numBuckets. element i contains
   // the access count of current - i bucket span.
-  std::vector<double> recordAndPopulateAccessFeatures(folly::StringPiece key);
+  std::vector<double> recordAndPopulateAccessFeatures(folly::StringPiece key) {
+    auto features = getAccesses(key);
+    recordAccess(key);
+    return features;
+  }
+
+  // Record access to the current bucket.
+  void recordAccess(folly::StringPiece key);
+
+  // Return the access histories of the given key.
+  std::vector<double> getAccesses(folly::StringPiece key);
 
   size_t getNumBuckets() const noexcept { return config_.numBuckets; }
 

@@ -125,5 +125,37 @@ TEST_P(AccessTrackerTest, simpleTestCase) {
   // key1: {0, 2, 0, 0, 1}
 }
 
+TEST_P(AccessTrackerTest, separateAccessTrackingAndPopulate) {
+  auto config = AccessTracker::Config();
+  config.numBuckets = 3;
+  config.useCounts = GetParam();
+  // Moves to a new bucket every two ticks.
+  config.numTicksPerBucket = 2;
+  config.getCurrentTick = std::move(getCurrentTick);
+  initializeTicks(
+      config.numTicksPerBucket, config.numBuckets, config.numTicksPerBucket);
+  auto tracker = AccessTracker(std::move(config));
+
+  folly::StringPiece key = "key0";
+  // Access is counted before recording.
+  assertVecEq(tracker.getAccesses(key), {0, 0, 0});
+  tracker.recordAccess(key);
+  // Access is counted after recording access.
+  assertVecEq(tracker.getAccesses(key), {1, 0, 0});
+
+  tracker.recordAccess(key);
+  tracker.recordAccess(key);
+  // Multiple accesses counted together.
+  assertVecEq(tracker.getAccesses(key), {3, 0, 0});
+
+  tracker.recordAccess(key);
+  advanceTicks();
+  tracker.recordAccess(key);
+  advanceTicks();
+  tracker.recordAccess(key);
+  // Multiple accesses across multiple buckets
+  assertVecEq(tracker.getAccesses(key), {1, 5, 0});
+}
+
 } // namespace cachelib
 } // namespace facebook

@@ -27,12 +27,20 @@ AccessTrackerBase<CMS>::AccessTrackerBase(Config config)
   }
 }
 
-// 1. The access count of the accssed key in the current
-// bucket is incremented.
-// 2. Collect the most recent config_.numBuckets access counts
-// and return in a vector.
+// Record access to the current bucket.
 template <typename CMS>
-std::vector<double> AccessTrackerBase<CMS>::recordAndPopulateAccessFeatures(
+void AccessTrackerBase<CMS>::recordAccess(folly::StringPiece key) {
+  updateMostRecentAccessedBucket();
+  const auto hashVal =
+      folly::hash::SpookyHashV2::Hash64(key.data(), key.size(), kRandomSeed);
+  const auto idx = mostRecentAccessedBucket_.load(std::memory_order_relaxed);
+  LockHolder l(locks_[idx]);
+  updateBucketLocked(idx, hashVal);
+}
+
+// Return the access histories of the given key.
+template <typename CMS>
+std::vector<double> AccessTrackerBase<CMS>::getAccesses(
     folly::StringPiece key) {
   updateMostRecentAccessedBucket();
   const auto hashVal =
@@ -47,10 +55,6 @@ std::vector<double> AccessTrackerBase<CMS>::recordAndPopulateAccessFeatures(
     const auto idx = rotatedIdx(mostRecentBucketIdx + config_.numBuckets - i);
     LockHolder l(locks_[idx]);
     features[i] = getBucketAccessCountLocked(idx, hashVal);
-    // Count the current access.
-    if (idx == mostRecentBucketIdx) {
-      updateBucketLocked(mostRecentBucketIdx, hashVal);
-    }
   }
   return features;
 }
