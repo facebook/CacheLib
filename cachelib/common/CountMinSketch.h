@@ -6,7 +6,7 @@
 namespace facebook {
 namespace cachelib {
 namespace util {
-
+namespace detail {
 // A probabilistic counting data structure that never undercounts items before
 // it hits counter's capacity. It is a table structure with the depth being the
 // number of hashes and the width being the number of unique items. When a key
@@ -100,11 +100,12 @@ class CountMinSketchBase {
   // Stores counts
   std::unique_ptr<UINT[]> table_{};
 };
+} // namespace detail
 
 // By default, use uint32_t as count type.
-using CountMinSketch = CountMinSketchBase<uint32_t>;
-using CountMinSketch8 = CountMinSketchBase<uint8_t>;
-using CountMinSketch16 = CountMinSketchBase<uint16_t>;
+using CountMinSketch = detail::CountMinSketchBase<uint32_t>;
+using CountMinSketch8 = detail::CountMinSketchBase<uint8_t>;
+using CountMinSketch16 = detail::CountMinSketchBase<uint16_t>;
 
 } // namespace util
 } // namespace cachelib

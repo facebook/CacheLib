@@ -11,7 +11,7 @@ namespace tests {
 using facebook::cachelib::util::CountMinSketch;
 using facebook::cachelib::util::CountMinSketch16;
 using facebook::cachelib::util::CountMinSketch8;
-using facebook::cachelib::util::CountMinSketchBase;
+using facebook::cachelib::util::detail::CountMinSketchBase;
 
 template <typename UINT, typename CT>
 UINT sanitizeCt(CT ct, CountMinSketchBase<UINT>& cms) {
