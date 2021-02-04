@@ -116,6 +116,7 @@ class CacheStressor : public Stressor {
     if (stressWorker_.joinable()) {
       stressWorker_.join();
     }
+    wg_->markShutdown();
   }
 
   void abort() override {
@@ -353,6 +354,7 @@ class CacheStressor : public Stressor {
         break;
       }
     }
+    wg_->markFinish();
   }
 
   OpResultType setKey(PoolId pid,

@@ -84,6 +84,18 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         continue;
       }
 
+      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
+      if (threadFinished_[shard].load(std::memory_order_relaxed)) {
+        if (shouldShutdown()) {
+          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
+          return;
+        }
+
+        XLOG_EVERY_MS(INFO, 100'000,
+                      folly::sformat("Thread {} finish, skip", shard));
+        continue;
+      }
+
       auto fullContentSizeT =
           folly::tryTo<size_t>(fields[SampleFields::OBJECT_SIZE]);
       auto responseSizeT =
@@ -162,7 +174,6 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         statsAggFields.push_back(fields[i].str());
       }
 
-      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_.cachePieceSize,
                                         nextReqId_,
@@ -176,13 +187,19 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         ttl,
                                         std::move(statsAggFields))) {
         if (shouldShutdown()) {
-          LOG(INFO) << "Forced to stop, terminate reading trace file!";
+          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;
         }
 
         queueProducerWaitCounts_.inc();
         std::this_thread::sleep_for(
             std::chrono::microseconds(kProducerConsumerWaitTimeUs));
+
+        if (threadFinished_[shard].load(std::memory_order_relaxed)) {
+          XLOG_EVERY_MS(INFO, 100'000,
+                        folly::sformat("Thread {} finish, skip", shard));
+          break;
+        }
       }
 
       ++nextReqId_;
