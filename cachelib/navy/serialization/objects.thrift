@@ -27,6 +27,14 @@ struct RegionData {
   2: required i32 regionSize = 0,
 }
 
+struct RegionId {
+  1: required i32 idx = 0,
+}
+
+struct FifoPolicyData{
+  1: required list<RegionId> queue
+}
+
 struct AccessStats {
   1: byte totalHits = 0,
   2: byte currHits = 0,

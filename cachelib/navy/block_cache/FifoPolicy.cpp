@@ -43,13 +43,26 @@ void FifoPolicy::reset() {
 }
 
 void FifoPolicy::persist(RecordWriter& rw) const {
-  std::ignore = rw;
-  throw std::runtime_error("Not Implemented.");
+  serialization::FifoPolicyData fifoPolicyData;
+  fifoPolicyData.queue_ref()->resize(queue_.size());
+
+  for (uint32_t i = 0; i < queue_.size(); i++) {
+    auto& regionIdProto = (*fifoPolicyData.queue_ref())[i];
+    regionIdProto.idx_ref() = queue_[i].index();
+  }
+
+  serializeProto(fifoPolicyData, rw);
 }
 
 void FifoPolicy::recover(RecordReader& rr) {
-  std::ignore = rr;
-  throw std::runtime_error("Not Implemented.");
+  auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
+  queue_.clear();
+  queue_.resize(fifoPolicyData.queue_ref()->size());
+
+  for (uint32_t i = 0; i < fifoPolicyData.queue_ref()->size(); i++) {
+    queue_[i] =
+        *std::make_unique<RegionId>(*fifoPolicyData.queue_ref()[i].idx_ref());
+  }
 }
 
 SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)

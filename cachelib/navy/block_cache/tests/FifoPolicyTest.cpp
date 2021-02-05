@@ -40,6 +40,32 @@ TEST(EvictionPolicy, FifoReset) {
   EXPECT_EQ(RegionId{}, policy.evict());
 }
 
+TEST(EvictionPolicy, FifoRecover) {
+  folly::IOBufQueue ioq;
+  {
+    FifoPolicy policy;
+    policy.track(kRegion1);
+    policy.track(kRegion2);
+    policy.track(kRegion3);
+
+    {
+      auto rw = createMemoryRecordWriter(ioq);
+      policy.persist(*rw);
+    }
+  }
+
+  {
+    FifoPolicy policy;
+    auto rr = createMemoryRecordReader(ioq);
+    policy.recover(*rr);
+
+    EXPECT_EQ(kRegion1.id(), policy.evict());
+    EXPECT_EQ(kRegion2.id(), policy.evict());
+    EXPECT_EQ(kRegion3.id(), policy.evict());
+    EXPECT_EQ(RegionId{}, policy.evict());
+  }
+}
+
 TEST(EvictionPolicy, SegmentedFifoSimple) {
   Region region0{RegionId{0}, 100};
   Region region1{RegionId{1}, 100};
