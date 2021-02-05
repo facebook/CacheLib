@@ -175,6 +175,17 @@ void LruPolicy::getCounters(const CounterVisitor& v) const {
   hitsEstimator_.visitQuantileEstimator(
       v, "{}_{}", "navy_bc_lru_region_hits_estimate");
 }
+
+void LruPolicy::persist(RecordWriter& rw) const {
+  std::ignore = rw;
+  throw std::runtime_error("Not Implemented.");
+}
+
+void LruPolicy::recover(RecordReader& rr) {
+  std::ignore = rr;
+  throw std::runtime_error("Not Implemented.");
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

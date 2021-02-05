@@ -29,6 +29,10 @@ class FifoPolicy final : public EvictionPolicy {
 
   void getCounters(const CounterVisitor&) const override {}
 
+  void persist(RecordWriter& rw) const override;
+
+  void recover(RecordReader& rr) override;
+
  private:
   std::deque<RegionId> queue_;
   mutable std::mutex mutex_;
@@ -83,6 +87,10 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   size_t memorySize() const override;
 
   void getCounters(const CounterVisitor& v) const override;
+
+  void persist(RecordWriter& rw) const override;
+
+  void recover(RecordReader& rr) override;
 
  private:
   struct Node {

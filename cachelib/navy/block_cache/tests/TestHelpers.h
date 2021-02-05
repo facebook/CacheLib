@@ -41,6 +41,13 @@ class MockPolicy : public EvictionPolicy {
     ON_CALL(*this, getCounters(_))
         .WillByDefault(
             Invoke([this](const CounterVisitor& v) { fifo_.getCounters(v); }));
+
+    ON_CALL(*this, persist(_)).WillByDefault(Invoke([this](RecordWriter& rw) {
+      fifo_.persist(rw);
+    }));
+    ON_CALL(*this, recover(_)).WillByDefault(Invoke([this](RecordReader& rr) {
+      fifo_.recover(rr);
+    }));
   }
 
   MOCK_METHOD1(track, void(const Region& region));
@@ -49,6 +56,9 @@ class MockPolicy : public EvictionPolicy {
   MOCK_METHOD0(reset, void());
   MOCK_CONST_METHOD0(memorySize, size_t());
   MOCK_CONST_METHOD1(getCounters, void(const CounterVisitor&));
+
+  MOCK_CONST_METHOD1(persist, void(RecordWriter& rw));
+  MOCK_METHOD1(recover, void(RecordReader& rr));
 
  private:
   std::vector<uint32_t>& hits_;

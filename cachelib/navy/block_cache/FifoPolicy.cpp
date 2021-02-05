@@ -42,6 +42,16 @@ void FifoPolicy::reset() {
   queue_.clear();
 }
 
+void FifoPolicy::persist(RecordWriter& rw) const {
+  std::ignore = rw;
+  throw std::runtime_error("Not Implemented.");
+}
+
+void FifoPolicy::recover(RecordReader& rr) {
+  std::ignore = rr;
+  throw std::runtime_error("Not Implemented.");
+}
+
 SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)
     : segmentRatio_{std::move(segmentRatio)},
       totalRatioWeight_{detail::accumulate(segmentRatio_)},
@@ -133,6 +143,17 @@ void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
     idx++;
   }
 }
+
+void SegmentedFifoPolicy::persist(RecordWriter& rw) const {
+  std::ignore = rw;
+  throw std::runtime_error("Not Implemented.");
+}
+
+void SegmentedFifoPolicy::recover(RecordReader& rr) {
+  std::ignore = rr;
+  throw std::runtime_error("Not Implemented");
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

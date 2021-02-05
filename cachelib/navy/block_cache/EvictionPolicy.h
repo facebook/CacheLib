@@ -31,6 +31,10 @@ class EvictionPolicy {
   virtual size_t memorySize() const = 0;
 
   virtual void getCounters(const CounterVisitor&) const = 0;
+
+  virtual void persist(RecordWriter& rw) const = 0;
+
+  virtual void recover(RecordReader& rr) = 0;
 };
 } // namespace navy
 } // namespace cachelib
