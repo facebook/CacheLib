@@ -38,7 +38,9 @@ struct Cache {
 
     Key getKey() const { return key_; }
 
-    uint64_t getConfiguredTTL() const { return ttl_; }
+    std::chrono::seconds getConfiguredTTL() const {
+      return std::chrono::seconds(ttl_);
+    }
 
     std::string key_;
     uint64_t ttl_{0};

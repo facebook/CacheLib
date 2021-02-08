@@ -351,7 +351,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     const auto result =
         handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
     eventTracker->record(AllocatorApiEvent::ALLOCATE, key, result, size,
-                         expiryTime - creationTime);
+                         expiryTime ? expiryTime - creationTime : 0);
   }
 
   return handle;
@@ -374,7 +374,7 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
     const auto result =
         it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
     eventTracker->record(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(),
-                         result, size, parent->getConfiguredTTL());
+                         result, size, parent->getConfiguredTTL().count());
   }
   return it;
 }
@@ -462,7 +462,7 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
                          AllocatorApiResult::INSERTED, child->getSize(),
-                         child->getConfiguredTTL());
+                         child->getConfiguredTTL().count());
   }
 }
 
@@ -501,7 +501,7 @@ CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
                          AllocatorApiResult::REMOVED, head->getSize(),
-                         head->getConfiguredTTL());
+                         head->getConfiguredTTL().count());
   }
 
   return head;
@@ -991,7 +991,7 @@ bool CacheAllocator<CacheTrait>::insertImpl(const ItemHandle& handle,
 
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(event, handle->getKey(), result, handle->getSize(),
-                         handle->getConfiguredTTL());
+                         handle->getConfiguredTTL().count());
   }
 
   return result == AllocatorApiResult::INSERTED;
@@ -1016,7 +1016,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
                            handle->getKey(),
                            AllocatorApiResult::FAILED,
                            handle->getSize(),
-                           handle->getConfiguredTTL());
+                           handle->getConfiguredTTL().count());
     }
     throw;
   }
@@ -1041,7 +1041,8 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
     const auto result =
         replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
     eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(),
-                         result, handle->getSize(), handle->getConfiguredTTL());
+                         result, handle->getSize(),
+                         handle->getConfiguredTTL().count());
   }
 
   return replaced;
@@ -1557,7 +1558,7 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(AllocatorApiEvent::REMOVE, it->getKey(),
                          AllocatorApiResult::REMOVED, it->getSize(),
-                         it->getConfiguredTTL());
+                         it->getConfiguredTTL().count());
   }
   return removeImpl(*it);
 }
@@ -1595,7 +1596,7 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
     const auto result =
         success ? AllocatorApiResult::REMOVED : AllocatorApiResult::NOT_FOUND;
     eventTracker->record(AllocatorApiEvent::REMOVE, item.getKey(), result,
-                         item.getSize(), item.getConfiguredTTL());
+                         item.getSize(), item.getConfiguredTTL().count());
   }
 
   // the last guy with reference to the item will release it back to the
@@ -1683,11 +1684,15 @@ CacheAllocator<CacheTrait>::findFast(typename Item::Key key, AccessMode mode) {
   auto handle = findFastImpl(key, mode);
   auto eventTracker = getEventTracker();
   if (UNLIKELY(eventTracker != nullptr)) {
-    const auto result =
-        handle ? AllocatorApiResult::FOUND : AllocatorApiResult::NOT_FOUND;
-    eventTracker->record(AllocatorApiEvent::FIND_FAST, key, result,
-                         handle ? handle->getSize() : -1,
-                         handle ? handle->getConfiguredTTL() : -1);
+    if (handle) {
+      eventTracker->record(AllocatorApiEvent::FIND_FAST, key,
+                           AllocatorApiResult::FOUND,
+                           folly::Optional<uint32_t>(handle->getSize()),
+                           handle->getConfiguredTTL().count());
+    } else {
+      eventTracker->record(AllocatorApiEvent::FIND_FAST, key,
+                           AllocatorApiResult::NOT_FOUND);
+    }
   }
   return handle;
 }
@@ -1721,7 +1726,7 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
     if (UNLIKELY(eventTracker != nullptr)) {
       eventTracker->record(AllocatorApiEvent::FIND, key,
                            AllocatorApiResult::FOUND, handle->getSize(),
-                           handle->getConfiguredTTL());
+                           handle->getConfiguredTTL().count());
     }
     return handle;
   }
@@ -2483,8 +2488,8 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
       return {};
     }
 
-    // Set up the destination for the move. Since oldChainedItem would have the
-    // moving bit set, it won't be picked for eviction.
+    // Set up the destination for the move. Since oldChainedItem would have
+    // the moving bit set, it won't be picked for eviction.
     auto newItemHdl =
         allocateChainedItemInternal(parentHandle, oldChainedItem.getSize());
     if (!newItemHdl) {
@@ -2738,8 +2743,8 @@ CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
   }
 
   // if we found the child in the parent's chain, we remove it and ensure that
-  // the handle we obtained was the last one. Before that, create a put token to
-  // guard any racing cache find to avoid item re-appearing in NvmCache.
+  // the handle we obtained was the last one. Before that, create a put token
+  // to guard any racing cache find to avoid item re-appearing in NvmCache.
   const bool evictToNvmCache = shouldWriteToNvmCache(expectedParent);
 
   auto token = evictToNvmCache
@@ -2754,9 +2759,9 @@ CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
   // at this point, we should be the last handle owner
   XDCHECK_EQ(1u, parentHandle->getRefCount());
 
-  // We remove the parent from both access and mm containers. It doesn't matter
-  // if someone else calls remove on the parent at this moment, it cannot be
-  // freed since we hold an active item handle
+  // We remove the parent from both access and mm containers. It doesn't
+  // matter if someone else calls remove on the parent at this moment, it
+  // cannot be freed since we hold an active item handle
   removeFromMMContainer(*parentHandle);
 
   // In case someone else had removed this chained item from its parent by now

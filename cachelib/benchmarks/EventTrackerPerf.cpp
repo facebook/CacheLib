@@ -25,7 +25,7 @@ class FakeWsaTracker : public EventInterface<LruAllocator::Key> {
               Key /* key */,
               AllocatorApiResult /* result */,
               EventInterfaceTypes::SizeT /* valueSize */ = folly::none,
-              EventInterfaceTypes::TtlT /* ttlSecs */ = folly::none) override {}
+              EventInterfaceTypes::TtlT /* ttlSecs */ = 0) override {}
 
   // Method that extracts stats from the event logger
   // @param statsMap A map of string to a stat value.

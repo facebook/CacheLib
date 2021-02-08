@@ -90,8 +90,9 @@ uint32_t CacheItem<CacheTrait>::getCreationTime() const noexcept {
 }
 
 template <typename CacheTrait>
-uint32_t CacheItem<CacheTrait>::getConfiguredTTL() const noexcept {
-  return expiryTime_ - creationTime_;
+std::chrono::seconds CacheItem<CacheTrait>::getConfiguredTTL() const noexcept {
+  return std::chrono::seconds(expiryTime_ > 0 ? expiryTime_ - creationTime_
+                                              : 0);
 }
 
 template <typename CacheTrait>

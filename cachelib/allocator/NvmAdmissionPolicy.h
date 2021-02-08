@@ -24,7 +24,8 @@ class NvmAdmissionPolicy {
     overallCount_.inc();
 
     auto minTTL = minTTL_.load(std::memory_order_relaxed);
-    if (minTTL > 0 && item.getConfiguredTTL() < minTTL) {
+    auto itemTTL = static_cast<uint64_t>(item.getConfiguredTTL().count());
+    if (minTTL > 0 && itemTTL < minTTL) {
       ttlRejected_.inc();
       return false;
     }

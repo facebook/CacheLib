@@ -246,8 +246,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Return timestamp of when this item was created
   uint32_t getCreationTime() const noexcept;
 
-  // return the relative time between expiry time and creation time
-  uint32_t getConfiguredTTL() const noexcept;
+  // return the original configured time to live in seconds.
+  std::chrono::seconds getConfiguredTTL() const noexcept;
 
   // Return the last time someone accessed this item
   uint32_t getLastAccessTime() const noexcept;
@@ -302,7 +302,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   /**
    * Function to set the timestamp for when to expire an item
-   * Employs a best-effort approach to update the expiryTime
+   * Employs a best-effort approach to update the expiryTime. Item's expiry
+   * time can only be updated when the item is a regular item and is part of
+   * the cache and not in the moving state.
    *
    * @param expiryTime the expiryTime value to update to
    *
