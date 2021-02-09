@@ -115,6 +115,14 @@ class GenericPieces {
     }
   }
 
+  uint64_t getBytesToTrimAtStart() const {
+    return requestedStartByte_ - startPieceIndex_ * pieceSize_;
+  }
+
+  uint64_t getBytesToTrimAtEnd() const {
+    return getLastByteOffsetOfLastPiece() - requestedEndByte_;
+  }
+
   uint64_t getRequestedSize() const {
     return (requestedEndByte_ - requestedStartByte_ + 1);
   }

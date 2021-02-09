@@ -21,6 +21,8 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(232, cp.getSizeOfAPiece(3));
   EXPECT_EQ(232, cp.getRequestedSizeOfAPiece(3));
   EXPECT_EQ(1000, cp.getTotalSize());
+  EXPECT_EQ(0, cp.getBytesToTrimAtStart());
+  EXPECT_EQ(0, cp.getBytesToTrimAtEnd());
   EXPECT_EQ(1000, cp.getRequestedSize());
   EXPECT_EQ(1000, cp.getRemainingBytes());
   cp.updateFetchIndex();
@@ -44,6 +46,8 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(512, cp.getTotalSize());
   EXPECT_EQ(500, cp.getRequestedSize());
   EXPECT_EQ(512, cp.getRemainingBytes());
+  EXPECT_EQ(4, cp.getBytesToTrimAtStart());
+  EXPECT_EQ(8, cp.getBytesToTrimAtEnd());
   cp.updateFetchIndex();
   EXPECT_EQ(256, cp.getRemainingBytes());
 
@@ -62,6 +66,8 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(232, cp.getTotalSize());
   EXPECT_EQ(196, cp.getRequestedSize());
   EXPECT_EQ(232, cp.getRemainingBytes());
+  EXPECT_EQ(32, cp.getBytesToTrimAtStart());
+  EXPECT_EQ(4, cp.getBytesToTrimAtEnd());
   cp.updateFetchIndex();
   EXPECT_EQ(0, cp.getRemainingBytes());
 
@@ -82,6 +88,8 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(744, cp.getTotalSize());
   EXPECT_EQ(600, cp.getRequestedSize());
   EXPECT_EQ(744, cp.getRemainingBytes());
+  EXPECT_EQ(144, cp.getBytesToTrimAtStart());
+  EXPECT_EQ(0, cp.getBytesToTrimAtEnd());
   cp.updateFetchIndex();
   EXPECT_EQ(488, cp.getRemainingBytes());
 
@@ -102,6 +110,8 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_EQ(744, cp.getTotalSize());
   EXPECT_EQ(600, cp.getRequestedSize());
   EXPECT_EQ(744, cp.getRemainingBytes());
+  EXPECT_EQ(144, cp.getBytesToTrimAtStart());
+  EXPECT_EQ(0, cp.getBytesToTrimAtEnd());
   cp.updateFetchIndex();
   EXPECT_EQ(488, cp.getRemainingBytes());
 }
