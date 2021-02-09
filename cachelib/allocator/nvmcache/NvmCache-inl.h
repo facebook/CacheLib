@@ -2,6 +2,66 @@ namespace facebook {
 namespace cachelib {
 
 template <typename C>
+std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
+  std::map<std::string, std::string> configMap;
+  configMap["encodeCB"] = encodeCb ? "set" : "empty";
+  configMap["decodeCb"] = decodeCb ? "set" : "empty";
+  configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
+  configMap["encryption"] = deviceEncryptor ? "set" : "empty";
+  configMap["truncateItemToOriginalAllocSizeInNvm"] =
+      truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
+  for (auto& pair : dipperOptions.items()) {
+    configMap["dipperOptions::" + pair.first.asString()] =
+        (pair.second.isObject() || pair.second.isArray())
+            ? folly::toJson(pair.second)
+            : pair.second.asString();
+  }
+  return configMap;
+}
+
+template <typename C>
+typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
+  const bool hasEncodeCb = !!encodeCb;
+  const bool hasDecodeCb = !!decodeCb;
+  if (hasEncodeCb != hasDecodeCb) {
+    throw std::invalid_argument(
+        "Encode and Decode CBs must be both specified or both empty.");
+  }
+
+  populateDefaultNavyOptions(dipperOptions);
+
+  if (deviceEncryptor) {
+    auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
+    auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
+    if (blockSize % encryptionBlockSize != 0) {
+      throw std::invalid_argument(folly::sformat(
+          "Encryption enabled but the encryption block granularity is not "
+          "aligned to the navy block size. ecryption block size: {}, "
+          "block size: {}",
+          encryptionBlockSize,
+          blockSize));
+    }
+    if (dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0).getInt() >
+        0) {
+      auto bucketSize =
+          dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
+              .getInt();
+      if (bucketSize % encryptionBlockSize != 0) {
+        throw std::invalid_argument(
+            folly::sformat("Encryption enabled but the encryption block "
+                           "granularity is not aligned to the navy "
+                           "big hash bucket size. ecryption block "
+                           "size: {}, bucket size: {}",
+                           encryptionBlockSize,
+                           bucketSize));
+      }
+    }
+  }
+
+  return *this;
+}
+
+template <typename C>
 typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
     folly::StringPiece key) {
   const size_t hash = folly::Hash()(key);
@@ -188,7 +248,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
 
 template <typename C>
 NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
-    : config_(config.validate()),
+    : config_(config.validateAndSetDefaults()),
       cache_(c),
       navySmallItemThreshold_{getSmallItemThreshold(config_.dipperOptions)} {
   navyCache_ = createNavyCache(
@@ -289,6 +349,14 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
+  if (item.isNvmClean() && item.isNvmEvicted()) {
+    stats().numNvmPutFromClean.inc();
+  }
+
+  if (item.isUnevictable()) {
+    stats().numNvmPermItems.inc();
+  }
+
   auto iobuf = toIOBuf(std::move(dItem));
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
@@ -299,14 +367,6 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   // capture array reference for putContext. it is stable
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
-
-  if (item.isUnevictable()) {
-    stats().numNvmPermItems.inc();
-  }
-
-  if (item.isNvmClean() && item.isNvmEvicted()) {
-    stats().numNvmPutFromClean.inc();
-  }
 
   // On a concurrent get, we remove the key from inflight evictions and hence
   // key not being present means a concurrent get happened with an inflight

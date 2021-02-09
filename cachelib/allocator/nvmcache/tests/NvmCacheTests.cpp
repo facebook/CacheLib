@@ -30,19 +30,19 @@ TEST_F(NvmCacheTest, Config) {
   };
 
   auto config = *this->getConfig().nvmConfig;
-  ASSERT_NO_THROW(config.validate());
+  ASSERT_NO_THROW(config.validateAndSetDefaults());
 
   config.dipperOptions["dipper_navy_block_size"] = 5555;
   config.dipperOptions["dipper_navy_bighash_bucket_size"] = 5555;
   config.deviceEncryptor = std::make_shared<MockEncryptor>();
-  ASSERT_NO_THROW(config.validate());
+  ASSERT_NO_THROW(config.validateAndSetDefaults());
 
   config.dipperOptions["dipper_navy_block_size"] = 4444;
-  ASSERT_THROW(config.validate(), std::invalid_argument);
+  ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 
   config.dipperOptions["dipper_navy_block_size"] = 5555;
   config.dipperOptions["dipper_navy_bighash_bucket_size"] = 4444;
-  ASSERT_THROW(config.validate(), std::invalid_argument);
+  ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 }
 
 namespace {

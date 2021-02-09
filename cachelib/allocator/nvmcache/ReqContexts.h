@@ -3,6 +3,7 @@
 #include <folly/Format.h>
 #include <folly/Range.h>
 #include <folly/container/F14Map.h>
+#include <folly/io/IOBuf.h>
 
 #include <list>
 #include <memory>
