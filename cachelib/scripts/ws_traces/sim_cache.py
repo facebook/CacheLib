@@ -5,8 +5,8 @@ import os
 import random
 from collections import OrderedDict
 
-import cachelib.scripts.ws_traces.dynamic_features as dyn_features
 import cachelib.scripts.ws_traces.utils as utils
+import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dyn_features
 import lightgbm as lgb
 import numpy as np
 
