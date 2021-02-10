@@ -51,6 +51,8 @@ TEST_F(NvmCacheStateTest, ClearState) {
     ASSERT_FALSE(s.wasCleanShutDown());
     s.markSafeShutDown();
     s.clearPrevState();
+    ASSERT_FALSE(util::getStatIfExists(
+        NvmCacheState::getFileForNvmCacheDrop(dir), nullptr));
   }
 
   {
@@ -225,8 +227,8 @@ TEST_F(NvmCacheStateTest, Drop) {
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
   }
+  auto dropFile = NvmCacheState::getFileForNvmCacheDrop(dir);
   {
-    auto dropFile = NvmCacheState::getFileForNvmCacheDrop(dir);
     std::ofstream f(dropFile, std::ios::trunc);
     f.flush();
     ASSERT_TRUE(util::getStatIfExists(dropFile, nullptr));
@@ -240,12 +242,22 @@ TEST_F(NvmCacheStateTest, Drop) {
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_NE(creationTime, s.getCreationTime());
     s.clearPrevState();
+    ASSERT_FALSE(util::getStatIfExists(dropFile, nullptr));
   }
 
   {
     NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
     ASSERT_TRUE(s.shouldDropNvmCache());
     ASSERT_FALSE(s.wasCleanShutDown());
+    ASSERT_FALSE(util::getStatIfExists(dropFile, nullptr));
+
+    s.clearPrevState();
+    s.markSafeShutDown();
+  }
+  {
+    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    ASSERT_FALSE(s.shouldDropNvmCache());
+    ASSERT_TRUE(s.wasCleanShutDown());
   }
 }
 

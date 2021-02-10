@@ -102,6 +102,10 @@ void NvmCacheTest::iceRoll() {
 
   cache_ = std::make_unique<LruAllocator>(LruAllocator::SharedMemAttach,
                                           allocConfig_);
+  if (util::getStatIfExists(fileName, nullptr)) {
+    throw std::runtime_error(folly::sformat(
+        "Drop file {} exists after re-initializing the cache", fileName));
+  }
 }
 
 void NvmCacheTest::iceColdRoll() {

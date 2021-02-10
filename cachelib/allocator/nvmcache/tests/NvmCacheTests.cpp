@@ -723,10 +723,9 @@ TEST_F(NvmCacheTest, IceRoll) {
   this->convertToShmCache();
   std::string key1 = "blah1";
   std::string key2 = "blah2";
+  auto pid = this->poolId();
   {
     auto& nvm = this->cache();
-    auto pid = this->poolId();
-
     {
       auto it1 = nvm.allocate(pid, key1, 100);
       nvm.insertOrReplace(it1);
@@ -755,11 +754,36 @@ TEST_F(NvmCacheTest, IceRoll) {
 
     // key2 was still in ram.
     ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+
     this->removeFromRamForTesting(key2);
 
     // fetch from nvmcache should fail for both
+    ASSERT_FALSE(this->checkKeyExists(key2, true /* ramOnly */));
     ASSERT_FALSE(this->checkKeyExists(key2, false /* ramOnly */));
-    ASSERT_FALSE(this->checkKeyExists(key2, false /* ramOnly */));
+
+    auto& nvm = this->cache();
+    auto it1 = nvm.allocate(pid, key1, 100);
+    nvm.insertOrReplace(it1);
+    auto it2 = nvm.allocate(pid, key2, 100);
+    nvm.insertOrReplace(it2);
+    // push key 2 to nvmcache again. we will warm roll and check if it exists
+    // after an ice roll.
+    ASSERT_TRUE(this->checkKeyExists(key1, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key1, false /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, false /* ramOnly */));
+
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key1));
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key2));
+  }
+
+  this->warmRoll();
+  {
+    // nvm is preserved subsequently
+    ASSERT_TRUE(this->checkKeyExists(key1, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key1, false /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, false /* ramOnly */));
   }
 }
 
