@@ -3,6 +3,7 @@
 #include <folly/Likely.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/SanitizeThread.h>
 #include <sys/mman.h>
 #include <sys/types.h>
 
@@ -413,8 +414,16 @@ Slab* FOLLY_NULLABLE SlabAllocator::reclaimSlab(PoolId id) {
 
 SlabHeader* SlabAllocator::getSlabHeader(
     const Slab* const slab) const noexcept {
-  if (isValidSlab(slab)) {
-    return getSlabHeader(slabIdx(slab));
+  if ([&] {
+        // TODO(T79149875): Fix data race exposed by TSAN.
+        folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+        return isValidSlab(slab);
+      }()) {
+    return [&] {
+      // TODO(T79149875): Fix data race exposed by TSAN.
+      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+      return getSlabHeader(slabIdx(slab));
+    }();
   }
   return nullptr;
 }
