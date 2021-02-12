@@ -126,8 +126,7 @@ class BufferManagerTest : public ::testing::Test {
     ASSERT_NE(nullptr, addr1);
     ASSERT_EQ(0, addr1.getItemOffset());
     ASSERT_EQ(detail::Buffer::getAllocSize(0), addr1.getByteOffset());
-    ASSERT_EQ(1000 - detail::Buffer::getAllocSize(100),
-              mgr.remainingBytes());
+    ASSERT_EQ(1000 - detail::Buffer::getAllocSize(100), mgr.remainingBytes());
     ASSERT_EQ(0, mgr.wastedBytes());
 
     while (true) {

@@ -111,10 +111,11 @@ std::string CacheItem<CacheTrait>::toString() const {
         "isInMMContainer={}:isAccessible={}:isMoving={}:references={}:ctime={}:"
         "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:hasChainedItem="
         "{}",
-        this, getRefCountAndFlagsRaw(), getSize(), folly::humanify(getKey().str()),
-        folly::hexlify(getKey()), isInMMContainer(), isAccessible(), isMoving(),
-        getRefCount(), getCreationTime(), getExpiryTime(), getLastAccessTime(),
-        isNvmClean(), isNvmEvicted(), hasChainedItem());
+        this, getRefCountAndFlagsRaw(), getSize(),
+        folly::humanify(getKey().str()), folly::hexlify(getKey()),
+        isInMMContainer(), isAccessible(), isMoving(), getRefCount(),
+        getCreationTime(), getExpiryTime(), getLastAccessTime(), isNvmClean(),
+        isNvmEvicted(), hasChainedItem());
   }
 }
 
@@ -129,8 +130,7 @@ void CacheItem<CacheTrait>::changeKey(Key key) {
 }
 
 template <typename CacheTrait>
-RefcountWithFlags::Value CacheItem<CacheTrait>::getRefCount()
-    const noexcept {
+RefcountWithFlags::Value CacheItem<CacheTrait>::getRefCount() const noexcept {
   return ref_.getAccessRef();
 }
 
