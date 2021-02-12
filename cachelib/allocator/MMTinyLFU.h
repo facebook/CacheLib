@@ -215,7 +215,7 @@ class MMTinyLFU {
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
     using CompressedPtr = typename T::CompressedPtr;
-    using Flags = typename T::Flags;
+    using RefFlags = typename T::Flags;
 
    public:
     Container() = default;
@@ -478,29 +478,29 @@ class MMTinyLFU {
     void removeLocked(T& node) noexcept;
 
     static bool isTiny(const T& node) noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_0>();
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
 
     static bool isAccessed(const T& node) noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_1>();
+      return node.template isFlagSet<RefFlags::kMMFlag1>();
     }
 
     // Bit MM_BIT_0 is used to record if the item is in tiny cache.
     static void markTiny(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_0>();
+      node.template setFlag<RefFlags::kMMFlag0>();
     }
     static void unmarkTiny(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_0>();
+      node.template unSetFlag<RefFlags::kMMFlag0>();
     }
 
     // Bit MM_BIT_1 is used to record if the item has been accessed since being
     // written in cache. Unaccessed items are ignored when determining projected
     // update time.
     static void markAccessed(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_1>();
+      node.template setFlag<RefFlags::kMMFlag1>();
     }
     static void unmarkAccessed(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_1>();
+      node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
     // Initial cache capacity estimate for count-min-sketch

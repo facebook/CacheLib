@@ -644,7 +644,7 @@ CacheAllocator<CacheTrait>::replaceChainedItemLocked(Item& oldItem,
                                                      ItemHandle newItemHdl,
                                                      const Item& parent) {
   XDCHECK(newItemHdl != nullptr);
-  XDCHECK_GE(1, oldItem.getRefCount());
+  XDCHECK_GE(1u, oldItem.getRefCount());
 
   // grab the handle to the old item so that we can return this. Also, we need
   // to drop the refcount the parent holds on oldItem by manually calling
@@ -697,7 +697,7 @@ CacheAllocator<CacheTrait>::replaceChainedItemLocked(Item& oldItem,
   // this should not result in 0 refcount. We are bumping down the internal
   // refcount. If it did, we would leak an item.
   oldItem.decRef();
-  XDCHECK_LT(0, oldItem.getRefCount()) << oldItem.toString();
+  XDCHECK_LT(0u, oldItem.getRefCount()) << oldItem.toString();
 
   // increment refcount to indicate parent owns this similar to addChainedItem
   // Since this is an internal refcount, we dont include it in active handle
@@ -713,7 +713,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
                                                    RemoveContext ctx,
                                                    bool nascent,
                                                    const Item* toRecycle) {
-  if (it.getRefCountRaw() != 0) {
+  if (!it.isDrained()) {
     throw std::runtime_error(
         folly::sformat("cannot release this item: {}", it.toString()));
   }
@@ -841,7 +841,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     XDCHECK(ReleaseRes::kReleased != res);
     res = ReleaseRes::kRecycled;
   } else {
-    XDCHECK_EQ(0u, it.getRefCountRaw());
+    XDCHECK(it.isDrained());
     allocator_->free(&it);
   }
 
@@ -855,8 +855,7 @@ void CacheAllocator<CacheTrait>::incRef(Item& it) {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::Item::RefCount::Value
-CacheAllocator<CacheTrait>::decRef(Item& it) {
+RefcountWithFlags::Value CacheAllocator<CacheTrait>::decRef(Item& it) {
   const auto ret = it.decRef();
   // do this after we ensured that we incremented a reference.
   --handleCount_.tlStats();
@@ -1511,7 +1510,7 @@ void CacheAllocator<CacheTrait>::evictForTesting(Item& it) {
   const auto res2 = removeFromMMContainer(it);
   XDCHECK(res2);
 
-  XDCHECK(it.getRefCountRaw() == 0);
+  XDCHECK(it.isDrained());
   const auto res3 =
       releaseBackToAllocator(it, RemoveContext::kEviction, false, nullptr);
   XDCHECK(ReleaseRes::kReleased == res3);
@@ -2611,7 +2610,7 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
       // we have the last handle. no longer need to hold on to the moving bit
       item.unmarkMoving();
 
-      XDCHECK_EQ(1u, owningHandle->getRefCountRaw());
+      XDCHECK(owningHandle->isExclusive());
 
       // manually decrement the refcount to call releaseBackToAllocator
       const auto ref = decRef(*owningHandle);

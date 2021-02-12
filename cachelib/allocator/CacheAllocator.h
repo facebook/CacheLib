@@ -936,13 +936,12 @@ class CacheAllocator : public CacheBase {
 
   // this ensures that we dont introduce any more hidden fields like vtable by
   // inheriting from the Hooks and their bool interface.
-  static_assert((sizeof(typename Item::FlagT) +
-                 sizeof(typename MMType::template Hook<Item>) +
+  static_assert((sizeof(typename MMType::template Hook<Item>) +
                  sizeof(typename AccessType::template Hook<Item>) +
-                 sizeof(typename Item::RefCount::Value) + sizeof(uint32_t) +
+                 sizeof(typename RefcountWithFlags::Value) + sizeof(uint32_t) +
                  sizeof(uint32_t) + sizeof(KAllocation)) == sizeof(Item),
                 "vtable overhead");
-  static_assert(31 == sizeof(Item), "item overhead is 31 bytes");
+  static_assert(32 == sizeof(Item), "item overhead is 32 bytes");
 
   // make sure there is no overhead in ChainedItem on top of a regular Item
   static_assert(sizeof(Item) == sizeof(ChainedItem),
@@ -967,7 +966,7 @@ class CacheAllocator : public CacheBase {
  private:
   // wrapper around Item's refcount and active handle tracking
   FOLLY_ALWAYS_INLINE void incRef(Item& it);
-  FOLLY_ALWAYS_INLINE typename Item::RefCount::Value decRef(Item& it);
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef(Item& it);
 
   // drops the refcount and if needed, frees the allocation back to the memory
   // allocator and executes the necessary callbacks. no-op if it is nullptr.

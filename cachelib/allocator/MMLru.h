@@ -144,7 +144,7 @@ class MMLru {
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
     using CompressedPtr = typename T::CompressedPtr;
-    using Flags = typename T::Flags;
+    using RefFlags = typename T::Flags;
 
    public:
     Container() = default;
@@ -326,30 +326,30 @@ class MMLru {
     // Bit MM_BIT_0 is used to record if the item is in tail. This
     // is used to implement LRU insertion points
     void markTail(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_0>();
+      node.template setFlag<RefFlags::kMMFlag0>();
     }
 
     void unmarkTail(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_0>();
+      node.template unSetFlag<RefFlags::kMMFlag0>();
     }
 
     bool isTail(T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_0>();
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
 
     // Bit MM_BIT_1 is used to record if the item has been accessed since
     // being written in cache. Unaccessed items are ignored when determining
     // projected update time.
     void markAccessed(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_1>();
+      node.template setFlag<RefFlags::kMMFlag1>();
     }
 
     void unmarkAccessed(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_1>();
+      node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
     bool isAccessed(const T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_1>();
+      return node.template isFlagSet<RefFlags::kMMFlag1>();
     }
 
     // protects all operations on the lru. We never really just read the state

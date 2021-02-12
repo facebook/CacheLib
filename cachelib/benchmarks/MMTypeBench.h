@@ -18,9 +18,9 @@ struct MMTypeBench {
   // our own implementation of node that will be put inside the container.
   struct Node {
     enum class Flags : uint8_t {
-      MM_FLAG_0 = 0,
-      MM_FLAG_1 = 1,
-      MM_FLAG_2 = 2,
+      kMMFlag0 = 0,
+      kMMFlag1 = 1,
+      kMMFlag2 = 2,
     };
 
     explicit Node(int id) : id_(id), inContainer_{false} {}
