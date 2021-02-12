@@ -54,8 +54,8 @@ class FOLLY_PACK_ATTR Buffer {
   void compact(Buffer& dest) const;
 
   uint32_t capacity() const { return capacity_; }
-  uint32_t remainingCapacity() const { return capacity_ - nextByte_; }
-  uint32_t wastedSpace() const { return deletedBytes_; }
+  uint32_t remainingBytes() const { return capacity_ - nextByte_; }
+  uint32_t wastedBytes() const { return deletedBytes_; }
 
   bool canAllocate(uint32_t size) const;
   bool canAllocateWithoutCompaction(uint32_t size) const;
@@ -364,11 +364,14 @@ class BufferManager {
   // as a result.
   void compact();
 
+  // Return bytes left unused (can be used for future allocaitons)
+  size_t remainingBytes() const;
+
   // Returns bytes left behind by removed allocations
-  size_t wastedSpace() const;
+  size_t wastedBytes() const;
 
   // Percentage of amount of space wasted
-  size_t wastedSpacePct() const;
+  size_t wastedBytesPct() const;
 
  private:
   // Allocate an allocation from an existing buffer

@@ -135,6 +135,12 @@ class RangeMap {
   // This doesn't include cachelib item overhead
   size_t sizeInBytes() const;
 
+  // Return bytes left unused (can be used for future entries)
+  size_t remainingBytes() const { return bufferManager_.remainingBytes(); }
+
+  // Returns bytes left behind by removed entries
+  size_t wastedBytes() const { return bufferManager_.wastedBytes(); }
+
   // Return number of elements in this map
   uint32_t size() const {
     return handle_->template getMemoryAs<BinaryIndex>()->numEntries();
@@ -161,7 +167,7 @@ class RangeMap {
   using BinaryIndex = detail::BinaryIndex<EntryKey>;
   using BufferManager = detail::BufferManager<Cache>;
 
-  static constexpr int kWastedSpacePctThreshold = 50;
+  static constexpr int kWastedBytesPctThreshold = 50;
   static constexpr uint32_t kDefaultNumEntries = 20;
   static constexpr uint32_t kDefaultNumBytes = kDefaultNumEntries * 8;
 

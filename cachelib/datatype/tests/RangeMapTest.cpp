@@ -301,6 +301,9 @@ TEST(RangeMap, Basic) {
   auto rm = RM::create(*cache, 0, "range_map");
   EXPECT_FALSE(rm.isNullItemHandle());
 
+  EXPECT_EQ(0, rm.wastedBytes());
+  EXPECT_EQ(160, rm.remainingBytes());
+
   auto rm2 = std::move(rm);
   EXPECT_FALSE(rm2.isNullItemHandle());
 

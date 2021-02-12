@@ -32,15 +32,15 @@ TEST(Buffer, Basic) {
 
   const uint32_t allocOffset1 = buffer->allocate(30);
   ASSERT_EQ(100, buffer->capacity());
-  ASSERT_EQ(100 - Buffer::getAllocSize(30), buffer->remainingCapacity());
-  ASSERT_EQ(0, buffer->wastedSpace());
+  ASSERT_EQ(100 - Buffer::getAllocSize(30), buffer->remainingBytes());
+  ASSERT_EQ(0, buffer->wastedBytes());
   ASSERT_TRUE(buffer->getData(allocOffset1));
 
   const uint32_t allocOffset2 = buffer->allocate(60);
   ASSERT_EQ(100, buffer->capacity());
   ASSERT_EQ(100 - Buffer::getAllocSize(30) - Buffer::getAllocSize(60),
-            buffer->remainingCapacity());
-  ASSERT_EQ(0, buffer->wastedSpace());
+            buffer->remainingBytes());
+  ASSERT_EQ(0, buffer->wastedBytes());
   ASSERT_TRUE(buffer->getData(allocOffset2));
 
   // No more memory to allocate
@@ -49,8 +49,8 @@ TEST(Buffer, Basic) {
   // Test deletion
   buffer->remove(allocOffset2);
   ASSERT_EQ(100 - Buffer::getAllocSize(30) - Buffer::getAllocSize(60),
-            buffer->remainingCapacity());
-  ASSERT_EQ(Buffer::getAllocSize(60), buffer->wastedSpace());
+            buffer->remainingBytes());
+  ASSERT_EQ(Buffer::getAllocSize(60), buffer->wastedBytes());
   ASSERT_EQ(100, buffer->capacity());
 
   // Still cannot allocate because deletion does not reclaim space
@@ -126,7 +126,9 @@ class BufferManagerTest : public ::testing::Test {
     ASSERT_NE(nullptr, addr1);
     ASSERT_EQ(0, addr1.getItemOffset());
     ASSERT_EQ(detail::Buffer::getAllocSize(0), addr1.getByteOffset());
-    ASSERT_EQ(0, mgr.wastedSpace());
+    ASSERT_EQ(1000 - detail::Buffer::getAllocSize(100),
+              mgr.remainingBytes());
+    ASSERT_EQ(0, mgr.wastedBytes());
 
     while (true) {
       auto addr = mgr.allocate(100);
@@ -135,7 +137,7 @@ class BufferManagerTest : public ::testing::Test {
         addr = mgr.allocate(100);
       }
       ASSERT_NE(nullptr, addr);
-      ASSERT_EQ(0, mgr.wastedSpace());
+      ASSERT_EQ(0, mgr.wastedBytes());
 
       // Stop when we get our allocation from the second chained item
       if (addr.getItemOffset() == 1) {
@@ -144,12 +146,19 @@ class BufferManagerTest : public ::testing::Test {
     }
 
     ASSERT_NO_THROW(mgr.remove(addr1));
-    ASSERT_EQ(detail::Buffer::getAllocSize(100), mgr.wastedSpace());
+    ASSERT_EQ(detail::Buffer::getAllocSize(100), mgr.wastedBytes());
+    // The remaining capacity is the left-over space from the first buffer,
+    // and the second buffer (which we just made a single allocation).
+    ASSERT_EQ(
+        BufferManager::kMaxBufferCapacity % detail::Buffer::getAllocSize(100) +
+            BufferManager::kMaxBufferCapacity -
+            detail::Buffer::getAllocSize(100),
+        mgr.remainingBytes());
 
     auto addr2 = mgr.allocate(100);
     ASSERT_NE(nullptr, addr2);
     ASSERT_EQ(1, addr2.getItemOffset());
-    ASSERT_EQ(detail::Buffer::getAllocSize(100), mgr.wastedSpace());
+    ASSERT_EQ(detail::Buffer::getAllocSize(100), mgr.wastedBytes());
   }
 
   void testVariableSize() {

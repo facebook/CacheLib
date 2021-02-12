@@ -185,7 +185,7 @@ void BufferManager<C>::compact() {
   for (auto& item : allocs.getChain()) {
     Buffer* buffer = item.template getMemoryAs<Buffer>();
 
-    if (buffer->wastedSpace() == 0) {
+    if (buffer->wastedBytes() == 0) {
       continue;
     }
 
@@ -200,26 +200,33 @@ void BufferManager<C>::compact() {
 }
 
 template <typename C>
-size_t BufferManager<C>::wastedSpace() const {
-  auto allocs = cache_->viewAsChainedAllocs(*parent_);
-  size_t wasted = 0;
-  for (const auto& c : allocs.getChain()) {
-    wasted += c.template getMemoryAs<Buffer>()->wastedSpace();
+size_t BufferManager<C>::remainingBytes() const {
+  size_t remainingBytes = 0;
+  for (const auto& b : buffers_) {
+    remainingBytes += b->template getMemoryAs<Buffer>()->remainingBytes();
   }
-  return wasted;
+  return remainingBytes;
 }
 
 template <typename C>
-size_t BufferManager<C>::wastedSpacePct() const {
-  size_t wastedSpace = 0;
+size_t BufferManager<C>::wastedBytes() const {
+  size_t wastedBytes = 0;
+  for (const auto& b : buffers_) {
+    wastedBytes += b->template getMemoryAs<Buffer>()->wastedBytes();
+  }
+  return wastedBytes;
+}
+
+template <typename C>
+size_t BufferManager<C>::wastedBytesPct() const {
+  size_t wastedBytes = 0;
   size_t capacity = 0;
-  auto allocs = cache_->viewAsChainedAllocs(*parent_);
-  for (const auto& c : allocs.getChain()) {
-    Buffer* buffer = c.template getMemoryAs<Buffer>();
-    wastedSpace += buffer->wastedSpace();
+  for (const auto& b : buffers_) {
+    Buffer* buffer = b->template getMemoryAs<Buffer>();
+    wastedBytes += buffer->wastedBytes();
     capacity += buffer->capacity();
   }
-  return wastedSpace * 100 / capacity;
+  return wastedBytes * 100 / capacity;
 }
 } // namespace detail
 } // namespace cachelib

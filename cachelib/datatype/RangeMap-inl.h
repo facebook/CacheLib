@@ -260,7 +260,7 @@ bool RangeMap<K, V, C>::remove(const EntryKey& key) {
   }
 
   bufferManager_.remove(addr);
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
   return true;
@@ -271,7 +271,7 @@ uint32_t RangeMap<K, V, C>::removeBefore(const EntryKey& key) {
   auto* index = handle_->template getMemoryAs<BinaryIndex>();
   auto count = index->removeBefore(
       key, [this](auto addr) { bufferManager_.remove(addr); });
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
   return count;
@@ -404,7 +404,7 @@ typename RangeMap<K, V, C>::InsertOrReplaceResult
 RangeMap<K, V, C>::insertOrReplaceInternal(const EntryKey& key,
                                            const EntryValue& value) {
   // If wasted space is more than threshold, trigger compaction
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
 
