@@ -54,8 +54,8 @@ class CacheAllocatorConfig {
       uint32_t _minAllocationClassSize,
       bool _reduceFragmentationInAllocationClass);
 
-  // Set the access config for cachelib's access container
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#accessconfig
+  // Set the access config for cachelib's access container. Refer to our
+  // user guide for how to tune access container (configure hashtable).
   CacheAllocatorConfig& setAccessConfig(AccessConfig config);
 
   // RemoveCallback is invoked for each item that is evicted or removed
@@ -108,12 +108,10 @@ class CacheAllocatorConfig {
   // returned by CacheAllocator::getUsableSize()
   bool isNvmCacheTruncateAllocSizeEnabled() const;
 
-  // Enable compact cache support
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#compact-cache
+  // Enable compact cache support. Refer to our user guide for how ccache works.
   CacheAllocatorConfig& enableCompactCache();
 
-  // Configure chained items. Get more details at:
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#chained-allocations
+  // Configure chained items. Refer to our user guide for how chained items work.
   //
   // @param config  Config for chained item's access container, it's similar to
   //                the main access container but only used for chained items
@@ -153,8 +151,8 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setMemoryLocking(bool enable);
 
   // This allows cache to be persisted across restarts. One example use case is
-  // to preserve the cache when releasing a new version of your service.
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#cache-persistence
+  // to preserve the cache when releasing a new version of your service. Refer
+  // to our user guide for how to set up cache persistence.
   CacheAllocatorConfig& enableCachePersistence(std::string directory,
                                                void* baseAddr = nullptr);
 
@@ -214,8 +212,7 @@ class CacheAllocatorConfig {
   // slab memory distributed across different allocation classes. For example,
   // if the 64 bytes allocation classes are receiving for allocation requests,
   // eventually CacheAllocator will move more memory to it from other allocation
-  // classes. For more details, see:
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#rebalancing
+  // classes. For more details, see our user guide.
   CacheAllocatorConfig& enablePoolRebalancing(
       std::shared_ptr<RebalanceStrategy> defaultRebalanceStrategy,
       std::chrono::milliseconds interval);
