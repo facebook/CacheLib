@@ -103,9 +103,22 @@ int main(int argc, char** argv) {
   std::cout << "Welcome to OSS version of cachebench" << std::endl;
 #endif
 
-  runnerInstance.reset(new facebook::cachelib::cachebench::Runner{
-      FLAGS_json_test_config, FLAGS_progress_stats_file, FLAGS_progress,
-      configCustomizer});
+  if (FLAGS_json_test_config.empty() ||
+      !facebook::cachelib::util::pathExists(FLAGS_json_test_config)) {
+    std::cout << "Invalid config file: " << FLAGS_json_test_config
+              << ". pass a valid --json_test_config for cachebench."
+              << std::endl;
+    return 1;
+  }
+
+  try {
+    runnerInstance.reset(new facebook::cachelib::cachebench::Runner{
+        FLAGS_json_test_config, FLAGS_progress_stats_file, FLAGS_progress,
+        configCustomizer});
+  } catch (const std::exception& e) {
+    std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
+    return 1;
+  }
 
   setupSignalHandler();
   setupTimeoutHandler();
