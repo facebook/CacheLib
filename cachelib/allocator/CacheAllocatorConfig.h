@@ -111,7 +111,8 @@ class CacheAllocatorConfig {
   // Enable compact cache support. Refer to our user guide for how ccache works.
   CacheAllocatorConfig& enableCompactCache();
 
-  // Configure chained items. Refer to our user guide for how chained items work.
+  // Configure chained items. Refer to our user guide for how chained items
+  // work.
   //
   // @param config  Config for chained item's access container, it's similar to
   //                the main access container but only used for chained items
