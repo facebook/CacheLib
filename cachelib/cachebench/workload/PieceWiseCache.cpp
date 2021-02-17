@@ -243,11 +243,18 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
     folly::Optional<uint64_t> rangeStart,
     folly::Optional<uint64_t> rangeEnd,
     uint32_t ttl,
-    std::vector<std::string>&& statsAggFieldV)
+    std::vector<std::string>&& statsAggFieldV,
+    std::unordered_map<std::string, std::string>&& admFeatureM)
     : baseKey(GenericPieces::escapeCacheKey(key.str())),
       pieceKey(baseKey),
       sizes(1),
-      req(pieceKey, sizes.begin(), sizes.end(), opType, ttl, reqId),
+      req(pieceKey,
+          sizes.begin(),
+          sizes.end(),
+          opType,
+          ttl,
+          reqId,
+          admFeatureM),
       requestRange(rangeStart, rangeEnd),
       headerSize(responseHeaderSize),
       fullObjectSize(fullContentSize),
@@ -282,7 +289,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(const PieceWiseReqWrapper& other)
           sizes.end(),
           other.req.getOp(),
           other.req.ttlSecs,
-          other.req.requestId.value()),
+          other.req.requestId.value(),
+          other.req.admFeatureMap),
       requestRange(other.requestRange),
       isHeaderPiece(other.isHeaderPiece),
       headerSize(other.headerSize),
@@ -432,6 +440,9 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
 
     // Perform set operation next for the current piece
     rw.req.setOp(OpType::kSet);
+  } else if (result == OpResultType::kSetSkip) {
+    // No need to set subsequent pieces.
+    done = true;
   } else {
     XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
   }
@@ -444,7 +455,7 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
   bool done = false;
 
   if (result == OpResultType::kGetHit || result == OpResultType::kSetSuccess ||
-      result == OpResultType::kSetFailure) {
+      result == OpResultType::kSetFailure || result == OpResultType::kSetSkip) {
     // Record the cache hit stats
     if (result == OpResultType::kGetHit) {
       size_t hitBytes = rw.sizes[0];

@@ -29,10 +29,26 @@ struct ThroughputStats {
 
 class GeneratorBase;
 
+// The class defines the admission policy at stressor level. The stressor
+// checks the admission policy first before inserting an item into cache.
+//
+// This base class always returns true, allowing the insersion.
+class StressorAdmPolicy {
+ public:
+  virtual ~StressorAdmPolicy() = default;
+
+  virtual bool accept(
+      const std::unordered_map<std::string, std::string>& /*featureMap*/) {
+    return true;
+  }
+};
+
 class Stressor {
  public:
-  static std::unique_ptr<Stressor> makeStressor(CacheConfig cacheConfig,
-                                                StressorConfig stressorConfig);
+  static std::unique_ptr<Stressor> makeStressor(
+      CacheConfig cacheConfig,
+      StressorConfig stressorConfig,
+      std::unique_ptr<StressorAdmPolicy> admPolicy);
 
   virtual ~Stressor() {}
 
@@ -61,6 +77,7 @@ class Stressor {
  private:
   std::atomic<bool> stopped_{false};
 };
+
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

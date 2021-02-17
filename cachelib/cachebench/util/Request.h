@@ -34,7 +34,8 @@ enum class OpResultType {
   kGetMiss,
   kGetHit,
   kSetSuccess,
-  kSetFailure
+  kSetFailure,
+  kSetSkip
 };
 
 struct Request {
@@ -54,12 +55,14 @@ struct Request {
           std::vector<size_t>::iterator e,
           OpType o,
           uint32_t ttl,
-          uint64_t reqId)
+          uint64_t reqId,
+          const std::unordered_map<std::string, std::string>& admFeatureM)
       : key(k),
         sizeBegin(b),
         sizeEnd(e),
         ttlSecs(ttl),
         requestId(reqId),
+        admFeatureMap(admFeatureM),
         op(o) {}
 
   static std::string getUniqueKey() {
@@ -88,6 +91,10 @@ struct Request {
   const uint32_t ttlSecs{0};
 
   const std::optional<uint64_t> requestId;
+
+  // Feature map for this request sample, which is used for for admission
+  // policy: feature name --> feature value
+  const std::unordered_map<std::string, std::string> admFeatureMap;
 
  private:
   std::atomic<OpType> op{OpType::kGet};

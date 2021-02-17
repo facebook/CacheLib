@@ -59,6 +59,11 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
 
 void PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
+  auto partialFieldCount = SampleFields::TOTAL_DEFINED_FIELDS +
+                           config_.replayGeneratorConfig.numAggregationFields;
+  auto totalFieldCount =
+      partialFieldCount + config_.replayGeneratorConfig.numExtraFields;
+
   while (true) {
     if (!std::getline(infile_, line)) {
       if (repeatTraceReplay_) {
@@ -76,10 +81,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
     try {
       std::vector<folly::StringPiece> fields;
       folly::split(",", line, fields);
-      if (fields.size() !=
-          SampleFields::TOTAL_FIELDS +
-              config_.replayGeneratorConfig.numAggregationFields +
-              config_.replayGeneratorConfig.numExtraFields) {
+      if (fields.size() != totalFieldCount) {
         invalidSamples_.inc();
         continue;
       }
@@ -167,11 +169,25 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       }
 
       std::vector<std::string> statsAggFields;
-      for (size_t i = SampleFields::TOTAL_FIELDS;
-           i < SampleFields::TOTAL_FIELDS +
-                   config_.replayGeneratorConfig.numAggregationFields;
+      for (size_t i = SampleFields::TOTAL_DEFINED_FIELDS; i < partialFieldCount;
            ++i) {
         statsAggFields.push_back(fields[i].str());
+      }
+
+      // Admission policy related fields: feature name --> feature value
+      std::unordered_map<std::string, std::string> admFeatureMap;
+      if (config_.replayGeneratorConfig.mlAdmissionConfig) {
+        for (const auto& [featureName, index] :
+             config_.replayGeneratorConfig.mlAdmissionConfig->numericFeatures) {
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
+        }
+        for (const auto& [featureName, index] :
+             config_.replayGeneratorConfig.mlAdmissionConfig
+                 ->categoricalFeatures) {
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
+        }
       }
 
       // Spin until the queue has room
@@ -185,7 +201,8 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         rangeStart,
                                         rangeEnd,
                                         ttl,
-                                        std::move(statsAggFields))) {
+                                        std::move(statsAggFields),
+                                        std::move(admFeatureMap))) {
         if (shouldShutdown()) {
           XLOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;

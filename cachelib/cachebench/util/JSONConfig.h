@@ -61,6 +61,21 @@ struct JSONConfig {
   }
 
   template <typename KeyType, typename ValType>
+  static void setValImpl(std::unordered_map<KeyType, ValType>& field,
+                         const folly::dynamic& val) {
+    if (val.isObject()) {
+      field.clear();
+      for (const auto& pair : val.items()) {
+        KeyType key;
+        setValImpl(key, pair.first);
+        ValType value;
+        setValImpl(value, pair.second);
+        field[key] = value;
+      }
+    }
+  }
+
+  template <typename KeyType, typename ValType>
   static void setValImpl(
       std::unordered_map<KeyType, std::vector<ValType>>& field,
       const folly::dynamic& val) {

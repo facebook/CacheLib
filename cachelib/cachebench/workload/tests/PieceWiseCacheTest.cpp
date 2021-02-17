@@ -15,6 +15,7 @@ class PieceWiseCacheTest : public ::testing::Test {
     std::string testKey = "test";
     std::vector<std::string> extraFieldV;
     std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
+    std::unordered_map<std::string, std::string> admFeatureMap;
 
     piecewiseCache =
         std::make_unique<PieceWiseCacheAdapter>(/*maxCachePiecesv=*/32000,
@@ -33,7 +34,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/100000,
         /*ttl=*/3600,
-        std::move(extraFieldV));
+        std::move(extraFieldV),
+        std::move(admFeatureMap));
 
     // pieceReq2 is stored as multiple pieces, and the range contains a single
     // piece
@@ -47,7 +49,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/65530,
         /*ttl=*/3600,
-        std::move(extraFieldV));
+        std::move(extraFieldV),
+        std::move(admFeatureMap));
 
     // nonPieceReq is stored as whole object
     nonPieceReq = std::make_unique<PieceWiseReqWrapper>(
@@ -60,7 +63,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/6000,
         /*ttl=*/3600,
-        std::move(extraFieldV));
+        std::move(extraFieldV),
+        std::move(admFeatureMap));
   }
 
   std::unique_ptr<PieceWiseCacheAdapter> piecewiseCache;

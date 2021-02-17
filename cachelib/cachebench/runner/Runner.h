@@ -10,23 +10,24 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 // User can pass in a config customizer to add additional settings at runtime
-using ConfigCustomizer = std::function<CacheConfig(CacheConfig)>;
+using CacheConfigCustomizer = std::function<CacheConfig(CacheConfig)>;
 
 class Runner {
  public:
   // @customizeCacheConfig    User can implement special handling to add custom
   //                          cache configs they desire on each run
-  Runner(const std::string& configPath,
+  Runner(const CacheBenchConfig& config,
          const std::string& progressStatsFile,
          uint64_t progressInterval,
-         ConfigCustomizer customizeCacheConfig);
+         CacheConfigCustomizer customizeCacheConfig,
+         std::unique_ptr<StressorAdmPolicy> admPolicy);
   bool run();
 
   void abort() { stressor_->abort(); }
 
  private:
   CacheBenchConfig config_;
-  std::function<CacheConfig(CacheConfig)> customizeCacheConfig_;
+  CacheConfigCustomizer customizeCacheConfig_;
 
   const std::string& progressStatsFile_;
   const uint64_t progressInterval_;

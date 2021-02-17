@@ -66,6 +66,25 @@ struct DistributionConfig : public JSONConfig {
   }
 };
 
+struct MLAdmissionConfig : public JSONConfig {
+  MLAdmissionConfig() {}
+
+  explicit MLAdmissionConfig(const folly::dynamic& configJson);
+
+  std::string modelPath;
+
+  // Map from feature name to its corresponding index in sample fields.
+  // Note these features could be in defined fields, aggregation Fields,
+  // or ExtraFields.
+  // Support two kinds of features:
+  // numeric features, categorical features.
+  std::unordered_map<std::string, uint32_t> numericFeatures;
+  std::unordered_map<std::string, uint32_t> categoricalFeatures;
+
+  double targetRecall;
+  size_t admitCategory;
+};
+
 struct ReplayGeneratorConfig : public JSONConfig {
   ReplayGeneratorConfig() {}
 
@@ -88,7 +107,7 @@ struct ReplayGeneratorConfig : public JSONConfig {
   uint64_t relaxedSerialIntervalMs{500};
 
   // # of extra fields in trace sample that we track broken down stats.
-  // These fields are placed after existing fields:
+  // These fields are placed after defined fields:
   // https://fburl.com/diffusion/hl3qerc9
   uint32_t numAggregationFields{0};
 
@@ -102,6 +121,8 @@ struct ReplayGeneratorConfig : public JSONConfig {
   // Mapping: field index in the aggregation fields (starting at 0) -->
   // list of values we track for that field
   std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
+
+  std::shared_ptr<MLAdmissionConfig> mlAdmissionConfig;
 
   SerializeMode getSerializationMode() const;
 };
@@ -191,11 +212,11 @@ class CacheBenchConfig {
   explicit CacheBenchConfig(const std::string& path);
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
-  const StressorConfig& getTestConfig() const { return testConfig_; }
+  const StressorConfig& getStressorConfig() const { return stressorConfig_; }
 
  private:
   CacheConfig cacheConfig_;
-  StressorConfig testConfig_;
+  StressorConfig stressorConfig_;
 };
 
 } // namespace cachebench

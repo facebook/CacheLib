@@ -30,10 +30,12 @@ class CacheStressor : public Stressor {
   // @param config    stress test config
   CacheStressor(CacheConfig cacheConfig,
                 StressorConfig config,
-                std::unique_ptr<GeneratorBase>&& generator)
+                std::unique_ptr<GeneratorBase>&& generator,
+                std::unique_ptr<StressorAdmPolicy> admPolicy)
       : config_(std::move(config)),
         throughputStats_(config_.numThreads),
         wg_(std::move(generator)),
+        admPolicy_(std::move(admPolicy)),
         hardcodedString_(genHardcodedString()) {
     // if either consistency check is enabled or if we want to move
     // items during slab release, we want readers and writers to chained
@@ -253,7 +255,8 @@ class CacheStressor : public Stressor {
         case OpType::kSet: {
           chainedItemLock(Mode::Exclusive, *key);
           SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs);
+          result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
+                          req.admFeatureMap);
 
           throttleFn();
           break;
@@ -281,7 +284,8 @@ class CacheStressor : public Stressor {
               chainedItemUnlock(lockMode, *key);
               lockMode = Mode::Exclusive;
               chainedItemLock(lockMode, *key);
-              setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs);
+              setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
+                     req.admFeatureMap);
             }
           } else {
             result = OpResultType::kGetHit;
@@ -357,11 +361,19 @@ class CacheStressor : public Stressor {
     wg_->markFinish();
   }
 
-  OpResultType setKey(PoolId pid,
-                      ThroughputStats& stats,
-                      const std::string* key,
-                      size_t size,
-                      uint32_t ttlSecs) {
+  OpResultType setKey(
+      PoolId pid,
+      ThroughputStats& stats,
+      const std::string* key,
+      size_t size,
+      uint32_t ttlSecs,
+      const std::unordered_map<std::string, std::string>& featureMap) {
+    // check the admission policy first, and skip the set operation
+    // if the policy returns false
+    if (!admPolicy_->accept(featureMap)) {
+      return OpResultType::kSetSkip;
+    }
+
     ++stats.set;
     auto it = cache_->allocate(pid, *key, size, ttlSecs);
     if (it == nullptr) {
@@ -391,6 +403,8 @@ class CacheStressor : public Stressor {
   std::vector<ThroughputStats> throughputStats_;
 
   std::unique_ptr<GeneratorBase> wg_;
+
+  std::unique_ptr<StressorAdmPolicy> admPolicy_;
 
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;

@@ -179,7 +179,7 @@ struct PieceWiseReqWrapper {
   // The size of the complete object, excluding response header.
   const size_t fullObjectSize;
   // Additional stats aggregation fields for this request sample other
-  // than the SampleFields
+  // than the defined SampleFields
   const std::vector<std::string> statsAggFields;
 
   // Tracker to record the start/end of request. Initialize it at the
@@ -195,16 +195,19 @@ struct PieceWiseReqWrapper {
   // @param rangeEnd: end of the range if it's range request
   // @param ttl: ttl of the content for caching
   // @param statsAggFieldV: extra fields used for stats aggregation
-  explicit PieceWiseReqWrapper(uint64_t cachePieceSize,
-                               uint64_t reqId,
-                               OpType opType,
-                               folly::StringPiece key,
-                               size_t fullContentSize,
-                               size_t responseHeaderSize,
-                               folly::Optional<uint64_t> rangeStart,
-                               folly::Optional<uint64_t> rangeEnd,
-                               uint32_t ttl,
-                               std::vector<std::string>&& statsAggFieldV);
+  // @param admFeatureM: features map for admission policy
+  explicit PieceWiseReqWrapper(
+      uint64_t cachePieceSize,
+      uint64_t reqId,
+      OpType opType,
+      folly::StringPiece key,
+      size_t fullContentSize,
+      size_t responseHeaderSize,
+      folly::Optional<uint64_t> rangeStart,
+      folly::Optional<uint64_t> rangeEnd,
+      uint32_t ttl,
+      std::vector<std::string>&& statsAggFieldV,
+      std::unordered_map<std::string, std::string>&& admFeatureM);
 
   PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };
