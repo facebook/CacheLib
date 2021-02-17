@@ -6,7 +6,9 @@ import random
 import cachelib.scripts.ws_traces.feature_extractor as feature_extractor
 import cachelib.scripts.ws_traces.utils as utils
 import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dfeature
-import lightgbm as lgb
+
+# @dep=@/third-party:lightgbm:lightgbm-py
+import lightgbm as lgb  # @manual
 import numpy as np
 import pandas as pd
 

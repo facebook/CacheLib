@@ -7,7 +7,9 @@ from collections import OrderedDict
 
 import cachelib.scripts.ws_traces.utils as utils
 import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dyn_features
-import lightgbm as lgb
+
+# @dep=@/third-party:lightgbm:lightgbm-py
+import lightgbm as lgb  # @manual
 import numpy as np
 
 
