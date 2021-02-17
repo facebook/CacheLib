@@ -1,14 +1,13 @@
 #pragma once
 
-#include "cachelib/navy/AbstractCache.h"
-#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
-#include "cachelib/navy/common/Device.h"
-
-#include "cachelib/navy/scheduler/JobScheduler.h"
-
 #include <chrono>
 #include <memory>
 #include <vector>
+
+#include "cachelib/navy/AbstractCache.h"
+#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
+#include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
@@ -141,8 +140,20 @@ class CacheProto {
   // (Optional) Set admission policy to accept a random item with a target write
   // rate in bytes/s. setBlockCache is a dependency and must be called before
   // this.
+  // targetRate: rate in bytes/s
+  //
+  // deterministicKeyHashSuffixLength: length of suffix in key to be ignored
+  // when hashing for probability.
+  //
+  // itemBaseSize: base size of baseProbability calculation.
+  //
+  // maxRate: max rate at which Navy can write without saturation which
+  // negatively affects latency.
   virtual void setDynamicRandomAdmissionPolicy(
-      uint64_t targetRate, size_t deterministicKeyHashSuffixLength = 0) = 0;
+      uint64_t targetRate,
+      size_t deterministicKeyHashSuffixLength = 0,
+      uint32_t itemBaseSize = 0,
+      uint64_t maxRate = 0) = 0;
 };
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto();

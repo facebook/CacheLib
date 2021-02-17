@@ -1,13 +1,13 @@
+#include "cachelib/cachebench/workload/WorkloadGenerator.h"
+
 #include <algorithm>
 #include <chrono>
 #include <iostream>
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-template <typename Distribution>
-WorkloadGenerator<Distribution>::WorkloadGenerator(const StressorConfig& config)
+WorkloadGenerator::WorkloadGenerator(const StressorConfig& config)
     : config_{config} {
   for (const auto& c : config.poolDistributions) {
     if (c.keySizeRange.size() != c.keySizeRangeProbability.size() + 1) {
@@ -15,7 +15,7 @@ WorkloadGenerator<Distribution>::WorkloadGenerator(const StressorConfig& config)
           "Key size range and their probabilities do not match up. Check your "
           "test config.");
     }
-    workloadDist_.push_back(Distribution(c));
+    workloadDist_.push_back(WorkloadDistribution(c));
   }
 
   if (config_.numKeys > std::numeric_limits<uint32_t>::max()) {
@@ -28,9 +28,9 @@ WorkloadGenerator<Distribution>::WorkloadGenerator(const StressorConfig& config)
   generateKeyDistributions();
 }
 
-template <typename Distribution>
-const Request& WorkloadGenerator<Distribution>::getReq(
-    uint8_t poolId, std::mt19937_64& gen, std::optional<uint64_t>) {
+const Request& WorkloadGenerator::getReq(uint8_t poolId,
+                                         std::mt19937_64& gen,
+                                         std::optional<uint64_t>) {
   XDCHECK_LT(poolId, keyIndicesForPool_.size());
   XDCHECK_LT(poolId, keyGenForPool_.size());
 
@@ -41,8 +41,7 @@ const Request& WorkloadGenerator<Distribution>::getReq(
   return reqs_[idx];
 }
 
-template <typename Distribution>
-void WorkloadGenerator<Distribution>::generateKeys() {
+void WorkloadGenerator::generateKeys() {
   uint8_t pid = 0;
   auto fn = [pid, this](size_t start, size_t end) {
     // All keys are printable lower case english alphabet.
@@ -93,8 +92,7 @@ void WorkloadGenerator<Distribution>::generateKeys() {
             << std::endl;
 }
 
-template <typename Distribution>
-void WorkloadGenerator<Distribution>::generateReqs() {
+void WorkloadGenerator::generateReqs() {
   generateFirstKeyIndexForPool();
   generateKeys();
   std::mt19937_64 gen(folly::Random::rand64());
@@ -118,8 +116,7 @@ void WorkloadGenerator<Distribution>::generateReqs() {
   }
 }
 
-template <typename Distribution>
-void WorkloadGenerator<Distribution>::generateFirstKeyIndexForPool() {
+void WorkloadGenerator::generateFirstKeyIndexForPool() {
   auto sumProb = std::accumulate(config_.keyPoolDistribution.begin(),
                                  config_.keyPoolDistribution.end(), 0.);
   auto accumProb = 0.;
@@ -131,8 +128,7 @@ void WorkloadGenerator<Distribution>::generateFirstKeyIndexForPool() {
   }
 }
 
-template <typename Distribution>
-void WorkloadGenerator<Distribution>::generateKeyDistributions() {
+void WorkloadGenerator::generateKeyDistributions() {
   // We are trying to generate a gaussian distribution for each pool's part
   // in the overall cache ops. To keep the amount of memory finite, we only
   // generate a max of 4 billion op traces across all the pools and replay
@@ -159,11 +155,8 @@ void WorkloadGenerator<Distribution>::generateKeyDistributions() {
           std::mt19937_64 gen(folly::Random::rand64());
           auto popDist = workloadDist_[idx].getPopDist(left, right);
           for (uint64_t j = start; j < end; j++) {
-            double idx;
-            do {
-              idx = std::round(popDist(gen));
-            } while (idx < left || idx > right);
-            keyIndicesForPool_[i][j] = util::narrow_cast<uint32_t>(idx);
+            keyIndicesForPool_[i][j] =
+                util::narrow_cast<uint32_t>((*popDist)(gen));
           }
         },
         config_.numThreads, numOpsForPool);

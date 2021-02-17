@@ -1,8 +1,8 @@
-#include <limits>
+#include "cachelib/cachebench/consistency/ValueTracker.h"
 
 #include <glog/logging.h>
 
-#include "cachelib/cachebench/consistency/ValueTracker.h"
+#include <limits>
 
 namespace facebook {
 namespace cachelib {

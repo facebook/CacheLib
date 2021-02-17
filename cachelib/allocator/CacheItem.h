@@ -1,24 +1,23 @@
 #pragma once
 
-#include <atomic>
-#include <utility>
-
 #include <folly/CPortability.h>
 #include <folly/String.h>
 
+#include <atomic>
+#include <utility>
+
+#include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheChainedItemIterator.h"
+#include "cachelib/allocator/Handle.h"
+#include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/Refcount.h"
+#include "cachelib/allocator/TypedHandle.h"
 #include "cachelib/allocator/datastruct/SList.h"
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Mutex.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/Handle.h"
-#include "cachelib/allocator/KAllocation.h"
-#include "cachelib/allocator/Refcount.h"
-#include "cachelib/allocator/TypedHandle.h"
 
 namespace facebook {
 
@@ -61,67 +60,6 @@ class CacheChainedAllocs;
 template <typename K, typename V, typename C>
 class Map;
 
-struct ItemRefCountWithFlags {
-  /**
-   * Width of refcount type. This includes the flags and refcount bits. Flags
-   * encode special reference counts that contain information on who holds the
-   * reference count (like AccessContainer or MMContainer)
-   */
-  using RefCountT = uint16_t;
-
-  static constexpr uint8_t kNumRefFlags = 3;
-  static constexpr uint8_t kNumRefCountBits =
-      NumBits<RefCountT>::value - kNumRefFlags;
-
-  enum class RefFlags : uint8_t {
-    // is linked through memory container
-    kLinked = kNumRefCountBits,
-
-    // exists in hash table
-    kAccessible,
-
-    // this flag indicates the allocation is being moved elsewhere
-    // (can be triggered by a resize or reblanace operation)
-    kMoving,
-  };
-
-  using RefCount = RefCountWithFlags<RefCountT, kNumRefCountBits>;
-
-  static_assert(NumBits<RefCountT>::value >= kNumRefFlags,
-                "RefCountT does not fit all the flags");
-};
-
-struct ItemFlags {
-  using FlagT = uint8_t;
-
-  enum class Flags : uint8_t {
-    MM_FLAG_0 = 0,
-    MM_FLAG_1 = 1,
-
-    // Item hasn't been modified after loading from nvm
-    NVM_CLEAN = 2,
-
-    // Item was evicted from NVM while it was in RAM.
-    NVM_EVICTED = 3,
-
-    // Whether or not an item is a regular item or chained alloc
-    IS_CHAINED_ITEM = 4,
-
-    // If a regular item has chained allocs
-    HAS_CHAINED_ITEM = 5,
-
-    // Whether or not an item is evictable
-    UNEVICTABLE = 6,
-
-    MM_FLAG_2 = 7,
-
-    MAX_FLAGS = 8,
-  };
-
-  static_assert(static_cast<size_t>(Flags::MAX_FLAGS) <= sizeof(FlagT) * 8,
-                "More flags than the number of bits in FlagT");
-};
-
 // This is the actual representation of the cache item. It has two member
 // hooks of type MMType::Hook and AccessType::Hook to ensure that the CacheItem
 // can be put in the MMType::Container and AccessType::Container.
@@ -137,6 +75,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
    */
   using CacheT = CacheAllocator<CacheTrait>;
   using NvmCacheT = NvmCache<CacheT>;
+  using Flags = RefcountWithFlags::Flags;
 
   /**
    * Currently there are two types of items that can be cached.
@@ -155,7 +94,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
    *  ---------------------
    *  | Intrusive Hooks   |
    *  | Reference & Flags |
-   *  | Additional Flags  |
    *  | Creation Time     |
    *  | Expiry Time       |
    *  | Payload           |
@@ -172,10 +110,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
   using AccessHook = typename CacheTrait::AccessType::template Hook<Item>;
   using MMHook = typename CacheTrait::MMType::template Hook<Item>;
   using Key = KAllocation::Key;
-  using RefFlags = ItemRefCountWithFlags::RefFlags;
-  using RefCount = ItemRefCountWithFlags::RefCount;
-  using FlagT = ItemFlags::FlagT;
-  using Flags = ItemFlags::Flags;
 
   /**
    * User primarily interacts with an item through its handle.
@@ -247,8 +181,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Return timestamp of when this item was created
   uint32_t getCreationTime() const noexcept;
 
-  // return the relative time between expiry time and creation time
-  uint32_t getConfiguredTTL() const noexcept;
+  // return the original configured time to live in seconds.
+  std::chrono::seconds getConfiguredTTL() const noexcept;
 
   // Return the last time someone accessed this item
   uint32_t getLastAccessTime() const noexcept;
@@ -280,22 +214,15 @@ class CACHELIB_PACKED_ATTR CacheItem {
   bool hasChainedItem() const noexcept;
 
   /**
-   * TODO: temporary for Tao integration
-   *       this needs to be public since Tao code modifies this
-   *
-   * NVM_CLEAN bit to keep track of whether the item was modified
-   * while in cache after loading from Nvm
+   * Keep track of whether the item was modified while in ram cache
    */
   bool isNvmClean() const noexcept;
   void markNvmClean() noexcept;
   void unmarkNvmClean() noexcept;
 
   /**
-   * TODO: temporary for Tao integration
-   *       this needs to be public since Tao code modifies this
-   *
    * Marks that the item was potentially evicted from the nvmcache and might
-   * need to be rewritten even if it was nvmclean
+   * need to be rewritten even if it was nvm-clean
    */
   void markNvmEvicted() noexcept;
   void unmarkNvmEvicted() noexcept;
@@ -303,7 +230,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   /**
    * Function to set the timestamp for when to expire an item
-   * Employs a best-effort approach to update the expiryTime
+   * Employs a best-effort approach to update the expiryTime. Item's expiry
+   * time can only be updated when the item is a regular item and is part of
+   * the cache and not in the moving state.
    *
    * @param expiryTime the expiryTime value to update to
    *
@@ -318,7 +247,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   bool extendTTL(std::chrono::seconds ttl) noexcept;
 
   // Return the refcount of an item
-  RefCount::Value getRefCount() const noexcept;
+  RefcountWithFlags::Value getRefCount() const noexcept;
 
   // Returns true if the item is in access container, false otherwise
   bool isAccessible() const noexcept;
@@ -344,27 +273,37 @@ class CACHELIB_PACKED_ATTR CacheItem {
   void changeKey(Key key);
 
   /**
-   * CacheItem's refcount contain both references and flags
+   * CacheItem's refcount contain admin references, access referneces, and
+   * flags, refer to Refcount.h for details.
    *
-   * Currently we support up to 2^13 references on any given item.
+   * Currently we support up to 2^18 references on any given item.
    * Increment and decrement may throw the following due to over/under-flow.
    *  cachelib::exception::RefcountOverflow
    *  cachelib::exception::RefcountUnderflow
-   *
-   * User can get just the refcount portion or choose to get the whole
-   * value which include flags (the bits at the top) and the references.
    */
-  RefCount::Value getRefCountRaw() const noexcept;
+  RefcountWithFlags::Value getRefCountAndFlagsRaw() const noexcept;
 
   FOLLY_ALWAYS_INLINE void incRef() {
-    if (LIKELY(ref_.inc())) {
+    if (LIKELY(ref_.incRef())) {
       return;
     }
     throw exception::RefcountOverflow(
         folly::sformat("Refcount maxed out. item: {}", toString()));
   }
 
-  FOLLY_ALWAYS_INLINE RefCount::Value decRef() { return ref_.dec(); }
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef() {
+    return ref_.decRef();
+  }
+
+  // Whether or not an item is completely drained of all references including
+  // the internal ones. This means there is no access refcount bits and zero
+  // admin bits set. I.e. refcount is 0 and the item is not linked, accessible,
+  // nor moving
+  bool isDrained() const noexcept;
+
+  // Whether or not we hold the last exclusive access to this item
+  // Refcount is 1 and the item is not linked, accessible, nor moving
+  bool isExclusive() const noexcept;
 
   /**
    * The following three functions correspond to the state of the allocation
@@ -426,13 +365,13 @@ class CACHELIB_PACKED_ATTR CacheItem {
   uint32_t getOffsetForMemory() const noexcept;
 
   /**
-   * Functions to set, unset and get bits from flags_
+   * Functions to set, unset and get bits
    */
-  template <Flags flagBit>
+  template <RefcountWithFlags::Flags flagBit>
   void setFlag() noexcept;
-  template <Flags flagBit>
+  template <RefcountWithFlags::Flags flagBit>
   void unSetFlag() noexcept;
-  template <Flags flagBit>
+  template <RefcountWithFlags::Flags flagBit>
   bool isFlagSet() const noexcept;
 
   /**
@@ -457,11 +396,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
       typename CacheTrait::MMType::template Container<Item, &Item::mmHook_>;
 
  protected:
-  // Refcount for the item, also flags related the item's lifetime
-  RefCount ref_{0};
-
-  // Additional flags for the item that are not relevant to refcount logic
-  FlagT flags_{0};
+  // Refcount for the item and also flags on the items state
+  RefcountWithFlags ref_;
 
   // Time when this cache item is created
   const uint32_t creationTime_{0};
@@ -506,10 +442,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
 //
 // Memory layout:
 // | --------------------- |
-// | FlagT                 |
 // | AccessHook            |
 // | MMHook                |
-// | RefCount              |
+// | RefCountWithFlags     |
 // | creationTime_         |
 // | --------------------- |
 // |  K | size_            |

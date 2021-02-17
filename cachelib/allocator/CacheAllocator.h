@@ -1,15 +1,15 @@
 #pragma once
 
+#include <folly/CPortability.h>
+#include <folly/Likely.h>
+#include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
+
 #include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <utility>
-
-#include <folly/CPortability.h>
-#include <folly/Likely.h>
-#include <folly/ScopeGuard.h>
-#include <folly/logging/xlog.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -89,6 +89,8 @@ class NvmCacheTest;
 
 template <typename AllocatorT>
 class PoolOptimizeStrategyTest;
+
+class NvmAdmissionPolicyTest;
 } // namespace tests
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
@@ -163,11 +165,6 @@ class CacheAllocator : public CacheBase {
   // call back type that is executed when the cache item is removed
   // (evicted / freed)
   using RemoveCb = std::function<void(const RemoveCbData& data)>;
-
-  // returns true for items that will have to be filtered out so that they
-  // dont get pushed to nvm cache.
-  using NvmCacheFilterCb =
-      std::function<bool(const Item&, folly::Range<ChainedItemIter>)>;
 
   // the holder for the item when we hand it to the caller. This ensures
   // that the reference count is maintained when the caller is done with the
@@ -692,13 +689,18 @@ class CacheAllocator : public CacheBase {
   //
   // precondition:  serialization must happen without any reader or writer
   // present. Any modification of this object afterwards will result in an
-  // invalid, inconsistent state for the serialized data.
+  // invalid, inconsistent state for the serialized data. There must not be
+  // any outstanding active handles
   //
   // @throw   std::invalid_argument if the cache allocator isn't using shared
   //          memory
   // @throw   std::logic_error if any component is not restorable.
-  // @return  A @a ShutDownStatus value indicating the result of the shutDown
-  // operation.
+  // @return  A ShutDownStatus value indicating the result of the shutDown
+  //          operation.
+  //          kSuccess - successfully shut down and can be re-attached
+  //          kFailed - failure due to outstanding active handle or error with
+  //                    cache dir
+  //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
   ShutDownStatus shutDown();
 
   // Stop existing ones (if any) and create new workers
@@ -934,13 +936,12 @@ class CacheAllocator : public CacheBase {
 
   // this ensures that we dont introduce any more hidden fields like vtable by
   // inheriting from the Hooks and their bool interface.
-  static_assert((sizeof(typename Item::FlagT) +
-                 sizeof(typename MMType::template Hook<Item>) +
+  static_assert((sizeof(typename MMType::template Hook<Item>) +
                  sizeof(typename AccessType::template Hook<Item>) +
-                 sizeof(typename Item::RefCount::Value) + sizeof(uint32_t) +
+                 sizeof(typename RefcountWithFlags::Value) + sizeof(uint32_t) +
                  sizeof(uint32_t) + sizeof(KAllocation)) == sizeof(Item),
                 "vtable overhead");
-  static_assert(31 == sizeof(Item), "item overhead is 31 bytes");
+  static_assert(32 == sizeof(Item), "item overhead is 32 bytes");
 
   // make sure there is no overhead in ChainedItem on top of a regular Item
   static_assert(sizeof(Item) == sizeof(ChainedItem),
@@ -965,7 +966,7 @@ class CacheAllocator : public CacheBase {
  private:
   // wrapper around Item's refcount and active handle tracking
   FOLLY_ALWAYS_INLINE void incRef(Item& it);
-  FOLLY_ALWAYS_INLINE typename Item::RefCount::Value decRef(Item& it);
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef(Item& it);
 
   // drops the refcount and if needed, frees the allocation back to the memory
   // allocator and executes the necessary callbacks. no-op if it is nullptr.
@@ -1047,8 +1048,8 @@ class CacheAllocator : public CacheBase {
   MMContainer& getEvictableMMContainer(PoolId pid, ClassId cid) const noexcept;
 
   // same as above, but return the unevictable mm container
-  MMContainer& getUnevictableMMContainer(PoolId pid, ClassId cid) const
-      noexcept;
+  MMContainer& getUnevictableMMContainer(PoolId pid,
+                                         ClassId cid) const noexcept;
 
   // create a new cache allocation. The allocation can be initialized
   // appropriately and made accessible through insert or insertOrReplace.
@@ -1101,6 +1102,27 @@ class CacheAllocator : public CacheBase {
   ItemHandle allocateChainedItemInternal(const ItemHandle& parent,
                                          uint32_t size);
 
+  // Given an item and its parentKey, validate that the parentKey
+  // corresponds to an item that's the parent of the supplied item.
+  //
+  // @param item       item that we want to get the parent handle for
+  // @param parentKey  key of the item's parent
+  //
+  // @return  handle to the parent item if the validations pass
+  //          otherwise, an empty ItemHandle is returned.
+  //
+  ItemHandle validateAndGetParentHandleForChainedMoveLocked(
+      const ChainedItem& item, const Key& parentKey);
+
+  // Given an existing item, allocate a new one for the
+  // existing one to later be moved into.
+  //
+  // @param oldItem    handle to item we want to allocate a new item for
+  //
+  // @return  handle to the newly allocated item
+  //
+  ItemHandle allocateNewItemForOldItem(const Item& oldItem);
+
   // internal helper that grabs a refcounted handle to the item. This does
   // not record the access to reflect in the mmContainer.
   //
@@ -1129,17 +1151,33 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
 
-  // Moves an item to a different slab. Ths should only be used during slab
-  // release after the item's moving bit has been set. The user supplied
+  // Moves a regular item to a different slab. This should only be used during
+  // slab release after the item's moving bit has been set. The user supplied
   // callback is responsible for copying the contents and fixing the semantics
   // of chained item.
   //
-  // @param oldItem  Reference to the item being moved
+  // @param oldItem     Reference to the item being moved
+  // @param newItemHdl  Reference to the handle of the new item being moved into
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveRegularItem(Item& oldItem);
-  bool moveChainedItem(ChainedItem& oldItem);
+  bool moveRegularItem(Item& oldItem, ItemHandle& newItemHdl);
+
+  // Moves a chained item to a different slab. This should only be used during
+  // slab release after the item's moving bit has been set. The user supplied
+  // callback is responsible for copying the contents and fixing the semantics
+  // of chained item.
+  //
+  // Note: If we have successfully moved the old item into the new, the
+  //       newItemHdl is reset and no longer usable by the caller.
+  //
+  // @param oldItem       Reference to the item being moved
+  // @param newItemHdl    Reference to the handle of the new item being
+  //                      moved into
+  //
+  // @return true  If the move was completed, and the containers were updated
+  //               successfully.
+  bool moveChainedItem(ChainedItem& oldItem, ItemHandle& newItemHdl);
 
   // transfers the chain ownership from parent to newParent. Parent and
   // NewParent must be valid handles to items with same key and parent must
@@ -1371,11 +1409,12 @@ class CacheAllocator : public CacheBase {
   // "Move" (by copying) the content in this item to another memory
   // location by invoking the move callback.
   //
-  // @param item        old item to be moved elsewhere
+  // @param item         old item to be moved elsewhere
+  // @param newItemHdl   handle of new item to be moved into
   //
   // @return    true  if the item has been moved
   //            false if we have exhausted moving attempts
-  bool tryMovingForSlabRelease(Item& item);
+  bool tryMovingForSlabRelease(Item& item, ItemHandle& newItemHdl);
 
   // Evict an item from access and mm containers and
   // ensure it is safe for freeing.
@@ -1647,25 +1686,6 @@ class CacheAllocator : public CacheBase {
   mutable util::FastStats<int64_t> handleCount_{};
 
   mutable detail::Stats stats_{};
-
-  // latency stats of various cachelib operations
-  mutable util::PercentileStats allocateLatency_;
-  mutable util::PercentileStats nvmLookupLatency_;
-  mutable util::PercentileStats nvmInsertLatency_;
-  mutable util::PercentileStats nvmRemoveLatency_;
-
-  // percentile stats for various cache statistics
-  mutable util::PercentileStats ramEvictionAgeSecs_;
-  mutable util::PercentileStats nvmSmallEvictionAgeSecs_;
-  mutable util::PercentileStats nvmLargeEvictionAgeSecs_;
-  mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
-  mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
-
-  // This tracks in each window what are the percentiles of the sizes of
-  // items that we have written to flash. This is at-the-moment view of what
-  // we're currently writing into flash.
-  mutable util::PercentileStats nvmPutSize_;
-
   // allocator's items reaper to evict expired items in bg checking
   std::unique_ptr<Reaper<CacheT>> reaper_;
 
@@ -1685,8 +1705,8 @@ class CacheAllocator : public CacheBase {
 
   // Make this friend to give access to acquire and release
   friend ItemHandle;
-  friend NvmCacheT;
   friend ReaperAPIWrapper<CacheT>;
+  friend class CacheAPIWrapperForNvm<CacheT>;
   friend class tao::TaoApiWrapper;
 
   // tests
@@ -1699,6 +1719,7 @@ class CacheAllocator : public CacheBase {
   friend class facebook::cachelib::tests::AllocatorResizeTest;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::PoolOptimizeStrategyTest;
+  friend class facebook::cachelib::tests::NvmAdmissionPolicyTest;
 
   // benchmarks
   template <typename Allocator>

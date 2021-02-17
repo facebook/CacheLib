@@ -33,7 +33,11 @@ class GeneratorBase {
     // not implemented by default
   }
 
+  // Should be called when all working threads are finished, or aborted
   void markShutdown() { isShutdown_.store(true, std::memory_order_relaxed); }
+
+  // Should be called when working thread finish its operations
+  virtual void markFinish() {}
 
  protected:
   bool shouldShutdown() const {

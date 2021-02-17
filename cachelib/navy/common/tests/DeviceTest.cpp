@@ -1,10 +1,10 @@
-#include <thread>
-
 #include <folly/File.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <thread>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
@@ -142,6 +142,7 @@ TEST(Device, Stats) {
   MockDevice device{0, 1};
   MockCounterVisitor visitor;
   EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_read"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_avg"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_min"), 0));

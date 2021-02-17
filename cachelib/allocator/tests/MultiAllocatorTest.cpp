@@ -1,10 +1,11 @@
+#include "cachelib/allocator/tests/MultiAllocatorTest.h"
+
 #include <algorithm>
 #include <future>
 #include <mutex>
 #include <thread>
 
 #include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/allocator/tests/MultiAllocatorTest.h"
 #include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {

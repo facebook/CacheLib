@@ -1,15 +1,16 @@
 #pragma once
 
-#include <array>
-#include <mutex>
-#include <vector>
-
 #include <folly/container/F14Map.h>
 #include <folly/dynamic.h>
 #include <folly/hash/Hash.h>
 #include <folly/json.h>
 #include <folly/synchronization/Baton.h>
 
+#include <array>
+#include <mutex>
+#include <vector>
+
+#include "cachelib/allocator/nvmcache/CacheApiWrapper.h"
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
 #include "cachelib/allocator/nvmcache/NavySetup.h"
@@ -17,6 +18,7 @@
 #include "cachelib/allocator/nvmcache/TombStones.h"
 #include "cachelib/allocator/nvmcache/WaitContext.h"
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
@@ -86,63 +88,15 @@ class NvmCache {
     // If true, only store the orignal size the user requested.
     bool truncateItemToOriginalAllocSizeInNvm{false};
 
-    std::map<std::string, std::string> serialize() const {
-      std::map<std::string, std::string> configMap;
-      configMap["encodeCB"] = encodeCb ? "set" : "empty";
-      configMap["decodeCb"] = decodeCb ? "set" : "empty";
-      configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
-      configMap["encryption"] = deviceEncryptor ? "set" : "empty";
-      configMap["truncateItemToOriginalAllocSizeInNvm"] =
-          truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
-      for (auto& pair : dipperOptions.items()) {
-        configMap["dipperOptions::" + pair.first.asString()] =
-            (pair.second.isObject() || pair.second.isArray())
-                ? folly::toJson(pair.second)
-                : pair.second.asString();
-      }
-      return configMap;
-    }
+    // serialize the config for debugging purposes
+    std::map<std::string, std::string> serialize() const;
 
-    Config validate() {
-      const bool hasEncodeCb = !!encodeCb;
-      const bool hasDecodeCb = !!decodeCb;
-      if (hasEncodeCb != hasDecodeCb) {
-        throw std::invalid_argument(
-            "Encode and Decode CBs must be both specified or both empty.");
-      }
-
-      populateDefaultNavyOptions(dipperOptions);
-
-      if (deviceEncryptor) {
-        auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
-        auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
-        if (blockSize % encryptionBlockSize != 0) {
-          throw std::invalid_argument(folly::sformat(
-              "Encryption enabled but the encryption block granularity is not "
-              "aligned to the navy block size. ecryption block size: {}, "
-              "block size: {}",
-              encryptionBlockSize,
-              blockSize));
-        }
-        if (dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0)
-                .getInt() > 0) {
-          auto bucketSize =
-              dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
-                  .getInt();
-          if (bucketSize % encryptionBlockSize != 0) {
-            throw std::invalid_argument(
-                folly::sformat("Encryption enabled but the encryption block "
-                               "granularity is not aligned to the navy "
-                               "big hash bucket size. ecryption block "
-                               "size: {}, bucket size: {}",
-                               encryptionBlockSize,
-                               bucketSize));
-          }
-        }
-      }
-
-      return *this;
-    }
+    // validate the config, set any defaults that were not set and  return a
+    // copy.
+    //
+    // @throw std::invalid_argument if encoding/decoding/encryption is
+    // incompatible.
+    Config validateAndSetDefaults();
   };
 
   // @param c         the cache instance using nvmcache
@@ -211,7 +165,8 @@ class NvmCache {
   size_t getSize() const noexcept { return navyCache_->getSize(); }
 
  private:
-  detail::Stats& stats() { return cache_.stats_; }
+  detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }
+
   // creates the RAM item from DipperItem.
   //
   // @param key   key for the dipper item
@@ -376,8 +331,12 @@ class NvmCache {
     alignas(folly::hardware_destructive_interference_size) std::mutex fillLock_;
   } fillLock_[kShards];
 
+  // currently queued put operations to navy.
   std::array<PutContexts, kShards> putContexts_;
+
+  // currently queued delete operations to navy.
   std::array<DelContexts, kShards> delContexts_;
+
   // co-ordination between in-flight evictions from cache that are not queued
   // to navy and in-flight gets into nvmcache that are not yet queued.
   std::array<InFlightPuts, kShards> inflightPuts_;

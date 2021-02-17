@@ -276,7 +276,7 @@ class Map {
   // END private members
 
   // Threshold after which we will trigger compaction automatically
-  static constexpr int kWastedSpacePctThreshold = 50;
+  static constexpr int kWastedBytesPctThreshold = 50;
   static constexpr uint32_t kDefaultNumEntries = 20;
   static constexpr uint32_t kDefaultNumBytes = kDefaultNumEntries * 8;
 };

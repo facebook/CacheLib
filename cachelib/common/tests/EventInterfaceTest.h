@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/Random.h>
 
 #include <algorithm>
 #include <chrono>
@@ -11,8 +11,6 @@
 #include <thread>
 #include <vector>
 
-#include <folly/Random.h>
-
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
@@ -20,10 +18,9 @@
 #include "cachelib/allocator/MarginalHitsStrategy.h"
 #include "cachelib/allocator/PoolRebalancer.h"
 #include "cachelib/allocator/Util.h"
-
+#include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
-
-#include "cachelib/allocator/EventInterface.h"
 
 namespace facebook {
 namespace cachelib {
@@ -49,7 +46,7 @@ class TestEventInterface : public facebook::cachelib::EventInterface<Key> {
               Key key,
               AllocatorApiResult result,
               SizeT valueSize = folly::none,
-              TtlT ttl = folly::none) override {
+              TtlT ttl = 0) override {
     lastEvent = event;
     lastKey = key;
     lastResult = result;
@@ -76,7 +73,7 @@ class TestEventInterface : public facebook::cachelib::EventInterface<Key> {
   Key lastKey{};
   AllocatorApiResult lastResult{AllocatorApiResult::FAILED};
   SizeT lastValueSize{folly::none};
-  TtlT lastTtl{folly::none};
+  TtlT lastTtl{0};
 };
 
 template <typename AllocatorT>
@@ -120,6 +117,18 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
                              AllocatorApiResult::INSERTED, valueSize, ttl);
     }
 
+    // replace to an item configured with 0 ttl.
+    {
+      auto handle = alloc.allocate(pid, key, valueSize, 0);
+      ASSERT_NE(handle, nullptr);
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE, key,
+                             AllocatorApiResult::ALLOCATED, valueSize, 0);
+
+      ASSERT_TRUE(alloc.insertOrReplace(handle));
+      eventTrackerPtr->check(AllocatorApiEvent::INSERT_OR_REPLACE, key,
+                             AllocatorApiResult::REPLACED, valueSize, 0);
+    }
+
     {
       auto handle = alloc.allocate(pid, key, valueSize, ttl);
       ASSERT_NE(handle, nullptr);
@@ -147,6 +156,28 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(alloc.insertOrReplace(handle), nullptr);
       eventTrackerPtr->check(AllocatorApiEvent::INSERT_OR_REPLACE, key2,
                              AllocatorApiResult::INSERTED, valueSize, ttl);
+    }
+
+    {
+      const auto key3 = this->getRandomNewKey(alloc, keyLen);
+      auto handle = alloc.allocate(pid, key3, valueSize, ttl);
+      ASSERT_NE(handle, nullptr);
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
+
+      auto handle2 = alloc.allocateChainedItem(handle, valueSize);
+      ASSERT_NE(handle2, nullptr);
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE_CHAINED, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
+
+      // Passing in a null parent handle will not record an event, since it's
+      // an invalid use of API and is a no-op.
+      ASSERT_THROW(alloc.allocateChainedItem({}, valueSize),
+                   std::invalid_argument);
+      // Event recorded is still the same as the previou one, indicating no
+      // event was recorded.
+      eventTrackerPtr->check(AllocatorApiEvent::ALLOCATE_CHAINED, key3,
+                             AllocatorApiResult::ALLOCATED, valueSize, ttl);
     }
   }
 
@@ -177,8 +208,7 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     // Try to find non-existing key.
     EXPECT_EQ(alloc.find(key), nullptr);
     eventTrackerPtr->check(AllocatorApiEvent::FIND, key,
-                           AllocatorApiResult::NOT_FOUND, folly::none,
-                           folly::none);
+                           AllocatorApiResult::NOT_FOUND, folly::none, 0);
 
     // Allocate and insert.
     util::allocateAccessible(alloc, pid, key, valueSize, ttl);
@@ -187,6 +217,14 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     EXPECT_NE(alloc.find(key), nullptr);
     eventTrackerPtr->check(AllocatorApiEvent::FIND, key,
                            AllocatorApiResult::FOUND, valueSize, ttl);
+
+    auto handle = alloc.find(key);
+    EXPECT_NE(handle, nullptr);
+    handle->updateExpiryTime(0);
+
+    EXPECT_NE(alloc.find(key), nullptr);
+    eventTrackerPtr->check(AllocatorApiEvent::FIND, key,
+                           AllocatorApiResult::FOUND, valueSize, 0);
   }
 
   // make some allocations without evictions, remove them and ensure that they
@@ -215,8 +253,7 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     // Try to remove non-existing key.
     EXPECT_EQ(alloc.remove(key), AllocatorT::RemoveRes::kNotFoundInRam);
     eventTrackerPtr->check(AllocatorApiEvent::REMOVE, key,
-                           AllocatorApiResult::NOT_FOUND, folly::none,
-                           folly::none);
+                           AllocatorApiResult::NOT_FOUND, folly::none, 0);
 
     // Allocate and insert.
     util::allocateAccessible(alloc, pid, key, valueSize, ttl);

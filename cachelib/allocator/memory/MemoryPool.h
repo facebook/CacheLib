@@ -1,8 +1,7 @@
 #pragma once
 
-#include <cstddef>
-
 #include <atomic>
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -176,14 +175,13 @@ class MemoryPool {
   //        is invalid. Or if the mode is set to kResize but the receiver is
   //        also specified. Receiver class id can only be specified if the mode
   //        is set to kRebalance.
-  SlabReleaseContext startSlabRelease(ClassId victim,
-                                      ClassId receiver,
-                                      SlabReleaseMode mode,
-                                      const void* hint,
-                                      bool zeroOnRelease,
-                                      SlabReleaseAbortFn shouldAbortFn = []() {
-                                        return false;
-                                      });
+  SlabReleaseContext startSlabRelease(
+      ClassId victim,
+      ClassId receiver,
+      SlabReleaseMode mode,
+      const void* hint,
+      bool zeroOnRelease,
+      SlabReleaseAbortFn shouldAbortFn = []() { return false; });
 
   // Aborts the slab release process when there were active allocations in
   // the slab. This should be called with the same non-null context that was

@@ -3,6 +3,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/ThreadLocal.h>
+#include <folly/synchronization/SanitizeThread.h>
 #pragma GCC diagnostic pop
 
 namespace facebook {
@@ -59,6 +60,11 @@ class FastStats {
 
   // get a snapshot across all instances.
   T getSnapshot() const {
+    // This is used in a racy manner where threads can access thread locals
+    // from another thread. Suppressing this so TSAN does not report it as an
+    // error. See T83768142 for further context such as how to reproduce this
+    // issue should we ever decide to fix the data race.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     T res = parent_;
     for (const auto& tl : tlStats_.accessAllThreads()) {
       res += tl.stats();

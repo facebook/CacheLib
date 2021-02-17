@@ -19,9 +19,13 @@ bool RefCountWithFlags<T, RefCountBits>::inc(const T maxCount) noexcept {
       return false;
     }
 
-    if (__atomic_compare_exchange_n(refPtr, &oldCount, newCount, isWeak,
-                                    __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
-      return true;
+    {
+      // TODO(T83749172): Fix data race exposed by TSAN.
+      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+      if (__atomic_compare_exchange_n(refPtr, &oldCount, newCount, isWeak,
+                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+        return true;
+      }
     }
 
     if ((++nCASFailures % 4) == 0) {
@@ -46,9 +50,14 @@ T RefCountWithFlags<T, RefCountBits>::dec() {
       throw exception::RefcountUnderflow(
           "Trying to decRef with no refcount. RefCount Leak!");
     }
-    if (__atomic_compare_exchange_n(refPtr, &oldCount, newCount, isWeak,
-                                    __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
-      return newCount;
+
+    {
+      // TODO(T83749172): Fix data race exposed by TSAN.
+      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+      if (__atomic_compare_exchange_n(refPtr, &oldCount, newCount, isWeak,
+                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+        return newCount;
+      }
     }
     if ((++nCASFailures % 4) == 0) {
       folly::asm_volatile_pause();
@@ -84,6 +93,8 @@ void RefCountWithFlags<T, RefCountBits>::setFlag() noexcept {
   static_assert(flagBit >= RefCountBits, "incorrect flag");
   static_assert(flagBit < NumBits<T>::value, "incorrect flag");
   constexpr T bitMask = (((T)1) << flagBit);
+  // TODO(T83749172): Fix data race exposed by TSAN.
+  folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
   __atomic_or_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
 }
 
@@ -106,10 +117,14 @@ bool RefCountWithFlags<T, RefCountBits>::setFlagConditional() noexcept {
     }
 
     const T newValue = curValue | bitMask;
-    if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
-                                    __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
-      XDCHECK(newValue & conditionBitMask);
-      return true;
+    {
+      // TODO(T83749172): Fix data race exposed by TSAN.
+      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+      if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
+                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+        XDCHECK(newValue & conditionBitMask);
+        return true;
+      }
     }
 
     if ((++nCASFailures % 4) == 0) {
@@ -127,6 +142,8 @@ T RefCountWithFlags<T, RefCountBits>::unsetFlag() noexcept {
   static_assert(flagBit >= RefCountBits, "incorrect flag");
   static_assert(flagBit < NumBits<T>::value, "incorrect flag");
   constexpr T bitMask = std::numeric_limits<T>::max() - (((T)1) << flagBit);
+  // TODO(T83749172): Fix data race exposed by TSAN.
+  folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
   return __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
 }
 } // namespace cachelib

@@ -1,8 +1,8 @@
-#include "cachelib/navy/bighash/BucketStorage.h"
-
 #include <folly/Format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/bighash/BucketStorage.h"
 
 namespace facebook {
 namespace cachelib {

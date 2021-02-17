@@ -1,6 +1,7 @@
+#include "cachelib/navy/block_cache/Index.h"
+
 #include <folly/Format.h>
 
-#include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
@@ -57,11 +58,12 @@ Index::LookupResult Index::peek(uint64_t key) const {
   return lr;
 }
 
-Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
+Index::LookupResult Index::insert(uint64_t key,
+                                  uint32_t address,
+                                  uint16_t sizeHint) {
   LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
-
   auto it = map.find(subkey(key));
   if (it != map.end()) {
     lr.found_ = true;
@@ -71,8 +73,9 @@ Index::LookupResult Index::insert(uint64_t key, uint32_t address) {
     it.value().address = address;
     it.value().currentHits = 0;
     it.value().totalHits = 0;
+    it.value().sizeHint = sizeHint;
   } else {
-    map.try_emplace(key, address);
+    map.try_emplace(key, address, sizeHint);
   }
   return lr;
 }
@@ -145,7 +148,6 @@ size_t Index::computeSize() const {
   return size;
 }
 
-// Todo (aw7): check if other fields needs persist and recover
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
@@ -155,7 +157,7 @@ void Index::persist(RecordWriter& rw) const {
       serialization::IndexEntry entry;
       entry.key_ref() = key;
       entry.address_ref() = record.address;
-      entry.size_ref() = record.size;
+      entry.sizeHint_ref() = record.sizeHint;
       entry.totalHits_ref() = record.totalHits;
       entry.currentHits_ref() = record.currentHits;
       bucket.entries.push_back(entry);
@@ -179,7 +181,7 @@ void Index::recover(RecordReader& rr) {
     for (auto& entry : bucket.entries) {
       buckets_[id].try_emplace(*entry.key_ref(),
                                *entry.address_ref(),
-                               *entry.size_ref(),
+                               *entry.sizeHint_ref(),
                                *entry.totalHits_ref(),
                                *entry.currentHits_ref());
     }

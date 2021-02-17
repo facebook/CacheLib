@@ -248,14 +248,13 @@ class MemoryAllocator {
   //        is set to kRebalance.
   // @throw exception::SlabReleaseAborted if slab release is aborted due to
   //        shouldAbortFn returning true.
-  SlabReleaseContext startSlabRelease(PoolId pid,
-                                      ClassId victim,
-                                      ClassId receiver,
-                                      SlabReleaseMode mode,
-                                      const void* hint = nullptr,
-                                      SlabReleaseAbortFn shouldAbortFn = []() {
-                                        return false;
-                                      });
+  SlabReleaseContext startSlabRelease(
+      PoolId pid,
+      ClassId victim,
+      ClassId receiver,
+      SlabReleaseMode mode,
+      const void* hint = nullptr,
+      SlabReleaseAbortFn shouldAbortFn = []() { return false; });
 
   // Check if an alloc is free (during slab release)
   //
@@ -433,8 +432,8 @@ class MemoryAllocator {
   //
   // @param memory  the memory belonging to the slab allocator
   // @return        pair of poolId and classId of the memory
-  FOLLY_ALWAYS_INLINE AllocInfo getAllocInfo(const void* memory) const
-      noexcept {
+  FOLLY_ALWAYS_INLINE AllocInfo
+  getAllocInfo(const void* memory) const noexcept {
     const auto* header = slabAllocator_.getSlabHeader(memory);
     XDCHECK(header) << "invalid header for slab memory addr: " << memory;
     return AllocInfo{header->poolId, header->classId, header->allocSize};

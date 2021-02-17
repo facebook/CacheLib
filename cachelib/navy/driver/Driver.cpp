@@ -1,7 +1,8 @@
+#include "cachelib/navy/driver/Driver.h"
+
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/navy/common/Hash.h"
-#include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/driver/NoopEngine.h"
 
 namespace facebook {
@@ -48,20 +49,19 @@ Driver::~Driver() {
 }
 
 std::pair<Engine&, Engine&> Driver::select(BufferView key,
-                                           BufferView value,
-                                           InsertOptions opt) const {
-  if (key.size() + value.size() < smallItemMaxSize_ && !opt.permanent) {
+                                           BufferView value) const {
+  if (key.size() + value.size() < smallItemMaxSize_) {
     return {*smallItemCache_, *largeItemCache_};
   } else {
     return {*largeItemCache_, *smallItemCache_};
   }
 }
 
-Status Driver::insert(BufferView key, BufferView value, InsertOptions opt) {
+Status Driver::insert(BufferView key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};
   auto status = insertAsync(
-      key, value, opt, [&done, &cbStatus](Status s, BufferView /* key */) {
+      key, value, [&done, &cbStatus](Status s, BufferView /* key */) {
         cbStatus = s;
         done.post();
       });
@@ -72,9 +72,7 @@ Status Driver::insert(BufferView key, BufferView value, InsertOptions opt) {
   return cbStatus;
 }
 
-bool Driver::admissionTest(HashedKey hk,
-                           BufferView value,
-                           bool permanent) const {
+bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   // If this parcel makes our memory above the limit, we reject it and
   // revert back increment we made. We can't split check and increment!
   // We can't check value before - it will over admit things. Same with
@@ -82,13 +80,12 @@ bool Driver::admissionTest(HashedKey hk,
   size_t parcelSize = hk.key().size() + value.size();
   auto currParcelMemory = parcelMemory_.add_fetch(parcelSize);
   auto currConcurrentInserts = concurrentInserts_.add_fetch(1);
-  if (permanent) {
-    return true;
-  }
 
   if (!admissionPolicy_ || admissionPolicy_->accept(hk, value)) {
     if (currConcurrentInserts <= maxConcurrentInserts_) {
       if (currParcelMemory <= maxParcelMemory_) {
+        acceptedCount_.inc();
+        acceptedBytes_.add(parcelSize);
         return true;
       } else {
         rejectedParcelMemoryCount_.inc();
@@ -109,7 +106,6 @@ bool Driver::admissionTest(HashedKey hk,
 
 Status Driver::insertAsync(BufferView key,
                            BufferView value,
-                           InsertOptions opt,
                            InsertCallback cb) {
   insertCount_.inc();
 
@@ -120,14 +116,14 @@ Status Driver::insertAsync(BufferView key,
     return Status::Rejected;
   }
 
-  if (!admissionTest(hk, value, opt.permanent)) {
+  if (!admissionTest(hk, value)) {
     return Status::Rejected;
   }
 
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, value, opt]() mutable {
-        auto selection = select(hk.key(), value, opt);
-        auto status = selection.first.insert(hk, value, opt);
+      [this, cb = std::move(cb), hk, value]() mutable {
+        auto selection = select(hk.key(), value);
+        auto status = selection.first.insert(hk, value);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }
@@ -333,6 +329,8 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
           rejectedConcurrentInsertsCount_.get());
   visitor("navy_rejected_parcel_memory", rejectedParcelMemoryCount_.get());
   visitor("navy_rejected_bytes", rejectedBytes_.get());
+  visitor("navy_accepted_bytes", acceptedBytes_.get());
+  visitor("navy_accepted", acceptedCount_.get());
   visitor("navy_io_errors", ioErrorCount_.get());
   visitor("navy_parcel_memory", parcelMemory_.get());
   visitor("navy_concurrent_inserts", concurrentInserts_.get());

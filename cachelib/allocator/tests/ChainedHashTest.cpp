@@ -211,7 +211,7 @@ TEST_F(ChainedHashTest, IteratorWithThrottler) {
   std::set<std::string> visitedKeys;
 
   facebook::cachelib::util::Throttler::Config config;
-  config.sleepMs = 200;
+  config.sleepMs = 2000;
   config.workMs = 5;
   auto iter1 = c.begin(config);
 

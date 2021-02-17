@@ -248,7 +248,9 @@ def lookup_uuid(m, k, fixed):
 
 def extract_features(users, namespaces, pipelines, kvs, fixed):
     def get_or_not_set(kvs, key):
-        return kvs[key].strip("\n") if key in kvs else "NOT_SET"
+        return (
+            kvs[key].strip("\n") if key in kvs and kvs[key] is not None else "NOT_SET"
+        )
 
     str_op = get_or_not_set(kvs, OP_STR)
     str_pipeline = get_or_not_set(kvs, PIPELINE_STR)

@@ -1,6 +1,5 @@
-#include <gtest/gtest.h>
-
 #include <folly/Random.h>
+#include <gtest/gtest.h>
 
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 namespace facebook {
@@ -24,8 +23,8 @@ TEST(DipperItemTest, SingleBlob) {
   uint32_t origSize = 5;
   Blob blob{origSize, data};
   size_t bufSize = DipperItem::estimateVariableSize(blob);
-  auto dItem = std::unique_ptr<DipperItem>(
-      new (bufSize) DipperItem(1, 1, 1, blob, DipperItemFlags::NONE));
+  auto dItem =
+      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blob));
   ASSERT_EQ(1, dItem->getNumBlobs());
   ASSERT_EQ(data, dItem->getBlob(0).data);
   ASSERT_EQ(origSize, dItem->getBlob(0).origAllocSize);
@@ -46,8 +45,8 @@ TEST(DipperItemTest, MultipleBlobs) {
   }
 
   size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  auto dItem = std::unique_ptr<DipperItem>(
-      new (bufSize) DipperItem(1, 1, 1, blobs, DipperItemFlags::NONE));
+  auto dItem =
+      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs));
 
   ASSERT_EQ(nBlobs, dItem->getNumBlobs());
   for (int i = 0; i < nBlobs; i++) {
@@ -71,8 +70,8 @@ TEST(DipperItemTest, TotalSize) {
   }
 
   size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  auto dItem = std::unique_ptr<DipperItem>(
-      new (bufSize) DipperItem(1, 1, 1, blobs, DipperItemFlags::NONE));
+  auto dItem =
+      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs));
 
   ASSERT_EQ(bufSize + sizeof(DipperItem), dItem->totalSize());
 }
@@ -96,9 +95,9 @@ TEST(DipperItemTest, MultipleBlobsOverFlow) {
                        folly::StringPiece{buf.get(), maxLen}});
 
   size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  ASSERT_THROW(std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-                   1, 1, 1, blobs, DipperItemFlags::NONE)),
-               std::out_of_range);
+  ASSERT_THROW(
+      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs)),
+      std::out_of_range);
 }
 
 TEST(DipperItemTest, SingleBlobOverflow) {
@@ -108,9 +107,9 @@ TEST(DipperItemTest, SingleBlobOverflow) {
             folly::StringPiece{buf.get(), maxLen}};
 
   size_t bufSize = DipperItem::estimateVariableSize(blob);
-  ASSERT_THROW(std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-                   1, 1, 1, blob, DipperItemFlags::NONE)),
-               std::out_of_range)
+  ASSERT_THROW(
+      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blob)),
+      std::out_of_range)
       << maxLen;
 }
 

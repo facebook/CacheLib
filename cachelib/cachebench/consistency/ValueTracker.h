@@ -1,12 +1,12 @@
 #pragma once
 
+#include <folly/Range.h>
+#include <folly/hash/Hash.h>
+
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <folly/Range.h>
-#include <folly/hash/Hash.h>
 
 #include "cachelib/cachebench/consistency/ShortThreadId.h"
 #include "cachelib/cachebench/consistency/ValueHistory.h"

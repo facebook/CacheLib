@@ -1,8 +1,8 @@
+#include "cachelib/cachebench/consistency/ShortThreadId.h"
+
 #include <limits>
 #include <mutex>
 #include <shared_mutex>
-
-#include "cachelib/cachebench/consistency/ShortThreadId.h"
 
 namespace facebook {
 namespace cachelib {

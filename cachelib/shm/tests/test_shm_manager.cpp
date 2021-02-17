@@ -1,8 +1,8 @@
-#include <sys/time.h>
-#include <fstream>
-
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
+#include <sys/time.h>
+
+#include <fstream>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"

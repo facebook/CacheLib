@@ -4,13 +4,13 @@
 #include <folly/Function.h>
 #include <folly/Range.h>
 
-#include "cachelib/navy/common/Buffer.h"
-#include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/serialization/RecordIO.h"
-
 #include <functional>
 #include <memory>
 #include <stdexcept>
+
+#include "cachelib/navy/common/Buffer.h"
+#include "cachelib/navy/common/Types.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook {
 namespace cachelib {
@@ -27,25 +27,6 @@ using LookupCallback =
 
 using RemoveCallback = folly::Function<void(Status status, BufferView key)>;
 
-struct InsertOptions {
-  // If true, item will never be evicted
-  bool permanent{false};
-
-  InsertOptions() = default;
-
-  InsertOptions& setPermanent() {
-    permanent = true;
-    return *this;
-  }
-
-  bool operator==(const InsertOptions& other) const {
-    return permanent == other.permanent;
-  }
-  bool operator!=(const InsertOptions& other) const {
-    return !(*this == other);
-  }
-};
-
 // Generic cache interface.
 // All functions are synchronous, unless stated the opposite.
 class AbstractCache {
@@ -54,9 +35,7 @@ class AbstractCache {
 
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
-  virtual Status insert(BufferView key,
-                        BufferView value,
-                        InsertOptions opt) = 0;
+  virtual Status insert(BufferView key, BufferView value) = 0;
 
   // Asynchronously inserts entry into the cache.
   // Invokes callback when done on a worker thread. Callback is optional.
@@ -67,7 +46,6 @@ class AbstractCache {
   // Returns: Ok, Rejected
   virtual Status insertAsync(BufferView key,
                              BufferView value,
-                             InsertOptions opt,
                              InsertCallback cb) = 0;
 
   // Looks up value. Returns non-null buffer if found.

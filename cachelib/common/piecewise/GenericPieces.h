@@ -1,12 +1,12 @@
 #pragma once
 
-#include <memory>
-#include <string>
-#include <unordered_map>
-
 #include <folly/dynamic.h>
 #include <folly/io/IOBuf.h>
 #include <folly/logging/xlog.h>
+
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 #include "cachelib/common/piecewise/RequestRange.h"
 
@@ -39,6 +39,8 @@ class GenericPieces {
                 uint64_t fullBodyLen,
                 const RequestRange* range);
 
+  void resetFromRequestRange(const RequestRange& range);
+
   /**
    * We fetch one piece at a time and keep track of that piece
    * number here.
@@ -55,12 +57,23 @@ class GenericPieces {
    */
   void updateFetchIndex() { curFetchingPieceIndex_ += 1; }
 
+  void setFetchIndex(uint64_t pieceIndex) {
+    curFetchingPieceIndex_ = pieceIndex;
+  }
+
   uint64_t getFirstByteOffsetOfCurPiece() const {
     return curFetchingPieceIndex_ * getPieceSize();
   }
 
   uint64_t getLastByteOffsetOfLastPiece() const {
     return std::min((endPieceIndex_ + 1) * pieceSize_ - 1, fullBodyLen_ - 1);
+  }
+
+  uint64_t getRemainingBytes() const {
+    if (curFetchingPieceIndex_ > endPieceIndex_) {
+      return 0;
+    }
+    return getLastByteOffsetOfLastPiece() - getFirstByteOffsetOfCurPiece() + 1;
   }
 
   uint64_t getPieceSize() const { return pieceSize_; }
@@ -100,6 +113,14 @@ class GenericPieces {
     } else {
       return pieceSize_;
     }
+  }
+
+  uint64_t getBytesToTrimAtStart() const {
+    return requestedStartByte_ - startPieceIndex_ * pieceSize_;
+  }
+
+  uint64_t getBytesToTrimAtEnd() const {
+    return getLastByteOffsetOfLastPiece() - requestedEndByte_;
   }
 
   uint64_t getRequestedSize() const {

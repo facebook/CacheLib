@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/dynamic.h>
+#include <folly/json.h>
+
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <folly/dynamic.h>
-#include <folly/json.h>
 
 #define JSONSetVal(configJson, field)             \
   do {                                            \
@@ -56,6 +56,21 @@ struct JSONConfig {
         ValType tmp;
         setValImpl(tmp, v);
         field.push_back(tmp);
+      }
+    }
+  }
+
+  template <typename KeyType, typename ValType>
+  static void setValImpl(std::unordered_map<KeyType, ValType>& field,
+                         const folly::dynamic& val) {
+    if (val.isObject()) {
+      field.clear();
+      for (const auto& pair : val.items()) {
+        KeyType key;
+        setValImpl(key, pair.first);
+        ValType value;
+        setValImpl(value, pair.second);
+        field[key] = value;
       }
     }
   }

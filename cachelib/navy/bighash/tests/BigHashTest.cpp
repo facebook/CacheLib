@@ -1,10 +1,9 @@
-#include "cachelib/navy/bighash/BigHash.h"
-
-#include <map>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <map>
+
+#include "cachelib/navy/bighash/BigHash.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
@@ -40,7 +39,7 @@ TEST(BigHash, InsertAndRemove) {
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -59,7 +58,7 @@ TEST(BigHash, SimpleStats) {
 
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -112,8 +111,8 @@ TEST(BigHash, EvictionStats) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("123456789"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("123456789")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -143,9 +142,9 @@ TEST(BigHash, DeviceErrorStats) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1")));
   EXPECT_CALL(*device, writeImpl(0, 64, _)).WillOnce(Return(false));
-  EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1"), {}));
+  EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -179,7 +178,7 @@ TEST(BigHash, DoubleInsert) {
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -188,7 +187,7 @@ TEST(BigHash, DoubleInsert) {
       call(makeView("key"), makeView("12345"), DestructorEvent::Removed));
 
   // Insert the same key a second time will overwrite the previous value.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("45678"), value.view());
 }
@@ -209,8 +208,8 @@ TEST(BigHash, DestructorCallback) {
   config.destructorCb = toCallback(helper);
 
   BigHash bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("value 2"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("value 2")));
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key 2")));
 }
 
@@ -225,7 +224,7 @@ TEST(BigHash, Reset) {
 
   auto device =
       std::make_unique<NiceMock<MockDevice>>(config.cacheSize, alignSize);
-  auto readFirstBucket = [& dev = device->getRealDeviceRef()] {
+  auto readFirstBucket = [&dev = device->getRealDeviceRef()] {
     // Read only the bucket after the initial generation and checksum fields
     // since the former can change with reset() while the latter can change
     // with every write.
@@ -241,7 +240,7 @@ TEST(BigHash, Reset) {
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
   auto oldBucketContent = readFirstBucket();
@@ -255,7 +254,7 @@ TEST(BigHash, Reset) {
   // The new bucket content must be identical to that of the old since
   // after a reset, our first write is equivalent to writing to a brand
   // new bucket.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   auto newBucketContent = readFirstBucket();
   EXPECT_EQ(oldBucketContent.view(), newBucketContent.view());
 }
@@ -294,9 +293,9 @@ TEST(BigHash, WriteInTwoBuckets) {
 
   BigHash bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("A"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("B"), makeView("45678"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("C"), makeView("67890"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("A"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("B"), makeView("45678")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("C"), makeView("67890")));
 }
 
 TEST(BigHash, RemoveNotFound) {
@@ -317,7 +316,7 @@ TEST(BigHash, RemoveNotFound) {
 
   BigHash bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"), {});
+  bh.insert(makeHK("key"), makeView("12345"));
   bh.remove(makeHK("key"));
   bh.remove(makeHK("key"));
 }
@@ -333,7 +332,7 @@ TEST(BigHash, CorruptBucket) {
 
   BigHash bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"), {});
+  bh.insert(makeHK("key"), makeView("12345"));
 
   Buffer value;
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
@@ -358,7 +357,7 @@ TEST(BigHash, Recovery) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -386,7 +385,7 @@ TEST(BigHash, RecoveryBadConfig) {
     BigHash bh(std::move(config));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
     EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
     EXPECT_EQ(makeView("12345"), value.view());
 
@@ -418,7 +417,7 @@ TEST(BigHash, RecoveryCorruptedData) {
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -443,9 +442,9 @@ TEST(BigHash, ConcurrentRead) {
   config.device = device.get();
 
   BigHash bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("1"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("2"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("1")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("2")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3")));
 
   struct MockLookupHelper {
     MOCK_METHOD2(call, void(BufferView, BufferView));
@@ -511,7 +510,7 @@ TEST(BigHash, BloomFilter) {
   BigHash bh(std::move(config));
   BufferGen bg;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), bg.gen(20).view()));
 
   // Check that eviction triggers BF rebuild. Use the following setup:
   // - Insert "100". BF rejects "101" and accepts "102" and "103".
@@ -533,11 +532,11 @@ TEST(BigHash, BloomFilter) {
   EXPECT_EQ(1, bh.bfRejectCount());
 
   // Insert "101"
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view()));
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value));
   EXPECT_EQ(2, bh.bfRejectCount());
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view()));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value));
   EXPECT_EQ(2, bh.bfRejectCount());
@@ -573,7 +572,7 @@ TEST(BigHash, BloomFilterRecovery) {
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
     BigHash bh(std::move(config));
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat"), {}));
+    EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat")));
     Buffer value;
     EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
     EXPECT_EQ(1, bh.bfRejectCount());

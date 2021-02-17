@@ -1,10 +1,10 @@
 #pragma once
 
+#include <folly/Range.h>
+
 #include <cstdint>
 #include <functional>
 #include <ostream>
-
-#include <folly/Range.h>
 
 #include "cachelib/navy/common/Buffer.h"
 

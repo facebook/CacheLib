@@ -6,11 +6,11 @@ namespace detail {
 constexpr uint32_t Buffer::kInvalidOffset;
 
 bool Buffer::canAllocate(uint32_t size) const {
-  return Slot::getAllocSize(size) <= (remainingCapacity() + wastedSpace());
+  return Slot::getAllocSize(size) <= (remainingBytes() + wastedBytes());
 }
 
 bool Buffer::canAllocateWithoutCompaction(uint32_t size) const {
-  return Slot::getAllocSize(size) <= remainingCapacity();
+  return Slot::getAllocSize(size) <= remainingBytes();
 }
 
 Buffer::Buffer(uint32_t capacity, const Buffer& other)
@@ -47,13 +47,13 @@ void Buffer::remove(uint32_t offset) {
 void* Buffer::getData(uint32_t offset) { return data_ + offset; }
 
 void Buffer::compact(Buffer& dest) const {
-  XDCHECK_EQ(dest.capacity(), dest.remainingCapacity());
-  if (dest.capacity() < capacity() - wastedSpace() - remainingCapacity()) {
+  XDCHECK_EQ(dest.capacity(), dest.remainingBytes());
+  if (dest.capacity() < capacity() - wastedBytes() - remainingBytes()) {
     throw std::invalid_argument(folly::sformat(
         "destination buffer is too small. Dest Capacity: {}, "
         "Current Capacity: {}, Current Wasted Space: {}, Current Remaining "
         "Capacity: {}",
-        dest.capacity(), capacity(), wastedSpace(), remainingCapacity()));
+        dest.capacity(), capacity(), wastedBytes(), remainingBytes()));
   }
 
   for (uint32_t srcOffset = 0; srcOffset < nextByte_;) {

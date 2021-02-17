@@ -1,11 +1,12 @@
 #pragma once
 
+#include <folly/Format.h>
+#include <folly/logging/xlog.h>
+
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <thread>
-
-#include <folly/logging/xlog.h>
 
 namespace facebook {
 namespace cachelib {
@@ -44,14 +45,20 @@ class RingBuffer {
 
   Value getAt(size_t index) const {
     if (!(first_ <= index && index < last_)) {
-      throw std::out_of_range("ring buffer index out of bounds for a get");
+      throw std::out_of_range(
+          folly::sformat("ring buffer index out of bounds for a get. first={}, "
+                         "last = {}, index = {}",
+                         first_, last_, index));
     }
     return data_[index % kCapacity];
   }
 
   void setAt(size_t index, const Value& val) const {
     if (!(first_ <= index && index < last_)) {
-      throw std::out_of_range("ring buffer index out of bounds for a set");
+      throw std::out_of_range(
+          folly::sformat("ring buffer index out of bounds for a get. first={}, "
+                         "last = {}, index = {}",
+                         first_, last_, index));
     }
     data_[index % kCapacity] = val;
   }

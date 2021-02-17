@@ -1,7 +1,7 @@
-#include <folly/hash/Hash.h>
-#include <folly/hash/Checksum.h>
-
 #include "cachelib/navy/common/Hash.h"
+
+#include <folly/hash/Checksum.h>
+#include <folly/hash/Hash.h>
 
 namespace facebook {
 namespace cachelib {

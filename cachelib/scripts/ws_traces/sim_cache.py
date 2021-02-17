@@ -5,9 +5,11 @@ import os
 import random
 from collections import OrderedDict
 
-import cachelib.scripts.ws_traces.dynamic_features as dyn_features
 import cachelib.scripts.ws_traces.utils as utils
-import lightgbm as lgb
+import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dyn_features
+
+# @dep=@/third-party:lightgbm:lightgbm-py
+import lightgbm as lgb  # @manual
 import numpy as np
 
 

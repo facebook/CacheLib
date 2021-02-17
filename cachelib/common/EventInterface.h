@@ -89,7 +89,7 @@ inline const char* toString(AllocatorApiResult result) {
 
 namespace EventInterfaceTypes {
 using SizeT = folly::Optional<uint32_t>;
-using TtlT = folly::Optional<uint32_t>;
+using TtlT = uint32_t;
 } // namespace EventInterfaceTypes
 
 // This class defines the interface for recording events inside Cache Library.
@@ -107,7 +107,7 @@ class EventInterface {
                       Key key,
                       AllocatorApiResult result,
                       EventInterfaceTypes::SizeT valueSize = folly::none,
-                      EventInterfaceTypes::TtlT ttlSecs = folly::none) = 0;
+                      EventInterfaceTypes::TtlT ttlSecs = 0) = 0;
 
   // Method that extracts stats from the event logger
   // @param statsMap A map of string to a stat value.

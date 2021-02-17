@@ -1,16 +1,14 @@
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/io/async/EventBase.h>
+#include <folly/synchronization/Baton.h>
+#include <gmock/gmock.h>
 
 #include <algorithm>
 #include <future>
 #include <mutex>
 #include <thread>
 
-#include <gmock/gmock.h>
-
-#include <folly/io/async/EventBase.h>
-#include <folly/synchronization/Baton.h>
-
 #include "cachelib/allocator/CacheItem.h"
+#include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/common/FastStats.h"
 
 namespace facebook {

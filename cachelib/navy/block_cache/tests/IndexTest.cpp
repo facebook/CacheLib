@@ -1,8 +1,8 @@
+#include <gtest/gtest.h>
+
 #include <thread>
 
 #include "cachelib/navy/block_cache/Index.h"
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {
@@ -17,7 +17,7 @@ TEST(Index, Recovery) {
       // First 32 bits set bucket id, last 32 is key for that bucket
       uint64_t key = i << 32 | j;
       uint32_t val = j + i;
-      index.insert(key, val);
+      index.insert(key, val, 0);
       log.push_back(std::make_pair(key, val));
     }
   }
@@ -35,19 +35,31 @@ TEST(Index, Recovery) {
   }
 }
 
+TEST(Index, EntrySize) {
+  Index index;
+  index.insert(111, 0, 11);
+  EXPECT_EQ(11, index.lookup(111).sizeHint());
+  index.insert(222, 0, 150);
+  EXPECT_EQ(150, index.lookup(222).sizeHint());
+  index.insert(333, 0, 303);
+  EXPECT_EQ(303, index.lookup(333).sizeHint());
+}
+
 TEST(Index, ReplaceExact) {
   Index index;
   // Empty value should fail in replace
   EXPECT_FALSE(index.replaceIfMatch(111, 3333, 2222));
   EXPECT_FALSE(index.lookup(111).found());
 
-  index.insert(111, 4444);
+  index.insert(111, 4444, 123);
   EXPECT_TRUE(index.lookup(111).found());
   EXPECT_EQ(4444, index.lookup(111).address());
+  EXPECT_EQ(123, index.lookup(111).sizeHint());
 
   // Old value mismatch should fail in replace
   EXPECT_FALSE(index.replaceIfMatch(111, 3333, 2222));
   EXPECT_EQ(4444, index.lookup(111).address());
+  EXPECT_EQ(123, index.lookup(111).sizeHint());
 
   EXPECT_TRUE(index.replaceIfMatch(111, 3333, 4444));
   EXPECT_EQ(3333, index.lookup(111).address());
@@ -58,7 +70,7 @@ TEST(Index, RemoveExact) {
   // Empty value should fail in replace
   EXPECT_FALSE(index.removeIfMatch(111, 4444));
 
-  index.insert(111, 4444);
+  index.insert(111, 4444, 0);
   EXPECT_TRUE(index.lookup(111).found());
   EXPECT_EQ(4444, index.lookup(111).address());
 
@@ -75,7 +87,7 @@ TEST(Index, Hits) {
   const uint64_t key = 9527;
 
   // Hits after inserting should be 0
-  index.insert(key, 0);
+  index.insert(key, 0, 0);
   EXPECT_EQ(0, index.peek(key).totalHits());
   EXPECT_EQ(0, index.peek(key).currentHits());
 
@@ -105,7 +117,7 @@ TEST(Index, HitsAfterUpdate) {
   const uint64_t key = 9527;
 
   // Hits after inserting should be 0
-  index.insert(key, 0);
+  index.insert(key, 0, 0);
   EXPECT_EQ(0, index.peek(key).totalHits());
   EXPECT_EQ(0, index.peek(key).currentHits());
 
@@ -115,7 +127,7 @@ TEST(Index, HitsAfterUpdate) {
   EXPECT_EQ(1, index.peek(key).currentHits());
 
   // re-insert
-  index.insert(key, 3);
+  index.insert(key, 3, 0);
   // hits should be cleared after insert
   EXPECT_EQ(0, index.peek(key).totalHits());
   EXPECT_EQ(0, index.peek(key).currentHits());
@@ -140,7 +152,7 @@ TEST(Index, HitsUpperBound) {
   Index index;
   const uint64_t key = 8341;
 
-  index.insert(key, 0);
+  index.insert(key, 0, 0);
   for (int i = 0; i < 1000; i++) {
     index.lookup(key);
   }
@@ -152,7 +164,7 @@ TEST(Index, HitsUpperBound) {
 TEST(Index, ThreadSafe) {
   Index index;
   const uint64_t key = 1314;
-  index.insert(key, 0);
+  index.insert(key, 0, 0);
 
   auto lookup = [&]() { index.lookup(key); };
 

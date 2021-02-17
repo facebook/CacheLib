@@ -1,8 +1,10 @@
 
+#include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
+
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/allocator/NvmCacheState.h"
-#include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
+#include "cachelib/allocator/tests/NvmTestUtils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -11,19 +13,7 @@ namespace tests {
 NvmCacheTest::NvmCacheTest() {
   cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   util::makeDir(cacheDir_);
-  config_ = folly::dynamic::object;
-  config_["dipper_navy_recovery_path"] = cacheDir_;
-  config_["dipper_navy_file_size"] = 100 * 1024ULL * 1024ULL; /* megabytes */
-  config_["dipper_navy_file_name"] = cacheDir_ + "/navy";
-  config_["dipper_navy_direct_io"] = false;
-  config_["dipper_navy_region_size"] = 4 * 1024 * 1024;   /* 4 MB */
-  config_["dipper_navy_metadata_size"] = 4 * 1024 * 1024; /* 4 MB */
-  config_["dipper_navy_lru"] = true;
-  config_["dipper_navy_block_size"] = 1024;
-  config_["dipper_navy_req_order_shards_power"] = 10;
-  config_["dipper_navy_bighash_size_pct"] = 50;
-  config_["dipper_navy_bighash_bucket_size"] = 1024;
-  config_["dipper_navy_small_item_max_size"] = 100;
+  config_ = utils::getNvmTestConfig(cacheDir_);
 
   {
     allocConfig_.enableCachePersistence(cacheDir_);
@@ -112,6 +102,10 @@ void NvmCacheTest::iceRoll() {
 
   cache_ = std::make_unique<LruAllocator>(LruAllocator::SharedMemAttach,
                                           allocConfig_);
+  if (util::getStatIfExists(fileName, nullptr)) {
+    throw std::runtime_error(folly::sformat(
+        "Drop file {} exists after re-initializing the cache", fileName));
+  }
 }
 
 void NvmCacheTest::iceColdRoll() {

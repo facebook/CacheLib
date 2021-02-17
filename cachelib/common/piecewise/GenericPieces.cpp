@@ -1,10 +1,10 @@
 #include "cachelib/common/piecewise/GenericPieces.h"
 
-#include <vector>
-
 #include <folly/Conv.h>
 #include <folly/String.h>
 #include <folly/logging/xlog.h>
+
+#include <vector>
 
 namespace facebook {
 namespace cachelib {
@@ -29,25 +29,29 @@ GenericPieces::GenericPieces(const std::string& baseKey,
   endPieceIndex_ = numPiecesTotal_ - 1;
 
   if (range) {
-    const auto& requestRange = range->getRequestRange();
-    if (requestRange.has_value()) {
-      // Range request, might not need to fetch all the pieces
-      requestedStartByte_ = requestRange->first;
-      startPieceIndex_ = requestedStartByte_ / pieceSize_;
-      if (requestRange->second.has_value()) {
-        uint64_t requestedEndByte = requestRange->second.value();
-        if (requestedEndByte < fullBodyLen_) {
-          requestedEndByte_ = requestedEndByte;
-          endPieceIndex_ = requestedEndByte_ / pieceSize_;
-        }
+    resetFromRequestRange(*range);
+  }
+}
+
+void GenericPieces::resetFromRequestRange(const RequestRange& range) {
+  const auto& requestRange = range.getRequestRange();
+  if (requestRange.has_value()) {
+    // Range request, might not need to fetch all the pieces
+    requestedStartByte_ = requestRange->first;
+    startPieceIndex_ = requestedStartByte_ / pieceSize_;
+    if (requestRange->second.has_value()) {
+      uint64_t requestedEndByte = requestRange->second.value();
+      if (requestedEndByte < fullBodyLen_) {
+        requestedEndByte_ = requestedEndByte;
+        endPieceIndex_ = requestedEndByte_ / pieceSize_;
       }
     }
-    XCHECK_GE(endPieceIndex_, startPieceIndex_);
-
-    curFetchingPieceIndex_ = startPieceIndex_;
-
-    firstByteOffsetToFetch_ = startPieceIndex_ * pieceSize_;
   }
+  XCHECK_GE(endPieceIndex_, startPieceIndex_);
+
+  curFetchingPieceIndex_ = startPieceIndex_;
+
+  firstByteOffsetToFetch_ = startPieceIndex_ * pieceSize_;
 }
 
 std::string GenericPieces::escapeCacheKey(const std::string& key) {

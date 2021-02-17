@@ -2,8 +2,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <folly/Random.h>
-
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Serialization.h"

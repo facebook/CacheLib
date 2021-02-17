@@ -4,9 +4,9 @@
  * This file implements the methods defined in CCache.h
  */
 
-#include <typeinfo>
-
 #include <folly/logging/xlog.h>
+
+#include <typeinfo>
 
 #include "cachelib/common/Hash.h"
 

@@ -1,8 +1,8 @@
 #include "cachelib/cachebench/runner/FastShutdown.h"
 
-#include <iostream>
-
 #include <folly/logging/xlog.h>
+
+#include <iostream>
 
 namespace facebook {
 namespace cachelib {

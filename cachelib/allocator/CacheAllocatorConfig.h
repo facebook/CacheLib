@@ -1,20 +1,20 @@
 #pragma once
 
+#include <folly/Optional.h>
+
 #include <functional>
 #include <memory>
 #include <set>
 #include <string>
 
-#include <folly/Optional.h>
-
 #include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/EventInterface.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
 #include "cachelib/allocator/PoolOptimizeStrategy.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/allocator/Util.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Throttler.h"
 
 namespace facebook {
@@ -26,7 +26,6 @@ class CacheAllocatorConfig {
   using AccessConfig = typename CacheT::AccessConfig;
   using ChainedItemMovingSync = typename CacheT::ChainedItemMovingSync;
   using RemoveCb = typename CacheT::RemoveCb;
-  using NvmCacheFilterCb = typename CacheT::NvmCacheFilterCb;
   using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
   using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
@@ -39,7 +38,10 @@ class CacheAllocatorConfig {
   // Set cache name as a string
   CacheAllocatorConfig& setCacheName(const std::string&);
 
-  // Set cache size in bytes
+  // Set cache size in bytes. If size is smaller than 60GB (64'424'509'440),
+  // then we will enable full coredump. Otherwise, we will disable it. The
+  // reason we disable full coredump for large cache is because it takes a
+  // long time to dump, and also we might not have enough local storage.
   CacheAllocatorConfig& setCacheSize(size_t _size);
 
   // Set default allocation sizes for a cache pool
@@ -52,8 +54,8 @@ class CacheAllocatorConfig {
       uint32_t _minAllocationClassSize,
       bool _reduceFragmentationInAllocationClass);
 
-  // Set the access config for cachelib's access container
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#accessconfig
+  // Set the access config for cachelib's access container. Refer to our
+  // user guide for how to tune access container (configure hashtable).
   CacheAllocatorConfig& setAccessConfig(AccessConfig config);
 
   // RemoveCallback is invoked for each item that is evicted or removed
@@ -83,9 +85,6 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setNvmCacheAdmissionPolicy(
       std::shared_ptr<NvmAdmissionPolicy<CacheT>> policy);
 
-  // enables filtering items that go into nvmcache
-  CacheAllocatorConfig& setNvmCacheFilterCallback(NvmCacheFilterCb cb);
-
   // enables encoding items before they go into nvmcache
   CacheAllocatorConfig& setNvmCacheEncodeCallback(NvmCacheEncodeCb cb);
 
@@ -109,12 +108,11 @@ class CacheAllocatorConfig {
   // returned by CacheAllocator::getUsableSize()
   bool isNvmCacheTruncateAllocSizeEnabled() const;
 
-  // Enable compact cache support
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#compact-cache
+  // Enable compact cache support. Refer to our user guide for how ccache works.
   CacheAllocatorConfig& enableCompactCache();
 
-  // Configure chained items. Get more details at:
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#chained-allocations
+  // Configure chained items. Refer to our user guide for how chained items
+  // work.
   //
   // @param config  Config for chained item's access container, it's similar to
   //                the main access container but only used for chained items
@@ -154,8 +152,8 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setMemoryLocking(bool enable);
 
   // This allows cache to be persisted across restarts. One example use case is
-  // to preserve the cache when releasing a new version of your service.
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#cache-persistence
+  // to preserve the cache when releasing a new version of your service. Refer
+  // to our user guide for how to set up cache persistence.
   CacheAllocatorConfig& enableCachePersistence(std::string directory,
                                                void* baseAddr = nullptr);
 
@@ -215,8 +213,7 @@ class CacheAllocatorConfig {
   // slab memory distributed across different allocation classes. For example,
   // if the 64 bytes allocation classes are receiving for allocation requests,
   // eventually CacheAllocator will move more memory to it from other allocation
-  // classes. For more details, see:
-  // https://our.internmc.facebook.com/intern/wiki/Cachelib-tutorial/#rebalancing
+  // classes. For more details, see our user guide.
   CacheAllocatorConfig& enablePoolRebalancing(
       std::shared_ptr<RebalanceStrategy> defaultRebalanceStrategy,
       std::chrono::milliseconds interval);
@@ -255,9 +252,15 @@ class CacheAllocatorConfig {
   // before you start customizing this option.
   CacheAllocatorConfig& setEvictionSearchLimit(uint32_t limit);
 
-  // This throttles various internal operations in cachelib. It may help improve
-  // latency in allocation and find paths. Come talk to Cache Library team if
-  // you find yourself customizing this.
+  // Specify a threshold for per-item outstanding references, beyond which,
+  // shared_ptr will be allocated instead of handles to support having  more
+  // outstanding iobuf
+  // The default behavior is always using handles
+  CacheAllocatorConfig& setRefcountThresholdForConvertingToIOBuf(uint32_t);
+
+  // This throttles various internal operations in cachelib. It may help
+  // improve latency in allocation and find paths. Come talk to Cache
+  // Library team if you find yourself customizing this.
   CacheAllocatorConfig& setThrottlerConfig(util::Throttler::Config config);
 
   // Disable eviction. Not recommended unless you want to use cachelib as
@@ -272,6 +275,11 @@ class CacheAllocatorConfig {
   // Passes in a callback to initialize an event tracker when the allocator
   // starts
   CacheAllocatorConfig& setEventTracker(EventTrackerSharedPtr&&);
+
+  // Set the minimum TTL for an item to be admitted into NVM cache.
+  // If nvmAdmissionMinTTL is set to be positive, any item with configured TTL
+  // smaller than this will always be rejected by NvmAdmissionPolicy.
+  CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
 
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
@@ -462,7 +470,7 @@ class CacheAllocatorConfig {
   util::Throttler::Config reaperConfig{};
 
   // time to sleep between each reaping period.
-  std::chrono::milliseconds reaperInterval{};
+  std::chrono::milliseconds reaperInterval{5000};
 
   // interval during which we adjust dynamically the refresh ratio.
   std::chrono::milliseconds mmReconfigureInterval{0};
@@ -483,6 +491,11 @@ class CacheAllocatorConfig {
   // the number of tries to search for an item to evict
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
+
+  // If refcount is larger than this threshold, we will use shared_ptr
+  // for handles in IOBuf chains.
+  unsigned int thresholdForConvertingToIOBuf{
+      std::numeric_limits<unsigned int>::max()};
 
   // number of attempts to move an item before giving up and try to
   // evict the item
@@ -522,10 +535,6 @@ class CacheAllocatorConfig {
   // custom user provided admission policy
   std::shared_ptr<NvmAdmissionPolicy<CacheT>> nvmCacheAP{nullptr};
 
-  // user defined call back for filtering out items that go into the nvm
-  // cache. this will keep certain items only in DRAM.
-  NvmCacheFilterCb filterCb{};
-
   // Config for nvmcache type
   folly::Optional<NvmCacheConfig> nvmConfig;
 
@@ -562,6 +571,9 @@ class CacheAllocatorConfig {
   uint32_t maxAllocationClassSize{Slab::kSize};
   uint32_t minAllocationClassSize{72};
   bool reduceFragmentationInAllocationClass{false};
+  // The minimum TTL an item need to have in order to be admitted into NVM
+  // cache.
+  uint64_t nvmAdmissionMinTTL{0};
 
   friend CacheT;
 
@@ -585,6 +597,10 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheName(
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheSize(size_t _size) {
   size = _size;
+  constexpr size_t maxCacheSizeWithCoredump = 64'424'509'440; // 60GB
+  if (size <= maxCacheSizeWithCoredump) {
+    return setFullCoredump(true);
+  }
   return *this;
 }
 
@@ -651,7 +667,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
     std::shared_ptr<NvmAdmissionPolicy<T>> policy) {
   if (!nvmConfig) {
     throw std::invalid_argument(
-        "NvmCache filter callback can not be set unless nvmcache is used");
+        "NvmCache admission policy callback can not be set unless nvmcache is "
+        "used");
   }
 
   if (!policy) {
@@ -659,17 +676,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
   }
 
   nvmCacheAP = std::move(policy);
-  return *this;
-}
-
-template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheFilterCallback(
-    NvmCacheFilterCb cb) {
-  if (!nvmConfig) {
-    throw std::invalid_argument(
-        "NvmCache filter callback can not be set unless nvmcache is used");
-  }
-  filterCb = std::move(cb);
   return *this;
 }
 
@@ -926,6 +932,14 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEvictionSearchLimit(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>&
+CacheAllocatorConfig<T>::setRefcountThresholdForConvertingToIOBuf(
+    uint32_t threshold) {
+  thresholdForConvertingToIOBuf = threshold;
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setThrottlerConfig(
     util::Throttler::Config config) {
   throttleConfig = config;
@@ -943,6 +957,18 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
     EventTrackerSharedPtr&& otherEventTracker) {
   eventTracker = std::move(otherEventTracker);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
+    uint64_t ttl) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmAdmissionMinTTL can not be set unless nvmcache is used");
+  }
+
+  nvmAdmissionMinTTL = ttl;
   return *this;
 }
 
@@ -1021,10 +1047,11 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       (cacheWorkerPostWorkHandler ? "set" : "empty");
   configMap["disableEviction"] = std::to_string(disableEviction);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
+  configMap["thresholdForConvertingToIOBuf"] =
+      std::to_string(thresholdForConvertingToIOBuf);
   configMap["movingTries"] = std::to_string(movingTries);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";
-  configMap["filterCb"] = filterCb ? "set" : "empty";
   configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
   configMap["nvmAPRejectFirst"] = rejectFirstAPNumEntries ? "set" : "empty";
   configMap["moveCb"] = moveCb ? "set" : "empty";
@@ -1044,6 +1071,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
   configMap["eventTracker"] = eventTracker ? "set" : "empty";
+  configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),

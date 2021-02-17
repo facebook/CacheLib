@@ -1,8 +1,8 @@
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
 
-#include <iostream>
-
 #include <folly/logging/xlog.h>
+
+#include <iostream>
 
 namespace facebook {
 namespace cachelib {

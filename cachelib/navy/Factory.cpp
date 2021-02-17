@@ -1,8 +1,9 @@
 
+#include "cachelib/navy/Factory.h"
+
 #include <folly/Format.h>
 #include <folly/Random.h>
 
-#include "cachelib/navy/Factory.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/admission_policy/RejectRandomAP.h"
 #include "cachelib/navy/bighash/BigHash.h"
@@ -199,8 +200,10 @@ class CacheProtoImpl final : public CacheProto {
         std::make_unique<RejectRandomAP>(std::move(apConfig));
   }
 
-  void setDynamicRandomAdmissionPolicy(
-      uint64_t targetRate, size_t deterministicKeyHashSuffixLength) override {
+  void setDynamicRandomAdmissionPolicy(uint64_t targetRate,
+                                       size_t deterministicKeyHashSuffixLength,
+                                       uint32_t itemBaseSize,
+                                       uint64_t maxRate) override {
     DynamicRandomAP::Config apConfig;
     apConfig.targetRate = targetRate;
     apConfig.fnBytesWritten = [device = config_.device.get()]() {
@@ -209,6 +212,12 @@ class CacheProtoImpl final : public CacheProto {
     apConfig.seed = folly::Random::rand32();
     apConfig.deterministicKeyHashSuffixLength =
         deterministicKeyHashSuffixLength;
+    if (itemBaseSize > 0) {
+      apConfig.baseSize = itemBaseSize;
+    }
+    if (maxRate > 0) {
+      apConfig.maxRate = maxRate;
+    }
     config_.admissionPolicy =
         std::make_unique<DynamicRandomAP>(std::move(apConfig));
   }

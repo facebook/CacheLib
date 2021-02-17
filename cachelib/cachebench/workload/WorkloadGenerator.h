@@ -1,27 +1,24 @@
 #pragma once
 
-#include <cstdint>
-#include <string>
-#include <vector>
-
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
+
+#include <cstdint>
+#include <string>
+#include <vector>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
-#include "cachelib/cachebench/workload/distributions/DiscreteDistribution.h"
-#include "cachelib/cachebench/workload/distributions/NormalDistribution.h"
-#include "cachelib/cachebench/workload/distributions/RangeDistribution.h"
+#include "cachelib/cachebench/workload/WorkloadDistribution.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-template <typename Distribution = DiscreteDistribution>
 class WorkloadGenerator : public GeneratorBase {
  public:
   explicit WorkloadGenerator(const StressorConfig& config);
@@ -55,10 +52,8 @@ class WorkloadGenerator : public GeneratorBase {
   std::vector<std::vector<uint32_t>> keyIndicesForPool_;
   std::vector<std::uniform_int_distribution<uint32_t>> keyGenForPool_;
 
-  std::vector<Distribution> workloadDist_;
+  std::vector<WorkloadDistribution> workloadDist_;
 };
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook
-
-#include "cachelib/cachebench/workload/WorkloadGenerator-inl.h"

@@ -1,13 +1,13 @@
 #pragma once
-#include "cachelib/allocator/KAllocation.h"
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/Format.h>
+#include <folly/Random.h>
 
 #include <memory>
 #include <set>
 #include <vector>
 
-#include <folly/Format.h>
-#include <folly/Random.h>
+#include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {

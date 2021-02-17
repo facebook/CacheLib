@@ -7,7 +7,6 @@
     {
       "addChainedRatio": 0.0, 
       "delRatio": 0.0, 
-      "distribution": "normal", 
       "enableLookaside": true, 
       "getRatio": 0.9746082749830369, 
       "keySizeRange": [

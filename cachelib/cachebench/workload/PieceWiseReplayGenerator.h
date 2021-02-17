@@ -21,11 +21,13 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
                            config.replayGeneratorConfig.statsPerAggField),
         mode_(config_.replayGeneratorConfig.getSerializationMode()),
         numShards_(config.numThreads),
-        activeReqQ_(config.numThreads) {
+        activeReqQ_(config.numThreads),
+        threadFinished_(config.numThreads) {
     for (uint32_t i = 0; i < numShards_; ++i) {
       activeReqQ_[i] =
           std::make_unique<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>(
               kMaxRequestQueueSize);
+      threadFinished_[i].store(false, std::memory_order_relaxed);
     }
 
     traceGenThread_ = std::thread([this]() { getReqFromTrace(); });
@@ -60,6 +62,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
   }
 
+  void markFinish() override {
+    threadFinished_[*tlStickyIdx_].store(true, std::memory_order_relaxed);
+  }
+
  private:
   void getReqFromTrace();
 
@@ -79,7 +85,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // timestamp, cacheKey, OpType, objectSize, responseSize,
   // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate.
   // (extra fields might exist defined by
-  // config_.replayGeneratorConfig.numAggregationFields)
+  // config_.replayGeneratorConfig.numAggregationFields and
+  // config_.replayGeneratorConfig.numExtraFields)
   enum SampleFields {
     TIMESTAMP = 0,
     CACHE_KEY,
@@ -91,7 +98,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     RANGE_END,
     TTL,
     SAMPLING_RATE,
-    TOTAL_FIELDS = 10
+    TOTAL_DEFINED_FIELDS = 10
   };
 
   PieceWiseCacheAdapter pieceCacheAdapter_;
@@ -118,6 +125,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   std::vector<
       std::unique_ptr<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>>
       activeReqQ_;
+
+  // Thread that finish its operations mark it here, so we will skip
+  // further request on its shard
+  std::vector<std::atomic<bool>> threadFinished_;
 
   // The thread used to process trace file and generate workloads for each
   // activeReqQ_ queue.

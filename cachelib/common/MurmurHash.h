@@ -1,7 +1,7 @@
 #pragma once
-#include <cstdint>
-
 #include <folly/CppAttributes.h>
+
+#include <cstdint>
 
 namespace facebook {
 namespace cachelib {

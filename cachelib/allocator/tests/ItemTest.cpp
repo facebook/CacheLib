@@ -1,10 +1,9 @@
-#include "cachelib/allocator/tests/TestBase.h"
-
 #include <future>
 #include <mutex>
 #include <thread>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 using Item = facebook::cachelib::LruAllocator::Item;
 using ChainedItem = facebook::cachelib::LruAllocator::ChainedItem;
@@ -54,15 +53,18 @@ TEST(ItemTest, ExpiryTime) {
 
   const folly::StringPiece key = "helloworld";
   const uint32_t now = util::getCurrentTimeSec();
-  const uint32_t tenMinutesLater = now + 600;
+  const auto tenMins = std::chrono::seconds(600);
+  const uint32_t tenMinutesLater = now + tenMins.count();
 
   auto item = new (buffer) Item(key, valueSize, now, 0);
   item->markInMMContainer();
   EXPECT_EQ(0, item->getExpiryTime());
+  EXPECT_EQ(0, item->getConfiguredTTL().count());
 
   // Test that the write went through
   bool result = item->updateExpiryTime(tenMinutesLater);
   EXPECT_TRUE(result);
+  EXPECT_EQ(tenMins, item->getConfiguredTTL());
 
   // Test that writes fail while the item is moving
   item->markMoving();
@@ -87,8 +89,14 @@ TEST(ItemTest, ExpiryTime) {
 
   // Extend expiry time (5 minutes)
   auto timeBeforeExtend = util::getCurrentTimeSec();
-  item->extendTTL(std::chrono::seconds{300});
-  EXPECT_LE(timeBeforeExtend + 300, item->getExpiryTime());
+  auto fiveMins = std::chrono::seconds(300);
+  item->extendTTL(fiveMins);
+  EXPECT_LE(timeBeforeExtend + fiveMins.count(), item->getExpiryTime());
+  EXPECT_EQ(fiveMins, item->getConfiguredTTL());
+
+  result = item->updateExpiryTime(0);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(0, item->getConfiguredTTL().count());
 }
 
 // Make a normal item and verify it's not a chained item

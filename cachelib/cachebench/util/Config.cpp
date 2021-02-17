@@ -2,6 +2,7 @@
 
 #include <folly/FileUtil.h>
 #include <folly/json.h>
+
 #include <unordered_map>
 
 namespace facebook {
@@ -10,7 +11,6 @@ namespace cachebench {
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, mode);
   JSONSetVal(configJson, generator);
-  JSONSetVal(configJson, distribution);
 
   JSONSetVal(configJson, name);
 
@@ -56,7 +56,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 464>();
+  checkCorrectSize<StressorConfig, 448>();
 }
 
 bool StressorConfig::usesChainedItems() const {
@@ -70,7 +70,7 @@ bool StressorConfig::usesChainedItems() const {
 
 CacheBenchConfig::CacheBenchConfig(CacheConfig cacheConfig,
                                    StressorConfig testConfig)
-    : cacheConfig_(cacheConfig), testConfig_(testConfig) {}
+    : cacheConfig_(cacheConfig), stressorConfig_(testConfig) {}
 
 CacheBenchConfig::CacheBenchConfig(const std::string& path) {
   std::string configString;
@@ -91,7 +91,7 @@ CacheBenchConfig::CacheBenchConfig(const std::string& path) {
     testConfigJson["configPath"] = configDir;
   }
 
-  testConfig_ = StressorConfig{testConfigJson};
+  stressorConfig_ = StressorConfig{testConfigJson};
   cacheConfig_ = CacheConfig{configJson["cache_config"]};
 }
 
@@ -153,7 +153,13 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, replaySerializationMode);
   JSONSetVal(configJson, relaxedSerialIntervalMs);
   JSONSetVal(configJson, numAggregationFields);
+  JSONSetVal(configJson, numExtraFields);
   JSONSetVal(configJson, statsPerAggField);
+
+  if (configJson.count("mlAdmissionConfig")) {
+    mlAdmissionConfig =
+        std::make_shared<MLAdmissionConfig>(configJson["mlAdmissionConfig"]);
+  }
 
   if (replaySerializationMode != "strict" &&
       replaySerializationMode != "relaxed" &&
@@ -162,7 +168,7 @@ ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {
         "Unsupported request serialization mode: {}", replaySerializationMode));
   }
 
-  checkCorrectSize<ReplayGeneratorConfig, 104>();
+  checkCorrectSize<ReplayGeneratorConfig, 120>();
 }
 
 ReplayGeneratorConfig::SerializeMode
@@ -176,6 +182,16 @@ ReplayGeneratorConfig::getSerializationMode() const {
   }
 
   return ReplayGeneratorConfig::SerializeMode::strict;
+}
+
+MLAdmissionConfig::MLAdmissionConfig(const folly::dynamic& configJson) {
+  JSONSetVal(configJson, modelPath);
+  JSONSetVal(configJson, numericFeatures);
+  JSONSetVal(configJson, categoricalFeatures);
+  JSONSetVal(configJson, targetRecall);
+  JSONSetVal(configJson, admitCategory);
+
+  checkCorrectSize<MLAdmissionConfig, 160>();
 }
 
 } // namespace cachebench

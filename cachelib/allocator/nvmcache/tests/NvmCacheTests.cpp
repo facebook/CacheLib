@@ -1,8 +1,8 @@
-#include <set>
-#include <thread>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <set>
+#include <thread>
 
 #include "cachelib/allocator/nvmcache/tests/NvmTestBase.h"
 
@@ -30,19 +30,19 @@ TEST_F(NvmCacheTest, Config) {
   };
 
   auto config = *this->getConfig().nvmConfig;
-  ASSERT_NO_THROW(config.validate());
+  ASSERT_NO_THROW(config.validateAndSetDefaults());
 
   config.dipperOptions["dipper_navy_block_size"] = 5555;
   config.dipperOptions["dipper_navy_bighash_bucket_size"] = 5555;
   config.deviceEncryptor = std::make_shared<MockEncryptor>();
-  ASSERT_NO_THROW(config.validate());
+  ASSERT_NO_THROW(config.validateAndSetDefaults());
 
   config.dipperOptions["dipper_navy_block_size"] = 4444;
-  ASSERT_THROW(config.validate(), std::invalid_argument);
+  ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 
   config.dipperOptions["dipper_navy_block_size"] = 5555;
   config.dipperOptions["dipper_navy_bighash_bucket_size"] = 4444;
-  ASSERT_THROW(config.validate(), std::invalid_argument);
+  ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 }
 
 namespace {
@@ -211,72 +211,6 @@ TEST_F(NvmCacheTest, EvictToDipperExpired) {
 
   // should not have been in nvmcache since it expired.
   ASSERT_FALSE(this->checkKeyExists(key, false /* ram Only */));
-}
-
-TEST_F(NvmCacheTest, FilterCb) {
-  auto& config = this->getConfig();
-  std::string failKey = "failure";
-  std::string successKey = "success";
-
-  std::string unEvictableKey = "unEvictable";
-
-  unsigned int filterSeen = 0;
-  unsigned int unEvictableSeen = 0;
-  config.setNvmCacheFilterCallback(
-      [&](const typename AllocatorT::Item& it,
-          folly::Range<typename AllocatorT::ChainedItemIter>) {
-        ++filterSeen;
-
-        if (it.getKey() == unEvictableKey) {
-          ++unEvictableSeen;
-        }
-        return it.getKey() != successKey;
-      });
-
-  std::set<std::string> evictedKeys;
-  config.setRemoveCallback([&](typename AllocatorT::RemoveCbData c) {
-    evictedKeys.insert(c.item.getKey().str());
-  });
-
-  auto& nvm = this->makeCache();
-  auto pid = this->poolId();
-
-  size_t allocSize = 15 * 1024;
-  {
-    auto it = nvm.allocate(pid, successKey, allocSize);
-    auto it2 = nvm.allocate(pid, failKey, allocSize);
-    auto it3 = nvm.allocatePermanent_deprecated(pid, unEvictableKey, allocSize);
-    ASSERT_NE(nullptr, it2);
-    ASSERT_NE(nullptr, it);
-    ASSERT_NE(nullptr, it3);
-    nvm.insertOrReplace(it);
-    nvm.insertOrReplace(it2);
-    nvm.insertOrReplace(it3);
-  }
-
-  auto keysFound = [&]() {
-    return evictedKeys.find(successKey) != evictedKeys.end() &&
-           evictedKeys.find(failKey) != evictedKeys.end();
-  };
-
-  int i = 0;
-  while (!keysFound()) {
-    auto it = nvm.allocate(pid, std::to_string(i++), allocSize);
-    nvm.insertOrReplace(it);
-  }
-
-  EXPECT_EQ(2, filterSeen);
-  EXPECT_EQ(0, unEvictableSeen);
-
-  // should not be present in RAM since we evicted it
-  EXPECT_FALSE(this->checkKeyExists(successKey, true /*ram Only*/));
-  EXPECT_FALSE(this->checkKeyExists(failKey, true /*ram Only*/));
-  EXPECT_TRUE(this->checkKeyExists(unEvictableKey, true /*ram Only*/));
-
-  // success one should be in nvmcache, failure one should not
-  EXPECT_FALSE(this->checkKeyExists(failKey, false /* ram Only */));
-  EXPECT_TRUE(this->checkKeyExists(successKey, false /* ram Only */));
-  EXPECT_TRUE(this->checkKeyExists(unEvictableKey, false /*ram Only*/));
 }
 
 // Unevictable items should be kept in DRAM
@@ -789,10 +723,9 @@ TEST_F(NvmCacheTest, IceRoll) {
   this->convertToShmCache();
   std::string key1 = "blah1";
   std::string key2 = "blah2";
+  auto pid = this->poolId();
   {
     auto& nvm = this->cache();
-    auto pid = this->poolId();
-
     {
       auto it1 = nvm.allocate(pid, key1, 100);
       nvm.insertOrReplace(it1);
@@ -821,11 +754,36 @@ TEST_F(NvmCacheTest, IceRoll) {
 
     // key2 was still in ram.
     ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+
     this->removeFromRamForTesting(key2);
 
     // fetch from nvmcache should fail for both
+    ASSERT_FALSE(this->checkKeyExists(key2, true /* ramOnly */));
     ASSERT_FALSE(this->checkKeyExists(key2, false /* ramOnly */));
-    ASSERT_FALSE(this->checkKeyExists(key2, false /* ramOnly */));
+
+    auto& nvm = this->cache();
+    auto it1 = nvm.allocate(pid, key1, 100);
+    nvm.insertOrReplace(it1);
+    auto it2 = nvm.allocate(pid, key2, 100);
+    nvm.insertOrReplace(it2);
+    // push key 2 to nvmcache again. we will warm roll and check if it exists
+    // after an ice roll.
+    ASSERT_TRUE(this->checkKeyExists(key1, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key1, false /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, false /* ramOnly */));
+
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key1));
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key2));
+  }
+
+  this->warmRoll();
+  {
+    // nvm is preserved subsequently
+    ASSERT_TRUE(this->checkKeyExists(key1, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, true /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key1, false /* ramOnly */));
+    ASSERT_TRUE(this->checkKeyExists(key2, false /* ramOnly */));
   }
 }
 
@@ -1486,6 +1444,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_io_errors"));
   EXPECT_TRUE(cs("navy_parcel_memory"));
   EXPECT_TRUE(cs("navy_concurrent_inserts"));
+  EXPECT_TRUE(cs("navy_accepted"));
+  EXPECT_TRUE(cs("navy_accepted_bytes"));
 
   // navy::OrderedThreadPoolJobScheduler
   EXPECT_TRUE(cs("navy_reader_pool_max_queue_len"));
@@ -1554,9 +1514,11 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reclaim_time"));
   EXPECT_TRUE(cs("navy_bc_region_reclaim_errors"));
   EXPECT_TRUE(cs("navy_bc_evicted"));
-  EXPECT_TRUE(cs("navy_bc_pinned_regions"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
   EXPECT_TRUE(cs("navy_bc_external_fragmentation"));
+  EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
+  EXPECT_TRUE(cs("navy_bc_inmem_active"));
+  EXPECT_TRUE(cs("navy_bc_inmem_flush_retries"));
 
   // navy::LruPolicy
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_avg"));
@@ -1604,8 +1566,6 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p99999"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_p999999"));
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_max"));
-  EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
-  EXPECT_TRUE(cs("navy_bc_inmem_active"));
 
   // navy::BigHash
   EXPECT_TRUE(cs("navy_bh_items"));
@@ -1633,6 +1593,7 @@ TEST_F(NvmCacheTest, NavyStats) {
 
   // navy::Device
   EXPECT_TRUE(cs("navy_device_bytes_written"));
+  EXPECT_TRUE(cs("navy_device_bytes_read"));
   EXPECT_TRUE(cs("navy_device_read_errors"));
   EXPECT_TRUE(cs("navy_device_write_errors"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_avg"));

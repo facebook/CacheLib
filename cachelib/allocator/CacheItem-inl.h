@@ -18,7 +18,7 @@ uint32_t CacheItem<CacheTrait>::getRequiredSize(Key key,
 
 template <typename CacheTrait>
 uint64_t CacheItem<CacheTrait>::getRefcountMax() noexcept {
-  return RefCount::getMaxRefCount();
+  return RefcountWithFlags::kAccessRefMask;
 }
 
 template <typename CacheTrait>
@@ -33,8 +33,8 @@ CacheItem<CacheTrait>::CacheItem(Key key, uint32_t size, uint32_t creationTime)
     : CacheItem(key, size, creationTime, 0 /* expiryTime_ */) {}
 
 template <typename CacheTrait>
-const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey() const
-    noexcept {
+const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
+    const noexcept {
   return alloc_.getKey();
 }
 
@@ -90,8 +90,9 @@ uint32_t CacheItem<CacheTrait>::getCreationTime() const noexcept {
 }
 
 template <typename CacheTrait>
-uint32_t CacheItem<CacheTrait>::getConfiguredTTL() const noexcept {
-  return expiryTime_ - creationTime_;
+std::chrono::seconds CacheItem<CacheTrait>::getConfiguredTTL() const noexcept {
+  return std::chrono::seconds(expiryTime_ > 0 ? expiryTime_ - creationTime_
+                                              : 0);
 }
 
 template <typename CacheTrait>
@@ -106,11 +107,11 @@ std::string CacheItem<CacheTrait>::toString() const {
   } else {
     return folly::sformat(
         "item: "
-        "memory={}:flags={}:raw-ref={}:size={}:key={}:hex-key={}:"
+        "memory={}:raw-ref={}:size={}:key={}:hex-key={}:"
         "isInMMContainer={}:isAccessible={}:isMoving={}:references={}:ctime={}:"
         "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:hasChainedItem="
         "{}",
-        this, static_cast<uint32_t>(flags_), getRefCountRaw(), getSize(),
+        this, getRefCountAndFlagsRaw(), getSize(),
         folly::humanify(getKey().str()), folly::hexlify(getKey()),
         isInMMContainer(), isAccessible(), isMoving(), getRefCount(),
         getCreationTime(), getExpiryTime(), getLastAccessTime(), isNvmClean(),
@@ -129,150 +130,148 @@ void CacheItem<CacheTrait>::changeKey(Key key) {
 }
 
 template <typename CacheTrait>
-typename CacheItem<CacheTrait>::RefCount::Value
-CacheItem<CacheTrait>::getRefCount() const noexcept {
-  return ref_.getCount();
+RefcountWithFlags::Value CacheItem<CacheTrait>::getRefCount() const noexcept {
+  return ref_.getAccessRef();
 }
 
 template <typename CacheTrait>
-typename CacheItem<CacheTrait>::RefCount::Value
-CacheItem<CacheTrait>::getRefCountRaw() const noexcept {
+RefcountWithFlags::Value CacheItem<CacheTrait>::getRefCountAndFlagsRaw()
+    const noexcept {
   return ref_.getRaw();
 }
 
 template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isDrained() const noexcept {
+  return ref_.isDrained();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isExclusive() const noexcept {
+  return ref_.isExclusive();
+}
+
+template <typename CacheTrait>
 void CacheItem<CacheTrait>::markAccessible() noexcept {
-  constexpr auto accessFlag = static_cast<uint8_t>(RefFlags::kAccessible);
-  ref_.template setFlag<accessFlag>();
-}
-
-template <typename CacheTrait>
-void CacheItem<CacheTrait>::markInMMContainer() noexcept {
-  constexpr auto linkFlag = static_cast<uint8_t>(RefFlags::kLinked);
-  ref_.template setFlag<linkFlag>();
-}
-
-template <typename CacheTrait>
-void CacheItem<CacheTrait>::unmarkInMMContainer() noexcept {
-  constexpr auto linkFlag = static_cast<uint8_t>(RefFlags::kLinked);
-  ref_.template unsetFlag<linkFlag>();
+  ref_.markAccessible();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkAccessible() noexcept {
-  constexpr auto accessFlag = static_cast<uint8_t>(RefFlags::kAccessible);
-  ref_.template unsetFlag<accessFlag>();
+  ref_.unmarkAccessible();
+}
+
+template <typename CacheTrait>
+void CacheItem<CacheTrait>::markInMMContainer() noexcept {
+  ref_.markInMMContainer();
+}
+
+template <typename CacheTrait>
+void CacheItem<CacheTrait>::unmarkInMMContainer() noexcept {
+  ref_.unmarkInMMContainer();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isAccessible() const noexcept {
-  constexpr auto accessFlag = static_cast<uint8_t>(RefFlags::kAccessible);
-  return ref_.template isFlagSet<accessFlag>();
+  return ref_.isAccessible();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isInMMContainer() const noexcept {
-  constexpr auto linkFlag = static_cast<uint8_t>(RefFlags::kLinked);
-  return ref_.template isFlagSet<linkFlag>();
+  return ref_.isInMMContainer();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::markMoving() noexcept {
-  constexpr auto linkFlag = static_cast<uint8_t>(RefFlags::kLinked);
-  constexpr auto movingFlag = static_cast<uint8_t>(RefFlags::kMoving);
-  return ref_.template setFlagConditional<movingFlag, linkFlag>();
+  return ref_.markMoving();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkMoving() noexcept {
-  constexpr auto movingFlag = static_cast<uint8_t>(RefFlags::kMoving);
-  ref_.template unsetFlag<movingFlag>();
+  ref_.unmarkMoving();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isMoving() const noexcept {
-  constexpr auto movingFlag = static_cast<uint8_t>(RefFlags::kMoving);
-  return ref_.template isFlagSet<movingFlag>();
+  return ref_.isMoving();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isOnlyMoving() const noexcept {
-  constexpr auto movingFlag = static_cast<uint8_t>(RefFlags::kMoving);
-  return ref_.template isOnlyFlagSet<movingFlag>();
+  return ref_.isOnlyMoving();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::markUnevictable() noexcept {
-  setFlag<Flags::UNEVICTABLE>();
+  ref_.markUnevictable();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkUnevictable() noexcept {
-  unSetFlag<Flags::UNEVICTABLE>();
+  ref_.unmarkUnevictable();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isUnevictable() const noexcept {
-  return isFlagSet<Flags::UNEVICTABLE>();
+  return ref_.isUnevictable();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isEvictable() const noexcept {
-  return !isFlagSet<Flags::UNEVICTABLE>();
+  return ref_.isEvictable();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::markNvmClean() noexcept {
-  setFlag<Flags::NVM_CLEAN>();
+  ref_.markNvmClean();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkNvmClean() noexcept {
-  unSetFlag<Flags::NVM_CLEAN>();
+  ref_.unmarkNvmClean();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isNvmClean() const noexcept {
-  return isFlagSet<Flags::NVM_CLEAN>();
+  return ref_.isNvmClean();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::markNvmEvicted() noexcept {
-  setFlag<Flags::NVM_EVICTED>();
+  ref_.markNvmEvicted();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkNvmEvicted() noexcept {
-  unSetFlag<Flags::NVM_EVICTED>();
+  ref_.unmarkNvmEvicted();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isNvmEvicted() const noexcept {
-  return isFlagSet<Flags::NVM_EVICTED>();
+  return ref_.isNvmEvicted();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::markIsChainedItem() noexcept {
   XDCHECK(!hasChainedItem());
-  setFlag<Flags::IS_CHAINED_ITEM>();
+  ref_.markIsChainedItem();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkIsChainedItem() noexcept {
   XDCHECK(!hasChainedItem());
-  unSetFlag<Flags::IS_CHAINED_ITEM>();
+  ref_.unmarkIsChainedItem();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::markHasChainedItem() noexcept {
   XDCHECK(!isChainedItem());
-  setFlag<Flags::HAS_CHAINED_ITEM>();
+  ref_.markHasChainedItem();
 }
 
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkHasChainedItem() noexcept {
   XDCHECK(!isChainedItem());
-  unSetFlag<Flags::HAS_CHAINED_ITEM>();
+  ref_.unmarkHasChainedItem();
 }
 
 template <typename CacheTrait>
@@ -289,39 +288,30 @@ CacheItem<CacheTrait>::asChainedItem() const noexcept {
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isChainedItem() const noexcept {
-  XDCHECK(!(isFlagSet<Flags::HAS_CHAINED_ITEM>() &&
-            isFlagSet<Flags::IS_CHAINED_ITEM>()));
-  return isFlagSet<Flags::IS_CHAINED_ITEM>();
+  return ref_.isChainedItem();
 }
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::hasChainedItem() const noexcept {
-  XDCHECK(!(isFlagSet<Flags::HAS_CHAINED_ITEM>() &&
-            isFlagSet<Flags::IS_CHAINED_ITEM>()));
-  return isFlagSet<Flags::HAS_CHAINED_ITEM>();
+  return ref_.hasChainedItem();
 }
 
 template <typename CacheTrait>
-template <typename CacheItem<CacheTrait>::Flags flagBit>
+template <typename RefcountWithFlags::Flags flagBit>
 void CacheItem<CacheTrait>::setFlag() noexcept {
-  constexpr FlagT bitmask =
-      (static_cast<FlagT>(1) << static_cast<unsigned int>(flagBit));
-  __sync_or_and_fetch(&flags_, bitmask);
+  ref_.template setFlag<flagBit>();
 }
 
 template <typename CacheTrait>
-template <typename CacheItem<CacheTrait>::Flags flagBit>
+template <typename RefcountWithFlags::Flags flagBit>
 void CacheItem<CacheTrait>::unSetFlag() noexcept {
-  constexpr FlagT bitmask =
-      std::numeric_limits<FlagT>::max() -
-      (static_cast<FlagT>(1) << static_cast<unsigned int>(flagBit));
-  __sync_fetch_and_and(&flags_, bitmask);
+  ref_.template unSetFlag<flagBit>();
 }
 
 template <typename CacheTrait>
-template <typename CacheItem<CacheTrait>::Flags flagBit>
+template <typename RefcountWithFlags::Flags flagBit>
 bool CacheItem<CacheTrait>::isFlagSet() const noexcept {
-  return flags_ & (static_cast<FlagT>(1) << static_cast<unsigned int>(flagBit));
+  return ref_.template isFlagSet<flagBit>();
 }
 
 template <typename CacheTrait>
@@ -444,13 +434,12 @@ std::string CacheChainedItem<CacheTrait>::toString() const {
       *reinterpret_cast<const CompressedPtr*>(Item::getKey().data());
   return folly::sformat(
       "chained item: "
-      "memory={}:flags={}:raw-ref={}:size={}:parent-compressed-ptr={}:"
+      "memory={}:raw-ref={}:size={}:parent-compressed-ptr={}:"
       "isInMMContainer={}:isAccessible={}:isMoving={}:references={}:ctime={}:"
       "expTime={}:updateTime={}",
-      this, static_cast<uint32_t>(Item::flags_), Item::getRefCountRaw(),
-      Item::getSize(), cPtr.getRaw(), Item::isInMMContainer(),
-      Item::isAccessible(), Item::isMoving(), Item::getRefCount(),
-      Item::getCreationTime(), Item::getExpiryTime(),
+      this, Item::getRefCountAndFlagsRaw(), Item::getSize(), cPtr.getRaw(),
+      Item::isInMMContainer(), Item::isAccessible(), Item::isMoving(),
+      Item::getRefCount(), Item::getCreationTime(), Item::getExpiryTime(),
       Item::getLastAccessTime());
 }
 
@@ -467,8 +456,8 @@ void CacheChainedItem<CacheTrait>::appendChain(
 
 template <typename CacheTrait>
 typename CacheChainedItem<CacheTrait>::ChainedItem*
-CacheChainedItem<CacheTrait>::getNext(const PtrCompressor& compressor) const
-    noexcept {
+CacheChainedItem<CacheTrait>::getNext(
+    const PtrCompressor& compressor) const noexcept {
   return getPayload().getNext(compressor);
 }
 

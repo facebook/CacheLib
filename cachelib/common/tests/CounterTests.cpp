@@ -1,6 +1,6 @@
-#include "cachelib/common/AtomicCounter.h"
-
 #include <gtest/gtest.h>
+
+#include "cachelib/common/AtomicCounter.h"
 
 namespace facebook {
 namespace cachelib {

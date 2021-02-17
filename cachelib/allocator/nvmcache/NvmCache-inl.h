@@ -2,6 +2,66 @@ namespace facebook {
 namespace cachelib {
 
 template <typename C>
+std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
+  std::map<std::string, std::string> configMap;
+  configMap["encodeCB"] = encodeCb ? "set" : "empty";
+  configMap["decodeCb"] = decodeCb ? "set" : "empty";
+  configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
+  configMap["encryption"] = deviceEncryptor ? "set" : "empty";
+  configMap["truncateItemToOriginalAllocSizeInNvm"] =
+      truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
+  for (auto& pair : dipperOptions.items()) {
+    configMap["dipperOptions::" + pair.first.asString()] =
+        (pair.second.isObject() || pair.second.isArray())
+            ? folly::toJson(pair.second)
+            : pair.second.asString();
+  }
+  return configMap;
+}
+
+template <typename C>
+typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
+  const bool hasEncodeCb = !!encodeCb;
+  const bool hasDecodeCb = !!decodeCb;
+  if (hasEncodeCb != hasDecodeCb) {
+    throw std::invalid_argument(
+        "Encode and Decode CBs must be both specified or both empty.");
+  }
+
+  populateDefaultNavyOptions(dipperOptions);
+
+  if (deviceEncryptor) {
+    auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
+    auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
+    if (blockSize % encryptionBlockSize != 0) {
+      throw std::invalid_argument(folly::sformat(
+          "Encryption enabled but the encryption block granularity is not "
+          "aligned to the navy block size. ecryption block size: {}, "
+          "block size: {}",
+          encryptionBlockSize,
+          blockSize));
+    }
+    if (dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0).getInt() >
+        0) {
+      auto bucketSize =
+          dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
+              .getInt();
+      if (bucketSize % encryptionBlockSize != 0) {
+        throw std::invalid_argument(
+            folly::sformat("Encryption enabled but the encryption block "
+                           "granularity is not aligned to the navy "
+                           "big hash bucket size. ecryption block "
+                           "size: {}, bucket size: {}",
+                           encryptionBlockSize,
+                           bucketSize));
+      }
+    }
+  }
+
+  return *this;
+}
+
+template <typename C>
 typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
     folly::StringPiece key) {
   const size_t hash = folly::Hash()(key);
@@ -32,7 +92,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     return ItemHandle{};
   }
 
-  util::LatencyTracker tracker(cache_.nvmLookupLatency_);
+  util::LatencyTracker tracker(stats().nvmLookupLatency_);
 
   auto shard = getShardForKey(key);
   // invalidateToken any inflight puts for the same key since we are filling
@@ -46,7 +106,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   {
     auto lock = getFillLockForShard(shard);
     // do not use the Cache::find() since that will call back into us.
-    hdl = cache_.findInternal(key);
+    hdl = CacheAPIWrapperForNvm<C>::findInternal(cache_, key);
     if (hdl != nullptr) {
       if (hdl->isExpired()) {
         hdl.reset();
@@ -55,10 +115,10 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
       return hdl;
     }
 
-    hdl = cache_.createNvmCacheFillHandle();
+    hdl = CacheAPIWrapperForNvm<C>::createNvmCacheFillHandle(cache_);
     hdl.markWentToNvm();
 
-    auto waitContext = cache_.getWaitContext(hdl);
+    auto waitContext = CacheAPIWrapperForNvm<C>::getWaitContext(cache_, hdl);
     XDCHECK(waitContext);
 
     auto& fillMap = getFillMapForShard(shard);
@@ -143,15 +203,15 @@ void NvmCache<C>::evictCB(navy::BufferView key,
   if (expiryTime != 0) {
     if (expiryTime < timeNow) {
       stats().numNvmExpiredEvict.inc();
-      cache_.nvmEvictionSecondsPastExpiry_.trackValue(timeNow - expiryTime);
+      stats().nvmEvictionSecondsPastExpiry_.trackValue(timeNow - expiryTime);
     } else {
-      cache_.nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
+      stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
     }
   }
 
   value.size() > navySmallItemThreshold_
-      ? cache_.nvmLargeEvictionAgeSecs_.trackValue(lifetime)
-      : cache_.nvmSmallEvictionAgeSecs_.trackValue(lifetime);
+      ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
+      : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
 
   ItemHandle hdl;
   try {
@@ -188,7 +248,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
 
 template <typename C>
 NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
-    : config_(config.validate()),
+    : config_(config.validateAndSetDefaults()),
       cache_(c),
       navySmallItemThreshold_{getSmallItemThreshold(config_.dipperOptions)} {
   navyCache_ = createNavyCache(
@@ -227,7 +287,8 @@ std::unique_ptr<DipperItem> NvmCache<C>::makeDipperItem(const ItemHandle& hdl) {
         "Chained item can not be flushed separately {}", hdl->toString()));
   }
 
-  auto chainedItemRange = cache_.viewAsChainedAllocsRange(*hdl);
+  auto chainedItemRange =
+      CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, *hdl);
   if (config_.encodeCb &&
       !config_.encodeCb(EncodeDecodeContext{*hdl, chainedItemRange})) {
     return nullptr;
@@ -243,35 +304,25 @@ std::unique_ptr<DipperItem> NvmCache<C>::makeDipperItem(const ItemHandle& hdl) {
 
     const size_t bufSize = DipperItem::estimateVariableSize(blobs);
     return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-        poolId,
-        item.getCreationTime(),
-        item.getExpiryTime(),
-        blobs,
-        item.isUnevictable() ? DipperItemFlags::UNEVICTABLE
-                             : DipperItemFlags::NONE));
+        poolId, item.getCreationTime(), item.getExpiryTime(), blobs));
   } else {
     Blob blob = makeBlob(item);
     const size_t bufSize = DipperItem::estimateVariableSize(blob);
     return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
-        poolId,
-        item.getCreationTime(),
-        item.getExpiryTime(),
-        blob,
-        item.isUnevictable() ? DipperItemFlags::UNEVICTABLE
-                             : DipperItemFlags::NONE));
+        poolId, item.getCreationTime(), item.getExpiryTime(), blob));
   }
 }
 
 template <typename C>
 void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
-  util::LatencyTracker tracker(cache_.nvmInsertLatency_);
+  util::LatencyTracker tracker(stats().nvmInsertLatency_);
 
   XDCHECK(hdl);
   const auto& item = *hdl;
   // for regular items that can only write to nvmcache upon eviction, we
   // should not be recording a write for an nvmclean item unless it is marked
   // as evicted from nvmcache.
-  if (item.isEvictable() && item.isNvmClean() && !item.isNvmEvicted()) {
+  if (item.isNvmClean() && !item.isNvmEvicted()) {
     throw std::runtime_error(folly::sformat(
         "Item is not nvm evicted and nvm clean {}", item.toString()));
   }
@@ -298,6 +349,14 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
+  if (item.isNvmClean() && item.isNvmEvicted()) {
+    stats().numNvmPutFromClean.inc();
+  }
+
+  if (item.isUnevictable()) {
+    stats().numNvmPermItems.inc();
+  }
+
   auto iobuf = toIOBuf(std::move(dItem));
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
@@ -309,27 +368,17 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
 
-  navy::InsertOptions opts;
-  if (item.isUnevictable()) {
-    stats().numNvmPermItems.inc();
-    opts.setPermanent();
-  }
-
-  if (item.isNvmClean() && item.isNvmEvicted()) {
-    stats().numNvmPutFromClean.inc();
-  }
-
   // On a concurrent get, we remove the key from inflight evictions and hence
   // key not being present means a concurrent get happened with an inflight
   // eviction, and we should abandon this write to navy since we already
   // reported the key doesn't exist in the cache.
   const bool executed = token.executeIfValid([&]() {
     auto status = navyCache_->insertAsync(
-        makeBufferView(ctx.key()), makeBufferView(val), opts,
+        makeBufferView(ctx.key()), makeBufferView(val),
         [this, putCleanup, valSize](navy::Status st, navy::BufferView) {
           putCleanup();
           if (st == navy::Status::Ok) {
-            cache_.nvmPutSize_.trackValue(valSize);
+            stats().nvmPutSize_.trackValue(valSize);
           }
         });
 
@@ -440,7 +489,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
   // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
-  if (cache_.insertImpl(it, AllocatorApiEvent::INSERT_FROM_NVM)) {
+  if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {
     if (config_.memoryInsertCb) {
       config_.memoryInsertCb(*it);
     }
@@ -460,9 +509,9 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
   stats().numNvmAllocAttempts.inc();
   // use the original alloc size to allocate, but make sure that the usable
   // size matches the pBlob's size
-  auto it = cache_.allocateInternal(
-      dItem.poolId(), key, pBlob.origAllocSize, dItem.getCreationTime(),
-      dItem.getExpiryTime(), dItem.isUnevictable());
+  auto it = CacheAPIWrapperForNvm<C>::allocateInternal(
+      cache_, dItem.poolId(), key, pBlob.origAllocSize, dItem.getCreationTime(),
+      dItem.getExpiryTime(), false);
   if (!it) {
     return nullptr;
   }
@@ -498,8 +547,8 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
 
   // issue the call back to decode and fix up the item if needed.
   if (config_.decodeCb) {
-    config_.decodeCb(
-        EncodeDecodeContext{*it, cache_.viewAsChainedAllocsRange(*it)});
+    config_.decodeCb(EncodeDecodeContext{
+        *it, CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, *it)});
   }
   return it;
 }
@@ -527,7 +576,7 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     return;
   }
 
-  util::LatencyTracker tracker(cache_.nvmRemoveLatency_);
+  util::LatencyTracker tracker(stats().nvmRemoveLatency_);
   const auto shard = getShardForKey(key);
   auto& delContexts = delContexts_[shard];
   auto& ctx = delContexts.createContext(key, std::move(tracker));

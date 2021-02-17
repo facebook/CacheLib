@@ -1,4 +1,6 @@
-#include "cachelib/allocator/memory/tests/TestBase.h"
+#include <cachelib/common/Utils.h>
+#include <folly/Random.h>
+#include <gtest/gtest.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -6,11 +8,8 @@
 #include <random>
 #include <vector>
 
-#include <folly/Random.h>
-#include <gtest/gtest.h>
-
-#include <cachelib/common/Utils.h>
 #include "cachelib/allocator/memory/SlabAllocator.h"
+#include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/shm/ShmManager.h"
 

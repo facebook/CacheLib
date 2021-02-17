@@ -1,11 +1,11 @@
 
+#include <folly/Benchmark.h>
+#include <folly/init/Init.h>
+
 #include <iomanip>
 #include <iostream>
 #include <thread>
 #include <vector>
-
-#include <folly/Benchmark.h>
-#include <folly/init/Init.h>
 
 #include "cachelib/allocator/MMLru.h"
 #include "cachelib/benchmarks/MMTypeBench.h"

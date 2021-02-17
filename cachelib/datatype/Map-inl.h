@@ -314,7 +314,7 @@ typename Map<K, V, C>::InsertOrReplaceResult Map<K, V, C>::insertImpl(
   }
 
   // If wasted space is more than threshold, trigger compaction
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
 

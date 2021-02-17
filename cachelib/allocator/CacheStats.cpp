@@ -1,4 +1,5 @@
 #include "cachelib/allocator/CacheStats.h"
+
 #include "cachelib/allocator/CacheStatsInternal.h"
 
 namespace facebook {
@@ -67,6 +68,21 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numChainedParentItems = numChainedParentItems.get();
   ret.numChainedChildItems = numChainedChildItems.get();
   ret.numNvmAllocAttempts = numNvmAllocAttempts.get();
+
+  ret.allocateLatencyNs = this->allocateLatency_.estimate();
+  ret.moveChainedLatencyNs = this->moveChainedLatency_.estimate();
+  ret.moveRegularLatencyNs = this->moveRegularLatency_.estimate();
+  ret.nvmLookupLatencyNs = this->nvmLookupLatency_.estimate();
+  ret.nvmInsertLatencyNs = this->nvmInsertLatency_.estimate();
+  ret.nvmRemoveLatencyNs = this->nvmRemoveLatency_.estimate();
+  ret.ramEvictionAgeSecs = this->ramEvictionAgeSecs_.estimate();
+  ret.ramItemLifeTimeSecs = this->ramItemLifeTimeSecs_.estimate();
+  ret.nvmSmallLifetimeSecs = this->nvmSmallLifetimeSecs_.estimate();
+  ret.nvmLargeLifetimeSecs = this->nvmLargeLifetimeSecs_.estimate();
+  ret.nvmEvictionSecondsPastExpiry =
+      this->nvmEvictionSecondsPastExpiry_.estimate();
+  ret.nvmEvictionSecondsToExpiry = this->nvmEvictionSecondsToExpiry_.estimate();
+  ret.nvmPutSize = this->nvmPutSize_.estimate();
 
   auto accum = [](const PerPoolClassAtomicCounters& c) {
     uint64_t sum = 0;

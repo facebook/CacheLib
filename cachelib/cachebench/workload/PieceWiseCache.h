@@ -17,58 +17,29 @@ constexpr uint64_t kCachePieceGroupSize = 16777216;
 
 class PieceWiseCacheStats {
  public:
-  // @param numAggregationFields: # of aggregation fields in trace sample
-  // @param statsPerAggField: list of values we track for each aggregation field
-  // Example: numAggregationFields: 2; statsPerAggField: {0: [X, Y]; 1: [Z]}
-  // for these inputs, we track the aggregated stats for samples that have value
-  // X for aggregation field 0, stats for samples that have value Y for field
-  // 0, and stats for samples that have value Z for field 1
-  explicit PieceWiseCacheStats(
-      uint32_t numAggregationFields,
-      const std::unordered_map<uint32_t, std::vector<std::string>>&
-          statsPerAggField);
-
-  // Record both byte-wise and object-wise stats for a get request access
-  void recordAccess(size_t getBytes,
-                    size_t getBodyBytes,
-                    size_t bytesEgress,
-                    const std::vector<std::string>& extraFields);
-
-  // Record cache hit for objects that are not stored in pieces
-  void recordNonPieceHit(size_t hitBytes,
-                         size_t hitBodyBytes,
-                         const std::vector<std::string>& extraFields);
-
-  // Record cache hit for a header piece
-  void recordPieceHeaderHit(size_t pieceBytes,
-                            const std::vector<std::string>& extraFields);
-
-  // Record cache hit for a body piece
-  void recordPieceBodyHit(size_t pieceBytes,
-                          const std::vector<std::string>& extraFields);
-
-  // Record full hit stats for piece wise caching
-  void recordPieceFullHit(size_t headerBytes,
-                          size_t bodyBytes,
-                          const std::vector<std::string>& extraFields);
-
-  // Record total bytes we ingress
-  void recordBytesIngress(size_t bytesIngress);
-
-  util::PercentileStats& getLatencyStatsObject();
-
-  void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
-
- private:
   struct InternalStats {
-    // Byte wise stats: getBytes, getHitBytes and getFullHitBytes record the
-    // bytes of the whole response (body + response header), while
-    // getBodyBytes, getHitBodyBytes and getFullHitBodyBytes record the body
-    // bytes only. getFullHitBytes and getFullHitBodyBytes only include cache
-    // hits of the full object (ie, all pieces), while getHitBytes and
-    // getHitBodyBytes includes partial hits as well.
-    // totalIngressBytes record all bytes we fetch from upstream, and
-    // totalEgressBytes record all bytes we send out to downstream.
+    // Byte wise stats:
+    // getBytes: record both body and header bytes we fetch from cache and
+    //           upstream;
+    // getHitBytes: record both body and header bytes we fetch from cache;
+    // getFullHitBytes: similar to getHitBytes, but only if all bytes for the
+    //                  request are cache hits, i.e., excluding partial hits
+
+    // getBodyBytes: similar to getBytes, but only for body bytes
+    // getHitBodyBytes: similar to getHitBytes, but only for body bytes
+    // getFullHitBodyBytes: similar to getFullHitBytes, but only for body bytes
+    //
+    // totalIngressBytes: record both body and header bytes we fetch from
+    //                    upstream. Note we fetch both the header (which might
+    //                    have been a hit) and the remaining part of missing
+    //                    pieces
+    // totalEgressBytes: record both body and header bytes we send out to
+    //                   downstream. Note we trim the bytes fetched from cache
+    //                   and/or upstream to for egress match request range
+    //
+    // For example, for range request of 0-50k (assuming 64k piece size), we
+    // will fetch the first complete piece, but egress only 0-50k bytes; so
+    // getBytes = 64k+header, getBodyBytes = 64k, totalEgressBytes = 50001
     AtomicCounter getBytes{0};
     AtomicCounter getHitBytes{0};
     AtomicCounter getFullHitBytes{0};
@@ -86,6 +57,52 @@ class PieceWiseCacheStats {
     AtomicCounter objGetFullHits{0};
   };
 
+  // @param numAggregationFields: # of aggregation fields in trace sample
+  // @param statsPerAggField: list of values we track for each aggregation field
+  // Example: numAggregationFields: 2; statsPerAggField: {0: [X, Y]; 1: [Z]}
+  // for these inputs, we track the aggregated stats for samples that have value
+  // X for aggregation field 0, stats for samples that have value Y for field
+  // 0, and stats for samples that have value Z for field 1
+  explicit PieceWiseCacheStats(
+      uint32_t numAggregationFields,
+      const std::unordered_map<uint32_t, std::vector<std::string>>&
+          statsPerAggField);
+
+  // Record both byte-wise and object-wise stats for a get request access
+  void recordAccess(size_t getBytes,
+                    size_t getBodyBytes,
+                    size_t bytesEgress,
+                    const std::vector<std::string>& statsAggFields);
+
+  // Record cache hit for objects that are not stored in pieces
+  void recordNonPieceHit(size_t hitBytes,
+                         size_t hitBodyBytes,
+                         const std::vector<std::string>& statsAggFields);
+
+  // Record cache hit for a header piece
+  void recordPieceHeaderHit(size_t pieceBytes,
+                            const std::vector<std::string>& statsAggFields);
+
+  // Record cache hit for a body piece
+  void recordPieceBodyHit(size_t pieceBytes,
+                          const std::vector<std::string>& statsAggFields);
+
+  // Record full hit stats for piece wise caching
+  void recordPieceFullHit(size_t headerBytes,
+                          size_t bodyBytes,
+                          const std::vector<std::string>& statsAggFields);
+
+  // Record bytes ingress from upstream
+  void recordIngressBytes(size_t ingressBytes,
+                          const std::vector<std::string>& statsAggFields);
+
+  util::PercentileStats& getLatencyStatsObject();
+
+  void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
+
+  const InternalStats& getInternalStats() const { return stats_; }
+
+ private:
   // Overall hit rate stats
   InternalStats stats_;
 
@@ -119,7 +136,8 @@ class PieceWiseCacheStats {
 
   static void recordAccessInternal(InternalStats& stats,
                                    size_t getBytes,
-                                   size_t getBodyBytes);
+                                   size_t getBodyBytes,
+                                   size_t egressBytes);
   static void recordNonPieceHitInternal(InternalStats& stats,
                                         size_t hitBytes,
                                         size_t hitBodyBytes);
@@ -130,16 +148,21 @@ class PieceWiseCacheStats {
   static void recordPieceFullHitInternal(InternalStats& stats,
                                          size_t headerBytes,
                                          size_t bodyBytes);
-
+  static void recordIngressBytesInternal(InternalStats& stats,
+                                         size_t ingressBytes);
   static void renderStatsInternal(const InternalStats& stats,
                                   double elapsedSecs,
                                   std::ostream& out);
 };
 
-// For piecewise caching, a raw request spawns into one or multiple piece
-// requests against the cache. The class wraps the struct Request (which
-// represents a single request against cache), and maintains the raw request
-// (identified by baseKey) with its piece request (identified by pieceKey).
+// For piecewise caching, an object is stored as multiple pieces (one header
+// piece + several body pieces) if its size is larger than cachePieceSize;
+// otherwise, it's stored as a single piece.
+// Therefore, a raw request spawns into one or multiple piece requests against
+// the cache.
+// The class wraps the struct Request (which represents a single request against
+// cache), and maintains the raw request (identified by baseKey) with its piece
+// request (identified by pieceKey).
 struct PieceWiseReqWrapper {
   const std::string baseKey;
   std::string pieceKey;
@@ -150,13 +173,14 @@ struct PieceWiseReqWrapper {
   std::unique_ptr<GenericPieces> cachePieces;
   const RequestRange requestRange;
   // whether current pieceKey is header piece or body piece, mutable
-  bool isHeaderPiece;
+  bool isHeaderPiece{false};
   // response header size
   const size_t headerSize;
   // The size of the complete object, excluding response header.
   const size_t fullObjectSize;
-  // Extra fields for this request sample other than the SampleFields
-  const std::vector<std::string> extraFields;
+  // Additional stats aggregation fields for this request sample other
+  // than the defined SampleFields
+  const std::vector<std::string> statsAggFields;
 
   // Tracker to record the start/end of request. Initialize it at the
   // start of request processing.
@@ -170,21 +194,30 @@ struct PieceWiseReqWrapper {
   // @param rangeStart: start of the range if it's range request
   // @param rangeEnd: end of the range if it's range request
   // @param ttl: ttl of the content for caching
-  // @param extraFieldV: Extra fields used for stats aggregation
-  explicit PieceWiseReqWrapper(uint64_t cachePieceSize,
-                               uint64_t reqId,
-                               folly::StringPiece key,
-                               size_t fullContentSize,
-                               size_t responseHeaderSize,
-                               folly::Optional<uint64_t> rangeStart,
-                               folly::Optional<uint64_t> rangeEnd,
-                               uint32_t ttl,
-                               std::vector<std::string>&& extraFieldV);
+  // @param statsAggFieldV: extra fields used for stats aggregation
+  // @param admFeatureM: features map for admission policy
+  explicit PieceWiseReqWrapper(
+      uint64_t cachePieceSize,
+      uint64_t reqId,
+      OpType opType,
+      folly::StringPiece key,
+      size_t fullContentSize,
+      size_t responseHeaderSize,
+      folly::Optional<uint64_t> rangeStart,
+      folly::Optional<uint64_t> rangeEnd,
+      uint32_t ttl,
+      std::vector<std::string>&& statsAggFieldV,
+      std::unordered_map<std::string, std::string>&& admFeatureM);
+
+  PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };
 
 // The class adapts/updates the PieceWiseReqWrapper to its next operation and/or
-// next piece based on the piecewise logic, and maintains the
-// PieceWiseCacheStats for all processings.
+// next piece based on the piecewise logic, and maintains PieceWiseCacheStats
+// for all processings.
+// For piecewise caching, we always fetch/store a complete piece from/to
+// the cache, and then trim the fetched pieces accordingly for egress to match
+// the request range.
 class PieceWiseCacheAdapter {
  public:
   // @param maxCachePieces: maximum # of cache pieces we store for a single
@@ -219,8 +252,6 @@ class PieceWiseCacheAdapter {
   // next operation, and record the stats.
   // @return true if all ops for the request are done.
   bool updateNonPieceProcessing(PieceWiseReqWrapper& rw, OpResultType result);
-
-  void recordIngressBytes(const PieceWiseReqWrapper& rw, OpResultType result);
 
   PieceWiseCacheStats stats_;
 

@@ -1,16 +1,15 @@
 #pragma once
 
+#include <folly/Random.h>
+
 #include <ctime>
 #include <fstream>
 #include <iostream>
-
-#include <folly/Random.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Request.h"
-
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/ReplayGenerator.h"
@@ -26,7 +25,7 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-template <typename Allocator, typename Generator = WorkloadGenerator<>>
+template <typename Allocator, typename Generator = WorkloadGenerator>
 class OutputStressor : public Stressor {
  public:
   using CacheT = Cache<Allocator>;

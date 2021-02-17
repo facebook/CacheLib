@@ -1,8 +1,8 @@
+#include "cachelib/navy/common/Buffer.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
-
-#include "cachelib/navy/common/Buffer.h"
 
 namespace facebook {
 namespace cachelib {

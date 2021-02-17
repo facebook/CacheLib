@@ -54,6 +54,35 @@ struct DistributionConfig : public JSONConfig {
   double loneSetRatio{0.0};
 
   bool usesChainedItems() const { return addChainedRatio > 0; }
+
+  // for continuous value sizes, the probability is expressed per interval
+  // instead of per value size range.
+  bool usesDiscreteValueSizes() const {
+    return valSizeRange.size() == valSizeRangeProbability.size();
+  }
+
+  bool usesDiscretePopularity() const {
+    return popularityBuckets.size() && popularityWeights.size();
+  }
+};
+
+struct MLAdmissionConfig : public JSONConfig {
+  MLAdmissionConfig() {}
+
+  explicit MLAdmissionConfig(const folly::dynamic& configJson);
+
+  std::string modelPath;
+
+  // Map from feature name to its corresponding index in sample fields.
+  // Note these features could be in defined fields, aggregation Fields,
+  // or ExtraFields.
+  // Support two kinds of features:
+  // numeric features, categorical features.
+  std::unordered_map<std::string, uint32_t> numericFeatures;
+  std::unordered_map<std::string, uint32_t> categoricalFeatures;
+
+  double targetRecall;
+  size_t admitCategory;
 };
 
 struct ReplayGeneratorConfig : public JSONConfig {
@@ -78,15 +107,22 @@ struct ReplayGeneratorConfig : public JSONConfig {
   uint64_t relaxedSerialIntervalMs{500};
 
   // # of extra fields in trace sample that we track broken down stats.
-  // These fields are placed after existing fields:
+  // These fields are placed after defined fields:
   // https://fburl.com/diffusion/hl3qerc9
   uint32_t numAggregationFields{0};
+
+  // # of extra fields after the defined fields and numAggregationFields in
+  // trace sample. E.g., additional ML features can be put here
+  uint32_t numExtraFields{0};
+
   // For each aggregation field, we track the statistics broken down by
   // specific aggregation values. this map specifies the values for which
   // stats are aggregated by per field.
   // Mapping: field index in the aggregation fields (starting at 0) -->
   // list of values we track for that field
   std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
+
+  std::shared_ptr<MLAdmissionConfig> mlAdmissionConfig;
 
   SerializeMode getSerializationMode() const;
 };
@@ -101,10 +137,6 @@ struct StressorConfig : public JSONConfig {
   // workload generator which samples from some distribution
   // but "replay" allows replaying a production trace, for example.
   std::string generator{};
-  // When using sampling based methods, which
-  // distributions to use.  Default is RangeDistribution
-  // which uses specified piecewise constant distributions
-  std::string distribution{};
 
   // Valid when generator is replay generator
   ReplayGeneratorConfig replayGeneratorConfig;
@@ -180,11 +212,11 @@ class CacheBenchConfig {
   explicit CacheBenchConfig(const std::string& path);
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
-  const StressorConfig& getTestConfig() const { return testConfig_; }
+  const StressorConfig& getStressorConfig() const { return stressorConfig_; }
 
  private:
   CacheConfig cacheConfig_;
-  StressorConfig testConfig_;
+  StressorConfig stressorConfig_;
 };
 
 } // namespace cachebench

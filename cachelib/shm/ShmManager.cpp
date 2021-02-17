@@ -1,11 +1,11 @@
 #include "cachelib/shm/ShmManager.h"
 
-#include <sys/stat.h>
-#include <fstream>
-#include <vector>
-
 #include <folly/ScopeGuard.h>
 #include <folly/hash/Hash.h>
+#include <sys/stat.h>
+
+#include <fstream>
+#include <vector>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"

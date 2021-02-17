@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/lang/Bits.h>
+#include <folly/logging/xlog.h>
+
 #include <cassert>
 #include <chrono>
 #include <memory>
-
-#include <folly/lang/Bits.h>
-#include <folly/logging/xlog.h>
 
 #include "cachelib/navy/common/CompilerUtils.h"
 

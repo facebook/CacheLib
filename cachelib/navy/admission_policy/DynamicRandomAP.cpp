@@ -1,17 +1,25 @@
-#include <algorithm>
-#include <shared_mutex>
-#include <utility>
+#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 
 #include <folly/Format.h>
 #include <folly/hash/Hash.h>
 #include <folly/lang/Bits.h>
 
-#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
+#include <algorithm>
+#include <shared_mutex>
+#include <utility>
+
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+namespace {
+// Clamp the input into range [lower, upper]
+double clamp(double input, double lower, double upper) {
+  return std::min(std::max(input, lower), upper);
+}
+} // namespace
 DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
   if (targetRate == 0) {
     throw std::invalid_argument{folly::sformat(
@@ -47,6 +55,7 @@ DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
 
 DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
     : targetRate_{config.targetRate},
+      maxRate_{config.maxRate},
       updateInterval_{config.updateInterval},
       baseProbabilityMultiplier_{folly::findLastSet(config.baseSize)},
       probabilitySeed_{config.probabilitySeed},
@@ -59,9 +68,10 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
           config.deterministicKeyHashSuffixLength} {
   reset();
   XLOGF(INFO,
-        "DynamicRandomAP: target rate {} byte/s, update interval {} s",
-        targetRate_,
-        updateInterval_.count());
+        "DynamicRandomAP: target rate {} byte/s, update interval {} s. "
+        "maxChange {}, minChange {}, kUpperBound_ {}, kLowerBound_ {}.",
+        targetRate_, updateInterval_.count(), maxChange_, minChange_,
+        kUpperBound_, kLowerBound_);
 }
 
 bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
@@ -76,8 +86,9 @@ bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
     }
   }
 
-  auto probability = getBaseProbability(hk.key().size() + value.size()) *
-                     params.probabilityFactor;
+  auto baseProb = getBaseProbability(hk.key().size() + value.size());
+  baseProbStats_.trackValue(baseProb * 100);
+  auto probability = baseProb * params.probabilityFactor;
   probability = std::max(0.0, std::min(1.0, probability));
 
   return probability == 1 || genF(hk) < probability;
@@ -115,11 +126,18 @@ void DynamicRandomAP::update() {
 void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
   constexpr uint64_t kSecondsInDay{3600 * 24};
 
+  auto updateTimeDelta = (curTime - params_.updateTime).count();
+  // in case this is the first update, or we are in unit test where curTime is
+  // set arbitrarily.
+  if (updateTimeDelta <= 0) {
+    updateTimeDelta = updateInterval_.count();
+  }
+
   params_.updateTime = curTime;
   auto bytesWritten = fnBytesWritten_();
-  auto curRate =
-      (bytesWritten - params_.bytesWrittenLastUpdate) / updateInterval_.count();
-  if (curRate == 0) {
+  params_.observedCurRate_ =
+      (bytesWritten - params_.bytesWrittenLastUpdate) / updateTimeDelta;
+  if (params_.observedCurRate_ == 0) {
     return;
   }
 
@@ -131,21 +149,34 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
     // currently written @bytesWritten.
     curTargetRate = (targetWrittenTomorrow - bytesWritten) / kSecondsInDay;
   }
+
+  if (curTargetRate > maxRate_) {
+    curTargetRate = maxRate_;
+    XLOGF(INFO,
+          "max write rate {} will be used because target current write rate {} "
+          "exceeds it.",
+          maxRate_, curTargetRate);
+  }
   params_.curTargetRate = curTargetRate;
-  params_.probabilityFactor *= clampFactorChange(
-      fdiv(static_cast<double>(curTargetRate), static_cast<double>(curRate)));
+
+  auto rawProbFactor = fdiv(static_cast<double>(curTargetRate),
+                            static_cast<double>(params_.observedCurRate_));
+  params_.probabilityFactor =
+      clampFactor(params_.probabilityFactor * clampFactorChange(rawProbFactor));
+  XLOG_EVERY_MS(INFO, 60000)
+      << "observed current write rate = " << params_.observedCurRate_
+      << ", target current rate = " << curTargetRate
+      << " rawProbFactor = " << rawProbFactor
+      << ", probFactor = " << params_.probabilityFactor;
   params_.bytesWrittenLastUpdate = bytesWritten;
 }
 
 double DynamicRandomAP::clampFactorChange(double change) const {
-  // Avoid changing probability factor too drastically
-  if (change < minChange_) {
-    return minChange_;
-  }
-  if (change > maxChange_) {
-    return maxChange_;
-  }
-  return change;
+  return clamp(change, minChange_, maxChange_);
+}
+
+double DynamicRandomAP::clampFactor(double factor) const {
+  return clamp(factor, kLowerBound_, kUpperBound_);
 }
 
 double DynamicRandomAP::getBaseProbability(uint64_t size) const {
@@ -162,9 +193,16 @@ DynamicRandomAP::ThrottleParams DynamicRandomAP::getThrottleParams() const {
 
 void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   auto params = getThrottleParams();
-  visitor("navy_ap_write_rate_target", static_cast<double>(targetRate_));
-  visitor("navy_ap_write_rate_current",
+  visitor("navy_ap_write_rate_target_configured",
+          static_cast<double>(targetRate_));
+  visitor("navy_ap_write_rate_max_configured", static_cast<double>(maxRate_));
+  visitor("navy_ap_write_rate_adjusted_target",
           static_cast<double>(params.curTargetRate));
+  visitor("navy_ap_prob_factor_x100", params_.probabilityFactor * 100);
+  baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_{}_{}",
+                                        "baseProb_x100");
+  visitor("navy_ap_write_rate_observed",
+          static_cast<double>(params_.observedCurRate_));
 }
 } // namespace navy
 } // namespace cachelib

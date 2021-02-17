@@ -49,7 +49,7 @@
   },
   "test_config": {
     
-    "distribution": "range",
+   
     
     "numOps": 20000000,
     "numThreads": 300,

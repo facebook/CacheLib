@@ -1,7 +1,7 @@
-#include "cachelib/cachebench/consistency/ShortThreadId.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/cachebench/consistency/ShortThreadId.h"
 
 namespace facebook {
 namespace cachelib {

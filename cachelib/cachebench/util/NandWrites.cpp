@@ -1,14 +1,14 @@
 #include "cachelib/cachebench/util/NandWrites.h"
 
-#include <algorithm>
-#include <string>
-#include <vector>
-
 #include <folly/Format.h>
 #include <folly/String.h>
 #include <folly/Subprocess.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 namespace facebook {
 namespace hw {

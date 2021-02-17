@@ -1,6 +1,6 @@
-#include "cachelib/navy/testing/BufferGen.h"
-
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/testing/BufferGen.h"
 
 namespace facebook {
 namespace cachelib {

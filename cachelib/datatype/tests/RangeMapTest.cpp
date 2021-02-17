@@ -1,14 +1,12 @@
-#include "cachelib/datatype/RangeMap.h"
-
 #include <folly/Random.h>
+
+#include <algorithm>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/tests/TestBase.h"
-#include "cachelib/datatype/tests/DataTypeTest.h"
-
 #include "cachelib/datatype/Buffer.h"
-
-#include <algorithm>
+#include "cachelib/datatype/RangeMap.h"
+#include "cachelib/datatype/tests/DataTypeTest.h"
 
 namespace facebook {
 namespace cachelib {
@@ -303,6 +301,9 @@ TEST(RangeMap, Basic) {
   auto rm = RM::create(*cache, 0, "range_map");
   EXPECT_FALSE(rm.isNullItemHandle());
 
+  EXPECT_EQ(0, rm.wastedBytes());
+  EXPECT_EQ(160, rm.remainingBytes());
+
   auto rm2 = std::move(rm);
   EXPECT_FALSE(rm2.isNullItemHandle());
 
@@ -566,6 +567,26 @@ TEST(RangeMap, RangeLookupApprox) {
     i++;
   }
   EXPECT_EQ(10, i);
+}
+
+TEST(RangeMap, LargeMap) {
+  using RM = RangeMap<uint64_t, uint64_t, LruAllocator>;
+
+  auto cache = createCache();
+
+  // Allocate everything from cache to we will fail to allocate range map
+  std::vector<LruAllocator::ItemHandle> handles;
+  for (int i = 0;; i++) {
+    auto handle = cache->allocate(0, folly::sformat("key_{}", i), 100'000);
+    if (!handle) {
+      break;
+    }
+    handles.push_back(std::move(handle));
+  }
+
+  auto rm = RM::create(*cache, 0, "range_map", 100'000 /* entries */,
+                       1024 * 1024ul - 100 /* storage bytes */);
+  EXPECT_TRUE(rm.isNullItemHandle());
 }
 } // namespace tests
 } // namespace cachelib

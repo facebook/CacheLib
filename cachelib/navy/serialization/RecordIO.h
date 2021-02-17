@@ -1,9 +1,9 @@
 #pragma once
 
+#include <folly/io/IOBufQueue.h>
+
 #include <memory>
 #include <stdexcept>
-
-#include <folly/io/IOBufQueue.h>
 
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/common/Device.h"

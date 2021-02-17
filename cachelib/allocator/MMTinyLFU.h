@@ -62,13 +62,13 @@ class MMTinyLFU {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
+        : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
+                 *configState.updateOnWrite_ref(),
                  *configState.updateOnRead_ref(),
                  *configState.tryLockUpdate_ref(),
-                 configState.windowToCacheSizeRatio,
-                 configState.tinySizePercent) {}
+                 *configState.windowToCacheSizeRatio_ref(),
+                 *configState.tinySizePercent_ref()) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
@@ -215,7 +215,7 @@ class MMTinyLFU {
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
     using CompressedPtr = typename T::CompressedPtr;
-    using Flags = typename T::Flags;
+    using RefFlags = typename T::Flags;
 
    public:
     Container() = default;
@@ -435,8 +435,8 @@ class MMTinyLFU {
     }
 
    private:
-    EvictionAgeStat getEvictionAgeStatLocked(uint64_t projectedLength) const
-        noexcept;
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
 
     static Time getUpdateTime(const T& node) noexcept {
       return (node.*HookPtr).getUpdateTime();
@@ -478,29 +478,29 @@ class MMTinyLFU {
     void removeLocked(T& node) noexcept;
 
     static bool isTiny(const T& node) noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_0>();
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
 
     static bool isAccessed(const T& node) noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_1>();
+      return node.template isFlagSet<RefFlags::kMMFlag1>();
     }
 
     // Bit MM_BIT_0 is used to record if the item is in tiny cache.
     static void markTiny(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_0>();
+      node.template setFlag<RefFlags::kMMFlag0>();
     }
     static void unmarkTiny(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_0>();
+      node.template unSetFlag<RefFlags::kMMFlag0>();
     }
 
     // Bit MM_BIT_1 is used to record if the item has been accessed since being
     // written in cache. Unaccessed items are ignored when determining projected
     // update time.
     static void markAccessed(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_1>();
+      node.template setFlag<RefFlags::kMMFlag1>();
     }
     static void unmarkAccessed(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_1>();
+      node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
     // Initial cache capacity estimate for count-min-sketch
@@ -543,6 +543,9 @@ class MMTinyLFU {
 
     // The next time to reconfigure the container.
     std::atomic<Time> nextReconfigureTime_{};
+
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
 
     // Config for this lru.
     // Write access to the MMTinyLFU Config is serialized.

@@ -1,8 +1,9 @@
+#include <folly/Benchmark.h>
+
 #include <atomic>
 #include <thread>
 #include <vector>
 
-#include <folly/Benchmark.h>
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/FastStats.h"
 

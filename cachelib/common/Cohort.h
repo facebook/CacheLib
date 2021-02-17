@@ -1,8 +1,8 @@
 #pragma once
 
-#include <atomic>
-
 #include <folly/logging/xlog.h>
+
+#include <atomic>
 
 namespace facebook {
 namespace cachelib {

@@ -1,4 +1,5 @@
 #include "cachelib/allocator/tests/SimpleRebalancingTest.h"
+
 #include "cachelib/allocator/CacheAllocator.h"
 
 namespace facebook {

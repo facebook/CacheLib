@@ -1,7 +1,7 @@
+#include <gtest/gtest.h>
+
 #include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/navy/serialization/Serialization.h"
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {
@@ -15,7 +15,7 @@ TEST(Serialization, Serialize) {
   for (auto& entry : *bucket.entries_ref()) {
     entry.key_ref() = i;
     entry.address_ref() = i * 10;
-    entry.size_ref() = i * 100;
+    entry.sizeHint_ref() = i * 100;
     entry.totalHits_ref() = i + 1;
     entry.currentHits_ref() = i + 2;
     ++i;
@@ -41,7 +41,7 @@ TEST(Serialization, Serialize) {
   for (auto& entry : *deserializedBucket.entries_ref()) {
     EXPECT_EQ(i, *entry.key_ref());
     EXPECT_EQ(i * 10, *entry.address_ref());
-    EXPECT_EQ(i * 100, *entry.size_ref());
+    EXPECT_EQ(i * 100, *entry.sizeHint_ref());
     EXPECT_EQ(i + 1, *entry.totalHits_ref());
     EXPECT_EQ(i + 2, *entry.currentHits_ref());
     EXPECT_FALSE(rr->isEnd());

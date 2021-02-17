@@ -74,44 +74,31 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   // TODO: Remove the empty() check once we label workload-based configs
   // properly
   if (config.generator.empty() || config.generator == "workload") {
-    if (config.distribution == "range") {
-      return std::make_unique<WorkloadGenerator<RangeDistribution>>(config);
-    } else if (config.distribution == "normal") {
-      return std::make_unique<WorkloadGenerator<NormalDistribution>>(config);
-    } else if (config.distribution == "workload" ||
-               // TODO: Remove the empty() check once we label workload-based
-               // configs properly
-               config.distribution.empty()) {
-      return std::make_unique<WorkloadGenerator<>>(config);
-    }
+    return std::make_unique<WorkloadGenerator>(config);
   } else if (config.generator == "online") {
-    if (config.distribution == "range") {
-      return std::make_unique<OnlineGenerator<RangeDistribution>>(config);
-    } else if (config.distribution == "normal") {
-      return std::make_unique<OnlineGenerator<NormalDistribution>>(config);
-    } else if (config.distribution == "workload" ||
-               config.distribution.empty()) {
-      return std::make_unique<OnlineGenerator<>>(config);
-    }
+    return std::make_unique<OnlineGenerator>(config);
+
   } else {
     throw std::invalid_argument("Invalid config");
   }
-  // WorkloadGenerator as default
-  return std::make_unique<WorkloadGenerator<>>(config);
 }
 } // namespace
 
 std::unique_ptr<Stressor> Stressor::makeStressor(
-    CacheConfig cacheConfig, StressorConfig stressorConfig) {
+    CacheConfig cacheConfig,
+    StressorConfig stressorConfig,
+    std::unique_ptr<StressorAdmPolicy> admPolicy) {
   if (stressorConfig.mode == "stress") {
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
       return std::make_unique<CacheStressor<LruAllocator>>(
-          cacheConfig, stressorConfig, std::move(generator));
+          cacheConfig, stressorConfig, std::move(generator),
+          std::move(admPolicy));
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
-          cacheConfig, stressorConfig, std::move(generator));
+          cacheConfig, stressorConfig, std::move(generator),
+          std::move(admPolicy));
     }
   }
   if (stressorConfig.mode == "stdout") {

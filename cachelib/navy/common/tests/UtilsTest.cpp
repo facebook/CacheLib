@@ -1,6 +1,6 @@
-#include "cachelib/navy/common/Utils.h"
-
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {

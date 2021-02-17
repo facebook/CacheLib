@@ -1,8 +1,8 @@
 
+#include <folly/Format.h>
+
 #include <cmath>
 #include <limits>
-
-#include <folly/Format.h>
 
 #include "cachelib/common/CountMinSketch.h"
 #include "cachelib/common/Hash.h"
@@ -11,6 +11,7 @@
 namespace facebook {
 namespace cachelib {
 namespace util {
+namespace detail {
 template <typename UINT>
 CountMinSketchBase<UINT>::CountMinSketchBase(double error,
                                              double probability,
@@ -122,6 +123,7 @@ uint64_t CountMinSketchBase<UINT>::getIndex(uint32_t hashNum,
                   width_;
   return hashNum * width_ + rowIndex;
 }
+} // namespace detail
 } // namespace util
 } // namespace cachelib
 } // namespace facebook

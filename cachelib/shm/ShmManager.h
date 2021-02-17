@@ -1,12 +1,12 @@
 #pragma once
 
+#include <folly/File.h>
+
 #include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <folly/File.h>
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/PosixShmSegment.h"

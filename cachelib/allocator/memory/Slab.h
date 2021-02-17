@@ -1,15 +1,13 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+#include <gtest/gtest.h>
+
 #include <cstddef>
 #include <cstdint>
-
 #include <functional>
 #include <type_traits>
 #include <vector>
-
-#include <folly/logging/xlog.h>
-
-#include <gtest/gtest.h>
 
 #include "cachelib/common/CompilerUtils.h"
 

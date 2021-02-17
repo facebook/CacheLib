@@ -309,8 +309,8 @@ void* AllocationClass::getAllocForIdx(const Slab* slab, size_t idx) const {
   return slab->memoryAtOffset(idx * allocationSize_);
 }
 
-size_t AllocationClass::getAllocIdx(const Slab* slab, void* alloc) const
-    noexcept {
+size_t AllocationClass::getAllocIdx(const Slab* slab,
+                                    void* alloc) const noexcept {
   const size_t offset = reinterpret_cast<uintptr_t>(alloc) -
                         reinterpret_cast<uintptr_t>(slab->memoryAtOffset(0));
   XDCHECK_EQ(0u, offset % allocationSize_);

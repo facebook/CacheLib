@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cstdint>
-
 #include <folly/Random.h>
+
+#include <cstdint>
 
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "cachelib/navy/common/Device.h"
+#include <gmock/gmock.h>
 
 #include <cassert>
 #include <memory>
 
-#include <gmock/gmock.h>
+#include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {

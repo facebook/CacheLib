@@ -1,5 +1,8 @@
 #pragma once
 
+#include <folly/lang/Aligned.h>
+#include <folly/synchronization/DistributedMutex.h>
+
 #include <atomic>
 #include <mutex>
 #include <unordered_map>
@@ -11,9 +14,6 @@
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
-
-#include <folly/lang/Aligned.h>
-#include <folly/synchronization/DistributedMutex.h>
 
 namespace facebook {
 namespace cachelib {
@@ -241,11 +241,10 @@ class AllocationClass {
   //
   // @throw exception::SlabReleaseAborted if slab release is aborted due to
   //        shouldAbortFn returning true.
-  SlabReleaseContext startSlabRelease(SlabReleaseMode mode,
-                                      const void* hint,
-                                      SlabReleaseAbortFn shouldAbortFn = []() {
-                                        return false;
-                                      });
+  SlabReleaseContext startSlabRelease(
+      SlabReleaseMode mode,
+      const void* hint,
+      SlabReleaseAbortFn shouldAbortFn = []() { return false; });
 
   // Aborting a previously started SlabRelease will not restore already
   // freed allocations. So the end state may not be exactly same as

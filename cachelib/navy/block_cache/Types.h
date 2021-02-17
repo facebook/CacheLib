@@ -1,9 +1,9 @@
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <cassert>
 #include <ostream>
-
-#include <folly/logging/xlog.h>
 
 #include "cachelib/navy/common/CompilerUtils.h"
 

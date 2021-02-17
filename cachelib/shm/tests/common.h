@@ -1,13 +1,12 @@
 #pragma once
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-
+#include <gtest/gtest.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 
-#include <gtest/gtest.h>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"

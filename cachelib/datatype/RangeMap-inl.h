@@ -201,8 +201,15 @@ RangeMap<K, V, C>::RangeMap(Cache& cache,
                             uint32_t numBytes)
     : cache_{&cache},
       handle_{cache_->allocate(
-          pid, key, BinaryIndex::computeStorageSize(numEntries))},
-      bufferManager_{*cache_, handle_, numBytes} {
+          pid, key, BinaryIndex::computeStorageSize(numEntries))} {
+  if (!handle_) {
+    throw cachelib::exception::OutOfMemory(
+        folly::sformat("Failed allocate index for range map. Key: {}, "
+                       "numEntries: {}, numBytes: {}",
+                       key, numEntries, numBytes));
+  }
+
+  bufferManager_ = BufferManager{*cache_, handle_, numBytes};
   BinaryIndex::createNewIndex(handle_->getMemory(), numEntries);
 }
 
@@ -253,7 +260,7 @@ bool RangeMap<K, V, C>::remove(const EntryKey& key) {
   }
 
   bufferManager_.remove(addr);
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
   return true;
@@ -264,7 +271,7 @@ uint32_t RangeMap<K, V, C>::removeBefore(const EntryKey& key) {
   auto* index = handle_->template getMemoryAs<BinaryIndex>();
   auto count = index->removeBefore(
       key, [this](auto addr) { bufferManager_.remove(addr); });
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
   return count;
@@ -397,7 +404,7 @@ typename RangeMap<K, V, C>::InsertOrReplaceResult
 RangeMap<K, V, C>::insertOrReplaceInternal(const EntryKey& key,
                                            const EntryValue& value) {
   // If wasted space is more than threshold, trigger compaction
-  if (bufferManager_.wastedSpacePct() > kWastedSpacePctThreshold) {
+  if (bufferManager_.wastedBytesPct() > kWastedBytesPctThreshold) {
     compact();
   }
 
@@ -441,7 +448,10 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
       cache_->allocate(pid, handle_->getKey(),
                        BinaryIndex::computeStorageSize(newIndexCapacity));
   if (!newHandle) {
-    throw std::bad_alloc{};
+    throw cachelib::exception::OutOfMemory(
+        folly::sformat("Unable to clone the index during range map expansion. "
+                       "Parent item: {}",
+                       handle_->toString()));
   }
   auto* newIndex =
       BinaryIndex::createNewIndex(newHandle->getMemory(), newIndexCapacity);
@@ -452,7 +462,10 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
   // it will still be valid and can still be accssed.
   auto newBufferManager = bufferManager_.clone(newHandle);
   if (newBufferManager.empty()) {
-    throw std::bad_alloc{};
+    throw cachelib::exception::OutOfMemory(
+        folly::sformat("Unable to clone the buffers associated with range map. "
+                       "Parent item: {}",
+                       handle_->toString()));
   }
 
   auto addr = newBufferManager.allocate(allocSize);
@@ -461,7 +474,10 @@ detail::BufferAddr RangeMap<K, V, C>::cloneIndexAndAllocate(uint32_t allocSize,
       addr = newBufferManager.allocate(allocSize);
     }
     if (!addr) {
-      throw std::bad_alloc{};
+      throw cachelib::exception::OutOfMemory(
+          folly::sformat("Unable to allocate for a new entry for range map. "
+                         "Alloc size: {}, Parent item: {}",
+                         allocSize, handle_->toString()));
     }
   }
 

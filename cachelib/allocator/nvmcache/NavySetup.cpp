@@ -1,10 +1,11 @@
 #include "cachelib/allocator/nvmcache/NavySetup.h"
-#include "cachelib/navy/Factory.h"
-#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
-#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 #include <folly/File.h>
 #include <folly/logging/xlog.h>
+
+#include "cachelib/navy/Factory.h"
+#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
@@ -20,7 +21,6 @@ constexpr folly::StringPiece kAdmissionWriteRate{"dipper_navy_adm_write_rate"};
 constexpr folly::StringPiece kAdmissionSuffixLen{
     "dipper_navy_adm_suffix_length"};
 constexpr folly::StringPiece kBlockSize{"dipper_navy_block_size"};
-constexpr folly::StringPiece kDirectIO{"dipper_navy_direct_io"};
 constexpr folly::StringPiece kFileName{"dipper_navy_file_name"};
 constexpr folly::StringPiece kRAIDPaths{"dipper_navy_raid_paths"};
 constexpr folly::StringPiece kDeviceMetadataSize{"dipper_navy_metadata_size"};
@@ -56,6 +56,10 @@ constexpr folly::StringPiece kNumInMemBuffers{"dipper_navy_num_in_mem_buffers"};
 constexpr folly::StringPiece kNavyDataChecksum{"dipper_navy_data_checksum"};
 constexpr folly::StringPiece kSegmentedFifoSegmentRatio{
     "dipper_navy_sfifo_segment_ratio"};
+constexpr folly::StringPiece kNavyItemBaseSize{
+    "dipper_navy_dynamic_random_base_size"};
+constexpr folly::StringPiece kNavyMaxWriteRate{
+    "dipper_navy_dynamic_random_max_write_rate"};
 
 uint64_t megabytesToBytes(uint64_t mb) { return mb << 20; }
 
@@ -83,18 +87,29 @@ bool usesRaidFiles(const folly::dynamic& options) {
 // Throws std::system_error if failed.
 folly::File openCacheFile(const std::string& fileName,
                           uint64_t size,
-                          bool directIO,
                           bool truncate) {
   XLOG(INFO) << "Cache file: " << fileName << " size: " << size
-             << " direct IO: " << directIO << " truncate: " << truncate;
+             << " truncate: " << truncate;
   if (fileName.empty()) {
     throw std::invalid_argument("File name is empty");
   }
+
   int flags{O_RDWR | O_CREAT};
-  if (directIO) {
-    flags |= O_DIRECT;
+  // try opening with o_direct. For tests, we might get a file on tmpfs that
+  // might not support o_direct. Hence, we might have to default to avoiding
+  // o_direct in those cases.
+  folly::File f;
+  try {
+    f = folly::File(fileName.c_str(), flags | O_DIRECT);
+  } catch (const std::system_error& e) {
+    if (e.code().value() == EINVAL) {
+      XLOG(ERR) << "Failed to open with o-direct, trying without. Error: "
+                << e.what();
+      f = folly::File(fileName.c_str(), flags);
+    }
   }
-  auto f = folly::File(fileName.c_str(), flags);
+  XDCHECK_GE(f.fd(), 0);
+
   // TODO detect if file exists and is of expected size. If not,
   // automatically fallocate the file or ftruncate the file.
   if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
@@ -104,7 +119,7 @@ folly::File openCacheFile(const std::string& fileName,
         folly::sformat("failed fallocate with size {}", size));
   }
 
-  if (directIO && ::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
+  if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
     throw std::system_error(errno, std::system_category(),
                             "Error fadvising cache file");
   }
@@ -212,6 +227,7 @@ void setupCacheProtos(const folly::dynamic& options,
       blockCacheSize -= cacheSizeAdjustment;
       blockCacheOffset = adjustedBlockCacheOffset;
     }
+    blockCacheSize = alignDown(blockCacheSize, regionSize);
 
     XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
                << ", block cache size: " << blockCacheSize;
@@ -281,8 +297,15 @@ void setAdmissionPolicy(const folly::dynamic& options,
     size_t admissionSuffixLen = options.get_ptr(kAdmissionSuffixLen)
                                     ? options[kAdmissionSuffixLen].getInt()
                                     : 0;
+    uint32_t itemBaseSize = options.get_ptr(kNavyItemBaseSize)
+                                ? options[kNavyItemBaseSize].getInt()
+                                : 0;
+    uint64_t maxRate = options.get_ptr(kNavyMaxWriteRate)
+                           ? options[kNavyMaxWriteRate].getInt()
+                           : 0;
     proto.setDynamicRandomAdmissionPolicy(options[kAdmissionWriteRate].getInt(),
-                                          admissionSuffixLen);
+                                          admissionSuffixLen, itemBaseSize,
+                                          maxRate);
   } else {
     throw std::invalid_argument{folly::sformat("invalid policy name {}", name)};
   }
@@ -342,10 +365,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     for (const auto& path : paths) {
       folly::File f;
       try {
-        f = openCacheFile(path,
-                          fdSize,
-                          options[kDirectIO].getBool(),
-                          options[kTruncateFile].getBool());
+        f = openCacheFile(path, fdSize, options[kTruncateFile].getBool());
       } catch (const std::exception& e) {
         XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
                   << ". Errno: " << errno;
@@ -376,7 +396,6 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     try {
       f = openCacheFile(fileName->getString(),
                         singleFileSize,
-                        options[kDirectIO].getBool(),
                         options[kTruncateFile].getBool());
     } catch (const std::exception& e) {
       XLOG(ERR) << "Exception in openCacheFile: " << e.what();
@@ -427,7 +446,6 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
 void populateDefaultNavyOptions(folly::dynamic& options) {
   // default values for some of the options if they are not already present.
   folly::dynamic defs = folly::dynamic::object;
-  defs[kDirectIO] = true;
   defs[kBlockSize] = 4096;
   defs[kRegionSize] = 16 * 1024 * 1024;
   defs[kLru] = true;

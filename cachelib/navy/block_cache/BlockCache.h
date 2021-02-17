@@ -70,7 +70,7 @@ class BlockCache final : public Engine {
   BlockCache& operator=(const BlockCache&) = delete;
   ~BlockCache() override = default;
 
-  Status insert(HashedKey hk, BufferView value, InsertOptions opt) override;
+  Status insert(HashedKey hk, BufferView value) override;
   Status lookup(HashedKey hk, Buffer& value) override;
   Status remove(HashedKey hk) override;
 
@@ -96,9 +96,14 @@ class BlockCache final : public Engine {
   // if needed.
   static constexpr uint32_t kMinAllocAlignSize = 512;
 
+  // This is the maximum size of an item that can be cached in block cache.
+  static constexpr uint32_t kMaxItemSize =
+      kMinAllocAlignSize *
+      static_cast<uint32_t>(std::numeric_limits<uint16_t>::max());
+
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 11;
+  static constexpr uint32_t kFormatVersion = 12;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache
@@ -137,12 +142,22 @@ class BlockCache final : public Engine {
   // Read and write are time consuming. It doesn't worth inlining them from
   // the performance point of view, but makes sense to track them for perf:
   // especially portion on CPU time spent in std::memcpy.
+  // @param addr        Address to write this entry into
+  // @param slotSize    Number of bytes this entry will take up on the device
+  // @param hk          Key of the entry
+  // @param value       Payload of the entry
   Status writeEntry(RelAddress addr,
                     uint32_t slotSize,
                     HashedKey hk,
                     BufferView value);
+  // @param readDesc      Descriptor for reading. This must be valid
+  // @param addrEnd       End of the entry since the item layout is backward
+  // @param approxSize    Approximate size since we got this size from index
+  // @param expected      We expect the entry's key to match with our key
+  // @param value         We will write the payload into this buffer
   Status readEntry(const RegionDescriptor& readDesc,
                    RelAddress addrEnd,
+                   uint32_t approxSize,
                    HashedKey expected,
                    Buffer& value);
 
@@ -167,6 +182,18 @@ class BlockCache final : public Engine {
   // returns size aligned to alloc alignment size
   uint32_t getAlignedSize(uint32_t size) const {
     return powTwoAlign(size, allocAlignSize_);
+  }
+
+  // Size hint is computed by aligning size up to kMinAllocAlignSize,
+  // and then divide by it. It is loosely compressing the size as
+  // we may decode into a bigger size later.
+  uint16_t encodeSizeHint(uint32_t size) const {
+    auto alignedSize = powTwoAlign(size, kMinAllocAlignSize);
+    return static_cast<uint16_t>(alignedSize / kMinAllocAlignSize);
+  }
+
+  uint32_t decodeSizeHint(uint16_t sizeHint) const {
+    return sizeHint * kMinAllocAlignSize;
   }
 
   uint32_t encodeRelAddress(RelAddress addr) const {

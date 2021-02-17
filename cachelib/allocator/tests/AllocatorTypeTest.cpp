@@ -126,6 +126,10 @@ TYPED_TEST(BaseAllocatorTest, IterateWithEvictions) {
 
 TYPED_TEST(BaseAllocatorTest, IOBufItemHandle) { this->testIOBufItemHandle(); }
 
+TYPED_TEST(BaseAllocatorTest, IOBufSharedItemHandle) {
+  this->testIOBufSharedItemHandleWithChainedItems();
+}
+
 TYPED_TEST(BaseAllocatorTest, IOBufItemHandleForChainedItems) {
   this->testIOBufItemHandleForChainedItems();
 }
@@ -166,10 +170,6 @@ TYPED_TEST(BaseAllocatorTest, RebalancingWithItemsAlreadyRemoved) {
   this->testRebalancingWithItemsAlreadyRemoved();
 }
 
-TYPED_TEST(BaseAllocatorTest, RebalancingWithSerialization) {
-  this->testRebalancingWithSerialization();
-}
-
 TYPED_TEST(BaseAllocatorTest, FastShutdownTestWithAbortedPoolRebalancer) {
   this->testFastShutdownWithAbortedPoolRebalancer();
 }
@@ -203,6 +203,10 @@ TYPED_TEST(BaseAllocatorTest, ReaperOutOfBound) {
 }
 
 TYPED_TEST(BaseAllocatorTest, ReaperShutDown) { this->testReaperShutDown(); }
+
+TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {
+  this->testShutDownWithActiveHandles();
+}
 
 TYPED_TEST(BaseAllocatorTest, UnevictableItems) {
   this->testUnevictableItems();
@@ -254,6 +258,10 @@ TYPED_TEST(BaseAllocatorTest, AddChainedItemMultiThreadWithMoving) {
 
 TYPED_TEST(BaseAllocatorTest, AddChainedItemMultiThreadWithMovingAndSync) {
   this->testAddChainedItemMultithreadWithMovingAndSync();
+}
+
+TYPED_TEST(BaseAllocatorTest, TransferChainWhileMoving) {
+  this->testTransferChainWhileMoving();
 }
 
 TYPED_TEST(BaseAllocatorTest, AddAndPopChainedItemMultithread) {
@@ -363,6 +371,10 @@ TYPED_TEST(BaseAllocatorTest, RebalanceByAllocFailure) {
   this->testRebalanceByAllocFailure();
 }
 
+TYPED_TEST(BaseAllocatorTest, RebalanceWakeupAfterAllocFailure) {
+  this->testRebalanceWakeupAfterAllocFailure();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;
@@ -439,6 +451,19 @@ TEST_F(TinyLFUAllocatorTest, Stats) { this->testStats(false); }
 TEST_F(LruAllocatorTest, MoveItem) { this->testMoveItem(true); }
 TEST_F(Lru2QAllocatorTest, MoveItem) { this->testMoveItem(true); }
 TEST_F(TinyLFUAllocatorTest, MoveItem) { this->testMoveItem(false); }
+
+// Try moving a single item from one slab to another while a separate thread
+// has a ref count to the slab to be released for some time. This tests the
+// retry logic.
+TEST_F(LruAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(true);
+}
+TEST_F(Lru2QAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(true);
+}
+TEST_F(TinyLFUAllocatorTest, MoveItemWithRetry) {
+  this->testMoveItemRetryWithRefCount(false);
+}
 
 // Test fragmentation size stats
 TEST_F(LruAllocatorTest, FragmentationSizeStat) {

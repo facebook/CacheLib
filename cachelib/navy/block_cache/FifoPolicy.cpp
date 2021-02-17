@@ -1,8 +1,8 @@
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 
-#include <numeric>
-
 #include <folly/Format.h>
+
+#include <numeric>
 
 namespace facebook {
 namespace cachelib {
@@ -40,6 +40,29 @@ RegionId FifoPolicy::evict() {
 void FifoPolicy::reset() {
   std::lock_guard<std::mutex> lock{mutex_};
   queue_.clear();
+}
+
+void FifoPolicy::persist(RecordWriter& rw) const {
+  serialization::FifoPolicyData fifoPolicyData;
+  fifoPolicyData.queue_ref()->resize(queue_.size());
+
+  for (uint32_t i = 0; i < queue_.size(); i++) {
+    auto& regionIdProto = (*fifoPolicyData.queue_ref())[i];
+    regionIdProto.idx_ref() = queue_[i].index();
+  }
+
+  serializeProto(fifoPolicyData, rw);
+}
+
+void FifoPolicy::recover(RecordReader& rr) {
+  auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
+  queue_.clear();
+  queue_.resize(fifoPolicyData.queue_ref()->size());
+
+  for (uint32_t i = 0; i < fifoPolicyData.queue_ref()->size(); i++) {
+    queue_[i] =
+        *std::make_unique<RegionId>(*fifoPolicyData.queue_ref()[i].idx_ref());
+  }
 }
 
 SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)
@@ -133,6 +156,17 @@ void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
     idx++;
   }
 }
+
+void SegmentedFifoPolicy::persist(RecordWriter& rw) const {
+  std::ignore = rw;
+  throw std::runtime_error("Not Implemented.");
+}
+
+void SegmentedFifoPolicy::recover(RecordReader& rr) {
+  std::ignore = rr;
+  throw std::runtime_error("Not Implemented");
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

@@ -21,7 +21,7 @@
   "test_config": {
     
     
-    "distribution": "range",
+   
     "enableLookaside": true,
     "numOps": 10000000,
     "numThreads": 34,

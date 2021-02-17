@@ -1,8 +1,8 @@
-#include <set>
-#include <vector>
-
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+
+#include <set>
+#include <vector>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"

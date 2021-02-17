@@ -1,10 +1,11 @@
+#include "cachelib/compact_cache/tests/CCacheTests.h"
+
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/TestUtils.h"
 #include "cachelib/compact_cache/allocators/TestAllocator.h"
-#include "cachelib/compact_cache/tests/CCacheTests.h"
 
 namespace facebook {
 namespace cachelib {

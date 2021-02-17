@@ -1,5 +1,8 @@
 #pragma once
 
+#include <folly/Random.h>
+#include <folly/synchronization/Baton.h>
+
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -8,8 +11,6 @@
 #include <set>
 #include <thread>
 #include <vector>
-
-#include <folly/Random.h>
 
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"
@@ -1165,6 +1166,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setCacheSize(10 * Slab::kSize);
     config.enableCachePersistence(this->cacheDir_);
     config.configureChainedItems();
+    config.reaperInterval = std::chrono::seconds(0);
 
     // Disable slab rebalancing
     config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
@@ -1242,6 +1244,23 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Restoring should fail
     ASSERT_THROW(AllocatorT(AllocatorT::SharedMemAttach, config),
                  std::exception);
+  }
+
+  void testShutDownWithActiveHandles() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.enableCachePersistence(this->cacheDir_);
+    config.configureChainedItems();
+
+    // Create a new cache allocator and save it properly
+    AllocatorT alloc(AllocatorT::SharedMemNew, config);
+    auto pid = alloc.addPool("foobar", alloc.getCacheMemoryStats().cacheSize);
+
+    auto handle = util::allocateAccessible(alloc, pid, "key", 10);
+    ASSERT_NE(nullptr, handle);
+    ASSERT_EQ(AllocatorT::ShutDownStatus::kFailed, alloc.shutDown());
+    handle.reset();
+    ASSERT_EQ(AllocatorT::ShutDownStatus::kSuccess, alloc.shutDown());
   }
 
   void testAttachDetachOnExit() {
@@ -1952,6 +1971,66 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(i, itemIOBuf.data()[0]);
       ASSERT_EQ(itemIOBuf.data()[0], itemIOBuf2.data()[0]);
     }
+  }
+
+  void testIOBufSharedItemHandleWithChainedItems() {
+    std::atomic<int> itemsRemoved{0};
+    auto removeCb = [&itemsRemoved](const typename AllocatorT::RemoveCbData&) {
+      ++itemsRemoved;
+    };
+
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+    config.setCacheSize(10 * Slab::kSize);
+    config.setRemoveCallback(removeCb);
+    config.setRefcountThresholdForConvertingToIOBuf(0);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    std::set<uint32_t> allocSizes{10000};
+    auto poolId = alloc.addPool("foobar", numBytes, allocSizes);
+
+    {
+      auto parent = util::allocateAccessible(alloc, poolId, "parent", 100);
+      *reinterpret_cast<char*>(parent->getWritableMemory()) = 'p';
+      for (unsigned int i = 0; i < 1000; ++i) {
+        auto chained = alloc.allocateChainedItem(parent, 100);
+        ASSERT_EQ(2, alloc.getNumActiveHandles());
+
+        *reinterpret_cast<int*>(chained->getWritableMemory()) = i;
+        alloc.addChainedItem(parent, std::move(chained));
+      }
+      ASSERT_EQ(1, alloc.getNumActiveHandles());
+    }
+
+    auto ioBuf = std::make_unique<folly::IOBuf>(
+        alloc.convertToIOBuf(alloc.find("parent")));
+    ASSERT_EQ(1, alloc.getNumActiveHandles());
+
+    // Confirm we have all the chained item iobufs
+    {
+      ASSERT_EQ(*ioBuf->data(), 'p');
+      ASSERT_EQ(ioBuf->length(), 100);
+
+      auto* curr = ioBuf->next();
+      for (unsigned int i = 0; i < 1000; ++i) {
+        ASSERT_NE(nullptr, curr);
+        ASSERT_EQ(*reinterpret_cast<const int*>(curr->data()), i);
+        curr = curr->next();
+        ASSERT_EQ(curr->length(), 100);
+      }
+    }
+
+    // Remove the parent item and start popping IOBufs
+    // the remove callback should not be triggered until
+    // all ioBufs have been dropped
+    alloc.remove("parent");
+    for (unsigned int i = 0; i < 1000 + 1; ++i) {
+      ASSERT_NE(nullptr, ioBuf);
+      ASSERT_EQ(0, itemsRemoved);
+      ioBuf = ioBuf->pop();
+    }
+    ASSERT_EQ(1, itemsRemoved);
+    ASSERT_EQ(0, alloc.getNumActiveHandles());
   }
 
   // Make sure we can convert a chain of cached items into a chain of IOBufs
@@ -2964,87 +3043,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(0, newStats.cacheStats[classId].numEvictions());
   }
 
-  void testRebalancingWithSerialization() {
-    std::set<std::string> evictedKeys;
-    auto removeCb =
-        [&evictedKeys](const typename AllocatorT::RemoveCbData& data) {
-          if (data.context == RemoveContext::kEviction) {
-            const auto key = data.item.getKey();
-            evictedKeys.insert({key.data(), key.size()});
-          }
-        };
-
-    const size_t nSlabs = 20;
-    const size_t size = nSlabs * Slab::kSize;
-    const unsigned int keyLen = 100;
-
-    std::vector<uint32_t> sizes;
-    uint8_t poolId;
-
-    // Test allocations. These allocations should remain after save/restore.
-    // Original lru allocator
-    std::vector<typename AllocatorT::Key> keys;
-    {
-      typename AllocatorT::Config config;
-      config.setRemoveCallback(removeCb);
-      config.setCacheSize(size);
-      config.enableCachePersistence(this->cacheDir_);
-      AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
-      poolId = alloc.addPool("foobar", numBytes);
-      sizes = this->getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
-      this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
-      for (const auto& item : alloc) {
-        auto key = item.getKey();
-        keys.push_back(key);
-      }
-
-      std::vector<typename AllocatorT::ItemHandle> handles;
-      for (auto& key : keys) {
-        auto handle = alloc.find(key);
-        ASSERT_NE(nullptr, handle.get());
-        handles.push_back(std::move(handle));
-      }
-
-      // Try to serialize while releasing a slab. This should fail.
-      const uint8_t classId =
-          alloc.getAllocInfo(handles[0]->getMemory()).classId;
-      auto slabRelease = std::async(std::launch::async, [&] {
-        alloc.releaseSlab(poolId, classId, SlabReleaseMode::kRebalance,
-                          handles[0]->getMemory());
-      });
-
-      // Wait here for the slab release to start
-      while (alloc.getSlabReleaseStats().numActiveSlabReleases == 0) {
-        /* sleep override */
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      }
-
-      // Save, this should throw
-      ASSERT_THROW(alloc.shutDown(), std::logic_error);
-
-      handles.clear();
-      slabRelease.wait();
-
-      // This should succeed
-      ASSERT_NO_THROW(alloc.shutDown());
-    }
-
-    // Restore lru allocator, evicted keys should no longer be found in the
-    // allocator
-    {
-      typename AllocatorT::Config config;
-      config.setCacheSize(size);
-      config.enableCachePersistence(this->cacheDir_);
-
-      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
-      for (auto& key : evictedKeys) {
-        auto handle = alloc.find(key);
-        ASSERT_EQ(nullptr, handle);
-      }
-    }
-  }
-
   void testFastShutdownWithAbortedPoolRebalancer() {
     const size_t nSlabs = 4;
     const size_t size = nSlabs * Slab::kSize;
@@ -3094,13 +3092,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
 
-      // Save, this should not throw
-      ASSERT_NO_THROW(alloc.shutDown());
+      // Save, this should stop any workers. However, this would fail since we
+      // are holding active handles. But this is good enough to test that
+      // shutdown aborts any active blocking rebalancer.
+      ASSERT_EQ(alloc.shutDown(), AllocatorT::ShutDownStatus::kFailed);
+
+      EXPECT_EQ(0, alloc.getSlabReleaseStats().numActiveSlabReleases);
 
       // release the handle references that were being held
-      for (auto& h : handles) {
-        h.release();
-      }
+      handles.clear();
+
+      ASSERT_EQ(alloc.shutDown(), AllocatorT::ShutDownStatus::kSuccess);
     }
     /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(3));
 
@@ -3299,8 +3301,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(current, fragmentationForOneSmallItem + fragmentationForOneItem);
   }
 
-  // Try moving a single item from one slab to another
-  void testMoveItem(bool testEviction) {
+  using ReleaseSlabFunc =
+      std::function<void(AllocatorT&, const AllocInfo&, void*)>;
+  void testMoveItemHelper(bool testEviction, ReleaseSlabFunc releaseSlabFunc) {
     const auto moveCb = [](typename AllocatorT::Item& oldItem,
                            typename AllocatorT::Item& newItem,
                            typename AllocatorT::Item* /* parentPtr */) {
@@ -3313,7 +3316,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Request numSlabs + 1 slabs so that we get numSlabs usable slabs
     typename AllocatorT::Config config;
-    config.enableMovingOnSlabRelease(moveCb);
+    config.enableMovingOnSlabRelease(moveCb, {} /* ChainedItemsMoveSync */,
+                                     -1 /* movingAttemptsLimit */);
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
     AllocatorT allocator(config);
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
@@ -3357,11 +3361,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     void* sourceAlloc =
         static_cast<void*>(allocator.findInternal("slab1_key0").get());
     const auto allocInfo = allocator.getAllocInfo(sourceAlloc);
-    allocator.releaseSlab(allocInfo.poolId,
-                          allocInfo.classId,
-                          SlabReleaseMode::kResize,
-                          sourceAlloc);
-    ASSERT_EQ(allocator.getSlabReleaseStats().numSlabReleaseForResize, 1);
+
+    releaseSlabFunc(allocator, allocInfo, sourceAlloc);
 
     // Check that the new handle points to the expected location
     const auto newHandle = allocator.find("slab1_key0");
@@ -3396,6 +3397,62 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
           util::allocateAccessible(allocator, poolId, "test_key", kItemSize);
       ASSERT_EQ(handle.get(), expectedAlloc);
     }
+  }
+
+  // Try moving a single item from one slab to another
+  void testMoveItem(bool testEviction) {
+    auto releaseSlabFunc = [](AllocatorT& allocator,
+                              const AllocInfo& allocInfo,
+                              void* sourceAlloc) {
+      allocator.releaseSlab(allocInfo.poolId,
+                            allocInfo.classId,
+                            SlabReleaseMode::kResize,
+                            sourceAlloc);
+      ASSERT_EQ(allocator.getSlabReleaseStats().numSlabReleaseForResize, 1);
+    };
+
+    testMoveItemHelper(testEviction, std::move(releaseSlabFunc));
+  }
+
+  // Try moving a single item from one slab to another while a separate thread
+  // has a ref count to the slab to be released for some time. This tests the
+  // retry logic.
+  void testMoveItemRetryWithRefCount(bool testEviction) {
+    auto releaseSlabFunc = [](AllocatorT& allocator,
+                              const AllocInfo& allocInfo,
+                              void* sourceAlloc) {
+      std::atomic<bool> holdItemHandle{false};
+
+      // Spin up a thread and take a hold on the item handle
+      // from second slab and sleep for sometime, so that
+      // the main thread attempting the slabRelease will
+      // continue retrying in a loop for sometime.
+      std::thread otherThread([&]() {
+        const auto tempHandle = allocator.find("slab1_key0");
+        holdItemHandle = true;
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      });
+
+      // Wait for the otherThread to take a refcount on a cache item
+      // from second slab, which we are trying to move to another slab.
+      while (!holdItemHandle) {
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
+      allocator.releaseSlab(allocInfo.poolId,
+                            allocInfo.classId,
+                            SlabReleaseMode::kResize,
+                            sourceAlloc);
+      otherThread.join();
+
+      XLOG(INFO, "Number of move retry attempts: ",
+           allocator.getSlabReleaseStats().numMoveAttempts);
+      ASSERT_GT(allocator.getSlabReleaseStats().numMoveAttempts, 1);
+      ASSERT_EQ(allocator.getSlabReleaseStats().numMoveSuccesses, 1);
+    };
+
+    testMoveItemHelper(testEviction, std::move(releaseSlabFunc));
   }
 
   void testAllocateWithoutEviction() {
@@ -3509,6 +3566,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // set this to false to ensure that items are not removed when they are
     // expired.
     config.setItemReaperOnFind(false);
+    config.reaperInterval = std::chrono::milliseconds(0);
     AllocatorT allocator(config);
 
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
@@ -3699,6 +3757,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     const int numSlabs = 2;
 
     typename AllocatorT::Config config;
+    // start with no reaper
+    config.reaperInterval = std::chrono::seconds(0);
     config.enableCachePersistence(this->cacheDir_,
                                   ((void*)(uintptr_t)0x7e0000000000));
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
@@ -4997,6 +5057,125 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     lookupFn("yolo");
   }
 
+  // while a chained item could be moved, try to transfer its parent and
+  // validate that move succeeds correctly.
+  void testTransferChainWhileMoving() {
+    // create an allocator worth 10 slabs.
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+
+    // allocate enough size to make sure evictions never occur
+    config.setCacheSize(200 * Slab::kSize);
+
+    using Item = typename AllocatorT::Item;
+
+    std::atomic<uint64_t> numRemovedKeys{0};
+    config.setRemoveCallback(
+        [&](const typename AllocatorT::RemoveCbData&) { ++numRemovedKeys; });
+
+    std::string movingKey = "helloworldmoving";
+    // we will use the acquisition of mutex as an indicator of whether item is
+    // close to being moved and use it to swap the parent.
+    std::mutex m;
+    struct TestSyncObj : public AllocatorT::SyncObj {
+      TestSyncObj(std::mutex& m,
+                  std::atomic<bool>& firstTime,
+                  folly::Baton<>& startedMoving,
+                  folly::Baton<>& changedParent)
+          : l(m) {
+        if (!firstTime) {
+          return;
+        }
+        firstTime = false;
+        startedMoving.post();
+        changedParent.wait();
+      }
+
+      std::lock_guard<std::mutex> l;
+    };
+
+    // used to track if the moving sync is executed upon the first time after
+    // allocation so that the baton logic is executed only once.
+    std::atomic<bool> firstTimeMovingSync{true};
+
+    // baton to indicate that the move process has started so that we can
+    // switch the parent
+    folly::Baton<> startedMoving;
+    // baton to indicate that the parent has been switched so that the move
+    // process can proceed
+    folly::Baton<> changedParent;
+
+    const size_t numMovingAttempts = 100;
+    std::atomic<uint64_t> numMoves{0};
+    config.enableMovingOnSlabRelease(
+        [&](Item& oldItem, Item& newItem, Item* /* parentPtr */) {
+          XDCHECK_EQ(oldItem.getSize(), newItem.getSize());
+          XDCHECK_EQ(oldItem.getKey(), newItem.getKey());
+          std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+                      oldItem.getSize());
+          ++numMoves;
+        },
+        [&m, &startedMoving, &changedParent,
+         &firstTimeMovingSync](typename Item::Key key) {
+          XLOG(ERR) << "Moving" << key;
+          return std::make_unique<TestSyncObj>(m, firstTimeMovingSync,
+                                               startedMoving, changedParent);
+        },
+        numMovingAttempts);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const auto poolSize = numBytes;
+
+    const std::set<uint32_t> allocSizes = {250, 2050};
+    const auto pid = alloc.addPool("one", poolSize, allocSizes);
+
+    void* childPtr = nullptr;
+    {
+      auto parent = alloc.allocate(pid, movingKey, 1000);
+      auto child = alloc.allocateChainedItem(parent, 200);
+      childPtr = child.get();
+      alloc.addChainedItem(parent, std::move(child));
+      alloc.insertOrReplace(parent);
+    }
+
+    XLOG(INFO) << childPtr;
+    // Release slab corresponding to the child to trigger a move
+    auto releaseFn = [&alloc, childPtr, pid] {
+      alloc.releaseSlab(pid, alloc.getAllocInfo(childPtr).classId,
+                        SlabReleaseMode::kRebalance, childPtr);
+    };
+
+    auto slabRelease = std::async(releaseFn);
+
+    startedMoving.wait();
+
+    // we know moving sync is held now.
+    {
+      auto newParent = alloc.allocate(pid, movingKey, 600);
+      auto parent = alloc.find(movingKey);
+      alloc.transferChainAndReplace(parent, newParent);
+    }
+
+    // indicate that we changed the parent. This should abort the current
+    // moving attempt, re-allocate the item and eventually succeed in moving.
+    changedParent.post();
+
+    // wait for slab release to complete.
+    slabRelease.wait();
+
+    EXPECT_EQ(numMoves, 1);
+    auto slabReleaseStats = alloc.getSlabReleaseStats();
+    EXPECT_EQ(slabReleaseStats.numMoveAttempts, 2);
+    EXPECT_EQ(slabReleaseStats.numMoveSuccesses, 1);
+
+    auto handle = alloc.find(movingKey);
+    auto chainedAllocs = alloc.viewAsChainedAllocs(handle);
+    for (const auto& c : chainedAllocs.getChain()) {
+      EXPECT_NE(&c, childPtr);
+    }
+  }
+
   // Test stats count on permanent allocation is correct
   // 1. Alloc and insert permanent items
   // 2. Alloc and REMOVE permanent items
@@ -5883,6 +6062,52 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         break;
       }
     }
+  }
+
+  void testRebalanceWakeupAfterAllocFailure() {
+    typename AllocatorT::Config config;
+    const size_t nSlabs = 3;
+    config.setCacheSize(nSlabs * Slab::kSize);
+    // set a very long rebalance interval: 20 seconds
+    config.enablePoolRebalancing(std::make_shared<RebalanceStrategy>(),
+                                 std::chrono::seconds{20});
+    AllocatorT alloc(config);
+
+    // smaller items (e.g. 128) will cause longer time to evict in test mode,
+    // to save testing time, use 1MB for smallSize and 3MB for largeSize
+    const auto smallSize = 1024 * 1024;
+    const auto largeSize = 3 * 1024 * 1024;
+    const auto poolId =
+        alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
+                      {smallSize + 100, largeSize + 100});
+    // Allocate until the smaller objects fill up the cache
+    // keeps handles in the vector to avoid eviction
+    std::vector<typename AllocatorT::ItemHandle> handles;
+    for (int i = 0;; i++) {
+      auto handle = util::allocateAccessible(
+          alloc, poolId, folly::sformat("small_{}", i), smallSize);
+      if (handle == nullptr) {
+        break;
+      }
+      handles.push_back(std::move(handle));
+    }
+
+    // clear handles so it will start to evict items
+    handles.clear();
+
+    // first time alloc failure will trigger rebalancer initialization
+    EXPECT_EQ(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+
+    std::this_thread::sleep_for(std::chrono::seconds{1});
+    // trigger the slab rebalance
+    EXPECT_EQ(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
+
+    std::this_thread::sleep_for(std::chrono::seconds{1});
+    // have available slab now
+    EXPECT_NE(nullptr,
+              util::allocateAccessible(alloc, poolId, "large", largeSize));
   }
 
   // changing cache name should  not affect the persistence

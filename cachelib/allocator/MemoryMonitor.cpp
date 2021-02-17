@@ -1,7 +1,8 @@
 
+#include "cachelib/allocator/MemoryMonitor.h"
+
 #include <folly/logging/xlog.h>
 
-#include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/common/Exceptions.h"
 

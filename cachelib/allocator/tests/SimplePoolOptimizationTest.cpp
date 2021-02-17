@@ -1,4 +1,5 @@
 #include "cachelib/allocator/tests/SimplePoolOptimizationTest.h"
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/tests/TestBase.h"
 

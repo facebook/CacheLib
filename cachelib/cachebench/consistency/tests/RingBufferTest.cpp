@@ -1,7 +1,7 @@
-#include "cachelib/cachebench/consistency/RingBuffer.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/cachebench/consistency/RingBuffer.h"
 
 namespace facebook {
 namespace cachelib {

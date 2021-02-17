@@ -1,8 +1,8 @@
-#include <cstdlib>
-#include <random>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <cstdlib>
+#include <random>
 
 #include "cachelib/common/hothash/HotHashDetector.h"
 

@@ -1,10 +1,10 @@
-#include "cachelib/common/BytesEqual.h"
-
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
 
 #include <cstring>
 #include <vector>
+
+#include "cachelib/common/BytesEqual.h"
 
 namespace facebook {
 namespace cachelib {

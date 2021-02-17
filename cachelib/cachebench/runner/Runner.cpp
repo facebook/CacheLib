@@ -5,18 +5,22 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-Runner::Runner(const std::string& configPath,
+Runner::Runner(const CacheBenchConfig& config,
                const std::string& progressStatsFile,
                uint64_t progressInterval,
-               std::function<CacheConfig(CacheConfig)> customizeCacheConfig)
-    : config_{configPath},
+               CacheConfigCustomizer customizeCacheConfig,
+               std::unique_ptr<StressorAdmPolicy> admPolicy)
+    : config_{config},
       customizeCacheConfig_{std::move(customizeCacheConfig)},
       progressStatsFile_{progressStatsFile},
-      progressInterval_{progressInterval} {}
+      progressInterval_{progressInterval} {
+  stressor_ =
+      Stressor::makeStressor(customizeCacheConfig_(config_.getCacheConfig()),
+                             config_.getStressorConfig(),
+                             std::move(admPolicy));
+}
 
 bool Runner::run() {
-  stressor_ = Stressor::makeStressor(
-      customizeCacheConfig_(config_.getCacheConfig()), config_.getTestConfig());
   ProgressTracker tracker{*stressor_, progressStatsFile_};
 
   stressor_->start();

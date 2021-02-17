@@ -3,8 +3,6 @@
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 
-using namespace facebook::cachelib::tests;
-
 namespace facebook {
 namespace cachelib {
 namespace tests {

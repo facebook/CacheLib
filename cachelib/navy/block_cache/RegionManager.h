@@ -1,11 +1,11 @@
 #pragma once
 
+#include <folly/container/F14Map.h>
+
 #include <cassert>
 #include <memory>
 #include <mutex>
 #include <utility>
-
-#include <folly/container/F14Map.h>
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
@@ -76,14 +76,7 @@ class RegionManager {
 
   const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
 
-  void pin(Region& region) {
-    region.setPinned();
-    pinnedCount_.inc();
-  }
-
   void doFlush(RegionId rid, bool async);
-
-  uint64_t pinnedCount() const { return pinnedCount_.get(); }
 
   uint64_t regionSize() const { return regionSize_; }
 
@@ -155,7 +148,7 @@ class RegionManager {
 
   uint32_t getRegionSlotSize(RegionId rid) const {
     const auto& region = getRegion(rid);
-    if (sizeClasses_.empty() || region.isPinned()) {
+    if (sizeClasses_.empty()) {
       return 0;
     }
     return sizeClasses_[region.getClassId()];
@@ -196,7 +189,6 @@ class RegionManager {
   mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter externalFragmentation_;
 
-  mutable AtomicCounter pinnedCount_;
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 
@@ -222,9 +214,10 @@ class RegionManager {
   mutable AtomicCounter reclaimTimeCountUs_;
   mutable AtomicCounter evictedCount_;
 
-  // stats to keep track of inmem buffer usage
+  // Stats to keep track of inmem buffer usage
   mutable AtomicCounter numInMemBufActive_;
   mutable AtomicCounter numInMemBufWaitingFlush_;
+  mutable AtomicCounter numInMemBufFlushRetires_;
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;

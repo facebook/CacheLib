@@ -1,8 +1,7 @@
-#include "cachelib/allocator/nvmcache/NavySetup.h"
-
 #include <folly/File.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/allocator/nvmcache/NavySetup.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -34,8 +33,6 @@ TEST(NavySetupTest, RAID0DeviceSize) {
   cfg["dipper_navy_region_size"] = stripeSize;
   cfg["dipper_navy_block_size"] = ioAlignSize;
   cfg["dipper_navy_truncate_file"] = true;
-  // Explicitly disable direct IO since tmp is backed by tmpfs on sandcastle
-  cfg["dipper_navy_direct_io"] = false;
 
   auto device = createDevice(cfg, nullptr);
   EXPECT_GT(size * files.size(), device->getSize());

@@ -5,7 +5,8 @@ namespace cachelib {
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 MMTinyLFU::Container<T, HookPtr>::Container(
     serialization::MMTinyLFUObject object, PtrCompressor compressor)
-    : lru_(object.lrus, std::move(compressor)), config_(object.config) {
+    : lru_(*object.lrus_ref(), std::move(compressor)),
+      config_(*object.config_ref()) {
   maybeGrowAccessCountersLocked();
 }
 
@@ -280,17 +281,17 @@ template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 serialization::MMTinyLFUObject MMTinyLFU::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMTinyLFUConfig configObject;
-  configObject.lruRefreshTime = config_.lruRefreshTime;
+  *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
-  configObject.updateOnWrite = config_.updateOnWrite;
+  *configObject.updateOnWrite_ref() = config_.updateOnWrite;
   *configObject.updateOnRead_ref() = config_.updateOnRead;
-  configObject.windowToCacheSizeRatio = config_.windowToCacheSizeRatio;
-  configObject.tinySizePercent = config_.tinySizePercent;
+  *configObject.windowToCacheSizeRatio_ref() = config_.windowToCacheSizeRatio;
+  *configObject.tinySizePercent_ref() = config_.tinySizePercent;
   // TODO: May be save/restore the counters.
 
   serialization::MMTinyLFUObject object;
-  object.config = configObject;
-  object.lrus = lru_.saveState();
+  *object.config_ref() = configObject;
+  *object.lrus_ref() = lru_.saveState();
   return object;
 }
 
@@ -319,10 +320,11 @@ void MMTinyLFU::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
 
   // update LRU refresh time
   auto stat = getEvictionAgeStatLocked(0);
-  auto lruRefreshTime =
+  auto lruRefreshTime = std::min(
       std::max(config_.defaultLruRefreshTime,
                static_cast<uint32_t>(stat.warmQueueStat.oldestElementAge *
-                                     config_.lruRefreshRatio));
+                                     config_.lruRefreshRatio)),
+      kLruRefreshTimeCap);
 
   config_.lruRefreshTime = lruRefreshTime;
 }

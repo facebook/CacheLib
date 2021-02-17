@@ -6,7 +6,7 @@
 namespace facebook {
 namespace cachelib {
 namespace exception {
-class OutOfMemory : std::bad_alloc {
+class OutOfMemory : public std::bad_alloc {
  public:
   OutOfMemory(std::string what) : what_{std::move(what)} {}
 

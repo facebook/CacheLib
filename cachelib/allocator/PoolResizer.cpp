@@ -1,7 +1,8 @@
+#include "cachelib/allocator/PoolResizer.h"
+
 #include <folly/logging/xlog.h>
 
 #include "cachelib/allocator/PoolResizeStrategy.h"
-#include "cachelib/allocator/PoolResizer.h"
 #include "cachelib/common/Exceptions.h"
 
 namespace facebook {

@@ -31,6 +31,8 @@ class LruPolicy final : public EvictionPolicy {
   void reset() override;
   size_t memorySize() const override;
   void getCounters(const CounterVisitor& v) const override;
+  void persist(RecordWriter& rw) const override;
+  void recover(RecordReader& rr) override;
 
  private:
   static constexpr uint32_t kInvalidIndex = 0xffffffffu;

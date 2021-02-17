@@ -1,14 +1,12 @@
 #pragma once
-#include <memory>
-#include <vector>
-
-#include <gtest/gtest.h>
-
-#include <folly/Random.h>
-
 #include <cachelib/allocator/Cache.h>
 #include <cachelib/allocator/datastruct/DList.h>
 #include <cachelib/common/Time.h>
+#include <folly/Random.h>
+#include <gtest/gtest.h>
+
+#include <memory>
+#include <vector>
 
 namespace facebook {
 namespace cachelib {
@@ -19,10 +17,10 @@ class MMTypeTest : public testing::Test {
  public:
   // our own implementation of node that will be put inside the container.
   struct Node {
-    enum class Flags : uint8_t {
-      MM_FLAG_0 = 0,
-      MM_FLAG_1 = 1,
-      MM_FLAG_2 = 2,
+    enum Flags {
+      kMMFlag0 = 0,
+      kMMFlag1 = 1,
+      kMMFlag2 = 2,
     };
 
     explicit Node(int id, std::string key)
@@ -67,7 +65,7 @@ class MMTypeTest : public testing::Test {
              (static_cast<uint8_t>(1) << static_cast<uint8_t>(flagBit));
     }
 
-    bool isTail() { return isFlagSet<Flags::MM_FLAG_0>(); }
+    bool isTail() { return isFlagSet<kMMFlag0>(); }
 
     bool isInMMContainer() const noexcept { return inContainer_; }
 

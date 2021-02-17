@@ -11,14 +11,13 @@
 #include <folly/lang/Aligned.h>
 #include <folly/synchronization/DistributedMutex.h>
 
+#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/datastruct/DList.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Mutex.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/CacheStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -40,12 +39,13 @@ class MMLru {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
-                 *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
-                 *configState.updateOnRead_ref(),
-                 *configState.tryLockUpdate_ref(),
-                 static_cast<uint8_t>(configState.lruInsertionPointSpec)) {}
+        : Config(
+              *configState.lruRefreshTime_ref(),
+              *configState.lruRefreshRatio_ref(),
+              *configState.updateOnWrite_ref(),
+              *configState.updateOnRead_ref(),
+              *configState.tryLockUpdate_ref(),
+              static_cast<uint8_t>(*configState.lruInsertionPointSpec_ref())) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time, updateOnW, updateOnR, false, 0) {}
@@ -144,7 +144,7 @@ class MMLru {
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
     using CompressedPtr = typename T::CompressedPtr;
-    using Flags = typename T::Flags;
+    using RefFlags = typename T::Flags;
 
    public:
     Container() = default;
@@ -297,8 +297,8 @@ class MMLru {
     }
 
    private:
-    EvictionAgeStat getEvictionAgeStatLocked(uint64_t projectedLength) const
-        noexcept;
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
 
     static Time getUpdateTime(const T& node) noexcept {
       return (node.*HookPtr).getUpdateTime();
@@ -326,30 +326,30 @@ class MMLru {
     // Bit MM_BIT_0 is used to record if the item is in tail. This
     // is used to implement LRU insertion points
     void markTail(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_0>();
+      node.template setFlag<RefFlags::kMMFlag0>();
     }
 
     void unmarkTail(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_0>();
+      node.template unSetFlag<RefFlags::kMMFlag0>();
     }
 
     bool isTail(T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_0>();
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
 
     // Bit MM_BIT_1 is used to record if the item has been accessed since
     // being written in cache. Unaccessed items are ignored when determining
     // projected update time.
     void markAccessed(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_1>();
+      node.template setFlag<RefFlags::kMMFlag1>();
     }
 
     void unmarkAccessed(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_1>();
+      node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
     bool isAccessed(const T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_1>();
+      return node.template isFlagSet<RefFlags::kMMFlag1>();
     }
 
     // protects all operations on the lru. We never really just read the state
@@ -384,6 +384,9 @@ class MMLru {
     // Write access to the MMLru Config is serialized.
     // Reads may be racy.
     Config config_{};
+
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
 
     FRIEND_TEST(MMLruTest, Reconfigure);
   };

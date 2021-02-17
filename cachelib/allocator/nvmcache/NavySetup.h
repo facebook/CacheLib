@@ -1,7 +1,7 @@
 #pragma once
-#include "cachelib/navy/AbstractCache.h"
-
 #include <folly/dynamic.h>
+
+#include "cachelib/navy/AbstractCache.h"
 namespace facebook {
 namespace cachelib {
 std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(

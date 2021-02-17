@@ -1,9 +1,9 @@
+#include <gtest/gtest.h>
+
 #include <thread>
 
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/serialization/RecordIO.h"
-
-#include <gtest/gtest.h>
 
 namespace facebook {
 namespace cachelib {
@@ -24,7 +24,7 @@ TEST(HitsReinsertionPolicy, Simple) {
   }
 
   // lookup after inserting has effect
-  index.insert(hk1.keyHash(), 0);
+  index.insert(hk1.keyHash(), 0, 0);
   {
     auto access = tracker.getAccessStats(hk1);
     EXPECT_EQ(0, access.totalHits);
@@ -70,7 +70,7 @@ TEST(HitsReinsertionPolicy, UpperBound) {
   tracker.setIndex(&index);
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0);
+  index.insert(hk1.keyHash(), 0, 0);
   for (int i = 0; i < 1000; i++) {
     index.lookup(hk1.keyHash());
   }
@@ -87,7 +87,7 @@ TEST(HitsReinsertionPolicy, ThreadSafe) {
   tracker.setIndex(&index);
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0);
+  index.insert(hk1.keyHash(), 0, 0);
 
   auto lookup = [&]() { index.lookup(hk1.keyHash()); };
 
@@ -113,7 +113,7 @@ TEST(HitsReinsertionPolicy, Recovery) {
   tracker.setIndex(&index);
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0);
+  index.insert(hk1.keyHash(), 0, 0);
   for (int i = 0; i < 1000; i++) {
     index.lookup(hk1.keyHash());
   }

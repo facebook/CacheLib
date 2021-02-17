@@ -103,23 +103,25 @@ std::set<ClassId> RebalanceStrategy::filterByAllocFailure(
     const PoolStats& stats,
     std::set<ClassId> candidates,
     const PoolState& prevState) {
-  return filter(std::move(candidates),
-                [&](ClassId cid) {
-                  return prevState.at(cid).deltaAllocFailures(stats) == 0;
-                },
-                "candidates with allocation failures");
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) {
+        return prevState.at(cid).deltaAllocFailures(stats) == 0;
+      },
+      "candidates with allocation failures");
 }
 
 std::set<ClassId> RebalanceStrategy::filterByNoEvictions(
     const PoolStats& stats,
     std::set<ClassId> candidates,
     const PoolState& prevState) {
-  return filter(std::move(candidates),
-                [&](ClassId cid) {
-                  return stats.mpStats.acStats.at(cid).freeSlabs > 0 ||
-                         prevState.at(cid).getDeltaEvictions(stats) == 0;
-                },
-                " candidates with free memory or no evictions");
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) {
+        return stats.mpStats.acStats.at(cid).freeSlabs > 0 ||
+               prevState.at(cid).getDeltaEvictions(stats) == 0;
+      },
+      " candidates with free memory or no evictions");
 }
 
 std::set<ClassId> RebalanceStrategy::filterByMinTailAge(

@@ -1,7 +1,7 @@
-#include "folly/String.h"
+#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 
 #include "cachelib/cachebench/util/Exceptions.h"
-#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
+#include "folly/String.h"
 
 namespace {
 constexpr uint32_t kProducerConsumerWaitTimeUs = 5;
@@ -59,6 +59,11 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
 
 void PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
+  auto partialFieldCount = SampleFields::TOTAL_DEFINED_FIELDS +
+                           config_.replayGeneratorConfig.numAggregationFields;
+  auto totalFieldCount =
+      partialFieldCount + config_.replayGeneratorConfig.numExtraFields;
+
   while (true) {
     if (!std::getline(infile_, line)) {
       if (repeatTraceReplay_) {
@@ -76,10 +81,20 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
     try {
       std::vector<folly::StringPiece> fields;
       folly::split(",", line, fields);
-      if (fields.size() !=
-          SampleFields::TOTAL_FIELDS +
-              config_.replayGeneratorConfig.numAggregationFields) {
+      if (fields.size() != totalFieldCount) {
         invalidSamples_.inc();
+        continue;
+      }
+
+      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
+      if (threadFinished_[shard].load(std::memory_order_relaxed)) {
+        if (shouldShutdown()) {
+          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
+          return;
+        }
+
+        XLOG_EVERY_MS(INFO, 100'000,
+                      folly::sformat("Thread {} finish, skip", shard));
         continue;
       }
 
@@ -153,30 +168,55 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         }
       }
 
-      std::vector<std::string> extraFields;
-      for (size_t i = SampleFields::TOTAL_FIELDS; i < fields.size(); ++i) {
-        extraFields.push_back(fields[i].str());
+      std::vector<std::string> statsAggFields;
+      for (size_t i = SampleFields::TOTAL_DEFINED_FIELDS; i < partialFieldCount;
+           ++i) {
+        statsAggFields.push_back(fields[i].str());
       }
 
-      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
+      // Admission policy related fields: feature name --> feature value
+      std::unordered_map<std::string, std::string> admFeatureMap;
+      if (config_.replayGeneratorConfig.mlAdmissionConfig) {
+        for (const auto& [featureName, index] :
+             config_.replayGeneratorConfig.mlAdmissionConfig->numericFeatures) {
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
+        }
+        for (const auto& [featureName, index] :
+             config_.replayGeneratorConfig.mlAdmissionConfig
+                 ->categoricalFeatures) {
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
+        }
+      }
+
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_.cachePieceSize,
                                         nextReqId_,
+                                        OpType::kGet, // Only support get from
+                                                      // trace for now
                                         fields[SampleFields::CACHE_KEY],
                                         fullContentSize,
                                         responseHeaderSize,
                                         rangeStart,
                                         rangeEnd,
                                         ttl,
-                                        std::move(extraFields))) {
+                                        std::move(statsAggFields),
+                                        std::move(admFeatureMap))) {
         if (shouldShutdown()) {
-          LOG(INFO) << "Forced to stop, terminate reading trace file!";
+          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;
         }
 
         queueProducerWaitCounts_.inc();
         std::this_thread::sleep_for(
             std::chrono::microseconds(kProducerConsumerWaitTimeUs));
+
+        if (threadFinished_[shard].load(std::memory_order_relaxed)) {
+          XLOG_EVERY_MS(INFO, 100'000,
+                        folly::sformat("Thread {} finish, skip", shard));
+          break;
+        }
       }
 
       ++nextReqId_;

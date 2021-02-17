@@ -1,8 +1,8 @@
+#include "cachelib/cachebench/consistency/LogEventStream.h"
+
 #include <folly/Conv.h>
 #include <folly/Format.h>
 #include <folly/Range.h>
-
-#include "cachelib/cachebench/consistency/LogEventStream.h"
 
 namespace facebook {
 namespace cachelib {

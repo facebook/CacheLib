@@ -1,12 +1,12 @@
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
-#include <ctime>
+#include "cachelib/cachebench/consistency/ValueHistory.h"
 
 #include <folly/logging/xlog.h>
 #include <glog/logging.h>
 
-#include "cachelib/cachebench/consistency/ValueHistory.h"
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
 
 namespace facebook {
 namespace cachelib {

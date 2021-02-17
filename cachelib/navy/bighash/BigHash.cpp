@@ -1,10 +1,11 @@
+#include "cachelib/navy/bighash/BigHash.h"
+
+#include <folly/Format.h>
+
 #include <chrono>
 #include <mutex>
 #include <shared_mutex>
 
-#include <folly/Format.h>
-
-#include "cachelib/navy/bighash/BigHash.h"
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/serialization/Serialization.h"
@@ -207,9 +208,7 @@ bool BigHash::recover(RecordReader& rr) {
   return true;
 }
 
-Status BigHash::insert(HashedKey hk,
-                       BufferView value,
-                       InsertOptions /* opt */) {
+Status BigHash::insert(HashedKey hk, BufferView value) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 

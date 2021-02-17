@@ -1,8 +1,7 @@
-#include "cachelib/allocator/tests/TestBase.h"
-
 #include <folly/Random.h>
 
 #include "cachelib/allocator/MarginalHitsState.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {

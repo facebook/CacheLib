@@ -1,9 +1,9 @@
 #include "cachelib/navy/testing/MockJobScheduler.h"
 
-#include <cassert>
-
 #include <folly/Format.h>
 #include <glog/logging.h>
+
+#include <cassert>
 
 namespace facebook {
 namespace cachelib {

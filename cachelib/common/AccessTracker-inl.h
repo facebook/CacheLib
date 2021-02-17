@@ -1,22 +1,23 @@
 // Copyright 2004-present Facebook. All Rights Reserved.
 
-#include "cachelib/common/AccessTracker.h"
-
 namespace facebook {
 namespace cachelib {
 
-AccessTracker::AccessTracker(Config config)
-    : config_(std::move(config)), locks_{config_.numBuckets} {
+namespace detail {
+template <typename CMS>
+AccessTrackerBase<CMS>::AccessTrackerBase(Config config)
+    : config_(std::move(config)),
+      locks_{config_.numBuckets},
+      itemCounts_(config_.numBuckets, 0) {
   if (config_.useCounts) {
     counts_.reserve(config_.numBuckets);
     const double errorMargin = config_.cmsMaxErrorValue /
                                static_cast<double>(config_.maxNumOpsPerBucket);
     for (size_t i = 0; i < config_.numBuckets; i++) {
-      counts_.push_back(
-          cachelib::util::CountMinSketch(errorMargin,
-                                         config_.cmsErrorCertainity,
-                                         config_.cmsMaxWidth,
-                                         config_.cmsMaxDepth));
+      counts_.push_back(CMS(errorMargin,
+                            config_.cmsErrorCertainity,
+                            config_.cmsMaxWidth,
+                            config_.cmsMaxDepth));
     }
   } else {
     filters_ = facebook::cachelib::BloomFilter::makeBloomFilter(
@@ -26,11 +27,20 @@ AccessTracker::AccessTracker(Config config)
   }
 }
 
-// 1. The access count of the accssed key in the current
-// bucket is incremented.
-// 2. Collect the most recent config_.numBuckets access counts
-// and return in a vector.
-std::vector<double> AccessTracker::recordAndPopulateAccessFeatures(
+// Record access to the current bucket.
+template <typename CMS>
+void AccessTrackerBase<CMS>::recordAccess(folly::StringPiece key) {
+  updateMostRecentAccessedBucket();
+  const auto hashVal =
+      folly::hash::SpookyHashV2::Hash64(key.data(), key.size(), kRandomSeed);
+  const auto idx = mostRecentAccessedBucket_.load(std::memory_order_relaxed);
+  LockHolder l(locks_[idx]);
+  updateBucketLocked(idx, hashVal);
+}
+
+// Return the access histories of the given key.
+template <typename CMS>
+std::vector<double> AccessTrackerBase<CMS>::getAccesses(
     folly::StringPiece key) {
   updateMostRecentAccessedBucket();
   const auto hashVal =
@@ -44,11 +54,7 @@ std::vector<double> AccessTracker::recordAndPopulateAccessFeatures(
   for (size_t i = 0; i < config_.numBuckets; i++) {
     const auto idx = rotatedIdx(mostRecentBucketIdx + config_.numBuckets - i);
     LockHolder l(locks_[idx]);
-    features[i] = getBucketAccessCount(idx, hashVal);
-    // Count the current access.
-    if (idx == mostRecentBucketIdx) {
-      updateBucket(mostRecentBucketIdx, hashVal);
-    }
+    features[i] = getBucketAccessCountLocked(idx, hashVal);
   }
   return features;
 }
@@ -57,7 +63,8 @@ std::vector<double> AccessTracker::recordAndPopulateAccessFeatures(
 // If updated, this is the first time entering a new bucket, the oldest
 // bucket's count would be cleared, keeping the number of buckets
 // constant at config_.numBuckets.
-void AccessTracker::updateMostRecentAccessedBucket() {
+template <typename CMS>
+void AccessTrackerBase<CMS>::updateMostRecentAccessedBucket() {
   const auto bucketIdx = getCurrentBucketIndex();
   while (true) {
     auto mostRecent = mostRecentAccessedBucket_.load(std::memory_order_relaxed);
@@ -72,25 +79,46 @@ void AccessTracker::updateMostRecentAccessedBucket() {
         mostRecent, bucketIdx);
     if (success) {
       LockHolder l(locks_[bucketIdx]);
-      resetBucket(bucketIdx);
+      resetBucketLocked(bucketIdx);
       return;
     }
   }
 }
 
-double AccessTracker::getBucketAccessCount(size_t idx, uint64_t hashVal) const {
+template <typename CMS>
+double AccessTrackerBase<CMS>::getBucketAccessCountLocked(
+    size_t idx, uint64_t hashVal) const {
   return config_.useCounts ? counts_.at(idx).getCount(hashVal)
-                           : (filters_.couldExist(idx, hashVal)) ? 1 : 0;
+         : (filters_.couldExist(idx, hashVal)) ? 1
+                                               : 0;
 }
 
-void AccessTracker::updateBucket(size_t idx, uint64_t hashVal) {
+template <typename CMS>
+void AccessTrackerBase<CMS>::updateBucketLocked(size_t idx, uint64_t hashVal) {
   config_.useCounts ? counts_[idx].increment(hashVal)
                     : filters_.set(idx, hashVal);
+  itemCounts_[idx]++;
 }
 
-void AccessTracker::resetBucket(size_t idx) {
+template <typename CMS>
+void AccessTrackerBase<CMS>::resetBucketLocked(size_t idx) {
   config_.useCounts ? counts_[idx].reset() : filters_.clear(idx);
+  itemCounts_[idx] = 0;
 }
 
+template <typename CMS>
+std::vector<uint64_t> AccessTrackerBase<CMS>::getRotatedAccessCounts() {
+  size_t currentBucketIdx = getCurrentBucketIndex();
+  std::vector<uint64_t> counts(config_.numBuckets);
+
+  for (size_t i = 0; i < config_.numBuckets; i++) {
+    const auto idx = rotatedIdx(currentBucketIdx + config_.numBuckets - i);
+    LockHolder l(locks_[idx]);
+    counts[i] = itemCounts_[idx];
+  }
+
+  return counts;
+}
+} // namespace detail
 } // namespace cachelib
 } // namespace facebook

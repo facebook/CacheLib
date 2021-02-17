@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "cachelib/allocator/TypedHandle.h"
+#include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Iterators.h"
 #include "cachelib/datatype/Buffer.h"
@@ -47,8 +48,9 @@ class RangeMap {
   // @param key     key for the item in cache
   // @param numEntries   number of entries this map can contain initially
   // @param numBytes     number of bytes allocated for value storage initially
-  // @return  valid cachelib::RangeMap on success,
-  //          cachelib::RangeMap::isNullItemHandle() == true on failure
+  // @return  valid cachelib::RangeMap on success
+  // @throw   cachelib::exception::OutOfMemory if failing to allocate an index
+  //          or a buffer associated with the map
   static RangeMap create(Cache& cache,
                          PoolId pid,
                          typename Cache::Key key,
@@ -133,6 +135,12 @@ class RangeMap {
   // This doesn't include cachelib item overhead
   size_t sizeInBytes() const;
 
+  // Return bytes left unused (can be used for future entries)
+  size_t remainingBytes() const { return bufferManager_.remainingBytes(); }
+
+  // Returns bytes left behind by removed entries
+  size_t wastedBytes() const { return bufferManager_.wastedBytes(); }
+
   // Return number of elements in this map
   uint32_t size() const {
     return handle_->template getMemoryAs<BinaryIndex>()->numEntries();
@@ -159,7 +167,7 @@ class RangeMap {
   using BinaryIndex = detail::BinaryIndex<EntryKey>;
   using BufferManager = detail::BufferManager<Cache>;
 
-  static constexpr int kWastedSpacePctThreshold = 50;
+  static constexpr int kWastedBytesPctThreshold = 50;
   static constexpr uint32_t kDefaultNumEntries = 20;
   static constexpr uint32_t kDefaultNumBytes = kDefaultNumEntries * 8;
 

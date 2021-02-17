@@ -1,7 +1,7 @@
-#include "cachelib/navy/admission_policy/RejectRandomAP.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/admission_policy/RejectRandomAP.h"
 
 namespace facebook {
 namespace cachelib {

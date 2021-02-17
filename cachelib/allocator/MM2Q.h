@@ -7,17 +7,16 @@
 #include <folly/Format.h>
 #pragma GCC diagnostic pop
 
+#include <folly/lang/Align.h>
+#include <folly/synchronization/DistributedMutex.h>
+
+#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/datastruct/MultiDList.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/Mutex.h"
-
-#include "cachelib/allocator/Cache.h"
-#include "cachelib/allocator/CacheStats.h"
-
-#include <folly/lang/Align.h>
-#include <folly/synchronization/DistributedMutex.h>
 
 namespace facebook {
 namespace cachelib {
@@ -54,14 +53,14 @@ class MM2Q {
 
   struct Config {
     explicit Config(SerializationConfigType configState)
-        : Config(configState.lruRefreshTime,
+        : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
-                 configState.updateOnWrite,
+                 *configState.updateOnWrite_ref(),
                  *configState.updateOnRead_ref(),
                  *configState.tryLockUpdate_ref(),
                  *configState.rebalanceOnRecordAccess_ref(),
-                 configState.hotSizePercent,
-                 configState.coldSizePercent) {}
+                 *configState.hotSizePercent_ref(),
+                 *configState.coldSizePercent_ref()) {}
 
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
@@ -226,7 +225,7 @@ class MM2Q {
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
     using CompressedPtr = typename T::CompressedPtr;
-    using Flags = typename T::Flags;
+    using RefFlags = typename T::Flags;
 
    public:
     Container() = default;
@@ -386,11 +385,11 @@ class MM2Q {
     // tail age
     void reconfigureLocked(const Time& currTime);
 
-    EvictionAgeStat getEvictionAgeStatLocked(uint64_t projectedLength) const
-        noexcept;
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
 
-    uint32_t getOldestAgeLocked(LruType lruType, Time currentTime) const
-        noexcept;
+    uint32_t getOldestAgeLocked(LruType lruType,
+                                Time currentTime) const noexcept;
 
     static Time getUpdateTime(const T& node) noexcept {
       return (node.*HookPtr).getUpdateTime();
@@ -408,28 +407,28 @@ class MM2Q {
 
     // Bit MM_BIT_0 is used to record if the item is hot.
     void markHot(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_0>();
+      node.template setFlag<RefFlags::kMMFlag0>();
     }
 
     void unmarkHot(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_0>();
+      node.template unSetFlag<RefFlags::kMMFlag0>();
     }
 
     bool isHot(const T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_0>();
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
 
     // Bit MM_BIT_2 is used to record if the item is cold.
     void markCold(T& node) noexcept {
-      node.template setFlag<Flags::MM_FLAG_2>();
+      node.template setFlag<RefFlags::kMMFlag2>();
     }
 
     void unmarkCold(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_2>();
+      node.template unSetFlag<RefFlags::kMMFlag2>();
     }
 
     bool isCold(const T& node) const noexcept {
-      return node.template isFlagSet<Flags::MM_FLAG_2>();
+      return node.template isFlagSet<RefFlags::kMMFlag2>();
     }
 
     bool isWarm(const T& node) const noexcept {
@@ -441,15 +440,15 @@ class MM2Q {
     // config_.tailSize > 0, and a node is in Tail only if the tail is enabled.
     void markTail(T& node) noexcept {
       XDCHECK(config_.tailSize > 0);
-      node.template setFlag<Flags::MM_FLAG_1>();
+      node.template setFlag<RefFlags::kMMFlag1>();
     }
 
     void unmarkTail(T& node) noexcept {
-      node.template unSetFlag<Flags::MM_FLAG_1>();
+      node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
     bool inTail(const T& node) const noexcept {
-      return config_.tailSize && node.template isFlagSet<Flags::MM_FLAG_1>();
+      return config_.tailSize && node.template isFlagSet<RefFlags::kMMFlag1>();
     }
 
     // get the tail lru for current lru, i.e. WarmTail for Warm, and ColdTail
@@ -518,6 +517,9 @@ class MM2Q {
     // Write access to the MM2Q Config is serialized.
     // Reads may be racy.
     Config config_{};
+
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
 
     FRIEND_TEST(MM2QTest, DetailedTest);
     FRIEND_TEST(MM2QTest, DeserializeToMoreLists);

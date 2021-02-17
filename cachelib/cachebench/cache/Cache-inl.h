@@ -1,12 +1,11 @@
-#include <iostream>
-
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #include <folly/Format.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include <iostream>
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/cachebench/util/NandWrites.h"
@@ -126,8 +125,6 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.dipperOptions["dipper_request_ordering"] = true;
     }
 
-    nvmConfig.dipperOptions["dipper_navy_direct_io"] =
-        config_.dipperUseDirectIO;
     nvmConfig.dipperOptions["dipper_navy_lru"] = config_.dipperNavyUseRegionLru;
     nvmConfig.dipperOptions["dipper_navy_sfifo_segment_ratio"] =
         folly::dynamic::array(config_.navySegmentedFifoSegmentRatio.begin(),
@@ -200,12 +197,7 @@ Cache<Allocator>::Cache(CacheConfig config,
                   config_.createMlPolicy())));
     }
 
-    if (config_.memoryOnlyTTL > 0) {
-      allocatorConfig.setNvmCacheFilterCallback(
-          [this](auto& item, auto /* chainedItemRange */) {
-            return item.getConfiguredTTL() < config_.memoryOnlyTTL;
-          });
-    }
+    allocatorConfig.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
 
     usesNvm_ = true;
   }

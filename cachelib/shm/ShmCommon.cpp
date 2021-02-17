@@ -1,12 +1,11 @@
 #include "cachelib/shm/ShmCommon.h"
 
-#include <sys/types.h>
-
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
 #include <folly/Range.h>
 #include <folly/String.h>
 #include <folly/logging/xlog.h>
+#include <sys/types.h>
 
 namespace facebook {
 namespace cachelib {

@@ -1,8 +1,8 @@
-#include <limits>
-#include <string>
-
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+
+#include <limits>
+#include <string>
 
 #include "cachelib/common/Hash.h"
 

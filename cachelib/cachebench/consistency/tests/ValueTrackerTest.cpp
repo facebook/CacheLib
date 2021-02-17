@@ -1,7 +1,7 @@
-#include "cachelib/cachebench/consistency/ValueTracker.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/cachebench/consistency/ValueTracker.h"
 
 namespace facebook {
 namespace cachelib {

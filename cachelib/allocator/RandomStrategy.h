@@ -1,8 +1,8 @@
 #pragma once
 
-#include "cachelib/allocator/RebalanceStrategy.h"
-
 #include <folly/Random.h>
+
+#include "cachelib/allocator/RebalanceStrategy.h"
 
 namespace facebook {
 namespace cachelib {

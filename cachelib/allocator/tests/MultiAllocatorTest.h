@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/Random.h>
 
 #include <algorithm>
 #include <future>
@@ -9,11 +9,10 @@
 #include <thread>
 #include <vector>
 
-#include <folly/Random.h>
-
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/PoolRebalancer.h"
+#include "cachelib/allocator/tests/TestBase.h"
 
 namespace facebook {
 namespace cachelib {

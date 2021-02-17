@@ -395,12 +395,15 @@ struct GlobalCacheStats {
 
   // latency and percentile stats of various cachelib operations
   util::PercentileStats::Estimates allocateLatencyNs{};
+  util::PercentileStats::Estimates moveChainedLatencyNs{};
+  util::PercentileStats::Estimates moveRegularLatencyNs{};
   util::PercentileStats::Estimates nvmLookupLatencyNs{};
   util::PercentileStats::Estimates nvmInsertLatencyNs{};
   util::PercentileStats::Estimates nvmRemoveLatencyNs{};
   util::PercentileStats::Estimates ramEvictionAgeSecs{};
-  util::PercentileStats::Estimates nvmSmallEvictionAgeSecs{};
-  util::PercentileStats::Estimates nvmLargeEvictionAgeSecs{};
+  util::PercentileStats::Estimates ramItemLifeTimeSecs{};
+  util::PercentileStats::Estimates nvmSmallLifetimeSecs{};
+  util::PercentileStats::Estimates nvmLargeLifetimeSecs{};
   util::PercentileStats::Estimates nvmEvictionSecondsPastExpiry{};
   util::PercentileStats::Estimates nvmEvictionSecondsToExpiry{};
   util::PercentileStats::Estimates nvmPutSize{};

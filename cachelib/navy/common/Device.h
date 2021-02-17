@@ -113,6 +113,7 @@ class Device {
   void flush() { flushImpl(); }
 
   uint64_t getBytesWritten() const { return bytesWritten_.get(); }
+  uint64_t getBytesRead() const { return bytesRead_.get(); }
 
   void getCounters(const CounterVisitor& visitor) const;
 
@@ -129,6 +130,7 @@ class Device {
 
  private:
   mutable AtomicCounter bytesWritten_;
+  mutable AtomicCounter bytesRead_;
   mutable AtomicCounter writeIOErrors_;
   mutable AtomicCounter readIOErrors_;
   mutable AtomicCounter encryptionErrors_;

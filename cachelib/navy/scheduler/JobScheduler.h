@@ -1,8 +1,8 @@
 #pragma once
 
-#include <memory>
-
 #include <folly/Function.h>
+
+#include <memory>
 
 #include "cachelib/navy/common/CompilerUtils.h"
 #include "cachelib/navy/common/Types.h"

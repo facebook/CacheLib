@@ -1,8 +1,8 @@
-#include <thread>
-
 #include <folly/Benchmark.h>
 #include <folly/ThreadLocal.h>
 #include <folly/init/Init.h>
+
+#include <thread>
 
 DEFINE_uint64(num_threads, 32, "Number of threads to be run concurrently");
 DEFINE_uint64(num_ops, 1e7, "Number of operations to be run per thread");

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cachelib/allocator/tests/TestBase.h"
+#include <folly/Random.h>
 
 #include <algorithm>
 #include <chrono>
@@ -11,9 +11,8 @@
 #include <thread>
 #include <vector>
 
-#include <folly/Random.h>
-
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/common/TestUtils.h"
 #include "cachelib/common/Utils.h"
 

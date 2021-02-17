@@ -1,12 +1,12 @@
 #pragma once
+#include <glog/logging.h>
+
 #include <atomic>
 #include <cstring>
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <numeric>
-
-#include <glog/logging.h>
 
 #include "cachelib/common/Time.h"
 
