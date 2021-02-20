@@ -207,6 +207,42 @@ TEST(ThreadPoolJobScheduler, ReadWriteReclaim) {
   scheduler.finish();
   EXPECT_EQ((std::vector<int>{3, 2, 0, 1}), v);
 }
+
+// Enqueue a certain number of jobs that cause the queue to be piled up and
+// check that the stats are reflective.
+TEST(ThreadPoolJobScheduler, MaxQueueLen) {
+  unsigned int numQueues = 4;
+  ThreadPoolJobScheduler scheduler{numQueues, 1};
+  SeqPoints sp;
+  sp.setName(0, "all enqueued");
+
+  std::atomic<unsigned int> jobsDone{0};
+  auto job = [&] {
+    sp.wait(0);
+    ++jobsDone;
+    return JobExitCode::Done;
+  };
+
+  int numToQueue = 1000;
+  for (int i = 0; i < numToQueue; i++) {
+    scheduler.enqueue(job, "read", JobType::Read);
+  }
+
+  // we have enqueued 1000 jobs across 4 queues. One job would be executed per
+  // thread. So the max queue len would be 249 per queue.
+  bool checked = false;
+  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+    if (name == "navy_reader_pool_max_queue_len") {
+      EXPECT_EQ(stat, numToQueue / numQueues - 1);
+      checked = true;
+    }
+  });
+  EXPECT_TRUE(checked);
+  sp.reached(0);
+  scheduler.finish();
+  EXPECT_EQ(jobsDone, numToQueue);
+}
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

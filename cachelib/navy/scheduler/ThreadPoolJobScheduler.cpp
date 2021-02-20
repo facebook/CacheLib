@@ -221,9 +221,7 @@ ThreadPoolExecutor::Stats ThreadPoolExecutor::getStats() const {
     stats.jobsDone += js.jobsDone;
     stats.jobsHighReschedule += js.jobsHighReschedule;
     stats.reschedules += js.reschedules;
-    if (stats.maxQueueLen > js.maxQueueLen) {
-      stats.maxQueueLen = js.maxQueueLen;
-    }
+    stats.maxQueueLen = std::max(stats.maxQueueLen, js.maxQueueLen);
     stats.maxPendingJobs += js.maxQueueLen;
   }
   return stats;

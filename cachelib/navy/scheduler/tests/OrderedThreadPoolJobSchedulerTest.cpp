@@ -233,6 +233,49 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueAndFinish) {
   EXPECT_EQ(numCompleted, numKeys);
 }
 
+// enqueue a certain number of jobs and validate the stats for spooling are
+// reflective of the behavior expected.
+TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
+  unsigned int numKeys = 10000;
+  std::atomic<int> numCompleted{0};
+  SeqPoints sp;
+  sp.setName(0, "all enqueued");
+
+  unsigned int numQueues = 4;
+  OrderedThreadPoolJobScheduler scheduler{numQueues, 1, 10};
+  for (unsigned int i = 0; i < numKeys; i++) {
+    scheduler.enqueueWithKey(
+        [&]() {
+          sp.wait(0);
+          ++numCompleted;
+          return JobExitCode::Done;
+        },
+        "", JobType::Read, folly::Random::rand32());
+  }
+
+  uint64_t numSpooled = 0;
+  uint64_t maxQueueLen = 0;
+  uint64_t pendingJobs = 0;
+  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+    if (name == "navy_reader_max_queue_len") {
+      maxQueueLen = static_cast<uint64_t>(stat);
+    } else if (name == "navy_req_order_curr_spool_size") {
+      numSpooled = static_cast<uint64_t>(stat);
+    } else if (name == "navy_max_reader_pool_pending_jobs") {
+      pendingJobs = static_cast<uint64_t>(stat);
+    }
+  });
+
+  EXPECT_GE(numSpooled, 0);
+  uint64_t numQueued = numKeys - numSpooled;
+  EXPECT_LE(maxQueueLen, numQueued);
+  EXPECT_EQ(pendingJobs + numQueues, numQueued);
+
+  sp.reached(0);
+  scheduler.finish();
+  EXPECT_EQ(numCompleted, numKeys);
+}
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib
