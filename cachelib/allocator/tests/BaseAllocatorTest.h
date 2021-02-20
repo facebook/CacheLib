@@ -3563,9 +3563,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // set up allocator for TTL test
     typename AllocatorT::Config config;
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
-    // set this to false to ensure that items are not removed when they are
-    // expired.
-    config.setItemReaperOnFind(false);
     config.reaperInterval = std::chrono::milliseconds(0);
     AllocatorT allocator(config);
 
@@ -3632,7 +3629,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // set up allocator for itemsReaper test
     typename AllocatorT::Config config;
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
-    config.setItemReaperOnFind(false);
     config.enableItemReaperInBackground(std::chrono::seconds{1}, {});
 
     AllocatorT allocator(config);

@@ -1702,15 +1702,10 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
   auto handle = findFastImpl(key, mode);
 
   if (handle) {
-    if (handle->isExpired()) {
+    if (UNLIKELY(handle->isExpired())) {
       // update cache miss stats if the item has already been expired.
       stats_.numCacheGetMiss.inc();
       stats_.numCacheGetExpiries.inc();
-      // remove the item if it is expired
-      if (config_.reapExpiredItemsOnFind) {
-        removeImpl(*handle, true /* removeFromNvm */,
-                   false /* recordApiEvent */);
-      }
       auto eventTracker = getEventTracker();
       if (UNLIKELY(eventTracker != nullptr)) {
         eventTracker->record(AllocatorApiEvent::FIND, key,

@@ -162,9 +162,6 @@ class CacheAllocatorConfig {
   // cachePersistence()
   CacheAllocatorConfig& usePosixForShm();
 
-  // This controls whether or not removing expired items on calling find()
-  CacheAllocatorConfig& setItemReaperOnFind(bool enable);
-
   // This turns on a background worker that periodically scans through the
   // access container and look for expired items and remove them.
   CacheAllocatorConfig& enableItemReaperInBackground(
@@ -462,9 +459,6 @@ class CacheAllocatorConfig {
   // they're reclaimed by pools in proportion to their sizes to reduce the
   // system free memory below this limit.
   unsigned int memUpperLimit{15};
-
-  // enable removing TTL-expired items in cache rightaway during find
-  bool reapExpiredItemsOnFind{true};
 
   // throttler config of items reaper for iteration
   util::Throttler::Config reaperConfig{};
@@ -811,13 +805,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::usePosixForShm() {
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setItemReaperOnFind(
-    bool enable) {
-  reapExpiredItemsOnFind = enable;
-  return *this;
-}
-
-template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableItemReaperInBackground(
     std::chrono::milliseconds interval, util::Throttler::Config config) {
   reaperInterval = interval;
@@ -1040,7 +1027,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memMaxAdvisePercent"] = std::to_string(memMaxAdvisePercent);
   configMap["memLowerLimit"] = std::to_string(memLowerLimit);
   configMap["memUpperLimit"] = std::to_string(memUpperLimit);
-  configMap["reapExpiredItemsOnFind"] = std::to_string(reapExpiredItemsOnFind);
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["cacheWorkerPostWorkHandler"] =
