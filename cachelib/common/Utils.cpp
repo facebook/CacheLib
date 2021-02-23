@@ -232,7 +232,7 @@ bool getStatIfExists(const std::string& name, mode_t* mode) {
     return true;
   } else if (errno != ENOENT && errno != ENOTDIR) {
     // some system error, but it might exist
-    throwSystemError(errno);
+    throwSystemError(errno, folly::sformat("Path: {}", name));
   }
 
   // does not exist;
@@ -247,7 +247,7 @@ bool isDir(const std::string& name) {
   struct stat buf = {};
   auto err = stat(name.c_str(), &buf);
   if (err) {
-    throwSystemError(errno);
+    throwSystemError(errno, folly::sformat("Path: {}", name));
   }
   return S_ISDIR(buf.st_mode) ? true : false;
 }

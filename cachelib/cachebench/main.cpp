@@ -133,16 +133,13 @@ int main(int argc, char** argv) {
     runnerInstance.reset(new facebook::cachelib::cachebench::Runner{
         config, FLAGS_progress_stats_file, FLAGS_progress,
         cacheConfigCustomizer, std::move(admPolicy)});
+
+    setupSignalHandler();
+    setupTimeoutHandler();
+
+    return runnerInstance->run() ? 0 : 1;
   } catch (const std::exception& e) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;
   }
-
-  setupSignalHandler();
-  setupTimeoutHandler();
-
-  if (!runnerInstance->run()) {
-    return 1;
-  }
-  return 0;
 }
