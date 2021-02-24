@@ -120,6 +120,12 @@ TEST(BlockCache, InsertLookup) {
     driver->flush();
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+    driver->getCounters([](folly::StringPiece name, double count) {
+      if (name == "navy_bc_lookups") {
+        EXPECT_EQ(1, count);
+      }
+    });
+
     EXPECT_EQ(e.value(), value.view());
     log.push_back(std::move(e));
     EXPECT_EQ(1, hits[0]);
@@ -168,6 +174,28 @@ TEST(BlockCache, InsertLookupSync) {
   EXPECT_EQ(1, hits[1]);
   EXPECT_EQ(0, hits[2]);
   EXPECT_EQ(0, hits[3]);
+}
+
+// assuming no collision of hash keys, we should have couldExist reflect the
+// insertion or deletion of keys.
+TEST(BlockCache, CouldExist) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device, {1024});
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  for (size_t i = 0; i < 17; i++) {
+    CacheEntry e{bg.gen(8 + i), bg.gen(800)};
+    EXPECT_FALSE(driver->couldExist(e.key()));
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+    EXPECT_TRUE(driver->couldExist(e.key()));
+    EXPECT_EQ(Status::Ok, driver->remove(e.key()));
+    EXPECT_FALSE(driver->couldExist(e.key()));
+  }
 }
 
 TEST(BlockCache, AsyncCallbacks) {

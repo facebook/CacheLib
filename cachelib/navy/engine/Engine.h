@@ -10,6 +10,10 @@ class Engine {
  public:
   virtual ~Engine() = default;
 
+  // returns true if the entry could exist. False if the entry definitely does
+  // not exist.
+  virtual bool couldExist(HashedKey hk) = 0;
+
   // If insert is failed, previous item (if existed) is not affected and
   // remains available via lookup.
   virtual Status insert(HashedKey hk, BufferView value) = 0;

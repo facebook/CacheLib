@@ -48,6 +48,49 @@ TEST(BigHash, InsertAndRemove) {
   EXPECT_EQ(Status::NotFound, bh.remove(makeHK("key")));
 }
 
+// without bloom filters, could exist always returns true.
+TEST(BigHash, CouldExistWithoutBF) {
+  BigHash::Config config;
+  setLayout(config, 128, 2);
+  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+  config.device = device.get();
+
+  BigHash bh(std::move(config));
+
+  Buffer value;
+  EXPECT_EQ(true, bh.couldExist(makeHK("key")));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  EXPECT_EQ(true, bh.couldExist(makeHK("key")));
+  EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
+  EXPECT_EQ(true, bh.couldExist(makeHK("key")));
+}
+
+TEST(BigHash, CouldExistWithBF) {
+  BigHash::Config config;
+  size_t bucketCount = 2;
+  setLayout(config, 128, bucketCount);
+  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+  config.device = device.get();
+
+  auto bf = std::make_unique<BloomFilter>(bucketCount, 2, 4);
+  config.bloomFilter = std::move(bf);
+
+  BigHash bh(std::move(config));
+
+  Buffer value;
+  // bloom filter is initially un-initialized. So it will only return true for
+  // keys that were inserted.
+  EXPECT_EQ(false, bh.couldExist(makeHK("key")));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
+  EXPECT_EQ(true, bh.couldExist(makeHK("key")));
+  EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
+  EXPECT_EQ(false, bh.couldExist(makeHK("key")));
+}
+
 TEST(BigHash, SimpleStats) {
   BigHash::Config config;
   setLayout(config, 64, 1);

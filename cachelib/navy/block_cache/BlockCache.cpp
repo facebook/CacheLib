@@ -184,6 +184,15 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   return status;
 }
 
+bool BlockCache::couldExist(HashedKey hk) {
+  const auto lr = index_.lookup(hk.keyHash());
+  if (!lr.found()) {
+    lookupCount_.inc();
+    return false;
+  }
+  return true;
+}
+
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   const auto seqNumber = regionManager_.getSeqNumber();
   const auto lr = index_.lookup(hk.keyHash());

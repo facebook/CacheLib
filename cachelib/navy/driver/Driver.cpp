@@ -57,6 +57,16 @@ std::pair<Engine&, Engine&> Driver::select(BufferView key,
   }
 }
 
+bool Driver::couldExist(BufferView key) {
+  const HashedKey hk{key};
+  auto couldExist =
+      smallItemCache_->couldExist(hk) || largeItemCache_->couldExist(hk);
+  if (!couldExist) {
+    lookupCount_.inc();
+  }
+  return couldExist;
+}
+
 Status Driver::insert(BufferView key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};
@@ -191,8 +201,9 @@ Status Driver::lookup(BufferView key, Buffer& value) {
 
 Status Driver::lookupAsync(BufferView key, LookupCallback cb) {
   lookupCount_.inc();
-  XDCHECK(cb);
   const HashedKey hk{key};
+  XDCHECK(cb);
+
   scheduler_->enqueueWithKey(
       [this, cb = std::move(cb), hk, skipLargeItemCache = false]() mutable {
         Buffer value;

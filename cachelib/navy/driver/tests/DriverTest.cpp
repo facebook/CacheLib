@@ -5,6 +5,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/Driver.h"
+#include "cachelib/navy/driver/NoopEngine.h"
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
@@ -52,6 +53,14 @@ class MockEngine final : public Engine {
           value = itr->second.second.copy();
           return Status::Ok;
         }));
+    ON_CALL(*this, couldExist(_)).WillByDefault(Invoke([this](HashedKey hk) {
+      auto itr = cache_.find(hk);
+      if (itr == cache_.end()) {
+        return false;
+      }
+      return true;
+    }));
+
     ON_CALL(*this, remove(_)).WillByDefault(Invoke([this](HashedKey hk) {
       return cache_.erase(hk) == 0 ? Status::NotFound : Status::Ok;
     }));
@@ -65,6 +74,7 @@ class MockEngine final : public Engine {
 
   MOCK_METHOD2(insert, Status(HashedKey hk, BufferView value));
   MOCK_METHOD2(lookup, Status(HashedKey hk, Buffer& value));
+  MOCK_METHOD1(couldExist, bool(HashedKey hk));
   MOCK_METHOD1(remove, Status(HashedKey hk));
 
   MOCK_METHOD0(flush, void());
@@ -129,6 +139,81 @@ Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,
 }
 } // namespace
 
+// test that the behavior of could exist works as expected when one of the
+// engine is a no-op engine.
+void testCouldExistWithOneEngine(bool small) {
+  BufferGen bg;
+  auto value = bg.gen(kSmallItemMaxSize + (small ? -5 : 5));
+
+  auto ex = makeJobScheduler();
+  auto exPtr = ex.get();
+
+  std::unique_ptr<Engine> li;
+  std::unique_ptr<Engine> si;
+
+  if (small) {
+    li = std::make_unique<NoopEngine>();
+    auto s = std::make_unique<MockEngine>();
+    {
+      testing::InSequence inSeq;
+      // current implementation always checks the small item engine first,
+      // before checking large item engine.
+      EXPECT_CALL(*s, couldExist(makeHK("key")));
+      EXPECT_CALL(*s, couldExist(makeHK("key")));
+      EXPECT_CALL(*s, couldExist(makeHK("key1")));
+    }
+
+    si = std::move(s);
+  } else {
+    si = std::make_unique<NoopEngine>();
+    auto l = std::make_unique<MockEngine>();
+    {
+      testing::InSequence inSeq;
+      // current implementation always checks the small item engine first,
+      // before checking large item engine.
+      EXPECT_CALL(*l, couldExist(makeHK("key")));
+      EXPECT_CALL(*l, couldExist(makeHK("key")));
+      EXPECT_CALL(*l, couldExist(makeHK("key1")));
+    }
+
+    li = std::move(l);
+  }
+
+  auto config = makeDriverConfig(std::move(li), std::move(si), std::move(ex));
+  auto driver = std::make_unique<Driver>(std::move(config));
+  EXPECT_FALSE(driver->couldExist(makeView("key")));
+
+  // Test async insert for small item cache
+  auto valCopy = Buffer{value.view()};
+  auto valView = valCopy.view();
+  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), valView));
+  exPtr->finish();
+  EXPECT_TRUE(driver->couldExist(makeView("key")));
+  Buffer valueLookup;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_FALSE(driver->couldExist(makeView("key1")));
+
+  uint32_t numLookups{std::numeric_limits<uint32_t>::max()};
+  uint32_t numLookupSuccess{std::numeric_limits<uint32_t>::max()};
+  driver->getCounters([&](folly::StringPiece name, double value) {
+    if (name == "navy_lookups") {
+      numLookups = static_cast<uint32_t>(value);
+
+    } else if (name == "navy_succ_lookups") {
+      numLookupSuccess = static_cast<uint32_t>(value);
+    }
+  });
+  EXPECT_EQ(3, numLookups);
+  EXPECT_EQ(1, numLookupSuccess);
+}
+
+TEST(Driver, CouldExistSmallWithNoopEngine) {
+  testCouldExistWithOneEngine(true);
+}
+TEST(Driver, CouldExistLargeWithNoopEngine) {
+  testCouldExistWithOneEngine(false);
+}
+
 TEST(Driver, SmallItem) {
   BufferGen bg;
   auto value = bg.gen(16);
@@ -137,6 +222,10 @@ TEST(Driver, SmallItem) {
   auto si = std::make_unique<MockEngine>();
   {
     testing::InSequence inSeq;
+    // current implementation always checks the small item engine first,
+    // before checking large item engine.
+    EXPECT_CALL(*si, couldExist(makeHK("key")));
+    EXPECT_CALL(*bc, couldExist(makeHK("key")));
     EXPECT_CALL(*si, insert(makeHK("key"), value.view()));
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _));
@@ -150,6 +239,8 @@ TEST(Driver, SmallItem) {
 
   MockInsertCB cbInsert;
   EXPECT_CALL(cbInsert, call(Status::Ok, makeView("key")));
+
+  EXPECT_FALSE(driver->couldExist(makeView("key")));
 
   // Test async insert for small item cache
   auto valCopy = Buffer{value.view()};
@@ -240,8 +331,8 @@ TEST(Driver, InsertFailed) {
   auto smallValue = bg.gen(16);
   auto largeValue = bg.gen(32);
 
-  // Insert a small item. Then insert a large one. Simulate large failed, device
-  // error reported. Small is still available.
+  // Insert a small item. Then insert a large one. Simulate large failed,
+  // device error reported. Small is still available.
   auto bc = std::make_unique<MockEngine>();
   auto si = std::make_unique<MockEngine>();
   {
@@ -386,8 +477,8 @@ TEST(Driver, EvictBlockCache) {
   EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 
-  // If we inserted in block cache, eviction from small cache should not happen,
-  // because it is removed.
+  // If we inserted in block cache, eviction from small cache should not
+  // happen, because it is removed.
   EXPECT_FALSE(siPtr->evict(makeView("key")));
 
   // But it can be evicted from block cache
