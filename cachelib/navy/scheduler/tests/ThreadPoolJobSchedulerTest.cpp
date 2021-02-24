@@ -17,8 +17,8 @@ void spinWait(std::atomic<int>& ai, int target) {
 }
 
 TEST(ThreadPoolJobScheduler, BlockOneTaskTwoWorkers) {
-  ThreadPoolJobScheduler scheduler{1, 2};
   std::atomic<int> ai{0};
+  ThreadPoolJobScheduler scheduler{1, 2};
   scheduler.enqueue(
       [&ai]() {
         spinWait(ai, 2);
@@ -124,13 +124,14 @@ TEST(ThreadPoolJobScheduler, Finish) {
 }
 
 TEST(ThreadPoolJobScheduler, FinishSchedulesNew) {
+  SeqPoints sp;
+
   // This test cover the bug in ThreadPoolJobScheduler we had. Let we have 2
   // thread scheduler, with threads #1 and #2. We finish threads one-by-one,
   // starting with thread #1. If a job on thread #2 schedules a new job on
   // thread #1 it will be never executed!
   ThreadPoolJobScheduler scheduler{2, 1};
 
-  SeqPoints sp;
   scheduler.enqueueWithKey(
       [&sp, &scheduler] {
         sp.wait(0);

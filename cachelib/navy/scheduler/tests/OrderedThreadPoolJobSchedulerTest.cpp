@@ -15,11 +15,11 @@ namespace tests {
 // order jobs with same type and ensure that they are executed in the
 // enqueued order.
 TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueSameType) {
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
   std::vector<int> order;
   int seq = 0;
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp, &order, n = ++seq]() {
         sp.wait(0);
@@ -62,11 +62,11 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueSameType) {
 // ordering is maintained.
 TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueDiffType) {
   std::array<JobType, 2> jobTypes = {JobType::Read, JobType::Write};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
   std::vector<int> order;
   int seq = 0;
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp, &order, n = ++seq]() {
         sp.wait(0);
@@ -109,10 +109,10 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueDiffType) {
 // should handle the draining of all the jobs, even with rescheduling.
 TEST(OrderedThreadPoolJobScheduler, SpoolAndFinish) {
   std::array<JobType, 2> jobTypes = {JobType::Read, JobType::Write};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
 
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp]() {
         sp.wait(0);
@@ -156,12 +156,12 @@ TEST(OrderedThreadPoolJobScheduler, SpoolAndFinish) {
 TEST(OrderedThreadPoolJobScheduler, JobWithRetry) {
   std::array<JobType, 3> jobTypes = {JobType::Read, JobType::Write,
                                      JobType::Reclaim};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
 
   std::atomic<uint64_t> numReschedules{0};
 
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&, i = 0]() mutable {
         sp.wait(0);
