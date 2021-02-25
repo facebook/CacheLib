@@ -88,8 +88,6 @@ Cache<Allocator>::Cache(CacheConfig config,
         config_.dipperSizeMB * MB;
 
     nvmConfig.dipperOptions["dipper_force_reinit"] = true;
-    nvmConfig.dipperOptions["dipper_async_threads"] =
-        config_.dipperAsyncThreads;
     nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
         config_.navyDataChecksum;
 

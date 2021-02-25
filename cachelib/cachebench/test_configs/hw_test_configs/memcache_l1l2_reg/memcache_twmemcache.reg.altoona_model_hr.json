@@ -8,7 +8,8 @@
     "minAllocSize": 64,
     "htBucketPower": 27,
 
-    "dipperAsyncThreads": 128,
+    "navyReaderThreads": 32,
+    "navyWriterThreads": 32,
     "dipperFilePath": "/dev/md0",
     "writeAmpDeviceList": [
       "nvme1n1",
