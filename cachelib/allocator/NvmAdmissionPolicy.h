@@ -68,6 +68,9 @@ class NvmAdmissionPolicy {
     return ctrs;
   }
 
+  // Track access for an item.
+  virtual void trackAccess(const std::string&) {}
+
  protected:
   // Implement this method for the detailed admission decision logic.
   // By default this accepts all items.
