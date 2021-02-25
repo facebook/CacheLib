@@ -269,7 +269,10 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
   EXPECT_GE(numSpooled, 0);
   uint64_t numQueued = numKeys - numSpooled;
   EXPECT_LE(maxQueueLen, numQueued);
-  EXPECT_EQ(pendingJobs + numQueues, numQueued);
+  // we could have at most one job executing per Queue. So the total of
+  // pending jobs must not be off by more than numQueue when compared with
+  // total enqueued.
+  EXPECT_LE(numQueued - pendingJobs, numQueues);
 
   sp.reached(0);
   scheduler.finish();
