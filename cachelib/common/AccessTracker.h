@@ -9,6 +9,7 @@
 
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/CountMinSketch.h"
+#include "cachelib/common/Ticker.h"
 #include "cachelib/common/Time.h"
 
 namespace facebook {
@@ -24,10 +25,11 @@ class AccessTrackerBase {
     size_t numBuckets{0};
 
     // Bucket configuration. By default we have one hour per bucket.
-
     // function to return the current tick.
-    mutable TickerFct getCurrentTick{
-        [] { return facebook::cachelib::util::getCurrentTimeSec(); }};
+
+    // The ticker to be uesd to supply current tick.
+    // If this is not set, the default clock based ticker will be used.
+    std::shared_ptr<Ticker> ticker{std::make_shared<ClockBasedTicker>()};
 
     // number of ticks per bucket.
     size_t numTicksPerBucket{3600};
@@ -116,7 +118,8 @@ class AccessTrackerBase {
   static constexpr uint64_t kRandomSeed{314159};
 
   size_t getCurrentBucketIndex() const {
-    return rotatedIdx(config_.getCurrentTick() / config_.numTicksPerBucket);
+    return rotatedIdx(config_.ticker->getCurrentTick() /
+                      config_.numTicksPerBucket);
   }
 
   // rotate raw bucket index to fit into the output.
