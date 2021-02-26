@@ -43,9 +43,6 @@ template <typename CacheTrait>
 class CacheAllocator;
 
 template <typename CacheTrait>
-class CacheItem;
-
-template <typename CacheTrait>
 class CacheChainedItem;
 
 template <typename CacheTrait>
