@@ -11,6 +11,15 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
+    unsigned int readerThreads,
+    unsigned int writerThreads,
+    unsigned int reqOrderShardPower) {
+  return std::make_unique<OrderedThreadPoolJobScheduler>(
+      readerThreads, writerThreads, reqOrderShardPower);
+}
+
 namespace {
 constexpr uint64_t kHighRescheduleCount = 250;
 constexpr uint64_t kHighRescheduleReportRate = 100;
