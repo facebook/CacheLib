@@ -62,8 +62,11 @@ class NvmAdmissionPolicy {
     ctrs["ap.called"] = overallCount_.get();
     ctrs["ap.accepted"] = accepted_.get();
     ctrs["ap.rejected"] = rejected_.get();
-    util::LatencyTracker::visitLatencyStatsUs(
-        ctrs, overallLatency_, "ap.latency");
+
+    auto visitorUs = [&ctrs](folly::StringPiece name, double count) {
+      ctrs[name.toString()] = count / 1000;
+    };
+    overallLatency_.visitQuantileEstimator(visitorUs, "ap.latency_us");
     ctrs["ap.ttlRejected"] = ttlRejected_.get();
     return ctrs;
   }

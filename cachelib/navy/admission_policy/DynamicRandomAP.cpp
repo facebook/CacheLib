@@ -199,8 +199,7 @@ void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_ap_write_rate_adjusted_target",
           static_cast<double>(params.curTargetRate));
   visitor("navy_ap_prob_factor_x100", params_.probabilityFactor * 100);
-  baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_{}_{}",
-                                        "baseProb_x100");
+  baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_baseProx_x100");
   visitor("navy_ap_write_rate_observed",
           static_cast<double>(params_.observedCurRate_));
 }

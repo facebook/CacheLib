@@ -169,11 +169,10 @@ void LruPolicy::dumpList(const char* tag,
 
 void LruPolicy::getCounters(const CounterVisitor& v) const {
   secSinceInsertionEstimator_.visitQuantileEstimator(
-      v, "{}_{}", "navy_bc_lru_secs_since_insertion");
+      v, "navy_bc_lru_secs_since_insertion");
   secSinceAccessEstimator_.visitQuantileEstimator(
-      v, "{}_{}", "navy_bc_lru_secs_since_access");
-  hitsEstimator_.visitQuantileEstimator(
-      v, "{}_{}", "navy_bc_lru_region_hits_estimate");
+      v, "navy_bc_lru_secs_since_access");
+  hitsEstimator_.visitQuantileEstimator(v, "navy_bc_lru_region_hits_estimate");
 }
 
 void LruPolicy::persist(RecordWriter& rw) const {
