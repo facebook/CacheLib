@@ -23,6 +23,7 @@ add_library (cachelib_navy
   driver/Driver.cpp
   Factory.cpp
   scheduler/ThreadPoolJobScheduler.cpp
+  scheduler/ThreadPoolJobQueue.cpp
   serialization/RecordIO.cpp
   )
 add_dependencies(cachelib_navy thrift_generated_files)
