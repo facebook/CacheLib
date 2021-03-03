@@ -47,6 +47,7 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   out << std::fixed;
   out << folly::sformat("{:10}: {:.2f} million", "Total Ops", ops / 1e6)
       << std::endl;
+  out << folly::sformat("{:10}: {:,}", "Total sets", set) << std::endl;
 
   auto outFn = [&out](folly::StringPiece k1, uint64_t v1, folly::StringPiece k2,
                       double v2) {
