@@ -45,7 +45,7 @@ build_debian_10()
       || die "failed to install packages for Debian"
   fi
 
-  for pkg in sparsemap fmt folly fizz wangle fbthrift ;
+  for pkg in zstd sparsemap fmt folly fizz wangle fbthrift ;
   do
     # shellcheck disable=SC2086
     ./contrib/build-package.sh -i $pass_params "$pkg" \
@@ -60,7 +60,7 @@ build_centos_8()
       || die "failed to install packages for CentOS"
   fi
 
-  for pkg in googleflags googlelog sparsemap fmt folly fizz wangle fbthrift ;
+  for pkg in zstd googleflags googlelog sparsemap fmt folly fizz wangle fbthrift ;
   do
     # shellcheck disable=SC2086
     ./contrib/build-package.sh -i $pass_params "$pkg" \
@@ -75,7 +75,7 @@ build_ubuntu_18()
       || die "failed to install packages for Ubuntu 18.04"
   fi
 
-  for pkg in googletest sparsemap fmt folly fizz wangle fbthrift ;
+  for pkg in zstd googletest sparsemap fmt folly fizz wangle fbthrift ;
   do
     # shellcheck disable=SC2086
     ./contrib/build-package.sh -i $pass_params "$pkg" \
