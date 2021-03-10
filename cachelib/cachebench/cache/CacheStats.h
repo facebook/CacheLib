@@ -69,18 +69,7 @@ struct Stats {
   bool isNvmCacheDisabled{false};
 
   void render(std::ostream& out) const {
-    auto pctFn = [](uint64_t ops, uint64_t total) {
-      return total == 0 ? 100.0
-                        : 100.0 * static_cast<double>(ops) /
-                              static_cast<double>(total);
-    };
-
-    auto invertPctFn = [&pctFn](uint64_t ops, uint64_t total) {
-      return 100 - pctFn(ops, total);
-    };
-
-    const uint64_t totalMisses =
-        numNvmGets > 0 ? numNvmGetMiss : numCacheGetMiss;
+    auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
     out << folly::sformat("Items in RAM  : {:,}", numItems) << std::endl;
     out << folly::sformat("Items in NVM  : {:,}", numNvmItems) << std::endl;
@@ -232,6 +221,51 @@ struct Stats {
           << std::endl;
     }
   }
+
+  uint64_t getTotalMisses() const {
+    return numNvmGets > 0 ? numNvmGetMiss : numCacheGetMiss;
+  }
+
+  // Render the stats based on the delta between overall stats and previous
+  // stats. It can be used to render the stats in the last time period.
+  void render(const Stats& prevStats, std::ostream& out) const {
+    auto totalMisses = getTotalMisses();
+    auto prevTotalMisses = prevStats.getTotalMisses();
+    if (numCacheGets > prevStats.numCacheGets &&
+        totalMisses >= prevTotalMisses) {
+      const double overallHitRatio = invertPctFn(
+          totalMisses - prevTotalMisses, numCacheGets - prevStats.numCacheGets);
+      out << folly::sformat("Cache Gets    : {:,}",
+                            numCacheGets - prevStats.numCacheGets)
+          << std::endl;
+      out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
+          << std::endl;
+
+      const double ramHitRatio =
+          invertPctFn(numCacheGetMiss - prevStats.numCacheGetMiss,
+                      numCacheGets - prevStats.numCacheGets);
+      const double nvmHitRatio =
+          invertPctFn(numNvmGetMiss - prevStats.numNvmGetMiss,
+                      numNvmGets - prevStats.numNvmGets);
+
+      out << folly::sformat(
+          "RAM Hit Ratio : {:6.2f}%\n"
+          "NVM Hit Ratio : {:6.2f}%\n",
+          ramHitRatio, nvmHitRatio);
+    }
+  }
+
+ private:
+  double pctFn(uint64_t ops, uint64_t total) const {
+    return total == 0
+               ? 100.0
+               : 100.0 * static_cast<double>(ops) / static_cast<double>(total);
+  }
+
+  double invertPctFn(uint64_t ops, uint64_t total) const {
+    return 100 - pctFn(ops, total);
+  }
+
 }; // namespace cachebench
 
 } // namespace cachebench
