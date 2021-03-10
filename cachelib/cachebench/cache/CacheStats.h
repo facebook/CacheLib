@@ -256,13 +256,13 @@ struct Stats {
   }
 
  private:
-  double pctFn(uint64_t ops, uint64_t total) const {
+  static double pctFn(uint64_t ops, uint64_t total) {
     return total == 0
                ? 100.0
                : 100.0 * static_cast<double>(ops) / static_cast<double>(total);
   }
 
-  double invertPctFn(uint64_t ops, uint64_t total) const {
+  static double invertPctFn(uint64_t ops, uint64_t total) {
     return 100 - pctFn(ops, total);
   }
 
