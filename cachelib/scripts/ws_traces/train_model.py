@@ -6,9 +6,6 @@ import random
 import cachelib.scripts.ws_traces.feature_extractor as feature_extractor
 import cachelib.scripts.ws_traces.utils as utils
 import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dfeature
-
-# @dep=@/third-party:lightgbm:lightgbm-py
-import lightgbm as lgb  # @manual
 import numpy as np
 import pandas as pd
 
@@ -85,40 +82,3 @@ def train_test_split(model_df):
     ) & (model_df.loc[train_test_split:, "missSize"] >= LABEL_REJECTX)
 
     return X_train, y_train, X_test, y_test
-
-
-def train_lgbm_model(X_train, y_train, X_test, y_test):
-
-    # basic model training hyperparameters
-    # hyperparameters are chosen based on experience & offline tuning
-    # Model AUC is gernerally above 0.95 (good enough), therefore the performance
-    # is more bounded by framing the right objective than training the model.
-
-    lgb_train = lgb.Dataset(X_train, y_train)
-    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
-
-    params = {
-        "boosting_type": "gbdt",
-        "objective": "binary",
-        "metric": ["binary_logloss"],
-        "num_leaves": 63,
-        "learning_rate": 0.005,
-        "max_bin": 255,
-        "feature_fraction": 0.9,
-        "bagging_fraction": 0.9,
-        "bagging_freq": 5,
-        "min_data_in_leaf": 50,
-        "min_sum_hessian_in_leaf": 5.0,
-        "num_threads": 10,
-        "verbosity": -1,
-    }
-
-    gbm = lgb.train(
-        params,
-        lgb_train,
-        num_boost_round=500,
-        valid_sets=lgb_eval,
-        verbose_eval=False,
-        early_stopping_rounds=25,
-    )
-    return gbm
