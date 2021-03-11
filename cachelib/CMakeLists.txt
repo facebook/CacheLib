@@ -69,7 +69,7 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
 find_package(Boost REQUIRED COMPONENTS
-             system filesystem regex context)
+             system filesystem regex context program_options thread)
 find_package(Sodium REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
