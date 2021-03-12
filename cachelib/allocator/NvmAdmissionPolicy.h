@@ -15,6 +15,7 @@ class NvmAdmissionPolicy {
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
   virtual ~NvmAdmissionPolicy() = default;
+
   // The method that the outside class calls to get the admission decision.
   // It captures the common logics (e.g statistics) then
   // delicates the detailed implementation to subclasses.
@@ -39,8 +40,43 @@ class NvmAdmissionPolicy {
     return decision;
   }
 
+  // same as the above, but makes admission decisions given just the key and
+  // not the entire item. This can be used when we can infer the information
+  // needed for admission decision from only the key.
+  virtual bool accept(typename Item::Key key) final {
+    util::LatencyTracker overallTracker(overallLatency_);
+    overallCount_.inc();
+
+    const bool decision = acceptImpl(key);
+    if (decision) {
+      accepted_.inc();
+    } else {
+      rejected_.inc();
+    }
+    return decision;
+  }
+
+  // The method that exposes statuses.
+  virtual std::unordered_map<std::string, double> getCounters() final {
+    auto ctrs = getCountersImpl();
+    ctrs["ap.called"] = overallCount_.get();
+    ctrs["ap.accepted"] = accepted_.get();
+    ctrs["ap.rejected"] = rejected_.get();
+
+    auto visitorUs = [&ctrs](folly::StringPiece name, double count) {
+      ctrs[name.toString()] = count / 1000;
+    };
+    overallLatency_.visitQuantileEstimator(visitorUs, "ap.latency_us");
+    ctrs["ap.ttlRejected"] = ttlRejected_.get();
+    return ctrs;
+  }
+
+  // Track access for an item.
+  // @param key   key corresponding to the item
+  virtual void trackAccess(typename Item::Key) {}
+
   // Set minTTL. This method should be called only once.
-  virtual void initMinTTL(const uint64_t minTTL) final {
+  void initMinTTL(uint64_t minTTL) {
     auto initValue = minTTL_.load(std::memory_order_relaxed);
     if (initValue > 0) {
       throw std::invalid_argument(
@@ -52,21 +88,7 @@ class NvmAdmissionPolicy {
     }
   }
 
-  virtual uint64_t getMinTTL() const final { return minTTL_; }
-
-  virtual bool accept(const std::string& /* key */) { return true; }
-
-  // The method that exposes statuses.
-  virtual std::unordered_map<std::string, double> getCounters() final {
-    auto ctrs = getCountersImpl();
-    ctrs["ap.called"] = overallCount_.get();
-    ctrs["ap.accepted"] = accepted_.get();
-    ctrs["ap.rejected"] = rejected_.get();
-    util::LatencyTracker::visitLatencyStatsUs(
-        ctrs, overallLatency_, "ap.latency");
-    ctrs["ap.ttlRejected"] = ttlRejected_.get();
-    return ctrs;
-  }
+  uint64_t getMinTTL() const { return minTTL_; }
 
  protected:
   // Implement this method for the detailed admission decision logic.
@@ -74,6 +96,11 @@ class NvmAdmissionPolicy {
   virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) {
     return true;
   }
+
+  // Implement this method for the detailed admission decision logic.
+  // By default this accepts all items.
+  virtual bool acceptImpl(typename Item::Key) { return true; }
+
   // Implementation specific statistics.
   // Please include a prefix/postfix with the name of implementation to avoid
   // collision with base level stats.
@@ -92,7 +119,7 @@ class NvmAdmissionPolicy {
 };
 
 template <typename Cache>
-class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
+class RejectFirstAP final : public NvmAdmissionPolicy<Cache> {
  public:
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
@@ -105,8 +132,8 @@ class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
         useDramHitSignal_{useDramHitSignal} {}
 
  protected:
-  virtual bool acceptImpl(const Item& it,
-                          folly::Range<ChainedItemIter>) final override {
+  bool acceptImpl(const Item& it,
+                  folly::Range<ChainedItemIter>) final override {
     const bool wasDramHit =
         useDramHitSignal_ && it.getLastAccessTime() > it.getCreationTime();
 
@@ -126,8 +153,7 @@ class RejectFirstAP : public NvmAdmissionPolicy<Cache> {
     return seenBefore || wasDramHit;
   }
 
-  virtual std::unordered_map<std::string, double> getCountersImpl()
-      final override {
+  std::unordered_map<std::string, double> getCountersImpl() final override {
     std::unordered_map<std::string, double> ctrs;
     ctrs["ap.reject_first_keys_tracked"] = tracker_.numKeysTracked();
     ctrs["ap.reject_first_tracking_window_secs"] =

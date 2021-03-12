@@ -11,6 +11,7 @@ class NoopEngine final : public Engine {
   Status insert(HashedKey /* hk */, BufferView /* value */) override {
     return Status::Rejected;
   }
+  bool couldExist(HashedKey) override { return false; }
   Status lookup(HashedKey /* hk */, Buffer& /* value */) override {
     return Status::NotFound;
   }

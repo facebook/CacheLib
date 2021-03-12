@@ -35,15 +35,33 @@ enum class JobType { Read, Write, Reclaim, Flush };
 class JobScheduler {
  public:
   virtual ~JobScheduler() = default;
-  virtual void enqueue(Job job, folly::StringPiece name, JobType type) = 0;
-  // Uses @key to deterministically schedule job on one of available workers.
+
+  // Uses @key to schedule job on one of available workers. Jobs can be
+  // ordered by their key based on their enqueue order,  if the scheduler
+  // supports it.
   virtual void enqueueWithKey(Job job,
                               folly::StringPiece name,
                               JobType type,
                               uint64_t key) = 0;
+
+  // enqueue a job for execution. No ordering guarantees are made for these
+  // jobs.
+  virtual void enqueue(Job job, folly::StringPiece name, JobType type) = 0;
+
+  // guarantees that all enqueued jobs are finished and blocks until then.
   virtual void finish() = 0;
+
+  // visits each available counter for the visitor to take appropriate action.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
 };
+
+// create a thread pool job scheduler that ensures ordering of requests by
+// key. This is the default job scheduler for use in Navy.
+std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
+    uint32_t readerThreads,
+    uint32_t writerThreads,
+    uint32_t reqOrderShardPower);
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

@@ -25,6 +25,9 @@ AccessTrackerBase<CMS>::AccessTrackerBase(Config config)
         config_.maxNumOpsPerBucket,
         config_.bfFalsePositiveRate);
   }
+  if (!config_.ticker) {
+    config_.ticker = std::make_shared<ClockBasedTicker>();
+  }
 }
 
 // Record access to the current bucket.

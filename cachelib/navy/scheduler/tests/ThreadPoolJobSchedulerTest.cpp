@@ -17,8 +17,8 @@ void spinWait(std::atomic<int>& ai, int target) {
 }
 
 TEST(ThreadPoolJobScheduler, BlockOneTaskTwoWorkers) {
-  ThreadPoolJobScheduler scheduler{1, 2};
   std::atomic<int> ai{0};
+  ThreadPoolJobScheduler scheduler{1, 2};
   scheduler.enqueue(
       [&ai]() {
         spinWait(ai, 2);
@@ -124,13 +124,14 @@ TEST(ThreadPoolJobScheduler, Finish) {
 }
 
 TEST(ThreadPoolJobScheduler, FinishSchedulesNew) {
+  SeqPoints sp;
+
   // This test cover the bug in ThreadPoolJobScheduler we had. Let we have 2
   // thread scheduler, with threads #1 and #2. We finish threads one-by-one,
   // starting with thread #1. If a job on thread #2 schedules a new job on
   // thread #1 it will be never executed!
   ThreadPoolJobScheduler scheduler{2, 1};
 
-  SeqPoints sp;
   scheduler.enqueueWithKey(
       [&sp, &scheduler] {
         sp.wait(0);
@@ -207,6 +208,42 @@ TEST(ThreadPoolJobScheduler, ReadWriteReclaim) {
   scheduler.finish();
   EXPECT_EQ((std::vector<int>{3, 2, 0, 1}), v);
 }
+
+// Enqueue a certain number of jobs that cause the queue to be piled up and
+// check that the stats are reflective.
+TEST(ThreadPoolJobScheduler, MaxQueueLen) {
+  unsigned int numQueues = 4;
+  ThreadPoolJobScheduler scheduler{numQueues, 1};
+  SeqPoints sp;
+  sp.setName(0, "all enqueued");
+
+  std::atomic<unsigned int> jobsDone{0};
+  auto job = [&] {
+    sp.wait(0);
+    ++jobsDone;
+    return JobExitCode::Done;
+  };
+
+  int numToQueue = 1000;
+  for (int i = 0; i < numToQueue; i++) {
+    scheduler.enqueue(job, "read", JobType::Read);
+  }
+
+  // we have enqueued 1000 jobs across 4 queues. One job could be executed per
+  // thread. So the max queue len would be 249 or 250 per queue.
+  bool checked = false;
+  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+    if (name == "navy_reader_pool_max_queue_len") {
+      EXPECT_LE(numToQueue / numQueues - stat, 1);
+      checked = true;
+    }
+  });
+  EXPECT_TRUE(checked);
+  sp.reached(0);
+  scheduler.finish();
+  EXPECT_EQ(jobsDone, numToQueue);
+}
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

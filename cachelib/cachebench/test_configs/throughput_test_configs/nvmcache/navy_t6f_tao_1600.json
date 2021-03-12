@@ -6,7 +6,6 @@
     "htBucketPower": 26,
     "dipperSizeMB": 1400000,
     "dipperUseDirectIO": true,
-    "dipperAsyncThreads": 128,
     "dipperNavyBigHashSizePct": 65,
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBlock": 4096,

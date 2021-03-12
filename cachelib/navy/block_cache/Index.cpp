@@ -189,7 +189,7 @@ void Index::recover(RecordReader& rr) {
 }
 
 void Index::getCounters(const CounterVisitor& visitor) const {
-  hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_{}_{}", "hits");
+  hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_hits");
   visitor("navy_bc_item_removed_with_no_access", unAccessedItems_.get());
 }
 } // namespace navy

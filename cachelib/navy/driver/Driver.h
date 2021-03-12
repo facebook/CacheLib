@@ -42,6 +42,7 @@ class Driver final : public AbstractCache {
   Driver& operator=(const Driver&) = delete;
   ~Driver() override;
 
+  bool couldExist(BufferView key) override;
   Status insert(BufferView key, BufferView value) override;
   Status insertAsync(BufferView key,
                      BufferView value,

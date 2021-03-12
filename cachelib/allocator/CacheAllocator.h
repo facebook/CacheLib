@@ -4,6 +4,7 @@
 #include <folly/Likely.h>
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/SanitizeThread.h>
 
 #include <functional>
 #include <memory>
@@ -1450,6 +1451,12 @@ class CacheAllocator : public CacheBase {
   // time.
   template <typename Fn>
   void traverseAndExpireItems(Fn&& f) {
+    // The intent here is to scan the memory to identify candidates for reaping
+    // without holding any locks. Candidates that are identified as potential
+    // ones are further processed by holding the right synchronization
+    // primitives. So we consciously exempt ourselves here from TSAN data race
+    // detection.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     allocator_->forEachAllocation(std::forward<Fn>(f));
   }
 

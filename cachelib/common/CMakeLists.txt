@@ -1,7 +1,6 @@
 add_thrift_file(BLOOM BloomFilter.thrift frozen2)
 
 add_library (cachelib_common
-  AccessTracker.cpp
   BloomFilter.cpp
   Cohort.cpp
   FurcHash.cpp
@@ -59,6 +58,7 @@ if (BUILD_TESTS)
   add_test (tests/CohortTests.cpp)
   add_test (tests/CounterTests.cpp)
   add_test (tests/CountMinSketchTest.cpp)
+  add_test (tests/EventInterfaceTest.cpp)
   add_test (tests/HashTests.cpp)
   add_test (tests/IteratorsTests.cpp)
   add_test (tests/MutexTests.cpp)

@@ -70,6 +70,14 @@ class BlockCache final : public Engine {
   BlockCache& operator=(const BlockCache&) = delete;
   ~BlockCache() override = default;
 
+  // Check if the key could exist in block cache. This can be used as a
+  // pre-check to optimize cache lookups  to avoid calling lookup in an async IO
+  // environment.
+  //
+  // @param hk   key to be checked
+  //
+  // @return  false if the key definitely does not exist and true if it could.
+  bool couldExist(HashedKey hk) override;
   Status insert(HashedKey hk, BufferView value) override;
   Status lookup(HashedKey hk, Buffer& value) override;
   Status remove(HashedKey hk) override;

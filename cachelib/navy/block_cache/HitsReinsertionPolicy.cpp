@@ -54,7 +54,7 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
 
 void HitsReinsertionPolicy::getCounters(const CounterVisitor& visitor) const {
   hitsOnReinsertionEstimator_.visitQuantileEstimator(
-      visitor, "navy_bc_item_{}_{}", "reinsertion_hits");
+      visitor, "navy_bc_item_reinsertion_hits");
 }
 
 HitsReinsertionPolicy::AccessStats HitsReinsertionPolicy::getAccessStats(

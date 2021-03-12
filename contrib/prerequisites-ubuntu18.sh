@@ -24,7 +24,6 @@ sudo apt-get install -y \
   libssl-dev \
   pkg-config \
   libunwind-dev \
-  libzstd-dev \
   libelf-dev \
   libdwarf-dev \
   libsodium-dev

@@ -21,6 +21,8 @@ class Runner {
          uint64_t progressInterval,
          CacheConfigCustomizer customizeCacheConfig,
          std::unique_ptr<StressorAdmPolicy> admPolicy);
+
+  // @return true if the run was successful, false if there is a failure.
   bool run();
 
   void abort() { stressor_->abort(); }

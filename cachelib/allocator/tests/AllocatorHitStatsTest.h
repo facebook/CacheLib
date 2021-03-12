@@ -26,8 +26,6 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
   void testFragmentationStats() {
     typename AllocatorT::Config config;
     config.setCacheSize(100 * Slab::kSize);
-    // enable reap expired items during find to evict items.
-    config.setItemReaperOnFind(true);
     // Enable chained item to test chained item's fragmentation.
     config.configureChainedItems();
     // Disable slab rebalancing

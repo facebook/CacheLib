@@ -5,7 +5,7 @@
 
 #include "cachelib/navy/Factory.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
-#include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
+#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
@@ -319,14 +319,9 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
       options.getDefault(kReaderThreads, legacyDipperAsyncThreads).getInt();
   auto writerThreads =
       options.getDefault(kWriterThreads, legacyDipperAsyncThreads).getInt();
-  if (options.get_ptr(kNavyRequestOrderingShards)) {
-    auto reqOrderShardsPower = options[kNavyRequestOrderingShards].getInt();
-    return std::make_unique<cachelib::navy::OrderedThreadPoolJobScheduler>(
-        readerThreads, writerThreads, reqOrderShardsPower);
-  } else {
-    return std::make_unique<cachelib::navy::ThreadPoolJobScheduler>(
-        readerThreads, writerThreads);
-  }
+  auto reqOrderShardsPower = options[kNavyRequestOrderingShards].getInt();
+  return cachelib::navy::createOrderedThreadPoolJobScheduler(
+      readerThreads, writerThreads, reqOrderShardsPower);
 }
 } // namespace
 
@@ -454,6 +449,7 @@ void populateDefaultNavyOptions(folly::dynamic& options) {
   defs[kBigHashBucketSize] = 4096;
   defs[kBigHashBucketBFSize] = 8;
   defs[kRAIDPaths] = folly::dynamic::array;
+  defs[kNavyRequestOrderingShards] = 20;
 
   options.update_missing(defs);
   return;

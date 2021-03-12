@@ -87,9 +87,6 @@ struct CacheConfig : public JSONConfig {
   // specified as any /dev that could point to a logical raid device.
   std::vector<std::string> writeAmpDeviceList{};
 
-  // number of asynchronous workers for dipper.
-  uint64_t dipperAsyncThreads{48};
-
   // Navy specific: device block size, bytes.
   uint64_t dipperNavyBlock{512};
 
@@ -142,12 +139,10 @@ struct CacheConfig : public JSONConfig {
   // use a probability based reinsertion policy with navy
   uint64_t navyProbabilityReinsertionThreshold{0};
 
-  // number of asynchronous worker thread for read operation.
-  // override dipperAsyncThreads
+  // number of asynchronous worker thread for navy read operation.
   uint32_t navyReaderThreads{32};
 
-  // number of asynchronous worker thread for write operation,
-  // override dipperAsyncThreads
+  // number of asynchronous worker thread for navy write operation,
   uint32_t navyWriterThreads{32};
 
   // buffer of clean regions to be maintained free to ensure writes

@@ -11,7 +11,6 @@ sudo dnf install -y \
   libunwind-devel \
   zlib-devel \
   lz4-devel \
-  libzstd-devel \
   xz-devel \
   bzip2-devel \
   jemalloc-devel \

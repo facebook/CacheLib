@@ -44,6 +44,7 @@ options:
   -v    verbose build
 
 NAME: the dependency to build supported values are:
+  zstd
   googlelog, googleflags, googletest,
   fmt, sparsemap,
   folly, fizz, wangle, fbthrift,
@@ -91,6 +92,7 @@ test "$#" -eq 0 \
 ######################################
 
 external_git_clone=
+external_git_branch=
 update_submodules=
 
 case "$1" in
@@ -132,6 +134,15 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
+    ;;
+
+  zstd)
+    NAME=zstd
+    REPO=https://github.com/facebook/zstd
+    REPODIR=cachelib/external/$NAME
+    SRCDIR=$REPODIR/build/cmake
+    external_git_clone=yes
+    external_git_branch=release
     ;;
 
   sparsemap)
@@ -222,6 +233,13 @@ if test "$source" ; then
       # Clone new repository directory
       git clone "$REPO" "$REPODIR" \
         || die "failed to clone git repository $REPO to '$REPODIR'"
+
+      # Switch to specific branch if needed
+      if test "$external_git_branch" ; then
+        ( cd "$REPODIR" \
+           && git checkout --track "origin/$external_git_branch" ) \
+           || die "failed to checkout branch $external_git_branch in $REPODIR"
+      fi
     fi
   fi
 

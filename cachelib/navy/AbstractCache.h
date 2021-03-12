@@ -33,6 +33,8 @@ class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
 
+  virtual bool couldExist(BufferView key) = 0;
+
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
   virtual Status insert(BufferView key, BufferView value) = 0;

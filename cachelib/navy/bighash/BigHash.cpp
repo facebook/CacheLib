@@ -267,6 +267,23 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   return Status::Ok;
 }
 
+bool BigHash::couldExist(HashedKey hk) {
+  const auto bid = getBucketId(hk);
+  bool canExist;
+  {
+    std::shared_lock<folly::SharedMutex> lock{getMutex(bid)};
+    canExist = !bfReject(bid, hk.keyHash());
+  }
+
+  // the caller is not likely to issue a subsequent lookup when we return
+  // false. hence tag this as a lookup. If we return the key can exist, the
+  // caller will perform a lookupAsync and will be counted within lookup api.
+  if (!canExist) {
+    lookupCount_.inc();
+  }
+  return canExist;
+}
+
 Status BigHash::lookup(HashedKey hk, Buffer& value) {
   const auto bid = getBucketId(hk);
   lookupCount_.inc();

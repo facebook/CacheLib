@@ -15,11 +15,11 @@ namespace tests {
 // order jobs with same type and ensure that they are executed in the
 // enqueued order.
 TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueSameType) {
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
   std::vector<int> order;
   int seq = 0;
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp, &order, n = ++seq]() {
         sp.wait(0);
@@ -62,11 +62,11 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueSameType) {
 // ordering is maintained.
 TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueDiffType) {
   std::array<JobType, 2> jobTypes = {JobType::Read, JobType::Write};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
   std::vector<int> order;
   int seq = 0;
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp, &order, n = ++seq]() {
         sp.wait(0);
@@ -109,10 +109,10 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueDiffType) {
 // should handle the draining of all the jobs, even with rescheduling.
 TEST(OrderedThreadPoolJobScheduler, SpoolAndFinish) {
   std::array<JobType, 2> jobTypes = {JobType::Read, JobType::Write};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
 
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&sp]() {
         sp.wait(0);
@@ -156,12 +156,12 @@ TEST(OrderedThreadPoolJobScheduler, SpoolAndFinish) {
 TEST(OrderedThreadPoolJobScheduler, JobWithRetry) {
   std::array<JobType, 3> jobTypes = {JobType::Read, JobType::Write,
                                      JobType::Reclaim};
-  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   uint64_t key = 5;
   SeqPoints sp;
 
   std::atomic<uint64_t> numReschedules{0};
 
+  OrderedThreadPoolJobScheduler scheduler{1, 2, 2};
   scheduler.enqueueWithKey(
       [&, i = 0]() mutable {
         sp.wait(0);
@@ -230,6 +230,52 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueAndFinish) {
 
     scheduler.finish();
   }
+  EXPECT_EQ(numCompleted, numKeys);
+}
+
+// enqueue a certain number of jobs and validate the stats for spooling are
+// reflective of the behavior expected.
+TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
+  unsigned int numKeys = 10000;
+  std::atomic<int> numCompleted{0};
+  SeqPoints sp;
+  sp.setName(0, "all enqueued");
+
+  unsigned int numQueues = 4;
+  OrderedThreadPoolJobScheduler scheduler{numQueues, 1, 10};
+  for (unsigned int i = 0; i < numKeys; i++) {
+    scheduler.enqueueWithKey(
+        [&]() {
+          sp.wait(0);
+          ++numCompleted;
+          return JobExitCode::Done;
+        },
+        "", JobType::Read, folly::Random::rand32());
+  }
+
+  uint64_t numSpooled = 0;
+  uint64_t maxQueueLen = 0;
+  uint64_t pendingJobs = 0;
+  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+    if (name == "navy_reader_max_queue_len") {
+      maxQueueLen = static_cast<uint64_t>(stat);
+    } else if (name == "navy_req_order_curr_spool_size") {
+      numSpooled = static_cast<uint64_t>(stat);
+    } else if (name == "navy_max_reader_pool_pending_jobs") {
+      pendingJobs = static_cast<uint64_t>(stat);
+    }
+  });
+
+  EXPECT_GE(numSpooled, 0);
+  uint64_t numQueued = numKeys - numSpooled;
+  EXPECT_LE(maxQueueLen, numQueued);
+  // we could have at most one job executing per Queue. So the total of
+  // pending jobs must not be off by more than numQueue when compared with
+  // total enqueued.
+  EXPECT_LE(numQueued - pendingJobs, numQueues);
+
+  sp.reached(0);
+  scheduler.finish();
   EXPECT_EQ(numCompleted, numKeys);
 }
 

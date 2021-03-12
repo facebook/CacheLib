@@ -64,6 +64,15 @@ class BigHash final : public Engine {
   BigHash(const BigHash&) = delete;
   BigHash& operator=(const BigHash&) = delete;
 
+  // Check if the key could exist in bighash. This can be used as a pre-check
+  // to optimize cache lookups to avoid calling lookups in an async IO
+  // environment.
+  //
+  // @param hk   key to be checked
+  //
+  // @return  false if the key definitely does not exist and true if it could.
+  bool couldExist(HashedKey hk) override;
+
   // Look up a key in BigHash. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
   // Buffer as "value" as any existing storage will be freed. If not found,
