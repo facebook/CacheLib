@@ -13,6 +13,7 @@
 #include "cachelib/allocator/nvmcache/CacheApiWrapper.h"
 #include "cachelib/allocator/nvmcache/DipperItem.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/allocator/nvmcache/NavySetup.h"
 #include "cachelib/allocator/nvmcache/ReqContexts.h"
 #include "cachelib/allocator/nvmcache/TombStones.h"
@@ -68,6 +69,7 @@ class NvmCache {
 
   struct Config {
     folly::dynamic dipperOptions;
+    navy::NavyConfig navyConfig{};
 
     // (Optional) enables the user to change some bits to prepare the item for
     // nvmcache serialization like fixing up pointers etc. Both must be encode
