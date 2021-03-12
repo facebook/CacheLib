@@ -72,7 +72,8 @@ class NvmAdmissionPolicy {
   }
 
   // Track access for an item.
-  virtual void trackAccess(const std::string&) {}
+  // @param key   key corresponding to the item
+  virtual void trackAccess(typename Item::Key) {}
 
   // Set minTTL. This method should be called only once.
   void initMinTTL(uint64_t minTTL) {
