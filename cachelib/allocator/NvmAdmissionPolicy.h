@@ -15,6 +15,7 @@ class NvmAdmissionPolicy {
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
   virtual ~NvmAdmissionPolicy() = default;
+
   // The method that the outside class calls to get the admission decision.
   // It captures the common logics (e.g statistics) then
   // delicates the detailed implementation to subclasses.
@@ -39,6 +40,22 @@ class NvmAdmissionPolicy {
     return decision;
   }
 
+  // same as the above, but makes admission decisions given just the key and
+  // not the entire item. This can be used when we can infer the information
+  // needed for admission decision from only the key.
+  virtual bool accept(typename Item::Key key) final {
+    util::LatencyTracker overallTracker(overallLatency_);
+    overallCount_.inc();
+
+    const bool decision = acceptImpl(key);
+    if (decision) {
+      accepted_.inc();
+    } else {
+      rejected_.inc();
+    }
+    return decision;
+  }
+
   // Set minTTL. This method should be called only once.
   virtual void initMinTTL(const uint64_t minTTL) final {
     auto initValue = minTTL_.load(std::memory_order_relaxed);
@@ -53,8 +70,6 @@ class NvmAdmissionPolicy {
   }
 
   virtual uint64_t getMinTTL() const final { return minTTL_; }
-
-  virtual bool accept(const std::string& /* key */) { return true; }
 
   // The method that exposes statuses.
   virtual std::unordered_map<std::string, double> getCounters() final {
@@ -80,6 +95,11 @@ class NvmAdmissionPolicy {
   virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) {
     return true;
   }
+
+  // Implement this method for the detailed admission decision logic.
+  // By default this accepts all items.
+  virtual bool acceptImpl(typename Item::Key) { return true; }
+
   // Implementation specific statistics.
   // Please include a prefix/postfix with the name of implementation to avoid
   // collision with base level stats.
