@@ -17,15 +17,20 @@ void CountDownLatch::wait() {
 
 // Count down without waiitng.
 bool CountDownLatch::count_down() {
-  std::unique_lock<std::mutex> lock(lock_);
-  if (count_ > 0) {
+  {
+    std::unique_lock<std::mutex> lock(lock_);
+    if (count_ == 0) {
+      return true;
+    }
+
     count_--;
+    if (count_ > 0) {
+      return false;
+    }
   }
-  if (count_ == 0) {
-    cv_.notify_all();
-    return true;
-  }
-  return false;
+
+  cv_.notify_all(); // count transitioned from non-zero to zero
+  return true;
 }
 
 // Count down then wait for other threads to finish the count down.
