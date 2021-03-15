@@ -137,20 +137,16 @@ class RejectFirstAP final : public NvmAdmissionPolicy<Cache> {
     const bool wasDramHit =
         useDramHitSignal_ && it.getLastAccessTime() > it.getCreationTime();
 
-    auto key = it.getKey();
-    size_t len = key.size() > suffixIgnoreLength_
-                     ? key.size() - suffixIgnoreLength_
-                     : key.size();
-    uint64_t keyHash = folly::hash::SpookyHashV2::Hash64(key.data(), len, 0);
-
-    // if key already existed, we want to admit. If we are inserting it for
-    // the first time, we insert and track.
-    bool seenBefore = tracker_.insert(keyHash);
+    const auto seenBefore = trackAndCheckIfSeenBefore(it.getKey());
     if (!seenBefore && wasDramHit) {
       admitsByDramHits_.inc();
     }
 
     return seenBefore || wasDramHit;
+  }
+
+  bool acceptImpl(typename Item::Key key) final override {
+    return trackAndCheckIfSeenBefore(key);
   }
 
   std::unordered_map<std::string, double> getCountersImpl() final override {
@@ -163,6 +159,20 @@ class RejectFirstAP final : public NvmAdmissionPolicy<Cache> {
   }
 
  private:
+  // @param key   the key to check and start tracking
+  // @return true if the key was seen before, false otherwise.
+  bool trackAndCheckIfSeenBefore(typename Item::Key key) {
+    const size_t len = key.size() > suffixIgnoreLength_
+                           ? key.size() - suffixIgnoreLength_
+                           : key.size();
+    const auto keyHash = folly::hash::SpookyHashV2::Hash64(key.data(), len, 0);
+
+    // if key already existed, return true. If we are inserting it for
+    // the first time, we insert to track and return false
+    bool seenBefore = tracker_.insert(keyHash);
+    return seenBefore;
+  }
+
   ApproxSplitSet tracker_;
   const size_t suffixIgnoreLength_;
   AtomicCounter admitsByDramHits_{0};
