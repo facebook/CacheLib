@@ -35,6 +35,21 @@ constexpr folly::StringPiece kBigHashBucketSize{
     "dipper_navy_bighash_bucket_size"};
 constexpr folly::StringPiece kBigHashBucketBFSize{
     "dipper_navy_bighash_bucket_bf_size"};
+constexpr folly::StringPiece kKangarooSizePct{"dipper_navy_kangaroo_size_pct"};
+constexpr folly::StringPiece kKangarooBucketSize{
+    "dipper_navy_kangaroo_bucket_size"};
+constexpr folly::StringPiece kKangarooBucketBFSize{
+    "dipper_navy_kangaroo_bucket_bf_size"};
+constexpr folly::StringPiece kKangarooLogSizePct{
+    "dipper_navy_kangaroo_log_size_pct"};
+constexpr folly::StringPiece kKangarooLogThreshold{
+    "dipper_navy_kangaroo_log_threshold"};
+constexpr folly::StringPiece kKangarooLogPhysicalPartitions{
+    "dipper_navy_kangaroo_log_physical_partitions"};
+constexpr folly::StringPiece kKangarooLogIndexPerPhysicalPartitions{
+    "dipper_navy_kangaroo_log_index_per_physical_partitions"};
+constexpr folly::StringPiece kKangarooLogAvgSmallObjectSize{
+    "dipper_navy_kangaroo_log_avg_small_obj_size"};
 constexpr folly::StringPiece kSmallItemMaxSize{
     "dipper_navy_small_item_max_size"};
 constexpr folly::StringPiece kMaxConcurrentInserts{
@@ -157,6 +172,7 @@ void setupCacheProtos(const folly::dynamic& options,
 
   // Set up BigHash if enabled
   const auto bigHashPctSize = options.get_ptr(kBigHashSizePct);
+  const auto kangarooPctSize = options.get_ptr(kKangarooSizePct);
   if (bigHashPctSize && bigHashPctSize->getInt() > 0) {
     const auto bucketSize =
         static_cast<uint32_t>(options[kBigHashBucketSize].getInt());
@@ -203,6 +219,56 @@ void setupCacheProtos(const folly::dynamic& options,
     XLOG(INFO) << "metadataSize: " << metadataSize
                << " bigHashCacheOffset: " << bigHashCacheOffset
                << " bigHashCacheSize: " << bigHashCacheSize;
+  } else if (kangarooPctSize && kangarooPctSize->getInt() > 0) {
+    const auto bucketSize = options[kKangarooBucketSize].getInt();
+    
+    // If enabled, Kangaroo's storage starts after BlockCache's.
+    const auto sizeReservedForKangaroo =
+        totalCacheSize * kangarooPctSize->getInt() / 100ul;
+
+    const uint64_t kangarooCacheOffset =
+        alignUp(totalCacheSize - sizeReservedForKangaroo, bucketSize);
+    const uint64_t kangarooCacheSize =
+        alignDown(totalCacheSize - kangarooCacheOffset, bucketSize);
+    
+    const auto logPctSize = options.getDefault(kKangarooLogSizePct, 0);
+    const auto sizeReservedForLog = kangarooCacheSize * logPctSize.getInt() / 100ul;
+
+    auto kangaroo = cachelib::navy::createKangarooProto();
+    kangaroo->setLayout(kangarooCacheOffset, kangarooCacheSize, 
+        bucketSize);
+
+    // Bucket Bloom filter size, bytes
+    const auto bfSize = options.getDefault(kKangarooBucketBFSize, 8).getInt();
+    if (bfSize > 0) {
+      // We set 4 hash function unconditionally. This seems to be the best
+      // for our use case. If BF size to bucket size ratio gets lower, try
+      // to reduce number of hashes.
+      constexpr uint32_t kNumHashes = 4;
+      const uint32_t bitsPerHash = bfSize * 8 / kNumHashes;
+      kangaroo->setBloomFilter(kNumHashes, bitsPerHash);
+    }
+    
+    // Enable log if requested
+    if (sizeReservedForLog > 0) {
+      const auto threshold = options.getDefault(kKangarooLogThreshold, 1).getInt();
+      const auto physicalPart = options[kKangarooLogPhysicalPartitions].getInt();
+      const uint64_t logSize = alignDown(sizeReservedForLog, bucketSize * 64 * physicalPart);
+      const auto indexPerPhysical = options[kKangarooLogIndexPerPhysicalPartitions].getInt();
+      const auto avgObjectSize = options.getDefault(kKangarooLogAvgSmallObjectSize, 100).getInt();
+      kangaroo->setLog(logSize, threshold, physicalPart, indexPerPhysical, avgObjectSize);
+    }
+
+    proto.setKangaroo(std::move(kangaroo), options[kSmallItemMaxSize].getInt());
+
+    if (kangarooCacheOffset <= metadataSize) {
+      throw std::invalid_argument("NVM cache size is not big enough!");
+    }
+    blockCacheSize = kangarooCacheOffset - metadataSize;
+    XLOG(ERR) << "metadataSize: " << metadataSize
+              << " blockCacheSize: " << blockCacheSize
+              << " kangarooCacheOffset: " << kangarooCacheOffset
+              << " kangarooCacheSize: " << kangarooCacheSize;
   } else {
     blockCacheSize = totalCacheSize - metadataSize;
     XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";

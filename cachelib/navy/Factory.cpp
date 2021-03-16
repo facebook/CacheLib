@@ -13,6 +13,7 @@
 #include "cachelib/navy/block_cache/LruPolicy.h"
 #include "cachelib/navy/block_cache/ProbabilisticReinsertionPolicy.h"
 #include "cachelib/navy/driver/Driver.h"
+#include "cachelib/navy/kangaroo/Kangaroo.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook {
@@ -159,6 +160,69 @@ class BigHashProtoImpl final : public BigHashProto {
   uint32_t hashTableBitSize_{};
 };
 
+class KangarooProtoImpl final : public KangarooProto {
+ public:
+  KangarooProtoImpl() = default;
+  ~KangarooProtoImpl() override = default;
+
+  void setLayout(uint64_t baseOffset,
+                 uint64_t size,
+                 uint32_t bucketSize) override {
+    config_.cacheBaseOffset = baseOffset;
+    config_.totalSetSize = size;
+    config_.bucketSize = bucketSize;
+  }
+
+  void setBloomFilter(uint32_t numHashes, uint32_t hashTableBitSize) override {
+    // Want to make @setLayout and Bloom filter setup independent.
+    bloomFilterEnabled_ = true;
+    numHashes_ = numHashes;
+    hashTableBitSize_ = hashTableBitSize;
+  }
+
+  void setLog(uint64_t logSize, 
+              uint32_t threshold,
+              uint32_t physicalPartitions,
+              uint32_t indexPartitionsPerPhysical,
+              uint32_t avgSmallObjectSize) override {
+    config_.logConfig.logSize = logSize;
+    config_.totalSetSize = config_.totalSetSize - logSize;
+    config_.logConfig.logBaseOffset = config_.cacheBaseOffset + config_.totalSetSize;
+    config_.logConfig.threshold = threshold;
+    config_.avgSmallObjectSize = avgSmallObjectSize;
+    config_.logIndexPartitionsPerPhysical = indexPartitionsPerPhysical;
+    config_.logConfig.logPhysicalPartitions = physicalPartitions;
+    config_.logConfig.numTotalIndexBuckets = config_.numBuckets() - 
+        config_.numBuckets() % (indexPartitionsPerPhysical * physicalPartitions);
+  }
+
+  void setDevice(Device* device) { config_.device = device; }
+
+  void setDestructorCb(DestructorCallback cb) {
+    config_.destructorCb = std::move(cb);
+  }
+
+  std::unique_ptr<Engine> create() && {
+    if (bloomFilterEnabled_) {
+      if (config_.bucketSize == 0) {
+        throw std::invalid_argument{"invalid bucket size"};
+      }
+      config_.bloomFilter = std::make_unique<BloomFilter>(
+          config_.numBuckets(), numHashes_, hashTableBitSize_);
+    }
+    config_.rripBitVector = std::make_unique<RripBitVector>(
+        config_.numBuckets());
+    return std::make_unique<Kangaroo>(std::move(config_));
+  }
+
+ private:
+  Kangaroo::Config config_;
+  bool bloomFilterEnabled_{false};
+  bool nruEnabled_{false};
+  uint32_t numHashes_{};
+  uint32_t hashTableBitSize_{};
+};
+
 class CacheProtoImpl final : public CacheProto {
  public:
   CacheProtoImpl() = default;
@@ -186,6 +250,12 @@ class CacheProtoImpl final : public CacheProto {
                   uint32_t smallItemMaxSize) override {
     bigHashProto_ = std::move(proto);
     config_.smallItemMaxSize = smallItemMaxSize;
+  }
+
+  void setKangaroo(std::unique_ptr<KangarooProto> proto,
+          uint32_t smallItemMaxSize) override {
+      kangarooProto_ = std::move(proto);
+      config_.smallItemMaxSize = smallItemMaxSize;
   }
 
   void setDestructorCallback(DestructorCallback cb) override {
@@ -248,6 +318,15 @@ class CacheProtoImpl final : public CacheProto {
         config_.smallItemCache = std::move(*bhProto).create();
       }
     }
+    
+    if (kangarooProto_) {
+      auto kangarooProto = dynamic_cast<KangarooProtoImpl*>(kangarooProto_.get());
+      if (kangarooProto != nullptr) {
+        kangarooProto->setDevice(config_.device.get());
+        kangarooProto->setDestructorCb(destructorCb_);
+        config_.smallItemCache = std::move(*kangarooProto).create();
+      }
+    }
 
     return std::make_unique<Driver>(std::move(config_));
   }
@@ -256,6 +335,7 @@ class CacheProtoImpl final : public CacheProto {
   DestructorCallback destructorCb_;
   std::unique_ptr<BlockCacheProto> blockCacheProto_;
   std::unique_ptr<BigHashProto> bigHashProto_;
+  std::unique_ptr<KangarooProto> kangarooProto_;
   Driver::Config config_;
 };
 } // namespace
@@ -266,6 +346,10 @@ std::unique_ptr<BlockCacheProto> createBlockCacheProto() {
 
 std::unique_ptr<BigHashProto> createBigHashProto() {
   return std::make_unique<BigHashProtoImpl>();
+}
+
+std::unique_ptr<KangarooProto> createKangarooProto() {
+  return std::make_unique<KangarooProtoImpl>();
 }
 
 std::unique_ptr<CacheProto> createCacheProto() {
