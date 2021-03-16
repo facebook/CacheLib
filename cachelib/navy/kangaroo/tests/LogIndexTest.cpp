@@ -26,7 +26,7 @@ TEST(LogIndex, BasicOps) {
   ret = li.lookup(hk2, true);
   EXPECT_EQ(ret, LogPageId(2, true));
 
-  auto status = li.remove(hk1);
+  auto status = li.remove(hk1, LogPageId(1, true));
   EXPECT_EQ(status, Status::Ok);
   ret = li.lookup(hk2, false);
   EXPECT_EQ(ret, LogPageId(2, true));

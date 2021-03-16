@@ -27,14 +27,10 @@ TEST(RripBucket, SingleKey) {
   EXPECT_EQ(0, bucket.size());
   EXPECT_TRUE(bucket.find(hk, updateEmpty).isNull());
   
-  std::cout << "After find" << std::endl;
-
   bucket.insert(hk, value, 0, nullptr);
   EXPECT_EQ(1, bucket.size());
   EXPECT_EQ(value, bucket.find(hk, updateEmpty));
   
-  std::cout << "Insert and another find" << std::endl;
-
   MockDestructor helper;
   EXPECT_CALL(helper, call(_, _, _)).Times(0);
   EXPECT_CALL(
@@ -42,13 +38,10 @@ TEST(RripBucket, SingleKey) {
       call(makeView("key"), makeView("value"), DestructorEvent::Removed));
   auto cb = toCallback(helper);
   EXPECT_EQ(1, bucket.remove(hk, cb));
-  std::cout << "After remove" << std::endl;
   EXPECT_EQ(0, bucket.size());
   EXPECT_TRUE(bucket.find(hk, updateEmpty).isNull());
-  std::cout << "After find" << std::endl;
 
   EXPECT_EQ(0, bucket.remove(hk, nullptr));
-  std::cout << "After empty remove" << std::endl;
 }
 
 TEST(RripBucket, SingleKeyRrip) {

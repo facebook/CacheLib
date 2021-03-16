@@ -21,6 +21,8 @@ class KangarooLogSegment  {
 
     HashedKey key() const { return HashedKey(itr_.key()); }
 
+    BufferView value() const { return itr_.value(); }
+
    private:
     friend KangarooLogSegment;
 
@@ -48,6 +50,7 @@ class KangarooLogSegment  {
   // Look up for the value corresponding to a key.
   // BufferView::isNull() == true if not found.
   BufferView find(HashedKey hk, LogPageId lpid);
+  BufferView findTag(uint32_t tag, HashedKey& hk, LogPageId lpid);
 
   // Insert into the segment. Returns invalid page id if there is no room.
   LogPageId insert(HashedKey hk, BufferView value);

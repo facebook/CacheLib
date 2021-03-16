@@ -27,32 +27,30 @@ class FOLLY_PACK_ATTR LogBucketEntry {
   }
 
   BufferView key() const { return {keySize_, data_}; }
+  
+  uint64_t keyHash() const { return makeHK(key()).keyHash(); }
 
   bool keyEqualsTo(HashedKey hk) const {
-    return hk == HashedKey::precomputed(key(), keyHash_);
+    return hk == makeHK(key());
   }
   
-  bool keyEqualsTo(uint64_t keyHash) const {
-    return keyHash == keyHash_;
+  bool keyEqualsTo(uint64_t hash) const {
+    return hash == keyHash();
   }
-
-  uint64_t keyHash() const { return keyHash_; }
 
   BufferView value() const { return {valueSize_, data_ + keySize_}; }
 
  private:
   LogBucketEntry(HashedKey hk, BufferView value)
-      : keySize_{static_cast<uint32_t>(hk.key().size())},
-        valueSize_{static_cast<uint32_t>(value.size())},
-        keyHash_{hk.keyHash()} {
-    static_assert(sizeof(LogBucketEntry) == 16, "LogBucketEntry overhead");
+      : keySize_{static_cast<uint16_t>(hk.key().size())},
+        valueSize_{static_cast<uint16_t>(value.size())} {
+    static_assert(sizeof(LogBucketEntry) == 4, "LogBucketEntry overhead");
     hk.key().copyTo(data_);
     value.copyTo(data_ + keySize_);
   }
 
-  const uint32_t keySize_{};
-  const uint32_t valueSize_{};
-  const uint64_t keyHash_{};
+  const uint16_t keySize_{};
+  const uint16_t valueSize_{};
   uint8_t data_[];
 };
 
@@ -106,18 +104,17 @@ BufferView LogBucket::find(HashedKey hk) const {
   return {};
 }
 
-Status LogBucket::findTag(uint32_t tag, HashedKey& hk, BufferView& value) const {
+BufferView LogBucket::findTag(uint32_t tag, HashedKey& hk) const {
   auto itr = storage_.getFirst();
   while (!itr.done()) {
     auto* entry = getIteratorEntry(itr);
     hk = makeHK(entry->key());
     if (createTag(hk) == tag) {
-      value = entry->value();
-      return Status::Ok;
+      return entry->value();
     }
     itr = storage_.getNext(itr);
   }
-  return Status::NotFound;
+  return {};
 }
 
 uint32_t LogBucket::insert(HashedKey hk,

@@ -42,16 +42,16 @@ class FOLLY_PACK_ATTR RripBucketEntry {
 
  private:
   RripBucketEntry(HashedKey hk, BufferView value)
-      : keySize_{static_cast<uint32_t>(hk.key().size())},
-        valueSize_{static_cast<uint32_t>(value.size())},
+      : keySize_{static_cast<uint16_t>(hk.key().size())},
+        valueSize_{static_cast<uint16_t>(value.size())},
         keyHash_{hk.keyHash()} {
-    static_assert(sizeof(RripBucketEntry) == 16, "RripBucketEntry overhead");
+    static_assert(sizeof(RripBucketEntry) == 12, "RripBucketEntry overhead");
     hk.key().copyTo(data_);
     value.copyTo(data_ + keySize_);
   }
 
-  const uint32_t keySize_{};
-  const uint32_t valueSize_{};
+  const uint16_t keySize_{};
+  const uint16_t valueSize_{};
   const uint64_t keyHash_{};
   uint8_t data_[];
 };

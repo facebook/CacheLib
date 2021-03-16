@@ -109,7 +109,7 @@ class FOLLY_PACK_ATTR RripBucket {
   uint32_t makeSpace(uint32_t size, const DestructorCallback& destructorCb);
   
   uint8_t getRripValue(uint8_t hits) const {
-    uint8_t start = 1 << 3 - 2;
+    uint8_t start = (1 << 3) - 2;
     if (hits > start) {
         return 0;
     }

@@ -19,7 +19,7 @@ RripBucketStorage::Allocation RripBucketStorage::allocate(uint32_t size, uint8_t
   //
   // after allocating object with 3 
   //                  tail
-  // |-6--|NEW|3|--0--|~~~~~~~~~|
+  // |-6--|3|NEW|--0--|~~~~~~~~~|
   if (!canAllocate(size)) {
     return {};
   }

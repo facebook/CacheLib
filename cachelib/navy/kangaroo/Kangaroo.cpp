@@ -14,6 +14,7 @@ namespace cachelib {
 namespace navy {
 namespace {
 constexpr uint64_t kMinSizeDistribution = 64;
+constexpr uint64_t kMinThresholdSizeDistribution = 8;
 constexpr double kSizeDistributionGranularityFactor = 1.25;
 } // namespace
 
@@ -90,7 +91,9 @@ Kangaroo::Kangaroo(Config&& config, ValidConfigTag)
       bitVector_{std::move(config.rripBitVector)},
       device_{*config.device},
       sizeDist_{kMinSizeDistribution, bucketSize_,
-                kSizeDistributionGranularityFactor} {
+                kSizeDistributionGranularityFactor},
+      thresholdSizeDist_{10, bucketSize_, 10},
+      thresholdNumDist_{1, 25, 1} {
   XLOGF(INFO,
         "Kangaroo created: buckets: {}, bucket size: {}, base offset: {}",
         numBuckets_,
@@ -101,10 +104,9 @@ Kangaroo::Kangaroo(Config&& config, ValidConfigTag)
     config.logConfig.setNumberCallback = cb;
     config.logConfig.logIndexPartitions = config.logIndexPartitionsPerPhysical * config.logConfig.logPhysicalPartitions;
     uint64_t bytesPerIndex = config.logConfig.logSize / config.logConfig.logIndexPartitions;
-    config.logConfig.numIndexPartitionSlots = (bytesPerIndex / config.avgSmallObjectSize) * LogIndexOverhead;
     config.logConfig.device = config.device;
-    config.logConfig.setMultiInsertCallback = [&](HashedKey hk, 
-        NextSetItemInLogCallback cb, ReadmitCallback readmit) { return insertMultipleObjectsToKangarooBucket(hk, cb, readmit); };
+    config.logConfig.setMultiInsertCallback = [&](std::vector<std::unique_ptr<ObjectInfo>>& ois, 
+        ReadmitCallback readmit) { return insertMultipleObjectsToKangarooBucket(ois, readmit); };
     log_ = std::make_unique<KangarooLog>(std::move(config.logConfig));
   }
   reset();
@@ -144,14 +146,19 @@ double Kangaroo::bfFalsePositivePct() const {
   }
 }
 
-void Kangaroo::insertMultipleObjectsToKangarooBucket(HashedKey hk,
-        NextSetItemInLogCallback cb, ReadmitCallback readmit) {
-  const auto bid = getKangarooBucketId(hk);
+void Kangaroo::insertMultipleObjectsToKangarooBucket(std::vector<std::unique_ptr<ObjectInfo>>& ois, 
+    ReadmitCallback readmit) {
+  const auto bid = getKangarooBucketId(ois[0]->key);
   insertCount_.inc();
+  multiInsertCalls_.inc();
 
+  uint64_t insertCount = 0;
+  uint64_t evictCount = 0;
+  uint64_t removedCount = 0;
 
-  unsigned int removed{0};
-  unsigned int evicted{0};
+  uint64_t passedItemSize = 0;
+  uint64_t passedCount = 0;
+    
     
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
@@ -164,31 +171,23 @@ void Kangaroo::insertMultipleObjectsToKangarooBucket(HashedKey hk,
     auto* bucket = reinterpret_cast<RripBucket*>(buffer.data());
     bucket->reorder([&](uint32_t keyIdx) {return bvGetHit(bid, keyIdx);});
     bitVector_->clear(bid.index());
-    
-    ObjectInfo oi = cb();
-    while (oi.status == Status::Ok || oi.status == Status::Retry) {
-      if (oi.status != Status::Retry && bucket->isSpace(oi.key, oi.value, oi.hits)) {
-        removed = bucket->remove(oi.key, destructorCb_);
-        evicted = bucket->insert(oi.key, oi.value, oi.hits, destructorCb_);
-        sizeDist_.addSize(oi.key.key().size() + oi.value.size());
-        logicalWrittenCount_.add(oi.key.key().size() + oi.value.size());
-        setInsertCount_.inc();
-        itemCount_.sub(evicted + removed);
-        logItemCount_.sub(1);
-        setItemCount_.sub(evicted + removed);
-        setItemCount_.inc();
-        evictionCount_.add(evicted);
-        succInsertCount_.inc();
-      } else if (oi.status != Status::Retry) {
-        if (oi.hits) {
-          //readmit(oi);
-          readmitInsertCount_.inc();
-        }
+
+    for (auto& oi: ois) {
+      passedItemSize += oi->key.key().size() + oi->value.size();
+      passedCount++;
+
+      if (bucket->isSpace(oi->key, oi->value.view(), oi->hits)) {
+        removedCount += bucket->remove(oi->key, destructorCb_);
+        evictCount += bucket->insert(oi->key, oi->value.view(), oi->hits, destructorCb_);
+        sizeDist_.addSize(oi->key.key().size() + oi->value.size());
+        insertCount++;
+      } else {
+        readmit(oi);
+        readmitInsertCount_.inc();
       }
-      oi = cb();
     }
-        
-    const auto res = writeBucket(bid, buffer.mutableView());
+
+    const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
@@ -198,15 +197,21 @@ void Kangaroo::insertMultipleObjectsToKangarooBucket(HashedKey hk,
     }
 
     if (bloomFilter_) {
-      if (removed + evicted == 0 && bloomFilter_->getInitBit(bid.index())) {
-        // In case nothing was removed or evicted, we can just add
-        bloomFilter_->set(bid.index(), hk.keyHash());
-      } else {
-        bfRebuild(bid, bucket);
-      }
+      bfRebuild(bid, bucket);
     }
   }
 
+  thresholdSizeDist_.addSize(passedItemSize);
+  thresholdNumDist_.addSize(passedCount * 2);
+
+  setInsertCount_.add(insertCount);
+  itemCount_.sub(evictCount + removedCount);
+  logItemCount_.sub(insertCount);
+  setItemCount_.sub(evictCount + removedCount);
+  setItemCount_.add(insertCount);
+  evictionCount_.add(evictCount);
+  succInsertCount_.add(insertCount);
+        
   physicalWrittenCount_.add(bucketSize_);
   return;
 }
@@ -221,10 +226,16 @@ void Kangaroo::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_succ_removes", succRemoveCount_.get());
   visitor("navy_bh_evictions", evictionCount_.get());
   visitor("navy_bh_logical_written", logicalWrittenCount_.get());
-  visitor("navy_bh_physical_written", physicalWrittenCount_.get());
+  uint64_t logBytesWritten = (log_) ? log_->getBytesWritten() : 0;
+  visitor("navy_bh_physical_written", physicalWrittenCount_.get() + logBytesWritten);
   visitor("navy_bh_io_errors", ioErrorCount_.get());
   visitor("navy_bh_bf_false_positive_pct", bfFalsePositivePct());
   visitor("navy_bh_checksum_errors", checksumErrorCount_.get());
+  if (log_) {
+    visitor("navy_klog_false_positive_pct", log_->falsePositivePct());
+    visitor("navy_klog_fragmentation_pct", log_->fragmentationPct());
+    visitor("navy_klog_extra_reads_pct", log_->extraReadsPct());
+  }
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {
     auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
@@ -241,11 +252,12 @@ void Kangaroo::persist(RecordWriter& rw) {
   pd.bucketSize = bucketSize_;
   pd.cacheBaseOffset = cacheBaseOffset_;
   pd.numBuckets = numBuckets_;
-  pd.sizeDist = sizeDist_.getSnapshot();
+  *pd.sizeDist_ref() = sizeDist_.getSnapshot();
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
-    bloomFilter_->persist(rw);
+    bloomFilter_->persist<ProtoSerializer>(rw);
+    XLOG(INFO, "bloom filter persist done");
   }
 
   XLOG(INFO, "Finished kangaroo persist");
@@ -274,9 +286,10 @@ bool Kangaroo::recover(RecordReader& rr) {
 
     generationTime_ = std::chrono::nanoseconds{pd.generationTime};
     itemCount_.set(pd.itemCount);
-    sizeDist_ = SizeDistribution{pd.sizeDist};
+    sizeDist_ = SizeDistribution{*pd.sizeDist_ref()};
     if (bloomFilter_) {
-      bloomFilter_->recover(rr);
+      bloomFilter_->recover<ProtoSerializer>(rr);
+      XLOG(INFO, "Recovered bloom filter");
     }
   } catch (const std::exception& e) {
     XLOGF(ERR, "Exception: {}", e.what());
@@ -290,35 +303,17 @@ bool Kangaroo::recover(RecordReader& rr) {
 }
 
 Status Kangaroo::insert(HashedKey hk,
-                       BufferView value,
-                       InsertOptions /* opt */) {
+                       BufferView value) {
   const auto bid = getKangarooBucketId(hk);
   insertCount_.inc();
 
-  /*if (insertCount_.get() % 1000000 == 0) {
-    XLOG(INFO, "Insert Counters");
-    XLOG(INFO, "\t total {}", succInsertCount_.get());
-    XLOG(INFO, "\t log {}", logInsertCount_.get());
-    XLOG(INFO, "\t set {}", setInsertCount_.get());
-    XLOG(INFO, "\t readmission ", readmitInsertCount_.get());
-    
-    XLOG(INFO, "Hit Counters");
-    XLOG(INFO, "\t total", succLookupCount_.get(), "/ ", lookupCount_.get());
-    XLOG(INFO, "\t log {}", logHits_.get());
-    XLOG(INFO, "\t set {}", setHits_.get());
-
-    XLOG(INFO, "# Items Counters");
-    XLOG(INFO, "\t total {}", itemCount_.get());
-    XLOG(INFO, "\t log {}", logItemCount_.get());
-    XLOG(INFO, "\t set {}", setItemCount_.get());
-  }*/
-  
   if (log_) {
     Status ret = log_->insert(hk, value);
     if (ret == Status::Ok) {
       sizeDist_.addSize(hk.key().size() + value.size());
+      succInsertCount_.inc();
     }
-    succInsertCount_.inc();
+    logicalWrittenCount_.add(hk.key().size() + value.size());
     logInsertCount_.inc();
     itemCount_.inc();
     logItemCount_.inc();
@@ -352,7 +347,7 @@ Status Kangaroo::insert(HashedKey hk,
     }
 
     if (space) {
-      const auto res = writeBucket(bid, buffer.mutableView());
+      const auto res = writeBucket(bid, std::move(Buffer(buffer.view(), bucketSize_)));
       if (!res) {
         if (bloomFilter_) {
           bloomFilter_->clear(bid.index());
@@ -363,7 +358,7 @@ Status Kangaroo::insert(HashedKey hk,
     }
 
     if (space && bloomFilter_) {
-      if (removed + evicted == 0 && bloomFilter_->getInitBit(bid.index())) {
+      if (removed + evicted == 0) {
         // In case nothing was removed or evicted, we can just add
         bloomFilter_->set(bid.index(), hk.keyHash());
       } else {
@@ -422,7 +417,6 @@ Status Kangaroo::lookup(HashedKey hk, Buffer& value) {
     }
 
     bucket = reinterpret_cast<RripBucket*>(buffer.data());
-    bfBuildUninitialized(bid, bucket);
 
     /* TODO: moving this inside lock could cause performance problem */
     valueView = bucket->find(hk, [&](uint32_t keyIdx) {bvSetHit(bid, keyIdx);});
@@ -468,12 +462,11 @@ Status Kangaroo::remove(HashedKey hk) {
     bucket->reorder([&](uint32_t keyIdx) {return bvGetHit(bid, keyIdx);});
 
     if (!bucket->remove(hk, destructorCb_)) {
-      bfBuildUninitialized(bid, bucket);
       bfFalsePositiveCount_.inc();
       return Status::NotFound;
     }
 
-    const auto res = writeBucket(bid, buffer.mutableView());
+    const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
       if (bloomFilter_) {
         bloomFilter_->clear(bid.index());
@@ -497,6 +490,28 @@ Status Kangaroo::remove(HashedKey hk) {
   physicalWrittenCount_.add(bucketSize_);
   succRemoveCount_.inc();
   return Status::Ok;
+}
+
+bool Kangaroo::couldExist(HashedKey hk) {
+  const auto bid = getKangarooBucketId(hk);
+  bool canExist = false;
+
+  if (log_) {
+    canExist = log_->couldExist(hk);
+  }
+
+  if (!canExist) {
+    std::shared_lock<folly::SharedMutex> lock{getMutex(bid)};
+    canExist = !bfReject(bid, hk.keyHash());
+  }
+
+  // the caller is not likely to issue a subsequent lookup when we return
+  // false. hence tag this as a lookup. If we return the key can exist, the
+  // caller will perform a lookupAsync and will be counted within lookup api.
+  if (!canExist) {
+    lookupCount_.inc();
+  }
+  return canExist;
 }
 
 bool Kangaroo::bfReject(KangarooBucketId bid, uint64_t keyHash) const {
@@ -523,12 +538,6 @@ void Kangaroo::bvSetHit(KangarooBucketId bid, uint32_t keyIdx) const {
   }
 }
 
-void Kangaroo::bfBuildUninitialized(KangarooBucketId bid, const RripBucket* bucket) {
-  if (bloomFilter_ && !bloomFilter_->getInitBit(bid.index())) {
-    bfRebuild(bid, bucket);
-  }
-}
-
 void Kangaroo::bfRebuild(KangarooBucketId bid, const RripBucket* bucket) {
   XDCHECK(bloomFilter_);
   bloomFilter_->clear(bid.index());
@@ -537,7 +546,6 @@ void Kangaroo::bfRebuild(KangarooBucketId bid, const RripBucket* bucket) {
     bloomFilter_->set(bid.index(), itr.keyHash());
     itr = bucket->getNext(itr);
   }
-  bloomFilter_->setInitBit(bid.index());
 }
 
 void Kangaroo::flush() {
@@ -562,8 +570,7 @@ Buffer Kangaroo::readBucket(KangarooBucketId bid) {
   // We can only know for certain this is a valid checksum error if bloom filter
   // is already initialized. Otherwise, it could very well be because we're
   // reading the bucket for the first time.
-  if (!checksumSuccess && bloomFilter_ &&
-      bloomFilter_->getInitBit(bid.index())) {
+  if (!checksumSuccess && bloomFilter_) {
     checksumErrorCount_.inc();
   }
 
@@ -574,11 +581,10 @@ Buffer Kangaroo::readBucket(KangarooBucketId bid) {
   return buffer;
 }
 
-bool Kangaroo::writeBucket(KangarooBucketId bid, MutableBufferView mutableView) {
-  auto* bucket = reinterpret_cast<RripBucket*>(mutableView.data());
-  bucket->setChecksum(RripBucket::computeChecksum(toView(mutableView)));
-  return device_.write(
-      getBucketOffset(bid), mutableView.size(), mutableView.data());
+bool Kangaroo::writeBucket(KangarooBucketId bid, Buffer buffer) {
+  auto* bucket = reinterpret_cast<RripBucket*>(buffer.data());
+  bucket->setChecksum(RripBucket::computeChecksum(buffer.view()));
+  return device_.write(getBucketOffset(bid), std::move(buffer));
 }
 } // namespace navy
 } // namespace cachelib

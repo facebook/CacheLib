@@ -10,7 +10,7 @@
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/kangaroo/LogIndex.h"
+#include "cachelib/navy/kangaroo/ChainedLogIndex.h"
 #include "cachelib/navy/kangaroo/KangarooLogSegment.h"
 
 namespace facebook {
@@ -33,7 +33,8 @@ class KangarooLog  {
 
     // for index
     uint64_t logIndexPartitions{};
-    uint64_t numIndexPartitionSlots{};
+    uint16_t sizeAllocations{1024};
+    uint64_t numTotalIndexBuckets{};
     SetNumberCallback setNumberCallback{};
 
     // for merging to sets
@@ -51,6 +52,8 @@ class KangarooLog  {
 
   KangarooLog(const KangarooLog&) = delete;
   KangarooLog& operator=(const KangarooLog&) = delete;
+
+  bool couldExist(HashedKey hk);
 
   // Look up a key in KangarooLog. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
@@ -70,6 +73,12 @@ class KangarooLog  {
   void flush();
 
   void reset();
+  
+  double falsePositivePct() const;
+  double extraReadsPct() const;
+  double fragmentationPct() const;
+  uint64_t getBytesWritten() const;
+
 
   // TODO: persist and recover not implemented
 
@@ -80,30 +89,40 @@ class KangarooLog  {
 
   Buffer readLogPage(LogPageId lpid);
   Buffer readLogSegment(LogSegmentId lsid);
-  bool writeLogSegment(LogSegmentId lsid, MutableBufferView mutableView);
+  bool writeLogSegment(LogSegmentId lsid, Buffer buffer);
   bool flushLogSegment(LogSegmentId lsid);
 
   bool isBuffered(LogPageId lpid, uint64_t physicalPartition); // does not grab logSegmentMutex mutex
   Status lookupBuffered(HashedKey hk, Buffer& value, LogPageId lpid);
+  Status lookupBufferedTag(uint32_t tag, HashedKey& hk, Buffer& value, LogPageId lpid);
 
   uint64_t getPhysicalPartition(LogPageId lpid) const {
     return lpid.index() / pagesPerPartition_;
-  }
-  uint64_t getPhysicalPartition(HashedKey hk) const {
-    return setNumberCallback_(hk.keyHash()).index() % logPhysicalPartitions_;
-  }
-  uint64_t getIndexPartition(HashedKey hk) const {
-    uint64_t indexPartitionPerPhysical = logIndexPartitions_ / logPhysicalPartitions_;
-    uint64_t index = setNumberCallback_(hk.keyHash()).index() % indexPartitionPerPhysical;
-    return getPhysicalPartition(hk) * indexPartitionPerPhysical + index;
   }
   uint64_t getLogSegmentOffset(LogSegmentId lsid) const {
     return logBaseOffset_ + segmentSize_ * lsid.index() 
       + physicalPartitionSize_ * lsid.partition();
   }
+
+  uint64_t getPhysicalPartition(HashedKey hk) const {
+    return getIndexPartition(hk) % logPhysicalPartitions_;
+  }
+  uint64_t getIndexPartition(HashedKey hk) const {
+    return getLogIndexEntry(hk) % logIndexPartitions_;
+  }
+  uint64_t getLogIndexEntry(HashedKey hk) const {
+    return setNumberCallback_(hk.keyHash()).index() % numIndexEntries_; 
+  }
   
   uint64_t getLogPageOffset(LogPageId lpid) const {
     return logBaseOffset_ + pageSize_ * lpid.index();
+  }
+
+  LogPageId getLogPageId(PartitionOffset po, uint32_t physicalPartition) {
+    return LogPageId(po.index() + physicalPartition * pagesPerPartition_, po.isValid());
+  }
+  PartitionOffset getPartitionOffset(LogPageId lpid) {
+    return PartitionOffset(lpid.index() % pagesPerPartition_, lpid.isValid());
   }
 
   LogSegmentId getSegmentId(LogPageId lpid) const {
@@ -126,10 +145,13 @@ class KangarooLog  {
     return getMutexFromSegment(getSegmentId(lpid));
   }
   
+  double cleaningThreshold_ = .1;
+  bool shouldClean(uint64_t nextWriteLog, uint64_t nextCleaningLoc);
   void cleanSegment(LogSegmentId lsid);
   void cleanSegmentsLoop(uint64_t threadId);
   bool shouldWakeCompaction(uint64_t threadId);
-  void moveBucket(HashedKey hk);
+  void moveBucket(HashedKey hk, uint64_t count, LogSegmentId lsidToFlush);
+  void readmit(HashedKey hk, BufferView value);
 
   // Use birthday paradox to estimate number of mutexes given number of parallel
   // queries and desired probability of lock collision.
@@ -149,13 +171,13 @@ class KangarooLog  {
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[NumMutexes]};
   const uint64_t logIndexPartitions_{};
-  std::unique_ptr<folly::SharedMutex[]> logIndexMutexs_;
-  LogIndex** index_;
+  ChainedLogIndex** index_;
   const SetNumberCallback setNumberCallback_{};
 
   const uint64_t logPhysicalPartitions_{};
   const uint64_t physicalPartitionSize_{};
   const uint64_t pagesPerPartition_{};
+  const uint64_t numIndexEntries_{};
   const uint64_t segmentsPerPartition_{};
   KangarooLogSegment** currentLogSegments_;
   /* prevent access to log segment while it's being switched out
@@ -190,6 +212,26 @@ class KangarooLog  {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter checksumErrorCount_;
+  mutable AtomicCounter flushPageReads_;
+  mutable AtomicCounter flushFalsePageReads_;
+  mutable AtomicCounter flushLogSegmentsCount_;
+  mutable AtomicCounter moveBucketCalls_;
+  mutable AtomicCounter notFoundInLogIndex_;
+  mutable AtomicCounter foundInLogIndex_;
+  mutable AtomicCounter indexSegmentMismatch_;
+  mutable AtomicCounter replaceIndexInsert_;
+  mutable AtomicCounter indexReplacementReinsertions_;
+  mutable AtomicCounter indexReinsertions_;
+  mutable AtomicCounter indexReinsertionFailed_;
+  mutable AtomicCounter moveBucketSuccessfulRets_;
+  mutable AtomicCounter thresholdNotHit_;
+  mutable AtomicCounter sumCountCounter_;
+  mutable AtomicCounter numCountCalls_;
+  mutable AtomicCounter readmitBytes_;
+  mutable AtomicCounter readmitRequests_;
+  mutable AtomicCounter readmitRequestsFailed_;
+  mutable AtomicCounter logSegmentsWrittenCount_;
+  mutable AtomicCounter bytesInserted_;
 
 };
 } // namespace navy

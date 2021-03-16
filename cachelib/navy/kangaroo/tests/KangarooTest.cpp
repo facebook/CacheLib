@@ -74,13 +74,15 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   Kangaroo::Config config;
   setLayout(config, 64, 8);
 
-  auto testInsertCb = [](HashedKey hk, NextSetItemInLogCallback cb, ReadmitCallback readmit) {return;};
+  auto testInsertCb = [](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback readmit) {return;};
   auto testSetNumCb = [](uint64_t id) { return KangarooBucketId(id % 2); };
   setLog(config.logConfig, 64, 1, 2, testSetNumCb, testInsertCb);
+  config.logConfig.numTotalIndexBuckets = 8;
   config.logIndexPartitionsPerPhysical = 2;
   auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize + config.logConfig.logSize, 64);
   config.device = device.get();
   config.logConfig.device = config.device;
+  config.logConfig.mergeThreads = 1;
   config.cacheBaseOffset = config.logConfig.logSize;
 
   Kangaroo bh(std::move(config));
@@ -95,7 +97,7 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(Status::NotFound, bh.remove(makeHK("key")));
-  
+
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345"), {}));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key1"), value));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22222"), {}));
@@ -104,15 +106,18 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key4"), makeView("12345"), {}));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-
+  
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key5"), makeView("12345"), {}));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-
+  
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key6"), makeView("66666"), {}));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key7"), makeView("12345"), {}));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key8"), makeView("88888"), {}));
+  
+
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key9"), makeView("99999"), {}));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("ke1&"), makeView("1&1&1"), {}));
 
@@ -124,8 +129,7 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   EXPECT_EQ(makeView("88888"), value.view());
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key9"), value));
   EXPECT_EQ(makeView("99999"), value.view());
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("ke1&"), value));
-  EXPECT_EQ(makeView("1&1&1"), value.view());
+  
 }
 
 TEST(Kangaroo, ReorderEviction) {
@@ -139,7 +143,7 @@ TEST(Kangaroo, ReorderEviction) {
 
   Buffer value;
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("11112222"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22223333"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22223333test22223333"), {}));
 
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key1"), value));
   EXPECT_EQ(makeView("11112222"), value.view());

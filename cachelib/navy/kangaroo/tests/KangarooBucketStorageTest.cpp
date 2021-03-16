@@ -30,7 +30,7 @@ bool checkContent(MutableBufferView view, uint8_t c) {
 } // namespace
 
 TEST(KangarooBucketStorage, Allocate) {
-  const uint32_t capacity = 100;
+  const uint32_t capacity = 68;
   Buffer buf(capacity + sizeof(KangarooBucketStorage));
   auto* allocator = new (buf.data()) KangarooBucketStorage(capacity);
 

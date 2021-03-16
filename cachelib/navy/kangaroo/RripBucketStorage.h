@@ -75,10 +75,10 @@ class FOLLY_PACK_ATTR RripBucketStorage {
   // Slot represents a physical slot in the storage. User does not use
   // this directly but instead uses Allocation.
   struct FOLLY_PACK_ATTR Slot {
-    uint32_t rrip : 3;
-    uint32_t size : 29;
+    uint16_t rrip : 3;
+    uint16_t size : 13;
     uint8_t data[];
-    explicit Slot(uint32_t s, uint8_t rrip) : rrip{rrip}, size{s} {}
+    explicit Slot(uint16_t s, uint8_t rrip) : rrip{rrip}, size{s} {}
   };
 
   bool canAllocate(uint32_t size) const {

@@ -15,6 +15,7 @@
 #include "cachelib/navy/engine/Engine.h"
 #include "cachelib/navy/kangaroo/LogBucket.h"
 #include "cachelib/navy/kangaroo/KangarooLog.h"
+#include "cachelib/navy/kangaroo/KangarooSizeDistribution.h"
 #include "cachelib/navy/kangaroo/RripBitVector.h"
 #include "cachelib/navy/kangaroo/RripBucket.h"
 #include "cachelib/navy/kangaroo/Types.h"
@@ -77,6 +78,14 @@ class Kangaroo final : public Engine {
   Kangaroo(const Kangaroo&) = delete;
   Kangaroo& operator=(const Kangaroo&) = delete;
 
+  // Check if the key could exist in bighash. This can be used as a pre-check
+  // to optimize cache lookups to avoid calling lookups in an async IO
+  // environment.
+  //
+  // @param hk   key to be checked
+  //
+  // @return  false if the key definitely does not exist and true if it could.
+  bool couldExist(HashedKey hk) override;
   // Look up a key in Kangaroo. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
   // Buffer as "value" as any existing storage will be freed. If not found,
@@ -87,8 +96,7 @@ class Kangaroo final : public Engine {
   // Inserts key and value into Kangaroo. This will replace an existing
   // key if found. If it failed to write, it will return DeviceError.
   Status insert(HashedKey hk,
-                BufferView value,
-                InsertOptions /* opt */) override;
+                BufferView value) override;
 
   // Removes an entry from Kangaroo if found. Ok on success, NotFound on miss,
   // and DeviceError on error.
@@ -110,7 +118,7 @@ class Kangaroo final : public Engine {
   Kangaroo(Config&& config, ValidConfigTag);
 
   Buffer readBucket(KangarooBucketId bid);
-  bool writeBucket(KangarooBucketId bid, MutableBufferView mutaleView);
+  bool writeBucket(KangarooBucketId bid, Buffer buffer);
 
   // The corresponding r/w bucket lock must be held during the entire
   // duration of the read and write operations. For example, during write,
@@ -138,14 +146,13 @@ class Kangaroo final : public Engine {
 
   double bfFalsePositivePct() const;
   void bfRebuild(KangarooBucketId bid, const RripBucket* bucket);
-  void bfBuildUninitialized(KangarooBucketId bid, const RripBucket* bucket);
   bool bfReject(KangarooBucketId bid, uint64_t keyHash) const;
 
   bool bvGetHit(KangarooBucketId bid, uint32_t keyIdx) const;
   void bvSetHit(KangarooBucketId bid, uint32_t keyIdx) const;
 
-  void insertMultipleObjectsToKangarooBucket(HashedKey hk,
-          NextSetItemInLogCallback cb, ReadmitCallback readmit);
+  void insertMultipleObjectsToKangarooBucket(std::vector<std::unique_ptr<ObjectInfo>>& ois, 
+      ReadmitCallback readmit);
 
   // Use birthday paradox to estimate number of mutexes given number of parallel
   // queries and desired probability of lock collision.
@@ -190,7 +197,11 @@ class Kangaroo final : public Engine {
   mutable AtomicCounter bfProbeCount_;
   mutable AtomicCounter bfRejectCount_;
   mutable AtomicCounter checksumErrorCount_;
+  mutable AtomicCounter thresholdNotHit_;
+  mutable AtomicCounter multiInsertCalls_;
   mutable SizeDistribution sizeDist_;
+  mutable KangarooSizeDistribution thresholdSizeDist_;
+  mutable KangarooSizeDistribution thresholdNumDist_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");

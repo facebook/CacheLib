@@ -71,9 +71,9 @@ class FOLLY_PACK_ATTR KangarooBucketStorage {
   // Slot represents a physical slot in the storage. User does not use
   // this directly but instead uses Allocation.
   struct FOLLY_PACK_ATTR Slot {
-    uint32_t size{};
+    uint16_t size{};
     uint8_t data[];
-    explicit Slot(uint32_t s) : size{s} {}
+    explicit Slot(uint16_t s) : size{s} {}
   };
 
   bool canAllocate(uint32_t size) const {

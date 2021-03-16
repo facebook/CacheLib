@@ -63,7 +63,7 @@ class LogIndex  {
   Status insert(HashedKey hk, LogPageId lpid, uint8_t hits = 0);
 
   // Removes entry's valid bit if it's in the log 
-  Status remove(HashedKey hk);
+  Status remove(HashedKey hk, LogPageId lpid);
 
   LogPageId findAndRemove(KangarooBucketId bid, uint32_t tag);
 

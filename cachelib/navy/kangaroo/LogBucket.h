@@ -76,7 +76,7 @@ class FOLLY_PACK_ATTR LogBucket {
   // BufferView::isNull() == true if not found.
   BufferView find(HashedKey hk) const;
 
-  Status findTag(uint32_t tag, HashedKey& hk, BufferView& value) const;
+  BufferView findTag(uint32_t tag, HashedKey& hk) const;
 
   // Note: this does *not* replace an existing key! User must make sure to
   //       remove an existing key before calling insert.

@@ -32,6 +32,12 @@ BufferView KangarooLogSegment::find(HashedKey hk, LogPageId lpid) {
   return buckets_[offset]->find(hk);
 }
 
+BufferView KangarooLogSegment::findTag(uint32_t tag, HashedKey& hk, LogPageId lpid) {
+  uint32_t offset = bucketOffset(lpid);
+  XDCHECK(offset < numBuckets_);
+  return  buckets_[offset]->findTag(tag, hk);
+}
+
 LogPageId KangarooLogSegment::insert(HashedKey hk, BufferView value) {
   KangarooBucketStorage::Allocation alloc;
   uint32_t i = 0;

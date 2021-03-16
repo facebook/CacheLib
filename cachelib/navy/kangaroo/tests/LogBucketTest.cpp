@@ -14,7 +14,7 @@ namespace navy {
 namespace tests {
 
 TEST(LogBucket, SingleKey) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk = makeHK("key");
@@ -61,11 +61,11 @@ TEST(LogBucket, CollisionKeys) {
   bucket.insert(collidedHk, value2, nullptr);
 
   EXPECT_EQ(value1, bucket.find(hk));
-  EXPECT_EQ(value2, bucket.find(collidedHk));
+  EXPECT_EQ(value2, bucket.find(makeHK(makeView("key 2"))));
 }
 
 TEST(LogBucket, MultipleKeys) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk1 = makeHK("key 1");
@@ -107,7 +107,7 @@ TEST(LogBucket, MultipleKeys) {
 }
 
 TEST(LogBucket, DuplicateKeys) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk = makeHK("key");
@@ -152,7 +152,7 @@ TEST(LogBucket, DuplicateKeys) {
 }
 
 TEST(LogBucket, EvictionNone) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   // Insert 3 small key/value just enough not to trigger
@@ -181,7 +181,7 @@ TEST(LogBucket, EvictionNone) {
 }
 
 TEST(LogBucket, EvictionOne) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk1 = makeHK("key 1");
@@ -207,7 +207,7 @@ TEST(LogBucket, EvictionOne) {
 }
 
 TEST(LogBucket, EvictionAll) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(65 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk1 = makeHK("key 1");
@@ -241,7 +241,7 @@ TEST(LogBucket, EvictionAll) {
 }
 
 TEST(LogBucket, Checksum) {
-  Buffer buf(96 + sizeof(LogBucket));
+  Buffer buf(54 + sizeof(LogBucket));
   auto& bucket = LogBucket::initNew(buf.mutableView(), 0);
 
   const auto hk = makeHK("key");

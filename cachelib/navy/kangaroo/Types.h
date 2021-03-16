@@ -2,13 +2,14 @@
 
 #include <functional>
 
+#include <cachelib/navy/common/Hash.h>
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
 
 using BitVectorUpdateVisitor = std::function<void(uint32_t)>;
 using BitVectorReadVisitor = std::function<bool(uint32_t)>;
-
 
 // Kangaroo Log Structures
 class LogSegmentId {
@@ -56,6 +57,29 @@ class LogPageId {
   bool valid_;
 };
 
+class PartitionOffset {
+ public:
+  explicit PartitionOffset(uint32_t idx, bool valid) : idx_{idx}, valid_{valid} {}
+  PartitionOffset() : idx_{0}, valid_{false} {}
+
+  bool operator==(const PartitionOffset& rhs) const noexcept {
+    if (!valid_ && !rhs.valid_) {
+      return true;
+    }
+    return valid_ == rhs.valid_ && idx_ == rhs.idx_;
+  }
+  bool operator!=(const PartitionOffset& rhs) const noexcept {
+    return !(*this == rhs);
+  }
+
+  uint32_t index() const noexcept { return idx_; }
+  bool isValid() const noexcept { return valid_; }
+
+ private:
+  uint32_t idx_;
+  bool valid_;
+};
+
 class KangarooBucketId {
  public:
   explicit KangarooBucketId(uint32_t idx) : idx_{idx} {}
@@ -76,16 +100,19 @@ class KangarooBucketId {
 using SetNumberCallback = std::function<KangarooBucketId(uint64_t)>;
 
 struct ObjectInfo {
-  Status status;
+  Buffer keyValue;
   HashedKey key;
-  BufferView value;
+  Buffer value;
   uint8_t hits;
+  LogPageId lpid;
+  uint32_t tag;
 
-  ObjectInfo(HashedKey hk) : key{hk} {}
+  ObjectInfo(HashedKey k, BufferView v, uint8_t h, LogPageId l, uint32_t t):
+    keyValue{k.key()}, key{HashedKey::precomputed(keyValue.view(), k.keyHash())},
+    value{Buffer(v)}, hits{h}, lpid{l}, tag{t} {}
 };
-using NextSetItemInLogCallback = std::function<ObjectInfo()>;
-using ReadmitCallback = std::function<void(ObjectInfo)>;
-using SetMultiInsertCallback = std::function<void(HashedKey, NextSetItemInLogCallback, ReadmitCallback)>;
+using ReadmitCallback = std::function<void(std::unique_ptr<ObjectInfo>&)>;
+using SetMultiInsertCallback = std::function<void(std::vector<std::unique_ptr<ObjectInfo>>&, ReadmitCallback)>;
   
 static const uint32_t maxTagValue = 1 << 9;
 static const int tagSeed = 23;
