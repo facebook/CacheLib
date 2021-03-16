@@ -144,6 +144,9 @@ class Cache {
     auto checksum = getUint64FromItem(*handle);
     auto opId = valueTracker_->beginSet(handle->getKey(), checksum);
     auto rv = cache_->insertOrReplace(handle);
+    if (rv != nullptr){
+        writtenBytes_ += handle->getSize();
+    }
     valueTracker_->endSet(opId);
     return rv;
   }
@@ -326,6 +329,7 @@ class Cache {
   Config allocatorConfig_;
   // reading of the nand bytes written for the benchmark if enabled.
   const uint64_t nandBytesBegin_{0};
+  uint64_t writtenBytes_{0};
 
   bool shouldCleanupFiles_{false};
 

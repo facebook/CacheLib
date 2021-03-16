@@ -7,9 +7,17 @@
 #include "cachelib/cachebench/runner/OutputStressor.h"
 #include "cachelib/common/Utils.h"
 
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+  thread_local std::istringstream ReplayBufferedGenerator::ss_ = std::istringstream();
+  thread_local std::string ReplayBufferedGenerator::key_ = std::string();
+  thread_local std::string ReplayBufferedGenerator::token_ = std::string();
+
+
+
 ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   set += other.set;
   setFailure += other.setFailure;
@@ -70,6 +78,9 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
 
   if (config.generator == "replay") {
     return std::make_unique<ReplayGenerator>(config);
+  }
+  if (config.generator == "replayFast") {
+    return std::make_unique<ReplayBufferedGenerator>(config);
   }
 
   // TODO: Remove the empty() check once we label workload-based configs
