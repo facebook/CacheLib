@@ -121,7 +121,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value* const refPtr = &refCount_;
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
-    Value oldVal = *refPtr;
+    // TSAN does not support atomic functions from GNU compiler extensions.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+    Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
 
     while (true) {
       const Value newCount = oldVal + static_cast<Value>(1);
@@ -129,10 +131,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
         return false;
       }
 
-      // TODO(T83749172): Fix data race exposed by TSAN.
-      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
       if (__atomic_compare_exchange_n(refPtr, &oldVal, newCount, isWeak,
-                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
         return true;
       }
 
@@ -156,7 +156,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
 
-    Value oldVal = *refPtr;
+    // TSAN does not support atomic functions from GNU compiler extensions.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+    Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const Value newCount = oldVal - static_cast<Value>(1);
       if ((oldVal & kAccessRefMask) == 0) {
@@ -164,10 +166,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
             "Trying to decRef with no refcount. RefCount Leak!");
       }
 
-      // TODO(T83749172): Fix data race exposed by TSAN.
-      folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
       if (__atomic_compare_exchange_n(refPtr, &oldVal, newCount, isWeak,
-                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
         return newCount & kRefMask;
       }
       if ((++nCASFailures % 4) == 0) {
@@ -193,7 +193,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // On intel it's the same as an atomic load on primitive types,
     // but it's better to be explicit and do an atomic load with
     // relaxed ordering.
-    // TODO(T83749172): Fix data race exposed by TSAN.
+    // TSAN does not support atomic functions from GNU compiler extensions.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     return __atomic_load_n(&refCount_, __ATOMIC_RELAXED);
   }
@@ -206,13 +206,13 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    */
   void markInMMContainer() noexcept {
     Value bitMask = getAdminRef<kLinked>();
-    // TODO(T83749172): Fix data race exposed by TSAN.
+    // TSAN does not support atomic functions from GNU compiler extensions.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_or_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   void unmarkInMMContainer() noexcept {
     Value bitMask = ~getAdminRef<kLinked>();
-    // TODO(T83749172): Fix data race exposed by TSAN.
+    // TSAN does not support atomic functions from GNU compiler extensions.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
@@ -228,13 +228,13 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    */
   void markAccessible() noexcept {
     Value bitMask = getAdminRef<kAccessible>();
-    // TODO(T83749172): Fix data race exposed by TSAN.
+    // TSAN does not support atomic functions from GNU compiler extensions.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_or_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   void unmarkAccessible() noexcept {
     Value bitMask = ~getAdminRef<kAccessible>();
-    // TODO(T83749172): Fix data race exposed by TSAN.
+    // TSAN does not support atomic functions from GNU compiler extensions.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
@@ -262,7 +262,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value* const refPtr = &refCount_;
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
-    Value curValue = *refPtr;
+    // TSAN does not support atomic functions from GNU compiler extensions.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+    Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const bool flagSet = curValue & conditionBitMask;
       if (!flagSet) {
@@ -271,7 +273,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
 
       const Value newValue = curValue | bitMask;
       if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
-                                      __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
         XDCHECK(newValue & conditionBitMask);
         return true;
       }
