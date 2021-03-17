@@ -59,10 +59,53 @@ class MapViewTest : public ::testing::Test {
     ASSERT_EQ(mapView2.size(), 2);
     ASSERT_EQ(mapView2.sizeInBytes(), map.sizeInBytes());
   }
+
+  void testEmptyIterator() {
+    auto cache = DataTypeTest::createCache<AllocatorT>();
+    const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
+
+    using BasicMap = cachelib::Map<int, int, AllocatorT>;
+    using BasicMapView = cachelib::MapView<int, int, AllocatorT>;
+
+    auto map = BasicMap::create(*cache, pid, "my_map");
+    auto& parent = map.viewItemHandle();
+    auto allocs = cache->viewAsChainedAllocs(parent);
+
+    BasicMapView mapView{*parent, allocs.getChain()};
+    ASSERT_EQ(mapView.begin(), mapView.end());
+  }
+
+  void testIterator() {
+    auto cache = DataTypeTest::createCache<AllocatorT>();
+    const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
+
+    using BasicMap = cachelib::Map<int, int, AllocatorT>;
+    using BasicMapView = cachelib::MapView<int, int, AllocatorT>;
+
+    auto map = BasicMap::create(*cache, pid, "my_map");
+    std::vector<int> keys = {123, 456, 789};
+    std::vector<int> values = {100, 200, 300};
+    for (unsigned int i = 0; i < keys.size(); ++i) {
+      ASSERT_TRUE(map.insert(keys.at(i), values.at(i)));
+    }
+    auto& parent = map.viewItemHandle();
+    auto allocs = cache->viewAsChainedAllocs(parent);
+
+    BasicMapView mapView{*parent, allocs.getChain()};
+    unsigned int i = 0;
+    for (auto& kv : mapView) {
+      ASSERT_EQ(kv.key, keys.at(i));
+      ASSERT_EQ(kv.value, values.at(i));
+      i++;
+    }
+    ASSERT_EQ(i, mapView.size());
+  }
 };
 TYPED_TEST_CASE(MapViewTest, AllocatorTypes);
 TYPED_TEST(MapViewTest, Basic) { this->testBasic(); }
 TYPED_TEST(MapViewTest, MapToMapView) { this->testMapToMapView(); }
+TYPED_TEST(MapViewTest, EmptyIterator) { this->testEmptyIterator(); }
+TYPED_TEST(MapViewTest, Iterator) { this->testIterator(); }
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

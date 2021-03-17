@@ -50,9 +50,67 @@ class MapView {
   // Return number of elements in this map
   uint32_t size() const;
 
- private:
   using BufferAddr = detail::BufferAddr;
   using Buffer = detail::Buffer;
+  class Iterator : public detail::IteratorFacade<Iterator,
+                                                 const EntryKeyValue,
+                                                 std::forward_iterator_tag> {
+   public:
+    Iterator() = default;
+    explicit Iterator(std::vector<const Buffer*>& buffers)
+        : buffers_(&buffers),
+          curr_(const_cast<Buffer*>(buffers_->at(index_))->begin()) {
+      if (curr_ == Buffer::Iterator()) {
+        // Currently, curr_ is invalid. So we increment to try to find
+        // an valid iterator
+        increment();
+      }
+    }
+
+    enum EndT { End };
+    Iterator(std::vector<const Buffer*>& buffers, EndT)
+        : buffers_(&buffers), index_(buffers_->size()) {}
+
+    detail::BufferAddr getAsBufferAddr() const {
+      return BufferAddr{buffers_->size() - index_ - 1 /* itemOffset */,
+                        curr_.getDataOffset()};
+    }
+
+    void increment() {
+      ++curr_;
+      while (curr_ == Buffer::Iterator{}) {
+        if (++index_ == buffers_->size()) {
+          // we've reached the end of Buffer
+          return;
+        }
+        curr_ = const_cast<Buffer*>(buffers_->at(index_))->begin();
+      }
+    }
+
+    const EntryKeyValue& dereference() const {
+      if (curr_ == Buffer::Iterator{}) {
+        throw std::runtime_error(
+            "MapView::Iterator:: deferencing a null Iterator.");
+      }
+      return reinterpret_cast<const EntryKeyValue&>(curr_.dereference());
+    }
+
+    bool equal(const Iterator& other) const {
+      return index_ == other.index_ && buffers_ == other.buffers_ &&
+             curr_ == other.curr_;
+    }
+
+   private:
+    std::vector<const Buffer*>* buffers_;
+    uint32_t index_{0};
+    detail::Buffer::Iterator curr_{};
+  };
+
+  // These iterators are only valid when this MapView object is valid
+  Iterator begin() { return Iterator{buffers_}; }
+  Iterator end() { return Iterator{buffers_, Iterator::End}; }
+
+ private:
   using HashTable = detail::HashTable<EntryKey>;
 
   // Get the keyValuEntry stored at the corresponding itemOffset and byteOffset
