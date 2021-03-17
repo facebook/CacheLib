@@ -1,0 +1,68 @@
+#include "cachelib/allocator/Util.h"
+#include "cachelib/allocator/tests/TestBase.h"
+#include "cachelib/datatype/Buffer.h"
+#include "cachelib/datatype/Map.h"
+#include "cachelib/datatype/MapView.h"
+#include "cachelib/datatype/tests/DataTypeTest.h"
+
+namespace facebook {
+namespace cachelib {
+namespace tests {
+template <typename AllocatorT>
+class MapViewTest : public ::testing::Test {
+ public:
+  void testBasic() {
+    auto cache = DataTypeTest::createCache<AllocatorT>();
+    const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
+
+    using BasicMap = cachelib::Map<int, int, AllocatorT>;
+    using BasicMapView = cachelib::MapView<int, int, AllocatorT>;
+
+    auto map = BasicMap::create(*cache, pid, "my_map");
+    ASSERT_TRUE(map.insert(123, 100));
+    auto& parent = map.viewItemHandle();
+    auto allocs = cache->viewAsChainedAllocs(parent);
+
+    BasicMapView mapView{*parent, allocs.getChain()};
+    ASSERT_TRUE(mapView.find(123));
+    ASSERT_FALSE(mapView.find(456));
+    const int* val = mapView.find(123);
+    ASSERT_EQ(*val, 100);
+    ASSERT_EQ(mapView.size(), map.size());
+    ASSERT_EQ(mapView.sizeInBytes(), map.sizeInBytes());
+  }
+  void testMapToMapView() {
+    auto cache = DataTypeTest::createCache<AllocatorT>();
+    const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
+
+    using BasicMap = cachelib::Map<int, int, AllocatorT>;
+    using BasicMapView = cachelib::MapView<int, int, AllocatorT>;
+
+    auto map = BasicMap::create(*cache, pid, "my_map");
+    ASSERT_TRUE(map.insert(123, 100));
+
+    BasicMapView mapView = map.toView();
+    ASSERT_TRUE(mapView.find(123));
+    ASSERT_FALSE(mapView.find(456));
+
+    ASSERT_EQ(*mapView.find(123), 100);
+    ASSERT_EQ(mapView.size(), map.size());
+    ASSERT_EQ(mapView.sizeInBytes(), map.sizeInBytes());
+
+    // mutate the map and create another MapView
+    ASSERT_TRUE(map.insert(456, 200));
+    BasicMapView mapView2 = map.toView();
+    ASSERT_TRUE(mapView2.find(123));
+    ASSERT_TRUE(mapView2.find(456));
+    ASSERT_EQ(*mapView2.find(123), 100);
+    ASSERT_EQ(*mapView2.find(456), 200);
+    ASSERT_EQ(mapView2.size(), 2);
+    ASSERT_EQ(mapView2.sizeInBytes(), map.sizeInBytes());
+  }
+};
+TYPED_TEST_CASE(MapViewTest, AllocatorTypes);
+TYPED_TEST(MapViewTest, Basic) { this->testBasic(); }
+TYPED_TEST(MapViewTest, MapToMapView) { this->testMapToMapView(); }
+} // namespace tests
+} // namespace cachelib
+} // namespace facebook

@@ -96,6 +96,9 @@ class MapIndexMaxedOut : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+template <typename K, typename V, typename C>
+class MapView;
+
 // Map data structure for cachelib
 // Key needs to be a fixed size POD.
 // Value can be variable sized, but must be POD.
@@ -225,6 +228,11 @@ class Map {
   }
 
   bool isNullItemHandle() const { return hashtable_ == nullptr; }
+
+  // Convert a Map to a read-only MapView.
+  // The view will become invalid as soon as any mutation happens to the
+  // underlying map.
+  MapView<EntryKey, EntryValue, CacheType> toView() const;
 
  private:
   using BufferManager = detail::BufferManager<CacheType>;

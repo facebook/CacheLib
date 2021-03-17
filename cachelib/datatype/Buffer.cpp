@@ -46,6 +46,8 @@ void Buffer::remove(uint32_t offset) {
 
 void* Buffer::getData(uint32_t offset) { return data_ + offset; }
 
+const void* Buffer::getData(uint32_t offset) const { return data_ + offset; }
+
 void Buffer::compact(Buffer& dest) const {
   XDCHECK_EQ(dest.capacity(), dest.remainingBytes());
   if (dest.capacity() < capacity() - wastedBytes() - remainingBytes()) {

@@ -454,5 +454,12 @@ bool Map<K, V, C>::expandHashTable() {
   bufferManager_ = BufferManager{*cache_, hashtable_.viewItemHandle()};
   return true;
 }
+
+template <typename K, typename V, typename C>
+MapView<K, V, C> Map<K, V, C>::toView() const {
+  auto& parent = hashtable_.viewItemHandle();
+  auto allocs = cache_->viewAsChainedAllocs(parent);
+  return MapView<K, V, C>{*parent, allocs.getChain()};
+}
 } // namespace cachelib
 } // namespace facebook

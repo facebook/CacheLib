@@ -49,6 +49,9 @@ class FOLLY_PACK_ATTR Buffer {
   // Return a pointer to the allocation given the offset
   void* getData(uint32_t offset);
 
+  // Return a const pointer to the allocation given the offset
+  const void* getData(uint32_t offset) const;
+
   // Eliminate deleted bytes by rearranging existing slots into destination
   // This does not change the current buffer's memory layout
   void compact(Buffer& dest) const;
