@@ -60,8 +60,8 @@ struct Request {
       : key(k),
         sizeBegin(b),
         sizeEnd(e),
-        ttlSecs(ttl),
         requestId(reqId),
+        ttlSecs(ttl),
         admFeatureMap(admFeatureM),
         op(o) {}
 
@@ -74,7 +74,10 @@ struct Request {
   }
 
   Request(Request&& r) noexcept
-      : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd), requestId(r.requestId) {}
+      : key(r.key),
+        sizeBegin(r.sizeBegin),
+        sizeEnd(r.sizeEnd),
+        requestId(r.requestId) {}
   Request& operator=(Request&& r) = delete;
 
   OpType getOp() const noexcept { return op.load(); }

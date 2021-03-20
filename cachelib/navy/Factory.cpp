@@ -218,7 +218,6 @@ class KangarooProtoImpl final : public KangarooProto {
  private:
   Kangaroo::Config config_;
   bool bloomFilterEnabled_{false};
-  bool nruEnabled_{false};
   uint32_t numHashes_{};
   uint32_t hashTableBitSize_{};
 };

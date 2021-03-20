@@ -2,10 +2,8 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-#include "cachelib/navy/kangaroo/KangarooLog.h"
 #include "cachelib/navy/common/Types.h"
-
-#include "cachelib/navy/driver/Driver.h"
+#include "cachelib/navy/kangaroo/KangarooLog.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/MockDevice.h"
 
@@ -18,10 +16,10 @@ namespace navy {
 namespace tests {
 namespace {
 void setLog(KangarooLog::Config& config,
-    uint32_t readSize,
-    uint32_t threshold, 
-    SetNumberCallback setNumCb,
-    SetMultiInsertCallback insertCb) {
+            uint32_t readSize,
+            uint32_t threshold,
+            SetNumberCallback setNumCb,
+            SetMultiInsertCallback insertCb) {
   config.readSize = readSize;
   config.segmentSize = 2 * config.readSize;
   config.logSize = 8 * config.segmentSize;
@@ -33,12 +31,15 @@ void setLog(KangarooLog::Config& config,
 
 TEST(KangarooLog, BasicOps) {
   std::atomic<int> count = 0;
-  SetMultiInsertCallback testInsertCb = [&count](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback readmit) {
-    count += ois.size();
-    return;
-  };
+  SetMultiInsertCallback testInsertCb =
+      [&count](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback) {
+        count += ois.size();
+        return;
+      };
   uint64_t numSetBuckets = 24;
-  auto testSetNumCb = [numSetBuckets](uint64_t id) { return KangarooBucketId(id % numSetBuckets); };
+  auto testSetNumCb = [numSetBuckets](uint64_t id) {
+    return KangarooBucketId(id % numSetBuckets);
+  };
   KangarooLog::Config config;
   setLog(config, 64, 1, testSetNumCb, testInsertCb);
   config.numTotalIndexBuckets = numSetBuckets;
@@ -46,7 +47,7 @@ TEST(KangarooLog, BasicOps) {
   config.logPhysicalPartitions = 2;
   auto device = std::make_unique<NiceMock<MockDevice>>(config.logSize, 64);
   config.device = device.get();
-  
+
   KangarooLog kl(std::move(config));
 
   const auto hk1 = makeHK("key 1");
@@ -58,14 +59,14 @@ TEST(KangarooLog, BasicOps) {
   Buffer value;
   EXPECT_EQ(kl.lookup(hk1, value), Status::Ok);
   EXPECT_EQ(makeView("value 1 test"), value.view());
-  
+
   ret = kl.insert(hk2, makeView("value 2 test"));
   EXPECT_EQ(ret, Status::Ok);
   EXPECT_EQ(kl.lookup(hk1, value), Status::Ok);
   EXPECT_EQ(makeView("value 1 test"), value.view());
   EXPECT_EQ(kl.lookup(hk2, value), Status::Ok);
   EXPECT_EQ(makeView("value 2 test"), value.view());
-  
+
   // Check for lookup after written to flash
   ret = kl.insert(hk3, makeView("value 3 test"));
   EXPECT_EQ(ret, Status::Ok);
@@ -76,7 +77,7 @@ TEST(KangarooLog, BasicOps) {
   EXPECT_EQ(kl.lookup(hk3, value), Status::Ok);
   EXPECT_EQ(makeView("value 3 test"), value.view());
 
-  EXPECT_EQ(kl.remove(hk1), Status::Ok); 
+  EXPECT_EQ(kl.remove(hk1), Status::Ok);
   EXPECT_EQ(kl.lookup(hk1, value), Status::NotFound);
 
   // trigger merging
@@ -92,12 +93,12 @@ TEST(KangarooLog, BasicOps) {
   EXPECT_EQ(makeView("value 7 test"), value.view());
   EXPECT_EQ(kl.lookup(hk1, value), Status::NotFound);
   EXPECT_EQ(kl.lookup(hk2, value), Status::Ok); /* only flushed one partition */
-  
+
   EXPECT_EQ(kl.insert(makeHK("key 8"), makeView("value 8 test")), Status::Ok);
   EXPECT_EQ(kl.insert(makeHK("key 9"), makeView("value 9 test")), Status::Ok);
   EXPECT_EQ(kl.insert(makeHK("key %"), makeView("value \% test")), Status::Ok);
   EXPECT_EQ(kl.insert(makeHK("key &"), makeView("value & test")), Status::Ok);
-  
+
   sleep(3);
 
   EXPECT_EQ(count, 3);
@@ -106,12 +107,15 @@ TEST(KangarooLog, BasicOps) {
 TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   std::cout << "Basic ops" << std::endl;
   std::atomic<int> count = 0;
-  SetMultiInsertCallback testInsertCb = [&count](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback readmit) {
-    count += ois.size();
-    return;
-  };
+  SetMultiInsertCallback testInsertCb =
+      [&count](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback) {
+        count += ois.size();
+        return;
+      };
   uint64_t numSetBuckets = 24;
-  auto testSetNumCb = [numSetBuckets](uint64_t id) { return KangarooBucketId(id % numSetBuckets); };
+  auto testSetNumCb = [numSetBuckets](uint64_t id) {
+    return KangarooBucketId(id % numSetBuckets);
+  };
   KangarooLog::Config config;
   setLog(config, 64, 1, testSetNumCb, testInsertCb);
   config.numTotalIndexBuckets = numSetBuckets / 3;
@@ -119,7 +123,7 @@ TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   config.logPhysicalPartitions = 2;
   auto device = std::make_unique<NiceMock<MockDevice>>(config.logSize, 64);
   config.device = device.get();
-  
+
   KangarooLog kl(std::move(config));
 
   const auto hk1 = makeHK("key 1");
@@ -131,14 +135,14 @@ TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   Buffer value;
   EXPECT_EQ(kl.lookup(hk1, value), Status::Ok);
   EXPECT_EQ(makeView("value 1 test"), value.view());
-  
+
   ret = kl.insert(hk2, makeView("value 2 test"));
   EXPECT_EQ(ret, Status::Ok);
   EXPECT_EQ(kl.lookup(hk1, value), Status::Ok);
   EXPECT_EQ(makeView("value 1 test"), value.view());
   EXPECT_EQ(kl.lookup(hk2, value), Status::Ok);
   EXPECT_EQ(makeView("value 2 test"), value.view());
-  
+
   // Check for lookup after written to flash
   ret = kl.insert(hk3, makeView("value 3 test"));
   EXPECT_EQ(ret, Status::Ok);
@@ -149,7 +153,7 @@ TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   EXPECT_EQ(kl.lookup(hk3, value), Status::Ok);
   EXPECT_EQ(makeView("value 3 test"), value.view());
 
-  EXPECT_EQ(kl.remove(hk1), Status::Ok); 
+  EXPECT_EQ(kl.remove(hk1), Status::Ok);
   EXPECT_EQ(kl.lookup(hk1, value), Status::NotFound);
 
   // trigger merging
@@ -165,7 +169,7 @@ TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   EXPECT_EQ(makeView("value 7 test"), value.view());
   EXPECT_EQ(kl.lookup(hk1, value), Status::NotFound);
   EXPECT_EQ(kl.lookup(hk2, value), Status::Ok); /* only flushed one partition */
-  
+
   EXPECT_EQ(kl.insert(makeHK("key 8"), makeView("value 8 test")), Status::Ok);
   EXPECT_EQ(kl.insert(makeHK("key 9"), makeView("value 9 test")), Status::Ok);
   EXPECT_EQ(kl.insert(makeHK("key %"), makeView("value \% test")), Status::Ok);
@@ -176,7 +180,7 @@ TEST(KangarooLog, MultipleSetsPerIndexEntry) {
   EXPECT_EQ(count, 3);
 }
 
-}
+} // namespace tests
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

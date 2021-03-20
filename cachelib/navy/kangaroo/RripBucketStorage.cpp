@@ -7,17 +7,19 @@ static_assert(sizeof(RripBucketStorage) == 12,
               "RripBucketStorage overhead. Changing this may require changing "
               "the sizes used in unit tests as well");
 
-const uint32_t RripBucketStorage::kAllocationOverhead = sizeof(RripBucketStorage::Slot);
+const uint32_t RripBucketStorage::kAllocationOverhead =
+    sizeof(RripBucketStorage::Slot);
 
 // This is very simple as it only tries to allocate starting from the
 // tail of the storage. Returns null view() if we don't have any more space.
-RripBucketStorage::Allocation RripBucketStorage::allocate(uint32_t size, uint8_t rrip) {
+RripBucketStorage::Allocation RripBucketStorage::allocate(uint32_t size,
+                                                          uint8_t rrip) {
   // Allocate at the beginning of the right rrip value
   //
   //              tail
   // |-6--|3|--0--|~~~~~~~~~~~~~|
   //
-  // after allocating object with 3 
+  // after allocating object with 3
   //                  tail
   // |-6--|3|NEW|--0--|~~~~~~~~~|
   if (!canAllocate(size)) {
@@ -36,15 +38,13 @@ RripBucketStorage::Allocation RripBucketStorage::allocate(uint32_t size, uint8_t
   if (!itr.done()) {
     start = itr.view().data() - kAllocationOverhead;
   }
-  std::memmove(start + totalNewSize,
-               start,
-               (data_ + endOffset_) - start);
+  std::memmove(start + totalNewSize, start, (data_ + endOffset_) - start);
 
-  auto* slot = new (start) Slot(size, rrip);
+  auto* slot = new (start) Slot(static_cast<uint16_t>(size), rrip);
   endOffset_ += totalNewSize;
   numAllocations_++;
-  return {MutableBufferView{slot->size, slot->data}, 
-    position, (uint8_t) slot->rrip};
+  return {MutableBufferView{slot->size, slot->data}, position,
+          (uint8_t)slot->rrip};
 }
 
 RripBucketStorage::Allocation RripBucketStorage::remove(Allocation alloc) {
@@ -68,14 +68,13 @@ RripBucketStorage::Allocation RripBucketStorage::remove(Allocation alloc) {
                (data_ + endOffset_) - removed - removedSize);
   endOffset_ -= removedSize;
   numAllocations_--;
-  
-  auto* current =
-      reinterpret_cast<Slot*>(removed);
+
+  auto* current = reinterpret_cast<Slot*>(removed);
   if (reinterpret_cast<uint8_t*>(current) - data_ >= endOffset_) {
     return {};
   }
-  return {MutableBufferView{current->size, current->data}, position, 
-      (uint8_t) current->rrip};
+  return {MutableBufferView{current->size, current->data}, position,
+          (uint8_t)current->rrip};
 }
 
 void RripBucketStorage::removeUntil(Allocation alloc) {
@@ -108,7 +107,7 @@ RripBucketStorage::Allocation RripBucketStorage::getFirst() const {
     return {};
   }
   auto* slot = reinterpret_cast<Slot*>(data_);
-  return {MutableBufferView{slot->size, slot->data}, 0, (uint8_t) slot->rrip};
+  return {MutableBufferView{slot->size, slot->data}, 0, (uint8_t)slot->rrip};
 }
 
 RripBucketStorage::Allocation RripBucketStorage::getNext(
@@ -122,14 +121,13 @@ RripBucketStorage::Allocation RripBucketStorage::getNext(
   if (reinterpret_cast<uint8_t*>(next) - data_ >= endOffset_) {
     return {};
   }
-  return {MutableBufferView{next->size, next->data}, alloc.position() + 1, 
-      (uint8_t) next->rrip};
+  return {MutableBufferView{next->size, next->data}, alloc.position() + 1,
+          (uint8_t)next->rrip};
 }
 
 void RripBucketStorage::incrementRrip(Allocation alloc, int8_t increment) {
   uint8_t* current_slot = alloc.view().data() - kAllocationOverhead;
-  auto* slot =
-      reinterpret_cast<Slot*>(current_slot);
+  auto* slot = reinterpret_cast<Slot*>(current_slot);
   XDCHECK(increment + slot->rrip <= 7);
   slot->rrip += increment;
 }

@@ -1,8 +1,8 @@
-#include "cachelib/navy/kangaroo/RripBucketStorage.h"
-
 #include <folly/Format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include "cachelib/navy/kangaroo/RripBucketStorage.h"
 
 namespace facebook {
 namespace cachelib {
@@ -197,7 +197,7 @@ TEST(RripBucketStorage, RripIteration1) {
 
   // Next of null is still null
   auto itr6 = allocator->getNext(itr5);
-  EXPECT_TRUE(itr5.done());
+  EXPECT_TRUE(itr6.done());
 }
 
 TEST(RripBucketStorage, RemoveFromMiddle) {

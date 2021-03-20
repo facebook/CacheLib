@@ -1,8 +1,8 @@
 #pragma once
 
-#include <stdexcept>
-
 #include <folly/SharedMutex.h>
+
+#include <stdexcept>
 
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
@@ -13,7 +13,7 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-class KangarooLogSegment  {
+class KangarooLogSegment {
  public:
   class Iterator {
    public:
@@ -26,8 +26,8 @@ class KangarooLogSegment  {
    private:
     friend KangarooLogSegment;
 
-    explicit Iterator(uint64_t bucketNum, LogBucket::Iterator itr) : 
-      bucketNum_{bucketNum}, itr_{itr} {
+    explicit Iterator(uint64_t bucketNum, LogBucket::Iterator itr)
+        : bucketNum_{bucketNum}, itr_{itr} {
       if (itr_.done()) {
         done_ = true;
       }
@@ -38,11 +38,14 @@ class KangarooLogSegment  {
     bool done_ = false;
   };
 
-  explicit KangarooLogSegment(uint64_t segmentSize, uint64_t pageSize, 
-      LogSegmentId lsid, uint64_t pagesPerPartition, 
-      MutableBufferView mutableView, bool newBucket);
+  explicit KangarooLogSegment(uint64_t segmentSize,
+                              uint64_t pageSize,
+                              LogSegmentId lsid,
+                              uint64_t pagesPerPartition,
+                              MutableBufferView mutableView,
+                              bool newBucket);
 
-  ~KangarooLogSegment() {delete buckets_;}
+  ~KangarooLogSegment() { delete[] buckets_; }
 
   KangarooLogSegment(const KangarooLogSegment&) = delete;
   KangarooLogSegment& operator=(const KangarooLogSegment&) = delete;
@@ -65,17 +68,17 @@ class KangarooLogSegment  {
  private:
   uint32_t bucketOffset(LogPageId lpid);
   LogPageId getLogPageId(uint32_t bucketOffset);
-  
-  // allocation on Kangaroo Bucket lock 
+
+  // allocation on Kangaroo Bucket lock
   folly::SharedMutex allocationMutex_;
-  
+
   uint64_t segmentSize_;
   uint64_t pageSize_;
   uint64_t numBuckets_;
   uint64_t pagesPerPartition_;
   LogSegmentId lsid_;
   // pointer to array of pointers to LogBuckets
-  LogBucket** buckets_; 
+  LogBucket** buckets_;
 };
 } // namespace navy
 } // namespace cachelib

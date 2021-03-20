@@ -1,7 +1,8 @@
-#pragma once 
+#pragma once
 
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
+#include "cachelib/navy/kangaroo/Types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -12,7 +13,7 @@ class LogIndex;
 class LogIndexEntry {
  public:
   explicit LogIndexEntry(HashedKey hk, LogPageId lpid)
-    : tag_{createTag(hk)}, flash_index_{lpid.index()}, hits_{0} {}
+      : tag_{createTag(hk)}, flash_index_{lpid.index()}, hits_{0} {}
   LogIndexEntry() : valid_{false} {}
   ~LogIndexEntry() = default;
 
@@ -23,15 +24,25 @@ class LogIndexEntry {
     return !(*this == rhs);
   }
 
-  void incrementHits() { if (hits_ < ((1 << 3) - 1)) {hits_++;} }
+  void incrementHits() {
+    if (hits_ < ((1 << 3) - 1)) {
+      hits_++;
+    }
+  }
   uint32_t hits() { return hits_; }
   uint32_t tag() { return tag_; }
-  void invalidate() { valid_ = 0; hits_ = 1; }
-  void clear() { hits_ = 0; valid_ = 0; }
+  void invalidate() {
+    valid_ = 0;
+    hits_ = 1;
+  }
+  void clear() {
+    hits_ = 0;
+    valid_ = 0;
+  }
   bool isValid() { return valid_; }
   bool continueIteration() { return isValid() || hits_; }
   LogPageId page() { return LogPageId(flash_index_, valid_); }
-    
+
  private:
   friend LogIndex;
 

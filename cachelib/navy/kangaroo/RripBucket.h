@@ -1,13 +1,13 @@
 #pragma once
 
-#include <functional>
-
 #include <folly/Portability.h>
 
-#include "cachelib/navy/kangaroo/RripBucketStorage.h"
-#include "cachelib/navy/kangaroo/Types.h"
+#include <functional>
+
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
+#include "cachelib/navy/kangaroo/RripBucketStorage.h"
+#include "cachelib/navy/kangaroo/Types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -74,7 +74,7 @@ class FOLLY_PACK_ATTR RripBucket {
   // BufferView::isNull() == true if not found.
   BufferView find(HashedKey hk, BitVectorUpdateVisitor setHitCallback) const;
 
-  //HashedKey findKey(uint64_t key_hash) const;
+  // HashedKey findKey(uint64_t key_hash) const;
 
   // Note: this does *not* replace an existing key! User must make sure to
   //       remove an existing key before calling insert.
@@ -96,7 +96,7 @@ class FOLLY_PACK_ATTR RripBucket {
 
   Iterator getFirst() const;
   Iterator getNext(Iterator itr) const;
-  
+
   // Checks if there is space for an object given its hit priority
   // Use 0 hits if there is no log
   bool isSpace(HashedKey hk, BufferView value, uint8_t hits);
@@ -107,19 +107,19 @@ class FOLLY_PACK_ATTR RripBucket {
 
   // Reserve enough space for @size by evicting. Return number of evictions.
   uint32_t makeSpace(uint32_t size, const DestructorCallback& destructorCb);
-  
+
   uint8_t getRripValue(uint8_t hits) const {
     uint8_t start = (1 << 3) - 2;
     if (hits > start) {
-        return 0;
+      return 0;
     }
     return start - hits;
   }
-  
+
   uint8_t getIncrement(uint8_t highestRrip) const {
-    uint8_t highestValue = 1 << 3 - 1;
+    uint8_t highestValue = (1 << 3) - 1;
     if (highestRrip > highestValue) {
-        return 0;
+      return 0;
     }
     return highestValue - highestRrip;
   }

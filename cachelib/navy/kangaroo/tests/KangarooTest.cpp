@@ -1,13 +1,12 @@
-#include "cachelib/navy/kangaroo/Kangaroo.h"
-#include "cachelib/navy/kangaroo/KangarooLog.h"
-
-#include <map>
-#include <iostream>
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "cachelib/navy/driver/Driver.h"
+#include <iostream>
+#include <map>
+
+#include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/kangaroo/Kangaroo.h"
+#include "cachelib/navy/kangaroo/KangarooLog.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 #include "cachelib/navy/testing/MockDevice.h"
@@ -25,21 +24,23 @@ namespace cachelib {
 namespace navy {
 namespace tests {
 namespace {
-void setLayout(Kangaroo::Config& config, uint32_t bs, uint32_t numKangarooBuckets) {
+void setLayout(Kangaroo::Config& config,
+               uint32_t bs,
+               uint32_t numKangarooBuckets) {
   config.bucketSize = bs;
   config.totalSetSize = uint64_t{bs} * numKangarooBuckets;
   config.avgSmallObjectSize = 10;
-  
+
   auto bv = std::make_unique<RripBitVector>(numKangarooBuckets);
   config.rripBitVector = std::move(bv);
 }
 
 void setLog(KangarooLog::Config& config,
-    uint32_t readSize,
-    uint32_t threshold, 
-    uint32_t physicalPartitions,
-    SetNumberCallback setNumCb,
-    SetMultiInsertCallback insertCb) {
+            uint32_t readSize,
+            uint32_t threshold,
+            uint32_t physicalPartitions,
+            SetNumberCallback setNumCb,
+            SetMultiInsertCallback insertCb) {
   config.readSize = readSize;
   config.segmentSize = 2 * config.readSize;
   config.logSize = 4 * config.segmentSize;
@@ -53,15 +54,16 @@ void setLog(KangarooLog::Config& config,
 TEST(Kangaroo, InsertAndRemove) {
   Kangaroo::Config config;
   setLayout(config, 128, 2);
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
   config.device = device.get();
-  
+
   Kangaroo bh(std::move(config));
 
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -74,12 +76,14 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   Kangaroo::Config config;
   setLayout(config, 64, 8);
 
-  auto testInsertCb = [](std::vector<std::unique_ptr<ObjectInfo>>& ois, ReadmitCallback readmit) {return;};
+  auto testInsertCb = [](std::vector<std::unique_ptr<ObjectInfo>>&,
+                         ReadmitCallback) { return; };
   auto testSetNumCb = [](uint64_t id) { return KangarooBucketId(id % 2); };
   setLog(config.logConfig, 64, 1, 2, testSetNumCb, testInsertCb);
   config.logConfig.numTotalIndexBuckets = 8;
   config.logIndexPartitionsPerPhysical = 2;
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize + config.logConfig.logSize, 64);
+  auto device = std::make_unique<NiceMock<MockDevice>>(
+      config.totalSetSize + config.logConfig.logSize, 64);
   config.device = device.get();
   config.logConfig.device = config.device;
   config.logConfig.mergeThreads = 1;
@@ -90,7 +94,7 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -98,28 +102,27 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(Status::NotFound, bh.remove(makeHK("key")));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key1"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22222"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22222")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key3"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key3"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key4"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key4"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-  
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key5"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
-  
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key6"), makeView("66666"), {}));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key7"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key8"), makeView("88888"), {}));
-  
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key9"), makeView("99999"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("ke1&"), makeView("1&1&1"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key5"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
+
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key6"), makeView("66666")));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key7"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key6"), value));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key8"), makeView("88888")));
+
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key9"), makeView("99999")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("ke1&"), makeView("1&1&1")));
 
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key2"), value));
   EXPECT_EQ(makeView("22222"), value.view());
@@ -129,7 +132,6 @@ TEST(Kangaroo, InsertAndRemoveLog) {
   EXPECT_EQ(makeView("88888"), value.view());
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key9"), value));
   EXPECT_EQ(makeView("99999"), value.view());
-  
 }
 
 TEST(Kangaroo, ReorderEviction) {
@@ -142,14 +144,15 @@ TEST(Kangaroo, ReorderEviction) {
   Kangaroo bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("11112222"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("22223333test22223333"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("11112222")));
+  EXPECT_EQ(Status::Ok,
+            bh.insert(makeHK("key2"), makeView("22223333test22223333")));
 
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key1"), value));
   EXPECT_EQ(makeView("11112222"), value.view());
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key3"), makeView("33334444"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key4"), makeView("44445555"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key3"), makeView("33334444")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key4"), makeView("44445555")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key1"), value));
   EXPECT_EQ(makeView("11112222"), value.view());
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key2"), value));
@@ -167,7 +170,7 @@ TEST(Kangaroo, SimpleStats) {
 
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -218,8 +221,8 @@ TEST(Kangaroo, EvictionStats) {
 
   Kangaroo bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("123456789"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key2"), makeView("123456789")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -249,9 +252,9 @@ TEST(Kangaroo, DeviceErrorStats) {
 
   Kangaroo bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1")));
   EXPECT_CALL(*device, writeImpl(0, 64, _)).WillOnce(Return(false));
-  EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1"), {}));
+  EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1")));
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
@@ -275,7 +278,8 @@ TEST(Kangaroo, DeviceErrorStats) {
 TEST(Kangaroo, DoubleInsert) {
   Kangaroo::Config config;
   setLayout(config, 128, 2);
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
   config.device = device.get();
 
   MockDestructor helper;
@@ -285,7 +289,7 @@ TEST(Kangaroo, DoubleInsert) {
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -294,7 +298,7 @@ TEST(Kangaroo, DoubleInsert) {
       call(makeView("key"), makeView("12345"), DestructorEvent::Removed));
 
   // Insert the same key a second time will overwrite the previous value.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("45678"), value.view());
 }
@@ -315,8 +319,8 @@ TEST(Kangaroo, DestructorCallback) {
   config.destructorCb = toCallback(helper);
 
   Kangaroo bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("value 2"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("value 2")));
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key 2")));
 }
 
@@ -328,8 +332,9 @@ TEST(Kangaroo, Reset) {
   auto bf = std::make_unique<BloomFilter>(bucketCount, 2, 4);
   config.bloomFilter = std::move(bf);
 
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
-  auto readFirstKangarooBucket = [& dev = device->getRealDeviceRef()] {
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
+  auto readFirstKangarooBucket = [&dev = device->getRealDeviceRef()] {
     // Read only the bucket after the initial generation and checksum fields
     // since the former can change with reset() while the latter can change
     // with every write.
@@ -343,7 +348,7 @@ TEST(Kangaroo, Reset) {
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
   auto oldKangarooBucketContent = readFirstKangarooBucket();
@@ -357,7 +362,7 @@ TEST(Kangaroo, Reset) {
   // The new bucket content must be identical to that of the old since
   // after a reset, our first write is equivalent to writing to a brand
   // new bucket.
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   auto newKangarooBucketContent = readFirstKangarooBucket();
   EXPECT_EQ(oldKangarooBucketContent.view(), newKangarooBucketContent.view());
 }
@@ -396,9 +401,9 @@ TEST(Kangaroo, WriteInTwoKangarooBuckets) {
 
   Kangaroo bh(std::move(config));
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("A"), makeView("12345"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("B"), makeView("45678"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("C"), makeView("67890"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("A"), makeView("12345")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("B"), makeView("45678")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("C"), makeView("67890")));
 }
 
 TEST(Kangaroo, RemoveNotFound) {
@@ -406,7 +411,8 @@ TEST(Kangaroo, RemoveNotFound) {
   // and second remove would not read the device.
   Kangaroo::Config config;
   setLayout(config, 128, 1);
-  auto device = std::make_unique<StrictMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<StrictMock<MockDevice>>(config.totalSetSize, 128);
   {
     InSequence inSeq;
     EXPECT_CALL(*device, readImpl(0, 128, _));
@@ -419,7 +425,7 @@ TEST(Kangaroo, RemoveNotFound) {
 
   Kangaroo bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"), {});
+  bh.insert(makeHK("key"), makeView("12345"));
   bh.remove(makeHK("key"));
   bh.remove(makeHK("key"));
 }
@@ -428,20 +434,22 @@ TEST(Kangaroo, CorruptKangarooBucket) {
   // Write a bucket, then corrupt a byte so we won't be able to read it
   Kangaroo::Config config;
   setLayout(config, 128, 2);
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
   config.device = device.get();
 
   Kangaroo bh(std::move(config));
 
-  bh.insert(makeHK("key"), makeView("12345"), {});
+  bh.insert(makeHK("key"), makeView("12345"));
 
   Buffer value;
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
   // Corrupt data. Use device directly to avoid alignment checks
-  uint8_t badBytes[4] = {13, 17, 19, 23};
-  device->getRealDeviceRef().write(10, sizeof(badBytes), badBytes);
+  unsigned char badBytes[4] = {13, 17, 19, 23};
+  Buffer b{BufferView{sizeof(badBytes), &badBytes[0]}};
+  device->getRealDeviceRef().write(10, std::move(b));
 
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
 }
@@ -451,13 +459,13 @@ TEST(Kangaroo, Recovery) {
   config.totalSetSize = 16 * 1024;
   auto bv = std::make_unique<RripBitVector>(config.numBuckets());
   config.rripBitVector = std::move(bv);
-  auto device = createMemoryDevice(config.totalSetSize);
+  auto device = createMemoryDevice(config.totalSetSize, nullptr);
   config.device = device.get();
 
   Kangaroo bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -478,7 +486,7 @@ TEST(Kangaroo, RecoveryBadConfig) {
     Kangaroo::Config config;
     config.totalSetSize = 16 * 1024;
     config.bucketSize = 4 * 1024;
-    auto device = createMemoryDevice(config.totalSetSize);
+    auto device = createMemoryDevice(config.totalSetSize, nullptr);
     config.device = device.get();
     auto bv = std::make_unique<RripBitVector>(config.numBuckets());
     config.rripBitVector = std::move(bv);
@@ -486,7 +494,7 @@ TEST(Kangaroo, RecoveryBadConfig) {
     Kangaroo bh(std::move(config));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
     EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
     EXPECT_EQ(makeView("12345"), value.view());
 
@@ -498,7 +506,7 @@ TEST(Kangaroo, RecoveryBadConfig) {
     // Config is different. Number of buckets the same, but size is different.
     config.totalSetSize = 32 * 1024;
     config.bucketSize = 8 * 1024;
-    auto device = createMemoryDevice(config.totalSetSize);
+    auto device = createMemoryDevice(config.totalSetSize, nullptr);
     config.device = device.get();
     auto bv = std::make_unique<RripBitVector>(config.numBuckets());
     config.rripBitVector = std::move(bv);
@@ -514,14 +522,14 @@ TEST(Kangaroo, RecoveryCorruptedData) {
   config.totalSetSize = 1024 * 1024;
   auto bv = std::make_unique<RripBitVector>(config.numBuckets());
   config.rripBitVector = std::move(bv);
-  auto device = createMemoryDevice(config.totalSetSize);
+  auto device = createMemoryDevice(config.totalSetSize, nullptr);
   config.device = device.get();
 
   Kangaroo bh(std::move(config));
 
   Buffer value;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
@@ -542,13 +550,14 @@ TEST(Kangaroo, ConcurrentRead) {
   // In one bucket, we can have multiple readers at the same time.
   Kangaroo::Config config;
   setLayout(config, 128, 1);
-  auto device = std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<NiceMock<MockDevice>>(config.totalSetSize, 128);
   config.device = device.get();
 
   Kangaroo bh(std::move(config));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("1"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("2"), {}));
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3"), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("1")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 2"), makeView("2")));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3")));
 
   struct MockLookupHelper {
     MOCK_METHOD2(call, void(BufferView, BufferView));
@@ -575,18 +584,16 @@ TEST(Kangaroo, ConcurrentRead) {
 TEST(Kangaroo, BloomFilterRecoveryFail) {
   Kangaroo::Config config;
   setLayout(config, 128, 2);
-  auto device = std::make_unique<StrictMock<MockDevice>>(config.totalSetSize, 128);
+  auto device =
+      std::make_unique<StrictMock<MockDevice>>(config.totalSetSize, 128);
   EXPECT_CALL(*device, readImpl(_, _, _)).Times(0);
   config.device = device.get();
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
-  auto* bf = config.bloomFilter.get();
 
   Kangaroo bh(std::move(config));
 
-  EXPECT_TRUE(bf->getInitBit(0));
   Buffer value;
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
-  EXPECT_TRUE(bf->getInitBit(0));
 
   // After a bad recovery, filters will not be affected
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -599,15 +606,13 @@ TEST(Kangaroo, BloomFilterRecoveryFail) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
 
-  EXPECT_TRUE(bf->getInitBit(0));
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
-  EXPECT_TRUE(bf->getInitBit(0));
 }
 
 TEST(Kangaroo, BloomFilter) {
   Kangaroo::Config config;
   setLayout(config, 128, 2);
-  auto device = createMemoryDevice(config.totalSetSize);
+  auto device = createMemoryDevice(config.totalSetSize, nullptr);
   config.device = device.get();
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
@@ -619,7 +624,7 @@ TEST(Kangaroo, BloomFilter) {
   Kangaroo bh(std::move(config));
   BufferGen bg;
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), bg.gen(20).view()));
 
   // Check that eviction triggers BF rebuild. Use the following setup:
   // - Insert "100". BF rejects "101" and accepts "102" and "103".
@@ -641,11 +646,11 @@ TEST(Kangaroo, BloomFilter) {
   EXPECT_EQ(1, bh.bfRejectCount());
 
   // Insert "101"
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view()));
   EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value));
   EXPECT_EQ(2, bh.bfRejectCount());
 
-  EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view(), {}));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view()));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value));
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value));
   EXPECT_EQ(2, bh.bfRejectCount());
@@ -681,7 +686,7 @@ TEST(Kangaroo, BloomFilterRecoveryRebuild) {
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
     Kangaroo bh(std::move(config));
-    EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat"), {}));
+    EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat")));
     auto rw = createMemoryRecordWriter(queue);
     bh.persist(*rw);
 
@@ -698,16 +703,13 @@ TEST(Kangaroo, BloomFilterRecoveryRebuild) {
     EXPECT_CALL(*device, readImpl(128, 128, _)).Times(0);
     config.device = device.get();
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
-    auto* bf = config.bloomFilter.get();
 
     Kangaroo bh(std::move(config));
     auto rr = createMemoryRecordReader(queue);
     ASSERT_TRUE(bh.recover(*rr));
 
-    EXPECT_TRUE(bf->getInitBit(0));
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(1, bh.bfRejectCount());
-    EXPECT_TRUE(bf->getInitBit(0));
 
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(2, bh.bfRejectCount());
@@ -716,9 +718,7 @@ TEST(Kangaroo, BloomFilterRecoveryRebuild) {
     EXPECT_EQ(3, bh.bfRejectCount());
 
     // Test lookup, second bucket
-    EXPECT_TRUE(bf->getInitBit(1));
     EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
-    EXPECT_TRUE(bf->getInitBit(1));
     EXPECT_EQ(4, bh.bfRejectCount());
     EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
     EXPECT_EQ(5, bh.bfRejectCount());

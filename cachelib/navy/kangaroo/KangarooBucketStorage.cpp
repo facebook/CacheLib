@@ -3,20 +3,23 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-static_assert(sizeof(KangarooBucketStorage) == 12,
-              "KangarooBucketStorage overhead. Changing this may require changing "
-              "the sizes used in unit tests as well");
+static_assert(
+    sizeof(KangarooBucketStorage) == 12,
+    "KangarooBucketStorage overhead. Changing this may require changing "
+    "the sizes used in unit tests as well");
 
-const uint32_t KangarooBucketStorage::kAllocationOverhead = sizeof(KangarooBucketStorage::Slot);
+const uint32_t KangarooBucketStorage::kAllocationOverhead =
+    sizeof(KangarooBucketStorage::Slot);
 
 // This is very simple as it only tries to allocate starting from the
 // tail of the storage. Returns null view() if we don't have any more space.
-KangarooBucketStorage::Allocation KangarooBucketStorage::allocate(uint32_t size) {
+KangarooBucketStorage::Allocation KangarooBucketStorage::allocate(
+    uint32_t size) {
   if (!canAllocate(size)) {
     return {};
   }
 
-  auto* slot = new (data_ + endOffset_) Slot(size);
+  auto* slot = new (data_ + endOffset_) Slot(static_cast<uint16_t>(size));
   endOffset_ += slotSize(size);
   numAllocations_++;
   return {MutableBufferView{slot->size, slot->data}, numAllocations_ - 1};
@@ -87,7 +90,8 @@ KangarooBucketStorage::Allocation KangarooBucketStorage::getNext(
       reinterpret_cast<Slot*>(alloc.view().data() + alloc.view().size());
   if (reinterpret_cast<uint8_t*>(next) - data_ >= endOffset_) {
     return {};
-  } else if (next->size + reinterpret_cast<uint8_t*>(next) - data_ >= endOffset_) {
+  } else if (next->size + reinterpret_cast<uint8_t*>(next) - data_ >=
+             endOffset_) {
     return {};
   } else if (next->size == 0) {
     return {};

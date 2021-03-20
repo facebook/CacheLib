@@ -1,7 +1,7 @@
+#include "cachelib/navy/kangaroo/ChainedLogIndex.h"
+
 #include <mutex>
 #include <shared_mutex>
-
-#include "cachelib/navy/kangaroo/ChainedLogIndex.h"
 
 namespace facebook {
 namespace cachelib {
@@ -11,16 +11,18 @@ void ChainedLogIndex::allocate() {
   {
     numAllocations_++;
     allocations.resize(numAllocations_);
-    allocations[numAllocations_ - 1] = new ChainedLogIndexEntry[allocationSize_];
+    allocations[numAllocations_ - 1] =
+        new ChainedLogIndexEntry[allocationSize_];
   }
 }
 
 ChainedLogIndex::ChainedLogIndex(uint64_t numHashBuckets,
-        uint16_t allocationSize, SetNumberCallback setNumberCb) 
-    : numHashBuckets_{numHashBuckets},
-      allocationSize_{allocationSize},
-      numMutexes_{numHashBuckets / 10 + 1},
-      setNumberCb_{setNumberCb} {
+                                 uint16_t allocationSize,
+                                 SetNumberCallback setNumberCb)
+    : numMutexes_{numHashBuckets / 10 + 1},
+      numHashBuckets_{numHashBuckets},
+      setNumberCb_{setNumberCb},
+      allocationSize_{allocationSize} {
   mutexes_ = std::make_unique<folly::SharedMutex[]>(numMutexes_);
   index_.resize(numHashBuckets_, -1);
   {
@@ -79,15 +81,16 @@ uint16_t ChainedLogIndex::releaseEntry(uint16_t offset) {
   return ret;
 }
 
-PartitionOffset ChainedLogIndex::lookup(HashedKey hk, bool hit, uint32_t* hits) {
-  const auto lib = getLogIndexBucket(hk); 
+PartitionOffset ChainedLogIndex::lookup(HashedKey hk,
+                                        bool hit,
+                                        uint32_t* hits) {
+  const auto lib = getLogIndexBucket(hk);
   uint32_t tag = createTag(hk);
   {
     std::shared_lock<folly::SharedMutex> lock{getMutex(lib)};
     ChainedLogIndexEntry* currentHead = findEntry(index_[lib.index()]);
     while (currentHead) {
-      if (currentHead->isValid() && 
-          currentHead->tag() == tag) {
+      if (currentHead->isValid() && currentHead->tag() == tag) {
         if (hit) {
           currentHead->incrementHits();
         }
@@ -104,19 +107,23 @@ PartitionOffset ChainedLogIndex::lookup(HashedKey hk, bool hit, uint32_t* hits) 
 }
 
 Status ChainedLogIndex::insert(HashedKey hk, PartitionOffset po, uint8_t hits) {
-  const auto lib = getLogIndexBucket(hk); 
+  const auto lib = getLogIndexBucket(hk);
   uint32_t tag = createTag(hk);
-  insert(tag, lib, po, hits);
+  return insert(tag, lib, po, hits);
 }
 
-Status ChainedLogIndex::insert(uint32_t tag, KangarooBucketId bid,
-    PartitionOffset po, uint8_t hits) {
+Status ChainedLogIndex::insert(uint32_t tag,
+                               KangarooBucketId bid,
+                               PartitionOffset po,
+                               uint8_t hits) {
   const auto lib = getLogIndexBucketFromSetBucket(bid);
-  insert(tag, lib, po, hits);
+  return insert(tag, lib, po, hits);
 }
 
-Status ChainedLogIndex::insert(uint32_t tag, LogIndexBucket lib, 
-    PartitionOffset po, uint8_t hits) {
+Status ChainedLogIndex::insert(uint32_t tag,
+                               LogIndexBucket lib,
+                               PartitionOffset po,
+                               uint8_t hits) {
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(lib)};
 
@@ -141,22 +148,27 @@ Status ChainedLogIndex::insert(uint32_t tag, LogIndexBucket lib,
 
 Status ChainedLogIndex::remove(HashedKey hk, PartitionOffset po) {
   uint64_t tag = createTag(hk);
-  const auto lib = getLogIndexBucket(hk); 
+  const auto lib = getLogIndexBucket(hk);
   return remove(tag, lib, po);
 }
-  
-Status ChainedLogIndex::remove(uint64_t tag, KangarooBucketId bid, PartitionOffset po) {
+
+Status ChainedLogIndex::remove(uint64_t tag,
+                               KangarooBucketId bid,
+                               PartitionOffset po) {
   auto lib = getLogIndexBucketFromSetBucket(bid);
   return remove(tag, lib, po);
 }
 
-Status ChainedLogIndex::remove(uint64_t tag, LogIndexBucket lib, PartitionOffset po) {
+Status ChainedLogIndex::remove(uint64_t tag,
+                               LogIndexBucket lib,
+                               PartitionOffset po) {
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(lib)};
     ChainedLogIndexEntry* nextEntry = findEntry(index_[lib.index()]);
     uint16_t* oldNext = &index_[lib.index()];
     while (nextEntry) {
-      if (nextEntry->isValid() && nextEntry->tag() == tag && nextEntry->offset() == po) {
+      if (nextEntry->isValid() && nextEntry->tag() == tag &&
+          nextEntry->offset() == po) {
         *oldNext = releaseEntry(*oldNext);
         return Status::Ok;
       }
@@ -167,9 +179,9 @@ Status ChainedLogIndex::remove(uint64_t tag, LogIndexBucket lib, PartitionOffset
   return Status::NotFound;
 }
 
-// Counts number of items in log corresponding to bucket 
+// Counts number of items in log corresponding to bucket
 uint64_t ChainedLogIndex::countBucket(HashedKey hk) {
-  const auto lib = getLogIndexBucket(hk); 
+  const auto lib = getLogIndexBucket(hk);
   uint64_t count = 0;
   {
     std::shared_lock<folly::SharedMutex> lock{getMutex(lib)};
@@ -185,8 +197,9 @@ uint64_t ChainedLogIndex::countBucket(HashedKey hk) {
 }
 
 // Get iterator for all items in the same bucket
-ChainedLogIndex::BucketIterator ChainedLogIndex::getHashBucketIterator(HashedKey hk) {
-  const auto lib = getLogIndexBucket(hk); 
+ChainedLogIndex::BucketIterator ChainedLogIndex::getHashBucketIterator(
+    HashedKey hk) {
+  const auto lib = getLogIndexBucket(hk);
   auto idx = setNumberCb_(hk.keyHash());
   {
     std::shared_lock<folly::SharedMutex> lock{getMutex(lib)};
@@ -200,8 +213,9 @@ ChainedLogIndex::BucketIterator ChainedLogIndex::getHashBucketIterator(HashedKey
   }
   return BucketIterator();
 }
-  
-ChainedLogIndex::BucketIterator ChainedLogIndex::getNext(ChainedLogIndex::BucketIterator bi) {
+
+ChainedLogIndex::BucketIterator ChainedLogIndex::getNext(
+    ChainedLogIndex::BucketIterator bi) {
   if (bi.done()) {
     return bi;
   }
@@ -237,15 +251,18 @@ PartitionOffset ChainedLogIndex::find(KangarooBucketId bid, uint64_t tag) {
   return PartitionOffset(0, false);
 }
 
-ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucket(HashedKey hk) {
+ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucket(
+    HashedKey hk) {
   return getLogIndexBucketFromSetBucket(setNumberCb_(hk.keyHash()));
 }
 
-ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucket(uint64_t key) {
+ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucket(
+    uint64_t key) {
   return getLogIndexBucketFromSetBucket(setNumberCb_(key));
 }
 
-ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucketFromSetBucket(KangarooBucketId bid) {
+ChainedLogIndex::LogIndexBucket ChainedLogIndex::getLogIndexBucketFromSetBucket(
+    KangarooBucketId bid) {
   return LogIndexBucket(bid.index() % numHashBuckets_);
 }
 

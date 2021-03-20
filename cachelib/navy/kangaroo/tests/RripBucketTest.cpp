@@ -1,8 +1,7 @@
-#include "cachelib/navy/kangaroo/RripBucket.h"
-
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "cachelib/navy/kangaroo/RripBucket.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 
@@ -13,9 +12,7 @@ namespace cachelib {
 namespace navy {
 namespace tests {
 
-void updateEmpty(uint32_t idx) {
-  return;
-}
+void updateEmpty(uint32_t) { return; }
 
 TEST(RripBucket, SingleKey) {
   Buffer buf(96 + sizeof(RripBucket));
@@ -26,11 +23,11 @@ TEST(RripBucket, SingleKey) {
 
   EXPECT_EQ(0, bucket.size());
   EXPECT_TRUE(bucket.find(hk, updateEmpty).isNull());
-  
+
   bucket.insert(hk, value, 0, nullptr);
   EXPECT_EQ(1, bucket.size());
   EXPECT_EQ(value, bucket.find(hk, updateEmpty));
-  
+
   MockDestructor helper;
   EXPECT_CALL(helper, call(_, _, _)).Times(0);
   EXPECT_CALL(
@@ -302,7 +299,7 @@ TEST(RripBucket, Checksum) {
 }
 
 TEST(RripBucket, Iteration) {
-  EXPECT_EQ(1,1);
+  EXPECT_EQ(1, 1);
   Buffer buf(96 + sizeof(RripBucket));
   auto& bucket = RripBucket::initNew(buf.mutableView(), 0);
 
@@ -355,7 +352,7 @@ TEST(RripBucket, Iteration) {
 }
 
 TEST(RripBucket, Reorder) {
-  EXPECT_EQ(1,1);
+  EXPECT_EQ(1, 1);
   Buffer buf(96 + sizeof(RripBucket));
   auto& bucket = RripBucket::initNew(buf.mutableView(), 0);
 
@@ -389,9 +386,9 @@ TEST(RripBucket, Reorder) {
     EXPECT_TRUE(itr.done());
   }
 
-  BitVectorReadVisitor visitor = [](uint32_t test){ return !(test % 2); };
+  BitVectorReadVisitor visitor = [](uint32_t test) { return !(test % 2); };
   bucket.reorder(visitor);
-  
+
   {
     auto itr = bucket.getFirst();
     EXPECT_FALSE(itr.done());
@@ -402,17 +399,15 @@ TEST(RripBucket, Reorder) {
     EXPECT_FALSE(itr.done());
     EXPECT_TRUE(itr.keyEqualsTo(hk1));
     EXPECT_EQ(makeView("value 1"), itr.value());
-    
+
     itr = bucket.getNext(itr);
     EXPECT_FALSE(itr.done());
     EXPECT_TRUE(itr.keyEqualsTo(hk2));
     EXPECT_EQ(makeView("value 2"), itr.value());
 
-
     itr = bucket.getNext(itr);
     EXPECT_TRUE(itr.done());
   }
-
 }
 
 } // namespace tests

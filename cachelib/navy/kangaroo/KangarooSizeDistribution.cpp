@@ -7,8 +7,10 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 namespace {
-std::vector<uint64_t> generateSizes(uint64_t min, uint64_t max, uint64_t factor) {
-  XDCHECK_GE(factor, 1);
+std::vector<uint64_t> generateSizes(uint64_t min,
+                                    uint64_t max,
+                                    uint64_t factor) {
+  XDCHECK_GE(factor, 1ull);
   std::vector<uint64_t> sizes;
   uint64_t current = min;
   while (current < max) {
@@ -20,7 +22,9 @@ std::vector<uint64_t> generateSizes(uint64_t min, uint64_t max, uint64_t factor)
 }
 } // namespace
 
-KangarooSizeDistribution::KangarooSizeDistribution(uint64_t min, uint64_t max, uint64_t factor) {
+KangarooSizeDistribution::KangarooSizeDistribution(uint64_t min,
+                                                   uint64_t max,
+                                                   uint64_t factor) {
   maxValue_ = max;
   auto sizes = generateSizes(min, max, factor);
   for (auto size : sizes) {
@@ -28,7 +32,8 @@ KangarooSizeDistribution::KangarooSizeDistribution(uint64_t min, uint64_t max, u
   }
 }
 
-KangarooSizeDistribution::KangarooSizeDistribution(std::map<int64_t, int64_t> snapshot) {
+KangarooSizeDistribution::KangarooSizeDistribution(
+    std::map<int64_t, int64_t> snapshot) {
   for (const auto& kv : snapshot) {
     dist_.emplace(static_cast<uint64_t>(kv.first),
                   AtomicCounter{static_cast<uint64_t>(kv.second)});
@@ -37,11 +42,12 @@ KangarooSizeDistribution::KangarooSizeDistribution(std::map<int64_t, int64_t> sn
 
 void KangarooSizeDistribution::addSize(uint64_t size) {
   // TODO: It's possible user warm-rolled cache from a version without
-  // KangarooSizeDistribution support. We will remove this once we bring an ice-roll.
+  // KangarooSizeDistribution support. We will remove this once we bring an
+  // ice-roll.
   if (dist_.empty()) {
     return;
   }
-  
+
   if (size > maxValue_) {
     XLOG(INFO, "overrun max in kangaroo size distribution at ", size);
     size = maxValue_;
@@ -57,7 +63,8 @@ void KangarooSizeDistribution::addSize(uint64_t size) {
 
 void KangarooSizeDistribution::removeSize(uint64_t size) {
   // TODO: It's possible user warm-rolled cache from a version without
-  // KangarooSizeDistribution support. We will remove this once we bring an ice-roll.
+  // KangarooSizeDistribution support. We will remove this once we bring an
+  // ice-roll.
   if (dist_.empty()) {
     return;
   }
