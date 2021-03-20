@@ -243,6 +243,13 @@ void Kangaroo::getCounters(const CounterVisitor& visitor) const {
     visitor("navy_klog_fragmentation_pct", log_->fragmentationPct());
     visitor("navy_klog_extra_reads_pct", log_->extraReadsPct());
   }
+  visitor("navy_kangaroo_set_succ_lookups", setHits_.get());
+  visitor("navy_kangaroo_log_succ_lookups", logHits_.get());
+  visitor("navy_kangaroo_set_inserts", setInsertCount_.get());
+  visitor("navy_kangaroo_log_inserts", logInsertCount_.get());
+  visitor("navy_kangaroo_readmit_inserts", readmitInsertCount_.get());
+  visitor("navy_kangaroo_log_items", logItemCount_.get());
+  visitor("navy_kangaroo_set_items", setItemCount_.get());
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {
     auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
@@ -313,13 +320,13 @@ Status Kangaroo::insert(HashedKey hk, BufferView value) {
   const auto bid = getKangarooBucketId(hk);
   insertCount_.inc();
 
+  logicalWrittenCount_.add(hk.key().size() + value.size());
   if (log_) {
     Status ret = log_->insert(hk, value);
     if (ret == Status::Ok) {
       sizeDist_.addSize(hk.key().size() + value.size());
       succInsertCount_.inc();
     }
-    logicalWrittenCount_.add(hk.key().size() + value.size());
     logInsertCount_.inc();
     itemCount_.inc();
     logItemCount_.inc();
@@ -378,7 +385,6 @@ Status Kangaroo::insert(HashedKey hk, BufferView value) {
   itemCount_.sub(evicted + removed);
   setItemCount_.sub(evicted + removed);
   evictionCount_.add(evicted);
-  logicalWrittenCount_.add(hk.key().size() + value.size());
   setInsertCount_.inc();
   if (space) {
     // otherwise was not written
