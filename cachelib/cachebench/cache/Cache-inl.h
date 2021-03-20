@@ -151,6 +151,27 @@ Cache<Allocator>::Cache(CacheConfig config,
           config_.dipperNavySmallItemMaxSize;
     }
 
+    if (config_.dipperNavyKangarooSizePct > 0) {
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_size_pct"] =
+          config_.dipperNavyKangarooSizePct;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_bucket_size"] =
+          config_.dipperNavyKangarooBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_bucket_bf_size"] =
+          config_.dipperNavyBloomFilterPerBucketSize;
+      nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
+          config_.dipperNavySmallItemMaxSize;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_size_pct"] =
+          config_.dipperNavyKangarooLogSizePct;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_threshold"] =
+          config_.dipperNavyKangarooLogThreshold;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_physical_partitions"] = 
+          config_.dipperNavyKangarooLogPhysicalPartitions;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_index_per_physical_partitions"] = 
+          config.dipperNavyKangarooLogIndexPerPhysicalPartitions;
+      nvmConfig.dipperOptions["dipper_navy_kangaroo_log_avg_small_obj_size"] = 
+          config.dipperNavyKangarooLogAvgSmallObjectSize;
+    }
+
     nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
         config_.dipperNavyParcelMemoryMB;
 
@@ -173,6 +194,10 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.dipperOptions["dipper_navy_adm_policy"] = "dynamic_random";
       nvmConfig.dipperOptions["dipper_navy_adm_write_rate"] =
           config_.navyAdmissionWriteRateMB * MB;
+    }
+    else if(config_.navyAdmissionProb > 0){
+      nvmConfig.dipperOptions["dipper_navy_adm_policy"] = "random";
+      nvmConfig.dipperOptions["dipper_navy_adm_probability"] = config_.navyAdmissionProb;
     }
     nvmConfig.dipperOptions["dipper_navy_max_concurrent_inserts"] =
         config_.navyMaxConcurrentInserts;
@@ -339,6 +364,7 @@ Stats Cache<Allocator>::getStats() const {
     ret.numNvmItems = lookup("navy_bh_items") + lookup("navy_bc_items");
     ret.numNvmBytesWritten = lookup("navy_device_bytes_written");
     uint64_t now = fetchNandWrites();
+    
     if (now > nandBytesBegin_) {
       ret.numNvmNandBytesWritten = now - nandBytesBegin_;
     }

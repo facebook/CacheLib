@@ -15,7 +15,7 @@ class ReplayGenerator : public ReplayGeneratorBase {
   explicit ReplayGenerator(const StressorConfig& config)
       : ReplayGeneratorBase(config),
         sizes_(1),
-        req_(key_, sizes_.begin(), sizes_.end(), OpType::kGet),
+        req_(key_, sizes_.begin(), sizes_.end()),
         repeats_(1) {}
 
   virtual ~ReplayGenerator() {}

@@ -22,6 +22,16 @@ add_library (cachelib_navy
   common/Types.cpp
   driver/Driver.cpp
   Factory.cpp
+  kangaroo/ChainedLogIndex.cpp
+  kangaroo/Kangaroo.cpp
+  kangaroo/KangarooBucketStorage.cpp
+  kangaroo/KangarooLog.cpp
+  kangaroo/KangarooLogSegment.cpp
+  kangaroo/LogBucket.cpp
+  kangaroo/RripBucket.cpp
+  kangaroo/RripBitVector.cpp
+  kangaroo/RripBucketStorage.cpp
+  kangaroo/KangarooSizeDistribution.cpp
   scheduler/ThreadPoolJobScheduler.cpp
   scheduler/ThreadPoolJobQueue.cpp
   serialization/RecordIO.cpp
@@ -70,6 +80,15 @@ if (BUILD_TESTS)
   add_test (block_cache/tests/IndexTest.cpp)
   add_test (block_cache/tests/LruPolicyTest.cpp)
   add_test (block_cache/tests/RegionTest.cpp)
+  add_test (kangaroo/tests/ChainedLogIndexTest.cpp)
+  add_test (kangaroo/tests/KangarooLogSegmentTest.cpp)
+  add_test (kangaroo/tests/KangarooTest.cpp)
+  add_test (kangaroo/tests/KangarooLogTest.cpp)
+  add_test (kangaroo/tests/RripBucketStorageTest.cpp)
+  add_test (kangaroo/tests/RripBitVectorTest.cpp)
+  add_test (kangaroo/tests/RripBucketTest.cpp)
+  add_test (kangaroo/tests/LogBucketTest.cpp)
+  add_test (kangaroo/tests/KangarooBucketStorageTest.cpp)
   add_test (serialization/tests/RecordIOTest.cpp)
   add_test (serialization/tests/SerializationTest.cpp)
   add_test (scheduler/tests/OrderedThreadPoolJobSchedulerTest.cpp)

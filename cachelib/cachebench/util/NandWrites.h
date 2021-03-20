@@ -49,6 +49,5 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
                         const folly::StringPiece& nvmePath = "/usr/sbin/nvme",
                         std::shared_ptr<ProcessFactory> processFactory =
                             std::make_shared<ProcessFactory>());
-
 } // namespace hw
 } // namespace facebook

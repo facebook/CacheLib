@@ -13,6 +13,7 @@
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/ReplayGenerator.h"
+#include "cachelib/cachebench/workload/ReplayBufferedGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 
 // Stressor class which sets up the underlying distributions but then dumps

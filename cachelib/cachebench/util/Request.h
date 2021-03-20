@@ -47,8 +47,8 @@ struct Request {
   Request(std::string& k,
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
-          OpType o)
-      : key(k), sizeBegin(b), sizeEnd(e), op(o) {}
+          uint64_t reqId)
+      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId) {}
 
   Request(std::string& k,
           std::vector<size_t>::iterator b,
@@ -74,7 +74,7 @@ struct Request {
   }
 
   Request(Request&& r) noexcept
-      : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd) {}
+      : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd), requestId(r.requestId) {}
   Request& operator=(Request&& r) = delete;
 
   OpType getOp() const noexcept { return op.load(); }
@@ -86,11 +86,10 @@ struct Request {
   // If not chained, the size is *sizeBegin
   std::vector<size_t>::iterator sizeBegin;
   std::vector<size_t>::iterator sizeEnd;
+  std::optional<uint64_t> requestId;
 
   // TTL in seconds.
   const uint32_t ttlSecs{0};
-
-  const std::optional<uint64_t> requestId;
 
   // Feature map for this request sample, which is used for for admission
   // policy: feature name --> feature value
