@@ -1,6 +1,7 @@
 #pragma once
 #include <folly/dynamic.h>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"
 namespace facebook {
 namespace cachelib {
@@ -20,6 +21,10 @@ uint64_t getSmallItemThreshold(const folly::dynamic& options);
 // public only for testing
 std::unique_ptr<cachelib::navy::Device> createDevice(
     const folly::dynamic& options,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor);
+
+std::unique_ptr<cachelib::navy::Device> createDevice(
+    const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
 } // namespace cachelib
 } // namespace facebook

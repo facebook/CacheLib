@@ -3,6 +3,7 @@
 #include <folly/File.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/Factory.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
@@ -392,6 +393,80 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       f = openCacheFile(fileName->getString(),
                         singleFileSize,
                         options[kTruncateFile].getBool());
+    } catch (const std::exception& e) {
+      XLOG(ERR) << "Exception in openCacheFile: " << e.what();
+      throw;
+    }
+    return cachelib::navy::createDirectIoFileDevice(
+        std::move(f), singleFileSize, blockSize, std::move(encryptor),
+        maxDeviceWriteSize);
+  }
+  return cachelib::navy::createMemoryDevice(singleFileSize,
+                                            std::move(encryptor), blockSize);
+}
+
+std::unique_ptr<cachelib::navy::Device> createDevice(
+    const navy::NavyConfig& config,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
+  if (config.usesRaidFiles() && config.usesSimpleFile()) {
+    throw std::invalid_argument("Can't use raid and simple file together");
+  }
+
+  if (config.usesRaidFiles() && config.getRaidPaths().size() <= 1) {
+    throw std::invalid_argument("Raid needs more than one path");
+  }
+  auto blockSize = config.getBlockSize();
+  auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
+  if (maxDeviceWriteSize > 0) {
+    maxDeviceWriteSize = alignDown(maxDeviceWriteSize, blockSize);
+  };
+
+  if (config.usesRaidFiles()) {
+    auto raidPaths = config.getRaidPaths();
+
+    // File paths are opened in the increasing order of the
+    // path string. This ensures that RAID0 stripes aren't
+    // out of order even if the caller changes the order of
+    // the file paths. We can recover the cache as long as all
+    // the paths are specified, regardless of the order.
+
+    std::sort(raidPaths.begin(), raidPaths.end());
+
+    auto fdSize = config.getFileSize();
+    std::vector<folly::File> fileVec;
+    for (const auto& path : raidPaths) {
+      folly::File f;
+      try {
+        f = openCacheFile(path, fdSize, config.getTruncateFile());
+      } catch (const std::exception& e) {
+        XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
+                  << ". Errno: " << errno;
+        throw;
+      }
+      fileVec.push_back(std::move(f));
+    }
+
+    // Align down device size to ensure each device is aligned to stripe size
+    auto stripeSize = config.getBlockCacheRegionSize();
+    fdSize = alignDown(fdSize, stripeSize);
+
+    auto device =
+        cachelib::navy::createDirectIoRAID0Device(std::move(fileVec),
+                                                  fdSize,
+                                                  blockSize,
+                                                  stripeSize,
+                                                  std::move(encryptor),
+                                                  maxDeviceWriteSize);
+    return device;
+  }
+
+  const auto singleFileSize = config.getFileSize();
+  if (config.usesSimpleFile()) {
+    // Create a simple file device
+    auto fileName = config.getFileName();
+    folly::File f;
+    try {
+      f = openCacheFile(fileName, singleFileSize, config.getTruncateFile());
     } catch (const std::exception& e) {
       XLOG(ERR) << "Exception in openCacheFile: " << e.what();
       throw;
