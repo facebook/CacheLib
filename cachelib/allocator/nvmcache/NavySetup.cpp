@@ -324,6 +324,18 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   return cachelib::navy::createOrderedThreadPoolJobScheduler(
       readerThreads, writerThreads, reqOrderShardsPower);
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
+    const navy::NavyConfig& config) {
+  auto readerThreads = config.getReaderThreads();
+  auto writerThreads = config.getWriterThreads();
+  auto reqOrderShardsPower = config.getNavyReqOrderingShards();
+  return cachelib::navy::createOrderedThreadPoolJobScheduler(
+      readerThreads, writerThreads, reqOrderShardsPower);
+}
+#pragma GCC diagnostic pop
 } // namespace
 
 std::unique_ptr<cachelib::navy::Device> createDevice(
