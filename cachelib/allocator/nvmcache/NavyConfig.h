@@ -23,6 +23,10 @@ namespace navy {
  */
 class NavyConfig {
  public:
+  static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
+  static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
+
+ public:
   bool usesSimpleFile() const { return !fileName_.empty(); }
   bool usesRaidFiles() const { return raidPaths_.size() > 0; }
   std::map<std::string, std::string> serialize() const;
@@ -30,7 +34,7 @@ class NavyConfig {
   // Getters:
   // admission policy settings
   const std::string& getAdmissionPolicy() const { return admissionPolicy_; }
-  double getAdmissionsProbability() const { return admissionProbability_; }
+  double getAdmissionProbability() const { return admissionProbability_; }
   uint64_t getAdmissionWriteRate() const { return admissionWriteRate_; }
   uint64_t getMaxWriteRate() const { return maxWriteRate_; }
   size_t getAdmissionSuffixLength() const { return admissionSuffixLen_; }
@@ -92,7 +96,7 @@ class NavyConfig {
   void setAdmissionPolicy(const std::string& admissionPolicy) {
     admissionPolicy_ = admissionPolicy;
   }
-  void setAdmissionsProbability(double admissionProbability) {
+  void setAdmissionProbability(double admissionProbability) {
     admissionProbability_ = admissionProbability;
   }
   void setAdmissionWriteRate(uint64_t admissionWriteRate) {
@@ -192,7 +196,7 @@ class NavyConfig {
   // ============ AP settings =============
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).
-  std::string admissionPolicy_;
+  std::string admissionPolicy_{""};
   // Admission probability in decimal form.
   // This is used for "random" only.
   double admissionProbability_;
@@ -209,7 +213,7 @@ class NavyConfig {
   size_t admissionSuffixLen_{0};
   // Navy item base size of baseProbability calculation.
   // This is used for "dynamic_random" only.
-  size_t admissionProbBaseSize_;
+  size_t admissionProbBaseSize_{0};
 
   // ============ Device settings =============
   // Navy specific device block size in bytes.

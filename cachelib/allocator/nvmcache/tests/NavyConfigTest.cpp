@@ -54,7 +54,7 @@ const uint64_t navyReqOrderingShards = 30;
 
 void setAdmissionPolicyTestSettings(NavyConfig& config) {
   config.setAdmissionPolicy(admissionPolicy);
-  config.setAdmissionsProbability(admissionProbability);
+  config.setAdmissionProbability(admissionProbability);
   config.setAdmissionWriteRate(admissionWriteRate);
   config.setMaxWriteRate(maxWriteRate);
   config.setAdmissionSuffixLength(admissionSuffixLen);
@@ -144,7 +144,7 @@ TEST(NavyConfigTest, GetterAndSetter) {
   setTestNavyConfig(config);
 
   EXPECT_EQ(config.getAdmissionPolicy(), admissionPolicy);
-  EXPECT_EQ(config.getAdmissionsProbability(), admissionProbability);
+  EXPECT_EQ(config.getAdmissionProbability(), admissionProbability);
   EXPECT_EQ(config.getAdmissionWriteRate(), admissionWriteRate);
   EXPECT_EQ(config.getMaxWriteRate(), maxWriteRate);
   EXPECT_EQ(config.getAdmissionSuffixLength(), admissionSuffixLen);
@@ -237,6 +237,14 @@ TEST(NavyConfigTest, Serialization) {
 TEST(NavyConfigTest, InvalidInput) {
   NavyConfig config{};
   ASSERT_THROW(config.setNavyReqOrderingShards(0), std::invalid_argument);
+}
+
+TEST(NavyConfigTest, AdmissionPolicy) {
+  NavyConfig config{};
+  config.setAdmissionPolicy("random");
+  EXPECT_EQ(config.getAdmissionPolicy(), NavyConfig::kAdmPolicyRandom);
+  config.setAdmissionPolicy("dynamic_random");
+  EXPECT_EQ(config.getAdmissionPolicy(), NavyConfig::kAdmPolicyDynamicRandom);
 }
 } // namespace tests
 } // namespace cachelib

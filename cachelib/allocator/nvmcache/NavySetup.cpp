@@ -327,6 +327,24 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
+void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
+                        cachelib::navy::CacheProto& proto) {
+  const std::string& policyName = config.getAdmissionPolicy();
+  if (policyName.empty()) {
+    return;
+  }
+  if (policyName == navy::NavyConfig::kAdmPolicyRandom) {
+    proto.setRejectRandomAdmissionPolicy(config.getAdmissionProbability());
+  } else if (policyName == navy::NavyConfig::kAdmPolicyDynamicRandom) {
+    proto.setDynamicRandomAdmissionPolicy(
+        config.getAdmissionWriteRate(), config.getAdmissionSuffixLength(),
+        config.getAdmissionProbBaseSize(), config.getMaxWriteRate());
+  } else {
+    throw std::invalid_argument{
+        folly::sformat("invalid policy name {}", policyName)};
+  }
+}
+
 std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
     const navy::NavyConfig& config) {
   auto readerThreads = config.getReaderThreads();
