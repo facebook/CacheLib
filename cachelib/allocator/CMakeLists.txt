@@ -33,6 +33,7 @@ add_library (cachelib_allocator
     memory/SlabAllocator.cpp
     memory/Slab.cpp
     nvmcache/DipperItem.cpp
+    nvmcache/NavyConfig.cpp
     nvmcache/NavySetup.cpp
     NvmCacheState.cpp
     PoolOptimizer.cpp
