@@ -30,6 +30,7 @@ class NavyConfig {
   bool usesSimpleFile() const { return !fileName_.empty(); }
   bool usesRaidFiles() const { return raidPaths_.size() > 0; }
   std::map<std::string, std::string> serialize() const;
+  bool isEnabled() const { return enabled_; }
 
   // Getters:
   // admission policy settings
@@ -95,104 +96,149 @@ class NavyConfig {
   // admission policy settings
   void setAdmissionPolicy(const std::string& admissionPolicy) {
     admissionPolicy_ = admissionPolicy;
+    enabled_ = true;
   }
   void setAdmissionProbability(double admissionProbability) {
     admissionProbability_ = admissionProbability;
+    enabled_ = true;
   }
   void setAdmissionWriteRate(uint64_t admissionWriteRate) {
     admissionWriteRate_ = admissionWriteRate;
+    enabled_ = true;
   }
-  void setMaxWriteRate(uint64_t maxWriteRate) { maxWriteRate_ = maxWriteRate; }
+  void setMaxWriteRate(uint64_t maxWriteRate) {
+    maxWriteRate_ = maxWriteRate;
+    enabled_ = true;
+  }
 
   void setAdmissionSuffixLength(size_t admissionSuffixLen) {
     admissionSuffixLen_ = admissionSuffixLen;
+    enabled_ = true;
   }
   void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
     admissionProbBaseSize_ = admissionProbBaseSize;
+    enabled_ = true;
   }
 
   // device settings
-  void setBlockSize(uint64_t blockSize) { blockSize_ = blockSize; }
-  void setFileName(const std::string& fileName) { fileName_ = fileName; }
+  void setBlockSize(uint64_t blockSize) {
+    blockSize_ = blockSize;
+    enabled_ = true;
+  }
+  void setFileName(const std::string& fileName) {
+    fileName_ = fileName;
+    enabled_ = true;
+  }
   void setRaidPaths(const std::vector<std::string>& raidPaths) {
     raidPaths_ = raidPaths;
+    enabled_ = true;
   }
   void setDeviceMetadataSize(uint64_t deviceMetadataSize) {
     deviceMetadataSize_ = deviceMetadataSize;
+    enabled_ = true;
   }
-  void setFileSize(uint64_t fileSize) { fileSize_ = fileSize; }
-  void setTruncateFile(bool truncateFile) { truncateFile_ = truncateFile; }
+  void setFileSize(uint64_t fileSize) {
+    fileSize_ = fileSize;
+    enabled_ = true;
+  }
+  void setTruncateFile(bool truncateFile) {
+    truncateFile_ = truncateFile;
+    enabled_ = true;
+  }
   void setDeviceMaxWriteSize(uint32_t deviceMaxWriteSize) {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
+    enabled_ = true;
   }
 
   // BlockCache settings
-  void setBlockCacheLru(bool blockCacheLru) { blockCacheLru_ = blockCacheLru; }
+  void setBlockCacheLru(bool blockCacheLru) {
+    blockCacheLru_ = blockCacheLru;
+    enabled_ = true;
+  }
   void setBlockCacheRegionSize(uint64_t blockCacheRegionSize) {
     blockCacheRegionSize_ = blockCacheRegionSize;
+    enabled_ = true;
   }
   void setBlockCacheReadBufferSize(uint64_t blockCacheReadBufferSize) {
     blockCacheReadBufferSize_ = blockCacheReadBufferSize;
+    enabled_ = true;
   }
   void setBlockCacheSizeClasses(
       const std::vector<uint32_t>& blockCacheSizeClasses) {
     blockCacheSizeClasses_ = blockCacheSizeClasses;
+    enabled_ = true;
   }
   void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) {
     blockCacheCleanRegions_ = blockCacheCleanRegions;
+    enabled_ = true;
   }
   void setBlockCacheReinsertionHitsThreshold(
       uint64_t blockCacheReinsertionHitsThreshold) {
     blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
+    enabled_ = true;
   }
   void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold) {
     blockCacheReinsertionProbabilityThreshold_ =
         blockCacheReinsertionProbabilityThreshold;
+    enabled_ = true;
   }
   void setBlockCacheNumInMemBuffers(uint32_t blockCacheNumInMemBuffers) {
     blockCacheNumInMemBuffers_ = blockCacheNumInMemBuffers;
+    enabled_ = true;
   }
   void setBlockCacheDataChecksum(bool blockCacheDataChecksum) {
     blockCacheDataChecksum_ = blockCacheDataChecksum;
+    enabled_ = true;
   }
   void setBlockCacheSegmentedFifoSegmentRatio(
       const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio) {
     blockCacheSegmentedFifoSegmentRatio_ = blockCacheSegmentedFifoSegmentRatio;
+    enabled_ = true;
   }
 
   // BigHash settings
   void setBigHashSizePct(unsigned int bigHashSizePct) {
     bigHashSizePct_ = bigHashSizePct;
+    enabled_ = true;
   }
   void setBigHashBucketSize(uint64_t bigHashBucketSize) {
     bigHashBucketSize_ = bigHashBucketSize;
+    enabled_ = true;
   }
   void setBigHashBucketBfSize(uint64_t bigHashBucketBfSize) {
     bigHashBucketBfSize_ = bigHashBucketBfSize;
+    enabled_ = true;
   }
   void setBigHashSmallItemMaxSize(uint64_t bigHashSmallItemMaxSize) {
     bigHashSmallItemMaxSize_ = bigHashSmallItemMaxSize;
+    enabled_ = true;
   }
 
   // job scheduler settings
   void setReaderThreads(unsigned int readerThreads) {
     readerThreads_ = readerThreads;
+    enabled_ = true;
   }
   void setWriterThreads(unsigned int writerThreads) {
     writerThreads_ = writerThreads;
+    enabled_ = true;
   }
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
 
   // other settings
   void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) {
     maxConcurrentInserts_ = maxConcurrentInserts;
+    enabled_ = true;
   }
   void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) {
     maxParcelMemoryMB_ = maxParcelMemoryMB;
+    enabled_ = true;
   }
 
  private:
+  // whether navy config is set, only used for migration
+  bool enabled_{false};
   // ============ AP settings =============
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).

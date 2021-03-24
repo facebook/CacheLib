@@ -20,6 +20,7 @@ const std::vector<std::string>& NavyConfig::getRaidPaths() const {
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards > 0) {
     navyReqOrderingShards_ = navyReqOrderingShards;
+    enabled_ = true;
   } else {
     throw std::invalid_argument(
         "Navy request ordering shards should always be non-zero");

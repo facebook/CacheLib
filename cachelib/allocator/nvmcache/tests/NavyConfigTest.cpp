@@ -137,11 +137,15 @@ TEST(NavyConfigTest, DefaultVal) {
 
   EXPECT_EQ(config.usesSimpleFile(), false);
   EXPECT_EQ(config.usesRaidFiles(), false);
+
+  EXPECT_FALSE(config.isEnabled());
 }
 
 TEST(NavyConfigTest, GetterAndSetter) {
   NavyConfig config{};
   setTestNavyConfig(config);
+
+  EXPECT_TRUE(config.isEnabled());
 
   EXPECT_EQ(config.getAdmissionPolicy(), admissionPolicy);
   EXPECT_EQ(config.getAdmissionProbability(), admissionProbability);
