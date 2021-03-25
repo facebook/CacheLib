@@ -6,6 +6,10 @@ add_library (cachelib_datatype
   )
 add_dependencies(cachelib_datatype thrift_generated_files)
 
+install(TARGETS cachelib_datatype
+        EXPORT cachelib-exports
+        DESTINATION ${LIB_INSTALL_DIR} )
+
 if (BUILD_TESTS)
   add_library (datatype_test_support
     tests/DataTypeTest.cpp)
