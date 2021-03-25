@@ -223,10 +223,12 @@ bool Device::write(uint64_t offset, Buffer buffer) {
     writeLatencyEstimator_.trackValue(
         toMicros((getSteadyClock() - timeBegin)).count());
 
-    if (!result) {
+    if (result) {
+      bytesWritten_.add(writeSize);
+    } else {
+      // One part of the write failed so we abort the rest
       break;
     }
-    bytesWritten_.add(result * size);
     offset += writeSize;
     data += writeSize;
     remainingSize -= writeSize;

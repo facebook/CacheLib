@@ -208,6 +208,12 @@ TEST(Device, MaxWriteSize) {
   for (uint32_t i = 0; i < bufSize; i++) {
     EXPECT_EQ(wdata[i], rdata[i]);
   }
+
+  MockCounterVisitor visitor;
+  EXPECT_CALL(visitor, call(_, _)).WillRepeatedly(testing::Return());
+  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 4096));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_read"), 4096));
+  device->getCounters(toCallback(visitor));
 }
 
 TEST(Device, RAID0IO) {
