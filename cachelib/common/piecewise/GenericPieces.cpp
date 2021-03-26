@@ -102,5 +102,17 @@ std::string GenericPieces::createPieceKey(const std::string& baseKey,
   }
 }
 
+folly::StringPiece GenericPieces::getBaseKey(folly::StringPiece key) {
+  auto found = key.find(kCacheGroupSeparator);
+  if (found == folly::StringPiece::npos) {
+    found = key.find(kCachePieceSeparator);
+  }
+
+  if (found != folly::StringPiece::npos) {
+    return key.subpiece(0, found);
+  }
+  return key;
+}
+
 } // namespace cachelib
 } // namespace facebook

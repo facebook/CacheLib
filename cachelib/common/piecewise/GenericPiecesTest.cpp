@@ -115,3 +115,34 @@ TEST(GenericPiecesTests, Normal) {
   cp.updateFetchIndex();
   EXPECT_EQ(488, cp.getRemainingBytes());
 }
+
+TEST(GenericPiecesTests, getBaseKey) {
+  std::string mainPart("any main part of a key");
+  EXPECT_EQ(mainPart, GenericPieces::getBaseKey(mainPart));
+
+  std::string prefix("test:");
+  std::string pieceSuffix("|#|header-0");
+  std::string groupSuffix("|@|1|#|body-16");
+
+  auto pieceKey = folly::to<std::string>(prefix, mainPart, pieceSuffix);
+  auto expected = folly::to<std::string>(prefix, mainPart);
+  EXPECT_EQ(expected, GenericPieces::getBaseKey(pieceKey));
+
+  auto groupKey = folly::to<std::string>(prefix, mainPart, groupSuffix);
+  expected = folly::to<std::string>(prefix, mainPart);
+  EXPECT_EQ(expected, GenericPieces::getBaseKey(groupKey));
+
+  // Key without prefix
+  auto keyWithoutPrefix = folly::to<std::string>(mainPart, groupSuffix);
+  EXPECT_EQ(mainPart, GenericPieces::getBaseKey(keyWithoutPrefix));
+
+  // Key without suffix
+  auto keyWithoutSuffix = folly::to<std::string>(prefix, mainPart);
+  EXPECT_EQ(keyWithoutSuffix, GenericPieces::getBaseKey(keyWithoutSuffix));
+
+  // Just prefix.
+  EXPECT_EQ(prefix, GenericPieces::getBaseKey(prefix));
+
+  // Just suffix
+  EXPECT_EQ("", GenericPieces::getBaseKey(pieceSuffix));
+}

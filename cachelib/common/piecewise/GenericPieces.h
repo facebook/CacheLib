@@ -155,6 +155,12 @@ class GenericPieces {
   static std::string escapeCacheKey(const std::string& key);
 
   /**
+   * Get the basekey from the given pieceKey (full key). The returned value
+   * shares the same lifetime as the passed in pieceKey.
+   */
+  static folly::StringPiece getBaseKey(folly::StringPiece pieceKey);
+
+  /**
    * @param versionID: unique identifer of the content's version, e.g.,
    * hash of the content.
    */
