@@ -4,18 +4,22 @@ namespace cachelib {
 template <typename C>
 std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
   std::map<std::string, std::string> configMap;
+  if (navyConfig.isEnabled()) {
+    configMap = navyConfig.serialize();
+  } else {
+    for (auto& pair : dipperOptions.items()) {
+      configMap["dipperOptions::" + pair.first.asString()] =
+          (pair.second.isObject() || pair.second.isArray())
+              ? folly::toJson(pair.second)
+              : pair.second.asString();
+    }
+  }
   configMap["encodeCB"] = encodeCb ? "set" : "empty";
   configMap["decodeCb"] = decodeCb ? "set" : "empty";
   configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
   configMap["encryption"] = deviceEncryptor ? "set" : "empty";
   configMap["truncateItemToOriginalAllocSizeInNvm"] =
       truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
-  for (auto& pair : dipperOptions.items()) {
-    configMap["dipperOptions::" + pair.first.asString()] =
-        (pair.second.isObject() || pair.second.isArray())
-            ? folly::toJson(pair.second)
-            : pair.second.asString();
-  }
   return configMap;
 }
 
@@ -28,11 +32,16 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
         "Encode and Decode CBs must be both specified or both empty.");
   }
 
-  populateDefaultNavyOptions(dipperOptions);
+  bool enableConfig = navyConfig.isEnabled();
+  if (!enableConfig) {
+    populateDefaultNavyOptions(dipperOptions);
+  }
 
   if (deviceEncryptor) {
     auto encryptionBlockSize = deviceEncryptor->encryptionBlockSize();
-    auto blockSize = dipperOptions["dipper_navy_block_size"].getInt();
+    auto blockSize = enableConfig
+                         ? navyConfig.getBlockSize()
+                         : dipperOptions["dipper_navy_block_size"].getInt();
     if (blockSize % encryptionBlockSize != 0) {
       throw std::invalid_argument(folly::sformat(
           "Encryption enabled but the encryption block granularity is not "
@@ -41,11 +50,17 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
           encryptionBlockSize,
           blockSize));
     }
-    if (dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0).getInt() >
-        0) {
+    auto bigHashSizePct =
+        enableConfig
+            ? navyConfig.getBigHashSizePct()
+            : dipperOptions.getDefault("dipper_navy_bighash_size_pct", 0)
+                  .getInt();
+    if (bigHashSizePct > 0) {
       auto bucketSize =
-          dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
-              .getInt();
+          enableConfig
+              ? navyConfig.getBigHashBucketSize()
+              : dipperOptions.getDefault("dipper_navy_bighash_bucket_size", 0)
+                    .getInt();
       if (bucketSize % encryptionBlockSize != 0) {
         throw std::invalid_argument(
             folly::sformat("Encryption enabled but the encryption block "
@@ -250,14 +265,23 @@ template <typename C>
 NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
-      navySmallItemThreshold_{getSmallItemThreshold(config_.dipperOptions)} {
-  navyCache_ = createNavyCache(
-      config_.dipperOptions,
-      [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {
-        this->evictCB(k, v, e);
-      },
-      truncate,
-      std::move(config.deviceEncryptor));
+      navySmallItemThreshold_{
+          getSmallItemThreshold(config_.dipperOptions, config_.navyConfig)} {
+  if (config_.navyConfig.isEnabled()) {
+    navyCache_ = createNavyCache(
+        config_.navyConfig,
+        [this](navy::BufferView k, navy::BufferView v,
+               navy::DestructorEvent e) { this->evictCB(k, v, e); },
+        truncate,
+        std::move(config.deviceEncryptor));
+  } else {
+    navyCache_ = createNavyCache(
+        config_.dipperOptions,
+        [this](navy::BufferView k, navy::BufferView v,
+               navy::DestructorEvent e) { this->evictCB(k, v, e); },
+        truncate,
+        std::move(config.deviceEncryptor));
+  }
 }
 
 template <typename C>

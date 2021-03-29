@@ -647,8 +647,13 @@ void populateDefaultNavyOptions(folly::dynamic& options) {
   return;
 }
 
-uint64_t getSmallItemThreshold(const folly::dynamic& options) {
-  return options.getDefault(kSmallItemMaxSize, 0).getInt();
+uint64_t getSmallItemThreshold(const folly::dynamic& options,
+                               const navy::NavyConfig& config) {
+  if (config.isEnabled()) {
+    return config.getBigHashSmallItemMaxSize();
+  } else {
+    return options.getDefault(kSmallItemMaxSize, 0).getInt();
+  }
 }
 
 } // namespace cachelib

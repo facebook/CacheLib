@@ -25,7 +25,8 @@ void populateDefaultNavyOptions(folly::dynamic& options);
 // returns the size threshold for small engine vs large engine. If small
 // engine is disabled, returns 0 to indicate all objects will be in large
 // engine.
-uint64_t getSmallItemThreshold(const folly::dynamic& options);
+uint64_t getSmallItemThreshold(const folly::dynamic& options,
+                               const navy::NavyConfig& config);
 
 // public only for testing
 std::unique_ptr<cachelib::navy::Device> createDevice(

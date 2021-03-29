@@ -31,6 +31,9 @@ class NavyConfig {
   bool usesRaidFiles() const { return raidPaths_.size() > 0; }
   std::map<std::string, std::string> serialize() const;
   bool isEnabled() const { return enabled_; }
+  // This is used in unit tests where we set both NavyConfig and dipperOptions.
+  // We have to disable NavyConfig to make dipperOptions tests work properly.
+  void disable() { enabled_ = false; }
 
   // Getters:
   // admission policy settings

@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -81,7 +82,8 @@ class NvmCacheTest : public testing::Test {
     return std::make_pair(shard, hash);
   }
 
-  folly::dynamic config_;
+  folly::dynamic options_;
+  navy::NavyConfig config_;
 
   // cache directory for the cache
   std::string cacheDir_;
