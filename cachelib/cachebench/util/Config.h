@@ -165,6 +165,10 @@ struct StressorConfig : public JSONConfig {
   uint64_t opDelayBatch{0}; // how many requests before a delay is added
   uint64_t opDelayNs{0};    // nanoseconds delay between each operation
 
+  // Max number of operations per second. We use token bucket for limiting the
+  // rate, and this value will be used as both rate and burst.
+  uint64_t opRatePerSec{0};
+
   // Distribution of operations across the pools in cache
   // This cannot exceed the number of pools in cache
   std::vector<double> opPoolDistribution{1.0};

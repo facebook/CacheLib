@@ -1,9 +1,13 @@
 #pragma once
 
 #include <folly/Random.h>
+#include <folly/TokenBucket.h>
 
 #include <atomic>
+#include <cstddef>
 #include <iostream>
+#include <memory>
+#include <thread>
 #include <unordered_set>
 
 #include "cachelib/cachebench/cache/Cache.h"
@@ -78,6 +82,10 @@ class CacheStressor : public Stressor {
 
     if (config_.checkConsistency) {
       cache_->enableConsistencyCheck(wg_->getAllKeys());
+    }
+    if (config_.opRatePerSec > 0) {
+      rateLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
+          config_.opRatePerSec, config_.opRatePerSec);
     }
   }
 
@@ -219,6 +227,8 @@ class CacheStressor : public Stressor {
         opCounter = 0;
         std::this_thread::sleep_for(opDelay);
       }
+      // Limit the rate if specified.
+      limitRate();
     };
 
     std::optional<uint64_t> lastRequestId = std::nullopt;
@@ -398,6 +408,13 @@ class CacheStressor : public Stressor {
     }
   }
 
+  void limitRate() {
+    if (!rateLimiter_) {
+      return;
+    }
+    rateLimiter_->consumeWithBorrowAndWait(1);
+  }
+
   const StressorConfig config_;
 
   std::vector<ThroughputStats> throughputStats_;
@@ -423,6 +440,9 @@ class CacheStressor : public Stressor {
 
   std::chrono::time_point<std::chrono::system_clock> startTime_;
   uint64_t testDurationNs_{0};
+
+  // Token bucket used to limit the operations per second.
+  std::unique_ptr<folly::BasicTokenBucket<>> rateLimiter_;
 };
 } // namespace cachebench
 } // namespace cachelib
