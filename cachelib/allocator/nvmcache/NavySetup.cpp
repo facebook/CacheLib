@@ -359,8 +359,6 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
       readerThreads, writerThreads, reqOrderShardsPower);
 }
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
 void setupCacheProtos(const navy::NavyConfig& config,
                       const navy::Device& device,
                       cachelib::navy::CacheProto& proto) {
@@ -411,7 +409,6 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   return cachelib::navy::createOrderedThreadPoolJobScheduler(
       readerThreads, writerThreads, reqOrderShardsPower);
 }
-#pragma GCC diagnostic pop
 } // namespace
 
 std::unique_ptr<cachelib::navy::Device> createDevice(
@@ -586,6 +583,38 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   proto->setDestructorCallback(cb);
 
   setupCacheProtos(options, *devicePtr, *proto);
+
+  auto cache = createCache(std::move(proto));
+  XDCHECK(cache != nullptr);
+
+  if (truncate) {
+    cache->reset();
+    return cache;
+  }
+
+  if (!cache->recover()) {
+    XLOG(WARN) << "No recovery data found. Continuing with clean cache.";
+  }
+  return cache;
+}
+
+std::unique_ptr<navy::AbstractCache> createNavyCache(
+    const navy::NavyConfig& config,
+    navy::DestructorCallback cb,
+    bool truncate,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
+  auto device = createDevice(config, std::move(encryptor));
+
+  auto proto = cachelib::navy::createCacheProto();
+  auto* devicePtr = device.get();
+  proto->setDevice(std::move(device));
+  proto->setJobScheduler(createJobScheduler(config));
+  proto->setMaxConcurrentInserts(config.getMaxConcurrentInserts());
+  proto->setMaxParcelMemory(megabytesToBytes(config.getMaxParcelMemoryMB()));
+  setAdmissionPolicy(config, *proto);
+  proto->setDestructorCallback(cb);
+
+  setupCacheProtos(config, *devicePtr, *proto);
 
   auto cache = createCache(std::move(proto));
   XDCHECK(cache != nullptr);
