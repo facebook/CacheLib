@@ -28,11 +28,11 @@ const uint32_t deviceMaxWriteSize = 4 * 1024 * 1024;
 
 // BlockCache settings
 const bool blockCacheLru = true;
-const uint64_t blockCacheRegionSize = 16 * 1024 * 1024;
+const uint32_t blockCacheRegionSize = 16 * 1024 * 1024;
 const uint64_t blockCacheReadBufferSize = 1024;
 const std::vector<uint32_t> blockCacheSizeClasses = {1024, 2048, 4096};
 const uint32_t blockCacheCleanRegions = 4;
-const uint64_t blockCacheReinsertionHitsThreshold = 11111;
+const uint8_t blockCacheReinsertionHitsThreshold = 111;
 const unsigned int blockCacheReinsertionProbabilityThreshold = 50;
 const uint32_t blockCacheNumInMemBuffers = 8;
 const bool blockCacheDataChecksum = true;
@@ -40,7 +40,7 @@ const std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio = {111, 222,
                                                                        333};
 // BigCache settings
 const unsigned int bigHashSizePct = 50;
-const uint64_t bigHashBucketSize = 1024;
+const uint32_t bigHashBucketSize = 1024;
 const uint64_t bigHashBucketBfSize = 4;
 const uint64_t bigHashSmallItemMaxSize = 512;
 
@@ -215,7 +215,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::blockCacheReadBufferSize"] = "1024";
   expectedConfigMap["navyConfig::blockCacheSizeClasses"] = "1024,2048,4096";
   expectedConfigMap["navyConfig::blockCacheCleanRegions"] = "4";
-  expectedConfigMap["navyConfig::blockCacheReinsertionHitsThreshold"] = "11111";
+  expectedConfigMap["navyConfig::blockCacheReinsertionHitsThreshold"] = "111";
   expectedConfigMap["navyConfig::blockCacheReinsertionProbabilityThreshold"] =
       "50";
   expectedConfigMap["navyConfig::blockCacheNumInMemBuffers"] = "8";

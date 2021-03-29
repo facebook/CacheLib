@@ -52,7 +52,7 @@ class NavyConfig {
 
   // BlockCache settings
   bool getBlockCacheLru() const { return blockCacheLru_; }
-  uint64_t getBlockCacheRegionSize() const { return blockCacheRegionSize_; }
+  uint32_t getBlockCacheRegionSize() const { return blockCacheRegionSize_; }
   uint64_t getBlockCacheReadBufferSize() const {
     return blockCacheReadBufferSize_;
   }
@@ -60,7 +60,7 @@ class NavyConfig {
     return blockCacheSizeClasses_;
   }
   uint32_t getBlockCacheCleanRegions() const { return blockCacheCleanRegions_; }
-  uint64_t getBlockCacheReinsertionHitsThreshold() const {
+  uint8_t getBlockCacheReinsertionHitsThreshold() const {
     return blockCacheReinsertionHitsThreshold_;
   }
   unsigned int getBlockCacheReinsertionProbabilityThreshold() const {
@@ -77,7 +77,7 @@ class NavyConfig {
 
   // BigCache settings
   unsigned int getBigHashSizePct() const { return bigHashSizePct_; }
-  uint64_t getBigHashBucketSize() const { return bigHashBucketSize_; }
+  uint32_t getBigHashBucketSize() const { return bigHashBucketSize_; }
   uint64_t getBigHashBucketBfSize() const { return bigHashBucketBfSize_; }
   uint64_t getBigHashSmallItemMaxSize() const {
     return bigHashSmallItemMaxSize_;
@@ -155,7 +155,7 @@ class NavyConfig {
     blockCacheLru_ = blockCacheLru;
     enabled_ = true;
   }
-  void setBlockCacheRegionSize(uint64_t blockCacheRegionSize) {
+  void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) {
     blockCacheRegionSize_ = blockCacheRegionSize;
     enabled_ = true;
   }
@@ -173,7 +173,7 @@ class NavyConfig {
     enabled_ = true;
   }
   void setBlockCacheReinsertionHitsThreshold(
-      uint64_t blockCacheReinsertionHitsThreshold) {
+      uint8_t blockCacheReinsertionHitsThreshold) {
     blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
     enabled_ = true;
   }
@@ -202,7 +202,7 @@ class NavyConfig {
     bigHashSizePct_ = bigHashSizePct;
     enabled_ = true;
   }
-  void setBigHashBucketSize(uint64_t bigHashBucketSize) {
+  void setBigHashBucketSize(uint32_t bigHashBucketSize) {
     bigHashBucketSize_ = bigHashBucketSize;
     enabled_ = true;
   }
@@ -284,7 +284,7 @@ class NavyConfig {
   bool blockCacheLru_{true};
   // Size for a region for Navy BlockCache (must be multiple of
   // blockSize_).
-  uint64_t blockCacheRegionSize_{16 * 1024 * 1024};
+  uint32_t blockCacheRegionSize_{16 * 1024 * 1024};
   // Read buffer size for stack allocator.
   // In stacked mode, we will read fixed buffer on first attempt. If we read
   // too little, we will read again. This size should be sized to ensure we
@@ -298,7 +298,7 @@ class NavyConfig {
   // Threshold of a hits based reinsertion policy with Navy BlockCache.
   // If an item had been accessed more than that threshold, it will be eligible
   // for reinsertion.
-  uint64_t blockCacheReinsertionHitsThreshold_{0};
+  uint8_t blockCacheReinsertionHitsThreshold_{0};
   // Threshold of a probability based reinsertion policy with Navy BlockCache.
   // The probability value is between 0 and 100 for reinsertion.
   unsigned int blockCacheReinsertionProbabilityThreshold_{0};
@@ -318,7 +318,7 @@ class NavyConfig {
   // device io block size).
   // This size determines how big each bucket is and what is the physical
   // write granularity onto the device.
-  uint64_t bigHashBucketSize_{4096};
+  uint32_t bigHashBucketSize_{4096};
   // The bloom filter size per bucket in bytes for Navy BigHash engine
   uint64_t bigHashBucketBfSize_{8};
   // The maximum item size to put into Navy BigHash engine.

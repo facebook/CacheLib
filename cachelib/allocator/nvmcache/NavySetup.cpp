@@ -128,8 +128,23 @@ folly::File openCacheFile(const std::string& fileName,
   return f;
 }
 
-void setupCacheProtos(const folly::dynamic& options,
-                      const navy::Device& device,
+void setupCacheProtos(const navy::Device& device,
+                      uint64_t metadataSize,
+                      const unsigned int bigHashPctSize,
+                      const uint32_t bucketSize,
+                      const uint64_t bfSize,
+                      const uint64_t smallItemMaxSize,
+                      const uint32_t regionSize,
+                      const bool dataChecksum,
+                      std::vector<unsigned int> segmentRatio,
+                      const bool useLru,
+                      std::vector<uint32_t> sizeClasses,
+                      const uint64_t readBufferSize,
+                      const uint32_t cleanRegions,
+                      const uint8_t reinsertionHitsThreshold,
+                      const uint32_t reinsertionProbabilityThreshold,
+                      const uint32_t numInMemBuffers,
+                      const bool usesRaidFiles,
                       cachelib::navy::CacheProto& proto) {
   const uint64_t totalCacheSize = device.getSize();
 
@@ -139,11 +154,10 @@ void setupCacheProtos(const folly::dynamic& options,
     auto mask = ~(alignment - 1);
     return (static_cast<size_t>(kDefaultMetadataPercent * size / 100) & mask);
   };
-  uint64_t metadataSize =
-      options
-          .getDefault(kDeviceMetadataSize,
-                      getDefaultMetadataSize(totalCacheSize, ioAlignSize))
-          .getInt();
+  if (metadataSize == 0) {
+    metadataSize = getDefaultMetadataSize(totalCacheSize, ioAlignSize);
+  }
+
   metadataSize = alignUp(metadataSize, ioAlignSize);
 
   if (metadataSize >= totalCacheSize) {
@@ -157,10 +171,7 @@ void setupCacheProtos(const folly::dynamic& options,
   uint64_t blockCacheSize = 0;
 
   // Set up BigHash if enabled
-  const auto bigHashPctSize = options.get_ptr(kBigHashSizePct);
-  if (bigHashPctSize && bigHashPctSize->getInt() > 0) {
-    const auto bucketSize =
-        static_cast<uint32_t>(options[kBigHashBucketSize].getInt());
+  if (bigHashPctSize > 0) {
     if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
       throw std::invalid_argument(
           folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
@@ -168,8 +179,7 @@ void setupCacheProtos(const folly::dynamic& options,
     }
 
     // If enabled, BigHash's storage starts after BlockCache's.
-    const auto sizeReservedForBigHash =
-        totalCacheSize * bigHashPctSize->getInt() / 100ul;
+    const auto sizeReservedForBigHash = totalCacheSize * bigHashPctSize / 100ul;
 
     const uint64_t bigHashCacheOffset =
         alignUp(totalCacheSize - sizeReservedForBigHash, bucketSize);
@@ -185,7 +195,6 @@ void setupCacheProtos(const folly::dynamic& options,
     // then optimal number of hash functions is 4 and false positive rate
     // below 10%. See details:
     // https://fb.facebook.com/groups/522950611436641/permalink/579237922474576/
-    const auto bfSize = options.getDefault(kBigHashBucketBFSize, 8).getInt();
     if (bfSize > 0) {
       // We set 4 hash function unconditionally. This seems to be the best
       // for our use case. If BF size to bucket size ratio gets lower, try
@@ -195,7 +204,7 @@ void setupCacheProtos(const folly::dynamic& options,
       bigHash->setBloomFilter(kNumHashes, bitsPerHash);
     }
 
-    proto.setBigHash(std::move(bigHash), options[kSmallItemMaxSize].getInt());
+    proto.setBigHash(std::move(bigHash), smallItemMaxSize);
 
     if (bigHashCacheOffset <= metadataSize) {
       throw std::invalid_argument("NVM cache size is not big enough!");
@@ -211,7 +220,6 @@ void setupCacheProtos(const folly::dynamic& options,
 
   // Set up BlockCache if enabled
   if (blockCacheSize > 0) {
-    auto regionSize = static_cast<uint32_t>(options[kRegionSize].getInt());
     if (regionSize != alignUp(regionSize, ioAlignSize)) {
       throw std::invalid_argument(
           folly::sformat("Region size: {} is not aligned to ioAlignSize: {}",
@@ -221,7 +229,7 @@ void setupCacheProtos(const folly::dynamic& options,
     // Adjust starting size of block cache to ensure it is aligned to region
     // size which is what we use for the stripe size when using RAID0Device.
     uint64_t blockCacheOffset = metadataSize;
-    if (usesRaidFiles(options)) {
+    if (usesRaidFiles) {
       auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
       auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
       XDCHECK_LT(cacheSizeAdjustment, blockCacheSize);
@@ -235,54 +243,80 @@ void setupCacheProtos(const folly::dynamic& options,
 
     auto blockCache = cachelib::navy::createBlockCacheProto();
     blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
-    bool dataChecksum = options.getDefault(kNavyDataChecksum, true).getBool();
     blockCache->setChecksum(dataChecksum);
 
-    auto configSegmentRatio =
-        options.getDefault(kSegmentedFifoSegmentRatio, folly::dynamic::array);
-    if (configSegmentRatio.size() > 0) {
-      std::vector<unsigned int> segmentRatio;
-      for (const auto& ratio : configSegmentRatio) {
-        segmentRatio.push_back(ratio.getInt());
-      }
+    if (!segmentRatio.empty()) {
       blockCache->setSegmentedFifoEvictionPolicy(std::move(segmentRatio));
-    } else if (options[kLru].getBool()) {
+    } else if (useLru) {
       blockCache->setLruEvictionPolicy();
     } else {
       blockCache->setFifoEvictionPolicy();
     }
 
-    if (options.get_ptr(kSizeClasses) && !options[kSizeClasses].empty()) {
-      std::vector<uint32_t> sizeClasses;
-      for (const auto& sc : options[kSizeClasses]) {
-        sizeClasses.push_back(sc.getInt());
-      }
-      DCHECK(!sizeClasses.empty());
+    if (!sizeClasses.empty()) {
       blockCache->setSizeClasses(std::move(sizeClasses));
     } else {
-      blockCache->setReadBufferSize(options[kReadBuffer].getInt());
+      blockCache->setReadBufferSize(readBufferSize);
     }
-    blockCache->setCleanRegionsPool(
-        options.getDefault(kCleanRegions, 1).getInt());
+    blockCache->setCleanRegionsPool(cleanRegions);
 
-    const uint8_t reinsertionHitsThreshold = static_cast<uint8_t>(
-        options.getDefault(kReinsertionHitsThreshold, 0).getInt());
     if (reinsertionHitsThreshold > 0) {
       blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
     }
 
-    const uint32_t reinsertionProbabilityThreshold =
-        options.getDefault(kReinsertionProbabilityThreshold, 0).getInt();
     if (reinsertionProbabilityThreshold > 0) {
       blockCache->setProbabilisticReinsertionPolicy(
           reinsertionProbabilityThreshold);
     }
 
-    blockCache->setNumInMemBuffers(
-        options.getDefault(kNumInMemBuffers, 0).getInt());
+    blockCache->setNumInMemBuffers(numInMemBuffers);
 
     proto.setBlockCache(std::move(blockCache));
   }
+}
+
+void setupCacheProtos(const folly::dynamic& options,
+                      const navy::Device& device,
+                      cachelib::navy::CacheProto& proto) {
+  auto metadataSize = options.getDefault(kDeviceMetadataSize, 0).getInt();
+
+  std::vector<unsigned int> segmentRatio;
+  auto configSegmentRatio =
+      options.getDefault(kSegmentedFifoSegmentRatio, folly::dynamic::array);
+  if (configSegmentRatio.size() > 0) {
+    for (const auto& ratio : configSegmentRatio) {
+      segmentRatio.push_back(ratio.getInt());
+    }
+  }
+  std::vector<uint32_t> sizeClasses;
+  if (options.get_ptr(kSizeClasses) && !options[kSizeClasses].empty()) {
+    for (const auto& sc : options[kSizeClasses]) {
+      sizeClasses.push_back(sc.getInt());
+    }
+  }
+
+  setupCacheProtos(
+      device,
+      metadataSize,
+      options.getDefault(kBigHashSizePct, 0).getInt(),
+      static_cast<uint32_t>(
+          options.getDefault(kBigHashBucketSize, 4096).getInt()),
+      options.getDefault(kBigHashBucketBFSize, 8).getInt(),
+      options.getDefault(kSmallItemMaxSize, 0).getInt(),
+      static_cast<uint32_t>(
+          options.getDefault(kRegionSize, 16 * 1024 * 102).getInt()),
+      options.getDefault(kNavyDataChecksum, true).getBool(),
+      std::move(segmentRatio),
+      options.getDefault(kLru, true).getBool(),
+      std::move(sizeClasses),
+      options.getDefault(kReadBuffer, 4096).getInt(),
+      options.getDefault(kCleanRegions, 1).getInt(),
+      static_cast<uint8_t>(
+          options.getDefault(kReinsertionHitsThreshold, 0).getInt()),
+      options.getDefault(kReinsertionProbabilityThreshold, 0).getInt(),
+      options.getDefault(kNumInMemBuffers, 0).getInt(),
+      usesRaidFiles(options),
+      proto);
 }
 
 void setAdmissionPolicy(const folly::dynamic& options,
@@ -327,6 +361,30 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
+void setupCacheProtos(const navy::NavyConfig& config,
+                      const navy::Device& device,
+                      cachelib::navy::CacheProto& proto) {
+  auto metadataSize = config.getDeviceMetadataSize();
+  setupCacheProtos(device,
+                   metadataSize,
+                   config.getBigHashSizePct(),
+                   config.getBigHashBucketSize(),
+                   config.getBigHashBucketBfSize(),
+                   config.getBigHashSmallItemMaxSize(),
+                   config.getBlockCacheRegionSize(),
+                   config.getBlockCacheDataChecksum(),
+                   config.getBlockCacheSegmentedFifoSegmentRatio(),
+                   config.getBlockCacheLru(),
+                   config.getBlockCacheSizeClasses(),
+                   config.getBlockCacheReadBufferSize(),
+                   config.getBlockCacheCleanRegions(),
+                   config.getBlockCacheReinsertionHitsThreshold(),
+                   config.getBlockCacheReinsertionProbabilityThreshold(),
+                   config.getBlockCacheNumInMemBuffers(),
+                   config.usesRaidFiles(),
+                   proto);
+}
+
 void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
                         cachelib::navy::CacheProto& proto) {
   const std::string& policyName = config.getAdmissionPolicy();
