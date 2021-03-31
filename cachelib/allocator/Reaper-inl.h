@@ -28,6 +28,7 @@ template <typename CacheT>
 void Reaper<CacheT>::reapSlabWalkMode() {
   util::Throttler t(throttlerConfig_);
   const auto begin = util::getCurrentTimeMs();
+  auto currentTimeSec = util::getCurrentTimeSec();
 
   // use a local to accumulate counts since the lambda could be executed
   // millions of times per sec.
@@ -50,6 +51,8 @@ void Reaper<CacheT>::reapSlabWalkMode() {
           if (shouldStopWork()) {
             return false;
           }
+
+          currentTimeSec = util::getCurrentTimeSec();
         }
 
         // if we throttle, then we should check for stop condition after
@@ -62,7 +65,7 @@ void Reaper<CacheT>::reapSlabWalkMode() {
         // container before we actually grab the
         // handle to the item and proceed to expire it.
         const auto& item = *reinterpret_cast<const Item*>(ptr);
-        if (!item.isExpired() || !item.isAccessible()) {
+        if (!item.isExpired(currentTimeSec) || !item.isAccessible()) {
           return true;
         }
 

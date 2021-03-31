@@ -194,6 +194,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // expiryTime_ == 0 means no time limitation for this Item
   bool isExpired() const noexcept;
 
+  // Check if the item is expired relative to the provided timestamp.
+  bool isExpired(uint32_t currentTimeSecs) const noexcept;
+
   /**
    * Access specific flags for an item
    *
