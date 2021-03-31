@@ -80,10 +80,10 @@ void setBlockCacheTestSettings(NavyConfig& config) {
 }
 
 void setBigHashTestSettings(NavyConfig& config) {
-  config.setBigHashSizePct(bigHashSizePct);
-  config.setBigHashBucketSize(bigHashBucketSize);
-  config.setBigHashBucketBfSize(bigHashBucketBfSize);
-  config.setBigHashSmallItemMaxSize(bigHashSmallItemMaxSize);
+  config.setBigHash(bigHashSizePct,
+                    bigHashBucketSize,
+                    bigHashBucketBfSize,
+                    bigHashSmallItemMaxSize);
 }
 
 void setJobSchedulerTestSettings(NavyConfig& config) {
@@ -138,11 +138,6 @@ TEST(NavyConfigTest, GetterAndSetter) {
   setTestNavyConfig(config);
 
   EXPECT_TRUE(config.isEnabled());
-
-  EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
-  EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
-  EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
-  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
 
   EXPECT_EQ(config.getMaxConcurrentInserts(), maxConcurrentInserts);
   EXPECT_EQ(config.getMaxParcelMemoryMB(), maxParcelMemoryMB);
@@ -331,6 +326,22 @@ TEST(NavyConfigTest, BlockCache) {
                std::invalid_argument);
   EXPECT_EQ(config6.getBlockCacheReinsertionProbabilityThreshold(), 50);
   EXPECT_EQ(config6.getBlockCacheReinsertionHitsThreshold(), 0);
+}
+
+TEST(NavyConfigTest, BigHash) {
+  NavyConfig config{};
+  EXPECT_THROW(
+      config.setBigHash(
+          200, bigHashBucketSize, bigHashBucketBfSize, bigHashSmallItemMaxSize),
+      std::invalid_argument);
+  config.setBigHash(bigHashSizePct,
+                    bigHashBucketSize,
+                    bigHashBucketBfSize,
+                    bigHashSmallItemMaxSize);
+  EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
+  EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
+  EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
+  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
 }
 } // namespace tests
 } // namespace cachelib

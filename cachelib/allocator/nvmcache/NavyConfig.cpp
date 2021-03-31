@@ -188,6 +188,23 @@ void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
   enabled_ = true;
 }
 
+// BigHash settings
+void NavyConfig::setBigHash(unsigned int bigHashSizePct,
+                            uint32_t bigHashBucketSize,
+                            uint64_t bigHashBucketBfSize,
+                            uint64_t bigHashSmallItemMaxSize) {
+  if (bigHashSizePct > 100) {
+    throw std::invalid_argument(folly::sformat(
+        "BigHash size pct should between 0 and 100, but {} is set",
+        bigHashSizePct));
+  }
+  bigHashSizePct_ = bigHashSizePct;
+  bigHashBucketSize_ = bigHashBucketSize;
+  bigHashBucketBfSize_ = bigHashBucketBfSize;
+  bigHashSmallItemMaxSize_ = bigHashSmallItemMaxSize;
+  enabled_ = true;
+}
+
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards > 0) {
     navyReqOrderingShards_ = navyReqOrderingShards;

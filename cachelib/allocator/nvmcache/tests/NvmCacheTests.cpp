@@ -57,7 +57,7 @@ TEST_F(NvmCacheTest, Config2) {
   ASSERT_NO_THROW(config.validateAndSetDefaults());
 
   config.navyConfig.setBlockSize(5555);
-  config.navyConfig.setBigHashBucketSize(5555);
+  config.navyConfig.setBigHash(50, 5555, 8, 1024);
   config.deviceEncryptor = std::make_shared<MockEncryptor>();
   ASSERT_NO_THROW(config.validateAndSetDefaults());
 
@@ -65,7 +65,7 @@ TEST_F(NvmCacheTest, Config2) {
   ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 
   config.navyConfig.setBlockSize(5555);
-  config.navyConfig.setBigHashBucketSize(4444);
+  config.navyConfig.setBigHash(50, 4444, 8, 1024);
   ASSERT_THROW(config.validateAndSetDefaults(), std::invalid_argument);
 }
 

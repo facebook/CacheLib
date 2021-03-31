@@ -78,7 +78,7 @@ class NavyConfig {
     return blockCacheSegmentedFifoSegmentRatio_;
   }
 
-  // BigCache settings
+  // ============ BigHash settings =============
   unsigned int getBigHashSizePct() const { return bigHashSizePct_; }
   uint32_t getBigHashBucketSize() const { return bigHashBucketSize_; }
   uint64_t getBigHashBucketBfSize() const { return bigHashBucketBfSize_; }
@@ -191,23 +191,14 @@ class NavyConfig {
     enabled_ = true;
   }
 
-  // BigHash settings
-  void setBigHashSizePct(unsigned int bigHashSizePct) {
-    bigHashSizePct_ = bigHashSizePct;
-    enabled_ = true;
-  }
-  void setBigHashBucketSize(uint32_t bigHashBucketSize) {
-    bigHashBucketSize_ = bigHashBucketSize;
-    enabled_ = true;
-  }
-  void setBigHashBucketBfSize(uint64_t bigHashBucketBfSize) {
-    bigHashBucketBfSize_ = bigHashBucketBfSize;
-    enabled_ = true;
-  }
-  void setBigHashSmallItemMaxSize(uint64_t bigHashSmallItemMaxSize) {
-    bigHashSmallItemMaxSize_ = bigHashSmallItemMaxSize;
-    enabled_ = true;
-  }
+  // ============ BigHash settings =============
+  // Set the parameters for BigHash.
+  // @throw std::invalid_argument if bigHashSizePct is not in the range of
+  //        0~100.
+  void setBigHash(unsigned int bigHashSizePct,
+                  uint32_t bigHashBucketSize,
+                  uint64_t bigHashBucketBfSize,
+                  uint64_t bigHashSmallItemMaxSize);
 
   // job scheduler settings
   void setReaderThreads(unsigned int readerThreads) {

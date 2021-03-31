@@ -34,9 +34,7 @@ inline NavyConfig getNvmTestConfig(const std::string& cacheDir) {
   config.setBlockCacheLru(true);
   config.setBlockSize(1024);
   config.setNavyReqOrderingShards(10);
-  config.setBigHashSizePct(50);
-  config.setBigHashBucketSize(1024);
-  config.setBigHashSmallItemMaxSize(100);
+  config.setBigHash(50, 1024, 8, 100);
   config.disable(); // add this line in order to test dipper options
                     // functionality
   return config;
