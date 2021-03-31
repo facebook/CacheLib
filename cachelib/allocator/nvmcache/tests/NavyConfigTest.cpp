@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <sstream>
+#include <stdexcept>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/common/Types.h"
@@ -10,8 +11,7 @@ namespace tests {
 using NavyConfig = navy::NavyConfig;
 namespace {
 // AP settings
-const std::string admissionPolicy = "random";
-const double admissionProbability = 0.5;
+const std::string admissionPolicy = "dynamic_random";
 const uint64_t admissionWriteRate = 100;
 const uint64_t maxWriteRate = 160;
 const size_t admissionSuffixLen = 1;
@@ -54,7 +54,6 @@ const uint64_t navyReqOrderingShards = 30;
 
 void setAdmissionPolicyTestSettings(NavyConfig& config) {
   config.setAdmissionPolicy(admissionPolicy);
-  config.setAdmissionProbability(admissionProbability);
   config.setAdmissionWriteRate(admissionWriteRate);
   config.setMaxWriteRate(maxWriteRate);
   config.setAdmissionSuffixLength(admissionSuffixLen);
@@ -147,13 +146,6 @@ TEST(NavyConfigTest, GetterAndSetter) {
 
   EXPECT_TRUE(config.isEnabled());
 
-  EXPECT_EQ(config.getAdmissionPolicy(), admissionPolicy);
-  EXPECT_EQ(config.getAdmissionProbability(), admissionProbability);
-  EXPECT_EQ(config.getAdmissionWriteRate(), admissionWriteRate);
-  EXPECT_EQ(config.getMaxWriteRate(), maxWriteRate);
-  EXPECT_EQ(config.getAdmissionSuffixLength(), admissionSuffixLen);
-  EXPECT_EQ(config.getAdmissionProbBaseSize(), admissionProbBaseSize);
-
   EXPECT_EQ(config.getBlockSize(), blockSize);
   EXPECT_EQ(config.getFileName(), fileName);
   EXPECT_EQ(config.getRaidPaths(), raidPaths);
@@ -195,8 +187,8 @@ TEST(NavyConfigTest, Serialization) {
   std::map<std::string, std::string> configMap = config.serialize();
 
   auto expectedConfigMap = std::map<std::string, std::string>();
-  expectedConfigMap["navyConfig::admissionPolicy"] = "random";
-  expectedConfigMap["navyConfig::admissionProbability"] = "0.5";
+  expectedConfigMap["navyConfig::admissionPolicy"] = "dynamic_random";
+  expectedConfigMap["navyConfig::admissionProbability"] = "0";
   expectedConfigMap["navyConfig::admissionWriteRate"] = "100";
   expectedConfigMap["navyConfig::maxWriteRate"] = "160";
   expectedConfigMap["navyConfig::admissionSuffixLen"] = "1";
@@ -244,11 +236,37 @@ TEST(NavyConfigTest, InvalidInput) {
 }
 
 TEST(NavyConfigTest, AdmissionPolicy) {
-  NavyConfig config{};
-  config.setAdmissionPolicy("random");
-  EXPECT_EQ(config.getAdmissionPolicy(), NavyConfig::kAdmPolicyRandom);
-  config.setAdmissionPolicy("dynamic_random");
-  EXPECT_EQ(config.getAdmissionPolicy(), NavyConfig::kAdmPolicyDynamicRandom);
+  // set random admission policy
+  NavyConfig config1{};
+  EXPECT_THROW(config1.setAdmissionPolicy(""), std::invalid_argument);
+  EXPECT_NO_THROW(config1.setAdmissionPolicy("random"));
+  EXPECT_THROW(config1.setAdmissionProbability(2), std::invalid_argument);
+  EXPECT_NO_THROW(config1.setAdmissionProbability(0.5));
+  EXPECT_EQ(config1.getAdmissionPolicy(), NavyConfig::kAdmPolicyRandom);
+  EXPECT_EQ(config1.getAdmissionProbability(), 0.5);
+  // cannot set dynamic_random parameters
+  EXPECT_THROW(config1.setAdmissionWriteRate(admissionWriteRate),
+               std::invalid_argument);
+  EXPECT_THROW(config1.setMaxWriteRate(maxWriteRate), std::invalid_argument);
+  EXPECT_THROW(config1.setAdmissionSuffixLength(admissionSuffixLen),
+               std::invalid_argument);
+  EXPECT_THROW(config1.setAdmissionProbBaseSize(admissionProbBaseSize),
+               std::invalid_argument);
+
+  // set dynamic_random policy
+  NavyConfig config2{};
+  EXPECT_NO_THROW(config2.setAdmissionPolicy("dynamic_random"));
+  EXPECT_NO_THROW(config2.setAdmissionWriteRate(admissionWriteRate));
+  EXPECT_NO_THROW(config2.setMaxWriteRate(maxWriteRate));
+  EXPECT_NO_THROW(config2.setAdmissionSuffixLength(admissionSuffixLen));
+  EXPECT_NO_THROW(config2.setAdmissionProbBaseSize(admissionProbBaseSize));
+  EXPECT_EQ(config2.getAdmissionPolicy(), NavyConfig::kAdmPolicyDynamicRandom);
+  EXPECT_EQ(config2.getAdmissionWriteRate(), admissionWriteRate);
+  EXPECT_EQ(config2.getMaxWriteRate(), maxWriteRate);
+  EXPECT_EQ(config2.getAdmissionSuffixLength(), admissionSuffixLen);
+  EXPECT_EQ(config2.getAdmissionProbBaseSize(), admissionProbBaseSize);
+  // cannot set random parameters
+  EXPECT_THROW(config2.setAdmissionProbability(0.5), std::invalid_argument);
 }
 } // namespace tests
 } // namespace cachelib

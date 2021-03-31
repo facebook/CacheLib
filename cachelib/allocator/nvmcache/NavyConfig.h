@@ -36,7 +36,7 @@ class NavyConfig {
   void disable() { enabled_ = false; }
 
   // Getters:
-  // admission policy settings
+  // ============ AP settings =============
   const std::string& getAdmissionPolicy() const { return admissionPolicy_; }
   double getAdmissionProbability() const { return admissionProbability_; }
   uint64_t getAdmissionWriteRate() const { return admissionWriteRate_; }
@@ -96,32 +96,30 @@ class NavyConfig {
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
 
   // Setters:
-  // admission policy settings
-  void setAdmissionPolicy(const std::string& admissionPolicy) {
-    admissionPolicy_ = admissionPolicy;
-    enabled_ = true;
-  }
-  void setAdmissionProbability(double admissionProbability) {
-    admissionProbability_ = admissionProbability;
-    enabled_ = true;
-  }
-  void setAdmissionWriteRate(uint64_t admissionWriteRate) {
-    admissionWriteRate_ = admissionWriteRate;
-    enabled_ = true;
-  }
-  void setMaxWriteRate(uint64_t maxWriteRate) {
-    maxWriteRate_ = maxWriteRate;
-    enabled_ = true;
-  }
-
-  void setAdmissionSuffixLength(size_t admissionSuffixLen) {
-    admissionSuffixLen_ = admissionSuffixLen;
-    enabled_ = true;
-  }
-  void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
-    admissionProbBaseSize_ = admissionProbBaseSize;
-    enabled_ = true;
-  }
+  // ============ AP settings =============
+  // Set the admission policy (e.g. "random", "dynamic_random").
+  // @throw std::invalid_argument on empty string.
+  void setAdmissionPolicy(const std::string& admissionPolicy);
+  // Set admission probability.
+  // @throw std::std::invalid_argument if the admission policy is not
+  //        "random" or the input value is not in the range of 0~1.
+  void setAdmissionProbability(double admissionProbability);
+  // Set admission policy target rate in bytes/s.
+  // @throw std::invalid_argument if the admission policy is not
+  //        "dynamic_random".
+  void setAdmissionWriteRate(uint64_t admissionWriteRate);
+  // Set the max write rate to device in bytes/s.
+  // @throw std::invalid_argument if the admission policy is not
+  //        "dynamic_random".
+  void setMaxWriteRate(uint64_t maxWriteRate);
+  // Set the length of suffix in key to be ignored when hashing for probability.
+  // @throw std::invalid_argument if the admission policy is not
+  //        "dynamic_random".
+  void setAdmissionSuffixLength(size_t admissionSuffixLen);
+  // Set the Navy item base size of baseProbability calculation.
+  // @throw std::invalid_argument if the admission policy is not
+  //        "dynamic_random".
+  void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
 
   // device settings
   void setBlockSize(uint64_t blockSize) {

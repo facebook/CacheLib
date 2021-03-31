@@ -1,5 +1,6 @@
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,77 @@ const std::string& NavyConfig::getFileName() const {
 const std::vector<std::string>& NavyConfig::getRaidPaths() const {
   XDCHECK(usesRaidFiles());
   return raidPaths_;
+}
+
+// admission policy settings
+void NavyConfig::setAdmissionPolicy(const std::string& admissionPolicy) {
+  if (admissionPolicy == "") {
+    throw std::invalid_argument("admission policy should not be empty");
+  }
+
+  admissionPolicy_ = admissionPolicy;
+  enabled_ = true;
+}
+
+void NavyConfig::setAdmissionProbability(double admissionProbability) {
+  if (admissionProbability < 0 || admissionProbability > 1) {
+    throw std::invalid_argument(folly::sformat(
+        "admission probability should between 0 and 1, but {} is set",
+        admissionProbability));
+  }
+
+  if (admissionPolicy_ != kAdmPolicyRandom) {
+    throw std::invalid_argument(
+        folly::sformat("admission probability is only for random policy, but "
+                       "{} policy was set",
+                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
+  }
+  admissionProbability_ = admissionProbability;
+  enabled_ = true;
+}
+
+void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
+  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
+    throw std::invalid_argument(
+        folly::sformat("admission write rate is only for dynamic_random "
+                       "policy, but {} policy was set",
+                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
+  }
+  admissionWriteRate_ = admissionWriteRate;
+  enabled_ = true;
+}
+
+void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
+  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
+    throw std::invalid_argument(
+        folly::sformat("max write rate is only for dynamic_random "
+                       "policy, but {} policy was set",
+                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
+  }
+  maxWriteRate_ = maxWriteRate;
+  enabled_ = true;
+}
+
+void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
+  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
+    throw std::invalid_argument(
+        folly::sformat("admission suffix length is only for dynamic_random "
+                       "policy, but {} policy was set",
+                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
+  }
+  admissionSuffixLen_ = admissionSuffixLen;
+  enabled_ = true;
+}
+
+void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
+  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
+    throw std::invalid_argument(
+        folly::sformat("admission probability base size is only for "
+                       "dynamic_random policy, but {} policy was set",
+                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
+  }
+  admissionProbBaseSize_ = admissionProbBaseSize;
+  enabled_ = true;
 }
 
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
