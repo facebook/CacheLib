@@ -179,6 +179,10 @@ struct CacheConfig : public JSONConfig {
   // a location for the ML model using this argument.
   std::string mlNvmAdmissionPolicyLocation{""};
 
+  // If enabled, when printing CacheStats, also print the NvmCounters (could be
+  // spammy).
+  bool printNvmCounters{false};
+
   //
   // Options below are not to be populated with JSON
   //

@@ -68,6 +68,11 @@ struct Stats {
   uint64_t inconsistencyCount{0};
   bool isNvmCacheDisabled{false};
 
+  // Attempt to capture the NVM ODS counters:
+  // https://fburl.com/diffusion/4ohscddo. Cache implementation can decide what
+  // to populate since not all of those are interesting when running cachebench.
+  std::unordered_map<std::string, double> nvmCounters;
+
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
@@ -219,6 +224,13 @@ struct Stats {
                  pctFn(evictionSuccessesForSlabRelease,
                        evictionAttemptsForSlabRelease))
           << std::endl;
+    }
+
+    if (!nvmCounters.empty()) {
+      out << "== NVM Counters Map ==" << std::endl;
+      for (const auto& it : nvmCounters) {
+        out << it.first << "  :  " << it.second << std::endl;
+      }
     }
   }
 

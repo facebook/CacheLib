@@ -329,6 +329,12 @@ Stats Cache<Allocator>::getStats() const {
   ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
   ret.cacheFindLatencyNs = cacheFindLatency_.estimate();
 
+  // Populate counters.
+  // TODO: Populate more counters that are interesting to cachebench.
+  if (config_.printNvmCounters) {
+    ret.nvmCounters = cache_->getNvmCacheStatsMap();
+  }
+
   // nvm stats from navy
   if (config_.dipperSizeMB && !navyStats.empty()) {
     auto lookup = [&navyStats](const std::string& key) {
