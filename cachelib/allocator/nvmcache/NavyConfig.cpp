@@ -118,6 +118,76 @@ void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
   enabled_ = true;
 }
 
+// BlockCache settings
+void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
+  if (blockCacheLru && !blockCacheSegmentedFifoSegmentRatio_.empty()) {
+    throw std::invalid_argument(
+        "already set sfifo segment ratio, should not use LRU policy");
+  }
+  blockCacheLru_ = blockCacheLru;
+  enabled_ = true;
+}
+
+void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
+    const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio) {
+  if (blockCacheLru_) {
+    throw std::invalid_argument(
+        "already use LRU policy, should not set sfifo segment ratio");
+  }
+  blockCacheSegmentedFifoSegmentRatio_ = blockCacheSegmentedFifoSegmentRatio;
+  enabled_ = true;
+}
+
+void NavyConfig::setBlockCacheReadBufferSize(
+    uint64_t blockCacheReadBufferSize) {
+  if (!blockCacheSizeClasses_.empty()) {
+    throw std::invalid_argument(
+        "already set size classes, should not set read buffer");
+  }
+  blockCacheReadBufferSize_ = blockCacheReadBufferSize;
+  readBufferSet = true;
+  enabled_ = true;
+}
+
+void NavyConfig::setBlockCacheSizeClasses(
+    const std::vector<uint32_t>& blockCacheSizeClasses) {
+  if (readBufferSet) {
+    throw std::invalid_argument(
+        "already set read buffer, should not set size classes");
+  }
+  blockCacheSizeClasses_ = blockCacheSizeClasses;
+  enabled_ = true;
+}
+
+void NavyConfig::setBlockCacheReinsertionHitsThreshold(
+    uint8_t blockCacheReinsertionHitsThreshold) {
+  if (blockCacheReinsertionProbabilityThreshold_ > 0) {
+    throw std::invalid_argument(
+        "already set reinsertion probability threshold, should not set "
+        "reinsertion hits threshold");
+  }
+  blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
+  enabled_ = true;
+}
+
+void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
+    unsigned int blockCacheReinsertionProbabilityThreshold) {
+  if (blockCacheReinsertionHitsThreshold_ > 0) {
+    throw std::invalid_argument(
+        "already set reinsertion hits threshold, should not set reinsertion "
+        "probability threshold");
+  }
+  if (blockCacheReinsertionProbabilityThreshold > 100) {
+    throw std::invalid_argument(
+        folly::sformat("reinsertion probability threshold should between 0 and "
+                       "100, but {} is set",
+                       blockCacheReinsertionProbabilityThreshold));
+  }
+  blockCacheReinsertionProbabilityThreshold_ =
+      blockCacheReinsertionProbabilityThreshold;
+  enabled_ = true;
+}
+
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards > 0) {
     navyReqOrderingShards_ = navyReqOrderingShards;

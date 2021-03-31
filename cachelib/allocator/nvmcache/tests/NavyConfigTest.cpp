@@ -28,13 +28,11 @@ const bool truncateFile = false;
 const uint32_t deviceMaxWriteSize = 4 * 1024 * 1024;
 
 // BlockCache settings
-const bool blockCacheLru = true;
 const uint32_t blockCacheRegionSize = 16 * 1024 * 1024;
 const uint64_t blockCacheReadBufferSize = 1024;
 const std::vector<uint32_t> blockCacheSizeClasses = {1024, 2048, 4096};
 const uint32_t blockCacheCleanRegions = 4;
 const uint8_t blockCacheReinsertionHitsThreshold = 111;
-const unsigned int blockCacheReinsertionProbabilityThreshold = 50;
 const uint32_t blockCacheNumInMemBuffers = 8;
 const bool blockCacheDataChecksum = true;
 const std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio = {111, 222,
@@ -69,15 +67,12 @@ void setDeviceTestSettings(NavyConfig& config) {
 }
 
 void setBlockCacheTestSettings(NavyConfig& config) {
-  config.setBlockCacheLru(blockCacheLru);
+  config.setBlockCacheLru(false);
   config.setBlockCacheRegionSize(blockCacheRegionSize);
-  config.setBlockCacheReadBufferSize(blockCacheReadBufferSize);
   config.setBlockCacheSizeClasses(blockCacheSizeClasses);
   config.setBlockCacheCleanRegions(blockCacheCleanRegions);
   config.setBlockCacheReinsertionHitsThreshold(
       blockCacheReinsertionHitsThreshold);
-  config.setBlockCacheReinsertionProbabilityThreshold(
-      blockCacheReinsertionProbabilityThreshold);
   config.setBlockCacheNumInMemBuffers(blockCacheNumInMemBuffers);
   config.setBlockCacheDataChecksum(blockCacheDataChecksum);
   config.setBlockCacheSegmentedFifoSegmentRatio(
@@ -144,20 +139,6 @@ TEST(NavyConfigTest, GetterAndSetter) {
 
   EXPECT_TRUE(config.isEnabled());
 
-  EXPECT_EQ(config.getBlockCacheLru(), blockCacheLru);
-  EXPECT_EQ(config.getBlockCacheRegionSize(), blockCacheRegionSize);
-  EXPECT_EQ(config.getBlockCacheReadBufferSize(), blockCacheReadBufferSize);
-  EXPECT_EQ(config.getBlockCacheSizeClasses(), blockCacheSizeClasses);
-  EXPECT_EQ(config.getBlockCacheCleanRegions(), blockCacheCleanRegions);
-  EXPECT_EQ(config.getBlockCacheReinsertionHitsThreshold(),
-            blockCacheReinsertionHitsThreshold);
-  EXPECT_EQ(config.getBlockCacheReinsertionProbabilityThreshold(),
-            blockCacheReinsertionProbabilityThreshold);
-  EXPECT_EQ(config.getBlockCacheNumInMemBuffers(), blockCacheNumInMemBuffers);
-  EXPECT_EQ(config.getBlockCacheDataChecksum(), blockCacheDataChecksum);
-  EXPECT_EQ(config.getBlockCacheSegmentedFifoSegmentRatio(),
-            blockCacheSegmentedFifoSegmentRatio);
-
   EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
   EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
   EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
@@ -192,14 +173,14 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::truncateFile"] = "false";
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
 
-  expectedConfigMap["navyConfig::blockCacheLru"] = "true";
+  expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";
-  expectedConfigMap["navyConfig::blockCacheReadBufferSize"] = "1024";
+  expectedConfigMap["navyConfig::blockCacheReadBufferSize"] = "4096";
   expectedConfigMap["navyConfig::blockCacheSizeClasses"] = "1024,2048,4096";
   expectedConfigMap["navyConfig::blockCacheCleanRegions"] = "4";
   expectedConfigMap["navyConfig::blockCacheReinsertionHitsThreshold"] = "111";
   expectedConfigMap["navyConfig::blockCacheReinsertionProbabilityThreshold"] =
-      "50";
+      "0";
   expectedConfigMap["navyConfig::blockCacheNumInMemBuffers"] = "8";
   expectedConfigMap["navyConfig::blockCacheDataChecksum"] = "true";
   expectedConfigMap["navyConfig::blockCacheSegmentedFifoSegmentRatio"] =
@@ -284,6 +265,72 @@ TEST(NavyConfigTest, Device) {
   EXPECT_EQ(config1.getTruncateFile(), truncateFile);
   EXPECT_THROW(config2.setSimpleFile(fileName, fileSize, truncateFile),
                std::invalid_argument);
+}
+
+TEST(NavyConfigTest, BlockCache) {
+  NavyConfig config0{};
+  config0.setBlockCacheRegionSize(blockCacheRegionSize);
+  config0.setBlockCacheCleanRegions(blockCacheCleanRegions);
+  config0.setBlockCacheNumInMemBuffers(blockCacheNumInMemBuffers);
+  config0.setBlockCacheDataChecksum(blockCacheDataChecksum);
+
+  EXPECT_EQ(config0.getBlockCacheRegionSize(), blockCacheRegionSize);
+  EXPECT_EQ(config0.getBlockCacheCleanRegions(), blockCacheCleanRegions);
+  EXPECT_EQ(config0.getBlockCacheNumInMemBuffers(), blockCacheNumInMemBuffers);
+  EXPECT_EQ(config0.getBlockCacheDataChecksum(), blockCacheDataChecksum);
+
+  // Test cannot set both LRU = true and segmentedFifoSegmentRatio
+  NavyConfig config1{};
+  config1.setBlockCacheLru(true);
+  EXPECT_THROW(config1.setBlockCacheSegmentedFifoSegmentRatio(
+                   blockCacheSegmentedFifoSegmentRatio),
+               std::invalid_argument);
+  EXPECT_EQ(config1.getBlockCacheLru(), true);
+  EXPECT_TRUE(config1.getBlockCacheSegmentedFifoSegmentRatio().empty());
+
+  NavyConfig config2{};
+  config2.setBlockCacheLru(false);
+  config2.setBlockCacheSegmentedFifoSegmentRatio(
+      blockCacheSegmentedFifoSegmentRatio);
+  EXPECT_THROW(config2.setBlockCacheLru(true), std::invalid_argument);
+  EXPECT_EQ(config2.getBlockCacheSegmentedFifoSegmentRatio(),
+            blockCacheSegmentedFifoSegmentRatio);
+  EXPECT_EQ(config2.getBlockCacheLru(), false);
+
+  // Test cannot set both size classes and read buffer
+  NavyConfig config3{};
+  config3.setBlockCacheSizeClasses(blockCacheSizeClasses);
+  EXPECT_THROW(config3.setBlockCacheReadBufferSize(blockCacheReadBufferSize),
+               std::invalid_argument);
+  EXPECT_EQ(config3.getBlockCacheSizeClasses(), blockCacheSizeClasses);
+
+  NavyConfig config4{};
+  config4.setBlockCacheReadBufferSize(blockCacheReadBufferSize);
+  EXPECT_THROW(config4.setBlockCacheSizeClasses(blockCacheSizeClasses),
+               std::invalid_argument);
+  EXPECT_EQ(config4.getBlockCacheReadBufferSize(), blockCacheReadBufferSize);
+  EXPECT_TRUE(config4.getBlockCacheSizeClasses().empty());
+
+  // Test cannot set both reinsertionProbabilityThreshold and
+  // reinsertionProbabilityThreshold
+  NavyConfig config5{};
+  config5.setBlockCacheReinsertionHitsThreshold(
+      blockCacheReinsertionHitsThreshold);
+  EXPECT_THROW(config5.setBlockCacheReinsertionProbabilityThreshold(50),
+               std::invalid_argument);
+  EXPECT_EQ(config5.getBlockCacheReinsertionHitsThreshold(),
+            blockCacheReinsertionHitsThreshold);
+  EXPECT_EQ(config5.getBlockCacheReinsertionProbabilityThreshold(), 0);
+
+  NavyConfig config6{};
+  EXPECT_THROW(config6.setBlockCacheReinsertionProbabilityThreshold(200),
+               std::invalid_argument);
+  config6.setBlockCacheReinsertionProbabilityThreshold(50);
+  EXPECT_THROW(config6.setBlockCacheReinsertionHitsThreshold(
+                   blockCacheReinsertionHitsThreshold),
+               std::invalid_argument);
+  EXPECT_EQ(config6.getBlockCacheReinsertionProbabilityThreshold(), 50);
+  EXPECT_EQ(config6.getBlockCacheReinsertionHitsThreshold(), 0);
 }
 } // namespace tests
 } // namespace cachelib

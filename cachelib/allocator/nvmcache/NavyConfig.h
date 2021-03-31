@@ -53,7 +53,7 @@ class NavyConfig {
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
 
-  // BlockCache settings
+  // ============ BlockCache settings =============
   bool getBlockCacheLru() const { return blockCacheLru_; }
   uint32_t getBlockCacheRegionSize() const { return blockCacheRegionSize_; }
   uint64_t getBlockCacheReadBufferSize() const {
@@ -146,50 +146,48 @@ class NavyConfig {
     enabled_ = true;
   }
 
-  // BlockCache settings
-  void setBlockCacheLru(bool blockCacheLru) {
-    blockCacheLru_ = blockCacheLru;
-    enabled_ = true;
-  }
-  void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) {
+  // ============ BlockCache settings =============
+  // Set whether LRU policy will be used.
+  // @throw std::invalid_argument if segmentedFifoSegmentRatio has been set and
+  //        blockCacheLru = true.
+  void setBlockCacheLru(bool blockCacheLru);
+  // Set segmentedFifoSegmentRatio for BlockCache.
+  // @throw std::invalid_argument if LRU policy is used.
+  void setBlockCacheSegmentedFifoSegmentRatio(
+      const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio);
+  // Set read buffer size for BlockCache.
+  // @throw std::invalid_argument if size classes have been set.
+  void setBlockCacheReadBufferSize(uint64_t blockCacheReadBufferSize);
+  // Set size classes for BlockCache.
+  // @throw std::invalid_argument if read buffer has been set.
+  void setBlockCacheSizeClasses(
+      const std::vector<uint32_t>& blockCacheSizeClasses);
+  // Set reinsertionHitsThreshold for BlockCache.
+  // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
+  //        set.
+  void setBlockCacheReinsertionHitsThreshold(
+      uint8_t blockCacheReinsertionHitsThreshold);
+  // Set ReinsertionProbabilityThreshold for BlockCache.
+  // @throw std::invalid_argument if reinsertionHitsThreshold has been set or
+  //        the input value is not in the range of 0~100.
+  void setBlockCacheReinsertionProbabilityThreshold(
+      unsigned int blockCacheReinsertionProbabilityThreshold);
+
+  void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
     blockCacheRegionSize_ = blockCacheRegionSize;
     enabled_ = true;
   }
-  void setBlockCacheReadBufferSize(uint64_t blockCacheReadBufferSize) {
-    blockCacheReadBufferSize_ = blockCacheReadBufferSize;
-    enabled_ = true;
-  }
-  void setBlockCacheSizeClasses(
-      const std::vector<uint32_t>& blockCacheSizeClasses) {
-    blockCacheSizeClasses_ = blockCacheSizeClasses;
-    enabled_ = true;
-  }
-  void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) {
+  void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) noexcept {
     blockCacheCleanRegions_ = blockCacheCleanRegions;
     enabled_ = true;
   }
-  void setBlockCacheReinsertionHitsThreshold(
-      uint8_t blockCacheReinsertionHitsThreshold) {
-    blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
-    enabled_ = true;
-  }
-  void setBlockCacheReinsertionProbabilityThreshold(
-      unsigned int blockCacheReinsertionProbabilityThreshold) {
-    blockCacheReinsertionProbabilityThreshold_ =
-        blockCacheReinsertionProbabilityThreshold;
-    enabled_ = true;
-  }
-  void setBlockCacheNumInMemBuffers(uint32_t blockCacheNumInMemBuffers) {
+  void setBlockCacheNumInMemBuffers(
+      uint32_t blockCacheNumInMemBuffers) noexcept {
     blockCacheNumInMemBuffers_ = blockCacheNumInMemBuffers;
     enabled_ = true;
   }
-  void setBlockCacheDataChecksum(bool blockCacheDataChecksum) {
+  void setBlockCacheDataChecksum(bool blockCacheDataChecksum) noexcept {
     blockCacheDataChecksum_ = blockCacheDataChecksum;
-    enabled_ = true;
-  }
-  void setBlockCacheSegmentedFifoSegmentRatio(
-      const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio) {
-    blockCacheSegmentedFifoSegmentRatio_ = blockCacheSegmentedFifoSegmentRatio;
     enabled_ = true;
   }
 
@@ -305,6 +303,8 @@ class NavyConfig {
   // An array of the ratio of each segment.
   // blockCacheLru_ must be false.
   std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio_;
+  // Whether read buffer is used.
+  bool readBufferSet{false};
 
   // ============ BigHash settings =============
   // Percentage of how much of the device out of all is given to BigHash
