@@ -26,6 +26,7 @@ class PieceWiseCacheTest : public ::testing::Test {
     // pieces
     pieceReq1 = std::make_unique<PieceWiseReqWrapper>(
         /*cachePieceSize=*/65536,
+        /*timestamp=*/1000,
         /*reqId=*/1,
         /*opType=*/OpType::kGet,
         /*key=*/testKey,
@@ -41,6 +42,7 @@ class PieceWiseCacheTest : public ::testing::Test {
     // piece
     pieceReq2 = std::make_unique<PieceWiseReqWrapper>(
         /*cachePieceSize=*/65536,
+        /*timestamp=*/1000,
         /*reqId=*/1,
         /*opType=*/OpType::kGet,
         /*key=*/testKey,
@@ -55,6 +57,7 @@ class PieceWiseCacheTest : public ::testing::Test {
     // nonPieceReq is stored as whole object
     nonPieceReq = std::make_unique<PieceWiseReqWrapper>(
         /*cachePieceSize=*/65536,
+        /*timestamp=*/1000,
         /*reqId=*/1,
         /*opType=*/OpType::kGet,
         /*key=*/testKey,

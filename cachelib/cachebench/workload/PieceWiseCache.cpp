@@ -235,6 +235,7 @@ void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
 
 PieceWiseReqWrapper::PieceWiseReqWrapper(
     uint64_t cachePieceSize,
+    uint64_t timestamp,
     uint64_t reqId,
     OpType opType,
     folly::StringPiece key,
@@ -259,6 +260,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
       headerSize(responseHeaderSize),
       fullObjectSize(fullContentSize),
       statsAggFields(statsAggFieldV) {
+  req.timestamp = timestamp;
+
   if (fullContentSize < cachePieceSize) {
     // The entire object is stored along with the response header.
     // We always fetch the full content first, then trim the

@@ -196,8 +196,10 @@ struct PieceWiseReqWrapper {
   // @param ttl: ttl of the content for caching
   // @param statsAggFieldV: extra fields used for stats aggregation
   // @param admFeatureM: features map for admission policy
+
   explicit PieceWiseReqWrapper(
       uint64_t cachePieceSize,
+      uint64_t timestamp,
       uint64_t reqId,
       OpType opType,
       folly::StringPiece key,

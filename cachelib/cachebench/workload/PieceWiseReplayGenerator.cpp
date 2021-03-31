@@ -117,6 +117,9 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         continue;
       }
 
+      // Convert timestamp to seconds.
+      uint64_t timestampSeconds =
+          folly::tryTo<size_t>(fields[SampleFields::TIMESTAMP]).value() / 1000;
       auto fullContentSize = fullContentSizeT.value();
       auto responseSize = responseSizeT.value();
       auto responseHeaderSize = responseHeaderSizeT.value();
@@ -192,6 +195,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_.cachePieceSize,
+                                        timestampSeconds,
                                         nextReqId_,
                                         OpType::kGet, // Only support get from
                                                       // trace for now
