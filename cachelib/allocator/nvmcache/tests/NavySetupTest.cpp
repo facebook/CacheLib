@@ -62,11 +62,9 @@ TEST(NavySetupTest, RAID0DeviceSize2) {
   }
 
   navy::NavyConfig cfg{};
-  cfg.setRaidPaths(navyFileArray);
-  cfg.setFileSize(size);
+  cfg.setRaidFiles(navyFileArray, size, true);
   cfg.setBlockCacheRegionSize(stripeSize);
   cfg.setBlockSize(ioAlignSize);
-  cfg.setTruncateFile(true);
 
   auto device = createDevice(cfg, nullptr);
   EXPECT_GT(size * files.size(), device->getSize());

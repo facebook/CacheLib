@@ -493,13 +493,6 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
 std::unique_ptr<cachelib::navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
-  if (config.usesRaidFiles() && config.usesSimpleFile()) {
-    throw std::invalid_argument("Can't use raid and simple file together");
-  }
-
-  if (config.usesRaidFiles() && config.getRaidPaths().size() <= 1) {
-    throw std::invalid_argument("Raid needs more than one path");
-  }
   auto blockSize = config.getBlockSize();
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
   if (maxDeviceWriteSize > 0) {

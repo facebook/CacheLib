@@ -89,6 +89,35 @@ void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
   enabled_ = true;
 }
 
+// file settings
+void NavyConfig::setSimpleFile(const std::string& fileName,
+                               uint64_t fileSize,
+                               bool truncateFile) {
+  if (usesRaidFiles()) {
+    throw std::invalid_argument("already set RAID files");
+  }
+  fileName_ = fileName;
+  fileSize_ = fileSize;
+  truncateFile_ = truncateFile;
+  enabled_ = true;
+}
+
+void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
+                              uint64_t fileSize,
+                              bool truncateFile) {
+  if (usesSimpleFile()) {
+    throw std::invalid_argument("already set a simple file");
+  }
+  if (raidPaths.size() <= 1) {
+    throw std::invalid_argument(folly::sformat(
+        "RAID needs at least two paths, but {} path is set", raidPaths.size()));
+  }
+  raidPaths_ = std::move(raidPaths);
+  fileSize_ = fileSize;
+  truncateFile_ = truncateFile;
+  enabled_ = true;
+}
+
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards > 0) {
     navyReqOrderingShards_ = navyReqOrderingShards;

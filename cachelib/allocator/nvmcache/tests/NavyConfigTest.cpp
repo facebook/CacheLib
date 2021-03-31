@@ -21,6 +21,7 @@ const uint64_t admissionProbBaseSize = 1024;
 const uint64_t blockSize = 1024;
 const std::string fileName = "test";
 const std::vector<std::string> raidPaths = {"test1", "test2"};
+const std::vector<std::string> raidPathsInvalid = {"test1"};
 const uint64_t deviceMetadataSize = 1024 * 1024 * 1024;
 const uint64_t fileSize = 10 * 1024 * 1024;
 const bool truncateFile = false;
@@ -62,11 +63,8 @@ void setAdmissionPolicyTestSettings(NavyConfig& config) {
 
 void setDeviceTestSettings(NavyConfig& config) {
   config.setBlockSize(blockSize);
-  config.setFileName(fileName);
-  config.setRaidPaths(raidPaths);
+  config.setRaidFiles(raidPaths, fileSize, truncateFile);
   config.setDeviceMetadataSize(deviceMetadataSize);
-  config.setFileSize(fileSize);
-  config.setTruncateFile(truncateFile);
   config.setDeviceMaxWriteSize(deviceMaxWriteSize);
 }
 
@@ -146,14 +144,6 @@ TEST(NavyConfigTest, GetterAndSetter) {
 
   EXPECT_TRUE(config.isEnabled());
 
-  EXPECT_EQ(config.getBlockSize(), blockSize);
-  EXPECT_EQ(config.getFileName(), fileName);
-  EXPECT_EQ(config.getRaidPaths(), raidPaths);
-  EXPECT_EQ(config.getDeviceMetadataSize(), deviceMetadataSize);
-  EXPECT_EQ(config.getFileSize(), fileSize);
-  EXPECT_EQ(config.getTruncateFile(), truncateFile);
-  EXPECT_EQ(config.getDeviceMaxWriteSize(), deviceMaxWriteSize);
-
   EXPECT_EQ(config.getBlockCacheLru(), blockCacheLru);
   EXPECT_EQ(config.getBlockCacheRegionSize(), blockCacheRegionSize);
   EXPECT_EQ(config.getBlockCacheReadBufferSize(), blockCacheReadBufferSize);
@@ -195,7 +185,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::admissionProbBaseSize"] = "1024";
 
   expectedConfigMap["navyConfig::blockSize"] = "1024";
-  expectedConfigMap["navyConfig::fileName"] = "test";
+  expectedConfigMap["navyConfig::fileName"] = "";
   expectedConfigMap["navyConfig::raidPaths"] = "test1,test2";
   expectedConfigMap["navyConfig::deviceMetadataSize"] = "1073741824";
   expectedConfigMap["navyConfig::fileSize"] = "10485760";
@@ -267,6 +257,33 @@ TEST(NavyConfigTest, AdmissionPolicy) {
   EXPECT_EQ(config2.getAdmissionProbBaseSize(), admissionProbBaseSize);
   // cannot set random parameters
   EXPECT_THROW(config2.setAdmissionProbability(0.5), std::invalid_argument);
+}
+
+TEST(NavyConfigTest, Device) {
+  NavyConfig config1{};
+  config1.setBlockSize(blockSize);
+  config1.setDeviceMetadataSize(deviceMetadataSize);
+  EXPECT_EQ(config1.getBlockSize(), blockSize);
+  EXPECT_EQ(config1.getDeviceMetadataSize(), deviceMetadataSize);
+
+  // set simple file
+  config1.setSimpleFile(fileName, fileSize, truncateFile);
+  EXPECT_EQ(config1.getFileName(), fileName);
+  EXPECT_EQ(config1.getFileSize(), fileSize);
+  EXPECT_EQ(config1.getTruncateFile(), truncateFile);
+  EXPECT_THROW(config1.setRaidFiles(raidPaths, fileSize, truncateFile),
+               std::invalid_argument);
+
+  // set RAID files
+  NavyConfig config2{};
+  EXPECT_THROW(config2.setRaidFiles(raidPathsInvalid, fileSize, truncateFile),
+               std::invalid_argument);
+  config2.setRaidFiles(raidPaths, fileSize, truncateFile);
+  EXPECT_EQ(config2.getRaidPaths(), raidPaths);
+  EXPECT_EQ(config2.getFileSize(), fileSize);
+  EXPECT_EQ(config1.getTruncateFile(), truncateFile);
+  EXPECT_THROW(config2.setSimpleFile(fileName, fileSize, truncateFile),
+               std::invalid_argument);
 }
 } // namespace tests
 } // namespace cachelib

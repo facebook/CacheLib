@@ -27,8 +27,8 @@ class NavyConfig {
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
 
  public:
-  bool usesSimpleFile() const { return !fileName_.empty(); }
-  bool usesRaidFiles() const { return raidPaths_.size() > 0; }
+  bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
+  bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
   std::map<std::string, std::string> serialize() const;
   bool isEnabled() const { return enabled_; }
   // This is used in unit tests where we set both NavyConfig and dipperOptions.
@@ -44,7 +44,7 @@ class NavyConfig {
   size_t getAdmissionSuffixLength() const { return admissionSuffixLen_; }
   uint32_t getAdmissionProbBaseSize() const { return admissionProbBaseSize_; }
 
-  // device settings
+  // ============ Device settings =============
   uint64_t getBlockSize() const { return blockSize_; }
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
@@ -121,32 +121,27 @@ class NavyConfig {
   //        "dynamic_random".
   void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
 
-  // device settings
-  void setBlockSize(uint64_t blockSize) {
+  // ============ Device settings =============
+  void setBlockSize(uint64_t blockSize) noexcept {
     blockSize_ = blockSize;
     enabled_ = true;
   }
-  void setFileName(const std::string& fileName) {
-    fileName_ = fileName;
-    enabled_ = true;
-  }
-  void setRaidPaths(const std::vector<std::string>& raidPaths) {
-    raidPaths_ = raidPaths;
-    enabled_ = true;
-  }
-  void setDeviceMetadataSize(uint64_t deviceMetadataSize) {
+  // Set the parameters for a simple file.
+  // @throw std::invalid_argument if RAID files have been already set.
+  void setSimpleFile(const std::string& fileName,
+                     uint64_t fileSize,
+                     bool truncateFile = false);
+  // Set the parameters for RAID files.
+  // @throw std::invalid_argument if a simple file has been already set
+  //        or there is only one or fewer RAID paths.
+  void setRaidFiles(std::vector<std::string> raidPaths,
+                    uint64_t fileSize,
+                    bool truncateFile = false);
+  void setDeviceMetadataSize(uint64_t deviceMetadataSize) noexcept {
     deviceMetadataSize_ = deviceMetadataSize;
     enabled_ = true;
   }
-  void setFileSize(uint64_t fileSize) {
-    fileSize_ = fileSize;
-    enabled_ = true;
-  }
-  void setTruncateFile(bool truncateFile) {
-    truncateFile_ = truncateFile;
-    enabled_ = true;
-  }
-  void setDeviceMaxWriteSize(uint32_t deviceMaxWriteSize) {
+  void setDeviceMaxWriteSize(uint32_t deviceMaxWriteSize) noexcept {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
     enabled_ = true;
   }

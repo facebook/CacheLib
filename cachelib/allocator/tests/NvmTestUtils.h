@@ -28,8 +28,7 @@ inline folly::dynamic getNvmTestOptions(const std::string& cacheDir) {
 using NavyConfig = navy::NavyConfig;
 inline NavyConfig getNvmTestConfig(const std::string& cacheDir) {
   NavyConfig config{};
-  config.setFileSize(100 * 1024ULL * 1024ULL);
-  config.setFileName(cacheDir + "/navy");
+  config.setSimpleFile(cacheDir + "/navy", 100 * 1024ULL * 1024ULL);
   config.setBlockCacheRegionSize(4 * 1024 * 1024);
   config.setDeviceMetadataSize(4 * 1024 * 1024);
   config.setBlockCacheLru(true);

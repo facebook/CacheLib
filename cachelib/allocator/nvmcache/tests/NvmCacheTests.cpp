@@ -1742,9 +1742,8 @@ TEST_F(NvmCacheTest, Raid0Basic2) {
 
   std::vector<std::string> vec = {filePath + "/CACHE0", filePath + "/CACHE1",
                                   filePath + "/CACHE2", filePath + "/CACHE3"};
-  navyConfig.setFileName("");
-  navyConfig.setRaidPaths(vec);
-  navyConfig.setFileSize(10 * 1024 * 1024);
+  navyConfig.setSimpleFile("", 0);
+  navyConfig.setRaidFiles(vec, 10 * 1024 * 1024);
   this->convertToShmCache();
   auto& nvm = this->cache();
   auto pid = this->poolId();
@@ -1823,29 +1822,6 @@ TEST_F(NvmCacheTest, IncorrectRaid) {
       folly::dynamic::array(filePath + "/CACHE0");
 
   options["dipper_navy_file_size"] = 10 * 1024 * 1024;
-  ASSERT_THROW(this->makeCache(), std::invalid_argument);
-}
-
-TEST_F(NvmCacheTest, IncorrectRaid2) {
-  auto& config = getConfig();
-  auto& navyConfig = config.nvmConfig->navyConfig;
-  auto filePath = folly::sformat("/tmp/nvmcache-navy-raid0/{}", ::getpid());
-  util::makeDir(filePath);
-  SCOPE_EXIT { util::removePath(filePath); };
-
-  // specifying just a single file path for raid should fail.
-  std::vector<std::string> vec = {filePath + "/CACHE0"};
-  navyConfig.setFileName("");
-  navyConfig.setRaidPaths(vec);
-  navyConfig.setFileSize(10 * 1024 * 1024);
-
-  ASSERT_THROW(this->makeCache(), std::invalid_argument);
-
-  // specify both file name and raid path and creation should fail.
-  navyConfig.setFileName("/tmp/nvmcache-navy-raid0/foo");
-  navyConfig.setRaidPaths(vec);
-  navyConfig.setFileSize(10 * 1024 * 1024);
-
   ASSERT_THROW(this->makeCache(), std::invalid_argument);
 }
 
@@ -2012,9 +1988,8 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange2) {
 
   std::vector<std::string> vec = {filePath + "/CACHE0", filePath + "/CACHE1",
                                   filePath + "/CACHE2", filePath + "/CACHE3"};
-  navyConfig.setFileName("");
-  navyConfig.setRaidPaths(vec);
-  navyConfig.setFileSize(10 * 1024 * 1024);
+  navyConfig.setSimpleFile("", 0);
+  navyConfig.setRaidFiles(vec, 10 * 1024 * 1024);
 
   // setup a cache with some content and change the raid0 order and verify
   // that everything is correct.
@@ -2059,7 +2034,7 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange2) {
   }
 
   vec = {filePath + "/CACHE0", filePath + "/CACHE2", filePath + "/CACHE3"};
-  navyConfig.setRaidPaths(vec);
+  navyConfig.setRaidFiles(vec, 10 * 1024 * 1024);
   this->warmRoll();
   // recovery should fail and we should lose the previous content. nvmcache
   // should still be enabled
@@ -2159,9 +2134,8 @@ TEST_F(NvmCacheTest, Raid0SizeChange2) {
   SCOPE_EXIT { util::removePath(filePath); };
   std::vector<std::string> vec = {filePath + "/CACHE0", filePath + "/CACHE1",
                                   filePath + "/CACHE2", filePath + "/CACHE3"};
-  navyConfig.setFileName("");
-  navyConfig.setRaidPaths(vec);
-  navyConfig.setFileSize(10 * 1024 * 1024);
+  navyConfig.setSimpleFile("", 0);
+  navyConfig.setRaidFiles(vec, 10 * 1024 * 1024);
 
   // setup a cache with some content and change the raid0 order and verify
   // that everything is correct.
@@ -2206,7 +2180,7 @@ TEST_F(NvmCacheTest, Raid0SizeChange2) {
   }
 
   // increase the size of the raid-0 files
-  navyConfig.setFileSize(32 * 1024 * 1024);
+  navyConfig.setRaidFiles(vec, 32 * 1024 * 1024);
   this->warmRoll();
   // recovery should fail and we should lose the previous content. nvmcache
   // should still be enabled
