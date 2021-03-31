@@ -235,6 +235,10 @@ void Kangaroo::getCounters(const CounterVisitor& visitor) const {
     visitor("navy_klog_false_positive_pct", log_->falsePositivePct());
     visitor("navy_klog_fragmentation_pct", log_->fragmentationPct());
     visitor("navy_klog_extra_reads_pct", log_->extraReadsPct());
+    auto evictedFromLog = log_->evictedFromLog();
+    auto readmittedToLog = log_->readmittedToLog();
+    auto insertedToSets = setInsertCount_.get();
+    visitor("navy_klog_admit_sets_pct", 100. * insertedToSets / (insertedToSets + readmittedToLog + evictedFromLog));
   }
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {

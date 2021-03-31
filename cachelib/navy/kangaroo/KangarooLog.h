@@ -78,6 +78,8 @@ class KangarooLog  {
   double extraReadsPct() const;
   double fragmentationPct() const;
   uint64_t getBytesWritten() const;
+  double evictedFromLog() const;
+  double readmittedToLog() const;
 
 
   // TODO: persist and recover not implemented

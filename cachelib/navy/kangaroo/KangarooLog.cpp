@@ -404,6 +404,14 @@ double KangarooLog::fragmentationPct() const {
   return 100. * found / (notFoundInLogIndex_.get() + found);
 }
 
+double KangarooLog::evictedFromLog() const {
+  return thresholdNotHit_.get();
+}
+
+double KangarooLog::readmittedToLog() const {
+  return readmitRequests_.get();
+}
+
 uint64_t KangarooLog::getBytesWritten() const {
   return logSegmentsWrittenCount_.get() * segmentSize_;
 }
