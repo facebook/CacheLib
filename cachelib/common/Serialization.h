@@ -88,7 +88,7 @@ class Deserializer {
   // deserialization.
   //
   // @throw std::exception with appropriate error message.
-  template <typename T>
+  template <typename T, typename Protocol = apache::thrift::BinarySerializer>
   T deserialize();
 
   // same as the above.
@@ -96,7 +96,7 @@ class Deserializer {
   // @param  object  the object that will hold the deserialized state.
   // @return  the number of bytes consumed in the buffer to serialize the
   //          object
-  template <typename T>
+  template <typename T, typename Protocol = apache::thrift::BinarySerializer>
   size_t deserialize(T& object);
 
  private:
@@ -113,7 +113,7 @@ size_t Serializer::serialize(const T& object) {
 template <typename T, typename Protocol>
 std::unique_ptr<folly::IOBuf> Serializer::serializeToIOBuf(const T& object) {
   folly::IOBufQueue queue;
-  serializeToIOBufQueue(queue, object);
+  serializeToIOBufQueue<T, Protocol>(queue, object);
   auto ioBuf = queue.move();
   ioBuf->coalesce();
   return ioBuf;
@@ -125,22 +125,21 @@ void Serializer::serializeToIOBufQueue(folly::IOBufQueue& queue,
   Protocol::serialize(object, &queue);
 }
 
-template <typename T>
+template <typename T, typename Protocol>
 T Deserializer::deserialize() {
   XDCHECK_LT(reinterpret_cast<uintptr_t>(curr_),
              reinterpret_cast<uintptr_t>(end_));
   T object;
-  deserialize(object);
+  deserialize<T, Protocol>(object);
   return object;
 }
 
-template <typename T>
+template <typename T, typename Protocol>
 size_t Deserializer::deserialize(T& object) {
   folly::ByteRange buffer(curr_, end_);
   // throws apache::thrift::protocol::TProtocolException which inherits from
   // std::exception and has the appropriate what() message.
-  const auto bytesRead =
-      apache::thrift::BinarySerializer::deserialize(buffer, object);
+  const auto bytesRead = Protocol::deserialize(buffer, object);
   curr_ += bytesRead;
   return bytesRead;
 }

@@ -31,6 +31,20 @@ class SlabReleaseAborted : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+// An allocation error. This could be a genuine std::bad_alloc from
+// the global allocator, or it can be an internal allocation error
+// from the backing cachelib item.
+class ObjectCacheAllocationError : public OutOfMemory {
+ public:
+  using OutOfMemory::OutOfMemory;
+};
+
+// Bad arguments were fed into deallocate(). This indicates the alloc
+// argument was invalid, or the size was different from the originally
+// requested size.
+class ObjectCacheDeallocationBadArgs : public std::invalid_argument {
+  using std::invalid_argument::invalid_argument;
+};
 } // namespace exception
 } // namespace cachelib
 } // namespace facebook
