@@ -4,8 +4,8 @@
 
 #include <vector>
 
-#include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/experimental/objcache/ObjectCache.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 #include "thrift/lib/cpp2/protocol/Cpp2Ops.h"
 
 namespace facebook {

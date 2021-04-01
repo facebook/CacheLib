@@ -226,7 +226,8 @@ using namespace facebook::cachelib::benchmark;
 
 /*
 ============================================================================
-cachelib/benchmarks/objcache/ObjectCacheAllocation.cpprelative  time/iter  iters/s
+cachelib/benchmarks/objcache/ObjectCacheAllocation.cpprelative  time/iter
+iters/s
 ============================================================================
 NOOP                                                         0.00fs  Infinity
 ----------------------------------------------------------------------------
@@ -234,30 +235,30 @@ NOOP                                                         0.00fs  Infinity
 full_heap_std_object                                          1.18s  848.29m
 ----------------------------------------------------------------------------
  serialized item bytes: 1737
- mem before: 675 MB, mem after: 850 MB, growth: 174 MB, per-item: 1 KB, fragmentation: 5 MB
-serialized_std_object                                         1.08s  928.00m
- serialized item bytes: 675
- mem before: 675 MB, mem after: 748 MB, growth: 72 MB, per-item: 0 KB, fragmentation: 4 MB
-compact_serialized_std_object                    108.08%   997.07ms     1.00
- serialized item bytes: 1737
- mem before: 675 MB, mem after: 850 MB, growth: 174 MB, per-item: 1 KB, fragmentation: 5 MB
+ mem before: 675 MB, mem after: 850 MB, growth: 174 MB, per-item: 1 KB,
+fragmentation: 5 MB serialized_std_object 1.08s  928.00m serialized item bytes:
+675 mem before: 675 MB, mem after: 748 MB, growth: 72 MB, per-item: 0 KB,
+fragmentation: 4 MB compact_serialized_std_object                    108.08%
+997.07ms     1.00 serialized item bytes: 1737 mem before: 675 MB, mem after: 850
+MB, growth: 174 MB, per-item: 1 KB, fragmentation: 5 MB
 serialized_custom_object_with_alloc              121.99%      1.13s  884.25m
 ----------------------------------------------------------------------------
  item bytes: 0, total occupied bytes: 282
- mem before: 675 MB, mem after: 1340 MB, growth: 664 MB, per-item: 6 KB, fragmentation: 1 MB
-std_object                                                    1.21s  828.22m
- item bytes: 6650, total occupied bytes: 8110
- mem before: 1308 MB, mem after: 2137 MB, growth: 829 MB, per-item: 8 KB, fragmentation: 32 MB
+ mem before: 675 MB, mem after: 1340 MB, growth: 664 MB, per-item: 6 KB,
+fragmentation: 1 MB std_object 1.21s  828.22m item bytes: 6650, total occupied
+bytes: 8110 mem before: 1308 MB, mem after: 2137 MB, growth: 829 MB, per-item: 8
+KB, fragmentation: 32 MB
 std_object_with_alloc                             49.09%      2.46s  406.55m
  item bytes: 6650, total occupied bytes: 6964
- mem before: 1308 MB, mem after: 2017 MB, growth: 709 MB, per-item: 7 KB, fragmentation: 40 MB
-std_object_with_alloc_with_compaction             56.20%      2.15s  465.47m
- item bytes: 5860, total occupied bytes: 16502
- mem before: 1308 MB, mem after: 2984 MB, growth: 1676 MB, per-item: 17 KB, fragmentation: 72 MB
+ mem before: 1308 MB, mem after: 2017 MB, growth: 709 MB, per-item: 7 KB,
+fragmentation: 40 MB std_object_with_alloc_with_compaction             56.20%
+2.15s  465.47m item bytes: 5860, total occupied bytes: 16502 mem before: 1308
+MB, mem after: 2984 MB, growth: 1676 MB, per-item: 17 KB, fragmentation: 72 MB
 custom_object_with_alloc                          39.05%      3.09s  323.42m
  item bytes: 5844, total occupied bytes: 6118
- mem before: 1308 MB, mem after: 1915 MB, growth: 607 MB, per-item: 6 KB, fragmentation: 19 MB
-custom_object_with_alloc_with_compaction          66.45%      1.82s  550.32m
+ mem before: 1308 MB, mem after: 1915 MB, growth: 607 MB, per-item: 6 KB,
+fragmentation: 19 MB custom_object_with_alloc_with_compaction          66.45%
+1.82s  550.32m
 ----------------------------------------------------------------------------
 ============================================================================
 */

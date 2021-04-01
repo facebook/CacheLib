@@ -12,9 +12,9 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/benchmarks/objcache/Common.h"
 #include "cachelib/benchmarks/objcache/gen-cpp2/ObjectCache_types.h"
-#include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/experimental/objcache/Allocator.h"
 #include "cachelib/experimental/objcache/ObjectCache.h"
+#include "cachelib/navy/serialization/RecordIO.h"
 #include "folly/BenchmarkUtil.h"
 
 namespace facebook {

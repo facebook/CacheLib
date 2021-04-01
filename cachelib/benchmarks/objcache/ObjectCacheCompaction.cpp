@@ -124,7 +124,8 @@ using namespace facebook::cachelib::benchmark;
 
 /*
 ============================================================================
-cachelib/benchmarks/objcache/ObjectCacheCompaction.cpprelative  time/iter  iters/s
+cachelib/benchmarks/objcache/ObjectCacheCompaction.cpprelative  time/iter
+iters/s
 ============================================================================
 NOOP                                                         0.00fs  Infinity
 ----------------------------------------------------------------------------
