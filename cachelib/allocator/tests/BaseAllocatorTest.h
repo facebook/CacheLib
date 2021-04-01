@@ -24,8 +24,14 @@
 
 namespace facebook {
 namespace cachelib {
-namespace tests {
+namespace detail {
+template <typename ItemHandle2>
+void objcacheUnmarkNascent(const ItemHandle2& hdl) {
+  hdl.unmarkNascent();
+}
+} // namespace detail
 
+namespace tests {
 template <typename AllocatorT>
 class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
  private:
@@ -6207,6 +6213,27 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_THROW(AllocatorT(AllocatorT::SharedMemAttach, config),
                    std::invalid_argument);
     }
+  }
+
+  void testNascent() {
+    typename AllocatorT::Config config;
+    bool isRemoveCbTriggered = false;
+    config.setRemoveCallback(
+        [&isRemoveCbTriggered](const typename AllocatorT::RemoveCbData& data) {
+          if (data.context == RemoveContext::kNormal) {
+            isRemoveCbTriggered = true;
+          }
+        });
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("default", numBytes);
+    { auto handle = alloc.allocate(poolId, "test", 100); }
+    EXPECT_EQ(false, isRemoveCbTriggered);
+    {
+      auto handle = alloc.allocate(poolId, "test", 100);
+      objcacheUnmarkNascent(handle);
+    }
+    EXPECT_EQ(true, isRemoveCbTriggered);
   }
 };
 } // namespace tests

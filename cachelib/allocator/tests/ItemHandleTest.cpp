@@ -15,7 +15,6 @@ namespace facebook {
 namespace cachelib {
 
 namespace {
-
 struct TestAllocator;
 
 struct TestItem {
@@ -67,6 +66,27 @@ struct TestAllocator {
   util::FastStats<int> tlRef_;
 };
 } // namespace
+
+namespace detail {
+template <typename ItemHandle2>
+typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl) {
+  return hdl.getCache();
+}
+} // namespace detail
+
+TEST(ItemHandleTest, GetCache) {
+  TestAllocator t;
+  auto hdl = t.getHandle();
+
+  // getCache should return reference to CacheAllocator
+  auto& cache = detail::objcacheGetCache(hdl);
+  EXPECT_EQ(&t, &cache);
+
+  EXPECT_FALSE(hdl.isReady());
+  TestItem k;
+  t.setHandle(hdl, &k);
+  EXPECT_TRUE(hdl.isReady());
+}
 
 TEST(ItemHandleTest, WaitContext_set) {
   testing::NiceMock<TestAllocator> t;

@@ -356,13 +356,12 @@ struct HandleImpl {
     return waitContext_ ? waitContext_->get() : it_;
   }
 
-  // internal book keeping to track handles that correspond to items that are
+  // Internal book keeping to track handles that correspond to items that are
   // not present in cache. This state is mutated, but does not affect the user
   // visible meaning of the item handle(public API). Hence this is const.
-  // markNascent should be set when we know the handle is constructed for an
-  // allocated item that is not inserted into the cache yet. we unmark the
-  // nascent flag when we know the item was successfully inserted into the
-  // cache by the caller.
+  // markNascent is set when we know the handle is constructed for an item that
+  // is not inserted into the cache yet. we unmark the nascent flag when we know
+  // the item was successfully inserted into the cache by the caller.
   void markNascent() const {
     flags_ |= static_cast<uint8_t>(HandleFlags::kNascent);
   }
@@ -385,6 +384,12 @@ struct HandleImpl {
 
   Item* releaseItem() noexcept { return std::exchange(it_, nullptr); }
 
+  // User of a handle can access cache via this accessor
+  CacheT& getCache() const {
+    XDCHECK(alloc_);
+    return *alloc_;
+  }
+
   // Handle which has the item already
   FOLLY_ALWAYS_INLINE HandleImpl(Item* it, CacheT& alloc) noexcept
       : alloc_(&alloc), it_(it) {}
@@ -400,6 +405,27 @@ struct HandleImpl {
   // Only CacheAllocator and NvmCache can create non-default constructed handles
   friend CacheT;
   friend typename CacheT::NvmCacheT;
+
+  // Object-cache's c++ allocator will need to create a zero refcount handle in
+  // order to access CacheAllocator API. Search for this function for details.
+  template <typename ItemHandle2, typename Item2, typename Cache2>
+  friend ItemHandle2* objcacheInitializeZeroRefcountHandle(void* handleStorage,
+                                                           Item2* it,
+                                                           Cache2& alloc);
+
+  // A handle is marked as nascent when it was not yet inserted into the cache.
+  // However, user can override it by marking an item as "not nascent" even if
+  // it's not inserted into the cache. Unmarking it means a not-yet-inserted
+  // item will still be processed by RemoveCallback if user frees it. Today,
+  // the only user who can do this is Cachelib's ObjectCache API to ensure the
+  // correct RAII behavior for an object.
+  template <typename ItemHandle2>
+  friend void objcacheUnmarkNascent(const ItemHandle2& hdl);
+
+  // Object-cache's c++ allocator needs to access CacheAllocator directly from
+  // an item handle in order to access CacheAllocator APIs.
+  template <typename ItemHandle2>
+  friend typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl);
 
   // instance of the cache this handle and item belong to.
   CacheT* alloc_ = nullptr;
