@@ -31,6 +31,9 @@ struct Stats {
   // number of nvm gets
   TLCounter numNvmGets{0};
 
+  // number of nvm get miss that happened synchronously
+  TLCounter numNvmGetMissFast{0};
+
   // number of nvm misses
   TLCounter numNvmGetMiss{0};
 

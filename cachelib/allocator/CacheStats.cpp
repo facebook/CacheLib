@@ -40,6 +40,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 
   ret.numNvmGets = numNvmGets.get();
   ret.numNvmGetMiss = numNvmGetMiss.get();
+  ret.numNvmGetMissFast = numNvmGetMissFast.get();
   ret.numNvmGetMissExpired = numNvmGetMissExpired.get();
   ret.numNvmGetCoalesced = numNvmGetCoalesced.get();
   ret.numNvmPuts = numNvmPuts.get();

@@ -311,6 +311,9 @@ struct GlobalCacheStats {
   // number of nvm misses
   uint64_t numNvmGetMiss{0};
 
+  // number of nvm misses that happened synchronously
+  uint64_t numNvmGetMissFast{0};
+
   // number of nvm gets that are expired
   uint64_t numNvmGetMissExpired{0};
 

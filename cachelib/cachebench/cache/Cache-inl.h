@@ -91,6 +91,8 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
         config_.navyDataChecksum;
 
+    nvmConfig.enableFastNegativeLookups = true;
+
     if (!config_.dipperFilePath.empty()) {
       // if we get a directory, create a file. we will clean it up. If we
       // already have a file, user provided it. So we will also keep it around

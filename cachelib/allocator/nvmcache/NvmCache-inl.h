@@ -122,12 +122,38 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     auto lock = getFillLockForShard(shard);
     // do not use the Cache::find() since that will call back into us.
     hdl = CacheAPIWrapperForNvm<C>::findInternal(cache_, key);
-    if (hdl != nullptr) {
+    if (UNLIKELY(hdl != nullptr)) {
       if (hdl->isExpired()) {
         hdl.reset();
         hdl.markExpired();
       }
       return hdl;
+    }
+
+    auto& fillMap = getFillMapForShard(shard);
+    auto it = fillMap.find(key);
+    // we use async apis for nvmcache operations into navy. async apis for
+    // lookups incur additional overheads and thread hops. However, navy can
+    // quickly answer negative lookups through a synchronous api. So we try to
+    // quickly validate this, if possible, before doing the heavier async
+    // lookup.
+    //
+    // since this is a synchronous api, navy would not guarantee any
+    // particular ordering semantic with other concurrent requests to same
+    // key. we need to ensure there are no asynchronous api requests for the
+    // same key. First, if there are already concurrent get requests, we
+    // simply add ourselves to the list of waiters for that get. If there are
+    // concurrent put requests already enqueued, executing this synchronous
+    // api can read partial state. Hence the result can not be trusted. If
+    // there are concurrent delete requests enqueued, we might get false
+    // positives that key is present. That is okay since it is a loss of
+    // performance and not correctness.
+    if (config_.enableFastNegativeLookups && it == fillMap.end() &&
+        !putContexts_[shard].hasContexts() &&
+        !navyCache_->couldExist(makeBufferView(key))) {
+      stats().numNvmGetMiss.inc();
+      stats().numNvmGetMissFast.inc();
+      return ItemHandle{};
     }
 
     hdl = CacheAPIWrapperForNvm<C>::createNvmCacheFillHandle(cache_);
@@ -136,8 +162,6 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     auto waitContext = CacheAPIWrapperForNvm<C>::getWaitContext(cache_, hdl);
     XDCHECK(waitContext);
 
-    auto& fillMap = getFillMapForShard(shard);
-    auto it = fillMap.find(key);
     if (it != fillMap.end()) {
       ctx = it->second.get();
       ctx->addWaiter(std::move(waitContext));
@@ -385,9 +409,14 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
-  auto& putContexts = putContexts_[getShardForKey(item.getKey())];
+  auto shard = getShardForKey(item.getKey());
+  // obtain the fill lock to record the put context so that any subsequent
+  // fill can use this to abandon synchronous negative lookups if enabled.
+  auto lock = getFillLockForShard(shard);
+  auto& putContexts = putContexts_[shard];
   auto& ctx = putContexts.createContext(item.getKey(), std::move(iobuf),
                                         std::move(tracker));
+  lock.unlock(); // once put ctx is instantiated, we don't need the fill lock.
   // capture array reference for putContext. it is stable
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });

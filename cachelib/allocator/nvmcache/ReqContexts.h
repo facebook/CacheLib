@@ -82,6 +82,13 @@ class ContextMap {
     return *kv->second;
   }
 
+  // returns true if this map has active contexts and false if the map is
+  // empty.
+  bool hasContexts() const {
+    std::lock_guard<std::mutex> l(mutex_);
+    return map_.size() != 0;
+  }
+
   // Remove the put context by passing a reference to it. After this, the
   // caller is supposed to not refer to it anymore.
   void destroyContext(const T& ctx) {
@@ -99,7 +106,7 @@ class ContextMap {
 
  private:
   folly::F14FastMap<uintptr_t, std::unique_ptr<T>> map_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
 };
 } // namespace detail
 
