@@ -51,7 +51,10 @@ bool TimeStampTicker::advanceTimeStamp(uint32_t currTimeStamp) {
   std::shared_ptr<CountDownLatch> latch;
   while (oldBucket < currentBucket) {
     latch = getLatch(oldBucket);
-    latch->count_down();
+    auto lastThread = latch->count_down();
+    if (lastThread && onCrossTimeWindow_) {
+      onCrossTimeWindow_();
+    }
     oldBucket++;
   }
   XDCHECK(latch);

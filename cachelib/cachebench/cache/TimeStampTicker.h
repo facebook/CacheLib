@@ -26,8 +26,15 @@ class TimeStampTicker : public cachelib::Ticker {
  public:
   // @param numThreads Number of threads that can be updating the timestamps.
   // @param bucketTicks The number of ticks that defines a bucket.
-  explicit TimeStampTicker(uint32_t numThreads, uint32_t bucketTicks = 3600)
-      : numThreads_{numThreads}, bucketTicks_{bucketTicks} {}
+  // @param onCrossTimeWindow The optional callback to run when a time windows
+  // has been crossed by all the threads. It is called on the last thread who
+  // crosses the window.
+  explicit TimeStampTicker(uint32_t numThreads,
+                           uint32_t bucketTicks = 3600,
+                           std::function<void()> onCrossTimeWindow = nullptr)
+      : numThreads_{numThreads},
+        bucketTicks_{bucketTicks},
+        onCrossTimeWindow_{onCrossTimeWindow} {}
 
   // Return the current tick.
   uint32_t getCurrentTick() override {
@@ -77,6 +84,8 @@ class TimeStampTicker : public cachelib::Ticker {
 
   const uint32_t numThreads_;
   const uint32_t bucketTicks_;
+  // The callback to run when the last thread cross a window.
+  std::function<void()> onCrossTimeWindow_;
 };
 } // namespace cachebench
 } // namespace cachelib
