@@ -189,12 +189,17 @@ Cache<Allocator>::Cache(CacheConfig config,
     if (config_.navyEncryption && config_.createEncryptor) {
       allocatorConfig.enableNvmCacheEncryption(config_.createEncryptor());
     }
-
-    if (!config_.mlNvmAdmissionPolicy.empty() && config_.createMlPolicy) {
-      allocatorConfig.setNvmCacheAdmissionPolicy(
-          std::shared_ptr<NvmAdmissionPolicy<Allocator>>(
-              reinterpret_cast<NvmAdmissionPolicy<Allocator>*>(
-                  config_.createMlPolicy())));
+    if (!config_.mlNvmAdmissionPolicy.empty() &&
+        config_.nvmAdmissionPolicyFactory) {
+      try {
+        nvmAdmissionPolicy_ =
+            std::any_cast<std::shared_ptr<NvmAdmissionPolicy<Allocator>>>(
+                config_.nvmAdmissionPolicyFactory());
+        allocatorConfig.setNvmCacheAdmissionPolicy(nvmAdmissionPolicy_);
+      } catch (const std::bad_any_cast& e) {
+        XLOG(ERR) << "CAST ERROR " << e.what();
+        throw;
+      }
     }
 
     allocatorConfig.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);

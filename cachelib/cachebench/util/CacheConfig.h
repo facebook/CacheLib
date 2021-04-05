@@ -1,8 +1,11 @@
 #pragma once
 
+#include <any>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
+#include "cachelib/common/Ticker.h"
 #include "cachelib/navy/common/Device.h"
 
 namespace facebook {
@@ -179,6 +182,11 @@ struct CacheConfig : public JSONConfig {
   // a location for the ML model using this argument.
   std::string mlNvmAdmissionPolicyLocation{""};
 
+  // If enabled, we will use the timestamps from the trace file in the ticker
+  // so that the cachebench will observe time based on timestamps from the trace
+  // instead of the system time.
+  bool useTraceTimeStamp{false};
+
   // If enabled, when printing CacheStats, also print the NvmCounters (could be
   // spammy).
   bool printNvmCounters{false};
@@ -192,14 +200,18 @@ struct CacheConfig : public JSONConfig {
   std::function<std::shared_ptr<navy::DeviceEncryptor>()> createEncryptor;
 
   // User will implement a function that returns NvmAdmissionPolicy.
-  // The reason we return as a "void*" is because the interface is a virtual
+  // The reason we return as a std::any is because the interface is a virtual
   // template class, and the actual type is determined by @allocator in
   // this config.
-  std::function<void*()> createMlPolicy;
+  std::function<std::any()> nvmAdmissionPolicyFactory;
 
   // User can implement a structure that polls stats from CacheAllocator
   // and saves the states to a backend/file/place they prefer.
   std::shared_ptr<CacheMonitorFactory> cacheMonitorFactory;
+
+  // shared pointer of the ticker to support time stamp based cachebench
+  // simulation. Stressor uses this to pass the ticker into the cache.
+  std::shared_ptr<cachelib::Ticker> ticker;
 
   explicit CacheConfig(const folly::dynamic& configJson);
 

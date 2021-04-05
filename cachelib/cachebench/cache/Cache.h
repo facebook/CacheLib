@@ -9,6 +9,7 @@
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/RandomStrategy.h"
 #include "cachelib/cachebench/cache/CacheStats.h"
+#include "cachelib/cachebench/cache/TimeStampTicker.h"
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
@@ -309,12 +310,20 @@ class Cache {
 
   void reattach();
 
+  void recordAccess(folly::StringPiece key) {
+    if (nvmAdmissionPolicy_) {
+      nvmAdmissionPolicy_->trackAccess(key);
+    }
+  }
+
  private:
   bool checkGet(ValueTracker::Index opId, const ItemHandle& it);
   uint64_t fetchNandWrites() const;
 
   CacheConfig config_;
   const std::string cacheDir_;
+  // The admission policy that tracks the accesses.
+  std::shared_ptr<NvmAdmissionPolicy<Allocator>> nvmAdmissionPolicy_;
   std::atomic<unsigned int> inconsistencyCount_{0};
   std::unique_ptr<ValueTracker> valueTracker_;
   std::unique_ptr<Allocator> cache_;

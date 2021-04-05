@@ -8,6 +8,6 @@ DEFINE_bool(report_api_latency,
 
 namespace facebook {
 namespace cachelib {
-namespace cachebench {}
+namespace cachebench {} // namespace cachebench
 } // namespace cachelib
 } // namespace facebook
