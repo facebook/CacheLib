@@ -1,4 +1,7 @@
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstring-conversion"
 #include <folly/futures/Promise.h>
+#pragma GCC diagnostic pop
 #include <folly/futures/SharedPromise.h>
 #include <gtest/gtest.h>
 
