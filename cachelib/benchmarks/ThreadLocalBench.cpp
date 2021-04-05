@@ -1,20 +1,36 @@
+/*
+============================================================================
+cachelib/benchmarks/ThreadLocalBench.cpp        relative  time/iter  iters/s
+============================================================================
+VanillaAtomicStats                                            5.48s  182.34m
+TestAtomicCounter                                102.18%      5.37s  186.31m
+VanillaThreadLocalStats                         8392.73%    65.35ms    15.30
+TestTLCounter                                   6814.13%    80.48ms    12.42
+============================================================================
+*/
 #include <folly/Benchmark.h>
 #include <folly/ThreadLocal.h>
 #include <folly/init/Init.h>
 
 #include <thread>
 
+#include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/FastStats.h"
+
 DEFINE_uint64(num_threads, 32, "Number of threads to be run concurrently");
 DEFINE_uint64(num_ops, 1e7, "Number of operations to be run per thread");
 
-namespace {
+using namespace facebook::cachelib;
 
+namespace {
 std::atomic<uint64_t> val;
+AtomicCounter atomicCounter;
 class DummyTag;
 folly::ThreadLocal<uint64_t, DummyTag> tlVal;
+TLCounter tlCounter;
 } // namespace
 
-BENCHMARK(AtomicStats) {
+BENCHMARK(VanillaAtomicStats) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
@@ -32,13 +48,49 @@ BENCHMARK(AtomicStats) {
   }
 }
 
-BENCHMARK_RELATIVE(ThreadLocalStats) {
+BENCHMARK_RELATIVE(TestAtomicCounter) {
+  std::vector<std::thread> threads;
+  for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
+    // bind captures the variable by copy.
+    threads.push_back(std::thread([&]() {
+      for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
+        atomicCounter.inc();
+      }
+    }));
+  }
+
+  for (auto& thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+}
+
+BENCHMARK_RELATIVE(VanillaThreadLocalStats) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
     threads.push_back(std::thread([&]() {
       for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
         ++(*tlVal);
+      }
+    }));
+  }
+
+  for (auto& thread : threads) {
+    if (thread.joinable()) {
+      thread.join();
+    }
+  }
+}
+
+BENCHMARK_RELATIVE(TestTLCounter) {
+  std::vector<std::thread> threads;
+  for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
+    // bind captures the variable by copy.
+    threads.push_back(std::thread([&]() {
+      for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
+        tlCounter.inc();
       }
     }));
   }
