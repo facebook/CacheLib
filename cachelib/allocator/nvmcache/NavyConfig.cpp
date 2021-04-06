@@ -129,12 +129,13 @@ void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
 }
 
 void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
-    const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio) {
+    std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio) {
   if (blockCacheLru_) {
     throw std::invalid_argument(
         "already use LRU policy, should not set sfifo segment ratio");
   }
-  blockCacheSegmentedFifoSegmentRatio_ = blockCacheSegmentedFifoSegmentRatio;
+  blockCacheSegmentedFifoSegmentRatio_ =
+      std::move(blockCacheSegmentedFifoSegmentRatio);
   enabled_ = true;
 }
 
@@ -150,12 +151,12 @@ void NavyConfig::setBlockCacheReadBufferSize(
 }
 
 void NavyConfig::setBlockCacheSizeClasses(
-    const std::vector<uint32_t>& blockCacheSizeClasses) {
+    std::vector<uint32_t> blockCacheSizeClasses) {
   if (readBufferSet) {
     throw std::invalid_argument(
         "already set read buffer, should not set size classes");
   }
-  blockCacheSizeClasses_ = blockCacheSizeClasses;
+  blockCacheSizeClasses_ = std::move(blockCacheSizeClasses);
   enabled_ = true;
 }
 
@@ -205,14 +206,14 @@ void NavyConfig::setBigHash(unsigned int bigHashSizePct,
   enabled_ = true;
 }
 
+// job scheduler settings
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
-  if (navyReqOrderingShards > 0) {
-    navyReqOrderingShards_ = navyReqOrderingShards;
-    enabled_ = true;
-  } else {
+  if (navyReqOrderingShards == 0) {
     throw std::invalid_argument(
         "Navy request ordering shards should always be non-zero");
   }
+  navyReqOrderingShards_ = navyReqOrderingShards;
+  enabled_ = true;
 }
 
 std::map<std::string, std::string> NavyConfig::serialize() const {

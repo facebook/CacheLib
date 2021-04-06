@@ -86,7 +86,7 @@ class NavyConfig {
     return bigHashSmallItemMaxSize_;
   }
 
-  // job scheduler settings
+  // ============ Job scheduler settings =============
   unsigned int getReaderThreads() const { return readerThreads_; }
   unsigned int getWriterThreads() const { return writerThreads_; }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
@@ -154,14 +154,13 @@ class NavyConfig {
   // Set segmentedFifoSegmentRatio for BlockCache.
   // @throw std::invalid_argument if LRU policy is used.
   void setBlockCacheSegmentedFifoSegmentRatio(
-      const std::vector<unsigned int>& blockCacheSegmentedFifoSegmentRatio);
+      std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio);
   // Set read buffer size for BlockCache.
   // @throw std::invalid_argument if size classes have been set.
   void setBlockCacheReadBufferSize(uint64_t blockCacheReadBufferSize);
   // Set size classes for BlockCache.
   // @throw std::invalid_argument if read buffer has been set.
-  void setBlockCacheSizeClasses(
-      const std::vector<uint32_t>& blockCacheSizeClasses);
+  void setBlockCacheSizeClasses(std::vector<uint32_t> blockCacheSizeClasses);
   // Set reinsertionHitsThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
   //        set.
@@ -172,7 +171,6 @@ class NavyConfig {
   //        the input value is not in the range of 0~100.
   void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
-
   void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
     blockCacheRegionSize_ = blockCacheRegionSize;
     enabled_ = true;
@@ -200,23 +198,23 @@ class NavyConfig {
                   uint64_t bigHashBucketBfSize,
                   uint64_t bigHashSmallItemMaxSize);
 
-  // job scheduler settings
-  void setReaderThreads(unsigned int readerThreads) {
+  // ============ Job scheduler settings =============
+  void setReaderAndWriterThreads(unsigned int readerThreads,
+                                 unsigned int writerThreads) noexcept {
     readerThreads_ = readerThreads;
-    enabled_ = true;
-  }
-  void setWriterThreads(unsigned int writerThreads) {
     writerThreads_ = writerThreads;
     enabled_ = true;
   }
+  // Set Navy request ordering shards (expressed as power of two).
+  // @throw std::invalid_argument if the input value is 0.
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
 
-  // other settings
-  void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) {
+  // ============ Other settings =============
+  void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) noexcept {
     maxConcurrentInserts_ = maxConcurrentInserts;
     enabled_ = true;
   }
-  void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) {
+  void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) noexcept {
     maxParcelMemoryMB_ = maxParcelMemoryMB;
     enabled_ = true;
   }
