@@ -191,6 +191,13 @@ struct CacheConfig : public JSONConfig {
   // spammy).
   bool printNvmCounters{false};
 
+  // When set to positive, CacheBench use this as TimeStampTickers bucket ticks
+  // https://fburl.com/diffusion/5hbb4jsn
+  // For example, a value of 3600 means the threads will
+  // always be processing traces from the same hour at any time.
+  // When set to 0, TimeStampTicker is not used.
+  uint64_t tickerSynchingSeconds{0};
+
   //
   // Options below are not to be populated with JSON
   //

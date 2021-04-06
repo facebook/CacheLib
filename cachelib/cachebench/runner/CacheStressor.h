@@ -11,6 +11,7 @@
 #include <unordered_set>
 
 #include "cachelib/cachebench/cache/Cache.h"
+#include "cachelib/cachebench/cache/TimeStampTicker.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
@@ -64,6 +65,15 @@ class CacheStressor : public Stressor {
       movingSync = [this](typename CacheT::Item::Key key) {
         return std::make_unique<CacheStressSyncObj>(*this, key.str());
       };
+    }
+
+    if (cacheConfig.useTraceTimeStamp &&
+        cacheConfig.tickerSynchingSeconds > 0) {
+      // Create TimeStampTicker to allow time synching based on traces'
+      // timestamps.
+      ticker_ = std::make_shared<TimeStampTicker>(
+          config.numThreads, cacheConfig.tickerSynchingSeconds);
+      cacheConfig.ticker = ticker_;
     }
 
     cache_ = std::make_unique<CacheT>(cacheConfig, movingSync);
@@ -279,9 +289,13 @@ class CacheStressor : public Stressor {
 
           chainedItemLock(lockMode, *key);
           SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
+          if (ticker_) {
+            ticker_->updateTimeStamp(req.timestamp);
+          }
           // TODO currently pure lookaside, we should
           // add a distribution over sequences of requests/access patterns
           // e.g. get-no-set and set-no-get
+          cache_->recordAccess(*key);
           auto it = cache_->find(*key, AccessMode::kRead);
           if (it == nullptr) {
             ++stats.getMiss;
@@ -435,6 +449,8 @@ class CacheStressor : public Stressor {
   const std::string hardcodedString_;
 
   std::unique_ptr<CacheT> cache_;
+  // Ticker that syncs the time according to trace timestamp.
+  std::shared_ptr<TimeStampTicker> ticker_;
 
   std::thread stressWorker_;
 
