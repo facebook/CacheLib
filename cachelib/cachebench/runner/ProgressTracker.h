@@ -18,6 +18,7 @@ class ProgressTracker final : public cachelib::PeriodicWorker {
 
   const Stressor& stressor_;
   std::ofstream statsFile_;
+  Stats prevStats_;
 };
 } // namespace cachebench
 } // namespace cachelib

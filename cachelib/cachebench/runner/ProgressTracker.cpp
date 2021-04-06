@@ -43,6 +43,10 @@ void ProgressTracker::reportProgress() {
     const auto currCacheStats = stressor_.getCacheStats();
     currCacheStats.render(statsFile_);
 
+    statsFile_ << "== Hit Ratio Stats Since Last ==" << std::endl;
+    currCacheStats.render(prevStats_, statsFile_);
+    prevStats_ = currCacheStats;
+
     statsFile_ << "== Throughput Stats ==" << std::endl;
     auto elapsedTimeNs =
         std::chrono::nanoseconds{now - stressor_.startTime()}.count();
