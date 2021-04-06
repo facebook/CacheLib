@@ -4,7 +4,6 @@
 #include <folly/Likely.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/Asm.h>
-#include <folly/synchronization/SanitizeThread.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -121,8 +120,6 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value* const refPtr = &refCount_;
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
 
     while (true) {
@@ -156,8 +153,6 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
 
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const Value newCount = oldVal - static_cast<Value>(1);
@@ -193,8 +188,6 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // On intel it's the same as an atomic load on primitive types,
     // but it's better to be explicit and do an atomic load with
     // relaxed ordering.
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     return __atomic_load_n(&refCount_, __ATOMIC_RELAXED);
   }
 
@@ -206,14 +199,10 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    */
   void markInMMContainer() noexcept {
     Value bitMask = getAdminRef<kLinked>();
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_or_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   void unmarkInMMContainer() noexcept {
     Value bitMask = ~getAdminRef<kLinked>();
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   bool isInMMContainer() const noexcept {
@@ -228,14 +217,10 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    */
   void markAccessible() noexcept {
     Value bitMask = getAdminRef<kAccessible>();
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_or_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   void unmarkAccessible() noexcept {
     Value bitMask = ~getAdminRef<kAccessible>();
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
   bool isAccessible() const noexcept {
@@ -262,8 +247,6 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value* const refPtr = &refCount_;
     unsigned int nCASFailures = 0;
     constexpr bool isWeak = false;
-    // TSAN does not support atomic functions from GNU compiler extensions.
-    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const bool flagSet = curValue & conditionBitMask;
