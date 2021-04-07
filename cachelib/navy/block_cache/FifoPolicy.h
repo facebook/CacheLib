@@ -9,6 +9,18 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+namespace detail {
+struct Node {
+  const RegionId rid{};
+  // Indicate when this region was initially tracked
+  const std::chrono::seconds trackTime{};
+
+  std::chrono::seconds secondsSinceTracking() const {
+    return getSteadyClockSeconds() - trackTime;
+  }
+};
+} // namespace detail
+
 // Simple FIFO policy
 class FifoPolicy final : public EvictionPolicy {
  public:
@@ -24,17 +36,17 @@ class FifoPolicy final : public EvictionPolicy {
 
   size_t memorySize() const override {
     std::lock_guard<std::mutex> lock{mutex_};
-    return sizeof(*this) + sizeof(RegionId) * queue_.size();
+    return sizeof(*this) + sizeof(detail::Node) * queue_.size();
   }
 
-  void getCounters(const CounterVisitor&) const override {}
+  void getCounters(const CounterVisitor& v) const override;
 
   void persist(RecordWriter& rw) const override;
 
   void recover(RecordReader& rr) override;
 
  private:
-  std::deque<RegionId> queue_;
+  std::deque<detail::Node> queue_;
   mutable std::mutex mutex_;
 };
 
@@ -93,16 +105,6 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   void recover(RecordReader& rr) override;
 
  private:
-  struct Node {
-    const RegionId rid{};
-    // Indicate when this region was initially tracked
-    const std::chrono::seconds trackTime{};
-
-    std::chrono::seconds secondsSinceTracking() const {
-      return getSteadyClockSeconds() - trackTime;
-    }
-  };
-
   void rebalanceLocked();
   size_t numElementsLocked();
 
@@ -112,7 +114,7 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   const std::vector<unsigned int> segmentRatio_;
   const unsigned int totalRatioWeight_;
 
-  std::vector<std::deque<Node>> segments_;
+  std::vector<std::deque<detail::Node>> segments_;
   mutable std::mutex mutex_;
 };
 } // namespace navy

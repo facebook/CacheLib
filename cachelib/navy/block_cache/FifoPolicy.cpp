@@ -24,7 +24,7 @@ FifoPolicy::FifoPolicy() { XLOG(INFO, "FIFO policy"); }
 
 void FifoPolicy::track(const Region& region) {
   std::lock_guard<std::mutex> lock{mutex_};
-  queue_.push_back(region.id());
+  queue_.push_back(detail::Node{region.id(), getSteadyClockSeconds()});
 }
 
 RegionId FifoPolicy::evict() {
@@ -32,7 +32,7 @@ RegionId FifoPolicy::evict() {
   if (queue_.empty()) {
     return RegionId{};
   }
-  auto rid = queue_.front();
+  auto rid = queue_.front().rid;
   queue_.pop_front();
   return rid;
 }
@@ -47,8 +47,9 @@ void FifoPolicy::persist(RecordWriter& rw) const {
   fifoPolicyData.queue_ref()->resize(queue_.size());
 
   for (uint32_t i = 0; i < queue_.size(); i++) {
-    auto& regionIdProto = (*fifoPolicyData.queue_ref())[i];
-    regionIdProto.idx_ref() = queue_[i].index();
+    auto& proto = (*fifoPolicyData.queue_ref())[i];
+    proto.idx_ref() = queue_[i].rid.index();
+    proto.trackTime_ref() = queue_[i].trackTime.count();
   }
 
   serializeProto(fifoPolicyData, rw);
@@ -57,12 +58,19 @@ void FifoPolicy::persist(RecordWriter& rw) const {
 void FifoPolicy::recover(RecordReader& rr) {
   auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
   queue_.clear();
-  queue_.resize(fifoPolicyData.queue_ref()->size());
-
-  for (uint32_t i = 0; i < fifoPolicyData.queue_ref()->size(); i++) {
-    queue_[i] =
-        *std::make_unique<RegionId>(*fifoPolicyData.queue_ref()[i].idx_ref());
+  for (uint32_t i = 0; i < fifoPolicyData.queue_ref().value().size(); i++) {
+    const auto& proto = fifoPolicyData.queue_ref().value()[i];
+    queue_.push_back(
+        detail::Node{RegionId{static_cast<uint32_t>(proto.idx_ref().value())},
+                     std::chrono::seconds{proto.trackTime_ref().value()}});
   }
+}
+
+void FifoPolicy::getCounters(const CounterVisitor& v) const {
+  std::lock_guard<std::mutex> lock{mutex_};
+  v(folly::sformat("navy_bc_fifo_size"), queue_.size());
+  v(folly::sformat("navy_bc_fifo_age"),
+    queue_.empty() ? 0 : queue_.front().secondsSinceTracking().count());
 }
 
 SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)
@@ -79,7 +87,8 @@ void SegmentedFifoPolicy::track(const Region& region) {
   auto priority = region.getPriority();
   XDCHECK_LT(priority, segments_.size());
   std::lock_guard<std::mutex> lock{mutex_};
-  segments_[priority].push_back(Node{region.id(), getSteadyClockSeconds()});
+  segments_[priority].push_back(
+      detail::Node{region.id(), getSteadyClockSeconds()});
   rebalanceLocked();
 }
 
@@ -141,7 +150,8 @@ size_t SegmentedFifoPolicy::memorySize() const {
   size_t memSize = sizeof(*this);
   std::lock_guard<std::mutex> lock{mutex_};
   for (const auto& segment : segments_) {
-    memSize += sizeof(std::deque<Node>) + sizeof(Node) * segment.size();
+    memSize += sizeof(std::deque<detail::Node>) +
+               sizeof(detail::Node) * segment.size();
   }
   return memSize;
 }

@@ -27,12 +27,13 @@ struct RegionData {
   2: required i32 regionSize = 0,
 }
 
-struct RegionId {
-  1: required i32 idx = 0,
+struct FifoPolicyNodeData {
+  1: required i32 idx,
+  2: required i64 trackTime,
 }
 
 struct FifoPolicyData{
-  1: required list<RegionId> queue
+  1: required list<FifoPolicyNodeData> queue,
 }
 
 struct AccessStats {
