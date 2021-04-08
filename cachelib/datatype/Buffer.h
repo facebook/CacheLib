@@ -250,7 +250,8 @@ class BufferManagerIterator;
 // with one chained item sized at a user-customized size. It will grow
 // as user keeps allocating and eventually when it has reached maximum
 // size for the chained item, it will allocate a second one at the max
-// capacity. And so on, until we reach the 255 chained items limit.
+// capacity. And so on, until we reach the 1024 chained items limit. The
+// limit is defined as BufferAddr::kMaxNumChainedItems.
 //
 // The ordering of allocation is always to fill up the first chained item
 // and then allocate a new one, fill it up as well, and so on. If a user
