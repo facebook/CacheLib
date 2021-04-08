@@ -26,6 +26,11 @@ inline uint64_t getCurrentTimeNs() {
   auto ret = std::chrono::steady_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::nanoseconds>(ret).count();
 }
+
+inline uint32_t getSteadyCurrentTimeSec() {
+  auto ret = std::chrono::steady_clock::now().time_since_epoch();
+  return std::chrono::duration_cast<std::chrono::seconds>(ret).count();
+}
 } // namespace util
 } // namespace cachelib
 } // namespace facebook
