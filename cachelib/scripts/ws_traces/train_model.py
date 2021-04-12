@@ -2,12 +2,17 @@
 
 import logging
 import random
+from datetime import timedelta
 
 import cachelib.scripts.ws_traces.feature_extractor as feature_extractor
 import cachelib.scripts.ws_traces.utils as utils
 import fblearner.flow.projects.cachelib.unified.common.dynamic_features as dfeature
 import numpy as np
 import pandas as pd
+from fblearner.flow.projects.cachelib.unified.common.historical_access import (
+    create_historical_accesses,
+)
+from fblearner.flow.projects.cachelib.unified.common.labelizer import create_labels
 
 
 logger = logging.getLogger(__name__)
@@ -24,45 +29,80 @@ LABEL_REJECTX = 1
 LABEL_FUTURE_ACCESS_THRESHOLD = 2
 
 
-def build_dataset_for_training(
-    tracefile,
-    region,
-    sample_ratio,
-    eviction_age,
-    access_history_use_counts=True,
-    global_feature_map_path=None,
-):
-    accesses, start_ts, end_ts = utils.read_processed_file_list_accesses(
-        tracefile, global_feature_map_path
-    )
-    return build_dataset_from_accesses(
-        eviction_age, access_history_use_counts, accesses
-    )
+def build_dataset_from_accesses(
+    eviction_age: int, model_df: pd.DataFrame
+) -> pd.DataFrame:
+    """
+    Builds training dataset from acccesses trace
+    """
 
-
-def build_dataset_from_accesses(eviction_age, access_history_use_counts, accesses):
     logger.info("#### Start building dataset")
-    dynamicFeatures = dfeature.DynamicFeatures(
-        utils.ACCESS_HISTORY_COUNT, access_history_use_counts
+    # WSML uses a composite key.
+    # e.g. block 1 chunk 1 on host A is different from block 1 chunk 1 on host B
+    logger.info("Computing key")
+    model_df["key"] = (
+        model_df["block_id"]
+        + "|"
+        + model_df["chunk"].astype(str)
+        + "|"
+        + model_df["host_name"]
     )
-    extractor = feature_extractor.FeatureExtractor(
-        eviction_age, CHUNK_SAMPLE_RATIO, dynamicFeatures
+
+    # Compute label
+    logger.info("Creating labels")
+    model_df["label"] = create_labels(
+        model_df["key"],
+        model_df["op_time"],
+        ts_delta_start=timedelta(),
+        ts_delta_end=timedelta(seconds=eviction_age),
     )
-    logger.info("##### Start running feature extractor")
-    extractor.run(accesses)
-    logger.info("###### Finished running feature extractor")
 
-    # create final model based on split train/test, which enables early stopping
-    (labels, features) = extractor.createFeatureTable()
-
-    randIndex = random.sample(range(len(labels)), min(len(labels), MAX_ROWS))
-    model_df = pd.DataFrame(features[randIndex], columns=utils.FEATURES)
-
-    model_df["label"] = labels[randIndex]
-
+    # Featurize
+    logger.info("Computing historical accesses")
+    num_buckets = 6
+    historical_accesses = create_historical_accesses(
+        model_df["key"],
+        model_df["op_time"],
+        timedelta(),
+        timedelta(hours=1),
+        num_buckets,
+    )
+    logger.info("Assigning AH columns")
+    model_df = model_df.assign(
+        **{f"bf_{i}": history for i, history in enumerate(historical_accesses)}
+    )
+    logger.info("Computing 'missSize'")
     model_df["missSize"] = np.sum(
         model_df[[f"bf_{i}" for i in range(0, utils.ACCESS_HISTORY_COUNT)]], axis=1
     )
+
+    # Rename columns to prod format
+    model_df["namespace"] = model_df["user_namespace"]
+    model_df["user"] = model_df["user_name"]
+
+    # Map op_name to prod int mapping
+    op_map = pd.CategoricalDtype(
+        [
+            "getChunkData.Temp",
+            "getChunkData.Permanent",
+            "putChunk.Temp",
+            "putChunk.Permanent",
+            "getChunkData.NotInitialized",
+        ]
+    )
+    model_df["op"] = model_df["op_name"].astype(op_map).cat.codes
+    model_df["op"].loc[
+        model_df["op"] != -1
+    ] += 1  # to match cachelib/scripts/ws_traces/utils.py
+
+    # Drop extra cols
+    cols_to_delete = [
+        col
+        for col in list(model_df.columns)
+        if col not in utils.FEATURES + ["label", "missSize"]
+    ]
+    for col in cols_to_delete:
+        del model_df[col]
 
     return model_df
 
