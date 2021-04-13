@@ -151,11 +151,11 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
   }
 
   if (curTargetRate > maxRate_) {
-    curTargetRate = maxRate_;
     XLOGF(INFO,
           "max write rate {} will be used because target current write rate {} "
           "exceeds it.",
           maxRate_, curTargetRate);
+    curTargetRate = maxRate_;
   }
   params_.curTargetRate = curTargetRate;
 
