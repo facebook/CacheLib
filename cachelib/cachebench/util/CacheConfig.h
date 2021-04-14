@@ -210,7 +210,7 @@ struct CacheConfig : public JSONConfig {
   // The reason we return as a std::any is because the interface is a virtual
   // template class, and the actual type is determined by @allocator in
   // this config.
-  std::function<std::any()> nvmAdmissionPolicyFactory;
+  std::function<std::any(CacheConfig&)> nvmAdmissionPolicyFactory;
 
   // User can implement a structure that polls stats from CacheAllocator
   // and saves the states to a backend/file/place they prefer.

@@ -194,7 +194,7 @@ Cache<Allocator>::Cache(CacheConfig config,
       try {
         nvmAdmissionPolicy_ =
             std::any_cast<std::shared_ptr<NvmAdmissionPolicy<Allocator>>>(
-                config_.nvmAdmissionPolicyFactory());
+                config_.nvmAdmissionPolicyFactory(config_));
         allocatorConfig.setNvmCacheAdmissionPolicy(nvmAdmissionPolicy_);
       } catch (const std::bad_any_cast& e) {
         XLOG(ERR) << "CAST ERROR " << e.what();
