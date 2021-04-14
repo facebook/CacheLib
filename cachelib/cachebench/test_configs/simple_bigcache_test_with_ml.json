@@ -147,7 +147,7 @@
     "mlNvmAdmissionPolicyLocation": "ti/bigcache/learnermodels/cdn.cache-learner.1.nao.lgbm",
     "useTraceTimeStamp": true,
     "printNvmCounters": true,
-    "tickerSynchingSeocnds": 3600
+    "tickerSynchingSeconds": 3600
   },
   "test_config": {
     "enableLookaside": false,
