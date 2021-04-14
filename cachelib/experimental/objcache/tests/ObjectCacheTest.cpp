@@ -688,9 +688,7 @@ TEST(ObjectCache, PersistenceMultipleTypes) {
   using VecStr =
       std::vector<ObjCacheString, LruObjectCache::Alloc<ObjCacheString>>;
   using MapStr = std::map<
-      ObjCacheString,
-      ObjCacheString,
-      std::less<ObjCacheString>,
+      ObjCacheString, ObjCacheString, std::less<ObjCacheString>,
       LruObjectCache::Alloc<std::pair<const ObjCacheString, ObjCacheString>>>;
 
   LruAllocator::Config cacheAllocatorConfig;
@@ -870,8 +868,8 @@ TEST(ObjectCache, PromiseColocateObject) {
   auto sfStr = folly::SemiFuture<ObjCacheString*>::makeEmpty();
   {
     auto [pr, sf] = folly::makePromiseContract<ObjCacheString*>();
-    auto p = objcache->create<StrPromiseWrapper>(
-        0 /* poolId */, "promise str", std::move(pr));
+    auto p = objcache->create<StrPromiseWrapper>(0 /* poolId */, "promise str",
+                                                 std::move(pr));
     sfStr = std::move(sf);
     objcache->insertOrReplace(p);
   }
@@ -931,22 +929,34 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
   });
   auto objcache = createCache(config);
 
-  std::vector<folly::SemiFuture<ObjCacheString*>> semiFutures;
+  std::vector<folly::SemiFuture<
+      std::pair<ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>>>
+      semiFutures;
   {
     auto p = objcache->create<StrPromiseWrapper>(
         0 /* poolId */, "promise str", folly::SharedPromise<ObjCacheString*>{});
     objcache->insertOrReplace(p);
 
+    auto sp = std::move(p).toSharedPtr();
+
     for (int i = 0; i < 3; i++) {
-      semiFutures.push_back(p->promise.getSemiFuture());
+      semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
+          [sp](ObjCacheString* str) mutable
+          -> folly::SemiFuture<
+              std::pair<ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> {
+            return std::make_pair(str, std::move(sp));
+          }));
     }
   }
 
   ObjCacheString someString{"01234567890123456789"};
-  auto readString = [&](folly::SemiFuture<ObjCacheString*> sfStr) {
-    sfStr.wait();
-    EXPECT_EQ(someString, *std::move(sfStr).get());
-  };
+  auto readString =
+      [&](folly::SemiFuture<std::pair<
+              ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> sfStr) {
+        sfStr.wait();
+        auto pair = std::move(sfStr).get();
+        EXPECT_EQ(someString, *pair.first);
+      };
   std::vector<std::thread> ts;
   for (auto& sf : semiFutures) {
     ts.push_back(std::thread{readString, std::move(sf)});
@@ -960,7 +970,79 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
         LruObjectCache::Alloc<ObjCacheString>(p->alloc).allocate(1);
     new (str) ObjCacheString(someString, p->alloc);
     p->obj = str;
+    p->promise.setValue(p->obj);
+  }
 
+  for (auto& t : ts) {
+    t.join();
+  }
+
+  objcache->remove("promise str");
+}
+
+TEST(ObjectCache, SharedPromiseColocateObject2) {
+  using StrPromiseWrapper = SharedPromiseWrapper<ObjCacheString>;
+
+  LruAllocator::Config cacheAllocatorConfig;
+  cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
+  LruObjectCache::Config config;
+  config.setCacheAllocatorConfig(cacheAllocatorConfig);
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+    if (key == "promise str") {
+      getType<StrPromiseWrapper, LruObjectCache::AllocatorResource>(
+          unalignedMem)
+          ->~StrPromiseWrapper();
+    }
+  });
+  auto objcache = createCache(config);
+
+  {
+    auto p = objcache->create<StrPromiseWrapper>(
+        0 /* poolId */, "promise str", folly::SharedPromise<ObjCacheString*>{});
+    objcache->insertOrReplace(p);
+  }
+
+  std::vector<folly::SemiFuture<std::shared_ptr<ObjCacheString>>> semiFutures;
+  {
+    auto p = objcache->find<StrPromiseWrapper>("promise str");
+    auto sp = std::move(p).toSharedPtr();
+
+    for (int i = 0; i < 3; i++) {
+      semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
+          [sp](ObjCacheString* str) mutable
+          -> folly::SemiFuture<std::shared_ptr<ObjCacheString>> {
+            return std::shared_ptr<ObjCacheString>{
+                str, [sp = std::move(sp)](auto /* unused */) {
+                  // once sp goes out of
+                  // scope, the underlying
+                  // item handle will be
+                  // destructed and refcount
+                  // decremented properly
+                }};
+          }));
+    }
+  }
+
+  ObjCacheString someString{"01234567890123456789"};
+  auto readString =
+      [&](folly::SemiFuture<std::shared_ptr<ObjCacheString>> sfStr) {
+        sfStr.wait();
+        auto str = std::move(sfStr).get();
+        EXPECT_EQ(someString, *str);
+      };
+  std::vector<std::thread> ts;
+  for (auto& sf : semiFutures) {
+    ts.push_back(std::thread{readString, std::move(sf)});
+  }
+
+  {
+    auto p = objcache->find<StrPromiseWrapper>("promise str");
+
+    // Create a string backed by the same allocator
+    ObjCacheString* str =
+        LruObjectCache::Alloc<ObjCacheString>(p->alloc).allocate(1);
+    new (str) ObjCacheString(someString, p->alloc);
+    p->obj = str;
     p->promise.setValue(p->obj);
   }
 
