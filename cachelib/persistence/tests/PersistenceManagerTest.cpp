@@ -5,8 +5,10 @@
 
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/tests/NvmTestUtils.h"
 #include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
+#include "cachelib/persistence/PersistenceManager.h"
 #include "cachelib/persistence/tests/PersistenceManagerMock.h"
 
 namespace facebook {
@@ -43,7 +45,8 @@ class PersistenceManagerTest : public ::testing::Test {
   std::set<std::string> cacheSetup(
       std::vector<std::pair<std::string, std::string>> items,
       uint32_t numPools,
-      uint32_t numChained) {
+      uint32_t numChained,
+      bool testNvm) {
     std::set<std::string> evictedKeys;
 
     auto removeCB = [&](const Cache::RemoveCbData& data) {
@@ -83,6 +86,28 @@ class PersistenceManagerTest : public ::testing::Test {
 
       cache.insertOrReplace(handle);
       handle.reset();
+
+      if (testNvm) {
+        EXPECT_TRUE(cache.pushToNvmCacheFromRamForTesting(key));
+        EXPECT_TRUE(cache.removeFromRamForTesting(key));
+        auto res = cache.inspectCache(key);
+        // must not exist in RAM
+        EXPECT_EQ(nullptr, res.first);
+        // must be in nvmcache
+        EXPECT_NE(nullptr, res.second);
+      }
+    }
+
+    if (testNvm) {
+      // for nvm test, do another round of lookup for find evicted items
+      // currently the removeCb doesn't work for Navy
+      evictedKeys.clear();
+      for (uint32_t i = 0; i < items.size(); ++i) {
+        auto res = cache.inspectCache(items[i].first);
+        if (res.second == nullptr) {
+          evictedKeys.insert(items[i].first);
+        }
+      }
     }
     cache.shutDown();
     return evictedKeys;
@@ -131,10 +156,11 @@ class PersistenceManagerTest : public ::testing::Test {
 
   void test(std::vector<std::pair<std::string, std::string>> items,
             uint32_t numPools,
-            uint32_t numChained) {
+            uint32_t numChained,
+            bool testNvm) {
     PersistenceManager manager(config_);
     // setup cache, insert data
-    auto evictedKeys = cacheSetup(items, numPools, numChained);
+    auto evictedKeys = cacheSetup(items, numPools, numChained, testNvm);
     // don't allow too many evicted items
     EXPECT_LE(evictedKeys.size(), items.size() / 2);
 
@@ -178,7 +204,7 @@ class PersistenceManagerTest : public ::testing::Test {
 
 TEST_F(PersistenceManagerTest, testConfigChange) {
   auto items = getKeyValuePairs(3);
-  auto evictedKeys = cacheSetup(items, 1, 0);
+  auto evictedKeys = cacheSetup(items, 1, 0, false);
   {
     PersistenceManager manager(config_);
     MockPersistenceStreamWriter writer(buffer_.get());
@@ -233,24 +259,72 @@ TEST_F(PersistenceManagerTest, testSmallSinglePool) {
   std::string key = "key";
   std::string data = "Repalce the data associated with key key";
   // test single item, one pool
-  test({{key, data}}, 1, 0);
+  test({{key, data}}, 1, 0, false);
 }
 
 TEST_F(PersistenceManagerTest, testSmallMultiplePools) {
   // test three items, two pools
-  test(getKeyValuePairs(3), 2, 0);
+  test(getKeyValuePairs(3), 2, 0, false);
 }
 
 TEST_F(PersistenceManagerTest, testChained) {
   // test three items, three chained item
-  test(getKeyValuePairs(3), 1, 3);
+  test(getKeyValuePairs(3), 1, 3, false);
+}
+
+TEST_F(PersistenceManagerTest, testNvmSingle) {
+  LruAllocator::NvmCacheConfig nvmConfig;
+  // also test if dipper options working
+  nvmConfig.dipperOptions = utils::getNvmTestOptions(cacheDir_);
+  nvmConfig.dipperOptions["dipper_navy_file_name"] = cacheDir_ + "/navy_CACHE";
+  config_.enableNvmCache(nvmConfig);
+
+  // test ten items, three chained item, nvm
+  test(getKeyValuePairs(10), 1, 3, true);
+}
+
+TEST_F(PersistenceManagerTest, testNvmRaidSmall) {
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = utils::getNvmTestConfig(cacheDir_);
+  util::makeDir(cacheDir_ + "/navy");
+
+  nvmConfig.navyConfig.setSimpleFile("", 0);
+  nvmConfig.navyConfig.setRaidFiles(
+      {cacheDir_ + "/navy/CACHE0", cacheDir_ + "/navy/CACHE1",
+       cacheDir_ + "/navy/CACHE2", cacheDir_ + "/navy/CACHE3"},
+      25 * 1024ULL * 1024ULL /*25MB*/);
+
+  config_.enableNvmCache(nvmConfig);
+  // test ten items, three chained item, nvm
+  test(getKeyValuePairs(10), 1, 3, true);
 }
 
 TEST_F(PersistenceManagerTest, testLarge) {
   config_.setCacheSize(kCacheSize * 8); // 800MB
   buffer_->reserve(0, kCapacity * 3);   // 1.2GB
   // test 500k items, 4 pools
-  test(getKeyValuePairs(500 * 1000), 4, 0);
+  test(getKeyValuePairs(500 * 1000), 4, 0, false);
+}
+
+TEST_F(PersistenceManagerTest, testNvmRaidLarge) {
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = utils::getNvmTestConfig(cacheDir_);
+  util::makeDir(cacheDir_ + "/navy");
+
+  // 100MB - 1 byte to test non-fullMB navy file size
+  nvmConfig.navyConfig.setSimpleFile("", 0);
+  nvmConfig.navyConfig.setRaidFiles(
+      {cacheDir_ + "/navy/CACHE0", cacheDir_ + "/navy/CACHE1",
+       cacheDir_ + "/navy/CACHE2", cacheDir_ + "/navy/CACHE3"},
+      100 * 1024ULL * 1024ULL - 1, true);
+
+  nvmConfig.navyConfig.setDeviceMetadataSize(10 * 1024ULL * 1024ULL);
+
+  buffer_->reserve(0, kCapacity * 2);
+
+  config_.enableNvmCache(nvmConfig);
+  // test 100 K items, nvm
+  test(getKeyValuePairs(100 * 1000), 1, 0, true);
 }
 
 TEST_F(PersistenceManagerTest, testCompactCache) {
@@ -309,7 +383,7 @@ TEST_F(PersistenceManagerTest, testCompactCache) {
 TEST_F(PersistenceManagerTest, testWriteFailAndRetry) {
   PersistenceManager manager(config_);
   auto items = getKeyValuePairs(3);
-  auto evictedKeys = cacheSetup(items, 1, 0);
+  auto evictedKeys = cacheSetup(items, 1, 0, false);
 
   {
     // limited buffer size will cause write fail with exception
@@ -342,7 +416,7 @@ TEST_F(PersistenceManagerTest, testWriteFailAndRetry) {
 TEST_F(PersistenceManagerTest, testReadFailAndRetry) {
   PersistenceManager manager(config_);
   auto items = getKeyValuePairs(3);
-  auto evictedKeys = cacheSetup(items, 1, 0);
+  auto evictedKeys = cacheSetup(items, 1, 0, false);
   MockPersistenceStreamWriter writer(buffer_.get());
   manager.saveCache(writer);
   // clean up memory and disk cache data
@@ -377,7 +451,7 @@ TEST_F(PersistenceManagerTest, testReadFailAndRetry) {
 
 TEST_F(PersistenceManagerTest, testCacheDirChange) {
   auto items = getKeyValuePairs(10);
-  auto evictedKeys = cacheSetup(items, 1, 0);
+  auto evictedKeys = cacheSetup(items, 1, 0, false);
   {
     PersistenceManager manager(config_);
     MockPersistenceStreamWriter writer(buffer_.get());
@@ -398,6 +472,35 @@ TEST_F(PersistenceManagerTest, testCacheDirChange) {
     manager.restoreCache(reader);
     // verify restored cache data
     cacheVerify(items, 0, evictedKeys);
+  }
+}
+
+TEST_F(PersistenceManagerTest, testNvmFail) {
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = utils::getNvmTestConfig(cacheDir_);
+  nvmConfig.navyConfig.setSimpleFile(cacheDir_ + "/navy_CACHE",
+                                     nvmConfig.navyConfig.getFileSize());
+  config_.enableNvmCache(nvmConfig);
+
+  auto items = getKeyValuePairs(10);
+  auto evictedKeys = cacheSetup(items, 1, 0, false);
+  {
+    PersistenceManager manager(config_);
+    MockPersistenceStreamWriter writer(buffer_.get());
+    manager.saveCache(writer);
+  }
+
+  cacheCleanup();
+
+  // make coruppted data
+  std::memset(buffer_->writableTail() - kDataBlockSize - 16, 0, 10);
+
+  {
+    PersistenceManager manager(config_);
+    // restore cache
+    MockPersistenceStreamReader reader(buffer_->data(), buffer_->length());
+    ASSERT_THROW_WITH_MSG(manager.restoreCache(reader), std::invalid_argument,
+                          "invalid checksum");
   }
 }
 

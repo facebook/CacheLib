@@ -112,6 +112,29 @@ void PersistenceManager::saveCache(PersistenceStreamWriter& writer) {
   auto shmCache =
       saveShm(writer, PersistenceType::ShmData, detail::kShmCacheName);
 
+  // save navy data
+  {
+    writer.write(DATA_MARK_CHAR);
+
+    int32_t numBlocks =
+        util::getAlignedSize(navyFileSize_, kDataBlockSize) / kDataBlockSize;
+    writer.write(makeHeader(PersistenceType::NavyPartition, navyFileSize_));
+    for (const std::string& file : navyFiles_) {
+      folly::File f(file);
+      for (int32_t i = 0; i < numBlocks; ++i) {
+        DataBlock db;
+        // readFull function read up to kDataBlockSize bytes from file
+        // and return the num of bytes read.
+        auto res = folly::readFull(f.fd(), db.data, kDataBlockSize);
+        CACHELIB_CHECK_THROWF(res != -1, "fail to write file {}, errno: {}",
+                              file, errno);
+        db.header.setLengthAndComputeChecksum(res, db.data);
+        writer.write(
+            folly::IOBuf(CopyBufferOp::COPY_BUFFER, &db, sizeof(DataBlock)));
+      }
+    }
+  }
+
   writer.write(DATA_END_CHAR);
   writer.flush();
 }
@@ -184,6 +207,26 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
                                       *header.length_ref(), nullptr, opts);
       restoreDataFromBlocks(reader, static_cast<uint8_t*>(shm.addr),
                             *header.length_ref());
+      break;
+    }
+    case PersistenceType::NavyPartition: {
+      int32_t navyFileSize = *header.length_ref();
+      int32_t numBlock =
+          util::getAlignedSize(navyFileSize, kDataBlockSize) / kDataBlockSize;
+
+      for (size_t i = 0; i < navyFiles_.size(); ++i) {
+        folly::File f(navyFiles_[i], O_CREAT | O_WRONLY | O_TRUNC);
+        for (int32_t j = 0; j < numBlock; ++j) {
+          auto buf = reader.read(sizeof(DataBlock));
+          CACHELIB_CHECK_THROW(buf.length() == sizeof(DataBlock),
+                               "invalid data");
+          DataBlock db = cast<DataBlock>(buf.data());
+          CACHELIB_CHECK_THROW(db.validate(), "invalid checksum");
+          auto res = folly::writeFull(f.fd(), db.data, db.header.length);
+          CACHELIB_CHECK_THROWF(res != -1, "fail to write file {}, errno: {}",
+                                navyFiles_[i], errno);
+        }
+      }
       break;
     }
     default:
