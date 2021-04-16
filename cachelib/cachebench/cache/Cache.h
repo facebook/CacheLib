@@ -202,42 +202,6 @@ class Cache {
     return it;
   }
 
-  // WARNING: This is internal test only (flash engines), not for users.
-  //          And this is a temporary fix -- we should find some good fix.
-  //          Problem: In flash engines, when we mutate the value of an item
-  //                  (or add a chain to it), the sync will be broken because
-  //                  we only mark the NvmClean bit as dirty but do not remove
-  //                  it from flash. Thus, inconsistency can be caused if a read
-  //                  of the item from flash happens at that time.
-  //          Temporary fix: Whenever we mutate the item, we mark it as dirty
-  //                         and remove it from flash.
-  ItemHandle findForWriteForTest(Key key, AccessMode mode) {
-    if (!cache_->isNvmCacheEnabled()) {
-      return find(key, mode);
-    }
-    auto findFn = [&]() {
-      // find from cache and wait for the result to be ready.
-      auto it = cache_->find(key, mode);
-      it.wait();
-      if (it) {
-        it->unmarkNvmClean();
-        cache_->removeFromNvmForTesting(it->getKey());
-      }
-      return it;
-    };
-
-    if (!consistencyCheckEnabled()) {
-      return findFn();
-    }
-
-    auto opId = valueTracker_->beginGet(key);
-    auto it = findFn();
-    if (checkGet(opId, it)) {
-      invalidKeys_[key.str()].store(true, std::memory_order_acquire);
-    }
-    return it;
-  }
-
   RemoveRes remove(Key key) {
     if (!consistencyCheckEnabled()) {
       return cache_->remove(key);

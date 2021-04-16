@@ -333,7 +333,7 @@ class CacheStressor : public Stressor {
           ++stats.get;
           chainedItemLock(Mode::Exclusive, *key);
           SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
-          auto it = cache_->findForWriteForTest(*key, AccessMode::kRead);
+          auto it = cache_->find(*key, AccessMode::kRead);
           if (!it) {
             ++stats.getMiss;
 
