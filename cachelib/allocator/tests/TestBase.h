@@ -95,11 +95,11 @@ class AllocatorTest : public SlabAllocatorTestBase {
 
   void runSerializationTest(typename AllocatorT::Config config);
 
-  void testInfoShmIsRemoved(typename AllocatorT::Config config);
+  static void testInfoShmIsRemoved(typename AllocatorT::Config config);
 
-  void testShmIsRemoved(typename AllocatorT::Config config);
+  static void testShmIsRemoved(typename AllocatorT::Config config);
 
-  void testShmIsNotRemoved(typename AllocatorT::Config config);
+  static void testShmIsNotRemoved(typename AllocatorT::Config config);
 
   const std::string cacheDir_;
 

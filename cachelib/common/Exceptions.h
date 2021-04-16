@@ -3,6 +3,26 @@
 #include <stdexcept>
 #include <string>
 
+#ifndef CACHELIB_CHECK_THROW
+#define CACHELIB_CHECK_THROW(cond, msg)          \
+  do {                                           \
+    if (UNLIKELY(!(cond))) {                     \
+      XLOG(ERR, "CHECK FAILED: " #cond "," msg); \
+      throw std::invalid_argument(msg);          \
+    }                                            \
+  } while (0)
+#endif
+
+#ifndef CACHELIB_CHECK_THROWF
+#define CACHELIB_CHECK_THROWF(cond, fmt, arg1, ...)                          \
+  do {                                                                       \
+    if (UNLIKELY(!(cond))) {                                                 \
+      XLOGF(ERR, "CHECK FAILED: " #cond "," fmt, arg1, ##__VA_ARGS__);       \
+      throw std::invalid_argument(folly::sformat(fmt, arg1, ##__VA_ARGS__)); \
+    }                                                                        \
+  } while (0)
+#endif
+
 namespace facebook {
 namespace cachelib {
 namespace exception {

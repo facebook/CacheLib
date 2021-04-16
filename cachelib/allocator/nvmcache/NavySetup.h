@@ -5,6 +5,12 @@
 #include "cachelib/navy/AbstractCache.h"
 namespace facebook {
 namespace cachelib {
+// returns true if navy config is single file
+bool usesSimpleFile(const folly::dynamic& options);
+
+// returns true if navy config is raid multile files
+bool usesRaidFiles(const folly::dynamic& options);
+
 // return a navy cache which is created by CacheProto whose data is from
 // dipperOptions (to be deprecated).
 std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
@@ -36,5 +42,21 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
 std::unique_ptr<cachelib::navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
+
+// validate file/raid paths config options, throws std::invalid_argument if
+// anything is invalid
+void validatePathConfig(const folly::dynamic& options);
+
+// returns navy file path
+// use only when usesSimpleFile() returns true
+std::string getNavyFilePath(const folly::dynamic& options);
+
+// returns ordered navy raid paths
+// use only when usesRaidFiles() returns true
+std::vector<std::string> getNavyRaidPaths(const folly::dynamic& options);
+
+// returns navy file size
+uint64_t getNavyFileSize(const folly::dynamic& options);
+
 } // namespace cachelib
 } // namespace facebook

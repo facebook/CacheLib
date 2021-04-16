@@ -74,16 +74,6 @@ uint64_t alignUp(uint64_t num, uint64_t alignment) {
   return alignDown(num + alignment - 1, alignment);
 }
 
-bool usesSimpleFile(const folly::dynamic& options) {
-  auto fileName = options.get_ptr(kFileName);
-  return fileName && !fileName->getString().empty();
-}
-
-bool usesRaidFiles(const folly::dynamic& options) {
-  auto raidPaths = options.get_ptr(kRAIDPaths);
-  return raidPaths && (raidPaths->size() > 0);
-}
-
 // Open cache file @fileName and set it size to @size.
 // Throws std::system_error if failed.
 folly::File openCacheFile(const std::string& fileName,
@@ -411,16 +401,21 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 }
 } // namespace
 
+bool usesSimpleFile(const folly::dynamic& options) {
+  auto fileName = options.get_ptr(kFileName);
+  return fileName && !fileName->getString().empty();
+}
+
+bool usesRaidFiles(const folly::dynamic& options) {
+  auto raidPaths = options.get_ptr(kRAIDPaths);
+  return raidPaths && (raidPaths->size() > 0);
+}
+
 std::unique_ptr<cachelib::navy::Device> createDevice(
     const folly::dynamic& options,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
-  if (usesRaidFiles(options) && usesSimpleFile(options)) {
-    throw std::invalid_argument("Can't use raid and simple file together");
-  }
+  validatePathConfig(options);
 
-  if (usesRaidFiles(options) && options.get_ptr(kRAIDPaths)->size() <= 1) {
-    throw std::invalid_argument("Raid needs more than one path");
-  }
   auto blockSize = options[kBlockSize].getInt();
   auto maxDeviceWriteSize = options.getDefault(kMaxDeviceWriteSize, 0).getInt();
   if (maxDeviceWriteSize > 0) {
@@ -428,20 +423,9 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   };
 
   if (usesRaidFiles(options)) {
-    auto raidPaths = options.get_ptr(kRAIDPaths);
+    const auto paths = getNavyRaidPaths(options);
 
-    // File paths are opened in the increasing order of the
-    // path string. This ensures that RAID0 stripes aren't
-    // out of order even if the caller changes the order of
-    // the file paths. We can recover the cache as long as all
-    // the paths are specified, regardless of the order.
-    std::vector<std::string> paths;
-    for (const auto& file : *raidPaths) {
-      paths.push_back(file.getString());
-    }
-    std::sort(paths.begin(), paths.end());
-
-    auto fdSize = static_cast<uint64_t>(options[kFileSize].getInt());
+    auto fdSize = getNavyFileSize(options);
     std::vector<folly::File> fileVec;
     for (const auto& path : paths) {
       folly::File f;
@@ -469,13 +453,12 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     return device;
   }
 
-  const auto singleFileSize = options[kFileSize].getInt();
+  const auto singleFileSize = getNavyFileSize(options);
   if (usesSimpleFile(options)) {
     // Create a simple file device
-    auto fileName = options.get_ptr(kFileName);
     folly::File f;
     try {
-      f = openCacheFile(fileName->getString(),
+      f = openCacheFile(getNavyFilePath(options),
                         singleFileSize,
                         options[kTruncateFile].getBool());
     } catch (const std::exception& e) {
@@ -647,6 +630,46 @@ uint64_t getSmallItemThreshold(const folly::dynamic& options,
   } else {
     return options.getDefault(kSmallItemMaxSize, 0).getInt();
   }
+}
+
+void validatePathConfig(const folly::dynamic& options) {
+  if (usesRaidFiles(options) && usesSimpleFile(options)) {
+    throw std::invalid_argument("Can't use raid and simple file together");
+  }
+
+  if (usesRaidFiles(options) && options.get_ptr(kRAIDPaths)->size() <= 1) {
+    throw std::invalid_argument("Raid needs more than one path");
+  }
+}
+
+std::string getNavyFilePath(const folly::dynamic& options) {
+  if (!usesSimpleFile(options)) {
+    throw std::invalid_argument("Simple file is not used, can't get it's path");
+  }
+  return options.get_ptr(kFileName)->getString();
+}
+
+std::vector<std::string> getNavyRaidPaths(const folly::dynamic& options) {
+  if (!usesRaidFiles(options)) {
+    throw std::invalid_argument("Raid file is not used, can't get it's path");
+  }
+  auto raidPaths = options.get_ptr(kRAIDPaths);
+
+  // File paths are opened in the increasing order of the
+  // path string. This ensures that RAID0 stripes aren't
+  // out of order even if the caller changes the order of
+  // the file paths. We can recover the cache as long as all
+  // the paths are specified, regardless of the order.
+  std::vector<std::string> paths;
+  for (const auto& file : *raidPaths) {
+    paths.push_back(file.getString());
+  }
+  std::sort(paths.begin(), paths.end());
+  return paths;
+}
+
+uint64_t getNavyFileSize(const folly::dynamic& options) {
+  return static_cast<uint64_t>(options[kFileSize].getInt());
 }
 
 } // namespace cachelib

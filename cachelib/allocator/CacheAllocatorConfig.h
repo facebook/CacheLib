@@ -315,6 +315,12 @@ class CacheAllocatorConfig {
 
   const std::string& getCacheDir() const noexcept { return cacheDir; }
 
+  const std::string& getCacheName() const noexcept { return cacheName; }
+
+  size_t getCacheSize() const noexcept { return size; }
+
+  bool isUsingPosixShm() const noexcept { return usePosixShm; }
+
   // validate the config, and return itself if valid
   const CacheAllocatorConfig& validate() const {
     // we can track tail hits only if MMType is MM2Q

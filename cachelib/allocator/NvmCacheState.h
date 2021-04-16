@@ -20,6 +20,12 @@ class NvmCacheState {
   // @return a std::string with the path for the control file
   static std::string getFileForNvmCacheDrop(folly::StringPiece cacheDir);
 
+  // cacheDir/NvmCacheState, file that store NVM cache meta data.
+  // @param  cacheDir   the directory we use for the cache state
+  //
+  // @return a std::string with the path for the NvmCacheState file
+  static std::string getNvmCacheStateFilePath(folly::StringPiece cacheDir);
+
   // Intialize the object for the cacheDir.
   explicit NvmCacheState(const std::string& cacheDir,
                          bool encryptionEnabled,

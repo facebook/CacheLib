@@ -52,6 +52,11 @@ void saveMetadata(const folly::File& file,
 }
 } // namespace
 
+std::string NvmCacheState::getNvmCacheStateFilePath(
+    folly::StringPiece cacheDir) {
+  return constructFilePath(cacheDir, kNvmCacheState);
+}
+
 NvmCacheState::NvmCacheState(const std::string& cacheDir,
                              bool encryptionEnabled,
                              bool truncateAllocSize)
