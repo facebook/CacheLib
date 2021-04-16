@@ -108,6 +108,10 @@ void PersistenceManager::saveCache(PersistenceStreamWriter& writer) {
   auto shmChainedHT = saveShm(writer, PersistenceType::ShmChainedItemHT,
                               detail::kShmChainedItemHashTableName);
 
+  // save /dev/shm/shm_cache to multiple data blocks
+  auto shmCache =
+      saveShm(writer, PersistenceType::ShmData, detail::kShmCacheName);
+
   writer.write(DATA_END_CHAR);
   writer.flush();
 }
@@ -171,6 +175,15 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
       auto shm =
           shmManager.createShm(detail::kShmChainedItemHashTableName, dataLen);
       restoreDataFromBlocks(reader, static_cast<uint8_t*>(shm.addr), dataLen);
+      break;
+    }
+    case PersistenceType::ShmData: {
+      ShmSegmentOpts opts;
+      opts.alignment = sizeof(Slab); // 4MB
+      auto shm = shmManager.createShm(detail::kShmCacheName,
+                                      *header.length_ref(), nullptr, opts);
+      restoreDataFromBlocks(reader, static_cast<uint8_t*>(shm.addr),
+                            *header.length_ref());
       break;
     }
     default:

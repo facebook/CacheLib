@@ -32,3 +32,15 @@ std::string getRandomAsciiStr(unsigned int len);
 
 #define ASSERT_EVENTUALLY_TRUE(fn, ...) \
   ASSERT_TRUE(facebook::cachelib::test_util::eventuallyTrue(fn, ##__VA_ARGS__))
+
+#ifndef ASSERT_THROW_WITH_MSG
+#define ASSERT_THROW_WITH_MSG(statement, exception, msg)     \
+  do {                                                       \
+    try {                                                    \
+      statement;                                             \
+      ASSERT_TRUE(false) << "Exception not raised: " << msg; \
+    } catch (const exception& e) {                           \
+      ASSERT_STREQ(msg, e.what());                           \
+    }                                                        \
+  } while (0)
+#endif

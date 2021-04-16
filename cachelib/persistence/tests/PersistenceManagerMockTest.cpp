@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/common/TestUtils.h"
 #include "cachelib/persistence/PersistenceManager.h"
 #include "cachelib/persistence/tests/PersistenceManagerMock.h"
 
@@ -121,7 +122,8 @@ TEST_F(PersistenceManagerMockTest, testWriteFail) {
     writer.ExpectCallAt(
         Invoke([&](folly::IOBuf) { throw std::runtime_error("mock error"); }),
         5); // the fifth write call throws exception
-    EXPECT_THROW(manager.saveCache(writer), std::runtime_error);
+    ASSERT_THROW_WITH_MSG(manager.saveCache(writer), std::runtime_error,
+                          "mock error");
     ASSERT_EQ(bufs.size(), 4);
   }
 
@@ -133,13 +135,14 @@ TEST_F(PersistenceManagerMockTest, testWriteFail) {
     writer.ExpectCallAt(
         Invoke([&](folly::IOBuf) { throw std::runtime_error("mock error"); }),
         9); // the ninth write call throws exception
-    EXPECT_THROW(manager.saveCache(writer), std::runtime_error);
+    ASSERT_THROW_WITH_MSG(manager.saveCache(writer), std::runtime_error,
+                          "mock error");
     ASSERT_EQ(bufs.size(), 8);
   }
 }
 
 TEST_F(PersistenceManagerMockTest, testRestoreCache) {
-  std::unique_ptr<folly::IOBuf> buffer = folly::IOBuf::create(10 * 1024 * 1024);
+  std::unique_ptr<folly::IOBuf> buffer = folly::IOBuf::create(kCacheSize * 2);
   {
     Cache cache(Cache::SharedMemNew, config_);
     cache.shutDown();
@@ -158,7 +161,8 @@ TEST_F(PersistenceManagerMockTest, testRestoreCache) {
     reader.ExpectCharCallAt(
         Invoke([&]() -> char { return PersistenceManager::DATA_BEGIN_CHAR; }),
         2);
-    EXPECT_THROW(manager.restoreCache(reader), std::invalid_argument);
+    ASSERT_THROW_WITH_MSG(manager.restoreCache(reader), std::invalid_argument,
+                          "Unknown character: \x1C"); // DATA_BEGIN_CHAR
   }
 
   {
@@ -169,19 +173,15 @@ TEST_F(PersistenceManagerMockTest, testRestoreCache) {
                           throw std::runtime_error("mock error");
                         }),
                         5); // the fifth read call throws exception
-    EXPECT_THROW(manager.restoreCache(reader), std::runtime_error);
+    ASSERT_THROW_WITH_MSG(manager.restoreCache(reader), std::runtime_error,
+                          "mock error");
   }
 
   {
     PersistenceManager manager(config_);
     MockPersistenceStreamReader reader(buffer->data(), buffer->length());
     manager.restoreCache(reader);
-    try {
-      // since not cache data, we expected exception
-      Cache cache(Cache::SharedMemAttach, config_);
-    } catch (const std::invalid_argument& e) {
-      ASSERT_STREQ("Unable to find any segment with name shm_cache", e.what());
-    }
+    Cache cache(Cache::SharedMemAttach, config_);
   }
 }
 

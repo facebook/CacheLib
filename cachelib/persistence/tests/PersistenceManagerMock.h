@@ -93,6 +93,7 @@ class MockPersistenceStreamWriterImpl : public PersistenceStreamWriter {
         capacity_(capacity),
         writeAction(Invoke([&](auto&& buf) { writeImpl(std::move(buf)); })),
         writeCharAction(Invoke([&](char c) { writeImpl(c); })) {
+    buf_->clear();
     ON_CALL(*this, write(An<folly::IOBuf>())).WillByDefault(writeAction);
     ON_CALL(*this, write(An<char>())).WillByDefault(writeCharAction);
     ON_CALL(*this, flush()).WillByDefault(Invoke([&]() { flushImpl(); }));
