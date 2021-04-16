@@ -23,6 +23,7 @@ clang-format on
 */
 
 #include <folly/Benchmark.h>
+#include <folly/BenchmarkUtil.h>
 #include <folly/init/Init.h>
 
 #include <chrono>
@@ -31,42 +32,14 @@ clang-format on
 #include <thread>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/benchmarks/BenchmarkUtils.h"
 #include "cachelib/common/BytesEqual.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/testing/SeqPoints.h"
-#include "folly/BenchmarkUtil.h"
 
 namespace facebook {
 namespace cachelib {
 namespace {
-class Timer {
- public:
-  explicit Timer(std::string name, uint64_t ops)
-      : name_{std::move(name)}, ops_{ops} {
-    startTime_ = std::chrono::system_clock::now();
-    startCycles_ = __rdtsc();
-  }
-  ~Timer() {
-    endTime_ = std::chrono::system_clock::now();
-    endCycles_ = __rdtsc();
-
-    std::chrono::nanoseconds durationTime = endTime_ - startTime_;
-    uint64_t durationCycles = endCycles_ - startCycles_;
-    std::cout << folly::sformat("[{: <60}] Per-Op: {: <5} ns, {: <5} cycles",
-                                name_, durationTime.count() / ops_,
-                                durationCycles / ops_)
-              << std::endl;
-  }
-
- private:
-  const std::string name_;
-  const uint64_t ops_;
-  std::chrono::time_point<std::chrono::system_clock> startTime_;
-  std::chrono::time_point<std::chrono::system_clock> endTime_;
-  uint64_t startCycles_;
-  uint64_t endCycles_;
-};
-
 template <size_t PayloadSize>
 struct ObjectImpl {
   explicit ObjectImpl(std::string k) : key(std::move(k)) {}
@@ -365,24 +338,24 @@ int main(int argc, char** argv) {
   folly::init(&argc, &argv);
 
   // clang-format off
-  std::cout << "---- Benchmark Starting Now --------------\n";
+  printMsg("Benchmark Starting Now");
 
   // These benchmarks are trying to compare the performance between
   // different lock implementation, and also variou alignment on locks
-  std::cout << "---- Bucket + SharedMutex ----------------\n";
+  printMsg("Bucket + SharedMutex");
   testSequential<Bucket, SharedMutex>(16, 24, 10, 1'000'000);
   testBatch<Bucket, SharedMutex, 16>(16, 24, 10, 1'000'000, true);
-  std::cout << "---- Bucket + SharedMutexAligned ----------------\n";
+  printMsg("Bucket + SharedMutexAligned");
   testSequential<Bucket, SharedMutexAligned>(16, 24, 10, 1'000'000);
   testBatch<Bucket, SharedMutexAligned, 16>(16, 24, 10, 1'000'000, true);
-  std::cout << "---- Bucket + SpinLock -------------------\n";
+  printMsg("Bucket + SpinLock");
   testSequential<Bucket, SpinLock>(16, 24, 10, 1'000'000);
   testSequential<Bucket, SpinLock>(16, 24, 16, 1'000'000);
   testSequential<Bucket, SpinLock>(16, 24, 20, 1'000'000);
   testBatch<Bucket, SpinLock, 16>(16, 24, 10, 1'000'000, true);
   testBatch<Bucket, SpinLock, 16>(16, 24, 16, 1'000'000, true);
   testBatch<Bucket, SpinLock, 16>(16, 24, 20, 1'000'000, true);
-  std::cout << "---- Bucket + SpinLockAligned -------------------\n";
+  printMsg("Bucket + SpinLockAligned");
   testSequential<Bucket, SpinLockAligned>(16, 24, 10, 1'000'000);
   testSequential<Bucket, SpinLockAligned>(16, 24, 16, 1'000'000);
   testSequential<Bucket, SpinLockAligned>(16, 24, 20, 1'000'000);
@@ -392,7 +365,7 @@ int main(int argc, char** argv) {
 
   // These benchmarks compare how sequential mode performs with different
   // amount of objects
-  std::cout << "---- Different Object Sizes ---\n";
+  printMsg("Different Object Sizes");
   testSequential<Bucket, SharedMutex>(1, 14, 10, 1000);
   testSequential<Bucket, SharedMutex>(1, 14, 10, 10'000);
   testSequential<Bucket, SharedMutex>(1, 16, 10, 10'000);
@@ -404,7 +377,7 @@ int main(int argc, char** argv) {
   testSequential<Bucket, SharedMutex>(1, 26, 10, 10'000'000);
 
   // These bnechmarks compare the different prefetching batch sizes
-  std::cout << "---- Different Prefetching Batch Sizes ---\n";
+  printMsg("Different Prefetching Batch Sizes");
   testBatch<Bucket, SharedMutex, 1>(16, 24, 10, 1'000'000, true);
   testBatch<Bucket, SharedMutex, 2>(16, 24, 10, 1'000'000, true);
   testBatch<Bucket, SharedMutex, 4>(16, 24, 10, 1'000'000, true);
@@ -421,7 +394,7 @@ int main(int argc, char** argv) {
   // These benchmarks compare how sequential and batch modes perform with
   // different object sizes and different hashtable sizes. In addition,
   // we also compare against a hashtable with key embedded
-  std::cout << "---- Sequential vs. Prefetching ----------\n";
+  printMsg("Sequential vs. Prefetching");
   for (auto t : {1, 4, 16}) {
     for (auto b : {24, 26}) {
       for (auto o : {100'000, 1'000'000, 10'000'000}) {
@@ -434,7 +407,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::cout << "---- Benchmark Ended ---------------------\n";
+  printMsg("Becnhmarks have completed");
   // clang-format on
 }
 
@@ -467,141 +440,141 @@ L2 cache:            1024K
 L3 cache:            25344K
 NUMA node0 CPU(s):   0-35
 
----- Benchmark Starting Now --------------
----- Bucket + SharedMutex ----------------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 345   ns, 551   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 289   ns, 461   cycles
----- Bucket + SharedMutexAligned ----------------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 346   ns, 552   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 224   ns, 357   cycles
----- Bucket + SpinLock -------------------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 500   ns, 799   cycles
-[Sequential_reg - 16 T, 24 HB, 16 HL, 1000000  Objects       ] Per-Op: 440   ns, 703   cycles
-[Sequential_reg - 16 T, 24 HB, 20 HL, 1000000  Objects       ] Per-Op: 505   ns, 806   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 324   ns, 517   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 16 HL, 1000000  Objects   ] Per-Op: 290   ns, 463   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 20 HL, 1000000  Objects   ] Per-Op: 289   ns, 461   cycles
----- Bucket + SpinLockAligned -------------------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 453   ns, 724   cycles
-[Sequential_reg - 16 T, 24 HB, 16 HL, 1000000  Objects       ] Per-Op: 510   ns, 815   cycles
-[Sequential_reg - 16 T, 24 HB, 20 HL, 1000000  Objects       ] Per-Op: 527   ns, 841   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 251   ns, 401   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 16 HL, 1000000  Objects   ] Per-Op: 290   ns, 463   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 20 HL, 1000000  Objects   ] Per-Op: 269   ns, 429   cycles
----- Different Object Sizes ---
-[Sequential_reg - 1  T, 14 HB, 10 HL, 1000     Objects       ] Per-Op: 85    ns, 136   cycles
-[Sequential_reg - 1  T, 14 HB, 10 HL, 10000    Objects       ] Per-Op: 112   ns, 179   cycles
-[Sequential_reg - 1  T, 16 HB, 10 HL, 10000    Objects       ] Per-Op: 104   ns, 166   cycles
-[Sequential_reg - 1  T, 16 HB, 10 HL, 100000   Objects       ] Per-Op: 368   ns, 587   cycles
-[Sequential_reg - 1  T, 20 HB, 10 HL, 100000   Objects       ] Per-Op: 326   ns, 521   cycles
-[Sequential_reg - 1  T, 20 HB, 10 HL, 1000000  Objects       ] Per-Op: 505   ns, 807   cycles
-[Sequential_reg - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 351   ns, 560   cycles
-[Sequential_reg - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 610   ns, 975   cycles
-[Sequential_reg - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 588   ns, 938   cycles
----- Different Prefetching Batch Sizes ---
-[Pretch_reg - 1    B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 1445  ns, 2307  cycles
-[Pretch_reg - 2    B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 815   ns, 1301  cycles
-[Pretch_reg - 4    B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 403   ns, 644   cycles
-[Pretch_reg - 8    B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 281   ns, 448   cycles
-[Pretch_reg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 281   ns, 448   cycles
-[Pretch_reg - 32   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 245   ns, 392   cycles
-[Pretch_reg - 64   B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 260   ns, 415   cycles
-[Pretch_reg - 128  B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 288   ns, 460   cycles
-[Pretch_reg - 256  B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 280   ns, 447   cycles
-[Pretch_reg - 1024 B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 318   ns, 507   cycles
-[Pretch_reg - 4096 B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 390   ns, 622   cycles
-[Pretch_reg - 8192 B, 16 T, 24 HB, 10 HL, 1000000  Objects   ] Per-Op: 429   ns, 686   cycles
----- Sequential vs. Prefetching ----------
+-------- Benchmark Starting Now --------------------------------------------------------------------
+-------- Bucket + SharedMutex ----------------------------------------------------------------------
+[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 310   ns, 495   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 191   ns, 305   cycles
+-------- Bucket + SharedMutexAligned ---------------------------------------------------------------
+[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 308   ns, 491   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 192   ns, 306   cycles
+-------- Bucket + SpinLock -------------------------------------------------------------------------
+[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 431   ns, 689   cycles
+[Sequential_reg - 16 T, 24 HB, 16 HL, 1000000  Objects       ] Per-Op: 367   ns, 586   cycles
+[Sequential_reg - 16 T, 24 HB, 20 HL, 1000000  Objects       ] Per-Op: 361   ns, 576   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 280   ns, 447   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 16 HL, 1000000  Objects  ] Per-Op: 204   ns, 325   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 20 HL, 1000000  Objects  ] Per-Op: 209   ns, 334   cycles
+-------- Bucket + SpinLockAligned ------------------------------------------------------------------
+[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 368   ns, 588   cycles
+[Sequential_reg - 16 T, 24 HB, 16 HL, 1000000  Objects       ] Per-Op: 403   ns, 644   cycles
+[Sequential_reg - 16 T, 24 HB, 20 HL, 1000000  Objects       ] Per-Op: 424   ns, 677   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 205   ns, 327   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 16 HL, 1000000  Objects  ] Per-Op: 217   ns, 346   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 20 HL, 1000000  Objects  ] Per-Op: 222   ns, 355   cycles
+-------- Different Object Sizes --------------------------------------------------------------------
+[Sequential_reg - 1  T, 14 HB, 10 HL, 1000     Objects       ] Per-Op: 82    ns, 132   cycles
+[Sequential_reg - 1  T, 14 HB, 10 HL, 10000    Objects       ] Per-Op: 100   ns, 160   cycles
+[Sequential_reg - 1  T, 16 HB, 10 HL, 10000    Objects       ] Per-Op: 90    ns, 144   cycles
+[Sequential_reg - 1  T, 16 HB, 10 HL, 100000   Objects       ] Per-Op: 195   ns, 311   cycles
+[Sequential_reg - 1  T, 20 HB, 10 HL, 100000   Objects       ] Per-Op: 183   ns, 292   cycles
+[Sequential_reg - 1  T, 20 HB, 10 HL, 1000000  Objects       ] Per-Op: 367   ns, 586   cycles
+[Sequential_reg - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 304   ns, 485   cycles
+[Sequential_reg - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 398   ns, 636   cycles
+[Sequential_reg - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 359   ns, 573   cycles
+-------- Different Prefetching Batch Sizes ---------------------------------------------------------
+[Prefetchreg - 1    B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 1456  ns, 2325  cycles
+[Prefetchreg - 2    B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 743   ns, 1187  cycles
+[Prefetchreg - 4    B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 375   ns, 599   cycles
+[Prefetchreg - 8    B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 214   ns, 342   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 196   ns, 313   cycles
+[Prefetchreg - 32   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 190   ns, 304   cycles
+[Prefetchreg - 64   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 186   ns, 298   cycles
+[Prefetchreg - 128  B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 187   ns, 298   cycles
+[Prefetchreg - 256  B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 186   ns, 297   cycles
+[Prefetchreg - 1024 B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 203   ns, 324   cycles
+[Prefetchreg - 4096 B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 228   ns, 365   cycles
+[Prefetchreg - 8192 B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 243   ns, 389   cycles
+-------- Sequential vs. Prefetching ----------------------------------------------------------------
 --------
-[Sequential_reg - 1  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 320   ns, 512   cycles
-[Sequential_key - 1  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 296   ns, 472   cycles
-[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 179   ns, 286   cycles
-[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 193   ns, 308   cycles
+[Sequential_reg - 1  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 174   ns, 278   cycles
+[Sequential_key - 1  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 116   ns, 185   cycles
+[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 106   ns, 169   cycles
+[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 98    ns, 157   cycles
 --------
-[Sequential_reg - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 445   ns, 711   cycles
-[Sequential_key - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 286   ns, 456   cycles
-[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 259   ns, 414   cycles
-[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 255   ns, 407   cycles
+[Sequential_reg - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 304   ns, 485   cycles
+[Sequential_key - 1  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 194   ns, 309   cycles
+[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 168   ns, 268   cycles
+[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 168   ns, 269   cycles
 --------
-[Sequential_reg - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 685   ns, 1094  cycles
-[Sequential_key - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 374   ns, 597   cycles
-[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 481   ns, 768   cycles
-[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 411   ns, 657   cycles
+[Sequential_reg - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 397   ns, 635   cycles
+[Sequential_key - 1  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 246   ns, 393   cycles
+[Prefetchreg - 16   B, 1  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 307   ns, 490   cycles
+[Prefetchkey - 16   B, 1  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 249   ns, 398   cycles
 --------
-[Sequential_reg - 1  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 426   ns, 680   cycles
-[Sequential_key - 1  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 324   ns, 517   cycles
-[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 231   ns, 369   cycles
-[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 254   ns, 406   cycles
+[Sequential_reg - 1  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 175   ns, 279   cycles
+[Sequential_key - 1  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 126   ns, 201   cycles
+[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 100   ns, 160   cycles
+[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 103   ns, 165   cycles
 --------
-[Sequential_reg - 1  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 507   ns, 810   cycles
-[Sequential_key - 1  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 313   ns, 501   cycles
-[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 305   ns, 487   cycles
-[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 309   ns, 493   cycles
+[Sequential_reg - 1  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 315   ns, 503   cycles
+[Sequential_key - 1  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 215   ns, 343   cycles
+[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 186   ns, 297   cycles
+[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 192   ns, 307   cycles
 --------
-[Sequential_reg - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 626   ns, 1000  cycles
-[Sequential_key - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 364   ns, 581   cycles
-[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 435   ns, 694   cycles
-[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 377   ns, 602   cycles
+[Sequential_reg - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 373   ns, 595   cycles
+[Sequential_key - 1  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 233   ns, 372   cycles
+[Prefetchreg - 16   B, 1  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 294   ns, 470   cycles
+[Prefetchkey - 16   B, 1  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 258   ns, 411   cycles
 --------
-[Sequential_reg - 4  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 286   ns, 456   cycles
-[Sequential_key - 4  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 229   ns, 365   cycles
-[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 169   ns, 270   cycles
-[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 170   ns, 272   cycles
+[Sequential_reg - 4  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 156   ns, 250   cycles
+[Sequential_key - 4  T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 113   ns, 181   cycles
+[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 106   ns, 170   cycles
+[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 122   ns, 196   cycles
 --------
-[Sequential_reg - 4  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 351   ns, 561   cycles
-[Sequential_key - 4  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 247   ns, 395   cycles
-[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 228   ns, 364   cycles
-[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 246   ns, 392   cycles
+[Sequential_reg - 4  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 303   ns, 484   cycles
+[Sequential_key - 4  T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 196   ns, 313   cycles
+[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 188   ns, 301   cycles
+[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 196   ns, 314   cycles
 --------
-[Sequential_reg - 4  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 516   ns, 823   cycles
-[Sequential_key - 4  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 342   ns, 546   cycles
-[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 384   ns, 614   cycles
-[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 337   ns, 538   cycles
+[Sequential_reg - 4  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 432   ns, 690   cycles
+[Sequential_key - 4  T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 270   ns, 431   cycles
+[Prefetchreg - 16   B, 4  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 310   ns, 495   cycles
+[Prefetchkey - 16   B, 4  T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 275   ns, 439   cycles
 --------
-[Sequential_reg - 4  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 332   ns, 531   cycles
-[Sequential_key - 4  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 242   ns, 386   cycles
-[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 190   ns, 304   cycles
-[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 193   ns, 309   cycles
+[Sequential_reg - 4  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 171   ns, 273   cycles
+[Sequential_key - 4  T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 189   ns, 303   cycles
+[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 108   ns, 173   cycles
+[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 110   ns, 176   cycles
 --------
-[Sequential_reg - 4  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 386   ns, 617   cycles
-[Sequential_key - 4  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 275   ns, 439   cycles
-[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 246   ns, 392   cycles
-[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 261   ns, 417   cycles
+[Sequential_reg - 4  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 311   ns, 496   cycles
+[Sequential_key - 4  T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 222   ns, 355   cycles
+[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 185   ns, 296   cycles
+[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 284   ns, 454   cycles
 --------
-[Sequential_reg - 4  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 487   ns, 778   cycles
-[Sequential_key - 4  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 301   ns, 481   cycles
-[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 348   ns, 556   cycles
-[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 311   ns, 496   cycles
+[Sequential_reg - 4  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 369   ns, 590   cycles
+[Sequential_key - 4  T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 247   ns, 394   cycles
+[Prefetchreg - 16   B, 4  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 273   ns, 437   cycles
+[Prefetchkey - 16   B, 4  T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 257   ns, 411   cycles
 --------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 368   ns, 588   cycles
-[Sequential_key - 16 T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 284   ns, 453   cycles
-[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 211   ns, 336   cycles
-[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 224   ns, 358   cycles
+[Sequential_reg - 16 T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 166   ns, 265   cycles
+[Sequential_key - 16 T, 24 HB, 10 HL, 100000   Objects       ] Per-Op: 221   ns, 354   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 119   ns, 190   cycles
+[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 100000   Objects  ] Per-Op: 157   ns, 250   cycles
 --------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 462   ns, 737   cycles
-[Sequential_key - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 428   ns, 683   cycles
-[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 272   ns, 435   cycles
-[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 336   ns, 537   cycles
+[Sequential_reg - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 306   ns, 489   cycles
+[Sequential_key - 16 T, 24 HB, 10 HL, 1000000  Objects       ] Per-Op: 204   ns, 327   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 269   ns, 429   cycles
+[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 1000000  Objects  ] Per-Op: 193   ns, 308   cycles
 --------
-[Sequential_reg - 16 T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 645   ns, 1030  cycles
-[Sequential_key - 16 T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 442   ns, 706   cycles
-[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 389   ns, 621   cycles
-[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 388   ns, 620   cycles
+[Sequential_reg - 16 T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 419   ns, 668   cycles
+[Sequential_key - 16 T, 24 HB, 10 HL, 10000000 Objects       ] Per-Op: 270   ns, 432   cycles
+[Prefetchreg - 16   B, 16 T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 311   ns, 496   cycles
+[Prefetchkey - 16   B, 16 T, 24 HB, 10 HL, 10000000 Objects  ] Per-Op: 284   ns, 453   cycles
 --------
-[Sequential_reg - 16 T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 436   ns, 696   cycles
-[Sequential_key - 16 T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 333   ns, 532   cycles
-[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 225   ns, 359   cycles
-[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 271   ns, 432   cycles
+[Sequential_reg - 16 T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 239   ns, 381   cycles
+[Sequential_key - 16 T, 26 HB, 10 HL, 100000   Objects       ] Per-Op: 187   ns, 299   cycles
+[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 120   ns, 192   cycles
+[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 100000   Objects  ] Per-Op: 119   ns, 191   cycles
 --------
-[Sequential_reg - 16 T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 485   ns, 775   cycles
-[Sequential_key - 16 T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 454   ns, 725   cycles
-[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 312   ns, 498   cycles
-[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 318   ns, 507   cycles
+[Sequential_reg - 16 T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 320   ns, 511   cycles
+[Sequential_key - 16 T, 26 HB, 10 HL, 1000000  Objects       ] Per-Op: 231   ns, 368   cycles
+[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 195   ns, 312   cycles
+[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 1000000  Objects  ] Per-Op: 213   ns, 340   cycles
 --------
-[Sequential_reg - 16 T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 624   ns, 996   cycles
-[Sequential_key - 16 T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 442   ns, 707   cycles
-[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 337   ns, 538   cycles
-[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 326   ns, 521   cycles
----- Benchmark Ended ---------------------
+[Sequential_reg - 16 T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 382   ns, 610   cycles
+[Sequential_key - 16 T, 26 HB, 10 HL, 10000000 Objects       ] Per-Op: 300   ns, 479   cycles
+[Prefetchreg - 16   B, 16 T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 285   ns, 454   cycles
+[Prefetchkey - 16   B, 16 T, 26 HB, 10 HL, 10000000 Objects  ] Per-Op: 268   ns, 428   cycles
+-------- Becnhmarks have completed -----------------------------------------------------------------
 clang-format on
 */

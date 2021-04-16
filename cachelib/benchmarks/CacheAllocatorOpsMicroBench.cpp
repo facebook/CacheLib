@@ -1,6 +1,6 @@
 /*
 clang-format off
-Microbenchmarks for variou small operations and CacheAllocator operations
+Microbenchmarks for variou CacheAllocator operations
 Results are at the bottom of this file
 
 Various latency numbers circa 2012
@@ -23,6 +23,7 @@ clang-format on
 */
 
 #include <folly/Benchmark.h>
+#include <folly/BenchmarkUtil.h>
 #include <folly/init/Init.h>
 
 #include <chrono>
@@ -31,42 +32,14 @@ clang-format on
 #include <thread>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/benchmarks/BenchmarkUtils.h"
 #include "cachelib/common/BytesEqual.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/testing/SeqPoints.h"
-#include "folly/BenchmarkUtil.h"
 
 namespace facebook {
 namespace cachelib {
 namespace {
-class Timer {
- public:
-  explicit Timer(std::string name, uint64_t ops)
-      : name_{std::move(name)}, ops_{ops} {
-    startTime_ = std::chrono::system_clock::now();
-    startCycles_ = __rdtsc();
-  }
-  ~Timer() {
-    endTime_ = std::chrono::system_clock::now();
-    endCycles_ = __rdtsc();
-
-    std::chrono::nanoseconds durationTime = endTime_ - startTime_;
-    uint64_t durationCycles = endCycles_ - startCycles_;
-    std::cout << folly::sformat("[{: <40}] Per-Op: {: <5} ns, {: <5} cycles",
-                                name_, durationTime.count() / ops_,
-                                durationCycles / ops_)
-              << std::endl;
-  }
-
- private:
-  const std::string name_;
-  const uint64_t ops_;
-  std::chrono::time_point<std::chrono::system_clock> startTime_;
-  std::chrono::time_point<std::chrono::system_clock> endTime_;
-  uint64_t startCycles_;
-  uint64_t endCycles_;
-};
-
 std::unique_ptr<LruAllocator> getCache(unsigned int htPower = 20) {
   LruAllocator::Config config;
   config.setCacheSize(1024 * 1024 * 1024);
@@ -84,144 +57,6 @@ std::unique_ptr<LruAllocator> getCache(unsigned int htPower = 20) {
   return cache;
 }
 } // namespace
-
-void randomGenCost() {
-  constexpr uint64_t kOps = 10'000'000;
-  std::mt19937 gen;
-  std::uniform_int_distribution<uint64_t> dist(0, 10000);
-
-  {
-    Timer t{"Random Number", kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      auto num = dist(gen);
-      folly::doNotOptimizeAway(num);
-    }
-  }
-}
-
-void takeTimeStamp() {
-  constexpr uint64_t kOps = 10'000'000;
-  {
-    Timer t{"Timestamp", kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      auto now = std::chrono::system_clock::now();
-      folly::doNotOptimizeAway(now);
-    }
-  }
-}
-
-void takeCpuCycles() {
-  constexpr uint64_t kOps = 10'000'000;
-  {
-    Timer t{"CPU Cycles", kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      uint64_t tsc = __rdtsc();
-      folly::doNotOptimizeAway(tsc);
-    }
-  }
-}
-
-void percentileStatsAdd() {
-  constexpr uint64_t kOps = 10'000'000;
-  util::PercentileStats stats;
-  {
-    Timer t{"PercentileStats Add", kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      double d = 1.2345;
-      folly::doNotOptimizeAway(d);
-      stats.trackValue(d);
-    }
-  }
-}
-
-void atomicCounterAdd() {
-  constexpr uint64_t kThreads = 32;
-  constexpr uint64_t kOps = 10'000'000;
-  AtomicCounter atomicCounter;
-  navy::SeqPoints sp;
-  auto addStats = [&]() {
-    sp.wait(0);
-    for (uint64_t j = 0; j < kOps; j++) {
-      atomicCounter.inc();
-    }
-  };
-
-  std::vector<std::thread> ts;
-  for (uint64_t i = 0; i < kThreads; i++) {
-    ts.push_back(std::thread{addStats});
-  }
-
-  {
-    Timer timer{"AtomicCounter Add", kOps};
-    sp.reached(0);
-    for (auto& t : ts) {
-      t.join();
-    }
-  }
-}
-
-void tlCounterAdd() {
-  constexpr uint64_t kThreads = 32;
-  constexpr uint64_t kOps = 10'000'000;
-  TLCounter tlCounter;
-  navy::SeqPoints sp;
-  auto addStats = [&]() {
-    sp.wait(0);
-    for (uint64_t j = 0; j < kOps; j++) {
-      tlCounter.inc();
-    }
-  };
-
-  std::vector<std::thread> ts;
-  for (uint64_t i = 0; i < kThreads; i++) {
-    ts.push_back(std::thread{addStats});
-  }
-
-  {
-    Timer timer{"TLCounter Add", kOps};
-    sp.reached(0);
-    for (auto& t : ts) {
-      t.join();
-    }
-  }
-}
-
-void createSmallString() {
-  // Just a simple test to figure out cost of creating a small string
-  constexpr uint64_t kOps = 10'000'000;
-  {
-    Timer t{"Create Small String", kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      // Read from the vector of strings (first memory load)
-      auto key = folly::sformat("{: <10}", i);
-      folly::doNotOptimizeAway(key);
-    }
-  }
-}
-
-void compareString(int len) {
-  // Just a simple test to figure out cost of reading a string
-  constexpr uint64_t kOps = 10'000'000;
-  constexpr uint64_t kObjects = 100'000;
-  std::vector<std::string> keys;
-  const std::string keyCopy(len, 'a');
-  for (uint64_t i = 0; i < kObjects; i++) {
-    keys.push_back(keyCopy);
-  }
-
-  std::mt19937 gen;
-  std::uniform_int_distribution<int> dist(0, kObjects - 1);
-  {
-    Timer t{folly::sformat("Read String - {: <3}", len), kOps};
-    for (uint64_t i = 0; i < kOps; i++) {
-      // Read from the vector of strings (first memory load)
-      auto& k1 = keys[dist(gen)];
-      auto& k2 = keys[dist(gen)];
-      auto equal = bytesEqual(k1.data(), k2.data(), k1.size());
-      folly::doNotOptimizeAway(equal);
-    }
-  }
-}
 
 void runDifferentHTSizes(int htPower, uint64_t numObjects) {
   constexpr int kNumThreads = 16;
@@ -470,19 +305,8 @@ using namespace facebook::cachelib;
 int main(int argc, char** argv) {
   folly::init(&argc, &argv);
 
-  std::cout << "----------- Benchmark various small operations --------\n";
-  randomGenCost();
-  takeTimeStamp();
-  takeCpuCycles();
-  percentileStatsAdd();
-  atomicCounterAdd();
-  tlCounterAdd();
-  createSmallString();
-  compareString(1);
-  compareString(10);
-  compareString(100);
-
-  std::cout << "----------- Becnhmarks (Different HT Sizes) -----------\n";
+  printMsg("Benchmark Starting Now");
+  printMsg("Becnhmarks (Different HT Sizes)");
   runDifferentHTSizes(12, 1000);
   std::set<int> htPowers{16, 20, 24, 28};
   std::set<uint64_t> numObjects{10'000, 100'000, 1'000'000, 10'000'000};
@@ -493,7 +317,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  std::cout << "----------- Becnhmarks (100K Objects) -----------------\n";
+  printMsg("Becnhmarks (100K Objects)");
   std::set<uint64_t> threads{1, 4, 8, 16, 32, 64};
   std::set<bool> findOrPeek{true, false};
   for (auto t : threads) {
@@ -532,7 +356,7 @@ int main(int argc, char** argv) {
       }
     }
   }
-  std::cout << "----------- Becnhmarks have completed -----------------\n";
+  printMsg("Becnhmarks have completed");
 }
 
 /*
@@ -564,171 +388,161 @@ L2 cache:            1024K
 L3 cache:            25344K
 NUMA node0 CPU(s):   0-35
 
------------ Cost of various small operations ----------
-[Random Number                           ] Per-Op: 18    ns, 29    cycles
-[Timestamp                               ] Per-Op: 24    ns, 39    cycles
-[CPU Cycles                              ] Per-Op: 9     ns, 14    cycles
-[PercentileStats Add                     ] Per-Op: 86    ns, 137   cycles
-[AtomicCounter Add                       ] Per-Op: 853   ns, 1362  cycles
-[TLCounter Add                           ] Per-Op: 4     ns, 6     cycles
-[Create Small String                     ] Per-Op: 78    ns, 125   cycles
-[Read String - 1                         ] Per-Op: 44    ns, 71    cycles
-[Read String - 10                        ] Per-Op: 44    ns, 70    cycles
-[Read String - 100                       ] Per-Op: 108   ns, 173   cycles
------------ Becnhmarks (Different HT Sizes) -----------
-[Peek - 12 HT Power, 1000     Objects    ] Per-Op: 298   ns, 476   cycles
+-------- Benchmark Starting Now --------------------------------------------------------------------
+-------- Becnhmarks (Different HT Sizes) -----------------------------------------------------------
+[Peek - 12 HT Power, 1000     Objects                        ] Per-Op: 199   ns, 317   cycles
 ---------
-[Peek - 16 HT Power, 10000    Objects    ] Per-Op: 297   ns, 474   cycles
-[Peek - 16 HT Power, 100000   Objects    ] Per-Op: 214   ns, 342   cycles
-[Peek - 16 HT Power, 1000000  Objects    ] Per-Op: 418   ns, 668   cycles
-[Peek - 16 HT Power, 10000000 Objects    ] Per-Op: 1117  ns, 1783  cycles
+[Peek - 16 HT Power, 10000    Objects                        ] Per-Op: 202   ns, 323   cycles
+[Peek - 16 HT Power, 100000   Objects                        ] Per-Op: 216   ns, 345   cycles
+[Peek - 16 HT Power, 1000000  Objects                        ] Per-Op: 414   ns, 660   cycles
+[Peek - 16 HT Power, 10000000 Objects                        ] Per-Op: 1120  ns, 1788  cycles
 ---------
-[Peek - 20 HT Power, 10000    Objects    ] Per-Op: 206   ns, 329   cycles
-[Peek - 20 HT Power, 100000   Objects    ] Per-Op: 220   ns, 352   cycles
-[Peek - 20 HT Power, 1000000  Objects    ] Per-Op: 428   ns, 684   cycles
-[Peek - 20 HT Power, 10000000 Objects    ] Per-Op: 1116  ns, 1782  cycles
+[Peek - 20 HT Power, 10000    Objects                        ] Per-Op: 202   ns, 322   cycles
+[Peek - 20 HT Power, 100000   Objects                        ] Per-Op: 216   ns, 345   cycles
+[Peek - 20 HT Power, 1000000  Objects                        ] Per-Op: 412   ns, 657   cycles
+[Peek - 20 HT Power, 10000000 Objects                        ] Per-Op: 1131  ns, 1806  cycles
 ---------
-[Peek - 24 HT Power, 10000    Objects    ] Per-Op: 208   ns, 332   cycles
-[Peek - 24 HT Power, 100000   Objects    ] Per-Op: 215   ns, 343   cycles
-[Peek - 24 HT Power, 1000000  Objects    ] Per-Op: 414   ns, 660   cycles
-[Peek - 24 HT Power, 10000000 Objects    ] Per-Op: 1135  ns, 1812  cycles
+[Peek - 24 HT Power, 10000    Objects                        ] Per-Op: 203   ns, 324   cycles
+[Peek - 24 HT Power, 100000   Objects                        ] Per-Op: 219   ns, 350   cycles
+[Peek - 24 HT Power, 1000000  Objects                        ] Per-Op: 412   ns, 657   cycles
+[Peek - 24 HT Power, 10000000 Objects                        ] Per-Op: 1137  ns, 1815  cycles
 ---------
-[Peek - 28 HT Power, 10000    Objects    ] Per-Op: 205   ns, 328   cycles
-[Peek - 28 HT Power, 100000   Objects    ] Per-Op: 218   ns, 348   cycles
-[Peek - 28 HT Power, 1000000  Objects    ] Per-Op: 414   ns, 662   cycles
-[Peek - 28 HT Power, 10000000 Objects    ] Per-Op: 1113  ns, 1777  cycles
------------ Becnhmarks (100K Objects) -----------------
+[Peek - 28 HT Power, 10000    Objects                        ] Per-Op: 216   ns, 345   cycles
+[Peek - 28 HT Power, 100000   Objects                        ] Per-Op: 323   ns, 515   cycles
+[Peek - 28 HT Power, 1000000  Objects                        ] Per-Op: 417   ns, 666   cycles
+[Peek - 28 HT Power, 10000000 Objects                        ] Per-Op: 1123  ns, 1794  cycles
+-------- Becnhmarks (100K Objects) -----------------------------------------------------------------
 ---------
-[Find - All Misses - 1  Threads          ] Per-Op: 97    ns, 156   cycles
-[Peek - All Misses - 1  Threads          ] Per-Op: 86    ns, 138   cycles
+[Find - All Misses - 1  Threads                              ] Per-Op: 101   ns, 162   cycles
+[Peek - All Misses - 1  Threads                              ] Per-Op: 86    ns, 138   cycles
 ---------
-[Find - All Misses - 4  Threads          ] Per-Op: 108   ns, 172   cycles
-[Peek - All Misses - 4  Threads          ] Per-Op: 87    ns, 139   cycles
+[Find - All Misses - 4  Threads                              ] Per-Op: 103   ns, 165   cycles
+[Peek - All Misses - 4  Threads                              ] Per-Op: 90    ns, 144   cycles
 ---------
-[Find - All Misses - 8  Threads          ] Per-Op: 111   ns, 177   cycles
-[Peek - All Misses - 8  Threads          ] Per-Op: 100   ns, 160   cycles
+[Find - All Misses - 8  Threads                              ] Per-Op: 110   ns, 176   cycles
+[Peek - All Misses - 8  Threads                              ] Per-Op: 91    ns, 146   cycles
 ---------
-[Find - All Misses - 16 Threads          ] Per-Op: 217   ns, 347   cycles
-[Peek - All Misses - 16 Threads          ] Per-Op: 215   ns, 343   cycles
+[Find - All Misses - 16 Threads                              ] Per-Op: 114   ns, 182   cycles
+[Peek - All Misses - 16 Threads                              ] Per-Op: 94    ns, 151   cycles
 ---------
-[Find - All Misses - 32 Threads          ] Per-Op: 166   ns, 265   cycles
-[Peek - All Misses - 32 Threads          ] Per-Op: 257   ns, 410   cycles
+[Find - All Misses - 32 Threads                              ] Per-Op: 265   ns, 424   cycles
+[Peek - All Misses - 32 Threads                              ] Per-Op: 252   ns, 403   cycles
 ---------
-[Find - All Misses - 64 Threads          ] Per-Op: 344   ns, 550   cycles
-[Peek - All Misses - 64 Threads          ] Per-Op: 307   ns, 491   cycles
+[Find - All Misses - 64 Threads                              ] Per-Op: 376   ns, 600   cycles
+[Peek - All Misses - 64 Threads                              ] Per-Op: 308   ns, 492   cycles
 ---------
-[Find - 32 Threads, 0    Bytes, 0 % Write] Per-Op: 413   ns, 659   cycles
-[Find - 32 Threads, 100  Bytes, 0 % Write] Per-Op: 336   ns, 537   cycles
-[Find - 32 Threads, 1000 Bytes, 0 % Write] Per-Op: 340   ns, 544   cycles
-[Find - 32 Threads, 10000 Bytes, 0 % Write] Per-Op: 361   ns, 577   cycles
+[Find - 32 Threads, 0    Bytes, 0 % Write                    ] Per-Op: 340   ns, 542   cycles
+[Find - 32 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 337   ns, 539   cycles
+[Find - 32 Threads, 1000 Bytes, 0 % Write                    ] Per-Op: 340   ns, 543   cycles
+[Find - 32 Threads, 10000 Bytes, 0 % Write                   ] Per-Op: 359   ns, 574   cycles
 ---------
-[Find - 1  Threads, 0 % Write            ] Per-Op: 242   ns, 387   cycles
-[Find - 1  Threads, 5 % Write            ] Per-Op: 303   ns, 483   cycles
-[Find - 1  Threads, 10% Write            ] Per-Op: 324   ns, 518   cycles
-[Find - 1  Threads, 20% Write            ] Per-Op: 360   ns, 574   cycles
+[Find - 1  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 207   ns, 331   cycles
+[Find - 1  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 295   ns, 471   cycles
+[Find - 1  Threads, 100  Bytes, 10% Write                    ] Per-Op: 337   ns, 538   cycles
+[Find - 1  Threads, 100  Bytes, 20% Write                    ] Per-Op: 360   ns, 576   cycles
 ---------
-[Peek - 1  Threads, 0 % Write            ] Per-Op: 195   ns, 312   cycles
-[Peek - 1  Threads, 5 % Write            ] Per-Op: 215   ns, 343   cycles
-[Peek - 1  Threads, 10% Write            ] Per-Op: 211   ns, 337   cycles
-[Peek - 1  Threads, 20% Write            ] Per-Op: 207   ns, 331   cycles
+[Peek - 1  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 180   ns, 288   cycles
+[Peek - 1  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 221   ns, 353   cycles
+[Peek - 1  Threads, 100  Bytes, 10% Write                    ] Per-Op: 208   ns, 333   cycles
+[Peek - 1  Threads, 100  Bytes, 20% Write                    ] Per-Op: 207   ns, 330   cycles
 ---------
-[Find - 4  Threads, 0 % Write            ] Per-Op: 290   ns, 463   cycles
-[Find - 4  Threads, 5 % Write            ] Per-Op: 369   ns, 589   cycles
-[Find - 4  Threads, 10% Write            ] Per-Op: 373   ns, 596   cycles
-[Find - 4  Threads, 20% Write            ] Per-Op: 384   ns, 614   cycles
+[Find - 4  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 217   ns, 347   cycles
+[Find - 4  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 363   ns, 579   cycles
+[Find - 4  Threads, 100  Bytes, 10% Write                    ] Per-Op: 375   ns, 598   cycles
+[Find - 4  Threads, 100  Bytes, 20% Write                    ] Per-Op: 380   ns, 607   cycles
 ---------
-[Peek - 4  Threads, 0 % Write            ] Per-Op: 184   ns, 295   cycles
-[Peek - 4  Threads, 5 % Write            ] Per-Op: 280   ns, 448   cycles
-[Peek - 4  Threads, 10% Write            ] Per-Op: 281   ns, 449   cycles
-[Peek - 4  Threads, 20% Write            ] Per-Op: 280   ns, 448   cycles
+[Peek - 4  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 184   ns, 293   cycles
+[Peek - 4  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 280   ns, 448   cycles
+[Peek - 4  Threads, 100  Bytes, 10% Write                    ] Per-Op: 293   ns, 467   cycles
+[Peek - 4  Threads, 100  Bytes, 20% Write                    ] Per-Op: 316   ns, 505   cycles
 ---------
-[Find - 8  Threads, 0 % Write            ] Per-Op: 340   ns, 544   cycles
-[Find - 8  Threads, 5 % Write            ] Per-Op: 390   ns, 623   cycles
-[Find - 8  Threads, 10% Write            ] Per-Op: 390   ns, 623   cycles
-[Find - 8  Threads, 20% Write            ] Per-Op: 392   ns, 626   cycles
+[Find - 8  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 255   ns, 407   cycles
+[Find - 8  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 402   ns, 642   cycles
+[Find - 8  Threads, 100  Bytes, 10% Write                    ] Per-Op: 392   ns, 626   cycles
+[Find - 8  Threads, 100  Bytes, 20% Write                    ] Per-Op: 384   ns, 614   cycles
 ---------
-[Peek - 8  Threads, 0 % Write            ] Per-Op: 198   ns, 316   cycles
-[Peek - 8  Threads, 5 % Write            ] Per-Op: 313   ns, 500   cycles
-[Peek - 8  Threads, 10% Write            ] Per-Op: 317   ns, 507   cycles
-[Peek - 8  Threads, 20% Write            ] Per-Op: 334   ns, 533   cycles
+[Peek - 8  Threads, 100  Bytes, 0 % Write                    ] Per-Op: 198   ns, 316   cycles
+[Peek - 8  Threads, 100  Bytes, 5 % Write                    ] Per-Op: 325   ns, 519   cycles
+[Peek - 8  Threads, 100  Bytes, 10% Write                    ] Per-Op: 317   ns, 506   cycles
+[Peek - 8  Threads, 100  Bytes, 20% Write                    ] Per-Op: 323   ns, 516   cycles
 ---------
-[Find - 16 Threads, 0 % Write            ] Per-Op: 276   ns, 441   cycles
-[Find - 16 Threads, 5 % Write            ] Per-Op: 453   ns, 723   cycles
-[Find - 16 Threads, 10% Write            ] Per-Op: 456   ns, 728   cycles
-[Find - 16 Threads, 20% Write            ] Per-Op: 418   ns, 668   cycles
+[Find - 16 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 256   ns, 410   cycles
+[Find - 16 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 453   ns, 723   cycles
+[Find - 16 Threads, 100  Bytes, 10% Write                    ] Per-Op: 459   ns, 733   cycles
+[Find - 16 Threads, 100  Bytes, 20% Write                    ] Per-Op: 425   ns, 678   cycles
 ---------
-[Peek - 16 Threads, 0 % Write            ] Per-Op: 212   ns, 339   cycles
-[Peek - 16 Threads, 5 % Write            ] Per-Op: 376   ns, 601   cycles
-[Peek - 16 Threads, 10% Write            ] Per-Op: 387   ns, 618   cycles
-[Peek - 16 Threads, 20% Write            ] Per-Op: 393   ns, 628   cycles
+[Peek - 16 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 236   ns, 377   cycles
+[Peek - 16 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 367   ns, 586   cycles
+[Peek - 16 Threads, 100  Bytes, 10% Write                    ] Per-Op: 382   ns, 610   cycles
+[Peek - 16 Threads, 100  Bytes, 20% Write                    ] Per-Op: 393   ns, 628   cycles
 ---------
-[Find - 32 Threads, 0 % Write            ] Per-Op: 336   ns, 537   cycles
-[Find - 32 Threads, 5 % Write            ] Per-Op: 537   ns, 858   cycles
-[Find - 32 Threads, 10% Write            ] Per-Op: 534   ns, 853   cycles
-[Find - 32 Threads, 20% Write            ] Per-Op: 492   ns, 786   cycles
+[Find - 32 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 401   ns, 641   cycles
+[Find - 32 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 516   ns, 824   cycles
+[Find - 32 Threads, 100  Bytes, 10% Write                    ] Per-Op: 468   ns, 747   cycles
+[Find - 32 Threads, 100  Bytes, 20% Write                    ] Per-Op: 456   ns, 728   cycles
 ---------
-[Peek - 32 Threads, 0 % Write            ] Per-Op: 302   ns, 483   cycles
-[Peek - 32 Threads, 5 % Write            ] Per-Op: 404   ns, 645   cycles
-[Peek - 32 Threads, 10% Write            ] Per-Op: 334   ns, 533   cycles
-[Peek - 32 Threads, 20% Write            ] Per-Op: 340   ns, 543   cycles
+[Peek - 32 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 298   ns, 476   cycles
+[Peek - 32 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 369   ns, 590   cycles
+[Peek - 32 Threads, 100  Bytes, 10% Write                    ] Per-Op: 411   ns, 657   cycles
+[Peek - 32 Threads, 100  Bytes, 20% Write                    ] Per-Op: 396   ns, 632   cycles
 ---------
-[Find - 64 Threads, 0 % Write            ] Per-Op: 645   ns, 1030  cycles
-[Find - 64 Threads, 5 % Write            ] Per-Op: 1066  ns, 1702  cycles
-[Find - 64 Threads, 10% Write            ] Per-Op: 1080  ns, 1724  cycles
-[Find - 64 Threads, 20% Write            ] Per-Op: 1096  ns, 1750  cycles
+[Find - 64 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 642   ns, 1026  cycles
+[Find - 64 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 1087  ns, 1736  cycles
+[Find - 64 Threads, 100  Bytes, 10% Write                    ] Per-Op: 1092  ns, 1744  cycles
+[Find - 64 Threads, 100  Bytes, 20% Write                    ] Per-Op: 1080  ns, 1724  cycles
 ---------
-[Peek - 64 Threads, 0 % Write            ] Per-Op: 548   ns, 876   cycles
-[Peek - 64 Threads, 5 % Write            ] Per-Op: 1003  ns, 1601  cycles
-[Peek - 64 Threads, 10% Write            ] Per-Op: 1024  ns, 1634  cycles
-[Peek - 64 Threads, 20% Write            ] Per-Op: 1007  ns, 1607  cycles
+[Peek - 64 Threads, 100  Bytes, 0 % Write                    ] Per-Op: 549   ns, 876   cycles
+[Peek - 64 Threads, 100  Bytes, 5 % Write                    ] Per-Op: 1027  ns, 1639  cycles
+[Peek - 64 Threads, 100  Bytes, 10% Write                    ] Per-Op: 1008  ns, 1610  cycles
+[Peek - 64 Threads, 100  Bytes, 20% Write                    ] Per-Op: 1018  ns, 1626  cycles
 ---------
-[Allocate - New      - 1  Threads, 11 Sizes] Per-Op: 1724  ns, 2751  cycles
-[Allocate - New      - 1  Threads, 3  Sizes] Per-Op: 1657  ns, 2645  cycles
-[Allocate - New      - 1  Threads, 1  Sizes] Per-Op: 2066  ns, 3298  cycles
+[Allocate - New      - 1  Threads, 11 Sizes                  ] Per-Op: 1772  ns, 2830  cycles
+[Allocate - New      - 1  Threads, 3  Sizes                  ] Per-Op: 1677  ns, 2677  cycles
+[Allocate - New      - 1  Threads, 1  Sizes                  ] Per-Op: 2062  ns, 3291  cycles
 ---------
-[Allocate - Eviction - 1  Threads, 11 Sizes] Per-Op: 1033  ns, 1649  cycles
-[Allocate - Eviction - 1  Threads, 3  Sizes] Per-Op: 1151  ns, 1838  cycles
-[Allocate - Eviction - 1  Threads, 1  Sizes] Per-Op: 1013  ns, 1617  cycles
+[Allocate - Eviction - 1  Threads, 11 Sizes                  ] Per-Op: 982   ns, 1569  cycles
+[Allocate - Eviction - 1  Threads, 3  Sizes                  ] Per-Op: 1068  ns, 1705  cycles
+[Allocate - Eviction - 1  Threads, 1  Sizes                  ] Per-Op: 1039  ns, 1659  cycles
 ---------
-[Allocate - New      - 4  Threads, 11 Sizes] Per-Op: 2609  ns, 4166  cycles
-[Allocate - New      - 4  Threads, 3  Sizes] Per-Op: 2800  ns, 4470  cycles
-[Allocate - New      - 4  Threads, 1  Sizes] Per-Op: 3305  ns, 5276  cycles
+[Allocate - New      - 4  Threads, 11 Sizes                  ] Per-Op: 2680  ns, 4279  cycles
+[Allocate - New      - 4  Threads, 3  Sizes                  ] Per-Op: 2845  ns, 4542  cycles
+[Allocate - New      - 4  Threads, 1  Sizes                  ] Per-Op: 3376  ns, 5389  cycles
 ---------
-[Allocate - Eviction - 4  Threads, 11 Sizes] Per-Op: 1987  ns, 3173  cycles
-[Allocate - Eviction - 4  Threads, 3  Sizes] Per-Op: 2678  ns, 4275  cycles
-[Allocate - Eviction - 4  Threads, 1  Sizes] Per-Op: 4579  ns, 7310  cycles
+[Allocate - Eviction - 4  Threads, 11 Sizes                  ] Per-Op: 1989  ns, 3176  cycles
+[Allocate - Eviction - 4  Threads, 3  Sizes                  ] Per-Op: 2564  ns, 4093  cycles
+[Allocate - Eviction - 4  Threads, 1  Sizes                  ] Per-Op: 4412  ns, 7043  cycles
 ---------
-[Allocate - New      - 8  Threads, 11 Sizes] Per-Op: 2986  ns, 4767  cycles
-[Allocate - New      - 8  Threads, 3  Sizes] Per-Op: 3398  ns, 5425  cycles
-[Allocate - New      - 8  Threads, 1  Sizes] Per-Op: 4460  ns, 7119  cycles
+[Allocate - New      - 8  Threads, 11 Sizes                  ] Per-Op: 3032  ns, 4840  cycles
+[Allocate - New      - 8  Threads, 3  Sizes                  ] Per-Op: 3339  ns, 5330  cycles
+[Allocate - New      - 8  Threads, 1  Sizes                  ] Per-Op: 4523  ns, 7220  cycles
 ---------
-[Allocate - Eviction - 8  Threads, 11 Sizes] Per-Op: 2585  ns, 4127  cycles
-[Allocate - Eviction - 8  Threads, 3  Sizes] Per-Op: 3986  ns, 6362  cycles
-[Allocate - Eviction - 8  Threads, 1  Sizes] Per-Op: 8871  ns, 14161 cycles
+[Allocate - Eviction - 8  Threads, 11 Sizes                  ] Per-Op: 2524  ns, 4028  cycles
+[Allocate - Eviction - 8  Threads, 3  Sizes                  ] Per-Op: 3836  ns, 6124  cycles
+[Allocate - Eviction - 8  Threads, 1  Sizes                  ] Per-Op: 8916  ns, 14232 cycles
 ---------
-[Allocate - New      - 16 Threads, 11 Sizes] Per-Op: 3971  ns, 6339  cycles
-[Allocate - New      - 16 Threads, 3  Sizes] Per-Op: 4553  ns, 7269  cycles
-[Allocate - New      - 16 Threads, 1  Sizes] Per-Op: 7728  ns, 12337 cycles
+[Allocate - New      - 16 Threads, 11 Sizes                  ] Per-Op: 4106  ns, 6554  cycles
+[Allocate - New      - 16 Threads, 3  Sizes                  ] Per-Op: 4643  ns, 7412  cycles
+[Allocate - New      - 16 Threads, 1  Sizes                  ] Per-Op: 7628  ns, 12176 cycles
 ---------
-[Allocate - Eviction - 16 Threads, 11 Sizes] Per-Op: 3760  ns, 6002  cycles
-[Allocate - Eviction - 16 Threads, 3  Sizes] Per-Op: 7178  ns, 11458 cycles
-[Allocate - Eviction - 16 Threads, 1  Sizes] Per-Op: 18597 ns, 29686 cycles
+[Allocate - Eviction - 16 Threads, 11 Sizes                  ] Per-Op: 3686  ns, 5884  cycles
+[Allocate - Eviction - 16 Threads, 3  Sizes                  ] Per-Op: 7184  ns, 11467 cycles
+[Allocate - Eviction - 16 Threads, 1  Sizes                  ] Per-Op: 18559 ns, 29625 cycles
 ---------
-[Allocate - New      - 32 Threads, 11 Sizes] Per-Op: 7859  ns, 12545 cycles
-[Allocate - New      - 32 Threads, 3  Sizes] Per-Op: 9095  ns, 14518 cycles
-[Allocate - New      - 32 Threads, 1  Sizes] Per-Op: 16748 ns, 26735 cycles
+[Allocate - New      - 32 Threads, 11 Sizes                  ] Per-Op: 8358  ns, 13341 cycles
+[Allocate - New      - 32 Threads, 3  Sizes                  ] Per-Op: 9577  ns, 15287 cycles
+[Allocate - New      - 32 Threads, 1  Sizes                  ] Per-Op: 16754 ns, 26743 cycles
 ---------
-[Allocate - Eviction - 32 Threads, 11 Sizes] Per-Op: 6091  ns, 9723  cycles
-[Allocate - Eviction - 32 Threads, 3  Sizes] Per-Op: 14225 ns, 22706 cycles
-[Allocate - Eviction - 32 Threads, 1  Sizes] Per-Op: 37407 ns, 59711 cycles
+[Allocate - Eviction - 32 Threads, 11 Sizes                  ] Per-Op: 6055  ns, 9666  cycles
+[Allocate - Eviction - 32 Threads, 3  Sizes                  ] Per-Op: 14372 ns, 22942 cycles
+[Allocate - Eviction - 32 Threads, 1  Sizes                  ] Per-Op: 37691 ns, 60163 cycles
 ---------
-[Allocate - New      - 64 Threads, 11 Sizes] Per-Op: 17162 ns, 27394 cycles
-[Allocate - New      - 64 Threads, 3  Sizes] Per-Op: 21258 ns, 33933 cycles
-[Allocate - New      - 64 Threads, 1  Sizes] Per-Op: 35349 ns, 56426 cycles
+[Allocate - New      - 64 Threads, 11 Sizes                  ] Per-Op: 17692 ns, 28242 cycles
+[Allocate - New      - 64 Threads, 3  Sizes                  ] Per-Op: 20727 ns, 33086 cycles
+[Allocate - New      - 64 Threads, 1  Sizes                  ] Per-Op: 35300 ns, 56348 cycles
 ---------
-[Allocate - Eviction - 64 Threads, 11 Sizes] Per-Op: 25214 ns, 40249 cycles
-[Allocate - Eviction - 64 Threads, 3  Sizes] Per-Op: 33873 ns, 54070 cycles
-[Allocate - Eviction - 64 Threads, 1  Sizes] Per-Op: 77066 ns, 123017 cycles
------------ Becnhmarks have completed -----------------
+[Allocate - Eviction - 64 Threads, 11 Sizes                  ] Per-Op: 26014 ns, 41524 cycles
+[Allocate - Eviction - 64 Threads, 3  Sizes                  ] Per-Op: 34119 ns, 54463 cycles
+[Allocate - Eviction - 64 Threads, 1  Sizes                  ] Per-Op: 76896 ns, 122744 cycles
+-------- Becnhmarks have completed -----------------------------------------------------------------
 clang-format on
 */
