@@ -148,11 +148,6 @@ void* align(size_t alignment, size_t size, void*& ptr, size_t& space) {
   return nullptr;
 }
 
-uint32_t getAlignedSize(uint32_t size, uint32_t alignment) {
-  const auto rem = size % alignment;
-  return rem == 0 ? size : size + alignment - rem;
-}
-
 void* mmapAlignedZeroedMemory(size_t alignment,
                               size_t numBytes,
                               bool noAccess) {

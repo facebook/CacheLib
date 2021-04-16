@@ -13,7 +13,14 @@
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/ShmManager.h"
 
-namespace facebook::cachelib::persistence {
+namespace facebook::cachelib {
+
+namespace tests {
+class PersistenceManagerTest;
+class PersistenceManagerMockTest;
+} // namespace tests
+
+namespace persistence {
 
 constexpr uint32_t kDataBlockSize = 1 * 1024 * 1024; // 1MB
 
@@ -49,8 +56,10 @@ class PersistenceStreamWriter {
  * restore the cache cross host.
  *
  * User must shutdown cachelib instance before calling saveCache().
- * By calling restoreCache() any existing cachelib data/metadata will be erased,
- * and will not be recovered on any failure.
+ * Any failure/exception during saveCache() will not affect local cache
+ * instance, saveCache() can be retried with a clean writer. By calling
+ * restoreCache() any existing cachelib data/metadata will be erased, and will
+ * not be recovered on any failure.
  *
  * std::runtime_error will be thrown upon any error happens during save/restore.
  *
@@ -109,7 +118,41 @@ class PersistenceManager {
   /* call reader.read(), restore cache metadata/data to memory/disk */
   void restoreCache(PersistenceStreamReader& reader);
 
+  const static char DATA_BEGIN_CHAR;
+  const static char DATA_MARK_CHAR;
+  const static char DATA_END_CHAR;
+
  private:
+  folly::IOBuf makeHeader(PersistenceType, size_t);
+
+  void saveFile(PersistenceStreamWriter&,
+                PersistenceType,
+                const folly::StringPiece);
+
+  void restoreFile(const folly::IOBuf&, const folly::StringPiece);
+
+  // returns the unique_ptr to hold lifetime of the memory
+  // so that writer.flush is not required for each shm
+  std::unique_ptr<ShmSegment> saveShm(PersistenceStreamWriter&,
+                                      PersistenceType,
+                                      const std::string&);
+
+  void saveDataInBlocks(PersistenceStreamWriter&, const ShmAddr&);
+  void restoreDataFromBlocks(PersistenceStreamReader&, uint8_t*, size_t);
+
+  void deserializeAndValidateVersions(const folly::IOBuf&);
+
+  template <typename T>
+  static const T& cast(const uint8_t* p) {
+    return *reinterpret_cast<const T*>(p);
+  }
+
+  template <typename T>
+  static T deserialize(const folly::IOBuf& buf) {
+    Deserializer deserializer(buf.data(), buf.tail());
+    return deserializer.deserialize<T>();
+  }
+
   constexpr static int32_t kPersistenceVersion = 0;
 
   CacheLibVersions versions_;
@@ -121,6 +164,10 @@ class PersistenceManager {
   // navy file path and size to save/restore navy data
   std::vector<std::string> navyFiles_;
   uint64_t navyFileSize_;
+
+  friend class facebook::cachelib::tests::PersistenceManagerTest;
+  friend class facebook::cachelib::tests::PersistenceManagerMockTest;
 };
 
-} // namespace facebook::cachelib::persistence
+} // namespace persistence
+} // namespace facebook::cachelib

@@ -110,8 +110,12 @@ void setMaxLockMemory(uint64_t bytes);
 void* align(size_t alignment, size_t size, void*& ptr, size_t& space);
 
 // @return size aligned up to the next multiple of _alignment_
-uint32_t getAlignedSize(uint32_t size, uint32_t alignment);
-
+template <typename T>
+std::enable_if_t<std::is_arithmetic<T>::value, T> getAlignedSize(
+    T size, uint32_t alignment) {
+  const T rem = size % alignment;
+  return rem == 0 ? size : size + alignment - rem;
+}
 // creates a new mapping in the virtual address space of the calling process
 // aligned by the size of Slab.
 //

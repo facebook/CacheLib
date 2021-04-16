@@ -24,7 +24,8 @@ struct PersistCacheLibConfig {
 
 struct PersistenceHeader {
   1: required PersistenceType type;
-  // for ShmData and NavyFlash, length is number of block
-  // for others, length is the binary data length
+  // total length of data, if the data is split
+  // in blocks, it also includes checksum and length
+  // of each block.
   2: required i64 length;
 }

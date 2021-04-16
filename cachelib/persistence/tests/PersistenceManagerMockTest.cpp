@@ -1,0 +1,188 @@
+// Copyright 2004-present Facebook. All Rights Reserved.
+
+#include <folly/Random.h>
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <stdexcept>
+
+#include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/persistence/PersistenceManager.h"
+#include "cachelib/persistence/tests/PersistenceManagerMock.h"
+
+namespace facebook::cachelib::tests {
+
+class PersistenceManagerMockTest : public ::testing::Test {
+ public:
+  PersistenceManagerMockTest()
+      : cacheDir_("/tmp/persistence_test" +
+                  folly::to<std::string>(folly::Random::rand32())) {
+    util::makeDir(cacheDir_);
+    config_
+        .setCacheSize(kCacheSize) // 100MB
+        .setCacheName("test")
+        .enableCachePersistence(cacheDir_)
+        .usePosixForShm()
+        // Disable slab rebalancing
+        .enablePoolRebalancing(nullptr, std::chrono::seconds{0})
+        .validate(); // will throw if bad config
+  }
+
+  ~PersistenceManagerMockTest() {
+    Cache::ShmManager::cleanup(cacheDir_, config_.usePosixShm);
+    util::removePath(cacheDir_);
+  }
+
+ protected:
+  folly::IOBuf makeHeader(PersistenceManager& manager,
+                          PersistenceType type,
+                          int32_t len) {
+    return manager.makeHeader(type, len);
+  }
+
+  const size_t kCacheSize = 100 * 1024 * 1024; // 100MB
+  std::string cacheDir_;
+  CacheConfig config_;
+};
+
+using ::testing::An;
+using ::testing::AtLeast;
+using ::testing::ByMove;
+using ::testing::InSequence;
+using ::testing::Invoke;
+using ::testing::Return;
+using ::testing::SaveArg;
+
+TEST_F(PersistenceManagerMockTest, testNoCache) {
+  MockPersistenceStreamWriter writer;
+  {
+    InSequence seq;
+    EXPECT_CALL(writer, write(PersistenceManager::DATA_BEGIN_CHAR));
+    EXPECT_CALL(writer, write(PersistenceManager::DATA_MARK_CHAR));
+  }
+
+  PersistenceManager manager(config_);
+
+  // ShmManager::attachShm will throw since we didn't build cache instance
+  EXPECT_THROW(manager.saveCache(writer), std::invalid_argument);
+}
+
+TEST_F(PersistenceManagerMockTest, testSaveCache) {
+  std::vector<folly::IOBuf> bufs;
+
+  MockPersistenceStreamWriter writer;
+  writer.saveBuffers(bufs);
+  {
+    InSequence seq;
+    EXPECT_CALL(writer, write(PersistenceManager::DATA_BEGIN_CHAR));
+    EXPECT_CALL(writer, write(PersistenceManager::DATA_MARK_CHAR))
+        .Times(AtLeast(1));
+    EXPECT_CALL(writer, write(PersistenceManager::DATA_END_CHAR));
+  }
+
+  EXPECT_CALL(writer, write(An<folly::IOBuf>())).Times(AtLeast(5));
+
+  {
+    Cache cache(Cache::SharedMemNew, config_);
+    cache.shutDown();
+  }
+
+  PersistenceManager manager(config_);
+
+  manager.saveCache(writer);
+
+  // the serialized header must have same size regardless
+  // which PersistenceType and Length
+  ASSERT_EQ(makeHeader(manager, PersistenceType::ShmInfo,
+                       std::numeric_limits<int32_t>::max())
+                .length(),
+            *reinterpret_cast<const size_t*>(bufs[0].data()));
+
+  Deserializer deserializer(bufs[1].data(), bufs[1].tail());
+  auto header = deserializer.deserialize<PersistenceHeader>();
+  ASSERT_EQ(PersistenceType::Versions, header.get_type());
+  ASSERT_EQ(bufs[2].length(), header.get_length());
+
+  Deserializer deserializerCfg(bufs[4].data(), bufs[4].tail());
+  PersistCacheLibConfig cfg =
+      deserializerCfg.deserialize<PersistCacheLibConfig>();
+  ASSERT_EQ(config_.getCacheName(), cfg.get_cacheName());
+}
+
+TEST_F(PersistenceManagerMockTest, testWriteFail) {
+  Cache cache(Cache::SharedMemNew, config_);
+  cache.shutDown();
+
+  {
+    std::vector<folly::IOBuf> bufs;
+    PersistenceManager manager(config_);
+    MockPersistenceStreamWriter writer;
+    writer.saveBuffers(bufs);
+    writer.ExpectCallAt(
+        Invoke([&](folly::IOBuf) { throw std::runtime_error("mock error"); }),
+        5); // the fifth write call throws exception
+    EXPECT_THROW(manager.saveCache(writer), std::runtime_error);
+    ASSERT_EQ(bufs.size(), 4);
+  }
+
+  {
+    std::vector<folly::IOBuf> bufs;
+    PersistenceManager manager(config_);
+    MockPersistenceStreamWriter writer;
+    writer.saveBuffers(bufs);
+    writer.ExpectCallAt(
+        Invoke([&](folly::IOBuf) { throw std::runtime_error("mock error"); }),
+        9); // the ninth write call throws exception
+    EXPECT_THROW(manager.saveCache(writer), std::runtime_error);
+    ASSERT_EQ(bufs.size(), 8);
+  }
+}
+
+TEST_F(PersistenceManagerMockTest, testRestoreCache) {
+  std::unique_ptr<folly::IOBuf> buffer = folly::IOBuf::create(10 * 1024 * 1024);
+  {
+    Cache cache(Cache::SharedMemNew, config_);
+    cache.shutDown();
+    PersistenceManager manager(config_);
+    MockPersistenceStreamWriter writer(buffer.get());
+    manager.saveCache(writer);
+  }
+
+  Cache::ShmManager::cleanup(cacheDir_, config_.usePosixShm);
+  util::removePath(cacheDir_);
+
+  {
+    // reader returns wrong DATA_CHAR
+    PersistenceManager manager(config_);
+    MockPersistenceStreamReader reader(buffer->data(), buffer->length());
+    reader.ExpectCharCallAt(
+        Invoke([&]() -> char { return PersistenceManager::DATA_BEGIN_CHAR; }),
+        2);
+    EXPECT_THROW(manager.restoreCache(reader), std::invalid_argument);
+  }
+
+  {
+    // reader throw exceptions on the fifth call
+    PersistenceManager manager(config_);
+    MockPersistenceStreamReader reader(buffer->data(), buffer->length());
+    reader.ExpectCallAt(Invoke([&](uint32_t) -> folly::IOBuf {
+                          throw std::runtime_error("mock error");
+                        }),
+                        5); // the fifth read call throws exception
+    EXPECT_THROW(manager.restoreCache(reader), std::runtime_error);
+  }
+
+  {
+    PersistenceManager manager(config_);
+    MockPersistenceStreamReader reader(buffer->data(), buffer->length());
+    manager.restoreCache(reader);
+    try {
+      // since not cache data, we expected exception
+      Cache cache(Cache::SharedMemAttach, config_);
+    } catch (const std::invalid_argument& e) {
+      ASSERT_STREQ("Unable to find any segment with name shm_cache", e.what());
+    }
+  }
+}
+
+} // namespace facebook::cachelib::tests
