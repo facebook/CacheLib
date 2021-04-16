@@ -373,8 +373,15 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     break;
   case OpenStatus::Error:
     allocErrorCount_.inc();
-    // fall-through
+    reinsertionErrorCount_.inc();
+    break;
+
+  // TODO: once we verify no user is setting this error log, update this
+  //       to XDCHECK that we cannot receive this status
   case OpenStatus::Reclaimed:
+    XLOG(ERR, "Should not reach Reclaim state when trying to allocate");
+    reinsertionErrorCount_.inc();
+    break;
   case OpenStatus::Retry:
     reinsertionErrorCount_.inc();
     return removeItem();
