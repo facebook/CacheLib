@@ -6,7 +6,7 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/datatype/Map.h"
 
-DEFINE_int32(num_keys, 100 * 1000, "number of keys used to populate the maps");
+DEFINE_int32(num_keys, 50 * 1000, "number of keys used to populate the maps");
 DEFINE_int32(num_read_ops, 1000 * 1000, "number of read operations");
 
 namespace facebook {
