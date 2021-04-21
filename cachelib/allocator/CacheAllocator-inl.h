@@ -718,15 +718,17 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
         folly::sformat("cannot release this item: {}", it.toString()));
   }
 
+  const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
+
   if (ctx == RemoveContext::kEviction) {
     const auto timeNow = util::getCurrentTimeSec();
     const auto refreshTime = timeNow - it.getLastAccessTime();
     const auto lifeTime = timeNow - it.getCreationTime();
     stats_.ramEvictionAgeSecs_.trackValue(refreshTime);
     stats_.ramItemLifeTimeSecs_.trackValue(lifeTime);
+    stats_.perPoolEvictionAgeSecs_[allocInfo.poolId].trackValue(refreshTime);
   }
 
-  const auto allocInfo = allocator_->getAllocInfo(it.getMemory());
   (*stats_.fragmentationSize)[allocInfo.poolId][allocInfo.classId].sub(
       util::getFragmentation(*this, it));
 
@@ -2220,6 +2222,8 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   ret.cacheStats = std::move(cacheStats);
   ret.mpStats = std::move(mpStats);
   ret.numPoolGetHits = totalHits;
+  ret.evictionAgeSecs = stats_.perPoolEvictionAgeSecs_[poolId].estimate();
+
   return ret;
 }
 

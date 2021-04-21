@@ -141,6 +141,10 @@ struct Stats {
   mutable util::PercentileStats nvmEvictionSecondsPastExpiry_;
   mutable util::PercentileStats nvmEvictionSecondsToExpiry_;
 
+  // per-pool percentile stats for eviction age
+  std::array<util::PercentileStats, MemoryPoolManager::kMaxPools>
+      perPoolEvictionAgeSecs_;
+
   // This tracks in each window what are the percentiles of the sizes of
   // items that we have written to flash. This is at-the-moment view of what
   // we're currently writing into flash.

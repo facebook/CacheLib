@@ -162,6 +162,9 @@ struct PoolStats {
   // number of get hits for this pool.
   uint64_t numPoolGetHits;
 
+  // estimates for eviction age for items in this pool
+  util::PercentileStats::Estimates evictionAgeSecs{};
+
   const std::set<ClassId>& getClassIds() const noexcept {
     return mpStats.classIds;
   }
