@@ -4,6 +4,7 @@ add_library (cachelib_common
   BloomFilter.cpp
   Cohort.cpp
   FurcHash.cpp
+  CountDownLatch.cpp
   ${BLOOM_THRIFT_FILES}
   hothash/HotHashDetector.cpp
   hothash/HotHashDetectorTest.cpp
