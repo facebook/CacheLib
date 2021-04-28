@@ -228,11 +228,11 @@ class NavyConfig {
   std::string admissionPolicy_{""};
   // Admission probability in decimal form.
   // This is used for "random" only.
-  double admissionProbability_;
+  double admissionProbability_{};
   // Admission policy target rate, bytes/s.
   // Zero means no rate limiting.
   // This is used for "dynamic_random" only.
-  uint64_t admissionWriteRate_;
+  uint64_t admissionWriteRate_{};
   // The max write rate to device in bytes/s to stay within the device limit of
   // saturation to avoid latency increase.
   // This is used for "dynamic_random" only.
@@ -252,15 +252,15 @@ class NavyConfig {
   // An array of Navy RAID device file paths.
   std::vector<std::string> raidPaths_;
   // The size of the metadata partition on the Navy device.
-  uint64_t deviceMetadataSize_;
+  uint64_t deviceMetadataSize_{};
   // The size of the file that Navy should use.
   // 0 means to use the whole device.
-  uint64_t fileSize_;
+  uint64_t fileSize_{};
   // Whether ask Navy to truncate the file it uses.
   bool truncateFile_{false};
   // This controls granularity of the writes when we flush the region.
   // This is only used when in-mem buffer is enabled.
-  uint32_t deviceMaxWriteSize_;
+  uint32_t deviceMaxWriteSize_{};
 
   // ============ BlockCache settings =============
   // Whether Navy BlockCache will use region-based LRU.
@@ -286,7 +286,7 @@ class NavyConfig {
   // The probability value is between 0 and 100 for reinsertion.
   unsigned int blockCacheReinsertionProbabilityThreshold_{0};
   // Number of Navy BlockCache in-memory buffers.
-  uint32_t blockCacheNumInMemBuffers_;
+  uint32_t blockCacheNumInMemBuffers_{};
   // Whether enabling data checksum for Navy BlockCache.
   bool blockCacheDataChecksum_{true};
   // An array of the ratio of each segment.
@@ -307,7 +307,7 @@ class NavyConfig {
   // The bloom filter size per bucket in bytes for Navy BigHash engine
   uint64_t bigHashBucketBfSize_{8};
   // The maximum item size to put into Navy BigHash engine.
-  uint64_t bigHashSmallItemMaxSize_;
+  uint64_t bigHashSmallItemMaxSize_{};
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.

@@ -126,6 +126,14 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(config.getWriterThreads(), 32);
   EXPECT_EQ(config.getNavyReqOrderingShards(), 20);
 
+  EXPECT_EQ(config.getAdmissionProbability(), 0);
+  EXPECT_EQ(config.getAdmissionWriteRate(), 0);
+  EXPECT_EQ(config.getDeviceMetadataSize(), 0);
+  EXPECT_EQ(config.getFileSize(), 0);
+  EXPECT_EQ(config.getDeviceMaxWriteSize(), 0);
+  EXPECT_EQ(config.getBlockCacheNumInMemBuffers(), 0);
+  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), 0);
+
   EXPECT_EQ(config.usesSimpleFile(), false);
   EXPECT_EQ(config.usesRaidFiles(), false);
 
