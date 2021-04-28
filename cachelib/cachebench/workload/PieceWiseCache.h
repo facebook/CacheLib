@@ -55,6 +55,20 @@ class PieceWiseCacheStats {
     AtomicCounter objGets{0};
     AtomicCounter objGetHits{0};
     AtomicCounter objGetFullHits{0};
+
+    void reset() {
+      getBytes.set(0);
+      getHitBytes.set(0);
+      getFullHitBytes.set(0);
+      getBodyBytes.set(0);
+      getHitBodyBytes.set(0);
+      getFullHitBodyBytes.set(0);
+      totalIngressBytes.set(0);
+      totalEgressBytes.set(0);
+      objGets.set(0);
+      objGetHits.set(0);
+      objGetFullHits.set(0);
+    }
   };
 
   // @param numAggregationFields: # of aggregation fields in trace sample
@@ -102,9 +116,14 @@ class PieceWiseCacheStats {
 
   const InternalStats& getInternalStats() const { return stats_; }
 
+  void renderWindowStats(double elapsedSecs, std::ostream& out) const;
+
  private:
   // Overall hit rate stats
   InternalStats stats_;
+
+  // The stats for the data since the last time we rendered.
+  mutable InternalStats lastWindowStats_;
 
   // Collect breakdown stats for following map. The keys of these maps are added
   // in constructor and never changed afterwards, so no map structure change
@@ -124,6 +143,7 @@ class PieceWiseCacheStats {
                    const std::vector<std::string>& fields,
                    Args... args) {
     func(stats_, args...);
+    func(lastWindowStats_, args...);
 
     for (const auto& [fieldNum, statM] : extraStatsIndexM_) {
       XDCHECK_LT(fieldNum, fields.size());

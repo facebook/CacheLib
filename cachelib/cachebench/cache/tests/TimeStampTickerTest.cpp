@@ -13,7 +13,7 @@ namespace test {
 
 TEST(TimeStampTickerTest, callbackTest) {
   int called = 0;
-  auto callback = [&called]() { ++called; };
+  auto callback = [&called](double) { ++called; };
 
   uint32_t numThreads = 3;
   TimeStampTicker ticker{numThreads, 1, callback};

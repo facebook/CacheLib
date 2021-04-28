@@ -161,6 +161,17 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
   }
 }
 
+void PieceWiseCacheStats::renderWindowStats(double elapsedSecs,
+                                            std::ostream& out) const {
+  out << std::endl
+      << "== PieceWiseReplayGenerator Stats in Recent Time Window =="
+      << std::endl;
+
+  renderStatsInternal(lastWindowStats_, elapsedSecs, out);
+
+  lastWindowStats_.reset();
+}
+
 void PieceWiseCacheStats::renderStatsInternal(const InternalStats& stats,
                                               double elapsedSecs,
                                               std::ostream& out) {

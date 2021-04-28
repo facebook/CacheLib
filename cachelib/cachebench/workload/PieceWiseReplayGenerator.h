@@ -62,6 +62,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
   }
 
+  void renderWindowStats(double elapsedSecs, std::ostream& out) const override {
+    pieceCacheAdapter_.getStats().renderWindowStats(elapsedSecs, out);
+  }
+
   void markFinish() override {
     threadFinished_[*tlStickyIdx_].store(true, std::memory_order_relaxed);
   }

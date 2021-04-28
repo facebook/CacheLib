@@ -72,7 +72,10 @@ class CacheStressor : public Stressor {
       // Create TimeStampTicker to allow time synching based on traces'
       // timestamps.
       ticker_ = std::make_shared<TimeStampTicker>(
-          config.numThreads, cacheConfig.tickerSynchingSeconds);
+          config.numThreads, cacheConfig.tickerSynchingSeconds,
+          [wg = wg_.get()](double elapsedSecs) {
+            wg->renderWindowStats(elapsedSecs, std::cout);
+          });
       cacheConfig.ticker = ticker_;
     }
 

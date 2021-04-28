@@ -53,7 +53,7 @@ bool TimeStampTicker::advanceTimeStamp(uint32_t currTimeStamp) {
     latch = getLatch(oldBucket);
     auto lastThread = latch->count_down();
     if (lastThread && onCrossTimeWindow_) {
-      onCrossTimeWindow_();
+      onCrossTimeWindow_(static_cast<double>(bucketTicks_));
     }
     oldBucket++;
   }

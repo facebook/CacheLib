@@ -33,6 +33,12 @@ class GeneratorBase {
     // not implemented by default
   }
 
+  // Render the stats based on the data since last time we rendered.
+  virtual void renderWindowStats(double /*elapsedSecs*/,
+                                 std::ostream& /*out*/) const {
+    // not implemented by default
+  }
+
   // Should be called when all working threads are finished, or aborted
   void markShutdown() { isShutdown_.store(true, std::memory_order_relaxed); }
 

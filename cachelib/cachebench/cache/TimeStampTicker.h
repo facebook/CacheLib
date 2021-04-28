@@ -29,9 +29,10 @@ class TimeStampTicker : public cachelib::Ticker {
   // @param onCrossTimeWindow The optional callback to run when a time windows
   // has been crossed by all the threads. It is called on the last thread who
   // crosses the window.
-  explicit TimeStampTicker(uint32_t numThreads,
-                           uint32_t bucketTicks = 3600,
-                           std::function<void()> onCrossTimeWindow = nullptr)
+  explicit TimeStampTicker(
+      uint32_t numThreads,
+      uint32_t bucketTicks = 3600,
+      std::function<void(double elapsedSecs)> onCrossTimeWindow = nullptr)
       : numThreads_{numThreads},
         bucketTicks_{bucketTicks},
         onCrossTimeWindow_{onCrossTimeWindow} {}
@@ -84,8 +85,11 @@ class TimeStampTicker : public cachelib::Ticker {
 
   const uint32_t numThreads_;
   const uint32_t bucketTicks_;
+
   // The callback to run when the last thread cross a window.
-  std::function<void()> onCrossTimeWindow_;
+  // The param elapsedSecs is how long in seconds a time window is. It have the
+  // same value as bucketTicks_.
+  std::function<void(double elapsedSecs)> onCrossTimeWindow_;
 };
 } // namespace cachebench
 } // namespace cachelib
