@@ -3,7 +3,7 @@
     "cacheSizeMB": 22248,
     "navyReaderThreads": 32,
     "navyWriterThreads": 32,
-    "dipperFilePath": "/dev/md0",
+    "devicePaths": ["/dev/md0"],
     "writeAmpDeviceList": [
       "nvme1n1",
       "nvme2n1"

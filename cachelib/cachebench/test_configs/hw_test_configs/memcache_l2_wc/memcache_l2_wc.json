@@ -3,7 +3,7 @@
     "cacheSizeMB": 38000,
     "navyReaderThreads": 32,
     "navyWriterThreads": 32,
-    "dipperFilePath": "/dev/md0",
+    "devicePaths": ["/dev/md0"],
     "writeAmpDeviceList": [
       "nvme1n1",
       "nvme2n1"
@@ -49,8 +49,8 @@
         "valSizeDistFile": "memcache_twmemcache.ltw.ireland_sizes.json"
       }
     ],
-    
-    
+
+
     "opDelayNs": 5000000,
     "opDelayBatch": 1
   }

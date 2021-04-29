@@ -122,7 +122,7 @@
       1.0
     ],
     "dipperSizeMB": 155507,
-    "dipperFilePath": "",
+    "devicePaths": ["/dev/md0"],
     "dipperUseDirectIO": false,
     "dipperNavyBlock": 4096,
     "dipperNavyUseRegionLru": false,

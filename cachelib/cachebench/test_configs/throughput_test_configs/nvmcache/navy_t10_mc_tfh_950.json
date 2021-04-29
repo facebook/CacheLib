@@ -44,13 +44,13 @@
       819200
     ],
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperFilePath": "/dev/md0",
+    "devicePaths": ["/dev/md0"],
     "nvmCacheReadBufSize": 8192
   },
   "test_config": {
-    
-    
-   
+
+
+
     "numOps": 20000000,
     "numThreads": 300,
     "numKeys": 500000000,

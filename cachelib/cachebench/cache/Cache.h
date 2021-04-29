@@ -285,6 +285,7 @@ class Cache {
   uint64_t fetchNandWrites() const;
 
   CacheConfig config_;
+  std::vector<std::string> nvmCacheFilePaths_;
   const std::string cacheDir_;
   // The admission policy that tracks the accesses.
   std::shared_ptr<NvmAdmissionPolicy<Allocator>> nvmAdmissionPolicy_;

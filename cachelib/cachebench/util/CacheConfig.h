@@ -80,8 +80,10 @@ struct CacheConfig : public JSONConfig {
   // or raw device, then navy uses that directly. If the path specificied is a
   // directory, we will create a file inside with appropriate size . If a
   // directory is specified by user, cachebench cleans it up at exit. If it is
-  // a file, cachebench preserves the file upon exit
-  std::string dipperFilePath{};
+  // a file, cachebench preserves the file upon exit. User can also specify a
+  // number of devices. Cachelib's flash cache engine (Navy) will use them in a
+  // raid0 fashion
+  std::vector<std::string> devicePaths{};
 
   // list of device identifiers for the device path that can be used to
   // monitor the physical write amplification. If empty, physical write amp is

@@ -75,7 +75,9 @@ Cache<Allocator>::Cache(CacheConfig config,
 
   auto cleanupGuard = folly::makeGuard([&] {
     if (shouldCleanupFiles_) {
-      util::removePath(config_.dipperFilePath);
+      for (const auto& f : nvmCacheFilePaths_) {
+        util::removePath(f);
+      }
     }
   });
 
@@ -93,23 +95,32 @@ Cache<Allocator>::Cache(CacheConfig config,
 
     nvmConfig.enableFastNegativeLookups = true;
 
-    if (!config_.dipperFilePath.empty()) {
+    if (!config_.devicePaths.empty() && config_.devicePaths.size() == 1) {
       // if we get a directory, create a file. we will clean it up. If we
       // already have a file, user provided it. So we will also keep it around
       // after the tests.
-      if (cachelib::util::isDir(config_.dipperFilePath)) {
+      auto devicePath = config_.devicePaths[0];
+      if (cachelib::util::isDir(devicePath)) {
         const auto uniqueSuffix = folly::sformat("nvmcache_{}_{}", ::getpid(),
                                                  folly::Random::rand32());
-        config_.dipperFilePath = config_.dipperFilePath + "/" + uniqueSuffix;
-        util::makeDir(config_.dipperFilePath);
+        devicePath = devicePath + "/" + uniqueSuffix;
+        util::makeDir(devicePath);
         shouldCleanupFiles_ = true;
         nvmConfig.dipperOptions["dipper_navy_truncate_file"] = true;
         nvmConfig.dipperOptions["dipper_navy_file_name"] =
-            config_.dipperFilePath + "/navy_cache";
+            devicePath + "/navy_cache";
       } else {
-        nvmConfig.dipperOptions["dipper_navy_file_name"] =
-            config_.dipperFilePath;
+        nvmConfig.dipperOptions["dipper_navy_file_name"] = devicePath;
       }
+      nvmCacheFilePaths_.push_back(devicePath);
+    } else if (!config_.devicePaths.empty()) {
+      auto raidDevicePaths = folly::dynamic::array();
+      for (auto& path : config_.devicePaths) {
+        raidDevicePaths.push_back(path);
+        nvmCacheFilePaths_.push_back(path);
+      }
+      // We only support using the whole device for multiple paths
+      nvmConfig.dipperOptions["dipper_navy_raid_paths"] = raidDevicePaths;
     }
 
     if (config_.navyNumInmemBuffers > 0) {
@@ -246,7 +257,9 @@ Cache<Allocator>::~Cache() {
     cache_.reset();
 
     if (shouldCleanupFiles_) {
-      util::removePath(config_.dipperFilePath);
+      for (const auto& f : nvmCacheFilePaths_) {
+        util::removePath(f);
+      }
     }
   } catch (...) {
   }

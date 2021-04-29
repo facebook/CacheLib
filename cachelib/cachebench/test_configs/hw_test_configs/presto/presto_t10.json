@@ -19,12 +19,12 @@
     "dipperNavyBlock": 4096,
     "dipperNavySizeClasses": [],
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperFilePath": "/dev/md0"
+    "devicePaths": ["/dev/md0"]
   },
   "test_config": {
-    
-    
-   
+
+
+
     "enableLookaside": true,
     "numOps": 2000000,
     "numThreads": 34,

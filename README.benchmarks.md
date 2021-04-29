@@ -95,7 +95,7 @@ See [README.build.md](README.build.md) for further details.
 2. **Device Info** - Device info is configured in the config file
    using the "dipperDevicePath" option.  If you would rather use a
    filesystem based cache, pass the appropriate path through
-   `dipperFilePath`.  The benchmark will create a single file
+   `devicePaths`.  The benchmark will create a single file
    under that path corresponding to the configured `dipperSizeMb`
 3. **Watching Progress** -  While the benchmark runs, you can monitor the
    progress so far. The interval for progress update can be configured

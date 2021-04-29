@@ -5,8 +5,7 @@
     "numPools" : 1,
     "allocFactor" : 2.0,
 
-    "dipperFilePath": "/dev/shm/cachebench",
-    "dipperFilePath": "/dev/nvme0n1p1",
+    "devicePaths": ["/dev/shm/cachebench"],
 
     "dipperSizeMB" : 900000,
     "dipperNavyBigHashBucketSize" : 4096,
@@ -17,7 +16,7 @@
   },
   "test_config" :
     {
-      
+
       "checkConsistency" : false,
 
       "numOps" : 30000000,
