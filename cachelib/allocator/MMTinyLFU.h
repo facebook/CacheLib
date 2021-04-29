@@ -223,6 +223,7 @@ class MMTinyLFU {
         : lru_(LruType::NumTypes, std::move(compressor)),
           config_(std::move(c)) {
       maybeGrowAccessCountersLocked();
+      lruRefreshTime_ = config_.lruRefreshTime;
       nextReconfigureTime_ =
           config_.mmReconfigureIntervalSecs.count() == 0
               ? std::numeric_limits<Time>::max()
@@ -543,6 +544,9 @@ class MMTinyLFU {
 
     // The next time to reconfigure the container.
     std::atomic<Time> nextReconfigureTime_{};
+
+    // How often to promote an item in the eviction queue.
+    std::atomic<uint32_t> lruRefreshTime_{};
 
     // Max lruFreshTime.
     static constexpr uint32_t kLruRefreshTimeCap{900};

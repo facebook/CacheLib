@@ -152,6 +152,7 @@ class MMLru {
         : compressor_(std::move(compressor)),
           lru_(compressor_),
           config_(std::move(c)) {
+      lruRefreshTime_ = config_.lruRefreshTime;
       nextReconfigureTime_ =
           config_.mmReconfigureIntervalSecs.count() == 0
               ? std::numeric_limits<Time>::max()
@@ -379,6 +380,9 @@ class MMLru {
 
     // The next time to reconfigure the container.
     std::atomic<Time> nextReconfigureTime_{};
+
+    // How often to promote an item in the eviction queue.
+    std::atomic<uint32_t> lruRefreshTime_{};
 
     // Config for this lru.
     // Write access to the MMLru Config is serialized.

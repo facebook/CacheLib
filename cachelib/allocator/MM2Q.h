@@ -233,6 +233,7 @@ class MM2Q {
         : lru_(LruType::NumTypes, std::move(compressor)),
           tailTrackingEnabled_(c.tailSize > 0),
           config_(std::move(c)) {
+      lruRefreshTime_ = config_.lruRefreshTime;
       nextReconfigureTime_ =
           config_.mmReconfigureIntervalSecs.count() == 0
               ? std::numeric_limits<Time>::max()
@@ -512,6 +513,9 @@ class MM2Q {
 
     // The next time to reconfigure the container.
     std::atomic<Time> nextReconfigureTime_{};
+
+    // How often to promote an item in the eviction queue.
+    std::atomic<uint32_t> lruRefreshTime_{};
 
     // Config for this lru.
     // Write access to the MM2Q Config is serialized.

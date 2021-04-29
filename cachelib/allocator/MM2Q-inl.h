@@ -8,6 +8,12 @@ MM2Q::Container<T, HookPtr>::Container(const serialization::MM2QObject& object,
     : lru_(*object.lrus_ref(), compressor),
       tailTrackingEnabled_(*object.tailTrackingEnabled_ref()),
       config_(*object.config_ref()) {
+  lruRefreshTime_ = config_.lruRefreshTime;
+  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
+                             ? std::numeric_limits<Time>::max()
+                             : static_cast<Time>(util::getCurrentTimeSec()) +
+                                   config_.mmReconfigureIntervalSecs.count();
+
   // We need to adjust list positions if the previous version does not have
   // tail lists (WarmTail & ColdTail), in order to potentially avoid cold roll
   if (object.lrus_ref()->lists_ref()->size() < LruType::NumTypes) {
@@ -29,7 +35,8 @@ bool MM2Q::Container<T, HookPtr>::recordAccess(T& node,
   const auto curr = static_cast<Time>(util::getCurrentTimeSec());
   // check if the node is still being memory managed
   if (node.isInMMContainer() &&
-      (curr >= getUpdateTime(node) + config_.lruRefreshTime)) {
+      ((curr >= getUpdateTime(node) +
+                    lruRefreshTime_.load(std::memory_order_relaxed)))) {
     auto func = [&]() {
       reconfigureLocked(curr);
       ++numLockByRecordAccesses_;
@@ -259,6 +266,7 @@ void MM2Q::Container<T, HookPtr>::setConfig(const Config& newConfig) {
 
   lruMutex_->lock_combine([this, &newConfig]() {
     config_ = newConfig;
+    lruRefreshTime_.store(config_.lruRefreshTime, std::memory_order_relaxed);
     nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
                                ? std::numeric_limits<Time>::max()
                                : static_cast<Time>(util::getCurrentTimeSec()) +
@@ -359,7 +367,7 @@ template <typename T, MM2Q::Hook<T> T::*HookPtr>
 serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MM2QConfig configObject;
-  *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
+  *configObject.lruRefreshTime_ref() = lruRefreshTime_;
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
   *configObject.updateOnWrite_ref() = config_.updateOnWrite;
   *configObject.updateOnRead_ref() = config_.updateOnRead;
@@ -405,7 +413,7 @@ MMContainerStat MM2Q::Container<T, HookPtr>::getStats() const noexcept {
         numLockByInserts_,
         numLockByRecordAccesses_,
         numLockByRemoves_,
-        config_.lruRefreshTime,
+        lruRefreshTime_.load(std::memory_order_relaxed),
         numHotAccesses_,
         numColdAccesses_,
         numWarmAccesses_,
@@ -427,7 +435,7 @@ void MM2Q::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
                static_cast<uint32_t>(stat.warmQueueStat.oldestElementAge *
                                      config_.lruRefreshRatio)),
       kLruRefreshTimeCap);
-  config_.lruRefreshTime = lruRefreshTime;
+  lruRefreshTime_.store(lruRefreshTime, std::memory_order_relaxed);
 }
 
 // Iterator Context Implementation

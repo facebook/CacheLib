@@ -16,7 +16,13 @@ MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
       insertionPoint_(compressor_.unCompress(
           CompressedPtr{*object.compressedInsertionPoint_ref()})),
       tailSize_(*object.tailSize_ref()),
-      config_(*object.config_ref()) {}
+      config_(*object.config_ref()) {
+  lruRefreshTime_ = config_.lruRefreshTime;
+  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
+                             ? std::numeric_limits<Time>::max()
+                             : static_cast<Time>(util::getCurrentTimeSec()) +
+                                   config_.mmReconfigureIntervalSecs.count();
+}
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
 bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
@@ -29,7 +35,8 @@ bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
   const auto curr = static_cast<Time>(util::getCurrentTimeSec());
   // check if the node is still being memory managed
   if (node.isInMMContainer() &&
-      ((curr >= getUpdateTime(node) + config_.lruRefreshTime) ||
+      ((curr >= getUpdateTime(node) +
+                    lruRefreshTime_.load(std::memory_order_relaxed)) ||
        !isAccessed(node))) {
     if (!isAccessed(node)) {
       markAccessed(node);
@@ -120,6 +127,7 @@ void MMLru::Container<T, HookPtr>::setConfig(const Config& newConfig) {
       }
       insertionPoint_ = nullptr;
     }
+    lruRefreshTime_.store(config_.lruRefreshTime, std::memory_order_relaxed);
     nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
                                ? std::numeric_limits<Time>::max()
                                : static_cast<Time>(util::getCurrentTimeSec()) +
@@ -286,7 +294,8 @@ template <typename T, MMLru::Hook<T> T::*HookPtr>
 serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMLruConfig configObject;
-  *configObject.lruRefreshTime_ref() = config_.lruRefreshTime;
+  *configObject.lruRefreshTime_ref() =
+      lruRefreshTime_.load(std::memory_order_relaxed);
   *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
   *configObject.updateOnWrite_ref() = config_.updateOnWrite;
   *configObject.updateOnRead_ref() = config_.updateOnRead;
@@ -318,7 +327,7 @@ MMContainerStat MMLru::Container<T, HookPtr>::getStats() const noexcept {
                              numLockByInserts_,
                              numLockByRecordAccesses_,
                              numLockByRemoves_,
-                             config_.lruRefreshTime);
+                             lruRefreshTime_.load(std::memory_order_relaxed));
   });
   return {stat[0], stat[1], stat[2], stat[3], stat[4], stat[5], 0, 0, 0, 0};
 }
@@ -337,7 +346,7 @@ void MMLru::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
                static_cast<uint32_t>(stat.warmQueueStat.oldestElementAge *
                                      config_.lruRefreshRatio)),
       kLruRefreshTimeCap);
-  config_.lruRefreshTime = lruRefreshTime;
+  lruRefreshTime_.store(lruRefreshTime, std::memory_order_relaxed);
 }
 
 // Iterator Context Implementation
