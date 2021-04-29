@@ -54,6 +54,208 @@ TEST(Allocator, Propogation) {
   EXPECT_EQ(2, vec5.size());
 }
 
+TEST(Allocator, ScopedAllocatorWithVector) {
+  // This test is to ensure scoped_allocator_adaptor works as expected when
+  // used with our flavor of allocator. The expected behavior is that all
+  // containers aware of scoped_allocator_adaptor will forward the allocator
+  // to its inner member.
+
+  {
+    // If our ScopedAlloc only has a single allocator, it will be used
+    // for all inner members.
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc>;
+    using Vector = std::vector<std::vector<int, Alloc>, ScopedAlloc>;
+    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    Vector vec{alloc};
+    vec = {{1, 2}, {3, 4}};
+
+    EXPECT_EQ("1", vec.get_allocator().getAllocatorResource().getName());
+    auto vecItr = vec.begin();
+    ASSERT_NE(vecItr, vec.end());
+    for (; vecItr != vec.end(); vecItr++) {
+      EXPECT_EQ("1", vecItr->get_allocator().getAllocatorResource().getName());
+    }
+  }
+
+  {
+    // If a type has all "ScopedAlloc" type, then using a single allocator
+    // ScopedAlloc will correctly forward the allocator to all levels
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc>;
+    using Vector =
+        std::vector<std::vector<std::vector<int, ScopedAlloc>, ScopedAlloc>,
+                    ScopedAlloc>;
+    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    Vector vec{alloc};
+    vec = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};
+
+    EXPECT_EQ("1", vec.get_allocator().getAllocatorResource().getName());
+    auto vecItr = vec.begin();
+    ASSERT_NE(vecItr, vec.end());
+    for (; vecItr != vec.end(); vecItr++) {
+      EXPECT_EQ("1", vecItr->get_allocator().getAllocatorResource().getName());
+      auto vecItr2 = vecItr->begin();
+      ASSERT_NE(vecItr2, vecItr->end());
+      for (; vecItr2 != vecItr->end(); vecItr2++) {
+        EXPECT_EQ("1",
+                  vecItr2->get_allocator().getAllocatorResource().getName());
+      }
+    }
+  }
+
+  {
+    // This verifies the behavior that with a two-level container and a
+    // ScopeAlloc with two allocators. "1" will be used for the top level,
+    // and "2" will be used for the lower level.
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc, Alloc>;
+    using Vector = std::vector<std::vector<int, Alloc>, ScopedAlloc>;
+    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}},
+                      Alloc{TestAllocatorResource{"2"}}};
+    Vector vec{alloc};
+    vec = {{1, 2}, {3, 4}};
+
+    EXPECT_EQ("1", vec.get_allocator().getAllocatorResource().getName());
+    auto vecItr = vec.begin();
+    ASSERT_NE(vecItr, vec.end());
+    for (; vecItr != vec.end(); vecItr++) {
+      EXPECT_EQ("2", vecItr->get_allocator().getAllocatorResource().getName());
+    }
+  }
+
+  {
+    // This verifies the behavior that with a three-level container and a
+    // ScopeAlloc with three allocators. "1" will be used for the top level,
+    // "2" will be used for the second level, and "3" for the last level.
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAllocInner = std::scoped_allocator_adaptor<Alloc, Alloc>;
+    using ScopedAllocOuter =
+        std::scoped_allocator_adaptor<Alloc, ScopedAllocInner>;
+    using Vector =
+        std::vector<std::vector<std::vector<int, Alloc>, ScopedAllocInner>,
+                    ScopedAllocOuter>;
+    ScopedAllocOuter alloc{Alloc{TestAllocatorResource{"1"}},
+                           ScopedAllocInner{Alloc{TestAllocatorResource{"2"}},
+                                            Alloc{TestAllocatorResource{"3"}}}};
+    Vector vec{alloc};
+    vec = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};
+
+    EXPECT_EQ("1", vec.get_allocator().getAllocatorResource().getName());
+    auto vecItr = vec.begin();
+    ASSERT_NE(vecItr, vec.end());
+    for (; vecItr != vec.end(); vecItr++) {
+      EXPECT_EQ("2", vecItr->get_allocator().getAllocatorResource().getName());
+      auto vecItr2 = vecItr->begin();
+      ASSERT_NE(vecItr2, vecItr->end());
+      for (; vecItr2 != vecItr->end(); vecItr2++) {
+        EXPECT_EQ("3",
+                  vecItr2->get_allocator().getAllocatorResource().getName());
+      }
+    }
+  }
+}
+
+TEST(Allocator, ScopedAllocatorWithMap) {
+  // This test is to ensure scoped_allocator_adaptor works as expected when
+  // used with our flavor of allocator. We test using a map where each level
+  // has multiple different element types.
+
+  {
+    // If our ScopedAlloc only has a single allocator, it will be used
+    // for all inner members
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAlloc =
+        std::scoped_allocator_adaptor<Allocator<char, TestAllocatorResource>>;
+    using NestedContainer =
+        std::map<std::vector<int, Alloc>,
+                 std::vector<std::vector<int, Alloc>, ScopedAlloc>,
+                 std::less<std::vector<int, Alloc>>, ScopedAlloc>;
+
+    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    NestedContainer nc{alloc};
+    nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
+
+    EXPECT_EQ("1", nc.get_allocator().getAllocatorResource().getName());
+
+    auto itr = nc.begin();
+    ASSERT_NE(itr, nc.end());
+    EXPECT_EQ("1", itr->first.get_allocator().getAllocatorResource().getName());
+    EXPECT_EQ("1",
+              itr->second.get_allocator().getAllocatorResource().getName());
+
+    auto vecItr = itr->second.begin();
+    ASSERT_NE(vecItr, itr->second.end());
+    for (; vecItr != itr->second.end(); vecItr++) {
+      EXPECT_EQ("1", vecItr->get_allocator().getAllocatorResource().getName());
+    }
+  }
+
+  {
+    // If a type has all "ScopedAlloc" type, then using a single allocator
+    // ScopedAlloc will correctly forward the allocator to all levels.
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAlloc =
+        std::scoped_allocator_adaptor<Allocator<char, TestAllocatorResource>>;
+    using NestedContainer =
+        std::map<std::vector<int, ScopedAlloc>,
+                 std::vector<std::vector<int, ScopedAlloc>, ScopedAlloc>,
+                 std::less<std::vector<int, ScopedAlloc>>, ScopedAlloc>;
+
+    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    NestedContainer nc{alloc};
+    nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
+
+    EXPECT_EQ("1", nc.get_allocator().getAllocatorResource().getName());
+
+    auto itr = nc.begin();
+    ASSERT_NE(itr, nc.end());
+    EXPECT_EQ("1", itr->first.get_allocator().getAllocatorResource().getName());
+    EXPECT_EQ("1",
+              itr->second.get_allocator().getAllocatorResource().getName());
+
+    auto vecItr = itr->second.begin();
+    ASSERT_NE(vecItr, itr->second.end());
+    for (; vecItr != itr->second.end(); vecItr++) {
+      EXPECT_EQ("1", vecItr->get_allocator().getAllocatorResource().getName());
+    }
+  }
+
+  {
+    // This verifies the behavior that with a three-level container and a
+    // ScopeAlloc with three allocators. "1" will be used for the top level,
+    // "2" will be used for the second level, and "3" for the last level.
+    using Alloc = Allocator<char, TestAllocatorResource>;
+    using ScopedAllocInner = std::scoped_allocator_adaptor<Alloc, Alloc>;
+    using ScopedAllocOuter =
+        std::scoped_allocator_adaptor<Alloc, ScopedAllocInner>;
+    using NestedContainer =
+        std::map<std::vector<int, Alloc>,
+                 std::vector<std::vector<int, Alloc>, ScopedAllocInner>,
+                 std::less<std::vector<int, Alloc>>, ScopedAllocOuter>;
+
+    ScopedAllocOuter alloc{Alloc{TestAllocatorResource{"1"}},
+                           ScopedAllocInner{Alloc{TestAllocatorResource{"2"}},
+                                            Alloc{TestAllocatorResource{"3"}}}};
+    NestedContainer nc{alloc};
+    nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
+
+    EXPECT_EQ("1", nc.get_allocator().getAllocatorResource().getName());
+
+    auto itr = nc.begin();
+    ASSERT_NE(itr, nc.end());
+    EXPECT_EQ("2", itr->first.get_allocator().getAllocatorResource().getName());
+    EXPECT_EQ("2",
+              itr->second.get_allocator().getAllocatorResource().getName());
+
+    auto vecItr = itr->second.begin();
+    ASSERT_NE(vecItr, itr->second.end());
+    for (; vecItr != itr->second.end(); vecItr++) {
+      EXPECT_EQ("3", vecItr->get_allocator().getAllocatorResource().getName());
+    }
+  }
+}
+
 TEST(Allocator, Exception) {
   Allocator<int, TestAllocatorResource> myAllocator{
       TestAllocatorResource{"abc"}};

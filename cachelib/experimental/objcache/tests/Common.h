@@ -1,10 +1,11 @@
+#pragma once
+
+#include <folly/Random.h>
 #include <folly/logging/xlog.h>
 
 #include <memory>
 #include <scoped_allocator>
 #include <string>
-
-#pragma once
 
 #include "cachelib/experimental/objcache/Allocator.h"
 
@@ -17,7 +18,31 @@ namespace test {
 class TestAllocatorResource {
  public:
   TestAllocatorResource() = default;
-  explicit TestAllocatorResource(std::string name) : name_{std::move(name)} {}
+  // @param name          name must be the same for allocator to compare equal
+  // @param privateName   private name can be anything. it's just for us to
+  //                      identify the allocator
+  explicit TestAllocatorResource(std::string name,
+                                 std::string privateName = "private")
+      : name_{std::move(name)}, privateName_{std::move(privateName)} {}
+
+  TestAllocatorResource(const TestAllocatorResource& other) = default;
+  TestAllocatorResource& operator=(const TestAllocatorResource& other) =
+      default;
+
+  TestAllocatorResource(TestAllocatorResource&& other) {
+    // Instead of moving. Simply copy over the name and the shared_ptr
+    name_ = other.name_;
+    privateName_ = other.privateName_;
+    numAllocs_ = other.numAllocs_;
+    throw_ = other.throw_;
+  }
+
+  TestAllocatorResource& operator=(TestAllocatorResource&& other) {
+    if (this != &other) {
+      new (this) TestAllocatorResource(std::move(other));
+    }
+    return *this;
+  }
 
   void* allocate(size_t bytes, size_t alignment) {
     (void)alignment;
@@ -44,12 +69,16 @@ class TestAllocatorResource {
     return name_ == other.name_;
   }
 
-  uint64_t getNumAllocs() const { return *numAllocs_; }
-
   void setThrow(bool shouldThrow) { *throw_ = shouldThrow; }
 
+  uint64_t getNumAllocs() const { return *numAllocs_; }
+
+  const std::string& getName() const { return name_; }
+  const std::string& getPrivateName() const { return privateName_; }
+
  private:
-  std::string name_{"default"};
+  std::string name_{folly::sformat("name_{}", folly::Random::rand32())};
+  std::string privateName_{"private"};
   std::shared_ptr<uint64_t> numAllocs_{std::make_shared<uint64_t>()};
   std::shared_ptr<bool> throw_{std::make_shared<bool>(false)};
 };
