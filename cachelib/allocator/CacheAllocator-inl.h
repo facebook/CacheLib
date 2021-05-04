@@ -1486,6 +1486,8 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
   // put will check if there was a delete enqueued while the eviction was in
   // flight after removing from the hashtable.
   //
+  stats_.numCacheRemoves.inc();
+
   using Guard = typename NvmCacheT::DeleteTombStoneGuard;
   auto tombStone = nvmCache_ ? nvmCache_->createDeleteTombStone(key) : Guard{};
 
@@ -1556,6 +1558,7 @@ void CacheAllocator<CacheTrait>::flushNvmCache() {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
+  stats_.numCacheRemoves.inc();
   if (auto eventTracker = getEventTracker()) {
     eventTracker->record(AllocatorApiEvent::REMOVE, it->getKey(),
                          AllocatorApiResult::REMOVED, it->getSize(),
@@ -1567,6 +1570,7 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(const ItemHandle& it) {
+  stats_.numCacheRemoves.inc();
   if (!it) {
     throw std::invalid_argument("Trying to remove a null item handle");
   }
@@ -1602,7 +1606,11 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
 
   // the last guy with reference to the item will release it back to the
   // allocator.
-  return success ? RemoveRes::kSuccess : RemoveRes::kNotFoundInRam;
+  if (success) {
+    stats_.numCacheRemoveRamHits.inc();
+    return RemoveRes::kSuccess;
+  }
+  return RemoveRes::kNotFoundInRam;
 }
 
 template <typename CacheTrait>

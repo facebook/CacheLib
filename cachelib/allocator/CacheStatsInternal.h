@@ -28,6 +28,13 @@ struct Stats {
   // in the numCacheGetMiss stats above.
   TLCounter numCacheGetExpiries{0};
 
+  // number of remove calls to CacheAllocator::remove that requires
+  // a lookup first and then remove the item
+  TLCounter numCacheRemoves{0};
+
+  // number of remove calls that resulted in a ram hit
+  TLCounter numCacheRemoveRamHits{0};
+
   // number of nvm gets
   TLCounter numNvmGets{0};
 

@@ -308,6 +308,13 @@ struct GlobalCacheStats {
   // in the numCacheGetMiss stats above.
   uint64_t numCacheGetExpiries{0};
 
+  // number of remove calls to CacheAllocator::remove that requires
+  // a lookup first and then remove the item
+  uint64_t numCacheRemoves{0};
+
+  // number of remove calls that resulted in a ram hit
+  uint64_t numCacheRemoveRamHits{0};
+
   // number of nvm gets
   uint64_t numNvmGets{0};
 
