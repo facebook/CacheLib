@@ -103,7 +103,7 @@ struct CacheConfig : public JSONConfig {
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
   // Navy specific: size classes. Must be multiples of @dipperNavyBlock.
-  std::vector<uint64_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
+  std::vector<uint32_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
                                               4 * 512,  6 * 512,  8 * 512,
                                               12 * 512, 16 * 512, 32 * 512};
 

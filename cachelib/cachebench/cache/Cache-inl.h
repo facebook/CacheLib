@@ -1,3 +1,4 @@
+#include <folly/DynamicConverter.h>
 #include <folly/Format.h>
 #include <folly/json.h>
 #include <folly/logging/xlog.h>
@@ -8,6 +9,7 @@
 #include <iostream>
 
 #include "cachelib/allocator/Util.h"
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 
 namespace facebook {
@@ -84,14 +86,8 @@ Cache<Allocator>::Cache(CacheConfig config,
   // Set up Navy
   if (config_.dipperSizeMB) {
     typename Allocator::NvmCacheConfig nvmConfig;
-    nvmConfig.dipperOptions = folly::dynamic::object;
 
-    nvmConfig.dipperOptions["dipper_navy_file_size"] =
-        config_.dipperSizeMB * MB;
-
-    nvmConfig.dipperOptions["dipper_force_reinit"] = true;
-    nvmConfig.dipperOptions["dipper_navy_data_checksum"] =
-        config_.navyDataChecksum;
+    nvmConfig.navyConfig.setBlockCacheDataChecksum(config_.navyDataChecksum);
 
     nvmConfig.enableFastNegativeLookups = true;
 
@@ -106,95 +102,83 @@ Cache<Allocator>::Cache(CacheConfig config,
         devicePath = devicePath + "/" + uniqueSuffix;
         util::makeDir(devicePath);
         shouldCleanupFiles_ = true;
-        nvmConfig.dipperOptions["dipper_navy_truncate_file"] = true;
-        nvmConfig.dipperOptions["dipper_navy_file_name"] =
-            devicePath + "/navy_cache";
+        nvmConfig.navyConfig.setSimpleFile(devicePath + "/navy_cache",
+                                           config_.dipperSizeMB * MB,
+                                           true /*truncateFile*/);
       } else {
-        nvmConfig.dipperOptions["dipper_navy_file_name"] = devicePath;
+        nvmConfig.navyConfig.setSimpleFile(devicePath,
+                                           config_.dipperSizeMB * MB);
       }
       nvmCacheFilePaths_.push_back(devicePath);
     } else if (!config_.devicePaths.empty()) {
-      auto raidDevicePaths = folly::dynamic::array();
-      for (auto& path : config_.devicePaths) {
-        raidDevicePaths.push_back(path);
-        nvmCacheFilePaths_.push_back(path);
-      }
       // We only support using the whole device for multiple paths
-      nvmConfig.dipperOptions["dipper_navy_raid_paths"] = raidDevicePaths;
+      nvmConfig.navyConfig.setRaidFiles(config_.devicePaths,
+                                        config_.dipperSizeMB * MB);
+    } else {
+      nvmConfig.navyConfig.setMemoryFile(config_.dipperSizeMB * MB);
     }
 
     if (config_.navyNumInmemBuffers > 0) {
-      nvmConfig.dipperOptions["dipper_navy_num_in_mem_buffers"] =
-          config_.navyNumInmemBuffers;
+      nvmConfig.navyConfig.setBlockCacheNumInMemBuffers(
+          config_.navyNumInmemBuffers);
     }
 
     if (config_.dipperNavyReqOrderShardsPower != 0) {
-      nvmConfig.dipperOptions["dipper_navy_req_order_shards_power"] =
-          config_.dipperNavyReqOrderShardsPower;
-      nvmConfig.dipperOptions["dipper_request_ordering"] = false;
-    } else {
-      nvmConfig.dipperOptions["dipper_request_ordering"] = true;
+      nvmConfig.navyConfig.setNavyReqOrderingShards(
+          config_.dipperNavyReqOrderShardsPower);
     }
 
-    nvmConfig.dipperOptions["dipper_navy_lru"] = config_.dipperNavyUseRegionLru;
-    nvmConfig.dipperOptions["dipper_navy_sfifo_segment_ratio"] =
-        folly::dynamic::array(config_.navySegmentedFifoSegmentRatio.begin(),
-                              config_.navySegmentedFifoSegmentRatio.end());
-    nvmConfig.dipperOptions["dipper_navy_block_size"] = config_.dipperNavyBlock;
-    nvmConfig.dipperOptions["dipper_navy_region_size"] = 16 * MB;
+    nvmConfig.navyConfig.setBlockCacheLru(config_.dipperNavyUseRegionLru);
+    if (!config_.dipperNavyUseRegionLru) {
+      nvmConfig.navyConfig.setBlockCacheSegmentedFifoSegmentRatio(
+          config_.navySegmentedFifoSegmentRatio);
+    }
+    nvmConfig.navyConfig.setBlockSize(config_.dipperNavyBlock);
+    nvmConfig.navyConfig.setBlockCacheRegionSize(16 * MB);
 
-    if (config.dipperNavyUseStackAllocation ||
-        config_.dipperNavySizeClasses.empty()) {
-      nvmConfig.dipperOptions["dipper_navy_read_buffer"] =
-          config_.dipperNavyStackAllocReadBufSizeKB * 1024;
-    } else {
-      nvmConfig.dipperOptions["dipper_navy_size_classes"] =
-          folly::dynamic::array(config_.dipperNavySizeClasses.begin(),
-                                config_.dipperNavySizeClasses.end());
+    if (!config.dipperNavyUseStackAllocation &&
+        !config_.dipperNavySizeClasses.empty()) {
+      nvmConfig.navyConfig.setBlockCacheSizeClasses(
+          config_.dipperNavySizeClasses);
     }
 
     if (config_.dipperNavyBigHashSizePct > 0) {
-      nvmConfig.dipperOptions["dipper_navy_bighash_size_pct"] =
-          config_.dipperNavyBigHashSizePct;
-      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_size"] =
-          config_.dipperNavyBigHashBucketSize;
-      nvmConfig.dipperOptions["dipper_navy_bighash_bucket_bf_size"] =
-          config_.dipperNavyBloomFilterPerBucketSize;
-      nvmConfig.dipperOptions["dipper_navy_small_item_max_size"] =
-          config_.dipperNavySmallItemMaxSize;
+      nvmConfig.navyConfig.setBigHash(
+          config_.dipperNavyBigHashSizePct,
+          config_.dipperNavyBigHashBucketSize,
+          config_.dipperNavyBloomFilterPerBucketSize,
+          config_.dipperNavySmallItemMaxSize);
     }
 
-    nvmConfig.dipperOptions["dipper_navy_max_parcel_memory_mb"] =
-        config_.dipperNavyParcelMemoryMB;
+    nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.dipperNavyParcelMemoryMB);
 
     if (config_.navyHitsReinsertionThreshold > 0) {
-      nvmConfig.dipperOptions["dipper_navy_reinsertion_hits_threshold"] =
-          config_.navyHitsReinsertionThreshold;
+      nvmConfig.navyConfig.setBlockCacheReinsertionHitsThreshold(
+          static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
     }
     if (config_.navyProbabilityReinsertionThreshold > 0) {
-      nvmConfig.dipperOptions["dipper_navy_reinsertion_probability_threshold"] =
-          config_.navyProbabilityReinsertionThreshold;
+      nvmConfig.navyConfig.setBlockCacheReinsertionProbabilityThreshold(
+          config_.navyProbabilityReinsertionThreshold);
     }
 
-    nvmConfig.dipperOptions["dipper_navy_reader_threads"] =
-        config_.navyReaderThreads;
-    nvmConfig.dipperOptions["dipper_navy_writer_threads"] =
-        config_.navyWriterThreads;
-    nvmConfig.dipperOptions["dipper_navy_clean_regions"] =
-        config_.navyCleanRegions;
+    nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
+                                                   config_.navyWriterThreads);
+
+    nvmConfig.navyConfig.setBlockCacheCleanRegions(config_.navyCleanRegions);
     if (config_.navyAdmissionWriteRateMB > 0) {
-      nvmConfig.dipperOptions["dipper_navy_adm_policy"] = "dynamic_random";
-      nvmConfig.dipperOptions["dipper_navy_adm_write_rate"] =
-          config_.navyAdmissionWriteRateMB * MB;
+      nvmConfig.navyConfig.setAdmissionPolicy("dynamic_random");
+      nvmConfig.navyConfig.setAdmissionWriteRate(
+          config_.navyAdmissionWriteRateMB * MB);
     }
-    nvmConfig.dipperOptions["dipper_navy_max_concurrent_inserts"] =
-        config_.navyMaxConcurrentInserts;
+    nvmConfig.navyConfig.setMaxConcurrentInserts(
+        config_.navyMaxConcurrentInserts);
 
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;
 
     XLOG(INFO) << "Using the following nvm config"
-               << folly::toPrettyJson(nvmConfig.dipperOptions);
+               << folly::toPrettyJson(
+                      folly::toDynamic(nvmConfig.navyConfig.serialize()));
     allocatorConfig.enableNvmCache(nvmConfig);
 
     if (config_.navyEncryption && config_.createEncryptor) {

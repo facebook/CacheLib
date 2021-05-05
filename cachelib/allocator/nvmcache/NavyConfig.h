@@ -137,6 +137,13 @@ class NavyConfig {
   void setRaidFiles(std::vector<std::string> raidPaths,
                     uint64_t fileSize,
                     bool truncateFile = false);
+  // Set the parameter for a in-memory file.
+  // This function is only for cachebench and unit tests to create
+  // a MemoryDevice when no file path is set.
+  void setMemoryFile(uint64_t fileSize) noexcept {
+    fileSize_ = fileSize;
+    enabled_ = true;
+  }
   void setDeviceMetadataSize(uint64_t deviceMetadataSize) noexcept {
     deviceMetadataSize_ = deviceMetadataSize;
     enabled_ = true;
