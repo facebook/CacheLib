@@ -18,7 +18,6 @@
 namespace facebook {
 namespace cachelib {
 namespace benchmark {
-using namespace facebook::cachelib::objcache;
 
 constexpr uint64_t kNumObjects = 100'000;
 constexpr uint64_t kCacheSize = 10 * 1024 * 1024 * 1024ul; // 10GB

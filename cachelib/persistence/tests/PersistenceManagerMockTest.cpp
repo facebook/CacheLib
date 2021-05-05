@@ -46,13 +46,8 @@ class PersistenceManagerMockTest : public ::testing::Test {
   CacheConfig config_;
 };
 
-using ::testing::An;
 using ::testing::AtLeast;
-using ::testing::ByMove;
 using ::testing::InSequence;
-using ::testing::Invoke;
-using ::testing::Return;
-using ::testing::SaveArg;
 
 TEST_F(PersistenceManagerMockTest, testNoCache) {
   MockPersistenceStreamWriter writer;

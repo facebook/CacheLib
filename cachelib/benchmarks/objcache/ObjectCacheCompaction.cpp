@@ -19,7 +19,6 @@
 namespace facebook {
 namespace cachelib {
 namespace benchmark {
-using namespace facebook::cachelib::objcache;
 
 constexpr uint64_t kLoops = 10;
 constexpr uint64_t kNumObjects = 10'000;
