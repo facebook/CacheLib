@@ -3308,7 +3308,9 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
                           allocator_->getAdvisedMemorySize(),
                           memMonitorMaxAdvisedPct_,
                           allocator_->getUnreservedMemorySize(),
-                          nvmCache_ ? nvmCache_->getSize() : 0};
+                          nvmCache_ ? nvmCache_->getSize() : 0,
+                          memMonitor_ ? memMonitor_->getMemAvailableSize() : 0,
+                          memMonitor_ ? memMonitor_->getMemRssSize() : 0};
 }
 
 template <typename CacheTrait>

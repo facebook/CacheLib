@@ -110,6 +110,12 @@ class MemoryMonitor : public PeriodicWorker {
   // maximum percentage of regular cache memory that can be advised away.
   double getMaxAdvisePct() const noexcept { return maxLimitPercent_; }
 
+  // amount of memory available on the host
+  size_t getMemAvailableSize() const noexcept { return memAvailableSize_; }
+
+  // rss size of the process
+  size_t getMemRssSize() const noexcept { return memRssSize_; }
+
   SlabReleaseEvents getSlabReleaseEvents(PoolId pid) const {
     return stats_.getSlabReleaseEvents(pid);
   }
@@ -208,6 +214,11 @@ class MemoryMonitor : public PeriodicWorker {
 
   // a count of total number of slabs reclaimed
   std::atomic<unsigned int> slabsReclaimed_{0};
+
+  // amount of memory available on the host
+  std::atomic<size_t> memAvailableSize_{0};
+  // rss size of the process
+  std::atomic<size_t> memRssSize_{0};
 
   // implements the actual logic of running tryRebalancing and
   // updating the stats

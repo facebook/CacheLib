@@ -479,6 +479,12 @@ struct CacheMemoryStats {
 
   // returne usable portion of the cache size
   size_t usableCacheSize() const { return cacheSize - advisedSize; }
+
+  // amount of memory available on the host
+  size_t memAvailableSize{0};
+
+  // rss size of the process
+  size_t memRssSize{0};
 };
 
 struct CCacheStats {
