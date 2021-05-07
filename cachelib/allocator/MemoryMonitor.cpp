@@ -82,15 +82,15 @@ void MemoryMonitor::checkResidentMemory() {
   const auto stats = cache_.getCacheMemoryStats();
   if (rss > upperLimit_) {
     XLOGF(DBG,
-          "Resident memory size of {} bytes is below the limit of {} bytes",
-          rss,
-          lowerLimit_);
-    adviseAwaySlabs();
-  } else if (rss < lowerLimit_ && stats.numAdvisedSlabs() > 0) {
-    XLOGF(DBG,
           "Resident memory size of {} bytes is above the limit of {} bytes",
           rss,
           upperLimit_);
+    adviseAwaySlabs();
+  } else if (rss < lowerLimit_ && stats.numAdvisedSlabs() > 0) {
+    XLOGF(DBG,
+          "Resident memory size of {} bytes is below the limit of {} bytes",
+          rss,
+          lowerLimit_);
     reclaimSlabs();
   }
   checkPoolsAndAdviseReclaim();
