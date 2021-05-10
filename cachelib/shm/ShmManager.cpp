@@ -214,13 +214,13 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
 }
 
 std::unique_ptr<ShmSegment> ShmManager::attachShmReadOnly(
-    const std::string& dir, const std::string& name, bool posix) {
+    const std::string& dir, const std::string& name, bool posix, void* addr) {
   ShmSegmentOpts opts{PageSizeT::NORMAL, true /* read only */};
   auto shm = std::make_unique<ShmSegment>(ShmAttach, uniqueIdForName(name, dir),
                                           posix, opts);
-  if (!shm->mapAddress(nullptr)) {
-    throw std::invalid_argument(
-        folly::sformat("Error mapping shm {} under {}", name, dir));
+  if (!shm->mapAddress(addr)) {
+    throw std::invalid_argument(folly::sformat(
+        "Error mapping shm {} under {}, addr: {}", name, dir, addr));
   }
   return shm;
 }

@@ -836,6 +836,13 @@ void ShmManagerTest::testAttachReadOnly(bool posix) {
   ASSERT_NE(roShm.get(), nullptr);
   ASSERT_TRUE(roShm->isMapped());
   checkMemory(roShm->getCurrentMapping().addr, segSize, magicVal);
+
+  auto addr = getNewUnmappedAddr();
+  roShm = ShmManager::attachShmReadOnly(cacheDir, seg, posix, addr);
+  ASSERT_NE(roShm.get(), nullptr);
+  ASSERT_TRUE(roShm->isMapped());
+  ASSERT_EQ(roShm->getCurrentMapping().addr, addr);
+  checkMemory(roShm->getCurrentMapping().addr, segSize, magicVal);
 }
 
 TEST_F(ShmManagerTestPosix, AttachReadOnly) { testAttachReadOnly(true); }

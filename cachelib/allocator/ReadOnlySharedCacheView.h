@@ -25,10 +25,16 @@ class ReadOnlySharedCacheView {
   // @param usePosix    the posix compatbility status of original cache. This
   //                    would be part of the config that was used to
   //                    initialize the cache
+  // @param addr        starting address that this segment should be mapped to
+  //                    (exception will be thrown if it is not mounted to the
+  //                     given address)
+  //                    if nullptr, the segment will be mapped to a random
+  //                    address chosen by the kernel
   explicit ReadOnlySharedCacheView(const std::string& cacheDir,
-                                   bool usePosixShm)
+                                   bool usePosixShm,
+                                   void* addr = nullptr)
       : shm_(ShmManager::attachShmReadOnly(
-            cacheDir, detail::kShmCacheName, usePosixShm)) {}
+            cacheDir, detail::kShmCacheName, usePosixShm, addr)) {}
 
   // returns the absolute address at which the shared memory mapping is mounted.
   // The caller can add a relative offset obtained from

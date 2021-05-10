@@ -127,11 +127,17 @@ class ShmManager {
   // particular segment without owning its lifetime or any guarantees.
   //
   // @param cacheDir   the cache directory identifying the original shm
-  // @param segName    the name of the original segment.
+  // @param segName    the name of the original segment
+  // @param addr       starting address that this segment should be mapped to
+  //                   if nullptr, the segment will be mapped to a random
+  //                   address chosen by the kernel
   //
   // @return a unique_ptr to the shm if one is present with the name.
   static std::unique_ptr<ShmSegment> attachShmReadOnly(
-      const std::string& cacheDir, const std::string& segName, bool posix);
+      const std::string& cacheDir,
+      const std::string& segName,
+      bool posix,
+      void* addr = nullptr);
 
  private:
   enum class ShmVal : int8_t { SHM_SYS_V = 1, SHM_POSIX, SHM_INVALID };
