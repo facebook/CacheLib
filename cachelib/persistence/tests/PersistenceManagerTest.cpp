@@ -274,9 +274,9 @@ TEST_F(PersistenceManagerTest, testChained) {
 
 TEST_F(PersistenceManagerTest, testNvmSingle) {
   LruAllocator::NvmCacheConfig nvmConfig;
-  // also test if dipper options working
-  nvmConfig.dipperOptions = utils::getNvmTestOptions(cacheDir_);
-  nvmConfig.dipperOptions["dipper_navy_file_name"] = cacheDir_ + "/navy_CACHE";
+  nvmConfig.navyConfig = utils::getNvmTestConfig(cacheDir_);
+  nvmConfig.navyConfig.setSimpleFile(cacheDir_ + "/navy_CACHE",
+                                     nvmConfig.navyConfig.getFileSize());
   config_.enableNvmCache(nvmConfig);
 
   // test ten items, three chained item, nvm

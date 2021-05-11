@@ -79,9 +79,9 @@ class PersistenceStreamWriter {
  *  - accessConfig.numBuckets
  *  - accessConfig.pageSize
  *  - chainedItemAccessConfig.numBuckets
- *  - nvmConfig.dipperOptions["dipper_navy_file_name"]
- *  - nvmConfig.dipperOptions["dipper_navy_raid_paths"]
- *  - nvmConfig.dipperOptions["dipper_navy_file_size"]
+ *  - nvmConfig.navyConfig.FileName
+ *  - nvmConfig.navyConfig.RaidPaths
+ *  - nvmConfig.navyConfig.FileSize
  */
 class PersistenceManager {
  public:
@@ -101,25 +101,13 @@ class PersistenceManager {
                          "Only default PageSize is supported to persist");
 
     if (config.nvmConfig.has_value()) {
-      const auto& dipper = config.nvmConfig->dipperOptions;
-      if (!dipper.empty()) {
-        validatePathConfig(dipper);
-
-        if (usesSimpleFile(dipper)) {
-          navyFiles_.push_back(getNavyFilePath(dipper));
-        } else if (usesRaidFiles(dipper)) {
-          navyFiles_ = getNavyRaidPaths(dipper);
-        }
-        navyFileSize_ = getNavyFileSize(dipper);
-      } else if (config.nvmConfig->navyConfig.isEnabled()) {
-        const auto& navyConfig = config.nvmConfig->navyConfig;
-        if (navyConfig.usesSimpleFile()) {
-          navyFiles_.push_back(navyConfig.getFileName());
-        } else if (navyConfig.usesRaidFiles()) {
-          navyFiles_ = navyConfig.getRaidPaths();
-        }
-        navyFileSize_ = navyConfig.getFileSize();
+      const auto& navyConfig = config.nvmConfig->navyConfig;
+      if (navyConfig.usesSimpleFile()) {
+        navyFiles_.push_back(navyConfig.getFileName());
+      } else if (navyConfig.usesRaidFiles()) {
+        navyFiles_ = navyConfig.getRaidPaths();
       }
+      navyFileSize_ = navyConfig.getFileSize();
     }
   }
 
