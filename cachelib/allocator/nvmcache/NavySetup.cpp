@@ -129,7 +129,6 @@ void setupCacheProtos(const navy::Device& device,
                       std::vector<unsigned int> segmentRatio,
                       const bool useLru,
                       std::vector<uint32_t> sizeClasses,
-                      const uint64_t readBufferSize,
                       const uint32_t cleanRegions,
                       const uint8_t reinsertionHitsThreshold,
                       const uint32_t reinsertionProbabilityThreshold,
@@ -245,8 +244,6 @@ void setupCacheProtos(const navy::Device& device,
 
     if (!sizeClasses.empty()) {
       blockCache->setSizeClasses(std::move(sizeClasses));
-    } else {
-      blockCache->setReadBufferSize(readBufferSize);
     }
     blockCache->setCleanRegionsPool(cleanRegions);
 
@@ -299,7 +296,6 @@ void setupCacheProtos(const folly::dynamic& options,
       std::move(segmentRatio),
       options.getDefault(kLru, true).getBool(),
       std::move(sizeClasses),
-      options.getDefault(kReadBuffer, 4096).getInt(),
       options.getDefault(kCleanRegions, 1).getInt(),
       static_cast<uint8_t>(
           options.getDefault(kReinsertionHitsThreshold, 0).getInt()),
@@ -364,7 +360,6 @@ void setupCacheProtos(const navy::NavyConfig& config,
                    config.getBlockCacheSegmentedFifoSegmentRatio(),
                    config.getBlockCacheLru(),
                    config.getBlockCacheSizeClasses(),
-                   config.getBlockCacheReadBufferSize(),
                    config.getBlockCacheCleanRegions(),
                    config.getBlockCacheReinsertionHitsThreshold(),
                    config.getBlockCacheReinsertionProbabilityThreshold(),

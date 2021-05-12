@@ -56,9 +56,6 @@ class NavyConfig {
   // ============ BlockCache settings =============
   bool getBlockCacheLru() const { return blockCacheLru_; }
   uint32_t getBlockCacheRegionSize() const { return blockCacheRegionSize_; }
-  uint64_t getBlockCacheReadBufferSize() const {
-    return blockCacheReadBufferSize_;
-  }
   const std::vector<uint32_t>& getBlockCacheSizeClasses() const {
     return blockCacheSizeClasses_;
   }
@@ -162,12 +159,6 @@ class NavyConfig {
   // @throw std::invalid_argument if LRU policy is used.
   void setBlockCacheSegmentedFifoSegmentRatio(
       std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio);
-  // Set read buffer size for BlockCache.
-  // @throw std::invalid_argument if size classes have been set.
-  void setBlockCacheReadBufferSize(uint64_t blockCacheReadBufferSize);
-  // Set size classes for BlockCache.
-  // @throw std::invalid_argument if read buffer has been set.
-  void setBlockCacheSizeClasses(std::vector<uint32_t> blockCacheSizeClasses);
   // Set reinsertionHitsThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
   //        set.
@@ -178,6 +169,12 @@ class NavyConfig {
   //        the input value is not in the range of 0~100.
   void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
+  // Set size classes for BlockCache.
+  void setBlockCacheSizeClasses(
+      std::vector<uint32_t> blockCacheSizeClasses) noexcept {
+    blockCacheSizeClasses_ = std::move(blockCacheSizeClasses);
+    enabled_ = true;
+  }
   void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
     blockCacheRegionSize_ = blockCacheRegionSize;
     enabled_ = true;
@@ -275,11 +272,6 @@ class NavyConfig {
   // Size for a region for Navy BlockCache (must be multiple of
   // blockSize_).
   uint32_t blockCacheRegionSize_{16 * 1024 * 1024};
-  // Read buffer size for stack allocator.
-  // In stacked mode, we will read fixed buffer on first attempt. If we read
-  // too little, we will read again. This size should be sized to ensure we
-  // can do most of the reads with just a single IO.
-  uint64_t blockCacheReadBufferSize_{4096};
   // A vector of Navy BlockCache size classes (must be multiples of
   // blockSize_).
   std::vector<uint32_t> blockCacheSizeClasses_;
@@ -299,8 +291,6 @@ class NavyConfig {
   // An array of the ratio of each segment.
   // blockCacheLru_ must be false.
   std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio_;
-  // Whether read buffer is used.
-  bool readBufferSet{false};
 
   // ============ BigHash settings =============
   // Percentage of how much of the device out of all is given to BigHash

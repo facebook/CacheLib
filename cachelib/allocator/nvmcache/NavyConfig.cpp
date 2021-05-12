@@ -139,27 +139,6 @@ void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
   enabled_ = true;
 }
 
-void NavyConfig::setBlockCacheReadBufferSize(
-    uint64_t blockCacheReadBufferSize) {
-  if (!blockCacheSizeClasses_.empty()) {
-    throw std::invalid_argument(
-        "already set size classes, should not set read buffer");
-  }
-  blockCacheReadBufferSize_ = blockCacheReadBufferSize;
-  readBufferSet = true;
-  enabled_ = true;
-}
-
-void NavyConfig::setBlockCacheSizeClasses(
-    std::vector<uint32_t> blockCacheSizeClasses) {
-  if (readBufferSet) {
-    throw std::invalid_argument(
-        "already set read buffer, should not set size classes");
-  }
-  blockCacheSizeClasses_ = std::move(blockCacheSizeClasses);
-  enabled_ = true;
-}
-
 void NavyConfig::setBlockCacheReinsertionHitsThreshold(
     uint8_t blockCacheReinsertionHitsThreshold) {
   if (blockCacheReinsertionProbabilityThreshold_ > 0) {
@@ -246,8 +225,6 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::blockCacheLru"] = blockCacheLru_ ? "true" : "false";
   configMap["navyConfig::blockCacheRegionSize"] =
       folly::to<std::string>(blockCacheRegionSize_);
-  configMap["navyConfig::blockCacheReadBufferSize"] =
-      folly::to<std::string>(blockCacheReadBufferSize_);
   configMap["navyConfig::blockCacheSizeClasses"] =
       folly::join(",", blockCacheSizeClasses_);
   configMap["navyConfig::blockCacheCleanRegions"] =
