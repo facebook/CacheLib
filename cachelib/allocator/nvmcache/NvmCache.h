@@ -68,7 +68,6 @@ class NvmCache {
   using PutToken = typename InFlightPuts::PutToken;
 
   struct Config {
-    folly::dynamic dipperOptions;
     navy::NavyConfig navyConfig{};
 
     // (Optional) enables the user to change some bits to prepare the item for

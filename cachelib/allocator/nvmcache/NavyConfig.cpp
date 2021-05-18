@@ -23,9 +23,7 @@ void NavyConfig::setAdmissionPolicy(const std::string& admissionPolicy) {
   if (admissionPolicy == "") {
     throw std::invalid_argument("admission policy should not be empty");
   }
-
   admissionPolicy_ = admissionPolicy;
-  enabled_ = true;
 }
 
 void NavyConfig::setAdmissionProbability(double admissionProbability) {
@@ -42,7 +40,6 @@ void NavyConfig::setAdmissionProbability(double admissionProbability) {
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
   admissionProbability_ = admissionProbability;
-  enabled_ = true;
 }
 
 void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
@@ -53,7 +50,6 @@ void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
   admissionWriteRate_ = admissionWriteRate;
-  enabled_ = true;
 }
 
 void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
@@ -64,7 +60,6 @@ void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
   maxWriteRate_ = maxWriteRate;
-  enabled_ = true;
 }
 
 void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
@@ -75,7 +70,6 @@ void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
   admissionSuffixLen_ = admissionSuffixLen;
-  enabled_ = true;
 }
 
 void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
@@ -86,7 +80,6 @@ void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
   admissionProbBaseSize_ = admissionProbBaseSize;
-  enabled_ = true;
 }
 
 // file settings
@@ -99,7 +92,6 @@ void NavyConfig::setSimpleFile(const std::string& fileName,
   fileName_ = fileName;
   fileSize_ = fileSize;
   truncateFile_ = truncateFile;
-  enabled_ = true;
 }
 
 void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
@@ -115,7 +107,6 @@ void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
   raidPaths_ = std::move(raidPaths);
   fileSize_ = fileSize;
   truncateFile_ = truncateFile;
-  enabled_ = true;
 }
 
 // BlockCache settings
@@ -125,7 +116,6 @@ void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
         "already set sfifo segment ratio, should not use LRU policy");
   }
   blockCacheLru_ = blockCacheLru;
-  enabled_ = true;
 }
 
 void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
@@ -136,7 +126,6 @@ void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
   }
   blockCacheSegmentedFifoSegmentRatio_ =
       std::move(blockCacheSegmentedFifoSegmentRatio);
-  enabled_ = true;
 }
 
 void NavyConfig::setBlockCacheReinsertionHitsThreshold(
@@ -147,7 +136,6 @@ void NavyConfig::setBlockCacheReinsertionHitsThreshold(
         "reinsertion hits threshold");
   }
   blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
-  enabled_ = true;
 }
 
 void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
@@ -165,7 +153,6 @@ void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
   }
   blockCacheReinsertionProbabilityThreshold_ =
       blockCacheReinsertionProbabilityThreshold;
-  enabled_ = true;
 }
 
 // BigHash settings
@@ -182,7 +169,6 @@ void NavyConfig::setBigHash(unsigned int bigHashSizePct,
   bigHashBucketSize_ = bigHashBucketSize;
   bigHashBucketBfSize_ = bigHashBucketBfSize;
   bigHashSmallItemMaxSize_ = bigHashSmallItemMaxSize;
-  enabled_ = true;
 }
 
 // job scheduler settings
@@ -192,7 +178,6 @@ void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
         "Navy request ordering shards should always be non-zero");
   }
   navyReqOrderingShards_ = navyReqOrderingShards;
-  enabled_ = true;
 }
 
 std::map<std::string, std::string> NavyConfig::serialize() const {

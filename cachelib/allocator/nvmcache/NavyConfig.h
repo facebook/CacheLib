@@ -30,10 +30,6 @@ class NavyConfig {
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
   std::map<std::string, std::string> serialize() const;
-  bool isEnabled() const { return enabled_; }
-  // This is used in unit tests where we set both NavyConfig and dipperOptions.
-  // We have to disable NavyConfig to make dipperOptions tests work properly.
-  void disable() { enabled_ = false; }
 
   // Getters:
   // ============ AP settings =============
@@ -119,10 +115,7 @@ class NavyConfig {
   void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
 
   // ============ Device settings =============
-  void setBlockSize(uint64_t blockSize) noexcept {
-    blockSize_ = blockSize;
-    enabled_ = true;
-  }
+  void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
   // Set the parameters for a simple file.
   // @throw std::invalid_argument if RAID files have been already set.
   void setSimpleFile(const std::string& fileName,
@@ -137,17 +130,12 @@ class NavyConfig {
   // Set the parameter for a in-memory file.
   // This function is only for cachebench and unit tests to create
   // a MemoryDevice when no file path is set.
-  void setMemoryFile(uint64_t fileSize) noexcept {
-    fileSize_ = fileSize;
-    enabled_ = true;
-  }
+  void setMemoryFile(uint64_t fileSize) noexcept { fileSize_ = fileSize; }
   void setDeviceMetadataSize(uint64_t deviceMetadataSize) noexcept {
     deviceMetadataSize_ = deviceMetadataSize;
-    enabled_ = true;
   }
   void setDeviceMaxWriteSize(uint32_t deviceMaxWriteSize) noexcept {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
-    enabled_ = true;
   }
 
   // ============ BlockCache settings =============
@@ -169,28 +157,22 @@ class NavyConfig {
   //        the input value is not in the range of 0~100.
   void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
-  // Set size classes for BlockCache.
   void setBlockCacheSizeClasses(
       std::vector<uint32_t> blockCacheSizeClasses) noexcept {
     blockCacheSizeClasses_ = std::move(blockCacheSizeClasses);
-    enabled_ = true;
   }
   void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
     blockCacheRegionSize_ = blockCacheRegionSize;
-    enabled_ = true;
   }
   void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) noexcept {
     blockCacheCleanRegions_ = blockCacheCleanRegions;
-    enabled_ = true;
   }
   void setBlockCacheNumInMemBuffers(
       uint32_t blockCacheNumInMemBuffers) noexcept {
     blockCacheNumInMemBuffers_ = blockCacheNumInMemBuffers;
-    enabled_ = true;
   }
   void setBlockCacheDataChecksum(bool blockCacheDataChecksum) noexcept {
     blockCacheDataChecksum_ = blockCacheDataChecksum;
-    enabled_ = true;
   }
 
   // ============ BigHash settings =============
@@ -207,7 +189,6 @@ class NavyConfig {
                                  unsigned int writerThreads) noexcept {
     readerThreads_ = readerThreads;
     writerThreads_ = writerThreads;
-    enabled_ = true;
   }
   // Set Navy request ordering shards (expressed as power of two).
   // @throw std::invalid_argument if the input value is 0.
@@ -216,16 +197,12 @@ class NavyConfig {
   // ============ Other settings =============
   void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) noexcept {
     maxConcurrentInserts_ = maxConcurrentInserts;
-    enabled_ = true;
   }
   void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) noexcept {
     maxParcelMemoryMB_ = maxParcelMemoryMB;
-    enabled_ = true;
   }
 
  private:
-  // whether navy config is set, only used for migration
-  bool enabled_{false};
   // ============ AP settings =============
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).

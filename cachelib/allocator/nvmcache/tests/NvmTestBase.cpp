@@ -13,7 +13,6 @@ namespace tests {
 NvmCacheTest::NvmCacheTest() {
   cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   util::makeDir(cacheDir_);
-  options_ = utils::getNvmTestOptions(cacheDir_);
   config_ = utils::getNvmTestConfig(cacheDir_);
 
   {
@@ -26,7 +25,6 @@ NvmCacheTest::NvmCacheTest() {
     allocConfig_.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
     LruAllocator::NvmCacheConfig nvmConfig;
-    nvmConfig.dipperOptions = options_;
     nvmConfig.navyConfig = config_;
     allocConfig_.enableNvmCache(nvmConfig);
   }

@@ -134,8 +134,6 @@ TEST(NavyConfigTest, DefaultVal) {
 
   EXPECT_EQ(config.usesSimpleFile(), false);
   EXPECT_EQ(config.usesRaidFiles(), false);
-
-  EXPECT_FALSE(config.isEnabled());
 }
 
 TEST(NavyConfigTest, Serialization) {
@@ -218,9 +216,6 @@ TEST(NavyConfigTest, AdmissionPolicy) {
   EXPECT_EQ(config2.getAdmissionProbBaseSize(), admissionProbBaseSize);
   // cannot set random parameters
   EXPECT_THROW(config2.setAdmissionProbability(0.5), std::invalid_argument);
-
-  EXPECT_TRUE(config1.isEnabled());
-  EXPECT_TRUE(config2.isEnabled());
 }
 
 TEST(NavyConfigTest, Device) {
@@ -248,9 +243,6 @@ TEST(NavyConfigTest, Device) {
   EXPECT_EQ(config1.getTruncateFile(), truncateFile);
   EXPECT_THROW(config2.setSimpleFile(fileName, fileSize, truncateFile),
                std::invalid_argument);
-
-  EXPECT_TRUE(config1.isEnabled());
-  EXPECT_TRUE(config2.isEnabled());
 }
 
 TEST(NavyConfigTest, BlockCache) {
@@ -305,12 +297,6 @@ TEST(NavyConfigTest, BlockCache) {
                std::invalid_argument);
   EXPECT_EQ(config4.getBlockCacheReinsertionProbabilityThreshold(), 50);
   EXPECT_EQ(config4.getBlockCacheReinsertionHitsThreshold(), 0);
-
-  EXPECT_TRUE(config0.isEnabled());
-  EXPECT_TRUE(config1.isEnabled());
-  EXPECT_TRUE(config2.isEnabled());
-  EXPECT_TRUE(config3.isEnabled());
-  EXPECT_TRUE(config4.isEnabled());
 }
 
 TEST(NavyConfigTest, BigHash) {
@@ -327,7 +313,6 @@ TEST(NavyConfigTest, BigHash) {
   EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
   EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
   EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
-  EXPECT_TRUE(config.isEnabled());
 }
 
 TEST(NavyConfigTest, JobScheduler) {
@@ -338,7 +323,6 @@ TEST(NavyConfigTest, JobScheduler) {
   EXPECT_EQ(config.getReaderThreads(), readerThreads);
   EXPECT_EQ(config.getWriterThreads(), writerThreads);
   EXPECT_EQ(config.getNavyReqOrderingShards(), navyReqOrderingShards);
-  EXPECT_TRUE(config.isEnabled());
 }
 
 TEST(NavyConfigTest, OtherSettings) {
@@ -347,7 +331,6 @@ TEST(NavyConfigTest, OtherSettings) {
   config.setMaxParcelMemoryMB(maxParcelMemoryMB);
   EXPECT_EQ(config.getMaxConcurrentInserts(), maxConcurrentInserts);
   EXPECT_EQ(config.getMaxParcelMemoryMB(), maxParcelMemoryMB);
-  EXPECT_TRUE(config.isEnabled());
 }
 } // namespace tests
 } // namespace cachelib

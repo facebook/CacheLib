@@ -60,7 +60,6 @@ class NvmAdmissionPolicyTest : public testing::Test {
  protected:
   void enableNvmConfig(CacheAllocatorConfig<CacheAllocator<Cache>>& config) {
     CacheAllocator<Cache>::NvmCacheT::Config nvmConfig;
-    nvmConfig.dipperOptions = utils::getNvmTestOptions("/tmp");
     nvmConfig.navyConfig = utils::getNvmTestConfig("/tmp");
     config.enableNvmCache(nvmConfig);
   }
