@@ -284,7 +284,8 @@ Slab* SlabAllocator::computeSlabMemoryStart(void* memoryStart,
 
   if (memoryStart == nullptr ||
       reinterpret_cast<uintptr_t>(memoryStart) % sizeof(Slab)) {
-    throw std::invalid_argument("Invalid memory start");
+    throw std::invalid_argument(
+        folly::sformat("Invalid memory start {}", memoryStart));
   }
 
   // reserve the first numHeaderSlabs for storing the header info for all the

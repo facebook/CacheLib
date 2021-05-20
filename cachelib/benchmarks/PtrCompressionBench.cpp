@@ -96,10 +96,9 @@ int main(int argc, char** argv) {
   // allocate enough memory for all the pools plus slab headers.
   const size_t totalSize = numPools * poolSize + 2 * Slab::kSize;
 
-  std::unique_ptr<char[]> alloced(new char[totalSize]);
   MemoryAllocator::Config c(allocSizes, false /* enableZeroedSlabAllocs */,
                             true /* disableCoredump */, true /* lockMemory */);
-  m.reset(new MemoryAllocator{c, alloced.get(), totalSize});
+  m = std::make_unique<MemoryAllocator>(c, totalSize);
 
   buildAllocs(poolSize);
   folly::runBenchmarks();
