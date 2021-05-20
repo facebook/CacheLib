@@ -34,6 +34,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   }
 
   virtual ~PieceWiseReplayGenerator() {
+    markShutdown();
     traceGenThread_.join();
 
     XLOG(INFO) << "ProducerConsumerQueue Stats: producer waits: "
