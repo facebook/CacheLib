@@ -32,8 +32,8 @@ template <int>
 struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
-  // SizeVerify<sizeof(Stats::cacheHits)> a = SizeVerify<196608>{};
-  // std::ignore = a;
+  SizeVerify<sizeof(Stats)> a = SizeVerify<15680>{};
+  std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
   ret.numCacheGetExpiries = numCacheGetExpiries.get();
@@ -98,6 +98,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   };
   ret.allocAttempts = accum(*allocAttempts);
   ret.allocFailures = accum(*allocFailures);
+  ret.numEvictions = accum(*chainedItemEvictions);
+  ret.numEvictions += accum(*regularItemEvictions);
 
   ret.invalidAllocs = invalidAllocs.get();
   ret.numRefcountOverflow = numRefcountOverflow.get();

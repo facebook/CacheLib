@@ -379,6 +379,9 @@ struct GlobalCacheStats {
   // number of failures to allocate an item due to internal error
   uint64_t allocFailures{0};
 
+  // number of evictions across all the pools in the cache.
+  uint64_t numEvictions{0};
+
   // number of allocation attempts with invalid input params.
   uint64_t invalidAllocs{0};
 
