@@ -3,7 +3,8 @@
 // Ran on devvm T1 2021/05/24
 //
 // ============================================================================
-// cachelib/benchmarks/binarysearchvshashtablebench.cpprelative  time/iter  iters/s
+// cachelib/benchmarks/binarysearchvshashtablebench.cpprelative  time/iter
+// iters/s
 // ============================================================================
 // bs_read_10                                                 115.33ms     8.67
 // ht_read_10                                       681.12%    16.93ms    59.06
