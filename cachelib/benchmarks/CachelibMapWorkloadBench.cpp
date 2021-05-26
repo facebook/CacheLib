@@ -2,6 +2,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/container/EvictingCacheMap.h>
+#include <folly/init/Init.h>
 
 #include <random>
 
@@ -204,7 +205,8 @@ BENCHMARK_RELATIVE(std_unordered_mao_on_folly_evcting_cache_map) {
   cl::benchFollyCacheStdMap();
 }
 
-int main() {
+int main(int argc, char** argv) {
+  folly::init(&argc, &argv);
   cl::setup();
   folly::runBenchmarks();
 }

@@ -1,5 +1,6 @@
 // Benchmark for measuring individual operations of cachelib::Map
 #include <folly/Benchmark.h>
+#include <folly/init/Init.h>
 
 #include <array>
 
@@ -189,7 +190,8 @@ BENCHMARK_RELATIVE(lookup_cachelib_hashtable_only) {
 }
 BENCHMARK_RELATIVE(lookup_cachelib_map) { cl::lookupCachelibMap(); }
 
-int main() {
+int main(int argc, char** argv) {
+  folly::init(&argc, &argv);
   cl::setup();
   folly::runBenchmarks();
 }

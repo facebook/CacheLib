@@ -3,6 +3,7 @@
 #include <folly/Portability.h>
 #include <folly/Random.h>
 #include <folly/container/F14Map.h>
+#include <folly/init/Init.h>
 #include <tsl/sparse_map.h>
 #include <unistd.h>
 
@@ -160,7 +161,8 @@ tslMap_u64  :   13,242,368
 ====================================END=====================================
 #endif
 
-int main(int /* argc */, char** /* argv */) {
+int main(int argc, char** argv) {
+  folly::init(&argc, &argv);
   folly::runBenchmarks();
 
   // memory footprint

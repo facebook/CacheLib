@@ -67,6 +67,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
+#include <folly/init/Init.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -226,4 +227,7 @@ BENCH_WRITE(640, 1000);
 BENCH_WRITE(1000, 100);
 BENCH_WRITE(10000, 10);
 
-int main() { folly::runBenchmarks(); }
+int main(int argc, char** argv) {
+  folly::init(&argc, &argv);
+  folly::runBenchmarks();
+}

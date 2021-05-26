@@ -1,5 +1,6 @@
 #include <folly/Benchmark.h>
 #include <folly/Random.h>
+#include <folly/init/Init.h>
 
 #include <cstring>
 #include <vector>
@@ -183,6 +184,6 @@ BENCH_REL(runMemcmpRand, 1024bytes, 1024)
 } // namespace facebook
 
 int main(int argc, char** argv) {
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  folly::init(&argc, &argv);
   folly::runBenchmarks();
 }

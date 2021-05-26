@@ -19,6 +19,7 @@
 // ============================================================================
 
 #include <folly/Benchmark.h>
+#include <folly/init/Init.h>
 
 #include "cachelib/common/Ticker.h"
 #include "cachelib/common/Time.h"
@@ -89,4 +90,7 @@ BENCHMARK_RELATIVE(inline_steady_clock_in_branch) {
 
 BENCHMARK_RELATIVE(benchInlineClock) { facebook::cachelib::benchInlineClock(); }
 
-int main() { folly::runBenchmarks(); }
+int main(int argc, char** argv) {
+  folly::init(&argc, &argv);
+  folly::runBenchmarks();
+}
