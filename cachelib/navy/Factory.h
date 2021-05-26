@@ -160,6 +160,22 @@ std::unique_ptr<BlockCacheProto> createBlockCacheProto();
 std::unique_ptr<BigHashProto> createBigHashProto();
 std::unique_ptr<CacheProto> createCacheProto();
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
+std::unique_ptr<Device> createRAIDDevice(
+    std::vector<std::string> raidPaths,
+    uint64_t fdsize, // size of each device in the RAID
+    bool truncateFile,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
+std::unique_ptr<Device> createFileDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    bool tuncateFile,
+    uint32_t blockSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

@@ -258,6 +258,49 @@ class CacheProtoImpl final : public CacheProto {
   std::unique_ptr<BigHashProto> bigHashProto_;
   Driver::Config config_;
 };
+// Open cache file @fileName and set it size to @size.
+// Throws std::system_error if failed.
+folly::File openCacheFile(const std::string& fileName,
+                          uint64_t size,
+                          bool truncate) {
+  XLOG(INFO) << "Cache file: " << fileName << " size: " << size
+             << " truncate: " << truncate;
+  if (fileName.empty()) {
+    throw std::invalid_argument("File name is empty");
+  }
+
+  int flags{O_RDWR | O_CREAT};
+  // try opening with o_direct. For tests, we might get a file on tmpfs that
+  // might not support o_direct. Hence, we might have to default to avoiding
+  // o_direct in those cases.
+  folly::File f;
+  try {
+    f = folly::File(fileName.c_str(), flags | O_DIRECT);
+  } catch (const std::system_error& e) {
+    if (e.code().value() == EINVAL) {
+      XLOG(ERR) << "Failed to open with o-direct, trying without. Error: "
+                << e.what();
+      f = folly::File(fileName.c_str(), flags);
+    }
+  }
+  XDCHECK_GE(f.fd(), 0);
+
+  // TODO detect if file exists and is of expected size. If not,
+  // automatically fallocate the file or ftruncate the file.
+  if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
+    throw std::system_error(
+        errno,
+        std::system_category(),
+        folly::sformat("failed fallocate with size {}", size));
+  }
+
+  if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
+    throw std::system_error(errno, std::system_category(),
+                            "Error fadvising cache file");
+  }
+
+  return f;
+}
 } // namespace
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto() {
@@ -275,6 +318,61 @@ std::unique_ptr<CacheProto> createCacheProto() {
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto) {
   return std::move(dynamic_cast<CacheProtoImpl&>(*proto)).create();
 }
+
+std::unique_ptr<Device> createRAIDDevice(
+    std::vector<std::string> raidPaths,
+    uint64_t fdSize,
+    bool truncateFile,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  // File paths are opened in the increasing order of the
+  // path string. This ensures that RAID0 stripes aren't
+  // out of order even if the caller changes the order of
+  // the file paths. We can recover the cache as long as all
+  // the paths are specified, regardless of the order.
+
+  std::sort(raidPaths.begin(), raidPaths.end());
+  std::vector<folly::File> fileVec;
+  for (const auto& path : raidPaths) {
+    folly::File f;
+    try {
+      f = openCacheFile(path, fdSize, truncateFile);
+    } catch (const std::exception& e) {
+      XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
+                << ". Errno: " << errno;
+      throw;
+    }
+    fileVec.push_back(std::move(f));
+  }
+
+  return createDirectIoRAID0Device(std::move(fileVec),
+                                   fdSize,
+                                   blockSize,
+                                   stripeSize,
+                                   std::move(encryptor),
+                                   maxDeviceWriteSize);
+}
+
+std::unique_ptr<Device> createFileDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    bool truncateFile,
+    uint32_t blockSize,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  folly::File f;
+  try {
+    f = openCacheFile(fileName, singleFileSize, truncateFile);
+  } catch (const std::exception& e) {
+    XLOG(ERR) << "Exception in openCacheFile: " << e.what();
+    throw;
+  }
+  return createDirectIoFileDevice(std::move(f), singleFileSize, blockSize,
+                                  std::move(encryptor), maxDeviceWriteSize);
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

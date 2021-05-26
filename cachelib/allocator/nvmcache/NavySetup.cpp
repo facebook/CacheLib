@@ -27,50 +27,6 @@ uint64_t alignUp(uint64_t num, uint64_t alignment) {
   return alignDown(num + alignment - 1, alignment);
 }
 
-// Open cache file @fileName and set it size to @size.
-// Throws std::system_error if failed.
-folly::File openCacheFile(const std::string& fileName,
-                          uint64_t size,
-                          bool truncate) {
-  XLOG(INFO) << "Cache file: " << fileName << " size: " << size
-             << " truncate: " << truncate;
-  if (fileName.empty()) {
-    throw std::invalid_argument("File name is empty");
-  }
-
-  int flags{O_RDWR | O_CREAT};
-  // try opening with o_direct. For tests, we might get a file on tmpfs that
-  // might not support o_direct. Hence, we might have to default to avoiding
-  // o_direct in those cases.
-  folly::File f;
-  try {
-    f = folly::File(fileName.c_str(), flags | O_DIRECT);
-  } catch (const std::system_error& e) {
-    if (e.code().value() == EINVAL) {
-      XLOG(ERR) << "Failed to open with o-direct, trying without. Error: "
-                << e.what();
-      f = folly::File(fileName.c_str(), flags);
-    }
-  }
-  XDCHECK_GE(f.fd(), 0);
-
-  // TODO detect if file exists and is of expected size. If not,
-  // automatically fallocate the file or ftruncate the file.
-  if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
-    throw std::system_error(
-        errno,
-        std::system_category(),
-        folly::sformat("failed fallocate with size {}", size));
-  }
-
-  if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
-    throw std::system_error(errno, std::system_category(),
-                            "Error fadvising cache file");
-  }
-
-  return f;
-}
-
 void setupCacheProtosImpl(const navy::Device& device,
                           uint64_t metadataSize,
                           const unsigned int bigHashPctSize,
@@ -271,66 +227,29 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   auto blockSize = config.getBlockSize();
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
-  if (maxDeviceWriteSize > 0) {
-    maxDeviceWriteSize = alignDown(maxDeviceWriteSize, blockSize);
-  };
 
   if (config.usesRaidFiles()) {
-    auto raidPaths = config.getRaidPaths();
-
-    // File paths are opened in the increasing order of the
-    // path string. This ensures that RAID0 stripes aren't
-    // out of order even if the caller changes the order of
-    // the file paths. We can recover the cache as long as all
-    // the paths are specified, regardless of the order.
-
-    std::sort(raidPaths.begin(), raidPaths.end());
-
-    auto fdSize = config.getFileSize();
-    std::vector<folly::File> fileVec;
-    for (const auto& path : raidPaths) {
-      folly::File f;
-      try {
-        f = openCacheFile(path, fdSize, config.getTruncateFile());
-      } catch (const std::exception& e) {
-        XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
-                  << ". Errno: " << errno;
-        throw;
-      }
-      fileVec.push_back(std::move(f));
-    }
-
-    // Align down device size to ensure each device is aligned to stripe size
     auto stripeSize = config.getBlockCacheRegionSize();
-    fdSize = alignDown(fdSize, stripeSize);
-
-    auto device =
-        cachelib::navy::createDirectIoRAID0Device(std::move(fileVec),
-                                                  fdSize,
-                                                  blockSize,
-                                                  stripeSize,
-                                                  std::move(encryptor),
-                                                  maxDeviceWriteSize);
-    return device;
+    return cachelib::navy::createRAIDDevice(
+        config.getRaidPaths(),
+        alignDown(config.getFileSize(), stripeSize),
+        config.getTruncateFile(),
+        blockSize,
+        stripeSize,
+        std::move(encryptor),
+        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
+  } else if (config.usesSimpleFile()) {
+    return cachelib::navy::createFileDevice(
+        config.getFileName(),
+        config.getFileSize(),
+        config.getTruncateFile(),
+        blockSize,
+        std::move(encryptor),
+        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
+  } else {
+    return cachelib::navy::createMemoryDevice(config.getFileSize(),
+                                              std::move(encryptor), blockSize);
   }
-
-  const auto singleFileSize = config.getFileSize();
-  if (config.usesSimpleFile()) {
-    // Create a simple file device
-    folly::File f;
-    try {
-      f = openCacheFile(config.getFileName(), singleFileSize,
-                        config.getTruncateFile());
-    } catch (const std::exception& e) {
-      XLOG(ERR) << "Exception in openCacheFile: " << e.what();
-      throw;
-    }
-    return cachelib::navy::createDirectIoFileDevice(
-        std::move(f), singleFileSize, blockSize, std::move(encryptor),
-        maxDeviceWriteSize);
-  }
-  return cachelib::navy::createMemoryDevice(singleFileSize,
-                                            std::move(encryptor), blockSize);
 }
 
 std::unique_ptr<navy::AbstractCache> createNavyCache(
