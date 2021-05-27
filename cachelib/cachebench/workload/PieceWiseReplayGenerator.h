@@ -22,7 +22,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         mode_(config_.replayGeneratorConfig.getSerializationMode()),
         numShards_(config.numThreads),
         activeReqQ_(config.numThreads),
-        threadFinished_(config.numThreads) {
+        threadFinished_(config.numThreads),
+        timestampFactor(config.timestampFactor) {
     for (uint32_t i = 0; i < numShards_; ++i) {
       activeReqQ_[i] =
           std::make_unique<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>(
@@ -139,6 +140,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // activeReqQ_ queue.
   std::thread traceGenThread_;
   std::atomic<bool> isEndOfFile_{false};
+
+  // The constant to be divided from the timestamp value
+  // to turn the timestamp into seconds.
+  const uint64_t timestampFactor{1};
 
   AtomicCounter queueProducerWaitCounts_{0};
   AtomicCounter queueConsumerWaitCounts_{0};

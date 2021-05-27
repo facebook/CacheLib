@@ -203,6 +203,10 @@ struct StressorConfig : public JSONConfig {
   // in the cache.
   std::vector<DistributionConfig> poolDistributions;
 
+  // Factor to be divided from the timestamp to get to unit "second"
+  // By default, timestamps are in milliseconds.
+  uint64_t timestampFactor{1000};
+
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);
 
