@@ -308,6 +308,8 @@ Stats Cache<Allocator>::getStats() const {
   ret.numNvmGets = cacheStats.numNvmGets;
   ret.numNvmGetMiss = cacheStats.numNvmGetMiss;
   ret.numNvmGetCoalesced = cacheStats.numNvmGetCoalesced;
+  ret.numNvmRejectsByExpiry = cacheStats.numNvmRejectsByExpiry;
+  ret.numNvmRejectsByClean = cacheStats.numNvmRejectsByClean;
 
   ret.numNvmPuts = cacheStats.numNvmPuts;
   ret.numNvmPutErrs = cacheStats.numNvmPutErrs;

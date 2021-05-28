@@ -64,6 +64,8 @@ struct Stats {
   uint64_t moveSuccessesForSlabRelease{0};
   uint64_t evictionAttemptsForSlabRelease{0};
   uint64_t evictionSuccessesForSlabRelease{0};
+  uint64_t numNvmRejectsByExpiry{0};
+  uint64_t numNvmRejectsByClean{0};
 
   uint64_t inconsistencyCount{0};
   bool isNvmCacheDisabled{false};
@@ -123,6 +125,11 @@ struct Stats {
           "RAM Hit Ratio : {:6.2f}%\n"
           "NVM Hit Ratio : {:6.2f}%\n",
           ramHitRatio, nvmHitRatio);
+
+      out << folly::sformat(
+          "RAM eviction rejects expiry : {:,}\nRAM eviction rejects clean : "
+          "{:,}\n",
+          numNvmRejectsByExpiry, numNvmRejectsByClean);
 
       folly::StringPiece readCat = "NVM Read  Latency";
       folly::StringPiece writeCat = "NVM Write Latency";
