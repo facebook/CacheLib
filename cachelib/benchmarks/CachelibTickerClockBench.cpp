@@ -7,15 +7,21 @@
 // simulation.
 // The second choice is to use a if-statement and use the inline function in
 // proudction.
-// We also bench std::time.
-// In the benchmark evaluation, the second choice is more acceptable.
+//
+// Similarly, we also compare between util::getCurrentTimeSec() vs a ticker
+// implementation.
+//
+// The conclusion here is that we should use an if-statement to sub in the
+// ticker instead of using the ticker directly.
 // ============================================================================
 // cachelib/benchmarks/CachelibSteadyTickerBench.cpprelative  time/iter  iters/s
 // ============================================================================
-// inline_steady_clock                                          10.66s   93.81m
-// steady_clock_ticker                               86.20%     12.37s   80.86m
-// inline_steady_clock_in_branch                     99.37%     10.73s   93.22m
-// benchInlineClock                                 746.74%      1.43s  700.51m
+// inline_steady_clock                                          10.66s   93.85m
+// steady_clock_ticker                               86.29%     12.35s   80.98m
+// inline_steady_clock_in_branch                     99.40%     10.72s   93.29m
+// inline_clock                                     850.06%      1.25s  797.76m
+// clock_ticker                                     655.18%      1.63s  614.88m
+// inline_clock_ticker_in_branch                    843.80%      1.26s  791.89m
 // ============================================================================
 
 #include <folly/Benchmark.h>
@@ -77,6 +83,32 @@ void benchInlineClock() {
   }
   folly::doNotOptimizeAway(ts);
 }
+
+void benchClockTicker() {
+  auto ticker =
+      std::make_shared<facebook::cachelib::detail::ClockBasedTicker>();
+  uint32_t ts;
+  for (auto i = 0; i < FLAGS_num_ops; i++) {
+    ts = ticker->getCurrentTick();
+  }
+  folly::doNotOptimizeAway(ts);
+}
+
+void benchClockTickerInBranch() {
+  // In prod, the ticker object is always null.
+  std::shared_ptr<facebook::cachelib::detail::ClockBasedTicker> ticker =
+      nullptr;
+  uint32_t ts;
+  for (auto i = 0; i < FLAGS_num_ops; i++) {
+    if (ticker) {
+      ts = ticker->getCurrentTick();
+    } else {
+      ts = util::getCurrentTimeSec();
+    }
+  }
+  folly::doNotOptimizeAway(ts);
+}
+
 } // namespace cachelib
 } // namespace facebook
 
@@ -88,7 +120,11 @@ BENCHMARK_RELATIVE(inline_steady_clock_in_branch) {
   facebook::cachelib::benchSteadyClockInBranch();
 }
 
-BENCHMARK_RELATIVE(benchInlineClock) { facebook::cachelib::benchInlineClock(); }
+BENCHMARK_RELATIVE(inline_clock) { facebook::cachelib::benchInlineClock(); }
+BENCHMARK_RELATIVE(clock_ticker) { facebook::cachelib::benchClockTicker(); }
+BENCHMARK_RELATIVE(inline_clock_ticker_in_branch) {
+  facebook::cachelib::benchClockTickerInBranch();
+}
 
 int main(int argc, char** argv) {
   folly::init(&argc, &argv);
