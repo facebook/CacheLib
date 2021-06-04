@@ -65,10 +65,13 @@ class DynamicRandomAP final : public AdmissionPolicy {
     // admits/rejects by the hash
     size_t deterministicKeyHashSuffixLength{0};
 
-    // The max write rate target.
+    // The max write rate target. 0 means disabled.
     // If the target write rate caluclated by write budget exceeds this, use
-    // this rate as the target to adjust.
-    uint64_t maxRate{80 * 1024 * 1024};
+    // this rate as the target to adjust. By default this is 160MB which is
+    // higher than the usual 120MB endurance limit. This gives some leeway for
+    // Navy to use up its spare write budget when it wrote less than endurance
+    // limit during trough in the traffic.
+    uint64_t maxRate{160 * 1024 * 1024};
 
     // Throws if invalid config
     Config& validate();
