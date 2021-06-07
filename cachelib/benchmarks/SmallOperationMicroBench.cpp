@@ -26,6 +26,8 @@ clang-format on
 #include <folly/BenchmarkUtil.h>
 #include <folly/Format.h>
 #include <folly/init/Init.h>
+#include <folly/memory/MallctlHelper.h>
+#include <folly/memory/Malloc.h>
 
 #include <iostream>
 #include <random>
@@ -186,6 +188,18 @@ void compareString(int len) {
     }
   }
 }
+
+void callMallctl() {
+  constexpr uint64_t kOps = 10'000'000;
+  {
+    Timer t{"Mallctl", kOps};
+    for (uint64_t i = 0; i < kOps; i++) {
+      uint64_t mallocedBytes;
+      folly::mallctlRead("thread.allocated", &mallocedBytes);
+      folly::doNotOptimizeAway(mallocedBytes);
+    }
+  }
+}
 } // namespace cachelib
 } // namespace facebook
 
@@ -206,6 +220,7 @@ int main(int argc, char** argv) {
   compareString(1);
   compareString(10);
   compareString(100);
+  callMallctl();
   printMsg("Benchmarks have completed");
 }
 
@@ -250,6 +265,7 @@ NUMA node0 CPU(s):   0-35
 [Read String - 1                                             ] Per-Op: 46    ns, 74    cycles
 [Read String - 10                                            ] Per-Op: 50    ns, 80    cycles
 [Read String - 100                                           ] Per-Op: 108   ns, 173   cycles
+[Mallctl                                                     ] Per-Op: 63    ns, 151   cycles
 -------- Benchmarks have completed -----------------------------------------------------------------
 clang-format on
 */
