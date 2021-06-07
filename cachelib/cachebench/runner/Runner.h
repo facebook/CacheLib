@@ -1,5 +1,7 @@
 #pragma once
 
+#include <folly/Benchmark.h>
+
 #include <string>
 
 #include "cachelib/cachebench/runner/ProgressTracker.h"
@@ -24,6 +26,12 @@ class Runner {
 
   // @return true if the run was successful, false if there is a failure.
   bool run();
+
+  // for testings using folly::Benchmark
+  // in addition to running time, cachebench has several metrics
+  // (hit rate, throughput, ect.) to be compared, use BENCHMARK_COUNTER
+  // and put metrics into folly::UserCounters to show metrics in output results.
+  void run(folly::UserCounters&);
 
   void abort() { stressor_->abort(); }
 

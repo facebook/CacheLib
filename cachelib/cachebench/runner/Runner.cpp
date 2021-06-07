@@ -58,6 +58,30 @@ bool Runner::run() {
   return cacheStats.inconsistencyCount == 0 && !cacheStats.isNvmCacheDisabled;
 }
 
+void Runner::run(folly::UserCounters& counters) {
+  stressor_->start();
+  stressor_->finish();
+
+  BENCHMARK_SUSPEND {
+    // uint64_t durationNs = stressor_->getTestDurationNs();
+    auto cacheStats = stressor_->getCacheStats();
+    auto opsStats = stressor_->aggregateThroughputStats();
+
+    // Allocator Stats
+    cacheStats.render(counters);
+
+    // Throughput
+    // opsStats.render(durationNs, std::cout);
+
+    // stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
+
+    counters["nvm_disable"] = cacheStats.isNvmCacheDisabled ? 100 : 0;
+    counters["inconsistency_count"] = cacheStats.inconsistencyCount * 100;
+
+    stressor_.reset();
+  }
+}
+
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

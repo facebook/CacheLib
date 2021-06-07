@@ -1,4 +1,5 @@
 #pragma once
+#include <folly/Benchmark.h>
 #include <gflags/gflags.h>
 
 #include "cachelib/common/PercentileStats.h"
@@ -272,6 +273,14 @@ struct Stats {
           "NVM Hit Ratio : {:6.2f}%\n",
           ramHitRatio, nvmHitRatio);
     }
+  }
+
+  void render(folly::UserCounters& counters) {
+    auto totalMisses = getTotalMisses();
+    counters["num_items"] = numItems;
+    counters["num_nvm_items"] = numNvmItems;
+    counters["hit_rate"] =
+        static_cast<int64_t>(invertPctFn(totalMisses, numCacheGets) * 100);
   }
 
  private:
