@@ -193,6 +193,15 @@ struct HandleImpl {
   // If the item is ready, the callback is returned back to the user for
   // execution.
   //
+  // If the callback is successfully enqueued, then within the callback, user
+  // must increment per-thread handle count by 1.
+  //   cache->adjustHandleCountForThread(1);
+  // This is needed because cachelib had previously moved a handle from an
+  // internal thread to this callback, and cachelib internally removed a
+  // 1. It is done automatically if the user converted their ItemHandle
+  // to a SemiFuture via toSemiFuture(). For more details, refer to comments
+  // around ItemWaitContext.
+  //
   // @param callBack   callback function
   //
   // @return     an empty function if the callback was enqueued to be
@@ -248,6 +257,41 @@ struct HandleImpl {
     // NOTE: It's a bug to set a hdl that's already ready and can
     // terminate the application. This is only used internally within
     // cachelib and shouldn't be exposed outside of cachelib to applications.
+    //
+    // Active item handle count semantics
+    // ----------------------------------
+    //
+    //  CacheLib keeps track of thread-local handle count in order to detect
+    //  if we have leaked handles on shutdown. The reason for thread-local is
+    //  to achieve optimal concurrency without forcing all threads to sync on
+    //  updating the same atomics. For async get (from nvm-cache), there are
+    //  three scenarios that we need to consider regarding the handle count.
+    //    1. User calls "wait()" on a handle or relies on checking "isReady()".
+    //    2. User adds a "onReadyCallback" via "onReady()".
+    //    3. User converts handle to a "SemiFuture".
+    //
+    //  For (2), user must increment the active handle count, if user's cb
+    //  is successfully enqueued. Something like the following. User can do
+    //  this at the beginning of their onReadyCallback. Now, beware that
+    //  user should NOT execute the onReadyCallback if the onReady() enqueue
+    //  failed, as that means the item is already ready, and there's no need
+    //  to adjust the refcount.
+    //
+    //  TODO: T87126824. The behavior for (2) is far from ideal. CacheLib will
+    //        figure out a way to resolve this API and avoid the need for user
+    //        to explicitly adjust the handle count.
+    //
+    //  For (1) and (3), do nothing. Cachelib automatically handles handle
+    //  counts internally. In particular, for (1), the current thread will
+    //  have "zero" outstanding handle for this handle user is accessing,
+    //  instead when the handle is destructed, we will "inc" the handle count
+    //  and then "dec" the handle count to achieve a net-zero change in count.
+    //  For (3), the for the "handle count" associated with the original
+    //  item-handle that had been converted to SemiFuture, we have done the
+    //  same as (1) which we will achieve a net-zero change at destruction.
+    //  In addition, we will be bumping the handle count by 1, when SemiFuture
+    //  is evaluated (via defer callback). This is because we have cloned
+    //  an item handle to be passed to the SemiFuture.
     void set(HandleImpl hdl) override {
       XDCHECK(!isReady());
       SCOPE_EXIT { hdl.release(); };
@@ -322,9 +366,9 @@ struct HandleImpl {
         return;
       }
 
-      // if we have a wait context, we acquired the handle from another thread
+      // If we have a wait context, we acquired the handle from another thread
       // that asynchronously created the handle. Fix up the thread local
-      // refcount so that alloc_.release does not decrement it.
+      // refcount so that alloc_.release does not decrement it to negative.
       alloc_.adjustHandleCountForThread(1);
       try {
         alloc_.release(it, /* isNascent */ false);
@@ -439,6 +483,18 @@ struct HandleImpl {
   std::shared_ptr<ItemWaitContext> waitContext_;
 
   mutable uint8_t flags_{};
+
+  // Only CacheAllocator and NvmCache can create non-default constructed handles
+  friend CacheT;
+  friend typename CacheT::NvmCacheT;
+
+  // Only used in tests where we want to explicitly create an item handle with
+  // wait context
+  template <typename T1, typename T2>
+  friend T1 createHandleWithWaitContextForTest(T2&);
+  template <typename T1>
+  friend std::shared_ptr<typename T1::ItemWaitContext> getWaitContextForTest(
+      T1&);
 };
 
 template <typename T>

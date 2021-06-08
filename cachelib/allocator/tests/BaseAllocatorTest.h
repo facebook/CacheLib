@@ -29,6 +29,17 @@ template <typename ItemHandle2>
 void objcacheUnmarkNascent(const ItemHandle2& hdl) {
   hdl.unmarkNascent();
 }
+
+template <typename HandleT, typename AllocT>
+HandleT createHandleWithWaitContextForTest(AllocT& alloc) {
+  return HandleT{alloc};
+}
+
+template <typename HandleT>
+std::shared_ptr<typename HandleT::ItemWaitContext> getWaitContextForTest(
+    HandleT& hdl) {
+  return hdl.getItemWaitContext();
+}
 } // namespace detail
 
 namespace tests {
@@ -2547,6 +2558,71 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
     // active refcount must be 0
     ASSERT_EQ(0, alloc.getNumActiveHandles());
+  }
+
+  // TODO: ideally we should use a real NvmCache for this. However,
+  //       we're not able to inject mocks into Navy from CacheAllocator
+  //       layer and thus there's no good way to explicitly control
+  //       how we can enqueue onReady callback or convert to semi-future
+  //       while an async get is in-flight. Instead, we explicitly
+  //       create a waitcontext in this test and act as if we're populating
+  //       it from NvmCache. This test should be kept in-sync with how
+  //       create ItemHandle from NvmCache to ensure the behavior stays
+  //       consistent.
+  void testHandleTrackingAsync() {
+    typename AllocatorT::Config config{};
+    config.setCacheSize(100 * Slab::kSize);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    // Create a item in ram cache to fulfill the "async item"
+    {
+      auto ramHdl = alloc.allocate(poolId, "test", 100);
+      alloc.insertOrReplace(ramHdl);
+    }
+    ASSERT_EQ(0, alloc.getNumActiveHandles());
+    ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+    // Test waiting for a handle
+    {
+      auto hdl = detail::createHandleWithWaitContextForTest<
+          typename AllocatorT::ItemHandle, AllocatorT>(alloc);
+      auto waitContext = detail::getWaitContextForTest(hdl);
+      ASSERT_EQ(0, alloc.getNumActiveHandles());
+      ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+      // This is like doing a "clone" and setting it into wait context
+      waitContext->set(alloc.find("test"));
+      ASSERT_EQ(0, alloc.getNumActiveHandles());
+      ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+      ASSERT_TRUE(hdl.isReady());
+    }
+    ASSERT_EQ(0, alloc.getNumActiveHandles());
+    ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+    // Test converting to SemiFuture
+    {
+      auto hdl = detail::createHandleWithWaitContextForTest<
+          typename AllocatorT::ItemHandle, AllocatorT>(alloc);
+
+      auto waitContext = detail::getWaitContextForTest(hdl);
+      ASSERT_EQ(0, alloc.getNumActiveHandles());
+      ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+      auto semiFuture = std::move(hdl).toSemiFuture().deferValue(
+          [](typename AllocatorT::ItemHandle) { return true; });
+
+      // This is like doing a "clone" and setting it into wait context
+      waitContext->set(alloc.find("test"));
+      ASSERT_EQ(0, alloc.getNumActiveHandles());
+      ASSERT_EQ(0, alloc.getHandleCountForThread());
+
+      ASSERT_TRUE(std::move(semiFuture).get());
+    }
+    ASSERT_EQ(0, alloc.getNumActiveHandles());
+    ASSERT_EQ(0, alloc.getHandleCountForThread());
   }
 
   void testRefcountOverflow() {

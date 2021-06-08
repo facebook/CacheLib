@@ -136,6 +136,10 @@ TYPED_TEST(BaseAllocatorTest, IOBufItemHandleForChainedItems) {
 
 TYPED_TEST(BaseAllocatorTest, HandleTracking) { this->testHandleTracking(); }
 
+TYPED_TEST(BaseAllocatorTest, HandleTrackingAsync) {
+  this->testHandleTrackingAsync();
+}
+
 TYPED_TEST(BaseAllocatorTest, TLHandleTracking) {
   this->testTLHandleTracking();
 }

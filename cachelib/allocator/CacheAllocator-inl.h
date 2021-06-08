@@ -3186,12 +3186,12 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
 }
 
 template <typename CacheTrait>
-unsigned int CacheAllocator<CacheTrait>::getNumActiveHandles() const {
+int64_t CacheAllocator<CacheTrait>::getNumActiveHandles() const {
   return handleCount_.getSnapshot();
 }
 
 template <typename CacheTrait>
-int CacheAllocator<CacheTrait>::getHandleCountForThread() const {
+int64_t CacheAllocator<CacheTrait>::getHandleCountForThread() const {
   return handleCount_.tlStats();
 }
 
@@ -3201,7 +3201,7 @@ void CacheAllocator<CacheTrait>::resetHandleCountForThread() {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::adjustHandleCountForThread(int delta) {
+void CacheAllocator<CacheTrait>::adjustHandleCountForThread(int64_t delta) {
   handleCount_.tlStats() += delta;
 }
 

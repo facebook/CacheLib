@@ -133,7 +133,9 @@ TEST_F(NvmCacheTest, EvictToDipperGet) {
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
 
-  // read from reverse to no cause evictions to navy
+  // read from ram cache first so that we will not cause evictions
+  // to navy for items that are still in ram-cache until we start
+  // reading items from navy
   for (unsigned int i = nKeys + 100; i-- > 0;) {
     unsigned int index = i - 1;
     auto key = folly::sformat("key{}", index);
@@ -145,15 +147,28 @@ TEST_F(NvmCacheTest, EvictToDipperGet) {
       // we load it from nvm
       const auto isClean = hdl->isNvmClean();
       if (index < nEvictions) {
+        // A handle read from nvm-cache does not have any outstanding handle
+        // associated with it on the local thread. It is adjusted at destruction
+        // time to be net-zero for handle count (first an Inc, and then a Dec).
+        EXPECT_EQ(0, nvm.getHandleCountForThread())
+            << folly::sformat("key: {} was read from Navy", key);
         ASSERT_TRUE(isClean);
         ASSERT_TRUE(hdl.wentToNvm());
       } else {
+        // A handle read from ram-cache will have incremented the thread-local
+        // handle count when we have acquired the handle.
+        EXPECT_EQ(1, nvm.getHandleCountForThread())
+            << folly::sformat("key: {} was read from RAM cache", key);
         ASSERT_FALSE(isClean);
       }
     } else {
       ASSERT_EQ(nullptr, hdl);
     }
   }
+
+  // Reads are done. We should be at "0" active handle count across all threads.
+  ASSERT_EQ(0, nvm.getNumActiveHandles());
+  ASSERT_EQ(0, nvm.getHandleCountForThread());
 }
 
 TEST_F(NvmCacheTest, EvictToDipperGetCheckCtime) {

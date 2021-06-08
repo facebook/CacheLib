@@ -891,7 +891,7 @@ class CacheAllocator : public CacheBase {
   // returns the current count of the active handles that are handed out
   // through the API. This also includes the handles that are maintained by
   // the iterator and internal rebalancing threads.
-  unsigned int getNumActiveHandles() const;
+  int64_t getNumActiveHandles() const;
 
   // returns the current count of handle at an given time for this thread. If
   // the threads do not transfer handles between them, the caller can rely on
@@ -906,12 +906,12 @@ class CacheAllocator : public CacheBase {
   //          transferred, this can be negative  on threads that give away
   //          handles and always non zero on threads that acquire a handle from
   //          another thread.
-  int getHandleCountForThread() const;
+  int64_t getHandleCountForThread() const;
 
   //  temporary for TAO integration
   //  TODO (sathya) clean this up after TAO MW code is cleaned up
   void resetHandleCountForThread();
-  void adjustHandleCountForThread(int delta);
+  void adjustHandleCountForThread(int64_t delta);
 
   // madvise(MADV_DODUMP) all recently accessed items.
   // this function is intended for signal handler which can mprotect other
