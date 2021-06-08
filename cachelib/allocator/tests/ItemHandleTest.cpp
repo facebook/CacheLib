@@ -178,6 +178,7 @@ TEST(ItemHandleTest, WaitContext_set_waitSemiFuture_ready) {
   EXPECT_TRUE(called);
 }
 
+namespace detail {
 TEST(ItemHandleTest, WaitContext_readycb) {
   testing::NiceMock<TestAllocator> t;
   TestItem k;
@@ -220,6 +221,7 @@ TEST(ItemHandleTest, WaitContext_ready_immediate) {
   retCallback(std::move(hdl));
   EXPECT_TRUE(cbFired);
 }
+} // namespace detail
 
 TEST(ItemHandleTest, Release) {
   TestAllocator t;
@@ -260,6 +262,7 @@ TEST(ItemHandleTest, ReleaseWithWaitContext) {
   }
 }
 
+namespace detail {
 TEST(ItemHandleTest, onReadyWithNoWaitContext) {
   testing::NiceMock<TestAllocator> t;
   TestItem k;
@@ -277,6 +280,7 @@ TEST(ItemHandleTest, onReadyWithNoWaitContext) {
   retCallback(std::move(hdl));
   EXPECT_TRUE(cbFired);
 }
+} // namespace detail
 
 TEST(ItemHandleTest, handleState) {
   testing::NiceMock<TestAllocator> t;

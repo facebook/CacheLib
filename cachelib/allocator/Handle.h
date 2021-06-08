@@ -4,6 +4,7 @@
 #include <folly/fibers/Baton.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
+#include <gtest/gtest.h>
 
 #include <iostream>
 #include <mutex>
@@ -189,31 +190,6 @@ struct HandleImpl {
     waitContext_->wait();
   }
 
-  // Set the onReady callback which should be invoked once the item is ready.
-  // If the item is ready, the callback is returned back to the user for
-  // execution.
-  //
-  // If the callback is successfully enqueued, then within the callback, user
-  // must increment per-thread handle count by 1.
-  //   cache->adjustHandleCountForThread(1);
-  // This is needed because cachelib had previously moved a handle from an
-  // internal thread to this callback, and cachelib internally removed a
-  // 1. It is done automatically if the user converted their ItemHandle
-  // to a SemiFuture via toSemiFuture(). For more details, refer to comments
-  // around ItemWaitContext.
-  //
-  // @param callBack   callback function
-  //
-  // @return     an empty function if the callback was enqueued to be
-  //             executed when the handle becomes ready.
-  //             if the handle becomes/is ready, this returns the
-  //             original callback back to the caller to execute.
-  //
-  FOLLY_NODISCARD ReadyCallback onReady(ReadyCallback&& callBack) {
-    return (waitContext_) ? waitContext_->onReady(std::move(callBack))
-                          : std::move(callBack);
-  }
-
   // Clones Item handle. returns an empty handle if it is null.
   // @return HandleImpl   return a handle to this item
   // @throw std::overflow_error is the maximum item refcount is execeeded by
@@ -392,6 +368,31 @@ struct HandleImpl {
     CacheT& alloc_;   //< allocator instance
   };
 
+  // Set the onReady callback which should be invoked once the item is ready.
+  // If the item is ready, the callback is returned back to the user for
+  // execution.
+  //
+  // If the callback is successfully enqueued, then within the callback, user
+  // must increment per-thread handle count by 1.
+  //   cache->adjustHandleCountForThread(1);
+  // This is needed because cachelib had previously moved a handle from an
+  // internal thread to this callback, and cachelib internally removed a
+  // 1. It is done automatically if the user converted their ItemHandle
+  // to a SemiFuture via toSemiFuture(). For more details, refer to comments
+  // around ItemWaitContext.
+  //
+  // @param callBack   callback function
+  //
+  // @return     an empty function if the callback was enqueued to be
+  //             executed when the handle becomes ready.
+  //             if the handle becomes/is ready, this returns the
+  //             original callback back to the caller to execute.
+  //
+  FOLLY_NODISCARD ReadyCallback onReady(ReadyCallback&& callBack) {
+    return (waitContext_) ? waitContext_->onReady(std::move(callBack))
+                          : std::move(callBack);
+  }
+
   std::shared_ptr<ItemWaitContext> getItemWaitContext() const noexcept {
     return waitContext_;
   }
@@ -488,13 +489,16 @@ struct HandleImpl {
   friend CacheT;
   friend typename CacheT::NvmCacheT;
 
-  // Only used in tests where we want to explicitly create an item handle with
-  // wait context
+  // Following methods are only used in tests where we need to access private
+  // methods in ItemHandle
   template <typename T1, typename T2>
   friend T1 createHandleWithWaitContextForTest(T2&);
   template <typename T1>
   friend std::shared_ptr<typename T1::ItemWaitContext> getWaitContextForTest(
       T1&);
+  FRIEND_TEST(ItemHandleTest, WaitContext_readycb);
+  FRIEND_TEST(ItemHandleTest, WaitContext_ready_immediate);
+  FRIEND_TEST(ItemHandleTest, onReadyWithNoWaitContext);
 };
 
 template <typename T>
