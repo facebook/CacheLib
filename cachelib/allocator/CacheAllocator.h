@@ -495,6 +495,10 @@ class CacheAllocator : public CacheBase {
   //                 to an valid item
   ItemHandle getSampleItem();
 
+  // TODO: When Read/Write Handles are ready, change this to allow
+  //       const-only access to data manged by iobuf and offer a
+  //       convertToWritableIOBuf() API.
+  //
   // Convert an item handle to an IOBuf. The returned IOBuf gives a
   // read-only view to the user. The item's ownership is retained by
   // the IOBuf until its destruction.
@@ -510,6 +514,10 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if ItemHandle is nullptr
   folly::IOBuf convertToIOBuf(ItemHandle handle);
 
+  // TODO: When Read/Write Handles are ready, change this to allow
+  //       const-only access to data manged by iobuf and offer a
+  //       wrapAsWritableIOBuf() API.
+  //
   // wrap an IOBuf over the data for an item. This IOBuf does not own the item
   // and the caller is responsible for ensuring that the IOBuf is valid with
   // the item lifetime. If the item has chained allocations, the chains are

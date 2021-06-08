@@ -1980,26 +1980,13 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
 
 template <typename CacheTrait>
 folly::IOBuf CacheAllocator<CacheTrait>::wrapAsIOBuf(const Item& item) {
-  const uint32_t dataOffset = item.getOffsetForMemory();
-  // Since we'll be moving the IOBuf data pointer forward by dataOffset,
-  // we need to adjust the IOBuf length accordingly
-  folly::IOBuf ioBuf{folly::IOBuf::WRAP_BUFFER, &item,
-                     dataOffset + item.getSize()};
-  ioBuf.trimStart(dataOffset);
+  folly::IOBuf ioBuf{folly::IOBuf::WRAP_BUFFER, item.getMemory(),
+                     item.getSize()};
 
   if (item.hasChainedItem()) {
-    // TODO: need to handle the case with regarding to moving during slab
-    // rebalancing. If there is an outstanding IOBuf point to a chained item,
-    // that chained item cannot be moved during a slab release.
-
     auto appendHelper = [&](ChainedItem& chainedItem) {
-      // Since we'll be moving the IOBuf data pointer forward by dataOffset,
-      // we need to adjust the IOBuf length accordingly
-      const uint32_t chainedItemDataOffset = chainedItem.getOffsetForMemory();
-      auto nextChain = folly::IOBuf::wrapBuffer(
-          &chainedItem, chainedItemDataOffset + chainedItem.getSize());
-
-      nextChain->trimStart(chainedItemDataOffset);
+      auto nextChain = folly::IOBuf::wrapBuffer(chainedItem.getMemory(),
+                                                chainedItem.getSize());
 
       // Append immediately after the parent, IOBuf will present the data
       // in the original insertion order.
