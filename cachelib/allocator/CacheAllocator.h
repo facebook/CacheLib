@@ -60,12 +60,6 @@
 #include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
-
-// Temporary for migrating Tao to CacheAllocator
-namespace tao {
-class TaoApiWrapper;
-}
-
 namespace cachelib {
 
 namespace cachebench {
@@ -94,6 +88,7 @@ class PoolOptimizeStrategyTest;
 class NvmAdmissionPolicyTest;
 
 class PersistenceManagerTest;
+class CacheAllocatorTestWrapper;
 } // namespace tests
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
@@ -881,9 +876,6 @@ class CacheAllocator : public CacheBase {
   //          in the RAM and the second is a copy of the state in NVM
   std::pair<ItemHandle, ItemHandle> inspectCache(Key key);
 
-  // Test utility function to move a key from ram into nvmcache.
-  bool pushToNvmCacheFromRamForTesting(Key key);
-
   // blocks until the inflight operations are flushed to nvmcache. Used for
   // benchmarking when we want to load up the cache first with some data and
   // run the benchmarks after flushing.
@@ -1541,6 +1533,8 @@ class CacheAllocator : public CacheBase {
   // Write the item to nvm cache if enabled. This is called on eviction.
   void pushToNvmCache(const Item& item);
 
+  // Test utility function to move a key from ram into nvmcache.
+  bool pushToNvmCacheFromRamForTesting(Key key);
   // Test utility functions to remove things from individual caches.
   bool removeFromRamForTesting(Key key);
   void removeFromNvmForTesting(Key key);
@@ -1724,7 +1718,6 @@ class CacheAllocator : public CacheBase {
   friend ItemHandle;
   friend ReaperAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
-  friend class tao::TaoApiWrapper;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
@@ -1738,6 +1731,7 @@ class CacheAllocator : public CacheBase {
   friend class facebook::cachelib::tests::PoolOptimizeStrategyTest;
   friend class facebook::cachelib::tests::NvmAdmissionPolicyTest;
   friend class facebook::cachelib::tests::PersistenceManagerTest;
+  friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
 
   // benchmarks
   template <typename Allocator>

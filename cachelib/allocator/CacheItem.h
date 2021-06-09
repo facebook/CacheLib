@@ -21,10 +21,6 @@
 
 namespace facebook {
 
-namespace tao {
-class TaoApiWrapper;
-}
-
 namespace cachelib {
 
 namespace tests {
@@ -36,6 +32,8 @@ class AllocatorHitStatsTest;
 
 template <typename AllocatorT>
 class MapTest;
+
+class CacheAllocatorTestWrapper;
 } // namespace tests
 
 // forward declaration
@@ -416,7 +414,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   friend NvmCacheT;
   friend CacheChainedAllocs<CacheAllocator<CacheTrait>>;
   friend CacheChainedItemIterator<CacheAllocator<CacheTrait>>;
-  friend tao::TaoApiWrapper;
+  friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
   template <typename K, typename V, typename C>
   friend class Map;
 
