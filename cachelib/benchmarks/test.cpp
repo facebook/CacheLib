@@ -3,7 +3,6 @@
 
 #include "cachelib/cachebench/runner/Runner.h"
 
-using namespace facebook::cachelib;
 using namespace std;
 
 DEFINE_string(json_test_config,
