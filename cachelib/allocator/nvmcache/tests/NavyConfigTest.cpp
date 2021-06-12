@@ -315,6 +315,26 @@ TEST(NavyConfigTest, BigHash) {
   EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
 }
 
+TEST(NavyConfigTest, BigHash2) {
+  NavyConfig config{};
+  EXPECT_THROW(
+      config.bigHash().setSizePctAndMaxItemSize(200, bigHashSmallItemMaxSize),
+      std::invalid_argument);
+  EXPECT_THROW(
+      config.bigHash().setSizePctAndMaxItemSize(0, bigHashSmallItemMaxSize),
+      std::invalid_argument);
+  EXPECT_THROW(config.bigHash().setSizePctAndMaxItemSize(50, 0),
+               std::invalid_argument);
+  config.bigHash()
+      .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
+      .setBucketSize(bigHashBucketSize)
+      .setBucketBfSize(bigHashBucketBfSize);
+  EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
+  EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
+  EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
+  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
+}
+
 TEST(NavyConfigTest, JobScheduler) {
   NavyConfig config{};
   config.setReaderAndWriterThreads(readerThreads, writerThreads);

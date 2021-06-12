@@ -156,21 +156,31 @@ void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
 }
 
 // BigHash settings
+NavyConfig::BigHashConfig& NavyConfig::BigHashConfig::setSizePctAndMaxItemSize(
+    unsigned int sizePct, uint64_t smallItemMaxSize) {
+  if (sizePct > 100 || sizePct == 0) {
+    throw std::invalid_argument(folly::sformat(
+        "to enable BigHash, BigHash size pct should be in the range of (0, 100]"
+        ", but {} is set",
+        sizePct));
+  }
+  if (smallItemMaxSize == 0) {
+    throw std::invalid_argument("maximum item size should be greater than 0");
+  }
+  sizePct_ = sizePct;
+  smallItemMaxSize_ = smallItemMaxSize;
+  return *this;
+}
+
 void NavyConfig::setBigHash(unsigned int bigHashSizePct,
                             uint32_t bigHashBucketSize,
                             uint64_t bigHashBucketBfSize,
                             uint64_t bigHashSmallItemMaxSize) {
-  if (bigHashSizePct > 100) {
-    throw std::invalid_argument(folly::sformat(
-        "BigHash size pct should between 0 and 100, but {} is set",
-        bigHashSizePct));
-  }
-  bigHashSizePct_ = bigHashSizePct;
-  bigHashBucketSize_ = bigHashBucketSize;
-  bigHashBucketBfSize_ = bigHashBucketBfSize;
-  bigHashSmallItemMaxSize_ = bigHashSmallItemMaxSize;
+  bigHashConfig_
+      .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
+      .setBucketSize(bigHashBucketSize)
+      .setBucketBfSize(bigHashBucketBfSize);
 }
-
 // job scheduler settings
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards == 0) {
@@ -227,13 +237,13 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
 
   // BigHash settings
   configMap["navyConfig::bigHashSizePct"] =
-      folly::to<std::string>(bigHashSizePct_);
+      folly::to<std::string>(getBigHashSizePct());
   configMap["navyConfig::bigHashBucketSize"] =
-      folly::to<std::string>(bigHashBucketSize_);
+      folly::to<std::string>(getBigHashBucketSize());
   configMap["navyConfig::bigHashBucketBfSize"] =
-      folly::to<std::string>(bigHashBucketBfSize_);
+      folly::to<std::string>(getBigHashBucketBfSize());
   configMap["navyConfig::bigHashSmallItemMaxSize"] =
-      folly::to<std::string>(bigHashSmallItemMaxSize_);
+      folly::to<std::string>(getBigHashSmallItemMaxSize());
 
   // Job scheduler settings
   configMap["navyConfig::readerThreads"] =

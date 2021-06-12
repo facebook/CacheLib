@@ -10,10 +10,6 @@ namespace navy {
  * NavyConfig provides APIs for users to set up Navy related settings for
  * NvmCache.
  *
- * It will be put as one part of NvmCache Config
- * https://fburl.com/diffusion/042f2o7x to deprecate the old folly::dynamic
- * way of doing the setup.
- *
  * Notes: the reason why these settings cannot be directly passed to Navy
  * internal config https://fburl.com/diffusion/y5fqozuy and setup there is
  * because we have logic in "NavySetup.cpp" that translates this input config
@@ -22,6 +18,49 @@ namespace navy {
  *
  */
 class NavyConfig {
+  class BigHashConfig {
+   public:
+    // ============ setters =============
+    // Set BigHash device percentage and maximum item size(in bytes) to enable
+    // BigHash engine. Default value of sizePct and smallItemMaxSize is 0,
+    // meaning BigHash is not enabled.
+    // @throw std::invalid_argument if sizePct is not in the range of
+    //        (0, 100] or smallItemMaxSize is 0.
+    BigHashConfig& setSizePctAndMaxItemSize(unsigned int sizePct,
+                                            uint64_t smallItemMaxSize);
+    // Set the bucket size in bytes for BigHash engine.
+    // Default value is 4096.
+    BigHashConfig& setBucketSize(uint32_t bucketSize) noexcept {
+      bucketSize_ = bucketSize;
+      return *this;
+    }
+    // Set bloom filter size per bucket in bytes for BigHash engine.
+    // 0 means bloom filter will not be applied. Default value is 8.
+    BigHashConfig& setBucketBfSize(uint64_t bucketBfSize) noexcept {
+      bucketBfSize_ = bucketBfSize;
+      return *this;
+    }
+    // ============ getters =============
+    unsigned int getSizePct() const { return sizePct_; }
+    uint32_t getBucketSize() const { return bucketSize_; }
+    uint64_t getBucketBfSize() const { return bucketBfSize_; }
+    uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
+
+   private:
+    // Percentage of how much of the device out of all is given to BigHash
+    // engine in Navy, e.g. 50.
+    unsigned int sizePct_{0};
+    // Navy BigHash engine's bucket size (must be multiple of the minimum
+    // device io block size).
+    // This size determines how big each bucket is and what is the physical
+    // write granularity onto the device.
+    uint32_t bucketSize_{4096};
+    // The bloom filter size per bucket in bytes for Navy BigHash engine
+    uint64_t bucketBfSize_{8};
+    // The maximum item size to put into Navy BigHash engine.
+    uint64_t smallItemMaxSize_{};
+  };
+
  public:
   static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
@@ -72,11 +111,15 @@ class NavyConfig {
   }
 
   // ============ BigHash settings =============
-  unsigned int getBigHashSizePct() const { return bigHashSizePct_; }
-  uint32_t getBigHashBucketSize() const { return bigHashBucketSize_; }
-  uint64_t getBigHashBucketBfSize() const { return bigHashBucketBfSize_; }
+  unsigned int getBigHashSizePct() const { return bigHashConfig_.getSizePct(); }
+  uint32_t getBigHashBucketSize() const {
+    return bigHashConfig_.getBucketSize();
+  }
+  uint64_t getBigHashBucketBfSize() const {
+    return bigHashConfig_.getBucketBfSize();
+  }
   uint64_t getBigHashSmallItemMaxSize() const {
-    return bigHashSmallItemMaxSize_;
+    return bigHashConfig_.getSmallItemMaxSize();
   }
 
   // ============ Job scheduler settings =============
@@ -176,13 +219,15 @@ class NavyConfig {
   }
 
   // ============ BigHash settings =============
-  // Set the parameters for BigHash.
+  // (Deprecated) Set the parameters for BigHash.
   // @throw std::invalid_argument if bigHashSizePct is not in the range of
   //        0~100.
   void setBigHash(unsigned int bigHashSizePct,
                   uint32_t bigHashBucketSize,
                   uint64_t bigHashBucketBfSize,
                   uint64_t bigHashSmallItemMaxSize);
+  // Get BigHashConfig to configure bigHash.
+  BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
 
   // ============ Job scheduler settings =============
   void setReaderAndWriterThreads(unsigned int readerThreads,
@@ -270,18 +315,7 @@ class NavyConfig {
   std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio_;
 
   // ============ BigHash settings =============
-  // Percentage of how much of the device out of all is given to BigHash
-  // engine in Navy, e.g. 50.
-  unsigned int bigHashSizePct_{0};
-  // Navy BigHash engine's bucket size (must be multiple of the minimum
-  // device io block size).
-  // This size determines how big each bucket is and what is the physical
-  // write granularity onto the device.
-  uint32_t bigHashBucketSize_{4096};
-  // The bloom filter size per bucket in bytes for Navy BigHash engine
-  uint64_t bigHashBucketBfSize_{8};
-  // The maximum item size to put into Navy BigHash engine.
-  uint64_t bigHashSmallItemMaxSize_{};
+  BigHashConfig bigHashConfig_{};
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.
