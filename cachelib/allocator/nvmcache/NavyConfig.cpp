@@ -158,14 +158,14 @@ void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
 // BigHash settings
 NavyConfig::BigHashConfig& NavyConfig::BigHashConfig::setSizePctAndMaxItemSize(
     unsigned int sizePct, uint64_t smallItemMaxSize) {
-  if (sizePct > 100 || sizePct == 0) {
+  if (sizePct > 100) {
     throw std::invalid_argument(folly::sformat(
-        "to enable BigHash, BigHash size pct should be in the range of (0, 100]"
+        "to enable BigHash, BigHash size pct should be in the range of [0, 100]"
         ", but {} is set",
         sizePct));
   }
-  if (smallItemMaxSize == 0) {
-    throw std::invalid_argument("maximum item size should be greater than 0");
+  if (sizePct == 0) {
+    XLOG(INFO) << "BigHash is not configured";
   }
   sizePct_ = sizePct;
   smallItemMaxSize_ = smallItemMaxSize;

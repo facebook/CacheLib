@@ -25,7 +25,7 @@ class NavyConfig {
     // BigHash engine. Default value of sizePct and smallItemMaxSize is 0,
     // meaning BigHash is not enabled.
     // @throw std::invalid_argument if sizePct is not in the range of
-    //        (0, 100] or smallItemMaxSize is 0.
+    //        [0, 100].
     BigHashConfig& setSizePctAndMaxItemSize(unsigned int sizePct,
                                             uint64_t smallItemMaxSize);
     // Set the bucket size in bytes for BigHash engine.

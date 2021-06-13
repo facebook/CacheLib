@@ -320,11 +320,6 @@ TEST(NavyConfigTest, BigHash2) {
   EXPECT_THROW(
       config.bigHash().setSizePctAndMaxItemSize(200, bigHashSmallItemMaxSize),
       std::invalid_argument);
-  EXPECT_THROW(
-      config.bigHash().setSizePctAndMaxItemSize(0, bigHashSmallItemMaxSize),
-      std::invalid_argument);
-  EXPECT_THROW(config.bigHash().setSizePctAndMaxItemSize(50, 0),
-               std::invalid_argument);
   config.bigHash()
       .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
       .setBucketSize(bigHashBucketSize)
