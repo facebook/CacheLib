@@ -20,6 +20,9 @@ struct DistributionConfig : public JSONConfig {
   std::vector<double> keySizeRangeProbability{};
 
   // Value size distribution
+  // The value size will be changed to max(valSize, sizeof(CacheValue))
+  // when allocate in the cache for cachebench. If the size distribution is
+  // important to the test, this may affect the test.
   std::vector<double> valSizeRange{};
   std::vector<double> valSizeRangeProbability{};
 
@@ -198,6 +201,10 @@ struct StressorConfig : public JSONConfig {
   // If enabled and using trace replay mode. We will repeat the trace file again
   // and again until the number of operations specified in the test config.
   bool repeatTraceReplay{false};
+
+  // Max number of invalid destructor detection (destructor call more than once
+  // for an item or wrong version).
+  uint64_t maxInvalidDestructorCount{50};
 
   // Allows multiple distributions, one corresponding to each pool of workload
   // in the cache.

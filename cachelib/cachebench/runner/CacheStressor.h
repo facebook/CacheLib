@@ -22,6 +22,9 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+// All items value in CacheStressor follows CacheValue schema, which
+// contains a few integers for sanity checks use. So it is invalid
+// to use item.getMemory and item.getSize APIs.
 template <typename Allocator>
 class CacheStressor : public Stressor {
  public:
@@ -140,6 +143,7 @@ class CacheStressor : public Stressor {
       stressWorker_.join();
     }
     wg_->markShutdown();
+    cache_->clearCache();
   }
 
   void abort() override {
@@ -213,8 +217,7 @@ class CacheStressor : public Stressor {
     if (cache_->consistencyCheckEnabled()) {
       cache_->setUint64ToItem(handle, folly::Random::rand64(rng));
     } else {
-      std::memcpy(cache_->getWritableMemory(handle), hardcodedString_.data(),
-                  cache_->getSize(handle));
+      cache_->setStringItem(handle, hardcodedString_);
     }
   }
 
@@ -248,6 +251,8 @@ class CacheStressor : public Stressor {
     for (uint64_t i = 0;
          i < config_.numOps &&
          cache_->getInconsistencyCount() < config_.maxInconsistencyCount &&
+         cache_->getInvalidDestructorCount() <
+             config_.maxInvalidDestructorCount &&
          !cache_->isNvmCacheDisabled() && !shouldTestStop();
          ++i) {
       try {

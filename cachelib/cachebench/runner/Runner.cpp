@@ -45,17 +45,8 @@ bool Runner::run() {
   stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
   std::cout << std::endl;
 
-  if (cacheStats.isNvmCacheDisabled) {
-    std::cout << "NVM Cache was disabled during test!" << std::endl;
-  }
-
-  if (cacheStats.inconsistencyCount) {
-    std::cout << "Found " << cacheStats.inconsistencyCount
-              << " inconsistent cases" << std::endl;
-  }
-
   stressor_.reset();
-  return cacheStats.inconsistencyCount == 0 && !cacheStats.isNvmCacheDisabled;
+  return cacheStats.renderIsTestPassed(std::cout);
 }
 
 void Runner::run(folly::UserCounters& counters) {

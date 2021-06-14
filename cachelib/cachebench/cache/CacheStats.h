@@ -70,6 +70,8 @@ struct Stats {
 
   uint64_t inconsistencyCount{0};
   bool isNvmCacheDisabled{false};
+  uint64_t invalidDestructorCount{0};
+  int64_t unDestructedItemCount{0};
 
   // Attempt to capture the NVM ODS counters:
   // https://fburl.com/diffusion/4ohscddo. Cache implementation can decide what
@@ -281,6 +283,35 @@ struct Stats {
     counters["num_nvm_items"] = numNvmItems;
     counters["hit_rate"] =
         static_cast<int64_t>(invertPctFn(totalMisses, numCacheGets) * 100);
+  }
+
+  bool renderIsTestPassed(std::ostream& out) {
+    bool pass = true;
+
+    if (isNvmCacheDisabled) {
+      out << "NVM Cache was disabled during test!" << std::endl;
+      pass = false;
+    }
+
+    if (inconsistencyCount) {
+      out << "Found " << inconsistencyCount << " inconsistent cases"
+          << std::endl;
+      pass = false;
+    }
+
+    if (invalidDestructorCount) {
+      out << "Found " << invalidDestructorCount
+          << " invalid item destructor cases" << std::endl;
+      pass = false;
+    }
+
+    if (unDestructedItemCount) {
+      out << "Found " << unDestructedItemCount
+          << " items missing destructor cases" << std::endl;
+      pass = false;
+    }
+
+    return pass;
   }
 
  private:

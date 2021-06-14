@@ -74,11 +74,13 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, useTraceTimeStamp);
   JSONSetVal(configJson, printNvmCounters);
   JSONSetVal(configJson, tickerSynchingSeconds);
+  JSONSetVal(configJson, enableItemDestructorCheck);
+  JSONSetVal(configJson, enableItemDestructor);
 
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 680>();
+  checkCorrectSize<CacheConfig, 688>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

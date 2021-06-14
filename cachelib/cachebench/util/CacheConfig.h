@@ -222,6 +222,15 @@ struct CacheConfig : public JSONConfig {
   // simulation. Stressor uses this to pass the ticker into the cache.
   std::shared_ptr<cachelib::Ticker> ticker;
 
+  // Check if ItemDestructor is triggered properly for every item.
+  // Be careful that this will keep a record of every item allocated,
+  // and won't be dropped after item is removed from cache, it the size
+  // is not bounded by the size of cache.
+  bool enableItemDestructorCheck{false};
+  // enable the ItemDestructor feature, but not check correctness,
+  // this verifies whether the feature affects throughputs.
+  bool enableItemDestructor{false};
+
   explicit CacheConfig(const folly::dynamic& configJson);
 
   CacheConfig() {}

@@ -10,6 +10,7 @@
 
 #include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
+#include "cachelib/cachebench/cache/ItemRecords.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 
 namespace facebook {
@@ -34,7 +35,10 @@ template <typename Allocator>
 Cache<Allocator>::Cache(CacheConfig config,
                         ChainedItemMovingSync movingSync,
                         std::string cacheDir)
-    : config_(config), cacheDir_(cacheDir), nandBytesBegin_{fetchNandWrites()} {
+    : config_(config),
+      cacheDir_(cacheDir),
+      nandBytesBegin_{fetchNandWrites()},
+      itemRecords_(config_.enableItemDestructorCheck) {
   constexpr size_t MB = 1024ULL * 1024ULL;
 
   typename Allocator::Config allocatorConfig;
@@ -54,11 +58,13 @@ Cache<Allocator>::Cache(CacheConfig config,
   }
 
   if (config_.allocSizes.empty()) {
+    XDCHECK(config_.minAllocSize >= sizeof(CacheValue));
     allocatorConfig.setDefaultAllocSizes(util::generateAllocSizes(
         config_.allocFactor, config_.maxAllocSize, config_.minAllocSize, true));
   } else {
     std::set<uint32_t> allocSizes;
     for (uint64_t s : config_.allocSizes) {
+      XDCHECK(s >= sizeof(CacheValue));
       allocSizes.insert(s);
     }
     allocatorConfig.setDefaultAllocSizes(std::move(allocSizes));
@@ -82,6 +88,23 @@ Cache<Allocator>::Cache(CacheConfig config,
       }
     }
   });
+
+  if (config_.enableItemDestructorCheck) {
+    // TODO (zixuan) use ItemDestructor once feature is finished
+    auto removeCB = [&](const typename Allocator::RemoveCbData& data) {
+      if (!itemRecords_.validate(data)) {
+        ++invalidDestructor_;
+      }
+      // in the end of test, total destructor invocations must be equal to total
+      // size of itemRecords_ (also is the number of new allocations)
+      ++totalDestructor_;
+    };
+    allocatorConfig.setRemoveCallback(removeCB);
+  } else if (config_.enableItemDestructor) {
+    // TODO (zixuan) use ItemDestructor once feature is finished
+    auto removeCB = [&](const typename Allocator::RemoveCbData&) {};
+    allocatorConfig.setRemoveCallback(removeCB);
+  }
 
   // Set up Navy
   if (config_.dipperSizeMB) {
@@ -331,6 +354,9 @@ Stats Cache<Allocator>::getStats() const {
 
   ret.inconsistencyCount = getInconsistencyCount();
   ret.isNvmCacheDisabled = isNvmCacheDisabled();
+  ret.invalidDestructorCount = invalidDestructor_;
+  ret.unDestructedItemCount =
+      static_cast<int64_t>(itemRecords_.count()) - totalDestructor_;
 
   ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
   ret.cacheFindLatencyNs = cacheFindLatency_.estimate();
@@ -382,6 +408,22 @@ Stats Cache<Allocator>::getStats() const {
   }
 
   return ret;
+}
+
+template <typename Allocator>
+void Cache<Allocator>::clearCache() {
+  if (config_.enableItemDestructorCheck) {
+    // all items leftover in the cache must be removed
+    // at the end of the test to trigger ItemDestrutor
+    // so that we are able to check if ItemDestructor
+    // are called once and only once for every item.
+    auto keys = itemRecords_.getKeys();
+    XLOGF(DBG, "clearCache keys: {}", keys.size());
+    for (const auto& key : keys) {
+      cache_->remove(key);
+    }
+    cache_->flushNvmCache();
+  }
 }
 
 } // namespace cachebench

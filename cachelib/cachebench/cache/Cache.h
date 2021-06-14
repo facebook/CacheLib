@@ -9,6 +9,8 @@
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/RandomStrategy.h"
 #include "cachelib/cachebench/cache/CacheStats.h"
+#include "cachelib/cachebench/cache/CacheValue.h"
+#include "cachelib/cachebench/cache/ItemRecords.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 #include "cachelib/cachebench/consistency/ValueTracker.h"
@@ -19,6 +21,11 @@ DECLARE_bool(report_api_latency);
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+// A specialized Cache for cachebench use, backed by Cachelib.
+// Items value in this cache follows CacheValue schema, which
+// contains a few integers for sanity checks use. So it is invalid
+// to use item.getMemory and item.getSize APIs.
 template <typename Allocator>
 class Cache {
  public:
@@ -72,34 +79,57 @@ class Cache {
 
   // Return the readonly memory
   const void* getMemory(const ItemHandle& item) const noexcept {
-    return item == nullptr ? nullptr : item->getMemory();
+    return item == nullptr ? nullptr : getMemory(*item);
   }
 
   // Return the writable memory
-  void* getWritableMemory(const ItemHandle& item) const noexcept {
-    return item == nullptr ? nullptr : item->getWritableMemory();
+  void* getWritableMemory(ItemHandle& item) const noexcept {
+    return item == nullptr ? nullptr : getWritableMemory(*item);
+  }
+
+  // Return the readonly memory
+  const void* getMemory(const Item& item) const noexcept {
+    return item.template getMemoryAs<CacheValue>()->getData();
+  }
+
+  // Return the writable memory
+  void* getWritableMemory(Item& item) const noexcept {
+    return item.template getWritableMemoryAs<CacheValue>()->getWritableData();
   }
 
   uint32_t getSize(const ItemHandle& item) const noexcept {
-    return item == nullptr ? 0 : item->getSize();
+    return item == nullptr ? 0 : getSize(item.get());
   }
 
-  static uint64_t getUint64FromItem(const Item& item) {
-    uint64_t num = 0;
-    std::memcpy(&num, item.getMemory(),
-                std::min<size_t>(sizeof(num), item.getSize()));
-    return num;
+  uint32_t getSize(const Item* item) const noexcept {
+    if (item == nullptr) {
+      return 0;
+    }
+    return item->template getMemoryAs<CacheValue>()->getDataSize(
+        item->getSize());
   }
 
-  template <typename Handle>
-  static void setUint64ToItem(const Handle& handle, uint64_t num) {
-    std::memcpy(handle->getWritableMemory(), &num,
-                std::min<size_t>(sizeof(num), handle->getSize()));
+  uint64_t getUint64FromItem(const Item& item) {
+    auto ptr = item.template getMemoryAs<CacheValue>();
+    return ptr->getConsistencyNum();
   }
 
-  template <typename... Params>
-  auto allocateAccessible(Params&&... args) {
-    return util::allocateAccessible(*cache_, std::forward<Params>(args)...);
+  void setUint64ToItem(ItemHandle& handle, uint64_t num) {
+    auto ptr = handle->template getWritableMemoryAs<CacheValue>();
+    ptr->setConsistencyNum(num);
+  }
+
+  void setStringItem(ItemHandle& handle, const std::string& str) {
+    auto ptr = reinterpret_cast<uint8_t*>(getWritableMemory(handle));
+    std::memcpy(ptr, str.data(), std::min<size_t>(str.size(), getSize(handle)));
+  }
+
+  auto allocateAccessible(PoolId poolId,
+                          Key key,
+                          uint32_t size,
+                          uint32_t ttlSecs = 0) {
+    return util::allocateAccessible(
+        *cache_, poolId, key, CacheValue::getSize(size), ttlSecs);
   }
 
   template <typename... Params>
@@ -107,11 +137,16 @@ class Cache {
     return cache_->getPoolStats(std::forward<Params>(args)...);
   }
 
-  template <typename... Params>
-  auto allocate(Params&&... args) {
+  auto allocate(PoolId pid,
+                folly::StringPiece key,
+                size_t size,
+                uint32_t ttlSecs = 0) {
     ItemHandle handle;
     try {
-      handle = cache_->allocate(std::forward<Params>(args)...);
+      handle = cache_->allocate(pid, key, CacheValue::getSize(size), ttlSecs);
+      if (handle) {
+        CacheValue::initialize(handle->getWritableMemory());
+      }
     } catch (const std::invalid_argument& e) {
       XLOGF(DBG, "Unable to allocate, reason: {}", e.what());
     }
@@ -134,6 +169,8 @@ class Cache {
   }
 
   ItemHandle insertOrReplace(const ItemHandle& handle) {
+    itemRecords_.addItemRecord(handle);
+
     if (!consistencyCheckEnabled()) {
       try {
         return cache_->insertOrReplace(handle);
@@ -170,12 +207,12 @@ class Cache {
     valueTracker_->endSet(opId);
   }
 
-  template <typename... Params>
-  auto insert(Params&&... args) {
+  auto insert(const ItemHandle& handle) {
     // Insert is not supported in consistency checking mode because consistency
     // checking assumes a Set always succeeds and overrides existing value.
     XDCHECK(!consistencyCheckEnabled());
-    return cache_->insert(std::forward<Params>(args)...);
+    itemRecords_.addItemRecord(handle);
+    return cache_->insert(handle);
   }
 
   ItemHandle find(Key key, AccessMode mode = AccessMode::kRead) {
@@ -224,9 +261,12 @@ class Cache {
     return rv;
   }
 
-  template <typename... Params>
-  auto allocateChainedItem(Params&&... args) {
-    return cache_->allocateChainedItem(std::forward<Params>(args)...);
+  auto allocateChainedItem(const ItemHandle& it, size_t size) {
+    auto handle = cache_->allocateChainedItem(it, CacheValue::getSize(size));
+    if (handle) {
+      CacheValue::initialize(handle->getWritableMemory());
+    }
+    return handle;
   }
 
   template <typename... Params>
@@ -280,6 +320,10 @@ class Cache {
     }
   }
 
+  void clearCache();
+
+  uint64_t getInvalidDestructorCount() { return invalidDestructor_; }
+
  private:
   bool checkGet(ValueTracker::Index opId, const ItemHandle& it);
   uint64_t fetchNandWrites() const;
@@ -305,6 +349,10 @@ class Cache {
 
   // latency stats of cachelib APIs inside cachebench
   mutable util::PercentileStats cacheFindLatency_;
+
+  ItemRecords<Allocator> itemRecords_;
+  std::atomic<uint64_t> invalidDestructor_{0};
+  std::atomic<int64_t> totalDestructor_{0};
 };
 
 // Specializations are required for each MMType
