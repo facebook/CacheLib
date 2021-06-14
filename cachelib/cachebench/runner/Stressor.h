@@ -16,6 +16,8 @@ struct ThroughputStats {
   uint64_t get{0};
   uint64_t getMiss{0};
   uint64_t del{0};
+  uint64_t update{0};
+  uint64_t updateMiss{0};
   uint64_t delNotFound{0};
   uint64_t addChained{0};
   uint64_t addChainedFailure{0};

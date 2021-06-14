@@ -26,6 +26,8 @@ enum class OpType {
   kLoneGet,
   kLoneSet,
 
+  kUpdate, // in-place mutation
+
   kSize
 };
 

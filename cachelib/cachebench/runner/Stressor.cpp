@@ -16,6 +16,8 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   get += other.get;
   getMiss += other.getMiss;
   del += other.del;
+  update += other.update;
+  updateMiss += other.updateMiss;
   delNotFound += other.delNotFound;
   addChained += other.addChained;
   addChainedFailure += other.addChainedFailure;
@@ -38,6 +40,11 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   const double delSuccessRate =
       del == 0 ? 0.0 : 100.0 * (del - delNotFound) / del;
 
+  const uint64_t updatePerSec =
+      util::narrow_cast<uint64_t>(update / elapsedSecs);
+  const double updateSuccessRate =
+      update == 0 ? 0.0 : 100.0 * (update - updateMiss) / update;
+
   const uint64_t addChainedPerSec =
       util::narrow_cast<uint64_t>(addChained / elapsedSecs);
   const double addChainedSuccessRate =
@@ -57,6 +64,9 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   outFn("get", getPerSec, "success", getSuccessRate);
   outFn("set", setPerSec, "success", setSuccessRate);
   outFn("del", delPerSec, "found", delSuccessRate);
+  if (update > 0) {
+    outFn("update", updatePerSec, "success", updateSuccessRate);
+  }
   if (addChained > 0) {
     outFn("addChained", addChainedPerSec, "success", addChainedSuccessRate);
   }

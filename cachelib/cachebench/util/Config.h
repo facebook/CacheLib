@@ -55,6 +55,7 @@ struct DistributionConfig : public JSONConfig {
   double addChainedRatio{0.0};
   double loneGetRatio{0.0};
   double loneSetRatio{0.0};
+  double updateRatio{0.0};
 
   bool usesChainedItems() const { return addChainedRatio > 0; }
 

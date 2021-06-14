@@ -21,7 +21,7 @@ class WorkloadDistribution {
       : config_(c),
         opDist_({config_.setRatio, config_.getRatio, config_.delRatio,
                  config_.addChainedRatio, config_.loneGetRatio,
-                 config_.loneSetRatio}),
+                 config_.loneSetRatio, config_.updateRatio}),
         useDiscreteValSizes_(config_.usesDiscreteValueSizes()),
         valSizeDiscreteDist_{initDiscreteValSize(config_)},
         valSizePiecewiseDist_{initPiecewiseValSize(config_)},

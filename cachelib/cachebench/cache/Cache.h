@@ -269,9 +269,9 @@ class Cache {
     return handle;
   }
 
-  template <typename... Params>
-  auto addChainedItem(Params&&... args) {
-    return cache_->addChainedItem(std::forward<Params>(args)...);
+  auto addChainedItem(const ItemHandle& parent, ItemHandle child) {
+    itemRecords_.updateItemVersion(*parent);
+    return cache_->addChainedItem(parent, std::move(child));
   }
 
   template <typename... Params>
@@ -279,9 +279,17 @@ class Cache {
     return cache_->viewAsChainedAllocs(std::forward<Params>(args)...);
   }
 
-  template <typename... Params>
-  auto replaceChainedItem(Params&&... args) {
-    return cache_->replaceChainedItem(std::forward<Params>(args)...);
+  auto replaceChainedItem(Item& oldItem,
+                          ItemHandle newItemHandle,
+                          Item& parent) {
+    itemRecords_.updateItemVersion(parent);
+    return cache_->replaceChainedItem(
+        oldItem, std::move(newItemHandle), parent);
+  }
+
+  void updateItem(ItemHandle& it) {
+    itemRecords_.updateItemVersion(*it);
+    cache_->invalidateNvm(*it);
   }
 
   template <typename... Params>

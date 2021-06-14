@@ -375,6 +375,25 @@ class CacheStressor : public Stressor {
           throttleFn();
           break;
         }
+        case OpType::kUpdate: {
+          ++stats.get;
+          ++stats.update;
+          chainedItemLock(Mode::Exclusive, *key);
+          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          if (ticker_) {
+            ticker_->updateTimeStamp(req.timestamp);
+          }
+          auto it = cache_->find(*key, AccessMode::kWrite);
+          if (it == nullptr) {
+            ++stats.getMiss;
+            ++stats.updateMiss;
+            break;
+          }
+          cache_->updateItem(it);
+
+          throttleFn();
+          break;
+        }
         default:
           throw std::runtime_error(
               folly::sformat("invalid operation generated: {}", (int)op));

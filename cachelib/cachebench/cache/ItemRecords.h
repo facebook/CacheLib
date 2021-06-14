@@ -97,6 +97,17 @@ class ItemRecords {
     return count;
   }
 
+  void updateItemVersion(Item& it) {
+    if (!enable_) {
+      return;
+    }
+    auto ptr = it.template getWritableMemoryAs<CacheValue>();
+    auto [lock, records] = getItemRecords(ptr->getIdx());
+    auto& record = records[ptr->getIdx() / itemRecords_.size()];
+    ++record.version;
+    ptr->incrVersion();
+  }
+
   auto getKeys() {
     std::lock_guard<std::mutex> l(keysMutex_);
     return std::move(keys_);
