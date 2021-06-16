@@ -53,6 +53,9 @@ struct Stats {
   // number of deletes issues to nvm
   TLCounter numNvmDeletes{0};
 
+  // number of deletes skipped and not issued to nvm
+  TLCounter numNvmSkippedDeletes{0};
+
   // number of writes to nvm
   TLCounter numNvmPuts{0};
 

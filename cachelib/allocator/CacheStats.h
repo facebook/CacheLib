@@ -333,6 +333,9 @@ struct GlobalCacheStats {
   // number of deletes issues to nvm
   uint64_t numNvmDeletes{0};
 
+  // number of deletes skipped and not issued to nvm
+  uint64_t numNvmSkippedDeletes{0};
+
   // number of writes to nvm
   uint64_t numNvmPuts{0};
 

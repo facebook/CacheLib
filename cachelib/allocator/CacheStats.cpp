@@ -32,7 +32,7 @@ template <int>
 struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
-  SizeVerify<sizeof(Stats)> a = SizeVerify<15680>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<15776>{};
   std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
@@ -47,6 +47,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numNvmGetCoalesced = numNvmGetCoalesced.get();
   ret.numNvmPuts = numNvmPuts.get();
   ret.numNvmDeletes = numNvmDeletes.get();
+  ret.numNvmSkippedDeletes = numNvmSkippedDeletes.get();
   ret.numNvmPutErrs = numNvmPutErrs.get();
   ret.numNvmPutEncodeFailure = numNvmPutEncodeFailure.get();
   ret.numNvmAbortedPutOnTombstone += numNvmAbortedPutOnTombstone.get();

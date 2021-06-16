@@ -59,6 +59,7 @@ struct Stats {
   uint64_t numNvmExceededMaxRetry{0};
 
   uint64_t numNvmDeletes{0};
+  uint64_t numNvmSkippedDeletes{0};
 
   uint64_t slabsReleased{0};
   uint64_t moveAttemptsForSlabRelease{0};
@@ -214,7 +215,12 @@ struct Stats {
                "Double",
                numNvmCleanDoubleEvict)
         << std::endl;
-    out << folly::sformat("{:14}: {:15,}", "NVM Deletes", numNvmDeletes)
+    const double skippedDeletesPct = pctFn(numNvmSkippedDeletes, numNvmDeletes);
+    out << folly::sformat("{:14}: {:15,} {:14}: {:6.2f}%",
+                          "NVM Deletes",
+                          numNvmDeletes,
+                          "Skipped Deletes",
+                          skippedDeletesPct)
         << std::endl;
     if (numNvmExceededMaxRetry > 0) {
       out << folly::sformat("{}: {}", "NVM max read retry reached",

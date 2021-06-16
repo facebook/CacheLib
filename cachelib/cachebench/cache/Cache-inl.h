@@ -345,6 +345,7 @@ Stats Cache<Allocator>::getStats() const {
   ret.numNvmEvictions = cacheStats.numNvmEvictions;
 
   ret.numNvmDeletes = cacheStats.numNvmDeletes;
+  ret.numNvmSkippedDeletes = cacheStats.numNvmSkippedDeletes;
 
   ret.slabsReleased = rebalanceStats.numSlabReleaseForRebalance;
   ret.moveAttemptsForSlabRelease = rebalanceStats.numMoveAttempts;

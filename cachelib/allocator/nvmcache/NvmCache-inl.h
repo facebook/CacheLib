@@ -596,8 +596,29 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     return;
   }
 
+  stats().numNvmDeletes.inc();
+
   util::LatencyTracker tracker(stats().nvmRemoveLatency_);
   const auto shard = getShardForKey(key);
+  //
+  // invalidate any inflight put that is on flight since we are queueing up a
+  // deletion.
+  inflightPuts_[shard].invalidateToken(key);
+
+  // Skip scheduling async job to remove the key if the key couldn't exist,
+  // if there are no put requests for the key shard.
+  //
+  // The existence check for skipping a remove to be enqueued is not going to
+  // be changed by a get. It can be changed only by a concurrent put. And to
+  // co-ordinate with that, we need to ensure that there are no put contexts
+  // (in-flight puts) before we check for couldExist.  Any put contexts
+  // created after couldExist api returns does not matter, since the put
+  // token is invalidated before all of this begins.
+  if (config_.enableFastNegativeLookups && !putContexts_[shard].hasContexts() &&
+      !navyCache_->couldExist(makeBufferView(key))) {
+    stats().numNvmSkippedDeletes.inc();
+    return;
+  }
   auto& delContexts = delContexts_[shard];
   auto& ctx = delContexts.createContext(key, std::move(tracker));
 
@@ -612,12 +633,6 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     disableNavy(folly::sformat("Delete Failure. status = {}",
                                static_cast<int>(status)));
   };
-
-  stats().numNvmDeletes.inc();
-
-  // invalidate any inflight put that is on flight since we are queueing up a
-  // deletion.
-  inflightPuts_[shard].invalidateToken(key);
 
   auto lock = getFillLockForShard(shard);
   cancelFillLocked(key, shard);
