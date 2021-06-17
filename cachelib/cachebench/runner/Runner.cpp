@@ -54,7 +54,7 @@ void Runner::run(folly::UserCounters& counters) {
   stressor_->finish();
 
   BENCHMARK_SUSPEND {
-    // uint64_t durationNs = stressor_->getTestDurationNs();
+    uint64_t durationNs = stressor_->getTestDurationNs();
     auto cacheStats = stressor_->getCacheStats();
     auto opsStats = stressor_->aggregateThroughputStats();
 
@@ -62,9 +62,9 @@ void Runner::run(folly::UserCounters& counters) {
     cacheStats.render(counters);
 
     // Throughput
-    // opsStats.render(durationNs, std::cout);
+    opsStats.render(durationNs, counters);
 
-    // stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
+    stressor_->renderWorkloadGeneratorStats(durationNs, counters);
 
     counters["nvm_disable"] = cacheStats.isNvmCacheDisabled ? 100 : 0;
     counters["inconsistency_count"] = cacheStats.inconsistencyCount * 100;

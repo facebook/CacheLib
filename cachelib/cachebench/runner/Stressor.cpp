@@ -72,6 +72,40 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
   }
 }
 
+void ThroughputStats::render(uint64_t elapsedTimeNs,
+                             folly::UserCounters& counters) const {
+  const double elapsedSecs = elapsedTimeNs / static_cast<double>(1e9);
+
+  const uint64_t setPerSec = util::narrow_cast<uint64_t>(set / elapsedSecs);
+  const double setSuccessRate =
+      set == 0 ? 0.0 : 100.0 * (set - setFailure) / set;
+
+  const uint64_t getPerSec = util::narrow_cast<uint64_t>(get / elapsedSecs);
+  const double getSuccessRate = get == 0 ? 0.0 : 100.0 * (get - getMiss) / get;
+
+  const uint64_t delPerSec = util::narrow_cast<uint64_t>(del / elapsedSecs);
+  const double delSuccessRate =
+      del == 0 ? 0.0 : 100.0 * (del - delNotFound) / del;
+
+  const uint64_t addChainedPerSec =
+      util::narrow_cast<uint64_t>(addChained / elapsedSecs);
+  const double addChainedSuccessRate =
+      addChained == 0 ? 0.0
+                      : 100.0 * (addChained - addChainedFailure) / addChained;
+
+  counters["ops"] = ops;
+  counters["total_sets"] = set;
+  counters["get_per_sec"] = getPerSec;
+  counters["get_suc_rate"] = util::narrow_cast<uint64_t>(getSuccessRate);
+  counters["set_per_sec"] = setPerSec;
+  counters["set_suc_rate"] = util::narrow_cast<uint64_t>(setSuccessRate);
+  counters["del_per_sec"] = delPerSec;
+  counters["del_suc_rate"] = util::narrow_cast<uint64_t>(delSuccessRate);
+  counters["addChain_per_sec"] = addChainedPerSec;
+  counters["addChain_suc_rate"] =
+      util::narrow_cast<uint64_t>(addChainedSuccessRate);
+}
+
 namespace {
 std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   if (config.generator == "piecewise-replay") {

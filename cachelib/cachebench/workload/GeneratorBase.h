@@ -1,5 +1,7 @@
 #pragma once
 
+#include <folly/Benchmark.h>
+
 #include <atomic>
 
 #include "cachelib/cachebench/util/Request.h"
@@ -30,6 +32,11 @@ class GeneratorBase {
 
   virtual void renderStats(uint64_t /*elapsedTimeNs*/,
                            std::ostream& /*out*/) const {
+    // not implemented by default
+  }
+
+  virtual void renderStats(uint64_t /*elapsedTimeNs*/,
+                           folly::UserCounters& /*counters*/) const {
     // not implemented by default
   }
 

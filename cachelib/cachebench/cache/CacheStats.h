@@ -284,11 +284,41 @@ struct Stats {
   }
 
   void render(folly::UserCounters& counters) {
+    auto calcInvertPctFn = [](uint64_t ops, uint64_t total) {
+      return static_cast<int64_t>(invertPctFn(ops, total) * 100);
+    };
+
     auto totalMisses = getTotalMisses();
     counters["num_items"] = numItems;
     counters["num_nvm_items"] = numNvmItems;
-    counters["hit_rate"] =
-        static_cast<int64_t>(invertPctFn(totalMisses, numCacheGets) * 100);
+    counters["hit_rate"] = calcInvertPctFn(totalMisses, numCacheGets);
+
+    counters["find_latency_p99"] = cacheFindLatencyNs.p99;
+    counters["alloc_latency_p99"] = cacheAllocateLatencyNs.p99;
+
+    counters["ram_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
+    counters["nvm_hit_rate"] = calcInvertPctFn(numCacheGetMiss, numCacheGets);
+
+    counters["nvm_read_latency_p99"] =
+        static_cast<int64_t>(nvmReadLatencyMicrosP99);
+    counters["nvm_write_latency_p99"] =
+        static_cast<int64_t>(nvmWriteLatencyMicrosP99);
+
+    constexpr double MB = 1024.0 * 1024;
+    double appWriteAmp =
+        pctFn(numNvmBytesWritten, numNvmLogicalBytesWritten) / 100.0;
+
+    double devWriteAmp =
+        pctFn(numNvmNandBytesWritten, numNvmBytesWritten) / 100.0;
+
+    counters["nvm_bytes_written_physical_mb"] =
+        static_cast<int64_t>(numNvmBytesWritten / MB);
+    counters["nvm_bytes_written_logical_mb"] =
+        static_cast<int64_t>(numNvmLogicalBytesWritten / MB);
+    counters["nvm_bytes_written_nand_mb"] =
+        static_cast<int64_t>(numNvmNandBytesWritten / MB);
+    counters["nvm_app_write_amp"] = static_cast<int64_t>(appWriteAmp);
+    counters["nvm_dev_write_amp"] = static_cast<int64_t>(devWriteAmp);
   }
 
   bool renderIsTestPassed(std::ostream& out) {

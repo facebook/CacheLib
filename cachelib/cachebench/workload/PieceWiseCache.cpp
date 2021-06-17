@@ -161,6 +161,12 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
   }
 }
 
+void PieceWiseCacheStats::renderStats(uint64_t /* elapsedTimeNs */,
+                                      folly::UserCounters& counters) const {
+  auto ret = reqLatencyStats_.estimate();
+  counters["request_latency_p99"] = ret.p99;
+}
+
 void PieceWiseCacheStats::renderWindowStats(double elapsedSecs,
                                             std::ostream& out) const {
   out << std::endl

@@ -176,6 +176,11 @@ class CacheStressor : public Stressor {
     wg_->renderStats(elapsedTimeNs, out);
   }
 
+  void renderWorkloadGeneratorStats(
+      uint64_t elapsedTimeNs, folly::UserCounters& counters) const override {
+    wg_->renderStats(elapsedTimeNs, counters);
+  }
+
   uint64_t getTestDurationNs() const override { return testDurationNs_; }
 
  private:

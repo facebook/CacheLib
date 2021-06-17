@@ -1,5 +1,6 @@
 #pragma once
 
+#include <folly/Benchmark.h>
 #include <folly/Optional.h>
 #include <folly/Range.h>
 
@@ -113,6 +114,9 @@ class PieceWiseCacheStats {
   util::PercentileStats& getLatencyStatsObject();
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const;
+
+  void renderStats(uint64_t /* elapsedTimeNs */,
+                   folly::UserCounters& counters) const;
 
   const InternalStats& getInternalStats() const { return stats_; }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <folly/Benchmark.h>
+
 #include <atomic>
 #include <memory>
 
@@ -27,6 +29,7 @@ struct ThroughputStats {
   ThroughputStats& operator+=(const ThroughputStats& other);
 
   void render(uint64_t elapsedTimeNs, std::ostream& out) const;
+  void render(uint64_t, folly::UserCounters&) const;
 };
 
 class GeneratorBase;
@@ -58,6 +61,8 @@ class Stressor {
   virtual ThroughputStats aggregateThroughputStats() const = 0;
   virtual void renderWorkloadGeneratorStats(uint64_t /*elapsedTimeNs*/,
                                             std::ostream& /*out*/) const {}
+  virtual void renderWorkloadGeneratorStats(
+      uint64_t /*elapsedTimeNs*/, folly::UserCounters& /*counters*/) const {}
   virtual std::chrono::time_point<std::chrono::system_clock> startTime()
       const = 0;
   virtual uint64_t getTestDurationNs() const = 0;

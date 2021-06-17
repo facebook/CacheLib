@@ -64,6 +64,11 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
   }
 
+  void renderStats(uint64_t elapsedTimeNs,
+                   folly::UserCounters& counters) const override {
+    pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, counters);
+  }
+
   void renderWindowStats(double elapsedSecs, std::ostream& out) const override {
     pieceCacheAdapter_.getStats().renderWindowStats(elapsedSecs, out);
   }
