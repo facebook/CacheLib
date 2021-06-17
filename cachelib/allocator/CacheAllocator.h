@@ -87,8 +87,8 @@ class PoolOptimizeStrategyTest;
 
 class NvmAdmissionPolicyTest;
 
-class PersistenceManagerTest;
 class CacheAllocatorTestWrapper;
+class PersistenceCache;
 } // namespace tests
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
@@ -1730,8 +1730,8 @@ class CacheAllocator : public CacheBase {
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::PoolOptimizeStrategyTest;
   friend class facebook::cachelib::tests::NvmAdmissionPolicyTest;
-  friend class facebook::cachelib::tests::PersistenceManagerTest;
   friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
+  friend class facebook::cachelib::tests::PersistenceCache;
 
   // benchmarks
   template <typename Allocator>

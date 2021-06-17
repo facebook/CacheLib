@@ -38,6 +38,7 @@ class PersistenceStreamReader {
   virtual ~PersistenceStreamReader() {}
   // data in IOBuf must remain valid until next read call,
   // it is recommanded to make IObuf maintain the lifetime of data.
+  // the IObuf can't be chained.
   virtual folly::IOBuf read(size_t length) = 0;
   virtual char read() = 0;
 };

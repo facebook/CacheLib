@@ -51,7 +51,7 @@ struct FOLLY_PACK_ATTR DataBlock {
     ::memcpy(data, ptr, len);
     header.setLengthAndComputeChecksum(len, data);
   }
-  bool validate() {
+  bool validate() const {
     return header.checksum == folly::crc32(data, header.length);
   }
 };
@@ -220,7 +220,7 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
           auto buf = reader.read(sizeof(DataBlock));
           CACHELIB_CHECK_THROW(buf.length() == sizeof(DataBlock),
                                "invalid data");
-          DataBlock db = cast<DataBlock>(buf.data());
+          const DataBlock& db = cast<DataBlock>(buf.data());
           CACHELIB_CHECK_THROW(db.validate(), "invalid checksum");
           auto res = folly::writeFull(f.fd(), db.data, db.header.length);
           CACHELIB_CHECK_THROWF(res != -1, "fail to write file {}, errno: {}",
@@ -344,7 +344,7 @@ void PersistenceManager::restoreDataFromBlocks(PersistenceStreamReader& reader,
   for (uint32_t i = 0; i < numBlock; ++i) {
     auto buf = reader.read(sizeof(DataBlock));
     CACHELIB_CHECK_THROW(buf.length() == sizeof(DataBlock), "invalid data");
-    DataBlock db = cast<DataBlock>(buf.data());
+    const DataBlock& db = cast<DataBlock>(buf.data());
     CACHELIB_CHECK_THROW(db.validate(), "invalid checksum");
     ::memcpy(ptr, db.data, db.header.length);
     ptr += db.header.length;
