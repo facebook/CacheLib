@@ -19,6 +19,34 @@ const std::vector<std::string>& NavyConfig::getRaidPaths() const {
 }
 
 // admission policy settings
+RandomAPConfig& NavyConfig::enableRandomAdmPolicy() {
+  if (!admissionPolicy_.empty()) {
+    throw std::invalid_argument(folly::sformat(
+        "{} admission policy is already enabled", admissionPolicy_));
+  }
+  admissionPolicy_ = "random";
+  return randomAPConfig_;
+}
+
+DynamicRandomAPConfig& NavyConfig::enableDynamicRandomAdmPolicy() {
+  if (!admissionPolicy_.empty()) {
+    throw std::invalid_argument(folly::sformat(
+        "{} admission policy is already enabled", admissionPolicy_));
+  }
+  admissionPolicy_ = "dynamic_random";
+  return dynamicRandomAPConfig_;
+}
+
+RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
+  if (admProbability < 0 || admProbability > 1) {
+    throw std::invalid_argument(folly::sformat(
+        "admission probability should be in the range of [0, 1], but {} is set",
+        admProbability));
+  }
+  admProbability_ = admProbability;
+  return *this;
+}
+
 void NavyConfig::setAdmissionPolicy(const std::string& admissionPolicy) {
   if (admissionPolicy == "") {
     throw std::invalid_argument("admission policy should not be empty");
@@ -27,19 +55,13 @@ void NavyConfig::setAdmissionPolicy(const std::string& admissionPolicy) {
 }
 
 void NavyConfig::setAdmissionProbability(double admissionProbability) {
-  if (admissionProbability < 0 || admissionProbability > 1) {
-    throw std::invalid_argument(folly::sformat(
-        "admission probability should between 0 and 1, but {} is set",
-        admissionProbability));
-  }
-
   if (admissionPolicy_ != kAdmPolicyRandom) {
     throw std::invalid_argument(
         folly::sformat("admission probability is only for random policy, but "
                        "{} policy was set",
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
-  admissionProbability_ = admissionProbability;
+  randomAPConfig_.setAdmProbability(admissionProbability);
 }
 
 void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
@@ -49,7 +71,7 @@ void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
                        "policy, but {} policy was set",
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
-  admissionWriteRate_ = admissionWriteRate;
+  dynamicRandomAPConfig_.setAdmWriteRate(admissionWriteRate);
 }
 
 void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
@@ -59,7 +81,7 @@ void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
                        "policy, but {} policy was set",
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
-  maxWriteRate_ = maxWriteRate;
+  dynamicRandomAPConfig_.setMaxWriteRate(maxWriteRate);
 }
 
 void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
@@ -69,7 +91,7 @@ void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
                        "policy, but {} policy was set",
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
-  admissionSuffixLen_ = admissionSuffixLen;
+  dynamicRandomAPConfig_.setAdmSuffixLength(admissionSuffixLen);
 }
 
 void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
@@ -79,7 +101,7 @@ void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
                        "dynamic_random policy, but {} policy was set",
                        admissionPolicy_.empty() ? "no" : admissionPolicy_));
   }
-  admissionProbBaseSize_ = admissionProbBaseSize;
+  dynamicRandomAPConfig_.setAdmProbBaseSize(admissionProbBaseSize);
 }
 
 // file settings
@@ -194,16 +216,17 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   auto configMap = std::map<std::string, std::string>();
 
   // admission policy settings
-  configMap["navyConfig::admissionPolicy"] = admissionPolicy_;
+  configMap["navyConfig::admissionPolicy"] = getAdmissionPolicy();
   configMap["navyConfig::admissionProbability"] =
-      folly::to<std::string>(admissionProbability_);
+      folly::to<std::string>(randomAPConfig_.getAdmProbability());
   configMap["navyConfig::admissionWriteRate"] =
-      folly::to<std::string>(admissionWriteRate_);
-  configMap["navyConfig::maxWriteRate"] = folly::to<std::string>(maxWriteRate_);
+      folly::to<std::string>(dynamicRandomAPConfig_.getAdmWriteRate());
+  configMap["navyConfig::maxWriteRate"] =
+      folly::to<std::string>(dynamicRandomAPConfig_.getMaxWriteRate());
   configMap["navyConfig::admissionSuffixLen"] =
-      folly::to<std::string>(admissionSuffixLen_);
+      folly::to<std::string>(dynamicRandomAPConfig_.getAdmSuffixLength());
   configMap["navyConfig::admissionProbBaseSize"] =
-      folly::to<std::string>(admissionProbBaseSize_);
+      folly::to<std::string>(dynamicRandomAPConfig_.getAdmProbBaseSize());
 
   // device settings
   configMap["navyConfig::blockSize"] = folly::to<std::string>(blockSize_);

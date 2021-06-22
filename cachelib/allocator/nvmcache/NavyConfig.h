@@ -5,6 +5,94 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+/**
+ * RandomAPConfig provides APIs for users to configure one of the admission
+ * policy - "random". Admission policy is one part of NavyConfig.
+ *
+ * By this class, users can:
+ * - set admission probability
+ * - get the value of admission probability
+ */
+class RandomAPConfig {
+ public:
+  // Set admission probability for "random" policy.
+  // @throw std::std::invalid_argument if the input value is not in the range
+  //        of [0, 1].
+  RandomAPConfig& setAdmProbability(double admProbability);
+
+  double getAdmProbability() const { return admProbability_; }
+
+ private:
+  // Admission probability in decimal form.
+  double admProbability_{};
+};
+
+/**
+ * RandomDynamicAPConfig provides APIs for users to configure one of the
+ * admission policy - "dynamic_random". Admission policy is one part of
+ * NavyConfig.
+ *
+ *
+ * By this class, users can:
+ * - set admission target write rate
+ * - set max write rate
+ * - set admission suffix length
+ * - set base size of baseProbability calculation
+ * - get the values of the above parameters
+ */
+class DynamicRandomAPConfig {
+ public:
+  // Set admission policy's target rate in bytes/s.
+  // This target is enforced across a window in average. Default to be 0 if not
+  // set, meaning no rate limiting.
+  DynamicRandomAPConfig& setAdmWriteRate(uint64_t admWriteRate) noexcept {
+    admWriteRate_ = admWriteRate;
+    return *this;
+  }
+
+  // Set the max write rate to device in bytes/s.
+  // This ensures write at any given second don't exceed this limit despite a
+  // possibility of writing more to stay within the target rate above.
+  DynamicRandomAPConfig& setMaxWriteRate(uint64_t maxWriteRate) noexcept {
+    maxWriteRate_ = maxWriteRate;
+    return *this;
+  }
+
+  // Set the length of suffix in key to be ignored when hashing for
+  // probability.
+  DynamicRandomAPConfig& setAdmSuffixLength(size_t admSuffixLen) noexcept {
+    admSuffixLen_ = admSuffixLen;
+    return *this;
+  }
+
+  // Set the Navy item base size for base probability calculation.
+  // Set this closer to the mean size of objects. The probability is scaled for
+  // other sizes by using this size as the pivot.
+  DynamicRandomAPConfig& setAdmProbBaseSize(uint32_t admProbBaseSize) noexcept {
+    admProbBaseSize_ = admProbBaseSize;
+    return *this;
+  }
+
+  uint64_t getAdmWriteRate() const { return admWriteRate_; }
+
+  uint64_t getMaxWriteRate() const { return maxWriteRate_; }
+
+  size_t getAdmSuffixLength() const { return admSuffixLen_; }
+
+  uint32_t getAdmProbBaseSize() const { return admProbBaseSize_; }
+
+ private:
+  // Admission policy target rate, bytes/s.
+  // Zero means no rate limiting.
+  uint64_t admWriteRate_{0};
+  // The max write rate to device in bytes/s to stay within the device limit
+  // of saturation to avoid latency increase.
+  uint64_t maxWriteRate_{0};
+  // Length of suffix in key to be ignored when hashing for probability.
+  size_t admSuffixLen_{0};
+  // Navy item base size of baseProbability calculation.
+  size_t admProbBaseSize_{0};
+};
 
 /**
  * NavyConfig provides APIs for users to set up Navy related settings for
@@ -71,13 +159,36 @@ class NavyConfig {
   std::map<std::string, std::string> serialize() const;
 
   // Getters:
-  // ============ AP settings =============
+  // ============ Admission Policy =============
   const std::string& getAdmissionPolicy() const { return admissionPolicy_; }
-  double getAdmissionProbability() const { return admissionProbability_; }
-  uint64_t getAdmissionWriteRate() const { return admissionWriteRate_; }
-  uint64_t getMaxWriteRate() const { return maxWriteRate_; }
-  size_t getAdmissionSuffixLength() const { return admissionSuffixLen_; }
-  uint32_t getAdmissionProbBaseSize() const { return admissionProbBaseSize_; }
+  // To be deprecated
+  double getAdmissionProbability() const {
+    return randomAPConfig_.getAdmProbability();
+  }
+  // To be deprecated
+  uint64_t getAdmissionWriteRate() const {
+    return dynamicRandomAPConfig_.getAdmWriteRate();
+  }
+  // To be deprecated
+  uint64_t getMaxWriteRate() const {
+    return dynamicRandomAPConfig_.getMaxWriteRate();
+  }
+  // To be deprecated
+  size_t getAdmissionSuffixLength() const {
+    return dynamicRandomAPConfig_.getAdmSuffixLength();
+  }
+  // To be deprecated
+  uint32_t getAdmissionProbBaseSize() const {
+    return dynamicRandomAPConfig_.getAdmProbBaseSize();
+  }
+
+  // Get a const DynamicRandomAPConfig to read values of its parameters.
+  const DynamicRandomAPConfig& dynamicRandomAdmPolicy() const {
+    return dynamicRandomAPConfig_;
+  }
+
+  // Get a const RandomAPConfig to read values of its parameters.
+  const RandomAPConfig& randomAdmPolicy() const { return randomAPConfig_; }
 
   // ============ Device settings =============
   uint64_t getBlockSize() const { return blockSize_; }
@@ -133,29 +244,39 @@ class NavyConfig {
 
   // Setters:
   // ============ AP settings =============
-  // Set the admission policy (e.g. "random", "dynamic_random").
+  // (Deprecated) Set the admission policy (e.g. "random", "dynamic_random").
   // @throw std::invalid_argument on empty string.
   void setAdmissionPolicy(const std::string& admissionPolicy);
-  // Set admission probability.
+  // (Deprecated) Set admission probability.
   // @throw std::std::invalid_argument if the admission policy is not
   //        "random" or the input value is not in the range of 0~1.
   void setAdmissionProbability(double admissionProbability);
-  // Set admission policy target rate in bytes/s.
+  // (Deprecated) Set admission policy target rate in bytes/s.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
   void setAdmissionWriteRate(uint64_t admissionWriteRate);
-  // Set the max write rate to device in bytes/s.
+  // (Deprecated) Set the max write rate to device in bytes/s.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
   void setMaxWriteRate(uint64_t maxWriteRate);
-  // Set the length of suffix in key to be ignored when hashing for probability.
+  // (Deprecated) Set the length of suffix in key to be ignored when hashing for
+  // probability.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
   void setAdmissionSuffixLength(size_t admissionSuffixLen);
-  // Set the Navy item base size of baseProbability calculation.
+  // (Deprecated) Set the Navy item base size of baseProbability calculation.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
   void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
+  // Enable "dynamic_random" admission policy.
+  // @return DynamicRandomAPConfig (for configuration)
+  // @throw  invalid_argument if admissionPolicy_ is not empty
+  DynamicRandomAPConfig& enableDynamicRandomAdmPolicy();
+
+  // Enable "random" admission policy.
+  // @return RandomAPConfig (for configuration)
+  // @throw invalid_argument if admissionPolicy_ is not empty
+  RandomAPConfig& enableRandomAdmPolicy();
 
   // ============ Device settings =============
   void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
@@ -252,23 +373,8 @@ class NavyConfig {
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).
   std::string admissionPolicy_{""};
-  // Admission probability in decimal form.
-  // This is used for "random" only.
-  double admissionProbability_{};
-  // Admission policy target rate, bytes/s.
-  // Zero means no rate limiting.
-  // This is used for "dynamic_random" only.
-  uint64_t admissionWriteRate_{};
-  // The max write rate to device in bytes/s to stay within the device limit of
-  // saturation to avoid latency increase.
-  // This is used for "dynamic_random" only.
-  uint64_t maxWriteRate_{0};
-  // Length of suffix in key to be ignored when hashing for probability.
-  // This is used for "dynamic_random" only.
-  size_t admissionSuffixLen_{0};
-  // Navy item base size of baseProbability calculation.
-  // This is used for "dynamic_random" only.
-  size_t admissionProbBaseSize_{0};
+  DynamicRandomAPConfig dynamicRandomAPConfig_{};
+  RandomAPConfig randomAPConfig_{};
 
   // ============ Device settings =============
   // Navy specific device block size in bytes.
