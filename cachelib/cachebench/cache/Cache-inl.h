@@ -406,6 +406,14 @@ Stats Cache<Allocator>::getStats() const {
     ret.nvmWriteLatencyMicrosP999999 =
         lookup("navy_device_write_latency_us_p999999");
     ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_p100");
+
+    // track any non-zero check sum errors or io errors
+    for (const auto& [k, v] : navyStats) {
+      if (v != 0 && ((k.find("checksum_error") != std::string::npos) ||
+                     (k.find("io_error") != std::string::npos))) {
+        ret.nvmErrors.insert(std::make_pair(k, v));
+      }
+    }
   }
 
   return ret;

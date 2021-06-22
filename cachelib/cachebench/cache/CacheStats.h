@@ -79,6 +79,9 @@ struct Stats {
   // to populate since not all of those are interesting when running cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
+  // errors from the nvm engine.
+  std::unordered_map<std::string, double> nvmErrors;
+
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
@@ -344,6 +347,11 @@ struct Stats {
     if (unDestructedItemCount) {
       out << "Found " << unDestructedItemCount
           << " items missing destructor cases" << std::endl;
+      pass = false;
+    }
+
+    for (const auto& kv : nvmErrors) {
+      std::cout << "NVM error. " << kv.first << " : " << kv.second << std::endl;
       pass = false;
     }
 
