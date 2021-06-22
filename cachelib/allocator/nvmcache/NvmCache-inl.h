@@ -130,6 +130,10 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     // there are concurrent delete requests enqueued, we might get false
     // positives that key is present. That is okay since it is a loss of
     // performance and not correctness.
+    //
+    // For concurrent put, if it is already enqueued, its put context already
+    // exists. If it is not enqueued yet (in-flight) the above invalidateToken
+    // will prevent the put from being enqueued.
     if (config_.enableFastNegativeLookups && it == fillMap.end() &&
         !putContexts_[shard].hasContexts() &&
         !navyCache_->couldExist(makeBufferView(key))) {
@@ -383,13 +387,9 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
   auto shard = getShardForKey(item.getKey());
-  // obtain the fill lock to record the put context so that any subsequent
-  // fill can use this to abandon synchronous negative lookups if enabled.
-  auto lock = getFillLockForShard(shard);
   auto& putContexts = putContexts_[shard];
   auto& ctx = putContexts.createContext(item.getKey(), std::move(iobuf),
                                         std::move(tracker));
-  lock.unlock(); // once put ctx is instantiated, we don't need the fill lock.
   // capture array reference for putContext. it is stable
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
