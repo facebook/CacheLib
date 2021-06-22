@@ -50,6 +50,17 @@ class NvmCacheTest : public testing::Test {
   void iceColdRoll();
   auto shutDownCache() { return cache_->shutDown(); }
 
+  void insertOrReplace(ItemHandle& handle) {
+    cache_->insertOrReplace(handle);
+    // enforce nvm to complete remove job (triggered by insertOrReplace).
+    // o/w it will cause an immediate eviction's put job  to fail.
+    // Using large items in the test triggers eviction immediately after
+    // insertOrReplace, and some items may be missing without the flushNvm. this
+    // should be safe in production since the eviction of the item won't happen
+    // within a short duration.
+    cache_->flushNvmCache();
+  }
+
   void removeFromRamForTesting(folly::StringPiece key) {
     cache_->removeFromRamForTesting(key);
   }
@@ -59,6 +70,10 @@ class NvmCacheTest : public testing::Test {
   }
 
   bool pushToNvmCacheFromRamForTesting(folly::StringPiece key) {
+    // a typical test case is insertOrReplace then push to nvm immediately.
+    // but pending remove job (triggered by insertOrReplace) will fail
+    // the put job due to active TombStone.
+    cache_->flushNvmCache();
     return cache_->pushToNvmCacheFromRamForTesting(key);
   }
 

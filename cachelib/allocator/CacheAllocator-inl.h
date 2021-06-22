@@ -1031,7 +1031,8 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
     // We can avoid nvm delete only if we have non nvm clean item in cache.
     // In all other cases we must enqueue delete.
     if (!replaced || replaced->isNvmClean()) {
-      nvmCache_->remove(handle->getKey());
+      nvmCache_->remove(handle->getKey(),
+                        nvmCache_->createDeleteTombStone(handle->getKey()));
     }
   }
 
@@ -1494,7 +1495,7 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
   auto handle = findInternal(key);
   if (!handle) {
     if (nvmCache_) {
-      nvmCache_->remove(key);
+      nvmCache_->remove(key, std::move(tombStone));
     }
     if (auto eventTracker = getEventTracker()) {
       eventTracker->record(AllocatorApiEvent::REMOVE, key,
@@ -1503,7 +1504,7 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
     return RemoveRes::kNotFoundInRam;
   }
 
-  return removeImpl(*handle);
+  return removeImpl(*handle, std::move(tombStone));
 }
 
 template <typename CacheTrait>
@@ -1523,15 +1524,15 @@ void CacheAllocator<CacheTrait>::evictForTesting(Item& it) {
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::removeFromRamForTesting(
     typename Item::Key key) {
-  return removeImpl(*findInternal(key), false /* removeFromNvm */) ==
-         RemoveRes::kSuccess;
+  return removeImpl(*findInternal(key), DeleteTombStoneGuard{},
+                    false /* removeFromNvm */) == RemoveRes::kSuccess;
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::removeFromNvmForTesting(
     typename Item::Key key) {
   if (nvmCache_) {
-    nvmCache_->remove(key);
+    nvmCache_->remove(key, nvmCache_->createDeleteTombStone(key));
   }
 }
 
@@ -1564,7 +1565,9 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
                          AllocatorApiResult::REMOVED, it->getSize(),
                          it->getConfiguredTTL().count());
   }
-  return removeImpl(*it);
+  auto tombstone = nvmCache_ ? nvmCache_->createDeleteTombStone(it->getKey())
+                             : DeleteTombStoneGuard{};
+  return removeImpl(*it, std::move(tombstone));
 }
 
 template <typename CacheTrait>
@@ -1574,19 +1577,23 @@ CacheAllocator<CacheTrait>::remove(const ItemHandle& it) {
   if (!it) {
     throw std::invalid_argument("Trying to remove a null item handle");
   }
-  return removeImpl(*it);
+  auto tombstone = nvmCache_ ? nvmCache_->createDeleteTombStone(it->getKey())
+                             : DeleteTombStoneGuard{};
+  return removeImpl(*it, std::move(tombstone));
 }
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::removeImpl(Item& item,
+                                       DeleteTombStoneGuard tombstone,
                                        bool removeFromNvm,
                                        bool recordApiEvent) {
   // Enqueue delete to nvmCache if we know from the item that it was pulled in
   // from NVM. If the item was not pulled in from NVM, it is not possible to
   // have it be written to NVM.
   if (nvmCache_ && removeFromNvm && item.isNvmClean()) {
-    nvmCache_->remove(item.getKey());
+    XDCHECK(tombstone);
+    nvmCache_->remove(item.getKey(), std::move(tombstone));
   }
 
   const bool success = accessContainer_->remove(item);
@@ -1617,7 +1624,8 @@ template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
   if (nvmCache_ != nullptr && item.isAccessible() && item.isNvmClean()) {
     item.unmarkNvmClean();
-    nvmCache_->remove(item.getKey());
+    nvmCache_->remove(item.getKey(),
+                      nvmCache_->createDeleteTombStone(item.getKey()));
   }
 }
 

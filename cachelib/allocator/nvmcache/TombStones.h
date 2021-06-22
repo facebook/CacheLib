@@ -61,6 +61,8 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
       return *this;
     }
 
+    explicit operator bool() const noexcept { return tombstones_ != nullptr; }
+
    private:
     // only tombstone can create a guard.
     friend TombStones;

@@ -143,7 +143,18 @@ class NvmCache {
 
   // remove an item by key
   // @param key         key to remove
-  void remove(folly::StringPiece key);
+  // @param tombstone   the tombstone guard associated for this key. See
+  //                    CacheAllocator::remove on how tombstone maintain
+  //                    consistency with presence of concurrent get/puts to the
+  //                    same key from nvmcache.Tombstone is kept alive and
+  //                    destroyed until the remove operation is finished
+  //                    processing asynchronously.
+  //                    The tombstone should be created by
+  //                    'createDeleteTombStone', it can be created right before
+  //                    the remove called if caller is only removing item in
+  //                    nvm; if the caller is also removing the item from ram,
+  //                    tombstone should be created before removing item in ram.
+  void remove(folly::StringPiece key, DeleteTombStoneGuard guard);
 
   // peek the nvmcache without bringing the item into the cache. creates a
   // temporary item handle with the content of the nvmcache. this is intended
@@ -199,17 +210,13 @@ class NvmCache {
     std::vector<std::shared_ptr<WaitContext<ItemHandle>>> waiters; // list of
                                                                    // waiters
     ItemHandle it; // will be set when Context is being filled
-    bool cancelFill_;
     util::LatencyTracker tracker_;
 
     GetCtx(NvmCache& c,
            folly::StringPiece k,
            std::shared_ptr<WaitContext<ItemHandle>> ctx,
            util::LatencyTracker tracker)
-        : cache(c),
-          key(k.toString()),
-          cancelFill_(false),
-          tracker_(std::move(tracker)) {
+        : cache(c), key(k.toString()), tracker_(std::move(tracker)) {
       it.markWentToNvm();
       addWaiter(std::move(ctx));
     }
@@ -228,10 +235,6 @@ class NvmCache {
     // and pass a clone of the handle to the callBack. By default we pass
     // a null handle
     void setItemHandle(ItemHandle _it) { it = std::move(_it); }
-
-    void cancelFill() noexcept { cancelFill_ = true; }
-
-    bool shouldCancelFill() const noexcept { return cancelFill_; }
 
     // enqueue a waiter into the waiter list
     // @param  waiter       WaitContext
@@ -277,8 +280,6 @@ class NvmCache {
   // returns true if there is a concurrent get request in flight fetching from
   // nvm.
   bool mightHaveConcurrentFill(size_t shard, folly::StringPiece key);
-
-  void cancelFillLocked(folly::StringPiece key, size_t shard);
 
   // map of concurrent fills by key. The key is a string piece wrapper around
   // GetCtx's std::string. This makes the lookups possible without

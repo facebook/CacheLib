@@ -127,7 +127,7 @@ TEST_F(NvmCacheTest, EvictToDipperGet) {
     auto key = folly::sformat("key{}", i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    nvm.insertOrReplace(it);
+    insertOrReplace(it);
   }
 
   const auto nEvictions = this->evictionCount() - evictBefore;
@@ -183,7 +183,7 @@ TEST_F(NvmCacheTest, EvictToDipperGetCheckCtime) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    nvm.insertOrReplace(it);
+    insertOrReplace(it);
     keyToCtime.insert({key, it->getCreationTime()});
   }
 
@@ -285,7 +285,7 @@ TEST_F(NvmCacheTest, Delete) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    nvm.insertOrReplace(it);
+    insertOrReplace(it);
   }
 
   // fetch all of them
@@ -393,7 +393,7 @@ TEST_F(NvmCacheTest, NvmClean) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
-    nvm.insertOrReplace(it);
+    insertOrReplace(it);
   }
 
   auto nEvictions = this->evictionCount() - evictBefore;
@@ -459,7 +459,7 @@ TEST_F(NvmCacheTest, NvmEvicted) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
-    nvm.insertOrReplace(it);
+    insertOrReplace(it);
   }
 
   // read everything again. This should churn and cause the current ones to be

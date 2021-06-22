@@ -60,12 +60,18 @@ typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
   const auto shard = hash % kShards;
   auto guard = tombstones_[shard].add(hash);
 
-  {
-    // need to synchronize tombstone creations with fill lock to serialize
-    // async fills with deletes
-    auto lock = getFillLockForShard(shard);
-    cancelFillLocked(key, shard);
-  }
+  // need to synchronize tombstone creations with fill lock to serialize
+  // async fills with deletes
+  // o/w concurrent onGetComplete might re-insert item to RAM after tombstone
+  // is created.
+  // The lock here is to that  adding the tombstone and checking the dram cache
+  // in remove path happens entirely before or  happens entirely after checking
+  // for tombstone and inserting into dram from the get path.
+  // If onGetComplete is holding the FillLock, wait the insertion to be done.
+  // If onGetComplete has not yet acquired FillLock, we are fine to exit since
+  // hasTombStone in onGetComplete is checked after acquiring FillLock.
+  auto lock = getFillLockForShard(shard);
+
   return guard;
 }
 
@@ -164,7 +170,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
       });
   if (status != navy::Status::Ok) {
     // instead of disabling navy, we enqueue a delete and return a miss.
-    remove(key);
+    remove(key, createDeleteTombStone(key));
     stats().numNvmGetMiss.inc();
   } else {
     guard.dismiss();
@@ -467,13 +473,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (status != navy::Status::Ok) {
     // instead of disabling navy, we enqueue a delete and return a miss.
     if (status != navy::Status::NotFound) {
-      remove(key);
+      remove(key, createDeleteTombStone(key));
     }
-    stats().numNvmGetMiss.inc();
-    return;
-  }
-
-  if (hasTombStone(key)) {
     stats().numNvmGetMiss.inc();
     return;
   }
@@ -495,15 +496,16 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     stats().numNvmGetMiss.inc();
     // we failed to fill due to an internal failure. Return a miss and
     // invalidate what we have in nvmcache
-    remove(key);
+    remove(key, createDeleteTombStone(key));
     return;
   }
 
   XDCHECK(it->isNvmClean());
 
   auto lock = getFillLock(key);
-  if (ctx.shouldCancelFill()) {
+  if (hasTombStone(key)) {
     // a racing remove while we were filling
+    stats().numNvmGetMiss.inc();
     return;
   }
 
@@ -582,19 +584,12 @@ void NvmCache<C>::disableNavy(const std::string& msg) {
 }
 
 template <typename C>
-void NvmCache<C>::cancelFillLocked(folly::StringPiece key, size_t shard) {
-  auto& map = getFillMapForShard(shard);
-  auto it = map.find(key);
-  if (it != map.end()) {
-    it->second->cancelFill();
-  }
-}
-
-template <typename C>
-void NvmCache<C>::remove(folly::StringPiece key) {
+void NvmCache<C>::remove(folly::StringPiece key,
+                         DeleteTombStoneGuard tombstone) {
   if (!isEnabled()) {
     return;
   }
+  XDCHECK(tombstone);
 
   stats().numNvmDeletes.inc();
 
@@ -620,11 +615,12 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     return;
   }
   auto& delContexts = delContexts_[shard];
-  auto& ctx = delContexts.createContext(key, std::move(tracker));
+  auto& ctx =
+      delContexts.createContext(key, std::move(tracker), std::move(tombstone));
 
   // capture array reference for delContext. it is stable
   auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
-                                               navy::BufferView) {
+                                               navy::BufferView) mutable {
     delContexts.destroyContext(ctx);
     if (status == navy::Status::Ok || status == navy::Status::NotFound) {
       return;
@@ -633,9 +629,6 @@ void NvmCache<C>::remove(folly::StringPiece key) {
     disableNavy(folly::sformat("Delete Failure. status = {}",
                                static_cast<int>(status)));
   };
-
-  auto lock = getFillLockForShard(shard);
-  cancelFillLocked(key, shard);
 
   auto status = navyCache_->removeAsync(makeBufferView(ctx.key()), delCleanup);
   if (status != navy::Status::Ok) {

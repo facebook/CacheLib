@@ -137,7 +137,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     // which also removes all the chained items.
     for (unsigned int i = 0; i < numParents; ++i) {
       auto parent = alloc.find("parent" + folly::to<std::string>(i));
-      alloc.removeImpl(*parent);
+      alloc.remove(parent);
     }
     // to make sure clean the chained items clearly.
     /* sleep override */

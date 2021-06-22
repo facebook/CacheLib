@@ -86,20 +86,23 @@ class PersistenceCache {
 
       cache.insertOrReplace(handle);
       handle.reset();
-
-      if (testNvm) {
-        EXPECT_TRUE(cache.pushToNvmCacheFromRamForTesting(key));
-        EXPECT_TRUE(cache.removeFromRamForTesting(key));
-        auto res = cache.inspectCache(key);
-        // must not exist in RAM
-        EXPECT_EQ(nullptr, res.first);
-        // must be in nvmcache
-        EXPECT_NE(nullptr, res.second);
-      }
     }
 
     if (testNvm) {
-      // for nvm test, do another round of lookup for find evicted items
+      cache.flushNvmCache();
+      // push all items to nvm
+      for (uint32_t i = 0; i < items.size(); ++i) {
+        auto& key = items[i].first;
+        if (cache.pushToNvmCacheFromRamForTesting(key)) {
+          cache.removeFromRamForTesting(key);
+          auto res = cache.inspectCache(key);
+          // must not exist in RAM
+          EXPECT_EQ(nullptr, res.first);
+          // must be in nvmcache
+          EXPECT_NE(nullptr, res.second);
+        }
+      }
+      // do another round of lookup for find evicted items
       // currently the removeCb doesn't work for Navy
       evictedKeys.clear();
       for (uint32_t i = 0; i < items.size(); ++i) {

@@ -10,6 +10,7 @@
 #include <mutex>
 #include <string>
 
+#include "cachelib/allocator/nvmcache/TombStones.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/common/Utils.h"
@@ -42,8 +43,12 @@ class PutCtx {
 // Holds all necessary data to do an async dipper remove
 class DelCtx {
  public:
-  DelCtx(folly::StringPiece key, util::LatencyTracker tracker)
-      : key_(key.toString()), tracker_(std::move(tracker)) {}
+  DelCtx(folly::StringPiece key,
+         util::LatencyTracker tracker,
+         TombStones::Guard tombstone)
+      : key_(key.toString()),
+        tracker_(std::move(tracker)),
+        tombstone_(std::move(tombstone)) {}
 
   folly::StringPiece key() const { return key_; }
 
@@ -55,6 +60,10 @@ class DelCtx {
 
   //< tracking latency of the put operation
   util::LatencyTracker tracker_;
+
+  // a tombstone for the remove job, preventing concurrent get that could cause
+  // inconsistent result
+  TombStones::Guard tombstone_;
 };
 
 namespace detail {

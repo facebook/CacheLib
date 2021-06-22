@@ -178,6 +178,7 @@ class CacheAllocator : public CacheBase {
 
   using NvmCacheT = NvmCache<CacheT>;
   using NvmCacheConfig = typename NvmCacheT::Config;
+  using DeleteTombStoneGuard = typename NvmCacheT::DeleteTombStoneGuard;
 
   struct SyncObj {
     virtual ~SyncObj() = default;
@@ -1276,10 +1277,14 @@ class CacheAllocator : public CacheBase {
 
   // Removes an item from the access container and MM container.
   //
-  // @param it                  Item to remove
-  // @param removeFromNvm       if true clear key from nvm
-  // @param recordApiEvent      should we record API event for this operation.
+  // @param it               Item to remove
+  // @param tombstone        A tombstone for nvm::remove job created by
+  //                         nvm::createDeleteTombStone, can be empty if nvm is
+  //                         not enable, or removeFromNvm is false
+  // @param removeFromNvm    if true clear key from nvm
+  // @param recordApiEvent   should we record API event for this operation.
   RemoveRes removeImpl(Item& it,
+                       DeleteTombStoneGuard tombstone,
                        bool removeFromNvm = true,
                        bool recordApiEvent = true);
 
