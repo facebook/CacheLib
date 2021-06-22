@@ -422,7 +422,7 @@ Buffer BigHash::readBucket(BucketId bid) {
   // could lead to false positives on check sum errors for buckets that were not
   // initialized (by writing to it), but were read due to bloom filter having a
   // false positive.  Hence, we can't differentiate between false positives and
-  // real check sum errors due device failures 
+  // real check sum errors due device failures
   //
   // if (!checksumSuccess && bloomFilter_) {
   //  checksumErrorCount_.inc();
