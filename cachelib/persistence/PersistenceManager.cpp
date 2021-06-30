@@ -57,6 +57,9 @@ struct FOLLY_PACK_ATTR DataBlock {
 };
 
 void PersistenceManager::saveCache(PersistenceStreamWriter& writer) {
+  util::Timer timer;
+  timer.startOrResume();
+
   XLOGF(INFO, "Start saving cache: cacheName {}, cacheDir {}",
         *config_.cacheName_ref(), cacheDir_);
   writer.write(DATA_BEGIN_CHAR);
@@ -137,9 +140,15 @@ void PersistenceManager::saveCache(PersistenceStreamWriter& writer) {
 
   writer.write(DATA_END_CHAR);
   writer.flush();
+
+  timer.pause();
+  XLOGF(INFO, "saveCache finish, spent {} seconds", timer.getDurationSec());
 }
 
 void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
+  util::Timer timer;
+  timer.startOrResume();
+
   XLOGF(INFO, "Start restoring cache: cacheName {}, cacheDir {}",
         *config_.cacheName_ref(), cacheDir_);
 
@@ -239,6 +248,9 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
     case DATA_MARK_CHAR:
       continue;
     case DATA_END_CHAR:
+      timer.pause();
+      XLOGF(INFO, "restoreCache finish, spent {} seconds",
+            timer.getDurationSec());
       return;
     default:
       CACHELIB_CHECK_THROWF(false, "Unknown character: {}", mark);

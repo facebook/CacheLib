@@ -1,6 +1,7 @@
 #pragma once
 #include <chrono>
 #include <ctime>
+#include <stdexcept>
 
 namespace facebook {
 namespace cachelib {
@@ -31,6 +32,58 @@ inline uint32_t getSteadyCurrentTimeSec() {
   auto ret = std::chrono::steady_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::seconds>(ret).count();
 }
+
+class Timer {
+  using steady_clock = std::chrono::steady_clock;
+  class Finish {
+   public:
+    explicit Finish(Timer* t) : timer_(t) {}
+    ~Finish() { timer_->pause(); }
+    Timer* timer_;
+  };
+
+ public:
+  steady_clock::duration getDuration() const { return duration_; }
+
+  uint32_t getDurationSec() const {
+    return std::chrono::duration_cast<std::chrono::seconds>(duration_).count();
+  }
+
+  uint64_t getDurationMs() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration_)
+        .count();
+  }
+
+  void startOrResume() {
+    if (started_) {
+      throw std::runtime_error("already stated");
+    }
+    started_ = true;
+    start_ = steady_clock::now();
+  }
+
+  // automatically call pause() when out of scope
+  Finish scopedStartOrResume() {
+    startOrResume();
+    return Finish{this};
+  }
+
+  steady_clock::duration pause() {
+    if (!started_) {
+      throw std::runtime_error("not stated yet");
+    }
+    started_ = false;
+    auto d = steady_clock::now() - start_;
+    duration_ += d;
+    return d;
+  }
+
+ private:
+  steady_clock::duration duration_ = steady_clock::duration::zero();
+  steady_clock::time_point start_;
+  bool started_{false};
+};
+
 } // namespace util
 } // namespace cachelib
 } // namespace facebook

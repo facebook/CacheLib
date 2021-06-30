@@ -9,6 +9,7 @@
 #include "cachelib/allocator/nvmcache/NavySetup.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Serialization.h"
+#include "cachelib/common/Time.h"
 #include "cachelib/persistence/gen-cpp2/objects_types.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/ShmManager.h"
