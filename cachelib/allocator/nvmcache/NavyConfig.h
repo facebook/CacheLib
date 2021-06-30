@@ -93,6 +93,194 @@ class DynamicRandomAPConfig {
   // Navy item base size of baseProbability calculation.
   size_t admProbBaseSize_{0};
 };
+/**
+ * BlockCacheConfig provides APIs for users to configure BlockCache engine,
+ * which is one part of NavyConfig.
+ *
+ * By this class, users can:
+ * - enable FIFO or segmented FIFO eviction policy (default is LRU)
+ * - enable hits-based OR probability-based reinsertion policy (but not both)
+ * - set number of clean regions
+ * - enable in-mem buffer (once enabled, the number is 2 * clean regions)
+ * - set size classes
+ * - set region size
+ * - set data checksum
+ * - get the values of all the above parameters
+ */
+class BlockCacheConfig {
+ public:
+  // Enable FIFO eviction policy (LRU will be disabled).
+  BlockCacheConfig& enableFifo() noexcept {
+    lru_ = false;
+    return *this;
+  }
+
+  // Enable segmented FIFO eviction policy (LRU will be disabled)
+  // @param sFifoSegmentRatio maps to segments in the order from
+  //        least-important to most-important.
+  //        e.g. {1, 1, 1} gives equal share in each of the 3 segments;
+  //             {1, 2, 3} gives the 1/6th of the items in the first segment (P0
+  //             least important), 2/6th of the items in the second segment
+  //             (P1), and finally 3/6th of the items in the third segment (P2).
+  BlockCacheConfig& enableSegmentedFifo(
+      std::vector<unsigned int> sFifoSegmentRatio) noexcept {
+    sFifoSegmentRatio_ = std::move(sFifoSegmentRatio);
+    lru_ = false;
+    return *this;
+  }
+
+  // Enable hit-based reinsertion policy.
+  // When evicting regions, items that exceed this threshold of access will be
+  // preserved by reinserting them internally.
+  // @throw std::invalid_argument if percentage based reinsertion policy has
+  //        been enabled.
+  BlockCacheConfig& enableHitsBasedReinsertion(uint8_t hitsThreshold);
+
+  // Enable percentage based reinsertion policy.
+  // This is used for testing where a certain fraction of evicted items
+  // (governed by the percentage) are always reinserted.
+  // @throw std::invalid_argument if hit based reinsertion policy has
+  //        been enabled or the input value is not in the range of 0~100.
+  BlockCacheConfig& enablePctBasedReinsertion(unsigned int pctThreshold);
+
+  // Set number of clean regions that are maintained for incoming write and
+  // whether the writes are buffered in-memory.
+  // When in-memory buffers are enabled, Navy maintains sufficient buffers for
+  // each clean region that is reserved. This ensures each time we obtain a new
+  // in-mem buffer, we have a clean region to flush it to flash once it's ready.
+  BlockCacheConfig& setCleanRegions(uint32_t cleanRegions,
+                                    bool enableInMemBuffer) noexcept;
+
+  // Set a vector of size classes.
+  // If enabled, Navy will configure regions to allocate rounded up to these
+  // size classes and evict regions within a size classs. A given region
+  // allocates corresponding to a given size class. By default, objects will be
+  // stack allocated irrespective of their size on available regions.
+  BlockCacheConfig& useSizeClasses(std::vector<uint32_t> sizeClasses) noexcept {
+    sizeClasses_ = std::move(sizeClasses);
+    return *this;
+  }
+
+  BlockCacheConfig& setRegionSize(uint32_t regionSize) noexcept {
+    regionSize_ = regionSize;
+    return *this;
+  }
+
+  BlockCacheConfig& setDataChecksum(bool dataChecksum) noexcept {
+    dataChecksum_ = dataChecksum;
+    return *this;
+  }
+
+  bool getLru() const { return lru_; }
+
+  const std::vector<unsigned int>& getSFifoSegmentRatio() const {
+    return sFifoSegmentRatio_;
+  }
+
+  uint8_t getReinsertionHitsThreshold() const {
+    return reinsertionHitsThreshold_;
+  }
+
+  unsigned int getReinsertionPctThreshold() const {
+    return reinsertionPctThreshold_;
+  }
+
+  uint32_t getCleanRegions() const { return cleanRegions_; }
+
+  uint32_t getNumInMemBuffers() const { return numInMemBuffers_; }
+
+  const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
+
+  uint32_t getRegionSize() const { return regionSize_; }
+
+  bool getDataChecksum() const { return dataChecksum_; }
+
+ private:
+  // Whether Navy BlockCache will use region-based LRU eviction policy.
+  bool lru_{true};
+  // The ratio of segments for segmented FIFO eviction policy.
+  // Once segmented FIFO is enabled, lru_ will be false.
+  std::vector<unsigned int> sFifoSegmentRatio_;
+  // Threshold of a hits based reinsertion policy with Navy BlockCache.
+  // If an item had been accessed more than that threshold, it will be
+  // eligible for reinsertion.
+  uint8_t reinsertionHitsThreshold_{0};
+  // Threshold of a percentage based reinsertion policy with Navy BlockCache.
+  // The percentage value is between 0 and 100 for reinsertion.
+  unsigned int reinsertionPctThreshold_{0};
+  // Buffer of clean regions to maintain for eviction.
+  uint32_t cleanRegions_{1};
+  // Number of Navy BlockCache in-memory buffers.
+  uint32_t numInMemBuffers_{0};
+  // A vector of Navy BlockCache size classes (must be multiples of
+  // blockSize_).
+  std::vector<uint32_t> sizeClasses_;
+  // Size for a region for Navy BlockCache (must be multiple of
+  // blockSize_).
+  uint32_t regionSize_{16 * 1024 * 1024};
+  // Whether enabling data checksum for Navy BlockCache.
+  bool dataChecksum_{true};
+
+  friend class NavyConfig;
+};
+
+/**
+ * BigHashConfig provides APIs for users to configure BigHash engine, which is
+ * one part of NavyConfig.
+ *
+ * By this class, users can:
+ * - enable BigHash by setting sizePct > 0
+ * - set maximum item size
+ * - set bucket size
+ * - set bloom filter size (0 to disable bloom filter)
+ * - get the values of all the above parameters
+ */
+class BigHashConfig {
+ public:
+  // Set BigHash device percentage and maximum item size(in bytes) to enable
+  // BigHash engine. Default value of sizePct and smallItemMaxSize is 0,
+  // meaning BigHash is not enabled.
+  // @throw std::invalid_argument if sizePct is not in the range of
+  //        [0, 100].
+  BigHashConfig& setSizePctAndMaxItemSize(unsigned int sizePct,
+                                          uint64_t smallItemMaxSize);
+
+  // Set the bucket size in bytes for BigHash engine.
+  // Default value is 4096.
+  BigHashConfig& setBucketSize(uint32_t bucketSize) noexcept {
+    bucketSize_ = bucketSize;
+    return *this;
+  }
+
+  // Set bloom filter size per bucket in bytes for BigHash engine.
+  // 0 means bloom filter will not be applied. Default value is 8.
+  BigHashConfig& setBucketBfSize(uint64_t bucketBfSize) noexcept {
+    bucketBfSize_ = bucketBfSize;
+    return *this;
+  }
+
+  unsigned int getSizePct() const { return sizePct_; }
+
+  uint32_t getBucketSize() const { return bucketSize_; }
+
+  uint64_t getBucketBfSize() const { return bucketBfSize_; }
+
+  uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
+
+ private:
+  // Percentage of how much of the device out of all is given to BigHash
+  // engine in Navy, e.g. 50.
+  unsigned int sizePct_{0};
+  // Navy BigHash engine's bucket size (must be multiple of the minimum
+  // device io block size).
+  // This size determines how big each bucket is and what is the physical
+  // write granularity onto the device.
+  uint32_t bucketSize_{4096};
+  // The bloom filter size per bucket in bytes for Navy BigHash engine
+  uint64_t bucketBfSize_{8};
+  // The maximum item size to put into Navy BigHash engine.
+  uint64_t smallItemMaxSize_{};
+};
 
 /**
  * NavyConfig provides APIs for users to set up Navy related settings for
@@ -106,49 +294,6 @@ class DynamicRandomAPConfig {
  *
  */
 class NavyConfig {
-  class BigHashConfig {
-   public:
-    // ============ setters =============
-    // Set BigHash device percentage and maximum item size(in bytes) to enable
-    // BigHash engine. Default value of sizePct and smallItemMaxSize is 0,
-    // meaning BigHash is not enabled.
-    // @throw std::invalid_argument if sizePct is not in the range of
-    //        [0, 100].
-    BigHashConfig& setSizePctAndMaxItemSize(unsigned int sizePct,
-                                            uint64_t smallItemMaxSize);
-    // Set the bucket size in bytes for BigHash engine.
-    // Default value is 4096.
-    BigHashConfig& setBucketSize(uint32_t bucketSize) noexcept {
-      bucketSize_ = bucketSize;
-      return *this;
-    }
-    // Set bloom filter size per bucket in bytes for BigHash engine.
-    // 0 means bloom filter will not be applied. Default value is 8.
-    BigHashConfig& setBucketBfSize(uint64_t bucketBfSize) noexcept {
-      bucketBfSize_ = bucketBfSize;
-      return *this;
-    }
-    // ============ getters =============
-    unsigned int getSizePct() const { return sizePct_; }
-    uint32_t getBucketSize() const { return bucketSize_; }
-    uint64_t getBucketBfSize() const { return bucketBfSize_; }
-    uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
-
-   private:
-    // Percentage of how much of the device out of all is given to BigHash
-    // engine in Navy, e.g. 50.
-    unsigned int sizePct_{0};
-    // Navy BigHash engine's bucket size (must be multiple of the minimum
-    // device io block size).
-    // This size determines how big each bucket is and what is the physical
-    // write granularity onto the device.
-    uint32_t bucketSize_{4096};
-    // The bloom filter size per bucket in bytes for Navy BigHash engine
-    uint64_t bucketBfSize_{8};
-    // The maximum item size to put into Navy BigHash engine.
-    uint64_t smallItemMaxSize_{};
-  };
-
  public:
   static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
@@ -200,35 +345,54 @@ class NavyConfig {
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
 
   // ============ BlockCache settings =============
-  bool getBlockCacheLru() const { return blockCacheLru_; }
-  uint32_t getBlockCacheRegionSize() const { return blockCacheRegionSize_; }
-  const std::vector<uint32_t>& getBlockCacheSizeClasses() const {
-    return blockCacheSizeClasses_;
-  }
-  uint32_t getBlockCacheCleanRegions() const { return blockCacheCleanRegions_; }
-  uint8_t getBlockCacheReinsertionHitsThreshold() const {
-    return blockCacheReinsertionHitsThreshold_;
-  }
-  unsigned int getBlockCacheReinsertionProbabilityThreshold() const {
-    return blockCacheReinsertionProbabilityThreshold_;
-  }
-  uint32_t getBlockCacheNumInMemBuffers() const {
-    return blockCacheNumInMemBuffers_;
-  }
-  bool getBlockCacheDataChecksum() const { return blockCacheDataChecksum_; }
+  // To be deprecated
+  bool getBlockCacheLru() const { return blockCacheConfig_.getLru(); }
+  // To be deprecated
   const std::vector<unsigned int>& getBlockCacheSegmentedFifoSegmentRatio()
       const {
-    return blockCacheSegmentedFifoSegmentRatio_;
+    return blockCacheConfig_.getSFifoSegmentRatio();
+  }
+  // To be deprecated
+  uint8_t getBlockCacheReinsertionHitsThreshold() const {
+    return blockCacheConfig_.getReinsertionHitsThreshold();
+  }
+  // To be deprecated
+  unsigned int getBlockCacheReinsertionProbabilityThreshold() const {
+    return blockCacheConfig_.getReinsertionPctThreshold();
+  }
+  // To be deprecated
+  uint32_t getBlockCacheCleanRegions() const {
+    return blockCacheConfig_.getCleanRegions();
+  }
+  // To be deprecated
+  uint32_t getBlockCacheNumInMemBuffers() const {
+    return blockCacheConfig_.getNumInMemBuffers();
+  }
+  // To be deprecated
+  const std::vector<uint32_t>& getBlockCacheSizeClasses() const {
+    return blockCacheConfig_.getSizeClasses();
+  }
+  // To be deprecated
+  uint32_t getBlockCacheRegionSize() const {
+    return blockCacheConfig_.getRegionSize();
+  }
+  // To be deprecated
+  bool getBlockCacheDataChecksum() const {
+    return blockCacheConfig_.getDataChecksum();
   }
 
   // ============ BigHash settings =============
+  // To be deprecated
   unsigned int getBigHashSizePct() const { return bigHashConfig_.getSizePct(); }
+  // To be deprecated
   uint32_t getBigHashBucketSize() const {
     return bigHashConfig_.getBucketSize();
   }
+  // To be deprecated
   uint64_t getBigHashBucketBfSize() const {
     return bigHashConfig_.getBucketBfSize();
   }
+  // To be deprecated
   uint64_t getBigHashSmallItemMaxSize() const {
     return bigHashConfig_.getSmallItemMaxSize();
   }
@@ -303,41 +467,48 @@ class NavyConfig {
   }
 
   // ============ BlockCache settings =============
-  // Set whether LRU policy will be used.
+  // (Deprecated) Set whether LRU policy will be used.
   // @throw std::invalid_argument if segmentedFifoSegmentRatio has been set and
   //        blockCacheLru = true.
   void setBlockCacheLru(bool blockCacheLru);
-  // Set segmentedFifoSegmentRatio for BlockCache.
+  // (Deprecated) Set segmentedFifoSegmentRatio for BlockCache.
   // @throw std::invalid_argument if LRU policy is used.
   void setBlockCacheSegmentedFifoSegmentRatio(
       std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio);
-  // Set reinsertionHitsThreshold for BlockCache.
+  // (Deprecated) Set reinsertionHitsThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
   //        set.
   void setBlockCacheReinsertionHitsThreshold(
       uint8_t blockCacheReinsertionHitsThreshold);
-  // Set ReinsertionProbabilityThreshold for BlockCache.
+  // (Deprecated) Set ReinsertionProbabilityThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionHitsThreshold has been set or
   //        the input value is not in the range of 0~100.
   void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
+  // (Deprecated) Set size classes vector for BlockCache.
   void setBlockCacheSizeClasses(
       std::vector<uint32_t> blockCacheSizeClasses) noexcept {
-    blockCacheSizeClasses_ = std::move(blockCacheSizeClasses);
+    blockCacheConfig_.useSizeClasses(std::move(blockCacheSizeClasses));
   }
+  // (Deprecated) Set region size for BlockCache.
   void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
-    blockCacheRegionSize_ = blockCacheRegionSize;
+    blockCacheConfig_.setRegionSize(blockCacheRegionSize);
   }
+  // (Deprecated) Set number of clean regions for BlockCache.
   void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) noexcept {
-    blockCacheCleanRegions_ = blockCacheCleanRegions;
+    blockCacheConfig_.cleanRegions_ = blockCacheCleanRegions;
   }
+  // (Deprecated) Set number of in-mem buffers for BlockCache.
   void setBlockCacheNumInMemBuffers(
       uint32_t blockCacheNumInMemBuffers) noexcept {
-    blockCacheNumInMemBuffers_ = blockCacheNumInMemBuffers;
+    blockCacheConfig_.numInMemBuffers_ = blockCacheNumInMemBuffers;
   }
+  // (Deprecated) Set whether enable data checksum for BlockCache.
   void setBlockCacheDataChecksum(bool blockCacheDataChecksum) noexcept {
-    blockCacheDataChecksum_ = blockCacheDataChecksum;
+    blockCacheConfig_.setDataChecksum(blockCacheDataChecksum);
   }
+  // Get BlockCacheConfig to configure BlockCache.
+  BlockCacheConfig& blockCache() noexcept { return blockCacheConfig_; }
 
   // ============ BigHash settings =============
   // (Deprecated) Set the parameters for BigHash.
@@ -347,7 +518,7 @@ class NavyConfig {
                   uint32_t bigHashBucketSize,
                   uint64_t bigHashBucketBfSize,
                   uint64_t bigHashSmallItemMaxSize);
-  // Get BigHashConfig to configure bigHash.
+  // Get BigHashConfig to configure BigHash.
   BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
 
   // ============ Job scheduler settings =============
@@ -395,30 +566,7 @@ class NavyConfig {
   uint32_t deviceMaxWriteSize_{};
 
   // ============ BlockCache settings =============
-  // Whether Navy BlockCache will use region-based LRU.
-  bool blockCacheLru_{true};
-  // Size for a region for Navy BlockCache (must be multiple of
-  // blockSize_).
-  uint32_t blockCacheRegionSize_{16 * 1024 * 1024};
-  // A vector of Navy BlockCache size classes (must be multiples of
-  // blockSize_).
-  std::vector<uint32_t> blockCacheSizeClasses_;
-  // Buffer of clean regions to maintain for eviction.
-  uint32_t blockCacheCleanRegions_{1};
-  // Threshold of a hits based reinsertion policy with Navy BlockCache.
-  // If an item had been accessed more than that threshold, it will be eligible
-  // for reinsertion.
-  uint8_t blockCacheReinsertionHitsThreshold_{0};
-  // Threshold of a probability based reinsertion policy with Navy BlockCache.
-  // The probability value is between 0 and 100 for reinsertion.
-  unsigned int blockCacheReinsertionProbabilityThreshold_{0};
-  // Number of Navy BlockCache in-memory buffers.
-  uint32_t blockCacheNumInMemBuffers_{};
-  // Whether enabling data checksum for Navy BlockCache.
-  bool blockCacheDataChecksum_{true};
-  // An array of the ratio of each segment.
-  // blockCacheLru_ must be false.
-  std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio_;
+  BlockCacheConfig blockCacheConfig_{};
 
   // ============ BigHash settings =============
   BigHashConfig bigHashConfig_{};

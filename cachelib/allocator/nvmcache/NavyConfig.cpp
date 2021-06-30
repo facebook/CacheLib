@@ -132,53 +132,70 @@ void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
 }
 
 // BlockCache settings
-void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
-  if (blockCacheLru && !blockCacheSegmentedFifoSegmentRatio_.empty()) {
+BlockCacheConfig& BlockCacheConfig::enableHitsBasedReinsertion(
+    uint8_t hitsThreshold) {
+  if (reinsertionPctThreshold_ > 0) {
     throw std::invalid_argument(
-        "already set sfifo segment ratio, should not use LRU policy");
-  }
-  blockCacheLru_ = blockCacheLru;
-}
-
-void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
-    std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio) {
-  if (blockCacheLru_) {
-    throw std::invalid_argument(
-        "already use LRU policy, should not set sfifo segment ratio");
-  }
-  blockCacheSegmentedFifoSegmentRatio_ =
-      std::move(blockCacheSegmentedFifoSegmentRatio);
-}
-
-void NavyConfig::setBlockCacheReinsertionHitsThreshold(
-    uint8_t blockCacheReinsertionHitsThreshold) {
-  if (blockCacheReinsertionProbabilityThreshold_ > 0) {
-    throw std::invalid_argument(
-        "already set reinsertion probability threshold, should not set "
+        "already set reinsertion percentage threshold, should not set "
         "reinsertion hits threshold");
   }
-  blockCacheReinsertionHitsThreshold_ = blockCacheReinsertionHitsThreshold;
+  reinsertionHitsThreshold_ = hitsThreshold;
+  return *this;
 }
 
-void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
-    unsigned int blockCacheReinsertionProbabilityThreshold) {
-  if (blockCacheReinsertionHitsThreshold_ > 0) {
+BlockCacheConfig& BlockCacheConfig::enablePctBasedReinsertion(
+    unsigned int pctThreshold) {
+  if (reinsertionHitsThreshold_ > 0) {
     throw std::invalid_argument(
         "already set reinsertion hits threshold, should not set reinsertion "
         "probability threshold");
   }
-  if (blockCacheReinsertionProbabilityThreshold > 100) {
+  if (pctThreshold > 100) {
     throw std::invalid_argument(
-        folly::sformat("reinsertion probability threshold should between 0 and "
+        folly::sformat("reinsertion percentage threshold should between 0 and "
                        "100, but {} is set",
-                       blockCacheReinsertionProbabilityThreshold));
+                       pctThreshold));
   }
-  blockCacheReinsertionProbabilityThreshold_ =
-      blockCacheReinsertionProbabilityThreshold;
+  reinsertionPctThreshold_ = pctThreshold;
+  return *this;
+}
+
+BlockCacheConfig& BlockCacheConfig::setCleanRegions(
+    uint32_t cleanRegions, bool enableInMemBuffer) noexcept {
+  cleanRegions_ = cleanRegions;
+  if (enableInMemBuffer) {
+    // Increasing number of in-mem buffers is a short-term mitigation
+    // (see T93961857, T93959811)
+    numInMemBuffers_ = 2 * cleanRegions;
+  }
+  return *this;
+}
+
+void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
+  if (!blockCacheLru) {
+    blockCacheConfig_.enableFifo();
+  }
+}
+
+void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
+    std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio) {
+  blockCacheConfig_.enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio);
+}
+
+void NavyConfig::setBlockCacheReinsertionHitsThreshold(
+    uint8_t blockCacheReinsertionHitsThreshold) {
+  blockCacheConfig_.enableHitsBasedReinsertion(
+      blockCacheReinsertionHitsThreshold);
+}
+
+void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
+    unsigned int blockCacheReinsertionProbabilityThreshold) {
+  blockCacheConfig_.enablePctBasedReinsertion(
+      blockCacheReinsertionProbabilityThreshold);
 }
 
 // BigHash settings
-NavyConfig::BigHashConfig& NavyConfig::BigHashConfig::setSizePctAndMaxItemSize(
+BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
     unsigned int sizePct, uint64_t smallItemMaxSize) {
   if (sizePct > 100) {
     throw std::invalid_argument(folly::sformat(
@@ -240,33 +257,34 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(deviceMaxWriteSize_);
 
   // BlockCache settings
-  configMap["navyConfig::blockCacheLru"] = blockCacheLru_ ? "true" : "false";
+  configMap["navyConfig::blockCacheLru"] =
+      blockCacheConfig_.getLru() ? "true" : "false";
   configMap["navyConfig::blockCacheRegionSize"] =
-      folly::to<std::string>(blockCacheRegionSize_);
+      folly::to<std::string>(blockCacheConfig_.getRegionSize());
   configMap["navyConfig::blockCacheSizeClasses"] =
-      folly::join(",", blockCacheSizeClasses_);
+      folly::join(",", blockCacheConfig_.getSizeClasses());
   configMap["navyConfig::blockCacheCleanRegions"] =
-      folly::to<std::string>(blockCacheCleanRegions_);
+      folly::to<std::string>(blockCacheConfig_.getCleanRegions());
   configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =
-      folly::to<std::string>(blockCacheReinsertionHitsThreshold_);
-  configMap["navyConfig::blockCacheReinsertionProbabilityThreshold"] =
-      folly::to<std::string>(blockCacheReinsertionProbabilityThreshold_);
+      folly::to<std::string>(blockCacheConfig_.getReinsertionHitsThreshold());
+  configMap["navyConfig::blockCacheReinsertionPctThreshold"] =
+      folly::to<std::string>(blockCacheConfig_.getReinsertionPctThreshold());
   configMap["navyConfig::blockCacheNumInMemBuffers"] =
-      folly::to<std::string>(blockCacheNumInMemBuffers_);
+      folly::to<std::string>(blockCacheConfig_.getNumInMemBuffers());
   configMap["navyConfig::blockCacheDataChecksum"] =
-      blockCacheDataChecksum_ ? "true" : "false";
+      blockCacheConfig_.getDataChecksum() ? "true" : "false";
   configMap["navyConfig::blockCacheSegmentedFifoSegmentRatio"] =
-      folly::join(",", blockCacheSegmentedFifoSegmentRatio_);
+      folly::join(",", blockCacheConfig_.getSFifoSegmentRatio());
 
   // BigHash settings
   configMap["navyConfig::bigHashSizePct"] =
-      folly::to<std::string>(getBigHashSizePct());
+      folly::to<std::string>(bigHashConfig_.getSizePct());
   configMap["navyConfig::bigHashBucketSize"] =
-      folly::to<std::string>(getBigHashBucketSize());
+      folly::to<std::string>(bigHashConfig_.getBucketSize());
   configMap["navyConfig::bigHashBucketBfSize"] =
-      folly::to<std::string>(getBigHashBucketBfSize());
+      folly::to<std::string>(bigHashConfig_.getBucketBfSize());
   configMap["navyConfig::bigHashSmallItemMaxSize"] =
-      folly::to<std::string>(getBigHashSmallItemMaxSize());
+      folly::to<std::string>(bigHashConfig_.getSmallItemMaxSize());
 
   // Job scheduler settings
   configMap["navyConfig::readerThreads"] =
