@@ -95,6 +95,7 @@ class MockEngine final : public Engine {
   MOCK_METHOD1(mockRecoverData, bool(const std::string&));
 
   void getCounters(const CounterVisitor& /* visitor */) const override {}
+  uint64_t getMaxItemSize() const override { return UINT32_MAX; }
 
   // Returns true if key found and can be actually evicted in the real world
   bool evict(BufferView key) {

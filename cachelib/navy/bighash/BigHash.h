@@ -96,6 +96,7 @@ class BigHash final : public Engine {
   bool recover(RecordReader& rr) override;
 
   void getCounters(const CounterVisitor& visitor) const override;
+  uint64_t getMaxItemSize() const override;
 
   uint64_t bfRejectCount() const { return bfRejectCount_.get(); }
 

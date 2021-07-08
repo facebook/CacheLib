@@ -125,6 +125,11 @@ double BigHash::bfFalsePositivePct() const {
   }
 }
 
+uint64_t BigHash::getMaxItemSize() const {
+  auto itemOverhead = BucketStorage::slotSize(sizeof(details::BucketEntry));
+  return bucketSize_ - sizeof(Bucket) - itemOverhead;
+}
+
 void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_items", itemCount_.get());
   visitor("navy_bh_inserts", insertCount_.get());

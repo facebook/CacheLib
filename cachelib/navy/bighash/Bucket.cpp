@@ -10,48 +10,8 @@ static_assert(sizeof(Bucket) == 24,
               "sizes used in unit tests.");
 
 namespace {
-// This maps to exactly how an entry is stored in a bucket on device.
-class FOLLY_PACK_ATTR BucketEntry {
- public:
-  static uint32_t computeSize(uint32_t keySize, uint32_t valueSize) {
-    return sizeof(BucketEntry) + keySize + valueSize;
-  }
-
-  static BucketEntry& create(MutableBufferView storage,
-                             HashedKey hk,
-                             BufferView value) {
-    new (storage.data()) BucketEntry{hk, value};
-    return reinterpret_cast<BucketEntry&>(*storage.data());
-  }
-
-  BufferView key() const { return {keySize_, data_}; }
-
-  bool keyEqualsTo(HashedKey hk) const {
-    return hk == HashedKey::precomputed(key(), keyHash_);
-  }
-
-  uint64_t keyHash() const { return keyHash_; }
-
-  BufferView value() const { return {valueSize_, data_ + keySize_}; }
-
- private:
-  BucketEntry(HashedKey hk, BufferView value)
-      : keySize_{static_cast<uint32_t>(hk.key().size())},
-        valueSize_{static_cast<uint32_t>(value.size())},
-        keyHash_{hk.keyHash()} {
-    static_assert(sizeof(BucketEntry) == 16, "BucketEntry overhead");
-    hk.key().copyTo(data_);
-    value.copyTo(data_ + keySize_);
-  }
-
-  const uint32_t keySize_{};
-  const uint32_t valueSize_{};
-  const uint64_t keyHash_{};
-  uint8_t data_[];
-};
-
-const BucketEntry* getIteratorEntry(BucketStorage::Allocation itr) {
-  return reinterpret_cast<const BucketEntry*>(itr.view().data());
+const details::BucketEntry* getIteratorEntry(BucketStorage::Allocation itr) {
+  return reinterpret_cast<const details::BucketEntry*>(itr.view().data());
 }
 } // namespace
 
@@ -99,13 +59,14 @@ BufferView Bucket::find(HashedKey hk) const {
 uint32_t Bucket::insert(HashedKey hk,
                         BufferView value,
                         const DestructorCallback& destructorCb) {
-  const auto size = BucketEntry::computeSize(hk.key().size(), value.size());
+  const auto size =
+      details::BucketEntry::computeSize(hk.key().size(), value.size());
   XDCHECK_LE(size, storage_.capacity());
 
   const auto evictions = makeSpace(size, destructorCb);
   auto alloc = storage_.allocate(size);
   XDCHECK(!alloc.done());
-  BucketEntry::create(alloc.view(), hk, value);
+  details::BucketEntry::create(alloc.view(), hk, value);
 
   return evictions;
 }

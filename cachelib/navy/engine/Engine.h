@@ -34,6 +34,9 @@ class Engine {
 
   // Get engine specific counters. Calls back @visitor with key name and value.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
+
+  // Get the maximum item size that can be inserted into the engine.
+  virtual uint64_t getMaxItemSize() const = 0;
 };
 } // namespace navy
 } // namespace cachelib

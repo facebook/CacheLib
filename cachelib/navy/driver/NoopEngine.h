@@ -21,6 +21,7 @@ class NoopEngine final : public Engine {
   void persist(RecordWriter& /* rw */) override {}
   bool recover(RecordReader& /* rr */) override { return true; }
   void getCounters(const CounterVisitor& /* visitor */) const override {}
+  uint64_t getMaxItemSize() const override { return UINT32_MAX; }
 };
 } // namespace navy
 } // namespace cachelib

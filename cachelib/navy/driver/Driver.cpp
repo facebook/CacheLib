@@ -4,6 +4,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/NoopEngine.h"
+#include "folly/Format.h"
 
 namespace facebook {
 namespace cachelib {
@@ -11,6 +12,13 @@ namespace navy {
 Driver::Config& Driver::Config::validate() {
   if (smallItemCache != nullptr && smallItemMaxSize == 0) {
     throw std::invalid_argument("invalid small item cache params");
+  }
+  if (smallItemCache != nullptr) {
+    if (smallItemMaxSize > smallItemCache->getMaxItemSize()) {
+      throw std::invalid_argument(folly::sformat(
+          "small item max size should not excceed: {}, but is set to be: {}",
+          smallItemCache->getMaxItemSize(), smallItemMaxSize));
+    }
   }
   return *this;
 }
@@ -70,11 +78,11 @@ bool Driver::couldExist(BufferView key) {
 Status Driver::insert(BufferView key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};
-  auto status = insertAsync(
-      key, value, [&done, &cbStatus](Status s, BufferView /* key */) {
-        cbStatus = s;
-        done.post();
-      });
+  auto status = insertAsync(key, value,
+                            [&done, &cbStatus](Status s, BufferView /* key */) {
+                              cbStatus = s;
+                              done.post();
+                            });
   if (status != Status::Ok) {
     return status;
   }

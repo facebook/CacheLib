@@ -89,6 +89,9 @@ class BlockCache final : public Engine {
   bool recover(RecordReader& rr) override;
 
   void getCounters(const CounterVisitor& visitor) const override;
+  uint64_t getMaxItemSize() const override {
+    return regionSize_ - sizeof(EntryDesc);
+  }
 
   uint32_t getAllocAlignSize() const {
     XDCHECK(folly::isPowTwo(allocAlignSize_));
