@@ -120,7 +120,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       // Convert timestamp to seconds.
       uint64_t timestampRaw =
           folly::tryTo<size_t>(fields[SampleFields::TIMESTAMP]).value();
-      uint64_t timestampSeconds = timestampRaw / timestampFactor;
+      uint64_t timestampSeconds = timestampRaw / timestampFactor_;
       auto fullContentSize = fullContentSizeT.value();
       auto responseSize = responseSizeT.value();
       auto responseHeaderSize = responseHeaderSizeT.value();

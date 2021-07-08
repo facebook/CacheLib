@@ -4,6 +4,8 @@
 #include <folly/Optional.h>
 #include <folly/Range.h>
 
+#include <mutex>
+
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
@@ -69,7 +71,22 @@ class PieceWiseCacheStats {
       objGets.set(0);
       objGetHits.set(0);
       objGetFullHits.set(0);
+
+      {
+        std::lock_guard<std::mutex> lck(tsMutex_);
+        startTimestamp_ = 0;
+        endTimestamp_ = 0;
+      }
     }
+
+    void updateTimestamp(uint64_t timestamp);
+    std::pair<uint64_t, uint64_t> getTimestamps();
+
+   private:
+    // The starting time and end time for counting the stats.
+    std::mutex tsMutex_;
+    uint64_t startTimestamp_{0};
+    uint64_t endTimestamp_{0};
   };
 
   // @param numAggregationFields: # of aggregation fields in trace sample
@@ -84,7 +101,8 @@ class PieceWiseCacheStats {
           statsPerAggField);
 
   // Record both byte-wise and object-wise stats for a get request access
-  void recordAccess(size_t getBytes,
+  void recordAccess(uint64_t timestamp,
+                    size_t getBytes,
                     size_t getBodyBytes,
                     size_t bytesEgress,
                     const std::vector<std::string>& statsAggFields);

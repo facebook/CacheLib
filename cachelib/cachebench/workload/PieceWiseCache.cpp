@@ -8,6 +8,27 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+void PieceWiseCacheStats::InternalStats::updateTimestamp(uint64_t timestamp) {
+  std::lock_guard<std::mutex> lck(tsMutex_);
+  if (startTimestamp_ > timestamp || startTimestamp_ == 0) {
+    startTimestamp_ = timestamp;
+  }
+
+  if (endTimestamp_ < timestamp) {
+    endTimestamp_ = timestamp;
+  }
+}
+
+std::pair<uint64_t, uint64_t>
+PieceWiseCacheStats::InternalStats::getTimestamps() {
+  std::pair<uint64_t, uint64_t> result;
+  {
+    std::lock_guard<std::mutex> lck(tsMutex_);
+    result = {startTimestamp_, endTimestamp_};
+  }
+  return result;
+}
+
 PieceWiseCacheStats::PieceWiseCacheStats(
     uint32_t numAggregationFields,
     const std::unordered_map<uint32_t, std::vector<std::string>>&
@@ -29,10 +50,15 @@ PieceWiseCacheStats::PieceWiseCacheStats(
 }
 
 void PieceWiseCacheStats::recordAccess(
+    uint64_t timestamp,
     size_t getBytes,
     size_t getBodyBytes,
     size_t egressBytes,
     const std::vector<std::string>& statsAggFields) {
+  // Adjust the timestamp given current sample.
+  stats_.updateTimestamp(timestamp);
+  lastWindowStats_.updateTimestamp(timestamp);
+
   recordStats(recordAccessInternal, statsAggFields, getBytes, getBodyBytes,
               egressBytes);
 }
@@ -169,9 +195,10 @@ void PieceWiseCacheStats::renderStats(uint64_t /* elapsedTimeNs */,
 
 void PieceWiseCacheStats::renderWindowStats(double elapsedSecs,
                                             std::ostream& out) const {
+  auto windowTs = lastWindowStats_.getTimestamps();
   out << std::endl
-      << "== PieceWiseReplayGenerator Stats in Recent Time Window =="
-      << std::endl;
+      << "== PieceWiseReplayGenerator Stats in Recent Time Window ("
+      << windowTs.first << " - " << windowTs.second << ") ==" << std::endl;
 
   renderStatsInternal(lastWindowStats_, elapsedSecs, out);
 
@@ -362,7 +389,8 @@ void PieceWiseCacheAdapter::recordNewReq(PieceWiseReqWrapper& rw) {
   } else {
     egressBytes = rw.fullObjectSize + rw.headerSize;
   }
-  stats_.recordAccess(getBytes, getBodyBytes, egressBytes, rw.statsAggFields);
+  stats_.recordAccess(rw.req.timestamp, getBytes, getBodyBytes, egressBytes,
+                      rw.statsAggFields);
 }
 
 bool PieceWiseCacheAdapter::processReq(PieceWiseReqWrapper& rw,
