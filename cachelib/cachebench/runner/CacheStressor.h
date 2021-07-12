@@ -32,8 +32,6 @@ class CacheStressor : public Stressor {
   using Key = typename CacheT::Key;
   using ItemHandle = typename CacheT::ItemHandle;
 
-  enum class Mode { Exclusive, Shared };
-
   // @param wrapper   wrapper that encapsulate the CacheAllocator
   // @param config    stress test config
   CacheStressor(CacheConfig cacheConfig,
@@ -54,16 +52,10 @@ class CacheStressor : public Stressor {
       lockEnabled_ = true;
 
       struct CacheStressSyncObj : public CacheT::SyncObj {
-        CacheStressor& stressor;
-        std::string key;
+        std::unique_lock<folly::SharedMutex> lock;
 
         CacheStressSyncObj(CacheStressor& s, std::string itemKey)
-            : stressor(s), key(std::move(itemKey)) {
-          stressor.chainedItemLock(Mode::Exclusive, key);
-        }
-        ~CacheStressSyncObj() override {
-          stressor.chainedItemUnlock(Mode::Exclusive, key);
-        }
+            : lock{s.chainedItemAcquireUniqueLock(itemKey)} {}
       };
       movingSync = [this](typename CacheT::Item::Key key) {
         return std::make_unique<CacheStressSyncObj>(*this, key.str());
@@ -200,17 +192,13 @@ class CacheStressor : public Stressor {
 
   // TODO maintain state on whether key has chained allocs and use it to only
   // lock for keys with chained items.
-  void chainedItemLock(Mode mode, Key key) {
-    if (lockEnabled_) {
-      auto& lock = getLock(key);
-      mode == Mode::Shared ? lock.lock_shared() : lock.lock();
-    }
+  auto chainedItemAcquireSharedLock(Key key) {
+    using Lock = std::shared_lock<folly::SharedMutex>;
+    return lockEnabled_ ? Lock{getLock(key)} : Lock{};
   }
-  void chainedItemUnlock(Mode mode, Key key) {
-    if (lockEnabled_) {
-      auto& lock = getLock(key);
-      mode == Mode::Shared ? lock.unlock_shared() : lock.unlock();
-    }
+  auto chainedItemAcquireUniqueLock(Key key) {
+    using Lock = std::unique_lock<folly::SharedMutex>;
+    return lockEnabled_ ? Lock{getLock(key)} : Lock{};
   }
 
   void populateItem(ItemHandle& handle) {
@@ -286,8 +274,7 @@ class CacheStressor : public Stressor {
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          auto lock = chainedItemAcquireUniqueLock(*key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);
 
@@ -298,10 +285,9 @@ class CacheStressor : public Stressor {
         case OpType::kGet: {
           ++stats.get;
 
-          Mode lockMode = Mode::Shared;
+          auto slock = chainedItemAcquireSharedLock(*key);
+          auto xlock = decltype(chainedItemAcquireUniqueLock(*key)){};
 
-          chainedItemLock(lockMode, *key);
-          SCOPE_EXIT { chainedItemUnlock(lockMode, *key); };
           if (ticker_) {
             ticker_->updateTimeStamp(req.timestamp);
           }
@@ -318,9 +304,8 @@ class CacheStressor : public Stressor {
               // allocate and insert on miss
               // upgrade access privledges, (lock_upgrade is not
               // appropriate here)
-              chainedItemUnlock(lockMode, *key);
-              lockMode = Mode::Exclusive;
-              chainedItemLock(lockMode, *key);
+              slock = {};
+              xlock = chainedItemAcquireUniqueLock(*key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                      req.admFeatureMap);
             }
@@ -333,8 +318,7 @@ class CacheStressor : public Stressor {
         }
         case OpType::kDel: {
           ++stats.del;
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          auto lock = chainedItemAcquireUniqueLock(*key);
           auto res = cache_->remove(*key);
           if (res == CacheT::RemoveRes::kNotFoundInRam) {
             ++stats.delNotFound;
@@ -344,8 +328,7 @@ class CacheStressor : public Stressor {
         }
         case OpType::kAddChained: {
           ++stats.get;
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          auto lock = chainedItemAcquireUniqueLock(*key);
           auto it = cache_->find(*key, AccessMode::kRead);
           if (!it) {
             ++stats.getMiss;
@@ -383,8 +366,7 @@ class CacheStressor : public Stressor {
         case OpType::kUpdate: {
           ++stats.get;
           ++stats.update;
-          chainedItemLock(Mode::Exclusive, *key);
-          SCOPE_EXIT { chainedItemUnlock(Mode::Exclusive, *key); };
+          auto lock = chainedItemAcquireUniqueLock(*key);
           if (ticker_) {
             ticker_->updateTimeStamp(req.timestamp);
           }
