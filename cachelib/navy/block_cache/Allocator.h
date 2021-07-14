@@ -75,7 +75,6 @@ class Allocator {
   //
   // @param size          Allocation size
   // @param priority      Specifies how important this allocation is
-  // @param size              Allocation size
   //
   // Returns a tuple containing region descriptor, allocated slotSize and
   // allocated address

@@ -163,7 +163,7 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
 }
 
 void RegionManager::doFlush(RegionId rid, bool async) {
-  // We're wasiting the remaining bytes of a region, so track it for stats
+  // We're wasting the remaining bytes of a region, so track it for stats
   externalFragmentation_.add(getRegion(rid).getFragmentationSize());
 
   // applicable only if configured to use in-memory buffers

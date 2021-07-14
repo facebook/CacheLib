@@ -191,7 +191,7 @@ void Driver::updateLookupStats(Status status) const {
 }
 
 Status Driver::lookup(BufferView key, Buffer& value) {
-  // We do busy wait because we don't expect many retires.
+  // We do busy wait because we don't expect many retries.
   lookupCount_.inc();
   const HashedKey hk{key};
   Status status{Status::NotFound};

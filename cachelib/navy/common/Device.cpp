@@ -272,7 +272,7 @@ bool Device::readInternal(uint64_t offset, uint32_t size, void* value) {
   return true;
 }
 
-// This API reads size bytes from the Device from offset in to a Buffer and
+// This API reads size bytes from the Device from offset into a Buffer and
 // returns the Buffer. If offset and size are not aligned to device's
 // ioAlignmentSize_, IO aligned offset and IO aligned size are determined
 // and passed to device read. Upon successful read from the device, the
@@ -297,8 +297,8 @@ Buffer Device::read(uint64_t offset, uint32_t size) {
   return buffer;
 }
 
-// This API reads size bytes from the Device from the offset offset into
-// value. Both offset and size are expected to be IO aligned.
+// This API reads size bytes from the Device from the offset into value.
+// Both offset and size are expected to be IO aligned.
 bool Device::read(uint64_t offset, uint32_t size, void* value) {
   return readInternal(offset, size, value);
 }

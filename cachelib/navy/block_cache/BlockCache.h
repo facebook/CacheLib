@@ -50,11 +50,11 @@ class BlockCache final : public Engine {
     JobScheduler* scheduler{};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
-    // Number of in-memory buffers wherer writes are buffered before flushed
+    // Number of in-memory buffers where writes are buffered before flushed
     // on to the device
     uint32_t numInMemBuffers{};
 
-    // Number of pririorities. Items of the same priority will be put into
+    // Number of priorities. Items of the same priority will be put into
     // the same reigon. The effect of priorities will be up to the particular
     // eviction policy. There must be at least one priority
     uint16_t numPriorities{1};
@@ -71,7 +71,7 @@ class BlockCache final : public Engine {
   ~BlockCache() override = default;
 
   // Check if the key could exist in block cache. This can be used as a
-  // pre-check to optimize cache lookups  to avoid calling lookup in an async IO
+  // pre-check to optimize cache lookups to avoid calling lookup in an async IO
   // environment.
   //
   // @param hk   key to be checked

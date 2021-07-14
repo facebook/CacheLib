@@ -22,7 +22,7 @@ namespace navy {
 // a series of buckets. One can think of it as a on-device hash table.
 //
 // Each item is hashed to a bucket according to its key. There is no size class,
-// and each bucket is consisted of various variable-sized items. When full, we
+// and each bucket is consist of various variable-sized items. When full, we
 // evict the items in their insertion order. An eviction call back is guaranteed
 // to be invoked once per item. We currently do not support removeCB. That is
 // coming as part of Navy eventually.
@@ -40,8 +40,8 @@ class BigHash final : public Engine {
   struct Config {
     uint32_t bucketSize{4 * 1024};
 
-    // The range of device that BigHash will access is guaranted to be
-    // with in [baseOffset, baseOffset + cacheSize)
+    // The range of device that BigHash will access is guaranteed to be
+    // within [baseOffset, baseOffset + cacheSize)
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
     Device* device{nullptr};

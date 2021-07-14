@@ -204,7 +204,7 @@ class RegionManager {
   const RegionEvictCallback evictCb_;
 
   const std::vector<uint32_t> sizeClasses_;
-  //
+
   // To understand naming here, let me explain difference between "reclamation"
   // and "eviction". Cache evicts item and makes it inaccessible via lookup. It
   // is an item level operation. When we say "reclamation" about regions we

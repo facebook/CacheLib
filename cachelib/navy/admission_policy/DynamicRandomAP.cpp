@@ -145,7 +145,7 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
   auto targetWrittenTomorrow = targetRate_ * (secondsElapsed + kSecondsInDay);
   uint64_t curTargetRate{0};
   if (bytesWritten < targetWrittenTomorrow) {
-    // Write rate needed to acheive @targetWrittenTomorrow given that we have
+    // Write rate needed to achieve @targetWrittenTomorrow given that we have
     // currently written @bytesWritten.
     curTargetRate = (targetWrittenTomorrow - bytesWritten) / kSecondsInDay;
   }

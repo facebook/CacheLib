@@ -52,7 +52,7 @@ class Device {
   // Device constructor
   //
   // @param size          total size of the device
-  // @param encryptor     entryption object
+  // @param encryptor     encryption object
   // @param ioAlignSize   alignment size for IO operations
   // @param maxWriteSize  max device write size
   Device(uint64_t size,

@@ -19,7 +19,7 @@ namespace navy {
  *
  * Probability = baseProbability * probabilityFactor
  *
- * baseProbability is a essentially a 1/x curve where x is the size of the item.
+ * baseProbability is essentially a 1/x curve where x is the size of the item.
  * This means that larger items are penalized. The reasoning is that allowing
  * more small items increases hit ratio. Hits are measured per item, not by
  * size, so more items will result in more hits.
@@ -132,7 +132,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   mutable folly::SharedMutex mutex_;
   ThrottleParams params_;
 
-  // baseProbability distrbution on the items that are tested on accept.
+  // baseProbability distribution on the items that are tested on accept.
   mutable util::PercentileStats baseProbStats_;
 
   // probabilityFactor would always be in [lowerBound_, upperBound_]

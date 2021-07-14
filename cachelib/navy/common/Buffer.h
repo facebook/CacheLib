@@ -192,7 +192,7 @@ class Buffer {
 
   // dataStartOffset_ is the offset in data_ where the actual(user-interested)
   // data starts. This helps in skipping past unnecessary data in the buffer
-  // without havingto copy it. There could be unnecessary data in the buffer
+  // without having to copy it. There could be unnecessary data in the buffer
   // due to read/write from/to a block-aligned address when the actual data
   // starts somewhere in the middle(ie not at the block aligned address).
   size_t dataStartOffset_{0};

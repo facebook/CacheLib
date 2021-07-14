@@ -18,7 +18,7 @@ enum class Status {
   // Entry not found
   NotFound,
 
-  // Operations was rejected (queue full, admission policy, etc.)
+  // Operations were rejected (queue full, admission policy, etc.)
   Rejected,
 
   // Resource is temporary busy
