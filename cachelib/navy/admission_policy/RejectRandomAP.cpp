@@ -18,6 +18,9 @@ RejectRandomAP::Config& RejectRandomAP::Config::validate() {
   return *this;
 }
 
+RejectRandomAP::RejectRandomAP(Config&& config)
+    : RejectRandomAP{std::move(config.validate()), ValidConfigTag{}} {}
+
 RejectRandomAP::RejectRandomAP(Config&& config, ValidConfigTag)
     : probability_{config.probability}, rg_{config.seed} {
   XLOGF(INFO, "RejectRandomAP: probability {}", probability_);

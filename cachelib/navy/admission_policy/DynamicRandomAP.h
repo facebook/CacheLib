@@ -77,10 +77,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
     Config& validate();
   };
 
-  // Contructor can throw std::exception
-  explicit DynamicRandomAP(Config&& config)
-      : DynamicRandomAP{std::move(config.validate()), ValidConfigTag{}} {}
-
+  // Contructor can throw std::exception if config is invalid.
+  explicit DynamicRandomAP(Config&& config);
   DynamicRandomAP(const DynamicRandomAP&) = delete;
   DynamicRandomAP& operator=(const DynamicRandomAP&) = delete;
   ~DynamicRandomAP() override = default;

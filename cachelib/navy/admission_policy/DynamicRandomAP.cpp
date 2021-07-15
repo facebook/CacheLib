@@ -53,6 +53,9 @@ DynamicRandomAP::Config& DynamicRandomAP::Config::validate() {
   return *this;
 }
 
+DynamicRandomAP::DynamicRandomAP(Config&& config)
+    : DynamicRandomAP{std::move(config.validate()), ValidConfigTag{}} {}
+
 DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
     : targetRate_{config.targetRate},
       maxRate_{config.maxRate},

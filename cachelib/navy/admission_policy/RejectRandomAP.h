@@ -23,8 +23,7 @@ class RejectRandomAP final : public AdmissionPolicy {
   };
 
   // Throws std::exception if can't be constructed (parameters invalid).
-  explicit RejectRandomAP(Config&& config)
-      : RejectRandomAP{std::move(config.validate()), ValidConfigTag{}} {}
+  explicit RejectRandomAP(Config&& config);
   RejectRandomAP(const RejectRandomAP&) = delete;
   RejectRandomAP& operator=(const RejectRandomAP&) = delete;
   ~RejectRandomAP() override = default;
