@@ -28,13 +28,9 @@ target_link_libraries(cachelib_cachebench
 add_executable (cachebench main.cpp)
 target_link_libraries(cachebench cachelib_cachebench)
 
-add_executable (cachebench-util util/main.cpp)
-target_link_libraries(cachebench-util cachelib_cachebench)
-
 install(
   TARGETS
      cachebench
-     cachebench-util
   DESTINATION ${BIN_INSTALL_DIR}
 )
 
