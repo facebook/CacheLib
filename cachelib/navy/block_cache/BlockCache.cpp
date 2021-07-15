@@ -458,12 +458,6 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     // But the size itself is determined by serializedSize(), so
     // we will try to read exactly that size or just slightly over.
 
-    // We may not have a size if we have upgraded from an older Navy which
-    // didn't store size in its index.
-    // TODO: remove the below logic once v12 has rolled out
-    if (approxSize == 0) {
-      approxSize = readBufferSize_;
-    }
     // Because we either use a predefined read buffer size, or align the size
     // up by kMinAllocAlignSize, our size might be bigger than the actual item
     // size. So we need to ensure we're not reading past the region's beginning.
