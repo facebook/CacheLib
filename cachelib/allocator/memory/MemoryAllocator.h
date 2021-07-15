@@ -408,10 +408,10 @@ class MemoryAllocator {
     return memoryPoolManager_.getPoolsOverLimit();
   }
 
-  // the following two are temporary API for tao's slab rebalancing/resizing
-  // logic.
   // return true if all the memory for the allocator is allocated to some
   // pool.
+  // this is leveraged by pool rebalancers to determine if the rebalancing has
+  // to start.
   bool allSlabsAllocated() const noexcept {
     return slabAllocator_.allSlabsAllocated();
   }
@@ -522,8 +522,7 @@ class MemoryAllocator {
     return slabAllocator_.unCompress(cPtr);
   }
 
-  // current tao implementation of pointer compression exposed for benchmarking
-  // purposes.
+  // a special implementation of pointer compression for benchmarking purposes.
   CompressedPtr CACHELIB_INLINE compressAlt(const void* ptr) const {
     return slabAllocator_.compressAlt(ptr);
   }
@@ -561,8 +560,7 @@ class MemoryAllocator {
     }
   }
 
-  // get a default set of allocation sizes close to what current TAO uses
-  // based on the header size for the allocation.
+  // returns a default set of allocation sizes with given size range and factor.
   //
   // @param factor      the factor by which the alloc sizes grow.
   // @param maxSize     the maximum allowed allocation size

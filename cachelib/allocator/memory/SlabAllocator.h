@@ -265,8 +265,7 @@ class SlabAllocator {
     return slab->memoryAtOffset(offset);
   }
 
-  // current tao implementation of pointer compression exposed for benchmarking
-  // purposes.
+  // a special implementation of pointer compression for benchmarking purposes.
   CompressedPtr compressAlt(const void* ptr) const;
   void* unCompressAlt(const CompressedPtr ptr) const;
 

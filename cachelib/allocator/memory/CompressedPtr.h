@@ -20,9 +20,8 @@ class SlabAllocator;
 // of memory in slabs and index anything more than 64 byte allocations inside
 // the slab using a 32 bit representation.
 //
-// Unlike tao's current pointer compression which is based on markers, this
-// one makes decompression faster by staying away from division and modulo
-// arithmetic and doing those during the compression time. We most often
+// This CompressedPtr makes decompression fast by staying away from division and
+// modulo arithmetic and doing those during the compression time. We most often
 // decompress a CompressedPtr than compress a pointer while creating one.
 class CACHELIB_PACKED_ATTR CompressedPtr {
  public:
