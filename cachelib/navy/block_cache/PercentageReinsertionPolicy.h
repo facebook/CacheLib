@@ -5,20 +5,23 @@
 #include <cstdint>
 
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
+#include "folly/logging/xlog.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
-class ProbabilisticReinsertionPolicy : public ReinsertionPolicy {
+class PercentageReinsertionPolicy : public ReinsertionPolicy {
  public:
-  // @param probability     reinsertion chances: 0 - 100
-  explicit ProbabilisticReinsertionPolicy(uint32_t probability)
-      : probability_{probability} {}
+  // @param percentage     reinsertion chances: 0 - 100
+  explicit PercentageReinsertionPolicy(uint32_t percentage)
+      : percentage_{percentage} {
+    XDCHECK(percentage > 0 && percentage <= 100);
+  }
 
   void setIndex(Index* /* index */) override {}
 
   bool shouldReinsert(HashedKey /* hk */) override {
-    return folly::Random::rand32() % 100 < probability_;
+    return folly::Random::rand32() % 100 < percentage_;
   }
 
   void persist(RecordWriter& /* rw */) override {}
@@ -28,7 +31,7 @@ class ProbabilisticReinsertionPolicy : public ReinsertionPolicy {
   void getCounters(const CounterVisitor& /* visitor */) const override {}
 
  private:
-  const uint32_t probability_;
+  const uint32_t percentage_;
 };
 } // namespace navy
 } // namespace cachelib

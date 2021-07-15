@@ -67,10 +67,11 @@ class BlockCacheProto {
   // reinsertion.
   virtual void setHitsReinsertionPolicy(uint8_t reinsertionThreshold) = 0;
 
-  // (Optional) Enable probability reinsertion policy that determines if an item
-  // should stay for more time in cache. @probablity lets user specify a
-  // probability between 0 and 100 for reinsertion.
-  virtual void setProbabilisticReinsertionPolicy(uint32_t probability) = 0;
+  // (Optional) Enable percentage reinsertion policy that determines if an item
+  // should stay for more time in cache.
+  // @percentage lets user specify a percentage between 0 and 100 for
+  //             reinsertion.
+  virtual void setPercentageReinsertionPolicy(uint32_t percentage) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

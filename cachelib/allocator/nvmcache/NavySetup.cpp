@@ -40,7 +40,7 @@ void setupCacheProtosImpl(const navy::Device& device,
                           std::vector<uint32_t> sizeClasses,
                           const uint32_t cleanRegions,
                           const uint8_t reinsertionHitsThreshold,
-                          const uint32_t reinsertionProbabilityThreshold,
+                          const uint32_t reinsertionPercentageThreshold,
                           const uint32_t numInMemBuffers,
                           const bool usesRaidFiles,
                           cachelib::navy::CacheProto& proto) {
@@ -160,9 +160,9 @@ void setupCacheProtosImpl(const navy::Device& device,
       blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
     }
 
-    if (reinsertionProbabilityThreshold > 0) {
-      blockCache->setProbabilisticReinsertionPolicy(
-          reinsertionProbabilityThreshold);
+    if (reinsertionPercentageThreshold > 0) {
+      blockCache->setPercentageReinsertionPolicy(
+          reinsertionPercentageThreshold);
     }
 
     blockCache->setNumInMemBuffers(numInMemBuffers);

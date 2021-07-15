@@ -11,7 +11,7 @@
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/LruPolicy.h"
-#include "cachelib/navy/block_cache/ProbabilisticReinsertionPolicy.h"
+#include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -86,12 +86,12 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
         std::make_unique<HitsReinsertionPolicy>(reinsertionThreshold);
   }
 
-  void setProbabilisticReinsertionPolicy(uint32_t probability) override {
+  void setPercentageReinsertionPolicy(uint32_t percentage) override {
     if (config_.reinsertionPolicy) {
       throw std::invalid_argument("There's already a reinsertion policy set.");
     }
     config_.reinsertionPolicy =
-        std::make_unique<ProbabilisticReinsertionPolicy>(probability);
+        std::make_unique<PercentageReinsertionPolicy>(percentage);
   }
 
   void setDevice(Device* device) { config_.device = device; }
