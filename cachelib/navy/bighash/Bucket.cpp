@@ -43,8 +43,6 @@ Bucket& Bucket::initNew(MutableBufferView view, uint64_t generationTime) {
 }
 
 BufferView Bucket::find(HashedKey hk) const {
-  // TODO: (beyondsora) T31567959 store hash values in the beginning of
-  //                              of a bucket for quick lookup
   auto itr = storage_.getFirst();
   while (!itr.done()) {
     auto* entry = getIteratorEntry(itr);
