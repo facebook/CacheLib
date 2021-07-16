@@ -285,7 +285,7 @@ folly::File openCacheFile(const std::string& fileName,
   }
   XDCHECK_GE(f.fd(), 0);
 
-  // TODO detect if file exists and is of expected size. If not,
+  // TODO: T95780876 detect if file exists and is of expected size. If not,
   // automatically fallocate the file or ftruncate the file.
   if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
     throw std::system_error(

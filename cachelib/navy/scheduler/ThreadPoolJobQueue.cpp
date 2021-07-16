@@ -114,7 +114,6 @@ JobExitCode JobQueue::runJob(QueueEntry& entry) {
     entry.rescheduleCount++;
     if (entry.rescheduleCount >= kHighRescheduleCount &&
         entry.rescheduleCount % kHighRescheduleReportRate == 0) {
-      // TODO: Histogram of reschedule count
       XLOGF(DBG,
             "Job '{}' rescheduled {} times",
             entry.name,

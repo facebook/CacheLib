@@ -228,9 +228,7 @@ JobExitCode RegionManager::startReclaim() {
           auto sizeToRead = region.getLastEntryEndOffset();
           auto buffer = read(desc, RelAddress{rid, 0}, sizeToRead);
           if (buffer.size() != sizeToRead) {
-            // T68874972: We know this can happen today due to this bug.
-            // For now, we will log this error and also bump a stat while we
-            // work on a proper fix with proper tests.
+            // TODO: remove when we fix T95777575
             XLOGF(ERR,
                   "Failed to read region {} during reclaim. Region size to "
                   "read: {}, Actually read: {}",

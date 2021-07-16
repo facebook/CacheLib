@@ -357,7 +357,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
 
   // Priority of an re-inserted item is determined by its past accesses
   // since the time it was last (re)inserted.
-  // TODO: this should be made configurable by having the reinsertion
+  // TODO: T95784621 this should be made configurable by having the reinsertion
   //       policy return a priority rank for an item.
   uint16_t priority =
       numPriorities_ == 0
@@ -368,6 +368,8 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   bool ioAligned = config_.sizeClasses.empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   auto [desc, slotSize, addr] = allocator_.allocate(size, priority);
+
+  XDCHECK(desc.status() != OpenStatus::Reclaimed);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;
@@ -375,16 +377,12 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     allocErrorCount_.inc();
     reinsertionErrorCount_.inc();
     break;
-
-  // TODO: once we verify no user is setting this error log, update this
-  //       to XDCHECK that we cannot receive this status
-  case OpenStatus::Reclaimed:
-    XLOG(ERR, "Should not reach Reclaim state when trying to allocate");
-    reinsertionErrorCount_.inc();
-    break;
   case OpenStatus::Retry:
     reinsertionErrorCount_.inc();
     return removeItem();
+  case OpenStatus::Reclaimed:
+    reinsertionErrorCount_.inc();
+    break;
   }
   auto closeRegionGuard =
       folly::makeGuard([this, desc = std::move(desc)]() mutable {

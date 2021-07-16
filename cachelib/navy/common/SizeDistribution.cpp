@@ -36,7 +36,7 @@ SizeDistribution::SizeDistribution(std::map<int64_t, int64_t> snapshot) {
 }
 
 void SizeDistribution::addSize(uint64_t size) {
-  // TODO: It's possible user warm-rolled cache from a version without
+  // It's possible user warm-rolled cache from a version without
   // SizeDistribution support. We will remove this once we bring an ice-roll.
   if (dist_.empty()) {
     return;
@@ -51,7 +51,7 @@ void SizeDistribution::addSize(uint64_t size) {
 }
 
 void SizeDistribution::removeSize(uint64_t size) {
-  // TODO: It's possible user warm-rolled cache from a version without
+  // It's possible user warm-rolled cache from a version without
   // SizeDistribution support. We will remove this once we bring an ice-roll.
   if (dist_.empty()) {
     return;
