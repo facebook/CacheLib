@@ -39,8 +39,7 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
   AccessStats getAccessStats(HashedKey hk) const;
 
  private:
-  // TDOD: remove kNumLocks once all bigcache hosts being upgraded
-  // Each access map is guarded by its own lock. We shard 1K ways.
+  // TODO: T95755384 clean up kNumLocks
   static constexpr size_t kNumLocks = (2 << 10);
 
   const uint8_t hitsThreshold_{};

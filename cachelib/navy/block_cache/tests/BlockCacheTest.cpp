@@ -2147,8 +2147,7 @@ TEST(BlockCache, NoJobsOnStartup) {
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
-  // Should not schedule any jobs on creation. This is for TAO: callbacks might
-  // be not ready.
+  // Should not schedule any jobs on creation.
   EXPECT_EQ(0, exPtr->getQueueSize());
 }
 

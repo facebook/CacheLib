@@ -19,6 +19,7 @@ bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
   return true;
 }
 
+// TODO: T95755384 delete persist API
 void HitsReinsertionPolicy::persist(RecordWriter& rw) {
   // disable future recover by writing kNumLocks empty AccessTrackers
   serializeProto(kNumLocks, rw);
@@ -28,6 +29,7 @@ void HitsReinsertionPolicy::persist(RecordWriter& rw) {
   }
 }
 
+// TODO: T95755384 delete recover API
 void HitsReinsertionPolicy::recover(RecordReader& rr) {
   XDCHECK(index_);
 
@@ -37,9 +39,6 @@ void HitsReinsertionPolicy::recover(RecordReader& rr) {
     const auto& trackerData =
         deserializeProto<serialization::AccessTracker>(rr);
 
-    // For compatibility, remove after BigCache release 145 is out.
-    // Deprecated data shouldn't contain anything since we do not have any
-    // bigcache host running on Navy for release 144 or prior releases.
     XDCHECK(trackerData.deprecated_data_ref()->empty());
 
     for (auto& kv : *trackerData.data_ref()) {
