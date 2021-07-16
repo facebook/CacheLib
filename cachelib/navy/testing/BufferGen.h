@@ -9,6 +9,7 @@ namespace cachelib {
 namespace navy {
 class BufferGen {
  public:
+  // @param seed  seed value
   explicit BufferGen(uint32_t seed = 1) : rg_(seed) {}
   Buffer gen(uint32_t size);
   Buffer gen(uint32_t sizeMin, uint32_t sizeMax);

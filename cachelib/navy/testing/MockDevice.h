@@ -14,6 +14,10 @@ class MockDevice : public Device {
  public:
   // If @deviceSize is 0, constructor doesn't create a memory device.
   // User should set it manually.
+  //
+  // @param deviceSize    size of the device
+  // @param ioAlignSize   alignment size for IO operations
+  // @param encryptor     encryption object
   MockDevice(uint64_t deviceSize,
              uint32_t ioAlignSize,
              std::shared_ptr<DeviceEncryptor> encryptor = nullptr);

@@ -43,9 +43,14 @@ class Region {
  public:
   static constexpr uint32_t kClassIdMax{(1u << 16) - 1};
 
+  // @param id         unique id for the region
+  // @param regionSize region size
   Region(RegionId id, uint64_t regionSize)
       : regionId_{id}, regionSize_{regionSize} {}
 
+  // @param d          previously serialized state of Region.
+  // @param rid        unique id for the region.
+  // @param regionSize size of the region.
   Region(const serialization::Region& d, RegionId rid, uint64_t regionSize)
       : regionId_{rid},
         regionSize_{regionSize},
@@ -227,6 +232,7 @@ class Region {
 // descriptor to properly close and update the internal counters.
 class RegionDescriptor {
  public:
+  // @param status  status of the open
   RegionDescriptor(OpenStatus status) : status_(status) {}
   static RegionDescriptor makeWriteDescriptor(OpenStatus status,
                                               RegionId regionId) {

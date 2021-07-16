@@ -24,7 +24,8 @@ class ThreadPoolExecutor {
     uint64_t maxPendingJobs{};
   };
 
-  // @name for debugging
+  // @param numThreads  number of threads for the executor
+  // @param name        name for debugging
   ThreadPoolExecutor(uint32_t numThreads, folly::StringPiece name);
 
   void enqueue(Job job, folly::StringPiece name, JobQueue::QueuePos pos);
@@ -52,6 +53,8 @@ class ThreadPoolExecutor {
 // Pool of worker threads, each with their own job queue
 class ThreadPoolJobScheduler final : public JobScheduler {
  public:
+  // @param readerThreads   number of threads for the read scheduler
+  // @param writerThreads   number of threads for the write scheduler
   explicit ThreadPoolJobScheduler(uint32_t readerThreads,
                                   uint32_t writerThreads);
   ThreadPoolJobScheduler(const ThreadPoolJobScheduler&) = delete;

@@ -51,6 +51,7 @@ class SeqPoints {
 
   static Logger defaultLogger();
 
+  // @param logger  debugging logger
   explicit SeqPoints(Logger logger = {}) : logger_(std::move(logger)) {}
 
   SeqPoints(const SeqPoints&) = delete;

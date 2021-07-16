@@ -21,6 +21,7 @@ class HashedKey {
     return HashedKey{key, keyHash};
   }
 
+  // @param key   key BufferView
   explicit HashedKey(BufferView key) : HashedKey{key, hashBuffer(key)} {}
 
   BufferView key() const { return key_; }

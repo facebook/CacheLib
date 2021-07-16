@@ -82,17 +82,21 @@ class Buffer {
  public:
   Buffer() = default;
 
+  // @param view  read-only view into the buffer
   explicit Buffer(BufferView view) : Buffer{view.size()} {
     view.copyTo(data());
   }
 
+  // @param view      read-only view into the buffer
+  // @param alignment the desired alignment
   Buffer(BufferView view, size_t alignment) : Buffer{view.size(), alignment} {
     view.copyTo(data());
   }
 
   explicit Buffer(size_t size) : size_{size}, data_{allocate(size)} {}
 
-  // @size must be multiple of @alignment
+  // @param size      must be multiple of @alignment
+  // @param alignment the desired alignment
   Buffer(size_t size, size_t alignment)
       : size_{size}, data_{allocate(size, alignment)} {}
 
