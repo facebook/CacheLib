@@ -111,24 +111,26 @@ struct CacheConfig : public JSONConfig {
   // Navy. If 0, the default configuration of Navy(20) is used.
   uint64_t navyReqOrderShardsPower{21};
 
-  // Determins how much of the device is given to big hash engine in Navy
-  uint64_t dipperNavyBigHashSizePct = 50;
+  // percentage of the nvm cache size that is dedicated for objects that are
+  // smaller than @navySmallItemMaxSize. This size is dedicated for BigHash
+  // engine.
+  uint64_t navyBigHashSizePct = 50;
 
-  // Big Hash Bucket Size determines how big each bucket is and what
-  // is the phsyical write granularity onto the device.
-  uint64_t dipperNavyBigHashBucketSize = 4096;
+  // bucket size for BigHash. This controls the write amplification for small
+  // objects in Navy. Every small object write performs a RMW for a bucket.
+  uint64_t navyBigHashBucketSize = 4096;
 
-  // Big Hash bloom filter size per bucket
-  uint64_t dipperNavyBloomFilterPerBucketSize = 8;
+  // Big Hash bloom filter size in bytes per bucket above.
+  uint64_t navyBloomFilterPerBucketSize = 8;
 
   // Small Item Max Size determines the upper bound of an item size that
   // can be admitted into Big Hash engine.
-  uint64_t dipperNavySmallItemMaxSize = 2048;
+  uint64_t navySmallItemMaxSize = 2048;
 
-  // total memory limit for in-flight parcels. Once this is reached,
-  // requests will be rejected until the parcel memory usage gets under the
-  // limit.
-  uint64_t dipperNavyParcelMemoryMB = 1024;
+  // total memory limit for in-flight insertion operations for NVM. Once this is
+  // reached, requests will be rejected until the memory usage gets under
+  // the limit.
+  uint64_t navyParcelMemoryMB = 1024;
 
   // use a hits based reinsertion policy with navy
   uint64_t navyHitsReinsertionThreshold{0};

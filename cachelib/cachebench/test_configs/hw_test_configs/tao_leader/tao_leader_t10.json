@@ -9,10 +9,10 @@
       "nvme1n1",
       "nvme2n1"
     ],
-    "dipperNavyBigHashBucketSize": 4096,
-    "dipperNavyBigHashSizePct": 65,
+    "navyBigHashBucketSize": 4096,
+    "navyBigHashSizePct": 65,
     "navyBlockSize": 4096,
-    "dipperNavyParcelMemoryMB": 6048,
+    "navyParcelMemoryMB": 6048,
     "navySizeClasses": [
       4096,
       8192,

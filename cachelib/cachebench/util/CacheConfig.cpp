@@ -46,11 +46,11 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
   JSONSetVal(configJson, navySizeClasses);
   JSONSetVal(configJson, navyReqOrderShardsPower);
-  JSONSetVal(configJson, dipperNavyBigHashSizePct);
-  JSONSetVal(configJson, dipperNavyBigHashBucketSize);
-  JSONSetVal(configJson, dipperNavyBloomFilterPerBucketSize);
-  JSONSetVal(configJson, dipperNavySmallItemMaxSize);
-  JSONSetVal(configJson, dipperNavyParcelMemoryMB);
+  JSONSetVal(configJson, navyBigHashSizePct);
+  JSONSetVal(configJson, navyBigHashBucketSize);
+  JSONSetVal(configJson, navyBloomFilterPerBucketSize);
+  JSONSetVal(configJson, navySmallItemMaxSize);
+  JSONSetVal(configJson, navyParcelMemoryMB);
   JSONSetVal(configJson, navyHitsReinsertionThreshold);
   JSONSetVal(configJson, navyProbabilityReinsertionThreshold);
   JSONSetVal(configJson, navyReaderThreads);

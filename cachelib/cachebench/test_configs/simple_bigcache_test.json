@@ -13,7 +13,7 @@
       "navyBlockSize": 4096,
       "navySegmentedFifoSegmentRatio": [1],
       "navySizeClasses": [],
-      "dipperNavyBigHashSizePct": 0,
+      "navyBigHashSizePct": 0,
       "navyHitsReinsertionThreshold": 1,
       "navyProbabilityReinsertionThreshold": 0,
       "navyReaderThreads": 36,

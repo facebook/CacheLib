@@ -168,15 +168,14 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.navyConfig.setBlockCacheSizeClasses(config_.navySizeClasses);
     }
 
-    if (config_.dipperNavyBigHashSizePct > 0) {
-      nvmConfig.navyConfig.setBigHash(
-          config_.dipperNavyBigHashSizePct,
-          config_.dipperNavyBigHashBucketSize,
-          config_.dipperNavyBloomFilterPerBucketSize,
-          config_.dipperNavySmallItemMaxSize);
+    if (config_.navyBigHashSizePct > 0) {
+      nvmConfig.navyConfig.setBigHash(config_.navyBigHashSizePct,
+                                      config_.navyBigHashBucketSize,
+                                      config_.navyBloomFilterPerBucketSize,
+                                      config_.navySmallItemMaxSize);
     }
 
-    nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.dipperNavyParcelMemoryMB);
+    nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
 
     if (config_.navyHitsReinsertionThreshold > 0) {
       nvmConfig.navyConfig.setBlockCacheReinsertionHitsThreshold(

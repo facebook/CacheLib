@@ -21,7 +21,7 @@
       "navyNumInmemBuffers": 64,
 
       "nvmCacheSizeMB" : 2048,
-      "dipperNavyBigHashSizePct" : 0
+      "navyBigHashSizePct" : 0
     },
     "test_config" :
       {

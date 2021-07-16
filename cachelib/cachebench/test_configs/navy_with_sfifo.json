@@ -7,7 +7,7 @@
       "moveOnSlabRelease" : true,
 
       "allocFactor" : 2.0,
-      "dipperNavyBigHashSizePct": 0,
+      "navyBigHashSizePct": 0,
       "navyCleanRegions" : 10,
       "navyNumInmemBuffers" : 10,
       "navyHitsReinsertionThreshold": 1,

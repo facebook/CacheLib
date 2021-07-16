@@ -9,11 +9,10 @@
       "nvme1n1",
       "nvme2n1"
     ],
-    "dipperNavyBigHashBucketSize": 4096,
-    "dipperNavyBigHashSizePct": 0,
+    "navyBigHashSizePct": 0,
     "navyBlockSize": 4096,
     "navySizeClasses": [],
-    "dipperNavyParcelMemoryMB": 6048,
+    "navyParcelMemoryMB": 6048,
     "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": true,

@@ -8,7 +8,7 @@
     "poolSizes" : [0.3, 0.7],
 
     "nvmCacheSizeMB" : 512,
-    "dipperNavyBigHashSizePct" : 0
+    "navyBigHashSizePct" : 0
   },
   "test_config" : 
     {
