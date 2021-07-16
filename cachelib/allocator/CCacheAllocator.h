@@ -33,8 +33,12 @@ class CCacheAllocator : public CCacheAllocatorBase {
   // @return the number of chunks we have resized to
   size_t resize() override;
 
+  // Return name assocaited with this allocator. This is the name associated
+  // with the pool when user has created it via CacheAllocator::addPool()
   std::string getName() const;
 
+  // This allocator uses CacheAllocator underneath and each chunk is an
+  // entire cachelib slab.
   size_t getChunkSize() const { return Slab::kSize; }
 
   // return the configured size of the allocator

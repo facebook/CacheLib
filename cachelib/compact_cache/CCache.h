@@ -76,12 +76,14 @@ enum class CCacheReturn : int {
 enum class RehashOperation { COPY, DELETE };
 
 /**
- * Interface for a compact cache.
+ * Interface for a compact cache. User should not need to directly reference
+ * this type. Instead, use CCacheCreator<...>::type as the Compact Cache type.
  *
  * @param C Class that provides information about the data (keys and values)
  *          processed by the compact cache. See ccache_descriptor.h for more
  *          information.
- * @param A Class that provides interface to allocate memory
+ * @param A Class that provides interface to allocate memory. It needs to
+ *          implement the CCacheAllocatorBase<> interface.
  * @param B Class that handles the management of the data in the buckets. This
  *          will use FixedLruBucket by default if the values are of a fixed
  *          size and VariableLruBucket if they are of a variable size. You can
@@ -115,6 +117,8 @@ class CompactCache : public ICompactCache {
    * appropriately if its an eviction or deletion or garbage collection.
    * Note: if the values stored in this compact cache are of a variable size,
    * it is assumed that the user will be able to compute the size if needed.
+   * For example, user has already stored a size field as part of the value,
+   * or can tell how big a value should be given the key.
    */
   using RemoveCb = typename std::conditional<
       kHasValues,
@@ -169,7 +173,10 @@ class CompactCache : public ICompactCache {
                ValidCb validCb,
                bool allowPromotions = true);
 
-  // Destructor will detach the allocator
+  /**
+   * Destructor will detach the allocator. Only after a CompactCache instance
+   * is destroyed, user can attach another instance to the same allocator.
+   */
   ~CompactCache();
 
   /**
@@ -227,34 +234,39 @@ class CompactCache : public ICompactCache {
 
   /**
    * Set or update a value in the compact cache.
-   * Use the overload that does not have a "val" argument if the compact cache
-   * does not store values.
    *
    * @param key     Key for which to set / update the value.
    * @param timeout if greater than 0, take a timed lock
-   * @param val     Val to set / update for the key.
-   * @param size    Size of the value
+   * @param val     Val to set / update for the key. Must not be nullptr unless
+   *                the value type is NoValue which is a special indicator for
+   *                a compact cache of no values.
+   * @param size    Size of the value. 0 means the value is fixed size.
    * @return        CCacheReturn with appropriate result type:
    *                FOUND (on hit - the value was updated), NOTFOUND (on miss -
    *                the value was set), TIMEOUT, ERROR (other error)
    */
   CCacheReturn set(const Key& key,
                    const std::chrono::microseconds& timeout,
-                   Value* val = nullptr,
+                   const Value* val = nullptr,
                    size_t size = 0);
-  CCacheReturn set(const Key& key, Value* val = nullptr, size_t size = 0) {
+  CCacheReturn set(const Key& key,
+                   const Value* val = nullptr,
+                   size_t size = 0) {
     return set(key, std::chrono::microseconds::zero(), val, size);
   }
 
   /**
    * Delete the entry mapped by a key and retrieve the old value.
-   * Use the overload that does not have a "val" argument if the compact cache
-   * does not store values or if you do not need to retrieve the deleted data.
    *
    * @param key     Key of the entry to be deleted.
    * @param timeout if greater than 0, take a timed lock
    * @param val     Pointer to the memory location where the old value will be
-   *                written to. Left untouched on a miss.
+   *                written to. Left untouched on a miss. Nullptr means we don't
+   *                have a value, or we don't need to obtain the old value.
+   * @param size    Poiner to the memory location where the deleted value's size
+   *                will be written to if the value is variable. Fixed values
+   *                will NOT have their sizes written into this field. Nullptr
+   *                means caller does not need the size of the deleted value.
    * @return        CCacheReturn with appropriate result type:
    *                FOUND (on hit - the value was deleted), NOTFOUND (on miss),
    *                TIMEOUT, ERROR (other error)
@@ -271,13 +283,16 @@ class CompactCache : public ICompactCache {
 
   /**
    * Retrieve the value mapped by a key.
-   * Use the overload that does not have a "val" argument if the compact cache
-   * does not store values.
    *
-   * @paramc key            Key of the entry to be read.
+   * @param  key            Key of the entry to be read.
    * @param  timeout        if greater than 0, take a timed lock
    * @param  val            Pointer to the memory location where the value will
-   *                        be written to. Left untouched on a miss.
+   *                        be written to. Left untouched on a miss. Nullptr
+   *                        means caller does not need the value.
+   * @param  size           Poiner to the memory location where the value's
+   *                        size will be written to if the value is variable.
+   *                        Fixed values will NOT have their sizes written into
+   *                        this field. Nullptr means size info is not needed.
    * @param  shouldPromote  Whether key should be promoted. Note that if the
    *                        CCache promotion is disabled by default (set at
    *                        construction), this  parameter is ignored.
@@ -300,7 +315,7 @@ class CompactCache : public ICompactCache {
   }
 
   /**
-   * check if the key exists in the compact cache. Useful if the caller wants
+   * Check if the key exists in the compact cache. Useful if the caller wants
    * to check for only existence and not copy the value out.
    *
    * @param key             key of the entry
@@ -317,6 +332,8 @@ class CompactCache : public ICompactCache {
 
   /**
    * Accepts a prefix and value, returning whether or not to purge the entry.
+   * @param key     key of the entry
+   * @param value   value of the entry. Nullptr if compact cache has no value
    */
   enum class PurgeFilterResult { SKIP, PURGE, ABORT };
   using PurgeFilter =
@@ -438,6 +455,7 @@ class CompactCache : public ICompactCache {
    *
    * @param bucket Bucket from which to look for an entry.
    * @param key    Key to search for in the bucket.
+   * @param val    Value to insert into the bucket. Nullptr means no value.
    * @param size   Size of the value. Unused if this compact cache stores
    *               values of a fixed size.
    *
@@ -446,7 +464,7 @@ class CompactCache : public ICompactCache {
    */
   BucketReturn bucketSet(Bucket* bucket,
                          const Key& key,
-                         Value* val = nullptr,
+                         const Value* val = nullptr,
                          size_t size = 0);
 
   /**

@@ -139,7 +139,7 @@ struct FixedLruBucket {
    */
   static bool insert(Bucket* bucket,
                      const Key& key,
-                     Value* val,
+                     const Value* val,
                      size_t,
                      EvictionCb evictionCb) {
     bool evicted = false;
@@ -223,7 +223,7 @@ struct FixedLruBucket {
    *                   does not cause entries to be evicted when updating.
    */
   static void updateVal(EntryHandle& handle,
-                        Value* val,
+                        const Value* val,
                         size_t,
                         EvictionCb /*evictionCb*/) {
     if (kHasValues) {

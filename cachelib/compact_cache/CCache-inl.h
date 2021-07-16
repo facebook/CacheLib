@@ -325,7 +325,7 @@ template <typename C, typename A, typename B>
 CCacheReturn CompactCache<C, A, B>::set(
     const Key& key,
     const std::chrono::microseconds& timeout,
-    Value* val,
+    const Value* val,
     size_t size) {
   int rv = callBucketFn(
       key, Operation::WRITE, timeout, &SelfType::bucketSet, val, size);
@@ -550,7 +550,7 @@ void CompactCache<C, A, B>::onEntryEvicted(const EntryHandle& handle) {
 
 template <typename C, typename A, typename B>
 typename CompactCache<C, A, B>::BucketReturn CompactCache<C, A, B>::bucketSet(
-    Bucket* bucket, const Key& key, Value* val, size_t size) {
+    Bucket* bucket, const Key& key, const Value* val, size_t size) {
   if ((kHasValues && (val == nullptr)) ||
       (kValuesFixedSize && size != 0 && size != sizeof(Value))) {
     // val should not be null if kHasValues is true

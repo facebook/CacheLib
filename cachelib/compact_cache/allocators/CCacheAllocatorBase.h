@@ -60,7 +60,7 @@ class CCacheMetadata {
 };
 
 // This is the base call for all of the compact cache allocators in order to
-// enforce that only one compact cache can be attached to a same allocator
+// enforce that only one compact cache can be attached to the same allocator
 class CCacheAllocatorBase {
  public:
   CCacheAllocatorBase() = default;
