@@ -151,11 +151,7 @@ class CacheStressor : public Stressor {
   Stats getCacheStats() const override { return cache_->getStats(); }
 
   ThroughputStats aggregateThroughputStats() const override {
-    if (throughputStats_.empty()) {
-      return {config_.name};
-    }
-
-    ThroughputStats res{config_.name};
+    ThroughputStats res{};
     for (const auto& stats : throughputStats_) {
       res += stats;
     }

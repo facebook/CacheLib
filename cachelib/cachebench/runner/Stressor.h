@@ -11,27 +11,35 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+// Stats to track the throughput of the stress run. This is updated on every
+// stressor thread and aggregated once the stress test finishes.
 struct ThroughputStats {
-  std::string name;
-  uint64_t set{0};
+  uint64_t set{0}; // number of set operations
   uint64_t setFailure{0};
   uint64_t get{0};
   uint64_t getMiss{0};
   uint64_t del{0};
-  uint64_t update{0};
-  uint64_t updateMiss{0};
-  uint64_t delNotFound{0};
+  uint64_t update{0};      // number of in-place updates
+  uint64_t updateMiss{0};  // number of in-place updates with key missing
+  uint64_t delNotFound{0}; // deletes for non-existent key
   uint64_t addChained{0};
   uint64_t addChainedFailure{0};
   // current number of ops executed. Read periodically to track progress
-  uint64_t ops{0};
+  uint64_t ops{0}; 
 
+  // operator overload to aggregate multiple instances of ThroughputStats, one
+  // from each  thread
   ThroughputStats& operator+=(const ThroughputStats& other);
 
+  // convenience method to print the final throughput and hit ratio to stdout.
   void render(uint64_t elapsedTimeNs, std::ostream& out) const;
+
+  // convenience method to fetch throughput information as counters.
   void render(uint64_t, folly::UserCounters&) const;
 };
 
+// forward declaration for the workload generator.
 class GeneratorBase;
 
 // The class defines the admission policy at stressor level. The stressor
@@ -48,27 +56,46 @@ class StressorAdmPolicy {
   }
 };
 
+// Skeleton interface for a workload stressor. All stressors implement this
+// interface.
 class Stressor {
  public:
+  // create a stressor according to the passed in config and return through an
+  // opaque base class instance.
   static std::unique_ptr<Stressor> makeStressor(
-      CacheConfig cacheConfig,
-      StressorConfig stressorConfig,
+      const CacheConfig& cacheConfig,
+      const StressorConfig& stressorConfig,
       std::unique_ptr<StressorAdmPolicy> admPolicy);
 
   virtual ~Stressor() {}
 
+  // report the stats from the cache  while the stress test is being run.
   virtual Stats getCacheStats() const = 0;
+
+  // aggregate the throughput related stats at any given point in time.
   virtual ThroughputStats aggregateThroughputStats() const = 0;
+
+  // ouputs workload generator specific stats to either an output stream or to
+  // an output counter map
   virtual void renderWorkloadGeneratorStats(uint64_t /*elapsedTimeNs*/,
                                             std::ostream& /*out*/) const {}
   virtual void renderWorkloadGeneratorStats(
       uint64_t /*elapsedTimeNs*/, folly::UserCounters& /*counters*/) const {}
+
+  // time when the stress run started.
   virtual std::chrono::time_point<std::chrono::system_clock> startTime()
       const = 0;
+
+  // duration of the stress test.
   virtual uint64_t getTestDurationNs() const = 0;
 
+  // start the stress run.
   virtual void start() = 0;
+
+  // wait until the stress run finishes
   virtual void finish() = 0;
+
+  // abort the run
   virtual void abort() { stopTest(); }
 
  protected:
@@ -82,6 +109,8 @@ class Stressor {
   void stopTest() { stopped_.store(true, std::memory_order_release); }
 
  private:
+  // status that indicates if the runner has indicated the stress test to be
+  // stopped before completion.
   std::atomic<bool> stopped_{false};
 };
 
