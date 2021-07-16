@@ -74,14 +74,7 @@ struct Info {
   // delta of the number of hits
   uint64_t deltaHits(const PoolStats& poolStats) const {
     XDCHECK(poolStats.cacheStats.find(id) != poolStats.cacheStats.end());
-    // When a thread goes out of scope, numHitsForClass will decrease. In this
-    // case, we simply consider delta as 0.  TODO: change following if to
-    // XDCHECK_GE(poolStats.numHitsForClass(id), hits) once TAO uses
-    // CacheAllocator since https://fburl.com/2ld1psjm will handle the threads
-    // going out of scope.
-    if (poolStats.numHitsForClass(id) <= hits) {
-      return 0;
-    }
+    XDCHECK_GE(poolStats.numHitsForClass(id), hits);
 
     return poolStats.numHitsForClass(id) - hits;
   }
