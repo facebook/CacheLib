@@ -380,10 +380,8 @@ void RegionManager::recover(RecordReader& rr) {
     if (numPriorities_ > 0 && regionProto.priority_ref() >= numPriorities_) {
       regionProto.priority_ref() = numPriorities_ - 1;
     }
-    regions_[index] = std::make_unique<Region>(
-        regionProto,
-        RegionId{static_cast<uint32_t>(regionProto.regionId)},
-        regionData.regionSize);
+    regions_[index] =
+        std::make_unique<Region>(regionProto, *regionData.regionSize_ref());
   }
 
   // Reset policy and reinitialize it per the recovered state
