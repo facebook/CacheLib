@@ -164,7 +164,7 @@ void CompactCache<C, A, B>::tableRehash(size_t oldNumChunks,
       Bucket* bucket = &table_chunk[i];
       auto lock = locks_.lockExclusive(bucket);
 
-      const size_t capacity = BucketDescriptor::nEntriesCapacity(bucket);
+      const size_t capacity = BucketDescriptor::nEntriesCapacity(*bucket);
       /* When expanding the cache (newNumChunks > oldNumChunks) move
        * the entire capacity elements over.
        * When shrinking cache to some fraction of its former size,

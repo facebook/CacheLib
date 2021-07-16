@@ -1,7 +1,6 @@
 #pragma once
 
 /**
- * @file ccache_fixed_lru_bucket.h
  * This file implements a bucket management that uses entries of a fixed size
  * that are stored contiguously in the bucket (linear probing).
  *
@@ -117,7 +116,7 @@ struct FixedLruBucket {
    * @param bucket
    * @return number of entries this bucket can hold when filled
    */
-  static uint32_t nEntriesCapacity(Bucket* /*bucket*/) {
+  static uint32_t nEntriesCapacity(const Bucket& /*bucket*/) {
     return kEntriesPerBucket;
   }
 
@@ -129,7 +128,7 @@ struct FixedLruBucket {
    * @param bucket         Bucket in which to insert the new entry.
    * @param key            key of the new entry.
    * @param val            Pointer to a value to be copied in the new
-   *                       entry.
+   *                       entry. Unused if Value Type is NoValue.
    * @param size           Unused because the size of values is already known
    *                       in a compact cache that stores values of a fixed
    *                       size.

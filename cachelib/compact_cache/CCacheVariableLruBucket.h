@@ -6,8 +6,6 @@
 #include <utility>
 
 /**
- * @file ccache_variable_lru_bucket.h
- *
  * This file implements a bucket management for variable sized objects that is
  * highly optimized for read operations and has a 4 byte overhead per entry + 3
  * bytes per bucket.
@@ -228,12 +226,12 @@ struct VariableLruBucket {
    * Due to variable size this is imprecise; extrapolate capacity
    * by dividing current # of items by current fractional memory
    * in use
-   * @param bucket
+   * @param bucket Bucket to find out the number of entries it could hold
    * @return number of entries this bucket can hold (approx)
    */
-  static uint32_t nEntriesCapacity(Bucket* bucket) {
-    const size_t n = bucket->numEntries;
-    const size_t sz = bucket->totalDataSize;
+  static uint32_t nEntriesCapacity(const Bucket& bucket) {
+    const size_t n = bucket.numEntries;
+    const size_t sz = bucket.totalDataSize;
     XDCHECK_LE(sz + sizeof(EntryHdr) * n, kBucketDataSize);
     if (n == 0) {
       return 0;
@@ -362,7 +360,7 @@ struct VariableLruBucket {
    * Promote an entry.
    *
    * 1) Shift all the EntryHdr headers that precede the promoted
-   * EntryHdr one position to the right.
+   *    EntryHdr one position to the right.
    * 2) Write the promoted entry to the first position.
    * 3) Update the headerIndex field of all EntryData objects for which
    *    the corresponding EntryHdr header was moved.

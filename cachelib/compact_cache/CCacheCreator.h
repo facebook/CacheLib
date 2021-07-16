@@ -35,6 +35,10 @@ namespace cachelib {
  *
  * using MyCCache = CCacheCreator<A, K, V>::type;
  *     maps a key made of type K to a value of type V;
+ *
+ * @param AllocatorT    This must implement CCacheAllocatorBase interface.
+ * @param KeyT          Key must be a POD-like type.
+ * @param ValueT        Value must be a POD-like type.
  */
 template <typename AllocatorT, typename KeyT, typename ValueT = NoValue>
 struct CCacheCreator {
@@ -61,6 +65,10 @@ struct CCacheCreator {
  * For example:
  *  using MyCCache = CCacheVariableCreator<A, K, 400>::type;
  *     maps a key made of type K to values of a variable size up to 400B.
+ *
+ * @param AllocatorT    This must implement CCacheAllocatorBase interface.
+ * @param KeyT          Key must be a POD-like type.
+ * @param ValueT        Value must be a POD-like type.
  */
 template <typename AllocatorT, typename KeyT, unsigned MaxValueSize>
 struct CCacheVariableCreator {

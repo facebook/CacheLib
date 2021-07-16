@@ -60,7 +60,9 @@ class CCacheMetadata {
 };
 
 // This is the base call for all of the compact cache allocators in order to
-// enforce that only one compact cache can be attached to the same allocator
+// enforce that only one compact cache can be attached to the same allocator.
+// Allocator here means a cache pool in CacheLib. Each compact cache must be
+// associated with exactly one cache pool.
 class CCacheAllocatorBase {
  public:
   CCacheAllocatorBase() = default;
@@ -75,6 +77,8 @@ class CCacheAllocatorBase {
     }
   }
 
+  // Initialize and attach the allocator. Note this allocator can only be
+  // attached once.
   template <typename CCacheT>
   void attach(CCacheT* ccache) {
     std::lock_guard<std::mutex> lock(resizeLock_);
@@ -85,6 +89,8 @@ class CCacheAllocatorBase {
     compactCacheResizeFn_ = [ccache]() { ccache->resize(); };
   }
 
+  // Detaching the allocator. Only after detach, can another compact cache
+  // instance attach this allocator
   void detach() {
     std::lock_guard<std::mutex> lock(resizeLock_);
     if (!isAttached()) {
@@ -95,6 +101,7 @@ class CCacheAllocatorBase {
 
   bool isAttached() const { return compactCacheResizeFn_ ? true : false; }
 
+  // Resize the compact cache to its new, desired size
   void resizeCompactCache() {
     std::lock_guard<std::mutex> lock(resizeLock_);
     try {

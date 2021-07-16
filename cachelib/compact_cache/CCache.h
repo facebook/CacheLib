@@ -83,7 +83,7 @@ enum class RehashOperation { COPY, DELETE };
  *          processed by the compact cache. See ccache_descriptor.h for more
  *          information.
  * @param A Class that provides interface to allocate memory. It needs to
- *          implement the CCacheAllocatorBase<> interface.
+ *          implement the CCacheAllocatorBase interface.
  * @param B Class that handles the management of the data in the buckets. This
  *          will use FixedLruBucket by default if the values are of a fixed
  *          size and VariableLruBucket if they are of a variable size. You can
