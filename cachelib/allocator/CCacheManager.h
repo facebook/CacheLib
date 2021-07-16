@@ -6,6 +6,9 @@
 namespace facebook {
 namespace cachelib {
 
+// manager for compact cache
+// It manages the multiple pools of compact caches (CCacheAllocator) and
+// interacts with cache allocator.
 class CCacheManager {
  public:
   using SerializationType = serialization::CompactCacheAllocatorManagerObject;

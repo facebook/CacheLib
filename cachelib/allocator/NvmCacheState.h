@@ -11,6 +11,7 @@
 namespace facebook {
 namespace cachelib {
 
+// State class for Nvm cache
 class NvmCacheState {
  public:
   // file name to indicate that the nvmcache should be dropped the next time

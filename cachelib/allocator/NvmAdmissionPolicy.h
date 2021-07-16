@@ -9,6 +9,12 @@
 namespace facebook {
 namespace cachelib {
 
+// Base class for admission policy into nvm cache
+// It provides:
+// 1. Interface function for testing whether an item should be admitted.
+// 2. Stats gathering functionalities.
+// 3. minTTL functionality: when set, items with configured TTL smaller than
+// minTTL will be rejected.
 template <typename Cache>
 class NvmAdmissionPolicy {
  public:
@@ -18,7 +24,7 @@ class NvmAdmissionPolicy {
 
   // The method that the outside class calls to get the admission decision.
   // It captures the common logics (e.g statistics) then
-  // delicates the detailed implementation to subclasses.
+  // delicates the detailed implementation to subclasses in acceptImpl.
   virtual bool accept(const Item& item,
                       folly::Range<ChainedItemIter> chainItem) final {
     util::LatencyTracker overallTracker(overallLatency_);
@@ -43,6 +49,8 @@ class NvmAdmissionPolicy {
   // same as the above, but makes admission decisions given just the key and
   // not the entire item. This can be used when we can infer the information
   // needed for admission decision from only the key.
+  // Note: minTTL will be ignored if a callsite uses this function to test
+  // a key.
   virtual bool accept(typename Item::Key key) final {
     util::LatencyTracker overallTracker(overallLatency_);
     overallCount_.inc();
@@ -56,7 +64,7 @@ class NvmAdmissionPolicy {
     return decision;
   }
 
-  // The method that exposes statuses.
+  // The method that exposes stats.
   virtual std::unordered_map<std::string, double> getCounters() final {
     auto ctrs = getCountersImpl();
     ctrs["ap.called"] = overallCount_.get();
@@ -72,6 +80,8 @@ class NvmAdmissionPolicy {
   }
 
   // Track access for an item.
+  // This is useful when the admission policy requires access pattern to make
+  // admission decision.
   // @param key   key corresponding to the item
   virtual void trackAccess(typename Item::Key) {}
 
@@ -118,11 +128,20 @@ class NvmAdmissionPolicy {
   std::atomic<uint64_t> minTTL_{0};
 };
 
+// an admission policy that keeps track of a number (numEntries) of unique keys
+// recently observed and rejects an item if the key is not recently observed,
+// backed by cachelib/common/ApproxSplitSet
 template <typename Cache>
 class RejectFirstAP final : public NvmAdmissionPolicy<Cache> {
  public:
   using Item = typename Cache::Item;
   using ChainedItemIter = typename Cache::ChainedItemIter;
+
+  // @param numEntries number of items to be tracked
+  // @param numSplits number of splits in the ApporxSplitSet
+  // @param suffixIgnoreLength  length of the suffix to be ignored in the key.
+  // Useful when an admission policy treates items with the same key prefix as
+  // the same item.
   RejectFirstAP(uint64_t numEntries,
                 uint32_t numSplits,
                 size_t suffixIgnoreLength,

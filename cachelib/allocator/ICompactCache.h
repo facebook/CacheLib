@@ -16,6 +16,7 @@ class ICompactCache {
   // return the name of the compact cache.
   virtual std::string getName() const = 0;
 
+  // return the pool id for the compact cache
   virtual PoolId getPoolId() const = 0;
 
   // get the size of the ccache's allocator (in bytes). Returns 0 if it is

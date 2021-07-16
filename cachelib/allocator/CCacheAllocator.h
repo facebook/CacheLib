@@ -3,10 +3,10 @@
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/compact_cache/allocators/CCacheAllocatorBase.h"
 
-// This is the allocator for compact cache provided by cache allocator
-// It helps attached compact cache allocate/release memory from the specified
-// memory pool in memory allocator
-
+// This is the allocator for compact cache provided by cache allocator for one
+// pool
+// It helps attached compact cache allocate/release memory from the
+// specified memory pool in memory allocator
 namespace facebook {
 namespace cachelib {
 
@@ -57,6 +57,7 @@ class CCacheAllocator : public CCacheAllocatorBase {
     return getNumChunks() * getChunkSize() > getConfiguredSize();
   }
 
+  // return the pool id for the compact cache
   PoolId getPoolId() const { return poolId_; }
 
   // store allocate state into an object for warm roll
