@@ -350,10 +350,8 @@ Status BigHash::remove(HashedKey hk) {
     }
     newRemainingBytes = bucket->remainingBytes();
 
-    // TODO: we compute this before writing the bucket becase when
-    //       encryption is enabled, we will mutate the data passed
-    //       in. This will be updated to be more explicit about the
-    //       data being transferred to another component.
+    // We compute bloom filter before writing the bucket because when encryption
+    // is enabled, we will "move" the bucket content into writeBucket().
     if (bloomFilter_) {
       bfRebuild(bid, bucket);
     }
