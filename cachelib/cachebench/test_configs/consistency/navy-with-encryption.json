@@ -10,7 +10,7 @@
     "nvmCacheSizeMB" : 1024,
     "dipperUseDirectIO": false,
     "dipperNavyBigHashBucketSize": 4096,
-    "dipperNavyBlock": 4096,
+    "navyBlockSize": 4096,
     "dipperNavyUseStackAllocation": true,
     "navyEncryption": true
   },

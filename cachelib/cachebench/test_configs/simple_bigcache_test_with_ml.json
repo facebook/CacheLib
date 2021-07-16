@@ -124,7 +124,7 @@
     "nvmCacheSizeMB": 155507,
     "devicePaths": ["/dev/md0"],
     "dipperUseDirectIO": false,
-    "dipperNavyBlock": 4096,
+    "navyBlockSize": 4096,
     "dipperNavyUseRegionLru": false,
     "dipperNavySizeClasses": [],
     "dipperNavyReqOrderShardsPower": 0,

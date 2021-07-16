@@ -18,7 +18,7 @@
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBigHashSizePct": 60,
     "dipperNavySmallItemMaxSize": 1024,
-    "dipperNavyBlock": 4096,
+    "navyBlockSize": 4096,
     "dipperNavyParcelMemoryMB": 6048,
     "nvmCacheSizeMB": 932000,
     "dipperUseDirectIO": true,

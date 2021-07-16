@@ -92,8 +92,8 @@ struct CacheConfig : public JSONConfig {
   // to be a physical device identifier;
   std::vector<std::string> writeAmpDeviceList{};
 
-  // Navy specific: device block size, bytes.
-  uint64_t dipperNavyBlock{512};
+  // Navy specific: block size in bytes
+  uint64_t navyBlockSize{512};
 
   // If true, Navy will use region-based LRU. False it will be using FIFO.
   bool dipperNavyUseRegionLru{true};
@@ -102,7 +102,8 @@ struct CacheConfig : public JSONConfig {
   // @dipperNavyUseRegionLru must be false.
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
-  // Navy specific: size classes. Must be multiples of @dipperNavyBlock.
+  // Navy specific: size classes. Must be multiples of @navyBlockSize unless
+  // in-mem buffer is enabled.
   std::vector<uint32_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
                                               4 * 512,  6 * 512,  8 * 512,
                                               12 * 512, 16 * 512, 32 * 512};

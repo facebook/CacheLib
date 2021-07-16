@@ -156,7 +156,7 @@ Cache<Allocator>::Cache(CacheConfig config,
       nvmConfig.navyConfig.setBlockCacheSegmentedFifoSegmentRatio(
           config_.navySegmentedFifoSegmentRatio);
     }
-    nvmConfig.navyConfig.setBlockSize(config_.dipperNavyBlock);
+    nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
     nvmConfig.navyConfig.setBlockCacheRegionSize(16 * MB);
 
     if (!config.dipperNavyUseStackAllocation &&

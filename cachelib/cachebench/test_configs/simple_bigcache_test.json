@@ -11,7 +11,7 @@
       "nvmCacheSizeMB": 800,
       "dipperUseDirectIO": false,
 
-      "dipperNavyBlock": 4096,
+      "navyBlockSize": 4096,
       "dipperNavyUseRegionLru": false,
       "dipperNavySizeClasses": [],
       "dipperNavyReqOrderShardsPower": 0,

@@ -42,7 +42,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, nvmCachePaths);
   JSONSetVal(configJson, writeAmpDeviceList);
 
-  JSONSetVal(configJson, dipperNavyBlock);
+  JSONSetVal(configJson, navyBlockSize);
   JSONSetVal(configJson, dipperNavyUseRegionLru);
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
   JSONSetVal(configJson, dipperNavySizeClasses);

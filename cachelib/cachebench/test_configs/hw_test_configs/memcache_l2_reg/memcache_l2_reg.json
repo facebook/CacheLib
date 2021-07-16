@@ -11,7 +11,7 @@
     ],
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBigHashSizePct": 0,
-    "dipperNavyBlock": 4096,
+    "navyBlockSize": 4096,
     "dipperNavyParcelMemoryMB": 6048,
     "dipperUseDirectIO": true,
     "enableChainedItem": true,
