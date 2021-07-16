@@ -37,6 +37,11 @@ class Driver final : public AbstractCache {
     Config& validate();
   };
 
+  // Contructor can throw std::exception if config is invalid.
+  //
+  // @param config  config that was validated with Config::validate
+  //
+  // @throw std::invalid_argument on bad config
   explicit Driver(Config&& config);
   Driver(const Driver&) = delete;
   Driver& operator=(const Driver&) = delete;

@@ -22,7 +22,11 @@ class RejectRandomAP final : public AdmissionPolicy {
     Config& validate();
   };
 
-  // Throws std::exception if can't be constructed (parameters invalid).
+  // Contructor can throw std::exception if config is invalid.
+  //
+  // @param config  config that was validated with Config::validate
+  //
+  // @throw std::invalid_argument on bad config
   explicit RejectRandomAP(Config&& config);
   RejectRandomAP(const RejectRandomAP&) = delete;
   RejectRandomAP& operator=(const RejectRandomAP&) = delete;

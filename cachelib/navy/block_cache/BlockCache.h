@@ -65,6 +65,11 @@ class BlockCache final : public Engine {
     Config& validate();
   };
 
+  // Contructor can throw std::exception if config is invalid.
+  //
+  // @param config  config that was validated with Config::validate
+  //
+  // @throw std::invalid_argument on bad config
   explicit BlockCache(Config&& config);
   BlockCache(const BlockCache&) = delete;
   BlockCache& operator=(const BlockCache&) = delete;

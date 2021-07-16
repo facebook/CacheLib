@@ -56,13 +56,15 @@ class BigHash final : public Engine {
     Config& validate();
   };
 
-  // Throw std::invalid_argument on bad config
+  // Contructor can throw std::exception if config is invalid.
+  //
+  // @param config  config that was validated with Config::validate
+  //
+  // @throw std::invalid_argument on bad config
   explicit BigHash(Config&& config);
-
-  ~BigHash() override = default;
-
   BigHash(const BigHash&) = delete;
   BigHash& operator=(const BigHash&) = delete;
+  ~BigHash() override = default;
 
   // Check if the key could exist in bighash. This can be used as a pre-check
   // to optimize cache lookups to avoid calling lookups in an async IO
