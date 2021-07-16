@@ -200,13 +200,14 @@ class ChainedHashTable {
     CompressedPtr next_{};
   };
 
+  // Config class for the chained hash table.
   class Config {
    public:
-    // TODO(sugak) this is changed to unblock the LLVM upgrade
-    // The fix is not completely understood, but it's a safe change
-    // T16521551
-    // - Config() noexcept = default;
-    Config() = default;
+    Config() noexcept = default;
+
+    // @param bucketsPower number of buckets in base 2 logarithm
+    // @param locksPower number of locks in base 2 logarithm
+    // @param pageSize page size
     Config(unsigned int bucketsPower,
            unsigned int locksPower,
            PageSizeT pageSize = PageSizeT::NORMAL)
@@ -214,6 +215,11 @@ class ChainedHashTable {
                  locksPower,
                  std::make_shared<MurmurHash2>(),
                  pageSize) {}
+
+    // @param bucketsPower number of buckets in base 2 logarithm
+    // @param locksPower number of locks in base 2 logarithm
+    // @param hasher the key hash function
+    // @param pageSize page size
     Config(unsigned int bucketsPower,
            unsigned int locksPower,
            Hasher hasher,
@@ -459,6 +465,7 @@ class ChainedHashTable {
     // need to be destroyed or if the container can not be restored.
     serialization::ChainedHashTableObject saveState() const;
 
+    // get the required size for the buckets.
     static size_t getRequiredSize(size_t numBuckets) noexcept {
       return sizeof(CompressedPtr) * numBuckets;
     }
@@ -564,6 +571,7 @@ class ChainedHashTable {
     struct DistributionStats {
       uint64_t numKeys{0};
       uint64_t numBuckets{0};
+      // map from bucket id to number of items in the bucket.
       std::map<unsigned int, uint64_t> itemDistribution{};
     };
 
@@ -583,10 +591,7 @@ class ChainedHashTable {
 
     // lightweight stats that give the number of keys and buckets inside the
     // container. This is guaranteed to be fast.
-    Stats getStats() const noexcept {
-      // const uint64_t numKeys = numKeys_;
-      return {numKeys_, ht_.getNumBuckets()};
-    }
+    Stats getStats() const noexcept { return {numKeys_, ht_.getNumBuckets()}; }
 
     // Get the total number of keys inserted into the hash table
     uint64_t getNumKeys() const noexcept { return numKeys_; }

@@ -60,7 +60,9 @@ class MMTinyLFU {
 
   enum LruType { Main, Tiny, NumTypes };
 
+  // Config class for MMTinfyLFU
   struct Config {
+    // create from serialized config
     explicit Config(SerializationConfigType configState)
         : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
@@ -70,6 +72,11 @@ class MMTinyLFU {
                  *configState.windowToCacheSizeRatio_ref(),
                  *configState.tinySizePercent_ref()) {}
 
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
                  updateOnW,
@@ -78,55 +85,103 @@ class MMTinyLFU {
                  16,
                  1) {}
 
+    // @param time              the LRU refresh time in seconds.
+    //                          An item will be promoted only once in each lru
+    //                          refresh time depite the number of accesses it
+    //                          gets.
+    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnR         whether to promote the item on read
+    // @param windowToCacheSize multiplier of window size to cache size
+    // @param tinySizePct       percentage number of tiny size to overall size
     Config(uint32_t time,
            bool updateOnW,
            bool updateOnR,
            size_t windowToCacheSize,
-           size_t tinySize)
+           size_t tinySizePct)
         : Config(time,
                  updateOnW,
                  updateOnR,
                  /* try lock update */ false,
                  windowToCacheSize,
-                 tinySize) {}
+                 tinySizePct) {}
 
+    // @param time              the LRU refresh time in seconds.
+    //                          An item will be promoted only once in each lru
+    //                          refresh time depite the number of accesses it
+    //                          gets.
+    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnR         whether to promote the item on read
+    // @param tryLockU          whether to use a try lock when doing update.
+    // @param windowToCacheSize multiplier of window size to cache size
+    // @param tinySizePct       percentage number of tiny size to overall size
     Config(uint32_t time,
            bool updateOnW,
            bool updateOnR,
            bool tryLockU,
            size_t windowToCacheSize,
-           size_t tinySize)
+           size_t tinySizePct)
         : Config(time,
                  0.,
                  updateOnW,
                  updateOnR,
                  tryLockU,
                  windowToCacheSize,
-                 tinySize) {}
+                 tinySizePct) {}
 
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
            bool updateOnR,
            bool tryLockU,
            size_t windowToCacheSize,
-           size_t tinySize)
+           size_t tinySizePct)
         : Config(time,
                  ratio,
                  updateOnW,
                  updateOnR,
                  tryLockU,
                  windowToCacheSize,
-                 tinySize,
+                 tinySizePct,
                  0) {}
-
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
            bool updateOnR,
            bool tryLockU,
            size_t windowToCacheSize,
-           size_t tinySize,
+           size_t tinySizePct,
            uint32_t mmReconfigureInterval)
         : defaultLruRefreshTime(time),
           lruRefreshRatio(ratio),
@@ -134,7 +189,7 @@ class MMTinyLFU {
           updateOnRead(updateOnR),
           tryLockUpdate(tryLockU),
           windowToCacheSizeRatio(windowToCacheSize),
-          tinySizePercent(tinySize),
+          tinySizePercent(tinySizePct),
           mmReconfigureIntervalSecs(
               std::chrono::seconds(mmReconfigureInterval)) {
       checkConfig();

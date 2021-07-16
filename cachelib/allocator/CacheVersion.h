@@ -30,8 +30,9 @@ constexpr uint64_t kCacheRamFormatVersion = 3;
 // as well.
 constexpr uint64_t kCacheNvmFormatVersion = 2;
 
+// @return a string as version.
+// cachelib: X, ram: Y, nvm: Z
 inline const std::string& getCacheVersionString() {
-  // allocator: X, ram: Y, nvm: Z
   static std::string kVersionStr =
       "{ \"cachelib\" : " + std::to_string(kCachelibVersion) +
       ", \"ram\" : " + std::to_string(kCacheRamFormatVersion) +

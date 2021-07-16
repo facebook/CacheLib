@@ -17,8 +17,7 @@ class MM2Q;
 template <typename MMType>
 class MMTypeTest;
 
-// uses a double linked list to implement an LRU. T must be have a public
-// member of type Hook and HookPtr must point to that.
+// Implements an intrusive doubly linked list using DList. This is used to build MMContainers with multiple priorities.
 template <typename T, DListHook<T> T::*HookPtr>
 class MultiDList {
  public:

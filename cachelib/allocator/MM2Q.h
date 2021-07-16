@@ -51,7 +51,9 @@ class MM2Q {
 
   enum LruType { Warm, WarmTail, Hot, Cold, ColdTail, NumTypes };
 
+  // Config class for MM2Q
   struct Config {
+    // Create from serialized config
     explicit Config(SerializationConfigType configState)
         : Config(*configState.lruRefreshTime_ref(),
                  *configState.lruRefreshRatio_ref(),
@@ -62,6 +64,11 @@ class MM2Q {
                  *configState.hotSizePercent_ref(),
                  *configState.coldSizePercent_ref()) {}
 
+    // @param time      the refresh time in seconds to trigger an update in position upon access.
+    // An item will be promoted only once in each lru refresh time depite the
+    // number of accesses it gets.
+    // @param udpateOnW whether to promote the item on write
+    // @param updateOnR whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
                  updateOnW,
@@ -71,6 +78,15 @@ class MM2Q {
                  30,
                  30) {}
 
+    // @param time      the LRU refresh time.
+    // An item will be promoted only once in each lru refresh time depite the
+    // number of accesses it gets.
+    // @param udpateOnW whether to promote the item on write
+    // @param updateOnR whether to promote the item on read
+    // @param hotPercent percentage number for the size of the hot queue in the
+    // overall size.
+    // @param coldPercent percentage number for the size of the cold queue in
+    // the overall size.
     Config(uint32_t time,
            bool updateOnW,
            bool updateOnR,
@@ -84,6 +100,21 @@ class MM2Q {
                  hotPercent,
                  coldPercent) {}
 
+    // @param time                    the LRU refresh time.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the
+    //                                number of accesses it gets.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    // update.
+    // @param rebalanceOnRecordAccs   whether to do rebalance on access. If set
+    //                                to false, rebalance only happens when
+    //                                items are added or removed to the queue.
+    // @param hotPercent              percentage number for the size of the hot
+    //                                queue in the overall size.
+    // @param coldPercent             percentage number for the size of the cold
+    //                                queue in the overall size.
     Config(uint32_t time,
            bool updateOnW,
            bool updateOnR,
@@ -100,6 +131,25 @@ class MM2Q {
                  hotPercent,
                  coldPercent) {}
 
+    // @param time                    the LRU refresh time.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the
+    //                                number of accesses it gets.
+    // @param ratio                   the LRU refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    // update.
+    // @param rebalanceOnRecordAccs   whether to do rebalance on access. If set
+    //                                to false, rebalance only happens when
+    //                                items are added or removed to the queue.
+    // @param hotPercent              percentage number for the size of the hot
+    //                                queue in the overall size.
+    // @param coldPercent             percentage number for the size of the cold
+    //                                queue in the overall size.
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
@@ -118,6 +168,27 @@ class MM2Q {
                  coldPercent,
                  0) {}
 
+    // @param time                    the LRU refresh time.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the
+    //                                number of accesses it gets.
+    // @param ratio                   the LRU refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    // update.
+    // @param rebalanceOnRecordAccs   whether to do rebalance on access. If set
+    //                                to false, rebalance only happens when
+    //                                items are added or removed to the queue.
+    // @param hotPercent              percentage number for the size of the hot
+    //                                queue in the overall size.
+    // @param coldPercent             percentage number for the size of the cold
+    //                                queue in the overall size.
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
@@ -151,6 +222,7 @@ class MM2Q {
       return 100 - hotSizePercent - coldSizePercent;
     }
 
+    // Make sure that the size percent numbers are sane.
     void checkLruSizes() {
       auto warmSizePercent = getWarmSizePercent();
       if (hotSizePercent <= 0 || hotSizePercent >= 100 ||

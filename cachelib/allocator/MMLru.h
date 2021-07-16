@@ -22,6 +22,17 @@
 namespace facebook {
 namespace cachelib {
 
+// CacheLib's modified LRU policy.
+// In classic LRU, the items form a queue according last access time
+// time. Items are inserted to the head of the queue and removed from the tail
+// of the queue. Items accessed (used) are moved (promoted) to the head of the
+// queue.
+// CacheLib made two variations on top of the classic LRU:
+// 1. Insertion point. The items are inserted into a configured insertion point
+// instead of always to the head.
+// 2. Delayed promotion. Items get promoted at most once in any lru refresh time
+// window. lru refresh time and lru refresh ratio controls this internval
+// length.
 class MMLru {
  public:
   // unique identifier per MMType
@@ -37,7 +48,9 @@ class MMLru {
   // This is not applicable for MMLru, just for compile of cache allocator
   enum LruType { NumTypes };
 
+  // Config class for MMLru
   struct Config {
+    // create from serialized config
     explicit Config(SerializationConfigType configState)
         : Config(
               *configState.lruRefreshTime_ref(),
@@ -47,9 +60,24 @@ class MMLru {
               *configState.tryLockUpdate_ref(),
               static_cast<uint8_t>(*configState.lruInsertionPointSpec_ref())) {}
 
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time, updateOnW, updateOnR, false, 0) {}
 
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
+    // @param tryLockU    whether to use a try lock when doing update.
+    // @param ipSpec      insertion point spec, which is the inverse power of
+    //                    length from the end of the queue. For example, value 1
+    //                    means the insertion point is 1/2 from the end of LRU;
+    //                    value 2 means 1/4 from the end of LRU.
     Config(uint32_t time, bool updateOnW, bool updateOnR, uint8_t ipSpec)
         : Config(time, updateOnW, updateOnR, false, ipSpec) {}
 
@@ -60,6 +88,19 @@ class MMLru {
            uint8_t ipSpec)
         : Config(time, 0., updateOnW, updateOnR, tryLockU, ipSpec) {}
 
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param ratio       the lru refresh ratio. The ratio times the
+    //                    oldest element's lifetime in warm queue
+    //                    would be the minimum value of LRU refresh time.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
+    // @param tryLockU    whether to use a try lock when doing update.
+    // @param ipSpec      insertion point spec, which is the inverse power of
+    //                    length from the end of the queue. For example, value 1
+    //                    means the insertion point is 1/2 from the end of LRU;
+    //                    value 2 means 1/4 from the end of LRU.
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
@@ -68,6 +109,21 @@ class MMLru {
            uint8_t ipSpec)
         : Config(time, ratio, updateOnW, updateOnR, tryLockU, ipSpec, 0) {}
 
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param ratio       the lru refresh ratio. The ratio times the
+    //                    oldest element's lifetime in warm queue
+    //                    would be the minimum value of LRU refresh time.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
+    // @param tryLockU    whether to use a try lock when doing update.
+    // @param ipSpec      insertion point spec, which is the inverse power of
+    //                    length from the end of the queue. For example, value 1
+    //                    means the insertion point is 1/2 from the end of LRU;
+    //                    value 2 means 1/4 from the end of LRU.
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
     Config(uint32_t time,
            double ratio,
            bool updateOnW,

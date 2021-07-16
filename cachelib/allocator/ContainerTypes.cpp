@@ -4,6 +4,7 @@
 #include "cachelib/allocator/MMTinyLFU.h"
 namespace facebook {
 namespace cachelib {
+// Types of AccessContainer and MMContainer
 // MMType
 const int MMLru::kId = 1;
 const int MM2Q::kId = 2;
