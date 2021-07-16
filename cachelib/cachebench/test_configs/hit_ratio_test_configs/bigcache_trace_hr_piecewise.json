@@ -18,7 +18,6 @@
     "dipperNavyReqOrderShardsPower": 0,
     "dipperNavyBigHashSizePct": 0,
     "dipperNavyUseStackAllocation": true,
-    "dipperNavyStackAllocReadBufSizeKB": 4,
     "navyHitsReinsertionThreshold": 1,
     "navyProbabilityReinsertionThreshold": 0,
     "navyReaderThreads": 128,

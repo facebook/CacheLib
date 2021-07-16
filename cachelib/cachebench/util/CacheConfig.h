@@ -133,10 +133,6 @@ struct CacheConfig : public JSONConfig {
   // uses stack allocation mode for navy.
   bool dipperNavyUseStackAllocation = false;
 
-  // size of the internal navy read buffer when using stack allocation. stack
-  // allocaiton is enabled when the size classes are not specified.
-  uint64_t dipperNavyStackAllocReadBufSizeKB = 32;
-
   // use a hits based reinsertion policy with navy
   uint64_t navyHitsReinsertionThreshold{0};
 
