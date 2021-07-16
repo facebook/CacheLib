@@ -26,6 +26,8 @@ class CacheChainedItemIterator
 
   Item& dereference() const { return *curr_; }
 
+  // advance the iterator.
+  // Do nothing if uninitizliaed.
   void increment() {
     if (curr_) {
       curr_ = curr_->asChainedItem().getNext(*compressor_);

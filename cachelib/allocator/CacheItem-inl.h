@@ -49,8 +49,8 @@ void* CacheItem<CacheTrait>::getMemory() const noexcept {
 
 template <typename CacheTrait>
 void* CacheItem<CacheTrait>::getWritableMemory() const {
-  // TODO (aw7): check AccessMode, throw exception if not writable
-  // TODO (aw7): add nvm evict logic
+  // TODO : check AccessMode, throw exception if not writable
+  // TODO : add nvm invalidation logic
   if (isChainedItem()) {
     return asChainedItem().getMemory();
   } else {

@@ -14,13 +14,16 @@
 namespace facebook {
 namespace cachelib {
 
+// stats class for a single eviction queue
 struct EvictionStatPerType {
   // the age of the oldest element in seconds
   uint64_t oldestElementAge = 0ULL;
-
+  // number of elements in the eviction queue
   uint64_t size = 0ULL;
 };
 
+// stats class for one MM container (a.k.a one allocation class) related to
+// evictions
 struct EvictionAgeStat {
   EvictionStatPerType warmQueueStat;
 
@@ -32,7 +35,9 @@ struct EvictionAgeStat {
   uint64_t projectedAge;
 };
 
+// stats related to evictions for a pool
 struct PoolEvictionAgeStats {
+  // Map from allocation class id to the eviction age stats
   std::unordered_map<ClassId, EvictionAgeStat> classEvictionAgeStats;
 
   uint64_t getOldestElementAge(ClassId cid) const {
@@ -56,6 +61,7 @@ struct PoolEvictionAgeStats {
   }
 };
 
+// Stats for MM container
 struct MMContainerStat {
   // number of elements in the container.
   size_t size;
@@ -85,7 +91,7 @@ struct MMContainerStat {
   uint64_t numTailAccesses;
 };
 
-// stats for the cache broken down by ClassId.
+// cache related stats for a given allocation class.
 struct CacheStat {
   // allocation size for this container.
   uint32_t allocSize;
@@ -123,6 +129,7 @@ struct CacheStat {
     return unevictableContainerStat.size;
   }
 
+  // total number of evictions.
   uint64_t numEvictions() const noexcept {
     return chainedItemEvictions + regularItemEvictions;
   }
@@ -135,6 +142,7 @@ struct CacheStat {
   }
 };
 
+// Stats for a pool
 struct PoolStats {
   // pool name given by users of this pool.
   std::string poolName;
@@ -239,6 +247,7 @@ struct PoolStats {
   PoolStats& operator+=(const PoolStats& other);
 };
 
+// Stats for slab release events
 struct SlabReleaseStats {
   uint64_t numActiveSlabReleases;
   uint64_t numSlabReleaseForRebalance;
@@ -253,6 +262,7 @@ struct SlabReleaseStats {
   uint64_t numEvictionSuccesses;
 };
 
+// Stats for reaper
 struct ReaperStats {
   // the total number of items the reaper has visited.
   uint64_t numVisitedItems{0};
@@ -278,7 +288,7 @@ struct ReaperStats {
   uint64_t avgTraversalTimeMs{0};
 };
 
-// CacheMetadata type to export to Scuba
+// CacheMetadata type to export
 struct CacheMetadata {
   // allocator_version
   int allocatorVersion;
@@ -495,6 +505,7 @@ struct CacheMemoryStats {
   size_t memRssSize{0};
 };
 
+// Stats for compact cache
 struct CCacheStats {
   uint64_t get;
   uint64_t getHit;
@@ -547,12 +558,14 @@ struct CCacheStats {
   }
 };
 
+// Types of background workers
 enum PoolWorkerType {
   POOL_REBALANCER = 0,
   POOL_RESIZER,
   MEMORY_MONITOR,
   MAX_POOL_WORKER
 };
+
 /* Slab release event data */
 struct SlabReleaseData {
   // Time when release occured.
@@ -586,6 +599,7 @@ struct SlabReleaseData {
 
 using SlabReleaseEvents = std::vector<SlabReleaseData>;
 
+//  Slab release events organized by their type
 struct AllSlabReleaseEvents {
   SlabReleaseEvents rebalancerEvents;
   SlabReleaseEvents resizerEvents;

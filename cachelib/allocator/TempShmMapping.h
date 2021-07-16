@@ -27,7 +27,7 @@ class TempShmMapping {
  public:
   explicit TempShmMapping(size_t size);
   ~TempShmMapping();
-
+  // get the start of addrress.
   void* getAddr() const { return addr_; }
 
  private:

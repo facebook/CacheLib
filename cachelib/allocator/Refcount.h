@@ -16,6 +16,7 @@
 
 namespace facebook {
 namespace cachelib {
+// refcount and flag in the CacheItem.
 class FOLLY_PACK_ATTR RefcountWithFlags {
  public:
   /**
@@ -228,9 +229,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   }
 
   /**
-   * The following two functions corresond to whether or not an item is
-   * currently in the process of being moved. This happens during a slab
-   * rebalance or resize operation.
+   * The following four functions are used to track whether or not
+   * an item is currently in the process of being moved. This happens during a
+   * slab rebalance or resize operation.
    *
    * An item can only be marked moving when `isInMMContainer` returns true.
    * This operation is atomic.
@@ -288,8 +289,11 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
 
   /**
    * The following correspond to the evictable state of the item
-   * An unevictable item unevictable item may prevent the slab it
-   * belongs to from being released if it cannot be moved
+   * An unevictable item  may prevent the slab it
+   * belongs to, from being released if it cannot be moved.
+   *
+   * These functions will be removed once permenant item feature is fully
+   * deprecated.
    */
   void markUnevictable() noexcept { setFlag<kUnevictable_deprecated>(); }
   void unmarkUnevictable() noexcept { unSetFlag<kUnevictable_deprecated>(); }

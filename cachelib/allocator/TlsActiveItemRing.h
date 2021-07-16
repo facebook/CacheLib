@@ -8,6 +8,7 @@
 namespace facebook {
 namespace cachelib {
 
+// Thread local class for tracking recently accessed item.
 class TlsActiveItemRing {
   static const size_t KB = 1024ULL;
   static const size_t MB = 1024ULL * KB;
@@ -71,6 +72,7 @@ class TlsActiveItemRing {
     return sizeTotal;
   }
 
+  // The tracked item in the form of address and size.
   std::array<std::pair<uintptr_t, size_t>, kItemsPerThread> items_;
   size_t head_{0};
   // compute this one time to avoid static overhead and locks etc.

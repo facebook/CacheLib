@@ -14,8 +14,9 @@
 namespace facebook {
 namespace cachelib {
 namespace detail {
+// Bit mask for flags on cache handle
 enum class HandleFlags : uint8_t {
-  // Indicates if a handle has been inserted into cache
+  // Indicates if a handle has been created but not inserted into the cache yet. This is used to track if removeCB is invoked when the item is freed back.
   kNascent = 1 << 0,
 
   // Indicate if the item was expired
@@ -38,6 +39,7 @@ struct HandleImpl {
   HandleImpl() = default;
   HandleImpl(std::nullptr_t) {}
 
+  // reset the handle by releasing the item it holds.
   void reset() noexcept {
     waitContext_.reset();
 
@@ -134,6 +136,7 @@ struct HandleImpl {
   FOLLY_ALWAYS_INLINE Item& operator*() const noexcept { return *get(); }
   FOLLY_ALWAYS_INLINE Item* get() const noexcept { return getImpl(); }
 
+  // Convert to semi future.
   folly::SemiFuture<HandleImpl> toSemiFuture() && {
     if (isReady()) {
       return folly::makeSemiFuture(std::forward<HandleImpl>(*this));

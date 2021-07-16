@@ -146,7 +146,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   const Key getKey() const noexcept;
 
   // Readonly memory for this allocation.
-  // TODO (aw7): switch the return type to 'const void*' once all the callsites
+  // TODO: switch the return type to 'const void*' once all the callsites
   // are modified to use getMemory() and getWritableMemory() correctly
   void* getMemory() const noexcept;
 
@@ -156,7 +156,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   void* getWritableMemory() const;
 
   // Cast item's readonly memory to a readonly user type
-  // TODO (aw7): switch the return type to 'const T*' once all the callsites
+  // TODO: switch the return type to 'const T*' once all the callsites
   // are modified to use getMemory() and getWritableMemory() correctly
   template <typename T>
   T* getMemoryAs() const noexcept {

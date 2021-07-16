@@ -23,9 +23,12 @@ namespace cachelib {
 class CACHELIB_PACKED_ATTR KAllocation {
  public:
   using KeyLenT = uint8_t;
+  // Maximum size of the key.
   static constexpr KeyLenT kKeyMaxLen = std::numeric_limits<KeyLenT>::max();
+  // Maximum number of bits of the value (payload minus the key)
   static constexpr uint32_t kMaxValSizeBits =
       NumBits<uint32_t>::value - NumBits<KeyLenT>::value;
+  // Maximum size of the value (payload minus the key)
   static constexpr uint32_t kMaxValSize =
       (static_cast<uint32_t>(1) << kMaxValSizeBits) - 1;
 
@@ -91,6 +94,7 @@ class CACHELIB_PACKED_ATTR KAllocation {
   // TODO add support for alignment
   void* getMemory() const noexcept { return &data_[getKeySize()]; }
 
+  // get the size of the value.
   uint32_t getSize() const noexcept { return size_ & kMaxValSize; }
 
   // Check if the key is valid.  The length of the key needs to be in (0,
@@ -99,6 +103,8 @@ class CACHELIB_PACKED_ATTR KAllocation {
     // StringPiece empty() does not realy check for start being nullptr
     return (key.size() <= kKeyMaxLen) && (!key.empty()) && (key.start());
   }
+
+  // Throw readable exception if the key is invalid.
   static void throwIfKeyInvalid(folly::StringPiece key) {
     if (!isKeyValid(key)) {
       // We need to construct the key for the error message manually here for
