@@ -13,7 +13,7 @@
     "dipperNavyBigHashSizePct": 65,
     "navyBlockSize": 4096,
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperNavySizeClasses": [
+    "navySizeClasses": [
       4096,
       8192,
       12288,

@@ -16,7 +16,7 @@
       "navyWriterThreads": 64,
       "navyBlockSize": 512,
 
-      "dipperNavySizeClasses": [1024, 1536, 2048, 2560, 3072, 3584, 4096],
+      "navySizeClasses": [1024, 1536, 2048, 2560, 3072, 3584, 4096],
       "navyCleanRegions": 64,
       "navyNumInmemBuffers": 0,
 

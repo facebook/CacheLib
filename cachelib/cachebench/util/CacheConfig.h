@@ -100,11 +100,12 @@ struct CacheConfig : public JSONConfig {
   // appropriate ratios.
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
-  // Navy specific: size classes. Must be multiples of @navyBlockSize unless
-  // in-mem buffer is enabled.
-  std::vector<uint32_t> dipperNavySizeClasses{512,      2 * 512,  3 * 512,
-                                              4 * 512,  6 * 512,  8 * 512,
-                                              12 * 512, 16 * 512, 32 * 512};
+  // size classes for large objects in Navy that exceed the
+  // @navySmallItemMaxSize. Must be multiples of @navyBlockSize unless
+  // in-mem buffer is enabled. If empty, navy will use stack allocation mode.
+  std::vector<uint32_t> navySizeClasses{512,      2 * 512,  3 * 512,
+                                        4 * 512,  6 * 512,  8 * 512,
+                                        12 * 512, 16 * 512, 32 * 512};
 
   // Number of shards expressed as power of two for native request ordering in
   // Navy. 0 means disabled. If disabled, default dipper level request
@@ -129,9 +130,6 @@ struct CacheConfig : public JSONConfig {
   // requests will be rejected until the parcel memory usage gets under the
   // limit.
   uint64_t dipperNavyParcelMemoryMB = 1024;
-
-  // uses stack allocation mode for navy.
-  bool dipperNavyUseStackAllocation = false;
 
   // use a hits based reinsertion policy with navy
   uint64_t navyHitsReinsertionThreshold{0};

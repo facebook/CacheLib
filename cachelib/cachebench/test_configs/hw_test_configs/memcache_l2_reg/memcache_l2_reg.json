@@ -17,8 +17,8 @@
     "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": false,
-    "poolRebalanceIntervalSec": 5,
-    "dipperNavyUseStackAllocation": true
+    "navySizeClasses": [],
+    "poolRebalanceIntervalSec": 5
   },
   "test_config": {
     "enableLookaside": true,

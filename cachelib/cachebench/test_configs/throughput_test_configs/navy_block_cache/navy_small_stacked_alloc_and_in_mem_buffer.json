@@ -15,8 +15,8 @@
       "navyReaderThreads": 64,
       "navyWriterThreads": 64,
       "navyBlockSize": 512,
+      "navySizeClasses": [],
 
-      "dipperNavyUseStackAllocation": true,
       "navyCleanRegions": 64,
       "navyNumInmemBuffers": 64,
 

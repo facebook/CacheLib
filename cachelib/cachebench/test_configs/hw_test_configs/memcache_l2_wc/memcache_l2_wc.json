@@ -12,6 +12,7 @@
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBigHashSizePct": 0,
     "navyBlockSize": 4096,
+    "navySizeClasses": [],
     "dipperNavyParcelMemoryMB": 6048,
     "dipperUseDirectIO": true,
     "enableChainedItem": true,
@@ -20,8 +21,7 @@
     "poolRebalanceIntervalSec": 2,
     "rebalanceStrategy": "tail-age",
     "rebalanceMinRatio": 0.1,
-    "rebalanceMinSlabs": 2,
-    "dipperNavyUseStackAllocation": true
+    "rebalanceMinSlabs": 2
   },
   "test_config": {
     "enableLookaside": true,

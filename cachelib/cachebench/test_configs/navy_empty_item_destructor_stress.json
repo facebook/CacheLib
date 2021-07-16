@@ -10,7 +10,7 @@
     "nvmCacheSizeMB" : 1024,
     "dipperNavyBigHashBucketSize": 4096,
     "navyBlockSize": 4096,
-    "dipperNavyUseStackAllocation": true,
+    "navySizeClasses": [],
     "navyNumInmemBuffers": 30,
     "enableItemDestructor" : true
   },

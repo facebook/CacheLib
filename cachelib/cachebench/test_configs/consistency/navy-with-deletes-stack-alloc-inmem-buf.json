@@ -9,7 +9,7 @@
     "allocFactor" : 2.0,
     "nvmCacheSizeMB" : 1024,
     "dipperUseDirectIO": false,
-    "dipperNavyUseStackAllocation": true,
+    "navySizeClasses": [],
     "navyNumInmemBuffers": 30
   },
   "test_config" :

@@ -164,10 +164,8 @@ Cache<Allocator>::Cache(CacheConfig config,
     nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
     nvmConfig.navyConfig.setBlockCacheRegionSize(16 * MB);
 
-    if (!config.dipperNavyUseStackAllocation &&
-        !config_.dipperNavySizeClasses.empty()) {
-      nvmConfig.navyConfig.setBlockCacheSizeClasses(
-          config_.dipperNavySizeClasses);
+    if (!config_.navySizeClasses.empty()) {
+      nvmConfig.navyConfig.setBlockCacheSizeClasses(config_.navySizeClasses);
     }
 
     if (config_.dipperNavyBigHashSizePct > 0) {

@@ -44,14 +44,13 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
 
   JSONSetVal(configJson, navyBlockSize);
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
-  JSONSetVal(configJson, dipperNavySizeClasses);
+  JSONSetVal(configJson, navySizeClasses);
   JSONSetVal(configJson, dipperNavyReqOrderShardsPower);
   JSONSetVal(configJson, dipperNavyBigHashSizePct);
   JSONSetVal(configJson, dipperNavyBigHashBucketSize);
   JSONSetVal(configJson, dipperNavyBloomFilterPerBucketSize);
   JSONSetVal(configJson, dipperNavySmallItemMaxSize);
   JSONSetVal(configJson, dipperNavyParcelMemoryMB);
-  JSONSetVal(configJson, dipperNavyUseStackAllocation);
   JSONSetVal(configJson, navyHitsReinsertionThreshold);
   JSONSetVal(configJson, navyProbabilityReinsertionThreshold);
   JSONSetVal(configJson, navyReaderThreads);
@@ -78,7 +77,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 672>();
+  checkCorrectSize<CacheConfig, 664>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

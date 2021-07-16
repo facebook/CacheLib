@@ -11,8 +11,8 @@
     "dipperUseDirectIO": false,
     "dipperNavyBigHashBucketSize": 4096,
     "navyBlockSize": 4096,
-    "dipperNavyUseStackAllocation": true,
     "navyNumInmemBuffers": 30,
+    "navySizeClasses": [],
     "navyEncryption": true
   },
   "test_config" :

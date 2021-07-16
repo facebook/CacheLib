@@ -29,9 +29,8 @@
     "rebalanceStrategy": "tail-age",
     "rebalanceMinRatio": 0.1,
     "rebalanceMinSlabs": 2,
-    "navyNumInmemBuffers": 30,
-    "dipperNavyUseStackAllocation": true
-
+    "navySizeClasses": [],
+    "navyNumInmemBuffers": 30
   },
   "test_config":
     {
