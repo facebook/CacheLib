@@ -5,7 +5,7 @@
     "moveOnSlabRelease" : false,
 
     "nvmCacheSizeMB" : 512,
-    "dipperNavyUseRegionLru": false
+    "navySegmentedFifoSegmentRatio": [1]
   },
   "test_config" : 
     {

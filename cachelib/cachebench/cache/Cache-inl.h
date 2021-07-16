@@ -151,10 +151,15 @@ Cache<Allocator>::Cache(CacheConfig config,
           config_.dipperNavyReqOrderShardsPower);
     }
 
-    nvmConfig.navyConfig.setBlockCacheLru(config_.dipperNavyUseRegionLru);
-    if (!config_.dipperNavyUseRegionLru) {
-      nvmConfig.navyConfig.setBlockCacheSegmentedFifoSegmentRatio(
-          config_.navySegmentedFifoSegmentRatio);
+    // by default lru. if more than one fifo ratio is present, we use
+    // segmented fifo. otherwise, simple fifo.
+    if (!config_.navySegmentedFifoSegmentRatio.empty()) {
+      if (config.navySegmentedFifoSegmentRatio.size() == 1) {
+        nvmConfig.navyConfig.blockCache().enableFifo();
+      } else {
+        nvmConfig.navyConfig.blockCache().enableSegmentedFifo(
+            config_.navySegmentedFifoSegmentRatio);
+      }
     }
     nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
     nvmConfig.navyConfig.setBlockCacheRegionSize(16 * MB);

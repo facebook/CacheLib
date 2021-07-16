@@ -95,11 +95,9 @@ struct CacheConfig : public JSONConfig {
   // Navy specific: block size in bytes
   uint64_t navyBlockSize{512};
 
-  // If true, Navy will use region-based LRU. False it will be using FIFO.
-  bool dipperNavyUseRegionLru{true};
-
-  // If non-empty, specifies the ratio of each segment.
-  // @dipperNavyUseRegionLru must be false.
+  // If non-empty, configures Navy to use FIFO instead of LRU. If there are
+  // more than one values provided, it enables segmented fifo with the
+  // appropriate ratios.
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
   // Navy specific: size classes. Must be multiples of @navyBlockSize unless

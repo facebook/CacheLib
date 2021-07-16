@@ -11,7 +11,6 @@
       "navyCleanRegions" : 10,
       "navyNumInmemBuffers" : 10,
       "navyHitsReinsertionThreshold": 1,
-      "dipperNavyUseRegionLru": false,
       "navySegmentedFifoSegmentRatio": [1, 1, 2],
       "dipperNavyUseStackAllocation": true,
       "dipperUseDirectIO": false
