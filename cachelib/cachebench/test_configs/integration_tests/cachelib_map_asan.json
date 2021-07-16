@@ -9,7 +9,6 @@
   },
   "test_config": 
     {
-      "mode": "integration",
       "name": "cachelib_map",
       "numOps" : 30000
     }

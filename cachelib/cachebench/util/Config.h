@@ -132,11 +132,6 @@ struct ReplayGeneratorConfig : public JSONConfig {
 };
 
 struct StressorConfig : public JSONConfig {
-  // by default everything is stress test. When @mode == "integration",
-  // the test case specified in @name will control how to create a cache and run
-  // the test. The other settings, except @numOps, will not take any effect.
-  std::string mode{"stress"};
-
   // Which workload generator to use, default is
   // workload generator which samples from some distribution
   // but "replay" allows replaying a production trace, for example.
@@ -145,7 +140,10 @@ struct StressorConfig : public JSONConfig {
   // Valid when generator is replay generator
   ReplayGeneratorConfig replayGeneratorConfig;
 
-  // name identifying the type of the stressor.
+  // name identifying a custom type of the stress test. When empty, launches a
+  // standard stress test using the workload config against an instance of the
+  // cache defined by the CacheConfig. Other supported options are
+  // "high_refcount", "cachelib_map", cachelib_range_map", "fast_shutdown"
   std::string name;
 
   // follow get misses with a set

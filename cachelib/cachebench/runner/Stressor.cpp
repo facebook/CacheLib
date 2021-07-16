@@ -4,7 +4,10 @@
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
-#include "cachelib/cachebench/runner/OutputStressor.h"
+#include "cachelib/cachebench/workload/OnlineGenerator.h"
+#include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
+#include "cachelib/cachebench/workload/ReplayGenerator.h"
+#include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -110,15 +113,11 @@ namespace {
 std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   if (config.generator == "piecewise-replay") {
     return std::make_unique<PieceWiseReplayGenerator>(config);
-  }
-
-  if (config.generator == "replay") {
+  } else if (config.generator == "replay") {
     return std::make_unique<ReplayGenerator>(config);
-  }
-
-  // TODO: Remove the empty() check once we label workload-based configs
-  // properly
-  if (config.generator.empty() || config.generator == "workload") {
+  } else if (config.generator.empty() || config.generator == "workload") {
+    // TODO: Remove the empty() check once we label workload-based configs
+    // properly
     return std::make_unique<WorkloadGenerator>(config);
   } else if (config.generator == "online") {
     return std::make_unique<OnlineGenerator>(config);
@@ -133,7 +132,19 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     CacheConfig cacheConfig,
     StressorConfig stressorConfig,
     std::unique_ptr<StressorAdmPolicy> admPolicy) {
-  if (stressorConfig.mode == "stress") {
+  if (stressorConfig.name == "high_refcount") {
+    return std::make_unique<HighRefcountStressor>(cacheConfig,
+                                                  stressorConfig.numOps);
+  } else if (stressorConfig.name == "cachelib_map") {
+    return std::make_unique<CachelibMapStressor>(cacheConfig,
+                                                 stressorConfig.numOps);
+  } else if (stressorConfig.name == "cachelib_range_map") {
+    return std::make_unique<CachelibRangeMapStressor>(cacheConfig,
+                                                      stressorConfig.numOps);
+  } else if (stressorConfig.name == "fast_shutdown") {
+    return std::make_unique<FastShutdownStressor>(cacheConfig,
+                                                  stressorConfig.numOps);
+  } else {
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
@@ -144,24 +155,6 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator),
           std::move(admPolicy));
-    }
-  }
-  if (stressorConfig.mode == "stdout") {
-    return std::make_unique<OutputStressor<LruAllocator>>(cacheConfig,
-                                                          stressorConfig);
-  } else {
-    if (stressorConfig.name == "high_refcount") {
-      return std::make_unique<HighRefcountStressor>(cacheConfig,
-                                                    stressorConfig.numOps);
-    } else if (stressorConfig.name == "cachelib_map") {
-      return std::make_unique<CachelibMapStressor>(cacheConfig,
-                                                   stressorConfig.numOps);
-    } else if (stressorConfig.name == "cachelib_range_map") {
-      return std::make_unique<CachelibRangeMapStressor>(cacheConfig,
-                                                        stressorConfig.numOps);
-    } else if (stressorConfig.name == "fast_shutdown") {
-      return std::make_unique<FastShutdownStressor>(cacheConfig,
-                                                    stressorConfig.numOps);
     }
   }
   throw std::invalid_argument("Invalid config");

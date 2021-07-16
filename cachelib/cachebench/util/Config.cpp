@@ -9,7 +9,6 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 StressorConfig::StressorConfig(const folly::dynamic& configJson) {
-  JSONSetVal(configJson, mode);
   JSONSetVal(configJson, generator);
 
   JSONSetVal(configJson, name);
@@ -61,7 +60,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 472>();
+  checkCorrectSize<StressorConfig, 440>();
 }
 
 bool StressorConfig::usesChainedItems() const {

@@ -10,7 +10,6 @@
   },
   "test_config": 
     {
-      "mode": "integration",
       "name": "fast_shutdown",
       "numOps" : 5
     }

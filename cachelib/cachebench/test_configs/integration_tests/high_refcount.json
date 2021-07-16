@@ -9,7 +9,6 @@
   },
   "test_config": 
     {
-      "mode": "integration",
       "name": "high_refcount",
       "numOps" : 200000
     }
