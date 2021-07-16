@@ -13,7 +13,6 @@
     "dipperNavyBigHashSizePct": 0,
     "navyBlockSize": 4096,
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperUseDirectIO": true,
     "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": false,

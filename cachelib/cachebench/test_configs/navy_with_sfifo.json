@@ -12,8 +12,7 @@
       "navyNumInmemBuffers" : 10,
       "navyHitsReinsertionThreshold": 1,
       "navySizeClasses": [],
-      "navySegmentedFifoSegmentRatio": [1, 1, 2],
-      "dipperUseDirectIO": false
+      "navySegmentedFifoSegmentRatio": [1, 1, 2]
     },
     "test_config" : {
         "enableLookaside": false,

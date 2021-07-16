@@ -4,8 +4,7 @@
     "poolRebalanceIntervalSec" : 1,
     "moveOnSlabRelease" : true,
 
-    "nvmCacheSizeMB" : 512,
-    "dipperUseDirectIO": false
+    "nvmCacheSizeMB" : 512
   },
   "test_config" : 
     {

@@ -21,7 +21,6 @@
     "navyBlockSize": 4096,
     "dipperNavyParcelMemoryMB": 6048,
     "nvmCacheSizeMB": 932000,
-    "dipperUseDirectIO": true,
     "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": true,

@@ -8,7 +8,6 @@
     "poolSizes" : [0.5, 0.5],
     "allocFactor" : 2.0,
     "nvmCacheSizeMB" : 1024,
-    "dipperUseDirectIO": false,
     "navySizeClasses": [],
     "navyNumInmemBuffers": 30
   },
