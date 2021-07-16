@@ -10,7 +10,7 @@
 
     "navyReaderThreads": 32,
     "navyWriterThreads": 32,
-    "devicePaths": ["/dev/md0"],
+    "nvmCachePaths": ["/dev/md0"],
     "writeAmpDeviceList": [
       "nvme1n1",
       "nvme2n1"
@@ -20,7 +20,7 @@
     "dipperNavySmallItemMaxSize": 1024,
     "dipperNavyBlock": 4096,
     "dipperNavyParcelMemoryMB": 6048,
-    "dipperSizeMB": 932000,
+    "nvmCacheSizeMB": 932000,
     "dipperUseDirectIO": true,
     "enableChainedItem": true,
     "htBucketPower": 26,

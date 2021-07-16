@@ -7,7 +7,7 @@
     "numPools" : 2,
     "poolSizes" : [0.5, 0.5],
     "allocFactor" : 2.0,
-    "dipperSizeMB" : 1024,
+    "nvmCacheSizeMB" : 1024,
     "dipperUseDirectIO": false,
     "dipperNavyUseStackAllocation": true,
     "navyNumInmemBuffers": 30

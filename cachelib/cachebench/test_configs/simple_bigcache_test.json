@@ -8,7 +8,7 @@
       "numPools": 1,
       "poolSizes": [1.0],
 
-      "dipperSizeMB": 800,
+      "nvmCacheSizeMB": 800,
       "dipperUseDirectIO": false,
 
       "dipperNavyBlock": 4096,

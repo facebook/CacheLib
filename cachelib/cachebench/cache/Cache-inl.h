@@ -107,38 +107,38 @@ Cache<Allocator>::Cache(CacheConfig config,
   }
 
   // Set up Navy
-  if (config_.dipperSizeMB) {
+  if (!isRamOnly()) {
     typename Allocator::NvmCacheConfig nvmConfig;
 
     nvmConfig.navyConfig.setBlockCacheDataChecksum(config_.navyDataChecksum);
 
     nvmConfig.enableFastNegativeLookups = true;
 
-    if (!config_.devicePaths.empty() && config_.devicePaths.size() == 1) {
+    if (config_.nvmCachePaths.size() == 1) {
       // if we get a directory, create a file. we will clean it up. If we
-      // already have a file, user provided it. So we will also keep it around
+      // already have a file, user provided it. We will also keep it around
       // after the tests.
-      auto devicePath = config_.devicePaths[0];
-      if (cachelib::util::isDir(devicePath)) {
+      auto path = config_.nvmCachePaths[0];
+      if (cachelib::util::isDir(path)) {
         const auto uniqueSuffix = folly::sformat("nvmcache_{}_{}", ::getpid(),
                                                  folly::Random::rand32());
-        devicePath = devicePath + "/" + uniqueSuffix;
-        util::makeDir(devicePath);
+        path = path + "/" + uniqueSuffix;
+        util::makeDir(path);
         shouldCleanupFiles_ = true;
-        nvmConfig.navyConfig.setSimpleFile(devicePath + "/navy_cache",
-                                           config_.dipperSizeMB * MB,
+        nvmConfig.navyConfig.setSimpleFile(path + "/navy_cache",
+                                           config_.nvmCacheSizeMB * MB,
                                            true /*truncateFile*/);
       } else {
-        nvmConfig.navyConfig.setSimpleFile(devicePath,
-                                           config_.dipperSizeMB * MB);
+        nvmConfig.navyConfig.setSimpleFile(path, config_.nvmCacheSizeMB * MB);
       }
-      nvmCacheFilePaths_.push_back(devicePath);
-    } else if (!config_.devicePaths.empty()) {
-      // We only support using the whole device for multiple paths
-      nvmConfig.navyConfig.setRaidFiles(config_.devicePaths,
-                                        config_.dipperSizeMB * MB);
+      nvmCacheFilePaths_.push_back(path);
+    } else if (config_.nvmCachePaths.size() > 1) {
+      // set up a software raid-0 across each nvm cache path.
+      nvmConfig.navyConfig.setRaidFiles(config_.nvmCachePaths,
+                                        config_.nvmCacheSizeMB * MB);
     } else {
-      nvmConfig.navyConfig.setMemoryFile(config_.dipperSizeMB * MB);
+      // use memory to mock NVM.
+      nvmConfig.navyConfig.setMemoryFile(config_.nvmCacheSizeMB * MB);
     }
 
     if (config_.navyNumInmemBuffers > 0) {
@@ -221,8 +221,6 @@ Cache<Allocator>::Cache(CacheConfig config,
     }
 
     allocatorConfig.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
-
-    usesNvm_ = true;
   }
 
   allocatorConfig.cacheName = "cachebench";
@@ -369,7 +367,7 @@ Stats Cache<Allocator>::getStats() const {
   }
 
   // nvm stats from navy
-  if (config_.dipperSizeMB && !navyStats.empty()) {
+  if (!isRamOnly() && !navyStats.empty()) {
     auto lookup = [&navyStats](const std::string& key) {
       return navyStats.find(key) != navyStats.end()
                  ? static_cast<uint64_t>(navyStats.at(key))

@@ -38,8 +38,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, numPools);
   JSONSetVal(configJson, poolSizes);
 
-  JSONSetVal(configJson, dipperSizeMB);
-  JSONSetVal(configJson, devicePaths);
+  JSONSetVal(configJson, nvmCacheSizeMB);
+  JSONSetVal(configJson, nvmCachePaths);
   JSONSetVal(configJson, writeAmpDeviceList);
 
   JSONSetVal(configJson, dipperNavyBlock);
@@ -90,7 +90,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   }
 }
 
-std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() {
+std::shared_ptr<RebalanceStrategy> CacheConfig::getRebalanceStrategy() const {
   if (poolRebalanceIntervalSec == 0) {
     return nullptr;
   }

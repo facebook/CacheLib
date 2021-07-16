@@ -7,7 +7,7 @@
     "numPools" : 2,
     "poolSizes" : [0.5, 0.5],
     "allocFactor" : 2.0,
-    "dipperSizeMB" : 1024,
+    "nvmCacheSizeMB" : 1024,
     "dipperNavyBigHashBucketSize": 4096,
     "dipperNavyBlock": 4096,
     "dipperNavyUseStackAllocation": true,

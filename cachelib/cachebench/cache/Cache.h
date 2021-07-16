@@ -48,12 +48,14 @@ class Cache {
 
   ~Cache();
 
-  bool isRamOnly() { return config_.dipperSizeMB == 0; }
+  // true if the cache only uses DRAM. false if the cache is configured to
+  // have NVM as well (even if it is mocked by DRAM underneath).
+  bool isRamOnly() const { return config_.nvmCacheSizeMB == 0; }
 
   void flushNvmCache() { cache_->flushNvmCache(); }
 
   bool isNvmCacheDisabled() const {
-    return usesNvm_ && !cache_->isNvmCacheEnabled();
+    return !isRamOnly() && !cache_->isNvmCacheEnabled();
   }
 
   void enableConsistencyCheck(const std::vector<std::string>& keys);
@@ -336,7 +338,7 @@ class Cache {
   bool checkGet(ValueTracker::Index opId, const ItemHandle& it);
   uint64_t fetchNandWrites() const;
 
-  CacheConfig config_;
+  const CacheConfig config_;
   std::vector<std::string> nvmCacheFilePaths_;
   const std::string cacheDir_;
   // The admission policy that tracks the accesses.
@@ -346,7 +348,6 @@ class Cache {
   std::unique_ptr<Allocator> cache_;
   std::unique_ptr<CacheMonitor> monitor_;
   std::vector<PoolId> pools_;
-  std::atomic<bool> usesNvm_{false};
   std::unordered_map<std::string, std::atomic<bool>> invalidKeys_;
   ChainedItemMovingSync movingSync_;
   Config allocatorConfig_;

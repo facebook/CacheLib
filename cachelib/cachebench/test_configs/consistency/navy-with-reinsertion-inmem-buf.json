@@ -6,7 +6,7 @@
 
     "allocFactor" : 2.0,
     "navyProbabilityReinsertionThreshold": 50,
-    "dipperSizeMB" : 512,
+    "nvmCacheSizeMB" : 512,
     "dipperUseDirectIO": false,
     "navyNumInmemBuffers": 30
   },

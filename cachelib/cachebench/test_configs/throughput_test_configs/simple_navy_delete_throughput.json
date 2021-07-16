@@ -1,7 +1,7 @@
 {
   "cache_config" : {
     "cacheSizeMB" : 5120,
-    "dipperSizeMB": 1400,
+    "nvmCacheSizeMB": 1400,
     "poolRebalanceIntervalSec" : 0
   },
   "test_config" : 

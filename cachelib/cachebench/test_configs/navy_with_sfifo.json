@@ -2,7 +2,7 @@
     "cache_config" : {
       "allocator": "LRU",
       "cacheSizeMB": 128,
-      "dipperSizeMB": 600,
+      "nvmCacheSizeMB": 600,
       "poolRebalanceIntervalSec" : 1,
       "moveOnSlabRelease" : true,
 

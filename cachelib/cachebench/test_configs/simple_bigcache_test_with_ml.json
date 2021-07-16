@@ -121,7 +121,7 @@
     "poolSizes": [
       1.0
     ],
-    "dipperSizeMB": 155507,
+    "nvmCacheSizeMB": 155507,
     "devicePaths": ["/dev/md0"],
     "dipperUseDirectIO": false,
     "dipperNavyBlock": 4096,

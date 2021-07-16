@@ -4,7 +4,7 @@
     "poolRebalanceIntervalSec" : 1,
     "moveOnSlabRelease" : false,
 
-    "dipperSizeMB" : 512,
+    "nvmCacheSizeMB" : 512,
     "dipperNavyUseRegionLru": false
   },
   "test_config" : 

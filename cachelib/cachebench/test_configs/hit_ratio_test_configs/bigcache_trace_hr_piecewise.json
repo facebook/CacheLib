@@ -9,7 +9,7 @@
     "numPools": 1,
     "poolSizes": [1.0],
 
-    "dipperSizeMB": 48838,
+    "nvmCacheSizeMB": 48838,
     "dipperUseDirectIO": false,
 
     "dipperNavyBlock": 4096,

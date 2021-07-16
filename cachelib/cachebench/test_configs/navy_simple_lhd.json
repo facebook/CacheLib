@@ -8,7 +8,7 @@
     "numPools" : 2,
     "poolSizes" : [0.3, 0.7],
 
-    "dipperSizeMB" : 512
+    "nvmCacheSizeMB" : 512
   },
   "test_config" :
     {

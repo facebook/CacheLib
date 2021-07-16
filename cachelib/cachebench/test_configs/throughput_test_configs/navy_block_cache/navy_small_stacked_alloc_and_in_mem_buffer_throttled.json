@@ -20,7 +20,7 @@
       "navyCleanRegions": 64,
       "navyNumInmemBuffers": 64,
 
-      "dipperSizeMB" : 2048,
+      "nvmCacheSizeMB" : 2048,
       "dipperNavyBigHashSizePct" : 0
     },
     "test_config" :

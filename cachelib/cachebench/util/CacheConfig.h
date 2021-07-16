@@ -72,10 +72,6 @@ struct CacheConfig : public JSONConfig {
   uint64_t numPools{1};
   std::vector<double> poolSizes{1.0};
 
-  // The size of dipper cache to use. Default to not use dipper. This is the
-  // overall size of the dipper resources
-  uint64_t dipperSizeMB{0};
-
   // uses a user specified file for caching. If the path specified is a file
   // or raw device, then navy uses that directly. If the path specificied is a
   // directory, we will create a file inside with appropriate size . If a
@@ -83,13 +79,17 @@ struct CacheConfig : public JSONConfig {
   // a file, cachebench preserves the file upon exit. User can also specify a
   // number of devices. Cachelib's flash cache engine (Navy) will use them in a
   // raid0 fashion
-  std::vector<std::string> devicePaths{};
+  std::vector<std::string> nvmCachePaths{};
+
+  // size of the NVM for caching. When more than one device path is
+  // specified, this is the size per device path. When this is non-zero and
+  // nvmCachePaths is empty, an in-memory block device is used.
+  uint64_t nvmCacheSizeMB{0};
 
   // list of device identifiers for the device path that can be used to
   // monitor the physical write amplification. If empty, physical write amp is
   // not computed. This can be specified as nvme1n1 or nvme1n2 etc, confirming
-  // to be a physical device identifier; where as the dipperDevicePath can be
-  // specified as any /dev that could point to a logical raid device.
+  // to be a physical device identifier;
   std::vector<std::string> writeAmpDeviceList{};
 
   // Navy specific: device block size, bytes.
@@ -212,7 +212,7 @@ struct CacheConfig : public JSONConfig {
   // The reason we return as a std::any is because the interface is a virtual
   // template class, and the actual type is determined by @allocator in
   // this config.
-  std::function<std::any(CacheConfig&)> nvmAdmissionPolicyFactory;
+  std::function<std::any(const CacheConfig&)> nvmAdmissionPolicyFactory;
 
   // User can implement a structure that polls stats from CacheAllocator
   // and saves the states to a backend/file/place they prefer.
@@ -235,7 +235,7 @@ struct CacheConfig : public JSONConfig {
 
   CacheConfig() {}
 
-  std::shared_ptr<RebalanceStrategy> getRebalanceStrategy();
+  std::shared_ptr<RebalanceStrategy> getRebalanceStrategy() const;
 };
 } // namespace cachebench
 } // namespace cachelib
