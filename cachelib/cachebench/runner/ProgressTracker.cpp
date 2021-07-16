@@ -21,7 +21,7 @@ ProgressTracker::~ProgressTracker() {
   }
 }
 
-void ProgressTracker::reportProgress() {
+void ProgressTracker::work() {
   auto now = std::chrono::system_clock::now();
   auto nowTimeT = std::chrono::system_clock::to_time_t(now);
   char buf[16];
