@@ -107,10 +107,9 @@ struct CacheConfig : public JSONConfig {
                                         4 * 512,  6 * 512,  8 * 512,
                                         12 * 512, 16 * 512, 32 * 512};
 
-  // Number of shards expressed as power of two for native request ordering in
-  // Navy. 0 means disabled. If disabled, default dipper level request
-  // ordering is enabled.
-  uint64_t dipperNavyReqOrderShardsPower{21};
+  // Number of shards expressed as power of two for request ordering in
+  // Navy. If 0, the default configuration of Navy(20) is used.
+  uint64_t navyReqOrderShardsPower{21};
 
   // Determins how much of the device is given to big hash engine in Navy
   uint64_t dipperNavyBigHashSizePct = 50;

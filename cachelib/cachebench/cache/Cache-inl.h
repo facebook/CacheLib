@@ -146,9 +146,9 @@ Cache<Allocator>::Cache(CacheConfig config,
           config_.navyNumInmemBuffers);
     }
 
-    if (config_.dipperNavyReqOrderShardsPower != 0) {
+    if (config_.navyReqOrderShardsPower != 0) {
       nvmConfig.navyConfig.setNavyReqOrderingShards(
-          config_.dipperNavyReqOrderShardsPower);
+          config_.navyReqOrderShardsPower);
     }
 
     // by default lru. if more than one fifo ratio is present, we use

@@ -45,7 +45,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyBlockSize);
   JSONSetVal(configJson, navySegmentedFifoSegmentRatio);
   JSONSetVal(configJson, navySizeClasses);
-  JSONSetVal(configJson, dipperNavyReqOrderShardsPower);
+  JSONSetVal(configJson, navyReqOrderShardsPower);
   JSONSetVal(configJson, dipperNavyBigHashSizePct);
   JSONSetVal(configJson, dipperNavyBigHashBucketSize);
   JSONSetVal(configJson, dipperNavyBloomFilterPerBucketSize);

@@ -126,7 +126,6 @@
     "navyBlockSize": 4096,
     "navySegmentedFifoSegmentRatio": [1],
     "navySizeClasses": [],
-    "dipperNavyReqOrderShardsPower": 0,
     "dipperNavyBigHashSizePct": 0,
     "navyHitsReinsertionThreshold": 1,
     "navyProbabilityReinsertionThreshold": 0,
