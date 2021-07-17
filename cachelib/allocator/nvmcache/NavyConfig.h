@@ -287,7 +287,7 @@ class BigHashConfig {
  * NvmCache.
  *
  * Notes: the reason why these settings cannot be directly passed to Navy
- * internal config https://fburl.com/diffusion/y5fqozuy and setup there is
+ * internal config navy/Factory.h and setup there is
  * because we have logic in "NavySetup.cpp" that translates this input config
  * into CacheProto. Therefore, we need this intermediary config in NvmCache
  * Config.

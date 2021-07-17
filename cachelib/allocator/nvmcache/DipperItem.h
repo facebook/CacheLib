@@ -46,8 +46,7 @@ class FOLLY_PACK_ATTR DipperItem {
   // The reason for the extra bool field is because without it, we'll be left
   // with a custom operator delete overload for constructor exception that
   // conflicts with another operator delete already defined.
-  // See this FB post I made for more info:
-  // https://fb.facebook.com/groups/474291069286180/permalink/1940743515974254/
+  // see an example here: https://ideone.com/5YEfwf
   static void* operator new(size_t count, size_t extra, bool = true);
 
   // Because we alloc extra (unknowable) amount of space, we cannot use sized

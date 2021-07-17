@@ -291,10 +291,6 @@ class AllocationClass {
   // will result in an invalid, inconsistent state for the serialized data.
   //
   // @throw std::logic_error if the object state can not be serialized
-  //
-  // TODO move the seriailization/deserialization into separate wrappers
-  // around this class and make the checks for restorability compile time. See
-  // t9554838
   serialization::AllocationClassObject saveState() const;
 
  private:

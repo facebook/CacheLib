@@ -119,8 +119,7 @@ void setupCacheProtosImpl(const navy::Device& device,
     //
     // Experiments showed that if we have 16 bytes for BF with 25 entries,
     // then optimal number of hash functions is 4 and false positive rate
-    // below 10%. See details:
-    // https://fb.facebook.com/groups/522950611436641/permalink/579237922474576/
+    // below 10%.
     if (bfSize > 0) {
       // We set 4 hash function unconditionally. This seems to be the best
       // for our use case. If BF size to bucket size ratio gets lower, try
