@@ -73,6 +73,12 @@ namespace detail {
 template <typename T>
 class ContextMap {
  public:
+  // create, return a context for an in-flight request for given key,
+  // and track this context in the map.
+  // @param key   the item key
+  // @param args  the arguments being forward to create context
+  // @return      the created context
+  // @throw std::invalid_argument if key already has context being tracked
   template <typename... Args>
   T& createContext(folly::StringPiece key, Args&&... args) {
     // construct the context first since it is the source of the key for its

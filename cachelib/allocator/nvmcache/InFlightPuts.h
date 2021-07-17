@@ -116,6 +116,7 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
 
  private:
   // execute only if the token is present and was not invalidated.
+  //  @param key the item key
   //  @param fn  function to execute
   //
   //  @return  true if the function was executed and token was destroyed

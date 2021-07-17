@@ -13,7 +13,8 @@ std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
 
-// public only for testing
+// create a flash device for Navy engines to use
+// made public for testing purposes
 std::unique_ptr<cachelib::navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);

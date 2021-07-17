@@ -27,6 +27,34 @@ uint64_t alignUp(uint64_t num, uint64_t alignment) {
   return alignDown(num + alignment - 1, alignment);
 }
 
+// the implementation to translate configs from NavyConfig into CacheProto,
+// the engine config interface, which can be used to create BigHash and/or
+// BlockCache engine
+//
+// @param device            the flash device
+// @param metadataSize      size of meta data in device
+// @param bigHashPctSize    the percentage of storage for BigHash
+// @param bucketSize        size of each bucket in BigHash
+// @param bfSize            the bloom filter size in BigHash
+// @param smallItemMaxSize  maximum size of item that will be store in BigHash
+// @param regionSize        size of a region in BlockCache
+// @param dataChecksum      whether checksum is enabled in BlockCache
+// @param segmentRatio      enable SegmentedFifo eviction policy and set ratio
+//                          of each segment in BlockCache
+// @param useLru            whether use LRU eviction policy in BlockCache
+// @param sizeClasses       set BlockCache size classes
+// @param cleanRegions      the number of clean region in BlockCache
+// @param reinsertionHitsThreshold         set hit based reinsertion policy and
+//                                         the threshold in BlockCache
+// @param reinsertionProbabilityThreshold  set probability based reinsertion
+//                                         policy and the probability threshold
+//                                         in BlockCache
+// @param numInMemBuffers    the number of in-memory buffers can be used for
+//                           regions in BlockCache
+// @param usesRaidFiles      whether the deivce is raid setup
+// @param proto              the output CacheProto
+//
+// @throw std::invalid_argument if input arguments are invalid
 void setupCacheProtosImpl(const navy::Device& device,
                           uint64_t metadataSize,
                           const unsigned int bigHashPctSize,
@@ -171,6 +199,9 @@ void setupCacheProtosImpl(const navy::Device& device,
   }
 }
 
+// Setup the CacheProto, includes BigHashProto and BlockCacheProto,
+// which is the configuration interface from Navy engine, and can be used to
+// create BigHash and BlockCache engines.
 void setupCacheProtos(const navy::NavyConfig& config,
                       const navy::Device& device,
                       cachelib::navy::CacheProto& proto) {

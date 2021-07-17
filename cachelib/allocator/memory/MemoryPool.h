@@ -164,7 +164,9 @@ class MemoryPool {
   // @param hint  hint referring to the slab. this can be an allocation that
   //              the user knows to exist in the slab. If this is nullptr, a
   //              random slab is selected from the pool and allocation class.
-  // @param zeroOnRelease   whether or not to zero out the slab
+  // @param zeroOnRelease  whether or not to zero out the slab
+  // @param shouldAbortFn  invoked in the code to see if this release slab
+  //                       process should be aborted
   //
   // @return  a valid context. If the slab is already released, then the
   //          caller needs to do nothing. If it is not released, then the caller
@@ -175,6 +177,8 @@ class MemoryPool {
   //        is invalid. Or if the mode is set to kResize but the receiver is
   //        also specified. Receiver class id can only be specified if the mode
   //        is set to kRebalance.
+  // @throw exception::SlabReleaseAborted if slab release is aborted due to
+  //        shouldAbortFn returning true.
   SlabReleaseContext startSlabRelease(
       ClassId victim,
       ClassId receiver,
@@ -215,7 +219,8 @@ class MemoryPool {
   // Reclaim the given number of advised away slabs for this pool from
   // the slab allocator.
   //
-  // @return the number of slabs reclaimed by the pool
+  // @param numSlabs   the maximum number of slab to be reclaimed.
+  // @return           the actual number of slabs reclaimed by the pool
   size_t reclaimSlabsAndGrow(size_t numSlabs);
 
   // for saving the state of the memory pool

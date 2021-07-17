@@ -154,7 +154,7 @@ class NvmCache {
   //                    the remove called if caller is only removing item in
   //                    nvm; if the caller is also removing the item from ram,
   //                    tombstone should be created before removing item in ram.
-  void remove(folly::StringPiece key, DeleteTombStoneGuard guard);
+  void remove(folly::StringPiece key, DeleteTombStoneGuard tombstone);
 
   // peek the nvmcache without bringing the item into the cache. creates a
   // temporary item handle with the content of the nvmcache. this is intended

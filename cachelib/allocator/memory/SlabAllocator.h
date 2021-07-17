@@ -76,6 +76,7 @@ class SlabAllocator {
   // caller needs to ensure that the same memory region of the appropriate
   // size is already mapped into the process.
   //
+  // @param object        Object that contains the data to restore SlabAllocator
   // @param memoryStart   the start of the memory that was originally used
   // @param memorySize    the size of the memory that was originally used
   // @param config        the new config for this allocator

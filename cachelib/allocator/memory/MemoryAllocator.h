@@ -116,16 +116,20 @@ class MemoryAllocator {
   // unmap the memory on destruction. this instantiation can not be saved and
   // restored.
   //
-  // @param disableFullCoredump exclude mapped region from core dumps
+  // @param config     The config for the allocator.
+  // @param memSize     The size of memory in bytes.
+  // @throw std::invalid_argument if the config is invalid or the size
+  //        passed in is too small to instantiate a slab allocator.
   MemoryAllocator(Config config, size_t memSize);
 
   // creates a memory allocator by restoring it from a serialized buffer.
-  // @param object        Object that contains the data to restore
-  //                      MemoryAllocator
-  // @param memoryStart   the start of the memory region that was originally
-  //                      used to create this memory allocator.
-  // @param memSize       the size of the memory region that was originally
-  //                      used to create this memory allocator
+  // @param object          Object that contains the data to restore
+  //                        MemoryAllocator
+  // @param memoryStart     the start of the memory region that was originally
+  //                        used to create this memory allocator.
+  // @param memSize         the size of the memory region that was originally
+  //                        used to create this memory allocator
+  // @param disableCoredump exclude mapped region from core dumps
   MemoryAllocator(const serialization::MemoryAllocatorObject& object,
                   void* memoryStart,
                   size_t memSize,
@@ -188,6 +192,7 @@ class MemoryAllocator {
                  bool ensureProvisionable = false);
 
   // shrink the existing pool by _bytes_ .
+  // @param id     the id for the pool
   // @param bytes  the number of bytes to be taken away from the pool
   // @return  true if the operation succeeded. false if the size of the pool is
   //          smaller than _bytes_
@@ -198,6 +203,7 @@ class MemoryAllocator {
 
   // grow an existing pool by _bytes_. This will fail if there is no
   // available memory across all the pools to provide for this pool
+  // @param id     the pool id to be grown.
   // @param bytes  the number of bytes to be added to the pool.
   // @return    true if the pool was grown. false if the necessary number of
   //            bytes were not available.
@@ -269,10 +275,11 @@ class MemoryAllocator {
   //         if the context belongs to a different slab.
   bool isAllocFreed(const SlabReleaseContext& ctx, void* memory) const;
 
-  // Check if the slab has all its active allocations freed
+  // Check if the slab has all its active allocations freed.
   //
-  // @return true if all allocs have been freed back to the allcoator
-  //         false otherwise
+  // @param ctx context returned by startSlabRelease.
+  // @return    true if all allocs have been freed back to the allcoator
+  //            false otherwise
   //
   // @throw std::invalid_argument if the pool id or allocation class id
   //        associated with the context is invalid.
@@ -293,7 +300,7 @@ class MemoryAllocator {
   // not exactly same as pre-startSlabRelease state because freed allocations
   // while trying to release the slab are not restored.
   //
-  // @param context         context returned by startSlabRelease
+  // @param context  the context returned by startSlabRelease
   //
   // @throw std::invalid_argument if the context is invalid or
   //        context is already released or all allocs in the context are
@@ -469,7 +476,9 @@ class MemoryAllocator {
 
   // fetch the allocation class info corresponding to a given size in a pool.
   //
-  // @return  a valid class id on success
+  // @param poolId  the pool to be allocated from
+  // @param nBytes  the allocation size
+  // @return        a valid class id on success
   // @throw   std::invalid_argument if the poolId is invalid or the size is
   //          outside of the allocation sizes for the memory pool.
   ClassId getAllocationClassId(PoolId poolId, uint32_t nBytes) const;
