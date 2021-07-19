@@ -22,11 +22,14 @@ class ForwardIterator
   ForwardIterator() = default;
   ForwardIterator(T* element, T* end) : element_(element), end_(end) {}
 
+  // Go to the next element
+  // @throw std::out_of_range if we iterate past the end pointer
   void increment() {
     checkSanity();
     ++element_;
   }
 
+  // Two iterators are equal only if elements and end pointers are equal
   bool equal(const ForwardIterator& rhs) const {
     return element_ == rhs.element_ && end_ == rhs.end_;
   }
@@ -42,7 +45,11 @@ class ForwardIterator
     }
   }
 
+  // Pointer to the element this iterator is referring to
   T* element_{};
+
+  // Point at the end element. This is different for iterators
+  // from different containers.
   T* end_{};
 };
 

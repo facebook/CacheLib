@@ -86,6 +86,7 @@ class FOLLY_PACK_ATTR Buffer {
       return *reinterpret_cast<uint8_t*>(curr_->getData());
     }
 
+    // Reaching the end of this iterator will reset the "buffer_" to nullptr
     void increment() {
       if (!curr_) {
         return;
@@ -340,7 +341,7 @@ class BufferManager {
   // Allocate a new allocation from existing buffers.
   // If there isn't enough storage in the existing buffers in BufferManager,
   // expand should be called, after which allocate can be tried again.
-  // Fork can happen between these two allocation calls.
+  //
   // Returns null BuffAddr if fails.
   BufferAddr allocate(uint32_t size);
 
@@ -443,6 +444,8 @@ class BufferManagerIterator
                       curr_.getDataOffset()};
   }
 
+  // Calling increment when we have reached the end will result in
+  // a null iterator.
   void increment() {
     ++curr_;
     while (curr_ == Buffer::Iterator{}) {
@@ -457,6 +460,7 @@ class BufferManagerIterator
     }
   }
 
+  // @throw std::runtime_error if we're dereferencing a null iterator
   T& dereference() const {
     if (curr_ == Buffer::Iterator{}) {
       throw std::runtime_error(
