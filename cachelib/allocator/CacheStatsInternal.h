@@ -118,13 +118,14 @@ struct Stats {
   // allocated with a parent handle that it's chained to)
   TLCounter numChainedChildItems{0};
 
-  // the numbers for move and evictions in the process of slab release. 
+  // the numbers for move and evictions in the process of slab release.
   AtomicCounter numMoveAttempts{0};
   AtomicCounter numMoveSuccesses{0};
   AtomicCounter numEvictionAttempts{0};
   AtomicCounter numEvictionSuccesses{0};
 
-  // the number times a refcount overflow occurred, resulting in an exception being thrown
+  // the number times a refcount overflow occurred, resulting in an exception
+  // being thrown
   AtomicCounter numRefcountOverflow{0};
 
   // The number of slabs being released right now.

@@ -17,7 +17,8 @@ class MM2Q;
 template <typename MMType>
 class MMTypeTest;
 
-// Implements an intrusive doubly linked list using DList. This is used to build MMContainers with multiple priorities.
+// Implements an intrusive doubly linked list using DList. This is used to build
+// MMContainers with multiple priorities.
 template <typename T, DListHook<T> T::*HookPtr>
 class MultiDList {
  public:

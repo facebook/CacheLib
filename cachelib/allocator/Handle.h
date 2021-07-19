@@ -16,7 +16,8 @@ namespace cachelib {
 namespace detail {
 // Bit mask for flags on cache handle
 enum class HandleFlags : uint8_t {
-  // Indicates if a handle has been created but not inserted into the cache yet. This is used to track if removeCB is invoked when the item is freed back.
+  // Indicates if a handle has been created but not inserted into the cache yet.
+  // This is used to track if removeCB is invoked when the item is freed back.
   kNascent = 1 << 0,
 
   // Indicate if the item was expired

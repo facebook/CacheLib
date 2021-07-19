@@ -64,9 +64,9 @@ class MM2Q {
                  *configState.hotSizePercent_ref(),
                  *configState.coldSizePercent_ref()) {}
 
-    // @param time      the refresh time in seconds to trigger an update in position upon access.
-    // An item will be promoted only once in each lru refresh time depite the
-    // number of accesses it gets.
+    // @param time      the refresh time in seconds to trigger an update in
+    // position upon access. An item will be promoted only once in each lru
+    // refresh time depite the number of accesses it gets.
     // @param udpateOnW whether to promote the item on write
     // @param updateOnR whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)

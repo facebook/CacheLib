@@ -26,7 +26,7 @@ struct ThroughputStats {
   uint64_t addChained{0};
   uint64_t addChainedFailure{0};
   // current number of ops executed. Read periodically to track progress
-  uint64_t ops{0}; 
+  uint64_t ops{0};
 
   // operator overload to aggregate multiple instances of ThroughputStats, one
   // from each  thread
