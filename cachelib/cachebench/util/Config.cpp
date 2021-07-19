@@ -72,11 +72,8 @@ bool StressorConfig::usesChainedItems() const {
   return false;
 }
 
-CacheBenchConfig::CacheBenchConfig(CacheConfig cacheConfig,
-                                   StressorConfig testConfig)
-    : cacheConfig_(cacheConfig), stressorConfig_(testConfig) {}
-
-CacheBenchConfig::CacheBenchConfig(const std::string& path) {
+CacheBenchConfig::CacheBenchConfig(
+    const std::string& path, CacheConfigCustomizer cacheConfigCustomizer) {
   std::string configString;
   if (!folly::readFile(path.c_str(), configString)) {
     throw std::invalid_argument(
@@ -101,7 +98,10 @@ CacheBenchConfig::CacheBenchConfig(const std::string& path) {
   }
 
   stressorConfig_ = StressorConfig{testConfigJson};
-  cacheConfig_ = CacheConfig{configJson["cache_config"]};
+  // if present, customize the cache configuration.
+  auto cacheConfig = CacheConfig{configJson["cache_config"]};
+  cacheConfig_ =
+      cacheConfigCustomizer ? cacheConfigCustomizer(cacheConfig) : cacheConfig;
 }
 
 DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,

@@ -219,11 +219,21 @@ struct StressorConfig : public JSONConfig {
   bool usesChainedItems() const;
 };
 
+// User can pass in a config customizer to add additional settings at runtime
+using CacheConfigCustomizer = std::function<CacheConfig(CacheConfig)>;
+
 // Configs for setting up the cache allocator and specify load test parameters
 class CacheBenchConfig {
  public:
-  CacheBenchConfig(CacheConfig cacheConfig, StressorConfig testConfig);
-  explicit CacheBenchConfig(const std::string& path);
+  // read the json file in the path and intialize the cache bench
+  // configuration. Some fb specific configuration is abstracted out of the
+  // json file and is set through a custom setup to keep the dependencies
+  // separate.
+  //
+  // @param path   path for the json file
+  // @param c      the customization function for cache config (optional)
+  explicit CacheBenchConfig(const std::string& path,
+                            CacheConfigCustomizer c = {});
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
   const StressorConfig& getStressorConfig() const { return stressorConfig_; }

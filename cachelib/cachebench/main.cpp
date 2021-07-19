@@ -105,7 +105,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  CacheBenchConfig config(FLAGS_json_test_config);
+  CacheBenchConfig config(FLAGS_json_test_config,
+                          customizeCacheConfigForFacebook);
   std::unique_ptr<OdslExporter> odslExporter_;
   std::unique_ptr<FB303ThriftService> fb303_;
   if (FLAGS_fb303_port == 0 && FLAGS_export_to_ods) {
@@ -113,7 +114,6 @@ int main(int argc, char** argv) {
   } else if (FLAGS_fb303_port > 0) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
-  auto cacheConfigCustomizer = customizeCacheConfigForFacebook;
   auto admPolicy =
       std::make_unique<FbStressorAdmPolicy>(config.getStressorConfig());
   std::cout << "Welcome to FB-internal version of cachebench" << std::endl;
@@ -124,20 +124,21 @@ int main(int argc, char** argv) {
   }
 
   CacheBenchConfig config(FLAGS_json_test_config);
-  auto cacheConfigCustomizer = [](CacheConfig c) { return c; };
   auto admPolicy = std::make_unique<StressorAdmPolicy>();
   std::cout << "Welcome to OSS version of cachebench" << std::endl;
 #endif
 
   try {
     runnerInstance.reset(new facebook::cachelib::cachebench::Runner{
-        config, FLAGS_progress_stats_file, FLAGS_progress,
-        cacheConfigCustomizer, std::move(admPolicy)});
+        config, std::move(admPolicy)});
 
     setupSignalHandler();
     setupTimeoutHandler();
 
-    return runnerInstance->run() ? 0 : 1;
+    return runnerInstance->run(std::chrono::seconds(FLAGS_progress),
+                               FLAGS_progress_stats_file)
+               ? 0
+               : 1;
   } catch (const std::exception& e) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;

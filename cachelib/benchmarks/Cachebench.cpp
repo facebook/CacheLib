@@ -58,13 +58,8 @@ int main(int argc, char** argv) {
   // name and config for different testings
   folly::addBenchmark(
       __FILE__, FLAGS_benchmark_name, [=](folly::UserCounters& counters) {
-        CacheBenchConfig config(test_config
-                                /* FLAGS_json_test_config */);
-        auto cacheConfigCustomizer = [](CacheConfig c) { return c; };
-        auto admPolicy = std::make_unique<StressorAdmPolicy>();
-
-        Runner runner(config, "" /* progress_stats_file */, 0 /* progress */,
-                      cacheConfigCustomizer, std::move(admPolicy));
+        CacheBenchConfig config(test_config);
+        Runner runner(config, std::make_unique<StressorAdmPolicy>());
         runner.run(counters);
         // "1" means iteration number, we always run once for cachebench
         return 1;

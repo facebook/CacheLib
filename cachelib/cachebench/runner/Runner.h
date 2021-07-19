@@ -11,21 +11,24 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-// User can pass in a config customizer to add additional settings at runtime
-using CacheConfigCustomizer = std::function<CacheConfig(CacheConfig)>;
 
 class Runner {
  public:
-  // @customizeCacheConfig    User can implement special handling to add custom
-  //                          cache configs they desire on each run
+  // @param config                the configuration for the cachebench run. This
+  //                              contains both the stressor configuration and
+  //                              the cache configuration.
+  // @param admPolicy             the implementation of the admission policy
+  //                              for cache
   Runner(const CacheBenchConfig& config,
-         const std::string& progressStatsFile,
-         uint64_t progressInterval,
-         CacheConfigCustomizer customizeCacheConfig,
          std::unique_ptr<StressorAdmPolicy> admPolicy);
 
+  // @param progressInterval    the interval at which periodic progress of the
+  //                            benchmark run is reported/tracked.
+  // @param progressStatsFile   the file to log periodic stats and progress
+  //                            to in addition to stdtout. Ignored if empty
   // @return true if the run was successful, false if there is a failure.
-  bool run();
+  bool run(std::chrono::seconds progressInterval,
+           const std::string& progressStatsFile);
 
   // for testings using folly::Benchmark
   // in addition to running time, cachebench has several metrics
@@ -36,12 +39,7 @@ class Runner {
   void abort() { stressor_->abort(); }
 
  private:
-  CacheBenchConfig config_;
-  CacheConfigCustomizer customizeCacheConfig_;
-
-  const std::string& progressStatsFile_;
-  const uint64_t progressInterval_;
-
+  // instance of the stressor.
   std::unique_ptr<Stressor> stressor_;
 };
 } // namespace cachebench
