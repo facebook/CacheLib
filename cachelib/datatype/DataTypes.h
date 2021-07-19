@@ -11,10 +11,6 @@
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/Iterators.h"
 
-// CL_REQUIRE(expression)
-//   use this after all the template arguments to require certain traits.
-#define CL_REQUIRE(...) typename = typename ::std::enable_if_t<__VA_ARGS__>
-
 namespace facebook {
 namespace cachelib {
 namespace util {

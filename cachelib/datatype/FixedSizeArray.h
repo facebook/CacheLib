@@ -9,7 +9,8 @@ namespace facebook {
 namespace cachelib {
 
 namespace detail {
-template <typename T, CL_REQUIRE(std::is_trivially_copyable<T>::value)>
+// @param T must be a POD like type
+template <typename T>
 class FOLLY_PACK_ATTR FixedSizeArrayLayout {
  public:
   // Compute the storage required for the number of elements
@@ -116,8 +117,6 @@ class FOLLY_PACK_ATTR FixedSizeArrayLayout {
   const T& getAt(uint32_t index) const { return elements_[index]; }
 };
 
-// TODO: remove this in favor of std::equal once
-//       we switch to use a std-compliant iterator
 template <typename InputIt1, typename InputIt2>
 bool isEqual(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2) {
   while (first1 != last1 && first2 != last2) {
@@ -143,6 +142,9 @@ bool isEqual(const FixedSizeArrayLayout<T>& l, const std::array<T, N>& r) {
 }
 } // namespace detail
 
+// @param T   must be a POD like type
+// @param C   this is an instance of CacheAllocator<> or provides
+//            the same functionality
 template <typename T, typename C>
 class FixedSizeArray {
  public:
@@ -171,8 +173,7 @@ class FixedSizeArray {
   // Construct a fixed size array from an ItemHandle
   // This modifies the item's memory
   // @throw std::invalid_argument  if the item does not have enough memory
-  template <typename SizeT,
-            CL_REQUIRE(std::is_convertible<SizeT, uint32_t>::value)>
+  template <typename SizeT>
   FixedSizeArray(ItemHandle handle, SizeT numElements)
       : layout_{std::move(handle)} {
     const auto requiredSize = computeStorageSize(numElements);
@@ -207,6 +208,7 @@ class FixedSizeArray {
   ConstIterator cbegin() const { return layout_->cbegin(); }
   ConstIterator cend() const { return layout_->cend(); }
 
+  // Return the number of elements in the array
   uint32_t size() const { return layout_->size(); }
 
   Element& operator[](uint32_t index) { return (*layout_)[index]; }
@@ -215,11 +217,15 @@ class FixedSizeArray {
   Element& at(uint32_t index) { return layout_->at(index); }
   const Element& at(uint32_t index) const { return layout_->at(index); }
 
+  // Copy elements in this array into the destination. The destination
+  // container must have sufficient capacity.
   template <typename InsertionIterator>
   void copyTo(InsertionIterator&& itr) const {
     return layout_->copyTo(std::forward<InsertionIterator>(itr));
   }
 
+  // Copy elements from start to the end. This array must have
+  // sufficient capacity.
   template <typename ForwardIterator>
   void copyFrom(ForwardIterator&& itr, ForwardIterator&& end) {
     return layout_->copyFrom(std::forward<ForwardIterator>(itr),
