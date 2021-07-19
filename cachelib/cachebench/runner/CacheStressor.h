@@ -42,7 +42,8 @@ class CacheStressor : public Stressor {
         throughputStats_(config_.numThreads),
         wg_(std::move(generator)),
         admPolicy_(std::move(admPolicy)),
-        hardcodedString_(genHardcodedString()) {
+        hardcodedString_(genHardcodedString()),
+        endTime_{std::chrono::system_clock::time_point::max()} {
     // if either consistency check is enabled or if we want to move
     // items during slab release, we want readers and writers to chained
     // allocs to be synchronized
@@ -104,8 +105,10 @@ class CacheStressor : public Stressor {
   // Then we start another worker thread that will be responsible for
   // spawning all the stress test threads
   void start() override {
-    startTime_ = std::chrono::system_clock::now();
-
+    {
+      std::lock_guard<std::mutex> l(timeMutex_);
+      startTime_ = std::chrono::system_clock::now();
+    }
     std::cout << folly::sformat("Total {:.2f}M ops to be run",
                                 config_.numThreads * config_.numOps / 1e6)
               << std::endl;
@@ -121,11 +124,10 @@ class CacheStressor : public Stressor {
       for (auto& worker : workers) {
         worker.join();
       }
-
-      testDurationNs_ =
-          std::chrono::nanoseconds{std::chrono::system_clock::now() -
-                                   startTime_}
-              .count();
+      {
+        std::lock_guard<std::mutex> l(timeMutex_);
+        endTime_ = std::chrono::system_clock::now();
+      }
     });
   }
 
@@ -141,11 +143,6 @@ class CacheStressor : public Stressor {
   void abort() override {
     wg_->markShutdown();
     Stressor::abort();
-  }
-
-  std::chrono::time_point<std::chrono::system_clock> startTime()
-      const override {
-    return startTime_;
   }
 
   Stats getCacheStats() const override { return cache_->getStats(); }
@@ -169,7 +166,12 @@ class CacheStressor : public Stressor {
     wg_->renderStats(elapsedTimeNs, counters);
   }
 
-  uint64_t getTestDurationNs() const override { return testDurationNs_; }
+  uint64_t getTestDurationNs() const override {
+    std::lock_guard<std::mutex> l(timeMutex_);
+    return std::chrono::nanoseconds{
+        std::min(std::chrono::system_clock::now(), endTime_) - startTime_}
+        .count();
+  }
 
  private:
   static std::string genHardcodedString() {
@@ -464,8 +466,14 @@ class CacheStressor : public Stressor {
 
   std::thread stressWorker_;
 
+  // mutex to protect reading the timestamps.
+  mutable std::mutex timeMutex_;
+
+  // time when the benchmark started.
   std::chrono::time_point<std::chrono::system_clock> startTime_;
-  uint64_t testDurationNs_{0};
+
+  // time when benchmark finished. This is set once the benchmark finishes
+  std::chrono::time_point<std::chrono::system_clock> endTime_;
 
   // Token bucket used to limit the operations per second.
   std::unique_ptr<folly::BasicTokenBucket<>> rateLimiter_;

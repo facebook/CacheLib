@@ -48,8 +48,7 @@ void ProgressTracker::work() {
     prevStats_ = currCacheStats;
 
     statsFile_ << "== Throughput Stats ==" << std::endl;
-    auto elapsedTimeNs =
-        std::chrono::nanoseconds{now - stressor_.startTime()}.count();
+    auto elapsedTimeNs = stressor_.getTestDurationNs();
     throughputStats.render(elapsedTimeNs, statsFile_);
 
     stressor_.renderWorkloadGeneratorStats(elapsedTimeNs, statsFile_);

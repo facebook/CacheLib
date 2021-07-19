@@ -49,11 +49,6 @@ class HighRefcountStressor : public Stressor {
     return stats;
   }
 
-  std::chrono::time_point<std::chrono::system_clock> startTime()
-      const override {
-    return startTime_;
-  }
-
   uint64_t getTestDurationNs() const override {
     return std::chrono::nanoseconds{endTime_ - startTime_}.count();
   }
@@ -93,11 +88,6 @@ class CachelibMapStressor : public Stressor {
     ThroughputStats stats;
     stats.ops = ops_;
     return stats;
-  }
-
-  std::chrono::time_point<std::chrono::system_clock> startTime()
-      const override {
-    return startTime_;
   }
 
   uint64_t getTestDurationNs() const override {
@@ -169,11 +159,6 @@ class CachelibRangeMapStressor : public Stressor {
     ThroughputStats stats;
     stats.ops = ops_;
     return stats;
-  }
-
-  std::chrono::time_point<std::chrono::system_clock> startTime()
-      const override {
-    return startTime_;
   }
 
   uint64_t getTestDurationNs() const override {

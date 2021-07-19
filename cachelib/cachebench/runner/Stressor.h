@@ -82,11 +82,8 @@ class Stressor {
   virtual void renderWorkloadGeneratorStats(
       uint64_t /*elapsedTimeNs*/, folly::UserCounters& /*counters*/) const {}
 
-  // time when the stress run started.
-  virtual std::chrono::time_point<std::chrono::system_clock> startTime()
-      const = 0;
-
-  // duration of the stress test.
+  // get the duration the test has run so far. If the test is finished, this
+  // is not expected to change.
   virtual uint64_t getTestDurationNs() const = 0;
 
   // start the stress run.
