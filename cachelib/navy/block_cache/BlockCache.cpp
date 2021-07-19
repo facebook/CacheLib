@@ -159,7 +159,6 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   case OpenStatus::Ready:
     insertCount_.inc();
     break;
-  case OpenStatus::Reclaimed:
   case OpenStatus::Retry:
     return Status::Retry;
   }
@@ -225,9 +224,6 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
     return status;
   }
   case OpenStatus::Retry:
-  case OpenStatus::Reclaimed:
-    // If status is reclaimed, we may still have a chance of reading the
-    // item, if it is eligible for re-insertion. So we retry.
     return Status::Retry;
   default:
     // Open region never returns other statuses than above
@@ -369,7 +365,6 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   auto [desc, slotSize, addr] = allocator_.allocate(size, priority);
 
-  XDCHECK(desc.status() != OpenStatus::Reclaimed);
   switch (desc.status()) {
   case OpenStatus::Ready:
     break;
@@ -380,9 +375,6 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   case OpenStatus::Retry:
     reinsertionErrorCount_.inc();
     return removeItem();
-  case OpenStatus::Reclaimed:
-    reinsertionErrorCount_.inc();
-    break;
   }
   auto closeRegionGuard =
       folly::makeGuard([this, desc = std::move(desc)]() mutable {

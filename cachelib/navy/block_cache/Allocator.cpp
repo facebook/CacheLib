@@ -93,7 +93,6 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   if (rid.valid()) {
     auto& region = regionManager_.getRegion(rid);
     auto [desc, addr] = region.openAndAllocate(size);
-    XDCHECK_NE(OpenStatus::Reclaimed, desc.status());
     XDCHECK_NE(OpenStatus::Retry, desc.status());
     if (desc.isReady()) {
       return std::make_tuple(std::move(desc), size, addr);

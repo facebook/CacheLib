@@ -29,9 +29,6 @@ enum class OpenStatus {
 
   // Error (like too large, out of regions)
   Error,
-
-  // Region is being reclaimed
-  Reclaimed,
 };
 
 class RegionDescriptor;
