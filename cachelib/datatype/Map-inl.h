@@ -427,7 +427,6 @@ void Map<K, V, C>::compact() {
           "hashtable cannot have insufficient space during a compaction");
     }
     if (!oldAddr) {
-      // TODO: need to store key as a local, non-packed, variable to compile
       auto key = itr->key;
       throw std::runtime_error(folly::sformat(
           "old entry is missing, this should never happen. key: {}", key));

@@ -269,7 +269,7 @@ class BufferManager {
   using Item = typename CacheType::Item;
   using ItemHandle = typename CacheType::ItemHandle;
 
-  // TODO: remove compaction callback in favor of using iterator to
+  // TODO: T95574601 remove compaction callback in favor of using iterator to
   //       update hash table.
   // Compaction callback
   // @param void*       pointer to a copy of the original allocation in the
@@ -278,8 +278,8 @@ class BufferManager {
   using CompactionCB = std::function<void(void*, BufferAddr)>;
 
   // Maximum size for a single chained item.
-  // TODO: This is just under 1MB to allow some room for the chained item header
-  //       and buffer header. We may make this configurable if needed.
+  // TODO: T37573713 This is just under 1MB to allow some room for the chained
+  //       item header and buffer header. We can make this configurable.
   static constexpr uint32_t kMaxBufferCapacity = 1024 * 1024 - 100;
 
   BufferManager() = default;
