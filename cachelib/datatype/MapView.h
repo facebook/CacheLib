@@ -63,7 +63,7 @@ class MapView {
       if (curr_ == Buffer::Iterator()) {
         // Currently, curr_ is invalid. So we increment to try to find
         // an valid iterator
-        increment();
+        incrementIntoNextBuffer();
       }
     }
 
@@ -76,14 +76,19 @@ class MapView {
                         curr_.getDataOffset()};
     }
 
+    // Calling increment when we have reached the end will result in
+    // a null iterator.
+    // @throw std::out_of_range if we move past the end
     void increment() {
+      if (curr_ == Buffer::Iterator{}) {
+        throw std::out_of_range(fmt::format(
+            "Moving past the end of all buffers. Size of buffers: {}",
+            buffers_->size()));
+      }
+
       ++curr_;
-      while (curr_ == Buffer::Iterator{}) {
-        if (++index_ == buffers_->size()) {
-          // we've reached the end of Buffer
-          return;
-        }
-        curr_ = const_cast<Buffer*>(buffers_->at(index_))->begin();
+      if (curr_ == Buffer::Iterator{}) {
+        incrementIntoNextBuffer();
       }
     }
 
@@ -101,7 +106,17 @@ class MapView {
     }
 
    private:
-    std::vector<const Buffer*>* buffers_;
+    void incrementIntoNextBuffer() {
+      while (curr_ == Buffer::Iterator{}) {
+        if (++index_ == buffers_->size()) {
+          // we've reached the end of Buffer
+          return;
+        }
+        curr_ = const_cast<Buffer*>(buffers_->at(index_))->begin();
+      }
+    }
+
+    std::vector<const Buffer*>* buffers_{};
     uint32_t index_{0};
     detail::Buffer::Iterator curr_{};
   };

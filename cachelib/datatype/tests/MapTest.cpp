@@ -659,6 +659,9 @@ class MapTest : public ::testing::Test {
 
     map.compact();
     ASSERT_EQ(map.begin(), map.end());
+
+    auto itr = map.begin();
+    ASSERT_THROW(++itr, std::out_of_range);
   }
 
   void testStdContainer() {

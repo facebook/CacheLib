@@ -73,6 +73,9 @@ class MapViewTest : public ::testing::Test {
 
     BasicMapView mapView{*parent, allocs.getChain()};
     ASSERT_EQ(mapView.begin(), mapView.end());
+
+    auto itr = mapView.begin();
+    ASSERT_THROW(++itr, std::out_of_range);
   }
 
   void testIterator() {

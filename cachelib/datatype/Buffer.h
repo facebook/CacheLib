@@ -69,7 +69,7 @@ class FOLLY_PACK_ATTR Buffer {
     Iterator() = default;
     explicit Iterator(Buffer& buffer)
         : buffer_(&buffer), curr_(buffer.getFirstSlot()) {
-      if (curr_ == nullptr) {
+      if (!curr_) {
         buffer_ = nullptr;
       } else if (curr_->isRemoved()) {
         // If current slot is marked as removed, increment to the next valid one
@@ -77,6 +77,7 @@ class FOLLY_PACK_ATTR Buffer {
       }
     }
 
+    // @throw std::runtime_error if we're dereferencing a null iterator
     uint8_t& dereference() const {
       if (!curr_) {
         throw std::runtime_error(
@@ -87,9 +88,12 @@ class FOLLY_PACK_ATTR Buffer {
     }
 
     // Reaching the end of this iterator will reset the "buffer_" to nullptr
+    // @throw std::out_of_range if we move pass the end pointer
     void increment() {
       if (!curr_) {
-        return;
+        throw std::out_of_range(
+            fmt::format("Moving past end pointer. Buffer: {}",
+                        reinterpret_cast<uintptr_t>(buffer_)));
       }
 
       while ((curr_ = buffer_->getNextSlot(*curr_))) {
@@ -432,7 +436,7 @@ class BufferManagerIterator
     if (curr_ == Buffer::Iterator()) {
       // Currently, curr_ is invalid. So we increment to try to find
       // an valid iterator
-      increment();
+      incrementIntoNextBuffer();
     }
   }
 
@@ -446,17 +450,16 @@ class BufferManagerIterator
 
   // Calling increment when we have reached the end will result in
   // a null iterator.
+  // @throw std::out_of_range if moving the iterator past the end
   void increment() {
-    ++curr_;
-    while (curr_ == Buffer::Iterator{}) {
-      auto allocs = mgr_.cache_->viewAsChainedAllocs(*mgr_.parent_);
-      auto* item = allocs.getNthInChain(++index_);
-      if (!item) {
-        // we've reached the end of BufferManager
-        return;
-      }
+    if (curr_ == Buffer::Iterator{}) {
+      throw std::out_of_range(
+          "BufferManagerIterator:: Moving past the end of all buffers.");
+    }
 
-      curr_ = item->template getMemoryAs<Buffer>()->begin();
+    ++curr_;
+    if (curr_ == Buffer::Iterator{}) {
+      incrementIntoNextBuffer();
     }
   }
 
@@ -474,6 +477,19 @@ class BufferManagerIterator
   }
 
  private:
+  void incrementIntoNextBuffer() {
+    while (curr_ == Buffer::Iterator{}) {
+      auto allocs = mgr_.cache_->viewAsChainedAllocs(*mgr_.parent_);
+      auto* item = allocs.getNthInChain(++index_);
+      if (!item) {
+        // we've reached the end of BufferManager
+        return;
+      }
+
+      curr_ = item->template getMemoryAs<Buffer>()->begin();
+    }
+  }
+
   uint32_t index_{0};
   const Mgr& mgr_;
   Buffer::Iterator curr_{};
