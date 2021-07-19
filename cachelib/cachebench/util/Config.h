@@ -110,9 +110,9 @@ struct ReplayGeneratorConfig : public JSONConfig {
   // The time interval threshold when replaySerializationMode is relaxed.
   uint64_t relaxedSerialIntervalMs{500};
 
-  // # of extra fields in trace sample that we track broken down stats.
-  // These fields are placed after defined fields:
-  // https://fburl.com/diffusion/hl3qerc9
+  // # of extra fields in trace sample. These are used to offer break down of
+  // stats by some workloadload generators.  These fields are placed after
+  // defined fields
   uint32_t numAggregationFields{0};
 
   // # of extra fields after the defined fields and numAggregationFields in

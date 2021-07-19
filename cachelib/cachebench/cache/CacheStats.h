@@ -74,9 +74,9 @@ struct Stats {
   uint64_t invalidDestructorCount{0};
   int64_t unDestructedItemCount{0};
 
-  // Attempt to capture the NVM ODS counters:
-  // https://fburl.com/diffusion/4ohscddo. Cache implementation can decide what
-  // to populate since not all of those are interesting when running cachebench.
+  // populate the counters related to nvm usage. Cache implementation can decide
+  // what to populate since not all of those are interesting when running
+  // cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
   // errors from the nvm engine.
