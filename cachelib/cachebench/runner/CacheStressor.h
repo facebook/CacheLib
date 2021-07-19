@@ -22,8 +22,10 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-// All items value in CacheStressor follows CacheValue schema, which
-// contains a few integers for sanity checks use. So it is invalid
+
+// Implementation of stressor that uses a workload generator to stress an
+// instance of the cache.  All item's value in CacheStressor follows CacheValue
+// schema, which contains a few integers for sanity checks use. So it is invalid
 // to use item.getMemory and item.getSize APIs.
 template <typename Allocator>
 class CacheStressor : public Stressor {
@@ -32,8 +34,10 @@ class CacheStressor : public Stressor {
   using Key = typename CacheT::Key;
   using ItemHandle = typename CacheT::ItemHandle;
 
-  // @param wrapper   wrapper that encapsulate the CacheAllocator
-  // @param config    stress test config
+  // @param cacheConfig   the config to instantiate the cache instance
+  // @param config        stress test config
+  // @param generator     workload  generator
+  // @param admPolicy     admission policy for the cache
   CacheStressor(CacheConfig cacheConfig,
                 StressorConfig config,
                 std::unique_ptr<GeneratorBase>&& generator,
@@ -45,7 +49,7 @@ class CacheStressor : public Stressor {
         hardcodedString_(genHardcodedString()),
         endTime_{std::chrono::system_clock::time_point::max()} {
     // if either consistency check is enabled or if we want to move
-    // items during slab release, we want readers and writers to chained
+    // items during slab release, we want readers and writers of chained
     // allocs to be synchronized
     typename CacheT::ChainedItemMovingSync movingSync;
     if (config_.usesChainedItems() &&
@@ -65,8 +69,9 @@ class CacheStressor : public Stressor {
 
     if (cacheConfig.useTraceTimeStamp &&
         cacheConfig.tickerSynchingSeconds > 0) {
-      // Create TimeStampTicker to allow time synching based on traces'
-      // timestamps.
+      // When using trace based replay for generating the workload,
+      // TimeStampTicker allows syncing the notion of time between the
+      // cache and the workload generator based on timestamps in the trace.
       ticker_ = std::make_shared<TimeStampTicker>(
           config.numThreads, cacheConfig.tickerSynchingSeconds,
           [wg = wg_.get()](double elapsedSecs) {
@@ -100,10 +105,8 @@ class CacheStressor : public Stressor {
 
   ~CacheStressor() override { finish(); }
 
-  // Start the stress test
-  // We first launch a stats worker that will wake up periodically
-  // Then we start another worker thread that will be responsible for
-  // spawning all the stress test threads
+  // Start the stress test by spawning the worker threads and waiting for them
+  // to finish the stress operations.
   void start() override {
     {
       std::lock_guard<std::mutex> l(timeMutex_);
@@ -140,13 +143,17 @@ class CacheStressor : public Stressor {
     cache_->clearCache();
   }
 
+  // abort the stress run by indicating to the workload generator and
+  // delegating to the base class abort() to stop the test.
   void abort() override {
     wg_->markShutdown();
     Stressor::abort();
   }
 
+  // obtain stats from the cache instance.
   Stats getCacheStats() const override { return cache_->getStats(); }
 
+  // obtain aggregated throughput stats for the stress run so far.
   ThroughputStats aggregateThroughputStats() const override {
     ThroughputStats res{};
     for (const auto& stats : throughputStats_) {
@@ -199,12 +206,13 @@ class CacheStressor : public Stressor {
     return lockEnabled_ ? Lock{getLock(key)} : Lock{};
   }
 
+  // populate the input item handle according to the stress setup.
   void populateItem(ItemHandle& handle) {
     if (!config_.populateItem) {
       return;
     }
-    assert(handle);
-    assert(cache_->getSize(handle) <= 4 * 1024 * 1024);
+    XDCHECK(handle);
+    XDCHECK_LE(cache_->getSize(handle), 4ULL * 1024 * 1024);
     if (cache_->consistencyCheckEnabled()) {
       cache_->setUint64ToItem(handle, folly::Random::rand64(rng));
     } else {
@@ -213,8 +221,8 @@ class CacheStressor : public Stressor {
   }
 
   // Runs a number of operations on the cache allocator. The actual
-  // operations and key/value used are determined by a set of random
-  // number generators
+  // operations and key/value used are determined by the workload generator
+  // initialized.
   //
   // Throughput and Hit/Miss rates are tracked here as well
   //
@@ -247,6 +255,9 @@ class CacheStressor : public Stressor {
          !cache_->isNvmCacheDisabled() && !shouldTestStop();
          ++i) {
       try {
+        // at the end of every operation, throttle per the config.
+        SCOPE_EXIT { throttleFn(); };
+          // detect refcount leaks when run in  debug mode.
 #ifndef NDEBUG
         auto checkCnt = [](int cnt) {
           if (cnt != 0) {
@@ -276,7 +287,6 @@ class CacheStressor : public Stressor {
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);
 
-          throttleFn();
           break;
         }
         case OpType::kLoneGet:
@@ -311,7 +321,6 @@ class CacheStressor : public Stressor {
             result = OpResultType::kGetHit;
           }
 
-          throttleFn();
           break;
         }
         case OpType::kDel: {
@@ -321,7 +330,6 @@ class CacheStressor : public Stressor {
           if (res == CacheT::RemoveRes::kNotFoundInRam) {
             ++stats.delNotFound;
           }
-          throttleFn();
           break;
         }
         case OpType::kAddChained: {
@@ -358,7 +366,6 @@ class CacheStressor : public Stressor {
           if (chainSuccessful && cache_->consistencyCheckEnabled()) {
             cache_->trackChainChecksum(it);
           }
-          throttleFn();
           break;
         }
         case OpType::kUpdate: {
@@ -375,8 +382,6 @@ class CacheStressor : public Stressor {
             break;
           }
           cache_->updateItem(it);
-
-          throttleFn();
           break;
         }
         default:
@@ -397,6 +402,15 @@ class CacheStressor : public Stressor {
     wg_->markFinish();
   }
 
+  // inserts key into the cache if the admission policy also indicates the key
+  // is worthy to be cached.
+  //
+  // @param pid         pool id to insert the key
+  // @param stats       reference to the stats structure.
+  // @param key         the key to be inserted
+  // @param size        size of the cache value
+  // @param ttlSecs     ttl for the value
+  // @param featureMap  feature map for admission policy decisions.
   OpResultType setKey(
       PoolId pid,
       ThroughputStats& stats,
@@ -422,6 +436,15 @@ class CacheStressor : public Stressor {
     }
   }
 
+  // fetch a request from the workload generator for a particular pool
+  // @param pid             the pool id chosen for the request.
+  // @param gen             the thread local random number generator to be fed
+  //                        to the workload generator  for constructing the
+  //                        request.
+  // @param lastRequestId   optional information about the last request id that
+  //                        was given to this thread by the workload generator.
+  //                        This is used to provide continuity by some generator
+  //                        implementations.
   const Request& getReq(const PoolId& pid,
                         std::mt19937_64& gen,
                         std::optional<uint64_t>& lastRequestId) {
@@ -441,12 +464,13 @@ class CacheStressor : public Stressor {
     rateLimiter_->consumeWithBorrowAndWait(1);
   }
 
-  const StressorConfig config_;
+  const StressorConfig config_; // config for the stress run
 
-  std::vector<ThroughputStats> throughputStats_;
+  std::vector<ThroughputStats> throughputStats_; // thread local stats
 
-  std::unique_ptr<GeneratorBase> wg_;
+  std::unique_ptr<GeneratorBase> wg_; // workload generator
 
+  // admission policy for the cache
   std::unique_ptr<StressorAdmPolicy> admPolicy_;
 
   // locks when using chained item and moving.
@@ -458,18 +482,21 @@ class CacheStressor : public Stressor {
   // memorize rng to improve random performance
   folly::ThreadLocalPRNG rng;
 
+  // string used for generating random payloads
   const std::string hardcodedString_;
 
   std::unique_ptr<CacheT> cache_;
+
   // Ticker that syncs the time according to trace timestamp.
   std::shared_ptr<TimeStampTicker> ticker_;
 
+  // main stressor thread
   std::thread stressWorker_;
 
   // mutex to protect reading the timestamps.
   mutable std::mutex timeMutex_;
 
-  // time when the benchmark started.
+  // start time for the stress test
   std::chrono::time_point<std::chrono::system_clock> startTime_;
 
   // time when benchmark finished. This is set once the benchmark finishes
