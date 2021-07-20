@@ -11,10 +11,9 @@ namespace cachebench {
 FastShutdownStressor::FastShutdownStressor(const CacheConfig& cacheConfig,
                                            uint64_t numOps)
     : numOps_(numOps),
+      cacheDir_{folly::sformat("/tmp/cache_bench_fss_{}", getpid())},
       cache_(std::make_unique<Cache<LruAllocator>>(
-          cacheConfig,
-          nullptr,
-          folly::sformat("/tmp/cache_bench_fss_{}", getpid()))) {}
+          cacheConfig, nullptr, cacheDir_)) {}
 
 void FastShutdownStressor::start() {
   startTime_ = std::chrono::system_clock::now();
@@ -115,10 +114,11 @@ void FastShutdownStressor::start() {
     std::cout << "Reattaching to cache...\n";
     cache_->reattach();
     expectedAbortCount++;
-    if (cache_->getNumAbortedReleases() != expectedAbortCount) {
+    const auto stats = cache_->getStats();
+    if (stats.numAbortedSlabReleases != expectedAbortCount) {
       throw std::runtime_error(
           folly::sformat("Failed. Expected abort count did not match {} {}",
-                         cache_->getNumAbortedReleases(), expectedAbortCount));
+                         stats.numAbortedSlabReleases, expectedAbortCount));
     }
   }
 }

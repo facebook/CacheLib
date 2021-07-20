@@ -62,10 +62,6 @@ class Cache {
 
   bool consistencyCheckEnabled() const { return valueTracker_ != nullptr; }
 
-  uint64_t getNumAbortedReleases() const {
-    return cache_->getGlobalCacheStats().numAbortedSlabReleases;
-  }
-
   void cleanupSharedMem() {
     if (!cacheDir_.empty()) {
       cache_->cleanupStrayShmSegments(allocatorConfig_.cacheDir,

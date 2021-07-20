@@ -37,6 +37,8 @@ class FastShutdownStressor : public Stressor {
   // number of times the test operates
   const uint64_t numOps_{};
 
+  std::string cacheDir_{};
+
   // instance of the cache
   std::unique_ptr<Cache<LruAllocator>> cache_;
 
