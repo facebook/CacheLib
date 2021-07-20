@@ -18,7 +18,7 @@
 namespace facebook {
 namespace cachelib {
 
-// Holds all necessary data to do an async dipper put that is queued to dipper
+// Holds all necessary data to do an async nvm put that is queued to nvm
 class PutCtx {
  public:
   PutCtx(folly::StringPiece _key,
@@ -40,7 +40,7 @@ class PutCtx {
   util::LatencyTracker tracker_;
 };
 
-// Holds all necessary data to do an async dipper remove
+// Holds all necessary data to do an async nvm remove
 class DelCtx {
  public:
   DelCtx(folly::StringPiece key,
@@ -68,7 +68,7 @@ class DelCtx {
 
 namespace detail {
 // Keeps track of the contexts that are utilized by in-flight requests in
-// dipper. The contexts need to be accessed through their reference. Hence
+// nvm. The contexts need to be accessed through their reference. Hence
 // they are keyed by the actual instance of the context.
 template <typename T>
 class ContextMap {

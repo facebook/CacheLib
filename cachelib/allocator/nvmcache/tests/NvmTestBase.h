@@ -103,7 +103,7 @@ class NvmCacheTest : public testing::Test {
   // cache directory for the cache
   std::string cacheDir_;
 
-  // the config for the allocator that also includes the dipper config
+  // the config for the allocator that also includes the nvm config
   AllocatorT::Config allocConfig_;
 
   // cache instance

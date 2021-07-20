@@ -32,7 +32,7 @@ add_library (cachelib_allocator
     MemoryMonitor.cpp
     memory/SlabAllocator.cpp
     memory/Slab.cpp
-    nvmcache/DipperItem.cpp
+    nvmcache/NvmItem.cpp
     nvmcache/NavyConfig.cpp
     nvmcache/NavySetup.cpp
     NvmCacheState.cpp
@@ -97,7 +97,7 @@ if (BUILD_TESTS)
   add_test (tests/AllocatorHitStatsTypeTest.cpp)
   add_test (tests/MultiAllocatorTest.cpp)
   add_test (tests/NvmAdmissionPolicyTest.cpp)
-  add_test (nvmcache/tests/DipperItemTests.cpp)
+  add_test (nvmcache/tests/NvmItemTests.cpp)
   add_test (nvmcache/tests/InFlightPutsTest.cpp)
   add_test (nvmcache/tests/TombStoneTests.cpp)
   add_test (nvmcache/tests/NavySetupTest.cpp)

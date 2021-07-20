@@ -8,7 +8,7 @@ namespace cachelib {
 
 /**
  * If the value is set to true for some type T, then T is safe to persistently
- * store in shared memory or dipper.
+ * store in shared memory or nvm.
  */
 template <class T>
 struct IsShmSafe {
@@ -22,7 +22,7 @@ struct CheckSize {};
 
 /**
  * Certifies that the type named by 'Name' is of the given size and is
- * safe to store in shared memory or dipper.
+ * safe to store in shared memory or nvm.
  */
 #define CACHELIB_SHM_CERTIFY(Name, size)                        \
   template <>                                                   \

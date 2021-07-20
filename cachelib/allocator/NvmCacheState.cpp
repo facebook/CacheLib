@@ -134,7 +134,7 @@ time_t NvmCacheState::getCreationTime() const { return creationTime_; }
 void NvmCacheState::clearPrevState() {
   auto dropFile = getFileNameFor(kShouldDropNvmCache);
   if (::unlink(dropFile.data()) != 0 && errno != ENOENT) {
-    util::throwSystemError(errno, "Failed to delete dipper run file");
+    util::throwSystemError(errno, "Failed to delete nvm run file");
   }
   XDCHECK(metadataFile_);
   ftruncate(metadataFile_->fd(), 0);

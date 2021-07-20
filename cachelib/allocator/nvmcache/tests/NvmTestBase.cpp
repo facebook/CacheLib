@@ -109,7 +109,7 @@ void NvmCacheTest::iceRoll() {
 }
 
 void NvmCacheTest::iceColdRoll() {
-  // shutdown with cold roll and indicate that we want to drop dipper
+  // shutdown with cold roll and indicate that we want to drop nvm
   cache_.reset();
 
   const auto fileName = NvmCacheState::getFileForNvmCacheDrop(cacheDir_);

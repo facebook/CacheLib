@@ -1,7 +1,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
-#include "cachelib/allocator/nvmcache/DipperItem.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 namespace facebook {
 namespace cachelib {
 namespace tests {
@@ -18,21 +18,20 @@ std::string genRandomStr(size_t len) {
 }
 } // namespace
 
-TEST(DipperItemTest, SingleBlob) {
+TEST(NvmItemTest, SingleBlob) {
   folly::StringPiece data{"helloworld"};
   uint32_t origSize = 5;
   Blob blob{origSize, data};
-  size_t bufSize = DipperItem::estimateVariableSize(blob);
-  auto dItem =
-      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blob));
-  ASSERT_EQ(1, dItem->getNumBlobs());
-  ASSERT_EQ(data, dItem->getBlob(0).data);
-  ASSERT_EQ(origSize, dItem->getBlob(0).origAllocSize);
-  ASSERT_THROW(dItem->getBlob(folly::Random::rand32() + 1),
+  size_t bufSize = NvmItem::estimateVariableSize(blob);
+  auto nvmItem = std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blob));
+  ASSERT_EQ(1, nvmItem->getNumBlobs());
+  ASSERT_EQ(data, nvmItem->getBlob(0).data);
+  ASSERT_EQ(origSize, nvmItem->getBlob(0).origAllocSize);
+  ASSERT_THROW(nvmItem->getBlob(folly::Random::rand32() + 1),
                std::invalid_argument);
 }
 
-TEST(DipperItemTest, MultipleBlobs) {
+TEST(NvmItemTest, MultipleBlobs) {
   int nBlobs = folly::Random::rand32(0, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
@@ -44,20 +43,20 @@ TEST(DipperItemTest, MultipleBlobs) {
         len - extra, folly::StringPiece{strings[i].data(), strings[i].size()}});
   }
 
-  size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  auto dItem =
-      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs));
+  size_t bufSize = NvmItem::estimateVariableSize(blobs);
+  auto nvmItem =
+      std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs));
 
-  ASSERT_EQ(nBlobs, dItem->getNumBlobs());
+  ASSERT_EQ(nBlobs, nvmItem->getNumBlobs());
   for (int i = 0; i < nBlobs; i++) {
-    ASSERT_EQ(blobs[i].data, dItem->getBlob(i).data);
-    ASSERT_EQ(blobs[i].origAllocSize, dItem->getBlob(i).origAllocSize);
+    ASSERT_EQ(blobs[i].data, nvmItem->getBlob(i).data);
+    ASSERT_EQ(blobs[i].origAllocSize, nvmItem->getBlob(i).origAllocSize);
   }
-  ASSERT_THROW(dItem->getBlob(folly::Random::rand32(nBlobs, 1024 * 1024)),
+  ASSERT_THROW(nvmItem->getBlob(folly::Random::rand32(nBlobs, 1024 * 1024)),
                std::invalid_argument);
 }
 
-TEST(DipperItemTest, TotalSize) {
+TEST(NvmItemTest, TotalSize) {
   int nBlobs = folly::Random::rand32(0, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
@@ -69,14 +68,14 @@ TEST(DipperItemTest, TotalSize) {
              folly::StringPiece{strings[i].data(), strings[i].size()}});
   }
 
-  size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  auto dItem =
-      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs));
+  size_t bufSize = NvmItem::estimateVariableSize(blobs);
+  auto nvmItem =
+      std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs));
 
-  ASSERT_EQ(bufSize + sizeof(DipperItem), dItem->totalSize());
+  ASSERT_EQ(bufSize + sizeof(NvmItem), nvmItem->totalSize());
 }
 
-TEST(DipperItemTest, MultipleBlobsOverFlow) {
+TEST(NvmItemTest, MultipleBlobsOverFlow) {
   int nBlobs = folly::Random::rand32(0, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
@@ -94,22 +93,20 @@ TEST(DipperItemTest, MultipleBlobsOverFlow) {
   blobs.push_back(Blob{static_cast<uint32_t>(maxLen),
                        folly::StringPiece{buf.get(), maxLen}});
 
-  size_t bufSize = DipperItem::estimateVariableSize(blobs);
-  ASSERT_THROW(
-      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blobs)),
-      std::out_of_range);
+  size_t bufSize = NvmItem::estimateVariableSize(blobs);
+  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs)),
+               std::out_of_range);
 }
 
-TEST(DipperItemTest, SingleBlobOverflow) {
+TEST(NvmItemTest, SingleBlobOverflow) {
   const size_t maxLen = std::numeric_limits<uint32_t>::max() + 10ULL;
   auto buf = std::make_unique<char[]>(maxLen);
   Blob blob{static_cast<uint32_t>(maxLen),
             folly::StringPiece{buf.get(), maxLen}};
 
-  size_t bufSize = DipperItem::estimateVariableSize(blob);
-  ASSERT_THROW(
-      std::unique_ptr<DipperItem>(new (bufSize) DipperItem(1, 1, 1, blob)),
-      std::out_of_range)
+  size_t bufSize = NvmItem::estimateVariableSize(blob);
+  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blob)),
+               std::out_of_range)
       << maxLen;
 }
 

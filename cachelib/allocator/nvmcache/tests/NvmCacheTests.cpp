@@ -116,7 +116,7 @@ TEST_F(NvmCacheTest, BasicGet) {
   ASSERT_TRUE(this->checkKeyExists(key, false /* ramOnly */));
 }
 
-TEST_F(NvmCacheTest, EvictToDipperGet) {
+TEST_F(NvmCacheTest, EvictToNvmGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -171,7 +171,7 @@ TEST_F(NvmCacheTest, EvictToDipperGet) {
   ASSERT_EQ(0, nvm.getHandleCountForThread());
 }
 
-TEST_F(NvmCacheTest, EvictToDipperGetCheckCtime) {
+TEST_F(NvmCacheTest, EvictToNvmGetCheckCtime) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -202,7 +202,7 @@ TEST_F(NvmCacheTest, EvictToDipperGetCheckCtime) {
   }
 }
 
-TEST_F(NvmCacheTest, EvictToDipperExpired) {
+TEST_F(NvmCacheTest, EvictToNvmExpired) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -242,7 +242,7 @@ TEST_F(NvmCacheTest, UnEvictable) {
   EXPECT_EQ(nullptr, res.second);
 }
 
-TEST_F(NvmCacheTest, ReadFromDipperExpired) {
+TEST_F(NvmCacheTest, ReadFromNvmExpired) {
   auto& nvm = this->cache();
   auto pid = this->poolId();
 

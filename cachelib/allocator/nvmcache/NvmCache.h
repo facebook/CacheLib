@@ -11,10 +11,10 @@
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/CacheApiWrapper.h"
-#include "cachelib/allocator/nvmcache/DipperItem.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/allocator/nvmcache/NavySetup.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/allocator/nvmcache/ReqContexts.h"
 #include "cachelib/allocator/nvmcache/TombStones.h"
 #include "cachelib/allocator/nvmcache/WaitContext.h"
@@ -114,7 +114,7 @@ class NvmCache {
   // @return            ItemHandle
   ItemHandle find(folly::StringPiece key);
 
-  // Try to mark the key as in process of being evicted from RAM to Dipper.
+  // Try to mark the key as in process of being evicted from RAM to NVM.
   // This is used to maintain the consistency between the RAM cache and
   // NvmCache when an item is transitioning from RAM to NvmCache in the
   // presence of concurrent gets and deletes from other threads.
@@ -183,19 +183,19 @@ class NvmCache {
  private:
   detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }
 
-  // creates the RAM item from DipperItem.
+  // creates the RAM item from NvmItem.
   //
-  // @param key   key for the dipper item
-  // @param dItem contents for the key
+  // @param key   key for the nvm item
+  // @param nvmItem contents for the key
   //
   // @param   return an item handle allocated and initialized to the right state
-  //          based on the dipperItem
-  ItemHandle createItem(folly::StringPiece key, const DipperItem& dItem);
+  //          based on the NvmItem
+  ItemHandle createItem(folly::StringPiece key, const NvmItem& nvmItem);
 
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(folly::StringPiece key);
 
-  std::unique_ptr<DipperItem> makeDipperItem(const ItemHandle& handle);
+  std::unique_ptr<NvmItem> makeNvmItem(const ItemHandle& handle);
 
   // wrap an item into a blob for writing into navy.
   Blob makeBlob(const Item& it);

@@ -1,4 +1,4 @@
-#include "cachelib/allocator/nvmcache/DipperItem.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -10,7 +10,7 @@
 namespace facebook {
 namespace cachelib {
 
-Blob DipperItem::getBlob(size_t index) const {
+Blob NvmItem::getBlob(size_t index) const {
   if (index >= numBlobs_) {
     throw std::invalid_argument(
         folly::sformat("Index {} out of range {}", index, numBlobs_));
@@ -24,10 +24,10 @@ Blob DipperItem::getBlob(size_t index) const {
   return Blob{blobInfo.origAllocSize, data};
 }
 
-DipperItem::DipperItem(PoolId id,
-                       uint32_t creationTime,
-                       uint32_t expTime,
-                       const std::vector<Blob>& blobs)
+NvmItem::NvmItem(PoolId id,
+                 uint32_t creationTime,
+                 uint32_t expTime,
+                 const std::vector<Blob>& blobs)
     : id_(id),
       creationTime_(creationTime),
       expTime_(expTime),
@@ -54,10 +54,7 @@ DipperItem::DipperItem(PoolId id,
   }
 }
 
-DipperItem::DipperItem(PoolId id,
-                       uint32_t creationTime,
-                       uint32_t expTime,
-                       Blob blob)
+NvmItem::NvmItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob)
     : id_(id), creationTime_(creationTime), expTime_(expTime), numBlobs_(1) {
   auto& blobInfo = getBlobInfo(0);
   if (blob.data.size() >
@@ -70,7 +67,7 @@ DipperItem::DipperItem(PoolId id,
   blobInfo.endOffset = static_cast<uint32_t>(blob.data.size());
 }
 
-void* DipperItem::operator new(size_t count, size_t extra) {
+void* NvmItem::operator new(size_t count, size_t extra) {
   void* alloc = malloc(count + extra);
   if (alloc == nullptr) {
     throw std::bad_alloc();
@@ -78,19 +75,19 @@ void* DipperItem::operator new(size_t count, size_t extra) {
   return alloc;
 }
 
-void DipperItem::operator delete(void* p) {
+void NvmItem::operator delete(void* p) {
   free(p); // let free figure out the size.
 }
 
-void DipperItem::operator delete(void* p, size_t) { operator delete(p); }
+void NvmItem::operator delete(void* p, size_t) { operator delete(p); }
 
-size_t DipperItem::totalSize() const noexcept {
+size_t NvmItem::totalSize() const noexcept {
   // size of sizes + size of all blobs
-  return sizeof(DipperItem) + numBlobs_ * sizeof(BlobInfo) +
+  return sizeof(NvmItem) + numBlobs_ * sizeof(BlobInfo) +
          getBlobInfo(numBlobs_ - 1).endOffset;
 }
 
-size_t DipperItem::estimateVariableSize(const std::vector<Blob>& blobs) {
+size_t NvmItem::estimateVariableSize(const std::vector<Blob>& blobs) {
   size_t total = 0;
   for (const auto& blob : blobs) {
     total += estimateVariableSize(blob);
@@ -98,11 +95,11 @@ size_t DipperItem::estimateVariableSize(const std::vector<Blob>& blobs) {
   return total;
 }
 
-size_t DipperItem::estimateVariableSize(Blob blob) {
+size_t NvmItem::estimateVariableSize(Blob blob) {
   return sizeof(BlobInfo) + blob.data.size();
 }
 
-bool DipperItem::isExpired() const noexcept {
+bool NvmItem::isExpired() const noexcept {
   return expTime_ > 0 &&
          expTime_ < static_cast<uint32_t>(util::getCurrentTimeSec());
 }

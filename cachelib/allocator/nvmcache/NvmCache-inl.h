@@ -199,8 +199,8 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
       makeBufferView(key),
       [&, this](navy::Status st, navy::BufferView, navy::Buffer v) {
         if (st != navy::Status::NotFound) {
-          auto dItem = reinterpret_cast<const DipperItem*>(v.data());
-          hdl = createItem(key, *dItem);
+          auto nvmItem = reinterpret_cast<const NvmItem*>(v.data());
+          hdl = createItem(key, *nvmItem);
         }
         b.post();
       });
@@ -221,10 +221,10 @@ void NvmCache<C>::evictCB(navy::BufferView key,
 
   stats().numNvmEvictions.inc();
 
-  const auto& dItem = *reinterpret_cast<const DipperItem*>(value.data());
+  const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
   const auto timeNow = util::getCurrentTimeSec();
-  const auto lifetime = timeNow - dItem.getCreationTime();
-  const auto expiryTime = dItem.getExpiryTime();
+  const auto lifetime = timeNow - nvmItem.getCreationTime();
+  const auto expiryTime = nvmItem.getExpiryTime();
   if (expiryTime != 0) {
     if (expiryTime < timeNow) {
       stats().numNvmExpiredEvict.inc();
@@ -303,7 +303,7 @@ uint32_t NvmCache<C>::getStorageSizeInNvm(const Item& it) {
 }
 
 template <typename C>
-std::unique_ptr<DipperItem> NvmCache<C>::makeDipperItem(const ItemHandle& hdl) {
+std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const ItemHandle& hdl) {
   const auto& item = *hdl;
   auto poolId = cache_.getAllocInfo((void*)(&item)).poolId;
 
@@ -327,13 +327,13 @@ std::unique_ptr<DipperItem> NvmCache<C>::makeDipperItem(const ItemHandle& hdl) {
       blobs.push_back(makeBlob(chainedItem));
     }
 
-    const size_t bufSize = DipperItem::estimateVariableSize(blobs);
-    return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
+    const size_t bufSize = NvmItem::estimateVariableSize(blobs);
+    return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
         poolId, item.getCreationTime(), item.getExpiryTime(), blobs));
   } else {
     Blob blob = makeBlob(item);
-    const size_t bufSize = DipperItem::estimateVariableSize(blob);
-    return std::unique_ptr<DipperItem>(new (bufSize) DipperItem(
+    const size_t bufSize = NvmItem::estimateVariableSize(blob);
+    return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
         poolId, item.getCreationTime(), item.getExpiryTime(), blob));
   }
 }
@@ -368,8 +368,8 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     return;
   }
 
-  auto dItem = makeDipperItem(hdl);
-  if (!dItem) {
+  auto nvmItem = makeNvmItem(hdl);
+  if (!nvmItem) {
     stats().numNvmPutEncodeFailure.inc();
     return;
   }
@@ -382,7 +382,7 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     stats().numNvmPermItems.inc();
   }
 
-  auto iobuf = toIOBuf(std::move(dItem));
+  auto iobuf = toIOBuf(std::move(nvmItem));
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};
 
@@ -479,10 +479,10 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  const DipperItem* dItem = reinterpret_cast<const DipperItem*>(val.data());
+  const NvmItem* nvmItem = reinterpret_cast<const NvmItem*>(val.data());
 
   // this item expired. return a miss.
-  if (dItem->isExpired()) {
+  if (nvmItem->isExpired()) {
     stats().numNvmGetMiss.inc();
     ItemHandle hdl{};
     hdl.markExpired();
@@ -491,7 +491,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     return;
   }
 
-  auto it = createItem(key, *dItem);
+  auto it = createItem(key, *nvmItem);
   if (!it) {
     stats().numNvmGetMiss.inc();
     // we failed to fill due to an internal failure. Return a miss and
@@ -522,18 +522,18 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
 template <typename C>
 typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
-    folly::StringPiece key, const DipperItem& dItem) {
-  const size_t numBufs = dItem.getNumBlobs();
+    folly::StringPiece key, const NvmItem& nvmItem) {
+  const size_t numBufs = nvmItem.getNumBlobs();
   // parent item
   XDCHECK_GE(numBufs, 1u);
-  const auto pBlob = dItem.getBlob(0);
+  const auto pBlob = nvmItem.getBlob(0);
 
   stats().numNvmAllocAttempts.inc();
   // use the original alloc size to allocate, but make sure that the usable
   // size matches the pBlob's size
   auto it = CacheAPIWrapperForNvm<C>::allocateInternal(
-      cache_, dItem.poolId(), key, pBlob.origAllocSize, dItem.getCreationTime(),
-      dItem.getExpiryTime(), false);
+      cache_, nvmItem.poolId(), key, pBlob.origAllocSize,
+      nvmItem.getCreationTime(), nvmItem.getExpiryTime(), false);
   if (!it) {
     return nullptr;
   }
@@ -550,7 +550,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
     // chained items need to be added in reverse order to maintain the same
     // order as what we serialized.
     for (int i = numBufs - 1; i >= 1; i--) {
-      auto cBlob = dItem.getBlob(i);
+      auto cBlob = nvmItem.getBlob(i);
       XDCHECK_GT(cBlob.origAllocSize, 0u);
       XDCHECK_GT(cBlob.data.size(), 0u);
       stats().numNvmAllocAttempts.inc();

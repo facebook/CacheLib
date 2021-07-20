@@ -20,28 +20,28 @@ struct Blob {
   folly::StringPiece data;
 };
 
-// DipperItem is used to store CacheItems in dipper.
-class FOLLY_PACK_ATTR DipperItem {
+// NvmItem is used to store CacheItems in nvm cache.
+class FOLLY_PACK_ATTR NvmItem {
  public:
-  // constructs a dipper item with multiple blob
+  // constructs a nvm item with multiple blob
   //
   // @param id            pool id for the original item
   // @param creationTime  creation time for the item in cache
   // @param blobs         vector of blobs
   //
   // @throw std::out_of_range if the total size of the blobs exceeds 4GB.
-  DipperItem(PoolId id,
-             uint32_t creationTime,
-             uint32_t expTime,
-             const std::vector<Blob>& blobs);
+  NvmItem(PoolId id,
+          uint32_t creationTime,
+          uint32_t expTime,
+          const std::vector<Blob>& blobs);
 
   //  same as the above, but handles for a single blob without having to
   //  instantiate a vector
   //
   // @throw std::out_of_range if the total size of blob exceeds 4GB.
-  DipperItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob);
+  NvmItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob);
 
-  // A custom new that allocates DipperItem with extra
+  // A custom new that allocates NvmItem with extra
   // bytes space at the end for data
   static void* operator new(size_t count, size_t extra);
 
@@ -67,7 +67,7 @@ class FOLLY_PACK_ATTR DipperItem {
   // format.
   uint32_t getExpiryTime() const noexcept { return expTime_; }
 
-  // number of blobs in this dipper item
+  // number of blobs in this nvm item
   size_t getNumBlobs() const noexcept { return numBlobs_; }
 
   // get the blob at index. index starts from 0 up to numBlobs - 1
@@ -79,7 +79,7 @@ class FOLLY_PACK_ATTR DipperItem {
   bool isExpired() const noexcept;
 
   // @return    total size of this item including data for all the blobs. This
-  // should be alteast  estimateVariableSize() + sizeof(DipperItem)
+  // should be alteast  estimateVariableSize() + sizeof(NvmItem)
   size_t totalSize() const noexcept;
 
   // estimate the additional malloc size for a single blob to be passed to the
@@ -144,15 +144,15 @@ class FOLLY_PACK_ATTR DipperItem {
 };
 
 namespace detail {
-inline void dipperItemFreeCb(void* buf, void* /* userData */) {
-  delete reinterpret_cast<DipperItem*>(buf);
+inline void NvmItemFreeCb(void* buf, void* /* userData */) {
+  delete reinterpret_cast<NvmItem*>(buf);
 }
 } // namespace detail
 
-inline folly::IOBuf toIOBuf(std::unique_ptr<DipperItem> ditem) {
-  const auto size = ditem->totalSize();
-  return folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, ditem.release(), size,
-                      detail::dipperItemFreeCb};
+inline folly::IOBuf toIOBuf(std::unique_ptr<NvmItem> nitem) {
+  const auto size = nitem->totalSize();
+  return folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, nitem.release(), size,
+                      detail::NvmItemFreeCb};
 }
 } // namespace cachelib
 } // namespace facebook
