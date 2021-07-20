@@ -131,6 +131,20 @@ struct ReplayGeneratorConfig : public JSONConfig {
   SerializeMode getSerializationMode() const;
 };
 
+// The class defines the admission policy at stressor level. The stressor
+// checks the admission policy first before inserting an item into cache.
+//
+// This base class always returns true, allowing the insersion.
+class StressorAdmPolicy {
+ public:
+  virtual ~StressorAdmPolicy() = default;
+
+  virtual bool accept(
+      const std::unordered_map<std::string, std::string>& /*featureMap*/) {
+    return true;
+  }
+};
+
 struct StressorConfig : public JSONConfig {
   // Which workload generator to use, default is
   // workload generator which samples from some distribution
@@ -213,14 +227,23 @@ struct StressorConfig : public JSONConfig {
   // By default, timestamps are in milliseconds.
   uint64_t timestampFactor{1000};
 
+  // admission policy for cache.
+  std::shared_ptr<StressorAdmPolicy> admPolicy{};
+
   StressorConfig() {}
   explicit StressorConfig(const folly::dynamic& configJson);
 
+  // return true if the workload configuration uses chained items.
   bool usesChainedItems() const;
 };
 
-// User can pass in a config customizer to add additional settings at runtime
+// user defined function to configure parts of cache config outside of the
+// json
 using CacheConfigCustomizer = std::function<CacheConfig(CacheConfig)>;
+
+// user defined function to configure parts of stressor config outside of the
+// json
+using StressorConfigCustomizer = std::function<StressorConfig(StressorConfig)>;
 
 // Configs for setting up the cache allocator and specify load test parameters
 class CacheBenchConfig {
@@ -232,8 +255,10 @@ class CacheBenchConfig {
   //
   // @param path   path for the json file
   // @param c      the customization function for cache config (optional)
+  // @param s      the customization function for stressor config (optional)
   explicit CacheBenchConfig(const std::string& path,
-                            CacheConfigCustomizer c = {});
+                            CacheConfigCustomizer c = {},
+                            StressorConfigCustomizer s = {});
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
   const StressorConfig& getStressorConfig() const { return stressorConfig_; }

@@ -129,9 +129,7 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
 } // namespace
 
 std::unique_ptr<Stressor> Stressor::makeStressor(
-    const CacheConfig& cacheConfig,
-    const StressorConfig& stressorConfig,
-    std::unique_ptr<StressorAdmPolicy> admPolicy) {
+    const CacheConfig& cacheConfig, const StressorConfig& stressorConfig) {
   if (stressorConfig.name == "high_refcount") {
     return std::make_unique<HighRefcountStressor>(cacheConfig,
                                                   stressorConfig.numOps);
@@ -149,12 +147,10 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     if (cacheConfig.allocator == "LRU") {
       // default allocator is LRU, other allocator types should be added here
       return std::make_unique<CacheStressor<LruAllocator>>(
-          cacheConfig, stressorConfig, std::move(generator),
-          std::move(admPolicy));
+          cacheConfig, stressorConfig, std::move(generator));
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
-          cacheConfig, stressorConfig, std::move(generator),
-          std::move(admPolicy));
+          cacheConfig, stressorConfig, std::move(generator));
     }
   }
   throw std::invalid_argument("Invalid config");

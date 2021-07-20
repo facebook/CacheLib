@@ -60,7 +60,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 440>();
+  checkCorrectSize<StressorConfig, 456>();
 }
 
 bool StressorConfig::usesChainedItems() const {
@@ -73,7 +73,9 @@ bool StressorConfig::usesChainedItems() const {
 }
 
 CacheBenchConfig::CacheBenchConfig(
-    const std::string& path, CacheConfigCustomizer cacheConfigCustomizer) {
+    const std::string& path,
+    CacheConfigCustomizer cacheConfigCustomizer,
+    StressorConfigCustomizer stressorConfigCustomizer) {
   std::string configString;
   if (!folly::readFile(path.c_str(), configString)) {
     throw std::invalid_argument(
@@ -97,8 +99,11 @@ CacheBenchConfig::CacheBenchConfig(
     testConfigJson["configPath"] = configDir;
   }
 
-  stressorConfig_ = StressorConfig{testConfigJson};
-  // if present, customize the cache configuration.
+  // if present, customize the configuration.
+  auto stressorConfig = StressorConfig{testConfigJson};
+  stressorConfig_ = stressorConfigCustomizer
+                        ? stressorConfigCustomizer(stressorConfig)
+                        : stressorConfig;
   auto cacheConfig = CacheConfig{configJson["cache_config"]};
   cacheConfig_ =
       cacheConfigCustomizer ? cacheConfigCustomizer(cacheConfig) : cacheConfig;

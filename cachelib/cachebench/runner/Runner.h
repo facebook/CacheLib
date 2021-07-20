@@ -12,15 +12,14 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+// A simple wrapper to maintain the stress run through an opaque stressor
+// instance.
 class Runner {
  public:
   // @param config                the configuration for the cachebench run. This
   //                              contains both the stressor configuration and
   //                              the cache configuration.
-  // @param admPolicy             the implementation of the admission policy
-  //                              for cache
-  Runner(const CacheBenchConfig& config,
-         std::unique_ptr<StressorAdmPolicy> admPolicy);
+  Runner(const CacheBenchConfig& config);
 
   // @param progressInterval    the interval at which periodic progress of the
   //                            benchmark run is reported/tracked.

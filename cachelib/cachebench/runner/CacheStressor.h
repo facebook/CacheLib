@@ -37,15 +37,12 @@ class CacheStressor : public Stressor {
   // @param cacheConfig   the config to instantiate the cache instance
   // @param config        stress test config
   // @param generator     workload  generator
-  // @param admPolicy     admission policy for the cache
   CacheStressor(CacheConfig cacheConfig,
                 StressorConfig config,
-                std::unique_ptr<GeneratorBase>&& generator,
-                std::unique_ptr<StressorAdmPolicy> admPolicy)
+                std::unique_ptr<GeneratorBase>&& generator)
       : config_(std::move(config)),
         throughputStats_(config_.numThreads),
         wg_(std::move(generator)),
-        admPolicy_(std::move(admPolicy)),
         hardcodedString_(genHardcodedString()),
         endTime_{std::chrono::system_clock::time_point::max()} {
     // if either consistency check is enabled or if we want to move
@@ -402,8 +399,8 @@ class CacheStressor : public Stressor {
     wg_->markFinish();
   }
 
-  // inserts key into the cache if the admission policy also indicates the key
-  // is worthy to be cached.
+  // inserts key into the cache if the admission policy also indicates the
+  // key is worthy to be cached.
   //
   // @param pid         pool id to insert the key
   // @param stats       reference to the stats structure.
@@ -420,7 +417,7 @@ class CacheStressor : public Stressor {
       const std::unordered_map<std::string, std::string>& featureMap) {
     // check the admission policy first, and skip the set operation
     // if the policy returns false
-    if (!admPolicy_->accept(featureMap)) {
+    if (!config_.admPolicy->accept(featureMap)) {
       return OpResultType::kSetSkip;
     }
 
@@ -438,13 +435,16 @@ class CacheStressor : public Stressor {
 
   // fetch a request from the workload generator for a particular pool
   // @param pid             the pool id chosen for the request.
-  // @param gen             the thread local random number generator to be fed
+  // @param gen             the thread local random number generator to be
+  // fed
   //                        to the workload generator  for constructing the
   //                        request.
-  // @param lastRequestId   optional information about the last request id that
-  //                        was given to this thread by the workload generator.
-  //                        This is used to provide continuity by some generator
-  //                        implementations.
+  // @param lastRequestId   optional information about the last request id
+  // that
+  //                        was given to this thread by the workload
+  //                        generator. This is used to provide continuity by
+  //                        some generator implementations.
+
   const Request& getReq(const PoolId& pid,
                         std::mt19937_64& gen,
                         std::optional<uint64_t>& lastRequestId) {
@@ -469,9 +469,6 @@ class CacheStressor : public Stressor {
   std::vector<ThroughputStats> throughputStats_; // thread local stats
 
   std::unique_ptr<GeneratorBase> wg_; // workload generator
-
-  // admission policy for the cache
-  std::unique_ptr<StressorAdmPolicy> admPolicy_;
 
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;

@@ -5,11 +5,9 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-Runner::Runner(const CacheBenchConfig& config,
-               std::unique_ptr<StressorAdmPolicy> admPolicy)
+Runner::Runner(const CacheBenchConfig& config)
     : stressor_{Stressor::makeStressor(config.getCacheConfig(),
-                                       config.getStressorConfig(),
-                                       std::move(admPolicy))} {}
+                                       config.getStressorConfig())} {}
 
 bool Runner::run(std::chrono::seconds progressInterval,
                  const std::string& progressStatsFile) {

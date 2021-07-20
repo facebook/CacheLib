@@ -42,20 +42,6 @@ struct ThroughputStats {
 // forward declaration for the workload generator.
 class GeneratorBase;
 
-// The class defines the admission policy at stressor level. The stressor
-// checks the admission policy first before inserting an item into cache.
-//
-// This base class always returns true, allowing the insersion.
-class StressorAdmPolicy {
- public:
-  virtual ~StressorAdmPolicy() = default;
-
-  virtual bool accept(
-      const std::unordered_map<std::string, std::string>& /*featureMap*/) {
-    return true;
-  }
-};
-
 // Skeleton interface for a workload stressor. All stressors implement this
 // interface.
 class Stressor {
@@ -63,9 +49,7 @@ class Stressor {
   // create a stressor according to the passed in config and return through an
   // opaque base class instance.
   static std::unique_ptr<Stressor> makeStressor(
-      const CacheConfig& cacheConfig,
-      const StressorConfig& stressorConfig,
-      std::unique_ptr<StressorAdmPolicy> admPolicy);
+      const CacheConfig& cacheConfig, const StressorConfig& stressorConfig);
 
   virtual ~Stressor() {}
 

@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
   folly::addBenchmark(
       __FILE__, FLAGS_benchmark_name, [=](folly::UserCounters& counters) {
         CacheBenchConfig config(test_config);
-        Runner runner(config, std::make_unique<StressorAdmPolicy>());
+        Runner runner(config);
         runner.run(counters);
         // "1" means iteration number, we always run once for cachebench
         return 1;
