@@ -2,7 +2,6 @@
 # The extension is already found. Any number of sources could be listed here.
 add_library (cachelib_datatype
   Buffer.cpp
-  DataTypes.cpp
   )
 add_dependencies(cachelib_datatype thrift_generated_files)
 
