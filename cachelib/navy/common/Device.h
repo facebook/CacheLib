@@ -41,16 +41,19 @@ class DeviceEncryptor {
 // Pointer ownership is not passed.
 class Device {
  public:
+  // @param size    total size of the device
   explicit Device(uint64_t size)
-      : Device{size, nullptr, 0 /* max device write size */} {}
+      : Device{size, nullptr /* encryptor */, 0 /* max device write size */} {}
 
+  // @param size          total size of the device
+  // @param encryptor     encryption object
+  // @param maxWriteSize  max device write size
   Device(uint64_t size,
          std::shared_ptr<DeviceEncryptor> encryptor,
          uint32_t maxWriteSize)
-      : Device(size, encryptor, kDefaultAlignmentSize, maxWriteSize) {}
+      : Device(
+            size, std::move(encryptor), kDefaultAlignmentSize, maxWriteSize) {}
 
-  // Device constructor
-  //
   // @param size          total size of the device
   // @param encryptor     encryption object
   // @param ioAlignSize   alignment size for IO operations
@@ -79,6 +82,7 @@ class Device {
   }
   virtual ~Device() = default;
 
+  // Get the post-alignment size for the size of the data we intend to write
   size_t getIOAlignedSize(size_t size) const {
     return powTwoAlign(size, ioAlignmentSize_);
   }
@@ -90,10 +94,10 @@ class Device {
   }
 
   // Write buffer to the device. This call takes ownership of the buffer
-  // and de-allocates it by end of the call. @buffer must be aligned the same
-  // way as `makeIOBuffer` would return.
-  // @offset and @size must be ioAligmentSize_ aligned
-  // @offset + @size must be less than or equal to device size_
+  // and de-allocates it by end of the call.
+  // @param buffer    Data to write to the device. It must be aligned the same
+  //                  way as `makeIOBuffer` would return.
+  // @param offset    Must be ioAlignmentSize_ aligned
   bool write(uint64_t offset, Buffer buffer);
 
   // Reads @size bytes from device at @deviceOffset and copys to @value
@@ -110,17 +114,22 @@ class Device {
   // bytes from offset.
   Buffer read(uint64_t offset, uint32_t size);
 
+  // Everything should be on device after this call returns.
   void flush() { flushImpl(); }
 
+  // Return bytes written since device start
   uint64_t getBytesWritten() const { return bytesWritten_.get(); }
+
+  // Return bytes read since device start
   uint64_t getBytesRead() const { return bytesRead_.get(); }
 
+  // Export device stats via CounterVisitor
   void getCounters(const CounterVisitor& visitor) const;
 
-  // returns the size of the device. All IO operations must be from [0, size)
+  // Returns the size of the device. All IO operations must be from [0, size)
   uint64_t getSize() const { return size_; }
 
-  // returns the alignment size for device io operations
+  // Returns the alignment size for device io operations
   uint32_t getIOAlignmentSize() const { return ioAlignmentSize_; }
 
  protected:
