@@ -1543,9 +1543,6 @@ class CacheAllocator : public CacheBase {
   // Test utility functions to remove things from individual caches.
   bool removeFromRamForTesting(Key key);
   void removeFromNvmForTesting(Key key);
-  // Testing API to force an eviction for dipper related tests on TAO
-  // TODO (sathya) clean up after TAO dipper integration
-  void evictForTesting(Item& it);
 
   // @param dramCacheAttached   boolean indicating if the dram cache was
   //                            restored from previous state

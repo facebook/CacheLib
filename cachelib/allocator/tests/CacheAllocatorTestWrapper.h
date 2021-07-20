@@ -21,11 +21,6 @@ class CacheAllocatorTestWrapper {
   }
 
   template <class Allocator, typename... Params>
-  static void evictForTesting(Allocator* alloc, Params&&... args) {
-    alloc->evictForTesting(std::forward<Params>(args)...);
-  }
-
-  template <class Allocator, typename... Params>
   static bool pushToNvmCacheFromRamForTesting(Allocator* alloc,
                                               Params&&... args) {
     return alloc->pushToNvmCacheFromRamForTesting(

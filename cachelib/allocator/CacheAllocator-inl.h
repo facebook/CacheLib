@@ -1508,20 +1508,6 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::evictForTesting(Item& it) {
-  const auto res1 = accessContainer_->remove(it);
-  XDCHECK(res1);
-
-  const auto res2 = removeFromMMContainer(it);
-  XDCHECK(res2);
-
-  XDCHECK(it.isDrained());
-  const auto res3 =
-      releaseBackToAllocator(it, RemoveContext::kEviction, false, nullptr);
-  XDCHECK(ReleaseRes::kReleased == res3);
-}
-
-template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::removeFromRamForTesting(
     typename Item::Key key) {
   return removeImpl(*findInternal(key), DeleteTombStoneGuard{},
