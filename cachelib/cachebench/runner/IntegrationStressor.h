@@ -40,8 +40,7 @@ class HighRefcountStressor : public Stressor {
  public:
   // @param cacheConfig configuration for the cache.
   // @param numOps   number of ops per thread.
-  HighRefcountStressor(const CacheConfig& cacheConfig,
-                       uint64_t numOps);
+  HighRefcountStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
   Stats getCacheStats() const override { return cache_->getStats(); }
 
@@ -82,8 +81,7 @@ class HighRefcountStressor : public Stressor {
 // verify they do exist by looking them up via the map's hash table.
 class CachelibMapStressor : public Stressor {
  public:
-  CachelibMapStressor(const CacheConfig& cacheConfig,
-                      uint64_t numOps);
+  CachelibMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
   Stats getCacheStats() const override { return cache_->getStats(); }
 
@@ -154,8 +152,7 @@ class CachelibMapStressor : public Stressor {
 // verify they do exist by looking them up via the map's index.
 class CachelibRangeMapStressor : public Stressor {
  public:
-  CachelibRangeMapStressor(const CacheConfig& cacheConfig,
-                           uint64_t numOps);
+  CachelibRangeMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
   Stats getCacheStats() const override { return cache_->getStats(); }
 
