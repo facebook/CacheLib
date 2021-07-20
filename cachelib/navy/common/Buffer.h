@@ -26,23 +26,35 @@ class BufferViewT {
   using Type = T;
 
   constexpr BufferViewT() : BufferViewT{0, nullptr} {}
+
+  // @param size  Size of data in bytes
+  // @param data  Pointer to the data this view will encapsulate
   constexpr BufferViewT(size_t size, Type* data) : size_{size}, data_{data} {}
+
   BufferViewT(const BufferViewT&) = default;
   BufferViewT& operator=(const BufferViewT&) = default;
 
+  // Return true if data is nullptr
   bool isNull() const { return data_ == nullptr; }
 
+  // Return byte at specified index. This view must NOT be null. Caller is
+  // responsible for ensuring the index is within bounds.
   uint8_t byteAt(size_t idx) const {
+    XDCHECK(data_);
     XDCHECK_LT(idx, size_);
     return data_[idx];
   }
 
+  // Return beginning of the data
   Type* data() const { return data_; }
 
+  // Return end of the data
   Type* dataEnd() const { return data_ + size_; }
 
+  // Return size of the view in bytes
   size_t size() const { return size_; }
 
+  // @param dst   Destination buffer into which to copy data from this view
   void copyTo(void* dst) const {
     if (data_ != nullptr) {
       XDCHECK_NE(dst, nullptr);
@@ -50,7 +62,10 @@ class BufferViewT {
     }
   }
 
-  // Slices buffer in place: starting with @offset and of @size bytes.
+  // Return a new view from part of this current view. This view must NOT be
+  // null.
+  // @param offset  start of the data to encapsulate
+  // @param size    size of bytes for the new view
   BufferViewT slice(size_t offset, size_t size) const {
     // Use - instead of + to avoid potential overflow problem
     XDCHECK_LE(offset, size_);
@@ -58,6 +73,7 @@ class BufferViewT {
     return BufferViewT{size, data_ + offset};
   }
 
+  // Two views are equal if their contents are identical
   bool operator==(BufferViewT other) const {
     return size_ == other.size_ &&
            (size_ == 0 || std::memcmp(other.data_, data_, size_) == 0);
@@ -82,21 +98,27 @@ class Buffer {
  public:
   Buffer() = default;
 
-  // @param view  read-only view into the buffer
+  // Copy data from a view
+  // @param view    source of data to be copied from. Cannot be null.
   explicit Buffer(BufferView view) : Buffer{view.size()} {
     view.copyTo(data());
   }
 
-  // @param view      read-only view into the buffer
-  // @param alignment the desired alignment
+  // Copy data from a view into an aligned buffer
+  // @param view        source of data to be copied from. Cannot be null.
+  // @param alignment   alignment of the buffer data.
   Buffer(BufferView view, size_t alignment) : Buffer{view.size(), alignment} {
     view.copyTo(data());
   }
 
+  // Create a new, empty buffer
+  // @param size    size of bytes of the buffer
   explicit Buffer(size_t size) : size_{size}, data_{allocate(size)} {}
 
-  // @param size      must be multiple of @alignment
-  // @param alignment the desired alignment
+  // Create a new, empty, and aligned buffer
+  // @param size        size of bytes of the buffer, it must be a
+  //                    multiple of the alignment
+  // @param alignment   alignment of the buffer
   Buffer(size_t size, size_t alignment)
       : size_{size}, data_{allocate(size, alignment)} {}
 
@@ -107,25 +129,36 @@ class Buffer {
   Buffer(Buffer&&) noexcept = default;
   Buffer& operator=(Buffer&&) noexcept = default;
 
+  // Return a read-only view
   BufferView view() const { return BufferView{size_, data()}; }
 
+  // Return a mutable view
   MutableBufferView mutableView() { return MutableBufferView{size_, data()}; }
 
+  // Return true if data is nullptr
   bool isNull() const { return data_ == nullptr; }
 
+  // Return read-only start of the data
   const uint8_t* data() const { return data_.get() + dataStartOffset_; }
 
+  // Return mutable start of the data
   uint8_t* data() { return data_.get() + dataStartOffset_; }
 
+  // Return size in bytes for the data
   size_t size() const { return size_; }
 
-  // copy copies size_ number of bytes from dataOffsetStart_ to a new buffer
+  // Copy copies size_ number of bytes from dataOffsetStart_ to a new buffer
   // and returns the new buffer
+  // @param alignment   alignment of the new buffer
   Buffer copy(size_t alignment = 0) const {
     return (alignment == 0) ? copyInternal(Buffer{size_})
                             : copyInternal(Buffer{size_, alignment});
   }
 
+  // This buffer must NOT be null and it must have sufficient capacity
+  // to copy the data from the source view.
+  // @param offset  copy from the offset for the view until the end
+  // @param view    source of the data to be copied from
   void copyFrom(size_t offset, BufferView view) {
     XDCHECK_LE(offset + view.size(), size_);
     XDCHECK_NE(data_, nullptr);
@@ -152,15 +185,10 @@ class Buffer {
     size_ = size;
   }
 
+  // Clear the buffer
   void reset() {
     size_ = 0;
     data_.reset();
-  }
-
-  // Release buffer ownership and reset
-  uint8_t* release() {
-    size_ = 0;
-    return data_.release();
   }
 
  private:
