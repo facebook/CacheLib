@@ -33,6 +33,7 @@ class FOLLY_PACK_ATTR Bucket {
   // Iterator to bucket's items.
   class Iterator {
    public:
+    // return whether the iteration has reached the end
     bool done() const { return itr_.done(); }
 
     BufferView key() const;
@@ -63,6 +64,8 @@ class FOLLY_PACK_ATTR Bucket {
 
   void setChecksum(uint32_t checksum) { checksum_ = checksum; }
 
+  // return the generation time of the bucket, if this is mismatch with
+  // the one in BigHash data in the bucket is invalid.
   uint64_t generationTime() const { return generationTime_; }
 
   uint32_t size() const { return storage_.numAllocations(); }
@@ -86,6 +89,7 @@ class FOLLY_PACK_ATTR Bucket {
   // before returning true. Return number of entries removed.
   uint32_t remove(HashedKey hk, const DestructorCallback& destructorCb);
 
+  // return an iterator of items in the bucket
   Iterator getFirst() const;
   Iterator getNext(Iterator itr) const;
 
@@ -109,6 +113,10 @@ class FOLLY_PACK_ATTR BucketEntry {
     return sizeof(BucketEntry) + keySize + valueSize;
   }
 
+  // construct the BucketEntry with given memory using placement new
+  // @param storage  the mutable memory used to create BucketEntry
+  // @param hk       the item's key and its hash
+  // @param value    the item's value
   static BucketEntry& create(MutableBufferView storage,
                              HashedKey hk,
                              BufferView value) {

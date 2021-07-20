@@ -90,16 +90,27 @@ class BigHash final : public Engine {
   // and DeviceError on error.
   Status remove(HashedKey hk) override;
 
+  // flush the device file
   void flush() override;
 
+  // reset BigHash, this clears the bloom filter and all stats
+  // data is invalidated even it is not physically removed.
   void reset() override;
 
+  // serialize BigHash state to a RecordWriter
   void persist(RecordWriter& rw) override;
+
+  // deserialize BigHash state from a RecordReader
+  // @return true if recovery succeed, false o/w.
   bool recover(RecordReader& rr) override;
 
+  // returns BigHash stats to the visitor
   void getCounters(const CounterVisitor& visitor) const override;
+
+  // return the maximum allowed item size
   uint64_t getMaxItemSize() const override;
 
+  // return how manu times a lookup is rejected by the bloom filter
   uint64_t bfRejectCount() const { return bfRejectCount_.get(); }
 
  private:

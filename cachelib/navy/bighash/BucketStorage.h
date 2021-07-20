@@ -24,10 +24,13 @@ class FOLLY_PACK_ATTR BucketStorage {
   // all the other references to allocations.
   class Allocation {
    public:
+    // indicate if the end of storage is reached.
     bool done() const { return view_.isNull(); }
 
+    // return a mutable view where caller can read or modify data
     MutableBufferView view() const { return view_; }
 
+    // return the index of this allocation in the BucketStorage
     uint32_t position() const { return position_; }
 
    private:
@@ -42,8 +45,13 @@ class FOLLY_PACK_ATTR BucketStorage {
 
   static uint32_t slotSize(uint32_t size) { return kAllocationOverhead + size; }
 
+  // construct a BucketStorage with given capacity, a placement new is required.
   explicit BucketStorage(uint32_t capacity) : capacity_{capacity} {}
 
+  // allocate a space under this bucket storage
+  // @param size  the required size for the space
+  // @return      an Allocation for the allocated space, empty Allocation is
+  //              returned if remaining space is not enough
   Allocation allocate(uint32_t size);
 
   uint32_t capacity() const { return capacity_; }
@@ -52,11 +60,13 @@ class FOLLY_PACK_ATTR BucketStorage {
 
   uint32_t numAllocations() const { return numAllocations_; }
 
+  // remove the give allocation in the bucket storage.
   void remove(Allocation alloc);
 
   // Removes every single allocation from the beginning, including this one.
   void removeUntil(Allocation alloc);
 
+  // iterate the storage using Allocation
   Allocation getFirst() const;
   Allocation getNext(Allocation alloc) const;
 
