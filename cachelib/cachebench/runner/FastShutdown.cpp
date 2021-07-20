@@ -8,9 +8,9 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-FastShutdownStressor::FastShutdownStressor(CacheConfig cacheConfig,
+FastShutdownStressor::FastShutdownStressor(const CacheConfig& cacheConfig,
                                            uint64_t numOps)
-    : numOpsPerThread_(numOps),
+    : numOps_(numOps),
       cache_(std::make_unique<Cache<LruAllocator>>(
           cacheConfig,
           nullptr,
@@ -28,7 +28,7 @@ void FastShutdownStressor::start() {
   // Test with wait time 6 seconds first time and wait time 30 seconds second
   // time to interrupt slab release at different places.
   uint32_t waitTime = 6;
-  for (; waitTime <= numOpsPerThread_ * 3; waitTime += 3) {
+  for (; waitTime <= numOps_ * 3; waitTime += 3) {
     std::vector<CacheType::ItemHandle> v;
     std::cout << "allocating....\n";
     for (uint32_t i = 0; i < nslabs; i++) {

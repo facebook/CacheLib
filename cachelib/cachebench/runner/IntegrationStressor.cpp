@@ -10,8 +10,8 @@ namespace cachebench {
 
 const uint32_t HighRefcountStressor::kNumThreads;
 
-HighRefcountStressor::HighRefcountStressor(CacheConfig cacheConfig,
-                                           uint64_t numOps)
+HighRefcountStressor::HighRefcountStressor(
+    const CacheConfig& cacheConfig, uint64_t numOps)
     : numOpsPerThread_{numOps},
       cache_{std::make_unique<Cache<LruAllocator>>(cacheConfig)} {}
 
@@ -70,8 +70,8 @@ const uint32_t CachelibMapStressor::kMapEntryValueSizeMax;
 const uint32_t CachelibMapStressor::kMapInsertionBatchMin;
 const uint32_t CachelibMapStressor::kMapInsertionBatchMax;
 
-CachelibMapStressor::CachelibMapStressor(CacheConfig cacheConfig,
-                                         uint64_t numOps)
+CachelibMapStressor::CachelibMapStressor(
+    const CacheConfig& cacheConfig, uint64_t numOps)
     : numOpsPerThread_{numOps} {
   struct CachelibMapTestCaseSync : public CacheType::SyncObj {
     CachelibMapStressor& stressor;
@@ -208,8 +208,8 @@ const uint32_t CachelibRangeMapStressor::kMapEntryValueSizeMax;
 const uint32_t CachelibRangeMapStressor::kMapInsertionBatchMin;
 const uint32_t CachelibRangeMapStressor::kMapInsertionBatchMax;
 
-CachelibRangeMapStressor::CachelibRangeMapStressor(CacheConfig cacheConfig,
-                                                   uint64_t numOps)
+CachelibRangeMapStressor::CachelibRangeMapStressor(
+    const CacheConfig& cacheConfig, uint64_t numOps)
     : numOpsPerThread_{numOps} {
   struct CachelibMapTestCaseSync : public CacheType::SyncObj {
     CachelibRangeMapStressor& stressor;
