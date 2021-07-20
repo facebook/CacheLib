@@ -32,23 +32,20 @@ uint64_t Cache<Allocator>::fetchNandWrites() const {
 }
 
 template <typename Allocator>
-Cache<Allocator>::Cache(CacheConfig config,
+Cache<Allocator>::Cache(const CacheConfig& config,
                         ChainedItemMovingSync movingSync,
                         std::string cacheDir)
     : config_(config),
-      cacheDir_(cacheDir),
       nandBytesBegin_{fetchNandWrites()},
       itemRecords_(config_.enableItemDestructorCheck) {
   constexpr size_t MB = 1024ULL * 1024ULL;
 
-  typename Allocator::Config allocatorConfig;
-
-  allocatorConfig.enablePoolRebalancing(
+  allocatorConfig_.enablePoolRebalancing(
       config_.getRebalanceStrategy(),
       std::chrono::seconds(config_.poolRebalanceIntervalSec));
 
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
-    allocatorConfig.enableMovingOnSlabRelease(
+    allocatorConfig_.enableMovingOnSlabRelease(
         [](Item& oldItem, Item& newItem, Item* parentPtr) {
           XDCHECK(oldItem.isChainedItem() == (parentPtr != nullptr));
           std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
@@ -59,7 +56,7 @@ Cache<Allocator>::Cache(CacheConfig config,
 
   if (config_.allocSizes.empty()) {
     XDCHECK(config_.minAllocSize >= sizeof(CacheValue));
-    allocatorConfig.setDefaultAllocSizes(util::generateAllocSizes(
+    allocatorConfig_.setDefaultAllocSizes(util::generateAllocSizes(
         config_.allocFactor, config_.maxAllocSize, config_.minAllocSize, true));
   } else {
     std::set<uint32_t> allocSizes;
@@ -67,25 +64,23 @@ Cache<Allocator>::Cache(CacheConfig config,
       XDCHECK(s >= sizeof(CacheValue));
       allocSizes.insert(s);
     }
-    allocatorConfig.setDefaultAllocSizes(std::move(allocSizes));
+    allocatorConfig_.setDefaultAllocSizes(std::move(allocSizes));
   }
 
   // Set hash table config
-  allocatorConfig.setAccessConfig(typename Allocator::AccessConfig{
+  allocatorConfig_.setAccessConfig(typename Allocator::AccessConfig{
       static_cast<uint32_t>(config_.htBucketPower),
       static_cast<uint32_t>(config_.htLockPower)});
 
-  allocatorConfig.configureChainedItems(typename Allocator::AccessConfig{
+  allocatorConfig_.configureChainedItems(typename Allocator::AccessConfig{
       static_cast<uint32_t>(config_.chainedItemHtBucketPower),
       static_cast<uint32_t>(config_.chainedItemHtLockPower)});
 
-  allocatorConfig.setCacheSize(config_.cacheSizeMB * (MB));
+  allocatorConfig_.setCacheSize(config_.cacheSizeMB * (MB));
 
   auto cleanupGuard = folly::makeGuard([&] {
-    if (shouldCleanupFiles_) {
-      for (const auto& f : nvmCacheFilePaths_) {
-        util::removePath(f);
-      }
+    if (!nvmCacheFilePath_.empty()) {
+      util::removePath(nvmCacheFilePath_);
     }
   });
 
@@ -99,11 +94,11 @@ Cache<Allocator>::Cache(CacheConfig config,
       // size of itemRecords_ (also is the number of new allocations)
       ++totalDestructor_;
     };
-    allocatorConfig.setRemoveCallback(removeCB);
+    allocatorConfig_.setRemoveCallback(removeCB);
   } else if (config_.enableItemDestructor) {
     // TODO (zixuan) use ItemDestructor once feature is finished
     auto removeCB = [&](const typename Allocator::RemoveCbData&) {};
-    allocatorConfig.setRemoveCallback(removeCB);
+    allocatorConfig_.setRemoveCallback(removeCB);
   }
 
   // Set up Navy
@@ -124,14 +119,13 @@ Cache<Allocator>::Cache(CacheConfig config,
                                                  folly::Random::rand32());
         path = path + "/" + uniqueSuffix;
         util::makeDir(path);
-        shouldCleanupFiles_ = true;
+        nvmCacheFilePath_ = path;
         nvmConfig.navyConfig.setSimpleFile(path + "/navy_cache",
                                            config_.nvmCacheSizeMB * MB,
                                            true /*truncateFile*/);
       } else {
         nvmConfig.navyConfig.setSimpleFile(path, config_.nvmCacheSizeMB * MB);
       }
-      nvmCacheFilePaths_.push_back(path);
     } else if (config_.nvmCachePaths.size() > 1) {
       // set up a software raid-0 across each nvm cache path.
       nvmConfig.navyConfig.setRaidFiles(config_.nvmCachePaths,
@@ -204,10 +198,10 @@ Cache<Allocator>::Cache(CacheConfig config,
     XLOG(INFO) << "Using the following nvm config"
                << folly::toPrettyJson(
                       folly::toDynamic(nvmConfig.navyConfig.serialize()));
-    allocatorConfig.enableNvmCache(nvmConfig);
+    allocatorConfig_.enableNvmCache(nvmConfig);
 
     if (config_.navyEncryption && config_.createEncryptor) {
-      allocatorConfig.enableNvmCacheEncryption(config_.createEncryptor());
+      allocatorConfig_.enableNvmCacheEncryption(config_.createEncryptor());
     }
     if (!config_.mlNvmAdmissionPolicy.empty() &&
         config_.nvmAdmissionPolicyFactory) {
@@ -215,26 +209,26 @@ Cache<Allocator>::Cache(CacheConfig config,
         nvmAdmissionPolicy_ =
             std::any_cast<std::shared_ptr<NvmAdmissionPolicy<Allocator>>>(
                 config_.nvmAdmissionPolicyFactory(config_));
-        allocatorConfig.setNvmCacheAdmissionPolicy(nvmAdmissionPolicy_);
+        allocatorConfig_.setNvmCacheAdmissionPolicy(nvmAdmissionPolicy_);
       } catch (const std::bad_any_cast& e) {
         XLOG(ERR) << "CAST ERROR " << e.what();
         throw;
       }
     }
 
-    allocatorConfig.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
+    allocatorConfig_.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
   }
 
-  allocatorConfig.cacheName = "cachebench";
+  allocatorConfig_.cacheName = "cachebench";
 
-  if (!cacheDir_.empty()) {
-    allocatorConfig.cacheDir = cacheDir_;
+  if (!cacheDir.empty()) {
+    allocatorConfig_.cacheDir = cacheDir;
     cache_ =
-        std::make_unique<Allocator>(Allocator::SharedMemNew, allocatorConfig);
+        std::make_unique<Allocator>(Allocator::SharedMemNew, allocatorConfig_);
   } else {
-    cache_ = std::make_unique<Allocator>(allocatorConfig);
+    cache_ = std::make_unique<Allocator>(allocatorConfig_);
   }
-  allocatorConfig_ = allocatorConfig;
+
   const size_t numBytes = cache_->getCacheMemoryStats().cacheSize;
   for (uint64_t i = 0; i < config_.numPools; ++i) {
     const double& ratio = config_.poolSizes[i];
@@ -263,19 +257,32 @@ Cache<Allocator>::~Cache() {
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();
 
-    if (shouldCleanupFiles_) {
-      for (const auto& f : nvmCacheFilePaths_) {
-        util::removePath(f);
-      }
+    if (!nvmCacheFilePath_.empty()) {
+      util::removePath(nvmCacheFilePath_);
     }
   } catch (...) {
   }
 }
 
 template <typename Allocator>
-void Cache<Allocator>::reattach() {
+void Cache<Allocator>::reAttach() {
   cache_ =
       std::make_unique<Allocator>(Allocator::SharedMemAttach, allocatorConfig_);
+}
+
+template <typename Allocator>
+void Cache<Allocator>::shutDown() {
+  monitor_.reset();
+  cache_->shutDown();
+}
+
+template <typename Allocator>
+void Cache<Allocator>::cleanupSharedMem() {
+  if (!allocatorConfig_.cacheDir.empty()) {
+    cache_->cleanupStrayShmSegments(allocatorConfig_.cacheDir,
+                                    allocatorConfig_.usePosixShm);
+    util::removePath(allocatorConfig_.cacheDir);
+  }
 }
 
 template <typename Allocator>
@@ -288,6 +295,126 @@ void Cache<Allocator>::enableConsistencyCheck(
     invalidKeys_[key] = false;
   }
 }
+
+template <typename Allocator>
+typename Cache<Allocator>::RemoveRes Cache<Allocator>::remove(Key key) {
+  if (!consistencyCheckEnabled()) {
+    return cache_->remove(key);
+  }
+
+  auto opId = valueTracker_->beginDelete(key);
+  auto rv = cache_->remove(key);
+  valueTracker_->endDelete(opId);
+  return rv;
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::RemoveRes Cache<Allocator>::remove(
+    const ItemHandle& it) {
+  if (!consistencyCheckEnabled()) {
+    return cache_->remove(it);
+  }
+
+  auto opId = valueTracker_->beginDelete(it->getKey());
+  auto rv = cache_->remove(it->getKey());
+  valueTracker_->endDelete(opId);
+  return rv;
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocateChainedItem(
+    const ItemHandle& parent, size_t size) {
+  auto handle = cache_->allocateChainedItem(parent, CacheValue::getSize(size));
+  if (handle) {
+    CacheValue::initialize(handle->getWritableMemory());
+  }
+  return handle;
+}
+
+template <typename Allocator>
+void Cache<Allocator>::addChainedItem(const ItemHandle& parent,
+                                      ItemHandle child) {
+  itemRecords_.updateItemVersion(*parent);
+  cache_->addChainedItem(parent, std::move(child));
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::ItemHandle Cache<Allocator>::replaceChainedItem(
+    Item& oldItem, ItemHandle newItemHandle, Item& parent) {
+  itemRecords_.updateItemVersion(parent);
+  return cache_->replaceChainedItem(oldItem, std::move(newItemHandle), parent);
+}
+
+template <typename Allocator>
+bool Cache<Allocator>::insert(const ItemHandle& handle) {
+  // Insert is not supported in consistency checking mode because consistency
+  // checking assumes a Set always succeeds and overrides existing value.
+  XDCHECK(!consistencyCheckEnabled());
+  itemRecords_.addItemRecord(handle);
+  return cache_->insert(handle);
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocate(
+    PoolId pid, folly::StringPiece key, size_t size, uint32_t ttlSecs) {
+  ItemHandle handle;
+  try {
+    handle = cache_->allocate(pid, key, CacheValue::getSize(size), ttlSecs);
+    if (handle) {
+      CacheValue::initialize(handle->getWritableMemory());
+    }
+  } catch (const std::invalid_argument& e) {
+    XLOGF(DBG, "Unable to allocate, reason: {}", e.what());
+  }
+
+  return handle;
+}
+template <typename Allocator>
+typename Cache<Allocator>::ItemHandle Cache<Allocator>::insertOrReplace(
+    const ItemHandle& handle) {
+  itemRecords_.addItemRecord(handle);
+
+  if (!consistencyCheckEnabled()) {
+    try {
+      return cache_->insertOrReplace(handle);
+    } catch (const cachelib::exception::RefcountOverflow& ex) {
+      XLOGF(DBG, "overflow exception: {}", ex.what());
+    }
+  }
+
+  auto checksum = getUint64FromItem(*handle);
+  auto opId = valueTracker_->beginSet(handle->getKey(), checksum);
+  auto rv = cache_->insertOrReplace(handle);
+  valueTracker_->endSet(opId);
+  return rv;
+}
+
+template <typename Allocator>
+typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
+                                                             AccessMode mode) {
+  auto findFn = [&]() {
+    util::LatencyTracker tracker;
+    if (FLAGS_report_api_latency) {
+      tracker = util::LatencyTracker(cacheFindLatency_);
+    }
+    // find from cache and wait for the result to be ready.
+    auto it = cache_->find(key, mode);
+    it.wait();
+    return it;
+  };
+
+  if (!consistencyCheckEnabled()) {
+    return findFn();
+  }
+
+  auto opId = valueTracker_->beginGet(key);
+  auto it = findFn();
+  if (checkGet(opId, it)) {
+    invalidKeys_[key.str()].store(true, std::memory_order_acquire);
+  }
+  return it;
+}
+
 template <typename Allocator>
 bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
                                 const ItemHandle& it) {
@@ -434,6 +561,52 @@ void Cache<Allocator>::clearCache() {
     }
     cache_->flushNvmCache();
   }
+}
+
+template <typename Allocator>
+uint32_t Cache<Allocator>::getSize(const Item* item) const noexcept {
+  if (item == nullptr) {
+    return 0;
+  }
+  return item->template getMemoryAs<CacheValue>()->getDataSize(item->getSize());
+}
+
+template <typename Allocator>
+uint64_t Cache<Allocator>::genHashForChain(const ItemHandle& handle) const {
+  auto chainedAllocs = cache_->viewAsChainedAllocs(handle);
+  uint64_t hash = getUint64FromItem(*handle);
+  for (const auto& item : chainedAllocs.getChain()) {
+    hash = folly::hash::hash_128_to_64(hash, getUint64FromItem(item));
+  }
+  return hash;
+}
+
+template <typename Allocator>
+void Cache<Allocator>::trackChainChecksum(const ItemHandle& handle) {
+  XDCHECK(consistencyCheckEnabled());
+  auto checksum = genHashForChain(handle);
+  auto opId = valueTracker_->beginSet(handle->getKey(), checksum);
+  valueTracker_->endSet(opId);
+}
+
+template <typename Allocator>
+void Cache<Allocator>::setUint64ToItem(ItemHandle& handle, uint64_t num) const {
+  XDCHECK(handle);
+  auto ptr = handle->template getWritableMemoryAs<CacheValue>();
+  ptr->setConsistencyNum(num);
+}
+
+template <typename Allocator>
+void Cache<Allocator>::setStringItem(ItemHandle& handle,
+                                     const std::string& str) const {
+  auto ptr = reinterpret_cast<uint8_t*>(getWritableMemory(handle));
+  std::memcpy(ptr, str.data(), std::min<size_t>(str.size(), getSize(handle)));
+}
+
+template <typename Allocator>
+void Cache<Allocator>::updateItemRecordVersion(ItemHandle& it) {
+  itemRecords_.updateItemVersion(*it);
+  cache_->invalidateNvm(*it);
 }
 
 } // namespace cachebench

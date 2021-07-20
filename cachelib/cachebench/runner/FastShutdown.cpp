@@ -112,7 +112,7 @@ void FastShutdownStressor::start() {
     // reattach the cache, so that stats can be collected or the test can be
     // repeated.
     std::cout << "Reattaching to cache...\n";
-    cache_->reattach();
+    cache_->reAttach();
     expectedAbortCount++;
     const auto stats = cache_->getStats();
     if (stats.numAbortedSlabReleases != expectedAbortCount) {

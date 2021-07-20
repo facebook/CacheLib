@@ -378,7 +378,7 @@ class CacheStressor : public Stressor {
             ++stats.updateMiss;
             break;
           }
-          cache_->updateItem(it);
+          cache_->updateItemRecordVersion(it);
           break;
         }
         default:
