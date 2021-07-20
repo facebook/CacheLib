@@ -70,7 +70,7 @@ DipperItem::DipperItem(PoolId id,
   blobInfo.endOffset = static_cast<uint32_t>(blob.data.size());
 }
 
-void* DipperItem::operator new(size_t count, size_t extra, bool) {
+void* DipperItem::operator new(size_t count, size_t extra) {
   void* alloc = malloc(count + extra);
   if (alloc == nullptr) {
     throw std::bad_alloc();
@@ -82,7 +82,7 @@ void DipperItem::operator delete(void* p) {
   free(p); // let free figure out the size.
 }
 
-void DipperItem::operator delete(void* p, size_t, bool) { operator delete(p); }
+void DipperItem::operator delete(void* p, size_t) { operator delete(p); }
 
 size_t DipperItem::totalSize() const noexcept {
   // size of sizes + size of all blobs

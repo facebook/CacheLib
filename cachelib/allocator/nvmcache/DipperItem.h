@@ -43,11 +43,7 @@ class FOLLY_PACK_ATTR DipperItem {
 
   // A custom new that allocates DipperItem with extra
   // bytes space at the end for data
-  // The reason for the extra bool field is because without it, we'll be left
-  // with a custom operator delete overload for constructor exception that
-  // conflicts with another operator delete already defined.
-  // see an example here: https://ideone.com/5YEfwf
-  static void* operator new(size_t count, size_t extra, bool = true);
+  static void* operator new(size_t count, size_t extra);
 
   // Because we alloc extra (unknowable) amount of space, we cannot use sized
   // deallocation. So override `delete`, without sized deallocation, so this
@@ -55,8 +51,10 @@ class FOLLY_PACK_ATTR DipperItem {
   static void operator delete(void* p);
 
   // This delete operator overload is specifically here to complement the
-  // custom placement new operator in the case of an exception from constructor
-  static void operator delete(void* p, size_t, bool);
+  // custom placement new operator in the case of an exception from constructor.
+  // C++14 doc also requires this delete operator must be overloaded with the
+  // one above together.
+  static void operator delete(void* p, size_t);
 
   // @return    pool id where the original cache item was
   //            stored
