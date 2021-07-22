@@ -41,10 +41,9 @@ class HashedKey {
   uint64_t keyHash_{};
 };
 
+// Convenience utils to convert a piece of buffer to a hashed key
 inline HashedKey makeHK(BufferView key) { return HashedKey{key}; }
-
 inline HashedKey makeHK(const Buffer& key) { return HashedKey{key.view()}; }
-
 inline HashedKey makeHK(const char* cstr) { return HashedKey{makeView(cstr)}; }
 } // namespace navy
 } // namespace cachelib

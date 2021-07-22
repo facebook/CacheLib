@@ -46,7 +46,10 @@ using CounterVisitor =
 
 constexpr uint32_t kMaxKeySize{255};
 
+// Convert status to string message. Return "Unknown" if invalid status.
 const char* toString(Status status);
+
+// Convert event to string message. Return "Unknown" if invalid event.
 const char* toString(DestructorEvent e);
 
 inline std::ostream& operator<<(std::ostream& os, Status status) {
