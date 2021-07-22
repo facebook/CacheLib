@@ -142,10 +142,6 @@ class RegionManager {
 
   void getCounters(const CounterVisitor& visitor) const;
 
-  const folly::F14FastMap<uint16_t, AtomicCounter> getRegionsByClassId() const {
-    return regionsByClassId_;
-  }
-
   uint32_t getRegionSlotSize(RegionId rid) const {
     const auto& region = getRegion(rid);
     if (sizeClasses_.empty()) {
@@ -186,7 +182,6 @@ class RegionManager {
   Device& device_;
   const std::unique_ptr<EvictionPolicy> policy_;
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;
-  mutable folly::F14FastMap<uint16_t, AtomicCounter> regionsByClassId_;
   mutable AtomicCounter externalFragmentation_;
 
   mutable AtomicCounter physicalWrittenCount_;
