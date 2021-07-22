@@ -153,7 +153,6 @@ class RegionManager {
   RegionDescriptor openForRead(RegionId rid, uint64_t seqNumber);
   void close(RegionDescriptor&& desc);
   OpenStatus getCleanRegion(RegionId& rid);
-  void scheduleReclaim();
   JobExitCode startReclaim();
   void releaseEvictedRegion(RegionId rid, std::chrono::nanoseconds startTime);
   void doEviction(RegionId rid, BufferView buffer) const;
