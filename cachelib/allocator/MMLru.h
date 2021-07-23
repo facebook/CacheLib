@@ -23,10 +23,10 @@ namespace facebook {
 namespace cachelib {
 
 // CacheLib's modified LRU policy.
-// In classic LRU, the items form a queue according to the last access time. Items
-// are inserted to the head of the queue and removed from the tail of the queue.
-// Items accessed (used) are moved (promoted) to the head of the queue. CacheLib
-// made two variations on top of the classic LRU:
+// In classic LRU, the items form a queue according to the last access time.
+// Items are inserted to the head of the queue and removed from the tail of the
+// queue. Items accessed (used) are moved (promoted) to the head of the queue.
+// CacheLib made two variations on top of the classic LRU:
 // 1. Insertion point. The items are inserted into a configured insertion point
 // instead of always to the head.
 // 2. Delayed promotion. Items get promoted at most once in any lru refresh time
