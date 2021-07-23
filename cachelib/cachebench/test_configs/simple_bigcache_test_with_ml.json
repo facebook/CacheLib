@@ -122,9 +122,13 @@
       1.0
     ],
     "nvmCacheSizeMB": 155507,
-    "devicePaths": ["/dev/md0"],
+    "nvmCachePaths": [
+      "/dev/md0"
+    ],
     "navyBlockSize": 4096,
-    "navySegmentedFifoSegmentRatio": [1],
+    "navySegmentedFifoSegmentRatio": [
+      1
+    ],
     "navySizeClasses": [],
     "navyBigHashSizePct": 0,
     "navyHitsReinsertionThreshold": 1,
