@@ -45,6 +45,7 @@ void PoolResizer::work() {
 
       try {
         const auto now = util::getCurrentTimeMs();
+        // Throws excption if the strategy did not pick a valid victim classId.
         cache_.releaseSlab(poolId, classId, SlabReleaseMode::kResize);
         XLOGF(DBG, "Moved a slab from classId {} for poolid: {}",
               static_cast<int>(classId), static_cast<int>(poolId));

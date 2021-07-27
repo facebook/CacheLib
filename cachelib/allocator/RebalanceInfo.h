@@ -47,8 +47,8 @@ struct Info {
 
   // return the delta of slabs for this alloc class from the current state.
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // delta of the number of slabs acquired.
+  // @param poolStats   the current pool stats for this pool.
+  // @return the delta of the number of slabs acquired.
   int64_t getDeltaSlabs(const PoolStats& poolStats) const {
     const auto& acStats = poolStats.mpStats.acStats;
     XDCHECK(acStats.find(id) != acStats.end());
@@ -59,8 +59,8 @@ struct Info {
   // return the delta of evictions for this alloc class from the current
   // state.
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // delta of the number of evictions
+  // @param poolStats   the current pool stats for this pool.
+  // @return the delta of the number of evictions
   int64_t getDeltaEvictions(const PoolStats& poolStats) const {
     const auto& cacheStats = poolStats.cacheStats;
     XDCHECK(cacheStats.find(id) != cacheStats.end());
@@ -70,8 +70,8 @@ struct Info {
 
   // return the delta of hits for this alloc class from the current state.
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // delta of the number of hits
+  // @param poolStats   the current pool stats for this pool.
+  // @return the delta of the number of hits
   uint64_t deltaHits(const PoolStats& poolStats) const {
     XDCHECK(poolStats.cacheStats.find(id) != poolStats.cacheStats.end());
     XDCHECK_GE(poolStats.numHitsForClass(id), hits);
@@ -82,8 +82,8 @@ struct Info {
   // return the delta of alloc failures for this alloc class from the current
   // state.
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // delta of allocation failures
+  // @param poolStats   the current pool stats for this pool.
+  // @return the delta of allocation failures
   uint64_t deltaAllocFailures(const PoolStats& poolStats) const {
     XDCHECK(poolStats.cacheStats.find(id) != poolStats.cacheStats.end());
     const auto& c = poolStats.cacheStats.at(id);
@@ -96,8 +96,8 @@ struct Info {
   // return the delta of hits per slab for this alloc class from the current
   // state.
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // delta of the hits per slab
+  // @param poolStats   the current pool stats for this pool.
+  // @return the delta of the hits per slab
   uint64_t deltaHitsPerSlab(const PoolStats& poolStats) const {
     return deltaHits(poolStats) / poolStats.numSlabsForClass(id);
   }
@@ -105,9 +105,9 @@ struct Info {
   // return the delta of hits per slab for this alloc class from the current
   // state after removing one slab
   //
-  // @param poolStats   the current pool stats for this pool.  @return the
-  // projected delta of the hits per slab, or UINT64_MAX if alloc class only
-  // has 1 slab
+  // @param poolStats   the current pool stats for this pool.
+  // @return the projected delta of the hits per slab, or UINT64_MAX if alloc
+  // class only has 1 slab
   uint64_t projectedDeltaHitsPerSlab(const PoolStats& poolStats) const {
     const auto nSlab = poolStats.numSlabsForClass(id);
     return nSlab == 1 ? UINT64_MAX : deltaHits(poolStats) / (nSlab - 1);
@@ -115,8 +115,8 @@ struct Info {
 
   // return the delta of hits in the tail slab for this allocation class
   //
-  // @param poolStats  the current pool stats for this pool.  @return the
-  // marginal hits
+  // @param poolStats  the current pool stats for this pool.
+  // @return the marginal hits
   uint64_t getMarginalHits(const PoolStats& poolStats) const {
     return poolStats.cacheStats.at(id).containerStat.numTailAccesses -
            accuTailHits;

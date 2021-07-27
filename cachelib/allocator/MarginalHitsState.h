@@ -8,6 +8,7 @@
 namespace facebook {
 namespace cachelib {
 
+// Data structure that ranks the entities according to marginal hits.
 template <typename EntityId>
 struct MarginalHitsState {
   // IDs for entities that participate in size optimization

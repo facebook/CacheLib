@@ -20,6 +20,7 @@
 namespace facebook {
 namespace cachelib {
 
+// Config class for CacheAllocator.
 template <typename CacheT>
 class CacheAllocatorConfig {
  public:
@@ -190,9 +191,6 @@ class CacheAllocatorConfig {
       uint32_t upperLimit,
       std::shared_ptr<RebalanceStrategy> = {});
 
-  CacheAllocatorConfig& enableTestMemoryMonitor(
-      std::chrono::milliseconds interval);
-
   // This is similar to the above, but for use cases running on Tupperware
   // However, lowerLimit and upperLimit are the opposite to the above.
   // "upperLimit" here reffers to the upper bound of application memory.
@@ -278,39 +276,36 @@ class CacheAllocatorConfig {
   // smaller than this will always be rejected by NvmAdmissionPolicy.
   CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
 
+  // @return whether compact cache is enabled
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
+  // @return whether pool resizing is enabled
   bool poolResizingEnabled() const noexcept {
     return poolResizeInterval.count() > 0 && poolResizeSlabsPerIter > 0;
   }
 
+  // @return whether pool rebalancing is enabled
   bool poolRebalancingEnabled() const noexcept {
     return poolRebalanceInterval.count() > 0 &&
            defaultPoolRebalanceStrategy != nullptr;
   }
 
+  // @return whether pool optimizing is enabled
   bool poolOptimizerEnabled() const noexcept {
     return (regularPoolOptimizeInterval.count() > 0 ||
             compactCacheOptimizeInterval.count() > 0) &&
            poolOptimizeStrategy != nullptr;
   }
 
+  // @return whether memory monitor is enabled
   bool memMonitoringEnabled() const noexcept {
     return memMonitorMode != MemoryMonitor::Disabled &&
            memMonitorInterval.count() > 0;
   }
 
-  bool canAllocatePermanent() const noexcept {
-    return ((poolRebalancingEnabled() || poolResizingEnabled()) && moveCb) ||
-           (!poolRebalancingEnabled() && !poolResizingEnabled());
-  }
-
+  // @return whether reaper is enabled
   bool itemsReaperEnabled() const noexcept {
     return reaperInterval.count() > 0;
-  }
-
-  bool mmReconfigureEnabled() const noexcept {
-    return mmReconfigureInterval.count() > 0;
   }
 
   const std::string& getCacheDir() const noexcept { return cacheDir; }
@@ -339,6 +334,7 @@ class CacheAllocatorConfig {
   bool validateStrategy(
       const std::shared_ptr<PoolOptimizeStrategy>& strategy) const;
 
+  // @return a map representation of the configs
   std::map<std::string, std::string> serialize() const;
 
   // Cache name for users to indentify their own cache.
@@ -571,6 +567,7 @@ class CacheAllocatorConfig {
   uint32_t maxAllocationClassSize{Slab::kSize};
   uint32_t minAllocationClassSize{72};
   bool reduceFragmentationInAllocationClass{false};
+
   // The minimum TTL an item need to have in order to be admitted into NVM
   // cache.
   uint64_t nvmAdmissionMinTTL{0};
@@ -679,7 +676,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheAdmissionPolicy(
   return *this;
 }
 
-// enables encoding items before they go into nvmcache
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheEncodeCallback(
     NvmCacheEncodeCb cb) {
@@ -691,7 +687,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheEncodeCallback(
   return *this;
 }
 
-// enables decoding items before they get back into ram cache
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheDecodeCallback(
     NvmCacheDecodeCb cb) {

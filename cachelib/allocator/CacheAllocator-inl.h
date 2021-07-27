@@ -1447,7 +1447,7 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
   // While we issue this delete, there can be potential races that change the
   // state of the cache between ram and nvm. If we find the item in RAM and
   // obtain a handle, the situation is simpler. The complicated ones are the
-  // following scenarios where when the delete checks RAM, we dont find
+  // following scenarios where when the delete checks RAM, we don't find
   // anything in RAM. The end scenario is that in the absence of any
   // concurrent inserts, after delete, there should be nothing in nvm and ram.
   //

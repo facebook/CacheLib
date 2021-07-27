@@ -17,10 +17,13 @@ struct RebalanceContext {
       : victimClassId(victim), receiverClassId(receiver) {}
 };
 
-// The idea here is the user should inspect the stats corresponding to the
-// pool they want to rebalance. They will then decide if and which allocation
-// classes need to release slab and how many slabs should be released back to
-// the pool.
+// Base class for rebalance strategy.
+// Given a pool, the rebalance strategy picks a victim allocation class to
+// release slabs, or picks a pair of victim and receiver. The idea here is the
+// user should inspect the stats corresponding to the pool they want to
+// rebalance. They will then decide if and which allocation classes need to
+// release slab and how many slabs should be released back to the pool, or
+// moved.
 //
 // The actual release operation is handled by PoolRebalancer
 class RebalanceStrategy {

@@ -37,6 +37,7 @@ enum class AccessMode { kRead, kWrite };
 // or not.
 enum class RemoveContext { kEviction, kNormal };
 
+// A base class of cache exposing members and status agnostic of template type.
 class CacheBase {
  public:
   CacheBase() = default;
@@ -76,36 +77,61 @@ class CacheBase {
   virtual PoolEvictionAgeStats getPoolEvictionAgeStats(
       PoolId pid, unsigned int slabProjectionLength) const = 0;
 
-  // Return a map of <stat name -> stat value> representation for all the nvm
+  // @return a map of <stat name -> stat value> representation for all the nvm
   // cache stats. This is useful for our monitoring to directly upload them.
   virtual std::unordered_map<std::string, double> getNvmCacheStatsMap()
       const = 0;
 
-  // Return a map of <stat name -> stat value> representation for all the event
+  // @return a map of <stat name -> stat value> representation for all the event
   // tracker stats. If no event tracker exists, this will be empty
   virtual std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
       const = 0;
 
-  // returns the Cache metadata
+  // @return the Cache metadata
   virtual CacheMetadata getCacheMetadata() const noexcept = 0;
 
-  // return cache's memory usage stats
+  // @return cache's memory usage stats
   virtual CacheMemoryStats getCacheMemoryStats() const = 0;
 
-  // return the overall cache stats
+  // @return the overall cache stats
   virtual GlobalCacheStats getGlobalCacheStats() const = 0;
 
+  // @return the slab release stats.
   virtual SlabReleaseStats getSlabReleaseStats() const = 0;
 
+  // Set rebalancing strategy
+  //
+  // @param pid Pool id of the pool to set this strategy on.
+  // @param strategy The strategy
   void setRebalanceStrategy(PoolId pid,
                             std::shared_ptr<RebalanceStrategy> strategy);
+
+  // @param pid The pool id.
+  //
+  // @return The rebalancing strategy of the specifid pool.
   std::shared_ptr<RebalanceStrategy> getRebalanceStrategy(PoolId pid) const;
 
+  // Set resizing strategy
+  //
+  // @param pid Pool id of the pool to set this strategy on.
+  // @param strategy The strategy
   void setResizeStrategy(PoolId pid,
                          std::shared_ptr<RebalanceStrategy> strategy);
+
+  // @param pid The pool id.
+  //
+  // @return The resizing strategy of the specifid pool.
   std::shared_ptr<RebalanceStrategy> getResizeStrategy(PoolId pid) const;
 
+  // Set optimizing strategy
+  //
+  // @param pid Pool id of the pool to set this strategy on.
+  // @param strategy The strategy
   void setPoolOptimizeStrategy(std::shared_ptr<PoolOptimizeStrategy> strategy);
+
+  // @param pid The pool id.
+  //
+  // @return The optimizing strategy of the specifid pool.
   std::shared_ptr<PoolOptimizeStrategy> getPoolOptimizeStrategy() const;
 
   // return the list of currently active pools that are oversized

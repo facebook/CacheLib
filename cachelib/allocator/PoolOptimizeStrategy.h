@@ -15,11 +15,11 @@ struct PoolOptimizeContext {
       : victimPoolId(victim), receiverPoolId(receiver) {}
 };
 
-// The idea here is the user should inspect the stats corresponding to the
-// pool they want to rebalance. They will then decide if and which allocation
-// classes need to release slab and how many slabs should be released back to
-// the pool.
-//
+// Base class for pool optimizing strategy, providing functions to find victim
+// and receiver pools.
+// The goal of PoolOptimizeStrategy is to figure out which pool should release
+// a slab and which pool should gain a slab, based on a user-defined set of
+// criteria.
 // The actual release operation is handled by PoolOptimizer
 class PoolOptimizeStrategy {
  public:

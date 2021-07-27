@@ -11,8 +11,22 @@
 namespace facebook {
 namespace cachelib {
 
+// Periodic worker that rebalances slabs within each pool so that new
+// allocations are less likely to fail. For each pool:
+// 1. If there is any allocation class with a high free-alloc-slab (see
+// constructors documentation for definition), release a slab from that class.
+// Else
+// 2. Find a victim and receiver pair according to the strategy and move a slab
+// from the victim class to the receiver class.
 class PoolRebalancer : public PeriodicWorker {
  public:
+  // @param cache               the cache interface
+  // @param strategy            rebalancing strategy
+  // @param freeAllocThreshold  threshold for free-alloc-slab. free-alloc-slab
+  // is calculated by the number of total free allocations divided by the number
+  // of allocations in a slab. Only allocation classes with a higher
+  // free-alloc-slab could get picked as a victim.
+  // @param postWorkHandler     callback to be executed after the worker stops
   PoolRebalancer(CacheBase& cache,
                  std::shared_ptr<RebalanceStrategy> strategy,
                  unsigned int freeAllocThreshold,
@@ -20,6 +34,7 @@ class PoolRebalancer : public PeriodicWorker {
 
   ~PoolRebalancer() override;
 
+  // return the slab release event for the specified pool.
   SlabReleaseEvents getSlabReleaseEvents(PoolId pid) const {
     return stats_.getSlabReleaseEvents(pid);
   }

@@ -69,6 +69,13 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
       });
 }
 
+// The list of allocation classes to be receiver is determined by:
+//
+// 0. Filter out classes that have no evictions
+//
+// 1. Filter out classes that have no slabs
+//
+// 2. pick receiver from the one that has highest hitsPerSlab
 ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
                                           PoolId pid,
                                           const PoolStats& stats,

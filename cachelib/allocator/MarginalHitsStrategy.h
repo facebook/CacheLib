@@ -11,6 +11,7 @@ namespace cachelib {
 // And use a smoothed ranking of those potentials to decide victim and receiver.
 class MarginalHitsStrategy : public RebalanceStrategy {
  public:
+  // Config class for marginal hits strategy
   struct Config : public BaseConfig {
     // parameter for moving average, to smooth the ranking
     double movingAverageParam{0.3};

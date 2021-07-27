@@ -5,6 +5,8 @@
 namespace facebook {
 namespace cachelib {
 
+// Strategy that frees a slab from any allocation class that's above the free
+// memory limit. This strategy only picks the victim but not the receiver.
 class FreeMemStrategy : public RebalanceStrategy {
  public:
   struct Config {
@@ -18,6 +20,7 @@ class FreeMemStrategy : public RebalanceStrategy {
     // of free slabs is more than this number
     size_t maxUnAllocatedSlabs{1000};
 
+    // free memory threshold to be used for picking victim.
     size_t getFreeMemThreshold() const noexcept {
       return numFreeSlabs * Slab::kSize;
     }

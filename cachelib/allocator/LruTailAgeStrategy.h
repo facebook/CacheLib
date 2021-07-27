@@ -36,6 +36,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
     WeightFn getWeight = {};
 
+    // The free memory threshold to be used to pick victim class.
     size_t getFreeMemThreshold() const noexcept {
       return numSlabsFreeMem * Slab::kSize;
     }

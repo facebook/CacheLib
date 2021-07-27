@@ -9,8 +9,18 @@
 namespace facebook {
 namespace cachelib {
 
+// Periodic worker that optimizes pools by moving a slab from the victim pool to
+// the receiver pool picked by the strategy.
 class PoolOptimizer : public PeriodicWorker {
  public:
+  // @param cache             the cache interface
+  // @param strategy          pool optimizing strategy
+  // @param intervalRegular   the period in number of intervals for optimizing
+  //                          regular pools
+  // @param intervalCompact   the period in number of intervals for optimizing
+  //                          compact cache pools
+  // @param stepSizePercent   the percentage number that controls the size of
+  //                          each movement in a compact cache optimization.
   PoolOptimizer(CacheBase& cache,
                 std::shared_ptr<PoolOptimizeStrategy> strategy,
                 uint32_t intervalRegular,

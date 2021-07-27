@@ -180,6 +180,11 @@ class CacheAllocator : public CacheBase {
   using NvmCacheConfig = typename NvmCacheT::Config;
   using DeleteTombStoneGuard = typename NvmCacheT::DeleteTombStoneGuard;
 
+  // Interface for the sync object provided by the user if movingSync is turned
+  // on.
+  // SyncObj is for CacheLib to obtain exclusive access to an item when
+  // it is moving it during slab release. Once held, the user should guarantee
+  // the item will not be accessed from another thread.
   struct SyncObj {
     virtual ~SyncObj() = default;
 
@@ -374,19 +379,8 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
 
-  // look up an item by its key. But we only want to retrieve meta information
-  // with regarding to the key and will not access the content or use a
-  // different API to mark the item as useful.
-  //
-  // @param key   the key for lookup
-  // @return      the handle for the item or a handle to nullptr if the key does
-  //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle peek(Key key);
-
   // look up an item by its key. This ignores the nvm cache and only does RAM
-  // lookup. Does not update the stats related to cache gets and misses.
-  // TODO (sathya) fix the stats part after TAO issue with performance is
-  //      resolved
+  // lookup.
   //
   // @param key         the key for lookup
   // @param mode        the mode of access for the lookup. defaults to
@@ -396,11 +390,22 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ItemHandle findFast(Key key, AccessMode mode);
 
-  // Mark an item that was fetched through peek as useful. This is useful when
+  // look up an item by its key. This ignores the nvm cache and only does RAM
+  // lookup. This API does not update the stats related to cache gets and misses
+  // nor mark the item as useful (see markUseful below).
   //
+  // @param key   the key for lookup
+  // @return      the handle for the item or a handle to nullptr if the key does
+  //              not exist.
+  FOLLY_ALWAYS_INLINE ItemHandle peek(Key key);
+
+  // Mark an item that was fetched through peek as useful. This is useful when
   // users want to look into the cache and only mark items as useful when they
   // inspect the contents of it.
   //
+  // @param handle        the item handle
+  // @param mode          the mode of access for the lookup. defaults to
+  //                      AccessMode::kRead
   void markUseful(const ItemHandle& handle, AccessMode mode);
 
   using AccessIterator = typename AccessContainer::Iterator;
@@ -422,6 +427,10 @@ class CacheAllocator : public CacheBase {
 
   AccessIterator end() { return accessContainer_->end(); }
 
+  enum class RemoveRes : uint8_t {
+    kSuccess,
+    kNotFoundInRam,
+  };
   // removes the allocation corresponding to the key, if present in the hash
   // table. The key will not be accessible through find() after this returns
   // success. The allocation for the key will be recycled once all active
@@ -431,10 +440,6 @@ class CacheAllocator : public CacheBase {
   // @return      kSuccess if the key exists and was successfully removed.
   //              kNotFoundInRam if the key was not present in memory (doesn't
   //              check nvm)
-  enum class RemoveRes : uint8_t {
-    kSuccess,
-    kNotFoundInRam,
-  };
   RemoveRes remove(Key key);
 
   // remove the key that the iterator is pointing to. The element will
@@ -710,19 +715,75 @@ class CacheAllocator : public CacheBase {
   //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
   ShutDownStatus shutDown();
 
-  // Stop existing ones (if any) and create new workers
+  // Functions that stop existing ones (if any) and create new workers
+
+  // start pool rebalancer
+  // @param interval            the period this worker fires.
+  // @param strategy            rebalancing strategy
+  // @param postWorkHandler     callback function to be executed after the
+  //                            worker stops
+  // @param freeAllocThreshold  threshold for free-alloc-slab for picking victim
+  // allocation class. free-alloc-slab is calculated by the number of free
+  // allocation divided by the number of allocations in one slab. Only
+  // allocation classes with a higher free-alloc-slab than the threshold would
+  // be picked as a victim.
+  //
+  //
   bool startNewPoolRebalancer(std::chrono::milliseconds interval,
                               std::shared_ptr<RebalanceStrategy> strategy,
                               std::function<void()> postWorkHandler,
                               unsigned int freeAllocThreshold);
+
+  // start pool resizer
+  // @param interval                the period this worker fires.
+  // @param poolResizeSlabsPerIter  maximum number of slabs each pool may remove
+  //                                in resizing.
+  // @param strategy                resizing strategy
+  // @param postWorkHandler         callback function to be executed after the
+  //                                worker stops
   bool startNewPoolResizer(std::chrono::milliseconds interval,
                            unsigned int poolResizeSlabsPerIter,
                            std::shared_ptr<RebalanceStrategy> strategy,
                            std::function<void()> postWorkHandler);
+
+  // start pool optimizer
+  // @param regularInterval         the period for optimizing regular cache
+  // @param ccacheInterval          the period for optimizing compact cache
+  // @param strategy                pool optimizing strategy
+  // @param ccacheStepSizePercent   the percentage number that controls the size
+  //                                of each movement in a compact cache
+  //                                optimization.
   bool startNewPoolOptimizer(std::chrono::seconds regularInterval,
                              std::chrono::seconds ccacheInterval,
                              std::shared_ptr<PoolOptimizeStrategy> strategy,
                              unsigned int ccacheStepSizePercent);
+  // start memory monitor
+  // @param memMonitorMode                  memory monitor mode
+  // @param interval                        the period this worker fires
+  // @param memAdviseReclaimPercentPerIter  Percentage of
+  //                                        upperLimitGB-lowerLimitGB to be
+  //                                        advised or reclaimed every poll
+  //                                        period. This governs the rate of
+  //                                        advise/reclaim.
+  // @param memLowerLimit                   The lower limit of resident memory
+  //                                        in GBytes
+  //                                        that triggers reclaiming of
+  //                                        previously advised away of memory
+  //                                        from cache
+  // @param memUpperLimit                   The upper limit of resident memory
+  //                                         in GBytes
+  //                                        that triggers advising of memory
+  //                                        from cache
+  // @param memMaxAdvisePercent             Maximum percentage of item cache
+  //                                        limit that
+  //                                        can be advised away before advising
+  //                                        is disabled leading to a probable
+  //                                        OOM.
+  // @param strategy                        strategy to find an allocation class
+  //                                        to release slab
+  //                                        from
+  // @param postWorkHandler                 callback function to be executed
+  //                                        after the worker stops
   bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
                           std::chrono::milliseconds interval,
                           unsigned int memAdviseReclaimPercentPerIter,
@@ -731,10 +792,13 @@ class CacheAllocator : public CacheBase {
                           unsigned int memMaxAdvisePercent,
                           std::shared_ptr<RebalanceStrategy> strategy,
                           std::function<void()> postWorkHandler);
+  // start reaper
+  // @param interval                the period this worker fires
+  // @param reaperThrottleConfig    throttling config
   bool startNewReaper(std::chrono::milliseconds interval,
                       util::Throttler::Config reaperThrottleConfig);
 
-  // Stop existing workers
+  // Stop existing workers with a timeout
   bool stopPoolRebalancer(std::chrono::seconds timeout = std::chrono::seconds{
                               0});
   bool stopPoolResizer(std::chrono::seconds timeout = std::chrono::seconds{0});
@@ -752,6 +816,7 @@ class CacheAllocator : public CacheBase {
   // returns true if all workers have been successfully stopped
   bool stopWorkers(std::chrono::seconds timeout = std::chrono::seconds{0});
 
+  // get the allocation information for the specified memory address.
   // @throw std::invalid_argument if the memory does not belong to this
   //        cache allocator
   AllocInfo getAllocInfo(const void* memory) const {
@@ -762,11 +827,15 @@ class CacheAllocator : public CacheBase {
   std::set<PoolId> getPoolIds() const override final {
     return allocator_->getPoolIds();
   }
-  // return a  list of pool ids that are backing compact caches. This includes
+
+  // return a list of pool ids that are backing compact caches. This includes
   // both attached and un-attached compact caches.
   std::set<PoolId> getCCachePoolIds() const override final;
+
+  // return a list of pool ids for regular pools.
   std::set<PoolId> getRegularPoolIds() const override final;
 
+  // return the pool with speicified id.
   const MemoryPool& getPool(PoolId pid) const override final {
     return allocator_->getPool(pid);
   }
@@ -810,6 +879,7 @@ class CacheAllocator : public CacheBase {
     return accessContainer_->getStats();
   }
 
+  // returns the reaper stats
   ReaperStats getReaperStats() const {
     auto stats = reaper_ ? reaper_->getStats() : ReaperStats{};
     return stats;
@@ -841,9 +911,11 @@ class CacheAllocator : public CacheBase {
   // return cache's memory usage stats
   CacheMemoryStats getCacheMemoryStats() const override final;
 
+  // return the nvm cache stats map
   std::unordered_map<std::string, double> getNvmCacheStatsMap()
       const override final;
 
+  // return the event tracker stats map
   std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     std::unordered_map<std::string, uint64_t> eventTrackerStats;
@@ -909,8 +981,7 @@ class CacheAllocator : public CacheBase {
   //          another thread.
   int64_t getHandleCountForThread() const;
 
-  //  temporary for TAO integration
-  //  TODO (sathya) clean this up after TAO MW code is cleaned up
+  // (Deprecated) reset and adjust handle count for a thread.
   void resetHandleCountForThread();
   void adjustHandleCountForThread(int64_t delta);
 
@@ -1143,9 +1214,7 @@ class CacheAllocator : public CacheBase {
   }
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
-  // lookup. Does not update the stats related to cache gets and misses.
-  // TODO (sathya) fix the stats part after TAO issue with performance is
-  //      resolved
+  // lookup.
   //
   // @param key         the key for lookup
   // @param mode        the mode of access for the lookup. defaults to

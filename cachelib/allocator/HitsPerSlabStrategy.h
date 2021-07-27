@@ -5,6 +5,8 @@
 namespace facebook {
 namespace cachelib {
 
+// Strategy that rebalances the slabs by moving slabs from the allocation class
+// with the lowest hits per slab to the highest hits per slab within the pool.
 class HitsPerSlabStrategy : public RebalanceStrategy {
  public:
   struct Config : public BaseConfig {
@@ -27,6 +29,7 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
     WeightFn getWeight = {};
 
+    // free memory threshold used to pick victim.
     size_t getFreeMemThreshold() const noexcept {
       return numSlabsFreeMem * Slab::kSize;
     }

@@ -6,6 +6,10 @@
 namespace facebook {
 namespace cachelib {
 
+// Similar to MarginalHitsStrategy but works at a pool level.
+// The score of each pool is defined as the maximum tail hits amongst the pool's
+// allocation classes. Then rank the pools according to the score to decide
+// victim and receiver.
 class MarginalHitsOptimizeStrategy : public PoolOptimizeStrategy {
  public:
   struct Config : public BaseConfig {

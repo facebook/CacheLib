@@ -5,6 +5,7 @@
 
 namespace facebook {
 namespace cachelib {
+// Stats for slab releases
 class ReleaseStats {
  public:
   using SlabReleaseEventsBuffer = std::deque<SlabReleaseData>;
@@ -13,6 +14,24 @@ class ReleaseStats {
   ReleaseStats(const ReleaseStats&) = delete;
   ReleaseStats& operator=(const ReleaseStats& other) = delete;
 
+  // add slab release event
+  // @param from              the victim allocation class
+  // @param to                the receiver allocation class.
+  // @param elapsedTime       time took for the cache to release the slab given
+  //                          the victim and the receiver
+  // @param pid               pool id
+  // @param numSlabsInVictim  number of slabs in the victim class after the
+  // event.
+  // @param numSlabsInReceiver number of slabs in the receiver class after the
+  // event.
+  // @param victimAllocSize   victim class allocation size.
+  // @param receiverAllocSize receiver class allocation size.
+  // @param victimEvictionAge eviction age of victim class defined by the
+  // lifetime of the oldest item.
+  // @param receiverEvictionAge     eviction age of receiver class defined by
+  // the lifetime of the oldest item.
+  // @param numFreeAllocsInVictim   number of free allocations in the victim
+  // class after the event.
   void addSlabReleaseEvent(const ClassId from,
                            const ClassId to,
                            const uint64_t elapsedTime,
@@ -25,6 +44,7 @@ class ReleaseStats {
                            const uint64_t receiverEvictionAge,
                            const uint64_t numFreeAllocsInVictim);
 
+  // @return slab release events of the given pool.
   SlabReleaseEvents getSlabReleaseEvents(const PoolId pid) const;
 
  private:

@@ -10,8 +10,17 @@
 namespace facebook {
 namespace cachelib {
 
+// Periodic worker that resizes pools.
+// For each pool that is over the limit, the worker attempts to release up to a
+// certain number of slabs.
 class PoolResizer : public PeriodicWorker {
  public:
+  // @param cache                 the cache interace
+  // @param numSlabsPerIteration  maximum number of slabs each pool may remove
+  //                              in resizing.
+  // @param strategy              the resizing strategy
+  // @param postWorkHandler       callback function to be executed after the
+  //                              worker stops
   PoolResizer(CacheBase& cache,
               unsigned int numSlabsPerIteration,
               std::shared_ptr<RebalanceStrategy> strategy,
@@ -22,6 +31,7 @@ class PoolResizer : public PeriodicWorker {
   // number of slabs that have been released to resize pools.
   unsigned int getNumSlabsResized() const noexcept { return slabsReleased_; }
 
+  // returns the slab release events for the specified pool.
   SlabReleaseEvents getSlabReleaseEvents(PoolId pid) const {
     return stats_.getSlabReleaseEvents(pid);
   }
