@@ -203,7 +203,14 @@ class ChainedHashTable {
   // Config class for the chained hash table.
   class Config {
    public:
-    Config() noexcept = default;
+    // Do not add 'noexcept' here - causes GCC to delete this method:
+    //    "config() is implicitly deleted because its exception-specification
+    //     does not match the implicit exception-specification
+    //     <noexcept (false)>"
+    // followed by:
+    //    "CacheAllocatorConfig.h:522:29: error: use of deleted function
+    //     constexpr facebook::cachelib::ChainedHashTable::Config::Config()
+    Config() = default;
 
     // @param bucketsPower number of buckets in base 2 logarithm
     // @param locksPower number of locks in base 2 logarithm
