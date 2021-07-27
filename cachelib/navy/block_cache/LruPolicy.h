@@ -25,13 +25,28 @@ class LruPolicy final : public EvictionPolicy {
 
   ~LruPolicy() override {}
 
+  // Records the hit of the region.
   void touch(RegionId rid) override;
+
+  // Adds a new region to the array for tracking.
   void track(const Region& region) override;
+
+  // Evicts the least recently used region and stops tracking.
   RegionId evict() override;
+
+  // Resets LRU policy to the initial state.
   void reset() override;
+
+  // Gets memory used by LRU policy.
   size_t memorySize() const override;
+
+  // Exports LRU policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
+
+  // Persists metadata associated with LRU policy.
   void persist(RecordWriter& rw) const override;
+
+  // Recovers from previously persisted metadata associated with LRU policy.
   void recover(RecordReader& rr) override;
 
  private:

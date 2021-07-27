@@ -10,30 +10,34 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Abstract base class of an eviction policy.
 class EvictionPolicy {
  public:
   virtual ~EvictionPolicy() = default;
 
-  // Add a new region for tracking
+  // Adds a new region for tracking.
   // @param region    region to be tracked
   virtual void track(const Region& region) = 0;
 
-  // Touch (record a hit) this region
+  // Touches (record a hit) this region.
   virtual void touch(RegionId id) = 0;
 
-  // Evict a region and stop tracking
+  // Evicts a region and stops tracking.
   virtual RegionId evict() = 0;
 
-  // Reset policy to the initial state
+  // Resets policy to the initial state.
   virtual void reset() = 0;
 
-  // Memory used by the policy
+  // Gets memory used by the policy.
   virtual size_t memorySize() const = 0;
 
+  // Exports policy stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor&) const = 0;
 
+  // Persists metadata associated with this policy.
   virtual void persist(RecordWriter& rw) const = 0;
 
+  // Recovers from previously persisted metadata associated with this policy.
   virtual void recover(RecordReader& rr) = 0;
 };
 } // namespace navy

@@ -30,19 +30,29 @@ class FifoPolicy final : public EvictionPolicy {
   ~FifoPolicy() override = default;
 
   void touch(RegionId /* rid */) override {}
+
+  // Adds a new region to the queue for tracking.
   void track(const Region& region) override;
+
+  // Evicts the first added region and stops tracking.
   RegionId evict() override;
+
+  // Resets FIFO policy to the initial state.
   void reset() override;
 
+  // Gets memory used by FIFO policy.
   size_t memorySize() const override {
     std::lock_guard<std::mutex> lock{mutex_};
     return sizeof(*this) + sizeof(detail::Node) * queue_.size();
   }
 
+  // Exports FIFO policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
 
+  // Persists metadata associated with FIFO policy.
   void persist(RecordWriter& rw) const override;
 
+  // Recovers from previously persisted metadata associated with FIFO policy.
   void recover(RecordReader& rr) override;
 
  private:
@@ -92,16 +102,27 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   ~SegmentedFifoPolicy() override = default;
 
   void touch(RegionId /* rid */) override {}
+
+  // Adds a new region to the segments for tracking.
   void track(const Region& region) override;
+
+  // Evicts the region with the lowest priority and stops tracking.
   RegionId evict() override;
+
+  // Resets Segmented FIFO policy to the initial state.
   void reset() override;
 
+  // Gets memory used by Segmented FIFO policy.
   size_t memorySize() const override;
 
+  // Exports Segmented FIFO policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& v) const override;
 
+  // Persists metadata associated with segmented FIFO policy.
   void persist(RecordWriter& rw) const override;
 
+  // Recovers from previously persisted metadata associated with segmented FIFO
+  // policy.
   void recover(RecordReader& rr) override;
 
  private:
