@@ -97,10 +97,10 @@ class Index {
     bool found_{false};
   };
 
-  // get value and update tracking counters
+  // Gets value and update tracking counters
   LookupResult lookup(uint64_t key);
 
-  // get value without updating tracking counters
+  // Gets value without updating tracking counters
   LookupResult peek(uint64_t key) const;
 
   // Overwrites existing key if exists with new address and size, and it also
@@ -109,11 +109,11 @@ class Index {
   // record.
   LookupResult insert(uint64_t key, uint32_t address, uint16_t sizeHint);
 
-  // Replace old address with new address if there exists the key with the
+  // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
   // All other fields in the record is retained.
   //
-  // Return true if replaced.
+  // @return true if replaced.
   bool replaceIfMatch(uint64_t key, uint32_t newAddress, uint32_t oldAddress);
 
   // If the entry was successfully removed, LookupResult.found() returns true
@@ -121,17 +121,21 @@ class Index {
   // If the entry wasn't found, then LookupResult.found() returns false.
   LookupResult remove(uint64_t key);
 
-  // Only remove if both key and address match.
-  // Return true if removed successfully, false otherwise.
+  // Removes only if both key and address match.
+  //
+  // @return true if removed successfully, false otherwise.
   bool removeIfMatch(uint64_t key, uint32_t address);
 
+  // Updates hits information of a key.
   void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits);
 
+  // Resets all the buckets to the initial state.
   void reset();
 
   // Walks buckets and computes total index entry count
   size_t computeSize() const;
 
+  // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const;
 
  private:

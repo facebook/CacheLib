@@ -10,13 +10,17 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Represents the identifier of a @Region.
 class RegionId {
  public:
   RegionId() = default;
+  // @param idx   the unique index
   explicit RegionId(uint32_t idx) : idx_{idx} {}
 
+  // Checks whether the index is valid.
   bool valid() const noexcept { return idx_ != kInvalid; }
 
+  // Returns the unique index.
   uint32_t index() const noexcept { return idx_; }
 
   bool operator==(const RegionId& other) const noexcept {
@@ -50,12 +54,20 @@ inline std::ostream& operator<<(std::ostream& os, RegionId rid) {
 class AbsAddress {
  public:
   AbsAddress() = default;
+  // @param o   64-bit offset of the device
   explicit AbsAddress(uint64_t o) : offset_{o} {}
 
+  // Returns the 64-bit offset.
   uint64_t offset() const { return offset_; }
 
+  // Adds a 64-bit offset to the existing offset and returns the new
+  // @AbsAddress.
+  // @param ofs   the 64-bit offset to be added
   AbsAddress add(uint64_t ofs) const { return AbsAddress{offset_ + ofs}; }
 
+  // Subtracts a 64-bit offset from the existing offset and returns the new
+  // @AbsAddress.
+  // @param ofs   the 64-bit offset subtrahend, less than the existing offset
   AbsAddress sub(uint64_t ofs) const {
     XDCHECK_LE(ofs, offset_);
     return AbsAddress{offset_ - ofs};
@@ -77,14 +89,24 @@ inline std::ostream& operator<<(std::ostream& os, AbsAddress addr) {
 class RelAddress {
  public:
   RelAddress() = default;
+  // @param r   32-bit region id
+  // @param o   32-bit offset inside the region
   explicit RelAddress(RegionId r, uint32_t o = 0) : rid_{r}, offset_{o} {}
 
+  // Returns the region id.
   RegionId rid() const { return rid_; }
 
+  // Returns the 32-bit offset.
   uint32_t offset() const { return offset_; }
 
+  // Adds a 32-bit offset to the existing offset and returns the new
+  // @RelAddress.
+  // @param ofs   the 32-bit offset to be added
   RelAddress add(uint32_t ofs) const { return RelAddress{rid_, offset_ + ofs}; }
 
+  // Subtracts a 32-bit offset from the existing offset and returns the new
+  // @RelAddress.
+  // @param ofs   the 32-bit offset subtrahend, less than the existing offset
   RelAddress sub(uint32_t ofs) const {
     XDCHECK_LE(ofs, offset_);
     return RelAddress{rid_, offset_ - ofs};
