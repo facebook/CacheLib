@@ -41,7 +41,7 @@ set(CMAKE_INSTALL_DIR lib/cmake/cachelib CACHE STRING
 # automatically.
 #set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${LIB_INSTALL_DIR}")
 ##https://gitlab.kitware.com/cmake/community/-/wikis/doc/cmake/RPATH-handling
-set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib/cachelib/")
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN/../lib64:$ORIGIN/../lib-os")
 set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH FALSE)
 
@@ -63,7 +63,7 @@ set(CMAKE_MODULE_PATH
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-include(fb_cxx_flags)
+# include(fb_cxx_flags)
 message(STATUS "Update CXXFLAGS: ${CMAKE_CXX_FLAGS}")
 
 
@@ -73,7 +73,6 @@ find_package(Threads REQUIRED)
 
 find_package(Boost REQUIRED COMPONENTS
              system filesystem regex context program_options thread)
-find_package(Sodium REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
 find_package(GTest REQUIRED)

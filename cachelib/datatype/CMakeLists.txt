@@ -4,6 +4,9 @@ add_library (cachelib_datatype
   Buffer.cpp
   )
 add_dependencies(cachelib_datatype thrift_generated_files)
+target_link_libraries(cachelib_datatype
+  cachelib_common
+)
 
 install(TARGETS cachelib_datatype
         EXPORT cachelib-exports
