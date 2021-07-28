@@ -36,7 +36,7 @@ using RegionEvictCallback =
 // take care of locking.
 class RegionManager {
  public:
-  // constructs a Region Manager
+  // Constructs a Region Manager.
   //
   // @param numRegions        number of regions
   // @param regionSize        size of the region
@@ -64,50 +64,67 @@ class RegionManager {
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
+  // Gets a region from a valid region ID.
   Region& getRegion(RegionId rid) {
     XDCHECK(rid.valid());
     return *regions_[rid.index()];
   }
 
+  // Gets a const region from a valid region ID.
   const Region& getRegion(RegionId rid) const {
     XDCHECK(rid.valid());
     return *regions_[rid.index()];
   }
 
+  // Returns the size classes.
   const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
 
+  // Flushes the in memory buffer attached to a region in either async or
+  // sync mode.
+  // In async mode, a flush job will be added to a job scheduler;
+  // In sync mode, the function will not end until the flush work succeeds.
   void doFlush(RegionId rid, bool async);
 
+  // Returns the size of one region.
   uint64_t regionSize() const { return regionSize_; }
 
-  // Gets a region to evict
+  // Gets a region to evict.
   RegionId evict();
 
+  // Records a hit of a region.
   void touch(RegionId rid) { policy_->touch(rid); }
 
-  // Calling track on tracked regions is noop
+  // Calling track on tracked regions is noop.
   void track(RegionId rid);
 
+  // Resets all region internal state.
   void reset();
 
+  // Atomically loads the current sequence number (in memory_order_acquire
+  // order).
+  // Sequence number increases when a reclamation finished. Since reclamation
+  // may start during reading, by checking whether the sequence number changes,
+  // we avoid reading a region that has been reclaimed.
   uint64_t getSeqNumber() const {
     return seqNumber_.load(std::memory_order_acquire);
   }
 
+  // Converts @RelAddress to @AbsAddress.
   AbsAddress toAbsolute(RelAddress ra) const {
     return AbsAddress{ra.offset() + ra.rid().index() * regionSize_};
   }
 
+  // Converts @AbsAddress to @RelAddress.
   RelAddress toRelative(AbsAddress aa) const {
     // Compiler optimizes to use one division instruction
     return RelAddress{RegionId(aa.offset() / regionSize_),
                       uint32_t(aa.offset() % regionSize_)};
   }
 
-  // Assign a buffer from buffer pool
+  // Assigns a buffer from buffer pool.
   std::unique_ptr<Buffer> claimBufferFromPool();
 
-  // Return the buffer to the pool
+  // Returns the buffer to the pool.
   void returnBufferToPool(std::unique_ptr<Buffer> buf) {
     {
       std::lock_guard<std::mutex> bufLock{bufferMutex_};
@@ -116,32 +133,38 @@ class RegionManager {
     numInMemBufActive_.dec();
   }
 
-  // writes buffer @buf at the @addr
+  // Writes buffer @buf at the @addr.
   // @addr must be the address returned by Region::open(OpenMode::Write)
   // @buf may be mutated and will be de-allocated at the end of this
   bool write(RelAddress addr, Buffer buf);
 
-  // returns a buffer with data read from the device the @addr of size bytes
-  // @addr must be the address returned by Region::open(OpenMode::Read)
+  // Returns a buffer with data read from the device the @addr of size bytes
+  // @addr must be the address returned by Region::open(OpenMode::Read).
   //
   // On success the returned buffer will have same size as "size" argument.
   // Caller must check the size of the buffer returned to determine if this
   // succeeded or not.
   Buffer read(const RegionDescriptor& desc, RelAddress addr, size_t size) const;
 
-  // flushes all in memory buffers to the device and then issues device flush
+  // Flushes all in memory buffers to the device and then issues device flush.
   void flush();
+
+  // Flushes the in memory buffer attached to a region.
+  // Returns true if the flush succeeds and the buffer is detached from the
+  // region; false otherwise.
   bool flushBuffer(const RegionId& rid);
 
-  // Stores region information in a Thrift object for all regions
+  // Stores region information in a Thrift object for all regions.
   void persist(RecordWriter& rw) const;
 
   // Resets RegionManager and recovers region data. Throws std::exception on
   // failure.
   void recover(RecordReader& rr);
 
+  // Exports RegionManager stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const;
 
+  // Gets the size class of a region. Returns 0 when @sizeClasses is empty.
   uint32_t getRegionSlotSize(RegionId rid) const {
     const auto& region = getRegion(rid);
     if (sizeClasses_.empty()) {
@@ -150,12 +173,39 @@ class RegionManager {
     return sizeClasses_[region.getClassId()];
   }
 
+  // Opens a region for reading and returns the region descriptor.
+  //
+  // @param rid         region ID
+  // @param seqNumber   the sequence number aqcuired before opening the region
+  //                    for read; it is used to determine whether a reclamation
+  //                    happened during reading
   RegionDescriptor openForRead(RegionId rid, uint64_t seqNumber);
+
+  // Closes the region and consumes the region descriptor.
   void close(RegionDescriptor&& desc);
+
+  // Fetches a clean region from the @cleanRegions_ list and schedules reclaim
+  // jobs to refill the list. If in-mem buffer mode is enabled, a buffer will be
+  // attached to the fetched clean region.
+  // Returns OpenStatus::Ready if all the operations are successful;
+  // OpenStatus::Retry otherwise.
   OpenStatus getCleanRegion(RegionId& rid);
+
+  // Tries to get a free region first, otherwise evicts one and schedules region
+  // cleanup job (which will add the region to the clean list).
   JobExitCode startReclaim();
+
+  // Releases a region that was evicted during region reclamation.
+  //
+  // @param rid        region ID
+  // @param startTime  time when a reclamation starts;
+  //                   it is used to count the reclamation time duration
   void releaseEvictedRegion(RegionId rid, std::chrono::nanoseconds startTime);
+
+  // Evicts a region by calling @evictCb_ during region reclamation.
   void doEviction(RegionId rid, BufferView buffer) const;
+
+  // Checks whether in-mem buffer is enabled.
   bool doesBufferingWrites() const { return numInMemBuffers_ > 0; }
 
  private:
@@ -169,7 +219,7 @@ class RegionManager {
   bool isValidIORange(uint32_t offset, uint32_t size) const;
   OpenStatus assignBufferToRegion(RegionId rid);
 
-  // Initialize the eviction policy. Even on a clean start, we will track all
+  // Initializes the eviction policy. Even on a clean start, we will track all
   // the regions. The difference is that these regions will have no items in
   // them and can be evicted right away.
   void resetEvictionPolicy();

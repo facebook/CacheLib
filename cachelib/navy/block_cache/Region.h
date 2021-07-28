@@ -68,46 +68,52 @@ class Region {
   // thread can be running region reclaim at a time.
   bool readyForReclaim();
 
-  // Open this region for write and allocate a slot of @size.
+  // Opens this region for write and allocate a slot of @size.
   // Fail if there's insufficient space.
   std::tuple<RegionDescriptor, RelAddress> openAndAllocate(uint32_t size);
 
-  // Open this region for reading. Fail if region is blocked,
+  // Opens this region for reading. Fail if region is blocked.
   RegionDescriptor openForRead();
 
-  // Reset the region's internal state. This is used to reset state
+  // Resets the region's internal state. This is used to reset state
   // after a region has been reclaimed.
   void reset();
 
-  // Close the region and consume the region descriptor.
+  // Closes the region and consume the region descriptor.
   void close(RegionDescriptor&& desc);
 
-  // Associate this region with a RegionAllocator
+  // Associates this region with a RegionAllocator.
   void setClassId(uint16_t classId) {
     std::lock_guard<std::mutex> l{lock_};
     classId_ = classId;
   }
+
+  // Gets the size class this region is associated with.
   uint16_t getClassId() const {
     std::lock_guard<std::mutex> l{lock_};
     return classId_;
   }
 
-  // Assign this region a priority. The meaning of priority
+  // Assigns this region a priority. The meaning of priority
   // is dependent on the eviction policy we choose.
   void setPriority(uint16_t priority) {
     std::lock_guard<std::mutex> l{lock_};
     priority_ = priority;
   }
+
+  // Gets the priority this region is assigned.
   uint16_t getPriority() const {
     std::lock_guard<std::mutex> l{lock_};
     return priority_;
   }
 
+  // Gets the end offset of last slot added to this region.
   uint32_t getLastEntryEndOffset() const {
     std::lock_guard<std::mutex> l{lock_};
     return lastEntryEndOffset_;
   }
 
+  // Gets the number of items in this region.
   uint32_t getNumItems() const {
     std::lock_guard<std::mutex> l{lock_};
     return numItems_;
@@ -123,27 +129,27 @@ class Region {
     return 0;
   }
 
-  // Write buf to attached buffer at offset 'offset'
+  // Writes buf to attached buffer at offset 'offset'.
   void writeToBuffer(uint32_t offset, BufferView buf);
 
-  // Read from attached buffer from 'fromOffset' into 'outBuf'
+  // Reads from attached buffer from 'fromOffset' into 'outBuf'.
   void readFromBuffer(uint32_t fromOffset, MutableBufferView outBuf) const;
 
-  // Attach buffer 'buf' to the region
+  // Attaches buffer 'buf' to the region.
   void attachBuffer(std::unique_ptr<Buffer>&& buf) {
     std::lock_guard l{lock_};
     XDCHECK_EQ(buffer_, nullptr);
     buffer_ = std::move(buf);
   }
 
-  // checks if the region has buffer attached
+  // Checks if the region has buffer attached.
   bool hasBuffer() const {
     std::lock_guard l{lock_};
     return buffer_.get() != nullptr;
   }
 
-  // detaches the attached buffer and returns it only if there are no
-  // active readers, otherwise returns nullptr
+  // Detaches the attached buffer and returns it only if there are no
+  // active readers, otherwise returns nullptr.
   std::unique_ptr<Buffer> detachBuffer() {
     std::lock_guard l{lock_};
     XDCHECK_NE(buffer_, nullptr);
@@ -156,12 +162,13 @@ class Region {
     return nullptr;
   }
 
-  // flushes the attached buffer by calling the callBack function.
+  // Flushes the attached buffer by calling the callBack function.
   // The callBack function is expected to write to the underlying device.
   // The callback function should return true if successfully flushed the
   // buffer, otherwise it should return false.
   bool flushBuffer(std::function<bool(RelAddress, BufferView)> callBack);
 
+  // Marks the bit to indicate pending flush status.
   void setPendingFlush() {
     std::lock_guard l{lock_};
     XDCHECK_NE(buffer_, nullptr);
@@ -170,29 +177,29 @@ class Region {
     flags_ |= kFlushPending;
   }
 
-  // checks if the region's buffer is flushed
+  // Checks if the region's buffer is flushed.
   bool isFlushedLocked() const { return (flags_ & kFlushed) != 0; }
 
-  // returns the number of active writers using the region
+  // Returns the number of active writers using the region.
   uint32_t getActiveWriters() const {
     std::lock_guard l{lock_};
     return activeWriters_;
   }
 
-  // returns the number of active readers using the region
+  // Returns the number of active readers using the region.
   uint32_t getActiveInMemReaders() const {
     std::lock_guard l{lock_};
     return activeInMemReaders_;
   }
 
-  // returns the region id
+  // Returns the region id.
   RegionId id() const { return regionId_; }
 
  private:
   uint32_t activeOpenLocked();
 
-  // checks to see if there is enough space in the region for a new write of
-  // size 'size'
+  // Checks to see if there is enough space in the region for a new write of
+  // size 'size'.
   bool canAllocateLocked(uint32_t size) const {
     // assert that buffer is not flushed and flush is not pending
     XDCHECK((flags_ & (kFlushPending | kFlushed)) == 0);
@@ -261,16 +268,21 @@ class RegionDescriptor {
     return *this;
   }
 
+  // Checks whether the current open mode is Physical Read Mode.
   bool isPhysReadMode() const {
     return (mode_ == OpenMode::Read) && physReadMode_;
   }
 
+  // Checks whether status of the open is Ready.
   bool isReady() const { return status_ == OpenStatus::Ready; }
 
+  // Returns the current open mode.
   OpenMode mode() const { return mode_; }
 
+  // Returns the current open status.
   OpenStatus status() const { return status_; }
 
+  // Returns the unique region ID.
   RegionId id() const { return regionId_; }
 
  private:

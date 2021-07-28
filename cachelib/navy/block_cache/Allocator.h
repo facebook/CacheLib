@@ -31,18 +31,23 @@ class RegionAllocator {
         priority_{other.priority_},
         rid_{other.rid_} {}
 
-  // Set new region to allocate from. Region allocator has to be reset before
+  // Sets new region to allocate from. Region allocator has to be reset before
   // calling this.
   void setAllocationRegion(RegionId rid);
 
+  // Returns the current allocation region unique ID.
   RegionId getAllocationRegion() const { return rid_; }
 
-  // Resets allocator (releases used region)
+  // Resets allocator to the inital state.
   void reset();
 
+  // Returns the size class this region allocator is associated with.
   uint16_t classId() const { return classId_; }
+
+  // Returns the priority this region allocator is associated with.
   uint16_t priority() const { return priority_; }
 
+  // Returns the mutex lock.
   std::mutex& getLock() const { return mutex_; }
 
  private:
@@ -67,6 +72,8 @@ class Allocator {
   // Throws std::exception if invalid arguments
   explicit Allocator(RegionManager& regionManager, uint16_t numPriorities);
 
+  // Checks whether size class is used.
+  // Returns true if @sizeClasses is not empty; false otherwise.
   bool isSizeClassAllocator() const {
     return regionManager_.getSizeClasses().size() > 0;
   }
@@ -89,13 +96,16 @@ class Allocator {
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(
       uint32_t size, uint16_t priority);
 
+  // Closes the region.
   void close(RegionDescriptor&& rid);
 
+  // Resets the region to the initial state.
   void reset();
 
-  // Flushes any regions with in-memory buffers to device
+  // Flushes any regions with in-memory buffers to device.
   void flush();
 
+  // Exports Allocator stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const;
 
  private:

@@ -202,8 +202,6 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   }
 }
 
-// Tries to get a free region first, otherwise evicts one and schedules region
-// cleanup job (which will add the region to the clean list).
 JobExitCode RegionManager::startReclaim() {
   auto rid = evict();
   if (!rid.valid()) {
