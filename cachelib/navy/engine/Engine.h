@@ -6,11 +6,12 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Abstract base class of an engine.
 class Engine {
  public:
   virtual ~Engine() = default;
 
-  // returns true if the entry could exist. False if the entry definitely does
+  // Returns true if the entry could exist. False if the entry definitely does
   // not exist.
   virtual bool couldExist(HashedKey hk) = 0;
 
@@ -18,24 +19,30 @@ class Engine {
   // remains available via lookup.
   virtual Status insert(HashedKey hk, BufferView value) = 0;
 
+  // Looks up a key in the engine.
   virtual Status lookup(HashedKey hk, Buffer& value) = 0;
 
   // Remove must not return Status::Retry.
   virtual Status remove(HashedKey hk) = 0;
 
-  // Flush all buffered (in flight) operations
+  // Flushes all buffered (in flight) operations
   virtual void flush() = 0;
 
-  // Reset cache to the initial state
+  // Resets cache to the initial state
   virtual void reset() = 0;
 
+  // Serializes engine state to a RecordWriter.
   virtual void persist(RecordWriter& rw) = 0;
+
+  // Deserialize engine state from a RecordReader.
+  //
+  // @return  true if recovery succeeds, false otherwise.
   virtual bool recover(RecordReader& rr) = 0;
 
-  // Get engine specific counters. Calls back @visitor with key name and value.
+  // Gets engine specific counters. Calls back @visitor with key name and value.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
 
-  // Get the maximum item size that can be inserted into the engine.
+  // Gets the maximum item size that can be inserted into the engine.
   virtual uint64_t getMaxItemSize() const = 0;
 };
 } // namespace navy

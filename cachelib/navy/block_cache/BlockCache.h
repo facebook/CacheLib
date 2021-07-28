@@ -56,9 +56,10 @@ class BlockCache final : public Engine {
 
     // Number of priorities. Items of the same priority will be put into
     // the same reigon. The effect of priorities will be up to the particular
-    // eviction policy. There must be at least one priority
+    // eviction policy. There must be at least one priority.
     uint16_t numPriorities{1};
 
+    // Calculates the total region number.
     uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
     // Checks invariants. Throws exception if failed.
@@ -75,7 +76,7 @@ class BlockCache final : public Engine {
   BlockCache& operator=(const BlockCache&) = delete;
   ~BlockCache() override = default;
 
-  // Check if the key could exist in block cache. This can be used as a
+  // Checks if the key could exist in block cache. This can be used as a
   // pre-check to optimize cache lookups to avoid calling lookup in an async IO
   // environment.
   //
@@ -83,21 +84,64 @@ class BlockCache final : public Engine {
   //
   // @return  false if the key definitely does not exist and true if it could.
   bool couldExist(HashedKey hk) override;
+
+  // Inserts a key-value pair into BlockCache.
+  //
+  // @param hk      key to be inserted
+  // @param value   value to be inserted
+  //
+  // @return  Status::Ok on success,
+  //          Status::Rejected on error,
+  //          Status::Retry on no space available for now.
   Status insert(HashedKey hk, BufferView value) override;
+
+  // Looks up a key in BlockCache.
+  //
+  // @param hk      key to be looked up
+  // @param value   value to be populated with the data read
+  //
+  // @return  Status::Ok on success,
+  //          Status::NotFound if the key is not found,
+  //          Status::Retry read cannot be served and needs to be retried again.
+  //          Status::DeviceError otherwise.
   Status lookup(HashedKey hk, Buffer& value) override;
+
+  // Removes a key from BlockCache.
+  //
+  // @param hk  key to be removed
+  //
+  // @return Status::Ok if the key is found and Status::NotFound otherwise.
   Status remove(HashedKey hk) override;
 
+  // Flushes all buffered (in flight) operations in BlockCache.
   void flush() override;
+
+  // Resets BlockCache to its initial state.
   void reset() override;
 
+  // Serializes BlockCache state to a RecordWriter.
+  //
+  // @param rw   RecordWriter to serialize state
   void persist(RecordWriter& rw) override;
+
+  // Deserialize BlockCache state from a RecordReader.
+  //
+  // @param rr   RecordReader to deserialize state
+  //
+  // @return  true if recovery succeeds, false otherwise.
   bool recover(RecordReader& rr) override;
 
+  // Exports BlockCache stats via CounterVisitor.
+  //
+  // @param visitor   CounterVisitor to export stats
   void getCounters(const CounterVisitor& visitor) const override;
+
+  // Gets the maximum item size that can be inserted into BlockCache.
   uint64_t getMaxItemSize() const override {
     return regionSize_ - sizeof(EntryDesc);
   }
 
+  // Gets the alloc alignment size (must be an integral power of two).
   uint32_t getAllocAlignSize() const {
     XDCHECK(folly::isPowTwo(allocAlignSize_));
     return allocAlignSize_;
