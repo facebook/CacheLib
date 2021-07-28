@@ -8,23 +8,24 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Abstract base class of a reinsertion policy.
 class ReinsertionPolicy {
  public:
   virtual ~ReinsertionPolicy() = default;
 
-  // pass in the index
+  // Passes in the index.
   virtual void setIndex(Index* index) = 0;
 
-  // Determine whether or not we should keep this key around longer in cache.
+  // Determines whether or not we should keep this key around longer in cache.
   virtual bool shouldReinsert(HashedKey hk) = 0;
 
-  // Persist metadata associated with this policy.
+  // Persists metadata associated with this policy.
   virtual void persist(RecordWriter& rw) = 0;
 
-  // Recover from previously persisted metadata associated with this policy.
+  // Recovers from previously persisted metadata associated with this policy.
   virtual void recover(RecordReader& rr) = 0;
 
-  // Export stats
+  // Exports policy stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
 };
 } // namespace navy

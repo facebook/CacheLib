@@ -20,6 +20,8 @@ class PercentageReinsertionPolicy : public ReinsertionPolicy {
 
   void setIndex(Index* /* index */) override {}
 
+  // Applies percentage based policy to determine whether or not we should keep
+  // this key around longer in cache.
   bool shouldReinsert(HashedKey /* hk */) override {
     return folly::Random::rand32() % 100 < percentage_;
   }

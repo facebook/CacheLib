@@ -26,16 +26,25 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
   // @param hitsThreshold how many hits for an item is eligible for reinsertion
   explicit HitsReinsertionPolicy(uint8_t hitsThreshold);
 
+  // Sets the index for hits based reinsertion policy.
   void setIndex(Index* index) override { index_ = index; }
 
+  // Applies hits based policy to determine whether or not we should keep
+  // this key around longer in cache.
   bool shouldReinsert(HashedKey hk) override;
 
+  // Persists metadata associated with hits based reinsertion policy.
   void persist(RecordWriter& rw) override;
 
+  // Recovers from previously persisted metadata associated with
+  // hits based reinsertion policy.
   void recover(RecordReader& rr) override;
 
+  // Exports hits based reinsertion policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
+  // Gets the @AccessStats of a hashed key.
+  // Returns empty when the key is not found.
   AccessStats getAccessStats(HashedKey hk) const;
 
  private:
