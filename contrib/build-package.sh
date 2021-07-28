@@ -93,7 +93,9 @@ test "$#" -eq 0 \
 
 external_git_clone=
 external_git_branch=
+external_git_tag=
 update_submodules=
+cmake_custom_params=
 
 case "$1" in
   googlelog)
@@ -102,6 +104,8 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
+    external_git_tag="v0.5.0"
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     ;;
 
   googleflags)
@@ -110,6 +114,13 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
+    external_git_tag="v2.2.2"
+    cmake_custom_params="-DGFLAGS_BUILD_SHARED_LIBS=YES"
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DGFLAGS_BUILD_TESTING=YES"
+    else
+        cmake_custom_params="$cmake_custom_params -DGFLAGS_BUILD_TESTING=NO"
+    fi
     ;;
 
   googletest)
@@ -125,6 +136,7 @@ case "$1" in
         echo "Note: disabling DEBUG mode for googletest build"
         debug_build=
     fi
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     external_git_clone=yes
     ;;
 
@@ -134,6 +146,12 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DFMT_TEST=YES"
+    else
+        cmake_custom_params="$cmake_custom_params -DFMT_TEST=NO"
+    fi
     ;;
 
   zstd)
@@ -143,6 +161,11 @@ case "$1" in
     SRCDIR=$REPODIR/build/cmake
     external_git_clone=yes
     external_git_branch=release
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="-DZSTD_BUILD_TESTS=ON"
+    else
+        cmake_custom_params="-DZSTD_BUILD_TESTS=OFF"
+    fi
     ;;
 
   sparsemap)
@@ -157,30 +180,53 @@ case "$1" in
     NAME=folly
     SRCDIR=cachelib/external/$NAME
     update_submodules=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=ON"
+    else
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=OFF"
+    fi
     ;;
 
   fizz)
     NAME=fizz
     SRCDIR=cachelib/external/$NAME/$NAME
     update_submodules=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=ON"
+    else
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=OFF"
+    fi
     ;;
 
   wangle)
     NAME=wangle
     SRCDIR=cachelib/external/$NAME/$NAME
     update_submodules=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=ON"
+    else
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=OFF"
+    fi
     ;;
 
   fbthrift)
     NAME=fbthrift
     SRCDIR=cachelib/external/$NAME
     update_submodules=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     ;;
 
   cachelib)
     NAME=cachelib
     SRCDIR=cachelib
-    install=  # cachelib is NEVER installed automatically
+    if test "$build_tests" = "yes" ; then
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=ON"
+    else
+        cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=OFF"
+    fi
     ;;
 
   *) die "unknown dependency '$1'. See -h for help."
@@ -190,13 +236,11 @@ esac
 ## Calculate cmake/make parameters
 ####################################
 
-CMAKE_PARAMS=
+CMAKE_PARAMS="$cmake_custom_params"
 test "$debug_build" \
-  && CMAKE_PARAMS="-DCMAKE_BUILD_TYPE=Debug" \
-  || CMAKE_PARAMS="-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+  && CMAKE_PARAMS="$CMAKE_PARAMS -DCMAKE_BUILD_TYPE=Debug" \
+  || CMAKE_PARAMS="$CMAKE_PARAMS -DCMAKE_BUILD_TYPE=RelWithDebInfo"
 
-test -z "$build_tests" \
-  && CMAKE_PARAMS="$CMAKE_PARAMS -DBUILD_TESTS=OFF"
 
 MAKE_PARAMS=
 test "$verbose" && MAKE_PARAMS="$MAKE_PARAMS VERBOSE=YES"
@@ -217,6 +261,18 @@ cd "$dir/.." || die "failed to change-dir into $dir/.."
 test -d cachelib || die "expected 'cachelib' directory not found in $PWD"
 
 
+# After ensuring we are in the correct directory, set the installation prefix"
+PREFIX="$PWD/opt/cachelib/"
+CMAKE_PARAMS="$CMAKE_PARAMS -DCMAKE_INSTALL_PREFIX=$PREFIX"
+CMAKE_PREFIX_PATH="$PREFIX/lib/cmake:$PREFIX/lib64/cmake:$PREFIX/lib:$PREFIX/lib64:$PREFIX:${CMAKE_PREFIX_PATH:-}"
+export CMAKE_PREFIX_PATH
+PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
+export PKG_CONFIG_PATH
+LD_LIBRARY_PATH="$PREFIX/lib:$PREFIX/lib64:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH
+PATH="$PREFIX/bin:$PATH"
+export PATH
+
 ##
 ## Update the latest source code
 ##
@@ -224,23 +280,30 @@ test -d cachelib || die "expected 'cachelib' directory not found in $PWD"
 if test "$source" ; then
 
   if test "$external_git_clone" ; then
+
     # This is an external (non-facebook) project, clone/pull it.
     if test -d "$SRCDIR" ; then
-      # cloned repository already exists, update it
-      ( cd "$SRCDIR" && git pull ) \
-        || die "failed to update git repository for '$NAME' in '$SRCDIR'"
+      # cloned repository already exists, update it, unless we're on a specific tag
+      ( cd "$SRCDIR" && git fetch --all ) \
+        || die "failed to fetch git repository for '$NAME' in '$SRCDIR'"
     else
       # Clone new repository directory
       git clone "$REPO" "$REPODIR" \
         || die "failed to clone git repository $REPO to '$REPODIR'"
-
-      # Switch to specific branch if needed
-      if test "$external_git_branch" ; then
-        ( cd "$REPODIR" \
-           && git checkout --track "origin/$external_git_branch" ) \
-           || die "failed to checkout branch $external_git_branch in $REPODIR"
-      fi
     fi
+
+
+    # switch to specific branch/tag if needed
+    if test "$external_git_branch" ; then
+        ( cd "$REPODIR" \
+           && git checkout --force "origin/$external_git_branch" ) \
+           || die "failed to checkout branch $external_git_branch in $REPODIR"
+    elif test "$external_git_tag" ; then
+        ( cd "$REPODIR" \
+           && git checkout --force "$external_git_tag" ) \
+           || die "failed to checkout tag $external_git_tag in $REPODIR"
+    fi
+
   fi
 
   if test "$update_submodules" ; then
@@ -283,7 +346,8 @@ fi
 ##
 
 if test "$install" ; then
-  sudo make install || die "make install failed"
+  # shellcheck disable=SC2086
+  make $MAKE_PARAMS install || die "make install failed"
 fi
 
 echo "'$NAME' is now installed"

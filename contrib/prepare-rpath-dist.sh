@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 
 set -o pipefail
+export LC_ALL=C
+
+# In case these directories were not included
+export LD_LIBRARY_PATH=/usr/local/lib64:/usr/local/lib:$LD_LIBRARY_PATH
+
+# Default installation path
+BINARY=opt/cachelib/bin/cachebench
+
+
 
 die()
 {
-  base=$(basename "0")
+  base=$(basename "$0")
   echo "$base: error: $*" >&2
   exit 1
 }
@@ -15,26 +24,42 @@ test -d cachelib || die "failed to change-dir to expected root directory"
 
 test -d build-cachelib || die "the 'build-cachelib' directory wasn't found (try ./contrib/build-cachelib.sh)"
 
+test -e "$BINARY" || die "the executable '$BINARY' was not found"
+
+# Ensure all libraries are found
+if ldd "$BINARY" 2>&1 | grep -q "not found" ; then
+  die "some shared-object/libraries not found for '$BINARY' - check \$LD_LIBRARY_PATH"
+fi
+
 d=$(date +%F-%H%M%S)
 
 dst=dist-$d
 
-mkdir -p "$dst" "$dst/bin" "$dst/lib/cachelib" || die "failed to create destination directory '$dst'"
+# Find parent directory of the binary
+BASE_DIR=$(dirname "$BINARY")
+BASE_DIR=$(dirname "$BASE_DIR")
+LIB_OS_DIR="$BASE_DIR/lib-os"
 
-cp build-cachelib/cachebench/cachebench "$dst/bin" \
-  || die "failed to copy cachebench binary to '$dst/bin'"
+mkdir -p "$LIB_OS_DIR" \
+  || die "failed to create directory '$LIB_OS_DIR'"
 
-ldd build-cachelib/cachebench/cachebench | awk '/=>/ { print $3 }' | sort -u | xargs cp -t "$dst/lib/cachelib/" \
-  || die "failed to extract and copy shared-object dependencies"
+ldd "$BINARY" \
+    | awk '/=>/ { print $3 }' \
+    | sort -u \
+    | xargs -I% realpath --no-symlinks --relative-base="$BASE_DIR" "%" \
+    | grep "^/" \
+    | grep -vE "lib(c|m|dl|rt|pthread)[-.]" \
+    | sed -E 's/\.so\.[0-9.]*$/\.so*/' \
+    | xargs echo cp --no-dereference -t "$LIB_OS_DIR" \
+    | sh \
+   || die "failed to extract and copy shared-object dependencies"
 
-tar -czf "cachelib-rpath-binary-$d.tar.gz" "$dst" \
+
+tar -C opt -czf "cachelib-rpath-binary-$d.tar.gz" cachelib \
   || die "failed to create tarball"
 
 
 echo "
-  Created RPATH binary:
-     $dst/bin/cachebench
-
   Tarball in:
      cachelib-rpath-binary-$d.tar.gz
 "
