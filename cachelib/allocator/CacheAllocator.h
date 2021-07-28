@@ -787,8 +787,8 @@ class CacheAllocator : public CacheBase {
   bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
                           std::chrono::milliseconds interval,
                           unsigned int memAdviseReclaimPercentPerIter,
-                          unsigned int memLowerLimit,
-                          unsigned int memUpperLimit,
+                          unsigned int memLowerLimitGB,
+                          unsigned int memUpperLimitGB,
                           unsigned int memMaxAdvisePercent,
                           std::shared_ptr<RebalanceStrategy> strategy,
                           std::function<void()> postWorkHandler);

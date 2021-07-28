@@ -175,20 +175,20 @@ class CacheAllocatorConfig {
   // @param advisedPercentPerIteration  amount of memory to shrink/grow per
   //                                    iteration. This is computed like:
   //             (advisedPercentPerIteration / 100) * (upperLimit - lowerLimit)
-  // @param lowerLimit  the lower bound of free memory in the system, once
-  //                    this is reached, the memory monitor will start shrinking
-  //                    cache size
-  // @param uppperLimit the upper bound of free memory in the system, once
-  //                    this is reached, the memory monitor will start growing
-  //                    cache size until the initial configured cache size
+  // @param lowerLimitGB  the lower bound of free memory in the system, once
+  //                      this is reached, the memory monitor will start
+  //                      shrinking cache size
+  // @param uppperLimitGB the upper bound of free memory in the system, once
+  //                      this is reached, the memory monitor will start growing
+  //                      cache size until the initial configured cache size
   // @param RebalanceStrategy  an optional strategy to customize where the slab
   //                           to give up when shrinking cache
   CacheAllocatorConfig& enableFreeMemoryMonitor(
       std::chrono::milliseconds interval,
       uint32_t advisePercentPerIteration,
       uint32_t maxAdvisePercentage,
-      uint32_t lowerLimit,
-      uint32_t upperLimit,
+      uint32_t lowerLimitGB,
+      uint32_t upperLimitGB,
       std::shared_ptr<RebalanceStrategy> = {});
 
   // This is similar to the above, but for use cases running on Tupperware
@@ -448,7 +448,7 @@ class CacheAllocatorConfig {
   // 2. In the FreeMemory mode, when the system free memory drops below this
   // limit, slabs are advised away from pools in proportion to their size to
   // raise system free memory above this limit.
-  unsigned int memLowerLimit{10};
+  unsigned int memLowerLimitGB{10};
 
   // upper limit for free/resident memory in GBs.
   // Note: the lower/upper limit is used in exactly opposite ways for the
@@ -460,7 +460,7 @@ class CacheAllocatorConfig {
   // this limit and if there are slabs that were advised away earlier,
   // they're reclaimed by pools in proportion to their sizes to reduce the
   // system free memory below this limit.
-  unsigned int memUpperLimit{15};
+  unsigned int memUpperLimitGB{15};
 
   // throttler config of items reaper for iteration
   util::Throttler::Config reaperConfig{};
@@ -824,15 +824,15 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableFreeMemoryMonitor(
     std::chrono::milliseconds interval,
     uint32_t advisePercentPerIteration,
     uint32_t maxAdvisePercentage,
-    uint32_t lowerFreeMemLimit,
-    uint32_t upperFreeMemLimit,
+    uint32_t lowerFreeMemLimitGB,
+    uint32_t upperFreeMemLimitGB,
     std::shared_ptr<RebalanceStrategy> adviseStrategy) {
   memMonitorMode = MemoryMonitor::FreeMemory;
   memMonitorInterval = interval;
   memAdviseReclaimPercentPerIter = advisePercentPerIteration;
   memMaxAdvisePercent = maxAdvisePercentage;
-  memLowerLimit = lowerFreeMemLimit;
-  memUpperLimit = upperFreeMemLimit;
+  memLowerLimitGB = lowerFreeMemLimitGB;
+  memUpperLimitGB = upperFreeMemLimitGB;
   poolAdviseStrategy = adviseStrategy;
   return *this;
 }
@@ -842,15 +842,15 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableResidentMemoryMonitor(
     std::chrono::milliseconds interval,
     uint32_t advisePercentPerIteration,
     uint32_t maxAdvisePercentage,
-    uint32_t lowerResidentMemoryLimit,
-    uint32_t upperResidentMemoryLimit,
+    uint32_t lowerResidentMemoryLimitGB,
+    uint32_t upperResidentMemoryLimitGB,
     std::shared_ptr<RebalanceStrategy> adviseStrategy) {
   memMonitorMode = MemoryMonitor::ResidentMemory;
   memMonitorInterval = interval;
   memAdviseReclaimPercentPerIter = advisePercentPerIteration;
   memMaxAdvisePercent = maxAdvisePercentage;
-  memLowerLimit = lowerResidentMemoryLimit;
-  memUpperLimit = upperResidentMemoryLimit;
+  memLowerLimitGB = lowerResidentMemoryLimitGB;
+  memUpperLimitGB = upperResidentMemoryLimitGB;
   poolAdviseStrategy = adviseStrategy;
   return *this;
 }
@@ -1027,8 +1027,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memAdviseReclaimPercentPerIter"] =
       std::to_string(memAdviseReclaimPercentPerIter);
   configMap["memMaxAdvisePercent"] = std::to_string(memMaxAdvisePercent);
-  configMap["memLowerLimit"] = std::to_string(memLowerLimit);
-  configMap["memUpperLimit"] = std::to_string(memUpperLimit);
+  configMap["memLowerLimitGB"] = std::to_string(memLowerLimitGB);
+  configMap["memUpperLimitGB"] = std::to_string(memUpperLimitGB);
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["cacheWorkerPostWorkHandler"] =

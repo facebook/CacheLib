@@ -235,7 +235,7 @@ void CacheAllocator<CacheTrait>::initWorkers() {
     }
     startNewMemMonitor(config_.memMonitorMode, config_.memMonitorInterval,
                        config_.memAdviseReclaimPercentPerIter,
-                       config_.memLowerLimit, config_.memUpperLimit,
+                       config_.memLowerLimitGB, config_.memUpperLimitGB,
                        config_.memMaxAdvisePercent, config_.poolAdviseStrategy,
                        config_.cacheWorkerPostWorkHandler);
   }
@@ -3388,15 +3388,15 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     MemoryMonitor::Mode memMonitorMode,
     std::chrono::milliseconds interval,
     unsigned int memAdviseReclaimPercentPerIter,
-    unsigned int memLowerLimit,
-    unsigned int memUpperLimit,
+    unsigned int memLowerLimitGB,
+    unsigned int memUpperLimitGB,
     unsigned int memMaxAdvisePercent,
     std::shared_ptr<RebalanceStrategy> strategy,
     std::function<void()> postWorkHandler) {
   memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
   return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
-                        memAdviseReclaimPercentPerIter, memLowerLimit,
-                        memUpperLimit, memMaxAdvisePercent, strategy,
+                        memAdviseReclaimPercentPerIter, memLowerLimitGB,
+                        memUpperLimitGB, memMaxAdvisePercent, strategy,
                         postWorkHandler);
 }
 template <typename CacheTrait>

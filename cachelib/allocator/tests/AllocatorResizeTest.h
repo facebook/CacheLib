@@ -881,8 +881,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.enableCachePersistence(this->cacheDir_);
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(1);
-    config.memLowerLimit = 1;
-    config.memUpperLimit = 2;
+    config.memLowerLimitGB = 1;
+    config.memUpperLimitGB = 2;
     config.memAdviseReclaimPercentPerIter = 2;
     config.memMaxAdvisePercent = 20;
 
@@ -928,7 +928,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       uint64_t perIterAdvSize = 5 * Slab::kSize;
       auto bytesToSlabs = [](size_t bytes) { return bytes / Slab::kSize; };
       const uint32_t slabsToAdvisePerIter =
-          (bytesToSlabs((config.memUpperLimit - config.memLowerLimit) << 30) *
+          (bytesToSlabs((config.memUpperLimitGB - config.memLowerLimitGB)
+                        << 30) *
            config.memAdviseReclaimPercentPerIter) /
           100;
       const uint32_t numItersToMaxAdviseAway = numPools * slabsPerPool *
@@ -978,8 +979,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     config.enableCachePersistence(this->cacheDir_);
     config.memMonitorMode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(1);
-    config.memLowerLimit = 1;
-    config.memUpperLimit = 2;
+    config.memLowerLimitGB = 1;
+    config.memUpperLimitGB = 2;
     config.memAdviseReclaimPercentPerIter = 2;
     config.memMaxAdvisePercent = 20;
 
