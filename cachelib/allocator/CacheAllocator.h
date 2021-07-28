@@ -720,8 +720,6 @@ class CacheAllocator : public CacheBase {
   // start pool rebalancer
   // @param interval            the period this worker fires.
   // @param strategy            rebalancing strategy
-  // @param postWorkHandler     callback function to be executed after the
-  //                            worker stops
   // @param freeAllocThreshold  threshold for free-alloc-slab for picking victim
   // allocation class. free-alloc-slab is calculated by the number of free
   // allocation divided by the number of allocations in one slab. Only
@@ -731,7 +729,6 @@ class CacheAllocator : public CacheBase {
   //
   bool startNewPoolRebalancer(std::chrono::milliseconds interval,
                               std::shared_ptr<RebalanceStrategy> strategy,
-                              std::function<void()> postWorkHandler,
                               unsigned int freeAllocThreshold);
 
   // start pool resizer
@@ -739,12 +736,9 @@ class CacheAllocator : public CacheBase {
   // @param poolResizeSlabsPerIter  maximum number of slabs each pool may remove
   //                                in resizing.
   // @param strategy                resizing strategy
-  // @param postWorkHandler         callback function to be executed after the
-  //                                worker stops
   bool startNewPoolResizer(std::chrono::milliseconds interval,
                            unsigned int poolResizeSlabsPerIter,
-                           std::shared_ptr<RebalanceStrategy> strategy,
-                           std::function<void()> postWorkHandler);
+                           std::shared_ptr<RebalanceStrategy> strategy);
 
   // start pool optimizer
   // @param regularInterval         the period for optimizing regular cache
@@ -780,18 +774,14 @@ class CacheAllocator : public CacheBase {
   //                                        is disabled leading to a probable
   //                                        OOM.
   // @param strategy                        strategy to find an allocation class
-  //                                        to release slab
-  //                                        from
-  // @param postWorkHandler                 callback function to be executed
-  //                                        after the worker stops
+  //                                        to release slab from
   bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
                           std::chrono::milliseconds interval,
                           unsigned int memAdviseReclaimPercentPerIter,
                           unsigned int memLowerLimitGB,
                           unsigned int memUpperLimitGB,
                           unsigned int memMaxAdvisePercent,
-                          std::shared_ptr<RebalanceStrategy> strategy,
-                          std::function<void()> postWorkHandler);
+                          std::shared_ptr<RebalanceStrategy> strategy);
   // start reaper
   // @param interval                the period this worker fires
   // @param reaperThrottleConfig    throttling config

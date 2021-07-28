@@ -263,10 +263,6 @@ class CacheAllocatorConfig {
   // to Cache Library team. There is usually a better solutuon.
   CacheAllocatorConfig& disableCacheEviction();
 
-  // Set a callback to be invoked after a cache worker has finished its round
-  // of work.
-  CacheAllocatorConfig& setCacheWorkerPostWorkHandler(std::function<void()> cb);
-
   // Passes in a callback to initialize an event tracker when the allocator
   // starts
   CacheAllocatorConfig& setEventTracker(EventTrackerSharedPtr&&);
@@ -471,9 +467,6 @@ class CacheAllocatorConfig {
   // interval during which we adjust dynamically the refresh ratio.
   std::chrono::milliseconds mmReconfigureInterval{0};
 
-  // user-defined post work handler that will be executed once for
-  // every cache worker
-  std::function<void()> cacheWorkerPostWorkHandler{};
   //
   // TODO:
   // ABOVE are the config for various cache workers
@@ -935,13 +928,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setThrottlerConfig(
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheWorkerPostWorkHandler(
-    std::function<void()> cb) {
-  cacheWorkerPostWorkHandler = cb;
-  return *this;
-}
-
-template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
     EventTrackerSharedPtr&& otherEventTracker) {
   eventTracker = std::move(otherEventTracker);
@@ -1031,8 +1017,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memUpperLimitGB"] = std::to_string(memUpperLimitGB);
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
-  configMap["cacheWorkerPostWorkHandler"] =
-      (cacheWorkerPostWorkHandler ? "set" : "empty");
   configMap["disableEviction"] = std::to_string(disableEviction);
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
   configMap["thresholdForConvertingToIOBuf"] =
