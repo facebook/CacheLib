@@ -28,17 +28,30 @@ class ThreadPoolExecutor {
   // @param name        name for debugging
   ThreadPoolExecutor(uint32_t numThreads, folly::StringPiece name);
 
+  // put a job into the next queue in pool
+  // @param job   the job to be executed
+  // @param name  name of the job, for logging/debugging purposes
+  // @param pos   front/back of the queue to push in
   void enqueue(Job job, folly::StringPiece name, JobQueue::QueuePos pos);
 
+  // put a job into the a specific queue in pool based on the key hash
+  // @param job   the job to be executed
+  // @param name  name of the job, for logging/debugging purposes
+  // @param pos   front/back of the queue to push in
+  // @param key   the key hash
   void enqueueWithKey(Job job,
                       folly::StringPiece name,
                       JobQueue::QueuePos pos,
                       uint64_t key);
 
+  // Waits till all queued and currently running jobs are finished
+  // @return  the total number of jobs processed in the pool.
   uint64_t finish();
 
+  // stops the queues and wait the current processing job to complete
   void join();
 
+  // returns the stats of the pool
   Stats getStats() const;
 
   folly::StringPiece getName() const { return name_; }
@@ -75,6 +88,7 @@ class ThreadPoolJobScheduler final : public JobScheduler {
   // Waits till all queued and currently running jobs are finished
   void finish() override;
 
+  // Exports scheduler stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
  private:
@@ -100,16 +114,31 @@ class OrderedThreadPoolJobScheduler final : public JobScheduler {
       const OrderedThreadPoolJobScheduler&) = delete;
   ~OrderedThreadPoolJobScheduler() override {}
 
+  // put a job into the queue
+  // @param job   the job to be executed
+  // @param name  name of the job, for logging/debugging purposes
+  // @param type  the type of job: Read/Write/Reclaim/Flush
   void enqueue(Job job, folly::StringPiece name, JobType type) override;
+
+  // put a job into the queue based on the key hash
+  // execution ordering of the key is guaranteed
+  // @param job   the job to be executed
+  // @param name  name of the job, for logging/debugging purposes
+  // @param type  the type of job: Read/Write/Reclaim/Flush
+  // @param key   the key hash
   void enqueueWithKey(Job job,
                       folly::StringPiece name,
                       JobType type,
                       uint64_t key) override;
 
+  // waits till all queued and currently running jobs are finished
   void finish() override;
 
+  // returns the total number of jobs that were spooled (pending) due to
+  // ordering.
   uint64_t getTotalSpooled() const { return numSpooled_.get(); }
 
+  // Exports the ordered scheduler stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
  private:

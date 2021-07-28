@@ -9,6 +9,8 @@ namespace {
 constexpr uint64_t kHighRescheduleCount = 250;
 constexpr uint64_t kHighRescheduleReportRate = 100;
 
+// A scoped unlock, it unlocks the given lock and lock it back when out of scope
+// (destructor).
 template <typename T>
 class ScopedUnlock {
  public:

@@ -13,6 +13,9 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
+// A double ended job queue, job can be pushed in to the beginning or end of
+// queue. The process() function will keep executing the head job (pop it before
+// process) until stop signal received.
 class JobQueue {
  public:
   struct Stats {
@@ -32,6 +35,10 @@ class JobQueue {
   JobQueue& operator=(const JobQueue&) = delete;
   ~JobQueue() = default;
 
+  // put a job into the next queue in pool
+  // @param job   the job to be executed
+  // @param name  name of the job, for logging/debugging purposes
+  // @param pos   front/back of the queue to push in
   void enqueue(Job job, folly::StringPiece name, QueuePos pos);
 
   // Returns total count of enqueued jobs to this queue. After @finish, all of
