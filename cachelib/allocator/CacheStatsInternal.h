@@ -99,7 +99,6 @@ struct Stats {
   AtomicCounter numNvmDecryptionErrors{0};
 
   // basic admission policy stats
-  TLCounter numNvmRejectsByFilterCb{0};
   TLCounter numNvmRejectsByExpiry{0};
   TLCounter numNvmRejectsByClean{0};
   TLCounter numNvmRejectsByAP{0};

@@ -449,7 +449,6 @@ struct GlobalCacheStats {
   // stats related to the reaper
   ReaperStats reaperStats;
 
-  uint64_t numNvmRejectsByFilterCb{};
   uint64_t numNvmRejectsByExpiry{};
   uint64_t numNvmRejectsByClean{};
   uint64_t numNvmRejectsByAP{};
