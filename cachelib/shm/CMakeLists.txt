@@ -8,7 +8,7 @@ add_library (cachelib_shm
   SysVShmSegment.cpp
   )
 add_dependencies(cachelib_shm thrift_generated_files)
-target_link_libraries(cachelib_shm
+target_link_libraries(cachelib_shm PUBLIC
   cachelib_common
 )
 
@@ -19,13 +19,13 @@ install(TARGETS cachelib_shm
 if (BUILD_TESTS)
   add_library (shm_test_support
     tests/common.cpp)
-  target_link_libraries (shm_test_support INTERFACE
+  target_link_libraries (shm_test_support PUBLIC
     cachelib_shm
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
-    gtest_main
+    GTest::gtest
+    GTest::gtest_main
+    GTest::gmock
   )
 
   function (ADD_TEST SOURCE_FILE)

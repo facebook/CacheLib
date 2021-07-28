@@ -29,6 +29,8 @@ option(BUILD_TESTS "If enabled, compile the tests." ON)
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")
+set(TESTS_INSTALL_DIR tests CACHE STRING
+    "The subdirectory where test binaries should be installed")
 set(INCLUDE_INSTALL_DIR include/cachelib CACHE STRING
     "The subdirectory where header files should be installed")
 set(LIB_INSTALL_DIR lib CACHE STRING
@@ -75,8 +77,7 @@ find_package(Boost REQUIRED COMPONENTS
              system filesystem regex context program_options thread)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_package(GTest REQUIRED)
-find_package(GMock REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 find_package(folly CONFIG REQUIRED)
 find_package(fizz CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
@@ -107,6 +108,11 @@ function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
 
   add_executable("${TEST_PREFIX}-${TEST_NAME}" "${SOURCE_FILE}")
   target_link_libraries("${TEST_PREFIX}-${TEST_NAME}" "${ARGN}")
+
+  install(
+    TARGETS "${TEST_PREFIX}-${TEST_NAME}"
+    DESTINATION ${TESTS_INSTALL_DIR}
+  )
 endfunction()
 
 

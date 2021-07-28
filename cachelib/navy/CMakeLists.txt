@@ -28,7 +28,7 @@ add_library (cachelib_navy
   )
 add_dependencies(cachelib_navy thrift_generated_files)
 
-target_link_libraries(cachelib_navy
+target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
   )
 
@@ -44,13 +44,13 @@ if (BUILD_TESTS)
     testing/SeqPoints.cpp
     )
   add_dependencies(navy_test_support thrift_generated_files)
-  target_link_libraries(navy_test_support
+  target_link_libraries(navy_test_support PUBLIC
     cachelib_navy
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
-    gtest_main
+    GTest::gtest
+    GTest::gtest_main
+    GTest::gmock
   )
 
 

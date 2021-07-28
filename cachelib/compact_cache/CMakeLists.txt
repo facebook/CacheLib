@@ -1,13 +1,13 @@
 add_library (compact_cache_test_support INTERFACE)
-add_dependencies(compact_cache_test_support thrift_generated_files)
+add_dependencies(compact_cache_test_support INTERFACE thrift_generated_files)
 
 if (BUILD_TESTS)
   target_link_libraries (compact_cache_test_support INTERFACE
     cachelib_allocator
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
+    GTest::gtest
+    GTest::gmock
   )
 
   function (ADD_TEST SOURCE_FILE)

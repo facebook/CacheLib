@@ -19,7 +19,7 @@ add_library (cachelib_cachebench
   ./workload/PieceWiseReplayGenerator.cpp
   )
 add_dependencies(cachelib_cachebench thrift_generated_files)
-target_link_libraries(cachelib_cachebench
+target_link_libraries(cachelib_cachebench PUBLIC
   cachelib_datatype
   cachelib_allocator
   gflags
@@ -39,11 +39,11 @@ if (BUILD_TESTS)
   add_library (cachebench_test_support INTERFACE )
   target_link_libraries (cachebench_test_support INTERFACE
     cachelib_cachebench
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
-    gtest_main
+    GTest::gtest
+    GTest::gtest_main
+    GTest::gmock
   )
 
 

@@ -41,8 +41,8 @@ if (BUILD_TESTS)
   target_link_libraries (common_test_support INTERFACE
     cachelib_common
     gflags
-    gtest
-    gtest_main
+    GTest::gtest
+    GTest::gtest_main
   )
 
   function (ADD_TEST SOURCE_FILE)
@@ -61,7 +61,7 @@ if (BUILD_TESTS)
   add_test (tests/CohortTests.cpp)
   add_test (tests/CounterTests.cpp)
   add_test (tests/CountMinSketchTest.cpp)
-  add_test (tests/EventInterfaceTest.cpp)
+  add_test (tests/EventInterfaceTest.cpp cachelib_allocator)
   add_test (tests/HashTests.cpp)
   add_test (tests/IteratorsTests.cpp)
   add_test (tests/MutexTests.cpp)
@@ -70,4 +70,5 @@ if (BUILD_TESTS)
   add_test (tests/UtilTests.cpp)
   add_test (tests/CountDownLatchTest.cpp)
   add_test (tests/UtilTestsRSS.cpp)
+  add_test (tests/TimeTests.cpp)
 endif()

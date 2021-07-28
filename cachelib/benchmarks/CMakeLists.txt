@@ -6,14 +6,14 @@ if (BUILD_TESTS)
     )
 
   add_dependencies(benchmark_test_support thrift_generated_files)
-  target_link_libraries (benchmark_test_support
+  target_link_libraries (benchmark_test_support PUBLIC
     cachelib_datatype
     cachelib_allocator
     Folly::follybenchmark
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
+    GTest::gtest
+    GTest::gmock
   )
 
   function (ADD_TEST SOURCE_FILE)
@@ -27,7 +27,7 @@ if (BUILD_TESTS)
   add_test (CachelibMapOperationBench.cpp)
   add_test (CachelibMapWorkloadBench.cpp)
   add_test (CachelibRangeMapWorkloadBench.cpp)
-  add_test (CachelibSteadyTickerBench.cpp)
+  add_test (CachelibTickerClockBench.cpp)
   add_test (CompactCacheBench.cpp)
   add_test (HashMapBenchmark.cpp)
   add_test (ItemsReaperBench.cpp)
@@ -38,9 +38,9 @@ if (BUILD_TESTS)
   add_test (PtrCompressionBench.cpp)
   add_test (SListBench.cpp)
   add_test (ThreadLocalBench.cpp)
-  add_test (CacheAllocatorOpsMicroBench.cpp)
   add_test (EventTrackerPerf.cpp)
-  add_test (SmallOperationMicroBench.cpp)
-  add_test (SpeedUpExistenceCheckBenchmark.cpp)
-  add_test (TempBenchmark.cpp)
+  # Temporarily disabled test: require __rdstc()
+  #add_test (CacheAllocatorOpsMicroBench.cpp)
+  #add_test (SmallOperationMicroBench.cpp)
+  #add_test (SpeedUpExistenceCheckBenchmark.cpp)
 endif()

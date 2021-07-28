@@ -45,7 +45,7 @@ add_library (cachelib_allocator
     TempShmMapping.cpp
 )
 add_dependencies(cachelib_allocator thrift_generated_files)
-target_link_libraries(cachelib_allocator
+target_link_libraries(cachelib_allocator PUBLIC
   cachelib_navy
   cachelib_common
   cachelib_shm
@@ -62,13 +62,13 @@ if (BUILD_TESTS)
     ./memory/tests/TestBase.cpp
     )
   add_dependencies(allocator_test_support thrift_generated_files)
-  target_link_libraries (allocator_test_support INTERFACE
+  target_link_libraries (allocator_test_support PUBLIC
     cachelib_allocator
-    gmock
-    glog
+    glog::glog
     gflags
-    gtest
-    gtest_main
+    GTest::gtest
+    GTest::gtest_main
+    GTest::gmock
   )
 
 
