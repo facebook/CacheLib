@@ -33,6 +33,10 @@ class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
 
+  // Checks if the key could exist in the cache. This can be used as a
+  // pre-check to optimize cache lookups to avoid calling lookup in an async IO
+  // environment.
+  // Returns: false if the key definitely does not exist and true if it could.
   virtual bool couldExist(BufferView key) = 0;
 
   // Inserts entry into cache.

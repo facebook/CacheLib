@@ -163,22 +163,49 @@ class CacheProto {
       double probFactorUpperBound = 0) = 0;
 };
 
+// Creates BlockCache engine prototype.
 std::unique_ptr<BlockCacheProto> createBlockCacheProto();
+
+// Creates BigHash engine prototype.
 std::unique_ptr<BigHashProto> createBigHashProto();
+
+// Creates Cache object prototype.
 std::unique_ptr<CacheProto> createCacheProto();
+
+// Creates Cache object.
+// @param proto   cache object prototype
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
+
+// Creates a direct IO RAID0 Device.
+//
+// @param raidPaths             paths of RAID files
+// @param fdsize                size of each device in the RAID
+// @param truncateFile          whether to truncate the file
+// @param blockSize             device block size
+// @param stripeSize            RAID stripe size
+// @param encryptor             encryption object
+// @param maxDeviceWriteSize    device maximum granularity of writes
 std::unique_ptr<Device> createRAIDDevice(
     std::vector<std::string> raidPaths,
-    uint64_t fdsize, // size of each device in the RAID
+    uint64_t fdsize,
     bool truncateFile,
     uint32_t blockSize,
     uint32_t stripeSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
+
+// Creates a direct IO single file device.
+//
+// @param fileName              name of the file
+// @param singleFileSize        size of the file
+// @param truncateFile          whether to truncate the file
+// @param blockSize             device block size
+// @param encryptor             encryption object
+// @param maxDeviceWriteSize    device maximum granularity of writes
 std::unique_ptr<Device> createFileDevice(
     std::string fileName,
     uint64_t singleFileSize,
-    bool tuncateFile,
+    bool truncateFile,
     uint32_t blockSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
