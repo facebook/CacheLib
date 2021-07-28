@@ -19,12 +19,9 @@ class PoolResizer : public PeriodicWorker {
   // @param numSlabsPerIteration  maximum number of slabs each pool may remove
   //                              in resizing.
   // @param strategy              the resizing strategy
-  // @param postWorkHandler       callback function to be executed after the
-  //                              worker stops
   PoolResizer(CacheBase& cache,
               unsigned int numSlabsPerIteration,
-              std::shared_ptr<RebalanceStrategy> strategy,
-              std::function<void()> postWorkHandler = {});
+              std::shared_ptr<RebalanceStrategy> strategy);
 
   ~PoolResizer() override;
 
@@ -63,19 +60,9 @@ class PoolResizer : public PeriodicWorker {
   // slab release stats for resizer.
   ReleaseStats stats_;
 
-  // user defined handler that will be executed when the resizer stops
-  std::function<void()> postWorkHandler_;
-
   // implements the actual logic of running tryRebalancing and
   // updating the stats
   void work() final;
-
-  // executes a user-defined postWork handler
-  void postWork() final {
-    if (postWorkHandler_) {
-      postWorkHandler_();
-    }
-  }
 };
 } // namespace cachelib
 } // namespace facebook

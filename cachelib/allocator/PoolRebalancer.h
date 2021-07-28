@@ -26,11 +26,9 @@ class PoolRebalancer : public PeriodicWorker {
   // is calculated by the number of total free allocations divided by the number
   // of allocations in a slab. Only allocation classes with a higher
   // free-alloc-slab could get picked as a victim.
-  // @param postWorkHandler     callback to be executed after the worker stops
   PoolRebalancer(CacheBase& cache,
                  std::shared_ptr<RebalanceStrategy> strategy,
-                 unsigned int freeAllocThreshold,
-                 std::function<void()> postWorkHandler = {});
+                 unsigned int freeAllocThreshold);
 
   ~PoolRebalancer() override;
 
@@ -72,19 +70,9 @@ class PoolRebalancer : public PeriodicWorker {
   // slab release stats for this rebalancer.
   ReleaseStats stats_;
 
-  // user defined handler that will be executed when the resizer stops
-  std::function<void()> postWorkHandler_;
-
   // implements the actual logic of running tryRebalancing and
   // updating the stats
   void work() final;
-
-  // executes a user-defined postWork handler
-  void postWork() final {
-    if (postWorkHandler_) {
-      postWorkHandler_();
-    }
-  }
 };
 } // namespace cachelib
 } // namespace facebook

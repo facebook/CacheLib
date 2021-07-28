@@ -10,12 +10,10 @@ namespace cachelib {
 
 PoolResizer::PoolResizer(CacheBase& cache,
                          unsigned int numSlabsPerIteration,
-                         std::shared_ptr<RebalanceStrategy> strategy,
-                         std::function<void()> postWorkHandler)
+                         std::shared_ptr<RebalanceStrategy> strategy)
     : cache_(cache),
       strategy_(std::move(strategy)),
-      numSlabsPerIteration_(numSlabsPerIteration),
-      postWorkHandler_(std::move(postWorkHandler)) {
+      numSlabsPerIteration_(numSlabsPerIteration) {
   if (!strategy_) {
     strategy_ = std::make_shared<PoolResizeStrategy>();
   }

@@ -10,12 +10,10 @@ namespace cachelib {
 
 PoolRebalancer::PoolRebalancer(CacheBase& cache,
                                std::shared_ptr<RebalanceStrategy> strategy,
-                               unsigned int freeAllocThreshold,
-                               std::function<void()> postWorkHandler)
+                               unsigned int freeAllocThreshold)
     : cache_(cache),
       defaultStrategy_(std::move(strategy)),
-      freeAllocThreshold_(freeAllocThreshold),
-      postWorkHandler_(std::move(postWorkHandler)) {
+      freeAllocThreshold_(freeAllocThreshold) {
   if (!defaultStrategy_) {
     throw std::invalid_argument("The default rebalance strategy is not set.");
   }

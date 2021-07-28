@@ -231,9 +231,7 @@ enum class Stage : int8_t {
   PREWORK_COMPLETE,
   PREWORK_ERROR,
   WORK_DONE_ONCE,
-  WORKING_ERROR,
-  POST_WORK_COMPLETE,
-  POST_WORK_ERROR
+  WORKING_ERROR
 };
 
 const std::map<Stage, const char*> StageString = {
@@ -241,9 +239,7 @@ const std::map<Stage, const char*> StageString = {
     {Stage::PREWORK_COMPLETE, "PREWORK_COMPLETE"},
     {Stage::PREWORK_ERROR, "PREWORK_ERROR"},
     {Stage::WORK_DONE_ONCE, "WORK_DONE_ONCE"},
-    {Stage::WORKING_ERROR, "WORKING_ERROR"},
-    {Stage::POST_WORK_COMPLETE, "POST_WORK_COMPLETE"},
-    {Stage::POST_WORK_ERROR, "POST_WORK_ERROR"}};
+    {Stage::WORKING_ERROR, "WORKING_ERROR"}};
 
 inline std::ostream& operator<<(std::ostream& os, const Stage& stage) {
   os << StageString.at(stage);
@@ -279,18 +275,6 @@ class Work : public PeriodicWorker {
     }
   }
 
-  void postWork() override {
-    /* post work can happen even before work happens or pre work
-     * happened. It happens only once. */
-    if (stage == Stage::WORK_DONE_ONCE || stage == Stage::PREWORK_COMPLETE ||
-        stage == Stage::NONE) {
-      stage = Stage::POST_WORK_COMPLETE;
-    } else if (stage == Stage::POST_WORK_COMPLETE) {
-      /* Error if stage is already POST_WORK_COMPLETE */
-      stage = Stage::POST_WORK_ERROR;
-    }
-  }
-
   Stage stage;
 };
 
@@ -303,8 +287,8 @@ TEST(periodic_worker, work) {
       eventuallyTrue(std::bind(&Work::checkStage, &w, Stage::WORK_DONE_ONCE)));
   bool success = w.stop(std::chrono::seconds(0));
   EXPECT_TRUE(success);
-  EXPECT_TRUE(eventuallyTrue(
-      std::bind(&Work::checkStage, &w, Stage::POST_WORK_COMPLETE)));
+  EXPECT_TRUE(
+      eventuallyTrue(std::bind(&Work::checkStage, &w, Stage::WORK_DONE_ONCE)));
 }
 
 TEST(periodic_worker, work_milliseconds) {
@@ -314,6 +298,6 @@ TEST(periodic_worker, work_milliseconds) {
       eventuallyTrue(std::bind(&Work::checkStage, &w, Stage::WORK_DONE_ONCE)));
   bool success = w.stop(std::chrono::seconds(0));
   EXPECT_TRUE(success);
-  EXPECT_TRUE(eventuallyTrue(
-      std::bind(&Work::checkStage, &w, Stage::POST_WORK_COMPLETE)));
+  EXPECT_TRUE(
+      eventuallyTrue(std::bind(&Work::checkStage, &w, Stage::WORK_DONE_ONCE)));
 }

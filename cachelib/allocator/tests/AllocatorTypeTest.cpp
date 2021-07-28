@@ -181,11 +181,6 @@ TYPED_TEST(BaseAllocatorTest, FastShutdownTestWithAbortedPoolRebalancer) {
 // test item sampling by getting a random item from memory
 TYPED_TEST(BaseAllocatorTest, ItemSampling) { this->testItemSampling(); }
 
-// test a cache worker post work handler is triggered
-TYPED_TEST(BaseAllocatorTest, CacheWorkerPostWorkHandler) {
-  this->testCacheWorkerPostWorkHandler();
-}
-
 TYPED_TEST(BaseAllocatorTest, AllocateWithoutEviction) {
   this->testAllocateWithoutEviction();
 }

@@ -3354,10 +3354,10 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewPoolRebalancer(
     std::chrono::milliseconds interval,
     std::shared_ptr<RebalanceStrategy> strategy,
-    std::function<void()> postWorkHandler,
+    std::function<void()> /* postWorkHandler */,
     unsigned int freeAllocThreshold) {
   return startNewWorker("PoolRebalancer", poolRebalancer_, interval, strategy,
-                        freeAllocThreshold, postWorkHandler);
+                        freeAllocThreshold);
 }
 
 template <typename CacheTrait>
@@ -3365,9 +3365,9 @@ bool CacheAllocator<CacheTrait>::startNewPoolResizer(
     std::chrono::milliseconds interval,
     unsigned int poolResizeSlabsPerIter,
     std::shared_ptr<RebalanceStrategy> strategy,
-    std::function<void()> postWorkHandler) {
+    std::function<void()> /* postWorkHandler */) {
   return startNewWorker("PoolResizer", poolResizer_, interval,
-                        poolResizeSlabsPerIter, strategy, postWorkHandler);
+                        poolResizeSlabsPerIter, strategy);
 }
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewPoolOptimizer(
@@ -3392,12 +3392,11 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     unsigned int memUpperLimitGB,
     unsigned int memMaxAdvisePercent,
     std::shared_ptr<RebalanceStrategy> strategy,
-    std::function<void()> postWorkHandler) {
+    std::function<void()> /* postWorkHandler */) {
   memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
   return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
                         memAdviseReclaimPercentPerIter, memLowerLimitGB,
-                        memUpperLimitGB, memMaxAdvisePercent, strategy,
-                        postWorkHandler);
+                        memUpperLimitGB, memMaxAdvisePercent, strategy);
 }
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(

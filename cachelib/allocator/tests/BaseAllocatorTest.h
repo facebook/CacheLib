@@ -3268,24 +3268,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_LT(0, poolStats.numItems());
   }
 
-  // test a cache worker post work handler is triggered
-  void testCacheWorkerPostWorkHandler() {
-    bool triggered = false;
-
-    typename AllocatorT::Config config{};
-    config.setCacheWorkerPostWorkHandler([&] { triggered = true; });
-    config.enablePoolRebalancing(std::make_shared<LruTailAgeStrategy>(
-                                     LruTailAgeStrategy::Config{0.1, 0}),
-                                 std::chrono::seconds{1});
-    config.setCacheSize(2 * Slab::kSize);
-    config.enableCachePersistence(this->cacheDir_);
-
-    AllocatorT alloc(AllocatorT::SharedMemNew, config);
-    alloc.shutDown();
-
-    ASSERT_TRUE(triggered);
-  }
-
   void testInsertAndFind(AllocatorT& alloc) {
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
     const size_t kAllocSize = 1024, kItemSize = 512;

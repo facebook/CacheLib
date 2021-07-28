@@ -96,9 +96,6 @@ class PeriodicWorker {
   /* Function that represents the work to be executed periodically */
   virtual void work() = 0;
 
-  /* Function to be executed after work is done or stopped. */
-  virtual void postWork() {}
-
   /* Worker thread which will periodically do the work */
   std::unique_ptr<std::thread> workerThread_;
 

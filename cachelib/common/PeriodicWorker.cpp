@@ -44,7 +44,6 @@ void PeriodicWorker::loop(void) {
     wakeUp_ = false;
   }
 
-  postWork();
   /* Indicate to the context stopping the work that the work was stopped
    * successfully. The stopping context sets this to "true" when work is
    * happening, and waits for this field to flip. */
@@ -116,7 +115,7 @@ bool PeriodicWorker::stop(const std::chrono::milliseconds timeout) {
       return false;
     }
 
-    /* When we are here worker has already finished postWork, and should
+    /* When we are here worker should
      * be in the process of terminating. Lets wait for the thread to
      * terminate before completing stop().  A new worker instance can be
      * spun once we unlock below. */

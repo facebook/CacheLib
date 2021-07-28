@@ -17,16 +17,14 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
                              size_t lowerLimitGB,
                              size_t upperLimitGB,
                              size_t maxLimitPercent,
-                             std::shared_ptr<RebalanceStrategy> strategy,
-                             std::function<void()> postWorkHandler)
+                             std::shared_ptr<RebalanceStrategy> strategy)
     : cache_(cache),
       mode_(mode),
       strategy_(std::move(strategy)),
       percentPerIteration_(percentPerIteration),
       lowerLimit_(lowerLimitGB * kGBytes),
       upperLimit_(upperLimitGB * kGBytes),
-      maxLimitPercent_(maxLimitPercent),
-      postWorkHandler_(std::move(postWorkHandler)) {
+      maxLimitPercent_(maxLimitPercent) {
   if (!strategy_) {
     strategy_ = std::make_shared<PoolResizeStrategy>();
   }

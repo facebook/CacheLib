@@ -60,7 +60,6 @@ class MemoryMonitor : public PeriodicWorker {
   //                             leading to a probable OOM.
   // @param strategy             Strategy to use to determine the allocation
   //                             class in pool to steal slabs from, for advising
-  // @param postWorkHandler      Function invoked after periodic poll completes
   //
   // 2. Resident Memory Monitoring
   //
@@ -89,15 +88,13 @@ class MemoryMonitor : public PeriodicWorker {
   //                             leading to a probable OOM.
   // @param strategy             Strategy to use to determine the allocation
   //                             class in pool to steal slabs from, for advising
-  // @param postWorkHandler      Function invoked after periodic poll completes
   MemoryMonitor(CacheBase& cache,
                 Mode mode,
                 size_t percentPerIteration,
                 size_t lowerLimitGB,
                 size_t upperLimitGB,
                 size_t maxLimitPercent,
-                std::shared_ptr<RebalanceStrategy> strategy,
-                std::function<void()> postWorkHandler = {});
+                std::shared_ptr<RebalanceStrategy> strategy);
 
   ~MemoryMonitor() override;
 
@@ -203,9 +200,6 @@ class MemoryMonitor : public PeriodicWorker {
   // the maximum percentage of total memory that can be advised away
   size_t maxLimitPercent_{0};
 
-  // user defined handler that will be executed when the resizer stops
-  std::function<void()> postWorkHandler_;
-
   // a count of total number of slabs advised away
   std::atomic<unsigned int> slabsAdvised_{0};
 
@@ -223,13 +217,6 @@ class MemoryMonitor : public PeriodicWorker {
   // implements the actual logic of running tryRebalancing and
   // updating the stats
   void work() final;
-
-  // executes a user-defined postWork handler
-  void postWork() final {
-    if (postWorkHandler_) {
-      postWorkHandler_();
-    }
-  }
 };
 } // namespace cachelib
 } // namespace facebook
