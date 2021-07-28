@@ -73,6 +73,17 @@ class DynamicRandomAPConfig {
     return *this;
   }
 
+  // Set the range for probability factor.
+  // Non-positive values in either of the field would make
+  // both values ignored and the default values from DynamicRandomAP::Config
+  // will be used.
+  DynamicRandomAPConfig& setProbFactorRange(double lowerBound,
+                                            double upperBound) noexcept {
+    probFactorLowerBound_ = lowerBound;
+    probFactorUpperBound_ = upperBound;
+    return *this;
+  }
+
   uint64_t getAdmWriteRate() const { return admWriteRate_; }
 
   uint64_t getMaxWriteRate() const { return maxWriteRate_; }
@@ -80,6 +91,10 @@ class DynamicRandomAPConfig {
   size_t getAdmSuffixLength() const { return admSuffixLen_; }
 
   uint32_t getAdmProbBaseSize() const { return admProbBaseSize_; }
+
+  double getProbFactorLowerBound() const { return probFactorLowerBound_; }
+
+  double getProbFactorUpperBound() const { return probFactorUpperBound_; }
 
  private:
   // Admission policy target rate, bytes/s.
@@ -92,6 +107,12 @@ class DynamicRandomAPConfig {
   size_t admSuffixLen_{0};
   // Navy item base size of baseProbability calculation.
   size_t admProbBaseSize_{0};
+  // Lower bound of the probability factor. Non-positive valu ewould be replaced
+  // the default value from DynamicRandomAP::Config
+  double probFactorLowerBound_{0};
+  // Upper bound of the probability factor. Non-positive value would be
+  // replaced the default value from DynamicRandomAP::Config
+  double probFactorUpperBound_{0};
 };
 /**
  * BlockCacheConfig provides APIs for users to configure BlockCache engine,
@@ -325,6 +346,16 @@ class NavyConfig {
   // To be deprecated
   uint32_t getAdmissionProbBaseSize() const {
     return dynamicRandomAPConfig_.getAdmProbBaseSize();
+  }
+
+  // To be deprecated
+  double getProbFactorLowerBound() const {
+    return dynamicRandomAPConfig_.getProbFactorLowerBound();
+  }
+
+  // To be deprecated
+  double getProbFactorUpperBound() const {
+    return dynamicRandomAPConfig_.getProbFactorUpperBound();
   }
 
   // Get a const DynamicRandomAPConfig to read values of its parameters.

@@ -55,7 +55,8 @@ void setAdmissionPolicyTestSettings(NavyConfig& config) {
       .setAdmWriteRate(admissionWriteRate)
       .setMaxWriteRate(maxWriteRate)
       .setAdmSuffixLength(admissionSuffixLen)
-      .setAdmProbBaseSize(admissionProbBaseSize);
+      .setAdmProbBaseSize(admissionProbBaseSize)
+      .setProbFactorRange(0.001, 2.0);
 }
 
 void setDeviceTestSettings(NavyConfig& config) {
@@ -103,6 +104,8 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(config.getAdmissionSuffixLength(), 0);
   EXPECT_EQ(config.getBlockSize(), 4096);
   EXPECT_EQ(config.getTruncateFile(), false);
+  EXPECT_EQ(config.getProbFactorLowerBound(), 0);
+  EXPECT_EQ(config.getProbFactorUpperBound(), 0);
 
   EXPECT_EQ(config.getBlockCacheLru(), true);
   EXPECT_EQ(config.getBlockCacheRegionSize(), 16 * 1024 * 1024);
@@ -145,6 +148,8 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::maxWriteRate"] = "160";
   expectedConfigMap["navyConfig::admissionSuffixLen"] = "1";
   expectedConfigMap["navyConfig::admissionProbBaseSize"] = "1024";
+  expectedConfigMap["navyConfig::admissionProbFactorLowerBound"] = "0.001";
+  expectedConfigMap["navyConfig::admissionProbFactorUpperBound"] = "2";
 
   expectedConfigMap["navyConfig::blockSize"] = "1024";
   expectedConfigMap["navyConfig::fileName"] = "";
@@ -232,13 +237,16 @@ TEST(NavyConfigTest, AdmissionPolicy2) {
                       .setAdmWriteRate(admissionWriteRate)
                       .setMaxWriteRate(maxWriteRate)
                       .setAdmSuffixLength(admissionSuffixLen)
-                      .setAdmProbBaseSize(admissionProbBaseSize));
+                      .setAdmProbBaseSize(admissionProbBaseSize)
+                      .setProbFactorRange(0.1, 10));
   auto dynamicRandomConfig = config.dynamicRandomAdmPolicy();
   EXPECT_EQ(config.getAdmissionPolicy(), NavyConfig::kAdmPolicyDynamicRandom);
   EXPECT_EQ(dynamicRandomConfig.getAdmWriteRate(), admissionWriteRate);
   EXPECT_EQ(dynamicRandomConfig.getMaxWriteRate(), maxWriteRate);
   EXPECT_EQ(dynamicRandomConfig.getAdmSuffixLength(), admissionSuffixLen);
   EXPECT_EQ(dynamicRandomConfig.getAdmProbBaseSize(), admissionProbBaseSize);
+  EXPECT_EQ(dynamicRandomConfig.getProbFactorLowerBound(), 0.1);
+  EXPECT_EQ(dynamicRandomConfig.getProbFactorUpperBound(), 10);
   // cannot set random parameters
   EXPECT_THROW(config.enableRandomAdmPolicy(), std::invalid_argument);
 }

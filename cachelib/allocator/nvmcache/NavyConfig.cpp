@@ -246,6 +246,10 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(dynamicRandomAPConfig_.getAdmSuffixLength());
   configMap["navyConfig::admissionProbBaseSize"] =
       folly::to<std::string>(dynamicRandomAPConfig_.getAdmProbBaseSize());
+  configMap["navyConfig::admissionProbFactorLowerBound"] =
+      folly::to<std::string>(dynamicRandomAPConfig_.getProbFactorLowerBound());
+  configMap["navyConfig::admissionProbFactorUpperBound"] =
+      folly::to<std::string>(dynamicRandomAPConfig_.getProbFactorUpperBound());
 
   // device settings
   configMap["navyConfig::blockSize"] = folly::to<std::string>(blockSize_);

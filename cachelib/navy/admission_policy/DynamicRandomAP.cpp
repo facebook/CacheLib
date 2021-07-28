@@ -66,6 +66,8 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
       maxChange_{1.0 + config.changeWindow},
       minChange_{1.0 - config.changeWindow},
       fnBytesWritten_{std::move(config.fnBytesWritten)},
+      lowerBound_{config.probFactorLowerBound},
+      upperBound_{config.probFactorUpperBound},
       rg_{config.seed},
       deterministicKeyHashSuffixLength_{
           config.deterministicKeyHashSuffixLength} {
@@ -179,7 +181,7 @@ double DynamicRandomAP::clampFactorChange(double change) const {
 }
 
 double DynamicRandomAP::clampFactor(double factor) const {
-  return clamp(factor, kLowerBound_, kUpperBound_);
+  return clamp(factor, lowerBound_, upperBound_);
 }
 
 double DynamicRandomAP::getBaseProbability(uint64_t size) const {

@@ -203,7 +203,9 @@ class CacheProtoImpl final : public CacheProto {
   void setDynamicRandomAdmissionPolicy(uint64_t targetRate,
                                        size_t deterministicKeyHashSuffixLength,
                                        uint32_t itemBaseSize,
-                                       uint64_t maxRate) override {
+                                       uint64_t maxRate,
+                                       double probFactorLowerBound,
+                                       double probFactorUpperBound) override {
     DynamicRandomAP::Config apConfig;
     apConfig.targetRate = targetRate;
     apConfig.fnBytesWritten = [device = config_.device.get()]() {
@@ -217,6 +219,10 @@ class CacheProtoImpl final : public CacheProto {
     }
     if (maxRate > 0) {
       apConfig.maxRate = maxRate;
+    }
+    if (probFactorLowerBound > 0 && probFactorUpperBound > 0) {
+      apConfig.probFactorLowerBound = probFactorLowerBound;
+      apConfig.probFactorUpperBound = probFactorUpperBound;
     }
     config_.admissionPolicy =
         std::make_unique<DynamicRandomAP>(std::move(apConfig));

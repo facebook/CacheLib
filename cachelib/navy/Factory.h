@@ -150,11 +150,17 @@ class CacheProto {
   //
   // maxRate: max rate at which Navy can write without saturation which
   // negatively affects latency.
+  // probFactorLowerBound: lower bound of probability factor.
+  // probFactorUpperBound: upper bound of probability factor.
+  // If either lower bound or upper bound is 0, the default value
+  // in DynamicRandomAP::Config will be used.
   virtual void setDynamicRandomAdmissionPolicy(
       uint64_t targetRate,
       size_t deterministicKeyHashSuffixLength = 0,
       uint32_t itemBaseSize = 0,
-      uint64_t maxRate = 0) = 0;
+      uint64_t maxRate = 0,
+      double probFactorLowerBound = 0,
+      double probFactorUpperBound = 0) = 0;
 };
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto();

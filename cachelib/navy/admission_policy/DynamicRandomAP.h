@@ -73,6 +73,11 @@ class DynamicRandomAP final : public AdmissionPolicy {
     // limit during trough in the traffic.
     uint64_t maxRate{160 * 1024 * 1024};
 
+    // Lower bound and upper bound of the probabitliy factor
+    double probFactorLowerBound{kLowerBound_};
+
+    double probFactorUpperBound{kUpperBound_};
+
     // Throws if invalid config
     Config& validate();
   };
@@ -126,6 +131,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const double maxChange_{};
   const double minChange_{};
   const FnBytesWritten fnBytesWritten_;
+  const double lowerBound_{};
+  const double upperBound_{};
 
   mutable std::minstd_rand rg_;
   const size_t deterministicKeyHashSuffixLength_{0};
