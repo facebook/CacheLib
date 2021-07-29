@@ -57,6 +57,8 @@ class SeqPoints {
   SeqPoints(const SeqPoints&) = delete;
   SeqPoints& operator=(const SeqPoints&) = delete;
 
+  // Indicates that a sequence point has been reached. This will unblock
+  // other threads that call wait() or waitFor() on the same sequence point.
   void reached(uint32_t idx);
 
   // Block until reached() is called on the same index. If reached()

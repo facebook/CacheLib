@@ -21,7 +21,18 @@ class MockJobScheduler : public JobScheduler {
   MockJobScheduler() = default;
   ~MockJobScheduler() override;
 
+  // @param job   The job enqueued on the scheduler
+  // @param name  Name associated with the job
+  // @param type  Job type. This indicates if this is a read, write, or
+  //              Navy internal jobs such as reclaim or flush.
   void enqueue(Job job, folly::StringPiece name, JobType type) override;
+
+  // @param job   The job enqueued on the scheduler
+  // @param name  Name associated with the job
+  // @param type  Job type. This indicates if this is a read, write, or
+  //              Navy internal jobs such as reclaim or flush.
+  // @param key   Key is ignored in the mock scheduler since we do NOT
+  //              shard the jobs internally.
   void enqueueWithKey(Job job,
                       folly::StringPiece name,
                       JobType type,
@@ -30,21 +41,27 @@ class MockJobScheduler : public JobScheduler {
     enqueue(std::move(job), name, type);
   }
 
+  // This will block until the scheduler has finished all its jobs
   void finish() override;
 
+  // Mock scheduler exports no stats
   void getCounters(const CounterVisitor&) const override {}
 
+  // Runs the first job
   bool runFirst() { return runFirstIf(""); }
 
   // Runs first job if its name matches @expected, throws std::logic_error
   // otherwise. Returns true if job is done, false if rescheduled.
+  // @param expected    Job name. "" means match any job.
   bool runFirstIf(folly::StringPiece expected);
 
+  // Returns how many jobs are currently enqueued in the scheduler
   size_t getQueueSize() const {
     std::lock_guard<std::mutex> lock{m_};
     return q_.size();
   }
 
+  // Returns how many jobs have completed so far
   size_t getDoneCount() const {
     std::lock_guard<std::mutex> lock{m_};
     return doneCount_;
