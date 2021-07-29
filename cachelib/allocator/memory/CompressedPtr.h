@@ -29,6 +29,9 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   // Thrift doesn't support unsigned type
   using SerializedPtrType = int64_t;
 
+  // Total number of bits to represent a CompressPtr.
+  static constexpr size_t kNumBits = NumBits<PtrType>::value;
+
   // true if the compressed ptr expands to nullptr.
   bool isNull() const noexcept { return ptr_ == kNull; }
 

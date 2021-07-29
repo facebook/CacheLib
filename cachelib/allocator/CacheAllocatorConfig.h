@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 
 #include "cachelib/allocator/Cache.h"
@@ -313,14 +314,7 @@ class CacheAllocatorConfig {
   bool isUsingPosixShm() const noexcept { return usePosixShm; }
 
   // validate the config, and return itself if valid
-  const CacheAllocatorConfig& validate() const {
-    // we can track tail hits only if MMType is MM2Q
-    if (trackTailHits && CacheT::MMType::kId != MM2Q::kId) {
-      throw std::invalid_argument(
-          "Tail hits tracking cannot be enabled on MMTypes except MM2Q.");
-    }
-    return *this;
-  }
+  const CacheAllocatorConfig& validate() const;
 
   // check whether the RebalanceStrategy can be used with this config
   bool validateStrategy(
@@ -943,6 +937,30 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
   }
 
   nvmAdmissionMinTTL = ttl;
+  return *this;
+}
+
+template <typename T>
+const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
+  // we can track tail hits only if MMType is MM2Q
+  if (trackTailHits && T::MMType::kId != MM2Q::kId) {
+    throw std::invalid_argument(
+        "Tail hits tracking cannot be enabled on MMTypes except MM2Q.");
+  }
+
+  // The first part determines max number of "slots" we can address using
+  // CompressedPtr;
+  // The second part specifies the minimal allocation size for each slot.
+  // Multiplied, they inform us the maximal addressable space for cache.
+  size_t maxCacheSize = (1ul << CompressedPtr::kNumBits) * Slab::kMinAllocSize;
+  // Configured cache size should not exceed the maximal addressable space for
+  // cache.
+  if (size > maxCacheSize) {
+    throw std::invalid_argument(folly::sformat(
+        "config cache size: {}  exceeds max addressable space for cache: {}",
+        size,
+        maxCacheSize));
+  }
   return *this;
 }
 

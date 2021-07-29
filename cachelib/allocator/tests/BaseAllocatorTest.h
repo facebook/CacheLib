@@ -9,6 +9,7 @@
 #include <future>
 #include <mutex>
 #include <set>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -6009,6 +6010,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // can track tail hits only if MMType is MM2Q
     if (MMType::kId == MM2Q::kId) {
       EXPECT_NO_THROW(config.validate());
+      // size cannot exceed the maximum cache size (274'877'906'944 bytes)
+      config.setCacheSize(275'877'906'900);
+      EXPECT_THROW(config.validate(), std::invalid_argument);
     } else {
       EXPECT_THROW(config.validate(), std::invalid_argument);
     }
