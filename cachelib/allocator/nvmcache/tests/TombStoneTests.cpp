@@ -28,9 +28,9 @@ TEST(TombStoneTest, ConcurrentAddRemove) {
   TombStones t;
   const unsigned int nThreads = 10;
   const unsigned int nHashes = 100;
-  std::vector<size_t> hashes;
+  std::vector<std::string> hashes;
   for (unsigned int i = 0; i < nHashes; i++) {
-    hashes.push_back(i);
+    hashes.push_back(std::to_string(i));
   }
 
   std::vector<std::vector<std::unique_ptr<TombStones::Guard>>> guards;
@@ -67,7 +67,7 @@ TEST(TombStoneTest, ConcurrentAddRemove) {
 TEST(TombStoneTest, MultipleGuard) {
   TombStones t;
   int nGuards = 10;
-  uint64_t key = 12325;
+  std::string key = "12325";
   std::vector<std::unique_ptr<TombStones::Guard>> guards(nGuards);
   for (int i = 0; i < nGuards; i++) {
     guards[i] = std::make_unique<TombStones::Guard>(t.add(key));
@@ -85,7 +85,7 @@ TEST(TombStoneTest, MultipleGuard) {
 
 TEST(TombStoneTest, Move) {
   TombStones t;
-  uint64_t key = 12325;
+  std::string key = "12325";
   {
     auto guard = t.add(key);
     ASSERT_TRUE(t.isPresent(key));

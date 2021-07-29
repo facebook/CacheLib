@@ -43,21 +43,16 @@ class PutCtx {
 // Holds all necessary data to do an async nvm remove
 class DelCtx {
  public:
-  DelCtx(folly::StringPiece key,
+  DelCtx(folly::StringPiece,
          util::LatencyTracker tracker,
          TombStones::Guard tombstone)
-      : key_(key.toString()),
-        tracker_(std::move(tracker)),
-        tombstone_(std::move(tombstone)) {}
+      : tracker_(std::move(tracker)), tombstone_(std::move(tombstone)) {}
 
-  folly::StringPiece key() const { return key_; }
+  folly::StringPiece key() const { return tombstone_.key(); }
 
   static folly::StringPiece type() { return "del ctx"; }
 
  private:
-  // key corresponding to the context
-  std::string key_;
-
   //< tracking latency of the put operation
   util::LatencyTracker tracker_;
 

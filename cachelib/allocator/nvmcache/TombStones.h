@@ -1,17 +1,19 @@
 #pragma once
+#include <folly/container/F14Map.h>
 #include <folly/lang/Align.h>
 #include <glog/logging.h>
 
 #include <mutex>
-#include <unordered_map>
+#include <utility>
+
+#include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
 
-// Utility that helps us track in flight deletes by hashing the key. There
-// can be multiple concurrent deletes for the same key in flight and also
-// possibility of keys colliding on 64 bit hash. To work with this, we
-// maintain a count per hash and check for presence against the count.
+// Utility that helps us track in flight deletes. We maintain a count per key
+// and check for presence against the count to resolve multiple concurrent
+// deletes for the same key in flight.
 class alignas(folly::hardware_destructive_interference_size) TombStones {
  public:
   class Guard;
@@ -19,14 +21,20 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   // adds an instance of  key
   // @param key  key for the record
   // @return a valid Guard representing the tombstone
-  Guard add(uint64_t key) {
+  Guard add(folly::StringPiece key) {
     std::lock_guard<std::mutex> l(mutex_);
-    ++keys_[key];
-    return Guard(key, *this);
+    auto it = keys_.find(key);
+
+    if (it == keys_.end()) {
+      it = keys_.insert(std::make_pair(key.toString(), 0)).first;
+    }
+
+    ++it->second;
+    return Guard(it->first, *this);
   }
 
   // checks if there is a key present and returns true if so.
-  bool isPresent(uint64_t key) {
+  bool isPresent(folly::StringPiece key) {
     std::lock_guard<std::mutex> l(mutex_);
     return keys_.count(key) != 0;
   }
@@ -39,7 +47,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
     Guard() {}
     ~Guard() {
       if (tombstones_) {
-        tombstones_->remove(hash_);
+        tombstones_->remove(key_);
         tombstones_ = nullptr;
       }
     }
@@ -50,7 +58,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
 
     // allow moving
     Guard(Guard&& other) noexcept
-        : hash_{other.hash_}, tombstones_(other.tombstones_) {
+        : key_{std::move(other.key_)}, tombstones_(other.tombstones_) {
       other.tombstones_ = nullptr;
     }
     Guard& operator=(Guard&& other) noexcept {
@@ -61,16 +69,18 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
       return *this;
     }
 
+    folly::StringPiece key() const noexcept { return key_; }
+
     explicit operator bool() const noexcept { return tombstones_ != nullptr; }
 
    private:
     // only tombstone can create a guard.
     friend TombStones;
-    Guard(uint64_t hash, TombStones& t) noexcept
-        : hash_(hash), tombstones_(&t) {}
+    Guard(folly::StringPiece key, TombStones& t) noexcept
+        : key_(key), tombstones_(&t) {}
 
     // key for the tombstone
-    const uint64_t hash_{0};
+    folly::StringPiece key_;
 
     // tombstone record
     TombStones* tombstones_{nullptr};
@@ -78,7 +88,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
 
  private:
   // removes an instance of key. if the count drops to 0, we remove the key
-  void remove(uint64_t key) {
+  void remove(folly::StringPiece key) {
     std::lock_guard<std::mutex> l(mutex_);
     auto it = keys_.find(key);
     if (it == keys_.end() || it->second == 0) {
@@ -93,7 +103,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
 
   // mutex protecting the map below
   std::mutex mutex_;
-  std::unordered_map<uint64_t, uint64_t> keys_;
+  folly::F14NodeMap<std::string, uint64_t> keys_;
 };
 
 } // namespace cachelib

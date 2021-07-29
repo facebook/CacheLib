@@ -58,7 +58,7 @@ typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
   const size_t hash = folly::Hash()(key);
   // lower bits for shard and higher bits for key.
   const auto shard = hash % kShards;
-  auto guard = tombstones_[shard].add(hash);
+  auto guard = tombstones_[shard].add(key);
 
   // need to synchronize tombstone creations with fill lock to serialize
   // async fills with deletes
@@ -80,7 +80,7 @@ bool NvmCache<C>::hasTombStone(folly::StringPiece key) {
   const size_t hash = folly::Hash()(key);
   // lower bits for shard and higher bits for key.
   const auto shard = hash % kShards;
-  return tombstones_[shard].isPresent(hash);
+  return tombstones_[shard].isPresent(key);
 }
 
 template <typename C>
