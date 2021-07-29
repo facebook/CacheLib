@@ -92,11 +92,15 @@ class DynamicRandomAP final : public AdmissionPolicy {
   DynamicRandomAP& operator=(const DynamicRandomAP&) = delete;
   ~DynamicRandomAP() override = default;
 
+  // Whether to accept the given hashed key.
+  // The value is used to get size based probability factor.
   bool accept(HashedKey hk, BufferView value) override;
-  // Must be called non-concurrently
+
+  // Reset the throttling parameters update cycle.
+  // Not thread safe.
   void reset() override;
+  // Get stats counters to export.
   void getCounters(const CounterVisitor& visitor) const override;
-  void update();
 
  private:
   struct ValidConfigTag {};
@@ -119,6 +123,10 @@ class DynamicRandomAP final : public AdmissionPolicy {
   double clampFactorChange(double change) const;
   double clampFactor(double factor) const;
   double genF(const HashedKey& hk) const;
+
+  // Perform update to the throttling parameters.
+  // Not thread safe.
+  void update();
 
   // The rate we are configered to write on average over a day.
   const uint64_t targetRate_{};
@@ -147,6 +155,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   // probabilityFactor would always be in [lowerBound_, upperBound_]
   static constexpr double kLowerBound_{0.001};
   static constexpr double kUpperBound_{10.0};
+  FRIEND_TEST(DynamicRandomAPTest, AboveTarget);
+  FRIEND_TEST(DynamicRandomAPTest, BelowTarget);
   FRIEND_TEST(DynamicRandomAPTest, StayInRange);
   FRIEND_TEST(DynamicRandomAPTest, RespectMaxWriteRate);
 };
