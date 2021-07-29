@@ -9,12 +9,16 @@ namespace cachelib {
 namespace navy {
 using ProtoSerializer = apache::thrift::BinarySerializer;
 
+// @param obj       Object to be serialized. Must be a thrift object
+// @param writer    Serializer that implements RecordWriter interface
 template <typename ThriftObject>
 void serializeProto(const ThriftObject& obj, RecordWriter& writer) {
   facebook::cachelib::serializeProto<ThriftObject, ProtoSerializer>(obj,
                                                                     writer);
 }
 
+// @param reader    Deserializer that implements RecordReader interface
+// @return  deserialized thrift object
 template <typename ThriftObject>
 ThriftObject deserializeProto(RecordReader& reader) {
   return facebook::cachelib::deserializeProto<ThriftObject, ProtoSerializer>(
