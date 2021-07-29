@@ -614,11 +614,6 @@ void BlockCache::tryRecover(RecordReader& rr) {
   holeSizeTotal_.set(*config.holeSizeTotal_ref());
   regionManager_.recover(rr);
   index_.recover(rr);
-  // Reinsertion policy is optional. So only try to recover if we had it
-  // enabled in the last run of Navy.
-  if (*config.reinsertionPolicyEnabled_ref() && reinsertionPolicy_) {
-    reinsertionPolicy_->recover(rr);
-  }
 }
 
 bool BlockCache::isValidRecoveryData(

@@ -19,35 +19,14 @@ bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
   return true;
 }
 
-// TODO: T95755384 delete persist API
+// TODO: T95755384 delete persist API after BigCache has rolled out the release
+// that no longer tries to "recover" the persistence policy.
 void HitsReinsertionPolicy::persist(RecordWriter& rw) {
   // disable future recover by writing kNumLocks empty AccessTrackers
   serializeProto(kNumLocks, rw);
   for (size_t i = 0; i < kNumLocks; i++) {
     serialization::AccessTracker trackerData;
     serializeProto(trackerData, rw);
-  }
-}
-
-// TODO: T95755384 delete recover API
-void HitsReinsertionPolicy::recover(RecordReader& rr) {
-  XDCHECK(index_);
-
-  size_t numTrackers = deserializeProto<size_t>(rr);
-
-  for (size_t i = 0; i < numTrackers; i++) {
-    const auto& trackerData =
-        deserializeProto<serialization::AccessTracker>(rr);
-
-    XDCHECK(trackerData.deprecated_data_ref()->empty());
-
-    for (auto& kv : *trackerData.data_ref()) {
-      auto stats = kv.stats_ref();
-      auto key = kv.key_ref();
-      auto totalHits = static_cast<uint8_t>(*stats->totalHits_ref());
-      auto currHits = static_cast<uint8_t>(*stats->currHits_ref());
-      index_->setHits(*key, currHits, totalHits);
-    }
   }
 }
 

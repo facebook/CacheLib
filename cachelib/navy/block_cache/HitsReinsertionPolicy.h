@@ -42,9 +42,7 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
   // Persists metadata associated with hits based reinsertion policy.
   void persist(RecordWriter& rw) override;
 
-  // Recovers from previously persisted metadata associated with
-  // hits based reinsertion policy.
-  void recover(RecordReader& rr) override;
+  void recover(RecordReader& /* rr */) override {}
 
   // Exports hits based reinsertion policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
