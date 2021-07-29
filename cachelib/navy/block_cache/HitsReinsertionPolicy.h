@@ -13,6 +13,12 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Hits based reinsertion policy.
+// By enabling this policy, we will reinsert item that had been accessed more
+// than the threshold since the last time it was written into block cache. This
+// can better approximate a LRU than the region-based LRU. Typically users
+// apply this with a region-granularity FIFO eviction policy, or SFIFO eviction
+// policy.
 class HitsReinsertionPolicy : public ReinsertionPolicy {
  public:
   struct AccessStats {

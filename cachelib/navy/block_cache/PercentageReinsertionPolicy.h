@@ -10,6 +10,10 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// Percentage based reinsertion policy.
+// This is used for testing where a certain fraction of evicted items(governed
+// by the percentage) are always reinserted. The percentage value is between 0
+// and 100 for reinsertion.
 class PercentageReinsertionPolicy : public ReinsertionPolicy {
  public:
   // @param percentage     reinsertion chances: 0 - 100
