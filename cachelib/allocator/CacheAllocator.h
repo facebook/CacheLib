@@ -971,9 +971,10 @@ class CacheAllocator : public CacheBase {
   //          another thread.
   int64_t getHandleCountForThread() const;
 
-  // (Deprecated) reset and adjust handle count for a thread.
-  void resetHandleCountForThread();
-  void adjustHandleCountForThread(int64_t delta);
+  // (Deprecated) reset and adjust handle count for the current thread.
+  // Please do not use this API as it will be moved to a private function.
+  void resetHandleCountForThread_private();
+  void adjustHandleCountForThread_private(int64_t delta);
 
   // madvise(MADV_DODUMP) all recently accessed items.
   // this function is intended for signal handler which can mprotect other

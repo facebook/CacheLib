@@ -157,7 +157,7 @@ struct HandleImpl {
         if (handle) {
           // Increment one refcount on user thread since we transferred a handle
           // from a cachelib internal thread.
-          handle.alloc_->adjustHandleCountForThread(1);
+          handle.alloc_->adjustHandleCountForThread_private(1);
         }
         return handle;
       });
@@ -283,7 +283,7 @@ struct HandleImpl {
       // the refcount tracking accordingly. use the local copy to not make
       // this an atomic load check.
       if (it) {
-        alloc_.adjustHandleCountForThread(-1);
+        alloc_.adjustHandleCountForThread_private(-1);
       }
       {
         std::lock_guard<std::mutex> l(mtx_);
@@ -295,7 +295,7 @@ struct HandleImpl {
           // to a SemiFuture via toSemiFuture().
           auto itemHandle = hdl.clone();
           if (itemHandle) {
-            alloc_.adjustHandleCountForThread(-1);
+            alloc_.adjustHandleCountForThread_private(-1);
           }
           onReadyCallback_(std::move(itemHandle));
         }
@@ -331,7 +331,7 @@ struct HandleImpl {
       // After @wait, callback is invoked. We don't have to worry about mutex.
       wait();
       if (it_.exchange(nullptr, std::memory_order_release) != nullptr) {
-        alloc_.adjustHandleCountForThread(1);
+        alloc_.adjustHandleCountForThread_private(1);
       }
     }
 
@@ -349,7 +349,7 @@ struct HandleImpl {
       // If we have a wait context, we acquired the handle from another thread
       // that asynchronously created the handle. Fix up the thread local
       // refcount so that alloc_.release does not decrement it to negative.
-      alloc_.adjustHandleCountForThread(1);
+      alloc_.adjustHandleCountForThread_private(1);
       try {
         alloc_.release(it, /* isNascent */ false);
       } catch (const std::exception& e) {
@@ -378,7 +378,7 @@ struct HandleImpl {
   //
   // If the callback is successfully enqueued, then within the callback, user
   // must increment per-thread handle count by 1.
-  //   cache->adjustHandleCountForThread(1);
+  //   cache->adjustHandleCountForThread_private(1);
   // This is needed because cachelib had previously moved a handle from an
   // internal thread to this callback, and cachelib internally removed a
   // 1. It is done automatically if the user converted their ItemHandle

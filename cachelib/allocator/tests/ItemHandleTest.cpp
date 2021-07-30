@@ -61,7 +61,7 @@ struct TestAllocator {
 
   void markExpired(TestItemHandle& hdl) { hdl.markExpired(); }
 
-  void adjustHandleCountForThread(int i) { tlRef_.tlStats() += i; }
+  void adjustHandleCountForThread_private(int i) { tlRef_.tlStats() += i; }
 
   util::FastStats<int> tlRef_;
 };

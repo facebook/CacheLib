@@ -3175,12 +3175,13 @@ int64_t CacheAllocator<CacheTrait>::getHandleCountForThread() const {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::resetHandleCountForThread() {
+void CacheAllocator<CacheTrait>::resetHandleCountForThread_private() {
   handleCount_.tlStats() = 0;
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::adjustHandleCountForThread(int64_t delta) {
+void CacheAllocator<CacheTrait>::adjustHandleCountForThread_private(
+    int64_t delta) {
   handleCount_.tlStats() += delta;
 }
 
