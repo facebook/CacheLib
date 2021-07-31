@@ -255,6 +255,9 @@ TYPED_TEST(BaseAllocatorTest, AddChainedItemMultiThreadWithMoving) {
   this->testAddChainedItemMultithreadWithMoving();
 }
 
+// Notes (T96890007): This test is flaky in OSS build.
+// The test fails when running allocator-test-AllocatorTest on TinyLFU cache
+// trait but passes if the test is built with only TinyLFU cache trait.
 TYPED_TEST(BaseAllocatorTest, AddChainedItemMultiThreadWithMovingAndSync) {
   this->testAddChainedItemMultithreadWithMovingAndSync();
 }
