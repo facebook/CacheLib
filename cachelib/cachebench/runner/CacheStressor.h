@@ -417,7 +417,7 @@ class CacheStressor : public Stressor {
       const std::unordered_map<std::string, std::string>& featureMap) {
     // check the admission policy first, and skip the set operation
     // if the policy returns false
-    if (!config_.admPolicy->accept(featureMap)) {
+    if (config_.admPolicy && !config_.admPolicy->accept(featureMap)) {
       return OpResultType::kSetSkip;
     }
 
