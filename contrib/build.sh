@@ -90,6 +90,7 @@ options:
   -S    skip git-clone/git-pull step
   -t    build tests
         (default is to skip tests if supported by the package)
+  -T    build only CacheLib tests
   -v    verbose build
 
   "
@@ -104,13 +105,15 @@ pass_params=
 skip_os_pkgs=
 skip_build=
 show_help=
-while getopts BdhjOStv param
+build_cachelib_tests=
+while getopts BdhjOStvT param
 do
   case $param in
   h)  show_help=yes ;;
   O)  skip_os_pkgs=yes ;;
   B)  skip_build=yes ;;
   d|j|S|t|v) pass_params="$pass_params -$param" ;;
+  T)  build_cachelib_tests=yes ;;
   ?)      die "unknown option. See -h for help."
   esac
 done
@@ -136,6 +139,9 @@ if test -z "$skip_os_pkgs" ; then
 fi
 
 build_dependencies
+
+test -n "$build_cachelib_tests" \
+  && pass_params="$pass_params -t"
 
 # shellcheck disable=SC2086
 ./contrib/build-package.sh $pass_params cachelib \
