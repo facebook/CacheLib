@@ -1,3 +1,5 @@
+
+// @nolint item destructor test with simple dram cache
 {
   "cache_config" : {
     "cacheSizeMB" : 10240,
