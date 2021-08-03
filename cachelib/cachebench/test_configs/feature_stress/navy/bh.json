@@ -1,10 +1,13 @@
+// @nolint uses workload where the objects all fit within the small object cache 
 {
   "cache_config" : {
     "cacheSizeMB" : 32,
     "poolRebalanceIntervalSec" : 1,
     "moveOnSlabRelease" : true,
 
-    "nvmCacheSizeMB" : 512
+    "nvmCacheSizeMB" : 512,
+    "navyBigHashSizePct": 99,
+    "navySmallItemMaxSize": 2048
   },
   "test_config" : 
     {

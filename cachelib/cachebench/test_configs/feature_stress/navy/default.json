@@ -1,5 +1,6 @@
 // @nolint
-// Just a simple navy config meant for quick local testing on navy changes
+// Just a simple navy config meant for quick local testing on navy changes.
+// uses both the small and large object engines with Navy.
 {
   "cache_config" : {
     "cacheSizeMB" : 128,
