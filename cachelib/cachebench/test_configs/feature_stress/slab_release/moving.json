@@ -1,3 +1,4 @@
+// @nolint like default.json, but moves items during slab release instead of evicting them.
 {
   "cache_config" : {
     "cacheSizeMB" : 10240,
