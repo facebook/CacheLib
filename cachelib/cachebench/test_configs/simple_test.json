@@ -1,3 +1,4 @@
+// @nolint instantiates a small cache and runs a quick run of basic operations.
 {
   "cache_config" : {
     "cacheSizeMB" : 512,
@@ -13,10 +14,6 @@
       "numThreads" : 32,
       "numKeys" : 1000000,
       
-
-      "opDelayBatch" : 1,
-      "opDelayNs" : 200,
-
       "keySizeRange" : [1, 8, 64],
       "keySizeRangeProbability" : [0.3, 0.7],
 

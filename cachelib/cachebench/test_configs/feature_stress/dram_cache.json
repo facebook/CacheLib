@@ -1,3 +1,5 @@
+// @nolint turns on most feautures in dram cache like multiple pools, 
+// slab rebalancing with get/set/del operations across a wide variety of sizes
 {
   "cache_config" : {
     "cacheSizeMB" : 10240

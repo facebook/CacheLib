@@ -1,3 +1,5 @@
+// @nolint creates a large cache with a set and delete workload
+// this ensures that as the cache warms up, free allocs are generated and allocations are made from that.
 {
   "cache_config" : {
     "cacheSizeMB" : 102400,
