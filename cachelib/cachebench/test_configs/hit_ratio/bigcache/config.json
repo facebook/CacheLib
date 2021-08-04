@@ -8,7 +8,7 @@
       "addChainedRatio": 0.0, 
       "delRatio": 0.0, 
       "enableLookaside": true, 
-      "getRatio": 0.9746082749830369, 
+      "getRatio": 0.9911552928593673, 
       "keySizeRange": [
         1, 
         8, 
@@ -18,13 +18,14 @@
         0.3, 
         0.7
       ], 
-      "loneGetRatio": 0.025391725016963105, 
-      "numKeys": 23458726, 
+      "loneGetRatio": 0.008844707140632665, 
+      "numKeys": 8935378, 
       "numOps": 5000000, 
       "numThreads": 48, 
+      "popDistFile": "pop.json", 
        
       "setRatio": 0.0, 
-      "valSizeDistFile": "assoc_altoona1_follower_sizes.json"
+      "valSizeDistFile": "sizes.json"
     }
  
 }

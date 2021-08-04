@@ -8,7 +8,7 @@
       "addChainedRatio": 0.0, 
       "delRatio": 0.0, 
       "enableLookaside": true, 
-      "getRatio": 0.9845283120275657, 
+      "getRatio": 0.8841112719979642, 
       "keySizeRange": [
         1, 
         8, 
@@ -18,13 +18,14 @@
         0.3, 
         0.7
       ], 
-      "loneGetRatio": 0.015471687972434254, 
-      "numKeys": 14463466, 
+      "loneGetRatio": 0.1158887280020357, 
+      "numKeys": 65345659, 
       "numOps": 5000000, 
       "numThreads": 48, 
+      "popDistFile": "pop.json", 
        
       "setRatio": 0.0, 
-      "valSizeDistFile": "memcache_twmemcache.reg.altoona_sizes.json"
+      "valSizeDistFile": "sizes.json"
     }
  
 }

@@ -13,8 +13,8 @@
       "numKeys": 14463466000, 
       "numOps": 5000000000, 
       "numThreads": 48, 
-      "popDistFile": "memcache_twmemcache.reg.altoona_pop.json", 
-      "valSizeDistFile": "memcache_twmemcache.reg.altoona_sizes.json",
+      "popDistFile": "pop.json", 
+      "valSizeDistFile": "sizes.json",
        
 
       "opDelayNs" : 1000000,

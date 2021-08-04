@@ -8,7 +8,7 @@
       "addChainedRatio": 0.0, 
       "delRatio": 0.0, 
       "enableLookaside": true, 
-      "getRatio": 0.9572891261217322, 
+      "getRatio": 0.7684563460126871, 
       "keySizeRange": [
         1, 
         8, 
@@ -18,13 +18,14 @@
         0.3, 
         0.7
       ], 
-      "loneGetRatio": 0.042710873878267754, 
-      "numKeys": 36037042, 
+      "loneGetRatio": 0.2315436539873129, 
+      "numKeys": 71605574, 
       "numOps": 5000000, 
       "numThreads": 48, 
+      "popDistFile": "pop.json", 
        
       "setRatio": 0.0, 
-      "valSizeDistFile": "fbobj_altoona2_follower_sizes.json"
+      "valSizeDistFile": "sizes.json"
     }
  
 }
