@@ -167,6 +167,10 @@ struct CacheConfig : public JSONConfig {
   // number of navy in-memory buffers
   uint32_t navyNumInmemBuffers{0};
 
+  // By default Navy will only flush to device at most 1MB, if larger than 1MB,
+  // Navy will split it into multiple IOs.
+  uint32_t deviceMaxWriteSize{1024 * 1024};
+
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};

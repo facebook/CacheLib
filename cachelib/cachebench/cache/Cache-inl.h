@@ -195,6 +195,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     nvmConfig.truncateItemToOriginalAllocSizeInNvm =
         config_.truncateItemToOriginalAllocSizeInNvm;
 
+    nvmConfig.navyConfig.setDeviceMaxWriteSize(config_.deviceMaxWriteSize);
+
     XLOG(INFO) << "Using the following nvm config"
                << folly::toPrettyJson(
                       folly::toDynamic(nvmConfig.navyConfig.serialize()));
