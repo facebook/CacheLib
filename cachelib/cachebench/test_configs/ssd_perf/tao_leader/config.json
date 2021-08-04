@@ -86,9 +86,9 @@
           1.0
         ],
         "loneGetRatio": 0.2315436539873129,
-        "popDistFile": "fbobj_altoona_leader_pop.json",
+        "popDistFile": "fbobj_pop.json",
         "setRatio": 0.0,
-        "valSizeDistFile": "fbobj_altoona_leader_sizes.json"
+        "valSizeDistFile": "fbobj_sizes.json"
       },
       {
         "addChainedRatio": 0.0,
@@ -102,9 +102,9 @@
           1.0
         ],
         "loneGetRatio": 0.1158887280020357,
-        "popDistFile": "assoc_altoona_leader_pop.json",
+        "popDistFile": "assoc_pop.json",
         "setRatio": 0.0,
-        "valSizeDistFile": "assoc_altoona_leader_sizes.json"
+        "valSizeDistFile": "assoc_sizes.json"
       }
     ]
   }

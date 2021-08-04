@@ -3,32 +3,35 @@
     "cacheSizeMB": 38000,
     "navyReaderThreads": 32,
     "navyWriterThreads": 32,
-    "nvmCacheSizeMB": 932000,
     "nvmCachePaths": ["/dev/md0"],
+    "nvmCacheSizeMB": 932000,
     "writeAmpDeviceList": [
       "nvme1n1",
       "nvme2n1"
     ],
     "navyBigHashSizePct": 0,
     "navyBlockSize": 4096,
+    "navySizeClasses": [],
     "navyParcelMemoryMB": 6048,
     "enableChainedItem": true,
     "htBucketPower": 26,
-    "moveOnSlabRelease": false,
-    "navySizeClasses": [],
-    "poolRebalanceIntervalSec": 5
+    "moveOnSlabRelease": true,
+    "poolRebalanceIntervalSec": 2,
+    "rebalanceStrategy": "tail-age",
+    "rebalanceMinRatio": 0.1,
+    "rebalanceMinSlabs": 2
   },
   "test_config": {
     "enableLookaside": true,
     "generator": "online",
-    "numKeys": 2866320000,
-    "numOps": 200000000,
-    "numThreads": 36,
+    "numKeys": 72298041,
+    "numOps": 63000000,
+    "numThreads": 24,
     "poolDistributions": [
       {
         "addChainedRatio": 0.0,
         "delRatio": 0.0,
-        "getRatio": 0.87983,
+        "getRatio": 0.6,
         "keySizeRange": [
           8,
           16
@@ -36,16 +39,17 @@
         "keySizeRangeProbability": [
           1.0
         ],
-        "loneGetRatio": 1.0426679936986586e-05,
-        "loneSetRatio": 0.00317,
-        "popDistFile": "memcache_twmemcache.ltw.oregon_pop.json",
-        "setRatio": 0.117,
-        "valSizeDistFile": "memcache_twmemcache.ltw.oregon_sizes.json"
+        "loneGetRatio": 8.2e-06,
+        "loneSetRatio": 0.21,
+        "setRatio": 0.0,
+        "popDistFile": "pop.json",
+        "setRatio": 0.0,
+        "valSizeDistFile": "sizes.json"
       }
     ],
 
 
-    "opDelayNs": 1000,
+    "opDelayNs": 5000000,
     "opDelayBatch": 1
   }
 }

@@ -48,7 +48,7 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
 
 See [README.build.md](README.build.md) for further details.
 
-## Running the benchmark
+## Running the benchmark for SSD perf testing
 
 1. If `/dev/md0` is not being used, edit workload files appropiately.
    Change all instances of `/dev/md0` to raw path of data SSD(s):
@@ -61,13 +61,13 @@ See [README.build.md](README.build.md) for further details.
 3. Execute Tao Leader cachebench workload:
     ```sh
     cd cachelib/cachebench
-    ./cachebench -json_test_config test_configs/hw_test_configs/tao_leader/tao_leader_t10.json --progress_stats_file=/tmp/tao_leader.log
+    ./cachebench -json_test_config test_configs/ssd_perf/tao_leader/config.json --progress_stats_file=/tmp/tao_leader.log
     ```
 4. Fully trim the drive with fio again:
    `fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G`
 5. Execute `memcache_l2_wc` cachebench workload:
     ```sh
-    ./cachebench -json_test_config test_configs/hw_test_configs/memcache_l2_wc/memcache_l2_wc.json —progress_stats_file=/tmp/mc-l2-wc.log
+    ./cachebench -json_test_config test_configs/ssd_perf/memcache_l2_wc/config.json —progress_stats_file=/tmp/mc-l2-wc.log
     ```
 
 ## Getting the Results
@@ -93,7 +93,7 @@ See [README.build.md](README.build.md) for further details.
 1. **Duration of Replay** - To run cachebench operation for longer,
    increase the numOps appropriately in the config file.
 2. **Device Info** - Device info is configured in the config file
-   using the "dipperDevicePath" option.  If you would rather use a
+   using the "nvmCachePaths" option.  If you would rather use a
    filesystem based cache, pass the appropriate path through
    `nvmCachePaths`.  The benchmark will create a single file
    under that path corresponding to the configured `nvmCacheSizeMB`
