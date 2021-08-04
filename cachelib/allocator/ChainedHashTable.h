@@ -255,6 +255,18 @@ class ChainedHashTable {
       return static_cast<size_t>(1) << locksPower_;
     }
 
+    // Estimate bucketsPower and LocksPower based on cache entries.
+    void sizeBucketsPowerAndLocksPower(size_t cacheEntries) noexcept {
+      // The percentage of used buckets vs unused buckets is measured by a load
+      // factor. For optimal performance, the load factor should not be more
+      // than 60%.
+      bucketsPower_ =
+          static_cast<size_t>(ceil(log2(cacheEntries * 1.6 /* load factor */)));
+
+      // 1 lock per 1000 buckets.
+      locksPower_ = std::max<unsigned int>(1, bucketsPower_ - 10);
+    }
+
     unsigned int getBucketsPower() const noexcept { return bucketsPower_; }
 
     unsigned int getLocksPower() const noexcept { return locksPower_; }

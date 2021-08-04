@@ -8,6 +8,14 @@ namespace tests {
 using facebook::cachelib::ChainedHashTable;
 using ChainedHashTest = AccessTypeTest<ChainedHashTable>;
 
+TEST(ChainedHashTableConfigTest, Size) {
+  using HashConfig = ChainedHashTable::Config;
+  HashConfig config{};
+  config.sizeBucketsPowerAndLocksPower(1000000);
+  EXPECT_EQ(config.getBucketsPower(), 21);
+  EXPECT_EQ(config.getLocksPower(), 11);
+}
+
 TEST_F(ChainedHashTest, Insert) { testInsert(); }
 
 TEST_F(ChainedHashTest, Replace) { testReplace(); }
