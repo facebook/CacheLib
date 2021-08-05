@@ -74,7 +74,13 @@ struct Info {
   // @return the delta of the number of hits
   uint64_t deltaHits(const PoolStats& poolStats) const {
     XDCHECK(poolStats.cacheStats.find(id) != poolStats.cacheStats.end());
-    XDCHECK_GE(poolStats.numHitsForClass(id), hits);
+    // When a thread goes out of scope, numHitsForClass will decrease. In this
+    // case, we simply consider delta as 0.  TODO: change following if to
+    // XDCHECK_GE(poolStats.numHitsForClass(id), hits) once all use cases
+    // are using CacheStats::ThreadLocalStats
+    if (poolStats.numHitsForClass(id) <= hits) {
+      return 0;
+    }
 
     return poolStats.numHitsForClass(id) - hits;
   }
