@@ -649,8 +649,8 @@ TEST(BlockCache, ReclaimCorruptionSizeClass) {
       .WillOnce(testing::Invoke(
           [&device](uint64_t offset, uint32_t size, const void* data) {
             Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
-            // Skip 500 bytes at the end to ensure the header is corrupted
-            std::memcpy(buffer.data(), data, size - 500);
+            // Skip 10 bytes at the end to ensure the header is corrupted
+            std::memcpy(buffer.data(), data, size - 10);
             return device->getRealDeviceRef().write(offset, std::move(buffer));
           }));
   EXPECT_CALL(*device, writeImpl(4096, _, _))
