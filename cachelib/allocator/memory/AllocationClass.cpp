@@ -79,24 +79,24 @@ AllocationClass::AllocationClass(
     const serialization::AllocationClassObject& object,
     PoolId poolId,
     const SlabAllocator& s)
-    : classId_(object.classId),
+    : classId_(*object.classId_ref()),
       poolId_(poolId),
-      allocationSize_(static_cast<uint32_t>(object.allocationSize)),
-      currOffset_(static_cast<uint32_t>(object.currOffset)),
-      currSlab_(s.getSlabForIdx(object.currSlabIdx)),
+      allocationSize_(static_cast<uint32_t>(*object.allocationSize_ref())),
+      currOffset_(static_cast<uint32_t>(*object.currOffset_ref())),
+      currSlab_(s.getSlabForIdx(*object.currSlabIdx_ref())),
       slabAlloc_(s),
       freedAllocations_(*object.freedAllocationsObject_ref(),
                         slabAlloc_.createPtrCompressor<FreeAlloc>()),
-      canAllocate_(object.canAllocate) {
+      canAllocate_(*object.canAllocate_ref()) {
   if (!slabAlloc_.isRestorable()) {
     throw std::logic_error("The allocation class cannot be restored.");
   }
 
-  for (auto allocatedSlabIdx : object.allocatedSlabIdxs) {
+  for (auto allocatedSlabIdx : *object.allocatedSlabIdxs_ref()) {
     allocatedSlabs_.push_back(slabAlloc_.getSlabForIdx(allocatedSlabIdx));
   }
 
-  for (auto freeSlabIdx : object.freeSlabIdxs) {
+  for (auto freeSlabIdx : *object.freeSlabIdxs_ref()) {
     freeSlabs_.push_back(slabAlloc_.getSlabForIdx(freeSlabIdx));
   }
 
@@ -656,18 +656,18 @@ serialization::AllocationClassObject AllocationClass::saveState() const {
   }
 
   serialization::AllocationClassObject object;
-  object.classId = classId_;
-  object.allocationSize = allocationSize_;
-  object.currSlabIdx = slabAlloc_.slabIdx(currSlab_);
-  object.currOffset = currOffset_;
+  *object.classId_ref() = classId_;
+  *object.allocationSize_ref() = allocationSize_;
+  *object.currSlabIdx_ref() = slabAlloc_.slabIdx(currSlab_);
+  *object.currOffset_ref() = currOffset_;
   for (auto slab : allocatedSlabs_) {
-    object.allocatedSlabIdxs.push_back(slabAlloc_.slabIdx(slab));
+    object.allocatedSlabIdxs_ref()->push_back(slabAlloc_.slabIdx(slab));
   }
   for (auto slab : freeSlabs_) {
-    object.freeSlabIdxs.push_back(slabAlloc_.slabIdx(slab));
+    object.freeSlabIdxs_ref()->push_back(slabAlloc_.slabIdx(slab));
   }
   *object.freedAllocationsObject_ref() = freedAllocations_.saveState();
-  object.canAllocate = canAllocate_;
+  *object.canAllocate_ref() = canAllocate_;
   return object;
 }
 

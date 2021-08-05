@@ -118,11 +118,11 @@ bool ShmManager::initFromFile() {
 
   if (static_cast<bool>(usePosix_) ^
       (*object.shmVal_ref() == static_cast<int8_t>(ShmVal::SHM_POSIX))) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid value for attach. ShmVal: {}", object.shmVal));
+    throw std::invalid_argument(folly::sformat(
+        "Invalid value for attach. ShmVal: {}", *object.shmVal_ref()));
   }
 
-  for (const auto& kv : object.nameToKeyMap) {
+  for (const auto& kv : *object.nameToKeyMap_ref()) {
     nameToKey_.insert({kv.first, kv.second});
   }
 
@@ -155,7 +155,7 @@ typename ShmManager::ShutDownRes ShmManager::writeActiveSegmentsToFile() {
     const auto it = segments_.find(name);
     // segment exists and is active.
     if (it != segments_.end() && it->second->isActive()) {
-      object.nameToKeyMap[name] = key;
+      object.nameToKeyMap_ref()[name] = key;
     }
   }
 

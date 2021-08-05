@@ -18,7 +18,7 @@ using LockHolder = std::unique_lock<std::mutex>;
 std::vector<uint32_t> MemoryPool::createMcSizesFromSerialized(
     const serialization::MemoryPoolObject& object) {
   std::vector<uint32_t> acSizes;
-  for (auto size : object.acSizes) {
+  for (auto size : *object.acSizes_ref()) {
     acSizes.push_back(static_cast<uint32_t>(size));
   }
   return acSizes;
@@ -30,7 +30,7 @@ MemoryPool::ACVector MemoryPool::createMcFromSerialized(
     PoolId poolId,
     SlabAllocator& alloc) {
   MemoryPool::ACVector ac;
-  for (const auto& allocClassObject : object.ac) {
+  for (const auto& allocClassObject : *object.ac_ref()) {
     ac.emplace_back(new AllocationClass(allocClassObject, poolId, alloc));
   }
   return ac;
@@ -50,10 +50,10 @@ MemoryPool::MemoryPool(PoolId id,
 
 MemoryPool::MemoryPool(const serialization::MemoryPoolObject& object,
                        SlabAllocator& alloc)
-    : id_(object.id),
-      maxSize_(object.maxSize),
-      currSlabAllocSize_(object.currSlabAllocSize),
-      currAllocSize_(object.currAllocSize),
+    : id_(*object.id_ref()),
+      maxSize_(*object.maxSize_ref()),
+      currSlabAllocSize_(*object.currSlabAllocSize_ref()),
+      currAllocSize_(*object.currAllocSize_ref()),
       slabAllocator_(alloc),
       acSizes_(createMcSizesFromSerialized(object)),
       ac_(createMcFromSerialized(object, getId(), alloc)),
@@ -66,7 +66,7 @@ MemoryPool::MemoryPool(const serialization::MemoryPoolObject& object,
         "Memory Pool can not be restored with this slab allocator");
   }
 
-  for (auto freeSlabIdx : object.freeSlabIdxs) {
+  for (auto freeSlabIdx : *object.freeSlabIdxs_ref()) {
     freeSlabs_.push_back(slabAllocator_.getSlabForIdx(freeSlabIdx));
   }
   checkState();
@@ -309,21 +309,21 @@ serialization::MemoryPoolObject MemoryPool::saveState() const {
 
   serialization::MemoryPoolObject object;
 
-  object.id = id_;
-  object.maxSize = maxSize_;
-  object.currSlabAllocSize = currSlabAllocSize_;
-  object.currAllocSize = currAllocSize_;
+  *object.id_ref() = id_;
+  *object.maxSize_ref() = maxSize_;
+  *object.currSlabAllocSize_ref() = currSlabAllocSize_;
+  *object.currAllocSize_ref() = currAllocSize_;
 
   for (auto slab : freeSlabs_) {
-    object.freeSlabIdxs.push_back(slabAllocator_.slabIdx(slab));
+    object.freeSlabIdxs_ref()->push_back(slabAllocator_.slabIdx(slab));
   }
 
   for (auto size : acSizes_) {
-    object.acSizes.push_back(size);
+    object.acSizes_ref()->push_back(size);
   }
 
   for (const std::unique_ptr<AllocationClass>& allocClass : ac_) {
-    object.ac.push_back(allocClass->saveState());
+    object.ac_ref()->push_back(allocClass->saveState());
   }
 
   *object.numSlabResize_ref() = nSlabResize_;

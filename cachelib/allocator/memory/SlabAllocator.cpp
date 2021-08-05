@@ -123,23 +123,23 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
                              size_t memSize,
                              const Config& config)
     : memoryStart_(memoryStart),
-      memorySize_(object.memorySize),
+      memorySize_(*object.memorySize_ref()),
       slabMemoryStart_(computeSlabMemoryStart(memoryStart_, memorySize_)),
-      nextSlabAllocation_(getSlabForIdx(object.nextSlabIdx)),
-      canAllocate_(object.canAllocate),
+      nextSlabAllocation_(getSlabForIdx(*object.nextSlabIdx_ref())),
+      canAllocate_(*object.canAllocate_ref()),
       ownsMemory_(false) {
-  if (Slab::kSize != object.slabSize) {
+  if (Slab::kSize != *object.slabSize_ref()) {
     throw std::invalid_argument(folly::sformat(
         "current slab size {} does not match the previous one {}",
         Slab::kSize,
-        object.slabSize));
+        *object.slabSize_ref()));
   }
 
-  if (CompressedPtr::getMinAllocSize() != object.minAllocSize) {
+  if (CompressedPtr::getMinAllocSize() != *object.minAllocSize_ref()) {
     throw std::invalid_argument(folly::sformat(
         "current min alloc size {} does not match the previous one {}",
         CompressedPtr::getMinAllocSize(),
-        object.minAllocSize));
+        *object.minAllocSize_ref()));
   }
 
   XDCHECK(isRestorable());
@@ -156,7 +156,7 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
     excludeMemoryFromCoredump();
   }
 
-  for (const auto& pair : object.memoryPoolSize) {
+  for (const auto& pair : *object.memoryPoolSize_ref()) {
     const PoolId id = pair.first;
     if (id >= static_cast<PoolId>(memoryPoolSize_.size())) {
       throw std::invalid_argument(
@@ -167,7 +167,7 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
     memoryPoolSize_[id] = pair.second;
   }
 
-  for (auto freeSlabIdx : object.freeSlabIdxs) {
+  for (auto freeSlabIdx : *object.freeSlabIdxs_ref()) {
     freeSlabs_.push_back(getSlabForIdx(freeSlabIdx));
   }
 
@@ -480,23 +480,23 @@ serialization::SlabAllocatorObject SlabAllocator::saveState() {
   stopMemoryLocker();
 
   serialization::SlabAllocatorObject object;
-  object.memorySize = memorySize_;
-  object.nextSlabIdx = slabIdx(nextSlabAllocation_);
-  object.canAllocate = canAllocate_;
+  *object.memorySize_ref() = memorySize_;
+  *object.nextSlabIdx_ref() = slabIdx(nextSlabAllocation_);
+  *object.canAllocate_ref() = canAllocate_;
 
   for (PoolId id = 0; id < static_cast<PoolId>(memoryPoolSize_.size()); ++id) {
-    object.memoryPoolSize[id] = memoryPoolSize_[id];
+    object.memoryPoolSize_ref()[id] = memoryPoolSize_[id];
   }
 
   for (auto slab : freeSlabs_) {
-    object.freeSlabIdxs.push_back(slabIdx(slab));
+    object.freeSlabIdxs_ref()->push_back(slabIdx(slab));
   }
   for (auto slab : advisedSlabs_) {
     object.advisedSlabIdxs_ref()->push_back(slabIdx(slab));
   }
 
-  object.slabSize = Slab::kSize;
-  object.minAllocSize = CompressedPtr::getMinAllocSize();
+  *object.slabSize_ref() = Slab::kSize;
+  *object.minAllocSize_ref() = CompressedPtr::getMinAllocSize();
   return object;
 }
 

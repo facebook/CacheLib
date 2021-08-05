@@ -147,9 +147,9 @@ void benchStdMap() {
     int key = i % FLAGS_num_keys;
 
     if (rwDist(gen) == 0) {
-      s.m.find(key);
+      s.m_ref()->find(key);
     } else {
-      s.m[key] = val;
+      s.m_ref()[key] = val;
       auto iobuf = Serializer::serializeToIOBuf(s);
       auto res = util::insertIOBufInCache(*cache, poolId, kStdMap, *iobuf);
       XDCHECK(res);
@@ -179,7 +179,7 @@ void benchFrozenMap() {
       s.m().find(key);
     } else {
       auto mutableS = s.thaw();
-      mutableS.m[key] = val;
+      mutableS.m_ref()[key] = val;
       insertFrozenMap(mutableS, kFrozenStdMap);
     }
   }
@@ -196,9 +196,9 @@ void benchFollyCacheStdMap() {
     int key = i % FLAGS_num_keys;
 
     if (rwDist(gen) == 0) {
-      s.m.find(key);
+      s.m_ref()->find(key);
     } else {
-      s.m[key] = val;
+      s.m_ref()[key] = val;
     }
   }
 }

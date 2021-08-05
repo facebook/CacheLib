@@ -118,17 +118,17 @@ class BloomFilter {
 template <typename SerializationProto>
 void BloomFilter::persist(RecordWriter& rw) {
   serialization::BloomFilterPersistentData bd;
-  bd.numFilters = numFilters_;
-  bd.hashTableBitSize = hashTableBitSize_;
-  bd.filterByteSize = filterByteSize_;
-  bd.fragmentSize = kPersistFragmentSize;
-  bd.seeds.resize(seeds_.size());
+  *bd.numFilters_ref() = numFilters_;
+  *bd.hashTableBitSize_ref() = hashTableBitSize_;
+  *bd.filterByteSize_ref() = filterByteSize_;
+  *bd.fragmentSize_ref() = kPersistFragmentSize;
+  bd.seeds_ref()->resize(seeds_.size());
   for (uint32_t i = 0; i < seeds_.size(); i++) {
-    bd.seeds[i] = seeds_[i];
+    bd.seeds_ref()[i] = seeds_[i];
   }
   facebook::cachelib::serializeProto<serialization::BloomFilterPersistentData,
                                      SerializationProto>(bd, rw);
-  serializeBits(rw, bd.fragmentSize);
+  serializeBits(rw, *bd.fragmentSize_ref());
 }
 
 template <typename SerializationProto>
@@ -136,16 +136,16 @@ void BloomFilter::recover(RecordReader& rr) {
   const auto bd = facebook::cachelib::deserializeProto<
       serialization::BloomFilterPersistentData,
       SerializationProto>(rr);
-  if (numFilters_ != static_cast<uint32_t>(bd.numFilters) ||
-      hashTableBitSize_ != static_cast<uint64_t>(bd.hashTableBitSize) ||
-      filterByteSize_ != static_cast<uint64_t>(bd.filterByteSize) ||
-      static_cast<uint32_t>(bd.fragmentSize) != kPersistFragmentSize) {
+  if (numFilters_ != static_cast<uint32_t>(*bd.numFilters_ref()) ||
+      hashTableBitSize_ != static_cast<uint64_t>(*bd.hashTableBitSize_ref()) ||
+      filterByteSize_ != static_cast<uint64_t>(*bd.filterByteSize_ref()) ||
+      static_cast<uint32_t>(*bd.fragmentSize_ref()) != kPersistFragmentSize) {
     throw std::invalid_argument(
         "Could not recover BloomFilter. Invalid BloomFilter.");
   }
 
-  for (uint32_t i = 0; i < bd.seeds.size(); i++) {
-    seeds_[i] = bd.seeds[i];
+  for (uint32_t i = 0; i < bd.seeds_ref()->size(); i++) {
+    seeds_[i] = bd.seeds_ref()[i];
   }
   deserializeBits(rr);
 }

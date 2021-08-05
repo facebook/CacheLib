@@ -140,7 +140,7 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
 }
 
 Status BlockCache::insert(HashedKey hk, BufferView value) {
-  bool ioAligned = config_.sizeClasses.empty();
+  bool ioAligned = config_.sizeClasses_ref()->empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   if (size > kMaxItemSize) {
     allocErrorCount_.inc();
@@ -361,7 +361,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
           : std::min<uint16_t>(lr.currentHits(), numPriorities_ - 1);
 
   // explicitly align if not using size classes.
-  bool ioAligned = config_.sizeClasses.empty();
+  bool ioAligned = config_.sizeClasses_ref()->empty();
   uint32_t size = serializedSize(hk.key().size(), value.size(), ioAligned);
   auto [desc, slotSize, addr] = allocator_.allocate(size, priority);
 
@@ -573,7 +573,7 @@ void BlockCache::persist(RecordWriter& rw) {
   XLOG(INFO, "Starting block cache persist");
   auto config = config_;
   *config.sizeDist_ref() = sizeDist_.getSnapshot();
-  config.allocAlignSize = allocAlignSize_;
+  *config.allocAlignSize_ref() = allocAlignSize_;
   config.set_holeCount(holeCount_.get());
   config.set_holeSizeTotal(holeSizeTotal_.get());
   *config.reinsertionPolicyEnabled_ref() = (reinsertionPolicy_ != nullptr);
@@ -658,12 +658,12 @@ bool BlockCache::isValidRecoveryData(
 serialization::BlockCacheConfig BlockCache::serializeConfig(
     const Config& config) {
   serialization::BlockCacheConfig serializedConfig;
-  serializedConfig.cacheBaseOffset = config.cacheBaseOffset;
-  serializedConfig.cacheSize = config.cacheSize;
-  serializedConfig.checksum = config.checksum;
-  serializedConfig.version = kFormatVersion;
+  *serializedConfig.cacheBaseOffset_ref() = config.cacheBaseOffset;
+  *serializedConfig.cacheSize_ref() = config.cacheSize;
+  *serializedConfig.checksum_ref() = config.checksum;
+  *serializedConfig.version_ref() = kFormatVersion;
   for (auto sc : config.sizeClasses) {
-    serializedConfig.sizeClasses.insert(sc);
+    serializedConfig.sizeClasses_ref()->insert(sc);
   }
   return serializedConfig;
 }

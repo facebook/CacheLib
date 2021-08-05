@@ -359,34 +359,34 @@ TEST_F(SlabAllocatorTest, InvalidDeSerialization) {
   // now try to come up with some invalid serialized state and ensure that we
   // dont act normal.
   auto invalidSlabSizeState = correctState;
-  invalidSlabSizeState.slabSize = Slab::kSize * 4;
+  *invalidSlabSizeState.slabSize_ref() = Slab::kSize * 4;
 
   ASSERT_THROW(
       SlabAllocator(invalidSlabSizeState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
   invalidSlabSizeState = correctState;
-  invalidSlabSizeState.slabSize = Slab::kSize / 2;
+  *invalidSlabSizeState.slabSize_ref() = Slab::kSize / 2;
 
   ASSERT_THROW(
       SlabAllocator(invalidSlabSizeState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
   auto invalidMinAllocState = correctState;
-  invalidMinAllocState.minAllocSize += 20;
+  *invalidMinAllocState.minAllocSize_ref() += 20;
 
   ASSERT_THROW(
       SlabAllocator(invalidMinAllocState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
   invalidMinAllocState = correctState;
-  invalidMinAllocState.minAllocSize -= 20;
+  *invalidMinAllocState.minAllocSize_ref() -= 20;
   ASSERT_THROW(
       SlabAllocator(invalidMinAllocState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
   auto invalidMemorySizeState = correctState;
-  invalidMemorySizeState.memorySize = Slab::kSize;
+  *invalidMemorySizeState.memorySize_ref() = Slab::kSize;
 
   ASSERT_THROW(
       SlabAllocator(invalidMemorySizeState, memory, size, getDefaultConfig()),
@@ -404,7 +404,7 @@ TEST_F(SlabAllocatorTest, InvalidDeSerialization) {
       std::invalid_argument);
 
   auto invalidFreeSlabsState = correctState;
-  invalidFreeSlabsState.freeSlabIdxs.push_back(folly::Random::rand32());
+  invalidFreeSlabsState.freeSlabIdxs_ref()->push_back(folly::Random::rand32());
 
   ASSERT_THROW(
       SlabAllocator(invalidFreeSlabsState, memory, size, getDefaultConfig()),
@@ -412,18 +412,18 @@ TEST_F(SlabAllocatorTest, InvalidDeSerialization) {
 
   // check the nextSlab allocation outside of the memory bounds.
   auto invalidNextSlabIdxState = correctState;
-  invalidNextSlabIdxState.nextSlabIdx = 0;
+  *invalidNextSlabIdxState.nextSlabIdx_ref() = 0;
   ASSERT_THROW(
       SlabAllocator(invalidNextSlabIdxState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
-  invalidNextSlabIdxState.nextSlabIdx = -1;
+  *invalidNextSlabIdxState.nextSlabIdx_ref() = -1;
   ASSERT_THROW(
       SlabAllocator(invalidNextSlabIdxState, memory, size, getDefaultConfig()),
       std::invalid_argument);
 
-  invalidNextSlabIdxState.nextSlabIdx =
-      correctState.memorySize / Slab::kSize + 1;
+  *invalidNextSlabIdxState.nextSlabIdx_ref() =
+      *correctState.memorySize_ref() / Slab::kSize + 1;
 
   ASSERT_THROW(
       SlabAllocator(invalidNextSlabIdxState, memory, size, getDefaultConfig()),

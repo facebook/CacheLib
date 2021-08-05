@@ -14,12 +14,12 @@ CCacheAllocator::CCacheAllocator(MemoryAllocator& allocator, PoolId poolId)
 CCacheAllocator::CCacheAllocator(MemoryAllocator& allocator,
                                  PoolId poolId,
                                  const SerializationType& object)
-    : CCacheAllocatorBase(object.ccMetadata),
+    : CCacheAllocatorBase(*object.ccMetadata_ref()),
       allocator_(allocator),
       poolId_(poolId),
       currentChunksIndex_(0) {
   auto& currentChunks = chunks_[currentChunksIndex_];
-  for (auto chunk : object.chunks) {
+  for (auto chunk : *object.chunks_ref()) {
     currentChunks.push_back(allocator_.unCompress(CompressedPtr(chunk)));
   }
 }
@@ -77,11 +77,11 @@ size_t CCacheAllocator::resize() {
 
 CCacheAllocator::SerializationType CCacheAllocator::saveState() {
   CCacheAllocator::SerializationType object;
-  object.ccMetadata = ccType_.saveState();
+  *object.ccMetadata_ref() = ccType_.saveState();
 
   std::lock_guard<std::mutex> guard(resizeLock_);
   for (auto chunk : getCurrentChunks()) {
-    object.chunks.push_back(allocator_.compress(chunk).saveState());
+    object.chunks_ref()->push_back(allocator_.compress(chunk).saveState());
   }
   return object;
 }

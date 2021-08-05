@@ -8,7 +8,7 @@ CCacheManager::CCacheManager(const SerializationType& object,
     : memoryAllocator_(memoryAllocator) {
   std::lock_guard<std::mutex> guard(lock_);
 
-  for (const auto& allocator : object.allocators) {
+  for (const auto& allocator : *object.allocators_ref()) {
     auto id = memoryAllocator_.getPoolId(allocator.first);
     allocators_.emplace(
         std::piecewise_construct,
@@ -65,7 +65,8 @@ CCacheManager::SerializationType CCacheManager::saveState() {
 
   SerializationType object;
   for (auto& allocator : allocators_) {
-    object.allocators.emplace(allocator.first, allocator.second.saveState());
+    object.allocators_ref()->emplace(allocator.first,
+                                     allocator.second.saveState());
   }
   return object;
 }

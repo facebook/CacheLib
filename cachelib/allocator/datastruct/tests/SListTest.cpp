@@ -394,8 +394,8 @@ TEST_F(SListTest, TestRestoreListWarmRollFromOldFormat) {
   // Save the state, then copy it into the old format (dropping compressedTail).
   const auto state = list1.saveState();
   test_serialization::SListObjectNoCompressedTail oldState;
-  oldState.size = state.size;
-  oldState.compressedHead = state.compressedHead;
+  *oldState.size_ref() = *state.size_ref();
+  *oldState.compressedHead_ref() = *state.compressedHead_ref();
 
   // Now serialize the old object and deserialize it with the latest format.
   auto oldStateBuf = Serializer::serializeToIOBuf(oldState);
@@ -404,8 +404,8 @@ TEST_F(SListTest, TestRestoreListWarmRollFromOldFormat) {
                             oldStateBuf->data() + oldStateBuf->length());
   const auto newFromOld =
       deserializer.deserialize<serialization::SListObject>();
-  EXPECT_EQ(state.size, newFromOld.size);
-  EXPECT_EQ(state.compressedHead, newFromOld.compressedHead);
+  EXPECT_EQ(*state.size_ref(), *newFromOld.size_ref());
+  EXPECT_EQ(*state.compressedHead_ref(), *newFromOld.compressedHead_ref());
   EXPECT_EQ(-1, *newFromOld.compressedTail_ref());
 
   SListImpl list2{newFromOld, SListNode::PtrCompressor{}};
@@ -458,7 +458,7 @@ TEST_F(SListTest, TestInvalidRestore) {
 
   auto state = list1.saveState();
   auto invalidState = state;
-  invalidState.compressedHead = 0;
+  *invalidState.compressedHead_ref() = 0;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
   invalidState = state;
@@ -482,7 +482,7 @@ TEST_F(SListTest, TestInvalidRestore) {
 
   state = list2.saveState();
   invalidState = state;
-  invalidState.size = 5;
+  *invalidState.size_ref() = 5;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
 

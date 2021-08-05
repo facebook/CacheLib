@@ -942,19 +942,19 @@ TEST_F(AllocationClassTest, InvalidDeSerialization) {
   // try to create with invalid serialized state and
   // first, invalid classid.
   auto incorrectClassIdState = correctState;
-  incorrectClassIdState.classId = -20;
+  *incorrectClassIdState.classId_ref() = -20;
 
   ASSERT_THROW(AllocationClass(incorrectClassIdState, pid, *slabAlloc),
                std::invalid_argument);
 
   // test with invalid allocSizes in the serialized state
   auto incorrectAllocSizeState = correctState;
-  incorrectAllocSizeState.allocationSize = 0;
+  *incorrectAllocSizeState.allocationSize_ref() = 0;
 
   ASSERT_THROW(AllocationClass(incorrectAllocSizeState, pid, *slabAlloc),
                std::invalid_argument);
 
-  incorrectAllocSizeState.allocationSize =
+  *incorrectAllocSizeState.allocationSize_ref() =
       Slab::kSize + folly::Random::rand32() % Slab::kSize + 1;
 
   ASSERT_THROW(AllocationClass(incorrectAllocSizeState, pid, *slabAlloc),
@@ -964,14 +964,14 @@ TEST_F(AllocationClassTest, InvalidDeSerialization) {
   auto incorrectCurrSlabState = correctState;
 
   // a 32 bit address is not going to be valid.
-  incorrectCurrSlabState.currSlabIdx = folly::Random::rand32();
+  *incorrectCurrSlabState.currSlabIdx_ref() = folly::Random::rand32();
   ASSERT_THROW(AllocationClass(incorrectCurrSlabState, pid, *slabAlloc),
                std::invalid_argument);
 
   slab = grabFreeSlab();
   auto header = slabAlloc->getSlabHeader(slab);
   header->classId = cid + 1;
-  incorrectCurrSlabState.currSlabIdx = slabAlloc->slabIdx(slab);
+  *incorrectCurrSlabState.currSlabIdx_ref() = slabAlloc->slabIdx(slab);
   ASSERT_THROW(AllocationClass(incorrectCurrSlabState, pid, *slabAlloc),
                std::invalid_argument);
 

@@ -151,7 +151,7 @@ size_t Index::computeSize() const {
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    bucket.bucketId = i;
+    *bucket.bucketId_ref() = i;
     // Convert index entries to thrift objects
     for (const auto& [key, record] : buckets_[i]) {
       serialization::IndexEntry entry;
@@ -160,25 +160,25 @@ void Index::persist(RecordWriter& rw) const {
       entry.sizeHint_ref() = record.sizeHint;
       entry.totalHits_ref() = record.totalHits;
       entry.currentHits_ref() = record.currentHits;
-      bucket.entries.push_back(entry);
+      bucket.entries_ref()->push_back(entry);
     }
     // Serialize bucket then clear contents to reuse memory.
     serializeProto(bucket, rw);
-    bucket.entries.clear();
+    bucket.entries_ref()->clear();
   }
 }
 
 void Index::recover(RecordReader& rr) {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     auto bucket = deserializeProto<serialization::IndexBucket>(rr);
-    uint32_t id = bucket.bucketId;
+    uint32_t id = *bucket.bucketId_ref();
     if (id >= kNumBuckets) {
       throw std::invalid_argument{
           folly::sformat("Invalid bucket id. Max buckets: {}, bucket id: {}",
                          kNumBuckets,
                          id)};
     }
-    for (auto& entry : bucket.entries) {
+    for (auto& entry : *bucket.entries_ref()) {
       buckets_[id].try_emplace(*entry.key_ref(),
                                *entry.address_ref(),
                                *entry.sizeHint_ref(),

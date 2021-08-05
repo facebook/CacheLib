@@ -2976,7 +2976,7 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     for (unsigned int i = 0; i < mmContainers.size(); ++i) {
       for (unsigned int j = 0; j < mmContainers[i].size(); ++j) {
         if (mmContainers[i][j]) {
-          state.pools[i][j] = mmContainers[i][j]->saveState();
+          state.pools_ref()[i][j] = mmContainers[i][j]->saveState();
         }
       }
     }
@@ -3116,7 +3116,7 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
 
   MMContainers mmContainers;
 
-  for (auto& kvPool : container.pools) {
+  for (auto& kvPool : *container.pools_ref()) {
     auto i = static_cast<PoolId>(kvPool.first);
     auto& pool = getPool(i);
     for (auto& kv : kvPool.second) {
