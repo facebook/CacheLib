@@ -95,6 +95,9 @@ struct CacheConfig : public JSONConfig {
   // Navy specific: block size in bytes
   uint64_t navyBlockSize{512};
 
+  // Navy specific: region size in MB
+  uint64_t navyRegionSizeMB{16};
+
   // If non-empty, configures Navy to use FIFO instead of LRU. If there are
   // more than one values provided, it enables segmented fifo with the
   // appropriate ratios.

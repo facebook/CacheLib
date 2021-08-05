@@ -156,7 +156,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       }
     }
     nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
-    nvmConfig.navyConfig.setBlockCacheRegionSize(16 * MB);
+    nvmConfig.navyConfig.setBlockCacheRegionSize(config_.navyRegionSizeMB * MB);
 
     if (!config_.navySizeClasses.empty()) {
       nvmConfig.navyConfig.setBlockCacheSizeClasses(config_.navySizeClasses);
