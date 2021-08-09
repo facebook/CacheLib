@@ -326,7 +326,9 @@ class ObjectCache {
   // object's destructor. Similarly, this cannot throw and cachelib will
   // crash as a result of any exception in this callback.
   using DestructorCallback =
-      std::function<void(folly::StringPiece key, void* unalignedMem)>;
+      std::function<void(folly::StringPiece key,
+                         void* unalignedMem,
+                         const typename CacheAlloc::RemoveCbData& data)>;
 
   // Compactor is a helper class that exposes only the logic necessary to
   // compact objects.
@@ -632,7 +634,7 @@ class ObjectCache {
           [dcb = config.getDestructorCallback()](
               const typename CacheAlloc::RemoveCbData& data) {
             auto key = data.item.getKey();
-            dcb(key, data.item.getMemory());
+            dcb(key, data.item.getMemory(), data);
           });
     }
 

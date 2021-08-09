@@ -424,7 +424,8 @@ TEST(ObjCache, Destructor) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key == "test vec foo") {
       getType<VectorOfFoo,
               MonotonicBufferResource<CacheDescriptor<LruAllocator>>>(
@@ -489,7 +490,8 @@ TEST(ObjCache, DestructorWithVTable) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key.startsWith("test")) {
       getType<Parent, MonotonicBufferResource<CacheDescriptor<LruAllocator>>>(
           unalignedMem)
@@ -803,7 +805,8 @@ TEST(ObjectCache, PromiseSimple) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key == "promise int") {
       getType<IntPromiseWrapper, LruObjectCache::AllocatorResource>(
           unalignedMem)
@@ -856,7 +859,8 @@ TEST(ObjectCache, PromiseColocateObject) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key == "promise str") {
       getType<StrPromiseWrapper, LruObjectCache::AllocatorResource>(
           unalignedMem)
@@ -920,7 +924,8 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key == "promise str") {
       getType<StrPromiseWrapper, LruObjectCache::AllocatorResource>(
           unalignedMem)
@@ -987,7 +992,8 @@ TEST(ObjectCache, SharedPromiseColocateObject2) {
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
-  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem) {
+  config.setDestructorCallback([](folly::StringPiece key, void* unalignedMem,
+                                  const LruAllocator::RemoveCbData&) {
     if (key == "promise str") {
       getType<StrPromiseWrapper, LruObjectCache::AllocatorResource>(
           unalignedMem)
