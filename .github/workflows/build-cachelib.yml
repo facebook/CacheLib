@@ -79,6 +79,13 @@ jobs:
     # Docker container image name
     container: "centos:8.1.1911"
     steps:
+      - name: "update packages"
+        # stock centos has a problem with CMAKE, fails with:
+        #  "cmake: symbol lookup error: cmake: undefined symbol: archive_write_add_filter_zstd"
+        # updating solves it
+        run: dnf update -y
+      - name: "install sudo,git"
+        run: dnf install -y sudo git cmake gcc
       - name: "System Information"
         run: |
           echo === uname ===
@@ -93,21 +100,12 @@ jobs:
           top -b -n1 -1 -Eg || timeout 1 top -b -n1
           echo === env ===
           env
-      - name: "update packages"
-        # stock centos has a problem with CMAKE, fails with:
-        #  "cmake: symbol lookup error: cmake: undefined symbol: archive_write_add_filter_zstd"
-        # updating solves it
-        run: dnf update -y
-      - name: "install sudo,git"
-        run: dnf install -y sudo git
+          echo === gcc -v ===
+          gcc -v
       - name: "checkout sources"
         uses: actions/checkout@v2
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
-      - name: "Compiler Information"
-        run: |
-          echo === g++ -v ===
-          g++ -v
       - name: "Test: update-submodules"
         run: ./contrib/update-submodules.sh
       - name: "Install dependency: zstd"

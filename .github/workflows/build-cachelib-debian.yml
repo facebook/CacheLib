@@ -9,6 +9,12 @@ jobs:
     # Docker container image name
     container: "debian:buster-slim"
     steps:
+      - name: "update packages"
+        run: apt-get update
+      - name: "upgrade packages"
+        run: apt-get -y upgrade
+      - name: "install sudo,git"
+        run: apt-get install -y sudo git procps
       - name: "System Information"
         run: |
           echo === uname ===
@@ -20,21 +26,14 @@ jobs:
           echo === free -h ===
           free -h
           echo === top ===
-          top -b -n1 -1 -Eg || timeout 1 top -b -n1
+          top -b -n1 -1 -Eg || timeout 1 top -b -n1 ; true
           echo === env ===
           env
           echo === cc -v ===
-          cc -v
+          cc -v || true
           echo === g++ -v ===
-          g++ -
-          true
-      - name: "update packages"
-        run: apt-get update
-      - name: "upgrade packages"
-        run: apt-get -y upgrade
-      - name: "install sudo,git"
-        run: apt-get install -y sudo git
+          g++ - || true
       - name: "checkout sources"
         uses: actions/checkout@v2
       - name: "build CacheLib using build script"
-        run: ./contrib/build.sh -j -v
+        run: ./contrib/build.sh -j -v -T

@@ -9,6 +9,10 @@ jobs:
     # Docker container image name
     container: "centos:latest"
     steps:
+      - name: "update packages"
+        run: dnf upgrade -y
+      - name: "install sudo,git"
+        run: dnf install -y sudo git cmake gcc
       - name: "System Information"
         run: |
           echo === uname ===
@@ -23,14 +27,9 @@ jobs:
           top -b -n1 -1 -Eg || timeout 1 top -b -n1
           echo === env ===
           env
-          echo === cc -v ===
-          cc -v
-          echo === g++ -v ===
-          g++ -
-          true
-      - name: "install sudo,git"
-        run: dnf install -y sudo git
+          echo === gcc -v ===
+          gcc -v
       - name: "checkout sources"
         uses: actions/checkout@v2
       - name: "build CacheLib using build script"
-        run: ./contrib/build.sh -j -d -v -i
+        run: ./contrib/build.sh -j -v -T
