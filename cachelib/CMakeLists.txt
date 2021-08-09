@@ -98,6 +98,7 @@ endif()
 add_custom_target(thrift_generated_files)
 
 
+set_property(GLOBAL PROPERTY TEST_BINARIES)
 
 function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
   # Get the basename of the first source file
@@ -113,6 +114,10 @@ function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
     TARGETS "${TEST_PREFIX}-${TEST_NAME}"
     DESTINATION ${TESTS_INSTALL_DIR}
   )
+
+   get_property(tmp GLOBAL PROPERTY TEST_BINARIES)
+   set(tmp "${tmp} \\\n\t${TEST_PREFIX}-${TEST_NAME}")
+   set_property(GLOBAL PROPERTY TEST_BINARIES "${tmp}")
 endfunction()
 
 
@@ -334,3 +339,17 @@ install(EXPORT cachelib-exports
         FILE cachelib-targets.cmake
         #NAMESPACE cachelib::
         DESTINATION ${CMAKE_INSTALL_DIR})
+
+if (BUILD_TESTS)
+  get_property(TEST_BINARIES GLOBAL PROPERTY TEST_BINARIES)
+  #message(STATUS "=== Test binaries : ${TEST_BINARIES} ===")
+  configure_file(cmake/Makefile.tests.in Makefile.tests @ONLY)
+  install(
+    FILES
+      ${CACHELIB_BUILD}/Makefile.tests
+    DESTINATION
+      ${TESTS_INSTALL_DIR}
+    RENAME
+      Makefile
+  )
+endif()
