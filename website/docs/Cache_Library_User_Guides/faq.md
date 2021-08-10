@@ -3,17 +3,13 @@ id: faq
 title: faq
 ---
 
-If your question is not listed in this FAQ, post it to the [Cache Library Users](https://fb.workplace.com/groups/363899777130504/) group.
-
 # My service is broken. Help!
 
 ## Why my cache is not persisted after process restart?
 
 **Did your service used to recover cache fine? But it didn't recover in the newest release?**
 
-This could be due to cachelib's Format Version changes. Please check our user group and see if there're any pinned post that mention "cold roll" or "format change". In the event of a cache format change, CacheLib Cache cannot persist its cache content across service upgrades.
-
-If you would like to subscribe to cache format changes in the future, you can add your oncall rotation to our butterfly bot. (Or reach out to our oncall and we'll add your rotation to the subscriber list). https://www.internalfb.com/butterfly/rule/2624439420970131
+This could be due to cachelib's Format Version changes. In the event of a cache format change, CacheLib Cache cannot persist its cache content across service upgrades.
 
 **Did you call `CacheAllocator::shutDown()` explicitly?**
 
@@ -21,16 +17,11 @@ If you would like to subscribe to cache format changes in the future, you can ad
 CacheAllocator will destroy all shared memory segments if shutDown is not called before the object is destroyed.
 
 
-**Do you use Tupperware?**
-
-
-Tupperware (TW) users need to set up a persistent directory to keep around the cache metadata file between TW restarts. For more information, see [Persistent Directory](Tupperware/The_Hacker's_Guide_to_Tupperware/Task_Local_Storage#Persistent_Directory ). You also need to configure [[Tupperware/Reference/LanguageReference/LxcConfig/ | LXC]] for your container.
-
 ## Why do I see allocation failures?
 
 It is normal to see some allocation failures over the lifetime of your cache. However this number should be very low (e.g., less than 0.001% of your allocation attempts). If the rate is high, it can be caused by the following:
 
-1. You do not have any free slabs in certain allocation classes. Please check the [AC stats on scuba](https://our.intern.facebook.com/intern/scuba/query/?dataset=cachelib_admin_ac_stats&pool=uber) to verify this. To remedy this, you must enable slab rebalancing with the default policy (just `RebalancePolicy` by itself). This will rebalance your memory according to the allocation failures.
+1. You do not have any free slabs in certain allocation classes. To remedy this, you must enable slab rebalancing with the default policy (just `RebalancePolicy` by itself). This will rebalance your memory according to the allocation failures.
 2. You have very high number of allocation attempts and very low number of slabs in certain allocation classes (think 10K/s and only one or two slabs). Hence rate of evictions cannot keep up with the rate of allocations. To remedy this, you can enable `LruTailAge` rebalance policy which would try to keep all allocation classes around similar eviction age.
 
 ## Why do I see invalid allocs?
