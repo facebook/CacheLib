@@ -99,7 +99,7 @@ When you attach to an existing cache, cachelib will try to incorporate the confi
 
 ## Apply best practices
 
-If you haven't done so, *please consider adding a try-catch block in your main or any top level code that will be working with cachelib API*. This is because cachelib APIs can throw exceptions, and when it comes to persisting states, we expect the stack to be properly unwound to ensure the state is not corrupted. Uncaught exception does not unwind the stack properly and can lead to state corruption for cachelib. For more information, see [Is stack unwinding with exceptions guaranteed by C++ standard?](https://fburl.com/6hacgqkr) on StackOverflow.
+If you haven't done so, *please consider adding a try-catch block in your main or any top level code that will be working with cachelib API*. This is because cachelib APIs can throw exceptions, and when it comes to persisting states, we expect the stack to be properly unwound to ensure the state is not corrupted. Uncaught exception does not unwind the stack properly and can lead to state corruption for cachelib. For more information, see [Is stack unwinding with exceptions guaranteed by C++ standard?](https://stackoverflow.com/questions/39962999/is-stack-unwinding-with-exceptions-guaranteed-by-c-standard) on StackOverflow.
 
 ## Common failure scenarios
 
