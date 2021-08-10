@@ -5,11 +5,11 @@ title: oom protection
 
 Cachelib can dynamically *grow or shrink the total cache footprint* from its configured size based on the memory pressure in your system. We call this feature `MemoryMonitor`. When it is enabled, cachelib watches for the memory pressure through system metrics and releases cache memory back to the system. When the memory pressure eases, cachelib can reclaim back the memory and grow to its configured size. `MemoryMonitor` enables you to size your cache without having to worry about your system's running out of memory when regular heap memory grows or system free memory drops. It also enables you to be *less relaxed about coming up with an optimal cache size* or relaxing the head room you need to maintain in anticipation of sudden memory growth.
 
-For example, suppose you had 60 GB of memory available for your operating process and decide to dedicate 30 GB for cachelib and your application heap consuming 20 GB. This leaves a head room of 10 GB for free memory in the system. Cachelib ensures that the cache memory never grows beyond 30 GB. However, the same may not be the case for your application's heap usage or other system resources ([FB Tax](Core_Systems/FB_Tax/ )). When you face a regression in either case, you devour your free memory and will eventually run out of memory (OOM). With `MemoryMonitor`, you can configure cachelib to maintain the 10 GB head room even when the heap or other resources consume more than what is expected. This allows your cache to shrink below the configured 30 GB and grow back when memory pressure goes away. This effectively makes a OOM/SEV like situation more manageable to deal by rather lowering your hit ratio. Furthermore, you can be more aggressive about setting the free-memory even lower and rely on cachelib using up as much memory for caching and releasing it back when needed for your application.
+For example, suppose you had 60 GB of memory available for your operating process and decide to dedicate 30 GB for cachelib and your application heap consuming 20 GB. This leaves a head room of 10 GB for free memory in the system. Cachelib ensures that the cache memory never grows beyond 30 GB. However, the same may not be the case for your application's heap usage or other system resources. When you face a regression in either case, you devour your free memory and will eventually run out of memory (OOM). With `MemoryMonitor`, you can configure cachelib to maintain the 10 GB head room even when the heap or other resources consume more than what is expected. This allows your cache to shrink below the configured 30 GB and grow back when memory pressure goes away. This effectively makes a OOM/SEV like situation more manageable to deal by rather lowering your hit ratio. Furthermore, you can be more aggressive about setting the free-memory even lower and rely on cachelib using up as much memory for caching and releasing it back when needed for your application.
 
 # Enabling MemoryMonitor
 
-`MemoryMonitor` is available in two mode depending on whether your binary runs in Tupperware containers or runs without any containers. There are some parameters that are common between the two and some that are contrary. So make sure you understand the semantic differences.
+`MemoryMonitor` is available in two mode depending on whether your binary runs in containers or runs without any containers. There are some parameters that are common between the two and some that are contrary. So make sure you understand the semantic differences.
 
 ## Free memory mode
 
@@ -108,26 +108,4 @@ struct CacheMemoryStats {
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
 };
-```
-
-
-In addition, you should be able to get in Scuba and ServiceData a breakdown of the advised memory stat by pool and overall cache in the following hierarchy.
-
-For the overall cache:
-
-
-```cpp
-cachelib.<cache-name>.mem.size
-cachelib.<cache-name>.mem.usable_size
-cachelib.<cache-name>.mem.advised_size
-```
-
-
-To obtain break-down of advised memory per pool:
-
-
-```cpp
-cachelib.<cache-name>.<pool-name>.size
-cachelib.<cache-name>.<pool-name>.usable_size
-cachelib.<cache-name>.<pool-name>.advised_size
 ```
