@@ -15,7 +15,7 @@ By partition your cache into pools, you can achieve the following:
 
 ## Creating pools
 
-You can create and resize pools at runtime. Cachelib supports up to 64 pools. [CacheAllocator.h](https://www.internalfb.com/intern/diffusion/FBS/browse/master/fbcode/cachelib/allocator/CacheAllocator.h) defines the following methods to manage pools:
+You can create and resize pools at runtime. Cachelib supports up to 64 pools. `CacheAllocator.h` defines the following methods to manage pools:
 
 
 ```cpp
@@ -100,7 +100,7 @@ public PoolId addPool(
 
 When calling `addPool()` to create a pool, override some of the default parameters to customize your pool:
 
-1. **Allocation sizes** Allocation sizes can be customized on a per pool basis. Cachelib uses a slab allocator which can take custom allocation sizes per pool. Tuning the allocation sizes can help you reduce overall memory fragmentation and improving cache hit ratio.  This requires knowledge of the cache workload and can be visualized through the `cachelib_admin_ac_stats` Scuba data set by your cache name.
+1. **Allocation sizes** Allocation sizes can be customized on a per pool basis. Cachelib uses a slab allocator which can take custom allocation sizes per pool. Tuning the allocation sizes can help you reduce overall memory fragmentation and improving cache hit ratio.
 
 2. **Eviction parameters** Your `MMConfig` parameter can be customized on a per pool basis when you create the pool. For more information, see [Eviction parameters configuration](#Eviction_parameters_configuration ).
 
@@ -108,9 +108,9 @@ When calling `addPool()` to create a pool, override some of the default paramete
 
 ### Eviction parameters configuration
 
-For `MMLru`, look at the config structure in [cachelib/allocator/MMLru.h](https://www.internalfb.com/intern/diffusion/FBS/browse/master/fbcode/cachelib/allocator/MMLru.h).
+For `MMLru`, look at the config structure in `cachelib/allocator/MMLru.h`.
 
-For `MM2Q`, look at the config structure in [cachelib/allocator/MM2Q.h](https://www.internalfb.com/intern/diffusion/FBS/browse/master/fbcode/cachelib/allocator/MM2Q.h).
+For `MM2Q`, look at the config structure in `cachelib/allocator/MM2Q.h`.
 
 When configuring your eviction policy, look out for these:
 
@@ -259,8 +259,3 @@ struct PoolStats {
   uint64_t maxEvictionAge() const;
 }
 ```
-
-
-### Scuba
-
-If you have configured `CacheAdmin`, you can look up the stats for the breakdown by pool in the [cachelib_admin_pool_stats](https://fburl.com/scuba/qocjnmrq) by your cache name and pool name. This `cachelib_admin_ac_stats` shows the breakdown of the total number of bytes allocated by the size of the objects.
