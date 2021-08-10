@@ -13,7 +13,7 @@ Cachelib enables you to build structured data on top of a cache instead of treat
 Both key and value must be POD and fixed size.
 
 ## FixedSizeArray APIs
-For a complete list of FixedSizeArray APIs, see cachelib/datatype/FixedSizeArray.h.
+For a complete list of FixedSizeArray APIs, see `cachelib/datatype/FixedSizeArray.h`.
 
 User must specify the size of the array before creating it. Creating the array does NOT initialize any data. Users are responsible for initializing the values in the array.
 ```cpp
@@ -195,7 +195,7 @@ The `Key` and `Value` for `RangeMap` have the exact same requirements for [Map](
 
 ## RangeMap APIs
 
-For a complete list of the RangeMap APIs, see [`fbcode/cachelib/datatype/RangeMap.h`](https://fburl.com/diffusion/rpl9kxdu).
+For a complete list of the RangeMap APIs, see `cachelib/datatype/RangeMap.h`.
 
 To create a RangeMap, call the `create()` method:
 
