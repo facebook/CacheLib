@@ -5,7 +5,7 @@ title: Configure HybridCache
 
 # Example Config
 
-You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the [nvmCache](https://fburl.com/diffusion/5whg0cqk) in the Cache config by using APIs provided in [NavyConfig](https://fburl.com/diffusion/u9y6idic), for example:
+You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the NvmCache::Config::navyConfig in the Cache config by using APIs provided in navy::NavyConfig, for example:
 
 
 ```cpp
@@ -228,10 +228,7 @@ navyConfig.bigHash()
 
 
 # NavyConfig Data Output
-
- * All the NavyConfig settings will be uploaded to scuba table [cachelib_admin_allocator_config](https://fburl.com/scuba/cachelib_admin_allocator_config/mmmf8o09) by [CacheAdmin](Cache_Library_Architecture_Guide/CacheAdmin/), which will be a good place to monitor your data or debug.
-
-* `NavyConfig` itself also provides a public function [serialize()](https://fburl.com/diffusion/9grb1pac) so that you can call it to print out the data, e.g.
+* `NavyConfig` provides a public function NavyConfig::serialize() so that you can call it to print out the data, e.g.
 
 
  ```cpp
