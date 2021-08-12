@@ -1,0 +1,17 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 2048,
+    "htBucketPower": 20,
+    "poolRebalanceIntervalSec": 3,
+    "moveOnSlabRelease": true,
+    "rebalanceMinSlabs": 0,
+    "rebalanceStrategy": "tail-age",
+    "allocSizes": [64, 100]
+  },
+  "test_config": 
+    {
+      "name": "fast_shutdown",
+      "numOps" : 5
+    }
+ 
+}

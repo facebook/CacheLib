@@ -1,0 +1,55 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 38000,
+    "navyReaderThreads": 32,
+    "navyWriterThreads": 32,
+    "nvmCachePaths": ["/dev/md0"],
+    "nvmCacheSizeMB": 932000,
+    "writeAmpDeviceList": [
+      "nvme1n1",
+      "nvme2n1"
+    ],
+    "navyBigHashSizePct": 0,
+    "navyBlockSize": 4096,
+    "navySizeClasses": [],
+    "navyParcelMemoryMB": 6048,
+    "enableChainedItem": true,
+    "htBucketPower": 26,
+    "moveOnSlabRelease": true,
+    "poolRebalanceIntervalSec": 2,
+    "rebalanceStrategy": "tail-age",
+    "rebalanceMinRatio": 0.1,
+    "rebalanceMinSlabs": 2
+  },
+  "test_config": {
+    "enableLookaside": true,
+    "generator": "online",
+    "numKeys": 72298041,
+    "numOps": 63000000,
+    "numThreads": 24,
+    "poolDistributions": [
+      {
+        "addChainedRatio": 0.0,
+        "delRatio": 0.0,
+        "getRatio": 0.6,
+        "keySizeRange": [
+          8,
+          16
+        ],
+        "keySizeRangeProbability": [
+          1.0
+        ],
+        "loneGetRatio": 8.2e-06,
+        "loneSetRatio": 0.21,
+        "setRatio": 0.0,
+        "popDistFile": "pop.json",
+        "setRatio": 0.0,
+        "valSizeDistFile": "sizes.json"
+      }
+    ],
+
+
+    "opDelayNs": 5000000,
+    "opDelayBatch": 1
+  }
+}

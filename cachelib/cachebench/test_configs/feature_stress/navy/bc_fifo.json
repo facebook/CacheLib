@@ -1,0 +1,31 @@
+// @nolint config that uses block cache for all the objects
+{
+  "cache_config" : {
+    "cacheSizeMB" : 128,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : false,
+
+    "nvmCacheSizeMB" : 512,
+    "navySegmentedFifoSegmentRatio": [1],
+    "navyBigHashSizePct": 0
+  },
+  "test_config" : 
+    {
+      
+
+      "numOps" : 100000000,
+      "numThreads" : 32,
+      "numKeys" : 100000,
+      
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "valSizeRange" : [1, 102400],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.5,
+      "setRatio" : 0.3
+    }
+ 
+}

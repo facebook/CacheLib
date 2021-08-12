@@ -1,0 +1,28 @@
+// @nolint rebalances slabs every second randomly. items are evicted during slab release.
+{
+  "cache_config" : {
+    "cacheSizeMB" : 10240,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : false,
+    "rebalanceMinSlabs" : 2
+  },
+  "test_config" : 
+    {
+      "preallocateCache" : true,
+      "numOps" : 100000000,
+      "numThreads" : 32,
+      "numKeys" : 1000000,
+      
+
+      "keySizeRange" : [1, 8, 32, 64, 128, 256],
+      "keySizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+      "valSizeRange" : [1, 128, 1024, 4096, 10240, 20480, 40960, 60000],
+      "valSizeRangeProbability" : [0.1, 0.1, 0.2, 0.2, 0.2, 0.1, 0.1],
+
+      "getRatio" : 0.5,
+      "setRatio" : 0.1,
+      "delRatio" : 0.001
+    }
+ 
+}

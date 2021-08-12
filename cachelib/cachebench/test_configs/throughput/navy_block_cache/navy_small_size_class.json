@@ -1,0 +1,42 @@
+// @nolint
+// Navy Insert Throughput: 700K/s https://pxl.cl/1gDDG
+// NVM Insert Latency: 12ms https://pxl.cl/1gDDP
+// CPU: 78% https://pxl.cl/1gDF4
+{
+    "cache_config" : {
+      "cacheSizeMB" : 128,
+      "allocFactor": 2,
+      "poolRebalanceIntervalSec" : 1,
+      "moveOnSlabRelease" : false,
+
+      "numPools" : 1,
+      "poolSizes" : [1.0],
+
+      "navyReaderThreads": 64,
+      "navyWriterThreads": 64,
+      "navyBlockSize": 512,
+
+      "navySizeClasses": [1024, 1536, 2048, 2560, 3072, 3584, 4096],
+      "navyCleanRegions": 64,
+      "navyNumInmemBuffers": 0,
+
+      "nvmCacheSizeMB" : 2048,
+      "navyBigHashSizePct" : 0
+    },
+    "test_config" :
+      {
+        "numOps" : 100000000,
+        "numThreads" : 48,
+        "numKeys" : 100000,
+        
+
+        "keySizeRange" : [8, 9],
+        "keySizeRangeProbability" : [1.0],
+
+        "valSizeRange" : [900, 3900],
+        "valSizeRangeProbability" : [1.0],
+
+        "getRatio" : 0.0,
+        "setRatio" : 1.0
+      }
+  }

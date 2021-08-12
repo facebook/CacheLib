@@ -1,0 +1,30 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 20480,
+    "poolRebalanceIntervalSec" : 0,
+    "htBucketPower" : 30,
+    "htLockPower" : 20,
+    "lruUpdateOnRead" : true,
+    "lruRefreshSec" : 0,
+    "tryLockUpdate" : true
+  },
+  "test_config" :
+    {
+      "samplingIntervalMs" : 60000,
+      
+      "numOps" : 10000000,
+      "numThreads" : 48,
+      "numKeys" : 10000000,
+      
+
+      "keySizeRange" : [8, 9],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [670, 671],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 1.00,
+      "setRatio" : 0.00,
+      "delRatio" : 0.00
+    }
+}

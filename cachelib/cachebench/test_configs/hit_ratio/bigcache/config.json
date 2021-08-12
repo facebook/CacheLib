@@ -1,0 +1,31 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 8192, 
+    "poolRebalanceIntervalSec": 0
+  }, 
+  "test_config": 
+    {
+      "addChainedRatio": 0.0, 
+      "delRatio": 0.0, 
+      "enableLookaside": true, 
+      "getRatio": 0.9911552928593673, 
+      "keySizeRange": [
+        1, 
+        8, 
+        64
+      ], 
+      "keySizeRangeProbability": [
+        0.3, 
+        0.7
+      ], 
+      "loneGetRatio": 0.008844707140632665, 
+      "numKeys": 8935378, 
+      "numOps": 5000000, 
+      "numThreads": 48, 
+      "popDistFile": "pop.json", 
+       
+      "setRatio": 0.0, 
+      "valSizeDistFile": "sizes.json"
+    }
+ 
+}

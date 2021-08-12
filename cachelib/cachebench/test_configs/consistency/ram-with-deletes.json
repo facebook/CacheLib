@@ -1,0 +1,42 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 150,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true,
+
+    "numPools" : 2,
+    "poolSizes" : [0.5, 0.5],
+    "allocFactor" : 2.0
+  },
+  "test_config" :
+    {
+
+      "checkConsistency" : true,
+
+      "numOps" : 30000000,
+      "numThreads" : 40,
+      "numKeys" : 200000,
+
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.5, 0.5],
+
+
+      "valSizeRange" : [256, 1024, 4096, 8192],
+      "valSizeRangeProbability" : [0.2, 0.7, 0.1],
+
+      "chainedItemLengthRange" : [1, 2, 4, 32],
+      "chainedItemLengthRangeProbability" : [0.8, 0.18, 0.02],
+
+      "chainedItemValSizeRange" : [1, 128, 256, 1024, 4096, 20480],
+      "chainedItemValSizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+      "getRatio" : 0.8,
+      "setRatio" : 0.1,
+      "delRatio" : 0.01,
+      "addChainedRatio" : 0.05,
+      "keyPoolDistribution": [0.5, 0.5],
+      "opPoolDistribution" : [0.5, 0.5]
+    }
+
+}

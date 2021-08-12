@@ -1,0 +1,37 @@
+// @nolint like default.json. also allocates chained items and stresses 
+// the slab release code paths where items are moved during slab release.
+{
+  "cache_config" : {
+    "cacheSizeMB" : 10240,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true,
+    "rebalanceStrategy" : "random",
+    "rebalanceMinSlabs" : 2
+  },
+  "test_config" : 
+    {
+      "preallocateCache" : true,
+      "numOps" : 100000000,
+      "numThreads" : 32,
+      "numKeys" : 10000000,
+      
+
+      "keySizeRange" : [8, 16, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "valSizeRange" : [1, 128, 4096, 20480],
+      "valSizeRangeProbability" : [0.3, 0.5, 0.2],
+
+      "chainedItemLengthRange" : [1, 2, 4, 32],
+      "chainedItemLengthRangeProbability" : [0.8, 0.18, 0.02],
+
+      "chainedItemValSizeRange" : [1, 128, 256, 1024, 4096, 20480],
+      "chainedItemValSizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+      "getRatio" : 0.3,
+      "setRatio" : 0.2,
+      "delRatio" : 0.0002,
+      "addChainedRatio" : 0.05
+    }
+ 
+}

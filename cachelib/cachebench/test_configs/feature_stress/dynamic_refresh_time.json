@@ -1,0 +1,27 @@
+// @nolint sets up a simple dram cache and turns on the dynamic lru refresh time feature
+{
+  "cache_config" : {
+    "mmReconfigureIntervalSecs": 10,
+    "lruRefreshSec": 60,
+    "lruRefreshRatio": 0.1,
+    "cacheSizeMB" : 10240
+  },
+  "test_config" : 
+    {
+      "preallocateCache" : true,
+      "numOps" : 100000000,
+      "numThreads" : 32,
+      "numKeys" : 1000000,
+      
+
+      "keySizeRange" : [1, 8, 32, 64, 128, 256],
+      "keySizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+      "valSizeRange" : [1, 128, 1024, 4096, 10240, 20480, 40960, 60000],
+      "valSizeRangeProbability" : [0.1, 0.1, 0.2, 0.2, 0.2, 0.1, 0.1],
+
+      "getRatio" : 0.5,
+      "setRatio" : 0.01,
+      "delRatio" : 0.001
+    }
+}

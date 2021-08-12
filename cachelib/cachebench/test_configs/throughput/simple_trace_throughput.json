@@ -1,0 +1,16 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 5120,
+    "poolRebalanceIntervalSec" : 0
+  },
+  "test_config" : 
+    {
+      
+      "enableLookaside" : true,
+      "numOps" : 40000000,
+      "numThreads" : 1,
+      "traceFileName" : "test.trace",
+      "generator" : "replay"
+    }
+ 
+}

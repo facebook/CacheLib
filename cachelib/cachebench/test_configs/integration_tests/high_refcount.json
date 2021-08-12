@@ -1,0 +1,16 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 12,
+    "htBucketPower": 20,
+    "poolRebalanceIntervalSec": 5,
+    "moveOnSlabRelease": true,
+    "rebalanceMinSlabs": 0,
+    "allocSizes": [64, 1000000]
+  },
+  "test_config": 
+    {
+      "name": "high_refcount",
+      "numOps" : 200000
+    }
+ 
+}
