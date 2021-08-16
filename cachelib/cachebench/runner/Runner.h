@@ -51,7 +51,11 @@ class Runner {
   // and put metrics into folly::UserCounters to show metrics in output results.
   void run(folly::UserCounters&);
 
-  void abort() { stressor_->abort(); }
+  void abort() {
+    if (stressor_) {
+      stressor_->abort();
+    }
+  }
 
  private:
   // instance of the stressor.
