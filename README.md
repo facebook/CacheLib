@@ -15,12 +15,13 @@ low overhead caching services, with built-in ability to leverage
 DRAM and SSD caching transparently.
 
 
-## Hardware Benchmarking
+## Performance benchmarking
 
-CacheLib provides a standalone executable `cachebench` that can be
-used to evaluate heuristics and hardware platforms against production
-workloads. Additionally `cachebench` enables a platform to evaluate
-and measure new caching techniques.
+CacheLib provides a standalone executable `cachebench` that can be used to
+evaluate the performance of heuristics and caching hardware platforms against
+production workloads. Additionally `cachebench` enables stress testing
+implementation and design changes to CacheLib to catch correctness and
+performance issues.
 
 See [benchmarks](BENCHMARKS.md) for usage details
 and examples.
@@ -54,7 +55,7 @@ the building and installation process.
 ## Contributing
 
 We'd love to have your help in making CacheLib better. If you're interested,
-please read our guide to [guide to contributing](CONTRIBUTING.md)
+please read our [guide to contributing](CONTRIBUTING.md)
 
 
 
