@@ -17,6 +17,7 @@
 #include "cachelib/navy/block_cache/RegionManager.h"
 
 #include "cachelib/navy/common/Utils.h"
+#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
@@ -28,11 +29,14 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint32_t numCleanRegions,
                              JobScheduler& scheduler,
                              RegionEvictCallback evictCb,
+                             RegionCleanupCallback cleanupCb,
                              std::vector<uint32_t> sizeClasses,
                              std::unique_ptr<EvictionPolicy> policy,
                              uint32_t numInMemBuffers,
-                             uint16_t numPriorities)
+                             uint16_t numPriorities,
+                             uint16_t inMemBufFlushRetryLimit)
     : numPriorities_{numPriorities},
+      inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
       regionSize_{regionSize},
       baseOffset_{baseOffset},
@@ -42,6 +46,7 @@ RegionManager::RegionManager(uint32_t numRegions,
       numCleanRegions_{numCleanRegions},
       scheduler_{scheduler},
       evictCb_{evictCb},
+      cleanupCb_{cleanupCb},
       sizeClasses_{sizeClasses},
       numInMemBuffers_{numInMemBuffers} {
   XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
@@ -91,9 +96,6 @@ void RegionManager::reset() {
   resetEvictionPolicy();
 }
 
-// Caller is expected to call flushBuffer until true is returned.
-// This routine is idempotent and is safe to call multiple times until
-// detachBuffer is done.
 bool RegionManager::flushBuffer(const RegionId& rid) {
   auto& region = getRegion(rid);
   auto callBack = [this](RelAddress addr, BufferView view) {
@@ -110,15 +112,52 @@ bool RegionManager::flushBuffer(const RegionId& rid) {
   if (!region.flushBuffer(std::move(callBack))) {
     return false;
   }
+  return true;
+}
+
+bool RegionManager::detachBuffer(const RegionId& rid) {
+  auto& region = getRegion(rid);
   // detach buffer can return nullptr if there are active readers
   auto buf = region.detachBuffer();
-  if (buf) {
-    returnBufferToPool(std::move(buf));
-    // Flush completed, track the region
-    track(rid);
-    return true;
+  if (!buf) {
+    return false;
   }
-  return false;
+  returnBufferToPool(std::move(buf));
+  return true;
+}
+
+bool RegionManager::cleanupBufferOnFlushFailure(const RegionId& regionId) {
+  auto& region = getRegion(regionId);
+  auto callBack = [this](RegionId rid, BufferView buffer) {
+    cleanupCb_(rid, getRegionSlotSize(rid), buffer);
+    numInMemBufWaitingFlush_.dec();
+    numInMemBufFlushFailures_.inc();
+  };
+
+  // This is no-op if the buffer is already cleaned up.
+  if (!region.cleanupBuffer(std::move(callBack))) {
+    return false;
+  }
+
+  return detachBuffer(regionId);
+}
+
+void RegionManager::releaseCleanedupRegion(RegionId rid) {
+  auto& region = getRegion(rid);
+  // Subtract the wasted bytes in the end
+  externalFragmentation_.sub(getRegion(rid).getFragmentationSize());
+
+  // Full barrier because we cannot have seqNumber_.fetch_add() re-ordered
+  // below region.reset(). It is similar to the full barrier in openForRead.
+  seqNumber_.fetch_add(1, std::memory_order_acq_rel);
+
+  // Reset all region internal state, making it ready to be
+  // used by a region allocator.
+  region.reset();
+  {
+    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+    cleanRegions_.push_back(rid);
+  }
 }
 
 OpenStatus RegionManager::assignBufferToRegion(RegionId rid) {
@@ -193,28 +232,50 @@ void RegionManager::doFlush(RegionId rid, bool async) {
 
   getRegion(rid).setPendingFlush();
   numInMemBufWaitingFlush_.inc();
-  if (async) {
-    scheduler_.enqueue(
-        [this, rid] {
-          if (flushBuffer(rid)) {
-            return JobExitCode::Done;
-          }
-          numInMemBufFlushRetires_.inc();
-          return JobExitCode::Reschedule;
-        },
-        "flush",
-        JobType::Flush);
-  } else {
-    while (!flushBuffer(rid)) {
-      numInMemBufFlushRetires_.inc();
 
+  Job flushJob = [this, rid, retryAttempts = 0, flushed = false]() mutable {
+    if (!flushed) {
+      if (retryAttempts >= inMemBufFlushRetryLimit_) {
+        // Flush failure reaches retry limit, stop flushing and start to
+        // clean up the buffer.
+        if (cleanupBufferOnFlushFailure(rid)) {
+          releaseCleanedupRegion(rid);
+          return JobExitCode::Done;
+        }
+        numInMemBufCleanupRetries_.inc();
+        return JobExitCode::Reschedule;
+      }
+      if (flushBuffer(rid)) {
+        flushed = true;
+      } else {
+        // Flush fails
+        retryAttempts++;
+        numInMemBufFlushRetries_.inc();
+        return JobExitCode::Reschedule;
+      }
+    }
+    // If the buffer has been successfully flushed or the current flush
+    // succeeds, detach the buffer until it succeeds
+    if (flushed) {
+      if (detachBuffer(rid)) {
+        // Flush completed, track the region
+        track(rid);
+        return JobExitCode::Done;
+      }
+    }
+    return JobExitCode::Reschedule;
+  };
+
+  if (async) {
+    scheduler_.enqueue(std::move(flushJob), "flush", JobType::Flush);
+  } else {
+    while (flushJob() == JobExitCode::Reschedule) {
       // We intentionally sleep here to slow it down since this is only
-      // triggered on shutdown. On failures, we will sleep a bit before
+      // triggered on shutdown. On cleanup failures, we will sleep a bit before
       // retrying to avoid maxing out cpu.
       /* sleep override */
       std::this_thread::sleep_for(std::chrono::milliseconds{100});
     }
-    return;
   }
 }
 
@@ -482,7 +543,9 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_physical_written", physicalWrittenCount_.get());
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());
   visitor("navy_bc_inmem_waiting_flush", numInMemBufWaitingFlush_.get());
-  visitor("navy_bc_inmem_flush_retries", numInMemBufFlushRetires_.get());
+  visitor("navy_bc_inmem_flush_retries", numInMemBufFlushRetries_.get());
+  visitor("navy_bc_inmem_flush_failures", numInMemBufFlushFailures_.get());
+  visitor("navy_bc_inmem_cleanup_retries", numInMemBufCleanupRetries_.get());
   policy_->getCounters(visitor);
 }
 } // namespace navy

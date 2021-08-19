@@ -70,6 +70,11 @@ class BlockCache final : public Engine {
     // on to the device
     uint32_t numInMemBuffers{};
 
+    // Maximum number of retry times for in-mem buffer flushing.
+    // When exceeding the limit, we will not reschedule any flushing job but
+    // directly fail it.
+    uint16_t inMemBufFlushRetryLimit{10};
+
     // Number of priorities. Items of the same priority will be put into
     // the same reigon. The effect of priorities will be up to the particular
     // eviction policy. There must be at least one priority.
@@ -241,6 +246,9 @@ class BlockCache final : public Engine {
   // Returns number of slots that were successfully evicted
   uint32_t onRegionReclaim(RegionId rid, uint32_t slotSize, BufferView buffer);
 
+  // Allocator cleanup callback
+  void onRegionCleanup(RegionId rid, uint32_t slotSize, BufferView buffer);
+
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
 
@@ -300,6 +308,12 @@ class BlockCache final : public Engine {
                                       uint32_t entrySize,
                                       RelAddress currAddr);
 
+  // Removes an entry key from the index and the item size from size
+  // distribution.
+  // @return true if the item is successfully removed; false if the item cannot
+  //         be found or was removed earlier.
+  bool removeItem(HashedKey hk, uint32_t entrySize, RelAddress currAddr);
+
   void validate(Config& config) const;
 
   const serialization::BlockCacheConfig config_;
@@ -355,6 +369,8 @@ class BlockCache final : public Engine {
   mutable AtomicCounter reinsertionBytes_;
   mutable AtomicCounter reclaimEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter reclaimValueChecksumErrorCount_;
+  mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
+  mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable SizeDistribution sizeDist_;
 };
 } // namespace navy

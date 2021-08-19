@@ -184,6 +184,9 @@ class Region {
   // buffer, otherwise it should return false.
   bool flushBuffer(std::function<bool(RelAddress, BufferView)> callBack);
 
+  // Cleans up the attached buffer by calling the callBack function.
+  bool cleanupBuffer(std::function<void(RegionId, BufferView)> callBack);
+
   // Marks the bit to indicate pending flush status.
   void setPendingFlush() {
     std::lock_guard l{lock_};
@@ -195,6 +198,9 @@ class Region {
 
   // Checks if the region's buffer is flushed.
   bool isFlushedLocked() const { return (flags_ & kFlushed) != 0; }
+
+  // Checks whether the region's buffer is cleaned up.
+  bool isCleanedupLocked() const { return (flags_ & kCleanedup) != 0; }
 
   // Returns the number of active writers using the region.
   uint32_t getActiveWriters() const {
@@ -228,6 +234,7 @@ class Region {
   static constexpr uint16_t kPinned{1u << 1};
   static constexpr uint16_t kFlushPending{1u << 2};
   static constexpr uint16_t kFlushed{1u << 3};
+  static constexpr uint16_t kCleanedup{1u << 4};
 
   const RegionId regionId_{};
   const uint64_t regionSize_{0};

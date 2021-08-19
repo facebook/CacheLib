@@ -46,6 +46,13 @@ namespace navy {
 using RegionEvictCallback =
     std::function<uint32_t(RegionId rid, uint32_t slotSize, BufferView buffer)>;
 
+// Callback that is used to clean up region.
+//   @rid       Region ID
+//   @buffer    Buffer with region data, valid during callback invocation
+//   @slotSize  Region slot size (0 for stack allocator)
+using RegionCleanupCallback =
+    std::function<void(RegionId rid, uint32_t slotSize, BufferView buffer)>;
+
 // Size class or stack allocator. Thread safe. Syncs access, reclaims regions
 // Controls the allocation of regions, status (open for read/write), and
 // eviction. Region manager doesn't have internal locks. External caller must
@@ -54,18 +61,22 @@ class RegionManager {
  public:
   // Constructs a Region Manager.
   //
-  // @param numRegions        number of regions
-  // @param regionSize        size of the region
-  // @param baseOffset        base offset of the region
-  // @param device            reference to device
-  // @param numCleanRegions   How many regions reclamator maintains in
-  //                          the clean pool
-  // @param scheduler         JobScheduler to run reclamation jobs
-  // @param regionEvictCb     Callback invoked when region evicted
-  // @param sizeClasses       list of size classes
-  // @param policy            eviction policy
-  // @param numInMemBuffers   number of in memory buffers
-  // @Param numPriorities     max number of priorities allowed for regions
+  // @param numRegions                number of regions
+  // @param regionSize                size of the region
+  // @param baseOffset                base offset of the region
+  // @param device                    reference to device
+  // @param numCleanRegions           How many regions reclamator maintains in
+  //                                  the clean pool
+  // @param scheduler                 JobScheduler to run reclamation jobs
+  // @param evictCb                   Callback invoked when region evicted
+  // @param cleanupCb                 Callback invoked when region cleaned up
+  // @param sizeClasses               list of size classes
+  // @param policy                    eviction policy
+  // @param numInMemBuffers           number of in memory buffers
+  // @param numPriorities             max number of priorities allowed for
+  //                                  regions
+  // @param inMemBufFlushRetryLimit   max number of flushing retry times for
+  //                                  in-mem buffer
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -73,10 +84,12 @@ class RegionManager {
                 uint32_t numCleanRegions,
                 JobScheduler& scheduler,
                 RegionEvictCallback evictCb,
+                RegionCleanupCallback cleanupCb,
                 std::vector<uint32_t> sizeClasses,
                 std::unique_ptr<EvictionPolicy> policy,
                 uint32_t numInMemBuffers,
-                uint16_t numPriorities);
+                uint16_t numPriorities,
+                uint16_t inMemBufFlushRetryLimit);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -168,7 +181,31 @@ class RegionManager {
   // Flushes the in memory buffer attached to a region.
   // Returns true if the flush succeeds and the buffer is detached from the
   // region; false otherwise.
+  //
+  // Caller is expected to call flushBuffer until true is returned or retry
+  // times reach the limit. This routine is idempotent and is safe to call
+  // multiple times until detachBuffer is done.
   bool flushBuffer(const RegionId& rid);
+
+  // Detaches the buffer from the region and returns the buffer to pool.
+  // Caller is expected to call this until it returns true.
+  //
+  // @returns false if there are active readers when detaching the buffer;
+  //          true otherwise.
+  bool detachBuffer(const RegionId& rid);
+
+  // Cleans up the in memory buffer when flushing failure reach the retry limit.
+  // Returns true if the cleanup succeeds and the buffer is detached from the
+  // region; false otherwise.
+  //
+  // Caller is expected to call cleanupBufferOnFlushFailure until true is
+  // returned. This routine is idempotent and is safe to call multiple times
+  // until detachBuffer is done.
+  bool cleanupBufferOnFlushFailure(const RegionId& rid);
+
+  // Releases a region that was cleaned up due to in-mem buffer flushing
+  // failure.
+  void releaseCleanedupRegion(RegionId rid);
 
   // Stores region information in a Thrift object for all regions.
   void persist(RecordWriter& rw) const;
@@ -241,6 +278,7 @@ class RegionManager {
   void resetEvictionPolicy();
 
   const uint16_t numPriorities_{};
+  const uint16_t inMemBufFlushRetryLimit_{};
   const uint32_t numRegions_{};
   const uint64_t regionSize_{};
   const uint64_t baseOffset_{};
@@ -262,6 +300,7 @@ class RegionManager {
   JobScheduler& scheduler_;
 
   const RegionEvictCallback evictCb_;
+  const RegionCleanupCallback cleanupCb_;
 
   const std::vector<uint32_t> sizeClasses_;
 
@@ -277,7 +316,9 @@ class RegionManager {
   // Stats to keep track of inmem buffer usage
   mutable AtomicCounter numInMemBufActive_;
   mutable AtomicCounter numInMemBufWaitingFlush_;
-  mutable AtomicCounter numInMemBufFlushRetires_;
+  mutable AtomicCounter numInMemBufFlushRetries_;
+  mutable AtomicCounter numInMemBufFlushFailures_;
+  mutable AtomicCounter numInMemBufCleanupRetries_;
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;

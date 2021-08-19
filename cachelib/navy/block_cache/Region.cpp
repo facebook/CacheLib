@@ -80,6 +80,20 @@ bool Region::flushBuffer(std::function<bool(RelAddress, BufferView)> callBack) {
   return true;
 }
 
+bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
+  std::unique_lock<std::mutex> lock{lock_};
+  if (activeWriters_ != 0) {
+    return false;
+  }
+  if (!isCleanedupLocked()) {
+    lock.unlock();
+    callBack(regionId_, buffer_->view());
+    lock.lock();
+    flags_ |= kCleanedup;
+  }
+  return true;
+}
+
 void Region::reset() {
   std::lock_guard<std::mutex> l{lock_};
   XDCHECK_EQ(activeOpenLocked(), 0U);

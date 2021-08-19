@@ -45,6 +45,7 @@ namespace {
 constexpr uint64_t kDeviceSize{64 * 1024};
 constexpr uint64_t kRegionSize{16 * 1024};
 constexpr size_t kSizeOfEntryDesc{24};
+constexpr uint16_t kFlushRetryLimit{5};
 
 std::unique_ptr<JobScheduler> makeJobScheduler() {
   return std::make_unique<MockSingleThreadJobScheduler>();
@@ -2458,20 +2459,18 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
   }
 }
 
-TEST(BlockCache, DeviceFlushFailure) {
+TEST(BlockCache, DeviceFlushFailureSync) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
 
   testing::InSequence inSeq;
-  EXPECT_CALL(*device, writeImpl(_, _, _))
-      .Times(5)
-      .WillRepeatedly(Return(false));
-  EXPECT_CALL(*device, writeImpl(_, _, _)).WillOnce(Return(true));
+  EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {});
   config.numInMemBuffers = 4;
+  config.inMemBufFlushRetryLimit = kFlushRetryLimit;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -2482,7 +2481,10 @@ TEST(BlockCache, DeviceFlushFailure) {
 
   driver->getCounters([](folly::StringPiece name, double count) {
     if (name == "navy_bc_inmem_flush_retries") {
-      EXPECT_EQ(5, count);
+      EXPECT_EQ(kFlushRetryLimit, count);
+    }
+    if (name == "navy_bc_inmem_flush_failures") {
+      EXPECT_EQ(1, count);
     }
   });
 }
@@ -2493,18 +2495,13 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
 
   testing::InSequence inSeq;
-  EXPECT_CALL(*device, writeImpl(_, _, _))
-      .Times(5)
-      .WillRepeatedly(Return(false));
-
-  // Will be called twice as the second flush is a sync flush from
-  // driver->flush()
-  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(2).WillOnce(Return(true));
+  EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
   auto config =
       makeConfig(*ex, std::move(policy), *device, {16 * 1024 /* size class */});
   config.numInMemBuffers = 4;
+  config.inMemBufFlushRetryLimit = kFlushRetryLimit;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -2516,7 +2513,10 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
 
   driver->getCounters([](folly::StringPiece name, double count) {
     if (name == "navy_bc_inmem_flush_retries") {
-      EXPECT_EQ(5, count);
+      EXPECT_EQ(kFlushRetryLimit * 2, count);
+    }
+    if (name == "navy_bc_inmem_flush_failures") {
+      EXPECT_EQ(2, count);
     }
   });
 }

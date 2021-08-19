@@ -25,6 +25,7 @@
 #include <utility>
 
 #include "cachelib/navy/common/Hash.h"
+#include "cachelib/navy/common/Types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -131,10 +132,12 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.cleanRegionsPool,
                      *config.scheduler,
                      bindThis(&BlockCache::onRegionReclaim, *this),
+                     bindThis(&BlockCache::onRegionCleanup, *this),
                      config.sizeClasses,
                      std::move(config.evictionPolicy),
                      config.numInMemBuffers,
-                     config.numPriorities},
+                     config.numPriorities,
+                     config.inMemBufFlushRetryLimit},
       allocator_{regionManager_, config.numPriorities},
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
@@ -343,6 +346,85 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
   holeCount_.sub(removedItem);
   holeSizeTotal_.sub(removedItem * regionManager_.getRegionSlotSize(rid));
   return evictionCount;
+}
+
+void BlockCache::onRegionCleanup(RegionId rid,
+                                 uint32_t slotSize,
+                                 BufferView buffer) {
+  uint32_t evictionCount = 0; // item that was evicted during cleanup
+  uint32_t removedItem = 0;   // item that was previously removed
+  auto& region = regionManager_.getRegion(rid);
+  auto offset = region.getLastEntryEndOffset();
+  while (offset > 0) {
+    // iterate each entry
+    auto entryEnd = buffer.data() + offset;
+    auto desc =
+        *reinterpret_cast<const EntryDesc*>(entryEnd - sizeof(EntryDesc));
+    if (desc.csSelf != desc.computeChecksum()) {
+      cleanupEntryHeaderChecksumErrorCount_.inc();
+      XLOGF(ERR,
+            "Item header checksum mismatch. Region {} is likely corrupted. "
+            "Expected:{}, Actual: {}",
+            rid.index(),
+            desc.csSelf,
+            desc.computeChecksum());
+      if (slotSize == 0) {
+        XLOGF(
+            ERR,
+            "Stack allocation mode. So we need to abort clean up for Region {}",
+            rid.index());
+        break;
+      } else {
+        XDCHECK_GE(offset, slotSize);
+        offset -= slotSize;
+        continue;
+      }
+    }
+
+    const auto entrySize =
+        slotSize > 0
+            ? slotSize
+            : serializedSize(desc.keySize, desc.valueSize, true /* aligned */);
+    HashedKey hk{
+        BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
+    BufferView value{desc.valueSize, entryEnd - entrySize};
+    if (checksumData_ && desc.cs != checksum(value)) {
+      // We do not need to abort here since the EntryDesc checksum was good, so
+      // we can safely proceed to read the next entry.
+      cleanupValueChecksumErrorCount_.inc();
+    }
+
+    // remove the item
+    auto removeRes = removeItem(hk, entrySize, RelAddress{rid, offset});
+    if (removeRes) {
+      evictionCount++;
+    } else {
+      removedItem++;
+    }
+    if (destructorCb_) {
+      destructorCb_(hk.key(),
+                    value,
+                    removeRes ? DestructorEvent::Recycled
+                              : DestructorEvent::Removed);
+    }
+    XDCHECK_GE(offset, entrySize);
+    offset -= entrySize;
+  }
+
+  XDCHECK_GE(region.getNumItems(), evictionCount);
+  holeCount_.sub(removedItem);
+  holeSizeTotal_.sub(removedItem * regionManager_.getRegionSlotSize(rid));
+}
+
+bool BlockCache::removeItem(HashedKey hk,
+                            uint32_t entrySize,
+                            RelAddress currAddr) {
+  sizeDist_.removeSize(entrySize);
+  if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
+    return true;
+  }
+  evictionLookupMissCounter_.inc();
+  return false;
 }
 
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
@@ -557,6 +639,10 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           reclaimEntryHeaderChecksumErrorCount_.get());
   visitor("navy_bc_reclaim_value_checksum_errors",
           reclaimValueChecksumErrorCount_.get());
+  visitor("navy_bc_cleanup_entry_header_checksum_errors",
+          cleanupEntryHeaderChecksumErrorCount_.get());
+  visitor("navy_bc_cleanup_value_checksum_errors",
+          cleanupValueChecksumErrorCount_.get());
   visitor("navy_bc_succ_lookups", succLookupCount_.get());
   visitor("navy_bc_removes", removeCount_.get());
   visitor("navy_bc_succ_removes", succRemoveCount_.get());

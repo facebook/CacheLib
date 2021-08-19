@@ -33,6 +33,7 @@ namespace tests {
 namespace {
 constexpr uint16_t kNoPriority = 0;
 constexpr uint16_t kNumPriorities = 1;
+constexpr uint16_t kFlushRetryLimit = 10;
 } // namespace
 
 TEST(Allocator, RegionSync) {
@@ -44,10 +45,12 @@ TEST(Allocator, RegionSync) {
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{1024, 2048};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      sizeClasses, std::move(policy), 0, 0);
+      std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
+      kFlushRetryLimit);
 
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
@@ -123,10 +126,12 @@ TEST(Allocator, RegionSyncInMemBuffers) {
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   std::vector<uint32_t> sizeClasses{1024};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1, 0);
+      std::move(cleanupCb), sizeClasses, std::move(policy),
+      2 * sizeClasses.size() + 1, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -224,10 +229,12 @@ TEST(Allocator, TestInMemBufferStates) {
 
   std::vector<uint32_t> sizeClasses{1024};
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      sizeClasses, std::move(policy), 2 * sizeClasses.size() + 1, 0);
+      std::move(cleanupCb), sizeClasses, std::move(policy),
+      2 * sizeClasses.size() + 1, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -296,11 +303,12 @@ TEST(Allocator, UsePriorities) {
   auto device =
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::vector<uint32_t>{} /* no size class */, std::move(policy), 0,
-      3 /* numPriorities */);
+      std::move(cleanupCb), std::vector<uint32_t>{} /* no size class */,
+      std::move(policy), 0, 3 /* numPriorities */, kFlushRetryLimit);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
   EXPECT_EQ(0, ex.getQueueSize());
@@ -334,11 +342,12 @@ TEST(Allocator, UsePrioritiesSizeClass) {
   auto device =
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
   RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::vector<uint32_t>{1024, 4096} /* size class */, std::move(policy), 0,
-      3 /* numPriorities */);
+      std::move(cleanupCb), std::vector<uint32_t>{1024, 4096} /* size class */,
+      std::move(policy), 0, 3 /* numPriorities */, kFlushRetryLimit);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
   EXPECT_EQ(0, ex.getQueueSize());
