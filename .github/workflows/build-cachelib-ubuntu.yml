@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: "update packages"
-        run: apt-get update
+        run: sudo apt-get update
       - name: "install sudo,git"
-        run: apt-get install -y sudo git procps
+        run: sudo apt-get install -y git procps
       - name: "System Information"
         run: |
           echo === uname ===
