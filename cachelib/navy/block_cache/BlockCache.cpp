@@ -681,9 +681,6 @@ void BlockCache::persist(RecordWriter& rw) {
   serializeProto(config, rw);
   regionManager_.persist(rw);
   index_.persist(rw);
-  if (reinsertionPolicy_) {
-    reinsertionPolicy_->persist(rw);
-  }
 
   XLOG(INFO, "Finished block cache persist");
 }

@@ -55,8 +55,7 @@ class HitsReinsertionPolicy : public ReinsertionPolicy {
   // this key around longer in cache.
   bool shouldReinsert(HashedKey hk) override;
 
-  // Persists metadata associated with hits based reinsertion policy.
-  void persist(RecordWriter& rw) override;
+  void persist(RecordWriter& /* rw */) override {}
 
   void recover(RecordReader& /* rr */) override {}
 

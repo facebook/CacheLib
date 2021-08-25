@@ -35,17 +35,6 @@ bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
   return true;
 }
 
-// TODO: T95755384 delete persist API after BigCache has rolled out the release
-// that no longer tries to "recover" the persistence policy.
-void HitsReinsertionPolicy::persist(RecordWriter& rw) {
-  // disable future recover by writing kNumLocks empty AccessTrackers
-  serializeProto(kNumLocks, rw);
-  for (size_t i = 0; i < kNumLocks; i++) {
-    serialization::AccessTracker trackerData;
-    serializeProto(trackerData, rw);
-  }
-}
-
 void HitsReinsertionPolicy::getCounters(const CounterVisitor& visitor) const {
   hitsOnReinsertionEstimator_.visitQuantileEstimator(
       visitor, "navy_bc_item_reinsertion_hits");
