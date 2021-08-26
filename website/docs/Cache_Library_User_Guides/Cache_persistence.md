@@ -71,7 +71,7 @@ std::unique_ptr<Cache> cache;
 try {
   cache = std::make_unique<Cache>(Cache::SharedMemAttach, config);
   // Cache is now restored
-} catch (const std::exception& e) {
+} catch (const std::exception& ex) {
   // Attaching failed. Create a new one but make sure that
   // the old cache is destroyed before creating a new one.
   // This allows us to release any held resources (such as
