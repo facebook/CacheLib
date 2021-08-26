@@ -3,7 +3,7 @@ id: HybridCache
 title: HybridCache
 ---
 
-HybirdCache feature enables `CacheAllocator` to extend the DRAM cache to NVM. With HybridCache, cachelib can seamlessly move Items stored in cache across DRAM and NVM as they are accessed. Using HybridCache, you can shrink your DRAM footprint of the cache and replace it with NVM like Flash. This can also enable you to achieve large cache capacities for the same or relatively lower power and dollar cost.
+HybridCache feature enables `CacheAllocator` to extend the DRAM cache to NVM. With HybridCache, cachelib can seamlessly move Items stored in cache across DRAM and NVM as they are accessed. Using HybridCache, you can shrink your DRAM footprint of the cache and replace it with NVM like Flash. This can also enable you to achieve large cache capacities for the same or relatively lower power and dollar cost.
 
 # Design
 
