@@ -69,14 +69,11 @@ ClassId LruTailAgeStrategy::pickVictim(
   // the oldest projected age among the victims
   return *std::max_element(
       victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
-        return (poolEvictionAgeStats.getProjectedAge(a) *
-                    (config.getWeight
-                         ? config.getWeight(makeAllocInfo(pid, a, poolStats))
-                         : 1.0) <
-                poolEvictionAgeStats.getProjectedAge(b) *
-                    (config.getWeight
-                         ? config.getWeight(makeAllocInfo(pid, b, poolStats))
-                         : 1.0));
+        return (
+            poolEvictionAgeStats.getProjectedAge(a) *
+                (config.getWeight ? config.getWeight(pid, a, poolStats) : 1.0) <
+            poolEvictionAgeStats.getProjectedAge(b) *
+                (config.getWeight ? config.getWeight(pid, b, poolStats) : 1.0));
       });
 }
 
@@ -98,13 +95,9 @@ ClassId LruTailAgeStrategy::pickReceiver(
   return *std::min_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
         return (poolEvictionAgeStats.getOldestElementAge(a) *
-                    (config.getWeight
-                         ? config.getWeight(makeAllocInfo(pid, a, stats))
-                         : 1.0) <
+                    (config.getWeight ? config.getWeight(pid, a, stats) : 1.0) <
                 poolEvictionAgeStats.getOldestElementAge(b) *
-                    (config.getWeight
-                         ? config.getWeight(makeAllocInfo(pid, b, stats))
-                         : 1.0));
+                    (config.getWeight ? config.getWeight(pid, b, stats) : 1.0));
       });
 }
 

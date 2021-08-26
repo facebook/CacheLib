@@ -74,12 +74,10 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
 
   return *std::min_element(
       victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
-        double weight_a = config.getWeight
-                              ? config.getWeight(makeAllocInfo(pid, a, stats))
-                              : 1;
-        double weight_b = config.getWeight
-                              ? config.getWeight(makeAllocInfo(pid, b, stats))
-                              : 1;
+        double weight_a =
+            config.getWeight ? config.getWeight(pid, a, stats) : 1;
+        double weight_b =
+            config.getWeight ? config.getWeight(pid, b, stats) : 1;
         return poolState.at(a).projectedDeltaHitsPerSlab(stats) * weight_a <
                poolState.at(b).projectedDeltaHitsPerSlab(stats) * weight_b;
       });
@@ -113,12 +111,10 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
 
   return *std::max_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
-        double weight_a = config.getWeight
-                              ? config.getWeight(makeAllocInfo(pid, a, stats))
-                              : 1;
-        double weight_b = config.getWeight
-                              ? config.getWeight(makeAllocInfo(pid, b, stats))
-                              : 1;
+        double weight_a =
+            config.getWeight ? config.getWeight(pid, a, stats) : 1;
+        double weight_b =
+            config.getWeight ? config.getWeight(pid, b, stats) : 1;
         return poolState.at(a).deltaHitsPerSlab(stats) * weight_a <
                poolState.at(b).deltaHitsPerSlab(stats) * weight_b;
       });
@@ -153,10 +149,8 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   double weightVictim = 1;
   double weightReceiver = 1;
   if (config.getWeight) {
-    weightReceiver =
-        config.getWeight(makeAllocInfo(pid, ctx.receiverClassId, poolStats));
-    weightVictim =
-        config.getWeight(makeAllocInfo(pid, ctx.victimClassId, poolStats));
+    weightReceiver = config.getWeight(pid, ctx.receiverClassId, poolStats);
+    weightVictim = config.getWeight(pid, ctx.victimClassId, poolStats);
   }
   const auto victimProjectedDeltaHitsPerSlab =
       poolState.at(ctx.victimClassId).projectedDeltaHitsPerSlab(poolStats) *

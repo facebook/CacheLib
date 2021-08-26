@@ -269,19 +269,23 @@ class RebalanceStrategyTest : public testing::Test {
 
       if (weightFactor) {
         weightedHitsConfig.getWeight =
-            [kFactor](const AllocInfo& allocInfo) -> double {
-          return (allocInfo.allocSize + kFactor - 1) / kFactor;
+            [kFactor](const PoolId,
+                      const ClassId classId,
+                      const cachelib::PoolStats& pStats) -> double {
+          auto allocSize = pStats.mpStats.acStats.at(classId).allocSize;
+          return (allocSize + kFactor - 1) / kFactor;
         };
 
         // Asserts for testing the simple weight function
-        ASSERT_TRUE(weightedHitsConfig.getWeight(AllocInfo{0, smallAC, 1}) ==
-                    1);
-        ASSERT_TRUE(
-            weightedHitsConfig.getWeight(AllocInfo{0, smallAC, kFactor}) == 1);
-        ASSERT_TRUE(weightedHitsConfig.getWeight(
-                        AllocInfo{0, smallAC, kFactor + 1}) == 2);
-        ASSERT_TRUE(weightedHitsConfig.getWeight(
-                        AllocInfo{0, smallAC, kFactor * 4}) == 4);
+        cachelib::PoolStats pStats;
+        pStats.mpStats.acStats[smallAC].allocSize = 1;
+        ASSERT_TRUE(weightedHitsConfig.getWeight(0, smallAC, pStats) == 1);
+        pStats.mpStats.acStats[smallAC].allocSize = kFactor;
+        ASSERT_TRUE(weightedHitsConfig.getWeight(0, smallAC, pStats) == 1);
+        pStats.mpStats.acStats[smallAC].allocSize = kFactor + 1;
+        ASSERT_TRUE(weightedHitsConfig.getWeight(0, smallAC, pStats) == 2);
+        pStats.mpStats.acStats[smallAC].allocSize = kFactor * 4;
+        ASSERT_TRUE(weightedHitsConfig.getWeight(0, smallAC, pStats) == 4);
       }
 
       auto rebalancer =
@@ -439,8 +443,10 @@ class RebalanceStrategyTest : public testing::Test {
     const ClassId victim = static_cast<ClassId>(1);
 
     LruTailAgeStrategy::Config weightedlruConfig;
-    weightedlruConfig.getWeight = [](const AllocInfo& allocInfo) -> double {
-      return ((allocInfo.classId == 0) ? 0.4 : 1.0);
+    weightedlruConfig.getWeight = [](const PoolId,
+                                     const ClassId classId,
+                                     const cachelib::PoolStats&) -> double {
+      return ((classId == 0) ? 0.4 : 1.0);
     };
     allocatorConfig.enablePoolRebalancing(
         std::make_shared<LruTailAgeStrategy>(weightedlruConfig),

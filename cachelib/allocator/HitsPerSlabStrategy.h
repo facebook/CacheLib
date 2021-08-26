@@ -42,7 +42,8 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     unsigned int minLruTailAge{0};
 
     // optionial weight function based on allocation class size
-    using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
+    using WeightFn = std::function<double(
+        const PoolId, const ClassId, const PoolStats& pStats)>;
     WeightFn getWeight = {};
 
     // free memory threshold used to pick victim.

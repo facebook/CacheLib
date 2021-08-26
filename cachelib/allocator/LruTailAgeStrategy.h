@@ -49,7 +49,8 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // weight function is null, and no weighted tail age is computed.
     // If the weight function is set, tailAgeDifferenceRatio and
     // minTailAgeDifference are ignored
-    using WeightFn = std::function<double(const AllocInfo& allocInfo)>;
+    using WeightFn = std::function<double(
+        const PoolId pid, const ClassId classId, const PoolStats& pStats)>;
     WeightFn getWeight = {};
 
     // The free memory threshold to be used to pick victim class.
