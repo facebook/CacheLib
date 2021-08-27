@@ -1,6 +1,6 @@
 ---
 id: compact_cache
-title: compact cache
+title: Compact cache
 ---
 
 # Annoucement

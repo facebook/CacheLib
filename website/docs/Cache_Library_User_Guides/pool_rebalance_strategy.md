@@ -1,6 +1,6 @@
 ---
 id: pool_rebalance_strategy
-title: pool rebalance strategy
+title: Pool rebalance strategy
 ---
 
 # When do you need pool rebalancing?

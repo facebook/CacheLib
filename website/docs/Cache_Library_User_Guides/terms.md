@@ -1,6 +1,6 @@
 ---
 id: terms
-title: terms
+title: Terms
 ---
 
 **Item**

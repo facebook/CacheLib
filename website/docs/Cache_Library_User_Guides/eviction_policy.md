@@ -1,6 +1,6 @@
 ---
 id: eviction_policy
-title: eviction policy
+title: Eviction policy
 ---
 
 Cachelib offers different eviction policies, suitable for different use cases. To select a specific eviction policy, choose the appropriate allocator type.

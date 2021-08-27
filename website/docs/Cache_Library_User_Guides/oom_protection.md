@@ -1,6 +1,6 @@
 ---
 id: oom_protection
-title: oom protection
+title: Oom protection
 ---
 
 Cachelib can dynamically *grow or shrink the total cache footprint* from its configured size based on the memory pressure in your system. We call this feature `MemoryMonitor`. When it is enabled, cachelib watches for the memory pressure through system metrics and releases cache memory back to the system. When the memory pressure eases, cachelib can reclaim back the memory and grow to its configured size. `MemoryMonitor` enables you to size your cache without having to worry about your system's running out of memory when regular heap memory grows or system free memory drops. It also enables you to be *less relaxed about coming up with an optimal cache size* or relaxing the head room you need to maintain in anticipation of sudden memory growth.

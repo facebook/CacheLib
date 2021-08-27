@@ -1,6 +1,6 @@
 ---
 id: chained_items
-title: chained items
+title: Chained items
 ---
 
 The `allocate()` method allocates memory for data whose size is less than the maximum slab size (4 MB). To cache data whose size exceeds 4 MB, use chained allocations.

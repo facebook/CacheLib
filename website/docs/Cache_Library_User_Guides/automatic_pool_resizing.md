@@ -1,6 +1,6 @@
 ---
 id: automatic_pool_resizing
-title: automatic pool resizing
+title: Automatic pool resizing
 ---
 
 **This feature is incomplete and untested in prod. If you're interested, reach out to us and we can work out a plan to complete it.**

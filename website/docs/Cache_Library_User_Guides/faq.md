@@ -1,6 +1,6 @@
 ---
 id: faq
-title: faq
+title: FAQ
 ---
 
 # My service is broken. Help!
