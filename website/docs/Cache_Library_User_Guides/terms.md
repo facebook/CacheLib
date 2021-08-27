@@ -56,7 +56,7 @@ A slab is a logical unit of a fixed chunk of memory; it is hardcoded to 4 MB cur
 **Compact cache**
 
 
-A compact cache is used to store small key-value data, usually less than tens of bytes per entry. The size of the key must be fixed at compile time, whereas the size of the value can be fixed, variable, or empty. For more information, see [Compact Cache](Cachelib-tutorial/compact-cache/ ).
+A compact cache is used to store small key-value data, usually less than tens of bytes per entry. The size of the key must be fixed at compile time, whereas the size of the value can be fixed, variable, or empty. For more information, see [Compact Cache](compact_cache/).
 
 
 
@@ -85,7 +85,7 @@ TinyLFU consists of a frequency estimator (FE) and LRU. FE is an approximate dat
 **Compact cache**
 
 
-A compact cache is used to store small key-value data, usually less than tens of bytes per entry. The size of the key must be fixed at compile time, whereas the size of the value can be fixed, variable, or empty. For more information, see [Compact Cache](Cachelib-tutorial/compact-cache/ ).
+A compact cache is used to store small key-value data, usually less than tens of bytes per entry. The size of the key must be fixed at compile time, whereas the size of the value can be fixed, variable, or empty. For more information, see [Compact Cache](compact_cache/ ).
 
 
 **HybridCache**

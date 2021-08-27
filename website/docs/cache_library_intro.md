@@ -27,11 +27,6 @@ CacheLib is targeted at services that use gigabytes of memory to cache informati
 - Shared-memory based persistence of cache across process restarts.
 - Transparent usage of DRAM and SSD for caching.
 
-If you're interested in using cachelib, please go through this exercise and fill  out the [onboarding questionnaire](Cache_Library_User_Guides/Cache_Library_onboarding_questionnaire/ )
-and forward it to [cachelib oncall](https://www.internalfb.com/intern/monitor/oncall_management_scheduling?oncall=cachelib).
-
-If you have questions and discussions on cachelib, post them to the [Cache Library Users](https://fb.workplace.com/groups/363899777130504/) group.
-
 ## Getting started with CacheLib
 
 To get started with cachelib, read these guides:
@@ -41,4 +36,4 @@ To get started with cachelib, read these guides:
 - [Remove data from the cache](Cache_Library_User_Guides/Remove_data_from_cache/ ).
 - [Visit data in the cache](Cache_Library_User_Guides/Visit_data_in_cache/ ).
 
-Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer to our [architecture guide](Cache_Library_Architecture_Guide/).
+Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer to our architecture guide.

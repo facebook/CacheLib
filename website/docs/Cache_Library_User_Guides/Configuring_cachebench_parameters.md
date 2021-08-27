@@ -216,7 +216,7 @@ CacheBench can monitor the write-amplification of supported underlying devices i
 
 ## Storage engine parameters
 
-Set the following parameters to control the performance of the hybrid cache storage engine. See [hybrid cache](CacheLibrary_User_Guides/hybrid_cache ) for more details.
+Set the following parameters to control the performance of the hybrid cache storage engine. See [Hybrid Cache](HybridCache ) for more details.
 
 * `navyReaderThreads`  and `navyWriterThreads`
 Control the reader and writer thread pools.

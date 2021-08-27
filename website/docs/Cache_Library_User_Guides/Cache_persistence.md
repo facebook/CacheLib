@@ -21,11 +21,6 @@ Cache cache(Cache::SharedMemNew, config);
 // ... Use the cache
 ```
 
-
-### Do you use Tupperware?
-
-Tupperware users need to set up a persistent directory to keep the cache metadata file between Tupperware restarts. For more information, see [Persistent Directory](Tupperware/The_Hacker's_Guide_to_Tupperware/Task_Local_Storage#Persistent_Directory ). You also need to [[Tupperware/Reference/LanguageReference/LxcConfig/ | configure LXC]] for your container.
-
 ## Shut down a persistent cache
 
 To make sure that your cache is saved in the correct state, *ensure that you have drained all accesses to your cache* and call the `shutdown()` API in your process shutdown path. This ensures that cachelib saves all the relevant information to restore the cache.
