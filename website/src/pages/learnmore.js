@@ -21,13 +21,13 @@ function LearnMore() {
   const {siteConfig = {}} = context;
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
+      title={`${siteConfig.title}`}
       description="Pluggable caching engine to build and scale high performance cache services">
       <main>
 	  <section>
           <div className="container">
 
-          <div className="row">
+          <div className="row padding-top--lg">
 
 	  <div class="col col--6">
 	<p>
@@ -105,7 +105,7 @@ function LearnMore() {
 	  </div>
 
 	  <div className="row">
-	  <div class="col col--12">
+	  <div className="col col--12">
 	<h2>OSDI’20</h2>
 
 

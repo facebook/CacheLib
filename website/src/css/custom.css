@@ -25,21 +25,15 @@
   --ifm-code-font-size: 95%;
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Montserrat&display=swap');
-
-
 .button--secondary {
     background-color: #c8a47e;
     border-color: #c8a47e;
 }
 
 body {
-    font-family: 'Montserrat', sans-serif;
 }
 
 h1,h2,h4 {
-    font-family: 'Playfair Display', serif;
 }
 
 .jumbotron {
@@ -50,7 +44,6 @@ h1,h2,h4 {
 }
 
 .jumbotron p.lead {
-    font-family: 'Playfair Display', serif;
 }
 
 

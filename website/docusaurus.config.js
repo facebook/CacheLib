@@ -36,7 +36,7 @@ module.exports = {
   */
 
   // Settings for the production GitHub repository WITH custom domain
-  // The website will be https://facebookincubator.github.io/CacheLib/
+  // The website will be https://cachelib.org/
   // Don't forget a corrsponding CNAME file in the 'static' directory.
   url: 'https://cachelib.org',
   baseUrl: '/',
@@ -49,7 +49,7 @@ module.exports = {
       title: 'CacheLib',
       logo: {
         alt: 'My Facebook Project Logo',
-        src: 'img/CacheLib-Logo.png',
+        src: 'img/CacheLib-Logo-small.png',
       },
 	items: [
         {
@@ -88,7 +88,7 @@ module.exports = {
           title: 'Community',
           items: [
             {
-              label: 'FaceBook Developer Page',
+              label: 'Facebook Developer Page',
 		href: 'https://www.facebook.com/cachelib/',
             },
             {
