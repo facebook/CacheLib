@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/Random.h>
+#include <folly/Singleton.h>
 #include <folly/synchronization/Baton.h>
 
 #include <algorithm>
@@ -1205,6 +1206,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Disable slab rebalancing
     config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
 
+    // Destroy singletons before we fork() below
+    folly::SingletonVault::singleton()->destroyInstances();
+
     // Create a new cache allocator and save it properly
     {
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
@@ -1253,6 +1257,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       waitpid(pid, &status, 0);
       ASSERT_EQ(WEXITSTATUS(status), 5);
     }
+
+    // Re-enable folly::Singleton creation
+    folly::SingletonVault::singleton()->reenableInstances();
   }
 
   // test cleanup when directory was removed and cache is not attached.
