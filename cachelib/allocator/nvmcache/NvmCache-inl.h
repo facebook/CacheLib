@@ -50,9 +50,9 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
           encryptionBlockSize,
           blockSize));
     }
-    auto bigHashSizePct = navyConfig.getBigHashSizePct();
-    if (bigHashSizePct > 0) {
-      auto bucketSize = navyConfig.getBigHashBucketSize();
+
+    if (navyConfig.isBigHashEnabled()) {
+      auto bucketSize = navyConfig.bigHash().getBucketSize();
       if (bucketSize % encryptionBlockSize != 0) {
         throw std::invalid_argument(
             folly::sformat("Encryption enabled but the encryption block "
@@ -291,7 +291,7 @@ template <typename C>
 NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
-      navySmallItemThreshold_{config_.navyConfig.getBigHashSmallItemMaxSize()} {
+      navySmallItemThreshold_{config_.navyConfig.getSmallItemThreshold()} {
   navyCache_ = createNavyCache(
       config_.navyConfig,
       [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {

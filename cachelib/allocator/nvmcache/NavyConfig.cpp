@@ -280,7 +280,7 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
 
   // BlockCache settings
   configMap["navyConfig::blockCacheLru"] =
-      blockCacheConfig_.getLru() ? "true" : "false";
+      blockCacheConfig_.isLruEnabled() ? "true" : "false";
   configMap["navyConfig::blockCacheRegionSize"] =
       folly::to<std::string>(blockCacheConfig_.getRegionSize());
   configMap["navyConfig::blockCacheSizeClasses"] =

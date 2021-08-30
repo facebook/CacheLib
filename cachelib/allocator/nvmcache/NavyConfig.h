@@ -208,7 +208,7 @@ class BlockCacheConfig {
     return *this;
   }
 
-  bool getLru() const { return lru_; }
+  bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
     return sFifoSegmentRatio_;
@@ -296,6 +296,8 @@ class BigHashConfig {
     return *this;
   }
 
+  bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
+
   unsigned int getSizePct() const { return sizePct_; }
 
   uint32_t getBucketSize() const { return bucketSize_; }
@@ -338,6 +340,7 @@ class NavyConfig {
  public:
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
+  bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
   std::map<std::string, std::string> serialize() const;
 
   // Getters:
@@ -390,10 +393,13 @@ class NavyConfig {
   uint64_t getFileSize() const { return fileSize_; }
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
+  uint32_t getRaidStripeSize() const {
+    return blockCacheConfig_.getRegionSize();
+  }
 
   // ============ BlockCache settings =============
   // To be deprecated
-  bool getBlockCacheLru() const { return blockCacheConfig_.getLru(); }
+  bool getBlockCacheLru() const { return blockCacheConfig_.isLruEnabled(); }
   // To be deprecated
   const std::vector<unsigned int>& getBlockCacheSegmentedFifoSegmentRatio()
       const {
@@ -428,6 +434,9 @@ class NavyConfig {
     return blockCacheConfig_.getDataChecksum();
   }
 
+  // Return a const BlockCacheConfig to read values of its parameters.
+  const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
+
   // ============ BigHash settings =============
   // To be deprecated
   unsigned int getBigHashSizePct() const { return bigHashConfig_.getSizePct(); }
@@ -443,6 +452,17 @@ class NavyConfig {
   uint64_t getBigHashSmallItemMaxSize() const {
     return bigHashConfig_.getSmallItemMaxSize();
   }
+  // Return the threshold of classifying an item as small item or large item
+  // for Navy engine.
+  uint64_t getSmallItemThreshold() const {
+    if (!isBigHashEnabled()) {
+      return 0;
+    }
+    return bigHashConfig_.getSmallItemMaxSize();
+  }
+
+  // Return a const BlockCacheConfig to read values of its parameters.
+  const BigHashConfig& bigHash() const { return bigHashConfig_; }
 
   // ============ Job scheduler settings =============
   unsigned int getReaderThreads() const { return readerThreads_; }
@@ -554,7 +574,7 @@ class NavyConfig {
   void setBlockCacheDataChecksum(bool blockCacheDataChecksum) noexcept {
     blockCacheConfig_.setDataChecksum(blockCacheDataChecksum);
   }
-  // Get BlockCacheConfig to configure BlockCache.
+  // Return BlockCacheConfig for configuration.
   BlockCacheConfig& blockCache() noexcept { return blockCacheConfig_; }
 
   // ============ BigHash settings =============
@@ -565,7 +585,7 @@ class NavyConfig {
                   uint32_t bigHashBucketSize,
                   uint64_t bigHashBucketBfSize,
                   uint64_t bigHashSmallItemMaxSize);
-  // Get BigHashConfig to configure BigHash.
+  // Return BigHashConfig for configuration.
   BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
 
   // ============ Job scheduler settings =============

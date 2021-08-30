@@ -355,11 +355,11 @@ TEST(NavyConfigTest, BlockCache2) {
 
   // test FIFO eviction policy
   config.blockCache().enableFifo();
-  EXPECT_EQ(blockCacheConfig.getLru(), false);
+  EXPECT_EQ(blockCacheConfig.isLruEnabled(), false);
   EXPECT_TRUE(blockCacheConfig.getSFifoSegmentRatio().empty());
   // test segmented FIFO eviction policy
   config.blockCache().enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio);
-  EXPECT_EQ(blockCacheConfig.getLru(), false);
+  EXPECT_EQ(blockCacheConfig.isLruEnabled(), false);
   EXPECT_EQ(blockCacheConfig.getSFifoSegmentRatio(),
             blockCacheSegmentedFifoSegmentRatio);
 

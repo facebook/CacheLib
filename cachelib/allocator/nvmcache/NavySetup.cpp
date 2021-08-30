@@ -43,201 +43,173 @@ uint64_t alignUp(uint64_t num, uint64_t alignment) {
   return alignDown(num + alignment - 1, alignment);
 }
 
-// the implementation to translate configs from NavyConfig into CacheProto,
-// the engine config interface, which can be used to create BigHash and/or
-// BlockCache engine
+uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
+                      uint32_t ioAlignSize,
+                      uint64_t totalCacheSize,
+                      uint64_t metadataSize,
+                      cachelib::navy::CacheProto& proto) {
+  auto bucketSize = bigHashConfig.getBucketSize();
+  if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
+    throw std::invalid_argument(
+        folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
+                       bucketSize, ioAlignSize));
+  }
+
+  // If enabled, BigHash's storage starts after BlockCache's.
+  const auto sizeReservedForBigHash =
+      totalCacheSize * bigHashConfig.getSizePct() / 100ul;
+
+  const uint64_t bigHashCacheOffset =
+      alignUp(totalCacheSize - sizeReservedForBigHash, bucketSize);
+  const uint64_t bigHashCacheSize =
+      alignDown(totalCacheSize - bigHashCacheOffset, bucketSize);
+
+  auto bigHash = cachelib::navy::createBigHashProto();
+  bigHash->setLayout(bigHashCacheOffset, bigHashCacheSize, bucketSize);
+
+  // Bucket Bloom filter size, bytes
+  //
+  // Experiments showed that if we have 16 bytes for BF with 25 entries,
+  // then optimal number of hash functions is 4 and false positive rate
+  // below 10%.
+  if (bigHashConfig.isBloomFilterEnabled()) {
+    // We set 4 hash function unconditionally. This seems to be the best
+    // for our use case. If BF size to bucket size ratio gets lower, try
+    // to reduce number of hashes.
+    constexpr uint32_t kNumHashes = 4;
+    const uint32_t bitsPerHash =
+        bigHashConfig.getBucketBfSize() * 8 / kNumHashes;
+    bigHash->setBloomFilter(kNumHashes, bitsPerHash);
+  }
+
+  proto.setBigHash(std::move(bigHash), bigHashConfig.getSmallItemMaxSize());
+
+  if (bigHashCacheOffset <= metadataSize) {
+    throw std::invalid_argument("NVM cache size is not big enough!");
+  }
+  XLOG(INFO) << "metadataSize: " << metadataSize
+             << " bigHashCacheOffset: " << bigHashCacheOffset
+             << " bigHashCacheSize: " << bigHashCacheSize;
+  return bigHashCacheOffset;
+}
+
+void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
+                     uint64_t blockCacheSize,
+                     uint32_t ioAlignSize,
+                     uint64_t metadataSize,
+                     bool usesRaidFiles,
+                     cachelib::navy::CacheProto& proto) {
+  auto regionSize = blockCacheConfig.getRegionSize();
+  if (regionSize != alignUp(regionSize, ioAlignSize)) {
+    throw std::invalid_argument(
+        folly::sformat("Region size: {} is not aligned to ioAlignSize: {}",
+                       regionSize, ioAlignSize));
+  }
+
+  // Adjust starting size of block cache to ensure it is aligned to region
+  // size which is what we use for the stripe size when using RAID0Device.
+  uint64_t blockCacheOffset = metadataSize;
+  if (usesRaidFiles) {
+    auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
+    auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
+    XDCHECK_LT(cacheSizeAdjustment, blockCacheSize);
+    blockCacheSize -= cacheSizeAdjustment;
+    blockCacheOffset = adjustedBlockCacheOffset;
+  }
+  blockCacheSize = alignDown(blockCacheSize, regionSize);
+
+  XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
+             << ", block cache size: " << blockCacheSize;
+
+  auto blockCache = cachelib::navy::createBlockCacheProto();
+  blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
+  blockCache->setChecksum(blockCacheConfig.getDataChecksum());
+
+  // set eviction policy
+  auto segmentRatio = blockCacheConfig.getSFifoSegmentRatio();
+  if (!segmentRatio.empty()) {
+    blockCache->setSegmentedFifoEvictionPolicy(std::move(segmentRatio));
+  } else if (blockCacheConfig.isLruEnabled()) {
+    blockCache->setLruEvictionPolicy();
+  } else {
+    blockCache->setFifoEvictionPolicy();
+  }
+
+  auto sizeClasses = blockCacheConfig.getSizeClasses();
+  if (!sizeClasses.empty()) {
+    blockCache->setSizeClasses(std::move(sizeClasses));
+  }
+  blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions());
+
+  // set reinsertion policy
+  auto reinsertionHitsThreshold =
+      blockCacheConfig.getReinsertionHitsThreshold();
+  if (reinsertionHitsThreshold > 0) {
+    blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
+  }
+
+  auto reinsertionPercentageThreshold =
+      blockCacheConfig.getReinsertionPctThreshold();
+  if (reinsertionPercentageThreshold > 0) {
+    blockCache->setPercentageReinsertionPolicy(reinsertionPercentageThreshold);
+  }
+
+  blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
+
+  proto.setBlockCache(std::move(blockCache));
+}
+
+// Setup the CacheProto, includes BigHashProto and BlockCacheProto,
+// which is the configuration interface from Navy engine, and can be used to
+// create BigHash and BlockCache engines.
 //
+// @param config            the configured NavyConfig
 // @param device            the flash device
-// @param metadataSize      size of meta data in device
-// @param bigHashPctSize    the percentage of storage for BigHash
-// @param bucketSize        size of each bucket in BigHash
-// @param bfSize            the bloom filter size in BigHash
-// @param smallItemMaxSize  maximum size of item that will be store in BigHash
-// @param regionSize        size of a region in BlockCache
-// @param dataChecksum      whether checksum is enabled in BlockCache
-// @param segmentRatio      enable SegmentedFifo eviction policy and set ratio
-//                          of each segment in BlockCache
-// @param useLru            whether use LRU eviction policy in BlockCache
-// @param sizeClasses       set BlockCache size classes
-// @param cleanRegions      the number of clean region in BlockCache
-// @param reinsertionHitsThreshold         set hit based reinsertion policy and
-//                                         the threshold in BlockCache
-// @param reinsertionProbabilityThreshold  set probability based reinsertion
-//                                         policy and the probability threshold
-//                                         in BlockCache
-// @param numInMemBuffers    the number of in-memory buffers can be used for
-//                           regions in BlockCache
-// @param usesRaidFiles      whether the deivce is raid setup
-// @param proto              the output CacheProto
+// @param proto             the output CacheProto
 //
 // @throw std::invalid_argument if input arguments are invalid
-void setupCacheProtosImpl(const navy::Device& device,
-                          uint64_t metadataSize,
-                          const unsigned int bigHashPctSize,
-                          const uint32_t bucketSize,
-                          const uint64_t bfSize,
-                          const uint64_t smallItemMaxSize,
-                          const uint32_t regionSize,
-                          const bool dataChecksum,
-                          std::vector<unsigned int> segmentRatio,
-                          const bool useLru,
-                          std::vector<uint32_t> sizeClasses,
-                          const uint32_t cleanRegions,
-                          const uint8_t reinsertionHitsThreshold,
-                          const uint32_t reinsertionPercentageThreshold,
-                          const uint32_t numInMemBuffers,
-                          const bool usesRaidFiles,
-                          cachelib::navy::CacheProto& proto) {
-  const uint64_t totalCacheSize = device.getSize();
-
-  auto ioAlignSize = device.getIOAlignmentSize();
+void setupCacheProtos(const navy::NavyConfig& config,
+                      const navy::Device& device,
+                      cachelib::navy::CacheProto& proto) {
   auto getDefaultMetadataSize = [](size_t size, size_t alignment) {
     XDCHECK(folly::isPowTwo(alignment));
     auto mask = ~(alignment - 1);
     return (static_cast<size_t>(kDefaultMetadataPercent * size / 100) & mask);
   };
+
+  auto ioAlignSize = device.getIOAlignmentSize();
+  const uint64_t totalCacheSize = device.getSize();
+
+  auto metadataSize = config.getDeviceMetadataSize();
   if (metadataSize == 0) {
     metadataSize = getDefaultMetadataSize(totalCacheSize, ioAlignSize);
   }
-
   metadataSize = alignUp(metadataSize, ioAlignSize);
-
   if (metadataSize >= totalCacheSize) {
     throw std::invalid_argument{
         folly::sformat("Invalid metadata size: {}. Cache size: {}",
                        metadataSize,
                        totalCacheSize)};
   }
-
   proto.setMetadataSize(metadataSize);
+
   uint64_t blockCacheSize = 0;
 
   // Set up BigHash if enabled
-  if (bigHashPctSize > 0) {
-    if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
-      throw std::invalid_argument(
-          folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
-                         bucketSize, ioAlignSize));
-    }
-
-    // If enabled, BigHash's storage starts after BlockCache's.
-    const auto sizeReservedForBigHash = totalCacheSize * bigHashPctSize / 100ul;
-
-    const uint64_t bigHashCacheOffset =
-        alignUp(totalCacheSize - sizeReservedForBigHash, bucketSize);
-    const uint64_t bigHashCacheSize =
-        alignDown(totalCacheSize - bigHashCacheOffset, bucketSize);
-
-    auto bigHash = cachelib::navy::createBigHashProto();
-    bigHash->setLayout(bigHashCacheOffset, bigHashCacheSize, bucketSize);
-
-    // Bucket Bloom filter size, bytes
-    //
-    // Experiments showed that if we have 16 bytes for BF with 25 entries,
-    // then optimal number of hash functions is 4 and false positive rate
-    // below 10%.
-    if (bfSize > 0) {
-      // We set 4 hash function unconditionally. This seems to be the best
-      // for our use case. If BF size to bucket size ratio gets lower, try
-      // to reduce number of hashes.
-      constexpr uint32_t kNumHashes = 4;
-      const uint32_t bitsPerHash = bfSize * 8 / kNumHashes;
-      bigHash->setBloomFilter(kNumHashes, bitsPerHash);
-    }
-
-    proto.setBigHash(std::move(bigHash), smallItemMaxSize);
-
-    if (bigHashCacheOffset <= metadataSize) {
-      throw std::invalid_argument("NVM cache size is not big enough!");
-    }
+  if (config.isBigHashEnabled()) {
+    auto bigHashCacheOffset = setupBigHash(config.bigHash(), ioAlignSize,
+                                           totalCacheSize, metadataSize, proto);
     blockCacheSize = bigHashCacheOffset - metadataSize;
-    XLOG(INFO) << "metadataSize: " << metadataSize
-               << " bigHashCacheOffset: " << bigHashCacheOffset
-               << " bigHashCacheSize: " << bigHashCacheSize;
   } else {
-    blockCacheSize = totalCacheSize - metadataSize;
     XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";
+    blockCacheSize = totalCacheSize - metadataSize;
   }
 
   // Set up BlockCache if enabled
   if (blockCacheSize > 0) {
-    if (regionSize != alignUp(regionSize, ioAlignSize)) {
-      throw std::invalid_argument(
-          folly::sformat("Region size: {} is not aligned to ioAlignSize: {}",
-                         regionSize, ioAlignSize));
-    }
-
-    // Adjust starting size of block cache to ensure it is aligned to region
-    // size which is what we use for the stripe size when using RAID0Device.
-    uint64_t blockCacheOffset = metadataSize;
-    if (usesRaidFiles) {
-      auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
-      auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
-      XDCHECK_LT(cacheSizeAdjustment, blockCacheSize);
-      blockCacheSize -= cacheSizeAdjustment;
-      blockCacheOffset = adjustedBlockCacheOffset;
-    }
-    blockCacheSize = alignDown(blockCacheSize, regionSize);
-
-    XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
-               << ", block cache size: " << blockCacheSize;
-
-    auto blockCache = cachelib::navy::createBlockCacheProto();
-    blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
-    blockCache->setChecksum(dataChecksum);
-
-    if (!segmentRatio.empty()) {
-      blockCache->setSegmentedFifoEvictionPolicy(std::move(segmentRatio));
-    } else if (useLru) {
-      blockCache->setLruEvictionPolicy();
-    } else {
-      blockCache->setFifoEvictionPolicy();
-    }
-
-    if (!sizeClasses.empty()) {
-      blockCache->setSizeClasses(std::move(sizeClasses));
-    }
-    blockCache->setCleanRegionsPool(cleanRegions);
-
-    if (reinsertionHitsThreshold > 0) {
-      blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
-    }
-
-    if (reinsertionPercentageThreshold > 0) {
-      blockCache->setPercentageReinsertionPolicy(
-          reinsertionPercentageThreshold);
-    }
-
-    blockCache->setNumInMemBuffers(numInMemBuffers);
-
-    proto.setBlockCache(std::move(blockCache));
+    setupBlockCache(config.blockCache(), blockCacheSize, ioAlignSize,
+                    metadataSize, config.usesRaidFiles(), proto);
   }
-}
-
-// Setup the CacheProto, includes BigHashProto and BlockCacheProto,
-// which is the configuration interface from Navy engine, and can be used to
-// create BigHash and BlockCache engines.
-void setupCacheProtos(const navy::NavyConfig& config,
-                      const navy::Device& device,
-                      cachelib::navy::CacheProto& proto) {
-  auto metadataSize = config.getDeviceMetadataSize();
-  setupCacheProtosImpl(device,
-                       metadataSize,
-                       config.getBigHashSizePct(),
-                       config.getBigHashBucketSize(),
-                       config.getBigHashBucketBfSize(),
-                       config.getBigHashSmallItemMaxSize(),
-                       config.getBlockCacheRegionSize(),
-                       config.getBlockCacheDataChecksum(),
-                       config.getBlockCacheSegmentedFifoSegmentRatio(),
-                       config.getBlockCacheLru(),
-                       config.getBlockCacheSizeClasses(),
-                       config.getBlockCacheCleanRegions(),
-                       config.getBlockCacheReinsertionHitsThreshold(),
-                       config.getBlockCacheReinsertionProbabilityThreshold(),
-                       config.getBlockCacheNumInMemBuffers(),
-                       config.usesRaidFiles(),
-                       proto);
 }
 
 void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
@@ -276,7 +248,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
 
   if (config.usesRaidFiles()) {
-    auto stripeSize = config.getBlockCacheRegionSize();
+    auto stripeSize = config.getRaidStripeSize();
     return cachelib::navy::createRAIDDevice(
         config.getRaidPaths(),
         alignDown(config.getFileSize(), stripeSize),
