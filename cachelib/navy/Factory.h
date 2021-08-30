@@ -20,6 +20,7 @@
 #include <memory>
 #include <vector>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 #include "cachelib/navy/common/Device.h"
@@ -28,7 +29,6 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-
 // *Proto class convention:
 // Every method must be called no more than once and may throw std::exception
 // (or derived) if parameters are invalid.
@@ -152,31 +152,18 @@ class CacheProto {
 
   // (Optional) Set admission policy to accept a random item with specified
   // probability.
-  virtual void setRejectRandomAdmissionPolicy(double probability) = 0;
+  //
+  // @param config  Random policy configured in nvmcache
+  virtual void setRejectRandomAdmissionPolicy(const RandomAPConfig& config) = 0;
+  //   double probability) = 0;
 
   // (Optional) Set admission policy to accept a random item with a target write
   // rate in bytes/s. setBlockCache is a dependency and must be called before
   // this.
-  // targetRate: rate in bytes/s
   //
-  // deterministicKeyHashSuffixLength: length of suffix in key to be ignored
-  // when hashing for probability.
-  //
-  // itemBaseSize: base size of baseProbability calculation.
-  //
-  // maxRate: max rate at which Navy can write without saturation which
-  // negatively affects latency.
-  // probFactorLowerBound: lower bound of probability factor.
-  // probFactorUpperBound: upper bound of probability factor.
-  // If either lower bound or upper bound is 0, the default value
-  // in DynamicRandomAP::Config will be used.
+  // @param config  Dynamic Random policy configured in nvmcache
   virtual void setDynamicRandomAdmissionPolicy(
-      uint64_t targetRate,
-      size_t deterministicKeyHashSuffixLength = 0,
-      uint32_t itemBaseSize = 0,
-      uint64_t maxRate = 0,
-      double probFactorLowerBound = 0,
-      double probFactorUpperBound = 0) = 0;
+      const DynamicRandomAPConfig& config) = 0;
 };
 
 // Creates BlockCache engine prototype.

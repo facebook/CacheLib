@@ -346,36 +346,6 @@ class NavyConfig {
   // Getters:
   // ============ Admission Policy =============
   const std::string& getAdmissionPolicy() const { return admissionPolicy_; }
-  // To be deprecated
-  double getAdmissionProbability() const {
-    return randomAPConfig_.getAdmProbability();
-  }
-  // To be deprecated
-  uint64_t getAdmissionWriteRate() const {
-    return dynamicRandomAPConfig_.getAdmWriteRate();
-  }
-  // To be deprecated
-  uint64_t getMaxWriteRate() const {
-    return dynamicRandomAPConfig_.getMaxWriteRate();
-  }
-  // To be deprecated
-  size_t getAdmissionSuffixLength() const {
-    return dynamicRandomAPConfig_.getAdmSuffixLength();
-  }
-  // To be deprecated
-  uint32_t getAdmissionProbBaseSize() const {
-    return dynamicRandomAPConfig_.getAdmProbBaseSize();
-  }
-
-  // To be deprecated
-  double getProbFactorLowerBound() const {
-    return dynamicRandomAPConfig_.getProbFactorLowerBound();
-  }
-
-  // To be deprecated
-  double getProbFactorUpperBound() const {
-    return dynamicRandomAPConfig_.getProbFactorUpperBound();
-  }
 
   // Get a const DynamicRandomAPConfig to read values of its parameters.
   const DynamicRandomAPConfig& dynamicRandomAdmPolicy() const {

@@ -219,12 +219,9 @@ void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
     return;
   }
   if (policyName == navy::NavyConfig::kAdmPolicyRandom) {
-    proto.setRejectRandomAdmissionPolicy(config.getAdmissionProbability());
+    proto.setRejectRandomAdmissionPolicy(config.randomAdmPolicy());
   } else if (policyName == navy::NavyConfig::kAdmPolicyDynamicRandom) {
-    proto.setDynamicRandomAdmissionPolicy(
-        config.getAdmissionWriteRate(), config.getAdmissionSuffixLength(),
-        config.getAdmissionProbBaseSize(), config.getMaxWriteRate(),
-        config.getProbFactorLowerBound(), config.getProbFactorUpperBound());
+    proto.setDynamicRandomAdmissionPolicy(config.dynamicRandomAdmPolicy());
   } else {
     throw std::invalid_argument{
         folly::sformat("invalid policy name {}", policyName)};

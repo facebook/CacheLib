@@ -207,34 +207,33 @@ class CacheProtoImpl final : public CacheProto {
     destructorCb_ = std::move(cb);
   }
 
-  void setRejectRandomAdmissionPolicy(double probability) override {
+  void setRejectRandomAdmissionPolicy(const RandomAPConfig& config) override {
     RejectRandomAP::Config apConfig;
-    apConfig.probability = probability;
+    apConfig.probability = config.getAdmProbability();
     apConfig.seed = folly::Random::rand32();
     config_.admissionPolicy =
         std::make_unique<RejectRandomAP>(std::move(apConfig));
   }
 
-  void setDynamicRandomAdmissionPolicy(uint64_t targetRate,
-                                       size_t deterministicKeyHashSuffixLength,
-                                       uint32_t itemBaseSize,
-                                       uint64_t maxRate,
-                                       double probFactorLowerBound,
-                                       double probFactorUpperBound) override {
+  void setDynamicRandomAdmissionPolicy(
+      const DynamicRandomAPConfig& config) override {
     DynamicRandomAP::Config apConfig;
-    apConfig.targetRate = targetRate;
+    apConfig.targetRate = config.getAdmWriteRate();
     apConfig.fnBytesWritten = [device = config_.device.get()]() {
       return device->getBytesWritten();
     };
     apConfig.seed = folly::Random::rand32();
-    apConfig.deterministicKeyHashSuffixLength =
-        deterministicKeyHashSuffixLength;
+    apConfig.deterministicKeyHashSuffixLength = config.getAdmSuffixLength();
+    uint32_t itemBaseSize = config.getAdmProbBaseSize();
     if (itemBaseSize > 0) {
       apConfig.baseSize = itemBaseSize;
     }
+    uint64_t maxRate = config.getMaxWriteRate();
     if (maxRate > 0) {
       apConfig.maxRate = maxRate;
     }
+    double probFactorLowerBound = config.getProbFactorLowerBound();
+    double probFactorUpperBound = config.getProbFactorUpperBound();
     if (probFactorLowerBound > 0 && probFactorUpperBound > 0) {
       apConfig.probFactorLowerBound = probFactorLowerBound;
       apConfig.probFactorUpperBound = probFactorUpperBound;

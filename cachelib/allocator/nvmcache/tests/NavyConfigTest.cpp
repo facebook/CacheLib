@@ -116,12 +116,14 @@ void setTestNavyConfig(NavyConfig& config) {
 } // namespace
 TEST(NavyConfigTest, DefaultVal) {
   NavyConfig config{};
+
+  const auto dynamicRandomConfig = config.dynamicRandomAdmPolicy();
   EXPECT_EQ(config.getAdmissionPolicy(), "");
-  EXPECT_EQ(config.getAdmissionSuffixLength(), 0);
-  EXPECT_EQ(config.getBlockSize(), 4096);
-  EXPECT_EQ(config.getTruncateFile(), false);
-  EXPECT_EQ(config.getProbFactorLowerBound(), 0);
-  EXPECT_EQ(config.getProbFactorUpperBound(), 0);
+  EXPECT_EQ(config.randomAdmPolicy().getAdmProbability(), 0);
+  EXPECT_EQ(dynamicRandomConfig.getAdmSuffixLength(), 0);
+  EXPECT_EQ(dynamicRandomConfig.getProbFactorLowerBound(), 0);
+  EXPECT_EQ(dynamicRandomConfig.getProbFactorUpperBound(), 0);
+  EXPECT_EQ(dynamicRandomConfig.getAdmWriteRate(), 0);
 
   EXPECT_EQ(config.getBlockCacheLru(), true);
   EXPECT_EQ(config.getBlockCacheRegionSize(), 16 * 1024 * 1024);
@@ -140,8 +142,8 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(config.getWriterThreads(), 32);
   EXPECT_EQ(config.getNavyReqOrderingShards(), 20);
 
-  EXPECT_EQ(config.getAdmissionProbability(), 0);
-  EXPECT_EQ(config.getAdmissionWriteRate(), 0);
+  EXPECT_EQ(config.getBlockSize(), 4096);
+  EXPECT_EQ(config.getTruncateFile(), false);
   EXPECT_EQ(config.getDeviceMetadataSize(), 0);
   EXPECT_EQ(config.getFileSize(), 0);
   EXPECT_EQ(config.getDeviceMaxWriteSize(), 0);
@@ -202,40 +204,6 @@ TEST(NavyConfigTest, Serialization) {
 }
 
 TEST(NavyConfigTest, AdmissionPolicy) {
-  // set random admission policy
-  NavyConfig config1{};
-  EXPECT_THROW(config1.setAdmissionPolicy(""), std::invalid_argument);
-  EXPECT_NO_THROW(config1.setAdmissionPolicy("random"));
-  EXPECT_THROW(config1.setAdmissionProbability(2), std::invalid_argument);
-  EXPECT_NO_THROW(config1.setAdmissionProbability(0.5));
-  EXPECT_EQ(config1.getAdmissionPolicy(), NavyConfig::kAdmPolicyRandom);
-  EXPECT_EQ(config1.getAdmissionProbability(), 0.5);
-  // cannot set dynamic_random parameters
-  EXPECT_THROW(config1.setAdmissionWriteRate(admissionWriteRate),
-               std::invalid_argument);
-  EXPECT_THROW(config1.setMaxWriteRate(maxWriteRate), std::invalid_argument);
-  EXPECT_THROW(config1.setAdmissionSuffixLength(admissionSuffixLen),
-               std::invalid_argument);
-  EXPECT_THROW(config1.setAdmissionProbBaseSize(admissionProbBaseSize),
-               std::invalid_argument);
-
-  // set dynamic_random policy
-  NavyConfig config2{};
-  EXPECT_NO_THROW(config2.setAdmissionPolicy("dynamic_random"));
-  EXPECT_NO_THROW(config2.setAdmissionWriteRate(admissionWriteRate));
-  EXPECT_NO_THROW(config2.setMaxWriteRate(maxWriteRate));
-  EXPECT_NO_THROW(config2.setAdmissionSuffixLength(admissionSuffixLen));
-  EXPECT_NO_THROW(config2.setAdmissionProbBaseSize(admissionProbBaseSize));
-  EXPECT_EQ(config2.getAdmissionPolicy(), NavyConfig::kAdmPolicyDynamicRandom);
-  EXPECT_EQ(config2.getAdmissionWriteRate(), admissionWriteRate);
-  EXPECT_EQ(config2.getMaxWriteRate(), maxWriteRate);
-  EXPECT_EQ(config2.getAdmissionSuffixLength(), admissionSuffixLen);
-  EXPECT_EQ(config2.getAdmissionProbBaseSize(), admissionProbBaseSize);
-  // cannot set random parameters
-  EXPECT_THROW(config2.setAdmissionProbability(0.5), std::invalid_argument);
-}
-
-TEST(NavyConfigTest, AdmissionPolicy2) {
   // set random admission policy
   NavyConfig config{};
   EXPECT_THROW(config.enableRandomAdmPolicy().setAdmProbability(2),
