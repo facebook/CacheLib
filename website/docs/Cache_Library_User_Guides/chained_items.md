@@ -52,7 +52,7 @@ class CacheAllocator : public CacheBase {
 ```
 
 ## Insertion Order and Read Order
-Chained items are inserted in LIFO order. When user reads through the chained item using the ChainedAlllocs API. The iteration happens in LIFO order starting with the most recently inserted chained item until the chained item inserted first. When user uses `convertToIOBuf` API, it is in FIFO order starting with the parent, and end with the most recently inserted chained item.
+Chained items are inserted in LIFO order. When user reads through the chained item using the ChainedAllocs API. The iteration happens in LIFO order starting with the most recently inserted chained item until the chained item inserted first. When user uses `convertToIOBuf` API, it is in FIFO order starting with the parent, and end with the most recently inserted chained item.
 
 For example:
 
