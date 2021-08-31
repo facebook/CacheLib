@@ -30,6 +30,7 @@ module.exports = {
           label: 'Overview',
           collapsed: true,
           items: [
+            'Cache_Library_User_Guides/About_CacheLib',
             'Cache_Library_User_Guides/terms',
           ],
         },
