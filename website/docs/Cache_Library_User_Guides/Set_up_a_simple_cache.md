@@ -7,7 +7,8 @@ Before calling cachelib to cache your data, set up a cache first.
 
 To set up a simple cache, you need to provide the following to cachelib:
 
-- Eviction policy How data is evicted from the cache?
+- Eviction policy
+  - How data is evicted from the cache?
 - Cache configuration
   - What's the cache size?
   - What's the name of the cache?
