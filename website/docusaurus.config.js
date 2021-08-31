@@ -93,7 +93,7 @@ module.exports = {
             },
             {
               label: 'Twitter',
-              href: 'https://twitter.com/cachelib',
+              href: 'https://twitter.com/FBOpenSource',
             },
           ],
         },
