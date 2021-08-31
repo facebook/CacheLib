@@ -38,7 +38,7 @@ function LearnMore() {
 	    at Facebook.  From its first deployment in 2017, CacheLib
 	    now powers over 70 services at Facebook including
 
-	    <b>Facebook’s CDN, social-graph cache, application look-aside
+	    <b> Facebook’s CDN, social-graph cache, application look-aside
 		cache, and block-storage system</b>.
 	</p>
 
@@ -65,8 +65,7 @@ function LearnMore() {
 		&nbsp;to customize and scale highly concurrent caches
 		easily, and to leverage the improvements across different
 		caching systems by using a simple, expressive, thread-safe
-		API.
-	    </b>
+		API.</b> See <a href="../docs/"> docs </a> for more info.
 	</p>
 	  </div>
 
@@ -96,7 +95,7 @@ function LearnMore() {
 	    </li>
 
 	    <li>
-		Ability to perform warm restarts that retain the state
+		Ability to perform application binary restarts and retain the state
 		of the cache
 	    </li>
 	</ul>
@@ -106,27 +105,22 @@ function LearnMore() {
 
 	  <div className="row">
 	  <div className="col col--12">
-	<h2>OSDI’20</h2>
+	<h3>OSDI’20</h3>
 
 
 	<p>
 	    <a href="https://www.usenix.org/conference/osdi20/presentation/berg">
-		<em>
-		    CacheLib
-		</em>
-		Caching Engine: Design and Experiences at Scale
-	    </a>
-
-	    was published at the USENIX OSDI 20 Conference. The
-	    publication can be accessed
-	    <a href="https://www.usenix.org/system/files/osdi20-berg.pdf">here</a>
-	    and the video of the presentation is below.
+		<em> CacheLib  </em> Caching Engine: Design and Experiences at Scale
+	    </a> was published at the USENIX OSDI 20 Conference. The
+	    publication can be accessed <a href="https://www.usenix.org/system/files/osdi20-berg.pdf">here</a> and the video of the presentation is below.
 	</p>
 
-	<iframe width="905" height="509" src="https://www.youtube.com/embed/wp_X-Zg9WEo"
+    <p align="center">
+	<iframe width="500" height="300" src="https://www.youtube.com/embed/wp_X-Zg9WEo" 
 		frameborder="0"
 		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
 	</iframe>
+    </p>
 	  </div>
 	  </div>
 

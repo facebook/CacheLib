@@ -22,7 +22,7 @@ const features = [
     description: (
       <>
            Thread safe API to build high throughput, low overhead caching services.
-	    Built-in ability to leverage DRAM and SSD caching transparently
+	    Built-in ability to transparently leverage DRAM and SSD.
       </>
     ),
   },
@@ -31,8 +31,8 @@ const features = [
     //imageUrl: 'img/undraw_docusaurus_tree.svg',
     description: (
       <>
-	    Battle-tested mechanisms to adapt for workload changes and provide isolation.
-	    Cache persistence to support quick application development and deployment.
+	    Battle-tested mechanisms to provide isolation and adapt for workload changes.
+	    Cache persistence to support rapid application development and deployment.
       </>
     ),
   },
@@ -41,8 +41,7 @@ const features = [
     //imageUrl: 'img/undraw_docusaurus_react.svg',
     description: (
       <>
-	    Tool-kit to evaluate heuristics and hardware platforms against production workloads.
-	    Platform to evaluate and measure new caching techniques.
+	    CacheBench provides a tool-kit to  prototype new cache heuristics and evaluate hardware choices on industry standard workloads.
       </>
     ),
   },
@@ -69,7 +68,7 @@ function Home() {
   return (
     <Layout
       title={`${siteConfig.title}`}
-      description="Pluggable caching engine to build and scale high performance cache services">
+      description="Pluggable caching engine to build and scale high performance services">
 	  <header className={clsx('hero hero--primary', styles.heroBanner, 'jumbotron')}>
         <div className="container">
           <h1 className="hero__title">{siteConfig.title}</h1>
@@ -106,10 +105,8 @@ function Home() {
 	  <section>
           <div className="container">
           <div className="row">
-	  <div class="col col--12">
-	  <h1>
-	  CacheLib powers Facebook’s Caches from Social Graph to Storage Caches to CDNs
-          </h1>
+	  <div class="col col--12" align="center">
+	  <h3> Powers Facebook’s caches from Social Graph caches to Storage caches to CDNs </h3>
 	  </div>
 	  </div>
 	  </div>

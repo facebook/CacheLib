@@ -40,7 +40,7 @@ h1,h2,h4 {
     background: url("../../static/img/dark_blue_dots.jpg") no-repeat center center;
     background-size: cover;
     color: white;
-    height: 380px;
+    height: 250px;
 }
 
 .jumbotron p.lead {
