@@ -12,11 +12,11 @@ To use cachelib to write data to your cache:
 
 ## Allocate memory for data from cache
 
-The header file {{#link: https://www.internalfb.com/intern/diffusion/FBS/browsefile/master/fbcode/cachelib/allocator/CacheAllocator.h | label=CacheAllocator.h, target=_blank, style=font-family:monospace; }} declares the following methods to allocate memory from cache:
+The header file allocator/CacheAllocator.h declares the following methods to allocate memory from cache:
 
 
 ```cpp
-template &lt;typename CacheTrait&gt;
+template <typename CacheTrait>;
 class CacheAllocator : public CacheBase {
   public:
     // Allocate memory of a specific size from cache.
@@ -39,24 +39,24 @@ For example:
 
 
 ```cpp
-auto pool_id = cache-&gt;addPool(
+auto pool_id = cache->addPool(
   "default_pool",
-  cache-&gt;getCacheMemoryStats().cacheSize
+  cache->getCacheMemoryStats().cacheSize
 );
-ItemHandle item_handle = cache-&gt;allocate(pool_id, "key1", 1024);
+ItemHandle item_handle = cache->allocate(pool_id, "key1", 1024);
 ```
 
 
 where:
 - `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple cache](Set_up_a_simple_cache/ )).
-- `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see {{#link: https://www.internalfb.com/intern/diffusion/FBS/browsefile/master/fbcode/cachelib/allocator//CacheItem.h | label=CacheItem.h, target=_blank, style=font-family:monospace; }}), which is `facebook::cachelib::detail::HandleImpl` defined in {{#link: https://www.internalfb.com/intern/diffusion/FBS/browsefile/master/fbcode/cachelib/allocator//Handle.h | label=Handle.h, target=_blank, style=font-family:monospace; }}. If allocation failed, an empty handle will be returned.
+- `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::HandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
 
 To get the writable memory from the allocated memory, call the `getWritableMemory` method via the item handle:
 
 
 ```cpp
 if (item_handle) {
-  void* pwm = item_handle-&gt;getWritableMemory();
+  void* pwm = item_handle->getWritableMemory();
 }
 ```
 
@@ -74,13 +74,13 @@ For example:
 
 ```cpp
 size_t size = 1024 * 1024;
-auto parent_item_handle = cache-&gt;allocate(pool_id, "parent", size);
+auto parent_item_handle = cache->allocate(pool_id, "parent", size);
 
 if (parent_item_handle) {
   // Call allocateChainedItem() to allocate memory for 3 chained items.
-  auto chained_item_handle_1 = cache-&gt;allocateChainedItem(parent_item_handle, 2 * size);
-  auto chained_item_handle_2 = cache-&gt;allocateChainedItem(parent_item_handle, 4 * size);
-  auto chained_item_handle_3 = cache-&gt;allocateChainedItem(parent_item_handle, 6 * size);
+  auto chained_item_handle_1 = cache->allocateChainedItem(parent_item_handle, 2 * size);
+  auto chained_item_handle_2 = cache->allocateChainedItem(parent_item_handle, 4 * size);
+  auto chained_item_handle_3 = cache->allocateChainedItem(parent_item_handle, 6 * size);
 }
 ```
 
@@ -104,15 +104,15 @@ To get the destination address, call the `getWritableMemory()` method via the `I
 
 
 ```cpp
-void* pwm = item_handle-&gt;getWritableMemory();
+void* pwm = item_handle->getWritableMemory();
 ```
 
 
-To insert an item to the cache, call one of the following methods defined in {{#link: https://www.internalfb.com/intern/diffusion/FBS/browsefile/master/fbcode/cachelib/allocator/CacheAllocator.h | label=CacheAllocator.h, target=_blank, style=font-family:monospace; }}:
+To insert an item to the cache, call one of the following methods defined in allocator/CacheAllocator.h:
 
 
 ```cpp
-template &lt;typename CacheTrait&gt;
+template <typename CacheTrait>
 class CacheAllocator : public CacheBase {
   public:
     bool insert(const ItemHandle& handle);
@@ -130,14 +130,14 @@ For example, the following code writes *new* data (i.e., data associated with a 
 string data("Hello world");
 
 // Allocate memory for the data.
-auto item_handle = cache-&gt;allocate(pool_id, "key1", data.size());
+auto item_handle = cache->allocate(pool_id, "key1", data.size());
 
 if (item_handle) {
   // Write the data to the allocated memory.
-  std::memcpy(item_handle-&gt;getWritableMemory(), data.data(), data.size());
+  std::memcpy(item_handle->getWritableMemory(), data.data(), data.size());
 
   // Insert the item handle into the cache.
-  cache-&gt;insert(item_handle);
+  cache->insert(item_handle);
 } else {
   // handle allocation failure
 }
@@ -150,23 +150,23 @@ And the following code writes *new* data (i.e., data associated with a new key) 
 ```cpp
 string data("new data");
 // Allocate memory for the data.
-auto item_handle = cache-&gt;allocate(pool_id, "key2", data.size());
+auto item_handle = cache->allocate(pool_id, "key2", data.size());
 
 // Write the data to the cache.
-std::memcpy(handle-&gt;getWritableMemory(), data.data(), data.size());
+std::memcpy(handle->getWritableMemory(), data.data(), data.size());
 
 // Insert the item handle into the cache.
-cache-&gt;insertOrReplace(item_handle);
+cache->insertOrReplace(item_handle);
 
 data = "Repalce the data associated with key key1";
 // Allocate memory for the replacement data.
-item_handle = cache-&gt;allocate(pool_id, "key1", data.size());
+item_handle = cache->allocate(pool_id, "key1", data.size());
 
 // Write the replacement data to the cache.
-std::memcpy(item_handle-&gt;getWritableMemory(), data.data(), data.size());
+std::memcpy(item_handle->getWritableMemory(), data.data(), data.size());
 
 // Insert the item handle into the cache.
-cache-&gt;insertOrReplace(item_handle);
+cache->insertOrReplace(item_handle);
 ```
 
 
@@ -179,11 +179,11 @@ For example:
 
 
 ```cpp
-std::vector&lt;std::string&gt; chained_items = { "item 1", "item 2", "item 3" };
+std::vector<std::string> chained_items = { "item 1", "item 2", "item 3" };
 
 for (auto itr = chained_items.begin(); itr != chained_items.end(); ++itr) {
   // Allocate memory for the chained item.
-  auto item_handle = cache-&gt;allocateChainedItem(parent_handle, size);
+  auto item_handle = cache->allocateChainedItem(parent_handle, size);
 
   if (!item_handle) {
     // failed to allocate for the chained item.
@@ -191,10 +191,10 @@ for (auto itr = chained_items.begin(); itr != chained_items.end(); ++itr) {
   }
 
   // Write data to the chained item.
-  std::memcpy(item_handle-&gt;getWritableMemory(), itr-&gt;data(), itr-&gt;size());
+  std::memcpy(item_handle->getWritableMemory(), itr->data(), itr->size());
 
   // Add the chained item to the parent item.
-  cache-&gt;addChainedItem(parent_handle, std::move(item_handle));
+  cache->addChainedItem(parent_handle, std::move(item_handle));
 }
 ```
 
