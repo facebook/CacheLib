@@ -48,7 +48,6 @@ const uint32_t blockCacheRegionSize = 16 * 1024 * 1024;
 const std::vector<uint32_t> blockCacheSizeClasses = {1024, 2048, 4096};
 const uint8_t blockCacheReinsertionHitsThreshold = 111;
 const uint32_t blockCacheCleanRegions = 4;
-const uint32_t blockCacheNumInMemBuffers = 8;
 const bool blockCacheDataChecksum = true;
 const std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio = {111, 222,
                                                                        333};
@@ -125,15 +124,19 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(dynamicRandomConfig.getProbFactorUpperBound(), 0);
   EXPECT_EQ(dynamicRandomConfig.getAdmWriteRate(), 0);
 
-  EXPECT_EQ(config.getBlockCacheLru(), true);
-  EXPECT_EQ(config.getBlockCacheRegionSize(), 16 * 1024 * 1024);
-  EXPECT_EQ(config.getBlockCacheCleanRegions(), 1);
-  EXPECT_TRUE(config.getBlockCacheSizeClasses().empty());
-  EXPECT_TRUE(config.getBlockCacheSegmentedFifoSegmentRatio().empty());
-  EXPECT_EQ(config.getBlockCacheDataChecksum(), true);
+  const auto& blockCacheConfig = config.blockCache();
+  EXPECT_EQ(blockCacheConfig.isLruEnabled(), true);
+  EXPECT_EQ(blockCacheConfig.getRegionSize(), 16 * 1024 * 1024);
+  EXPECT_EQ(blockCacheConfig.getCleanRegions(), 1);
+  EXPECT_TRUE(blockCacheConfig.getSizeClasses().empty());
+  EXPECT_TRUE(blockCacheConfig.getSFifoSegmentRatio().empty());
+  EXPECT_EQ(blockCacheConfig.getDataChecksum(), true);
+  EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), 0);
 
-  EXPECT_EQ(config.getBigHashBucketSize(), 4096);
-  EXPECT_EQ(config.getBigHashBucketBfSize(), 8);
+  const auto& bigHashConfig = config.bigHash();
+  EXPECT_EQ(bigHashConfig.getBucketSize(), 4096);
+  EXPECT_EQ(bigHashConfig.getBucketBfSize(), 8);
+  EXPECT_EQ(bigHashConfig.getSmallItemMaxSize(), 0);
 
   EXPECT_EQ(config.getMaxConcurrentInserts(), 1'000'000);
   EXPECT_EQ(config.getMaxParcelMemoryMB(), 256);
@@ -147,8 +150,6 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(config.getDeviceMetadataSize(), 0);
   EXPECT_EQ(config.getFileSize(), 0);
   EXPECT_EQ(config.getDeviceMaxWriteSize(), 0);
-  EXPECT_EQ(config.getBlockCacheNumInMemBuffers(), 0);
-  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), 0);
 
   EXPECT_EQ(config.usesSimpleFile(), false);
   EXPECT_EQ(config.usesRaidFiles(), false);
@@ -263,50 +264,6 @@ TEST(NavyConfigTest, Device) {
 }
 
 TEST(NavyConfigTest, BlockCache) {
-  NavyConfig config0{};
-  config0.setBlockCacheRegionSize(blockCacheRegionSize);
-  config0.setBlockCacheCleanRegions(blockCacheCleanRegions);
-  config0.setBlockCacheNumInMemBuffers(blockCacheNumInMemBuffers);
-  config0.setBlockCacheDataChecksum(blockCacheDataChecksum);
-  config0.setBlockCacheSizeClasses(blockCacheSizeClasses);
-
-  EXPECT_EQ(config0.getBlockCacheRegionSize(), blockCacheRegionSize);
-  EXPECT_EQ(config0.getBlockCacheCleanRegions(), blockCacheCleanRegions);
-  EXPECT_EQ(config0.getBlockCacheNumInMemBuffers(), blockCacheNumInMemBuffers);
-  EXPECT_EQ(config0.getBlockCacheDataChecksum(), blockCacheDataChecksum);
-  EXPECT_EQ(config0.getBlockCacheSizeClasses(), blockCacheSizeClasses);
-
-  // Test segmentedFifoSegmentRatio
-  NavyConfig config2{};
-  config2.setBlockCacheSegmentedFifoSegmentRatio(
-      blockCacheSegmentedFifoSegmentRatio);
-  EXPECT_EQ(config2.getBlockCacheSegmentedFifoSegmentRatio(),
-            blockCacheSegmentedFifoSegmentRatio);
-  EXPECT_EQ(config2.getBlockCacheLru(), false);
-
-  // Test cannot set both reinsertionProbabilityThreshold and
-  // reinsertionProbabilityThreshold
-  NavyConfig config3{};
-  config3.setBlockCacheReinsertionHitsThreshold(
-      blockCacheReinsertionHitsThreshold);
-  EXPECT_THROW(config3.setBlockCacheReinsertionProbabilityThreshold(50),
-               std::invalid_argument);
-  EXPECT_EQ(config3.getBlockCacheReinsertionHitsThreshold(),
-            blockCacheReinsertionHitsThreshold);
-  EXPECT_EQ(config3.getBlockCacheReinsertionProbabilityThreshold(), 0);
-
-  NavyConfig config4{};
-  EXPECT_THROW(config4.setBlockCacheReinsertionProbabilityThreshold(200),
-               std::invalid_argument);
-  config4.setBlockCacheReinsertionProbabilityThreshold(50);
-  EXPECT_THROW(config4.setBlockCacheReinsertionHitsThreshold(
-                   blockCacheReinsertionHitsThreshold),
-               std::invalid_argument);
-  EXPECT_EQ(config4.getBlockCacheReinsertionProbabilityThreshold(), 50);
-  EXPECT_EQ(config4.getBlockCacheReinsertionHitsThreshold(), 0);
-}
-
-TEST(NavyConfigTest, BlockCache2) {
   NavyConfig config{};
   // test general settings
   config.blockCache()
@@ -360,32 +317,17 @@ TEST(NavyConfigTest, BlockCache2) {
 TEST(NavyConfigTest, BigHash) {
   NavyConfig config{};
   EXPECT_THROW(
-      config.setBigHash(
-          200, bigHashBucketSize, bigHashBucketBfSize, bigHashSmallItemMaxSize),
-      std::invalid_argument);
-  config.setBigHash(bigHashSizePct,
-                    bigHashBucketSize,
-                    bigHashBucketBfSize,
-                    bigHashSmallItemMaxSize);
-  EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
-  EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
-  EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
-  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
-}
-
-TEST(NavyConfigTest, BigHash2) {
-  NavyConfig config{};
-  EXPECT_THROW(
       config.bigHash().setSizePctAndMaxItemSize(200, bigHashSmallItemMaxSize),
       std::invalid_argument);
   config.bigHash()
       .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
       .setBucketSize(bigHashBucketSize)
       .setBucketBfSize(bigHashBucketBfSize);
-  EXPECT_EQ(config.getBigHashSizePct(), bigHashSizePct);
-  EXPECT_EQ(config.getBigHashBucketSize(), bigHashBucketSize);
-  EXPECT_EQ(config.getBigHashBucketBfSize(), bigHashBucketBfSize);
-  EXPECT_EQ(config.getBigHashSmallItemMaxSize(), bigHashSmallItemMaxSize);
+  auto& bigHashConfig = config.bigHash();
+  EXPECT_EQ(bigHashConfig.getSizePct(), bigHashSizePct);
+  EXPECT_EQ(bigHashConfig.getBucketSize(), bigHashBucketSize);
+  EXPECT_EQ(bigHashConfig.getBucketBfSize(), bigHashBucketBfSize);
+  EXPECT_EQ(bigHashConfig.getSmallItemMaxSize(), bigHashSmallItemMaxSize);
 }
 
 TEST(NavyConfigTest, JobScheduler) {

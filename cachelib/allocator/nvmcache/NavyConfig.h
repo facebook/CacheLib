@@ -367,62 +367,8 @@ class NavyConfig {
     return blockCacheConfig_.getRegionSize();
   }
 
-  // ============ BlockCache settings =============
-  // To be deprecated
-  bool getBlockCacheLru() const { return blockCacheConfig_.isLruEnabled(); }
-  // To be deprecated
-  const std::vector<unsigned int>& getBlockCacheSegmentedFifoSegmentRatio()
-      const {
-    return blockCacheConfig_.getSFifoSegmentRatio();
-  }
-  // To be deprecated
-  uint8_t getBlockCacheReinsertionHitsThreshold() const {
-    return blockCacheConfig_.getReinsertionHitsThreshold();
-  }
-  // To be deprecated
-  unsigned int getBlockCacheReinsertionProbabilityThreshold() const {
-    return blockCacheConfig_.getReinsertionPctThreshold();
-  }
-  // To be deprecated
-  uint32_t getBlockCacheCleanRegions() const {
-    return blockCacheConfig_.getCleanRegions();
-  }
-  // To be deprecated
-  uint32_t getBlockCacheNumInMemBuffers() const {
-    return blockCacheConfig_.getNumInMemBuffers();
-  }
-  // To be deprecated
-  const std::vector<uint32_t>& getBlockCacheSizeClasses() const {
-    return blockCacheConfig_.getSizeClasses();
-  }
-  // To be deprecated
-  uint32_t getBlockCacheRegionSize() const {
-    return blockCacheConfig_.getRegionSize();
-  }
-  // To be deprecated
-  bool getBlockCacheDataChecksum() const {
-    return blockCacheConfig_.getDataChecksum();
-  }
-
-  // Return a const BlockCacheConfig to read values of its parameters.
-  const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
-
-  // ============ BigHash settings =============
-  // To be deprecated
-  unsigned int getBigHashSizePct() const { return bigHashConfig_.getSizePct(); }
-  // To be deprecated
-  uint32_t getBigHashBucketSize() const {
-    return bigHashConfig_.getBucketSize();
-  }
-  // To be deprecated
-  uint64_t getBigHashBucketBfSize() const {
-    return bigHashConfig_.getBucketBfSize();
-  }
-  // To be deprecated
-  uint64_t getBigHashSmallItemMaxSize() const {
-    return bigHashConfig_.getSmallItemMaxSize();
-  }
-  // Return the threshold of classifying an item as small item or large item
+  // ============ Engine settings =============
+  // Returns the threshold of classifying an item as small item or large item
   // for Navy engine.
   uint64_t getSmallItemThreshold() const {
     if (!isBigHashEnabled()) {
@@ -433,6 +379,9 @@ class NavyConfig {
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BigHashConfig& bigHash() const { return bigHashConfig_; }
+
+  // Return a const BlockCacheConfig to read values of its parameters.
+  const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
 
   // ============ Job scheduler settings =============
   unsigned int getReaderThreads() const { return readerThreads_; }
