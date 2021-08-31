@@ -241,12 +241,12 @@ size_t sizeInBytes() const;
 
 // Return number of elements in this map.
 uint32_t size() const {
-  return handle_->template getMemoryAs>BinaryIndex>()->numEntries();
+  return handle_->template getMemoryAs<BinaryIndex>()->numEntries();
 }
 
 // Return capacity of the index in this map.
 uint32_t capacity() const {
-  return handle_->template getMemoryAs>BinaryIndex>()->capacity();
+  return handle_->template getMemoryAs<BinaryIndex>()->capacity();
 }
 ```
 
