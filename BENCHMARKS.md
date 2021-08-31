@@ -7,7 +7,7 @@ memory subsystem in a comparable way that they are stressed
 in production workloads.
 
 `cachebench` has two configs packaged for flash HW validation.
-These are under `test_configs/hw_test_configs/<service-domain>`.
+These are under `test_configs/ssd_perf/<service-domain>`.
 Currently, we have 'tao-leader', 'memcache-wc' which represents two
 distinct workloads in the cache space.
 
@@ -53,8 +53,8 @@ See [README.build.md](README.build.md) for further details.
 1. If `/dev/md0` is not being used, edit workload files appropiately.
    Change all instances of `/dev/md0` to raw path of data SSD(s):
     ```sh
-    vi test_configs/hw_test_configs/tao_leader/tao_leader_t10.json
-    vi test_configs/hw_test_configs/memcache_l2_wc/memcache_l2_wc.json
+    vi test_configs/ssd_perf/tao_leader/tao_leader_t10.json
+    vi test_configs/ssd_perf/memcache_l2_wc/memcache_l2_wc.json
     ```
 2. Before each benchmark run, fully trim the drive with fio:
    `fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G`
