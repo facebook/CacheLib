@@ -10,8 +10,7 @@
 module.exports = {
   title: 'CacheLib',
   tagline: 'Pluggable caching engine to build and scale high performance cache services',
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  //onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
 
   //// ONE OF THE THREE EXAMPLES BELOW MUST BE UNCOMMENTED

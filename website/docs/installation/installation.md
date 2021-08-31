@@ -14,19 +14,19 @@ to be build from source.
 The primary dependecies are:
 
 * a C++17 compiler (tested with GCC, CLANG)
-* [https://cmake.org/](CMake)
-* [https://github.com/facebook/folly](folly) - Facebook's Open Source library
-* [https://github.com/facebook/fbthrift](FBThrift) - Facebook Thrift
+* [CMake](https://cmake.org/)
+* [folly](https://github.com/facebook/folly) - Facebook's Open Source library
+* [FBThrift](https://github.com/facebook/fbthrift) - Facebook Thrift
 
 These dependencies further require multiple libraries:
 
-* [https://github.com/facebookincubator/fizz](fizz) - Facebook's TLS 1.3 implementation
-* [https://github.com/facebook/wangle](wangle) - C++ Networking Library
-* [https://github.com/google/glog](glog) - Google Log Library
-* [https://github.com/gflags/gflags](gflags) - Google Command-line flags Library
-* [https://github.com/google/googletest.git](googletest) - Google Testing Framework
-* [https://github.com/fmtlib/fmt.git](fmt) - open-source formatting library
-* [https://github.com/Tessil/sparse-map.git](sparse-map) - memory efficient hash map and hash set
+* [fizz](https://github.com/facebookincubator/fizz) - Facebook's TLS 1.3 implementation
+* [wangle](https://github.com/facebook/wangle) - C++ Networking Library
+* [glog](https://github.com/google/glog) - Google Log Library
+* [gflags](https://github.com/gflags/gflags) - Google Command-line flags Library
+* [googletest](https://github.com/google/googletest.git) - Google Testing Framework
+* [fmt](https://github.com/fmtlib/fmt.git) - open-source formatting library
+* [sparse-map](https://github.com/Tessil/sparse-map.git) - memory efficient hash map and hash set
 * And many more libraries, commonly available as installable packages, e.g:
   `boost`, `libevent`, `lz4`, `snappy`, `zlib`, `ssl`, `libunwind`, `libsodium`
 
