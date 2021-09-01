@@ -64,7 +64,7 @@ If the application can tolerate the latency of accessing NVM for some of your ac
 
 1. By default, if you don't change your existing cachelib code, dereferencing a handle that is not ready or doing any check on the result of the handle will **block** until it becomes ready. When it is blocking, if you are in a fiber context, it puts the fiber to sleep.
 2. Set a callback to be executed `onReady()`. The callback will be executed when the handle is ready or immediately if the handle is already ready.
-3. Get a `folly::SemiFuture` on the handle by calling the `handleToSemiFuture()` method.
+3. Get a `folly::SemiFuture` on the handle by calling the `toSemiFuture()` method.
 4. Pass the handle in its current state to another execution context that can then execute your code when the handle becomes ready.
 
 The following code snipper highlights the various techniques.
@@ -85,7 +85,7 @@ if (handle) {
 
 /* Accessing item and getting a future */
 auto handle = cache.find("foobar");
-auto semiFuture = util::handleToSemiFuture(std::move(handle));
+auto semiFuture = handle.toSemiFuture();
 
 /* Accessing an item and setting a onReady callback */
 auto handle = cache.find("foobar");
