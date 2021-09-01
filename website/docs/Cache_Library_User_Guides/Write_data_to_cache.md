@@ -48,7 +48,7 @@ ItemHandle item_handle = cache->allocate(pool_id, "key1", 1024);
 
 
 where:
-- `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple cache](Set_up_a_simple_cache/ )).
+- `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple dram cache](Set_up_a_simple_cache/ )).
 - `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::HandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
 
 To get the writable memory from the allocated memory, call the `getWritableMemory` method via the item handle:
