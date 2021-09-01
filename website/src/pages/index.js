@@ -72,7 +72,7 @@ function Home() {
       <header className={clsx('hero hero--primary', styles.heroBanner, 'jumbotron')}>
         <div className="container">
           <img className={styles.heroLogo}
-               src={useBaseUrl("static/img/CacheLib-Logo-small.png")} />
+               src={useBaseUrl("img/CacheLib-Logo-small.png")} />
           <h1 className={clsx("hero__title", styles.clHeroTitle)}>{siteConfig.title}</h1>
           <p className={clsx("hero__subtitle", styles.clHeroTagLine)}>
             <b>Pluggable</b> caching engine
