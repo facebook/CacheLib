@@ -10,40 +10,19 @@
 module.exports = {
   title: 'CacheLib',
   tagline: 'Pluggable caching engine to build and scale high performance cache services',
-  //onBrokenMarkdownLinks: 'warn',
   favicon: 'img/favicon.ico',
-
-  //// ONE OF THE THREE EXAMPLES BELOW MUST BE UNCOMMENTED
-  //// or Docusaurus will fail.
-
-  /*
-  //Settings for a forked github repository,
-  //The website will be https://agordon.github.io/CacheLib/
-  url: 'https://agordon.github.io',
-  baseUrl: '/CacheLib/',
-  organizationName: 'agordon', // Usually your GitHub org/user name.
-  projectName: 'CacheLib', // Usually your repo name.
-  */
-
-  /*
-  // Settings for the production GitHub repository WITHOUT custom domain
-  // The website will be https://facebookincubator.github.io/CacheLib/
-  url: 'https://facebookincubator.github.io',
-  baseUrl: '/CacheLib/',
-  organizationName: 'facebookincubator', // Usually your GitHub org/user name.
-  projectName: 'CacheLib', // Usually your repo name.
-  */
 
   // Settings for the production GitHub repository WITH custom domain
   // The website will be https://cachelib.org/
   // Don't forget a corrsponding CNAME file in the 'static' directory.
   url: 'https://cachelib.org',
   baseUrl: '/',
-  organizationName: 'facebookincubator', // Usually your GitHub org/user name.
+  organizationName: 'facebook', // Usually your GitHub org/user name.
   projectName: 'CacheLib', // Usually your repo name.
 
 
   themeConfig: {
+    image: 'img/CacheLib-Logo-small.png',
     navbar: {
       title: 'CacheLib',
       logo: {
@@ -83,7 +62,7 @@ module.exports = {
         },
         // Please keep GitHub link to the right for consistency.
         {
-          href: 'https://github.com/facebookincubator/CacheLib',
+          href: 'https://github.com/facebook/CacheLib',
           label: 'GitHub',
           position: 'right',
         },
@@ -97,7 +76,7 @@ module.exports = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/facebookincubator/CacheLib',
+              href: 'https://github.com/facebook/CacheLib',
             },
           ],
         },
