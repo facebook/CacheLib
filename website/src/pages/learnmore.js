@@ -105,13 +105,11 @@ function LearnMore() {
 
 	  <div className="row">
 	  <div className="col col--12">
-	<h3>OSDI’20</h3>
-
 
 	<p>
 	    <a href="https://www.usenix.org/conference/osdi20/presentation/berg">
 		<em> CacheLib  </em> Caching Engine: Design and Experiences at Scale
-	    </a> was published at the USENIX OSDI 20 Conference. The
+	    </a> was published at the <i>USENIX OSDI` 20</i> conference. The
 	    publication can be accessed <a href="https://www.usenix.org/system/files/osdi20-berg.pdf">here</a> and the video of the presentation is below.
 	</p>
 
@@ -121,6 +119,7 @@ function LearnMore() {
 		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
 	</iframe>
     </p>
+      <p align="center"> <b> More architecture docs coming soon!</b> </p> 
 	  </div>
 	  </div>
 

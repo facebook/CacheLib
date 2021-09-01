@@ -49,8 +49,8 @@ module.exports = {
           position: 'left',
         },
         {
-          to: 'docs/Cache_Library_Architecture_Guide/doc4',
-          activeBasePath: 'docs',
+          to: 'learnmore', // temporarily redirect here until we add docs.
+          activeBasePath: 'learnmore',
           label: 'Architecture Guide',
           position: 'left',
         },
