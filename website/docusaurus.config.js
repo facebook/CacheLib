@@ -52,15 +52,33 @@ module.exports = {
       },
 	items: [
         {
-          to: 'learnmore/',
-          activeBasePath: 'learnmore',
-          label: 'Learn More',
-          position: 'right',
+          to: 'docs/installation/installation',
+          activeBasePath: 'docs',
+          label: 'Build and Installation',
+          position: 'left',
         },
         {
           to: 'docs/',
           activeBasePath: 'docs',
-          label: 'Docs',
+          label: 'API and Usage',
+          position: 'left',
+        },
+        {
+          to: 'docs/Cache_Library_User_Guides/Cachebench_Overview',
+          activeBasePath: 'docs',
+          label: 'Cachebench',
+          position: 'left',
+        },
+        {
+          to: 'docs/Cache_Library_Architecture_Guide/doc4',
+          activeBasePath: 'docs',
+          label: 'Architecture Guide',
+          position: 'left',
+        },
+        {
+          to: 'learnmore/',
+          activeBasePath: 'learnmore',
+          label: 'Learn More',
           position: 'right',
         },
         // Please keep GitHub link to the right for consistency.
