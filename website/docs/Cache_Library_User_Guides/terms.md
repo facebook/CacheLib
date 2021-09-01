@@ -82,12 +82,6 @@ LRU 2Q uses three queues to manage hot, warm, and cold items. If an item in the 
 * **TinyLFU**
 TinyLFU consists of a frequency estimator (FE) and LRU. FE is an approximate data structure that computes an item's access frequency before it is inserted to LRU. Only items that pass the frequency threshold get accepted to LRU and evicted. For more information, see [Eviction Policy](eviction_policy/ ).
 
-**Compact cache**
-
-
-A compact cache is used to store small key-value data, usually less than tens of bytes per entry. The size of the key must be fixed at compile time, whereas the size of the value can be fixed, variable, or empty. For more information, see [Compact Cache](compact_cache/ ).
-
-
 **HybridCache**
 
 
