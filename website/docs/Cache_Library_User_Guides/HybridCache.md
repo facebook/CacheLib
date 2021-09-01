@@ -26,7 +26,7 @@ For example:
 nvmConfig.navyConfig.set<OPTION NAME> = <YOUR OPTION VALUE>;
 
 // set the nvmConfig in the main cache config.
-lruAllocatorConfig.enableHybridCache(nvmConfig);
+lruAllocatorConfig.enableNvmCache(nvmConfig);
 ```
 
 
