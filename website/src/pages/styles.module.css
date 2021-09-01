@@ -27,8 +27,8 @@
 
 .buttons {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: left;
+  justify-content: left;
 }
 
 .features {
@@ -41,4 +41,21 @@
 .featureImage {
   height: 200px;
   width: 200px;
+}
+
+.heroLogo {
+   width: 200px;
+   height: 200px;
+   float: right;
+ /*  margin-top: 20px;
+   padding: 0 20px 20px;*/
+
+}
+
+.clHeroTitle {
+  text-align: left;
+}
+
+.clHeroTagLine {
+  text-align: left;
 }

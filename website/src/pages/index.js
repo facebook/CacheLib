@@ -69,18 +69,33 @@ function Home() {
     <Layout
       title={`${siteConfig.title}`}
       description="Pluggable caching engine to build and scale high performance services">
-	  <header className={clsx('hero hero--primary', styles.heroBanner, 'jumbotron')}>
+      <header className={clsx('hero hero--primary', styles.heroBanner, 'jumbotron')}>
         <div className="container">
-          <h1 className="hero__title">{siteConfig.title}</h1>
-          <p className="hero__subtitle">{siteConfig.tagline}</p>
+          <img className={styles.heroLogo}
+               src={useBaseUrl("static/img/CacheLib-Logo-small.png")} />
+          <h1 className={clsx("hero__title", styles.clHeroTitle)}>{siteConfig.title}</h1>
+          <p className={clsx("hero__subtitle", styles.clHeroTagLine)}>
+            <b>Pluggable</b> caching engine
+            <br/>
+            to build and scale <b>high performance</b> cache services
+          </p>
           <div className={styles.buttons}>
             <Link
               className={clsx(
-                'button button--outline button--secondary button--lg',
+                'button button--success button--lg margin-right--lg',
                 styles.getStarted,
               )}
               to={ useBaseUrl('learnmore/') }>
               Learn More
+            </Link>
+
+            <Link
+              className={clsx(
+                'button button--secondary button--lg',
+                styles.getStarted,
+              )}
+              to={ useBaseUrl('docs/installation/installation') }>
+              Get Started
             </Link>
           </div>
         </div>
