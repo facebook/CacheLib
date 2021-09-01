@@ -102,7 +102,7 @@ for (auto itr = cache->begin(); itr != cache->end(); ++itr) {
 
 Consider the following chained items:
 
-```
+<!--
 <graphviz>
 digraph g {
   rankdir = LR;
@@ -116,7 +116,8 @@ digraph g {
   c2 -> c3;
 }
 </graphviz>
-```
+-->
+![](remove_data_from_cache_items.png)
 
 To remove the first chained item (`item 1`), call the `popChainedItem()` method:
 
