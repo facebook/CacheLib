@@ -19,7 +19,7 @@ To build the cachelib unit tests, use one of the following commands
 The unit test binaries will be installed in `./opt/cachelib/tests`:
 
 ```sh
-$ git clone https://github.com/facebookincubator/CacheLib
+$ git clone https://github.com/facebook/CacheLib
 $ cd CacheLib
 $ ./contrib/build.sh -T -j
 $ cd opt/cachelib/tests

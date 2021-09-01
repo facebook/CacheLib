@@ -19,7 +19,7 @@ your local work computer), The following error might appear:
 Use the following instructions to synchronize your local repository with CacheLib's.
 NOTES about the commands;
 1. This assumes you have no local changes
-2. This assumes the "origin" remote is `git@github.com:facebookincubator/CacheLib.git` .
+2. This assumes the "origin" remote is `git@github.com:facebook/CacheLib.git` .
 
 First, fetch all the remote updates:
 
@@ -31,7 +31,7 @@ First, fetch all the remote updates:
     remote: Total 174 (delta 54), reused 174 (delta 54), pack-reused 0
     Receiving objects: 100% (174/174), 398.69 KiB | 1.28 MiB/s, done.
     Resolving deltas: 100% (54/54), completed with 5 local objects.
-    From github.com:facebookincubator/CacheLib
+    From github.com:facebook/CacheLib
     + eb0a8b64...45eb4ad3 main       -> origin/main  (forced update) #### This indicates the branch was squashed
     d12f6273..3d6e81b8  gh-pages   -> origin/gh-pages
 
@@ -57,7 +57,7 @@ of Aug 13, 2021):
 
 If you created a forked repository on Github, it is very likely that
 the `origin` git remote points to YOUR forked repository, not to the
-`facebookincubator/CacheLib` repository.
+`facebook/CacheLib` repository.
 
 In such cases it is customary to locally add a second git-remote
 source and name it `upstream`, so that `git pull` from `origin` gets
@@ -78,7 +78,7 @@ and it points to a personal (*agordon*'s) forked repository.
 
 To add a second remote source, run the following command:
 
-    $ git remote add upstream git@github.com:facebookincubator/CacheLib.git
+    $ git remote add upstream git@github.com:facebook/CacheLib.git
     $ git remote show
     origin
     upstream
@@ -88,7 +88,7 @@ Synchronize all remote sources:
     $ git fetch --all
     Fetching origin
     Fetching upstream
-    From github.com:facebookincubator/CacheLib
+    From github.com:facebook/CacheLib
     * [new branch]        gh-pages                         -> upstream/gh-pages
     * [new branch]        main                             -> upstream/main
 
