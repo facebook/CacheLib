@@ -16,9 +16,9 @@ std::map<std::string, std::string> dict = {
   { "key2", "item 2" },
   { "key3", "item 3" },
 };
-for (auto& itr : dict) {
-  auto item_handle = cache->allocate(pool_id, itr.first, itr.second.size());
-  std::memcpy(item_handle->getWritableMemory(), itr.first.data(), itr.second.size());
+for (const auto& [k, v] : dict) {
+  auto item_handle = cache->allocate(pool_id, k, v.size());
+  std::memcpy(item_handle->getWritableMemory(), v.data(), v.size());
   cache->insertOrReplace(item_handle);
 }
 ```
@@ -40,7 +40,7 @@ You can also use the shorter `for-each` statement to visit them:
 
 
 ```cpp
-for (auto& itr : *cache) {
+for (const auto& itr : *cache) {
   auto key = itr.getKey();
   auto data = reinterpret_cast<const char*>(itr.getMemory());
   std::cout << key << " -> " << data << '\n';

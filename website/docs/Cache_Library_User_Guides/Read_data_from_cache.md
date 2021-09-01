@@ -3,7 +3,7 @@ id: Read_data_from_cache
 title: Read data from cache
 ---
 
-An unchained item written to cache by cachelib is associated with a key. To read the item from cache, call the `find()` method (defined in allocator/CacheAllocator.h) with the key to look up the item:
+An item written to cache by cachelib is associated with a key. To read the item from cache, call the `find()` method (defined in allocator/CacheAllocator.h) with the key to look up the item:
 
 
 ```cpp
@@ -27,7 +27,7 @@ void* pdata = item_handle->getMemory();
 ```
 
 
-The `getMemory()` method returns a `void*` pointer. Call `reinterpret_cast()` to cast it to a pointer of a specific type `T`:
+The `getMemory()` method returns a `void*` pointer. Use `reinterpret_cast<T*>` to cast it to a pointer of a specific type `T`:
 
 
 ```cpp
@@ -47,7 +47,7 @@ if (item_handle) {
 ```
 
 
-You can also use iterators to read all unchained items written to cache. See [Visit data in cache](Visit_data_in_cache/ ).
+You can also use iterators to read all the items written to the cache. See [Visit data in cache](Visit_data_in_cache/ ).
 
 To read data from chained items, start from the parent `ItemHandle`, for example:
 

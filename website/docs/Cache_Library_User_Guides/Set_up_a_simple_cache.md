@@ -1,11 +1,11 @@
 ---
 id: Set_up_a_simple_cache
-title: Set up a simple cache
+title: Set up a simple dram cache
 ---
 
-Before calling cachelib to cache your data, set up a cache first.
+Before calling cachelib to cache your data, set up a simple dram cache first.
 
-To set up a simple cache, you need to provide the following to cachelib:
+To set up a simple dram cache, you need to provide the following to cachelib:
 
 - Eviction policy
   - How data is evicted from the cache?
@@ -27,31 +27,27 @@ template class CacheAllocator<TinyLFUCacheTrait>;
 
 where `LruCacheTrait`, `LruCacheWithSpinBucketsTrait`, `Lru2QCacheTrait`, and `TinyLFUCacheTrait` are declared in allocator/CacheTraits.h. You can configure the eviction parameters. For more information, see [Eviction Policy](eviction_policy/ ).
 
-To use LRU as the eviction policy for your cache, use the following instantiated class:
+LRU is the most commonly used trait. To use LRU as the eviction policy for your cache, use the following instantiated class:
 
 ```cpp
 #include "cachelib/allocator/CacheAllocator.h"
 
 using Cache = facebook::cachelib::LruAllocator;
-// ...
 ```
 
 
-Before setting up a simple cache, use an object of a `CacheAllocatorConfig` class template instantiation to set the cache's configuration:
+Before setting up a simple cache, use an object of a `CacheAllocatorConfig` class to set the cache's configuration:
 
 
 ```cpp
 Cache::Config config;
 config
     .setCacheSize(1 * 1024 * 1024 * 1024) // 1 GB
-    .setCacheName("My cache")
+    .setCacheName("My cache") // unique identifier for the cache
     .setAccessConfig({25, 10})
     .validate();
 ```
 
-
-**Caution!**
-> If your team maintains multiple "cache" service/tiers, you should set only a single cache name. You can rely on tupperware job name to separate your cache services. Only use multiple cache names, when you're running multiple cachelib instances on a single host.
 
 **Caution!!**
 > If you're using multiple cache instances, please consider if you can simplify to using a single instance via multiple cache pools. CacheLib is highly optimized for concurrency; using multiple cachelib instances is typically an anti-pattern unless you have a good reason.

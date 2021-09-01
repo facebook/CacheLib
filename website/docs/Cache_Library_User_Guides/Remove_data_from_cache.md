@@ -16,9 +16,6 @@ class CacheAllocator : public CacheBase {
     // Remove the item pointed to by the specified handle.
     RemoveRes remove(const ItemHandle& handle);
 
-    // Remove the item pointed to by the specified iterator.
-    RemoveRes remove(AccessIterator& it);
-
     // Remove the first chained item pointed to by the parent handle.
     ItemHandle popChainedItem(const ItemHandle& parent)
   ...
@@ -37,7 +34,7 @@ enum class RemoveRes : uint8_t {
 ```
 
 
-For example, the following code removes an unchained item with key `"key1"`:
+For example, the following code removes an item with key `"key1"`:
 
 
 ```cpp
@@ -78,26 +75,22 @@ for (auto& itr : dict) {
 ```
 
 
-you can call this method to remove the three items:
-
-
-```cpp
-RemoveRes remove(AccessIterator& it);
-```
-
+you can iterate and remove the three items:
 
 For example:
 
 
 ```cpp
 for (auto itr = cache->begin(); itr != cache->end(); ++itr) {
-  auto rr = cache->remove(itr);
+  auto rr = cache->remove(itr.asHandle());
   if (rr == RemoveRes::kSuccess) {
     cout << "Removed the item" << '\n';
   }
 }
 
 ```
+
+Note that `it.asHandle()` returns the item handle for the  iterator
 
 
 Consider the following chained items:

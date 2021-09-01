@@ -7,7 +7,7 @@ After [setting up your cache](Set_up_a_simple_cache/ ), you can start writing da
 
 To use cachelib to write data to your cache:
 
-- Allocate memory for the data from the cache, which will return an item handle to the allocated memory.
+- Allocate memory for the data from the cache, which will return an item handle to the allocated memory. Item handle provides a reference counted wrapper to access a cache item.
 - Write the data to the allocated memory and insert the item handle into the cache.
 
 ## Allocate memory for data from cache
@@ -61,7 +61,7 @@ if (item_handle) {
 ```
 
 
-If the data size is greater than the maximum slab size (4 MB), use [chained items](chained_items/ ) to store the data. To allocate memory for chained items from cache, call this method:
+If the data size is greater than the maximum slab size (4 MB), use [chained items](chained_items/ ) to store the data with multiple items. To allocate memory for additional chained items from cache, call this method:
 
 
 ```cpp
@@ -108,15 +108,21 @@ void* pwm = item_handle->getWritableMemory();
 ```
 
 
-To insert an item to the cache, call one of the following methods defined in allocator/CacheAllocator.h:
+To insert an item to the cache, call one of the following methods defined in
+allocator/CacheAllocator.h.:
 
 
 ```cpp
 template <typename CacheTrait>
 class CacheAllocator : public CacheBase {
   public:
+    // will fail insertion if key is already present
     bool insert(const ItemHandle& handle);
+
+    // will insert or replace existing item for the key
     ItemHandle insertOrReplace(const ItemHandle& handle);
+
+    // link the chained items to the parent
     void addChainedItem(const ItemHandle& parent, ItemHandle child);
   // ...
 };
@@ -137,7 +143,7 @@ if (item_handle) {
   std::memcpy(item_handle->getWritableMemory(), data.data(), data.size());
 
   // Insert the item handle into the cache.
-  cache->insert(item_handle);
+  cache->insertOrReplace(item_handle);
 } else {
   // handle allocation failure
 }
