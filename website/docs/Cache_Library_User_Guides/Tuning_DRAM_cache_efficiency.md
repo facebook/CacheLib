@@ -7,7 +7,7 @@ title: Tuning DRAM cache efficiency
 
 When you use cachelib to allocate memory from cache, you get a piece of memory rounded up to the closest allocation size in the cache. This can lead to wastage of memory (e.g., if you allocate 60 bytes, you get  memory from the 80-byte allocation class; 20 bytes is wasted). Typically, once this grows beyond 5%, there is an opportunity to reduce the fragmentation and increase the usable cache size by tuning the internal allocation sizes.
 
-To estimate the current fragmentation size, use this ODS counter to export the current fragmentation bytes per pool and see if the overall volume is more than 5% of your cache size. You can find out the fragmentation per pool by calling PoolStats::totalFragmentation().
+To estimate the current fragmentation size, use CacheStat::fragmentationSize to get the current fragmentation bytes and see if the overall volume is more than 5% of your cache size. You can find out the fragmentation per pool by calling PoolStats::totalFragmentation().
 
 *Note that changing allocation sizes would need the cache to be dropped if you have cache persistence enabled.*
 
@@ -21,7 +21,7 @@ If you have enabled TTL for your objects, reaping them as soon as they expire wo
 
 If your objects are of different sizes, their relative memory footprint in the cache might be suboptimal. For example, you might have too many of the large objects hogging space or certain sized objects getting evicted faster than the other. These can lead to suboptimal hit ratios. Turning on pool rebalancing can help in this.
 
-There isn’t an easy way to tell if this is causing regressions; the easiest way is to experiment on a small canary with a few [options](pool_rebalance_strategy/#picking-a-strategy ) offered by cachelib. Tuning this often results in improvements to hit ratio. For example, Barkeep saved 300M misses/sec to memcache by enabling pool rebalancing on their local cache.
+There isn’t an easy way to tell if this is causing regressions; the easiest way is to experiment on a small test environment with a few [options](pool_rebalance_strategy/#picking-a-strategy ) offered by cachelib. Tuning this often results in improvements to hit ratio.
 
 ## Avoid copying from cache
 

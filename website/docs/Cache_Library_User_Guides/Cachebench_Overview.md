@@ -40,7 +40,7 @@ yum install gnuplot
 Then run this command to get the latency stats:
 
 ```shell
-./vizualize/extract_latency.sh /tmp/tao_leader.log
+./vizualize/extract_latency.sh /tmp/cachebench.log
 ```
 
 This should produce a tsv file for read latency, a tsv file for write latency, and the corresponding `png` files that have the graphs plotted.
