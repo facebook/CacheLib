@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="500" height="140" alt="CacheLib" src="CacheLib-Logo.png">
+  <img width="500" height="140" alt="CacheLib" src="website/static/img/CacheLib-Logo-Large-transp.png">
 </p>
 
 # CacheLib
