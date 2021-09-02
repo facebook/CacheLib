@@ -35,7 +35,7 @@ first. The workload configuration describes the nature of the cache workload
 by defining the number of cache objects, their size and popularity
 distribution, and the distribution of API operations.
 
-### Simple modeling key-value sizes and popularity distribution
+### Simple config with key-value sizes and popularity distribution
 
 The following config sets up a basic [hybrid cache](HybridCache) instance with two DRAM cache pools and also sets up and runs it in a DRAM-backed mode (useful for testing). The test config itself specifies the number of operations per threads, number of threads, number of keys, and then proceeds to describe the distribution of its key and value sizes and the distribution of the operations. It’s an example of a simple config that is usually written by a person for the purpose of adding a new integration test or a simple benchmark for a particular feature. Configs in this manner are not meant for representing real life workloads and used for performance measurements. For reference on what each option means, please refer to these files.
 
@@ -96,11 +96,7 @@ The value size will be changed to max(valSize, sizeof(CacheValue)) when allocate
 
 ### Real world config example
 
-Coming up with appropriate distribution sizes of key, values and getting their popularity is a challenging problem. To make this easier, CacheBench can take the popularity and size distribution through json files. To examine a real world config at use in production service, please refer to these files.
-
-```
-cachelib/cachebench/test_configs/ssd_perf/tao_leader/config.json
-```
+Coming up with appropriate distribution sizes of key, values and getting their popularity is a challenging problem. To make this easier, CacheBench can take the popularity and size distribution through json files. To examine a real world config at use in production service, refer to `cachelib/cachebench/test_configs/ssd_perf/graph_cache_leader/config.json`
 
 This describes the cache setup (similar to how we do it in the simple test config example above) for a production service. The `pop.json` file describes the popularity distribution across the key space and the `sizes.json` file describes the value distribution across the key space. They are key to getting close to simulate a production workload.
 

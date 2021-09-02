@@ -60,7 +60,7 @@ See [build and installation](../installation/installation) for further details.
 
 ## Running the benchmark for SSD perf testing
 
-Cachebench has three configs packaged for SSD validation. These are under `test_configs/ssd_perf/<service-domain>`. Currently, we have "tao-leader", "memcache-reg", and "memcache-wc" which represent three distinct cache workloads from Facebook. Below, we show how the benchmarks can be run for two of these workloads. It is important to trim the ssds between the runs to ensure any interference is avoided.
+Cachebench has three configs packaged for SSD validation. These are under `test_configs/ssd_perf/<service-domain>`. Currently, we have "graph_cache_leader", "kvcache_reg", and "kvcache_wc" which represent three distinct cache workloads from Facebook. Below, we show how the benchmarks can be run for two of these workloads. It is important to trim the ssds between the runs to ensure any interference is avoided.
 
 
 1. Change to the path where you previously copied cachebench to.
@@ -70,25 +70,25 @@ Cachebench has three configs packaged for SSD validation. These are under `test_
 2. If `/dev/md0` is not being used, edit workload files appropiately.
    Change all instances of `/dev/md0` to raw path of data SSD(s):
     ```sh
-    vi ./test_configs/ssd_perf/tao_leader/tao_leader_t10.json
-    vi ./test_configs/ssd_perf/memcache_l2_wc/memcache_l2_wc.json
+    vi ./test_configs/ssd_perf/graph_cache_leader/config.json
+    vi ./test_configs/ssd_perf/kvcache_l2_wc/config.json
     ```
     See [configuring storage path](Configuring_cachebench_parameters#storage-filedevicedirectory-path-info)  for more details on how to configure the storage path.
 3. Before each benchmark run, fully trim the drive with fio:
     ```sh
    fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
     ```
-3. Execute Tao Leader cachebench workload:
+3. Execute social graph leader cache workload:
     ```sh
-    ./cachebench -json_test_config test_configs/ssd_perf/tao_leader/config.json --progress_stats_file=/tmp/tao_leader.log
+    ./cachebench -json_test_config test_configs/ssd_perf/graph_cache_leader/config.json --progress_stats_file=/tmp/graph_cache_leader.log
     ```
 4. Fully trim the drive with fio again:
     ```sh
    fio --name=trim --filename=/dev/md0 --rw=trim --bs=3G
    ```
-5. Execute the Memcache workload cachebench workload. For example:
+5. Execute the `kvcache` workload:
     ```sh
-    ./cachebench -json_test_config test_configs/ssd_perf/memcache_l2_wc/config.json —progress_stats_file=/tmp/mc-l2-wc.log
+    ./cachebench -json_test_config test_configs/ssd_perf/kvcache_l2_wc/config.json —progress_stats_file=/tmp/mc-l2-wc.log
     ```
 
 ## Tuning the workload and cache parameters
@@ -96,9 +96,9 @@ Cachebench has three configs packaged for SSD validation. These are under `test_
 For a full list of options that can be configured, see [configuring cachebench](Configuring_cachebench_parameters)
 
 1. **Duration of Replay** - To run cachebench operation for longer,
-   increase the numOps appropriately in the config file.
+   increase the `numOps` appropriately in the config file.
 2. **Device Info** - Device info is configured in the config file
-   using the "nvmCachePaths" option.  If you would rather use a
+   using the `nvmCachePaths` option.  If you would rather use a
    filesystem based cache, pass the appropriate path through
    `nvmCachePaths`.  The benchmark will create a single file
    under that path corresponding to the configured `nvmCacheSizeMB`
@@ -113,11 +113,12 @@ For a full list of options that can be configured, see [configuring cachebench](
  View results summary through the log file:
 
     ```sh
-    tail -n 50 /tmp/tao_leader.log
+    tail -n 50 /tmp/graph_cache_leader.log
     tail -n 50 /tmp/mc-l2-wc.log
     ```
 ## Plotting latency stats
-The stats output can be parsed to plot SSD latency information over time. To do this, first ensure `gnuplot` is installed:
+The stats output can be parsed to plot SSD latency information over time. To
+do this, first ensure `gnuplot` is installed. For example, on CentOs:
 
 ```shell
 yum install gnuplot
@@ -126,7 +127,7 @@ yum install gnuplot
 Then run this command to get the latency stats:
 
 ```shell
-./vizualize/extract_latency.sh /tmp/tao_leader.log
+./vizualize/extract_latency.sh /tmp/graph_cache_leader.log
 ./vizualize/extract_latency.sh /tmp/mc-l2-wc.log
 ```
 
