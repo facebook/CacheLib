@@ -41,7 +41,7 @@ const features = [
     //imageUrl: 'img/undraw_docusaurus_react.svg',
     description: (
       <>
-	    CacheBench provides a tool-kit to  prototype new cache heuristics and evaluate hardware choices on industry standard workloads.
+	    <a href='docs/Cache_Library_User_Guides/Cachebench_Overview'> CacheBench </a> provides a tool-kit to prototype new cache heuristics and evaluate hardware choices on industry standard cache workloads.
       </>
     ),
   },

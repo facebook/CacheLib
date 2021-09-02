@@ -23,27 +23,33 @@ cachebench](Configuring_cachebench_parameters) for more details.
 CacheBench can be configured and used for several purposes depending on the
 developer's need. The following are few examples.
 
-1. Evaluating cache heuristics: CacheBench can be used to compare the cache
+1. **Prototype and evaluation of cache heuristics**: CacheBench can be used to compare the cache
    performance (hit ratio) of various configuration options for existing
    hueristics and new heuristics. For example, given a cache size and
-   workload, comparing LRU vs 2Q vs FIFO.
+   workload, comparing LRU vs 2Q vs FIFO vs new heuristic added to CacheLib.
 
-2. Evaluating throughput and scalability: By representing the workload in
-   CacheBench, you can compare the throughput of various cache setups by
-   changing the overall cache configuration. For example, given a workload,
-   identifying the maximum throughput of dram cache and hybrid cache setups.
+2. **Evaluating throughput and scalability**: By representing the workload in
+   CacheBench, you can compare the throughput of various cache setups and
+   CacheLib configuration. For example, given a workload, identifying the
+   maximum throughput of dram cache and hybrid cache setups as you scale up
+   number of application threads or modify CacheLib configuration.
 
-3. Evaluate hardware choices: CacheBench workloads can be evaluated on various
+3. **Evaluate hardware choices**: CacheBench workloads can be evaluated on various
    hardware choices to compare the trade-offs between them. For example
    CacheBench can replay the workload against a 100GB dram cache and a 10GB
-   dram + 90 GB SSD cache to compare the application performance.
+   dram + 90 GB SSD cache to compare the sensitivity of application
+   performance and hardware
+   performance.
 
-4. Testing for correctness and crashes: When adding new features to CacheLib,
-   in addition to unit tests, CacheBench is leveraged to stress test the
-   feature's correctness in a concurrent multi-threaded environment.
+4. **Testing for correctness and crashes**: When adding new features to
+   CacheLib, in addition to unit tests, CacheBench is leveraged to stress test
+   the feature's correctness in a concurrent multi-threaded environment.
    CacheBench provides options to ensure the consistency of the cache by
    validating the data correctness of the operations. See [configuring
-   consistency checking](Configuring_cachebench_parameters#consistency-checking)
+   consistency
+   checking](Configuring_cachebench_parameters#consistency-checking) on how
+   this can be enabled. All code changes and new features to CacheLib from
+   Facebook go through correctness stress tests with CacheBench.
 
 ## Building  cachebench
 

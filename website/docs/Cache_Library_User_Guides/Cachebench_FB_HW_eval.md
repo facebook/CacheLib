@@ -49,7 +49,7 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     ```
 
 4. If fio is not installed, build it with:
-    ``  ````sh
+    ```sh
     git clone git@github.com:axboe/fio.git
     ./configure
     make
