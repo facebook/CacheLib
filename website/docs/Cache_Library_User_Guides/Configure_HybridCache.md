@@ -3,10 +3,13 @@ id: Configure_HybridCache
 title: Configure HybridCache
 ---
 
-# Example Config
+## Enabling hybrid cache
 
 You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the NvmCache::Config::navyConfig in the Cache config by using APIs provided in navy::NavyConfig, for example:
 
+
+
+<details> <summary> Simple hybrid cache setup </summary>
 
 ```cpp
 #include "cachelib/allocator/CacheAllocator.h"
@@ -22,12 +25,14 @@ nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
 lruConfig.enableNvmCache(nvmConfig);
 ```
 
+</details>
+
 
 All settings are optional, unless marked as **"Required"**. The default value is shown after the equal sign `=`.
 
-# How to set Navy settings
-## 1. Common settings
-### (1) Device
+## Basic configuration
+
+###  Device
  * (**Required**) Set a simple file or RAID files
    * simple file:
      * (**Required**)`file name`
@@ -40,8 +45,6 @@ All settings are optional, unless marked as **"Required"**. The default value is
     ```cpp
     navyConfig.setSimpleFile(fileName, fileSize, truncateFile /*optional*/);
     ```
-
-
    * RAID files:
      * (**Required**) `RAID paths`
       Multiple files/devices to be used as a single cache. Note they must be identical in size.
@@ -68,8 +71,7 @@ This controls what’s the biggest IO we can write to a device. After it is conf
  navyConfig.setDeviceMaxWriteSize(deviceMaxWriteSize);
  ```
 
-
-### (2) Job scheduler
+### Job scheduler
 
 * (**Required**) `reader threads = 32`
 Number of threads available for processing *read* requests.
@@ -87,7 +89,7 @@ navyConfig.setNavyReqOrderingShards(navyReqOrderingShards);
 ```
 
 
-### (3) Other
+### Other
 
 * `max concurrent inserts = 1'000'000`
 This controls how many insertions can happen in parallel. This is an effective way to avoid too many insertions backing up that drives  up the write latency (it can happen if the use case is too heavy on writes).
@@ -101,39 +103,13 @@ navyConfig.setMaxParcelMemoryMB(maxParcelMemoryMB);
 ```
 
 
-## 2. Admission policy settings
-There are 2 types of admission policy: "random" and "dynamic_random". Users can choose one of them to enable.
- ### (1) "random" policy
-  * (**Required**) `admission probability`
-Acceptance probability. The value has to be in the range of [0, 1].
+## Navy engine specific configuration
 
- ```cpp
- navyConfig.enableRandomAdmPolicy()
-           .setAdmProbability(admissionProbability);
+### Large object cache (BlockCache)
+These configuration control the behavior of the storage engine that caches
+large objects
 
-
-### (2) "dynamic_random" policy
-*  (**Required**) `admission write rate` (bytes/s)
-Average **per day** write rate to target. Default to be 0 if not being  explicitly set, meaning no rate limiting.
-* `max write rate = 0` (bytes/s)
-The max write rate to device in bytes/s to stay within the device limit of saturation to avoid latency increase. This ensures writing at any given second doesn't exceed this limit despite a possibility of writing more to stay within the target rate above.
-*  `admission suffix length = 0`
- Length of suffix in key to be ignored when hashing for probability.
- *  `admission base size = 0`
- Navy item base size of baseProbability calculation. Set this closer to the mean size of objects. The probability is scaled for other sizes by using this size as the pivot.
-
- ```cpp
- navyConfig.enableDynamicRandomAdmPolicy()
-           .setAdmissionWriteRate(admissionWriteRate)
-           .setMaxWriteRate(maxWriteRate)
-           .setAdmissionSuffixLength(admissionSuffixLen)
-           .setAdmissionProbBaseSize(admissionProbBaseSize);
- ```
-
-
-## 3. Engine specific settings
-### (1) Block Cache
-* eviction policy (choose one of the followings):
+#### Eviction policy (choose one of the followings):
    * LRU: default policy
 
    * FIFO: once enabled, LRU will be disabled.
@@ -155,7 +131,7 @@ The max write rate to device in bytes/s to stay within the device limit of satur
    ```
 
 
-* reinsertion policy (choose one of the followings):
+#### Reinsertion policy (choose one of the followings):
   * hits based
 If this is enabled, we will reinsert item that had been accessed more than the threshold since the last time it was written into block cache. This can better approximate a LRU than the region-based LRU. Typically users configure this with a region-granularity FIFO policy, or SFIFO policy.  It cannot be enabled when percentage based reinsertion policy has been enabled.
 
@@ -172,10 +148,12 @@ If this is enabled, we will reinsert item that had been accessed more than the t
    ```
 
 
+#### Configuring the write mode
+
 * `clean regions = 1`
 How many regions do we reserve for future writes. Set this to be equivalent to your per-second write rate. It should ensure your writes will not have to retry to wait for a region reclamation to finish.
 
-  * `in-memory buffers = 0`
+* `in-memory buffers = 0`
 A non-zero value enables in-mem buffering for writes. All writes will first go into a region-sized buffer. Once the buffer is full, we will flush the region to the device. This allows BlockCache to internally pack items closer to each other (saves space) and also improves device read latency (regular sized write IOs means better read performance).
 
    ```cpp
@@ -204,8 +182,7 @@ navyConfig.blockCache()
 
 ```
 
-
-### (2) BigHash
+### Small object cache (BigHash)
 
 * (**Required**) `size percentage`
 Percentage of space to reserve for BigHash. Set the percentage > 0 to enable BigHash. The remaining part is for BlockCache. The value has to be in the range of [0, 100]. Default value is 0.
@@ -227,18 +204,14 @@ navyConfig.bigHash()
 ```
 
 
-# NavyConfig Data Output
-* `NavyConfig` provides a public function NavyConfig::serialize() so that you can call it to print out the data, e.g.
-
-
- ```cpp
+> `NavyConfig` provides a public function NavyConfig::serialize() so that you can call it to print out the data, e.g.
+> ```cpp
 XLOG(INFO) << "Using the following navy config"
            << folly::toPrettyJson(
                         folly::toDynamic(navyConfig.serialize()));
  ```
 
-
-# Admission
+## Admission policy
 
 HybridCache can leverage an admission policy to control burn rate of the underlying nvm devices (e.g. SSD drives). Using a suitable admission policy for your workloads can often not only improve device longevitiy but also improve the cache hit rate. You can configure an admission policy like the following example:
 
@@ -248,19 +221,46 @@ auto policy = std::make_shared<cachelib::RejectFirstAP<LruAllocator>>(/* ... */)
 cacheConfig.setNvmCacheAdmissionPolicy(std::move(policy));
 ```
 
+### Configuring probabilistic admission policy
+There are 2 types general purpose admission policy: "random" and "dynamic_random" to use probabilistic admission. Users can choose one of them to enable.
 
-## Random reject
-
+#### Random policy
 This policy just rejects `P%` of inserts, picking victims randomly. It lets user to reduce IOPS (and so increase flash life time).
 
-## Reject first
+  * (**Required**) `admission probability`
+Acceptance probability. The value has to be in the range of [0, 1].
+
+ ```cpp
+ navyConfig.enableRandomAdmPolicy()
+           .setAdmProbability(admissionProbability);
+
+
+#### Dynamic Random policy
+*  (**Required**) `admission write rate` (bytes/s)
+Average **per day** write rate to target. Default to be 0 if not being  explicitly set, meaning no rate limiting.
+* `max write rate = 0` (bytes/s)
+The max write rate to device in bytes/s to stay within the device limit of saturation to avoid latency increase. This ensures writing at any given second doesn't exceed this limit despite a possibility of writing more to stay within the target rate above.
+*  `admission suffix length = 0`
+ Length of suffix in key to be ignored when hashing for probability.
+ *  `admission base size = 0`
+ Navy item base size of baseProbability calculation. Set this closer to the mean size of objects. The probability is scaled for other sizes by using this size as the pivot.
+
+ ```cpp
+ navyConfig.enableDynamicRandomAdmPolicy()
+           .setAdmissionWriteRate(admissionWriteRate)
+           .setMaxWriteRate(maxWriteRate)
+           .setAdmissionSuffixLength(admissionSuffixLen)
+           .setAdmissionProbBaseSize(admissionProbBaseSize);
+ ```
+
+### Configuring reject first policy
 
 This policy helps if flash cache contains lots of inserted and never accessed items. It maintains a running window (sketch) of keys that were accessed. If a key is inserted for the first time, the policy rejects it. Second inserts get into the cache. A sketch consists of several splits. As times goes, old splits are discarded. With larger split, rejection gets more accurate (less false accepts).
 
-## Dynamic reject (or rate throttle)
+### Dynamic reject (or rate throttle)
 
 This is a smart random reject policy. Users specify the maximum size of data that can be written to the device per day. Policy monitors *write* traffic and as it grows beyond the target (how much can be written up to this time of the day) it starts randomly reject inserts. It prefers to reject larger items to make hit ratio better. This behavior is tunable to allow users to control flash's wearing out.
 
-## ML-based admission policy
+### Machine learning based admission policy
 
 CacheLib also supports using ML based admission policy to make intelligent decision on what to admit into nvm devices. However, the use of ML policy requires careful analysis of cache workloads, and set up a training pipeline to train the model on a conintuous basis. Please try out the other admission policies first, and if you're not satisfied with them, then reach out directly to the CacheLib team to discuss using a ML-based policy.
