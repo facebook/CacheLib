@@ -14,9 +14,10 @@
 
 .heroBanner {
   padding: 4rem 0;
-  text-align: center;
+ /* text-align: center; */
   position: relative;
-  overflow: hidden;
+  height: 100%;
+/*  overflow: hidden; */
 }
 
 @media screen and (max-width: 966px) {
@@ -46,10 +47,14 @@
 .heroLogo {
    width: 200px;
    height: 200px;
-   float: right;
  /*  margin-top: 20px;
    padding: 0 20px 20px;*/
 
+}
+
+.buttons2 {
+   padding-left: 1rem;
+   margin-bottom: 1rem;
 }
 
 .clHeroTitle {

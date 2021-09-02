@@ -71,15 +71,27 @@ function Home() {
       description="Pluggable caching engine to build and scale high performance services">
       <header className={clsx('hero hero--primary', styles.heroBanner, 'jumbotron')}>
         <div className="container">
+   <div className="row">
+      <div className="col col--3">
           <img className={styles.heroLogo}
                src={useBaseUrl("img/CacheLib-Logo-small.png")} />
+      </div>
+
+      <div className="col col--4 col--offset-1">
           <h1 className={clsx("hero__title", styles.clHeroTitle)}>{siteConfig.title}</h1>
           <p className={clsx("hero__subtitle", styles.clHeroTagLine)}>
             <b>Pluggable</b> caching engine
             <br/>
             to build and scale <b>high performance</b> cache services
           </p>
-          <div className={styles.buttons}>
+       </div>
+
+
+     </div>
+
+
+    <div className="row">
+      <div className={clsx("col", "col--3", "col--offset-4", styles.buttons2)}>
             <Link
               className={clsx(
                 'button button--success button--lg margin-right--lg',
@@ -88,7 +100,9 @@ function Home() {
               to={ useBaseUrl('learnmore/') }>
               Learn More
             </Link>
+          </div>
 
+      <div className={clsx("col", "col--3", styles.buttons2)}>
             <Link
               className={clsx(
                 'button button--secondary button--lg',
@@ -97,7 +111,8 @@ function Home() {
               to={ useBaseUrl('docs/installation/installation') }>
               Get Started
             </Link>
-          </div>
+    </div>
+  </div>
         </div>
       </header>
       <main>
