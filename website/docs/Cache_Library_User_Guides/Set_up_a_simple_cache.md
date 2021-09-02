@@ -79,26 +79,35 @@ void initializeCache() {
 
 Before using a cache, you need to partition its memory into pools. You can add many pools to the cache. In this example, only a default pool is added to the `cache`. Because of a fixed overhead needed to manage the cache, the default pool's size is less than 1 GB.
 
-For a complete program to set up a simple cache, see cachelib/examples/simple_cache/main.cpp
+For a complete program to set up a simple cache, see `examples/simple_cache/main.cpp`.
 
 ## Test the simple cache setup program
 
-To test the simple cache setup program cachelib/examples/simple_cache/main.cpp:
+To test the simple cache setup program `examples/simple_cache/main.cpp`:
 
-1. Build the simple cache setup program:
-   ```none
-   $ cd cachelib/examples/simple_cache
-   $ make:
+1. Build `cachelib` with all the dependecies:
+
+    ```sh
+    git clone https://github.com/facebook/CacheLib
+    cd CacheLib
+    ./contrib/build.sh -d -j -v -T
+    ```
+
+2. Build the simple cache setup program:
+
+   ```sh
+   cd examples/simple_cache
+   ./build.sh
    ```
 3. Run the program:
-   ```none
-   $ cd cachelib/opt/examples/simple_cache
-   $ ./example-simple-cache
+
+   ```sh
+   ./build/simple-cache-example
    ```
 
-When you run `example-simple-cache`, it doesn't produce any output.
+   When you run `simple-cache-example`, it doesn't produce any output.
 
-**Exercise**: Add code to cachelib/examples/simple_cache/main.cpp to do the following:
+**Exercise**: Add code to `examples/simple_cache/main.cpp` to do the following:
 
 - Print the value of the item with key `key`.
 - Compare the default pool size with the cache size (1 GB).
