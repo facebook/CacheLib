@@ -4,6 +4,7 @@ title: Configuring cachebench parameters
 ---
 
 
+## Command line parameters
 Cachebench takes command line parameters to control its behavior. The following are the semantics of the command line parameters:
 
 ### JSON test configuration
@@ -131,13 +132,9 @@ You can enable runtime consistency checking of the APIs through cachebench. In t
 
 You can enable *populateItem* to fill cache items with random bytes. When consistency mode is enabled, we populate the item automatically with unique values for validation.
 
-## Tuning cache parameters
+## Tuning DRAM cache parameters
 
-The `cache_config` section specifies knobs to control how the cache is configured.
-
-###  DRAM cache parameters
-
-The following options are available to configure the DRAM cache parameters. DRAM cache parameters come into play when using hybrid cache as well as stand-alone DRAM cache mode.
+The `cache_config` section specifies knobs to control how the cache is configured. The following options are available to configure the DRAM cache parameters. DRAM cache parameters come into play when using hybrid cache as well as stand-alone DRAM cache mode.
 
 ### DRAM cache  size
 
@@ -197,7 +194,7 @@ To enable cachelib pool rebalancing techniques, you can set `poolRebalanceInterv
 
 ## Hybrid cache parameters
 
-To enable hybrid cache for cachebench, you need to specify a non-zero value to the `nvmCacheSizeMB` parameter.
+Hybrid cache parameters are configured under the `cache_config` section. To enable hybrid cache for cachebench, you need to specify a non-zero value to the `nvmCacheSizeMB` parameter.
 
 ### Storage file/device/directory path info
 

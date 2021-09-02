@@ -105,8 +105,9 @@ module.exports = {
           collapsed: true,
           items: [
             'Cache_Library_User_Guides/Cachebench_Overview',
-            'Cache_Library_User_Guides/Developing_for_Cachebench',
             'Cache_Library_User_Guides/Configuring_cachebench_parameters',
+            'Cache_Library_User_Guides/Developing_for_Cachebench',
+            'Cache_Library_User_Guides/Cachebench_FB_HW_eval',
           ]
         },
    ],

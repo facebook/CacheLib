@@ -3,44 +3,52 @@ id: Cachebench_Overview
 title: Overview
 ---
 
-CacheBench is a benchmark suite that can read a workload configuration file, simulate cache behavior as stipulated in the config, and produce performance summary for the simulated cache. Results include metrics such as hit rate, evictions, write rate to flash cache, latency, etc. The workload configs can be hand-written by a human, produced by a workload analyzer, or backed by raw production cachelib traces. The main customization points into CacheBench are through writing workload configs or custom workload generators.
+CacheBench is a benchmark and stress testing  tool to evaluate cache
+performance with real hardware and real cache workloads. CacheBench takes in a
+configuration that describes the cache workload  and the cache configuration
+and simulates  the cache behavior by instantiating a CacheLib cache. It runs
+the workload and emits  results periodically and at the end. The results
+include metrics such as hit rate, evictions, write rate to flash cache,
+latency, etc. The workload configs can be hand-written by a human, produced by
+a workload analyzer, or backed by raw production cachelib traces. The main
+customization points into CacheBench are through writing workload configs or
+custom workload generators. See [configuring
+cachebench](Configuring_cachebench_parameters) for more details.
 
 ![](cachebench.png)
 
-### Build the latest cachebench
+
+## Uses of cachebench
+
+CacheBench can be configured and used for several purposes depending on the
+developer's need. The following are few examples.
+
+1. Evaluating cache heuristics: CacheBench can be used to compare the cache
+   performance (hit ratio) of various configuration options for existing
+   hueristics and new heuristics. For example, given a cache size and
+   workload, comparing LRU vs 2Q vs FIFO.
+
+2. Evaluating throughput and scalability: By representing the workload in
+   CacheBench, you can compare the throughput of various cache setups by
+   changing the overall cache configuration. For example, given a workload,
+   identifying the maximum throughput of dram cache and hybrid cache setups.
+
+3. Evaluate hardware choices: CacheBench workloads can be evaluated on various
+   hardware choices to compare the trade-offs between them. For example
+   CacheBench can replay the workload against a 100GB dram cache and a 10GB
+   dram + 90 GB SSD cache to compare the application performance.
+
+4. Testing for correctness and crashes: When adding new features to CacheLib,
+   in addition to unit tests, CacheBench is leveraged to stress test the
+   feature's correctness in a concurrent multi-threaded environment.
+   CacheBench provides options to ensure the consistency of the cache by
+   validating the data correctness of the operations. See [configuring
+   consistency checking](Configuring_cachebench_parameters#consistency-checking)
+
+## Building  cachebench
 
 Follow instructions in [Installation](../installation/installation) to build
 cachebench. This should install cachebench in your local machine under
 ```opt/cachelib/bin/cachebench```
 
-### Running cachebench for Facebook hardware validation
 
-Cachebench has three configs packaged for SSD validation. These are under `test_configs/ssd_perf/<service-domain>`. Currently, we have "tao-leader", "memcache-reg", and "memcache-wc" which represent three distinct cache workloads from Facebook.
-
-To run any of them, first ensure that the machine has sufficient free memory (50+GB). Next, modify the config.json file appropriately to reflect the SSD device setu;p. See [configuring storage path](Configuring_cachebench_parameters#storage-filedevicedirectory-path-info) for details. Then invoke the following.
-
-```shell
-./cachebench --json_test_config test_configs/ssd_perf/<service-domain>/config.json --progress_stats_file=/tmp/cachebench.log
-```
-
-This will stream the benchmark progress to the terminal and also log detailed stats to the specified file. The log file would contain a periodic dump of the latency  and cache stats, which  can then be plotted using some of the scripts.  If the stats are not intended to be collected, then skip the option `--progress_stats_file`.
-
-### Analyzing the performance metrics
-
-While cachebench runs, it will report some stats through the fb303 port. In addition, one can monitor the flash metrics from ODS on IOPS, nand writes etc. cachebench also periodically dumps some stats to the stdout, that can be processed later on.
-
-### Plotting latency stats
-
-The stats output can be parsed to plot NVM latency information over time. To do this, first ensure `gnuplot` is installed:
-
-```shell
-yum install gnuplot
-```
-
-Then run this command to get the latency stats:
-
-```shell
-./vizualize/extract_latency.sh /tmp/cachebench.log
-```
-
-This should produce a tsv file for read latency, a tsv file for write latency, and the corresponding `png` files that have the graphs plotted.
