@@ -1,13 +1,13 @@
 ---
 id: Configure_HashTable
-title: Configure HashTable
+title: Configure lookup performance
 ---
 
 When you use a cache instance, it comes with a hash table that the `find()` method uses to look up an item in cache by its key. The current implementation uses a chained, open addressable hash table for keeping the lookup performance as small as possible. There are a few knobs to tune that will impact the lookup and insert cost of the cache. For this reason, the default parameters for this are left as the most-unoptimized state. To tune the `HashTable`, you need configure two important parameters in the `AccessConfig` type in your cache.
 
-# BucketsPower
+## Hashtable bucket configuration
 
-BucketsPower, an exponent to base 2, is used to configure the number of buckets in the hash table. It is a good idea to set this to twice the number of elements you roughly expect to store in cache. For example, setting it to 21 creates a hash table of 2 million buckets and size 8 MB. For production use cases dealing with millions of items, set this to values around 26-28. If you are dealing with billions of items in cache, set this to 30+. Note for tests, you might want to lower this value so that the memory foot print of tests running concurrently is not an issue.
+`ChainedHashTable::Config::bucketsPower`, an exponent to base 2, is used to configure the number of buckets in the hash table. It is a good idea to set this to twice the number of elements you roughly expect to store in cache. For example, setting it to 21 creates a hash table of 2 million buckets and size 8 MB. For production use cases dealing with millions of items, set this to values around 26-28. If you are dealing with billions of items in cache, set this to 30+. Note for tests, you might want to lower this value so that the memory foot print of tests running concurrently is not an issue.
 
 For example:
 
@@ -19,7 +19,7 @@ cfg.accessConfig.bucketsPower = 25;
 ```
 
 
-## Choosing a good bucketspower
+### Choosing a good value
 
 For a fast lookup/insert performance in a chained hash table, keep the chaining at minimum. A good rule of thumb for such a hash table is to ensure there are no more than 50% of buckets occupied with any elements. However, that also means that you will need a bigger hash table and waste memory from unused buckets. You can use the following table to estimate a good approximate bucket power to start with. If you can tolerate the lookup performance and memory usage is important, you can go down by one factor in your bucket power.
 
@@ -36,7 +36,7 @@ For a fast lookup/insert performance in a chained hash table, keep the chaining 
 |1024+                           | 32          | 16 GB             |
 
 
-## Detecting a bad bucketspower
+### Detecting a bad value
 
 The following helps you find out whether your hash table size is misconfigured:
 
@@ -59,9 +59,9 @@ struct DistributionStats {
 
 The `itemDistribution` map contains the distribution of buckets by their occupancy of items; i.e., `itemDistribution[0]` contains the number of buckets with 0 elements, `itemDistribution[1]` contains the buckets with one element, etc. A lower number of buckets with 0 will indicate that your cache will suffer from a bad bucket power.
 
-## locksPower
+## Hashtable concurrency performance
 
-This parameter controls the concurrency of accessing the hash table from multiple threads. To optimize for concurrent lookups, cachelib shard's the hash table by locks across the keys. Most likely you do not have to configure this parameter from its default value of 10 unless you notice perf/strobelight samples showing SharedMutex stack in cachelib code path.
+`ChainedHashTable::Config::locksPower` parameter controls the concurrency of accessing the hash table from multiple threads. To optimize for concurrent lookups, cachelib shard's the hash table by locks across the keys. Most likely you do not have to configure this parameter from its default value of 10 unless you notice `perf` samples showing SharedMutex stack in cachelib code path.
 
 
 ```cpp

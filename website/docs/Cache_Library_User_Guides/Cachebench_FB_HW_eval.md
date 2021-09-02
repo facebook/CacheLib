@@ -64,7 +64,7 @@ Cachebench has three configs packaged for SSD validation. These are under `test_
 
 
 1. Change to the path where you previously copied cachebench to.
-    ```sh 
+    ```sh
     cd <your path>
     ```
 2. If `/dev/md0` is not being used, edit workload files appropiately.

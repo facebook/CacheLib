@@ -51,7 +51,7 @@ class CacheAllocator : public CacheBase {
 };
 ```
 
-## Insertion Order and Read Order
+## Insertion order and read order
 Chained items are inserted in LIFO order. When user reads through the chained item using the ChainedAllocs API. The iteration happens in LIFO order starting with the most recently inserted chained item until the chained item inserted first. When user uses `convertToIOBuf` API, it is in FIFO order starting with the parent, and end with the most recently inserted chained item.
 
 For example:
@@ -74,6 +74,9 @@ auto iobuf = cache->convertToIOBuf(std::move(parent));
 
 ## Example: A custom data structure with a large data blob.
 
+
+Let's assume we have a data structure that represents a large cache payload.
+
 ```cpp
 struct LargeUserData {
   uint64_t version;
@@ -81,7 +84,14 @@ struct LargeUserData {
   size_t length;
   int[] data;
 };
+```
 
+The following code breaks this large cache data and caches it using mulitple
+items through `ChainedItems`.
+
+<details> <summary> Caching `LargeUserData` with chained items </summary>
+
+```cpp
 std::unique_ptr<LargeUserData> userData = getLargeUserData();
 
 size_t userDataSize = sizeof(LargeUserData) + sizeof(int) * userData->length;
@@ -126,3 +136,4 @@ for (size_t i = 0; i < numChunks; ++i) {
 // Now, make parent item visible to others
 cache.insert(parentItemHandle);
 ```
+</details>

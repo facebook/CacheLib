@@ -1,18 +1,16 @@
 ---
 id: Structured_Cache
-title: Structured Cache
+title: Structured cache
 ---
-
-# General approach
 
 Cachelib enables you to build structured data on top of a cache instead of treating it as just a blob-cache. Data structures let you focus on the actual logic instead of being worried about where a memory allocation comes from. Of course, we're still bound by physical limits such as the 4 MB ceiling for any single piece of allocations, but in practice we rarely need to make use of that big an allocation. We provide a generic memory allocator that can take in one or more buffers of memory (one buffer correspond to an item type in cache). Cachelib data types are built by making use of this memory allocator.
 
-# FixedSizeArray
+## FixedSizeArray
 
-## Prerequisites for Key and Value
+### Prerequisites for Key and Value
 Both key and value must be POD and fixed size.
 
-## FixedSizeArray APIs
+### FixedSizeArray APIs
 For a complete list of FixedSizeArray APIs, see `cachelib/datatype/FixedSizeArray.h`.
 
 User must specify the size of the array before creating it. Creating the array does NOT initialize any data. Users are responsible for initializing the values in the array.
@@ -32,11 +30,11 @@ Element& at(uint32_t index) { return layout_->at(index); }
 const Element& at(uint32_t index) const { return layout_->at(index); }
 ```
 
-# Map
+## Map
 
 The following sections discuss the `Map` data structure.
 
-## Prerequisites for Key and Value
+### Prerequisites for Key and Value
 
 A `cachelib::Map` is a hash map implementation that can store fixed size key to variable size value. Our map implementation currently has more limitations than `std::unordered_map` due to the nature of cachelib's memory model. The following describes what is required of the `Key` and `Value` types.
 
@@ -65,7 +63,7 @@ struct Value {
 ```
 
 
-## Map APIs
+### Map APIs
 
 For a complete list of the Map APIs, see cachelib/datatype/Map.h.
 
@@ -159,7 +157,7 @@ void compact();
 ```
 
 
-## Map architecture
+### Map architecture
 
 Our map implementation uses robin-hood hash table to achieve high load factor and a stack allocator for simplicity. In terms of memory layout, `cachelib::Map` always makes use of at least two buffers (cachelib items). The first buffer (parent item) is used for hash table and the second (and third, and fourth, etc.) is used to store values. Our design (like any data structures) comes with a fixed up-front cost in storage and also per-entry storage overhead. The numbers currently are 16 bytes per entry (12 bytes for the hash table and 4 bytes for each value allocation), and 20 bytes of fixed cost. Each additional value buffer (which can fit multiple values) adds another 12 bytes.
 
@@ -185,15 +183,15 @@ So to use `cachelib::Map` properly in a multi-threaded environment, follow these
 2. Look up item handle from cache and convert it to an instance of cachelib::Map.
 3. Write.
 
-# RangeMap
+## RangeMap
 
-The following sections discuss the `RangeMap` data structure.
+Unlike `Map`, `RangeMap` exposes an ordered map implementation.The following sections discuss the `RangeMap` data structure.
 
-## Prerequisites for Key and Value
+### Prerequisites for Key and Value
 
 The `Key` and `Value` for `RangeMap` have the exact same requirements for [Map](#Map ). In addition, `Key` must support the equality and comparison operators (e.g., `operator==`, `operator!=`, `operator<`, `operator>`, etc.).
 
-## RangeMap APIs
+### RangeMap APIs
 
 For a complete list of the RangeMap APIs, see `cachelib/datatype/RangeMap.h`.
 
@@ -313,7 +311,7 @@ folly::Range<ConstItr> rangeLookupApproximate(
 ```
 
 
-## RangeMap architecture
+### RangeMap architecture
 
 The `Value` storage is identical to `cachelib::Map`. The main difference is in the index. We use a binary index to support efficient range lookups and ordered iteration. The index itself is just a sorted array of `{key, compressed ptr}`. The cost of a lookup is O(LOG(N)). The cost of an insert is typically O(N) as we have to insert data into the binary index. This means the insertion performance will degrade rapidly if the index size grows too large (e.g., beyond 1000s).
 

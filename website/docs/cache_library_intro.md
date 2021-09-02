@@ -1,21 +1,13 @@
 ---
 id: cache_library_intro
-title: Cache Library User Guides
+title: CacheLib user guide
 slug: /
 ---
 
-
-
-## Cache Library User Guides
-
-
-
-
-
-Cache Library (cachelib) is a C++ library for accessing and managing cache data. It is a
+Cache library (CacheLib) is a C++ library for accessing and managing cache data. It is a
 thread-safe API that enables developers to build and customize scalable, concurrent caches.
 
-## Who should be using cachelib?
+## Who should be using CacheLib?
 
 CacheLib is targeted at services that use gigabytes of memory to cache information. It provides an API similar to `malloc` and a concurrent unordered hash table for caching. Consider using cache and cachelib for your service if any of the following applies to the service:
 
@@ -36,4 +28,4 @@ To get started with cachelib, read these guides:
 - [Remove data from the cache](Cache_Library_User_Guides/Remove_data_from_cache/ ).
 - [Visit data in the cache](Cache_Library_User_Guides/Visit_data_in_cache/ ).
 
-Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer to our architecture guide.
+Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer [architecture guide](../learnmore/).

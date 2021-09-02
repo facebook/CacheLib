@@ -3,11 +3,9 @@ id: compact_cache
 title: Compact cache
 ---
 
-# Annoucement
-
 **This feature is in maintenance mode**. All future development plans are dropped. We understand there is value in optimizing for very small payloads, but we think the correct direction is to reduce item overhead in the regular cache instead of adding small, separate caches that offer low space overhead. Please reach out to us directly if you have a strong need for a RAM cache optimized for very small items.
 
-# Overview
+## Overview
 
 Compact cache is optimal to cache *small key-value data*, usually less than tens of bytes per entry. At compile time, the key must be fixed size, while the value can be fixed size or variable size or empty. Compact cache avoids the overhead (32 bytes per entry) incurred to an item stored in a regular cache. Compact cache has almost 0 bytes overhead for fixed size values. For variable sized entries, we pay a 3 byte overhead per bucket, and 4 bytes per entry. Compact cache is also a good alternative for `folly::EvictingCacheMap`, which has an overhead of 24 bytes per entry. In general, these optimizations only matter when your cache size in hundreds of MB or higher.
 
@@ -15,7 +13,7 @@ To optimize for small values, compact cache makes a few trade-offs and API chang
 
 For more information, see cachelib/examples/simple_compact_cache/main.cpp
 
-## Defining Compact Cache instance
+## Defining compact cache instance
 
 To get started, define the compact cache key type and value type:
 
@@ -62,7 +60,7 @@ Values' sizes are varied, but less than a predefined maximum size.
 - `ZeroSizeValueCCache`
 Useful for storing keys that are not associated with any values.
 
-## Creating Compact Cache instance
+## Creating compact cache instance
 
 After defining a compact cache type, you can start creating an instance of it from the main cache:
 
@@ -83,7 +81,7 @@ auto* ccache = cache.addCompactCache<MyCCacheType>("ccache name", sizeInBytes);
 ```
 
 
-## Caching using Compact Cache
+## Caching using compact cache
 
 Once you have the cache setup, you can store your keys and values in the compact cache using the following API
 
@@ -119,7 +117,7 @@ enum class CCacheReturn : int {
 ```
 
 
-## Restoring an instance of Compact Cache
+## Restoring an instance of compact cache
 
 This is only relevant if your cache is persistent and you want to access the cache that you have previously created in another process. After the compact cache was attached, you should be able to use the instance the same way as you did when you first created it, with all the previous content intact:
 

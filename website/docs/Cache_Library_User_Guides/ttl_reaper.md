@@ -1,6 +1,6 @@
 ---
 id: ttl_reaper
-title: Ttl reaper
+title: TTL Reaper
 ---
 
 Cachelib allocators support time to live (TTL) on an item natively at the granularity of seconds. When you set a TTL on an item, the item is automatically reaped if it is still present in the cache after its expiry.  The `find()` method returns an empty handle (`nullptr`) for an item that has expired.
