@@ -51,6 +51,8 @@ set(LIB_INSTALL_DIR lib CACHE STRING
     "The subdirectory where libraries should be installed")
 set(CMAKE_INSTALL_DIR lib/cmake/cachelib CACHE STRING
     "The subdirectory where CMake package config files should be installed")
+set(CONFIGS_INSTALL_DIR test_configs CACHE STRING
+    "The subdirectory where sample test configurations should be installed")
 
 # When installing the library (and dependencies like folly) in a non-default
 # prefix, this will let projects linking against *.so to find libfolly.so
@@ -327,6 +329,11 @@ configure_package_config_file(
 install(
   FILES ${CMAKE_CURRENT_BINARY_DIR}/cachelib-config.cmake
   DESTINATION ${CMAKE_INSTALL_DIR}
+)
+
+install(
+  DIRECTORY ${CACHELIB_HOME}/cachebench/test_configs/
+  DESTINATION ${CONFIGS_INSTALL_DIR}
 )
 
 add_library(cachelib INTERFACE)

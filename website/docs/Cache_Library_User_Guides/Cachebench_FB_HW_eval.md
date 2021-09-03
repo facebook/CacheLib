@@ -56,17 +56,82 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     ./cachebench --help
     ```
 
-4. Sample test configurations are provided in `./cachelib/cachebench/test_configs/`.
-    Examples:
+4. Sample test configurations are provided in `./opt/cachelib/test_configs/`.
+    Example:
+
     ```sh
-    ./opt/cachelib/bin/cachebench --json_test_config cachelib/cachebench/test_configs/simple_test.json
+    cd ./opt/cachelib
+    ./bin/cachebench --json_test_config ./test_configs/simple_test.json
     ```
-    or
-    ```sh
-    cp cachelib/cachebench/test_configs/simple_test.json ./opt/cachelib/bin
-    cd ./opt/cachelib/bin
-    ./cachebench --json_test_config simple_test.json
-    ```
+
+<details>
+<summary>Expected Output of test run</summary>
+
+    $ cd ./opt/cachelib
+    $ ./bin/cachebench --json_test_config ./test_configs/simple_test.json
+    ===JSON Config===
+    // @nolint instantiates a small cache and runs a quick run of basic operations.
+    {
+      "cache_config" : {
+        "cacheSizeMB" : 512,
+        "poolRebalanceIntervalSec" : 1,
+        "moveOnSlabRelease" : false,
+
+        "numPools" : 2,
+        "poolSizes" : [0.3, 0.7]
+      },
+      "test_config" : {
+
+          "numOps" : 100000,
+          "numThreads" : 32,
+          "numKeys" : 1000000,
+
+          "keySizeRange" : [1, 8, 64],
+          "keySizeRangeProbability" : [0.3, 0.7],
+
+          "valSizeRange" : [1, 32, 10240, 409200],
+          "valSizeRangeProbability" : [0.1, 0.2, 0.7],
+
+          "getRatio" : 0.15,
+          "setRatio" : 0.8,
+          "delRatio" : 0.05,
+          "keyPoolDistribution": [0.4, 0.6],
+          "opPoolDistribution" : [0.5, 0.5]
+        }
+    }
+
+    Welcome to OSS version of cachebench
+    Created 897,355 keys in 0.00 mins
+    Generating 1.60M sampled accesses
+    Generating 1.60M sampled accesses
+    Generated access patterns in 0.00 mins
+    Total 3.20M ops to be run
+    12:07:12       0.00M ops completed
+    == Test Results ==
+    == Allocator Stats ==
+    Items in RAM  : 96,995
+    Items in NVM  : 0
+    Alloc Attempts: 2,559,176 Success: 100.00%
+    RAM Evictions : 2,163,672
+    Cache Gets    : 480,592
+    Hit Ratio     :  10.97%
+    NVM Gets      :               0, Coalesced : 100.00%
+    NVM Puts      :               0, Success   :   0.00%, Clean   : 100.00%, AbortsFromDel   :        0, AbortsFromGet   :        0
+    NVM Evicts    :               0, Clean     : 100.00%, Unclean :       0, Double          :        0
+    NVM Deletes   :               0 Skipped Deletes: 100.00%
+    Released 21 slabs
+      Moves     : attempts:          0, success: 100.00%
+      Evictions : attempts:      3,040, success:  99.57%
+
+    == Throughput for  ==
+    Total Ops : 3.20 million
+    Total sets: 2,559,176
+    get       :    49,453/s, success   :  10.97%
+    set       :   263,344/s, success   : 100.00%
+    del       :    16,488/s, found     :  10.83%
+
+</details>
+
 
 5. If fio is not installed, build it with:
     ```sh
