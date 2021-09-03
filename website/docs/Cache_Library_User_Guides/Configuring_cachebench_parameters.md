@@ -166,7 +166,7 @@ Percentage of LRU dedicated for hot items
 * `lru2qColdPct`
 Percentage of LRU dedicated for cold items.
 
-For more details on the semantics of these parameters, see the documentation in [Eviction Policy guide](eviction_policy/ ).
+For more details on the semantics of these parameters, see the documentation in [Eviction Policy guide](eviction_policy).
 
 ### Pools
 
@@ -190,7 +190,7 @@ CacheLib uses a hashtable to index keys. The configuration of the hashtable can 
 
 ### Pool rebalancing
 
-To enable cachelib pool rebalancing techniques, you can set `poolRebalanceIntervalSec`. The default strategy is to randomly release a slab to test for correctness. You can configure this to your preference by setting `rebalanceStrategy` as "tail-age" or "hits". You can also specify `rebalanceMinSlabs` and `rebalanceDiffRatio` to configure this further per documentation in [Pool rebalancing guide](pool_rebalance_strategy/ ).
+To enable cachelib pool rebalancing techniques, you can set `poolRebalanceIntervalSec`. The default strategy is to randomly release a slab to test for correctness. You can configure this to your preference by setting `rebalanceStrategy` as "tail-age" or "hits". You can also specify `rebalanceMinSlabs` and `rebalanceDiffRatio` to configure this further per documentation in [Pool rebalancing guide](pool_rebalance_strategy).
 
 ## Hybrid cache parameters
 
@@ -208,7 +208,7 @@ CacheBench can monitor the write-amplification of supported underlying devices i
 
 ###  Storage engine parameters
 
-Set the following parameters to control the performance of the hybrid cache storage engine. See [Hybrid Cache](HybridCache ) for more details.
+Set the following parameters to control the performance of the hybrid cache storage engine. See [Hybrid Cache](HybridCache) for more details.
 
 * `navyReaderThreads`  and `navyWriterThreads`
 Control the reader and writer thread pools.
@@ -261,4 +261,4 @@ Number of memory buffers used to optimize write performance.
 * `navyCleanRegions`
 When un-buffered, the size of the clean regions pool.
 * `navyRegionSizeMB`
-This controls the region size to use for BlockCache. If not specified, 16MB will be used. See [Configure HybridCache](Configure_HybridCache/) for more details.
+This controls the region size to use for BlockCache. If not specified, 16MB will be used. See [Configure HybridCache](Configure_HybridCache) for more details.

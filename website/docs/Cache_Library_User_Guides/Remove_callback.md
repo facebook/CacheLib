@@ -53,7 +53,7 @@ struct RemoveCbData {
 
 * `context` This refers to the context of removal. `RemoveCB` can be called [invoked] on an item when it is explicitly removed by the user through the `remove()` API or when it is replacing an old item through the `insertOrReplace()` API, or when it being evicted to make room for a new item. For the first two calls on `RemoveCB`, the context is `kRemoval`; and for eviction, the context is `kEviction`.
 * `item` Reference to the item that is being destroyed. Modifying the item at this point is pointless because this is the last handle to the item and the memory will be recycled after the call to the remove callback.
-* `chainedAllocs` This provides a reference to the list of chained items associated with the given item if they exist. For details on what chained allocations are, see [visit data in cache](Visit_data_in_cache/ ).
+* `chainedAllocs` This provides a reference to the list of chained items associated with the given item if they exist. For details on what chained allocations are, see [visit data in cache](Visit_data_in_cache).
 
 ## Guarantees
 

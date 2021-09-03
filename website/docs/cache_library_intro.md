@@ -22,10 +22,10 @@ CacheLib is targeted at services that use gigabytes of memory to cache informati
 ## Getting started with CacheLib
 
 To get started with cachelib, read these guides:
-- [Set up a simple cache](Cache_Library_User_Guides/Set_up_a_simple_cache/ )
-- [Write data to the cache](Cache_Library_User_Guides/Write_data_to_cache/ ).
-- [Read data from the cache](Cache_Library_User_Guides/Read_data_from_cache/ ).
-- [Remove data from the cache](Cache_Library_User_Guides/Remove_data_from_cache/ ).
-- [Visit data in the cache](Cache_Library_User_Guides/Visit_data_in_cache/ ).
+- [Set up a simple cache](Cache_Library_User_Guides/Set_up_a_simple_cache)
+- [Write data to the cache](Cache_Library_User_Guides/Write_data_to_cache).
+- [Read data from the cache](Cache_Library_User_Guides/Read_data_from_cache).
+- [Remove data from the cache](Cache_Library_User_Guides/Remove_data_from_cache).
+- [Visit data in the cache](Cache_Library_User_Guides/Visit_data_in_cache).
 
-Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer [architecture guide](../learnmore/).
+Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer [architecture guide](../learnmore).

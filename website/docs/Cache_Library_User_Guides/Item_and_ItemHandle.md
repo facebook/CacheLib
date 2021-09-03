@@ -7,7 +7,7 @@ An *item* is the fundamental memory allocation backing an object in cache. Throu
 
 An `ItemHandle` is similar to a `std::shared_ptr<Item>`. Cachelib APIs like `find()`, `allocate()`, and `insertOrReplace()` return an `ItemHandle`. Because an item may be accessed concurrently, to ensure that the underlying memory backing the item is valid, use its `ItemHandle` to access it. This guarantees that during the lifetime of the `ItemHandle`, its item will never be evicted or reclaimed by any other thread.
 
-In addition, `ItemHandle` also provides future semantics offered in Hybrid Cache(flash). For more information, see [Hybrid Cache](HybridCache/ ).
+In addition, `ItemHandle` also provides future semantics offered in Hybrid Cache(flash). For more information, see [Hybrid Cache](HybridCache).
 
 ## Item memory overhead
 

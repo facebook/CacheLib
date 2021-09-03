@@ -3,7 +3,7 @@ id: Write_data_to_cache
 title: Write data to cache
 ---
 
-After [setting up your cache](Set_up_a_simple_cache/ ), you can start writing data to it.
+After [setting up your cache](Set_up_a_simple_cache), you can start writing data to it.
 
 To use cachelib to write data to your cache:
 
@@ -48,7 +48,7 @@ ItemHandle item_handle = cache->allocate(pool_id, "key1", 1024);
 
 
 where:
-- `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple dram cache](Set_up_a_simple_cache/ )).
+- `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple dram cache](Set_up_a_simple_cache)).
 - `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::HandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
 
 To get the writable memory from the allocated memory, call the `getWritableMemory` method via the item handle:
@@ -61,7 +61,7 @@ if (item_handle) {
 ```
 
 
-If the data size is greater than the maximum slab size (4 MB), use [chained items](chained_items/ ) to store the data with multiple items. To allocate memory for additional chained items from cache, call this method:
+If the data size is greater than the maximum slab size (4 MB), use [chained items](chained_items) to store the data with multiple items. To allocate memory for additional chained items from cache, call this method:
 
 
 ```cpp

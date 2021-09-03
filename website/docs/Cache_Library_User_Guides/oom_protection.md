@@ -43,7 +43,7 @@ Free memory value at which the cache will start shrinking to increase the system
 Free memory value at which the shrunken cache will grow back to its previous size.
 
 * `strategy`
-Strategy to use for freeing up the memory. For more information, see [Pool rebalance strategy](pool_rebalance_strategy/ ).
+Strategy to use for freeing up the memory. For more information, see [Pool rebalance strategy](pool_rebalance_strategy).
 
 For example, if your `config.size` was 100 GB and you are running on a system with 144 GB, with intent to have free memory around 10 GB. Setting `minFreeMem=10GB`, `maxFreeMem=15GB`, `maxResizePerIterationPercent=10`, `maxRemovedPercent=5` would make cachelib give away cache memory when free memory is below 10 GB and grow back the cache when free memory jumps above 15 GB. While shrinking, it will give away 10% of 5GB = 500MB in each iteration and only give up a maximum of 8% of the cache, which is 8 GB at the maximum. Note that if your heap usage regresses by more than 8 GB, this means that cachelib can no longer shrink itself to save you from dipping below your expected 10 GB head room.
 

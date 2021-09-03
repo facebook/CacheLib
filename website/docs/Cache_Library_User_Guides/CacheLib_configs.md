@@ -49,15 +49,15 @@ CacheLib has worker threads that run in background for asynchronous jobs. These 
 * Pool resizers:
    * *setCacheWorkerPostWorkHandler*: This sets a callback that is called on some workers.
    * *enablePoolResizing*: Pool resizing configs.
-* [Pool reballancing](pool_rebalance_strategy/):
+* [Pool rebalancing](pool_rebalance_strategy):
    * *setCacheWorkerPostWorkHandler*: Similarly, the same callback is used for pool rebalancer. Notice that here a default rebalancing strategy is provided for all pools. It could be overridden later with dynamic config.
    * *enablePoolRebalancing*: Pool rebalancing configs.
-* [Memory monitor](oom_protection/):
+* [Memory monitor](oom_protection):
    * *setCacheWorkerPostWorkHandler*: Similarly, the same callback is used for memory monitor.
    * *enableFreeMemoryMonitor*/enableResidentMemoryMonitor: Memory monitor configs.
 * [Reapers](ttl_reaper/#configure-reaper):
    * *enableItemReaperInBackground*: Reaper configs.
-* [Pool optimizer](automatic_pool_resizing/):
+* [Pool optimizer](automatic_pool_resizing):
    * *enablePoolOptimizer*
 
 ### Other configs

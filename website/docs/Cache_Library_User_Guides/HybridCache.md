@@ -17,7 +17,7 @@ The following sections describe how to configure HybridCache, how to allocate me
 
 ### Configuration
 
-To use HybridCache, you need to set the appropriate options in the cache's config under the `nvmConfig` section. Refer to [Configure HybridCache](Configure_HybridCache/ ) for a list of options to configure for the HybridCache's backing engine.
+To use HybridCache, you need to set the appropriate options in the cache's config under the `nvmConfig` section. Refer to [Configure HybridCache](Configure_HybridCache) for a list of options to configure for the HybridCache's backing engine.
 
 For example:
 

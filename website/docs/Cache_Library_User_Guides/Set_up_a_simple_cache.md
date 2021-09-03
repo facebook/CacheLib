@@ -12,7 +12,7 @@ To set up a simple dram cache, you need to provide the following to cachelib:
 - Cache configuration
   - What's the cache size?
   - What's the name of the cache?
-  - What's the access configuration for the cache? The access configuration is used to tune the [hash table](Configure_HashTable/ ) for looking up data in cache.
+  - What's the access configuration for the cache? The access configuration is used to tune the [hash table](Configure_HashTable) for looking up data in cache.
 
 The allocator/CacheAllocator.cpp file instantiates the following class templates for different eviction policies:
 
@@ -25,7 +25,7 @@ template class CacheAllocator<TinyLFUCacheTrait>;
 ```
 
 
-where `LruCacheTrait`, `LruCacheWithSpinBucketsTrait`, `Lru2QCacheTrait`, and `TinyLFUCacheTrait` are declared in allocator/CacheTraits.h. You can configure the eviction parameters. For more information, see [Eviction Policy](eviction_policy/ ).
+where `LruCacheTrait`, `LruCacheWithSpinBucketsTrait`, `Lru2QCacheTrait`, and `TinyLFUCacheTrait` are declared in allocator/CacheTraits.h. You can configure the eviction parameters. For more information, see [Eviction Policy](eviction_policy).
 
 LRU is the most commonly used trait. To use LRU as the eviction policy for your cache, use the following instantiated class:
 
@@ -146,10 +146,10 @@ int main(int argc, char** argv) {
 ## Use cache
 
 After setting up a simple cache, you can do the following:
-- [Write data to the cache](Write_data_to_cache/ ).
-- [Read data from the cache](Read_data_from_cache/ ).
-- [Remove data from the cache](Remove_data_from_cache/ ).
-- [Visit data in the cache](Visit_data_in_cache/ ).
+- [Write data to the cache](Write_data_to_cache).
+- [Read data from the cache](Read_data_from_cache).
+- [Remove data from the cache](Remove_data_from_cache).
+- [Visit data in the cache](Visit_data_in_cache).
 
 ## Release and delete cache
 

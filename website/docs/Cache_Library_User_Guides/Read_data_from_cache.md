@@ -47,7 +47,7 @@ if (item_handle) {
 ```
 
 
-You can also use iterators to read all the items written to the cache. See [Visit data in cache](Visit_data_in_cache/ ).
+You can also use iterators to read all the items written to the cache. See [Visit data in cache](Visit_data_in_cache).
 
 To read data from chained items, start from the parent `ItemHandle`, for example:
 
@@ -61,7 +61,7 @@ for (const auto& c : chained_allocs.getChain()) {
 ```
 
 
-**Refer to [Chained items](chained_items/ ) to see how chained items are ordered in cache.**
+**Refer to [Chained items](chained_items) to see how chained items are ordered in cache.**
 
 To get the *n*th item in the chain, call the `getNthInChain()` method via `CacheChainedAllocs`:
 
