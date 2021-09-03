@@ -31,26 +31,47 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
 1. If you have not already, clone the cachelib repository from github.com:
 
    ```sh
-   git clone git@github.com:facebook/CacheLib.git
+   git clone https://github.com/facebook/CacheLib.git
    ```
 
 2. Build cachelib and `cachebench`:
     ```sh
     cd CacheLib
-   ./contrib/build.sh -d -j -v
-   ```
-    Note: it will take several minutes to install with all dependencies
-3. Copy the cachebench executable and the configs to an appropriate location
-   from which you want to run cachebench:
-   ```sh
-    cp ./opt/cachelib/bin/cachebench <your path>
-    cp -r cachebench/test_configs <your path>
-    cd <your path>
+    ./contrib/build.sh -j
+    ```
+    Notes:
+    * It will take several minutes to build and install all dependencies.
+    * Remove `-j` flag to build using only a single CPU (build will take longer)
+    * The script will automatically use `sudo` to install several OS packages (using `apt`, `dnf`, etc.)
+    * The build script has been tested to work on stable Debian, Ubuntu, CentOS, RockyLinux.
+      Other systems are possible but not officially supported.
+
+3. The resulting binaries and libraries will be in `./opt/cachelib`:
+    ```sh
+    ./opt/cachelib/bin/cachebench --help
+    ```
+    or
+    ```sh
+    cd ./opt/cachelib/bin/
+    ./cachebench --help
     ```
 
-4. If fio is not installed, build it with:
+4. Sample test configurations are provided in `./cachelib/cachebench/test_configs/`.
+    Examples:
     ```sh
-    git clone git@github.com:axboe/fio.git
+    ./opt/cachelib/bin/cachebench --json_test_config cachelib/cachebench/test_configs/simple_test.json
+    ```
+    or
+    ```sh
+    cp cachelib/cachebench/test_configs/simple_test.json ./opt/cachelib/bin
+    cd ./opt/cachelib/bin
+    ./cachebench --json_test_config simple_test.json
+    ```
+
+5. If fio is not installed, build it with:
+    ```sh
+    git clone https://github.com/axboe/fio.git
+    cd fio
     ./configure
     make
     make install
