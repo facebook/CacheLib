@@ -4,7 +4,8 @@
 
 # CacheLib
 
-Pluggable caching engine for scale high performance cache services
+Pluggable caching engine to build and scale high performance cache services. See
+[www.cachelib.org](https://cachelib.org) for documentation and more information.
 
 
 ## What is CacheLib ?
@@ -17,15 +18,14 @@ DRAM and SSD caching transparently.
 
 ## Performance benchmarking
 
-CacheLib provides a standalone executable `cachebench` that can be used to
+CacheLib provides a standalone executable `CacheBench` that can be used to
 evaluate the performance of heuristics and caching hardware platforms against
-production workloads. Additionally `cachebench` enables stress testing
+production workloads. Additionally `CacheBench` enables stress testing
 implementation and design changes to CacheLib to catch correctness and
 performance issues.
 
-See [benchmarks](BENCHMARKS.md) for usage details
+See [CacheBench](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) for usage details
 and examples.
-
 
 
 ## Building and installation
@@ -36,20 +36,19 @@ The build script has been tested to work on CentOS 8,
 Ubuntu 18.04, and Debian 10.
 
 ```sh
-git clone https://github.com/facebookincubator/CacheLib
+git clone https://github.com/facebook/CacheLib
 cd CacheLib
 ./contrib/build.sh -d -j -v
 
 # The resulting library and executables:
-./build-cachelib/cachebench/cachebench --help
+./opt/cachelib/bin/cachebench --help
 ```
 
 Re-running `./contrib/build.sh` will update CacheLib and its dependencies
 to their latest versions and rebuild them.
 
-See [build](BUILD.md) for more details about
+See [build](https://cachelib.org/docs/installation/installation) for more details about
 the building and installation process.
-
 
 
 ## Contributing
