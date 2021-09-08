@@ -109,7 +109,9 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
     auto it = keys_.find(key);
     if (it == keys_.end() || it->second == 0) {
       // this is not supposed to happen if guards are destroyed appropriately
-      throw std::runtime_error("Invalid state");
+      throw std::runtime_error(fmt::format(
+          "Invalid state. Key: {}. State: {}", key,
+          it == keys_.end() ? "does not exist" : "exists, but count is 0"));
     }
 
     if (--(it->second) == 0) {
