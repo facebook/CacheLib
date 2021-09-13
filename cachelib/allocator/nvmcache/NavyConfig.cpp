@@ -229,6 +229,52 @@ BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
   return *this;
 }
 
+KangarooConfig& KangarooConfig::setSizePctAndMaxItemSize(
+    unsigned int sizePct, uint64_t smallItemMaxSize) {
+  if (sizePct > 100) {
+    throw std::invalid_argument(folly::sformat(
+        "to enable Kangaroo, Kangaroo size pct should be in the range of [0, 100]"
+        ", but {} is set",
+        sizePct));
+  }
+  if (sizePct == 0) {
+    XLOG(INFO) << "Kangaroo is not configured";
+  }
+  sizePct_ = sizePct;
+  smallItemMaxSize_ = smallItemMaxSize;
+  return *this;
+}
+
+KangarooConfig& KangarooConfig::setLog(unsigned int sizePct, 
+                                       uint64_t physicalPartitions, 
+                                       uint64_t indexPerPhysicalPartitions,
+                                       uint32_t threshold) {
+  if (sizePct > 100) {
+    throw std::invalid_argument(folly::sformat(
+        "to enable KangarooLog, KangarooLog size pct should be in the range of [0, 100]"
+        ", but {} is set",
+        sizePct));
+  }
+  if (sizePct == 0) {
+    XLOG(INFO) << "KangarooLog is not configured";
+  }
+  logSizePct_ = sizePct;
+  if (indexPerPhysicalPartitions == 0) {
+    throw std::invalid_argument(folly::sformat(
+        "to enable KangarooLog, need >=1 index partitions per physical partition, {} is set",
+        indexPerPhysicalPartitions));
+  }
+  if (physicalPartitions == 0) {
+    throw std::invalid_argument(folly::sformat(
+        "to enable KangarooLog, need >=1 physical partitions, {} is set",
+        physicalPartitions));
+  }
+  physicalPartitions_ = physicalPartitions;
+  indexPerPhysicalPartitions_ = indexPerPhysicalPartitions;
+  threshold_ = threshold;
+  return *this;
+}
+
 void NavyConfig::setBigHash(unsigned int bigHashSizePct,
                             uint32_t bigHashBucketSize,
                             uint64_t bigHashBucketBfSize,
@@ -237,6 +283,22 @@ void NavyConfig::setBigHash(unsigned int bigHashSizePct,
       .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
       .setBucketSize(bigHashBucketSize)
       .setBucketBfSize(bigHashBucketBfSize);
+}
+
+void NavyConfig::setKangaroo(unsigned int kangarooSizePct,
+                            uint32_t kangarooBucketSize,
+                            uint64_t kangarooBucketBfSize,
+                            uint64_t kangarooSmallItemMaxSize,
+                            uint64_t kangarooLogSizePct,
+                            uint64_t kangarooLogThreshold,
+                            uint64_t kangarooLogPhysicalPartitions,
+                            uint32_t kangarooLogIndexPerPhysicalPartitions) {
+  kangarooConfig_
+      .setSizePctAndMaxItemSize(kangarooSizePct, kangarooSmallItemMaxSize)
+      .setBucketSize(kangarooBucketSize)
+      .setBucketBfSize(kangarooBucketBfSize)
+      .setLog(kangarooLogSizePct, kangarooLogThreshold, 
+              kangarooLogPhysicalPartitions, kangarooLogIndexPerPhysicalPartitions);
 }
 // job scheduler settings
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {

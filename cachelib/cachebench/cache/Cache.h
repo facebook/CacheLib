@@ -347,6 +347,7 @@ class Cache {
 
   // reading of the nand bytes written for the benchmark if enabled.
   const uint64_t nandBytesBegin_{0};
+  uint64_t writtenBytes_{0};
 
   // latency stats of cachelib APIs inside cachebench
   mutable util::PercentileStats cacheFindLatency_;

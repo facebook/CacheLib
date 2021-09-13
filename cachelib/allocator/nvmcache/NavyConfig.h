@@ -322,6 +322,90 @@ class BigHashConfig {
 };
 
 /**
+ * KangarooConfig provides APIs for users to configure Kangaroo engine, which is
+ * one part of NavyConfig.
+ *
+ * By this class, users can:
+ * - enable Kangaroo by setting sizePct > 0
+ * - set maximum item size
+ * - set bucket size
+ * - set bloom filter size (0 to disable bloom filter)
+ * - set log percent and number of partitions
+ * - get the values of all the above parameters
+ */
+class KangarooConfig {
+ public:
+  // Set Kangaroo device percentage and maximum item size(in bytes) to enable
+  // Kangaroo engine. Default value of sizePct and smallItemMaxSize is 0,
+  // meaning Kangaroo is not enabled.
+  // @throw std::invalid_argument if sizePct is not in the range of
+  //        [0, 100].
+  KangarooConfig& setSizePctAndMaxItemSize(unsigned int sizePct,
+                                          uint64_t smallItemMaxSize);
+
+  // Set the bucket size in bytes for Kangaroo engine.
+  // Default value is 4096.
+  KangarooConfig& setBucketSize(uint32_t bucketSize) noexcept {
+    bucketSize_ = bucketSize;
+    return *this;
+  }
+  
+  // Set bloom filter size per bucket in bytes for Kangaroo engine.
+  // 0 means bloom filter will not be applied. Default value is 8.
+  KangarooConfig& setBucketBfSize(uint64_t bucketBfSize) noexcept {
+    bucketBfSize_ = bucketBfSize;
+    return *this;
+  }
+
+  // Set bloom filter size per bucket in bytes for Kangaroo engine.
+  // 0 means bloom filter will not be applied. Default value is 8.
+  KangarooConfig& setLog(unsigned int sizePct, 
+                         uint64_t physicalPartitions,
+                         uint64_t indexPerPhysicalParitions,
+                         uint32_t threshold);
+
+  bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
+
+  unsigned int getSizePct() const { return sizePct_; }
+
+  uint32_t getBucketSize() const { return bucketSize_; }
+
+  uint64_t getBucketBfSize() const { return bucketBfSize_; }
+
+  uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
+  
+  unsigned int getLogSizePct() const { return logSizePct_; }
+
+  uint64_t getPhysicalPartitions() const { return physicalPartitions_; }
+  
+  uint64_t getIndexPerPhysicalPartitions() const { return indexPerPhysicalPartitions_; }
+
+  uint32_t getLogThreshold() const { return threshold_; }
+
+ private:
+  // Percentage of how much of the device out of all is given to Kangaroo
+  // engine in Navy, e.g. 50.
+  unsigned int sizePct_{0};
+  // Navy Kangaroo engine's bucket size (must be multiple of the minimum
+  // device io block size).
+  // This size determines how big each bucket is and what is the physical
+  // write granularity onto the device.
+  uint32_t bucketSize_{4096};
+  // The bloom filter size per bucket in bytes for Navy Kangaroo engine
+  uint64_t bucketBfSize_{8};
+  // The maximum item size to put into Navy Kangaroo engine.
+  uint64_t smallItemMaxSize_{};
+  // Percent of Kangaroo to dedicate to KangarooLog
+  unsigned int logSizePct_{0}; 
+  // Number of physical partitions of KangarooLog
+  uint64_t physicalPartitions_{1};
+  // Number of index partitions of KangarooLog
+  uint64_t indexPerPhysicalPartitions_{1};
+  // Threshold for moving items from KangarooLog to sets
+  uint32_t threshold_{1};
+};
+
+/**
  * NavyConfig provides APIs for users to set up Navy related settings for
  * NvmCache.
  *
@@ -341,6 +425,7 @@ class NavyConfig {
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
   bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
+  bool isKangarooEnabled() const { return kangarooConfig_.getSizePct() > 0; }
   std::map<std::string, std::string> serialize() const;
 
   // Getters:
@@ -371,14 +456,20 @@ class NavyConfig {
   // Returns the threshold of classifying an item as small item or large item
   // for Navy engine.
   uint64_t getSmallItemThreshold() const {
-    if (!isBigHashEnabled()) {
+    if (isBigHashEnabled()) {
+      return bigHashConfig_.getSmallItemMaxSize();
+    } else if (isKangarooEnabled()) {
+      return kangarooConfig_.getSmallItemMaxSize();
+    } else {
       return 0;
     }
-    return bigHashConfig_.getSmallItemMaxSize();
   }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BigHashConfig& bigHash() const { return bigHashConfig_; }
+
+  // Return a const KangarooConfig to read values of its parameters.
+  const KangarooConfig& kangaroo() const { return kangarooConfig_; }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
@@ -506,6 +597,21 @@ class NavyConfig {
                   uint64_t bigHashSmallItemMaxSize);
   // Return BigHashConfig for configuration.
   BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
+  
+  // ============ Kangaroo settings =============
+  // (Deprecated) Set the parameters for Kangaroo.
+  // @throw std::invalid_argument if kangarooSizePct is not in the range of
+  //        0~100.
+  void setKangaroo(unsigned int kangarooSizePct,
+                  uint32_t kangarooBucketSize,
+                  uint64_t kangarooBucketBfSize,
+                  uint64_t kangarooSmallItemMaxSize,
+                  uint64_t kangarooLogSizePct,
+                  uint64_t kangarooLogThreshold,
+                  uint64_t kangarooLogPhysicalPartitions,
+                  uint32_t kangarooLogIndexPerPhysicalPartitions);
+  // Return KangarooConfig for configuration.
+  KangarooConfig& kangaroo() noexcept { return kangarooConfig_; }
 
   // ============ Job scheduler settings =============
   void setReaderAndWriterThreads(unsigned int readerThreads,
@@ -556,6 +662,9 @@ class NavyConfig {
 
   // ============ BigHash settings =============
   BigHashConfig bigHashConfig_{};
+  
+  // ============ Kangaroo settings =============
+  KangarooConfig kangarooConfig_{};
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.

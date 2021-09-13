@@ -93,6 +93,66 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
   return bigHashCacheOffset;
 }
 
+uint64_t setupKangaroo(const navy::KangarooConfig& kangarooConfig,
+                      uint32_t ioAlignSize,
+                      uint64_t totalCacheSize,
+                      uint64_t metadataSize,
+                      cachelib::navy::CacheProto& proto) {
+  auto bucketSize = kangarooConfig.getBucketSize();
+  if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
+    throw std::invalid_argument(
+        folly::sformat("Bucket size: {} is not aligned to ioAlignSize: {}",
+                       bucketSize, ioAlignSize));
+  }
+
+  // If enabled, Kangaroo storage starts after BlockCache's.
+  const auto sizeReservedForKangaroo =
+      totalCacheSize * kangarooConfig.getSizePct() / 100ul;
+
+  const uint64_t kangarooCacheOffset =
+      alignUp(totalCacheSize - sizeReservedForKangaroo, bucketSize);
+  const uint64_t kangarooCacheSize =
+      alignDown(totalCacheSize - kangarooCacheOffset, bucketSize);
+
+  auto kangaroo = cachelib::navy::createKangarooProto();
+  kangaroo->setLayout(kangarooCacheOffset, kangarooCacheSize, bucketSize);
+
+  // Bucket Bloom filter size, bytes
+  //
+  // Experiments showed that if we have 16 bytes for BF with 25 entries,
+  // then optimal number of hash functions is 4 and false positive rate
+  // below 10%.
+  if (kangarooConfig.isBloomFilterEnabled()) {
+    // We set 4 hash function unconditionally. This seems to be the best
+    // for our use case. If BF size to bucket size ratio gets lower, try
+    // to reduce number of hashes.
+    constexpr uint32_t kNumHashes = 4;
+    const uint32_t bitsPerHash =
+        kangarooConfig.getBucketBfSize() * 8 / kNumHashes;
+    kangaroo->setBloomFilter(kNumHashes, bitsPerHash);
+  }
+
+  if (kangarooConfig.getLogSizePct()) {
+    const uint64_t logSize = alignDown(
+            kangarooCacheSize * kangarooConfig.getLogSizePct() / 100ul, 
+            bucketSize * 64);
+    const uint32_t threshold = kangarooConfig.getLogThreshold();
+    const uint64_t indexPerPhysical = kangarooConfig.getIndexPerPhysicalPartitions();
+    const uint64_t physical = kangarooConfig.getPhysicalPartitions();
+    kangaroo->setLog(logSize, threshold, physical, indexPerPhysical);
+  }
+
+  proto.setKangaroo(std::move(kangaroo), kangarooConfig.getSmallItemMaxSize());
+
+  if (kangarooCacheOffset <= metadataSize) {
+    throw std::invalid_argument("NVM cache size is not big enough!");
+  }
+  XLOG(INFO) << "metadataSize: " << metadataSize
+             << " kangarooCacheOffset: " << kangarooCacheOffset
+             << " kangarooCacheSize: " << kangarooCacheSize;
+  return kangarooCacheOffset;
+}
+
 void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                      uint64_t blockCacheSize,
                      uint32_t ioAlignSize,
@@ -202,6 +262,16 @@ void setupCacheProtos(const navy::NavyConfig& config,
     blockCacheSize = bigHashCacheOffset - metadataSize;
   } else {
     XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";
+    blockCacheSize = totalCacheSize - metadataSize;
+  }
+  
+  // Set up Kangaroo if enabled
+  if (config.isKangarooEnabled()) {
+    auto kangarooCacheOffset = setupKangaroo(config.kangaroo(), ioAlignSize,
+                                           totalCacheSize, metadataSize, proto);
+    blockCacheSize = kangarooCacheOffset - metadataSize;
+  } else {
+    XLOG(INFO) << "metadataSize: " << metadataSize << ". No kangaroo.";
     blockCacheSize = totalCacheSize - metadataSize;
   }
 
