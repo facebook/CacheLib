@@ -36,6 +36,16 @@ add_library (cachelib_navy
   common/Types.cpp
   driver/Driver.cpp
   Factory.cpp
+  kangaroo/ChainedLogIndex.cpp
+  kangaroo/Kangaroo.cpp
+  kangaroo/KangarooLog.cpp
+  kangaroo/KangarooLogSegment.cpp
+  kangaroo/KangarooBucketStorage.cpp
+  kangaroo/LogBucket.cpp
+  kangaroo/RripBucket.cpp
+  kangaroo/RripBitVector.cpp
+  kangaroo/RripBucketStorage.cpp
+  kangaroo/KangarooSizeDistribution.cpp
   scheduler/ThreadPoolJobScheduler.cpp
   scheduler/ThreadPoolJobQueue.cpp
   serialization/RecordIO.cpp
