@@ -3418,21 +3418,6 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
                         strategy);
 }
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::startNewMemMonitor(
-    MemoryMonitor::Mode memMonitorMode,
-    std::chrono::milliseconds interval,
-    unsigned int memAdviseReclaimPercentPerIter,
-    unsigned int memLowerLimitGB,
-    unsigned int memUpperLimitGB,
-    unsigned int memMaxAdvisePercent,
-    std::shared_ptr<RebalanceStrategy> strategy) {
-  memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
-  return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
-                        memAdviseReclaimPercentPerIter,
-                        memAdviseReclaimPercentPerIter, memLowerLimitGB,
-                        memUpperLimitGB, memMaxAdvisePercent, strategy);
-}
-template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
     std::chrono::milliseconds interval,
     util::Throttler::Config reaperThrottleConfig) {

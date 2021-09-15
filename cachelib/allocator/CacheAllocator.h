@@ -770,11 +770,14 @@ class CacheAllocator : public CacheBase {
   // start memory monitor
   // @param memMonitorMode                  memory monitor mode
   // @param interval                        the period this worker fires
-  // @param memAdviseReclaimPercentPerIter  Percentage of
+  // @param memAdvisePercentPerIter         Percentage of
   //                                        upperLimitGB-lowerLimitGB to be
-  //                                        advised or reclaimed every poll
-  //                                        period. This governs the rate of
-  //                                        advise/reclaim.
+  //                                        advised every poll period. This
+  //                                        governs the rate of advise
+  // @param memReclaimPercentPerIter        Percentage of
+  //                                        upperLimitGB-lowerLimitGB to be
+  //                                        reclaimed every poll period. This
+  //                                        governs the rate of reclaim
   // @param memLowerLimit                   The lower limit of resident memory
   //                                        in GBytes
   //                                        that triggers reclaiming of
@@ -791,15 +794,6 @@ class CacheAllocator : public CacheBase {
   //                                        OOM.
   // @param strategy                        strategy to find an allocation class
   //                                        to release slab from
-  bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
-                          std::chrono::milliseconds interval,
-                          unsigned int memAdviseReclaimPercentPerIter,
-                          unsigned int memLowerLimitGB,
-                          unsigned int memUpperLimitGB,
-                          unsigned int memMaxAdvisePercent,
-                          std::shared_ptr<RebalanceStrategy> strategy);
-
-  // start memory monitor with separate advise/reclaim rates
   bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
                           std::chrono::milliseconds interval,
                           unsigned int memAdvisePercentPerIter,
