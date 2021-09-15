@@ -28,7 +28,8 @@ constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
 MemoryMonitor::MemoryMonitor(CacheBase& cache,
                              Mode mode,
-                             size_t percentPerIteration,
+                             size_t percentAdvisePerIteration,
+                             size_t percentReclaimPerIteration,
                              size_t lowerLimitGB,
                              size_t upperLimitGB,
                              size_t maxLimitPercent,
@@ -36,7 +37,8 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
     : cache_(cache),
       mode_(mode),
       strategy_(std::move(strategy)),
-      percentPerIteration_(percentPerIteration),
+      percentAdvisePerIteration_(percentAdvisePerIteration),
+      percentReclaimPerIteration_(percentReclaimPerIteration),
       lowerLimit_(lowerLimitGB * kGBytes),
       upperLimit_(upperLimitGB * kGBytes),
       maxLimitPercent_(maxLimitPercent) {
@@ -234,18 +236,20 @@ void MemoryMonitor::adviseAwaySlabs() {
           numAdvised, totalSlabs, advisedPercent, maxLimitPercent_);
     return;
   }
-  // Advise percentPerIteration_% of upperLimit_ - lowerLimit_ every iteration
-  const auto slabsToAdvise =
-      bytesToSlabs(upperLimit_ - lowerLimit_) * percentPerIteration_ / 100;
+  // Advise percentAdvisePerIteration_% of upperLimit_ - lowerLimit_
+  // every iteration
+  const auto slabsToAdvise = bytesToSlabs(upperLimit_ - lowerLimit_) *
+                             percentAdvisePerIteration_ / 100;
   XLOGF(DBG, "Advising away {} slabs to free {} bytes", slabsToAdvise,
         slabsToAdvise * Slab::kSize);
   cache_.updateNumSlabsToAdvise(slabsToAdvise);
 }
 
 void MemoryMonitor::reclaimSlabs() {
-  // Reclaim N% of the total slabs every iteration
-  auto slabsToReclaim =
-      bytesToSlabs(upperLimit_ - lowerLimit_) * percentPerIteration_ / 100;
+  // Reclaim percentReclaimPerIteration_% of upperLimit_ - lowerLimit_
+  // every iteration
+  auto slabsToReclaim = bytesToSlabs(upperLimit_ - lowerLimit_) *
+                        percentReclaimPerIteration_ / 100;
   const auto stats = cache_.getCacheMemoryStats();
   if (slabsToReclaim > stats.numAdvisedSlabs()) {
     slabsToReclaim = stats.numAdvisedSlabs();

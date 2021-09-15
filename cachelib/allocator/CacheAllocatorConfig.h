@@ -441,6 +441,16 @@ class CacheAllocatorConfig {
   // recliamed in an iteration.
   unsigned int memAdviseReclaimPercentPerIter{5};
 
+  // percentage of memUpperLimit - memLowerLimit to be advised away in an
+  // iteration. If specified (> 0) overrides the memAdviseReclaimPercentPerIter
+  // for advising only.
+  unsigned int memAdvisePercentPerIter{0};
+
+  // percentage of memUpperLimit - memLowerLimit to be reclaimed in an
+  // iteration. If specified (> 0) overrides the memAdviseReclaimPercentPerIter
+  // for reclaiming only.
+  unsigned int memReclaimPercentPerIter{0};
+
   // maximum percentage of item cache that can be advised away
   unsigned int memMaxAdvisePercent{20};
 
@@ -1046,6 +1056,10 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memMonitorInterval"] = util::toString(memMonitorInterval);
   configMap["memAdviseReclaimPercentPerIter"] =
       std::to_string(memAdviseReclaimPercentPerIter);
+  configMap["memAdvisePercentPerIter"] =
+      std::to_string(memAdvisePercentPerIter);
+  configMap["memReclaimPercentPerIter"] =
+      std::to_string(memReclaimPercentPerIter);
   configMap["memMaxAdvisePercent"] = std::to_string(memMaxAdvisePercent);
   configMap["memLowerLimitGB"] = std::to_string(memLowerLimitGB);
   configMap["memUpperLimitGB"] = std::to_string(memUpperLimitGB);

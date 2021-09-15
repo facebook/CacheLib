@@ -798,6 +798,17 @@ class CacheAllocator : public CacheBase {
                           unsigned int memUpperLimitGB,
                           unsigned int memMaxAdvisePercent,
                           std::shared_ptr<RebalanceStrategy> strategy);
+
+  // start memory monitor with separate advise/reclaim rates
+  bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
+                          std::chrono::milliseconds interval,
+                          unsigned int memAdvisePercentPerIter,
+                          unsigned int memReclaimPercentPerIter,
+                          unsigned int memLowerLimitGB,
+                          unsigned int memUpperLimitGB,
+                          unsigned int memMaxAdvisePercent,
+                          std::shared_ptr<RebalanceStrategy> strategy);
+
   // start reaper
   // @param interval                the period this worker fires
   // @param reaperThrottleConfig    throttling config

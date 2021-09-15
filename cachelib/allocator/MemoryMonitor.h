@@ -46,10 +46,11 @@ class MemoryMonitor : public PeriodicWorker {
   // 1. Free Memory Monitoring (Not supported for processes in cgroups)
   //
   // Setup a free memory monitor that periodically checks system free memory.
-  // If it dips below lowerLimitGB bytes, it advises away percentPerIteration
-  // percent of lowerLimitGB at a time (in every iteration), until system free
-  // memory is above the lowerLimitGB bytes. If the system free memory exceeds
-  // upperLimitGB bytes, it reclaims percentPerIteration percent of lowerLimitGB
+  // If it dips below lowerLimitGB bytes, it advises percentAdvisePerIteration
+  // percent of (upperLimitGB - lowerLimitGB) at a time (in every iteration),
+  // until system free memory is above the lowerLimitGB bytes. If the system
+  // free memory exceeds upperLimitGB bytes, it reclaims
+  // percentReclaimPerIteration percent of (upperLimitGB - lowerLimitGB)
   // at a time until system free memory drops below upperLimitGB. A maximum of
   // maxLimitPercent of total cache size (excluding compact cache) can be
   // advised away, after which advising stops to avoid cache from becoming
@@ -64,9 +65,14 @@ class MemoryMonitor : public PeriodicWorker {
   //
   // @param mode                 FreeMemory
   // @param cache                Cache
-  // @param percentPerIteration  Percentage of upperLimitGB-lowerLimitGB to be
-  //                             advised or reclaimed every poll period. This
-  //                             governs the rate of advise/reclaim.
+  // @param percentAdvisePerIteration
+  //                             Percentage of upperLimitGB-lowerLimitGB to be
+  //                             advised every poll period. This
+  //                             governs the rate of advise
+  // @param percentReclaimPerIteration
+  //                             Percentage of upperLimitGB-lowerLimitGB to be
+  //                             reclaimed every poll period. This
+  //                             governs the rate of reclaim
   // @param lowerLimitGB         The lower limit of free memory in GBytes that
   //                             triggers advising away of memory from cache
   // @param upperLimitGB         The upper limit of free memory in GBytes that
@@ -83,17 +89,23 @@ class MemoryMonitor : public PeriodicWorker {
   // by limiting process's total resident memory usage. The resident memory
   // usage of the process can be split into two parts, the cache and everything
   // else. When the resident memory usage exceeds the upperLimitGB, the monitor
-  // gives away memory from cache, percentPerIteration of upperLimitGB every
-  // poll period, until the memory usage drops below upperLimitGB. When the
-  // resident memory usage dips below lowerLimitGB, the monitor reclaims memory
-  // for cache (if previously given away), until the resident memory usage is
-  // above the lowerLimitGB, percentPerIteration of upperLimitGB at a time.
+  // gives away memory from cache, percentAdvisePerIteration of
+  // (upperLimitGB - lowerLimitGB) every poll period, until the memory usage
+  // drops below upperLimitGB. When the resident memory usage dips below
+  // lowerLimitGB, the monitor reclaims memory for cache (if previously given
+  // away), until the resident memory usage is above the lowerLimitGB,
+  // percentReclaimPerIteration of (upperLimitGB - lowerLimitGB) at a time.
   //
   // @param mode                 ResidentMemory
   // @param cache
-  // @param percentPerIteration  Percentage of upperLimitGB-lowerLimitGB to be
-  //                             advised or reclaimed every poll period. This
-  //                             governs the rate of advise/reclaim.
+  // @param percentAdvisePerIteration
+  //                             Percentage of upperLimitGB-lowerLimitGB to be
+  //                             advised every poll period. This
+  //                             governs the rate of advise
+  // @param percentReclaimPerIteration
+  //                             Percentage of upperLimitGB-lowerLimitGB to be
+  //                             reclaimed every poll period. This
+  //                             governs the rate of reclaim
   // @param lowerLimitGB         The lower limit of resident memory in GBytes
   //                             that triggers reclaiming of previously advised
   //                             away of memory from cache
@@ -106,7 +118,8 @@ class MemoryMonitor : public PeriodicWorker {
   //                             class in pool to steal slabs from, for advising
   MemoryMonitor(CacheBase& cache,
                 Mode mode,
-                size_t percentPerIteration,
+                size_t percentAdvisePerIteration,
+                size_t percentReclaimPerIteration,
                 size_t lowerLimitGB,
                 size_t upperLimitGB,
                 size_t maxLimitPercent,
@@ -160,12 +173,10 @@ class MemoryMonitor : public PeriodicWorker {
   // @return number of slabs in use by all pools together
   size_t getSlabsInUse() const noexcept;
 
-  // advise away (percentPerIteration_ percent of lowerLimit_)  of slabs to
-  // increase free memory
+  // advise away slabs to increase free memory or reduce RSS
   void adviseAwaySlabs();
 
-  // reclaim slabs (percentPerIteration_ percent of lowerLimit_) of slabs to
-  // increase cache size
+  // reclaim slabs to increase cache size and reduce free memory/increase RSS
   void reclaimSlabs();
 
   // cache's interface for rebalancing
@@ -185,9 +196,13 @@ class MemoryMonitor : public PeriodicWorker {
   // number of slabs released as a part of resizing pools.
   std::atomic<unsigned int> slabsReleased_{0};
 
-  // Specifies the percentage of the lower limit that is advised away or
-  // relcaimed in an iteration of the memory monitor.
-  size_t percentPerIteration_{0};
+  // Specifies the percentage of the advising bounds (upperlimit - lowerlimit)
+  // that is advised away per iteration of memory monitor.
+  size_t percentAdvisePerIteration_{0};
+
+  // Specifies the percentage of the advising bounds (upperlimit - lowerlimit)
+  // that is reclaimed per iteration of memory monitor.
+  size_t percentReclaimPerIteration_{0};
 
   // lower limit for free/resident memory in GBs.
   // Note: the lower/upper limit is used in exactly opposite ways for the

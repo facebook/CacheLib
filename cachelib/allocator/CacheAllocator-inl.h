@@ -249,7 +249,12 @@ void CacheAllocator<CacheTrait>::initWorkers() {
           "for cache on a shared memory segment only.");
     }
     startNewMemMonitor(config_.memMonitorMode, config_.memMonitorInterval,
-                       config_.memAdviseReclaimPercentPerIter,
+                       (config_.memAdvisePercentPerIter
+                            ? config_.memAdvisePercentPerIter
+                            : config_.memAdviseReclaimPercentPerIter),
+                       (config_.memReclaimPercentPerIter
+                            ? config_.memReclaimPercentPerIter
+                            : config_.memAdviseReclaimPercentPerIter),
                        config_.memLowerLimitGB, config_.memUpperLimitGB,
                        config_.memMaxAdvisePercent, config_.poolAdviseStrategy);
   }
@@ -3400,6 +3405,22 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     MemoryMonitor::Mode memMonitorMode,
     std::chrono::milliseconds interval,
+    unsigned int memAdvisePercentPerIter,
+    unsigned int memReclaimPercentPerIter,
+    unsigned int memLowerLimitGB,
+    unsigned int memUpperLimitGB,
+    unsigned int memMaxAdvisePercent,
+    std::shared_ptr<RebalanceStrategy> strategy) {
+  memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
+  return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
+                        memAdvisePercentPerIter, memReclaimPercentPerIter,
+                        memLowerLimitGB, memUpperLimitGB, memMaxAdvisePercent,
+                        strategy);
+}
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::startNewMemMonitor(
+    MemoryMonitor::Mode memMonitorMode,
+    std::chrono::milliseconds interval,
     unsigned int memAdviseReclaimPercentPerIter,
     unsigned int memLowerLimitGB,
     unsigned int memUpperLimitGB,
@@ -3407,6 +3428,7 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     std::shared_ptr<RebalanceStrategy> strategy) {
   memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
   return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
+                        memAdviseReclaimPercentPerIter,
                         memAdviseReclaimPercentPerIter, memLowerLimitGB,
                         memUpperLimitGB, memMaxAdvisePercent, strategy);
 }
