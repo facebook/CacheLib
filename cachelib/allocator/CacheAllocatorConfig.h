@@ -478,6 +478,17 @@ class CacheAllocatorConfig {
   // system free memory below this limit.
   unsigned int memUpperLimitGB{15};
 
+  // On restart, the heap usage for applications grows slowly to steady state
+  // over time. Memory monitoring may reclaim advised memory leaving application
+  // vulnerable to OOMs due rapid growth in heap usage.
+  // Cachelib supports rate limiting reclaiming of advised memory to avoid OOM.
+  // This is enabled by setting tracking window size to a non-zero value.
+
+  // Setting this config to a value > 0 enables rate limiting reclaiming of
+  // advised memory by the amount by which free/resident memory is
+  // decreasing/increasing
+  std::chrono::seconds reclaimRateLimitWindowSecs{0};
+
   // throttler config of items reaper for iteration
   util::Throttler::Config reaperConfig{};
 
@@ -1063,6 +1074,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["memMaxAdvisePercent"] = std::to_string(memMaxAdvisePercent);
   configMap["memLowerLimitGB"] = std::to_string(memLowerLimitGB);
   configMap["memUpperLimitGB"] = std::to_string(memUpperLimitGB);
+  configMap["reclaimRateLimitWindowSecs"] =
+      std::to_string(reclaimRateLimitWindowSecs.count());
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["disableEviction"] = std::to_string(disableEviction);

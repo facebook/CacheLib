@@ -794,6 +794,10 @@ class CacheAllocator : public CacheBase {
   //                                        OOM.
   // @param strategy                        strategy to find an allocation class
   //                                        to release slab from
+  // @param reclaimRateLimitWindowSecs      specifies window in seconds over
+  //                                        which free/resident memory values
+  //                                        are tracked to determine rate of
+  //                                        change to rate limit reclaim
   bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
                           std::chrono::milliseconds interval,
                           unsigned int memAdvisePercentPerIter,
@@ -801,7 +805,9 @@ class CacheAllocator : public CacheBase {
                           unsigned int memLowerLimitGB,
                           unsigned int memUpperLimitGB,
                           unsigned int memMaxAdvisePercent,
-                          std::shared_ptr<RebalanceStrategy> strategy);
+                          std::shared_ptr<RebalanceStrategy> strategy,
+                          std::chrono::seconds reclaimRateLimitWindowSecs =
+                              std::chrono::seconds{0});
 
   // start reaper
   // @param interval                the period this worker fires

@@ -33,7 +33,8 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
                              size_t lowerLimitGB,
                              size_t upperLimitGB,
                              size_t maxLimitPercent,
-                             std::shared_ptr<RebalanceStrategy> strategy)
+                             std::shared_ptr<RebalanceStrategy> strategy,
+                             std::chrono::seconds reclaimRateLimitWindowSecs)
     : cache_(cache),
       mode_(mode),
       strategy_(std::move(strategy)),
@@ -41,7 +42,12 @@ MemoryMonitor::MemoryMonitor(CacheBase& cache,
       percentReclaimPerIteration_(percentReclaimPerIteration),
       lowerLimit_(lowerLimitGB * kGBytes),
       upperLimit_(upperLimitGB * kGBytes),
-      maxLimitPercent_(maxLimitPercent) {
+      maxLimitPercent_(maxLimitPercent),
+      reclaimRateLimitWindowSecs_(reclaimRateLimitWindowSecs),
+      rateLimiter_(
+          // Detect rate of decrease in free memory and
+          // rate of increase in resident memory mode
+          mode_ == FreeMemory ? false : true) {
   if (!strategy_) {
     strategy_ = std::make_shared<PoolResizeStrategy>();
   }
@@ -58,6 +64,10 @@ MemoryMonitor::~MemoryMonitor() {
 }
 
 void MemoryMonitor::work() {
+  // Poll interval can change. Keep rate limiter window size updated.
+  rateLimiter_.setWindowSize(
+      reclaimRateLimitWindowSecs_.count() /
+      std::chrono::duration_cast<std::chrono::seconds>(getInterval()).count());
   switch (mode_) {
   case FreeMemory:
     checkFreeMemory();
@@ -76,6 +86,7 @@ void MemoryMonitor::work() {
 void MemoryMonitor::checkFreeMemory() {
   auto memFree = facebook::cachelib::util::getMemAvailable();
   memAvailableSize_ = memFree;
+  rateLimiter_.addValue(memFree);
   const auto stats = cache_.getCacheMemoryStats();
   if (memFree < lowerLimit_) {
     XLOGF(DBG,
@@ -96,6 +107,7 @@ void MemoryMonitor::checkFreeMemory() {
 void MemoryMonitor::checkResidentMemory() {
   auto rss = static_cast<size_t>(facebook::cachelib::util::getRSSBytes());
   memRssSize_ = rss;
+  rateLimiter_.addValue(rss);
   const auto stats = cache_.getCacheMemoryStats();
   if (rss > upperLimit_) {
     XLOGF(DBG,
@@ -248,8 +260,16 @@ void MemoryMonitor::adviseAwaySlabs() {
 void MemoryMonitor::reclaimSlabs() {
   // Reclaim percentReclaimPerIteration_% of upperLimit_ - lowerLimit_
   // every iteration
-  auto slabsToReclaim = bytesToSlabs(upperLimit_ - lowerLimit_) *
-                        percentReclaimPerIteration_ / 100;
+  const auto reclaimBytes =
+      (upperLimit_ - lowerLimit_) * percentReclaimPerIteration_ / 100;
+  // Rate limit reclaimed memory if free memory is dropping or rss is rising
+  // to prevent OOM
+  const auto rateLimitedReclaimBytes = rateLimiter_.throttle(reclaimBytes);
+  if (reclaimBytes > rateLimitedReclaimBytes) {
+    XLOGF(DBG, "Rate limiting reclaim down from {} bytes to {} bytes",
+          reclaimBytes, rateLimitedReclaimBytes);
+  }
+  auto slabsToReclaim = bytesToSlabs(rateLimitedReclaimBytes);
   const auto stats = cache_.getCacheMemoryStats();
   if (slabsToReclaim > stats.numAdvisedSlabs()) {
     slabsToReclaim = stats.numAdvisedSlabs();
@@ -266,6 +286,42 @@ void MemoryMonitor::reclaimSlabs() {
   XLOGF(DBG, "Reclaiming {} slabs to increase cache size by {} bytes",
         slabsToReclaim, slabsToReclaim * Slab::kSize);
   cache_.updateNumSlabsToAdvise(-slabsToReclaim);
+}
+
+RateLimiter::RateLimiter(bool detectIncrease)
+    : detectIncrease_(detectIncrease) {}
+
+void RateLimiter::addValue(int64_t value) {
+  if (windowSize_ < 2) {
+    // Window size not large enough to calculate rate of change.
+    // This effectively disables rate limiting.
+    return;
+  }
+  values_.push_back(value);
+  auto prevValue = values_.front();
+  // We may remove multiple values if window size shrinks
+  while (values_.size() > windowSize_) {
+    values_.pop_front();
+  }
+  if (detectIncrease_) {
+    rateOfChange_ = (value - prevValue) / static_cast<int64_t>(windowSize_);
+  } else {
+    rateOfChange_ = (prevValue - value) / static_cast<int64_t>(windowSize_);
+  }
+}
+
+size_t RateLimiter::throttle(int64_t delta) {
+  if (rateOfChange_ < 0 || windowSize_ < 2) {
+    return delta; // No throttling
+  }
+  // Fully throttled when we either have insufficient number of samples or
+  // rate of change is faster than proposed delta change.
+  if (values_.size() < windowSize_ || delta < rateOfChange_) {
+    return 0;
+  }
+  // Throttle down delta by rate of change. The greater the rate of change, the
+  // more the delta is throttled.
+  return delta - rateOfChange_;
 }
 
 } // namespace cachelib

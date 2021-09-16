@@ -256,7 +256,8 @@ void CacheAllocator<CacheTrait>::initWorkers() {
                             ? config_.memReclaimPercentPerIter
                             : config_.memAdviseReclaimPercentPerIter),
                        config_.memLowerLimitGB, config_.memUpperLimitGB,
-                       config_.memMaxAdvisePercent, config_.poolAdviseStrategy);
+                       config_.memMaxAdvisePercent, config_.poolAdviseStrategy,
+                       config_.reclaimRateLimitWindowSecs);
   }
 
   if (config_.itemsReaperEnabled()) {
@@ -3410,12 +3411,13 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     unsigned int memLowerLimitGB,
     unsigned int memUpperLimitGB,
     unsigned int memMaxAdvisePercent,
-    std::shared_ptr<RebalanceStrategy> strategy) {
+    std::shared_ptr<RebalanceStrategy> strategy,
+    std::chrono::seconds reclaimRateLimitWindowSecs) {
   memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
   return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
                         memAdvisePercentPerIter, memReclaimPercentPerIter,
                         memLowerLimitGB, memUpperLimitGB, memMaxAdvisePercent,
-                        strategy);
+                        strategy, reclaimRateLimitWindowSecs);
 }
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
