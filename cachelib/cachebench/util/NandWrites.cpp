@@ -291,14 +291,32 @@ std::optional<uint64_t> intelWriteBytes(
                          32 * 1024 * 1024 /* factor */);
 }
 
-// I don't have access to hosts with WDC, Liteon, or SKHMS flash drives that I
+// The output for an WDC device looks like:
+//
+// clang-format off
+// Additional Smart Log for NVME device:nvme0 namespace-id:ffffffff
+// key                               normalized raw
+// ...
+// Physical media units written -   	        0 2068700589752320
+// ...
+// clang-format on
+//
+std::optional<uint64_t> wdcWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
+  // For WDC devices, the output is in number of bytes.
+  //
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"wdc", "vs-smart-add-log", devicePath.str()},
+                         7 /* field num */,
+                         1 /* factor */);
+}
+
+// I don't have access to hosts with Liteon, or SKHMS flash drives that I
 // can use to test this code, so I've left these functions commented out for
 // now.
-//
-// uint64_t wdcWriteBytes(const folly::StringPiece& device) {
-//   // For WDC, output is in 512 byte pages.
-//   return getWriteCount(device, {"wdc", "smart-add-log"}, 4) * 512;
-// }
 //
 // uint64_t skhmsWriteBytes(const folly::StringPiece& device) {
 //   // For SKHMS, the output is in 512 byte pages.
@@ -372,9 +390,9 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
                 {"skhms", [](const auto&, const auto&,
                              const auto&) { return notImplemented("SKHMS"); }},
                 {"toshiba", toshibaWriteBytes},
-                {"wdc", [](const auto&, const auto&, const auto&) {
-                   return notImplemented("WDC");
-                 }}};
+                {"wus4bb019d4m9e7", wdcWriteBytes},
+                {"wus4bb019djese7", wdcWriteBytes},
+                {"wus4bb038djese7", wdcWriteBytes}};
   for (const auto& [vendor, func] : vendorMap) {
     XLOG(DBG) << "Looking for vendor " << vendor << " in device model string \""
               << modelNumber.value() << "\".";
