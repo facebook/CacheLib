@@ -76,6 +76,10 @@ class CacheAllocatorConfig {
   // user guide for how to tune access container (configure hashtable).
   CacheAllocatorConfig& setAccessConfig(AccessConfig config);
 
+  // Set the access config for cachelib's access container based on the
+  // number of estimated cache entries.
+  CacheAllocatorConfig& setAccessConfig(size_t numEntries);
+
   // RemoveCallback is invoked for each item that is evicted or removed
   // explicitly
   CacheAllocatorConfig& setRemoveCallback(RemoveCb cb);
@@ -137,6 +141,16 @@ class CacheAllocatorConfig {
   // @param lockPower  this controls the number of locks (2^lockPower) for
   //                   synchronizing operations on chained items.
   CacheAllocatorConfig& configureChainedItems(AccessConfig config = {},
+                                              uint32_t lockPower = 10);
+
+  // Configure chained items. Refer to our user guide for how chained items
+  // work. This function calculates the optimal bucketsPower and locksPower for
+  // users based on estimated chained items number.
+  //
+  // @param numEntries  number of estimated chained items
+  // @param lockPower  this controls the number of locks (2^lockPower) for
+  //                   synchronizing operations on chained items.
+  CacheAllocatorConfig& configureChainedItems(size_t numEntries,
                                               uint32_t lockPower = 10);
 
   // enable tracking tail hits
@@ -653,6 +667,15 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAccessConfig(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAccessConfig(
+    size_t numEntries) {
+  AccessConfig config{};
+  config.sizeBucketsPowerAndLocksPower(numEntries);
+  accessConfig = std::move(config);
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setRemoveCallback(
     RemoveCb cb) {
   removeCb = std::move(cb);
@@ -768,6 +791,16 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureChainedItems(
     AccessConfig config, uint32_t lockPower) {
   chainedItemAccessConfig = config;
+  chainedItemsLockPower = lockPower;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureChainedItems(
+    size_t numEntries, uint32_t lockPower) {
+  AccessConfig config{};
+  config.sizeBucketsPowerAndLocksPower(numEntries);
+  chainedItemAccessConfig = std::move(config);
   chainedItemsLockPower = lockPower;
   return *this;
 }
