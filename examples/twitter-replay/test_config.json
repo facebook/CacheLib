@@ -1,7 +1,6 @@
 {
   "cache_config": {
-    "cacheSizeMB": 128,
-    "poolRebalanceIntervalSec": 0
+    "cacheSizeMB": 128
   },
   "test_config":
     {

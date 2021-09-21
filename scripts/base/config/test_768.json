@@ -1,0 +1,1 @@
+{"cache_config": {"cacheSizeMB": "768"}, "test_config": {"enableLookaside": "true", "generator": "twitter-replay", "numOps": "99", "numThreads": 1, "traceFileName": "/home/pranav/Desktop/Research/CacheLib/examples/twitter-replay/twitter_sample.csv"}}
