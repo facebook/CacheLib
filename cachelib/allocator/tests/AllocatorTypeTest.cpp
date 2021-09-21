@@ -381,10 +381,6 @@ TYPED_TEST(BaseAllocatorTest, RefcountOverflow) {
 
 TYPED_TEST(BaseAllocatorTest, CCacheWarmRoll) { this->testCCacheWarmRoll(); }
 
-TYPED_TEST(BaseAllocatorTest, ReadOnlyCacheView) {
-  this->testReadOnlyCacheView();
-}
-
 TYPED_TEST(BaseAllocatorTest, RebalanceByAllocFailure) {
   this->testRebalanceByAllocFailure();
 }

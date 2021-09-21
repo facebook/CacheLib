@@ -6075,47 +6075,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
-  // create a cache and access it through the offsets from the read only cache
-  // view. Writing to the read only view should fail even if we try to
-  // const_cast
-  void testReadOnlyCacheView() {
-    typename AllocatorT::Config config;
-
-    uint8_t poolId;
-    const size_t nSlabs = 20;
-    config.setCacheSize(nSlabs * Slab::kSize);
-    config.enableCachePersistence(this->cacheDir_);
-
-    size_t allocSize = 1024;
-    AllocatorT alloc(AllocatorT::SharedMemNew, config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
-    poolId = alloc.addPool("foobar", numBytes);
-    auto hdl = util::allocateAccessible(alloc, poolId, "mykey", allocSize);
-    ASSERT_NE(hdl, nullptr);
-    unsigned char magicVal = 'f';
-    std::vector<char> v(hdl->getSize(), magicVal);
-    auto data = folly::StringPiece{v.data(), v.size()};
-    std::memcpy(hdl->getWritableMemory(), data.data(), data.size());
-    auto hdlSp = folly::StringPiece{
-        reinterpret_cast<const char*>(hdl->getMemory()), hdl->getSize()};
-    ASSERT_EQ(hdlSp, data);
-
-    auto offset = alloc.getItemPtrAsOffset(hdl->getMemory());
-
-    auto roCache = ReadOnlySharedCacheView(config.cacheDir, config.usePosixShm);
-
-    auto ptr = roCache.getItemPtrFromOffset(offset);
-    ASSERT_NE(reinterpret_cast<uintptr_t>(ptr),
-              reinterpret_cast<uintptr_t>(hdl->getMemory()));
-    auto roSp =
-        folly::StringPiece{reinterpret_cast<const char*>(ptr), allocSize};
-    ASSERT_EQ(data, roSp);
-
-    ASSERT_DEATH(std::memset(reinterpret_cast<char*>(const_cast<void*>(ptr)), 0,
-                             allocSize),
-                 ".*");
-  }
-
   void testRebalanceByAllocFailure() {
     typename AllocatorT::Config config;
     const size_t nSlabs = 3;
