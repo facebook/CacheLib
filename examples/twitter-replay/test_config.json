@@ -1,0 +1,15 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 128,
+    "poolRebalanceIntervalSec": 0
+  },
+  "test_config":
+    {
+      "enableLookaside": true,
+      "generator": "twitter-replay",
+      "numOps": 100,
+      "numThreads": 1,
+      "traceFileName": "twitter_sample.csv"
+    }
+
+}
