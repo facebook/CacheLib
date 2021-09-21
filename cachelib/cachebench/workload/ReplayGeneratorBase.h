@@ -56,9 +56,13 @@ class ReplayGeneratorBase : public GeneratorBase {
           folly::sformat("could not read file: {}", file));
     }
     infile_.rdbuf()->pubsetbuf(infileBuffer_, kIfstreamBufferSize);
-    // header
-    std::string row;
-    std::getline(infile_, row);
+
+    if (config_.skipHeader) {
+      // header
+      std::string row;
+      std::getline(infile_, row);
+    }
+
   }
 
   virtual ~ReplayGeneratorBase() { infile_.close(); }
@@ -71,9 +75,12 @@ class ReplayGeneratorBase : public GeneratorBase {
   void resetTraceFileToBeginning() {
     infile_.clear();
     infile_.seekg(0, std::ios::beg);
-    // header
-    std::string row;
-    std::getline(infile_, row);
+
+    if (config_.skipHeader) {
+      // header
+      std::string row;
+      std::getline(infile_, row);
+    }
   }
 
   const StressorConfig config_;
