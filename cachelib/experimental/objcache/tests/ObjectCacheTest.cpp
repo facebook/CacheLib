@@ -151,6 +151,41 @@ TEST(ObjectCache, Simple) {
   }
 }
 
+TEST(ObjectCache, Copy) {
+  LruAllocator::Config cacheAllocatorConfig;
+  cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
+  LruObjectCache::Config config;
+  config.setCacheAllocatorConfig(cacheAllocatorConfig);
+  auto objcache = createCache(config);
+
+  using Vector = std::vector<int, LruObjectCache::Alloc<int>>;
+
+  auto vec = objcache->create<Vector>(0 /* poolId */, "my obj");
+  ASSERT_TRUE(vec);
+  EXPECT_EQ(0, vec->size());
+  vec->push_back(123);
+  EXPECT_EQ(1, vec->size());
+  for (int i = 0; i < 1000; i++) {
+    vec->push_back(i);
+  }
+  EXPECT_EQ(1001, vec->size());
+
+  // Copy construction, the new vector is still associated with the same
+  // allocator.
+  Vector vec2 = *vec;
+  ASSERT_EQ(vec->get_allocator(), vec2.get_allocator());
+
+  // Copy construction with user-supplied allocator. The original allocator
+  // will not be propagated.
+  Vector vec3{*vec, decltype(vec->get_allocator()){}};
+  ASSERT_NE(vec->get_allocator(), vec3.get_allocator());
+
+  // Copy assignment. The original allocator will not be propagated.
+  Vector vec4;
+  vec4 = *vec;
+  ASSERT_NE(vec->get_allocator(), vec3.get_allocator());
+}
+
 TEST(ObjectCache, ObjectHandle) {
   LruAllocator::Config cacheAllocatorConfig;
   cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
