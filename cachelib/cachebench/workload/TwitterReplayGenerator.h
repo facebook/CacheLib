@@ -59,6 +59,8 @@ const Request& TwitterReplayGenerator::getReq(uint8_t,
   std::getline(s_stream, token, ','); // client ID
   std::getline(s_stream, token, ','); // op
 
+  // TODO: implement support for functions like add 
+  // and replace (check and set) just set for now 
   if ((token == "get") or (token == "gets"))
     op_ = OpType::kGet;
   else if ((token == "set") or (token == "cas") or \
