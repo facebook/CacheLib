@@ -69,3 +69,28 @@ The `itemDistribution` map contains the distribution of buckets by their occupan
 Cache::Config cfg;
 cfg.accessConfig.locksPower = 10;
 ```
+
+## Auto-tune Hashtable
+If you know the estimated number of items to cache, instead of figuring out the two parameters yourself, you can pass #items in `setAccessConfig` API to automatically tune the hash table with reasonable values of these two parameters:
+```cpp
+Cache::Config cfg;
+cfg.setAccessConfig(20000000 /* items number */);
+```
+which is equivalent to:
+```cpp
+Cache::Config cfg;
+cfg.setAccessConfig({25 /* bucketsPower */, 15 /* locksPower */});
+```
+
+If you are using chained items, you should also configure `chainedItemAccessConfig` and `chainedItemLocksPower`.
+
+Please note, `chainedItemLocksPower` is different from `ChainedHashTable::Config::locksPower`. It controls the number of locks to synchronize chained item's operations(add, pop, move, transfer, etc.). By default, it is set to be 10.
+
+Similarly, you can passing the number of estimated chained items in `configureChainedItems` API to auto-tune the hash table:
+```cpp
+cfg.configureChainedItems(20000000 /* items number */, chainedItemLocksPower);
+```
+which is equivalent to:
+```cpp
+cfg.configureChainedItems({25 /* bucketsPower */, 15 /* locksPower */}, chainedItemLocksPower);
+```
