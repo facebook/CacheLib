@@ -9,7 +9,7 @@ For example, suppose you had 60 GB of memory available for your operating proces
 
 # Enabling MemoryMonitor
 
-`MemoryMonitor` is available in two mode depending on whether your binary runs in containers or runs without any containers. There are some parameters that are common between the two and some that are contrary. So make sure you understand the semantic differences.
+`MemoryMonitor` is available in two modes depending on whether your binary runs in containers or runs without any containers. There are some parameters that are common between the two and some that are contrary. So make sure you understand the semantic differences.
 
 ## Free memory mode
 

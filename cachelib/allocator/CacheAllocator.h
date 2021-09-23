@@ -806,8 +806,15 @@ class CacheAllocator : public CacheBase {
                           unsigned int memUpperLimitGB,
                           unsigned int memMaxAdvisePercent,
                           std::shared_ptr<RebalanceStrategy> strategy,
-                          std::chrono::seconds reclaimRateLimitWindowSecs =
-                              std::chrono::seconds{0});
+                          std::chrono::seconds reclaimRateLimitWindowSecs);
+  // start memory monitor
+  // @param interval                        the period this worker fires
+  // @param config                          memory monitoring config
+  // @param strategy                        strategy to find an allocation class
+  //                                        to release slab from
+  bool startNewMemMonitor(std::chrono::milliseconds interval,
+                          MemoryMonitor::Config config,
+                          std::shared_ptr<RebalanceStrategy> strategy);
 
   // start reaper
   // @param interval                the period this worker fires

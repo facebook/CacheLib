@@ -488,7 +488,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     const uint32_t poolResizeSlabsPerIter = 20;
     config.enablePoolResizing(std::make_shared<RebalanceStrategy>(),
                               std::chrono::seconds{1}, poolResizeSlabsPerIter);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
     // Disable slab rebalancing
@@ -575,7 +575,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     // create an allocator worth 100 slabs.
     typename AllocatorT::Config config;
     config.enableCachePersistence(this->cacheDir_);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
     // Disable slab rebalancing
@@ -684,7 +684,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     const uint32_t poolResizeSlabsPerIter = 20;
     config.enablePoolResizing(std::make_shared<RebalanceStrategy>(),
                               std::chrono::seconds{1}, poolResizeSlabsPerIter);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
     // Disable slab rebalancing
@@ -798,7 +798,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     const uint32_t poolResizeSlabsPerIter = 20;
     config.enablePoolResizing(std::make_shared<RebalanceStrategy>(),
                               std::chrono::seconds{1}, poolResizeSlabsPerIter);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
 
     // Disable slab rebalancing
@@ -895,12 +895,13 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
   void testMemoryMonitorPerIterationAdviseReclaim() {
     typename AllocatorT::Config config;
     config.enableCachePersistence(this->cacheDir_);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(1);
-    config.memLowerLimitGB = 1;
-    config.memUpperLimitGB = 2;
-    config.memAdviseReclaimPercentPerIter = 2;
-    config.memMaxAdvisePercent = 20;
+    config.memMonitorConfig.lowerLimitGB = 1;
+    config.memMonitorConfig.upperLimitGB = 2;
+    config.memMonitorConfig.maxAdvisePercentPerIter = 2;
+    config.memMonitorConfig.maxReclaimPercentPerIter = 2;
+    config.memMonitorConfig.maxAdvisePercent = 20;
 
     // Disable slab rebalancing
     config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
@@ -944,13 +945,14 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       uint64_t perIterAdvSize = 5 * Slab::kSize;
       auto bytesToSlabs = [](size_t bytes) { return bytes / Slab::kSize; };
       const uint32_t slabsToAdvisePerIter =
-          (bytesToSlabs((config.memUpperLimitGB - config.memLowerLimitGB)
+          (bytesToSlabs((config.memMonitorConfig.upperLimitGB -
+                         config.memMonitorConfig.lowerLimitGB)
                         << 30) *
-           config.memAdviseReclaimPercentPerIter) /
+           config.memMonitorConfig.maxAdvisePercentPerIter) /
           100;
-      const uint32_t numItersToMaxAdviseAway = numPools * slabsPerPool *
-                                               config.memMaxAdvisePercent /
-                                               (100 * slabsToAdvisePerIter);
+      const uint32_t numItersToMaxAdviseAway =
+          numPools * slabsPerPool * config.memMonitorConfig.maxAdvisePercent /
+          (100 * slabsToAdvisePerIter);
 
       unsigned int i;
       /* iterate for numItersToMaxAdviseAway times */
@@ -993,12 +995,13 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
   void testMemoryAdviseWithSaveRestore() {
     typename AllocatorT::Config config;
     config.enableCachePersistence(this->cacheDir_);
-    config.memMonitorMode = MemoryMonitor::TestMode;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
     config.memMonitorInterval = std::chrono::seconds(1);
-    config.memLowerLimitGB = 1;
-    config.memUpperLimitGB = 2;
-    config.memAdviseReclaimPercentPerIter = 2;
-    config.memMaxAdvisePercent = 20;
+    config.memMonitorConfig.lowerLimitGB = 1;
+    config.memMonitorConfig.upperLimitGB = 2;
+    config.memMonitorConfig.maxAdvisePercentPerIter = 2;
+    config.memMonitorConfig.maxReclaimPercentPerIter = 2;
+    config.memMonitorConfig.maxAdvisePercent = 20;
 
     // Disable slab rebalancing
     config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});

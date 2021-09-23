@@ -27,27 +27,21 @@ namespace cachelib {
 constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
 MemoryMonitor::MemoryMonitor(CacheBase& cache,
-                             Mode mode,
-                             size_t percentAdvisePerIteration,
-                             size_t percentReclaimPerIteration,
-                             size_t lowerLimitGB,
-                             size_t upperLimitGB,
-                             size_t maxLimitPercent,
-                             std::shared_ptr<RebalanceStrategy> strategy,
-                             std::chrono::seconds reclaimRateLimitWindowSecs)
+                             Config config,
+                             std::shared_ptr<RebalanceStrategy> strategy)
     : cache_(cache),
-      mode_(mode),
+      mode_(config.mode),
       strategy_(std::move(strategy)),
-      percentAdvisePerIteration_(percentAdvisePerIteration),
-      percentReclaimPerIteration_(percentReclaimPerIteration),
-      lowerLimit_(lowerLimitGB * kGBytes),
-      upperLimit_(upperLimitGB * kGBytes),
-      maxLimitPercent_(maxLimitPercent),
-      reclaimRateLimitWindowSecs_(reclaimRateLimitWindowSecs),
+      percentAdvisePerIteration_(config.maxAdvisePercentPerIter),
+      percentReclaimPerIteration_(config.maxReclaimPercentPerIter),
+      lowerLimit_(config.lowerLimitGB * kGBytes),
+      upperLimit_(config.upperLimitGB * kGBytes),
+      maxLimitPercent_(config.maxAdvisePercent),
+      reclaimRateLimitWindowSecs_(config.reclaimRateLimitWindowSecs),
       rateLimiter_(
           // Detect rate of decrease in free memory and
           // rate of increase in resident memory mode
-          mode_ == FreeMemory ? false : true) {
+          config.mode == FreeMemory ? false : true) {
   if (!strategy_) {
     strategy_ = std::make_shared<PoolResizeStrategy>();
   }

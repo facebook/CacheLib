@@ -199,40 +199,24 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& enableItemReaperInBackground(
       std::chrono::milliseconds interval, util::Throttler::Config config = {});
 
-  // Enables free memory monitoring. This lets CacheAllocator shrink the cache
+  // When using free memory monitoring mode, CacheAllocator shrinks the cache
   // size when the system is under memory pressure. Cache will grow back when
   // the memory pressure goes down.
+  //
+  // When using resident memory monitoring mode, typically when the
+  // application runs inside containers, the lowerLimit and upperLimit are the
+  // opposite to that of the free memory monitoring mode.
+  // "upperLimit" refers to the upper bound of application memory.
+  // Cache size will actually decrease once an application reaches past it
+  // and grows when drops below "lowerLimit".
+  //
   // @param interval  waits for an interval between each run
-  // @param advisedPercentPerIteration  amount of memory to shrink/grow per
-  //                                    iteration. This is computed like:
-  //             (advisedPercentPerIteration / 100) * (upperLimit - lowerLimit)
-  // @param lowerLimitGB  the lower bound of free memory in the system, once
-  //                      this is reached, the memory monitor will start
-  //                      shrinking cache size
-  // @param uppperLimitGB the upper bound of free memory in the system, once
-  //                      this is reached, the memory monitor will start growing
-  //                      cache size until the initial configured cache size
+  // @param config    memory monitoring config
   // @param RebalanceStrategy  an optional strategy to customize where the slab
   //                           to give up when shrinking cache
-  CacheAllocatorConfig& enableFreeMemoryMonitor(
+  CacheAllocatorConfig& enableMemoryMonitor(
       std::chrono::milliseconds interval,
-      uint32_t advisePercentPerIteration,
-      uint32_t maxAdvisePercentage,
-      uint32_t lowerLimitGB,
-      uint32_t upperLimitGB,
-      std::shared_ptr<RebalanceStrategy> = {});
-
-  // This is similar to the above, but for use cases running on Tupperware
-  // However, lowerLimit and upperLimit are the opposite to the above.
-  // "upperLimit" here reffers to the upper bound of application memory.
-  // Cache size will actually decrease once an application reaches past it.
-  // Vice-versa for "lowerLimit"
-  CacheAllocatorConfig& enableResidentMemoryMonitor(
-      std::chrono::milliseconds interval,
-      uint32_t advisePercentPerIteration,
-      uint32_t maxAdvisePercentage,
-      uint32_t lowerLimit,
-      uint32_t upperLimit,
+      MemoryMonitor::Config config,
       std::shared_ptr<RebalanceStrategy> = {});
 
   // Enable pool rebalancing. This allows each pool to internally rebalance
@@ -326,7 +310,7 @@ class CacheAllocatorConfig {
 
   // @return whether memory monitor is enabled
   bool memMonitoringEnabled() const noexcept {
-    return memMonitorMode != MemoryMonitor::Disabled &&
+    return memMonitorConfig.mode != MemoryMonitor::Disabled &&
            memMonitorInterval.count() > 0;
   }
 
@@ -443,65 +427,12 @@ class CacheAllocatorConfig {
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
 
-  // Memory monitoring mode. Enable memory monitoring by setting this to
-  // MemoryMonitor::ResidentMemory or MemoryMonitor::FreeMemory mode.
-  MemoryMonitor::Mode memMonitorMode{MemoryMonitor::Disabled};
+  // Memory monitoring config
+  MemoryMonitor::Config memMonitorConfig;
 
   // time interval to sleep between iterations of monitoring memory.
   // Set to 0 to disable memory monitoring
   std::chrono::milliseconds memMonitorInterval{0};
-
-  // percentage of memUpperLimit - memLowerLimit to be advised away or
-  // recliamed in an iteration.
-  unsigned int memAdviseReclaimPercentPerIter{5};
-
-  // percentage of memUpperLimit - memLowerLimit to be advised away in an
-  // iteration. If specified (> 0) overrides the memAdviseReclaimPercentPerIter
-  // for advising only.
-  unsigned int memAdvisePercentPerIter{0};
-
-  // percentage of memUpperLimit - memLowerLimit to be reclaimed in an
-  // iteration. If specified (> 0) overrides the memAdviseReclaimPercentPerIter
-  // for reclaiming only.
-  unsigned int memReclaimPercentPerIter{0};
-
-  // maximum percentage of item cache that can be advised away
-  unsigned int memMaxAdvisePercent{20};
-
-  // lower limit for free/resident memory in GBs.
-  // Note: the lower/upper limit is used in exactly opposite ways for the
-  // FreeMemory versus ResidentMemory mode.
-  // 1. In the ResidentMemory mode, when the resident memory usage drops
-  // below this limit, advised away slabs are reclaimed in proportion to
-  // the size of pools, to increase cache size and raise resident memory
-  // above this limit.
-  // 2. In the FreeMemory mode, when the system free memory drops below this
-  // limit, slabs are advised away from pools in proportion to their size to
-  // raise system free memory above this limit.
-  unsigned int memLowerLimitGB{10};
-
-  // upper limit for free/resident memory in GBs.
-  // Note: the lower/upper limit is used in exactly opposite ways for the
-  // FreeMemory versus ResidentMemory mode.
-  // 1. In the ResidentMemory mode, when the resident memory usage exceeds
-  // this limit, slabs are advised away from pools in proportion to their
-  // size to reduce resident memory usage below this limit.
-  // 2. In the FreeMemory mode, when the system free memory exceeds
-  // this limit and if there are slabs that were advised away earlier,
-  // they're reclaimed by pools in proportion to their sizes to reduce the
-  // system free memory below this limit.
-  unsigned int memUpperLimitGB{15};
-
-  // On restart, the heap usage for applications grows slowly to steady state
-  // over time. Memory monitoring may reclaim advised memory leaving application
-  // vulnerable to OOMs due rapid growth in heap usage.
-  // Cachelib supports rate limiting reclaiming of advised memory to avoid OOM.
-  // This is enabled by setting tracking window size to a non-zero value.
-
-  // Setting this config to a value > 0 enables rate limiting reclaiming of
-  // advised memory by the amount by which free/resident memory is
-  // decreasing/increasing
-  std::chrono::seconds reclaimRateLimitWindowSecs{0};
 
   // throttler config of items reaper for iteration
   util::Throttler::Config reaperConfig{};
@@ -877,37 +808,12 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::disableCacheEviction() {
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableFreeMemoryMonitor(
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableMemoryMonitor(
     std::chrono::milliseconds interval,
-    uint32_t advisePercentPerIteration,
-    uint32_t maxAdvisePercentage,
-    uint32_t lowerFreeMemLimitGB,
-    uint32_t upperFreeMemLimitGB,
+    MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> adviseStrategy) {
-  memMonitorMode = MemoryMonitor::FreeMemory;
   memMonitorInterval = interval;
-  memAdviseReclaimPercentPerIter = advisePercentPerIteration;
-  memMaxAdvisePercent = maxAdvisePercentage;
-  memLowerLimitGB = lowerFreeMemLimitGB;
-  memUpperLimitGB = upperFreeMemLimitGB;
-  poolAdviseStrategy = adviseStrategy;
-  return *this;
-}
-
-template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableResidentMemoryMonitor(
-    std::chrono::milliseconds interval,
-    uint32_t advisePercentPerIteration,
-    uint32_t maxAdvisePercentage,
-    uint32_t lowerResidentMemoryLimitGB,
-    uint32_t upperResidentMemoryLimitGB,
-    std::shared_ptr<RebalanceStrategy> adviseStrategy) {
-  memMonitorMode = MemoryMonitor::ResidentMemory;
-  memMonitorInterval = interval;
-  memAdviseReclaimPercentPerIter = advisePercentPerIteration;
-  memMaxAdvisePercent = maxAdvisePercentage;
-  memLowerLimitGB = lowerResidentMemoryLimitGB;
-  memUpperLimitGB = upperResidentMemoryLimitGB;
+  memMonitorConfig = std::move(config);
   poolAdviseStrategy = adviseStrategy;
   return *this;
 }
@@ -1084,7 +990,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["poolRebalanceInterval"] = util::toString(poolRebalanceInterval);
   configMap["trackTailHits"] = std::to_string(trackTailHits);
   // Stringify enum
-  switch (memMonitorMode) {
+  switch (memMonitorConfig.mode) {
   case MemoryMonitor::FreeMemory:
     configMap["memMonitorMode"] = "Free Memory";
     break;
@@ -1098,17 +1004,16 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
     configMap["memMonitorMode"] = "Unknown";
   }
   configMap["memMonitorInterval"] = util::toString(memMonitorInterval);
-  configMap["memAdviseReclaimPercentPerIter"] =
-      std::to_string(memAdviseReclaimPercentPerIter);
   configMap["memAdvisePercentPerIter"] =
-      std::to_string(memAdvisePercentPerIter);
+      std::to_string(memMonitorConfig.maxAdvisePercentPerIter);
   configMap["memReclaimPercentPerIter"] =
-      std::to_string(memReclaimPercentPerIter);
-  configMap["memMaxAdvisePercent"] = std::to_string(memMaxAdvisePercent);
-  configMap["memLowerLimitGB"] = std::to_string(memLowerLimitGB);
-  configMap["memUpperLimitGB"] = std::to_string(memUpperLimitGB);
+      std::to_string(memMonitorConfig.maxReclaimPercentPerIter);
+  configMap["memMaxAdvisePercent"] =
+      std::to_string(memMonitorConfig.maxAdvisePercent);
+  configMap["memLowerLimitGB"] = std::to_string(memMonitorConfig.lowerLimitGB);
+  configMap["memUpperLimitGB"] = std::to_string(memMonitorConfig.upperLimitGB);
   configMap["reclaimRateLimitWindowSecs"] =
-      std::to_string(reclaimRateLimitWindowSecs.count());
+      std::to_string(memMonitorConfig.reclaimRateLimitWindowSecs.count());
   configMap["reaperInterval"] = util::toString(reaperInterval);
   configMap["mmReconfigureInterval"] = util::toString(mmReconfigureInterval);
   configMap["disableEviction"] = std::to_string(disableEviction);

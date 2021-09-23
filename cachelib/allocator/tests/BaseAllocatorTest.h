@@ -1609,10 +1609,14 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       const size_t nSlabs = 20;
       config.setCacheSize(nSlabs * Slab::kSize);
       // Enable memory monitoring by setting monitoring mode and interval.
-      config.enableFreeMemoryMonitor(
-          std::chrono::seconds{2}, 1 /* advise pct per iteration */,
-          10 /* max advise pct */, 10 /* lower limit */,
-          10000 /* upper limit */);
+      MemoryMonitor::Config memConfig;
+      memConfig.mode = MemoryMonitor::FreeMemory;
+      memConfig.maxAdvisePercentPerIter = 1;
+      memConfig.maxReclaimPercentPerIter = 1;
+      memConfig.maxAdvisePercent = 10;
+      memConfig.lowerLimitGB = 10;
+      memConfig.upperLimitGB = 20;
+      config.enableMemoryMonitor(std::chrono::seconds{2}, memConfig);
 
       AllocatorT alloc(config);
       ASSERT_TRUE(alloc.isOnShm());
@@ -4709,7 +4713,14 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Restoring a saved cache allocator from shared memroy
     {
-      config.enableResidentMemoryMonitor(std::chrono::seconds{2}, 1, 10, 1, 10);
+      MemoryMonitor::Config memConfig;
+      memConfig.mode = MemoryMonitor::ResidentMemory;
+      memConfig.maxAdvisePercentPerIter = 1;
+      memConfig.maxReclaimPercentPerIter = 1;
+      memConfig.maxAdvisePercent = 10;
+      memConfig.lowerLimitGB = 1;
+      memConfig.upperLimitGB = 10;
+      config.enableMemoryMonitor(std::chrono::seconds{2}, memConfig);
       AllocatorT alloc(config);
       ASSERT_TRUE(alloc.isOnShm());
     }

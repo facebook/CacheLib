@@ -248,16 +248,9 @@ void CacheAllocator<CacheTrait>::initWorkers() {
           "supported "
           "for cache on a shared memory segment only.");
     }
-    startNewMemMonitor(config_.memMonitorMode, config_.memMonitorInterval,
-                       (config_.memAdvisePercentPerIter
-                            ? config_.memAdvisePercentPerIter
-                            : config_.memAdviseReclaimPercentPerIter),
-                       (config_.memReclaimPercentPerIter
-                            ? config_.memReclaimPercentPerIter
-                            : config_.memAdviseReclaimPercentPerIter),
-                       config_.memLowerLimitGB, config_.memUpperLimitGB,
-                       config_.memMaxAdvisePercent, config_.poolAdviseStrategy,
-                       config_.reclaimRateLimitWindowSecs);
+    startNewMemMonitor(config_.memMonitorInterval,
+                       config_.memMonitorConfig,
+                       config_.poolAdviseStrategy);
   }
 
   if (config_.itemsReaperEnabled()) {
@@ -3404,20 +3397,11 @@ bool CacheAllocator<CacheTrait>::startNewPoolOptimizer(
 }
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewMemMonitor(
-    MemoryMonitor::Mode memMonitorMode,
     std::chrono::milliseconds interval,
-    unsigned int memAdvisePercentPerIter,
-    unsigned int memReclaimPercentPerIter,
-    unsigned int memLowerLimitGB,
-    unsigned int memUpperLimitGB,
-    unsigned int memMaxAdvisePercent,
-    std::shared_ptr<RebalanceStrategy> strategy,
-    std::chrono::seconds reclaimRateLimitWindowSecs) {
-  memMonitorMaxAdvisedPct_ = memMaxAdvisePercent;
-  return startNewWorker("MemoryMonitor", memMonitor_, interval, memMonitorMode,
-                        memAdvisePercentPerIter, memReclaimPercentPerIter,
-                        memLowerLimitGB, memUpperLimitGB, memMaxAdvisePercent,
-                        strategy, reclaimRateLimitWindowSecs);
+    MemoryMonitor::Config config,
+    std::shared_ptr<RebalanceStrategy> strategy) {
+  return startNewWorker("MemoryMonitor", memMonitor_, interval,
+                        std::move(config), strategy);
 }
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
