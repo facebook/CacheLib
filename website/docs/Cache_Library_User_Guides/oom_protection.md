@@ -17,12 +17,9 @@ In this mode, you ask cachelib to monitor the *total free memory* in the system 
 
 
 ```cpp
-config.enableFreeMemoryMonitor(
+config.enableMemoryMonitor(
     std::chrono::seconds(interval),
-    maxResizePerIterationPercent,
-    maxRemovedPercent,
-    minFreeMem,
-    maxFreeMem,
+    memoryMonitoringConfig,
     std::shared_ptr<facebook::cachelib::LruTailAgeStrategy>());
 ```
 
@@ -30,45 +27,52 @@ config.enableFreeMemoryMonitor(
 * **interval**:
 This specifies the frequency at which cachelib monitors the system free memory and decides to shrink or grow the cache.
 
-* `maxResizePerIterationPercent`
-Specifies the maximum amount of memory that can be reclaimed or shrunk in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`maxFreeMem - minFreeMem`). Setting this too high is not recommended especially when you intend to grow the cache back.
-
-* `maxRemovedPercent`
+* **memoryMonitoringConfig**:
+Specifies the memory monitoring configuration settings in MemoryMonitor::Config below:
+    * `mode`
+Specifies free memory monitoring mode. MemoryMonitor::FreeMemory
+    * `maxShrinkPerIterationPercent`
+Specifies the maximum amount of memory that can be shrunk in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`maxFreeMem - minFreeMem`).
+    * `maxGrowPerIterationPercent`
+Specifies the maximum amount of memory that can be grown in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`maxFreeMem - minFreeMem`). Setting this too high is not recommended.
+    * `maxRemovedPercent`
 Specifies the maximum percentage of the overall cache size that can be shrunk.
-
-* `minFreeMem`
+    * `minFreeMem`
 Free memory value at which the cache will start shrinking to increase the system free memory.
-
-* `maxFreeMem`
+    * `maxFreeMem`
 Free memory value at which the shrunken cache will grow back to its previous size.
+    * `reclaimRateLimitWindow`
+Growing cache while free memory is falling can cause OOMs. This configuration specifies a window of time over which rate of decrease in free memory is monitored to throttle growing cache.
 
-* `strategy`
+* **strategy**:
 Strategy to use for freeing up the memory. For more information, see [Pool rebalance strategy](pool_rebalance_strategy).
 
 For example, if your `config.size` was 100 GB and you are running on a system with 144 GB, with intent to have free memory around 10 GB. Setting `minFreeMem=10GB`, `maxFreeMem=15GB`, `maxResizePerIterationPercent=10`, `maxRemovedPercent=5` would make cachelib give away cache memory when free memory is below 10 GB and grow back the cache when free memory jumps above 15 GB. While shrinking, it will give away 10% of 5GB = 500MB in each iteration and only give up a maximum of 8% of the cache, which is 8 GB at the maximum. Note that if your heap usage regresses by more than 8 GB, this means that cachelib can no longer shrink itself to save you from dipping below your expected 10 GB head room.
 
 ## Resident memory mode
 
-Your process may be running inside a Tupperware container where a OOM is a result of your process exceeding container memory limits. The `ResidentMemoryMode` is applicable when you run your process in a container and need to monitor the memory usage of the process to stay within the container limits as opposed to overall system free memory. In this mode, cachelib watches the process resident set size (RSS) footprint to figure out when cachelib could shrink the cache size to keep the overall process RSS under the expected limit.
+Your process may be running inside a container where a OOM is a result of your process exceeding container memory limits. The `ResidentMemoryMode` is applicable when you run your process in a container and need to monitor the memory usage of the process to stay within the container limits as opposed to overall system free memory. In this mode, cachelib watches the process resident set size (RSS) footprint to figure out when cachelib could shrink the cache size to keep the overall process RSS under the expected limit.
 
 
 ```cpp
-config.enableResidentMemoryMonitor(
+config.enableMemoryMonitor(
     std::chrono::seconds(interval),
+    memoryMonitoringConfig,
     maxResizePerIterationPercent,
-    maxRemovedPercent,
-    minProcessSize,
-    maxProcessSize,
     std::shared_ptr<facebook::cachelib::LruTailAgeStrategy>());
 ```
 
 
-The semantics of `interval`, `maxResizePerIterationPercent`, `maxRemovedPercent`, and `strategy` remains the same as those defined in free memory monitor mode. The following two parameters are different to reflect the process RSS:
+The semantics of `interval`, `memoryMonitoringConfig`, and `strategy` remains the same as those defined in free memory monitor mode. The following `memoryMonitoringConfig` parameters are different to reflect the process RSS:
 
+* `mode`
+Specifies resident memory monitoring mode. MemoryMonitor::FreeMemory
 * `minProcessSize`
 Process RSS size at which the cachelib can grow back the shrunken cache.
 * `maxProcessSize`
 Process RSS size at which cachelib shrinks the cache to keep the process RSS below the configured limit.
+* `reclaimRateLimitWindow`
+Growing cache while process RSS size is increasing can cause OOMs. This configuration specifies a window of time over which rate of increase in process RSS size is monitored to throttle growing cache.
 
 For example, if you have configured 100 GB cache on a 144 GB container. Setting `maxProcessSize=120GB` and `minProcessSize=110GB` tells cachelib to start shrinking the cache when the process RSS grows beyond 120 GB. When the regression goes away and the process RSS is below 110 GB, cachelib slowly grows back the cache memory until the process RSS reaches 120 GB.
 
