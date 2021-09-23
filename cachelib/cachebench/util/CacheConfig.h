@@ -138,6 +138,26 @@ struct CacheConfig : public JSONConfig {
   // bucket size for BigHash. This controls the write amplification for small
   // objects in Navy. Every small object write performs a RMW for a bucket.
   uint64_t navyBigHashBucketSize = 4096;
+  
+  // Determines how much of the device is given to kangaroo engine in Navy
+  uint64_t navyKangarooSizePct = 0;
+
+  // Kangaroo Bucket Size determines how big each bucket is and what
+  // is the phsyical write granularity onto the device.
+  uint64_t navyKangarooBucketSize = 4096;
+
+  // Determines how much of the device is given to kangaroo log
+  uint64_t navyKangarooLogSizePct = 0;
+
+  // Kangaroo threshold for objects to be moved from log to a bucket
+  uint64_t navyKangarooLogThreshold = 2;
+
+  // Number of physical partitions for Log, makes indexing smaller, increases
+  // buffer space
+  uint64_t navyKangarooLogPhysicalPartitions = 1;
+
+  // Number of index partitions per physical partitions, allows for smaller index
+  uint64_t navyKangarooLogIndexPerPhysicalPartitions = 1;
 
   // Big Hash bloom filter size in bytes per bucket above.
   uint64_t navyBloomFilterPerBucketSize = 8;
@@ -169,6 +189,8 @@ struct CacheConfig : public JSONConfig {
 
   // disabled when value is 0
   uint32_t navyAdmissionWriteRateMB{0};
+  double navyAdmissionProb{0};
+
 
   // maximum pending inserts before rejecting new inserts.
   uint32_t navyMaxConcurrentInserts{1000000};

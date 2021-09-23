@@ -184,6 +184,17 @@ Cache<Allocator>::Cache(const CacheConfig& config,
                                       config_.navyBloomFilterPerBucketSize,
                                       config_.navySmallItemMaxSize);
     }
+    
+    if (config_.navyKangarooSizePct > 0) {
+        nvmConfig.navyConfig.setKangaroo(config_.navyKangarooSizePct,
+                                         config_.navyKangarooBucketSize,
+                                         config_.navyBloomFilterPerBucketSize,
+                                         config_.navySmallItemMaxSize,
+                                         config_.navyKangarooLogSizePct,
+                                         config_.navyKangarooLogThreshold,
+                                         config_.navyKangarooLogPhysicalPartitions,
+                                         config_.navyKangarooLogIndexPerPhysicalPartitions);
+    }
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
 
@@ -524,6 +535,7 @@ Stats Cache<Allocator>::getStats() const {
     ret.numNvmItems = lookup("navy_bh_items") + lookup("navy_bc_items");
     ret.numNvmBytesWritten = lookup("navy_device_bytes_written");
     uint64_t now = fetchNandWrites();
+    
     if (now > nandBytesBegin_) {
       ret.numNvmNandBytesWritten = now - nandBytesBegin_;
     }
