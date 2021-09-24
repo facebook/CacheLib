@@ -1,12 +1,9 @@
 {
     "cache_config": {
     "cacheSizeMB": 32000,
-    "poolRebalanceIntervalSec": 5,
-    "rebalanceStrategy": "tail-age",
     "allocFactor": 1.08,
     "maxAllocSize": 524288,
     "minAllocSize": 64,
-    "htBucketPower": 27,
 
     "navyReaderThreads": 32,
     "navyWriterThreads": 32,
@@ -16,16 +13,16 @@
       "nvme2n1"
     ],
     "navyBigHashBucketSize": 4096,
-    "navyBigHashSizePct": 60,
+    "navyBigHashSizePct": 50,
     "navySmallItemMaxSize": 1024,
     "navyBlockSize": 4096,
     "navyParcelMemoryMB": 6048,
     "nvmCacheSizeMB": 932000,
     "enableChainedItem": true,
-    "htBucketPower": 26,
+    "htBucketPower": 27,
     "moveOnSlabRelease": true,
     "poolRebalanceIntervalSec": 2,
-    "rebalanceStrategy": "tail-age",
+    "rebalanceStrategy": "hits",
     "rebalanceMinRatio": 0.1,
     "rebalanceMinSlabs": 2,
     "navySizeClasses": [],
@@ -41,8 +38,8 @@
       "numKeys": 14463466000000,
       "numOps": 5000000000,
       "numThreads": 48,
-      "popDistFile": "memcache_twmemcache.reg.altoona_pop.json",
-      "valSizeDistFile": "memcache_twmemcache.reg.altoona_sizes.json",
+      "popDistFile": "pop.json",
+      "valSizeDistFile": "sizes.json",
 
 
       "opDelayNs" : 1000000,
