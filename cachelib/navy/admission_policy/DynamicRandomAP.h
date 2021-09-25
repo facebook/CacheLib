@@ -118,6 +118,11 @@ class DynamicRandomAP final : public AdmissionPolicy {
   // Get stats counters to export.
   void getCounters(const CounterVisitor& visitor) const override;
 
+  void setMaxWriteRate(uint64_t maxRate) {
+    maxRate_ = maxRate;
+    update();
+  }
+
  private:
   struct ValidConfigTag {};
   struct ThrottleParams {
@@ -147,7 +152,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   // The rate we are configered to write on average over a day.
   const uint64_t targetRate_{};
   // The rate we are confiigured to write at most.
-  const uint64_t maxRate_{};
+  std::atomic<uint64_t> maxRate_{};
   const std::chrono::seconds updateInterval_{};
   const uint32_t baseProbabilityMultiplier_{};
   const double probabilitySeed_{};

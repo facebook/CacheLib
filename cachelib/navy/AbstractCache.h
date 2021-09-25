@@ -114,6 +114,13 @@ class AbstractCache {
 
   // Return how big the cache size is in bytes
   virtual uint64_t getSize() const = 0;
+
+  // This is a temporary API to update the maxWriteRate for
+  // DynamicRandomAdissionPolicy. The long term plan is to
+  // support online update to this and other cache configs.
+  // Returns true if update successfully
+  //         false if AdissionPolicy is not set or not DynamicRandom.
+  virtual bool updateMaxRateForDynamicRandomAP(uint64_t) = 0;
 };
 } // namespace navy
 } // namespace cachelib

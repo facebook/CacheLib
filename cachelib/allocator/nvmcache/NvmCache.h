@@ -24,6 +24,7 @@
 
 #include <array>
 #include <mutex>
+#include <stdexcept>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/CacheApiWrapper.h"
@@ -195,6 +196,10 @@ class NvmCache {
   std::unordered_map<std::string, double> getStatsMap() const;
 
   size_t getSize() const noexcept { return navyCache_->getSize(); }
+
+  bool updateMaxRateForDynamicRandomAP(uint64_t maxRate) {
+    return navyCache_->updateMaxRateForDynamicRandomAP(maxRate);
+  }
 
  private:
   detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }

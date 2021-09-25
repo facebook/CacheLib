@@ -126,6 +126,13 @@ class Driver final : public AbstractCache {
   // returns the navy stats
   void getCounters(const CounterVisitor& visitor) const override;
 
+  // This is a temporary API to update the maxWriteRate for
+  // DynamicRandomAdissionPolicy. The long term plan is to
+  // support online update to this and other cache configs.
+  // Returns true if update successfully
+  //         false if AdissionPolicy is not set or not DynamicRandom.
+  bool updateMaxRateForDynamicRandomAP(uint64_t maxRate) override;
+
  private:
   struct ValidConfigTag {};
 

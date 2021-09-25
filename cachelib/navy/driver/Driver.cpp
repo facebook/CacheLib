@@ -18,6 +18,7 @@
 
 #include <folly/synchronization/Baton.h>
 
+#include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/NoopEngine.h"
 #include "folly/Format.h"
@@ -348,6 +349,15 @@ bool Driver::recover() {
     }
   }
   return recovered;
+}
+
+bool Driver::updateMaxRateForDynamicRandomAP(uint64_t maxRate) {
+  DynamicRandomAP* ptr = dynamic_cast<DynamicRandomAP*>(admissionPolicy_.get());
+  if (ptr) {
+    ptr->setMaxWriteRate(maxRate);
+    return true;
+  }
+  return false;
 }
 
 uint64_t Driver::getSize() const { return device_->getSize(); }
