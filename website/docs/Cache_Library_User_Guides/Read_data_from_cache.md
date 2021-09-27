@@ -7,7 +7,7 @@ An item written to cache by cachelib is associated with a key. To read the item 
 
 
 ```cpp
-ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
+ItemHandle find(Key key);
 ```
 
 

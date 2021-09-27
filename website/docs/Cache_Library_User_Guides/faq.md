@@ -38,7 +38,7 @@ If you're using a cache that's tens of GB or more, it will take a while to finis
 
 ### I update certain items in my cache frequently (from some refill logic), but I do not want them to be seen as hotter than other items in my cache which are updated less frequently but read just as frequently. What can I do?
 
-If you know you're doing a mutation, pass in `AccessMode::kWrite` when you call `find()` on CacheAllocator. And configure LRU (or any other eviction policies you're using) to only promote for reads.
+You can configure LRU (or any other eviction policies you're using) to only promote for reads.
 
 ### How do I use an item?
 

@@ -18,7 +18,7 @@ std::map<std::string, std::string> dict = {
 };
 for (const auto& [k, v] : dict) {
   auto item_handle = cache->allocate(pool_id, k, v.size());
-  std::memcpy(item_handle->getWritableMemory(), v.data(), v.size());
+  std::memcpy(item_handle->getMemory(), v.data(), v.size());
   cache->insertOrReplace(item_handle);
 }
 ```
@@ -54,14 +54,14 @@ Chained items are stored in cache as a linked list. For example, suppose you wri
 ```cpp
 std::string parent_item("parent item");
 auto parent_item_handle = cache->allocate(pool_id, "parent key", parent_item.size());
-std::memcpy(parent_item_handle->getWritableMemory(), parent_item.c_str(), parent_item.size());
+std::memcpy(parent_item_handle->getMemory(), parent_item.c_str(), parent_item.size());
 cache->insert(parent_item_handle);
 
 auto size = 100
 std::vector<std::string> vitems = { "item 1", "item 2", "item 3" };
 for (auto& itr : vitems) {
   auto item_handle = cache->allocateChainedItem(parent_item_handle, size);
-  std::memcpy(item_handle->getWritableMemory(), itr.c_str(), itr.size());
+  std::memcpy(item_handle->getMemory(), itr.c_str(), itr.size());
   cache->addChainedItem(parent_item_handle, std::move(item_handle));
 }
 ```

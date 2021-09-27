@@ -69,7 +69,7 @@ std::map<std::string, std::string> dict = {
 };
 for (auto& itr : dict) {
   auto item_handle = cache->allocate(pool_id, itr.first, itr.second.size());
-  std::memcpy(item_handle->getWritableMemory(), itr.first.data(), itr.second.size());
+  std::memcpy(item_handle->getMemory(), itr.first.data(), itr.second.size());
   cache->insertOrReplace(item_handle);
 }
 ```

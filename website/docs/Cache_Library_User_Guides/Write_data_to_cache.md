@@ -51,12 +51,12 @@ where:
 - `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple dram cache](Set_up_a_simple_cache)).
 - `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::HandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
 
-To get the writable memory from the allocated memory, call the `getWritableMemory` method via the item handle:
+To get the writable memory from the allocated memory, call the `getMemory` method via the item handle:
 
 
 ```cpp
 if (item_handle) {
-  void* pwm = item_handle->getWritableMemory();
+  void* pwm = item_handle->getMemory();
 }
 ```
 
@@ -100,11 +100,11 @@ void* memcpy(void* destination, const void* source, size_t num);
 ```
 
 
-To get the destination address, call the `getWritableMemory()` method via the `ItemHandle`:
+To get the destination address, call the `getMemory()` method via the `ItemHandle`:
 
 
 ```cpp
-void* pwm = item_handle->getWritableMemory();
+void* pwm = item_handle->getMemory();
 ```
 
 
@@ -140,7 +140,7 @@ auto item_handle = cache->allocate(pool_id, "key1", data.size());
 
 if (item_handle) {
   // Write the data to the allocated memory.
-  std::memcpy(item_handle->getWritableMemory(), data.data(), data.size());
+  std::memcpy(item_handle->getMemory(), data.data(), data.size());
 
   // Insert the item handle into the cache.
   cache->insertOrReplace(item_handle);
@@ -159,7 +159,7 @@ string data("new data");
 auto item_handle = cache->allocate(pool_id, "key2", data.size());
 
 // Write the data to the cache.
-std::memcpy(handle->getWritableMemory(), data.data(), data.size());
+std::memcpy(handle->getMemory(), data.data(), data.size());
 
 // Insert the item handle into the cache.
 cache->insertOrReplace(item_handle);
@@ -169,7 +169,7 @@ data = "Repalce the data associated with key key1";
 item_handle = cache->allocate(pool_id, "key1", data.size());
 
 // Write the replacement data to the cache.
-std::memcpy(item_handle->getWritableMemory(), data.data(), data.size());
+std::memcpy(item_handle->getMemory(), data.data(), data.size());
 
 // Insert the item handle into the cache.
 cache->insertOrReplace(item_handle);
@@ -197,7 +197,7 @@ for (auto itr = chained_items.begin(); itr != chained_items.end(); ++itr) {
   }
 
   // Write data to the chained item.
-  std::memcpy(item_handle->getWritableMemory(), itr->data(), itr->size());
+  std::memcpy(item_handle->getMemory(), itr->data(), itr->size());
 
   // Add the chained item to the parent item.
   cache->addChainedItem(parent_handle, std::move(item_handle));
