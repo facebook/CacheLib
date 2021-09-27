@@ -1,0 +1,14 @@
+# From: https://github.com/marketplace/actions/clang-format-check#single-path
+name: clang-format Check
+on: [pull_request]
+jobs:
+  formatting-check:
+    name: CLANG-Formatting Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run clang-format style check for C/C++ programs.
+      uses: jidicula/clang-format-action@v3.4.0
+      with:
+        clang-format-version: '11'
+        check-path: ['cachelib', 'examples']
