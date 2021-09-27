@@ -201,6 +201,11 @@ struct CacheConfig : public JSONConfig {
   // a location for the ML model using this argument.
   std::string mlNvmAdmissionPolicyLocation{""};
 
+  // The target recall of the ML model.
+  // TODO: use an opaque config file path and put that path location here if we
+  // need to expose more configs related to ML model.
+  double mlNvmAdmissionTargetRecall{0.9};
+
   // If enabled, we will use the timestamps from the trace file in the ticker
   // so that the cachebench will observe time based on timestamps from the trace
   // instead of the system time.
