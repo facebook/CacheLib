@@ -34,8 +34,8 @@ percentiles="p50us p90us p99us p999us p9999us p99999us p999999us p100us"
 #   NVM Read Latency p99999  : 5533.74 us
 #   NVM Read Latency p999999 : 5533.74 us
 #   NVM Read Latency p100    : 9111.00 us
-#  
-#   becomes 
+#
+#   becomes
 #   1 201.39   449.96   1054.32 .... 9111.00
 extract_latency() {
     local in=$3
@@ -58,6 +58,31 @@ extract_latency() {
         echo "$search latency written to $out"
 }
 
+bandwidth="egress_gb_s ingress_gb_s"
+# grep for the last line, convert egressBytesPerSec/ingressBytesPerSec into columns
+# egressBytes : 4573.78 GB, ingressBytes: 771.18 GB, egressBytesPerSec :   9.53 GB/s, ingressBytesPerSec:   1.61 GB/s, ingressEgressratio:  83.14%
+#
+#   becomes
+#   9.53   1.61
+extract_bandwidth() {
+    local in=$3
+    local out=$2
+    local search=$1
+
+    {
+        echo "$bandwidth"
+        # get the bandwidth
+        grep -e "$search" "$in"             | \
+            tail -1                         | \
+            awk '{print $10 " " $13}'
+    }  | column -t > "$out"
+
+    # check if the file actually produced valid content
+    [[ "$(wc -l < "$out")" -eq "1" ]] &&                        \
+        echo "Incorrect log file. No bandwidth records found" ||  \
+        echo "Bandwidth written to $out"
+}
+
 extract_median() {
     local in="$1"
     local column="$2"
@@ -74,7 +99,7 @@ print_median_percentile() {
     local i=2
     local type="$2"
     echo -n "$type "
-    for _ in $percentiles; do 
+    for _ in $percentiles; do
         pct_val=$(extract_median "$tsv" $i)
         echo -n "$pct_val "
         i=$((i+1))
@@ -89,9 +114,11 @@ filename=$(basename "$input_logfile")
 # location of the intermediate tsv
 read_tsv="$out_dir/${filename%%.*}_read_latency.tsv"
 write_tsv="$out_dir/${filename%%.*}_write_latency.tsv"
+bandwidth_tsv="$out_dir/${filename%%.*}_bandwidth.tsv"
 
 extract_latency "NVM Write Latency" "$write_tsv"  "$input_logfile"
 extract_latency "NVM Read  Latency" "$read_tsv"  "$input_logfile"
+extract_bandwidth "egressBytesPerSec" "$bandwidth_tsv"  "$input_logfile"
 
 # location of the final latency charts
 read_png="$out_dir/${filename%%.*}_read_latency.png"
@@ -117,6 +144,3 @@ echo -e "\n\n======= Median Latency ======= "
     print_median_percentile "$read_tsv" "read"
     print_median_percentile "$write_tsv" "write"
 } | column -t
-
-
-
