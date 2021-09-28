@@ -545,13 +545,12 @@ class MemoryAllocator {
   serialization::MemoryAllocatorObject saveState();
 
   template <typename PtrType, typename CompressedPtrType>
-  using PtrCompressorType = facebook::cachelib::
+  using SingleTierPtrCompressorType = facebook::cachelib::
       PtrCompressor<PtrType, SlabAllocator, CompressedPtrType>;
 
   template <typename PtrType, typename CompressedPtrType>
-  PtrCompressorType<PtrType, CompressedPtrType> createPtrCompressor() {
-    return slabAllocator_.createPtrCompressor<PtrType, CompressedPtrType>();
-  }
+  using PtrCompressorType = facebook::cachelib::
+      PtrCompressor<PtrType, std::vector<std::unique_ptr<MemoryAllocator>>, CompressedPtrType>;
 
   // compress a given pointer to a valid allocation made out of this allocator
   // through an allocate() or nullptr. Calling this otherwise with invalid
@@ -681,6 +680,12 @@ class MemoryAllocator {
   // return the minimum allocation size
   uint32_t getMinAllocSize() const noexcept {
     return slabAllocator_.getMinAllocSize();
+  }
+  // returns ture if ptr points to memory which is managed by this
+  // allocator
+  bool isMemoryInAllocator(const void *ptr) {
+    return ptr && ptr >= slabAllocator_.getSlabMemoryBegin()
+      && ptr < slabAllocator_.getSlabMemoryEnd();
   }
 
  private:

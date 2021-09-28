@@ -93,6 +93,7 @@ struct CacheConfig : public JSONConfig {
   bool lruUpdateOnRead{true};
   bool tryLockUpdate{false};
   bool useCombinedLockForIterators{false};
+  bool insertToFirstFreeTier{false};
 
   // LRU param
   uint64_t lruIpSpec{0};

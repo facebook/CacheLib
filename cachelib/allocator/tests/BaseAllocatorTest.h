@@ -1711,6 +1711,141 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     testShmIsRemoved(config);
   }
 
+  void testMultiTierSerialization() {
+    std::set<std::string> evictedKeys;
+    auto removeCb =
+        [&evictedKeys](const typename AllocatorT::RemoveCbData& data) {
+          if (data.context == RemoveContext::kEviction) {
+            const auto key = data.item.getKey();
+            evictedKeys.insert({key.data(), key.size()});
+          }
+        };
+
+    const size_t nSlabs = 40;
+    const size_t size = nSlabs * Slab::kSize;
+    const unsigned int nSizes = 1;
+    const unsigned int keyLen = 100;
+
+    std::vector<uint32_t> sizes;
+    uint8_t poolId;
+
+    // Test allocations. These allocations should remain after save/restore.
+    // Original lru allocator - with two tiers
+    typename AllocatorT::Config config;
+    config.setCacheSize(size);
+    config.enableCachePersistence(this->cacheDir_);
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+    config.configureMemoryTiers({
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0")),
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0"))});
+    std::vector<std::string> keys;
+    {
+      AllocatorT alloc(AllocatorT::SharedMemNew, config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      poolId = alloc.addPool("foobar", numBytes);
+      sizes = this->getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
+      this->fillUpPoolUntilEvictions(alloc, 0,  poolId, sizes, keyLen);
+      this->fillUpPoolUntilEvictions(alloc, 1,  poolId, sizes, keyLen);
+      for (const auto& item : alloc) {
+        auto key = item.getKey();
+        keys.push_back(key.str());
+      }
+
+      // save
+      alloc.shutDown();
+    }
+
+    testShmIsNotRemoved(config);
+    // Restored lru allocator
+    {
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
+      for (auto& key : keys) {
+        auto handle = alloc.find(typename AllocatorT::Key{key});
+        ASSERT_NE(nullptr, handle.get());
+      }
+    }
+
+    testShmIsRemoved(config);
+    // Test LRU eviction and length before and after save/restore
+    // Original lru allocator
+    typename AllocatorT::Config config2;
+    config2.setCacheSize(size);
+    config2.setRemoveCallback(removeCb);
+    config2.enableCachePersistence(this->cacheDir_);
+    config2.configureMemoryTiers({
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0")),
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0"))});
+    {
+      AllocatorT alloc(AllocatorT::SharedMemNew, config2);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      poolId = alloc.addPool("foobar", numBytes);
+
+      sizes = this->getValidAllocSizes(alloc, poolId, nSizes, keyLen);
+
+      this->testLruLength(alloc, poolId, sizes, keyLen, evictedKeys);
+
+      // save
+      alloc.shutDown();
+    }
+    evictedKeys.clear();
+
+    testShmIsNotRemoved(config2);
+    // Restored lru allocator
+    {
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config2);
+      this->testLruLength(alloc, poolId, sizes, keyLen, evictedKeys);
+    }
+
+    testShmIsRemoved(config2);
+  }
+
+  void testMultiTierSerializationMMConfig() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(20 * Slab::kSize);
+    config.enableCachePersistence(this->cacheDir_);
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+    config.configureMemoryTiers({
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0")),
+        MemoryTierCacheConfig::fromShm()
+            .setRatio(1).setMemBind(std::string("0"))});
+    double ratio = 0.2;
+
+    // start allocator
+    {
+      AllocatorT alloc(AllocatorT::SharedMemNew, config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      {
+        typename AllocatorT::MMConfig mmConfig;
+        mmConfig.lruRefreshRatio = ratio;
+        auto pid =
+            alloc.addPool("foobar", numBytes, /* allocSizes = */ {}, mmConfig);
+        auto handle = util::allocateAccessible(alloc, pid, "key", 10);
+        ASSERT_NE(nullptr, handle);
+        auto& container = alloc.getMMContainer(*handle);
+        EXPECT_DOUBLE_EQ(ratio, container.getConfig().lruRefreshRatio);
+      }
+
+      // save
+      alloc.shutDown();
+    }
+    testShmIsNotRemoved(config);
+
+    // restore allocator and check lruRefreshRatio
+    {
+      AllocatorT alloc(AllocatorT::SharedMemAttach, config);
+      auto handle = alloc.find("key");
+      ASSERT_NE(nullptr, handle);
+      auto& container = alloc.getMMContainer(*handle);
+      EXPECT_DOUBLE_EQ(ratio, container.getConfig().lruRefreshRatio);
+    }
+    testShmIsRemoved(config);
+  }
+
   // Test temporary shared memory mode which is enabled when memory
   // monitoring is enabled.
   void testShmTemporary() {
@@ -4342,13 +4477,13 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Had a bug: D4799860 where we allocated the wrong size for chained item
     {
       const auto parentAllocInfo =
-          alloc.allocator_->getAllocInfo(itemHandle->getMemory());
+          alloc.allocator_[0 /* TODO - extend test */]->getAllocInfo(itemHandle->getMemory());
       const auto child1AllocInfo =
-          alloc.allocator_->getAllocInfo(chainedItemHandle->getMemory());
+          alloc.allocator_[0 /* TODO - extend test */]->getAllocInfo(chainedItemHandle->getMemory());
       const auto child2AllocInfo =
-          alloc.allocator_->getAllocInfo(chainedItemHandle2->getMemory());
+          alloc.allocator_[0 /* TODO - extend test */]->getAllocInfo(chainedItemHandle2->getMemory());
       const auto child3AllocInfo =
-          alloc.allocator_->getAllocInfo(chainedItemHandle3->getMemory());
+          alloc.allocator_[0 /* TODO - extend test */]->getAllocInfo(chainedItemHandle3->getMemory());
 
       const auto parentCid = parentAllocInfo.classId;
       const auto child1Cid = child1AllocInfo.classId;

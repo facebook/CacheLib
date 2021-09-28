@@ -17,10 +17,21 @@
 namespace cpp2 facebook.cachelib.serialization
 
 include "cachelib/allocator/datastruct/serialize/objects.thrift"
+include "cachelib/allocator/memory/serialize/objects.thrift"
 
 // Adding a new "required" field will cause the cache to be dropped
 // in the next release for our users. If the field needs to be required,
 // make sure to communicate that with our users.
+
+struct MemoryAllocatorCollection {
+  1: required map<i32, MemoryAllocatorObject> allocators;
+}
+
+struct MemoryDescriptorObject {
+  1: required i32 tid;
+  2: required i32 pid;
+  3: required i32 cid;
+}
 
 struct CacheAllocatorMetadata {
   1: required i64 allocatorVersion; // version of cache alloctor
@@ -80,7 +91,7 @@ struct MMLruObject {
 }
 
 struct MMLruCollection {
-  1: required map<i32, map<i32, MMLruObject>> pools;
+  1: required map<MemoryDescriptorObject, MMLruObject> containers;
 }
 
 struct MM2QConfig {
@@ -106,7 +117,7 @@ struct MM2QObject {
 }
 
 struct MM2QCollection {
-  1: required map<i32, map<i32, MM2QObject>> pools;
+  1: required map<MemoryDescriptorObject, MM2QObject> containers;
 }
 
 struct MMTinyLFUConfig {
@@ -134,7 +145,7 @@ struct MMTinyLFUObject {
 }
 
 struct MMTinyLFUCollection {
-  1: required map<i32, map<i32, MMTinyLFUObject>> pools;
+  1: required map<MemoryDescriptorObject, MMTinyLFUObject> containers;
 }
 
 struct ChainedHashTableObject {

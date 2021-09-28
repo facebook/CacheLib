@@ -44,6 +44,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, tryLockUpdate);
   JSONSetVal(configJson, lruIpSpec);
   JSONSetVal(configJson, useCombinedLockForIterators);
+  
+  JSONSetVal(configJson, insertToFirstFreeTier);
 
   JSONSetVal(configJson, lru2qHotPct);
   JSONSetVal(configJson, lru2qColdPct);

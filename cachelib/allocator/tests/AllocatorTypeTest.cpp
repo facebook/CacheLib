@@ -117,9 +117,13 @@ TYPED_TEST(BaseAllocatorTest, DropFile) { this->testDropFile(); }
 TYPED_TEST(BaseAllocatorTest, ShmTemporary) { this->testShmTemporary(); }
 
 TYPED_TEST(BaseAllocatorTest, Serialization) { this->testSerialization(); }
+TYPED_TEST(BaseAllocatorTest, MultiTierSerialization) { this->testMultiTierSerialization(); }
 
 TYPED_TEST(BaseAllocatorTest, SerializationMMConfig) {
   this->testSerializationMMConfig();
+}
+TYPED_TEST(BaseAllocatorTest, MultiTierSerializationMMConfig) {
+  this->testMultiTierSerializationMMConfig();
 }
 
 TYPED_TEST(BaseAllocatorTest, testSerializationWithFragmentation) {

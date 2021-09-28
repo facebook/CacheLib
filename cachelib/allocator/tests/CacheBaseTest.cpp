@@ -33,8 +33,10 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   const std::string getCacheName() const override { return cacheName; }
   bool isObjectCache() const override { return false; }
   const MemoryPool& getPool(PoolId) const override { return memoryPool_; }
+  //TODO: support tiers
+  const MemoryPool& getPoolByTid(PoolId, TierId tid) const override { return memoryPool_; }
   PoolStats getPoolStats(PoolId) const override { return PoolStats(); }
-  ACStats getACStats(PoolId, ClassId) const { return ACStats(); };
+  ACStats getACStats(TierId, PoolId, ClassId) const { return ACStats(); };
   AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId) const override {
     return AllSlabReleaseEvents{};
   }

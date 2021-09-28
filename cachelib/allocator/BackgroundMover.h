@@ -27,27 +27,33 @@ template <typename C>
 struct BackgroundMoverAPIWrapper {
   // traverse the cache and move items from one tier to another
   // @param cache             the cache interface
+  // @param tid               the tier to traverse
   // @param pid               the pool id to traverse
   // @param cid               the class id to traverse
   // @param evictionBatch     number of items to evict in one go
   // @param promotionBatch    number of items to promote in one go
   // @return pair of number of items evicted and promoted
   static std::pair<size_t, size_t> traverseAndMoveItems(C& cache,
+                                                        TierId tid,
                                                         PoolId pid,
                                                         ClassId cid,
                                                         size_t evictionBatch,
                                                         size_t promotionBatch) {
-    return cache.traverseAndMoveItems(pid, cid, evictionBatch, promotionBatch);
+    return cache.traverseAndMoveItems(tid, pid, cid, evictionBatch, promotionBatch);
   }
   static std::pair<size_t, double> getApproxUsage(C& cache,
+                                                  TierId tid,
                                                   PoolId pid,
                                                   ClassId cid) {
-    const auto& pool = cache.getPool(pid);
+    const auto& pool = cache.getPoolByTid(pid, tid);
     // we wait until all slabs are allocated before we start evicting
     if (!pool.allSlabsAllocated()) {
       return {0, 0.0};
     }
     return pool.getApproxUsage(cid);
+  }
+  static unsigned int getNumTiers(C& cache) {
+    return cache.getNumTiers();
   }
 };
 
@@ -78,7 +84,7 @@ class BackgroundMover : public PeriodicWorker {
 
   // return id of the worker responsible for promoting/evicting from particlar
   // pool and allocation calss (id is in range [0, numWorkers))
-  static size_t workerId(PoolId pid, ClassId cid, size_t numWorkers);
+  static size_t workerId(TierId tid, PoolId pid, ClassId cid, size_t numWorkers);
 
  private:
   struct TraversalStats {
@@ -135,7 +141,9 @@ BackgroundMover<CacheT>::BackgroundMover(Cache& cache,
     : cache_(cache),
       evictionBatch_(evictionBatch),
       promotionBatch_(promotionBatch),
-      targetFree_(targetFree) {}
+      targetFree_(targetFree) {
+        numTiers_ = BackgroundMoverAPIWrapper<CacheT>::getNumTiers(cache_);
+      }
 
 template <typename CacheT>
 void BackgroundMover<CacheT>::TraversalStats::recordTraversalTime(
@@ -170,8 +178,8 @@ template <typename CacheT>
 void BackgroundMover<CacheT>::setAssignedMemory(
     std::vector<MemoryDescriptorType>&& assignedMemory) {
   XLOG(INFO, "Class assigned to background worker:");
-  for (auto [pid, cid] : assignedMemory) {
-    XLOGF(INFO, "Pid: {}, Cid: {}", pid, cid);
+  for (auto [tid, pid, cid] : assignedMemory) {
+    XLOGF(INFO, "Tid: {}, Pid: {}, Cid: {}", tid, pid, cid);
   }
 
   mutex_.lock_combine([this, &assignedMemory] {
@@ -185,10 +193,10 @@ BackgroundMover<CacheT>::getNumItemsToFree(
     const std::vector<MemoryDescriptorType>& assignedMemory) {
   std::map<MemoryDescriptorType, size_t> toFree;
   for (const auto& md : assignedMemory) {
-    const auto [pid, cid] = md;
+    const auto [tid, pid, cid] = md;
     const auto& pool = cache_.getPool(pid);
     const auto [activeItems, usage] =
-        BackgroundMoverAPIWrapper<CacheT>::getApproxUsage(cache_, pid, cid);
+        BackgroundMoverAPIWrapper<CacheT>::getApproxUsage(cache_, tid, pid, cid);
     if (usage < 1 - targetFree_) {
       toFree[md] = 0;
     } else {
@@ -210,7 +218,7 @@ void BackgroundMover<CacheT>::checkAndRun() {
   while (true) {
     bool allDone = true;
     for (auto md : assignedMemory) {
-      const auto [pid, cid] = md;
+      const auto [tid, pid, cid] = md;
       size_t evictionBatch = evictionBatch_;
       size_t promotionBatch = 0; // will enable with multi-tier support
       if (toFree[md] == 0) {
@@ -224,7 +232,7 @@ void BackgroundMover<CacheT>::checkAndRun() {
         const auto begin = util::getCurrentTimeNs();
         // try moving BATCH items from the class in order to reach free target
         auto moved = BackgroundMoverAPIWrapper<CacheT>::traverseAndMoveItems(
-            cache_, pid, cid, evictionBatch, promotionBatch);
+            cache_, tid, pid, cid, evictionBatch, promotionBatch);
         numEvictedItems_ += moved.first;
         toFree[md] > moved.first ? toFree[md] -= moved.first : toFree[md] = 0;
         numPromotedItems_ += moved.second;
@@ -263,12 +271,13 @@ BackgroundMoverStats BackgroundMover<CacheT>::getStats() const noexcept {
 }
 
 template <typename CacheT>
-size_t BackgroundMover<CacheT>::workerId(PoolId pid,
+size_t BackgroundMover<CacheT>::workerId(TierId tid,
+                                         PoolId pid,
                                          ClassId cid,
                                          size_t numWorkers) {
   XDCHECK(numWorkers);
 
   // TODO: came up with some better sharding (use hashing?)
-  return (pid + cid) % numWorkers;
+  return (tid + pid + cid) % numWorkers;
 }
 }; // namespace facebook::cachelib

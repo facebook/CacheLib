@@ -75,16 +75,20 @@ enum class DestructorContext {
 
 // a tuple that describes the memory pool and allocation class
 struct MemoryDescriptorType {
-  MemoryDescriptorType(PoolId pid, ClassId cid) : pid_(pid), cid_(cid) {}
+  MemoryDescriptorType(TierId tid, PoolId pid, ClassId cid) : 
+      tid_(tid), pid_(pid), cid_(cid) {}
+  TierId tid_;
   PoolId pid_;
   ClassId cid_;
 
   bool operator<(const MemoryDescriptorType& rhs) const {
-    return std::make_tuple(pid_, cid_) < std::make_tuple(rhs.pid_, rhs.cid_);
+    return std::make_tuple(tid_, pid_, cid_) < 
+        std::make_tuple(rhs.tid_, rhs.pid_, rhs.cid_);
   }
 
   bool operator==(const MemoryDescriptorType& rhs) const {
-    return std::make_tuple(pid_, cid_) == std::make_tuple(rhs.pid_, rhs.cid_);
+    return std::make_tuple(tid_, pid_, cid_) == 
+        std::make_tuple(rhs.tid_, rhs.pid_, rhs.cid_);
   }
 };
 
@@ -111,6 +115,12 @@ class CacheBase {
   // @param poolId    The pool id to query
   virtual const MemoryPool& getPool(PoolId poolId) const = 0;
 
+  // Get the reference to a memory pool using a tier id, for stats purposes
+  //
+  // @param poolId    The pool id to query
+  // @param tierId    The tier of the pool id
+  virtual const MemoryPool& getPoolByTid(PoolId poolId, TierId tid) const = 0;
+
   // Get Pool specific stats (regular pools). This includes stats from the
   // Memory Pool and also the cache.
   //
@@ -121,7 +131,7 @@ class CacheBase {
   //
   // @param poolId   the pool id
   // @param classId   the class id
-  virtual ACStats getACStats(PoolId poolId, ClassId classId) const = 0;
+  virtual ACStats getACStats(TierId tid,PoolId poolId, ClassId classId) const = 0;
 
   // @param poolId   the pool id
   virtual AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId poolId) const = 0;

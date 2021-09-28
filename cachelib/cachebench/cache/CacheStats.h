@@ -137,8 +137,8 @@ struct Stats {
 
     auto foreachAC = [](const auto& map, auto cb) {
       for (const auto& [key, value] : map) {
-        auto [pid, cid] = key;
-        cb(pid, cid, value);
+        auto [tid, pid, cid] = key;
+        cb(tid, pid, cid, value);
       }
     };
 
@@ -169,17 +169,17 @@ struct Stats {
         }
       };
 
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto tid, auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
         auto [memorySizeSuffix, memorySize] =
             formatMemory(stats.totalAllocatedSize());
-        out << folly::sformat("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
-                              pid, cid, allocSize, allocSizeSuffix, memorySize,
+        out << folly::sformat("tid{:2} pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
+                              tid, pid, cid, allocSize, allocSizeSuffix, memorySize,
                               memorySizeSuffix)
             << std::endl;
       });
 
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto tid, auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
 
         // If the pool is not full, extrapolate usageFraction for AC assuming it
@@ -189,8 +189,8 @@ struct Stats {
                                    : stats.usageFraction();
 
         out << folly::sformat(
-                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,
-                   allocSize, allocSizeSuffix, acUsageFraction)
+                   "tid{:2} pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}",
+                   tid, pid, cid, allocSize, allocSizeSuffix, acUsageFraction)
             << std::endl;
       });
     }
@@ -262,10 +262,10 @@ struct Stats {
     if (!backgroundMoverClasses.empty() &&
         (totalBgEvicted || totalBgPromoted)) {
       out << "== Per Class Background Movers Counters ==" << std::endl;
-      foreachAC(backgroundMoverClasses, [&](auto pid, auto cid, auto pair) {
+      foreachAC(backgroundMoverClasses, [&](auto tid, auto pid, auto cid, auto pair) {
         if (pair.first > 0 || pair.second > 0) {
-          out << folly::sformat("pid{:2} cid{:4} evicted: {:4} promoted: {:4}",
-                                pid, cid, pair.first, pair.second)
+          out << folly::sformat("tid{:2} pid{:2} cid{:4} evicted: {:4} promoted: {:4}",
+                                tid, pid, cid, pair.first, pair.second)
               << std::endl;
         }
       });

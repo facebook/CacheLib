@@ -326,8 +326,8 @@ class Cache {
   // return the stats for the pool.
   PoolStats getPoolStats(PoolId pid) const { return cache_->getPoolStats(pid); }
 
-  ACStats getACStats(PoolId pid, ClassId cid) const {
-    return cache_->getACStats(pid, cid);
+  ACStats getACStats(TierId tid, PoolId pid, ClassId cid) const {
+    return cache_->getACStats(tid, pid, cid);
   }
 
   // return the total number of inconsistent operations detected since start.
@@ -576,6 +576,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   if (!config_.memoryTierConfigs.empty()) {
     allocatorConfig_.configureMemoryTiers(config_.memoryTierConfigs);
   }
+
+  allocatorConfig_.insertToFirstFreeTier = config_.insertToFirstFreeTier;
 
   auto cleanupGuard = folly::makeGuard([&] {
     if (!nvmCacheFilePath_.empty()) {
@@ -1142,9 +1144,11 @@ Stats Cache<Allocator>::getStats() const {
     PoolId poolId = static_cast<PoolId>(pid);
     auto poolStats = cache_->getPoolStats(poolId);
     auto cids = poolStats.getClassIds();
-    for (auto [cid, stats] : poolStats.mpStats.acStats) {
-      MemoryDescriptorType md(poolId, cid);
-      allocationClassStats[md] = stats;
+    for (TierId tid = 0; tid < cache_->getNumTiers(); tid++) {
+      for (auto cid : cids) {
+        MemoryDescriptorType md(tid, poolId, cid);
+        allocationClassStats[md] = cache_->getACStats(tid, poolId, cid);
+      }
     }
   }
 
