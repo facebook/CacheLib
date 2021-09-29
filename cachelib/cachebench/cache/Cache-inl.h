@@ -121,8 +121,6 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   if (!isRamOnly()) {
     typename Allocator::NvmCacheConfig nvmConfig;
 
-    nvmConfig.navyConfig.setBlockCacheDataChecksum(config_.navyDataChecksum);
-
     nvmConfig.enableFastNegativeLookups = true;
 
     if (config_.nvmCachePaths.size() == 1) {
@@ -151,58 +149,58 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       nvmConfig.navyConfig.setMemoryFile(config_.nvmCacheSizeMB * MB);
     }
 
-    if (config_.navyNumInmemBuffers > 0) {
-      nvmConfig.navyConfig.setBlockCacheNumInMemBuffers(
-          config_.navyNumInmemBuffers);
-    }
-
     if (config_.navyReqOrderShardsPower != 0) {
       nvmConfig.navyConfig.setNavyReqOrderingShards(
           config_.navyReqOrderShardsPower);
     }
+    nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
+
+    // configure BlockCache
+    auto& bcConfig = nvmConfig.navyConfig.blockCache()
+                         .setDataChecksum(config_.navyDataChecksum)
+                         .setCleanRegions(config_.navyCleanRegions,
+                                          config_.navyNumInmemBuffers > 0)
+                         .setRegionSize(config_.navyRegionSizeMB * MB);
 
     // by default lru. if more than one fifo ratio is present, we use
     // segmented fifo. otherwise, simple fifo.
     if (!config_.navySegmentedFifoSegmentRatio.empty()) {
       if (config.navySegmentedFifoSegmentRatio.size() == 1) {
-        nvmConfig.navyConfig.blockCache().enableFifo();
+        bcConfig.enableFifo();
       } else {
-        nvmConfig.navyConfig.blockCache().enableSegmentedFifo(
-            config_.navySegmentedFifoSegmentRatio);
+        bcConfig.enableSegmentedFifo(config_.navySegmentedFifoSegmentRatio);
       }
     }
-    nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
-    nvmConfig.navyConfig.setBlockCacheRegionSize(config_.navyRegionSizeMB * MB);
 
     if (!config_.navySizeClasses.empty()) {
-      nvmConfig.navyConfig.setBlockCacheSizeClasses(config_.navySizeClasses);
+      bcConfig.useSizeClasses(config_.navySizeClasses);
     }
 
+    if (config_.navyHitsReinsertionThreshold > 0) {
+      bcConfig.enableHitsBasedReinsertion(
+          static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
+    }
+    if (config_.navyProbabilityReinsertionThreshold > 0) {
+      bcConfig.enablePctBasedReinsertion(
+          config_.navyProbabilityReinsertionThreshold);
+    }
+
+    // configure BigHash if enabled
     if (config_.navyBigHashSizePct > 0) {
-      nvmConfig.navyConfig.setBigHash(config_.navyBigHashSizePct,
-                                      config_.navyBigHashBucketSize,
-                                      config_.navyBloomFilterPerBucketSize,
-                                      config_.navySmallItemMaxSize);
+      nvmConfig.navyConfig.bigHash()
+          .setSizePctAndMaxItemSize(config_.navyBigHashSizePct,
+                                    config_.navySmallItemMaxSize)
+          .setBucketSize(config_.navyBigHashBucketSize)
+          .setBucketBfSize(config_.navyBloomFilterPerBucketSize);
     }
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
 
-    if (config_.navyHitsReinsertionThreshold > 0) {
-      nvmConfig.navyConfig.setBlockCacheReinsertionHitsThreshold(
-          static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
-    }
-    if (config_.navyProbabilityReinsertionThreshold > 0) {
-      nvmConfig.navyConfig.setBlockCacheReinsertionProbabilityThreshold(
-          config_.navyProbabilityReinsertionThreshold);
-    }
-
     nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
                                                    config_.navyWriterThreads);
 
-    nvmConfig.navyConfig.setBlockCacheCleanRegions(config_.navyCleanRegions);
     if (config_.navyAdmissionWriteRateMB > 0) {
-      nvmConfig.navyConfig.setAdmissionPolicy("dynamic_random");
-      nvmConfig.navyConfig.setAdmissionWriteRate(
+      nvmConfig.navyConfig.enableDynamicRandomAdmPolicy().setAdmWriteRate(
           config_.navyAdmissionWriteRateMB * MB);
     }
     nvmConfig.navyConfig.setMaxConcurrentInserts(
