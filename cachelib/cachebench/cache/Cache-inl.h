@@ -159,8 +159,17 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)
                          .setCleanRegions(config_.navyCleanRegions,
-                                          config_.navyNumInmemBuffers > 0)
+                                          false /*enable in-mem buffer*/)
                          .setRegionSize(config_.navyRegionSizeMB * MB);
+
+    // We have to use the old API to separately set the in-mem buffer
+    // due to T102105644
+    // TODO: cleanup the old API after we understand why 2*cleanRegions will
+    // cause cogwheel tests issue
+    if (config_.navyNumInmemBuffers > 0) {
+      nvmConfig.navyConfig.setBlockCacheNumInMemBuffers(
+          config_.navyNumInmemBuffers);
+    }
 
     // by default lru. if more than one fifo ratio is present, we use
     // segmented fifo. otherwise, simple fifo.
