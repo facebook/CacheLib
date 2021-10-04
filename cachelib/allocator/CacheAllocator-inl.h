@@ -300,9 +300,6 @@ CacheAllocator<CacheTrait>::allocatePermanent_deprecated(PoolId poolId,
   }
   auto item = allocateInternal(poolId, key, size, util::getCurrentTimeSec(),
                                0 /* ttlSecs */, true /* unevictable */);
-  if (item) {
-    stats_.numPermanentItems.inc();
-  }
   return item;
 }
 
@@ -2173,7 +2170,6 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   if (!isCompactCache) {
     for (const ClassId cid : classIds) {
       const auto& container = getEvictableMMContainer(poolId, cid);
-      const auto& unevictableContainer = getUnevictableMMContainer(poolId, cid);
       uint64_t classHits = (*stats_.cacheHits)[poolId][cid].get();
       cacheStats.insert(
           {cid,
@@ -2182,7 +2178,7 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
             (*stats_.fragmentationSize)[poolId][cid].get(), classHits,
             (*stats_.chainedItemEvictions)[poolId][cid].get(),
             (*stats_.regularItemEvictions)[poolId][cid].get(),
-            container.getStats(), unevictableContainer.getStats()}});
+            container.getStats()}});
       totalHits += classHits;
     }
   }
@@ -2944,7 +2940,6 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     }
   }
 
-  *metadata_.numPermanentItems_ref() = stats_.numPermanentItems.get();
   *metadata_.numChainedParentItems_ref() = stats_.numChainedParentItems.get();
   *metadata_.numChainedChildItems_ref() = stats_.numChainedChildItems.get();
   *metadata_.numAbortedSlabReleases_ref() = stats_.numAbortedSlabReleases.get();
@@ -3176,7 +3171,6 @@ void CacheAllocator<CacheTrait>::initStats() {
   }
 
   // deserialize item counter stats
-  stats_.numPermanentItems.set(*metadata_.numPermanentItems_ref());
   stats_.numChainedParentItems.set(*metadata_.numChainedParentItems_ref());
   stats_.numChainedChildItems.set(*metadata_.numChainedChildItems_ref());
   stats_.numAbortedSlabReleases.set(

@@ -122,9 +122,6 @@ struct Stats {
   // attempts made from nvm cache to allocate an item for promotion
   TLCounter numNvmAllocAttempts{0};
 
-  // the number of allocated items that are permanent
-  TLCounter numPermanentItems{0};
-
   // the number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
   TLCounter numChainedParentItems{0};
@@ -215,9 +212,6 @@ struct Stats {
 
   // Eviction failures because this item is being moved
   AtomicCounter evictFailMove{0};
-
-  // Number of permanent item put in NVM cache.
-  AtomicCounter numNvmPermItems{0};
 
   void init();
 

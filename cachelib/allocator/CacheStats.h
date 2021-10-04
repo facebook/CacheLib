@@ -130,20 +130,13 @@ struct CacheStat {
   // number of regular items that were evicted from this classId
   uint64_t regularItemEvictions;
 
-  // the stats from the mm container for evictable and unevictable items
+  // the stats from the mm container
   MMContainerStat containerStat;
-  MMContainerStat unevictableContainerStat;
 
-  uint64_t numItems() const noexcept {
-    return numEvictableItems() + numUnevictableItems();
-  }
+  uint64_t numItems() const noexcept { return numEvictableItems(); }
 
   // number of elements in this MMContainer
   size_t numEvictableItems() const noexcept { return containerStat.size; }
-
-  size_t numUnevictableItems() const noexcept {
-    return unevictableContainerStat.size;
-  }
 
   // total number of evictions.
   uint64_t numEvictions() const noexcept {
@@ -216,9 +209,6 @@ struct PoolStats {
 
   // number of evictable items
   uint64_t numEvictableItems() const noexcept;
-
-  // number of unevictable items
-  uint64_t numUnevictableItems() const noexcept;
 
   // total number of allocations currently in this pool
   uint64_t numActiveAllocs() const noexcept;
@@ -420,9 +410,6 @@ struct GlobalCacheStats {
   // number of refcount overflows
   uint64_t numRefcountOverflow{0};
 
-  // number of allocated items that are permanent
-  uint64_t numPermanentItems{0};
-
   // number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
   uint64_t numChainedChildItems{0};
@@ -480,8 +467,6 @@ struct GlobalCacheStats {
   // not go to negative. If it's negative, it means we have
   // leaked handles (or some sort of accounting bug internally)
   int64_t numActiveHandles;
-
-  uint64_t numNvmPermItems{0};
 };
 
 struct CacheMemoryStats {

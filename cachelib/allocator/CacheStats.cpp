@@ -48,7 +48,7 @@ template <int>
 struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
-  SizeVerify<sizeof(Stats)> a = SizeVerify<15680>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<15600>{};
   std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
@@ -69,7 +69,6 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numNvmAbortedPutOnTombstone += numNvmAbortedPutOnTombstone.get();
   ret.numNvmCompactionFiltered += numNvmCompactionFiltered.get();
   ret.numNvmAbortedPutOnInflightGet = numNvmAbortedPutOnInflightGet.get();
-  ret.numNvmUncleanEvict = numNvmUncleanEvict.get();
   ret.numNvmCleanEvict = numNvmCleanEvict.get();
   ret.numNvmCleanDoubleEvict = numNvmCleanDoubleEvict.get();
   ret.numNvmExpiredEvict = numNvmExpiredEvict.get();
@@ -83,7 +82,6 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numNvmRejectsByClean = numNvmRejectsByClean.get();
   ret.numNvmRejectsByAP = numNvmRejectsByAP.get();
 
-  ret.numPermanentItems = numPermanentItems.get();
   ret.numChainedParentItems = numChainedParentItems.get();
   ret.numChainedChildItems = numChainedChildItems.get();
   ret.numNvmAllocAttempts = numNvmAllocAttempts.get();
@@ -126,7 +124,6 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numEvictionFailureFromMoving = evictFailMove.get();
   ret.numEvictionFailureFromParentMoving = evictFailParentMove.get();
   ret.numAbortedSlabReleases = numAbortedSlabReleases.get();
-  ret.numNvmPermItems = numNvmPermItems.get();
 }
 
 } // namespace detail
@@ -311,14 +308,6 @@ uint64_t PoolStats::numEvictableItems() const noexcept {
   uint64_t n = 0;
   for (const auto& s : cacheStats) {
     n += s.second.numEvictableItems();
-  }
-  return n;
-}
-
-uint64_t PoolStats::numUnevictableItems() const noexcept {
-  uint64_t n = 0;
-  for (const auto& s : cacheStats) {
-    n += s.second.numUnevictableItems();
   }
   return n;
 }

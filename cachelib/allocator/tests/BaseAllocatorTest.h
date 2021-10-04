@@ -5185,7 +5185,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   // Test stats count on chained items across multiple threads.
-  // Add peremanent and chained items with multiple threads
   void testCountItemsMultithread() {
     // create an allocator worth 10 slabs.
     typename AllocatorT::Config config;
@@ -5198,7 +5197,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     const auto poolSize = numBytes;
 
     const auto pid = alloc.addPool("one", poolSize);
-
     int itemSize = 100;
     // Thread to allocate chained child items
     int childCount = 17;
@@ -5210,7 +5208,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         alloc.addChainedItem(itemHandle, std::move(childItem));
       }
     };
-
     // -- Chained Test --
     util::allocateAccessible(alloc, pid, "parent", 100);
     auto tc1 = std::async(std::launch::async, addChild);
@@ -5222,8 +5219,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(childCount * 2, alloc.getGlobalCacheStats().numChainedChildItems);
   }
 
-  // Test chained item count consistency after shutdown and
-  // restore
+  // Test chained item count consistency after shutdown and restore
   void testItemCountCreationTime() {
     typename AllocatorT::Config config;
     uint8_t poolId;

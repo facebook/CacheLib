@@ -103,13 +103,7 @@ std::set<ClassId> RebalanceStrategy::filterByNumEvictableSlabs(
     unsigned int minSlabs) {
   auto condition = [&](const ClassId& id) {
     const auto& acStat = poolStats.mpStats.acStats.at(id);
-    // account for memory footprint that is un-evictable
-    const size_t unevictableSlabs =
-        (poolStats.cacheStats.at(id).numUnevictableItems() * acStat.allocSize) /
-        Slab::kSize;
-    DCHECK_LE(unevictableSlabs, acStat.totalSlabs());
-    const size_t evictableSlabs = acStat.totalSlabs() - unevictableSlabs;
-    return evictableSlabs <= minSlabs;
+    return acStat.totalSlabs() <= minSlabs;
   };
   return filter(
       std::move(candidates), condition, "remove candidates by numSlabs");
