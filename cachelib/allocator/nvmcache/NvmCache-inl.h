@@ -394,10 +394,6 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
     stats().numNvmPutFromClean.inc();
   }
 
-  if (item.isUnevictable()) {
-    stats().numNvmPermItems.inc();
-  }
-
   auto iobuf = toIOBuf(std::move(nvmItem));
   const auto valSize = iobuf.length();
   auto val = folly::ByteRange{iobuf.data(), iobuf.length()};

@@ -235,26 +235,6 @@ bool CacheItem<CacheTrait>::isOnlyMoving() const noexcept {
 }
 
 template <typename CacheTrait>
-void CacheItem<CacheTrait>::markUnevictable() noexcept {
-  ref_.markUnevictable();
-}
-
-template <typename CacheTrait>
-void CacheItem<CacheTrait>::unmarkUnevictable() noexcept {
-  ref_.unmarkUnevictable();
-}
-
-template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isUnevictable() const noexcept {
-  return ref_.isUnevictable();
-}
-
-template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isEvictable() const noexcept {
-  return ref_.isEvictable();
-}
-
-template <typename CacheTrait>
 void CacheItem<CacheTrait>::markNvmClean() noexcept {
   ref_.markNvmClean();
 }

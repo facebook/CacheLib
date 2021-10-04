@@ -222,8 +222,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * they're either the sole owner of this item or every one accessing this
    * item is only reading its content.
    */
-  bool isUnevictable() const noexcept;
-  bool isEvictable() const noexcept;
   bool isChainedItem() const noexcept;
   bool hasChainedItem() const noexcept;
 
@@ -355,14 +353,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
   void unmarkMoving() noexcept;
   bool isMoving() const noexcept;
   bool isOnlyMoving() const noexcept;
-
-  /**
-   * The following correspond to the evictable state of the item
-   * An unevictable item unevictable item may prevent the slab it
-   * belongs to from being released if it cannot be moved
-   */
-  void markUnevictable() noexcept;
-  void unmarkUnevictable() noexcept;
 
   /**
    * Item cannot be marked both chained allocation and

@@ -313,7 +313,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              uint32_t size,
                                              uint32_t creationTime,
                                              uint32_t expiryTime,
-                                             bool unevictable) {
+                                             bool /*unevictable*/) {
   util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
@@ -347,9 +347,6 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
       handle.markNascent();
       (*stats_.fragmentationSize)[pid][cid].add(
           util::getFragmentation(*this, *handle));
-      if (unevictable) {
-        handle->markUnevictable();
-      }
     }
 
   } else { // failed to allocate memory.
@@ -380,9 +377,6 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
   }
 
   auto it = allocateChainedItemInternal(parent, size);
-  if (it && it->isUnevictable()) {
-    stats_.numPermanentItems.inc();
-  }
   if (auto eventTracker = getEventTracker()) {
     const auto result =
         it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
@@ -426,9 +420,6 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
     child.markNascent();
     (*stats_.fragmentationSize)[pid][cid].add(
         util::getFragmentation(*this, *child));
-    if (parent->isUnevictable()) {
-      child->markUnevictable();
-    }
   }
 
   return child;
@@ -578,11 +569,9 @@ void CacheAllocator<CacheTrait>::transferChainLocked(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::transferChainAndReplace(
     const ItemHandle& parent, const ItemHandle& newParent) {
-  if (!parent || !newParent ||
-      (parent->isUnevictable() != newParent->isUnevictable())) {
+  if (!parent || !newParent) {
     throw std::invalid_argument("invalid parent or new parent");
   }
-
   { // scope for chained item lock
     auto l = chainedItemLocks_.lockExclusive(parent->getKey());
     transferChainLocked(parent, newParent);
@@ -755,9 +744,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
           folly::sformat("Can not recycle a chained item {}, toRecyle",
                          it.toString(), toRecycle->toString()));
     }
-    if (it.isUnevictable()) {
-      stats_.numPermanentItems.dec();
-    }
+
     allocator_->free(&it);
     return ReleaseRes::kReleased;
   }
@@ -773,10 +760,6 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
   // Because this function cannot fail to release "it"
   ReleaseRes res =
       toRecycle == nullptr ? ReleaseRes::kReleased : ReleaseRes::kNotRecycled;
-
-  if (it.isUnevictable()) {
-    stats_.numPermanentItems.dec();
-  }
 
   // Free chained allocs if there are any
   if (it.hasChainedItem()) {
@@ -830,10 +813,6 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
               "chained item refcount is not zero. We cannot proceed! "
               "Ref: {}, Chained Item: {}",
               childRef, head->toString()));
-        }
-
-        if (head->isUnevictable()) {
-          stats_.numPermanentItems.dec();
         }
 
         // Item is not moving and refcount is 0, we can proceed to
@@ -1633,11 +1612,7 @@ typename CacheAllocator<CacheTrait>::MMContainer&
 CacheAllocator<CacheTrait>::getMMContainer(const Item& item) const {
   const auto allocInfo =
       allocator_->getAllocInfo(static_cast<const void*>(&item));
-  if (item.isUnevictable()) {
-    return getUnevictableMMContainer(allocInfo.poolId, allocInfo.classId);
-  } else {
-    return getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
-  }
+  return getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
 }
 
 template <typename CacheTrait>
@@ -1788,12 +1763,9 @@ void CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
     ring_->trackItem(reinterpret_cast<uintptr_t>(&item), item.getSize());
   }
 
-  // Only record access for evictable items
-  if (LIKELY(item.isEvictable())) {
-    auto& mmContainer =
-        getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
-    mmContainer.recordAccess(item, mode);
-  }
+  auto& mmContainer =
+      getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
+  mmContainer.recordAccess(item, mode);
 }
 
 template <typename CacheTrait>
@@ -2378,18 +2350,12 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
     return false;
   }
 
-  // If evictions are disabled globally for cache or if the old item is a
-  // permanent item, we try moving for an unlimited number of times, because
-  // we cannot evict.
-  const bool unlimitedMovingTries =
-      config_.disableEviction || oldItem.isUnevictable();
-
   bool isMoved = false;
   auto startTime = util::getCurrentTimeSec();
   ItemHandle newItemHdl = allocateNewItemForOldItem(oldItem);
 
   for (unsigned int itemMovingAttempts = 0;
-       unlimitedMovingTries || itemMovingAttempts < config_.movingTries;
+       itemMovingAttempts < config_.movingTries;
        ++itemMovingAttempts) {
     stats_.numMoveAttempts.inc();
 
@@ -2510,13 +2476,12 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
 
   // Set up the destination for the move. Since oldItem would have the moving
   // bit set, it won't be picked for eviction.
-  const bool isUnevictable = oldItem.isUnevictable();
   auto newItemHdl = allocateInternal(allocInfo.poolId,
                                      oldItem.getKey(),
                                      oldItem.getSize(),
                                      oldItem.getCreationTime(),
                                      oldItem.getExpiryTime(),
-                                     isUnevictable);
+                                     false);
   if (!newItemHdl) {
     return {};
   }
@@ -2649,7 +2614,6 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::evictNormalItemForSlabRelease(Item& item) {
-  XDCHECK(item.isEvictable());
   XDCHECK(item.isMoving());
 
   if (item.isOnlyMoving()) {
@@ -2688,7 +2652,6 @@ CacheAllocator<CacheTrait>::evictNormalItemForSlabRelease(Item& item) {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
-  XDCHECK(child.isEvictable());
   XDCHECK(child.isMoving());
 
   // We have the child marked as moving, but dont know anything about the

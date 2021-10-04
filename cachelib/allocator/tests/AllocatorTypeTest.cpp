@@ -28,9 +28,6 @@ TYPED_TEST(BaseAllocatorTest, AllocateAccessible) {
   this->testAllocateAccessible();
 }
 
-// Test adding and looking up a mix of evictable and unevictable items
-TYPED_TEST(BaseAllocatorTest, MixedItems) { this->testMixedItems(); }
-
 // fill up the memory and test that making further allocations causes
 // evictions from the cache.
 TYPED_TEST(BaseAllocatorTest, Evictions) { this->testEvictions(); }
@@ -223,10 +220,6 @@ TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {
   this->testShutDownWithActiveHandles();
 }
 
-TYPED_TEST(BaseAllocatorTest, UnevictableItems) {
-  this->testUnevictableItems();
-}
-
 TYPED_TEST(BaseAllocatorTest, BasicFreeMemStrategy) {
   this->testBasicFreeMemStrategy();
 }
@@ -319,16 +312,13 @@ TYPED_TEST(BaseAllocatorTest, MovingSyncCorrectness) {
   this->testMovingSyncCorrectness();
 }
 
-TYPED_TEST(BaseAllocatorTest, StatsPermanentCount) {
-  this->testAllocPermanentCount();
-}
 TYPED_TEST(BaseAllocatorTest, StatsChainCount) {
   this->testAllocChainedCount();
 }
-TYPED_TEST(BaseAllocatorTest, StatsPermanentChainCountMultiThread) {
+TYPED_TEST(BaseAllocatorTest, StatsChainCountMultiThread) {
   this->testCountItemsMultithread();
 }
-TYPED_TEST(BaseAllocatorTest, StatsPermanentChainCountRestore) {
+TYPED_TEST(BaseAllocatorTest, StatsChainCountRestore) {
   this->testItemCountCreationTime();
 }
 
@@ -343,8 +333,6 @@ TYPED_TEST(BaseAllocatorTest, ReplaceInMMContainer) {
 TYPED_TEST(BaseAllocatorTest, ReplaceIfAccessible) {
   this->testReplaceIfAccessible();
 }
-
-TYPED_TEST(BaseAllocatorTest, PermanentItems) { this->testPermanentItems(); }
 
 TYPED_TEST(BaseAllocatorTest, ChainedItemIterator) {
   this->testChainedItemIterator();
@@ -504,13 +492,6 @@ TEST_F(Lru2QAllocatorTest, MMReconfigure) {
 
 using LruAllocatorWithMovingTest = BaseAllocatorTest<LruAllocator>;
 using TinyLFUAllocatorWithMovingTest = BaseAllocatorTest<TinyLFUAllocator>;
-
-TEST_F(LruAllocatorWithMovingTest, UnevictableItemsWithMoving) {
-  testUnevictableItemsWithMoving();
-}
-TEST_F(TinyLFUAllocatorWithMovingTest, UnevictableItemsWithMoving) {
-  testUnevictableItemsWithMoving();
-}
 
 } // namespace
 

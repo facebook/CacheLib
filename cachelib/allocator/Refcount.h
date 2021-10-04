@@ -112,9 +112,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // Item was evicted from NVM while it was in RAM.
     kNvmEvicted,
 
-    // TODO: to be deprecated when we deprecate perm item support
-    // Whether or not an item is evictable
-    kUnevictable_deprecated,
+    // A deprecated and noop flag that was used to mark whether the item is
+    // unevictable in the past.
+    kUnevictable_NOOP,
 
     // Unused. This is just to indciate the maximum number of flags
     kFlagMax,
@@ -302,21 +302,6 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     }
     return ref & getAdminRef<kMoving>();
   }
-
-  /**
-   * The following correspond to the evictable state of the item
-   * An unevictable item  may prevent the slab it
-   * belongs to, from being released if it cannot be moved.
-   *
-   * These functions will be removed once permenant item feature is fully
-   * deprecated.
-   */
-  void markUnevictable() noexcept { setFlag<kUnevictable_deprecated>(); }
-  void unmarkUnevictable() noexcept { unSetFlag<kUnevictable_deprecated>(); }
-  bool isUnevictable() const noexcept {
-    return isFlagSet<kUnevictable_deprecated>();
-  }
-  bool isEvictable() const noexcept { return !isUnevictable(); }
 
   /**
    * Item cannot be marked both chained allocation and
