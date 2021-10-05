@@ -27,6 +27,9 @@ performance issues.
 See [CacheBench](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) for usage details
 and examples.
 
+## Versioning
+CacheLib has one single version number `facebook::cachelib::kCachelibVersion` that can be located at [CacheVersion.h](https://github.com/facebook/CacheLib/blob/main/cachelib/allocator/CacheVersion.h#L31). Any changes that makes API changes or requires dropping the cache should increment this version number. Details about whether a certain version is compatible with the previous one can be found at the [changelog](https://github.com/facebook/CacheLib/blob/main/CHANGELOG.md).
+
 
 ## Building and installation
 
