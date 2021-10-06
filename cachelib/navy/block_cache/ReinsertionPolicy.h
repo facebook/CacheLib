@@ -29,17 +29,8 @@ class ReinsertionPolicy {
  public:
   virtual ~ReinsertionPolicy() = default;
 
-  // Passes in the index.
-  virtual void setIndex(Index* index) = 0;
-
   // Determines whether or not we should keep this key around longer in cache.
-  virtual bool shouldReinsert(HashedKey hk) = 0;
-
-  // Persists metadata associated with this policy.
-  virtual void persist(RecordWriter& rw) = 0;
-
-  // Recovers from previously persisted metadata associated with this policy.
-  virtual void recover(RecordReader& rr) = 0;
+  virtual bool shouldReinsert(HashedKey hk, const Index::LookupResult& lr) = 0;
 
   // Exports policy stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;

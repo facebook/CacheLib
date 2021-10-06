@@ -142,10 +142,6 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       reinsertionPolicy_{std::move(config.reinsertionPolicy)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
-  if (reinsertionPolicy_) {
-    reinsertionPolicy_->setIndex(&index_);
-  }
-  validate(config);
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 }
@@ -444,7 +440,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   }
 
-  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk)) {
+  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk, lr)) {
     return removeItem();
   }
 

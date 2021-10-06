@@ -37,42 +37,18 @@ namespace navy {
 // policy.
 class HitsReinsertionPolicy : public ReinsertionPolicy {
  public:
-  struct AccessStats {
-    // Total hits during this item's entire lifetime in cache
-    uint8_t totalHits{0};
-
-    // Hits during the current window for this item (e.g. before re-admission)
-    uint8_t currHits{0};
-  };
-
   // @param hitsThreshold how many hits for an item is eligible for reinsertion
   explicit HitsReinsertionPolicy(uint8_t hitsThreshold);
 
-  // Sets the index for hits based reinsertion policy.
-  void setIndex(Index* index) override { index_ = index; }
-
   // Applies hits based policy to determine whether or not we should keep
   // this key around longer in cache.
-  bool shouldReinsert(HashedKey hk) override;
-
-  void persist(RecordWriter& /* rw */) override {}
-
-  void recover(RecordReader& /* rr */) override {}
+  bool shouldReinsert(HashedKey hk, const Index::LookupResult& lr) override;
 
   // Exports hits based reinsertion policy stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
-  // Gets the @AccessStats of a hashed key.
-  // Returns empty when the key is not found.
-  AccessStats getAccessStats(HashedKey hk) const;
-
  private:
-  // TODO: T95755384 clean up kNumLocks
-  static constexpr size_t kNumLocks = (2 << 10);
-
   const uint8_t hitsThreshold_{};
-
-  Index* index_;
 
   mutable util::PercentileStats hitsOnReinsertionEstimator_{
       Index::kQuantileWindowSize};

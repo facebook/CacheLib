@@ -38,17 +38,12 @@ class PercentageReinsertionPolicy : public ReinsertionPolicy {
     XDCHECK(percentage > 0 && percentage <= 100);
   }
 
-  void setIndex(Index* /* index */) override {}
-
   // Applies percentage based policy to determine whether or not we should keep
   // this key around longer in cache.
-  bool shouldReinsert(HashedKey /* hk */) override {
+  bool shouldReinsert(HashedKey /* hk */,
+                      const Index::LookupResult& /*lr*/) override {
     return folly::Random::rand32() % 100 < percentage_;
   }
-
-  void persist(RecordWriter& /* rw */) override {}
-
-  void recover(RecordReader& /* rr */) override {}
 
   void getCounters(const CounterVisitor& /* visitor */) const override {}
 

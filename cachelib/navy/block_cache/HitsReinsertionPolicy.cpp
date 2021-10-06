@@ -24,9 +24,8 @@ namespace navy {
 HitsReinsertionPolicy::HitsReinsertionPolicy(uint8_t hitsThreshold)
     : hitsThreshold_{hitsThreshold} {}
 
-bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
-  XDCHECK(index_);
-  const auto lr = index_->peek(hk.keyHash());
+bool HitsReinsertionPolicy::shouldReinsert(HashedKey /*hk*/,
+                                           const Index::LookupResult& lr) {
   if (!lr.found() || lr.currentHits() < hitsThreshold_) {
     return false;
   }
@@ -38,16 +37,6 @@ bool HitsReinsertionPolicy::shouldReinsert(HashedKey hk) {
 void HitsReinsertionPolicy::getCounters(const CounterVisitor& visitor) const {
   hitsOnReinsertionEstimator_.visitQuantileEstimator(
       visitor, "navy_bc_item_reinsertion_hits");
-}
-
-HitsReinsertionPolicy::AccessStats HitsReinsertionPolicy::getAccessStats(
-    HashedKey hk) const {
-  XDCHECK(index_);
-  const auto lr = index_->peek(hk.keyHash());
-  if (lr.found()) {
-    return AccessStats{lr.totalHits(), lr.currentHits()};
-  }
-  return {};
 }
 
 } // namespace navy
