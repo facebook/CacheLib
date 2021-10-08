@@ -88,7 +88,7 @@ class ItemRecords {
     return result;
   }
 
-  void addItemRecord(const ItemHandle& handle) {
+  void addItemRecord(ItemHandle& handle) {
     if (!enable_ || !handle) {
       return;
     }

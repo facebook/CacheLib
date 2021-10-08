@@ -243,6 +243,8 @@ class Map {
     return hashtable_.viewItemHandle();
   }
 
+  ItemHandle& viewItemHandle() { return hashtable_.viewItemHandle(); }
+
   bool isNullItemHandle() const { return hashtable_ == nullptr; }
 
   // Convert a Map to a read-only MapView.
