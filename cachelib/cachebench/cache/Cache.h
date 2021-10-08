@@ -82,12 +82,12 @@ class Cache {
                       uint32_t ttlSecs = 0);
 
   // inserts the item into the cache and tracks it.
-  ItemHandle insertOrReplace(ItemHandle& handle);
+  ItemHandle insertOrReplace(const ItemHandle& handle);
 
   // inserts the handle into cache and returns true if the insert was
   // successful, false otherwise. Insert operation can not be performed when
   // consistency checking is enabled.
-  bool insert(ItemHandle& handle);
+  bool insert(const ItemHandle& handle);
 
   // perform lookup in the cache and if consistency checking is enabled,
   // ensure that the lookup result is consistent with the past actions and

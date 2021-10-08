@@ -176,7 +176,6 @@ class RangeMap {
   // Borrow the item handle underneath this structure. This is useful to
   // implement insertion into CacheAllocator.
   const ItemHandle& viewItemHandle() const { return handle_; }
-  ItemHandle& viewItemHandle() { return handle_; }
 
   bool isNullItemHandle() const { return handle_ == nullptr; }
 
