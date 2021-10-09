@@ -21,31 +21,43 @@
 
 #include "cachelib/common/Time.h"
 
+using facebook::cachelib::util::getCurrentTimeMs;
 using facebook::cachelib::util::Timer;
 
 namespace facebook {
 namespace cachelib {
 namespace tests {
 
+namespace {
+uint64_t abs(uint64_t a, uint64_t b) { return a > b ? a - b : b - a; }
+} // namespace
 TEST(Util, TimerTest) {
   {
     auto rnd = folly::Random::rand32(100, 2000);
 
     Timer timer;
     timer.startOrResume();
+
+    auto begin = getCurrentTimeMs();
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::milliseconds(rnd));
     timer.pause();
+    // sleep_for may sleep a little bit more than rnd
+    // use this to avoid flakiness
+    auto duration = getCurrentTimeMs() - begin;
 
-    ASSERT_EQ(timer.getDurationMs(), rnd);
-    ASSERT_EQ(timer.getDurationSec(), rnd / 1000);
+    // allow 2ms difference
+    ASSERT_LE(abs(timer.getDurationMs(), duration), 2);
+    ASSERT_EQ(timer.getDurationSec(), duration / 1000);
 
     {
       auto t = timer.scopedStartOrResume();
       /* sleep override */
       std::this_thread::sleep_for(std::chrono::milliseconds(rnd));
     }
-    ASSERT_EQ(timer.getDurationMs(), rnd * 2);
+    duration = getCurrentTimeMs() - begin;
+    // allow 3ms difference
+    ASSERT_LE(abs(timer.getDurationMs(), duration), 3);
   }
 }
 
