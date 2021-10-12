@@ -96,7 +96,7 @@ T* BufferManager<C>::get(BufferAddr addr) const {
 }
 
 template <typename C>
-BufferManager<C> BufferManager<C>::clone(const ItemHandle& newParent) const {
+BufferManager<C> BufferManager<C>::clone(ItemHandle& newParent) const {
   for (auto item : buffers_) {
     auto handle = cache_->allocateChainedItem(newParent, item->getSize());
     if (!handle) {

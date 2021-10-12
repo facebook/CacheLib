@@ -298,21 +298,27 @@ class CacheAllocator : public CacheBase {
   //            if the item is invalid
   ItemHandle allocateChainedItem(const ItemHandle& parent, uint32_t size);
 
-  // Link a chained item to a parent item
+  // Link a chained item to a parent item and mark this parent handle as having
+  // chained allocations.
+  // The parent handle is not reset (to become a null handle) so that the caller
+  // can continue using it as before calling this api.
   //
   // @param parent  handle to the parent item
   // @param child   chained item that will be linked to the parent
   //
   // @throw std::invalid_argument if parent is nullptr
-  void addChainedItem(const ItemHandle& parent, ItemHandle child);
+  void addChainedItem(ItemHandle& parent, ItemHandle child);
 
-  // Pop the first chained item assocaited with this parent
+  // Pop the first chained item assocaited with this parent and unmark this
+  // parent handle as having chained allocations.
+  // The parent handle is not reset (to become a null handle) so that the caller
+  // can continue using it as before calling this api.
   //
   // @param parent  handle to the parent item
   //
   // @return ChainedItem  head if there exists one
   //         nullptr      otherwise
-  ItemHandle popChainedItem(const ItemHandle& parent);
+  ItemHandle popChainedItem(ItemHandle& parent);
 
   // Return the key to the parent item.
   //
@@ -342,14 +348,17 @@ class CacheAllocator : public CacheBase {
                                 ItemHandle newItem,
                                 Item& parent);
 
-  // transfers the ownership of the chain from the current parent to the new
-  // parent and inserts the new parent into the cache. Caller must synchronize
-  // with any modifications to the parent's chain and any calls to find() for
-  // the same key to ensure there are no more concurrent parent handle while
-  // doing this. While calling this method, the cache does not guarantee a
-  // consistent view for the key and the caller must not rely on this. The new
-  // parent and old parent must be allocations for the same key. New parent
-  // must also be an allocation that is not added to the cache.
+  // Transfers the ownership of the chain from the current parent to the new
+  // parent and inserts the new parent into the cache. Parent will be unmarked
+  // as having chained allocations and its nvmCache will be invalidated. Parent
+  // will not be null after calling this API.
+  //
+  // Caller must synchronize with any modifications to the parent's chain and
+  // any calls to find() for the same key to ensure there are no more concurrent
+  // parent handle while doing this. While calling this method, the cache does
+  // not guarantee a consistent view for the key and the caller must not rely on
+  // this. The new parent and old parent must be allocations for the same key.
+  // New parent must also be an allocation that is not added to the cache.
   //
   //
   // @param parent    the current parent of the chain we want to transfer
@@ -358,8 +367,7 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if the parent does not have chained item or
   //          incorrect state of chained item or if any of the pre-conditions
   //          are not met
-  void transferChainAndReplace(const ItemHandle& parent,
-                               const ItemHandle& newParent);
+  void transferChainAndReplace(ItemHandle& parent, ItemHandle& newParent);
 
   // Inserts the allocated handle into the AccessContainer, making it
   // accessible for everyone. This needs to be the handle that the caller
@@ -1280,10 +1288,14 @@ class CacheAllocator : public CacheBase {
   //               successfully.
   bool moveChainedItem(ChainedItem& oldItem, ItemHandle& newItemHdl);
 
-  // transfers the chain ownership from parent to newParent. Parent and
-  // NewParent must be valid handles to items with same key and parent must
-  // have chained items and parent handle must be the only outstanding handle
-  // for parent. New parent must be without any chained item handles.
+  // Transfers the chain ownership from parent to newParent. Parent
+  // will be unmarked as having chained allocations. Parent will not be null
+  // after calling this API.
+  //
+  // Parent and NewParent must be valid handles to items with same key and
+  // parent must have chained items and parent handle must be the only
+  // outstanding handle for parent. New parent must be without any chained item
+  // handles.
   //
   // Chained item lock for the parent's key needs to be held in exclusive mode.
   //
@@ -1291,8 +1303,7 @@ class CacheAllocator : public CacheBase {
   // @param newParent the new parent for the chain
   //
   // @throw if any of the conditions for parent or newParent are not met.
-  void transferChainLocked(const ItemHandle& parent,
-                           const ItemHandle& newParent);
+  void transferChainLocked(ItemHandle& parent, ItemHandle& newParent);
 
   // replace a chained item in the existing chain. This needs to be called
   // with the chained item lock held exclusive

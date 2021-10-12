@@ -82,6 +82,7 @@ class TypedHandleImpl {
   }
 
   const ItemHandle& viewItemHandle() const { return h_; }
+  ItemHandle& viewItemHandle() { return h_; }
 
   void reset() { h_.reset(); }
 

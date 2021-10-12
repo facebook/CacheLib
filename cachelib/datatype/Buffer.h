@@ -311,9 +311,7 @@ class BufferManager {
   // Construct a new BufferManager
   // @throw cachelib::exceptions::OutOfMemory if failing to add a new buffer
   //        std::invalid_argument if initialCapacity is bigger than the max
-  BufferManager(CacheType& cache,
-                const ItemHandle& parent,
-                uint32_t initialCapacity)
+  BufferManager(CacheType& cache, ItemHandle& parent, uint32_t initialCapacity)
       : cache_(&cache), parent_(&parent) {
     if (initialCapacity > kMaxBufferCapacity) {
       throw std::invalid_argument(
@@ -331,7 +329,7 @@ class BufferManager {
   }
 
   // Initialize a BufferManager with an existing parent
-  BufferManager(CacheType& cache, const ItemHandle& parent)
+  BufferManager(CacheType& cache, ItemHandle& parent)
       : cache_(&cache), parent_(&parent) {
     if (parent) {
       materializeChainedAllocs();
@@ -383,7 +381,7 @@ class BufferManager {
   T* get(BufferAddr addr) const;
 
   // Clone a buffer manager within the same cache under another parent
-  BufferManager<C> clone(const ItemHandle& parent) const;
+  BufferManager<C> clone(ItemHandle& parent) const;
 
   // Compact buffers underneath. The layout of existing allocations may change
   // as a result.
@@ -421,7 +419,7 @@ class BufferManager {
 
   // BEGIN private members
   CacheType* cache_{nullptr};
-  const ItemHandle* parent_{nullptr};
+  ItemHandle* parent_{nullptr};
   std::vector<Item*> buffers_{};
   // END private members
 

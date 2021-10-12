@@ -2465,7 +2465,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // parent of different size
     auto newParent = alloc.allocate(poolId, "parent", 1000);
 
-    ASSERT_THROW(alloc.transferChainAndReplace({}, newParent),
+    typename AllocatorT::ItemHandle invalidParent = {};
+    ASSERT_THROW(alloc.transferChainAndReplace(invalidParent, newParent),
                  std::invalid_argument);
 
     ASSERT_FALSE(newParent->hasChainedItem());
@@ -2474,7 +2475,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_TRUE(originalParent->hasChainedItem());
     alloc.transferChainAndReplace(originalParent, newParent);
 
-    ASSERT_THROW(alloc.transferChainAndReplace(newParent, {}),
+    ASSERT_THROW(alloc.transferChainAndReplace(newParent, invalidParent),
                  std::invalid_argument);
 
     ASSERT_FALSE(originalParent->isAccessible());

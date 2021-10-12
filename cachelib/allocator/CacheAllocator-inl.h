@@ -423,7 +423,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
+void CacheAllocator<CacheTrait>::addChainedItem(ItemHandle& parent,
                                                 ItemHandle child) {
   if (!parent || !child || !child->isChainedItem()) {
     throw std::invalid_argument(
@@ -469,7 +469,7 @@ void CacheAllocator<CacheTrait>::addChainedItem(const ItemHandle& parent,
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::popChainedItem(const ItemHandle& parent) {
+CacheAllocator<CacheTrait>::popChainedItem(ItemHandle& parent) {
   if (!parent || !parent->hasChainedItem()) {
     throw std::invalid_argument(folly::sformat(
         "Invalid parent {}", parent ? parent->toString() : nullptr));
@@ -522,8 +522,8 @@ CacheAllocator<CacheTrait>::getParentKey(const Item& chainedItem) {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::transferChainLocked(
-    const ItemHandle& parent, const ItemHandle& newParent) {
+void CacheAllocator<CacheTrait>::transferChainLocked(ItemHandle& parent,
+                                                     ItemHandle& newParent) {
   // parent must be in a state to not have concurrent readers. Eviction code
   // paths rely on holding the last item handle. Since we hold on to an item
   // handle here, the chain will not be touched by any eviction code path.
@@ -565,7 +565,7 @@ void CacheAllocator<CacheTrait>::transferChainLocked(
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::transferChainAndReplace(
-    const ItemHandle& parent, const ItemHandle& newParent) {
+    ItemHandle& parent, ItemHandle& newParent) {
   if (!parent || !newParent) {
     throw std::invalid_argument("invalid parent or new parent");
   }

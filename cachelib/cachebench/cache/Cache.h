@@ -128,7 +128,7 @@ class Cache {
   // Adds a chained item to the parent.
   // @param  parent   the parent item's handle
   // @param child     handle to the child
-  void addChainedItem(const ItemHandle& parent, ItemHandle child);
+  void addChainedItem(ItemHandle& parent, ItemHandle child);
 
   template <typename... Params>
   auto viewAsChainedAllocs(Params&&... args) {

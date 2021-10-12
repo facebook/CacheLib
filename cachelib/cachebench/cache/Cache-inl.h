@@ -357,8 +357,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocateChainedItem(
 }
 
 template <typename Allocator>
-void Cache<Allocator>::addChainedItem(const ItemHandle& parent,
-                                      ItemHandle child) {
+void Cache<Allocator>::addChainedItem(ItemHandle& parent, ItemHandle child) {
   itemRecords_.updateItemVersion(*parent);
   cache_->addChainedItem(parent, std::move(child));
 }
