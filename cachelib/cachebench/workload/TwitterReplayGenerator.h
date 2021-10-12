@@ -61,19 +61,22 @@ const Request& TwitterReplayGenerator::getReq(uint8_t,
 
   // TODO: implement support for functions like add 
   // and replace (check and set) just set for now 
-  if ((token == "get") or (token == "gets"))
-    op_ = OpType::kGet;
+  if ((token == "get") or (token == "gets")) {
+    req_.setOp(OpType::kGet);
+  }
   else if ((token == "set") or (token == "cas") or \
     (token == "add") or (token == "replace") or \
     (token == "incr") or (token == "decr") or 
-    (token == "prepend") or (token == "append"))
-    op_ = OpType::kSet;
+    (token == "prepend") or (token == "append")) {
+    req_.setOp(OpType::kSet);
+  }
   else if (token == "delete")
-    op_ = OpType::kDel;
+    req_.setOp(OpType::kDel);
   else
     throw std::invalid_argument("Unrecognized Operation in the trace file!");
 
   std::getline(s_stream, token, ','); // TTL
+
   return req_;
 }
 

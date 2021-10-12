@@ -29,6 +29,10 @@
 #include "cachelib/cachebench/cache/ItemRecords.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 
+extern "C" {
+  #include "cachelib/cachebench/cache/IO.h"
+}
+
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
@@ -391,7 +395,6 @@ template <typename Allocator>
 typename Cache<Allocator>::ItemHandle Cache<Allocator>::insertOrReplace(
     const ItemHandle& handle) {
   itemRecords_.addItemRecord(handle);
-
   if (!consistencyCheckEnabled()) {
     try {
       return cache_->insertOrReplace(handle);
@@ -418,6 +421,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
     // find from cache and wait for the result to be ready.
     auto it = cache_->find(key, mode);
     it.wait();
+
     return it;
   };
 

@@ -1,0 +1,24 @@
+===JSON Config===
+{"cache_config": {"cacheSizeMB": "256"}, "test_config": {"enableLookaside": "true", "generator": "twitter-replay", "numOps": "99", "numThreads": 1, "traceFileName": "/home/pranav/Desktop/Research/CacheLib/examples/twitter-replay/twitter_sample.csv"}}
+Welcome to OSS version of cachebench
+Total 0.00M ops to be run
+18:16:31       0.00M ops completed
+== Test Results ==
+== Allocator Stats ==
+Items in RAM  : 84
+Items in NVM  : 0
+Alloc Attempts: 84 Success: 100.00%
+RAM Evictions : 0
+Cache Gets    : 99
+Hit Ratio     :  15.15%
+NVM Gets      :               0, Coalesced : 100.00%
+NVM Puts      :               0, Success   :   0.00%, Clean   : 100.00%, AbortsFromDel   :        0, AbortsFromGet   :        0
+NVM Evicts    :               0, Clean     : 100.00%, Unclean :       0, Double          :        0
+NVM Deletes   :               0 Skipped Deletes: 100.00%
+
+== Throughput for  ==
+Total Ops : 0.00 million
+Total sets: 84
+get       :   119,602/s, success   :  15.15%
+set       :   101,481/s, success   : 100.00%
+del       :         0/s, found     :   0.00%

@@ -15,6 +15,7 @@
 add_library (cachelib_cachebench
   ./cache/Cache.cpp
   ./cache/TimeStampTicker.cpp
+  ./cache/IO.c
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
   ./consistency/ValueHistory.cpp

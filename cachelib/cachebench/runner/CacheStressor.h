@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or iwrite on set miss (write-through)mplied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -285,6 +285,7 @@ class CacheStressor : public Stressor {
         const auto pid = static_cast<PoolId>(opPoolDist(gen));
         const Request& req(getReq(pid, gen, lastRequestId));
         OpType op = req.getOp();
+
         const std::string* key = &(req.key);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
@@ -300,6 +301,8 @@ class CacheStressor : public Stressor {
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);
 
+          // direct write on set miss (write-through)
+          direct_write();
           break;
         }
         case OpType::kLoneGet:
@@ -329,6 +332,10 @@ class CacheStressor : public Stressor {
               xlock = chainedItemAcquireUniqueLock(*key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                      req.admFeatureMap);
+
+              // direct read on get miss 
+              direct_read();
+              
             }
           } else {
             result = OpResultType::kGetHit;

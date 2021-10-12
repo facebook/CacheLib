@@ -24,6 +24,7 @@
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
 #include "cachelib/cachebench/workload/ReplayGenerator.h"
 #include "cachelib/cachebench/workload/TwitterReplayGenerator.h"
+#include "cachelib/cachebench/workload/BlockTraceReplay.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
@@ -134,6 +135,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
     return std::make_unique<ReplayGenerator>(config);
   } else if (config.generator == "twitter-replay") {
     return std::make_unique<TwitterReplayGenerator>(config);
+  } else if (config.generator == "block-replay") {
+    return std::make_unique<BlockTraceReplay>(config);
   } else if (config.generator.empty() || config.generator == "workload") {
     // TODO: Remove the empty() check once we label workload-based configs
     // properly

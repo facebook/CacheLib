@@ -179,6 +179,9 @@ struct StressorConfig : public JSONConfig {
   // follow get misses with a set
   bool enableLookaside{false};
 
+  // follow misses with read to storage
+  bool enableStorage{false};
+
   // read the first line of trace file 
   bool skipHeader{false};
 
