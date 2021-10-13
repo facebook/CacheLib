@@ -46,7 +46,7 @@ TEST(NavySetupTest, RAID0DeviceSize) {
 
   navy::NavyConfig cfg{};
   cfg.setRaidFiles(navyFileArray, size, true);
-  cfg.setBlockCacheRegionSize(stripeSize);
+  cfg.blockCache().setRegionSize(stripeSize);
   cfg.setBlockSize(ioAlignSize);
 
   auto device = createDevice(cfg, nullptr);

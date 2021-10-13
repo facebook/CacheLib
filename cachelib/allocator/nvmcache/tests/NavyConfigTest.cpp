@@ -92,10 +92,10 @@ void setBlockCacheTestSettings(NavyConfig& config) {
 }
 
 void setBigHashTestSettings(NavyConfig& config) {
-  config.setBigHash(bigHashSizePct,
-                    bigHashBucketSize,
-                    bigHashBucketBfSize,
-                    bigHashSmallItemMaxSize);
+  config.bigHash()
+      .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
+      .setBucketSize(bigHashBucketSize)
+      .setBucketBfSize(bigHashBucketBfSize);
 }
 
 void setJobSchedulerTestSettings(NavyConfig& config) {
