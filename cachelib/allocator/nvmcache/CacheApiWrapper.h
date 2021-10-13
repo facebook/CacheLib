@@ -64,9 +64,6 @@ class CacheAPIWrapperForNvm {
   //                        size.
   // @param creationTime    Timestamp when this item was created
   // @param expiryTime      set an expiry timestamp for the item
-  // @param unevictable     optional argument to make an item unevictable
-  //                        unevictable item may prevent the slab it belongs to
-  //                        from being released if it cannot be moved
   //                        (0 means no expiration time).
   // @return      the handle for the item or an invalid handle(nullptr) if the
   //              allocation failed. Allocation can fail if one such
@@ -81,10 +78,8 @@ class CacheAPIWrapperForNvm {
                                      Key key,
                                      uint32_t size,
                                      uint32_t creationTime,
-                                     uint32_t expiryTime,
-                                     bool unevictable) {
-    return cache.allocateInternal(
-        id, key, size, creationTime, expiryTime, unevictable);
+                                     uint32_t expiryTime) {
+    return cache.allocateInternal(id, key, size, creationTime, expiryTime);
   }
 
   // Insert the allocated handle into the AccessContainer from nvmcache, making

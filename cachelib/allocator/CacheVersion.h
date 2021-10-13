@@ -28,7 +28,7 @@ namespace cachelib {
 // then you only need to bump this version.
 // I.e. you're rolling out a new feature that is cache compatible with previous
 // Cachelib instances.
-constexpr uint64_t kCachelibVersion = 14;
+constexpr uint64_t kCachelibVersion = 15;
 
 // Updating this version will cause RAM cache to be dropped for all
 // cachelib users!!! Proceed with care!! You must coordinate with

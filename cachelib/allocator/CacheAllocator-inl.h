@@ -10,12 +10,13 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
+ * See the License for the specific language governing fmm permissions and
  * limitations under the License.
  */
 
 #pragma once
 
+#include "cachelib/allocator/CacheVersion.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -102,10 +103,7 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
       allocator_(restoreMemoryAllocator()),
       compactCacheManager_(restoreCCacheManager()),
       compressor_(createPtrCompressor()),
-      evictableMMContainers_(
-          deserializeMMContainers(*deserializer_, compressor_)),
-      unevictableMMContainers_(
-          deserializeMMContainers(*deserializer_, compressor_)),
+      mmContainers_(deserializeMMContainers(*deserializer_, compressor_)),
       accessContainer_(std::make_unique<AccessContainer>(
           deserializer_->deserialize<AccessSerializationType>(),
           config_.accessConfig,
@@ -284,23 +282,7 @@ CacheAllocator<CacheTrait>::allocate(PoolId poolId,
     creationTime = util::getCurrentTimeSec();
   }
   return allocateInternal(poolId, key, size, creationTime,
-                          ttlSecs == 0 ? 0 : creationTime + ttlSecs,
-                          false /* unevictable */);
-}
-
-template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::allocatePermanent_deprecated(PoolId poolId,
-                                                         typename Item::Key key,
-                                                         uint32_t size) {
-  if (!config_.moveCb && (poolRebalancer_ || poolResizer_ || memMonitor_)) {
-    throw std::invalid_argument(
-        "Without move callback, we cannot allocate unevictable items when one "
-        "of the workers that may trigger slab release is running");
-  }
-  auto item = allocateInternal(poolId, key, size, util::getCurrentTimeSec(),
-                               0 /* ttlSecs */, true /* unevictable */);
-  return item;
+                          ttlSecs == 0 ? 0 : creationTime + ttlSecs);
 }
 
 template <typename CacheTrait>
@@ -309,8 +291,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              typename Item::Key key,
                                              uint32_t size,
                                              uint32_t creationTime,
-                                             uint32_t expiryTime,
-                                             bool /*unevictable*/) {
+                                             uint32_t expiryTime) {
   util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
@@ -1182,7 +1163,7 @@ bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::Item*
 CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
-  auto& mmContainer = getEvictableMMContainer(pid, cid);
+  auto& mmContainer = getMMContainer(pid, cid);
 
   // Keep searching for a candidate until we were able to evict it
   // or until the search limit has been exhausted
@@ -1606,28 +1587,19 @@ void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::MMContainer&
-CacheAllocator<CacheTrait>::getMMContainer(const Item& item) const {
+CacheAllocator<CacheTrait>::getMMContainer(const Item& item) const noexcept {
   const auto allocInfo =
       allocator_->getAllocInfo(static_cast<const void*>(&item));
-  return getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
+  return getMMContainer(allocInfo.poolId, allocInfo.classId);
 }
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::MMContainer&
-CacheAllocator<CacheTrait>::getEvictableMMContainer(
-    PoolId pid, ClassId cid) const noexcept {
-  XDCHECK_LT(static_cast<size_t>(pid), evictableMMContainers_.size());
-  XDCHECK_LT(static_cast<size_t>(cid), evictableMMContainers_[pid].size());
-  return *evictableMMContainers_[pid][cid];
-}
-
-template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::MMContainer&
-CacheAllocator<CacheTrait>::getUnevictableMMContainer(
-    PoolId pid, ClassId cid) const noexcept {
-  XDCHECK_LT(static_cast<size_t>(pid), unevictableMMContainers_.size());
-  XDCHECK_LT(static_cast<size_t>(cid), unevictableMMContainers_[pid].size());
-  return *unevictableMMContainers_[pid][cid];
+CacheAllocator<CacheTrait>::getMMContainer(PoolId pid,
+                                           ClassId cid) const noexcept {
+  XDCHECK_LT(static_cast<size_t>(pid), mmContainers_.size());
+  XDCHECK_LT(static_cast<size_t>(cid), mmContainers_[pid].size());
+  return *mmContainers_[pid][cid];
 }
 
 template <typename CacheTrait>
@@ -1760,8 +1732,7 @@ void CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
     ring_->trackItem(reinterpret_cast<uintptr_t>(&item), item.getSize());
   }
 
-  auto& mmContainer =
-      getEvictableMMContainer(allocInfo.poolId, allocInfo.classId);
+  auto& mmContainer = getMMContainer(allocInfo.poolId, allocInfo.classId);
   mmContainer.recordAccess(item, mode);
 }
 
@@ -1798,15 +1769,15 @@ std::vector<std::string> CacheAllocator<CacheTrait>::dumpEvictionIterator(
     return {};
   }
 
-  if (static_cast<size_t>(pid) >= evictableMMContainers_.size() ||
-      static_cast<size_t>(cid) >= evictableMMContainers_[pid].size()) {
+  if (static_cast<size_t>(pid) >= mmContainers_.size() ||
+      static_cast<size_t>(cid) >= mmContainers_[pid].size()) {
     throw std::invalid_argument(
         folly::sformat("Invalid PoolId: {} and ClassId: {}.", pid, cid));
   }
 
   std::vector<std::string> content;
 
-  auto& mm = *evictableMMContainers_[pid][cid];
+  auto& mm = *mmContainers_[pid][cid];
   auto evictItr = mm.getEvictionIterator();
   size_t i = 0;
   while (evictItr && i < numItems) {
@@ -2000,10 +1971,9 @@ PoolId CacheAllocator<CacheTrait>::addPool(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::overridePoolRebalanceStrategy(
     PoolId pid, std::shared_ptr<RebalanceStrategy> rebalanceStrategy) {
-  if (static_cast<size_t>(pid) >= evictableMMContainers_.size()) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid PoolId: {}, size of pools: {}", pid,
-                       evictableMMContainers_.size()));
+  if (static_cast<size_t>(pid) >= mmContainers_.size()) {
+    throw std::invalid_argument(folly::sformat(
+        "Invalid PoolId: {}, size of pools: {}", pid, mmContainers_.size()));
   }
   setRebalanceStrategy(pid, std::move(rebalanceStrategy));
 }
@@ -2011,10 +1981,9 @@ void CacheAllocator<CacheTrait>::overridePoolRebalanceStrategy(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::overridePoolResizeStrategy(
     PoolId pid, std::shared_ptr<RebalanceStrategy> resizeStrategy) {
-  if (static_cast<size_t>(pid) >= evictableMMContainers_.size()) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid PoolId: {}, size of pools: {}", pid,
-                       evictableMMContainers_.size()));
+  if (static_cast<size_t>(pid) >= mmContainers_.size()) {
+    throw std::invalid_argument(folly::sformat(
+        "Invalid PoolId: {}, size of pools: {}", pid, mmContainers_.size()));
   }
   setResizeStrategy(pid, std::move(resizeStrategy));
 }
@@ -2028,10 +1997,9 @@ void CacheAllocator<CacheTrait>::overridePoolOptimizeStrategy(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::overridePoolConfig(PoolId pid,
                                                     const MMConfig& config) {
-  if (static_cast<size_t>(pid) >= evictableMMContainers_.size()) {
-    throw std::invalid_argument(
-        folly::sformat("Invalid PoolId: {}, size of pools: {}", pid,
-                       evictableMMContainers_.size()));
+  if (static_cast<size_t>(pid) >= mmContainers_.size()) {
+    throw std::invalid_argument(folly::sformat(
+        "Invalid PoolId: {}, size of pools: {}", pid, mmContainers_.size()));
   }
 
   auto& pool = allocator_->getPool(pid);
@@ -2042,10 +2010,9 @@ void CacheAllocator<CacheTrait>::overridePoolConfig(PoolId pid,
             ? pool.getAllocationClass(static_cast<ClassId>(cid))
                   .getAllocsPerSlab()
             : 0);
-    DCHECK_NOTNULL(evictableMMContainers_[pid][cid].get());
-    DCHECK_NOTNULL(unevictableMMContainers_[pid][cid].get());
-    evictableMMContainers_[pid][cid]->setConfig(mmConfig);
-    unevictableMMContainers_[pid][cid]->setConfig(mmConfig);
+    DCHECK_NOTNULL(mmContainers_[pid][cid].get());
+
+    mmContainers_[pid][cid]->setConfig(mmConfig);
   }
 }
 
@@ -2059,10 +2026,7 @@ void CacheAllocator<CacheTrait>::createMMContainers(const PoolId pid,
             ? pool.getAllocationClass(static_cast<ClassId>(cid))
                   .getAllocsPerSlab()
             : 0);
-    evictableMMContainers_[pid][cid].reset(
-        new MMContainer(config, compressor_));
-    unevictableMMContainers_[pid][cid].reset(
-        new MMContainer(config, compressor_));
+    mmContainers_[pid][cid].reset(new MMContainer(config, compressor_));
   }
 }
 
@@ -2169,7 +2133,7 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   // TODO export evictions, numItems etc from compact cache directly.
   if (!isCompactCache) {
     for (const ClassId cid : classIds) {
-      const auto& container = getEvictableMMContainer(poolId, cid);
+      const auto& container = getMMContainer(poolId, cid);
       uint64_t classHits = (*stats_.cacheHits)[poolId][cid].get();
       cacheStats.insert(
           {cid,
@@ -2205,7 +2169,7 @@ PoolEvictionAgeStats CacheAllocator<CacheTrait>::getPoolEvictionAgeStats(
   const auto& pool = allocator_->getPool(pid);
   const auto& allocSizes = pool.getAllocSizes();
   for (ClassId cid = 0; cid < static_cast<ClassId>(allocSizes.size()); ++cid) {
-    auto& mmContainer = getEvictableMMContainer(pid, cid);
+    auto& mmContainer = getMMContainer(pid, cid);
     const auto numItemsPerSlab =
         allocator_->getPool(pid).getAllocationClass(cid).getAllocsPerSlab();
     const auto projectionLength = numItemsPerSlab * slabProjectionLength;
@@ -2476,8 +2440,7 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
                                      oldItem.getKey(),
                                      oldItem.getSize(),
                                      oldItem.getCreationTime(),
-                                     oldItem.getExpiryTime(),
-                                     false);
+                                     oldItem.getExpiryTime());
   if (!newItemHdl) {
     return {};
   }
@@ -2905,9 +2868,9 @@ typename CacheTrait::MMType::LruType CacheAllocator<CacheTrait>::getItemLruType(
 //
 // ---------------------------------
 // | accessContainer_              |
-// | unevictableMMContainers_      |
-// | evictableMMContainers_        |
-// | compactCacheManager_ |
+// | mmContainers_                 |
+// | emptyMMContainers             |
+// | compactCacheManager_          |
 // | allocator_                    |
 // | metadata_                     |
 // ---------------------------------
@@ -2956,9 +2919,14 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
     return state;
   };
   MMSerializationTypeContainer mmContainersState =
-      serializeMMContainers(evictableMMContainers_);
+      serializeMMContainers(mmContainers_);
+
+  // On version 15, persist the empty unevictable mmcontainer.
+  // So that version <= 14 can still load a metadata saved by version 15.
+  // TODO: Remove this on version 16.
+  MMContainers dummyMMContainers = createEmptyMMContainers();
   MMSerializationTypeContainer unevictableMMContainersState =
-      serializeMMContainers(unevictableMMContainers_);
+      serializeMMContainers(dummyMMContainers);
 
   AccessSerializationType accessContainerState = accessContainer_->saveState();
   MemoryAllocator::SerializationType allocatorState = allocator_->saveState();
@@ -3105,7 +3073,28 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
       mmContainers[i][j] = std::move(ptr);
     }
   }
+  // We need to drop the unevictableMMContainer in the desierializer.
+  // TODO: remove this when all use case are later than version 15.
+  if (metadata_.allocatorVersion_ref() <= 15) {
+    deserializer.deserialize<MMSerializationTypeContainer>();
+  }
+  return mmContainers;
+}
 
+template <typename CacheTrait>
+typename CacheAllocator<CacheTrait>::MMContainers
+CacheAllocator<CacheTrait>::createEmptyMMContainers() {
+  MMContainers mmContainers;
+  for (unsigned int i = 0; i < mmContainers_.size(); i++) {
+    for (unsigned int j = 0; j < mmContainers_[i].size(); j++) {
+      if (mmContainers_[i][j]) {
+        MMContainerPtr ptr =
+            std::make_unique<typename MMContainerPtr::element_type>(
+                mmContainers_[i][j]->getConfig(), compressor_);
+        mmContainers[i][j] = std::move(ptr);
+      }
+    }
+  }
   return mmContainers;
 }
 

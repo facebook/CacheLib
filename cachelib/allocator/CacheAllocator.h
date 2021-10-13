@@ -277,11 +277,6 @@ class CacheAllocator : public CacheBase {
                       uint32_t ttlSecs = 0,
                       uint32_t creationTime = 0);
 
-  // same as allocate except this allocates an item unevictable from cache
-  // We are in the process of deprecating this API and remove support for
-  // permanent items.
-  ItemHandle allocatePermanent_deprecated(PoolId id, Key key, uint32_t size);
-
   // Allocate a chained item
   //
   // The resulting chained item does not have a parent item and
@@ -1144,23 +1139,19 @@ class CacheAllocator : public CacheBase {
   void createMMContainers(const PoolId pid, MMConfig config);
 
   // acquire the MMContainer corresponding to the the Item's class and pool.
-  // if the item is unevictable, return the mm container for unevictable items
-  // in the same pool
   //
   // @return pointer to the MMContainer.
   // @throw  std::invalid_argument if the Item does not point to a valid
   // allocation from the memory allocator.
-  MMContainer& getMMContainer(const Item& item) const;
+  MMContainer& getMMContainer(const Item& item) const noexcept;
 
-  // acquire the MMContainer for the give pool and class id and creates one if
-  // it does not exist.
+  MMContainer& getMMContainer(PoolId pid, ClassId cid) const noexcept;
+
+  // acquire the MMContainer for the give pool and class id and creates one
+  // if it does not exist.
   //
   // @return pointer to a valid MMContainer that is initialized.
   MMContainer& getEvictableMMContainer(PoolId pid, ClassId cid) const noexcept;
-
-  // same as above, but return the unevictable mm container
-  MMContainer& getUnevictableMMContainer(PoolId pid,
-                                         ClassId cid) const noexcept;
 
   // create a new cache allocation. The allocation can be initialized
   // appropriately and made accessible through insert or insertOrReplace.
@@ -1175,11 +1166,8 @@ class CacheAllocator : public CacheBase {
   // @param size            the size of the allocation, exclusive of the key
   //                        size.
   // @param creationTime    Timestamp when this item was created
-  // @param expiryTime      set an expiry timestamp for the item
-  // @param unevictable     optional argument to make an item unevictable
-  //                        unevictable item may prevent the slab it belongs to
-  //                        from being released if it cannot be moved
-  //                        (0 means no expiration time).
+  // @param expiryTime      set an expiry timestamp for the item (0 means no
+  //                        expiration time).
   //
   // @return      the handle for the item or an invalid handle(nullptr) if the
   //              allocation failed. Allocation can fail if one such
@@ -1193,8 +1181,7 @@ class CacheAllocator : public CacheBase {
                               Key key,
                               uint32_t size,
                               uint32_t creationTime,
-                              uint32_t expiryTime,
-                              bool unevictable);
+                              uint32_t expiryTime);
 
   // Allocate a chained item
   //
@@ -1436,9 +1423,13 @@ class CacheAllocator : public CacheBase {
       Deserializer& deserializer,
       const typename Item::PtrCompressor& compressor);
 
-  MMContainers deserializeUnevictableMMContainers(
-      Deserializer& deserializer,
-      const typename Item::PtrCompressor& compressor);
+  // Create a copy of empty MMContainers according to the configs of
+  // mmContainers_ This function is used when serilizing for persistence for the
+  // reason of backward compatibility. A copy of empty MMContainers from
+  // mmContainers_ will be created and serialized as unevictable mm containers
+  // and written to metadata so that previous CacheLib versions can restore from
+  // such a serialization. This function will be removed in the next version.
+  MMContainers createEmptyMMContainers();
 
   unsigned int reclaimSlabs(PoolId id, size_t numSlabs) final {
     return allocator_->reclaimSlabsAndGrow(id, numSlabs);
@@ -1763,11 +1754,7 @@ class CacheAllocator : public CacheBase {
   // container for the allocations which are currently being memory managed by
   // the cache allocator.
   // we need mmcontainer per allocator pool/allocation class.
-  MMContainers evictableMMContainers_;
-
-  // container for allocations which are unevictable
-  // we need one mm container per pool
-  MMContainers unevictableMMContainers_;
+  MMContainers mmContainers_;
 
   // container that is used for accessing the allocations by their key.
   std::unique_ptr<AccessContainer> accessContainer_;

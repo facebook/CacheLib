@@ -246,21 +246,6 @@ TEST_F(NvmCacheTest, EvictToNvmExpired) {
   ASSERT_FALSE(this->checkKeyExists(key, false /* ram Only */));
 }
 
-// Unevictable items should be kept in DRAM
-TEST_F(NvmCacheTest, UnEvictable) {
-  auto& nvm = this->makeCache();
-  auto pid = this->poolId();
-  auto key = "foo";
-
-  size_t allocSize = 15 * 1024;
-  auto it = nvm.allocatePermanent_deprecated(pid, key, allocSize);
-  ASSERT_NE(nullptr, it);
-  nvm.insertOrReplace(it);
-  auto res = this->inspectCache(key);
-  EXPECT_NE(nullptr, res.first);
-  EXPECT_EQ(nullptr, res.second);
-}
-
 TEST_F(NvmCacheTest, ReadFromNvmExpired) {
   auto& nvm = this->cache();
   auto pid = this->poolId();

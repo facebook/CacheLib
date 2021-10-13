@@ -545,7 +545,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
   // size matches the pBlob's size
   auto it = CacheAPIWrapperForNvm<C>::allocateInternal(
       cache_, nvmItem.poolId(), key, pBlob.origAllocSize,
-      nvmItem.getCreationTime(), nvmItem.getExpiryTime(), false);
+      nvmItem.getCreationTime(), nvmItem.getExpiryTime());
   if (!it) {
     return nullptr;
   }
