@@ -370,7 +370,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::replaceChainedItem(
 }
 
 template <typename Allocator>
-bool Cache<Allocator>::insert(const ItemHandle& handle) {
+bool Cache<Allocator>::insert(ItemHandle& handle) {
   // Insert is not supported in consistency checking mode because consistency
   // checking assumes a Set always succeeds and overrides existing value.
   XDCHECK(!consistencyCheckEnabled());
@@ -395,7 +395,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocate(
 }
 template <typename Allocator>
 typename Cache<Allocator>::ItemHandle Cache<Allocator>::insertOrReplace(
-    const ItemHandle& handle) {
+    ItemHandle& handle) {
   itemRecords_.addItemRecord(handle);
 
   if (!consistencyCheckEnabled()) {
