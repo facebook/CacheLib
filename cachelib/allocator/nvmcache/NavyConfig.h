@@ -394,30 +394,30 @@ class NavyConfig {
 
   // Setters:
   // ============ AP settings =============
-  // (Deprecated) Set the admission policy (e.g. "random", "dynamic_random").
+  // Set the admission policy (e.g. "random", "dynamic_random").
   // @throw std::invalid_argument on empty string.
-  void setAdmissionPolicy(const std::string& admissionPolicy);
-  // (Deprecated) Set admission probability.
+  [[deprecated]] void setAdmissionPolicy(const std::string& admissionPolicy);
+  // Set admission probability.
   // @throw std::std::invalid_argument if the admission policy is not
   //        "random" or the input value is not in the range of 0~1.
-  void setAdmissionProbability(double admissionProbability);
-  // (Deprecated) Set admission policy target rate in bytes/s.
+  [[deprecated]] void setAdmissionProbability(double admissionProbability);
+  // Set admission policy target rate in bytes/s.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
-  void setAdmissionWriteRate(uint64_t admissionWriteRate);
-  // (Deprecated) Set the max write rate to device in bytes/s.
+  [[deprecated]] void setAdmissionWriteRate(uint64_t admissionWriteRate);
+  // Set the max write rate to device in bytes/s.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
-  void setMaxWriteRate(uint64_t maxWriteRate);
-  // (Deprecated) Set the length of suffix in key to be ignored when hashing for
+  [[deprecated]] void setMaxWriteRate(uint64_t maxWriteRate);
+  // Set the length of suffix in key to be ignored when hashing for
   // probability.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
-  void setAdmissionSuffixLength(size_t admissionSuffixLen);
-  // (Deprecated) Set the Navy item base size of baseProbability calculation.
+  [[deprecated]] void setAdmissionSuffixLength(size_t admissionSuffixLen);
+  // Set the Navy item base size of baseProbability calculation.
   // @throw std::invalid_argument if the admission policy is not
   //        "dynamic_random".
-  void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
+  [[deprecated]] void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
   // Enable "dynamic_random" admission policy.
   // @return DynamicRandomAPConfig (for configuration)
   // @throw  invalid_argument if admissionPolicy_ is not empty
@@ -453,57 +453,60 @@ class NavyConfig {
   }
 
   // ============ BlockCache settings =============
-  // (Deprecated) Set whether LRU policy will be used.
+  // Set whether LRU policy will be used.
   // @throw std::invalid_argument if segmentedFifoSegmentRatio has been set and
   //        blockCacheLru = true.
-  void setBlockCacheLru(bool blockCacheLru);
-  // (Deprecated) Set segmentedFifoSegmentRatio for BlockCache.
+  [[deprecated]] void setBlockCacheLru(bool blockCacheLru);
+  // Set segmentedFifoSegmentRatio for BlockCache.
   // @throw std::invalid_argument if LRU policy is used.
-  void setBlockCacheSegmentedFifoSegmentRatio(
+  [[deprecated]] void setBlockCacheSegmentedFifoSegmentRatio(
       std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio);
-  // (Deprecated) Set reinsertionHitsThreshold for BlockCache.
+  // Set reinsertionHitsThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
   //        set.
-  void setBlockCacheReinsertionHitsThreshold(
+  [[deprecated]] void setBlockCacheReinsertionHitsThreshold(
       uint8_t blockCacheReinsertionHitsThreshold);
-  // (Deprecated) Set ReinsertionProbabilityThreshold for BlockCache.
+  // Set ReinsertionProbabilityThreshold for BlockCache.
   // @throw std::invalid_argument if reinsertionHitsThreshold has been set or
   //        the input value is not in the range of 0~100.
-  void setBlockCacheReinsertionProbabilityThreshold(
+  [[deprecated]] void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
-  // (Deprecated) Set size classes vector for BlockCache.
-  void setBlockCacheSizeClasses(
+  // Set size classes vector for BlockCache.
+  [[deprecated]] void setBlockCacheSizeClasses(
       std::vector<uint32_t> blockCacheSizeClasses) noexcept {
     blockCacheConfig_.useSizeClasses(std::move(blockCacheSizeClasses));
   }
-  // (Deprecated) Set region size for BlockCache.
-  void setBlockCacheRegionSize(uint32_t blockCacheRegionSize) noexcept {
+  // Set region size for BlockCache.
+  [[deprecated]] void setBlockCacheRegionSize(
+      uint32_t blockCacheRegionSize) noexcept {
     blockCacheConfig_.setRegionSize(blockCacheRegionSize);
   }
-  // (Deprecated) Set number of clean regions for BlockCache.
-  void setBlockCacheCleanRegions(uint32_t blockCacheCleanRegions) noexcept {
+  // Set number of clean regions for BlockCache.
+  [[deprecated]] void setBlockCacheCleanRegions(
+      uint32_t blockCacheCleanRegions) noexcept {
     blockCacheConfig_.cleanRegions_ = blockCacheCleanRegions;
   }
-  // (Deprecated) Set number of in-mem buffers for BlockCache.
-  void setBlockCacheNumInMemBuffers(
+  // Set number of in-mem buffers for BlockCache.
+  [[deprecated]] void setBlockCacheNumInMemBuffers(
       uint32_t blockCacheNumInMemBuffers) noexcept {
     blockCacheConfig_.numInMemBuffers_ = blockCacheNumInMemBuffers;
   }
-  // (Deprecated) Set whether enable data checksum for BlockCache.
-  void setBlockCacheDataChecksum(bool blockCacheDataChecksum) noexcept {
+  // Set whether enable data checksum for BlockCache.
+  [[deprecated]] void setBlockCacheDataChecksum(
+      bool blockCacheDataChecksum) noexcept {
     blockCacheConfig_.setDataChecksum(blockCacheDataChecksum);
   }
   // Return BlockCacheConfig for configuration.
   BlockCacheConfig& blockCache() noexcept { return blockCacheConfig_; }
 
   // ============ BigHash settings =============
-  // (Deprecated) Set the parameters for BigHash.
+  // Set the parameters for BigHash.
   // @throw std::invalid_argument if bigHashSizePct is not in the range of
   //        0~100.
-  void setBigHash(unsigned int bigHashSizePct,
-                  uint32_t bigHashBucketSize,
-                  uint64_t bigHashBucketBfSize,
-                  uint64_t bigHashSmallItemMaxSize);
+  [[deprecated]] void setBigHash(unsigned int bigHashSizePct,
+                                 uint32_t bigHashBucketSize,
+                                 uint64_t bigHashBucketBfSize,
+                                 uint64_t bigHashSmallItemMaxSize);
   // Return BigHashConfig for configuration.
   BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
 
