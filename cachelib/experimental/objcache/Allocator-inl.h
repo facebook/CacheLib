@@ -134,6 +134,11 @@ void* MonotonicBufferResource<CacheDescriptor>::allocateSlow(size_t bytes,
   newBufferSize =
       std::min(newBufferSize, static_cast<uint32_t>(Slab::kSize) - 1000);
 
+  if (bytes > newBufferSize) {
+    throw std::runtime_error(
+        fmt::format("Alloc request exceeding maximum. Requested: {}, Max: {}",
+                    bytes, newBufferSize));
+  }
   // The layout in our chained item is as follows.
   //
   // |-header-|-key-|-GAP-|-storage-|
