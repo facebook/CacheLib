@@ -253,7 +253,7 @@ class FixedSizeArray {
   // CacheAllocator that deals with ItemHandle. After invoking this function,
   // this structure is left in a null state.
   ItemHandle resetToItemHandle() && {
-    return std::move(layout_).resetToHandle();
+    return std::move(layout_).resetToItemHandle();
   }
 
   // Borrow the item handle underneath this structure. This is useful to
