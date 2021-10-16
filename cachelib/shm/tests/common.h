@@ -69,6 +69,7 @@ class ShmTest : public ShmTestBase {
   // parallel by fbmake runtests.
   const std::string segmentName{};
   const size_t shmSize{0};
+  ShmSegmentOpts opts;
 
  protected:
   void SetUp() final {
@@ -87,17 +88,19 @@ class ShmTest : public ShmTestBase {
   virtual void clearSegment() = 0;
 
   // common tests
-  void testCreateAttach(bool posix);
-  void testAttachReadOnly(bool posix);
-  void testMapping(bool posix);
-  void testMappingAlignment(bool posix);
-  void testLifetime(bool posix);
-  void testPageSize(PageSizeT, bool posix);
+  void testCreateAttach();
+  void testAttachReadOnly();
+  void testMapping();
+  void testMappingAlignment();
+  void testLifetime();
+  void testPageSize(PageSizeT);
 };
 
 class ShmTestPosix : public ShmTest {
  public:
-  ShmTestPosix() {}
+  ShmTestPosix() {
+    opts.typeOpts = PosixSysVSegmentOpts(true);
+  }
 
  private:
   void clearSegment() override {
@@ -113,12 +116,33 @@ class ShmTestPosix : public ShmTest {
 
 class ShmTestSysV : public ShmTest {
  public:
-  ShmTestSysV() {}
+  ShmTestSysV() {
+    opts.typeOpts = PosixSysVSegmentOpts(false);
+  }
 
  private:
   void clearSegment() override {
     try {
       SysVShmSegment::removeByName(segmentName);
+    } catch (const std::system_error& e) {
+      if (e.code().value() != ENOENT) {
+        throw;
+      }
+    }
+  }
+};
+
+class ShmTestFile : public ShmTest {
+ public:
+  ShmTestFile() {
+    opts.typeOpts = FileShmSegmentOpts("/tmp/" + segmentName);
+  }
+
+ private:
+  void clearSegment() override {
+    try {
+      auto path = std::get<FileShmSegmentOpts>(opts.typeOpts).path;
+      FileShmSegment::removeByPath(path);
     } catch (const std::system_error& e) {
       if (e.code().value() != ENOENT) {
         throw;

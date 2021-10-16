@@ -584,7 +584,7 @@ TEST_F(SlabAllocatorTest, AdviseRelease) {
   shmName += std::to_string(::getpid());
   shmManager.createShm(shmName, allocSize, memory);
 
-  SCOPE_EXIT { shmManager.removeShm(shmName); };
+  SCOPE_EXIT { shmManager.removeShm(shmName, PosixSysVSegmentOpts(false)); };
 
   memory = util::align(Slab::kSize, size, memory, allocSize);
 
@@ -714,7 +714,7 @@ TEST_F(SlabAllocatorTest, AdviseSaveRestore) {
   ShmManager shmManager(cacheDir, false /* posix */);
   shmManager.createShm(shmName, allocSize, memory);
 
-  SCOPE_EXIT { shmManager.removeShm(shmName); };
+  SCOPE_EXIT { shmManager.removeShm(shmName, PosixSysVSegmentOpts(false)); };
 
   {
     SlabAllocator s(memory, size, config);

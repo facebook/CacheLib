@@ -28,11 +28,11 @@ using facebook::cachelib::detail::getPageSize;
 using facebook::cachelib::detail::getPageSizeInSMap;
 using facebook::cachelib::detail::isPageAlignedSize;
 
-void ShmTest::testCreateAttach(bool posix) {
+void ShmTest::testCreateAttach() {
   const unsigned char magicVal = 'd';
   {
     // create with 0 size should round up to page size
-    ShmSegment s(ShmNew, segmentName, 0, posix);
+    ShmSegment s(ShmNew, segmentName, 0, opts);
     ASSERT_EQ(getPageSize(), s.getSize());
     s.markForRemoval();
   }
@@ -40,14 +40,14 @@ void ShmTest::testCreateAttach(bool posix) {
   {
     // create with unaligned size
     ASSERT_TRUE(isPageAlignedSize(shmSize));
-    ShmSegment s(ShmNew, segmentName, shmSize + 500, posix);
+    ShmSegment s(ShmNew, segmentName, shmSize + 500, opts);
     ASSERT_EQ(shmSize + getPageSize(), s.getSize());
     s.markForRemoval();
   }
   auto addr = getNewUnmappedAddr();
 
   {
-    ShmSegment s(ShmNew, segmentName, shmSize, posix);
+    ShmSegment s(ShmNew, segmentName, shmSize, opts);
     ASSERT_EQ(s.getSize(), shmSize);
     ASSERT_FALSE(s.isMapped());
     ASSERT_TRUE(s.mapAddress(addr));
@@ -57,14 +57,14 @@ void ShmTest::testCreateAttach(bool posix) {
     ASSERT_TRUE(s.isMapped());
     checkMemory(addr, s.getSize(), 0);
     writeToMemory(addr, s.getSize(), magicVal);
-    ASSERT_THROW(ShmSegment(ShmNew, segmentName, shmSize, posix),
+    ASSERT_THROW(ShmSegment(ShmNew, segmentName, shmSize, opts),
                  std::system_error);
     const auto m = s.getCurrentMapping();
     ASSERT_EQ(m.size, shmSize);
   }
 
   ASSERT_NO_THROW({
-    ShmSegment s2(ShmAttach, segmentName, posix);
+    ShmSegment s2(ShmAttach, segmentName, opts);
     ASSERT_EQ(s2.getSize(), shmSize);
     ASSERT_TRUE(s2.mapAddress(addr));
     checkMemory(addr, s2.getSize(), magicVal);
@@ -73,15 +73,17 @@ void ShmTest::testCreateAttach(bool posix) {
   });
 }
 
-TEST_F(ShmTestPosix, CreateAttach) { testCreateAttach(true); }
+TEST_F(ShmTestPosix, CreateAttach) { testCreateAttach(); }
 
-TEST_F(ShmTestSysV, CreateAttach) { testCreateAttach(false); }
+TEST_F(ShmTestSysV, CreateAttach) { testCreateAttach(); }
 
-void ShmTest::testMapping(bool posix) {
+TEST_F(ShmTestFile, CreateAttach) { testCreateAttach(); }
+
+void ShmTest::testMapping() {
   const unsigned char magicVal = 'z';
   auto addr = getNewUnmappedAddr();
   { // create a segment
-    ShmSegment s(ShmNew, segmentName, shmSize, posix);
+    ShmSegment s(ShmNew, segmentName, shmSize, opts);
     ASSERT_TRUE(s.mapAddress(addr));
     ASSERT_TRUE(s.isMapped());
     // creating another mapping should fail
@@ -95,7 +97,7 @@ void ShmTest::testMapping(bool posix) {
 
   // map with nullptr
   {
-    ShmSegment s(ShmAttach, segmentName, posix);
+    ShmSegment s(ShmAttach, segmentName, opts);
     ASSERT_TRUE(s.mapAddress(nullptr));
     ASSERT_TRUE(s.isMapped());
     const auto m = s.getCurrentMapping();
@@ -107,7 +109,7 @@ void ShmTest::testMapping(bool posix) {
   }
 
   {
-    ShmSegment s(ShmAttach, segmentName, posix);
+    ShmSegment s(ShmAttach, segmentName, opts);
     // can map again.
     ASSERT_TRUE(s.mapAddress(addr));
     ASSERT_TRUE(s.isMapped());
@@ -148,13 +150,15 @@ void ShmTest::testMapping(bool posix) {
   }
 }
 
-TEST_F(ShmTestPosix, Mapping) { testMapping(true); }
+TEST_F(ShmTestPosix, Mapping) { testMapping(); }
 
-TEST_F(ShmTestSysV, Mapping) { testMapping(false); }
+TEST_F(ShmTestSysV, Mapping) { testMapping(); }
 
-void ShmTest::testMappingAlignment(bool posix) {
+TEST_F(ShmTestFile, Mapping) { testMapping(); }
+
+void ShmTest::testMappingAlignment() {
   { // create a segment
-    ShmSegment s(ShmNew, segmentName, shmSize, posix);
+    ShmSegment s(ShmNew, segmentName, shmSize, opts);
 
     // 0 alignment is wrong.
     ASSERT_FALSE(s.mapAddress(nullptr, 0));
@@ -171,11 +175,13 @@ void ShmTest::testMappingAlignment(bool posix) {
   }
 }
 
-TEST_F(ShmTestPosix, MappingAlignment) { testMappingAlignment(true); }
+TEST_F(ShmTestPosix, MappingAlignment) { testMappingAlignment(); }
 
-TEST_F(ShmTestSysV, MappingAlignment) { testMappingAlignment(false); }
+TEST_F(ShmTestSysV, MappingAlignment) { testMappingAlignment(); }
 
-void ShmTest::testLifetime(bool posix) {
+TEST_F(ShmTestFile, MappingAlignment) { testMappingAlignment(); }
+
+void ShmTest::testLifetime() {
   const size_t safeSize = getRandomSize();
   const char magicVal = 'x';
   ASSERT_NO_THROW({
@@ -184,7 +190,7 @@ void ShmTest::testLifetime(bool posix) {
       // from address space. this should not actually delete the segment and
       // we should be able to map it back as long as the object is within the
       // scope.
-      ShmSegment s(ShmNew, segmentName, safeSize, posix);
+      ShmSegment s(ShmNew, segmentName, safeSize, opts);
       s.mapAddress(nullptr);
       auto m = s.getCurrentMapping();
       writeToMemory(m.addr, m.size, magicVal);
@@ -200,14 +206,14 @@ void ShmTest::testLifetime(bool posix) {
       // should be able to create  a new segment with same segmentName after the
       // previous scope exit destroys the segment.
       const size_t newSize = getRandomSize();
-      ShmSegment s(ShmNew, segmentName, newSize, posix);
+      ShmSegment s(ShmNew, segmentName, newSize, opts);
       s.mapAddress(nullptr);
       auto m = s.getCurrentMapping();
       checkMemory(m.addr, m.size, 0);
       writeToMemory(m.addr, m.size, magicVal);
     }
     // attaching should have the same behavior.
-    ShmSegment s(ShmAttach, segmentName, posix);
+    ShmSegment s(ShmAttach, segmentName, opts);
     s.mapAddress(nullptr);
     s.markForRemoval();
     ASSERT_TRUE(s.isMarkedForRemoval());
@@ -218,5 +224,6 @@ void ShmTest::testLifetime(bool posix) {
   });
 }
 
-TEST_F(ShmTestPosix, Lifetime) { testLifetime(true); }
-TEST_F(ShmTestSysV, Lifetime) { testLifetime(false); }
+TEST_F(ShmTestPosix, Lifetime) { testLifetime(); }
+TEST_F(ShmTestSysV, Lifetime) { testLifetime(); }
+TEST_F(ShmTestFile, Lifetime) { testLifetime(); }

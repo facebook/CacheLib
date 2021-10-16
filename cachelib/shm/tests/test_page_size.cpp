@@ -28,20 +28,20 @@ namespace facebook {
 namespace cachelib {
 namespace tests {
 
-void ShmTest::testPageSize(PageSizeT p, bool posix) {
-  ShmSegmentOpts opts{p};
+void ShmTest::testPageSize(PageSizeT p) {
+  opts.pageSize = p;
   size_t size = getPageAlignedSize(4096, p);
   ASSERT_TRUE(isPageAlignedSize(size, p));
 
   // create with unaligned size
   ASSERT_NO_THROW({
-    ShmSegment s(ShmNew, segmentName, size, posix, opts);
+    ShmSegment s(ShmNew, segmentName, size, opts);
     ASSERT_TRUE(s.mapAddress(nullptr));
     ASSERT_EQ(p, getPageSizeInSMap(s.getCurrentMapping().addr));
   });
 
   ASSERT_NO_THROW({
-    ShmSegment s2(ShmAttach, segmentName, posix, opts);
+    ShmSegment s2(ShmAttach, segmentName, opts);
     ASSERT_TRUE(s2.mapAddress(nullptr));
     ASSERT_EQ(p, getPageSizeInSMap(s2.getCurrentMapping().addr));
   });
@@ -52,13 +52,17 @@ void ShmTest::testPageSize(PageSizeT p, bool posix) {
 // complete yet. See https://fburl.com/f0umrcwq . We will re-enable these
 // tests on sandcastle when these get fixed.
 
-TEST_F(ShmTestPosix, PageSizesNormal) { testPageSize(PageSizeT::NORMAL, true); }
+TEST_F(ShmTestPosix, PageSizesNormal) { testPageSize(PageSizeT::NORMAL); }
 
-TEST_F(ShmTestPosix, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB, true); }
+TEST_F(ShmTestPosix, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB); }
 
-TEST_F(ShmTestSysV, PageSizesNormal) { testPageSize(PageSizeT::NORMAL, false); }
+TEST_F(ShmTestSysV, PageSizesNormal) { testPageSize(PageSizeT::NORMAL); }
 
-TEST_F(ShmTestSysV, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB, false); }
+TEST_F(ShmTestSysV, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB); }
+
+TEST_F(ShmTestFile, PageSizesNormal) { testPageSize(PageSizeT::NORMAL); }
+
+TEST_F(ShmTestFile, PageSizesTwoMB) { testPageSize(PageSizeT::TWO_MB); }
 
 } // namespace tests
 } // namespace cachelib

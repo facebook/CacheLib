@@ -26,22 +26,24 @@ using namespace facebook::cachelib::tests;
 
 using facebook::cachelib::detail::isPageAlignedSize;
 
-void ShmTest::testAttachReadOnly(bool posix) {
+void ShmTest::testAttachReadOnly() {
   unsigned char magicVal = 'd';
   ShmSegmentOpts ropts{PageSizeT::NORMAL, true /* read Only */};
+  ropts.typeOpts = opts.typeOpts;
   ShmSegmentOpts rwopts{PageSizeT::NORMAL, false /* read Only */};
+  rwopts.typeOpts = opts.typeOpts;
 
   {
     // attaching to something that does not exist should fail in read only
     // mode.
     ASSERT_TRUE(isPageAlignedSize(shmSize));
-    ASSERT_THROW(ShmSegment(ShmAttach, segmentName, posix, ropts),
+    ASSERT_THROW(ShmSegment(ShmAttach, segmentName, ropts),
                  std::system_error);
   }
 
   // create a new segment
   {
-    ShmSegment s(ShmNew, segmentName, shmSize, posix, rwopts);
+    ShmSegment s(ShmNew, segmentName, shmSize, rwopts);
     ASSERT_EQ(s.getSize(), shmSize);
     ASSERT_TRUE(s.mapAddress(nullptr));
     ASSERT_TRUE(s.isMapped());
@@ -51,7 +53,7 @@ void ShmTest::testAttachReadOnly(bool posix) {
   }
 
   ASSERT_NO_THROW({
-    ShmSegment s(ShmAttach, segmentName, posix, rwopts);
+    ShmSegment s(ShmAttach, segmentName, rwopts);
     ASSERT_EQ(s.getSize(), shmSize);
     ASSERT_TRUE(s.mapAddress(nullptr));
     void* addr = s.getCurrentMapping().addr;
@@ -65,8 +67,8 @@ void ShmTest::testAttachReadOnly(bool posix) {
   // reading in read only mode should work fine. while another one is
   // attached.
   ASSERT_NO_THROW({
-    ShmSegment s(ShmAttach, segmentName, posix, ropts);
-    ShmSegment s2(ShmAttach, segmentName, posix, rwopts);
+    ShmSegment s(ShmAttach, segmentName, ropts);
+    ShmSegment s2(ShmAttach, segmentName, rwopts);
     ASSERT_EQ(s.getSize(), shmSize);
     ASSERT_TRUE(s.mapAddress(nullptr));
     void* addr = s.getCurrentMapping().addr;
@@ -89,7 +91,7 @@ void ShmTest::testAttachReadOnly(bool posix) {
   // detached. segment should be present after it.
   ASSERT_DEATH(
       {
-        ShmSegment s(ShmAttach, segmentName, posix, ropts);
+        ShmSegment s(ShmAttach, segmentName, ropts);
         ASSERT_EQ(s.getSize(), shmSize);
         ASSERT_TRUE(s.mapAddress(nullptr));
         void* addr = s.getCurrentMapping().addr;
@@ -101,12 +103,14 @@ void ShmTest::testAttachReadOnly(bool posix) {
       },
       ".*");
 
-  ASSERT_NO_THROW(ShmSegment s(ShmAttach, segmentName, posix, ropts));
+  ASSERT_NO_THROW(ShmSegment s(ShmAttach, segmentName, ropts));
 }
 
-TEST_F(ShmTestPosix, AttachReadOnlyDeathTest) { testAttachReadOnly(true); }
+TEST_F(ShmTestPosix, AttachReadOnlyDeathTest) { testAttachReadOnly(); }
 
-TEST_F(ShmTestSysV, AttachReadOnlyDeathTest) { testAttachReadOnly(false); }
+TEST_F(ShmTestSysV, AttachReadOnlyDeathTest) { testAttachReadOnly(); }
+
+TEST_F(ShmTestFile, AttachReadOnlyDeathTest) { testAttachReadOnly(); }
 
 int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
