@@ -1197,7 +1197,8 @@ class CacheAllocator : public CacheBase {
   // returns true if there was no error in trying to cleanup the segment
   // because another process was attached. False if the user tried to clean up
   // and the cache was actually attached.
-  static bool cleanupStrayShmSegments(const std::string& cacheDir, bool posix);
+  static bool cleanupStrayShmSegments(const std::string& cacheDir, bool posix
+    /*TODO: const std::vector<CacheMemoryTierConfig>& config = {} */);
 
   // gives a relative offset to a pointer within the cache.
   uint64_t getItemPtrAsOffset(const void* ptr);

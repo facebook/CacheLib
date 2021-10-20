@@ -34,7 +34,8 @@ TempShmMapping::TempShmMapping(size_t size)
 TempShmMapping::~TempShmMapping() {
   try {
     if (addr_) {
-      shmManager_->removeShm(detail::kTempShmCacheName.str());
+      shmManager_->removeShm(detail::kTempShmCacheName.str(),
+        PosixSysVSegmentOpts(false /* posix */));
     }
     if (shmManager_) {
       shmManager_.reset();
@@ -77,7 +78,8 @@ void* TempShmMapping::createShmMapping(ShmManager& shmManager,
     return shmAddr;
   } catch (...) {
     if (shmAddr) {
-      shmManager.removeShm(detail::kTempShmCacheName.str());
+      shmManager.removeShm(detail::kTempShmCacheName.str(),
+        PosixSysVSegmentOpts(false /* posix */));
     } else {
       munmap(addr, size);
     }

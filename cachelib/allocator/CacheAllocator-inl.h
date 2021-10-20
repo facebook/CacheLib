@@ -35,7 +35,8 @@ template <typename CacheTrait>
 CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
     : CacheAllocator(InitMemType::kMemNew, config) {
   initCommon(false);
-  shmManager_->removeShm(detail::kShmInfoName);
+  shmManager_->removeShm(detail::kShmInfoName,
+    PosixSysVSegmentOpts(config_.usePosixShm));
 }
 
 template <typename CacheTrait>
@@ -50,7 +51,8 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
   // We will create a new info shm segment on shutDown(). If we don't remove
   // this info shm segment here and the new info shm segment's size is larger
   // than this one, creating new one will fail.
-  shmManager_->removeShm(detail::kShmInfoName);
+  shmManager_->removeShm(detail::kShmInfoName,
+    PosixSysVSegmentOpts(config_.usePosixShm));
 }
 
 template <typename CacheTrait>
@@ -115,6 +117,7 @@ std::unique_ptr<MemoryAllocator>
 CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
   ShmSegmentOpts opts;
   opts.alignment = sizeof(Slab);
+  opts.typeOpts = PosixSysVSegmentOpts(config_.usePosixShm);
   return std::make_unique<MemoryAllocator>(
       getAllocatorConfig(config_),
       shmManager_
@@ -129,6 +132,7 @@ std::unique_ptr<MemoryAllocator>
 CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
   ShmSegmentOpts opts;
   opts.alignment = sizeof(Slab);
+  opts.typeOpts = PosixSysVSegmentOpts(config_.usePosixShm);
   return std::make_unique<MemoryAllocator>(
       deserializer_->deserialize<MemoryAllocator::SerializationType>(),
       shmManager_
@@ -274,7 +278,7 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
                 name,
                 AccessContainer::getRequiredSize(config.getNumBuckets()),
                 nullptr,
-                ShmSegmentOpts(config.getPageSize()))
+                ShmSegmentOpts(config.getPageSize(), false, config_.usePosixShm))
             .addr,
         compressor_,
         [this](Item* it) -> WriteHandle { return acquire(it); });
@@ -282,7 +286,8 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
     return std::make_unique<AccessContainer>(
         deserializer_->deserialize<AccessSerializationType>(),
         config,
-        shmManager_->attachShm(name),
+        shmManager_->attachShm(name, nullptr,
+            ShmSegmentOpts(PageSizeT::NORMAL, false, config_.usePosixShm)),
         compressor_,
         [this](Item* it) -> WriteHandle { return acquire(it); });
   }
@@ -295,7 +300,8 @@ CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
 
 template <typename CacheTrait>
 std::unique_ptr<Deserializer> CacheAllocator<CacheTrait>::createDeserializer() {
-  auto infoAddr = shmManager_->attachShm(detail::kShmInfoName);
+  auto infoAddr = shmManager_->attachShm(detail::kShmInfoName, nullptr,
+            ShmSegmentOpts(PageSizeT::NORMAL, false, config_.usePosixShm));
   return std::make_unique<Deserializer>(
       reinterpret_cast<uint8_t*>(infoAddr.addr),
       reinterpret_cast<uint8_t*>(infoAddr.addr) + infoAddr.size);
@@ -3181,8 +3187,11 @@ void CacheAllocator<CacheTrait>::saveRamCache() {
   std::unique_ptr<folly::IOBuf> ioBuf = serializedBuf.move();
   ioBuf->coalesce();
 
-  void* infoAddr =
-      shmManager_->createShm(detail::kShmInfoName, ioBuf->length()).addr;
+  ShmSegmentOpts opts;
+  opts.typeOpts = PosixSysVSegmentOpts(config_.usePosixShm);
+
+  void* infoAddr = shmManager_->createShm(detail::kShmInfoName, ioBuf->length(),
+      nullptr, opts).addr;
   Serializer serializer(reinterpret_cast<uint8_t*>(infoAddr),
                         reinterpret_cast<uint8_t*>(infoAddr) + ioBuf->length());
   serializer.writeToBuffer(std::move(ioBuf));
@@ -3521,7 +3530,7 @@ bool CacheAllocator<CacheTrait>::stopReaper(std::chrono::seconds timeout) {
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::cleanupStrayShmSegments(
-    const std::string& cacheDir, bool posix) {
+    const std::string& cacheDir, bool posix /*TODO(SHM_FILE): const std::vector<CacheMemoryTierConfig>& config */) {
   if (util::getStatIfExists(cacheDir, nullptr) && util::isDir(cacheDir)) {
     try {
       // cache dir exists. clean up only if there are no other processes
@@ -3540,6 +3549,12 @@ bool CacheAllocator<CacheTrait>::cleanupStrayShmSegments(
     ShmManager::removeByName(cacheDir, detail::kShmHashTableName, posix);
     ShmManager::removeByName(cacheDir, detail::kShmChainedItemHashTableName,
                              posix);
+
+    // TODO(SHM_FILE): try to nuke segments of differente types (which require
+    // extra info)
+    // for (auto &tier : config) {
+    //   ShmManager::removeByName(cacheDir, tierShmName, config_.memoryTiers[i].opts);
+    // }
   }
   return true;
 }

@@ -22,8 +22,8 @@
 namespace facebook {
 namespace cachelib {
 
-/* This class lets you manage a posix shared memory segment identified by
- * name. This is very similar to the System V shared memory segment, except
+/* This class lets you manage a pmem shared memory segment identified by
+ * name. This is very similar to the Posix shared memory segment, except
  * that it allows for resizing of the segments on the fly. This can let the
  * application logic to grow/shrink the shared memory segment at its end.
  * Accessing the pages truncated on shrinking will result in SIGBUS.
@@ -41,13 +41,13 @@ namespace cachelib {
  * them are marked for removal.
  */
 
-class PosixShmSegment : public ShmBase {
+class FileShmSegment : public ShmBase {
  public:
-  // attach to an existing posix segment with the given name
+  // attach to an existing pmem segment with the given name
   //
   // @param name  Name of the segment
   // @param opts  the options for attaching to the segment.
-  PosixShmSegment(ShmAttachT,
+  FileShmSegment(ShmAttachT,
                   const std::string& name,
                   ShmSegmentOpts opts = {});
 
@@ -55,15 +55,15 @@ class PosixShmSegment : public ShmBase {
   // @param name  The name of the segment
   // @param size  The size of the segment. This will be rounded up to the
   //              nearest page size.
-  PosixShmSegment(ShmNewT,
+  FileShmSegment(ShmNewT,
                   const std::string& name,
                   size_t size,
                   ShmSegmentOpts opts = {});
 
   // destructor
-  ~PosixShmSegment() override;
+  ~FileShmSegment() override;
 
-  std::string getKeyStr() const noexcept override { return getName(); }
+  std::string getKeyStr() const noexcept override { return getPath(); }
 
   // marks the current segment to be removed once it is no longer mapped
   // by any process in the kernel.
@@ -90,14 +90,14 @@ class PosixShmSegment : public ShmBase {
 
   // useful for removing without attaching
   // @return true if the segment existed. false otherwise
-  static bool removeByName(const std::string& name);
+  static bool removeByPath(const std::string& path);
 
  private:
   static int createNewSegment(const std::string& name);
   static int getExisting(const std::string& name, const ShmSegmentOpts& opts);
 
   // returns the key type corresponding to the given name.
-  static std::string createKeyForName(const std::string& name) noexcept;
+  std::string getPath() const;
 
   // resize the segment
   // @param size  the new size

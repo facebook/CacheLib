@@ -99,7 +99,7 @@ class ShmManager {
   // @param shmName   name of the segment
   // @return  true if such a segment existed and we removed it.
   //          false if segment never existed
-  bool removeShm(const std::string& segName);
+  bool removeShm(const std::string& segName, ShmTypeOpts opts);
 
   // gets a current segment by the name that is managed by this
   // instance. The lifetime of the returned object is same as the
@@ -128,13 +128,13 @@ class ShmManager {
   // cacheDir without instanciating.
   static void removeByName(const std::string& cacheDir,
                            const std::string& segName,
-                           bool posix);
+                           ShmTypeOpts shmOpts);
 
   // Useful for checking whether a segment exists by name associated with a
   // given cacheDir without instanciating. This should be ONLY used in tests.
   static bool segmentExists(const std::string& cacheDir,
                             const std::string& segName,
-                            bool posix);
+                            ShmTypeOpts shmOpts);
 
   // free up and remove all the segments related to the cache directory.
   static void cleanup(const std::string& cacheDir, bool posix);
@@ -152,7 +152,7 @@ class ShmManager {
   static std::unique_ptr<ShmSegment> attachShmReadOnly(
       const std::string& cacheDir,
       const std::string& segName,
-      bool posix,
+      ShmTypeOpts opts,
       void* addr = nullptr);
 
  private:

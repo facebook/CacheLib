@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "cachelib/shm/PosixShmSegment.h"
+#include "cachelib/shm/FileShmSegment.h"
 
 #include <fcntl.h>
 #include <folly/logging/xlog.h>
@@ -32,8 +32,10 @@ typedef struct stat stat_t;
 
 namespace detail {
 
-static int shmOpenImpl(const char* name, int flags) {
-  const int fd = shm_open(name, flags, kRWMode);
+// TODO(SHM_FILE): move those *Impl functions to common file, there are copied
+// from PosixShmSegment.cpp
+static int openImpl(const char* name, int flags) {
+  const int fd = open(name, flags);
 
   if (fd != -1) {
     return fd;
@@ -68,8 +70,8 @@ static int shmOpenImpl(const char* name, int flags) {
   return kInvalidFD;
 }
 
-static void shmUnlinkImpl(const char* const name) {
-  const int ret = shm_unlink(name);
+static void unlinkImpl(const char* const name) {
+  const int ret = unlink(name);
   if (ret == 0) {
     return;
   }
@@ -168,22 +170,22 @@ static void munmapImpl(void* addr, size_t length) {
 
 } // namespace detail
 
-PosixShmSegment::PosixShmSegment(ShmAttachT,
+FileShmSegment::FileShmSegment(ShmAttachT,
                                  const std::string& name,
                                  ShmSegmentOpts opts)
-    : ShmBase(std::move(opts), createKeyForName(name)),
-      fd_(getExisting(getName(), opts_)) {
+    : ShmBase(std::move(opts), name),
+      fd_(getExisting(getPath(), opts_)) {
   XDCHECK_NE(fd_, kInvalidFD);
   markActive();
   createReferenceMapping();
 }
 
-PosixShmSegment::PosixShmSegment(ShmNewT,
+FileShmSegment::FileShmSegment(ShmNewT,
                                  const std::string& name,
                                  size_t size,
                                  ShmSegmentOpts opts)
-    : ShmBase(std::move(opts), createKeyForName(name)),
-      fd_(createNewSegment(getName())) {
+    : ShmBase(std::move(opts), name),
+      fd_(createNewSegment(getPath())) {
   markActive();
   resize(size);
   XDCHECK(isActive());
@@ -192,7 +194,7 @@ PosixShmSegment::PosixShmSegment(ShmNewT,
   createReferenceMapping();
 }
 
-PosixShmSegment::~PosixShmSegment() {
+FileShmSegment::~FileShmSegment() {
   try {
     // delete the reference mapping so the segment can be deleted if its
     // marked to be.
@@ -213,33 +215,32 @@ PosixShmSegment::~PosixShmSegment() {
   }
 }
 
-int PosixShmSegment::createNewSegment(const std::string& name) {
+int FileShmSegment::createNewSegment(const std::string& name) {
   constexpr static int createFlags = O_RDWR | O_CREAT | O_EXCL;
-  return detail::shmOpenImpl(name.c_str(), createFlags);
+  return detail::openImpl(name.c_str(), createFlags);
 }
 
-int PosixShmSegment::getExisting(const std::string& name,
+int FileShmSegment::getExisting(const std::string& name,
                                  const ShmSegmentOpts& opts) {
   int flags = opts.readOnly ? O_RDONLY : O_RDWR;
-  return detail::shmOpenImpl(name.c_str(), flags);
+  return detail::openImpl(name.c_str(), flags);
 }
 
-void PosixShmSegment::markForRemoval() {
+void FileShmSegment::markForRemoval() {
   if (isActive()) {
     // we still have the fd open. so we can use it to perform ftruncate
     // even after marking for removal through unlink. The fd does not get
     // recycled until we actually destroy this object.
-    removeByName(getName());
+    removeByPath(getPath());
     markForRemove();
   } else {
     XDCHECK(false);
   }
 }
 
-bool PosixShmSegment::removeByName(const std::string& segmentName) {
+bool FileShmSegment::removeByPath(const std::string& path) {
   try {
-    auto key = createKeyForName(segmentName);
-    detail::shmUnlinkImpl(key.c_str());
+    detail::unlinkImpl(path.c_str());
     return true;
   } catch (const std::system_error& e) {
     // unlink is opaque unlike sys-V api where its through the shmid. Hence
@@ -251,7 +252,11 @@ bool PosixShmSegment::removeByName(const std::string& segmentName) {
   }
 }
 
-size_t PosixShmSegment::getSize() const {
+std::string FileShmSegment::getPath() const {
+  return std::get<FileShmSegmentOpts>(opts_.typeOpts).path;
+}
+
+size_t FileShmSegment::getSize() const {
   if (isActive() || isMarkedForRemoval()) {
     stat_t buf = {};
     detail::fstatImpl(fd_, &buf);
@@ -264,7 +269,7 @@ size_t PosixShmSegment::getSize() const {
   return 0;
 }
 
-void PosixShmSegment::resize(size_t size) const {
+void FileShmSegment::resize(size_t size) const {
   size = detail::getPageAlignedSize(size, opts_.pageSize);
   XDCHECK(isActive() || isMarkedForRemoval());
   if (isActive() || isMarkedForRemoval()) {
@@ -277,7 +282,7 @@ void PosixShmSegment::resize(size_t size) const {
   }
 }
 
-void* PosixShmSegment::mapAddress(void* addr) const {
+void* FileShmSegment::mapAddress(void* addr) const {
   size_t size = getSize();
   if (!detail::isPageAlignedSize(size, opts_.pageSize) ||
       !detail::isPageAlignedAddr(addr, opts_.pageSize)) {
@@ -315,22 +320,11 @@ void* PosixShmSegment::mapAddress(void* addr) const {
   return retAddr;
 }
 
-void PosixShmSegment::unMap(void* addr) const {
+void FileShmSegment::unMap(void* addr) const {
   detail::munmapImpl(addr, getSize());
 }
 
-std::string PosixShmSegment::createKeyForName(
-    const std::string& name) noexcept {
-  // ensure that the slash is always there in the head. repetitive
-  // slash is fine.
-  if (name.empty() || name[0] != '/') {
-    return "/" + name;
-  } else {
-    return name;
-  }
-}
-
-void PosixShmSegment::createReferenceMapping() {
+void FileShmSegment::createReferenceMapping() {
   // create a mapping that lasts the life of this object. mprotect it to
   // ensure there are no actual accesses.
   referenceMapping_ = detail::mmapImpl(
@@ -338,7 +332,7 @@ void PosixShmSegment::createReferenceMapping() {
   XDCHECK(referenceMapping_ != nullptr);
 }
 
-void PosixShmSegment::deleteReferenceMapping() const {
+void FileShmSegment::deleteReferenceMapping() const {
   if (referenceMapping_ != nullptr) {
     detail::munmapImpl(referenceMapping_, detail::getPageSize());
   }

@@ -22,6 +22,7 @@
 #include <system_error>
 
 #include "cachelib/common/Utils.h"
+#include "cachelib/shm/FileShmSegment.h"
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/SysVShmSegment.h"
@@ -50,14 +51,17 @@ class ShmSegment {
   ShmSegment(ShmNewT,
              std::string name,
              size_t size,
-             bool usePosix,
              ShmSegmentOpts opts = {}) {
-    if (usePosix) {
-      segment_ = std::make_unique<PosixShmSegment>(ShmNew, std::move(name),
-                                                   size, opts);
-    } else {
-      segment_ =
-          std::make_unique<SysVShmSegment>(ShmNew, std::move(name), size, opts);
+    if (auto *v = std::get_if<FileShmSegmentOpts>(&opts.typeOpts)) {
+      segment_ = std::make_unique<FileShmSegment>(
+        ShmNew, std::move(name), size, opts);
+    } else if (auto *v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
+      if (v->usePosix)
+        segment_ = std::make_unique<PosixShmSegment>(
+          ShmNew, std::move(name), size, opts);
+      else
+        segment_ = std::make_unique<SysVShmSegment>(
+          ShmNew, std::move(name), size, opts);
     }
   }
 
@@ -66,14 +70,17 @@ class ShmSegment {
   // @param opts   the options for the segment.
   ShmSegment(ShmAttachT,
              std::string name,
-             bool usePosix,
              ShmSegmentOpts opts = {}) {
-    if (usePosix) {
-      segment_ =
-          std::make_unique<PosixShmSegment>(ShmAttach, std::move(name), opts);
-    } else {
-      segment_ =
-          std::make_unique<SysVShmSegment>(ShmAttach, std::move(name), opts);
+    if (std::get_if<FileShmSegmentOpts>(&opts.typeOpts)) {
+      segment_ = std::make_unique<FileShmSegment>(
+        ShmAttach, std::move(name), opts);
+    } else if (auto *v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
+      if (v->usePosix)
+        segment_ = std::make_unique<PosixShmSegment>(
+          ShmAttach, std::move(name), opts);
+      else
+        segment_ = std::make_unique<SysVShmSegment>(
+          ShmAttach, std::move(name), opts);
     }
   }
 

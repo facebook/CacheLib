@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 
 #include <system_error>
+#include <variant>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -70,13 +71,35 @@ enum PageSizeT {
   ONE_GB,
 };
 
+constexpr int kInvalidFD = -1;
+
+// TODO(SHM_FILE): maybe we could use this inside the Tier Config class?
+struct FileShmSegmentOpts {
+  FileShmSegmentOpts(std::string path = ""): path(path) {}
+  std::string path;
+};
+
+struct PosixSysVSegmentOpts {
+  PosixSysVSegmentOpts(bool usePosix = false): usePosix(usePosix) {}
+  bool usePosix;
+};
+
+using ShmTypeOpts = std::variant<FileShmSegmentOpts, PosixSysVSegmentOpts>;
+
 struct ShmSegmentOpts {
   PageSizeT pageSize{PageSizeT::NORMAL};
   bool readOnly{false};
   size_t alignment{1}; // alignment for mapping.
+  ShmTypeOpts typeOpts{}; // opts specific to segment type
 
   explicit ShmSegmentOpts(PageSizeT p) : pageSize(p) {}
   explicit ShmSegmentOpts(PageSizeT p, bool ro) : pageSize(p), readOnly(ro) {}
+  explicit ShmSegmentOpts(PageSizeT p, bool ro, const std::string& path) :
+                                       pageSize(p), readOnly(ro),
+                                       typeOpts(path) {}
+  explicit ShmSegmentOpts(PageSizeT p, bool ro, bool posix) :
+                                       pageSize(p), readOnly(ro),
+                                       typeOpts(posix) {}
   ShmSegmentOpts() : pageSize(PageSizeT::NORMAL) {}
 };
 
