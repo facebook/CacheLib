@@ -77,7 +77,7 @@ struct HandleImpl {
   // Waits for item (if async op in progress) and then releases item's
   // ownership to the caller.
   Item* release() noexcept {
-    auto ret = getImpl();
+    auto ret = getInternal();
     if (waitContext_) {
       waitContext_->releaseHandle();
       waitContext_.reset();
@@ -150,8 +150,9 @@ struct HandleImpl {
   // accessors. Calling get on handle with isReady() == false blocks the thread
   // until the handle is ready.
   FOLLY_ALWAYS_INLINE Item* operator->() const noexcept { return get(); }
-  FOLLY_ALWAYS_INLINE Item& operator*() const noexcept { return *get(); }
-  FOLLY_ALWAYS_INLINE Item* get() const noexcept { return getImpl(); }
+  FOLLY_ALWAYS_INLINE const Item& operator*() const noexcept { return *get(); }
+  FOLLY_ALWAYS_INLINE Item& operator*() noexcept { return *get(); }
+  FOLLY_ALWAYS_INLINE Item* get() const noexcept { return getInternal(); }
 
   // Convert to semi future.
   folly::SemiFuture<HandleImpl> toSemiFuture() && {
@@ -417,7 +418,7 @@ struct HandleImpl {
     return waitContext_;
   }
 
-  FOLLY_ALWAYS_INLINE Item* getImpl() const noexcept {
+  FOLLY_ALWAYS_INLINE Item* getInternal() const noexcept {
     return waitContext_ ? waitContext_->get() : it_;
   }
 

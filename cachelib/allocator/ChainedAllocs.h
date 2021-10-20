@@ -33,8 +33,8 @@ class CacheChainedAllocs {
   CacheChainedAllocs& operator=(CacheChainedAllocs&&) = default;
 
   // return the parent of the chain.
-  Item& getParentItem() const noexcept { return *parent_; }
-
+  Item& getParentItem() noexcept { return *parent_; }
+  const Item& getParentItem() const noexcept { return *parent_; }
   // iterate and compute the length of the chain. This is O(N) computation.
   //
   // @return the length of the chain

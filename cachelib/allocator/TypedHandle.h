@@ -68,7 +68,7 @@ class TypedHandleImpl {
   explicit operator bool() const noexcept { return h_.get(); }
 
   UserType* get() const noexcept {
-    return h_.get() == nullptr ? nullptr : &(toUserType(*h_));
+    return h_.get() == nullptr ? nullptr : &(toUserType(*((h_.get()))));
   }
 
   UserType& operator*() const noexcept {

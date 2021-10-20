@@ -330,8 +330,8 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const ItemHandle& hdl) {
 
   auto chainedItemRange =
       CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, *hdl);
-  if (config_.encodeCb &&
-      !config_.encodeCb(EncodeDecodeContext{*hdl, chainedItemRange})) {
+  if (config_.encodeCb && !config_.encodeCb(EncodeDecodeContext{
+                              *(hdl.getInternal()), chainedItemRange})) {
     return nullptr;
   }
 

@@ -948,12 +948,12 @@ bool CacheAllocator<CacheTrait>::insertImpl(const ItemHandle& handle,
 
   // insert into the MM container before we make it accessible. Find will
   // return this item as soon as it is accessible.
-  insertInMMContainer(*handle);
+  insertInMMContainer(*(handle.getInternal()));
 
   AllocatorApiResult result;
-  if (!accessContainer_->insert(*handle)) {
+  if (!accessContainer_->insert(*(handle.getInternal()))) {
     // this should destroy the handle and release it back to the allocator.
-    removeFromMMContainer(*handle);
+    removeFromMMContainer(*(handle.getInternal()));
     result = AllocatorApiResult::FAILED;
   } else {
     handle.unmarkNascent();
@@ -976,12 +976,12 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
     throw std::invalid_argument("Handle is already accessible");
   }
 
-  insertInMMContainer(*handle);
+  insertInMMContainer(*(handle.getInternal()));
   ItemHandle replaced;
   try {
-    replaced = accessContainer_->insertOrReplace(*handle);
+    replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
   } catch (const exception::RefcountOverflow&) {
-    removeFromMMContainer(*handle);
+    removeFromMMContainer(*(handle.getInternal()));
     if (auto eventTracker = getEventTracker()) {
       eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
                            handle->getKey(),
@@ -1535,7 +1535,7 @@ CacheAllocator<CacheTrait>::remove(const ItemHandle& it) {
   }
   auto tombstone = nvmCache_ ? nvmCache_->createDeleteTombStone(it->getKey())
                              : DeleteTombStoneGuard{};
-  return removeImpl(*it, std::move(tombstone));
+  return removeImpl(*(it.getInternal()), std::move(tombstone));
 }
 
 template <typename CacheTrait>
@@ -1708,7 +1708,7 @@ void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
     return;
   }
 
-  auto& item = *handle;
+  auto& item = *(handle.getInternal());
   recordAccessInMMContainer(item, mode);
 
   if (LIKELY(!item.hasChainedItem())) {
@@ -2717,9 +2717,10 @@ bool CacheAllocator<CacheTrait>::removeIfExpired(const ItemHandle& handle) {
 
   // We remove the item from both access and mm containers.
   // We want to make sure the caller is the only one holding the handle.
-  auto removedHandle = accessContainer_->removeIf(*handle, itemExpiryPredicate);
+  auto removedHandle =
+      accessContainer_->removeIf(*(handle.getInternal()), itemExpiryPredicate);
   if (removedHandle) {
-    removeFromMMContainer(*handle);
+    removeFromMMContainer(*(handle.getInternal()));
     return true;
   }
 
