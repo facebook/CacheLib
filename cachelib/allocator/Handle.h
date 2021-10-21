@@ -149,10 +149,12 @@ struct HandleImpl {
 
   // accessors. Calling get on handle with isReady() == false blocks the thread
   // until the handle is ready.
-  FOLLY_ALWAYS_INLINE Item* operator->() const noexcept { return get(); }
+  FOLLY_ALWAYS_INLINE const Item* operator->() const noexcept { return get(); }
+  FOLLY_ALWAYS_INLINE Item* operator->() noexcept { return get(); }
   FOLLY_ALWAYS_INLINE const Item& operator*() const noexcept { return *get(); }
   FOLLY_ALWAYS_INLINE Item& operator*() noexcept { return *get(); }
-  FOLLY_ALWAYS_INLINE Item* get() const noexcept { return getInternal(); }
+  FOLLY_ALWAYS_INLINE const Item* get() const noexcept { return getInternal(); }
+  FOLLY_ALWAYS_INLINE Item* get() noexcept { return getInternal(); }
 
   // Convert to semi future.
   folly::SemiFuture<HandleImpl> toSemiFuture() && {
@@ -215,14 +217,9 @@ struct HandleImpl {
   // @return HandleImpl   return a handle to this item
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  HandleImpl clone() const {
-    HandleImpl hdl{};
-    if (alloc_) {
-      hdl = alloc_->acquire(get());
-    }
-    hdl.cloneFlags(*this);
-    return hdl;
-  }
+  HandleImpl clone() { return cloneInternal(); }
+
+  const HandleImpl clone() const { return cloneInternal(); }
 
  private:
   struct ItemWaitContext : public WaitContext<HandleImpl> {
@@ -420,6 +417,15 @@ struct HandleImpl {
 
   FOLLY_ALWAYS_INLINE Item* getInternal() const noexcept {
     return waitContext_ ? waitContext_->get() : it_;
+  }
+
+  HandleImpl cloneInternal() const {
+    HandleImpl hdl{};
+    if (alloc_) {
+      hdl = alloc_->acquire(getInternal());
+    }
+    hdl.cloneFlags(*this);
+    return hdl;
   }
 
   // Internal book keeping to track handles that correspond to items that are

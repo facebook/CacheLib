@@ -27,6 +27,10 @@ struct DefaultUserTypeConverter {
   UserType& operator()(ItemType& item) {
     return *item.template getMemoryAs<UserType>();
   }
+
+  const UserType& operator()(const ItemType& item) {
+    return *item.template getMemoryAs<const UserType>();
+  }
 };
 } // namespace detail
 
@@ -67,16 +71,30 @@ class TypedHandleImpl {
 
   explicit operator bool() const noexcept { return h_.get(); }
 
-  UserType* get() const noexcept {
+  UserType* get() noexcept {
     return h_.get() == nullptr ? nullptr : &(toUserType(*((h_.get()))));
   }
 
-  UserType& operator*() const noexcept {
+  const UserType* get() const noexcept {
+    return h_.get() == nullptr ? nullptr : &(toUserType(*((h_.get()))));
+  }
+
+  UserType& operator*() noexcept {
     XDCHECK(get() != nullptr);
     return *get();
   }
 
-  UserType* operator->() const noexcept {
+  const UserType& operator*() const noexcept {
+    XDCHECK(get() != nullptr);
+    return *get();
+  }
+
+  UserType* operator->() noexcept {
+    XDCHECK(get() != nullptr);
+    return get();
+  }
+
+  const UserType* operator->() const noexcept {
     XDCHECK(get() != nullptr);
     return get();
   }
@@ -92,6 +110,7 @@ class TypedHandleImpl {
   ItemHandle h_{};
 
   static UserType& toUserType(Item& it) { return Converter()(it); }
+  static const UserType& toUserType(const Item& it) { return Converter()(it); }
 };
 
 template <typename T, typename U, typename Converter>
