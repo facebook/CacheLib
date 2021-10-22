@@ -2,7 +2,7 @@
 name = "cachelib"
 version = "0.1.0"
 authors = ["Facebook <opensource+cachelib@fb.com>"]
-edition = "2018"
+edition = "2021"
 description = "cachelib rust bindings"
 repository = "https://github.com/facebook/cachelib/"
 license = "MIT OR Apache-2.0"
