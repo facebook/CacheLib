@@ -227,7 +227,7 @@ class Cache {
   // is useful only when consistency checking is enabled by calling
   // enableConsistencyCheck()
   bool isInvalidKey(const std::string& key) {
-    return invalidKeys_[key].load(std::memory_order_release);
+    return invalidKeys_[key].load(std::memory_order_relaxed);
   }
 
   // Get overall stats on the whole cache allocator
@@ -238,7 +238,7 @@ class Cache {
 
   // return the total number of inconsistent operations detected since start.
   unsigned int getInconsistencyCount() const {
-    return inconsistencyCount_.load(std::memory_order_release);
+    return inconsistencyCount_.load(std::memory_order_relaxed);
   }
 
   // return the number of times Item destructor was called inconsistently.

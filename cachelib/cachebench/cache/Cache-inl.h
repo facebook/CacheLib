@@ -434,7 +434,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
   auto opId = valueTracker_->beginGet(key);
   auto it = findFn();
   if (checkGet(opId, it)) {
-    invalidKeys_[key.str()].store(true, std::memory_order_acquire);
+    invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
   }
   return it;
 }
@@ -454,7 +454,7 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
   }
   if (!valueTracker_->endGet(opId, expected, found, &es)) {
     std::cout << (es.format() + it->toString() + "\n");
-    inconsistencyCount_.fetch_add(1, std::memory_order::memory_order_acquire);
+    inconsistencyCount_.fetch_add(1, std::memory_order_relaxed);
     return true;
   }
   return false;

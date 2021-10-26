@@ -357,13 +357,14 @@ RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   // 2. Or, read a different seq number and abort read (4x -> 3r -> 4r)
   // Either of the above is CORRECT operation.
   //
-  // This means we must prevent 3r from reordered below 4r. We know at
-  // the end of 3r we have a mutex::unlock(), but it is only equivalent
-  // to a memory_order_release, which means anything above 3r cannot
-  // be ordered down, but 4r can be ordered up! So we have to set a full
-  // memory barrier here in the form of memory_order_acq_rel to make sure
-  // 3r will stay exactly where it is to guarantee 3r -> 4r ordering.
-  if (seqNumber_.load(std::memory_order_acq_rel) != seqNumber) {
+  // 3r has mutex::lock() at the beginning so, it prevents 4r from being
+  // reordered above it.
+  //
+  // We also need to ensure 3x is not re-ordered below 4x. This is handled
+  // by a acq_rel memory order in 3x. See releaseEvictedRegion() for details.
+  //
+  // Finally, 4r has acquire semantic which will sychronizes-with 3x's acq_rel.
+  if (seqNumber_.load(std::memory_order_acquire) != seqNumber) {
     region.close(std::move(desc));
     return RegionDescriptor{OpenStatus::Retry};
   }
@@ -382,9 +383,11 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // Subtract the wasted bytes in the end since we're reclaiming this region now
   externalFragmentation_.sub(getRegion(rid).getFragmentationSize());
 
-  // Full barrier because is we cannot have seqNumber_.fetch_add() re-ordered
-  // below region.reset(). It is similar to the full barrier in openForRead.
+  // Full barrier because we cannot have seqNumber_.fetch_add() re-ordered
+  // below region.reset(). If it is re-ordered then, we can end up with a data
+  // race where a read returns stale data. See openForRead() for details.
   seqNumber_.fetch_add(1, std::memory_order_acq_rel);
+
   // Reset all region internal state, making it ready to be
   // used by a region allocator.
   region.reset();
