@@ -79,9 +79,9 @@ class IteratorFacade {
   using difference_type = ssize_t;
   using iterator_category = Tag;
 
-  bool operator==(D const& rhs) const { return asDerivedConst().equal(rhs); }
+  friend bool operator==(D const& lhs, D const& rhs) { return equal(lhs, rhs); }
 
-  bool operator!=(D const& rhs) const { return !operator==(rhs); }
+  friend bool operator!=(D const& lhs, D const& rhs) { return !(lhs == rhs); }
 
   /*
    * Allow for comparisons between this and an iterator of some other class.
@@ -140,6 +140,8 @@ class IteratorFacade {
   D& asDerived() { return static_cast<D&>(*this); }
 
   D const& asDerivedConst() const { return static_cast<D const&>(*this); }
+
+  static bool equal(D const& lhs, D const& rhs) { return lhs.equal(rhs); }
 };
 
 } // namespace detail
