@@ -201,7 +201,7 @@ class MemoryMonitor : public PeriodicWorker {
   unsigned int getNumSlabsReclaimed() const noexcept { return slabsReclaimed_; }
 
   // maximum percentage of regular cache memory that can be advised away.
-  double getMaxAdvisePct() const noexcept { return maxLimitPercent_; }
+  size_t getMaxAdvisePct() const noexcept { return maxLimitPercent_; }
 
   // amount of memory available on the host
   size_t getMemAvailableSize() const noexcept { return memAvailableSize_; }

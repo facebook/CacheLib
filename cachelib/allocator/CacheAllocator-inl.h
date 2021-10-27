@@ -3248,7 +3248,7 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
                           regularCacheSize,
                           compactCacheSize,
                           allocator_->getAdvisedMemorySize(),
-                          memMonitorMaxAdvisedPct_,
+                          memMonitor_ ? memMonitor_->getMaxAdvisePct() : 0,
                           allocator_->getUnreservedMemorySize(),
                           nvmCache_ ? nvmCache_->getSize() : 0,
                           memMonitor_ ? memMonitor_->getMemAvailableSize() : 0,

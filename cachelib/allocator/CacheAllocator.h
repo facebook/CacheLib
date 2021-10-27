@@ -1782,8 +1782,6 @@ class CacheAllocator : public CacheBase {
   // free memory monitor
   std::unique_ptr<MemoryMonitor> memMonitor_;
 
-  uint32_t memMonitorMaxAdvisedPct_{};
-
   // check whether a pool is a slabs pool
   std::array<bool, MemoryPoolManager::kMaxPools> isCompactCachePool_{};
 
