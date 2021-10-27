@@ -92,12 +92,12 @@ class PosixShmSegment : public ShmBase {
   // @return true if the segment existed. false otherwise
   static bool removeByName(const std::string& name);
 
+  // returns the key type corresponding to the given name.
+  static std::string createKeyForName(const std::string& name) noexcept;
+
  private:
   static int createNewSegment(const std::string& name);
   static int getExisting(const std::string& name, const ShmSegmentOpts& opts);
-
-  // returns the key type corresponding to the given name.
-  static std::string createKeyForName(const std::string& name) noexcept;
 
   // resize the segment
   // @param size  the new size

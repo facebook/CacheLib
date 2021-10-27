@@ -796,6 +796,9 @@ void ShmManagerTest::testShutDown(bool posix) {
     // destroyed.
     ASSERT_NO_THROW(s.createShm(seg2, seg2Size, nullptr, seg2Opt));
     ASSERT_EQ(s.getShmByName(seg2).getSize(), seg2Size);
+    auto *v = std::get_if<PosixSysVSegmentOpts>(&s.getShmTypeByName(seg2));
+    ASSERT_TRUE(v);
+    ASSERT_EQ(v->usePosix, posix);
 
     ASSERT_TRUE(s.shutDown() == ShutDownRes::kSuccess);
   };

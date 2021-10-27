@@ -109,6 +109,14 @@ class ShmManager {
   //         it is returned. Otherwise, it throws std::invalid_argument
   ShmSegment& getShmByName(const std::string& shmName);
 
+  // gets a current segment type by the name that is managed by this
+  // instance. The lifetime of the returned object is same as the
+  // lifetime of this instance.
+  // @param name  Name of the segment
+  // @return If a segment of that name, managed by this instance exists,
+  //         it is returned. Otherwise, it throws std::invalid_argument
+  ShmTypeOpts& getShmTypeByName(const std::string& shmName);
+
   enum class ShutDownRes { kSuccess = 0, kFileDeleted, kFailedWrite };
 
   // persists the metadata information for the current segments managed
@@ -223,8 +231,9 @@ class ShmManager {
   std::unordered_map<std::string, std::unique_ptr<ShmSegment>> segments_{};
 
   // name to key mapping used for reattaching. This is persisted to a
-  // file and used for attaching to the segment.
-  std::unordered_map<std::string, std::string> nameToKey_{};
+  // file using serialization::ShmSegmentVariant and used for attaching
+  // to the segment.
+  std::unordered_map<std::string, ShmTypeOpts> nameToOpts_{};
 
   // file handle for the metadata file. It remains open throughout the lifetime
   // of the object.

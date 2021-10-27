@@ -3530,7 +3530,7 @@ bool CacheAllocator<CacheTrait>::stopReaper(std::chrono::seconds timeout) {
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::cleanupStrayShmSegments(
-    const std::string& cacheDir, bool posix /*TODO(SHM_FILE): const std::vector<CacheMemoryTierConfig>& config */) {
+  const std::string& cacheDir, bool posix /*TODO(SHM_FILE): const std::vector<CacheMemoryTierConfig>& config */) {
   if (util::getStatIfExists(cacheDir, nullptr) && util::isDir(cacheDir)) {
     try {
       // cache dir exists. clean up only if there are no other processes

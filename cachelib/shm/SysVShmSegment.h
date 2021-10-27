@@ -88,9 +88,10 @@ class SysVShmSegment : public ShmBase {
   // @return true if the segment existed. false otherwise
   static bool removeByName(const std::string& name);
 
- private:
   // returns the key identifier for the given name.
   static KeyType createKeyForName(const std::string& name) noexcept;
+
+private:
 
   static int createNewSegment(key_t key,
                               size_t size,

@@ -16,7 +16,12 @@
 
 namespace cpp2 facebook.cachelib.serialization
 
+struct ShmTypeObject {
+  1: required string path,
+  2: required bool usePosix,
+}
+
 struct ShmManagerObject {
   1: required byte shmVal,
-  3: required map<string, string> nameToKeyMap,
+  3: required map<string, ShmTypeObject> nameToKeyMap,
 }
