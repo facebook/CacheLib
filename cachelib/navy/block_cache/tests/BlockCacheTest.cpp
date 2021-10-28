@@ -21,6 +21,7 @@
 #include <future>
 #include <vector>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
@@ -64,6 +65,13 @@ BlockCache::Config makeConfig(JobScheduler& scheduler,
   config.cacheSize = cacheSize;
   config.device = &device;
   config.evictionPolicy = std::move(policy);
+  return config;
+}
+
+BlockCacheReinsertionConfig makeHitsReinsertionConfig(
+    uint8_t hitsReinsertThreshold) {
+  BlockCacheReinsertionConfig config{};
+  config.enableHitsBased(hitsReinsertThreshold);
   return config;
 }
 
@@ -472,7 +480,7 @@ TEST(BlockCache, HoleStats) {
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {1024});
   // items which are accessed once will be reinserted on reclaim
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -560,7 +568,7 @@ TEST(BlockCache, ReclaimCorruption) {
   config.checksum = true;
   config.numInMemBuffers = 1;
   // items which are accessed once will be reinserted on reclaim
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -646,7 +654,7 @@ TEST(BlockCache, ReclaimCorruptionSizeClass) {
                            {1024} /* specify size class */);
   config.checksum = true;
   // items which are accessed once will be reinserted on reclaim
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -2242,7 +2250,7 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {4096});
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -2312,7 +2320,7 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
                            metadataSize);
@@ -2349,7 +2357,7 @@ TEST(BlockCache, UsePriorities) {
   auto config =
       makeConfig(*ex, std::move(policy), *device, {}, kRegionSize * 6);
   config.numPriorities = 3;
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;
   config.cleanRegionsPool = 3;
@@ -2406,7 +2414,7 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
   auto config = makeConfig(*ex, std::move(policy), *device, {2048, 4096},
                            kRegionSize * 6);
   config.numPriorities = 3;
-  config.reinsertionPolicy = std::make_unique<HitsReinsertionPolicy>(1);
+  config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;
   config.cleanRegionsPool = 3;

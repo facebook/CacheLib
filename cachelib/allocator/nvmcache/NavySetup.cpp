@@ -141,18 +141,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   }
   blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions());
 
-  // set reinsertion policy
-  auto reinsertionHitsThreshold =
-      blockCacheConfig.getReinsertionHitsThreshold();
-  if (reinsertionHitsThreshold > 0) {
-    blockCache->setHitsReinsertionPolicy(reinsertionHitsThreshold);
-  }
-
-  auto reinsertionPercentageThreshold =
-      blockCacheConfig.getReinsertionPctThreshold();
-  if (reinsertionPercentageThreshold > 0) {
-    blockCache->setPercentageReinsertionPolicy(reinsertionPercentageThreshold);
-  }
+  blockCache->setReinsertionConfig(blockCacheConfig.getReinsertionConfig());
 
   blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
 

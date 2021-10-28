@@ -295,9 +295,9 @@ TEST(NavyConfigTest, BlockCache) {
           .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold)
           .enablePctBasedReinsertion(50),
       std::invalid_argument);
-  EXPECT_EQ(blockCacheConfig.getReinsertionHitsThreshold(),
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getHitsThreshold(),
             blockCacheReinsertionHitsThreshold);
-  EXPECT_EQ(blockCacheConfig.getReinsertionPctThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getPctThreshold(), 0);
 
   config = NavyConfig{};
   EXPECT_THROW(
@@ -305,8 +305,8 @@ TEST(NavyConfigTest, BlockCache) {
           .enablePctBasedReinsertion(50)
           .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold),
       std::invalid_argument);
-  EXPECT_EQ(blockCacheConfig.getReinsertionPctThreshold(), 50);
-  EXPECT_EQ(blockCacheConfig.getReinsertionHitsThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getPctThreshold(), 50);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getHitsThreshold(), 0);
 
   // test invalid input for percentage based reinsertion policy
   config = NavyConfig{};

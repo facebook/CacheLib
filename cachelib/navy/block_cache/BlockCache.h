@@ -22,11 +22,14 @@
 #include <stdexcept>
 #include <vector>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
+#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 #include "cachelib/navy/common/Device.h"
@@ -54,8 +57,7 @@ class BlockCache final : public Engine {
     uint64_t cacheSize{};
     // Eviction policy
     std::unique_ptr<EvictionPolicy> evictionPolicy;
-    // reinsertion policy
-    std::unique_ptr<ReinsertionPolicy> reinsertionPolicy;
+    BlockCacheReinsertionConfig reinsertionConfig{};
     // Sorted list of size classes (empty means stack allocator)
     std::vector<uint32_t> sizeClasses;
     // Region size, bytes
@@ -315,6 +317,10 @@ class BlockCache final : public Engine {
   bool removeItem(HashedKey hk, uint32_t entrySize, RelAddress currAddr);
 
   void validate(Config& config) const;
+
+  // Create the reinsertion policy from config.
+  std::unique_ptr<ReinsertionPolicy> makeReinsertionPolicy(
+      const BlockCacheReinsertionConfig& reinsertionConfig);
 
   const serialization::BlockCacheConfig config_;
   const uint16_t numPriorities_{};

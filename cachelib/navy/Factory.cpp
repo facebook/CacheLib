@@ -93,20 +93,9 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.cleanRegionsPool = n;
   }
 
-  void setHitsReinsertionPolicy(uint8_t reinsertionThreshold) override {
-    if (config_.reinsertionPolicy) {
-      throw std::invalid_argument("There's already a reinsertion policy set.");
-    }
-    config_.reinsertionPolicy =
-        std::make_unique<HitsReinsertionPolicy>(reinsertionThreshold);
-  }
-
-  void setPercentageReinsertionPolicy(uint32_t percentage) override {
-    if (config_.reinsertionPolicy) {
-      throw std::invalid_argument("There's already a reinsertion policy set.");
-    }
-    config_.reinsertionPolicy =
-        std::make_unique<PercentageReinsertionPolicy>(percentage);
+  void setReinsertionConfig(
+      const BlockCacheReinsertionConfig& reinsertionConfig) override {
+    config_.reinsertionConfig = reinsertionConfig;
   }
 
   void setDevice(Device* device) { config_.device = device; }

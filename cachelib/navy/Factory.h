@@ -22,7 +22,6 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"
-#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
@@ -77,17 +76,9 @@ class BlockCacheProto {
   // (Optional) Number of In memory buffers to maintain. Default: 0
   virtual void setNumInMemBuffers(uint32_t numInMemBuffers) = 0;
 
-  // (Optional) Enable hits reinsertion policy that determines if an item should
-  // stay for more time in cache. @reinsertionThreshold means if an item had
-  // been accessed more than that threshold, it will be eligible for
-  // reinsertion.
-  virtual void setHitsReinsertionPolicy(uint8_t reinsertionThreshold) = 0;
-
-  // (Optional) Enable percentage reinsertion policy that determines if an item
-  // should stay for more time in cache.
-  // @percentage lets user specify a percentage between 0 and 100 for
-  //             reinsertion.
-  virtual void setPercentageReinsertionPolicy(uint32_t percentage) = 0;
+  // (Optional) Enable a reinsertion policy with the config.
+  virtual void setReinsertionConfig(
+      const BlockCacheReinsertionConfig& config) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

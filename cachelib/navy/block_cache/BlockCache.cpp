@@ -60,6 +60,9 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (numPriorities == 0) {
     throw std::invalid_argument("allocator must have at least one priority");
   }
+
+  reinsertionConfig.validate();
+
   return *this;
 }
 
@@ -139,11 +142,24 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.numPriorities,
                      config.inMemBufFlushRetryLimit},
       allocator_{regionManager_, config.numPriorities},
-      reinsertionPolicy_{std::move(config.reinsertionPolicy)},
+      reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
+}
+std::unique_ptr<ReinsertionPolicy> BlockCache::makeReinsertionPolicy(
+    const BlockCacheReinsertionConfig& reinsertionConfig) {
+  auto hitsThreshold = reinsertionConfig.getHitsThreshold();
+  if (hitsThreshold) {
+    return std::make_unique<HitsReinsertionPolicy>(hitsThreshold);
+  }
+
+  auto pctThreshold = reinsertionConfig.getPctThreshold();
+  if (pctThreshold) {
+    return std::make_unique<PercentageReinsertionPolicy>(pctThreshold);
+  }
+  return nullptr;
 }
 
 uint32_t BlockCache::serializedSize(uint32_t keySize,

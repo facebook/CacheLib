@@ -147,32 +147,15 @@ void NavyConfig::setRaidFiles(std::vector<std::string> raidPaths,
   truncateFile_ = truncateFile;
 }
 
-// BlockCache settings
 BlockCacheConfig& BlockCacheConfig::enableHitsBasedReinsertion(
     uint8_t hitsThreshold) {
-  if (reinsertionPctThreshold_ > 0) {
-    throw std::invalid_argument(
-        "already set reinsertion percentage threshold, should not set "
-        "reinsertion hits threshold");
-  }
-  reinsertionHitsThreshold_ = hitsThreshold;
+  reinsertionConfig_.enableHitsBased(hitsThreshold);
   return *this;
 }
 
 BlockCacheConfig& BlockCacheConfig::enablePctBasedReinsertion(
     unsigned int pctThreshold) {
-  if (reinsertionHitsThreshold_ > 0) {
-    throw std::invalid_argument(
-        "already set reinsertion hits threshold, should not set reinsertion "
-        "probability threshold");
-  }
-  if (pctThreshold > 100) {
-    throw std::invalid_argument(
-        folly::sformat("reinsertion percentage threshold should between 0 and "
-                       "100, but {} is set",
-                       pctThreshold));
-  }
-  reinsertionPctThreshold_ = pctThreshold;
+  reinsertionConfig_.enablePctBased(pctThreshold);
   return *this;
 }
 
@@ -202,13 +185,13 @@ void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
 
 void NavyConfig::setBlockCacheReinsertionHitsThreshold(
     uint8_t blockCacheReinsertionHitsThreshold) {
-  blockCacheConfig_.enableHitsBasedReinsertion(
+  blockCacheConfig_.reinsertionConfig_.enableHitsBased(
       blockCacheReinsertionHitsThreshold);
 }
 
 void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
     unsigned int blockCacheReinsertionProbabilityThreshold) {
-  blockCacheConfig_.enablePctBasedReinsertion(
+  blockCacheConfig_.reinsertionConfig_.enablePctBased(
       blockCacheReinsertionProbabilityThreshold);
 }
 
@@ -288,9 +271,11 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::blockCacheCleanRegions"] =
       folly::to<std::string>(blockCacheConfig_.getCleanRegions());
   configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =
-      folly::to<std::string>(blockCacheConfig_.getReinsertionHitsThreshold());
+      folly::to<std::string>(
+          blockCacheConfig_.getReinsertionConfig().getHitsThreshold());
   configMap["navyConfig::blockCacheReinsertionPctThreshold"] =
-      folly::to<std::string>(blockCacheConfig_.getReinsertionPctThreshold());
+      folly::to<std::string>(
+          blockCacheConfig_.getReinsertionConfig().getPctThreshold());
   configMap["navyConfig::blockCacheNumInMemBuffers"] =
       folly::to<std::string>(blockCacheConfig_.getNumInMemBuffers());
   configMap["navyConfig::blockCacheDataChecksum"] =
