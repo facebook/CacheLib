@@ -21,7 +21,7 @@ namespace cachelib {
 template <typename K, typename V, typename C>
 MapView<K, V, C>::MapView(const Item& parent,
                           const folly::Range<ChainedItemIter>& children) {
-  hashtable_ = reinterpret_cast<HashTable*>(parent.getMemory());
+  hashtable_ = reinterpret_cast<const HashTable*>(parent.getMemory());
   numBytes_ += parent.getSize();
   for (auto& item : children) {
     numBytes_ += item.getSize();
