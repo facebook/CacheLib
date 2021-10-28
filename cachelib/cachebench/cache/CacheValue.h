@@ -35,12 +35,12 @@ namespace facebook::cachelib::cachebench {
  * Usage:
  * auto handle = cache_->allocate(pid, key, CacheValue::getSize(size));
  * if (handle) {
- *   CacheValue::initialize(handle->getWritableMemory());
+ *   CacheValue::initialize(handle->getMemory());
  * }
  *
- * auto* value = item->template getWritableMemoryAs<CacheValue>();
+ * auto* value = item->template getMemoryAs<CacheValue>();
  * value->setVersion(...);
- * std::memcpy(value->getWritableData(), ...);
+ * std::memcpy(value->getData(), ...);
  */
 class CACHELIB_PACKED_ATTR CacheValue {
  public:
@@ -51,7 +51,7 @@ class CACHELIB_PACKED_ATTR CacheValue {
   // returns a number used for consistency check
   uint64_t getConsistencyNum() const { return consistencyNum_; }
   // returns writable data pointer
-  void* getWritableData() { return data_; }
+  void* getData() { return data_; }
   // returns the data pointer
   const void* getData() const { return data_; }
   // returns the data size for given item size, this substrcut

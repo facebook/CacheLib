@@ -61,7 +61,7 @@ class ItemRecords {
     }
 
     auto& item = data.item;
-    auto ptr = item.template getWritableMemoryAs<CacheValue>();
+    auto ptr = item.template getMemoryAs<CacheValue>();
 
     auto [lock, records] = getItemRecords(ptr->getIdx());
     auto& record = records[ptr->getIdx() / itemRecords_.size()];
@@ -96,7 +96,7 @@ class ItemRecords {
       std::lock_guard<std::mutex> l(keysMutex_);
       keys_.insert(handle->getKey().toString());
     }
-    auto ptr = handle->template getWritableMemoryAs<CacheValue>();
+    auto ptr = handle->template getMemoryAs<CacheValue>();
     auto idx = indexes_++;
     ptr->setIdx(idx);
     ptr->setVersion(0);
@@ -117,7 +117,7 @@ class ItemRecords {
     if (!enable_) {
       return;
     }
-    auto ptr = it.template getWritableMemoryAs<CacheValue>();
+    auto ptr = it.template getMemoryAs<CacheValue>();
     auto [lock, records] = getItemRecords(ptr->getIdx());
     auto& record = records[ptr->getIdx() / itemRecords_.size()];
     ++record.version;

@@ -42,7 +42,7 @@ namespace cachebench {
 // Items value in this cache follows CacheValue schema, which
 // contains a few integers for sanity checks use. So it is invalid
 // to use item.getMemory and item.getSize APIs directly and caller must use
-// the getMemory() and getWriteableMemory() through this cache instance.
+// getMemory() through this cache instance.
 template <typename Allocator>
 class Cache {
  public:
@@ -139,13 +139,13 @@ class Cache {
   // cache adds some overheads on top of Cache::Item.
 
   // Return the readonly memory
-  const void* getMemory(const ItemHandle& item) const noexcept {
-    return item == nullptr ? nullptr : getMemory(*item);
+  const void* getMemory(const ItemHandle& handle) const noexcept {
+    return handle == nullptr ? nullptr : getMemory(*handle);
   }
 
   // Return the writable memory
-  void* getWritableMemory(ItemHandle& item) const noexcept {
-    return item == nullptr ? nullptr : getWritableMemory(*item);
+  void* getMemory(ItemHandle& handle) noexcept {
+    return handle == nullptr ? nullptr : getMemory(*handle);
   }
 
   // Return the readonly memory
@@ -154,8 +154,8 @@ class Cache {
   }
 
   // Return the writable memory
-  void* getWritableMemory(Item& item) const noexcept {
-    return item.template getWritableMemoryAs<CacheValue>()->getWritableData();
+  void* getMemory(Item& item) noexcept {
+    return item.template getMemoryAs<CacheValue>()->getData();
   }
 
   // return the allocation size for the item.
@@ -179,7 +179,7 @@ class Cache {
   //
   // @param handle   the handle for the item
   // @param str      the string value to be set.
-  void setStringItem(ItemHandle& handle, const std::string& str) const;
+  void setStringItem(ItemHandle& handle, const std::string& str);
 
   // when item records are enabled, updates the version for the item and
   // correspondingly invalidates the nvm cache.

@@ -64,7 +64,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     allocatorConfig_.enableMovingOnSlabRelease(
         [](Item& oldItem, Item& newItem, Item* parentPtr) {
           XDCHECK(oldItem.isChainedItem() == (parentPtr != nullptr));
-          std::memcpy(newItem.getWritableMemory(), oldItem.getMemory(),
+          std::memcpy(newItem.getMemory(), oldItem.getMemory(),
                       oldItem.getSize());
         },
         movingSync);
@@ -351,7 +351,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocateChainedItem(
     const ItemHandle& parent, size_t size) {
   auto handle = cache_->allocateChainedItem(parent, CacheValue::getSize(size));
   if (handle) {
-    CacheValue::initialize(handle->getWritableMemory());
+    CacheValue::initialize(handle->getMemory());
   }
   return handle;
 }
@@ -385,7 +385,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocate(
   try {
     handle = cache_->allocate(pid, key, CacheValue::getSize(size), ttlSecs);
     if (handle) {
-      CacheValue::initialize(handle->getWritableMemory());
+      CacheValue::initialize(handle->getMemory());
     }
   } catch (const std::invalid_argument& e) {
     XLOGF(DBG, "Unable to allocate, reason: {}", e.what());
@@ -616,14 +616,14 @@ void Cache<Allocator>::trackChainChecksum(const ItemHandle& handle) {
 template <typename Allocator>
 void Cache<Allocator>::setUint64ToItem(ItemHandle& handle, uint64_t num) const {
   XDCHECK(handle);
-  auto ptr = handle->template getWritableMemoryAs<CacheValue>();
+  auto ptr = handle->template getMemoryAs<CacheValue>();
   ptr->setConsistencyNum(num);
 }
 
 template <typename Allocator>
 void Cache<Allocator>::setStringItem(ItemHandle& handle,
-                                     const std::string& str) const {
-  auto ptr = reinterpret_cast<uint8_t*>(getWritableMemory(handle));
+                                     const std::string& str) {
+  auto ptr = reinterpret_cast<uint8_t*>(getMemory(handle));
   std::memcpy(ptr, str.data(), std::min<size_t>(str.size(), getSize(handle)));
 }
 
