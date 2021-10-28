@@ -51,7 +51,7 @@ bool put(CacheKey key, const std::string& value) {
   if (!handle) {
     return false; // cache may fail to evict due to too many pending writes
   }
-  std::memcpy(handle->getWritableMemory(), value.data(), value.size());
+  std::memcpy(handle->getMemory(), value.data(), value.size());
   gCache_->insertOrReplace(handle);
   return true;
 }

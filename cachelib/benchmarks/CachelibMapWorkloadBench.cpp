@@ -63,8 +63,7 @@ void insertFrozenMap(StdUnorderedMap& m, folly::StringPiece name) {
   apache::thrift::frozen::freezeToString(m, frozenContent);
   auto item = cache->allocate(poolId, name, frozenContent.size());
   XDCHECK(item);
-  std::memcpy(item->getWritableMemory(), frozenContent.data(),
-              frozenContent.size());
+  std::memcpy(item->getMemory(), frozenContent.data(), frozenContent.size());
   cache->insertOrReplace(item);
 }
 

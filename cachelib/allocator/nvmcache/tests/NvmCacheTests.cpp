@@ -534,7 +534,7 @@ TEST_F(NvmCacheTest, InspectCache) {
     auto it = cache.allocate(pid, key, val.length());
     ASSERT_NE(nullptr, it);
     cache.insertOrReplace(it);
-    ::memcpy(it->getWritableMemory(), val.data(), val.length());
+    ::memcpy(it->getMemory(), val.data(), val.length());
   }
 
   // item is only in RAM
@@ -590,11 +590,11 @@ TEST_F(NvmCacheTest, InspectCacheLarge) {
     auto it = cache.allocate(pid, key, val.length());
     ASSERT_NE(nullptr, it);
     cache.insertOrReplace(it);
-    ::memcpy(it->getWritableMemory(), val.data(), val.length());
+    ::memcpy(it->getMemory(), val.data(), val.length());
     for (int i = 0; i < nChained; i++) {
       auto chainedIt = cache.allocateChainedItem(it, val.length());
       ASSERT_TRUE(chainedIt);
-      ::memcpy(chainedIt->getWritableMemory(), val.data(), val.length());
+      ::memcpy(chainedIt->getMemory(), val.data(), val.length());
       cache.addChainedItem(it, std::move(chainedIt));
     }
   }
@@ -865,7 +865,7 @@ TEST_F(NvmCacheTest, EvictSlabRelease) {
     auto handle = cache.allocate(pid, key, size);
     cache.insertOrReplace(handle);
     if (handle) {
-      std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+      std::memcpy(handle->getMemory(), val.data(), val.size());
       keys.push_back(std::move(key));
     }
   }

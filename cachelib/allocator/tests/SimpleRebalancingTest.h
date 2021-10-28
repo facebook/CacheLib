@@ -151,7 +151,7 @@ class SimpleRebalanceTest : public testing::Test {
         if (!handle) {
           break;
         }
-        PoolId* mem = reinterpret_cast<PoolId*>(handle->getWritableMemory());
+        PoolId* mem = reinterpret_cast<PoolId*>(handle->getMemory());
         *mem = pid;
         ++i;
       }

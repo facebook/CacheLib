@@ -87,7 +87,7 @@ class PersistenceCache {
       auto& val = items[i].second;
       auto handle = cache.allocate(pool, key, val.size());
       EXPECT_NE(handle, nullptr);
-      std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+      std::memcpy(handle->getMemory(), val.data(), val.size());
 
       for (uint32_t j = 0; j < numChained; ++j) {
         std::string chainedData = folly::sformat("{}_Chained_{}", val, j);

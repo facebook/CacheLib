@@ -57,7 +57,7 @@ class BaseAllocatorTestDeathStyle : public AllocatorTest<AllocatorT> {
     unsigned char magicVal = 'f';
     std::vector<char> v(hdl->getSize(), magicVal);
     auto data = folly::StringPiece{v.data(), v.size()};
-    std::memcpy(hdl->getWritableMemory(), data.data(), data.size());
+    std::memcpy(hdl->getMemory(), data.data(), data.size());
     auto hdlSp = folly::StringPiece{
         reinterpret_cast<const char*>(hdl->getMemory()), hdl->getSize()};
     ASSERT_EQ(hdlSp, data);

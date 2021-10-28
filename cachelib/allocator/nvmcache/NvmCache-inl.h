@@ -552,7 +552,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
 
   XDCHECK_LE(pBlob.data.size(), getStorageSizeInNvm(*it));
   XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-  ::memcpy(it->getWritableMemory(), pBlob.data.data(), pBlob.data.size());
+  ::memcpy(it->getMemory(), pBlob.data.data(), pBlob.data.size());
   it->markNvmClean();
 
   // if we have more, then we need to allocate them as chained items and add
@@ -572,8 +572,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
       }
       XDCHECK(chainedIt->isChainedItem());
       XDCHECK_LE(cBlob.data.size(), getStorageSizeInNvm(*chainedIt));
-      ::memcpy(chainedIt->getWritableMemory(), cBlob.data.data(),
-               cBlob.data.size());
+      ::memcpy(chainedIt->getMemory(), cBlob.data.data(), cBlob.data.size());
       cache_.addChainedItem(it, std::move(chainedIt));
       XDCHECK(it->hasChainedItem());
     }
