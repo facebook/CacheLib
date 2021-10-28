@@ -55,7 +55,17 @@ const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
 }
 
 template <typename CacheTrait>
-void* CacheItem<CacheTrait>::getMemory() const noexcept {
+const void* CacheItem<CacheTrait>::getMemory() const noexcept {
+  return getMemoryInternal();
+}
+
+template <typename CacheTrait>
+void* CacheItem<CacheTrait>::getMemory() noexcept {
+  return getMemoryInternal();
+}
+
+template <typename CacheTrait>
+void* CacheItem<CacheTrait>::getMemoryInternal() const noexcept {
   if (isChainedItem()) {
     return asChainedItem().getMemory();
   } else {
@@ -63,10 +73,9 @@ void* CacheItem<CacheTrait>::getMemory() const noexcept {
   }
 }
 
+// Deprecated
 template <typename CacheTrait>
 void* CacheItem<CacheTrait>::getWritableMemory() const {
-  // TODO : check AccessMode, throw exception if not writable
-  // TODO : add nvm invalidation logic
   if (isChainedItem()) {
     return asChainedItem().getMemory();
   } else {

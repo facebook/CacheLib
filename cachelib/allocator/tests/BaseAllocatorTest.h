@@ -696,6 +696,28 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                                         3 * poolSize1);
   }
 
+  bool isConst(const void*) { return true; }
+  bool isConst(void*) { return false; }
+
+  void testGetMemory() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("default", numBytes);
+
+    auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+    ASSERT_NE(handle, nullptr);
+    ASSERT_FALSE(isConst(handle->getMemory()));
+
+    // TODO: change it to be auto after find() API change to return const
+    // itemHandle.
+    const auto handle2 = alloc.find("key");
+    ASSERT_NE(handle2, nullptr);
+    ASSERT_TRUE(isConst(handle2->getMemory()));
+  }
+
   // make some allocations without evictions and ensure that we are able to
   // fetch them.
   void testFind() {

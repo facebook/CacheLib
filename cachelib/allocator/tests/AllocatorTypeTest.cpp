@@ -46,6 +46,10 @@ TYPED_TEST(BaseAllocatorTest, Removals) { this->testRemovals(); }
 // other pool without evictions.
 TYPED_TEST(BaseAllocatorTest, Pools) { this->testPools(); }
 
+// test whether read handle will return read-only memory and write handle can
+// return mutable memory
+TYPED_TEST(BaseAllocatorTest, GetMemory) { this->testGetMemory(); }
+
 // make some allocations without evictions and ensure that we are able to
 // fetch them.
 TYPED_TEST(BaseAllocatorTest, Find) { this->testFind(); }

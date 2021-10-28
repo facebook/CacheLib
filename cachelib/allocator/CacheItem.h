@@ -162,26 +162,34 @@ class CACHELIB_PACKED_ATTR CacheItem {
   const Key getKey() const noexcept;
 
   // Readonly memory for this allocation.
-  // TODO: switch the return type to 'const void*' once all the callsites
-  // are modified to use getMemory() and getWritableMemory() correctly
-  void* getMemory() const noexcept;
+  const void* getMemory() const noexcept;
 
   // Writable memory for this allocation. The caller is free to do whatever he
-  // wants with it and needs to ensure thread sage for access into this
+  // wants with it and needs to ensure thread safety for access into this
   // piece of memory.
-  void* getWritableMemory() const;
+  void* getMemory() noexcept;
+
+  // (deprecated) Writable memory for this allocation. The caller is free to do
+  // whatever he wants with it and needs to ensure thread sage for access into
+  // this piece of memory.
+  [[deprecated("Use getMemory() instead")]] void* getWritableMemory() const;
 
   // Cast item's readonly memory to a readonly user type
-  // TODO: switch the return type to 'const T*' once all the callsites
-  // are modified to use getMemory() and getWritableMemory() correctly
   template <typename T>
-  T* getMemoryAs() const noexcept {
-    return reinterpret_cast<T*>(getMemory());
+  const T* getMemoryAs() const noexcept {
+    return reinterpret_cast<const T*>(getMemory());
   }
 
   // Cast item's writable memory to a writable user type
   template <typename T>
-  T* getWritableMemoryAs() noexcept {
+  T* getMemoryAs() noexcept {
+    return reinterpret_cast<T*>(getMemory());
+  }
+
+  // (Deprecated) Cast item's writable memory to a writable user type
+  template <typename T>
+  [[deprecated("Use getMemoryAs() instead")]] T*
+  getWritableMemoryAs() noexcept {
     return reinterpret_cast<T*>(getWritableMemory());
   }
 
@@ -283,6 +291,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // @throw std::invalid_argument if item is not a chained item or the key
   //        size does not match with the current key
   void changeKey(Key key);
+
+  void* getMemoryInternal() const noexcept;
 
   /**
    * CacheItem's refcount contain admin references, access referneces, and
