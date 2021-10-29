@@ -29,9 +29,11 @@ namespace tests {
 
 TEST(HitsReinsertionPolicy, Simple) {
   Index index;
-  HitsReinsertionPolicy tracker{1};
+  HitsReinsertionPolicy tracker{1, index};
 
   auto hk1 = makeHK("test_key_1");
+  folly::StringPiece strKey{reinterpret_cast<const char*>(hk1.key().data()),
+                            hk1.key().size()};
 
   // lookup before inserting has no effect
   {
@@ -56,7 +58,7 @@ TEST(HitsReinsertionPolicy, Simple) {
 
   {
     auto lr = index.peek(hk1.keyHash());
-    EXPECT_TRUE(tracker.shouldReinsert(hk1, lr));
+    EXPECT_TRUE(tracker.shouldReinsert(strKey));
     EXPECT_EQ(1, lr.totalHits());
     EXPECT_EQ(1, lr.currentHits());
   }
@@ -81,7 +83,6 @@ TEST(HitsReinsertionPolicy, Simple) {
 
 TEST(HitsReinsertionPolicy, UpperBound) {
   Index index;
-  HitsReinsertionPolicy tracker{1};
   auto hk1 = makeHK("test_key_1");
 
   index.insert(hk1.keyHash(), 0, 0);
@@ -97,7 +98,6 @@ TEST(HitsReinsertionPolicy, UpperBound) {
 
 TEST(HitsReinsertionPolicy, ThreadSafe) {
   Index index;
-  HitsReinsertionPolicy tracker{1};
 
   auto hk1 = makeHK("test_key_1");
 
@@ -124,7 +124,6 @@ TEST(HitsReinsertionPolicy, ThreadSafe) {
 
 TEST(HitsReinsertionPolicy, Recovery) {
   Index index;
-  HitsReinsertionPolicy tracker{1};
   auto hk1 = makeHK("test_key_1");
 
   index.insert(hk1.keyHash(), 0, 0);

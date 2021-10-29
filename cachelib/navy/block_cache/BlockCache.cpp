@@ -152,7 +152,7 @@ std::unique_ptr<ReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
   auto hitsThreshold = reinsertionConfig.getHitsThreshold();
   if (hitsThreshold) {
-    return std::make_unique<HitsReinsertionPolicy>(hitsThreshold);
+    return std::make_unique<HitsReinsertionPolicy>(hitsThreshold, index_);
   }
 
   auto pctThreshold = reinsertionConfig.getPctThreshold();
@@ -456,7 +456,10 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   }
 
-  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk, lr)) {
+  folly::StringPiece strKey{reinterpret_cast<const char*>(hk.key().data()),
+                            hk.key().size()};
+
+  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(strKey)) {
     return removeItem();
   }
 

@@ -24,7 +24,9 @@
 #include <vector>
 
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/block_cache/ReinsertionPolicy.h"
+#include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
@@ -38,17 +40,19 @@ namespace navy {
 class HitsReinsertionPolicy : public ReinsertionPolicy {
  public:
   // @param hitsThreshold how many hits for an item is eligible for reinsertion
-  explicit HitsReinsertionPolicy(uint8_t hitsThreshold);
+  explicit HitsReinsertionPolicy(uint8_t hitsThreshold, const Index& index);
 
   // Applies hits based policy to determine whether or not we should keep
   // this key around longer in cache.
-  bool shouldReinsert(HashedKey hk, const Index::LookupResult& lr) override;
+  bool shouldReinsert(folly::StringPiece key) override;
 
   // Exports hits based reinsertion policy stats via CounterVisitor.
-  void getCounters(const CounterVisitor& visitor) const override;
+  void getCounters(const util::CounterVisitor& visitor) const override;
 
  private:
   const uint8_t hitsThreshold_{};
+
+  const Index& index_;
 
   mutable util::PercentileStats hitsOnReinsertionEstimator_{
       Index::kQuantileWindowSize};
