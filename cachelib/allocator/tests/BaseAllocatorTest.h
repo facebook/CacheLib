@@ -1053,7 +1053,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // ensure that you can fetch all the items that we have a handle on.
     // TODO we might want to revisit this guarantee
     int8_t val = 1;
-    for (const auto& handle : handles) {
+    for (auto& handle : handles) {
       const auto key = handle->getKey();
       // ensure key was not evicted.
       ASSERT_EQ(evictedKeys.find({key.data(), key.size()}), evictedKeys.end());
@@ -1062,9 +1062,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(handle.get(), newHandle.get());
       ASSERT_EQ(evictedKeys.find({key.data(), key.size()}), evictedKeys.end());
       // also write a unique value to the handle's memory
-      void* m = handle->getMemory();
       size_t size = handle->getSize();
-      memset(m, val++, size);
+      memset(handle->getMemory(), val++, size);
     }
 
     // remove the keys to which we have handle to.
