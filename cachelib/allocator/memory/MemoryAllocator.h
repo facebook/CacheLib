@@ -455,10 +455,13 @@ class MemoryAllocator {
   //
   // @param memory  the memory belonging to the slab allocator
   // @return        pair of poolId and classId of the memory
-  FOLLY_ALWAYS_INLINE AllocInfo
-  getAllocInfo(const void* memory) const noexcept {
+  // @throw std::invalid_argument if the memory doesn't belong to allocator
+  FOLLY_ALWAYS_INLINE AllocInfo getAllocInfo(const void* memory) const {
     const auto* header = slabAllocator_.getSlabHeader(memory);
-    XDCHECK(header) << "invalid header for slab memory addr: " << memory;
+    if (!header) {
+      throw std::invalid_argument(
+          fmt::format("invalid header for slab memory addr: {}", memory));
+    }
     return AllocInfo{header->poolId, header->classId, header->allocSize};
   }
 

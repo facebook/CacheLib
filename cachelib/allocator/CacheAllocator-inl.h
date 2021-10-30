@@ -734,6 +734,12 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     config_.removeCb(RemoveCbData{ctx, it, viewAsChainedAllocsRange(it)});
   }
 
+  if (!nascent && (!it.isNvmClean() || it.isNvmEvicted()) &&
+      config_.itemDestructor) {
+    config_.itemDestructor(
+        DestructorData{ctx, it, viewAsChainedAllocsRange(it)});
+  }
+
   // If no `toRecycle` is set, then the result is kReleased
   // Because this function cannot fail to release "it"
   ReleaseRes res =

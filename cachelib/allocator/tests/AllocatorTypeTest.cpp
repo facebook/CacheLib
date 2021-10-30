@@ -61,6 +61,9 @@ TYPED_TEST(BaseAllocatorTest, Remove) { this->testRemove(); }
 // trigger evictions and ensure that the eviction call back gets called.
 TYPED_TEST(BaseAllocatorTest, RemoveCb) { this->testRemoveCb(); }
 
+// trigger evictions and ensure that the eviction call back gets called.
+TYPED_TEST(BaseAllocatorTest, ItemDestructor) { this->testItemDestructor(); }
+
 TYPED_TEST(BaseAllocatorTest, RemoveCbSlabReleaseMoving) {
   this->testRemoveCbSlabReleaseMoving();
 }

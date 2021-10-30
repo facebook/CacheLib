@@ -44,6 +44,7 @@ class CacheAllocatorConfig {
   using AccessConfig = typename CacheT::AccessConfig;
   using ChainedItemMovingSync = typename CacheT::ChainedItemMovingSync;
   using RemoveCb = typename CacheT::RemoveCb;
+  using ItemDestructor = typename CacheT::ItemDestructor;
   using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
   using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
@@ -81,8 +82,12 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setAccessConfig(size_t numEntries);
 
   // RemoveCallback is invoked for each item that is evicted or removed
-  // explicitly
+  // explicitly from RAM
   CacheAllocatorConfig& setRemoveCallback(RemoveCb cb);
+
+  // ItemDestructor is invoked for each item that is evicted or removed
+  // explicitly from cache (both RAM and NVM)
+  CacheAllocatorConfig& setItemDestructor(ItemDestructor destructor);
 
   // Config for NvmCache. If enabled, cachelib will also make use of flash.
   CacheAllocatorConfig& enableNvmCache(NvmCacheConfig config);
@@ -486,8 +491,13 @@ class CacheAllocatorConfig {
   // for all normal items
   AccessConfig accessConfig{};
 
-  // user defined callback invoked when an item is being evicted or freed
+  // user defined callback invoked when an item is being evicted or freed from
+  // RAM
   RemoveCb removeCb{};
+
+  // user defined item destructor invoked when an item is being
+  // evicted or freed from cache (both RAM and NVM)
+  ItemDestructor itemDestructor{};
 
   // user defined call back to move the item. This is executed while holding
   // the user provided movingSync. For items without chained allocations,
@@ -610,6 +620,13 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setRemoveCallback(
     RemoveCb cb) {
   removeCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setItemDestructor(
+    ItemDestructor destructor) {
+  itemDestructor = std::move(destructor);
   return *this;
 }
 
@@ -936,6 +953,12 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
         "config cache size: {}  exceeds max addressable space for cache: {}",
         size,
         maxCacheSize));
+  }
+
+  // we don't allow user to enable both RemoveCB and ItemDestructor
+  if (removeCb && itemDestructor) {
+    throw std::invalid_argument(
+        "It's not allowed to enable both RemoveCB and ItemDestructor.");
   }
   return *this;
 }

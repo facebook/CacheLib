@@ -171,6 +171,41 @@ class CacheAllocator : public CacheBase {
     // Iterator range pointing to chained allocs associated with @item
     folly::Range<ChainedItemIter> chainedAllocs;
   };
+  struct DestructorData {
+    DestructorData(DestructorContext ctx,
+                   Item& it,
+                   folly::Range<ChainedItemIter> iter)
+        : context(ctx), item(it), chainedAllocs(iter) {}
+
+    // helps to convert RemoveContext to DestructorContext,
+    // the context for RemoveCB is re-used to create DestructorData,
+    // this can be removed if RemoveCB is dropped.
+    DestructorData(RemoveContext ctx,
+                   Item& it,
+                   folly::Range<ChainedItemIter> iter)
+        : item(it), chainedAllocs(iter) {
+      if (ctx == RemoveContext::kEviction) {
+        context = DestructorContext::kEvictedFromRAM;
+      } else {
+        context = DestructorContext::kRemovedFromRAM;
+      }
+    }
+
+    // remove or eviction
+    DestructorContext context;
+
+    // item about to be freed back to allocator
+    // when the item is evicted/removed from NVM, the item is created on the
+    // heap, functions (e.g. CacheAllocator::getAllocInfo) that assumes item is
+    // located in cache slab doesn't work in such case.
+    Item& item;
+
+    // Iterator range pointing to chained allocs associated with @item
+    // when chained items are evicted/removed from NVM, items are created on the
+    // heap, functions (e.g. CacheAllocator::getAllocInfo) that assumes items
+    // are located in cache slab doesn't work in such case.
+    folly::Range<ChainedItemIter> chainedAllocs;
+  };
 
   // call back to execute when moving an item, this could be a simple memcpy
   // or something more complex.
@@ -180,8 +215,14 @@ class CacheAllocator : public CacheBase {
       std::function<void(Item& oldItem, Item& newItem, Item* parentItem)>;
 
   // call back type that is executed when the cache item is removed
-  // (evicted / freed)
+  // (evicted / freed) from RAM, only items inserted into cache (not nascent)
+  // successfully are tracked
   using RemoveCb = std::function<void(const RemoveCbData& data)>;
+
+  // the destructor being executed when the item is removed from cache (both RAM
+  // and NVM), only items inserted into cache (not nascent) successfully are
+  // tracked.
+  using ItemDestructor = std::function<void(const DestructorData& data)>;
 
   // the holder for the item when we hand it to the caller. This ensures
   // that the reference count is maintained when the caller is done with the

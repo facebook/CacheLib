@@ -49,9 +49,16 @@ struct SimplePoolOptimizeStrategy;
 // to differentiate between the access modes and do appropriate action.
 enum class AccessMode { kRead, kWrite };
 
-// enum value to indicate if the removal from the MMContainer was an eviction
-// or not.
+// used by RemoveCB, indicating if the removal from the MMContainer was an
+// eviction or not.
 enum class RemoveContext { kEviction, kNormal };
+// used by ItemDestructor, indicating how the item is destructed
+enum class DestructorContext {
+  kEvictedFromRAM,
+  kEvictedFromNVM,
+  kRemovedFromRAM,
+  kRemovedFromNVM
+};
 
 // A base class of cache exposing members and status agnostic of template type.
 class CacheBase {

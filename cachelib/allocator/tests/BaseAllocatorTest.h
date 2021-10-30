@@ -892,6 +892,63 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  // trigger various scenarios for item being destroyed from cache and ensure
+  // that destructor call back fires.
+  void testItemDestructor() {
+    std::vector<std::string> evictedKeys;
+    std::vector<std::string> removedKeys;
+    auto itemDestructor = [&](const typename AllocatorT::DestructorData& data) {
+      const auto key = data.item.getKey();
+      if (data.context == DestructorContext::kEvictedFromRAM) {
+        evictedKeys.push_back({key.data(), key.size()});
+      } else {
+        // kRemovedFromRAM case, no NVM in this test
+        removedKeys.push_back({key.data(), key.size()});
+      }
+    };
+    typename AllocatorT::Config config;
+    config.setItemDestructor(itemDestructor);
+    config.setCacheSize(100 * Slab::kSize);
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    const unsigned int nSizes = 10;
+    const unsigned int keyLen = 100;
+    const auto sizes = this->getValidAllocSizes(alloc, poolId, nSizes, keyLen);
+
+    // destructor cb should not be called for items not inserted in cache.
+    for (int i = 0; i < 100; i++) {
+      auto hdl = alloc.allocate(poolId, std::to_string(i), sizes[i % nSizes]);
+    }
+
+    ASSERT_EQ(0, evictedKeys.size());
+    ASSERT_EQ(0, removedKeys.size());
+
+    this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId, sizes, keyLen,
+                                        3 * numBytes);
+    // must have evicted at least once.
+    ASSERT_GE(evictedKeys.size(), sizes.size());
+    auto prevNEvicions = evictedKeys.size();
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId, sizes, keyLen,
+                                        3 * numBytes);
+    ASSERT_GT(evictedKeys.size(), prevNEvicions);
+
+    for (const auto size : sizes) {
+      prevNEvicions = evictedKeys.size();
+      const auto key = this->getRandomNewKey(alloc, keyLen);
+      auto handle = util::allocateAccessible(alloc, poolId, key, size);
+      ASSERT_NE(handle, nullptr);
+      ASSERT_EQ(prevNEvicions + 1, evictedKeys.size());
+      // ensure that evicted key cannot be found.
+      const auto& evictedKey = evictedKeys.back();
+      ASSERT_EQ(alloc.find(evictedKey), nullptr);
+      ASSERT_NE(alloc.find(key), nullptr);
+    }
+  }
+
   // do slab release and make sure that moved items dont get call backs issued
   // and evicted items get remove cb executed.
   void testRemoveCbSlabReleaseMoving() {
