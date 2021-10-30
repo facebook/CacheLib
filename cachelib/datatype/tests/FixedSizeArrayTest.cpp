@@ -64,6 +64,9 @@ class FixedSizeArrayTest : public ::testing::Test {
 
       // at() throws if out of bound
       ASSERT_THROW(array.at(array.size()), std::out_of_range);
+
+      EXPECT_NE(std::move(array).resetToItemHandle(), nullptr);
+      EXPECT_TRUE(array.isNullItemHandle());
     }
   }
 
