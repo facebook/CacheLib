@@ -159,7 +159,7 @@ string data("new data");
 auto item_handle = cache->allocate(pool_id, "key2", data.size());
 
 // Write the data to the cache.
-std::memcpy(handle->getMemory(), data.data(), data.size());
+std::memcpy(item_handle->getMemory(), data.data(), data.size());
 
 // Insert the item handle into the cache.
 cache->insertOrReplace(item_handle);
