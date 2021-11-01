@@ -206,10 +206,10 @@ navyConfig.bigHash()
 
 > `NavyConfig` provides a public function NavyConfig::serialize() so that you can call it to print out the data, e.g.
 > ```cpp
-XLOG(INFO) << "Using the following navy config"
-           << folly::toPrettyJson(
-                        folly::toDynamic(navyConfig.serialize()));
- ```
+> XLOG(INFO) << "Using the following navy config"
+>           << folly::toPrettyJson(
+>                        folly::toDynamic(navyConfig.serialize()));
+> ```
 
 ## Admission policy
 
@@ -233,7 +233,7 @@ Acceptance probability. The value has to be in the range of [0, 1].
  ```cpp
  navyConfig.enableRandomAdmPolicy()
            .setAdmProbability(admissionProbability);
-
+```
 
 #### Dynamic Random policy
 *  (**Required**) `admission write rate` (bytes/s)
