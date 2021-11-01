@@ -392,6 +392,11 @@ struct GlobalCacheStats {
   // attempts made from nvm cache to allocate an item for promotion
   uint64_t numNvmAllocAttempts{0};
 
+  // attempts made from nvm cache to allocate an item for its destructor
+  uint64_t numNvmAllocForItemDestructor{0};
+  // heap allocate errors for item destrutor
+  uint64_t numNvmItemDestructorAllocErrors{0};
+
   // number of attempts to allocate an item
   uint64_t allocAttempts{0};
 

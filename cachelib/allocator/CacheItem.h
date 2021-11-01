@@ -550,6 +550,7 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
   friend CacheAllocator<CacheTrait>;
   friend CacheChainedAllocs<CacheAllocator<CacheTrait>>;
   friend CacheChainedItemIterator<CacheAllocator<CacheTrait>>;
+  friend NvmCache<CacheAllocator<CacheTrait>>;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
   FRIEND_TEST(ItemTest, ChainedItemConstruction);

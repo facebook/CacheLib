@@ -231,33 +231,40 @@ template <typename C>
 void NvmCache<C>::evictCB(navy::BufferView key,
                           navy::BufferView value,
                           navy::DestructorEvent event) {
-  if (event != cachelib::navy::DestructorEvent::Recycled) {
+  if (event == cachelib::navy::DestructorEvent::Removed) {
     return;
   }
 
-  stats().numNvmEvictions.inc();
-
   const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
-  const auto timeNow = util::getCurrentTimeSec();
-  const auto lifetime = timeNow - nvmItem.getCreationTime();
-  const auto expiryTime = nvmItem.getExpiryTime();
-  if (expiryTime != 0) {
-    if (expiryTime < timeNow) {
-      stats().numNvmExpiredEvict.inc();
-      stats().nvmEvictionSecondsPastExpiry_.trackValue(timeNow - expiryTime);
-    } else {
-      stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
+
+  if (event == cachelib::navy::DestructorEvent::Recycled) {
+    // Recycled means item is evicted
+    // update stats for eviction
+    stats().numNvmEvictions.inc();
+
+    const auto timeNow = util::getCurrentTimeSec();
+    const auto lifetime = timeNow - nvmItem.getCreationTime();
+    const auto expiryTime = nvmItem.getExpiryTime();
+    if (expiryTime != 0) {
+      if (expiryTime < timeNow) {
+        stats().numNvmExpiredEvict.inc();
+        stats().nvmEvictionSecondsPastExpiry_.trackValue(timeNow - expiryTime);
+      } else {
+        stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
+      }
     }
+
+    value.size() > navySmallItemThreshold_
+        ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
+        : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
   }
 
-  value.size() > navySmallItemThreshold_
-      ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
-      : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
+  folly::StringPiece itemKey{reinterpret_cast<const char*>(key.data()),
+                             key.size()};
 
   ItemHandle hdl;
   try {
-    hdl = cache_.peek(folly::StringPiece{
-        reinterpret_cast<const char*>(key.data()), key.size()});
+    hdl = cache_.peek(itemKey);
   } catch (const exception::RefcountOverflow& ex) {
     XLOGF(ERR,
           "Refcount overflowed when trying peek at an item in "
@@ -267,31 +274,50 @@ void NvmCache<C>::evictCB(navy::BufferView key,
           ex.what());
   }
 
-  if (!hdl) {
-    return;
-  }
-
-  if (!hdl->isNvmClean()) {
-    // this is a bug
-    stats().numNvmUncleanEvict.inc();
-  } else {
+  if (hdl && hdl->isNvmClean()) {
+    // item found in RAM and it is NvmClean
+    // this means it is the same copy as what we are evicting/removing
     if (hdl->isNvmEvicted()) {
-      // this means we evicted something twice. This is possible since we
-      // could have two copies in the nvm cache and issued the call backs
-      // late. Not a correctness issue.
+      // this means we evicted something twice. This should not happen even we
+      // could have two copies in the nvm cache, since we only have one copy in
+      // index, the one not in index should not reach here.
       stats().numNvmCleanDoubleEvict.inc();
     } else {
       hdl->markNvmEvicted();
       stats().numNvmCleanEvict.inc();
     }
+  } else {
+    if (hdl) {
+      // item found in RAM but is NOT NvmClean
+      // this happens when RAM copy is in-place updated, or replaced with a new
+      // item.
+      stats().numNvmUncleanEvict.inc();
+    }
+    // ItemDestructor
+    if (itemDestructor_) {
+      // create the item on heap instead of memory pool to avoid allocation
+      // failure and evictions from cache for a temporary item.
+      auto iobuf = createItemAsIOBuf(itemKey, nvmItem);
+      if (iobuf) {
+        auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
+        // make chained items
+        // viewAsChainedAllocsRange(it)
+        itemDestructor_(DestructorData{DestructorContext::kEvictedFromNVM, item,
+                                       folly::Range<ChainedItemIter>{}});
+      }
+    }
   }
 }
 
 template <typename C>
-NvmCache<C>::NvmCache(C& c, Config config, bool truncate)
+NvmCache<C>::NvmCache(C& c,
+                      Config config,
+                      bool truncate,
+                      const ItemDestructor& itemDestructor)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
-      navySmallItemThreshold_{config_.navyConfig.getSmallItemThreshold()} {
+      navySmallItemThreshold_{config_.navyConfig.getSmallItemThreshold()},
+      itemDestructor_(itemDestructor) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
       [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {
@@ -584,6 +610,46 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
         *it, CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, *it)});
   }
   return it;
+}
+
+template <typename C>
+std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
+    folly::StringPiece key, const NvmItem& nvmItem) {
+  const size_t numBufs = nvmItem.getNumBlobs();
+  // parent item
+  XDCHECK_GE(numBufs, 1u);
+  const auto pBlob = nvmItem.getBlob(0);
+
+  stats().numNvmAllocForItemDestructor.inc();
+  std::unique_ptr<folly::IOBuf> head;
+  try {
+    // use the original alloc size to allocate, but make sure that the usable
+    // size matches the pBlob's size
+    auto size = Item::getRequiredSize(key, pBlob.origAllocSize);
+    head = folly::IOBuf::create(size);
+    head->append(size);
+  } catch (const std::bad_alloc&) {
+    stats().numNvmItemDestructorAllocErrors.inc();
+    return nullptr;
+  }
+  auto item = new (head->writableData())
+      Item(key, pBlob.origAllocSize, nvmItem.getCreationTime(),
+           nvmItem.getExpiryTime());
+
+  XDCHECK_LE(pBlob.origAllocSize, item->getSize());
+  XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
+  ::memcpy(item->getWritableMemory(), pBlob.data.data(), pBlob.origAllocSize);
+  item->markNvmClean();
+  item->markNvmEvicted();
+
+  // TODO (zixuan): chained item
+
+  // issue the call back to decode and fix up the item if needed.
+  if (config_.decodeCb) {
+    config_.decodeCb(
+        EncodeDecodeContext{*item, folly::Range<ChainedItemIter>{}});
+  }
+  return head;
 }
 
 template <typename C>

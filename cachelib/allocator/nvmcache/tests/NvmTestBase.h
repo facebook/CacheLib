@@ -30,9 +30,12 @@ using AllocatorT = LruAllocator;
 using Item = AllocatorT::Item;
 using ItemHandle = AllocatorT::ItemHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
+using DestructorData = typename AllocatorT::DestructorData;
 
 class NvmCacheTest : public testing::Test {
  public:
+  using NvmCacheT = typename AllocatorT::NvmCacheT;
+
   NvmCacheTest();
   ~NvmCacheTest();
 
@@ -103,10 +106,27 @@ class NvmCacheTest : public testing::Test {
                         SlabReleaseMode::kRebalance);
   }
 
+  NvmCacheT* getNvmCache() {
+    return cache_ ? cache_->nvmCache_.get() : nullptr;
+  }
+
+  std::unique_ptr<NvmItem> makeNvmItem(const ItemHandle& handle) {
+    return getNvmCache()->makeNvmItem(handle);
+  }
+
+  std::unique_ptr<folly::IOBuf> createItemAsIOBuf(folly::StringPiece key,
+                                                  const NvmItem& dItem) {
+    return getNvmCache()->createItemAsIOBuf(key, dItem);
+  }
+
+  template <typename... Params>
+  void evictCB(Params&&... args) {
+    getNvmCache()->evictCB(std::forward<Params>(args)...);
+  }
+
  protected:
   // Helper for ShardHashIsNotFillMapHash because we're the friend of NvmCache.
   std::pair<size_t, size_t> getNvmShardAndHashForKey(folly::StringPiece key) {
-    using NvmCacheT = typename AllocatorT::NvmCacheT;
     auto shard = NvmCacheT::getShardForKey(key);
     auto hash =
         typename NvmCacheT::FillMap{}.hash_function()(key) % NvmCacheT::kShards;

@@ -1944,6 +1944,113 @@ TEST_F(NvmCacheTest, ShardHashIsNotFillMapHash) {
   ASSERT_NE(shardHash.first, shardHash.second);
 }
 
+TEST_F(NvmCacheTest, testEvictCB) {
+  bool destructorCalled = false;
+  // this test only checks whether the destructor is triggered, but not checking
+  // the DestructorData
+  allocConfig_.setItemDestructor(
+      [&](const DestructorData&) { destructorCalled = true; });
+  allocConfig_.setRemoveCallback({});
+  auto& cache = makeCache();
+  auto pid = poolId();
+
+  {
+    destructorCalled = false;
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    auto buf = toIOBuf(makeNvmItem(handle));
+    evictCB(navy::makeView(key.data()),
+            navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Removed);
+    // Removed event should skip evictCB
+    ASSERT_FALSE(destructorCalled);
+  }
+  {
+    destructorCalled = false;
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    auto buf = toIOBuf(makeNvmItem(handle));
+    evictCB(navy::makeView(key.data()),
+            navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled);
+    // Recycled event, not in RAM
+    ASSERT_TRUE(destructorCalled);
+  }
+  {
+    destructorCalled = false;
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    cache.insertOrReplace(handle);
+    auto buf = toIOBuf(makeNvmItem(handle));
+    evictCB(navy::makeView(key.data()),
+            navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled);
+    // Recycled event, in RAM but unclean
+    ASSERT_TRUE(destructorCalled);
+    ASSERT_FALSE(handle->isNvmEvicted());
+  }
+  {
+    destructorCalled = false;
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    cache.insertOrReplace(handle);
+    handle->markNvmClean();
+    auto buf = toIOBuf(makeNvmItem(handle));
+    evictCB(navy::makeView(key.data()),
+            navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled);
+    // Recycled event, in RAM and clean
+    ASSERT_FALSE(destructorCalled);
+    ASSERT_TRUE(handle->isNvmEvicted());
+  }
+}
+
+TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
+  auto& cache = this->cache();
+  auto pid = this->poolId();
+
+  {
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+
+    auto dipper = makeNvmItem(handle);
+    auto iobuf = createItemAsIOBuf(key, *dipper);
+
+    Item& item = *reinterpret_cast<Item*>(iobuf->writableData());
+    ASSERT_EQ(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
+
+    ASSERT_EQ(
+        0,
+        std::memcmp(handle->getMemory(), item.getMemory(), handle->getSize()));
+
+    ASSERT_EQ(handle->getKey(), item.getKey());
+    ASSERT_EQ(handle->isChainedItem(), item.isChainedItem());
+    ASSERT_EQ(true, item.isNvmClean());
+    ASSERT_EQ(true, item.isNvmEvicted());
+    ASSERT_EQ(handle->getCreationTime(), item.getCreationTime());
+    ASSERT_EQ(handle->getExpiryTime(), item.getExpiryTime());
+    ASSERT_EQ(handle->getSize(), item.getSize());
+    ASSERT_EQ(0, item.getRefCount());
+    ASSERT_EQ(handle->isAccessible(), item.isAccessible());
+  }
+}
+// TODO: chained
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

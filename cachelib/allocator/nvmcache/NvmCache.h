@@ -54,7 +54,10 @@ template <typename C>
 class NvmCache {
  public:
   using Item = typename C::Item;
+  using ChainedItem = typename Item::ChainedItem;
   using ChainedItemIter = typename C::ChainedItemIter;
+  using ItemDestructor = typename C::ItemDestructor;
+  using DestructorData = typename C::DestructorData;
 
   // Context passed in encodeCb or decodeCb. If the item has children,
   // they are passed in the form of a folly::Range.
@@ -124,7 +127,10 @@ class NvmCache {
   // @param c         the cache instance using nvmcache
   // @param config    the config for nvmcache
   // @param truncate  if we should truncate the nvmcache store
-  NvmCache(C& c, Config config, bool truncate);
+  NvmCache(C& c,
+           Config config,
+           bool truncate,
+           const ItemDestructor& itemDestructor);
 
   // Look up item by key
   // @param key         key to lookup
@@ -212,6 +218,16 @@ class NvmCache {
   // @param   return an item handle allocated and initialized to the right state
   //          based on the NvmItem
   ItemHandle createItem(folly::StringPiece key, const NvmItem& nvmItem);
+
+  // creates the item into IOBuf from NvmItem, if the item has chained items,
+  // chained IOBufs will be created.
+  // @param key   key for the dipper item
+  // @param nvmItem contents for the key
+  //
+  // @return an IOBuf allocated for the item and initialized the memory to Item
+  //          based on the NvmItem
+  std::unique_ptr<folly::IOBuf> createItemAsIOBuf(folly::StringPiece key,
+                                                  const NvmItem& nvmItem);
 
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(folly::StringPiece key);
@@ -368,6 +384,8 @@ class NvmCache {
   // to navy and in-flight gets into nvmcache that are not yet queued.
   std::array<InFlightPuts, kShards> inflightPuts_;
   std::array<TombStones, kShards> tombstones_;
+
+  const ItemDestructor itemDestructor_;
 
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 

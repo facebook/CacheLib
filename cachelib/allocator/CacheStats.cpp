@@ -48,7 +48,7 @@ template <int>
 struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
-  SizeVerify<sizeof(Stats)> a = SizeVerify<15600>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<15856>{};
   std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
@@ -85,6 +85,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numChainedParentItems = numChainedParentItems.get();
   ret.numChainedChildItems = numChainedChildItems.get();
   ret.numNvmAllocAttempts = numNvmAllocAttempts.get();
+  ret.numNvmAllocForItemDestructor = numNvmAllocForItemDestructor.get();
+  ret.numNvmItemDestructorAllocErrors = numNvmItemDestructorAllocErrors.get();
 
   ret.allocateLatencyNs = this->allocateLatency_.estimate();
   ret.moveChainedLatencyNs = this->moveChainedLatency_.estimate();

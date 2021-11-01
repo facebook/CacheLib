@@ -122,6 +122,14 @@ struct Stats {
   // attempts made from nvm cache to allocate an item for promotion
   TLCounter numNvmAllocAttempts{0};
 
+  // attempts made from nvm cache to allocate an item for its destructor
+  TLCounter numNvmAllocForItemDestructor{0};
+  // heap allocate errors for item destrutor
+  TLCounter numNvmItemDestructorAllocErrors{0};
+
+  // the number of allocated items that are permanent
+  TLCounter numPermanentItems{0};
+
   // the number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
   TLCounter numChainedParentItems{0};

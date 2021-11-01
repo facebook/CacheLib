@@ -219,7 +219,8 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
     nvmCacheState_.markTruncated();
   }
 
-  nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate);
+  nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
+                                          config_.itemDestructor);
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();
   }
