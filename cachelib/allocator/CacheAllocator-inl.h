@@ -1555,6 +1555,11 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
   // from NVM. If the item was not pulled in from NVM, it is not possible to
   // have it be written to NVM.
   if (nvmCache_ && removeFromNvm && item.isNvmClean()) {
+    if (item.getRefCount() > 0) {
+      // caller hold the handle, mark NvmEvicted so handle destructor will call
+      // ItemDestructor
+      item.markNvmEvicted();
+    }
     XDCHECK(tombstone);
     nvmCache_->remove(item.getKey(), std::move(tombstone));
   }

@@ -78,7 +78,8 @@ class MockEngine final : public Engine {
     }));
 
     ON_CALL(*this, remove(_)).WillByDefault(Invoke([this](HashedKey hk) {
-      return cache_.erase(hk) == 0 ? Status::NotFound : Status::Ok;
+      Buffer buf{hk.key()};
+      return evict(buf.view()) ? Status::Ok : Status::NotFound;
     }));
     ON_CALL(*this, flush()).WillByDefault(Return());
     ON_CALL(*this, reset()).WillByDefault(Return());
@@ -122,7 +123,7 @@ class MockEngine final : public Engine {
     auto value = std::move(itr->second.second);
     cache_.erase(itr);
     if (destructorCb_) {
-      destructorCb_(key, value.view(), DestructorEvent::Recycled);
+      destructorCb_(key, value.view(), DestructorEvent::Removed);
     }
     return true;
   }
@@ -427,6 +428,12 @@ TEST(Driver, Remove) {
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, lookup(makeHK("key"), _));
     EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    // test retry
+    EXPECT_CALL(*si, remove(makeHK("test retry")))
+        .WillOnce(Return(Status::NotFound));
+    EXPECT_CALL(*bc, remove(makeHK("test retry")))
+        .WillOnce(Return(Status::Retry))
+        .WillOnce(Return(Status::Ok));
   }
 
   auto ex = makeJobScheduler();
@@ -442,6 +449,8 @@ TEST(Driver, Remove) {
 
   EXPECT_EQ(Status::Ok, driver->remove(makeView("key")));
   EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
+
+  EXPECT_EQ(Status::Ok, driver->remove(makeView("test retry")));
 }
 
 // Comment about EvictionBlockCache and EvictionSmallItemCache:
@@ -463,7 +472,7 @@ TEST(Driver, EvictBlockCache) {
   MockDestructor ecbBC;
   EXPECT_CALL(
       ecbBC,
-      call(makeView("key"), largeValue.view(), DestructorEvent::Recycled));
+      call(makeView("key"), largeValue.view(), DestructorEvent::Removed));
   auto bc = std::make_unique<MockEngine>("", &ecbBC);
   auto bcPtr = bc.get();
 
@@ -516,7 +525,7 @@ TEST(Driver, EvictSmallItemCache) {
   MockDestructor ecbSI;
   EXPECT_CALL(
       ecbSI,
-      call(makeView("key"), smallValue.view(), DestructorEvent::Recycled));
+      call(makeView("key"), smallValue.view(), DestructorEvent::Removed));
   auto si = std::make_unique<MockEngine>("", &ecbSI);
   auto siPtr = si.get();
 

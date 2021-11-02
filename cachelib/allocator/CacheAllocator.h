@@ -1070,6 +1070,10 @@ class CacheAllocator : public CacheBase {
     }
   }
 
+  // Mark the item as dirty and enqueue for deletion from nvmcache
+  // @param item         item to invalidate.
+  void invalidateNvm(Item& item);
+
   // Attempts to clean up left-over shared memory from preivous instance of
   // cachelib cache for the cache directory. If there are other processes
   // using the same directory, we don't touch it. If the directory is not
@@ -1347,10 +1351,6 @@ class CacheAllocator : public CacheBase {
   ItemHandle replaceChainedItemLocked(Item& oldItem,
                                       ItemHandle newItemHdl,
                                       const Item& parent);
-
-  // Mark the item as dirty and enqueue for deletion from nvmcache
-  // @param hdl         item to invalidate.
-  void invalidateNvm(Item& item);
 
   // Insert an item into MM container. The caller must hold a valid handle for
   // the item.

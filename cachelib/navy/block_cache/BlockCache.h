@@ -71,6 +71,8 @@ class BlockCache final : public Engine {
     // Number of in-memory buffers where writes are buffered before flushed
     // on to the device
     uint32_t numInMemBuffers{};
+    // whether ItemDestructor is enabled
+    bool itemDestructorEnabled{false};
 
     // Maximum number of retry times for in-mem buffer flushing.
     // When exceeding the limit, we will not reschedule any flushing job but
@@ -131,7 +133,7 @@ class BlockCache final : public Engine {
 
   // Removes a key from BlockCache.
   //
-  // @param hk  key to be removed
+  // @param hk           key to be removed
   //
   // @return Status::Ok if the key is found and Status::NotFound otherwise.
   Status remove(HashedKey hk) override;
@@ -341,6 +343,8 @@ class BlockCache final : public Engine {
   const uint32_t readBufferSize_{};
   // number of bytes in a region
   const uint64_t regionSize_{};
+  // whether ItemDestructor is enabled
+  const bool itemDestructorEnabled_{false};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset 0
@@ -382,6 +386,7 @@ class BlockCache final : public Engine {
   mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable SizeDistribution sizeDist_;
+  mutable AtomicCounter lookupForItemDestructorErrorCount_;
 };
 } // namespace navy
 } // namespace cachelib

@@ -128,6 +128,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                           ? kDefReadBufferSize
                           : config.readBufferSize},
       regionSize_{config.regionSize},
+      itemDestructorEnabled_{config.itemDestructorEnabled},
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,
@@ -264,12 +265,33 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
 
 Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
+
+  Buffer value;
+  if (itemDestructorEnabled_ && destructorCb_) {
+    Status status = lookup(hk, value);
+
+    if (status != Status::Ok) {
+      // device error, or region reclaimed, or item not found
+      value.reset();
+      if (status == Status::Retry) {
+        return status;
+      } else if (status != Status::NotFound) {
+        lookupForItemDestructorErrorCount_.inc();
+        // still fail after retry, return a BadState to disable navy
+        return Status::BadState;
+      }
+    }
+  }
+
   auto lr = index_.remove(hk.keyHash());
   if (lr.found()) {
     auto addr = decodeRelAddress(lr.address());
     holeSizeTotal_.add(regionManager_.getRegionSlotSize(addr.rid()));
     holeCount_.inc();
     succRemoveCount_.inc();
+    if (!value.isNull()) {
+      destructorCb_(hk.key(), value.view(), DestructorEvent::Removed);
+    }
     return Status::Ok;
   }
   return Status::NotFound;
@@ -343,12 +365,8 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid,
       break;
     }
 
-    if (destructorCb_ && reinsertionRes != ReinsertionRes::kReinserted) {
-      destructorCb_(hk.key(),
-                    value,
-                    reinsertionRes == ReinsertionRes::kEvicted
-                        ? DestructorEvent::Recycled
-                        : DestructorEvent::Removed);
+    if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
+      destructorCb_(hk.key(), value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -413,11 +431,8 @@ void BlockCache::onRegionCleanup(RegionId rid,
     } else {
       removedItem++;
     }
-    if (destructorCb_) {
-      destructorCb_(hk.key(),
-                    value,
-                    removeRes ? DestructorEvent::Recycled
-                              : DestructorEvent::Removed);
+    if (destructorCb_ && removeRes) {
+      destructorCb_(hk.key(), value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -669,6 +684,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reinsertions", reinsertionCount_.get());
   visitor("navy_bc_reinsertion_bytes", reinsertionBytes_.get());
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get());
+  visitor("navy_bc_lookup_for_item_destructor_errors",
+          lookupForItemDestructorErrorCount_.get());
 
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {

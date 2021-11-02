@@ -231,10 +231,6 @@ template <typename C>
 void NvmCache<C>::evictCB(navy::BufferView key,
                           navy::BufferView value,
                           navy::DestructorEvent event) {
-  if (event == cachelib::navy::DestructorEvent::Removed) {
-    return;
-  }
-
   const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
 
   if (event == cachelib::navy::DestructorEvent::Recycled) {
@@ -302,8 +298,10 @@ void NvmCache<C>::evictCB(navy::BufferView key,
         auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
         // make chained items
         auto chained = viewAsChainedAllocsRange(iobuf.get());
-        itemDestructor_(DestructorData{DestructorContext::kEvictedFromNVM, item,
-                                       std::move(chained)});
+        auto context = event == cachelib::navy::DestructorEvent::Removed
+                           ? DestructorContext::kRemovedFromNVM
+                           : DestructorContext::kEvictedFromNVM;
+        itemDestructor_(DestructorData{context, item, std::move(chained)});
       }
     }
   }
@@ -335,7 +333,8 @@ NvmCache<C>::NvmCache(C& c,
         this->evictCB(k, v, e);
       },
       truncate,
-      std::move(config.deviceEncryptor));
+      std::move(config.deviceEncryptor),
+      itemDestructor_ ? true : false);
 }
 
 template <typename C>
@@ -392,11 +391,11 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const ItemHandle& hdl) {
 }
 
 template <typename C>
-void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
+void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
   util::LatencyTracker tracker(stats().nvmInsertLatency_);
 
   XDCHECK(hdl);
-  const auto& item = *hdl;
+  auto& item = *hdl;
   // for regular items that can only write to nvmcache upon eviction, we
   // should not be recording a write for an nvmclean item unless it is marked
   // as evicted from nvmcache.
@@ -450,15 +449,27 @@ void NvmCache<C>::put(const ItemHandle& hdl, PutToken token) {
   const bool executed = token.executeIfValid([&]() {
     auto status = navyCache_->insertAsync(
         makeBufferView(ctx.key()), makeBufferView(val),
-        [this, putCleanup, valSize](navy::Status st, navy::BufferView) {
-          putCleanup();
+        [this, putCleanup, valSize, val](navy::Status st,
+                                         navy::BufferView key) {
           if (st == navy::Status::Ok) {
             stats().nvmPutSize_.trackValue(valSize);
+          } else if (st == navy::Status::BadState) {
+            // we set disable navy since we got a BadState from navy
+            disableNavy("Delete Failure. BadState");
+          } else {
+            // put failed
+            evictCB(key, makeBufferView(val), navy::DestructorEvent::Removed);
           }
+          putCleanup();
         });
 
     if (status == navy::Status::Ok) {
       guard.dismiss();
+      // mark it as NvmClean and unNvmEvicted if we put it into the queue
+      // so handle destruction awares that there's a NVM copy (at least in the
+      // queue)
+      item.markNvmClean();
+      item.unmarkNvmEvicted();
     } else {
       stats().numNvmPutErrs.inc();
     }

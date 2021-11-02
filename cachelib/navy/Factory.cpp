@@ -104,6 +104,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.numInMemBuffers = numInMemBuffers;
   }
 
+  void setItemDestructorEnabled(bool itemDestructorEnabled) override {
+    config_.itemDestructorEnabled = itemDestructorEnabled;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  DestructorCallback cb) && {
     config_.scheduler = &scheduler;

@@ -48,7 +48,9 @@ enum class Status {
 };
 
 enum class DestructorEvent {
+  // space is recycled (item evicted)
   Recycled,
+  // item is removed from NVM
   Removed,
 };
 

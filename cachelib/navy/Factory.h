@@ -79,6 +79,9 @@ class BlockCacheProto {
   // (Optional) Enable a reinsertion policy with the config.
   virtual void setReinsertionConfig(
       const BlockCacheReinsertionConfig& config) = 0;
+
+  // (Optional) Set if the item destructor feature is enabled.
+  virtual void setItemDestructorEnabled(bool itemDestructorEnabled) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

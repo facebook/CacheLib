@@ -32,6 +32,7 @@ using ItemHandle = AllocatorT::ItemHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
 using DestructorData = typename AllocatorT::DestructorData;
 using ChainedItemIter = AllocatorT::ChainedItemIter;
+using DestructedData = AllocatorT::DestructorData;
 
 class NvmCacheTest : public testing::Test {
  public:

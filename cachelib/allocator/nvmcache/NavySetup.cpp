@@ -98,6 +98,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                      uint32_t ioAlignSize,
                      uint64_t metadataSize,
                      bool usesRaidFiles,
+                     bool itemDestructorEnabled,
                      cachelib::navy::CacheProto& proto) {
   auto regionSize = blockCacheConfig.getRegionSize();
   if (regionSize != alignUp(regionSize, ioAlignSize)) {
@@ -144,6 +145,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setReinsertionConfig(blockCacheConfig.getReinsertionConfig());
 
   blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
+  blockCache->setItemDestructorEnabled(itemDestructorEnabled);
 
   proto.setBlockCache(std::move(blockCache));
 }
@@ -159,7 +161,8 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 // @throw std::invalid_argument if input arguments are invalid
 void setupCacheProtos(const navy::NavyConfig& config,
                       const navy::Device& device,
-                      cachelib::navy::CacheProto& proto) {
+                      cachelib::navy::CacheProto& proto,
+                      const bool itemDestructorEnabled) {
   auto getDefaultMetadataSize = [](size_t size, size_t alignment) {
     XDCHECK(folly::isPowTwo(alignment));
     auto mask = ~(alignment - 1);
@@ -197,7 +200,8 @@ void setupCacheProtos(const navy::NavyConfig& config,
   // Set up BlockCache if enabled
   if (blockCacheSize > 0) {
     setupBlockCache(config.blockCache(), blockCacheSize, ioAlignSize,
-                    metadataSize, config.usesRaidFiles(), proto);
+                    metadataSize, config.usesRaidFiles(), itemDestructorEnabled,
+                    proto);
   }
 }
 
@@ -261,7 +265,8 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     const navy::NavyConfig& config,
     navy::DestructorCallback cb,
     bool truncate,
-    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
+    bool itemDestructorEnabled) {
   auto device = createDevice(config, std::move(encryptor));
 
   auto proto = cachelib::navy::createCacheProto();
@@ -273,7 +278,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   setAdmissionPolicy(config, *proto);
   proto->setDestructorCallback(cb);
 
-  setupCacheProtos(config, *devicePtr, *proto);
+  setupCacheProtos(config, *devicePtr, *proto, itemDestructorEnabled);
 
   auto cache = createCache(std::move(proto));
   XDCHECK(cache != nullptr);
