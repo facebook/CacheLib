@@ -182,7 +182,12 @@ class Region {
   // The callBack function is expected to write to the underlying device.
   // The callback function should return true if successfully flushed the
   // buffer, otherwise it should return false.
-  bool flushBuffer(std::function<bool(RelAddress, BufferView)> callBack);
+  enum FlushRes {
+    kSuccess,
+    kRetryDeviceFailure,
+    kRetryPendingWrites,
+  };
+  FlushRes flushBuffer(std::function<bool(RelAddress, BufferView)> callBack);
 
   // Cleans up the attached buffer by calling the callBack function.
   bool cleanupBuffer(std::function<void(RegionId, BufferView)> callBack);

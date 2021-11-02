@@ -96,7 +96,7 @@ void RegionManager::reset() {
   resetEvictionPolicy();
 }
 
-bool RegionManager::flushBuffer(const RegionId& rid) {
+Region::FlushRes RegionManager::flushBuffer(const RegionId& rid) {
   auto& region = getRegion(rid);
   auto callBack = [this](RelAddress addr, BufferView view) {
     auto writeBuffer = device_.makeIOBuffer(view.size());
@@ -109,10 +109,7 @@ bool RegionManager::flushBuffer(const RegionId& rid) {
   };
 
   // This is no-op if the buffer is already flushed
-  if (!region.flushBuffer(std::move(callBack))) {
-    return false;
-  }
-  return true;
+  return region.flushBuffer(std::move(callBack));
 }
 
 bool RegionManager::detachBuffer(const RegionId& rid) {
@@ -245,12 +242,15 @@ void RegionManager::doFlush(RegionId rid, bool async) {
         numInMemBufCleanupRetries_.inc();
         return JobExitCode::Reschedule;
       }
-      if (flushBuffer(rid)) {
+      auto res = flushBuffer(rid);
+      if (res == Region::FlushRes::kSuccess) {
         flushed = true;
       } else {
-        // Flush fails
-        retryAttempts++;
-        numInMemBufFlushRetries_.inc();
+        // We have a limited retry limit for flush errors due to device
+        if (res == Region::FlushRes::kRetryDeviceFailure) {
+          retryAttempts++;
+          numInMemBufFlushRetries_.inc();
+        }
         return JobExitCode::Reschedule;
       }
     }

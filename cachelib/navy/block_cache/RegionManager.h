@@ -185,7 +185,7 @@ class RegionManager {
   // Caller is expected to call flushBuffer until true is returned or retry
   // times reach the limit. This routine is idempotent and is safe to call
   // multiple times until detachBuffer is done.
-  bool flushBuffer(const RegionId& rid);
+  Region::FlushRes flushBuffer(const RegionId& rid);
 
   // Detaches the buffer from the region and returns the buffer to pool.
   // Caller is expected to call this until it returns true.

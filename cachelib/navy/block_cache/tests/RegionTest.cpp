@@ -70,6 +70,25 @@ TEST(Region, BufferAttachDetach) {
   b = r.detachBuffer();
   EXPECT_FALSE(r.hasBuffer());
 }
+
+TEST(Region, BufferFlush) {
+  auto b = std::make_unique<Buffer>(1024);
+  Region r{RegionId(0), 1024};
+  r.attachBuffer(std::move(b));
+  EXPECT_TRUE(r.hasBuffer());
+
+  auto [desc2, addr2] = r.openAndAllocate(100);
+  EXPECT_EQ(desc2.status(), OpenStatus::Ready);
+
+  EXPECT_EQ(Region::FlushRes::kRetryPendingWrites,
+            r.flushBuffer([](auto, auto) { return true; }));
+
+  r.close(std::move(desc2));
+  EXPECT_EQ(Region::FlushRes::kRetryDeviceFailure,
+            r.flushBuffer([](auto, auto) { return false; }));
+  EXPECT_EQ(Region::FlushRes::kSuccess,
+            r.flushBuffer([](auto, auto) { return true; }));
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib
