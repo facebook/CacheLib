@@ -2017,6 +2017,47 @@ TEST_F(NvmCacheTest, testEvictCB) {
   }
 }
 
+void verifyItem(const Item& item, Item& iobufItem) {
+  ASSERT_EQ(item.isChainedItem(), iobufItem.isChainedItem());
+  ASSERT_EQ(item.hasChainedItem(), iobufItem.hasChainedItem());
+  ASSERT_EQ(item.getCreationTime(), iobufItem.getCreationTime());
+  ASSERT_EQ(item.getExpiryTime(), iobufItem.getExpiryTime());
+  ASSERT_EQ(item.getSize(), iobufItem.getSize());
+  ASSERT_EQ(
+      0, std::memcmp(item.getMemory(), iobufItem.getMemory(), item.getSize()));
+  // iobuf item is prepared for ItemDestructor, accessible should be false
+  ASSERT_FALSE(iobufItem.isAccessible());
+}
+
+void NvmCacheTest::verifyItemInIOBuf(const std::string& key,
+                                     const ItemHandle& handle,
+                                     folly::IOBuf* iobuf) {
+  Item& item = *reinterpret_cast<Item*>(iobuf->writableData());
+  ASSERT_EQ(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
+
+  ASSERT_EQ(true, item.isNvmClean());
+  ASSERT_EQ(true, item.isNvmEvicted());
+  ASSERT_EQ(0, item.getRefCount());
+  ASSERT_EQ(handle->getKey(), item.getKey());
+  verifyItem(*handle, item);
+
+  if (item.hasChainedItem()) {
+    auto iobufRange = viewAsChainedAllocsRange(iobuf);
+    auto handleRange = cache().viewAsChainedAllocsRange(*handle);
+
+    auto iobufIter = iobufRange.begin();
+    auto handleIter = handleRange.begin();
+
+    while (iobufIter != iobufRange.end() || handleIter != handleRange.end()) {
+      ASSERT_NE(iobufIter, iobufRange.end());
+      ASSERT_NE(handleIter, handleRange.end());
+      verifyItem(handleIter.dereference(), iobufIter.dereference());
+      handleIter.increment();
+      iobufIter.increment();
+    }
+  }
+}
+
 TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
   auto& cache = this->cache();
   auto pid = this->poolId();
@@ -2031,25 +2072,52 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
     auto dipper = makeNvmItem(handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
 
-    Item& item = *reinterpret_cast<Item*>(iobuf->writableData());
-    ASSERT_EQ(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
+    verifyItemInIOBuf(key, handle, iobuf.get());
+  }
+  {
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(100);
+    auto handle = cache.allocate(pid, key, 1000);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
 
-    ASSERT_EQ(
-        0,
-        std::memcmp(handle->getMemory(), item.getMemory(), handle->getSize()));
+    auto dipper = makeNvmItem(handle);
+    auto iobuf = createItemAsIOBuf(key, *dipper);
 
-    ASSERT_EQ(handle->getKey(), item.getKey());
-    ASSERT_EQ(handle->isChainedItem(), item.isChainedItem());
-    ASSERT_EQ(true, item.isNvmClean());
-    ASSERT_EQ(true, item.isNvmEvicted());
-    ASSERT_EQ(handle->getCreationTime(), item.getCreationTime());
-    ASSERT_EQ(handle->getExpiryTime(), item.getExpiryTime());
-    ASSERT_EQ(handle->getSize(), item.getSize());
-    ASSERT_EQ(0, item.getRefCount());
-    ASSERT_EQ(handle->isAccessible(), item.isAccessible());
+    verifyItemInIOBuf(key, handle, iobuf.get());
   }
 }
-// TODO: chained
+
+TEST_F(NvmCacheTest, testCreateItemAsIOBufChained) {
+  auto& cache = this->cache();
+  auto pid = this->poolId();
+
+  {
+    std::string key = "key" + genRandomStr(10);
+    std::string val = "val" + genRandomStr(10);
+    int nChained = 10;
+
+    auto handle = cache.allocate(pid, key, 100);
+    ASSERT_NE(nullptr, handle.get());
+    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    cache.insertOrReplace(handle);
+
+    for (int i = 0; i < nChained; i++) {
+      std::string chainedVal = val + "_chained_" + std::to_string(i);
+      auto chainedIt = cache.allocateChainedItem(handle, chainedVal.length());
+      ASSERT_TRUE(chainedIt);
+      ::memcpy(chainedIt->getWritableMemory(),
+               chainedVal.data(),
+               chainedVal.length());
+      cache.addChainedItem(handle, std::move(chainedIt));
+    }
+
+    auto dipper = makeNvmItem(handle);
+    auto iobuf = createItemAsIOBuf(key, *dipper);
+
+    verifyItemInIOBuf(key, handle, iobuf.get());
+  }
+}
 
 } // namespace tests
 } // namespace cachelib

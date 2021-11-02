@@ -301,12 +301,23 @@ void NvmCache<C>::evictCB(navy::BufferView key,
       if (iobuf) {
         auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
         // make chained items
-        // viewAsChainedAllocsRange(it)
+        auto chained = viewAsChainedAllocsRange(iobuf.get());
         itemDestructor_(DestructorData{DestructorContext::kEvictedFromNVM, item,
-                                       folly::Range<ChainedItemIter>{}});
+                                       std::move(chained)});
       }
     }
   }
+}
+
+template <typename C>
+folly::Range<typename C::ChainedItemIter> NvmCache<C>::viewAsChainedAllocsRange(
+    folly::IOBuf* parent) const {
+  XDCHECK(parent);
+  auto& item = *reinterpret_cast<Item*>(parent->writableData());
+  return item.hasChainedItem()
+             ? folly::Range<ChainedItemIter>{ChainedItemIter{parent->next()},
+                                             ChainedItemIter{parent}}
+             : folly::Range<ChainedItemIter>{};
 }
 
 template <typename C>
@@ -642,12 +653,41 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
   item->markNvmClean();
   item->markNvmEvicted();
 
-  // TODO (zixuan): chained item
+  // if we have more, then we need to allocate them as chained items and add
+  // them in the same order. To do that, we need to add them from the inverse
+  // order
+  if (numBufs > 1) {
+    // chained items need to be added in reverse order to maintain the same
+    // order as what we serialized.
+    for (int i = numBufs - 1; i >= 1; i--) {
+      auto cBlob = nvmItem.getBlob(i);
+      XDCHECK_GT(cBlob.origAllocSize, 0u);
+      XDCHECK_GT(cBlob.data.size(), 0u);
+      stats().numNvmAllocForItemDestructor.inc();
+      std::unique_ptr<folly::IOBuf> chained;
+      try {
+        auto size = ChainedItem::getRequiredSize(cBlob.origAllocSize);
+        chained = folly::IOBuf::create(size);
+        chained->append(size);
+      } catch (const std::bad_alloc&) {
+        stats().numNvmItemDestructorAllocErrors.inc();
+        return nullptr;
+      }
+      auto chainedItem = new (chained->writableData()) ChainedItem(
+          CompressedPtr(), cBlob.origAllocSize, util::getCurrentTimeSec());
+      XDCHECK(chainedItem->isChainedItem());
+      ::memcpy(chainedItem->getWritableMemory(), cBlob.data.data(),
+               cBlob.origAllocSize);
+      head->appendChain(std::move(chained));
+      item->markHasChainedItem();
+      XDCHECK(item->hasChainedItem());
+    }
+  }
 
   // issue the call back to decode and fix up the item if needed.
   if (config_.decodeCb) {
     config_.decodeCb(
-        EncodeDecodeContext{*item, folly::Range<ChainedItemIter>{}});
+        EncodeDecodeContext{*item, viewAsChainedAllocsRange(head.get())});
   }
   return head;
 }

@@ -61,6 +61,9 @@ class NvmCache {
 
   // Context passed in encodeCb or decodeCb. If the item has children,
   // they are passed in the form of a folly::Range.
+  // Chained items must be iterated though @chainedItemRange
+  // internal APIs getNext and getParentItem are broken for
+  // items destructed from NVM.
   struct EncodeDecodeContext {
     Item& item;
     folly::Range<ChainedItemIter> chainedItemRange;
@@ -227,7 +230,12 @@ class NvmCache {
   // @return an IOBuf allocated for the item and initialized the memory to Item
   //          based on the NvmItem
   std::unique_ptr<folly::IOBuf> createItemAsIOBuf(folly::StringPiece key,
-                                                  const NvmItem& nvmItem);
+                                                  const NvmItem& dItem);
+  // Returns an iterator to the item's chained IOBufs. The order of
+  // iteration on the item will be LIFO of the addChainedItem calls.
+  // This is only used when we have to create cache items on heap (IOBuf) for
+  // the purpose of ItemDestructor.
+  folly::Range<ChainedItemIter> viewAsChainedAllocsRange(folly::IOBuf*) const;
 
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(folly::StringPiece key);

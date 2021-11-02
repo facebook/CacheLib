@@ -31,6 +31,7 @@ using Item = AllocatorT::Item;
 using ItemHandle = AllocatorT::ItemHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
 using DestructorData = typename AllocatorT::DestructorData;
+using ChainedItemIter = AllocatorT::ChainedItemIter;
 
 class NvmCacheTest : public testing::Test {
  public:
@@ -124,6 +125,10 @@ class NvmCacheTest : public testing::Test {
     getNvmCache()->evictCB(std::forward<Params>(args)...);
   }
 
+  folly::Range<ChainedItemIter> viewAsChainedAllocsRange(folly::IOBuf* parent) {
+    return getNvmCache()->viewAsChainedAllocsRange(parent);
+  }
+
  protected:
   // Helper for ShardHashIsNotFillMapHash because we're the friend of NvmCache.
   std::pair<size_t, size_t> getNvmShardAndHashForKey(folly::StringPiece key) {
@@ -132,6 +137,10 @@ class NvmCacheTest : public testing::Test {
         typename NvmCacheT::FillMap{}.hash_function()(key) % NvmCacheT::kShards;
     return std::make_pair(shard, hash);
   }
+
+  void verifyItemInIOBuf(const std::string& key,
+                         const ItemHandle& handle,
+                         folly::IOBuf* iobuf);
 
   folly::dynamic options_;
   navy::NavyConfig config_;
