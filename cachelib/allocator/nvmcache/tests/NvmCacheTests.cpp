@@ -17,6 +17,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include <climits>
 #include <set>
 #include <thread>
 
@@ -31,7 +32,8 @@ std::string genRandomStr(size_t len) {
   std::string text;
   text.reserve(len);
   for (unsigned int i = 0; i < len; i++) {
-    text += static_cast<char>(folly::Random::rand32());
+    // avoid char 0 in string
+    text += static_cast<char>(folly::Random::rand32() % UCHAR_MAX + 1);
   }
   return text;
 }
