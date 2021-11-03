@@ -183,9 +183,6 @@ PoolStats& PoolStats::operator+=(const PoolStats& other) {
         d.oldestTimeSec = s.oldestTimeSec;
       }
 
-      d.numLockByInserts += s.numLockByInserts;
-      d.numLockByRecordAccesses += s.numLockByRecordAccesses;
-      d.numLockByRemoves += s.numLockByRemoves;
       d.numHotAccesses += s.numHotAccesses;
       d.numColdAccesses += s.numColdAccesses;
       d.numWarmAccesses += s.numWarmAccesses;

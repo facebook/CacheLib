@@ -61,7 +61,6 @@ bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
     auto func = [this, &node, curr]() {
       reconfigureLocked(curr);
       ensureNotInsertionPoint(node);
-      ++numLockByRecordAccesses_;
       if (node.isInMMContainer()) {
         lru_.moveToHead(node);
         setUpdateTime(node, curr);
@@ -203,7 +202,6 @@ bool MMLru::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
   return lruMutex_->lock_combine([this, &node, currTime]() {
-    ++numLockByInserts_;
     if (node.isInMMContainer()) {
       return false;
     }
@@ -259,7 +257,6 @@ void MMLru::Container<T, HookPtr>::removeLocked(T& node) {
 template <typename T, MMLru::Hook<T> T::*HookPtr>
 bool MMLru::Container<T, HookPtr>::remove(T& node) noexcept {
   return lruMutex_->lock_combine([this, &node]() {
-    ++numLockByRemoves_;
     if (!node.isInMMContainer()) {
       return false;
     }
@@ -340,12 +337,15 @@ MMContainerStat MMLru::Container<T, HookPtr>::getStats() const noexcept {
     // to return them
     return folly::make_array(lru_.size(),
                              tail == nullptr ? 0 : getUpdateTime(*tail),
-                             numLockByInserts_,
-                             numLockByRecordAccesses_,
-                             numLockByRemoves_,
                              lruRefreshTime_.load(std::memory_order_relaxed));
   });
-  return {stat[0], stat[1], stat[2], stat[3], stat[4], stat[5], 0, 0, 0, 0};
+  return {stat[0] /* lru size */,
+          stat[1] /* tail time */,
+          stat[2] /* refresh time */,
+          0,
+          0,
+          0,
+          0};
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>

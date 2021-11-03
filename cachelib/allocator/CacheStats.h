@@ -86,15 +86,6 @@ struct MMContainerStat {
   // the container.
   uint64_t oldestTimeSec;
 
-  // number of lock hits by inserts into the LRU
-  uint64_t numLockByInserts;
-
-  // number of lock hits by recordAccess
-  uint64_t numLockByRecordAccesses;
-
-  // number of lock hits by removes
-  uint64_t numLockByRemoves;
-
   // refresh time for LRU
   uint64_t lruRefreshTime;
 

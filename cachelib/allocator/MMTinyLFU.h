@@ -595,15 +595,6 @@ class MMTinyLFU {
     // the lru
     LruList lru_;
 
-    // number of inserts into the LRU
-    uint64_t numLockByInserts_{0};
-
-    // number of lock hits by calling recordAccess
-    uint64_t numLockByRecordAccesses_{0};
-
-    // number of lock hits by calling recordAccess on nodes not in mmContainer
-    uint64_t numLockByRemoves_{0};
-
     // the window size counter
     size_t windowSize_{0};
 

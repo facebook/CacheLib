@@ -55,7 +55,6 @@ bool MM2Q::Container<T, HookPtr>::recordAccess(T& node,
                     lruRefreshTime_.load(std::memory_order_relaxed)))) {
     auto func = [&]() {
       reconfigureLocked(curr);
-      ++numLockByRecordAccesses_;
       if (!node.isInMMContainer()) {
         return false;
       }
@@ -213,7 +212,6 @@ template <typename T, MM2Q::Hook<T> T::*HookPtr>
 bool MM2Q::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
   return lruMutex_->lock_combine([this, &node, currTime]() {
-    ++numLockByInserts_;
     if (node.isInMMContainer()) {
       return false;
     }
@@ -298,7 +296,6 @@ typename MM2Q::Config MM2Q::Container<T, HookPtr>::getConfig() const {
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 bool MM2Q::Container<T, HookPtr>::remove(T& node) noexcept {
   return lruMutex_->lock_combine([this, &node]() {
-    ++numLockByRemoves_;
     if (!node.isInMMContainer()) {
       return false;
     }
@@ -426,9 +423,6 @@ MMContainerStat MM2Q::Container<T, HookPtr>::getStats() const noexcept {
     return MMContainerStat{
         lru_.size(),
         tail == nullptr ? 0 : getUpdateTime(*tail),
-        numLockByInserts_,
-        numLockByRecordAccesses_,
-        numLockByRemoves_,
         lruRefreshTime_.load(std::memory_order_relaxed),
         numHotAccesses_,
         numColdAccesses_,

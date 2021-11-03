@@ -574,15 +574,6 @@ class MM2Q {
     // size of tail after insertion point
     size_t tailSize_{0};
 
-    // number of inserts into the LRU
-    uint64_t numLockByInserts_{0};
-
-    // number of lock hits by calling recordAccess
-    uint64_t numLockByRecordAccesses_{0};
-
-    // number of lock hits by calling recordAccess on nodes not in mmContainer
-    uint64_t numLockByRemoves_{0};
-
     // number of hits in each lru.
     uint64_t numHotAccesses_{0};
     uint64_t numColdAccesses_{0};

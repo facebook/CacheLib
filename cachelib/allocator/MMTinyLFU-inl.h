@@ -89,7 +89,6 @@ bool MMTinyLFU::Container<T, HookPtr>::recordAccess(T& node,
       return false;
     }
     reconfigureLocked(curr);
-    ++numLockByRecordAccesses_;
     if (!node.isInMMContainer()) {
       return false;
     }
@@ -180,7 +179,6 @@ template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
   LockHolder l(lruMutex_);
-  ++numLockByInserts_;
   if (node.isInMMContainer()) {
     return false;
   }
@@ -239,7 +237,6 @@ void MMTinyLFU::Container<T, HookPtr>::removeLocked(T& node) noexcept {
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::remove(T& node) noexcept {
   LockHolder l(lruMutex_);
-  ++numLockByRemoves_;
   if (!node.isInMMContainer()) {
     return false;
   }
@@ -325,9 +322,6 @@ MMContainerStat MMTinyLFU::Container<T, HookPtr>::getStats() const noexcept {
   auto* tail = lru_.size() == 0 ? nullptr : lru_.rbegin().get();
   return {lru_.size(),
           tail == nullptr ? 0 : getUpdateTime(*tail),
-          numLockByInserts_,
-          numLockByRecordAccesses_,
-          numLockByRemoves_,
           lruRefreshTime_.load(std::memory_order_relaxed),
           0,
           0,
