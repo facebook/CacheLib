@@ -101,8 +101,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   });
 
   if (config_.enableItemDestructorCheck) {
-    // TODO (zixuan) use ItemDestructor once feature is finished
-    auto removeCB = [&](const typename Allocator::RemoveCbData& data) {
+    auto removeCB = [&](const typename Allocator::DestructorData& data) {
       if (!itemRecords_.validate(data)) {
         ++invalidDestructor_;
       }
@@ -110,11 +109,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       // size of itemRecords_ (also is the number of new allocations)
       ++totalDestructor_;
     };
-    allocatorConfig_.setRemoveCallback(removeCB);
+    allocatorConfig_.setItemDestructor(removeCB);
   } else if (config_.enableItemDestructor) {
-    // TODO (zixuan) use ItemDestructor once feature is finished
-    auto removeCB = [&](const typename Allocator::RemoveCbData&) {};
-    allocatorConfig_.setRemoveCallback(removeCB);
+    auto removeCB = [&](const typename Allocator::DestructorData&) {};
+    allocatorConfig_.setItemDestructor(removeCB);
   }
 
   // Set up Navy
@@ -575,7 +573,7 @@ Stats Cache<Allocator>::getStats() const {
 }
 
 template <typename Allocator>
-void Cache<Allocator>::clearCache() {
+void Cache<Allocator>::clearCache(uint64_t errorLimit) {
   if (config_.enableItemDestructorCheck) {
     // all items leftover in the cache must be removed
     // at the end of the test to trigger ItemDestrutor
@@ -587,6 +585,7 @@ void Cache<Allocator>::clearCache() {
       cache_->remove(key);
     }
     cache_->flushNvmCache();
+    itemRecords_.findUndestructedItem(std::cout, errorLimit);
   }
 }
 

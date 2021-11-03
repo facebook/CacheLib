@@ -1,0 +1,36 @@
+// @nolint a mix workload to test the correctness of item destructor
+// most of the items are in BlockCache
+{
+  "cache_config" : {
+    "enableItemDestructorCheck" : true,
+    "cacheSizeMB" : 512,
+    "nvmCacheSizeMB" : 512
+  },
+  "test_config" :
+  {
+    "preallocateCache" : true,
+    "numOps" : 10000000,
+    "numThreads" : 32,
+    "numKeys" : 100000,
+
+
+    "keySizeRange" : [1, 8, 32, 64, 128, 256],
+    "keySizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+    "valSizeRange" : [1, 128, 1024, 4096, 10240, 20480, 40960, 60000],
+    "valSizeRangeProbability" : [0.1, 0.1, 0.2, 0.2, 0.2, 0.1, 0.1],
+
+    "chainedItemLengthRange" : [1, 2, 4, 32],
+    "chainedItemLengthRangeProbability" : [0.8, 0.18, 0.02],
+
+    "chainedItemValSizeRange" : [1, 128, 256, 1024, 4096, 20480],
+    "chainedItemValSizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+    "getRatio" : 0.2,
+    "setRatio" : 0.3,
+    "delRatio" : 0.3,
+    "updateRatio" : 0.3,
+    "addChainedRatio" : 0.3
+  }
+
+}

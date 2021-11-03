@@ -153,7 +153,7 @@ class CacheStressor : public Stressor {
       stressWorker_.join();
     }
     wg_->markShutdown();
-    cache_->clearCache();
+    cache_->clearCache(config_.maxInvalidDestructorCount);
   }
 
   // abort the stress run by indicating to the workload generator and

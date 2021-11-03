@@ -1,0 +1,36 @@
+// @nolint a mix workload to test the correctness of item destructor
+// most of the items are in BigHash
+{
+  "cache_config" : {
+    "enableItemDestructorCheck" : true,
+    "cacheSizeMB" : 128,
+    "navySmallItemMaxSize": 4052,
+    "nvmCacheSizeMB" : 512
+  },
+  "test_config" :
+  {
+    "preallocateCache" : true,
+    "numOps" : 10000000,
+    "numThreads" : 32,
+    "numKeys" : 100000,
+
+
+    "keySizeRange" : [1, 8, 32, 64],
+    "keySizeRangeProbability" : [0.3, 0.3, 0.4],
+
+    "valSizeRange" : [3600, 4000],
+    "valSizeRangeProbability" : [1],
+
+    "chainedItemLengthRange" : [1, 2, 4, 32],
+    "chainedItemLengthRangeProbability" : [0.8, 0.18, 0.02],
+
+    "chainedItemValSizeRange" : [1, 128, 256, 1024, 4096, 20480],
+    "chainedItemValSizeRangeProbability" : [0.1, 0.1, 0.2, 0.3, 0.3],
+
+    "getRatio" : 0.2,
+    "setRatio" : 0.3,
+    "delRatio" : 0.3,
+    "updateRatio" : 0.2
+  }
+
+}

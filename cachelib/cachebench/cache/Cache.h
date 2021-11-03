@@ -268,7 +268,7 @@ class Cache {
 
   // empties the cache entries by removing the keys, this will schedule the
   // destructor call backs to be executed.
-  void clearCache();
+  void clearCache(uint64_t errorLimit);
 
   // shuts down the cache for persistence. User shall not access the instance
   // until the cache is re-attached using reAttach() below.

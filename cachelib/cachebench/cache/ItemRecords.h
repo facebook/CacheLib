@@ -41,21 +41,22 @@ struct ItemRecord {
   uint32_t version{0};
   // for debug purpose, if destructor is triggered more than once
   // what is the context for previous removal.
-  RemoveContext context;
+  DestructorContext context;
+  std::string key;
 };
 
 template <typename Allocator>
 class ItemRecords {
   using Item = typename Allocator::Item;
   using ItemHandle = typename Allocator::ItemHandle;
-  using RemoveCbData = typename Allocator::RemoveCbData;
+  using DestructorData = typename Allocator::DestructorData;
 
  public:
   explicit ItemRecords(bool enable,
                        uint64_t threads = std::thread::hardware_concurrency())
       : enable_(enable), itemRecords_(threads), mutexes_(threads) {}
 
-  bool validate(const RemoveCbData& data) {
+  bool validate(const DestructorData& data) {
     if (!enable_) {
       return true;
     }
@@ -102,6 +103,7 @@ class ItemRecords {
     ptr->setVersion(0);
     auto [lock, records] = getItemRecords(idx);
     records.resize(std::max(idx / itemRecords_.size() + 1, records.size()));
+    records[idx / itemRecords_.size()].key = handle->getKey().toString();
   }
 
   size_t count() const {
@@ -127,6 +129,22 @@ class ItemRecords {
   auto getKeys() {
     std::lock_guard<std::mutex> l(keysMutex_);
     return std::move(keys_);
+  }
+
+  void findUndestructedItem(std::ostream& out, uint64_t errorLimit) {
+    // this should be executed at the end of test to find items missing
+    // destructor, lock is not needed
+    uint64_t errorCnt = 0;
+    for (const auto& records : itemRecords_) {
+      for (const auto& record : records) {
+        if (record.destructCount == 0) {
+          out << "item missing destructor " << record.key << std::endl;
+          if (++errorCnt >= errorLimit) {
+            return;
+          }
+        }
+      }
+    }
   }
 
  private:
