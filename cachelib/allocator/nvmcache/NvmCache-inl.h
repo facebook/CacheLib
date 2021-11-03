@@ -270,7 +270,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
     // Concurrent DRAM cache remove/replace/update for same item could
     // modify DRAM index, check NvmClean/NvmEvicted flag, update itemRemoved_
     // set, and unmark NvmClean flag.
-    auto lock = getItemDestructorLock();
+    auto lock = getItemDestructorLock(itemKey);
     ItemHandle hdl;
     try {
       hdl = cache_.peek(itemKey);
@@ -856,24 +856,29 @@ std::unordered_map<std::string, double> NvmCache<C>::getStatsMap() const {
 template <typename C>
 void NvmCache<C>::markNvmItemRemovedLocked(folly::StringPiece key) {
   if (itemDestructor_) {
-    itemRemoved_.insert(key);
+    itemRemoved_[getShardForKey(key)].insert(key);
   }
-}
-
-template <typename C>
-uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
-  auto lock = getItemDestructorLock();
-  return itemRemoved_.size();
 }
 
 template <typename C>
 bool NvmCache<C>::checkAndUnmarkItemRemovedLocked(folly::StringPiece key) {
-  auto it = itemRemoved_.find(key);
-  if (it != itemRemoved_.end()) {
-    itemRemoved_.erase(it);
+  auto& removedSet = itemRemoved_[getShardForKey(key)];
+  auto it = removedSet.find(key);
+  if (it != removedSet.end()) {
+    removedSet.erase(it);
     return true;
   }
   return false;
+}
+
+template <typename C>
+uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
+  uint64_t size = 0;
+  for (size_t i = 0; i < kShards; ++i) {
+    auto lock = std::unique_lock<std::mutex>{itemDestructorMutex_[i]};
+    size += itemRemoved_[i].size();
+  }
+  return size;
 }
 
 } // namespace cachelib

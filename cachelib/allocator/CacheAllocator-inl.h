@@ -993,7 +993,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
   insertInMMContainer(*(handle.getInternal()));
   ItemHandle replaced;
   try {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock()
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(handle->getKey())
                           : std::unique_lock<std::mutex>();
 
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
@@ -1570,7 +1570,7 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
                                        bool recordApiEvent) {
   bool success = false;
   {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock()
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(item.getKey())
                           : std::unique_lock<std::mutex>();
 
     success = accessContainer_->remove(item);
@@ -1617,7 +1617,7 @@ template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
   if (nvmCache_ != nullptr && item.isAccessible() && item.isNvmClean()) {
     {
-      auto lock = nvmCache_->getItemDestructorLock();
+      auto lock = nvmCache_->getItemDestructorLock(item.getKey());
       if (!item.isNvmEvicted() && item.isNvmClean() && item.isAccessible()) {
         // item is being updated and invalidated in nvm. Mark the item to avoid
         // destructor to be executed from nvm

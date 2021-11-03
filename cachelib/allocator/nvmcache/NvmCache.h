@@ -222,9 +222,11 @@ class NvmCache {
   // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
   // eviction must erase item from itemRemoved_, so there won't memory leak or
   // influence to future item with same key.
-  std::unique_lock<std::mutex> getItemDestructorLock() const {
+  std::unique_lock<std::mutex> getItemDestructorLock(
+      folly::StringPiece key) const {
     using LockType = std::unique_lock<std::mutex>;
-    return itemDestructor_ ? LockType{itemDestructorMutex_} : LockType{};
+    return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(key)]}
+                           : LockType{};
   }
 
   // For items with this key that are present in NVM, mark the DRAM to be the
@@ -237,6 +239,9 @@ class NvmCache {
   void markNvmItemRemovedLocked(folly::StringPiece key);
 
  private:
+  // returns the itemRemoved_ set size
+  // it is the number of items were both in dram and nvm
+  // and were removed from dram but not yet removed from nvm
   uint64_t getNvmItemRemovedSize() const;
 
   bool checkAndUnmarkItemRemovedLocked(folly::StringPiece key);
@@ -445,14 +450,14 @@ class NvmCache {
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::mutex itemDestructorMutex_;
+  mutable std::array<std::mutex, kShards> itemDestructorMutex_;
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
   // DRAM. The ownership of item destructor is already managed elsewhere for
   // these keys. This data struct is updated prior to issueing NvmCache::remove
   // to handle any racy eviction from NVM before the NvmCache::remove is
   // finished.
-  folly::F14FastSet<std::string> itemRemoved_;
+  std::array<folly::F14FastSet<std::string>, kShards> itemRemoved_;
 
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
