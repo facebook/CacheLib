@@ -286,12 +286,16 @@ class NvmCache {
                                                                    // waiters
     ItemHandle it; // will be set when Context is being filled
     util::LatencyTracker tracker_;
+    bool valid_;
 
     GetCtx(NvmCache& c,
            folly::StringPiece k,
            std::shared_ptr<WaitContext<ItemHandle>> ctx,
            util::LatencyTracker tracker)
-        : cache(c), key(k.toString()), tracker_(std::move(tracker)) {
+        : cache(c),
+          key(k.toString()),
+          tracker_(std::move(tracker)),
+          valid_(true) {
       it.markWentToNvm();
       addWaiter(std::move(ctx));
     }
@@ -339,6 +343,10 @@ class NvmCache {
         }
       }
     }
+
+    void invalidate() { valid_ = false; }
+
+    bool isValid() const { return valid_; }
   };
 
   // Erase entry for the ctx from the fill map
@@ -347,6 +355,18 @@ class NvmCache {
     auto key = ctx.getKey();
     auto lock = getFillLock(key);
     getFillMap(key).erase(key);
+  }
+
+  // Erase entry for the ctx from the fill map
+  // @param     key   item key
+  void invalidateFill(folly::StringPiece key) {
+    auto shard = getShardForKey(key);
+    auto lock = getFillLockForShard(shard);
+    auto& map = getFillMapForShard(shard);
+    auto it = map.find(key);
+    if (it != map.end() && it->second) {
+      it->second->invalidate();
+    }
   }
 
   // Logs and disables navy usage

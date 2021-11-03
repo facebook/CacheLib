@@ -231,6 +231,11 @@ template <typename C>
 void NvmCache<C>::evictCB(navy::BufferView key,
                           navy::BufferView value,
                           navy::DestructorEvent event) {
+  folly::StringPiece itemKey{reinterpret_cast<const char*>(key.data()),
+                             key.size()};
+  // invalidate any inflight lookup that is on flight since we are evicting it.
+  invalidateFill(itemKey);
+
   const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
 
   if (event == cachelib::navy::DestructorEvent::Recycled) {
@@ -254,9 +259,6 @@ void NvmCache<C>::evictCB(navy::BufferView key,
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
   }
-
-  folly::StringPiece itemKey{reinterpret_cast<const char*>(key.data()),
-                             key.size()};
 
   bool needDestructor = true;
   {
@@ -619,8 +621,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   XDCHECK(it->isNvmClean());
 
   auto lock = getFillLock(key);
-  if (hasTombStone(key)) {
-    // a racing remove while we were filling
+  if (hasTombStone(key) || !ctx.isValid()) {
+    // a racing remove or evict while we were filling
     stats().numNvmGetMiss.inc();
     return;
   }
