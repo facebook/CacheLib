@@ -674,6 +674,39 @@ TEST(BigHash, BloomFilterRecovery) {
     actual = device->releaseRealDevice();
   }
 }
+
+TEST(BigHash, DestructorCallbackOutsideLock) {
+  BigHash::Config config;
+  setLayout(config, 64, 1);
+  auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 64);
+  config.device = device.get();
+
+  bool done = false, started = false;
+  config.destructorCb = [&](BufferView, BufferView, DestructorEvent event) {
+    started = true;
+    // only hangs the insertion not removal
+    while (!done && event == DestructorEvent::Recycled)
+      ;
+  };
+
+  BigHash bh(std::move(config));
+  EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 1")));
+
+  // insert will hang in the destructor, but lock should be released once
+  // destructorCB starts
+  std::thread t([&]() {
+    EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 2")));
+  });
+
+  // wait until destrcutor started, which means bucket lock is released
+  while (!started)
+    ;
+  // remove should not be blocked since bucket lock has been released
+  EXPECT_EQ(Status::Ok, bh.remove(makeHK("key 1")));
+
+  done = true;
+  t.join();
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

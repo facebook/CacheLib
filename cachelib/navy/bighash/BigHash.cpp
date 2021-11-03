@@ -238,6 +238,15 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
 
   uint32_t oldRemainingBytes = 0;
   uint32_t newRemainingBytes = 0;
+
+  // we copy the items and trigger the destructorCb after bucket lock is
+  // released to avoid possible heavy operations or locks in the destrcutor.
+  std::vector<std::tuple<Buffer, Buffer, DestructorEvent>> removedItems;
+  DestructorCallback cb =
+      [&removedItems](BufferView key, BufferView val, DestructorEvent event) {
+        removedItems.emplace_back(key, val, event);
+      };
+
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
     auto buffer = readBucket(bid);
@@ -248,8 +257,8 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
 
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
     oldRemainingBytes = bucket->remainingBytes();
-    removed = bucket->remove(hk, destructorCb_);
-    evicted = bucket->insert(hk, value, destructorCb_);
+    removed = bucket->remove(hk, cb);
+    evicted = bucket->insert(hk, value, cb);
     newRemainingBytes = bucket->remainingBytes();
 
     // rebuild / fix the bloom filter before we move the buffer to do the
@@ -271,6 +280,12 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
       ioErrorCount_.inc();
       return Status::DeviceError;
     }
+  }
+
+  for (const auto& item : removedItems) {
+    destructorCb_(std::get<0>(item).view() /* key */,
+                  std::get<1>(item).view() /* value */,
+                  std::get<2>(item) /* event */);
   }
 
   if (oldRemainingBytes < newRemainingBytes) {
@@ -346,6 +361,15 @@ Status BigHash::remove(HashedKey hk) {
 
   uint32_t oldRemainingBytes = 0;
   uint32_t newRemainingBytes = 0;
+
+  // we copy the items and trigger the destructorCb after bucket lock is
+  // released to avoid possible heavy operations or locks in the destrcutor.
+  Buffer valueCopy;
+  DestructorCallback cb = [&valueCopy](
+                              BufferView, BufferView value, DestructorEvent) {
+    valueCopy = Buffer{value};
+  };
+
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
     if (bfReject(bid, hk.keyHash())) {
@@ -360,7 +384,7 @@ Status BigHash::remove(HashedKey hk) {
 
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
     oldRemainingBytes = bucket->remainingBytes();
-    if (!bucket->remove(hk, destructorCb_)) {
+    if (!bucket->remove(hk, cb)) {
       bfFalsePositiveCount_.inc();
       return Status::NotFound;
     }
@@ -380,6 +404,10 @@ Status BigHash::remove(HashedKey hk) {
       ioErrorCount_.inc();
       return Status::DeviceError;
     }
+  }
+
+  if (!valueCopy.isNull()) {
+    destructorCb_(hk.key(), valueCopy.view(), DestructorEvent::Removed);
   }
 
   XDCHECK_LE(oldRemainingBytes, newRemainingBytes);
