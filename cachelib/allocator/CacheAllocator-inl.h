@@ -16,9 +16,6 @@
 
 #pragma once
 
-#include "cachelib/allocator/CacheVersion.h"
-#include "cachelib/common/Utils.h"
-
 namespace facebook {
 namespace cachelib {
 
@@ -735,10 +732,20 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     config_.removeCb(RemoveCbData{ctx, it, viewAsChainedAllocsRange(it)});
   }
 
-  if (!nascent && (!it.isNvmClean() || it.isNvmEvicted()) &&
-      config_.itemDestructor) {
-    config_.itemDestructor(
-        DestructorData{ctx, it, viewAsChainedAllocsRange(it)});
+  // only skip destructor for evicted items that are either in the queue to put
+  // into nvm or already in nvm
+  if (!nascent && config_.itemDestructor &&
+      (ctx != RemoveContext::kEviction || !it.isNvmClean() ||
+       it.isNvmEvicted())) {
+    try {
+      config_.itemDestructor(
+          DestructorData{ctx, it, viewAsChainedAllocsRange(it)});
+      stats().numRamDestructorCalls.inc();
+    } catch (const std::exception& e) {
+      stats().numDestructorExceptions.inc();
+      XLOG_EVERY_N(INFO, 100)
+          << "Catch exception from user's item destructor: " << e.what();
+    }
   }
 
   // If no `toRecycle` is set, then the result is kReleased
@@ -986,8 +993,18 @@ CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
   insertInMMContainer(*(handle.getInternal()));
   ItemHandle replaced;
   try {
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock()
+                          : std::unique_lock<std::mutex>();
+
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
-  } catch (const exception::RefcountOverflow&) {
+
+    if (replaced && replaced->isNvmClean() && !replaced->isNvmEvicted()) {
+      // item is to be replaced and the destructor will be executed
+      // upon memory released, mark it in nvm to avoid destructor
+      // executed from nvm
+      nvmCache_->markNvmItemRemovedLocked(handle->getKey());
+    }
+  } catch (const std::exception&) {
     removeFromMMContainer(*(handle.getInternal()));
     if (auto eventTracker = getEventTracker()) {
       eventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
@@ -1551,25 +1568,33 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
                                        DeleteTombStoneGuard tombstone,
                                        bool removeFromNvm,
                                        bool recordApiEvent) {
-  // Enqueue delete to nvmCache if we know from the item that it was pulled in
-  // from NVM. If the item was not pulled in from NVM, it is not possible to
-  // have it be written to NVM.
-  if (nvmCache_ && removeFromNvm && item.isNvmClean()) {
-    if (item.getRefCount() > 0) {
-      // caller hold the handle, mark NvmEvicted so handle destructor will call
-      // ItemDestructor
-      item.markNvmEvicted();
-    }
-    XDCHECK(tombstone);
-    nvmCache_->remove(item.getKey(), std::move(tombstone));
-  }
+  bool success = false;
+  {
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock()
+                          : std::unique_lock<std::mutex>();
 
-  const bool success = accessContainer_->remove(item);
+    success = accessContainer_->remove(item);
+
+    if (removeFromNvm && success && item.isNvmClean() && !item.isNvmEvicted()) {
+      // item is to be removed and the destructor will be executed
+      // upon memory released, mark it in nvm to avoid destructor
+      // executed from nvm
+      nvmCache_->markNvmItemRemovedLocked(item.getKey());
+    }
+  }
   XDCHECK(!item.isAccessible());
 
   // remove it from the mm container. this will be no-op if it is already
   // removed.
   removeFromMMContainer(item);
+
+  // Enqueue delete to nvmCache if we know from the item that it was pulled in
+  // from NVM. If the item was not pulled in from NVM, it is not possible to
+  // have it be written to NVM.
+  if (removeFromNvm && item.isNvmClean()) {
+    XDCHECK(tombstone);
+    nvmCache_->remove(item.getKey(), std::move(tombstone));
+  }
 
   auto eventTracker = getEventTracker();
   if (recordApiEvent && eventTracker) {
@@ -1591,7 +1616,15 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
   if (nvmCache_ != nullptr && item.isAccessible() && item.isNvmClean()) {
-    item.unmarkNvmClean();
+    {
+      auto lock = nvmCache_->getItemDestructorLock();
+      if (!item.isNvmEvicted() && item.isNvmClean() && item.isAccessible()) {
+        // item is being updated and invalidated in nvm. Mark the item to avoid
+        // destructor to be executed from nvm
+        nvmCache_->markNvmItemRemovedLocked(item.getKey());
+      }
+      item.unmarkNvmClean();
+    }
     nvmCache_->remove(item.getKey(),
                       nvmCache_->createDeleteTombStone(item.getKey()));
   }

@@ -479,6 +479,7 @@ Stats Cache<Allocator>::getStats() const {
 
   ret.numCacheGets = cacheStats.numCacheGets;
   ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
+  ret.numRamDestructorCalls = cacheStats.numRamDestructorCalls;
   ret.numNvmGets = cacheStats.numNvmGets;
   ret.numNvmGetMiss = cacheStats.numNvmGetMiss;
   ret.numNvmGetCoalesced = cacheStats.numNvmGetCoalesced;
@@ -493,6 +494,7 @@ Stats Cache<Allocator>::getStats() const {
   ret.numNvmUncleanEvict = cacheStats.numNvmUncleanEvict;
   ret.numNvmCleanEvict = cacheStats.numNvmCleanEvict;
   ret.numNvmCleanDoubleEvict = cacheStats.numNvmCleanDoubleEvict;
+  ret.numNvmDestructorCalls = cacheStats.numNvmDestructorCalls;
   ret.numNvmEvictions = cacheStats.numNvmEvictions;
 
   ret.numNvmDeletes = cacheStats.numNvmDeletes;
@@ -558,6 +560,7 @@ Stats Cache<Allocator>::getStats() const {
     ret.nvmWriteLatencyMicrosP999999 =
         lookup("navy_device_write_latency_us_p999999");
     ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_p100");
+    ret.numNvmItemRemovedSetSize = lookup("items_tracked_for_destructor");
 
     // track any non-zero check sum errors or io errors
     for (const auto& [k, v] : navyStats) {

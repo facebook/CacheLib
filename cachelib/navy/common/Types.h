@@ -52,6 +52,8 @@ enum class DestructorEvent {
   Recycled,
   // item is removed from NVM
   Removed,
+  // item already in the queue but failed to put into NVM
+  PutFailed,
 };
 
 // @key and @value are valid only during this callback invocation

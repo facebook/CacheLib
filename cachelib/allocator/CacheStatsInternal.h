@@ -51,6 +51,9 @@ struct Stats {
   // number of remove calls that resulted in a ram hit
   TLCounter numCacheRemoveRamHits{0};
 
+  // number of item destructor calls from ram
+  TLCounter numRamDestructorCalls{0};
+
   // number of nvm gets
   TLCounter numNvmGets{0};
 
@@ -106,6 +109,13 @@ struct Stats {
   // number of evictions that were already expired
   AtomicCounter numNvmExpiredEvict{0};
 
+  // number of item destructor calls from nvm
+  AtomicCounter numNvmDestructorCalls{0};
+
+  // number of RefcountOverflow happens causing item destructor
+  // being skipped in nvm
+  AtomicCounter numNvmDestructorRefcountOverflow{0};
+
   // number of entries that were clean in RAM, but evicted and rewritten to
   // nvmcache because the nvmcache version was evicted
   AtomicCounter numNvmPutFromClean{0};
@@ -147,6 +157,9 @@ struct Stats {
   // the number times a refcount overflow occurred, resulting in an exception
   // being thrown
   AtomicCounter numRefcountOverflow{0};
+
+  // number of exception occurred inside item destructor
+  AtomicCounter numDestructorExceptions{0};
 
   // The number of slabs being released right now.
   // This must be zero when `saveState()` is called.

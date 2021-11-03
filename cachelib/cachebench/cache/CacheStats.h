@@ -34,6 +34,7 @@ struct Stats {
 
   uint64_t numCacheGets{0};
   uint64_t numCacheGetMiss{0};
+  uint64_t numRamDestructorCalls{0};
   uint64_t numNvmGets{0};
   uint64_t numNvmGetMiss{0};
   uint64_t numNvmGetCoalesced{0};
@@ -47,10 +48,13 @@ struct Stats {
   uint64_t numNvmUncleanEvict{0};
   uint64_t numNvmCleanEvict{0};
   uint64_t numNvmCleanDoubleEvict{0};
+  uint64_t numNvmDestructorCalls{0};
   uint64_t numNvmEvictions{0};
   uint64_t numNvmBytesWritten{0};
   uint64_t numNvmNandBytesWritten{0};
   uint64_t numNvmLogicalBytesWritten{0};
+
+  uint64_t numNvmItemRemovedSetSize{0};
 
   util::PercentileStats::Estimates cacheAllocateLatencyNs;
   util::PercentileStats::Estimates cacheFindLatencyNs;
@@ -268,6 +272,12 @@ struct Stats {
         out << it.first << "  :  " << it.second << std::endl;
       }
     }
+
+    if (numRamDestructorCalls > 0 || numNvmDestructorCalls > 0) {
+      out << folly::sformat("Destructor executed from RAM {}, from NVM {}",
+                            numRamDestructorCalls, numNvmDestructorCalls)
+          << std::endl;
+    }
   }
 
   uint64_t getTotalMisses() const {
@@ -369,6 +379,11 @@ struct Stats {
 
     for (const auto& kv : nvmErrors) {
       std::cout << "NVM error. " << kv.first << " : " << kv.second << std::endl;
+      pass = false;
+    }
+
+    if (numNvmItemRemovedSetSize != 0) {
+      std::cout << "NVM error. ItemRemoved not empty" << std::endl;
       pass = false;
     }
 

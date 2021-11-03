@@ -48,13 +48,14 @@ template <int>
 struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
-  SizeVerify<sizeof(Stats)> a = SizeVerify<15856>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<15968>{};
   std::ignore = a;
   ret.numCacheGets = numCacheGets.get();
   ret.numCacheGetMiss = numCacheGetMiss.get();
   ret.numCacheGetExpiries = numCacheGetExpiries.get();
   ret.numCacheRemoves = numCacheRemoves.get();
   ret.numCacheRemoveRamHits = numCacheRemoveRamHits.get();
+  ret.numRamDestructorCalls = numRamDestructorCalls.get();
 
   ret.numNvmGets = numNvmGets.get();
   ret.numNvmGetMiss = numNvmGetMiss.get();
@@ -71,6 +72,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numNvmAbortedPutOnInflightGet = numNvmAbortedPutOnInflightGet.get();
   ret.numNvmCleanEvict = numNvmCleanEvict.get();
   ret.numNvmCleanDoubleEvict = numNvmCleanDoubleEvict.get();
+  ret.numNvmDestructorCalls = numNvmDestructorCalls.get();
+  ret.numNvmDestructorRefcountOverflow = numNvmDestructorRefcountOverflow.get();
   ret.numNvmExpiredEvict = numNvmExpiredEvict.get();
   ret.numNvmPutFromClean = numNvmPutFromClean.get();
   ret.numNvmEvictions = numNvmEvictions.get();

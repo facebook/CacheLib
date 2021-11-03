@@ -258,50 +258,102 @@ void NvmCache<C>::evictCB(navy::BufferView key,
   folly::StringPiece itemKey{reinterpret_cast<const char*>(key.data()),
                              key.size()};
 
-  ItemHandle hdl;
-  try {
-    hdl = cache_.peek(itemKey);
-  } catch (const exception::RefcountOverflow& ex) {
-    XLOGF(ERR,
-          "Refcount overflowed when trying peek at an item in "
-          "NvmCache::evictCB. key: {}, ex: {}",
-          folly::StringPiece{reinterpret_cast<const char*>(key.data()),
-                             key.size()},
-          ex.what());
+  bool needDestructor = true;
+  {
+    // The ItemDestructorLock is to protect:
+    // 1. peek item in DRAM cache,
+    // 2. check it's NvmClean flag
+    // 3. mark NvmEvicted flag
+    // 4. lookup itemRemoved_ set.
+    // Concurrent DRAM cache remove/replace/update for same item could
+    // modify DRAM index, check NvmClean/NvmEvicted flag, update itemRemoved_
+    // set, and unmark NvmClean flag.
+    auto lock = getItemDestructorLock();
+    ItemHandle hdl;
+    try {
+      hdl = cache_.peek(itemKey);
+    } catch (const exception::RefcountOverflow& ex) {
+      // TODO(zixuan) item exists in DRAM, but we can't obtain the handle
+      // and mark it as NvmEvicted. In this scenario, there are two
+      // possibilities when the item is removed from nvm.
+      // 1. destructor is not executed: The item in DRAM is still marked
+      // NvmClean, so when it is evicted from DRAM, destructor is also skipped
+      // since we infer nvm copy exists  (NvmClean && !NvmEvicted). In this
+      // case, we incorrectly skip executing an item destructor and it is also
+      // possible to leak the itemRemoved_ state if this item is
+      // removed/replaced from DRAM before this happens.
+      // 2. destructor is executed here: In addition to destructor being
+      // executed here, it could also be executed if the item was removed from
+      // DRAM and the handle goes out of scope. Among the two, (1) is preferred,
+      // until we can solve this, since executing destructor here while item
+      // handle being outstanding and being possibly used is dangerous.
+      XLOGF(ERR,
+            "Refcount overflowed when trying peek at an item in "
+            "NvmCache::evictCB. key: {}, ex: {}",
+            folly::StringPiece{reinterpret_cast<const char*>(key.data()),
+                               key.size()},
+            ex.what());
+      stats().numNvmDestructorRefcountOverflow.inc();
+      return;
+    }
+
+    if (hdl && hdl->isNvmClean()) {
+      // item found in RAM and it is NvmClean
+      // this means it is the same copy as what we are evicting/removing
+      needDestructor = false;
+      if (hdl->isNvmEvicted()) {
+        // this means we evicted something twice. This should not happen even we
+        // could have two copies in the nvm cache, since we only have one copy
+        // in index, the one not in index should not reach here.
+        stats().numNvmCleanDoubleEvict.inc();
+      } else {
+        hdl->markNvmEvicted();
+        stats().numNvmCleanEvict.inc();
+      }
+    } else {
+      if (hdl) {
+        // item found in RAM but is NOT NvmClean
+        // this happens when RAM copy is in-place updated, or replaced with a
+        // new item.
+        stats().numNvmUncleanEvict.inc();
+      }
+
+      // If we can't find item from DRAM or isNvmClean flag not set, it might be
+      // removed/replaced. Check if it is in itemRemoved_, item existing in
+      // itemRemoved_ means it was in DRAM, was removed/replaced and
+      // destructor should have been executed by the DRAM copy.
+      //
+      // PutFailed event can skip the check because when item was in flight put
+      // and failed it was the latest copy and item was not removed/replaced
+      // but it could exist in itemRemoved_ due to in-place mutation and the
+      // legacy copy in NVM is still pending to be removed.
+      if (event != cachelib::navy::DestructorEvent::PutFailed &&
+          checkAndUnmarkItemRemovedLocked(itemKey)) {
+        needDestructor = false;
+      }
+    }
   }
 
-  if (hdl && hdl->isNvmClean()) {
-    // item found in RAM and it is NvmClean
-    // this means it is the same copy as what we are evicting/removing
-    if (hdl->isNvmEvicted()) {
-      // this means we evicted something twice. This should not happen even we
-      // could have two copies in the nvm cache, since we only have one copy in
-      // index, the one not in index should not reach here.
-      stats().numNvmCleanDoubleEvict.inc();
-    } else {
-      hdl->markNvmEvicted();
-      stats().numNvmCleanEvict.inc();
-    }
-  } else {
-    if (hdl) {
-      // item found in RAM but is NOT NvmClean
-      // this happens when RAM copy is in-place updated, or replaced with a new
-      // item.
-      stats().numNvmUncleanEvict.inc();
-    }
-    // ItemDestructor
-    if (itemDestructor_) {
-      // create the item on heap instead of memory pool to avoid allocation
-      // failure and evictions from cache for a temporary item.
-      auto iobuf = createItemAsIOBuf(itemKey, nvmItem);
-      if (iobuf) {
-        auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
-        // make chained items
-        auto chained = viewAsChainedAllocsRange(iobuf.get());
-        auto context = event == cachelib::navy::DestructorEvent::Removed
-                           ? DestructorContext::kRemovedFromNVM
-                           : DestructorContext::kEvictedFromNVM;
+  // ItemDestructor
+  if (itemDestructor_ && needDestructor) {
+    // create the item on heap instead of memory pool to avoid allocation
+    // failure and evictions from cache for a temporary item.
+    auto iobuf = createItemAsIOBuf(itemKey, nvmItem);
+    if (iobuf) {
+      auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
+      // make chained items
+      auto chained = viewAsChainedAllocsRange(iobuf.get());
+      auto context = event == cachelib::navy::DestructorEvent::Removed
+                         ? DestructorContext::kRemovedFromNVM
+                         : DestructorContext::kEvictedFromNVM;
+
+      try {
         itemDestructor_(DestructorData{context, item, std::move(chained)});
+        stats().numNvmDestructorCalls.inc();
+      } catch (const std::exception& e) {
+        stats().numDestructorExceptions.inc();
+        XLOG_EVERY_N(INFO, 100)
+            << "Catch exception from user's item destructor: " << e.what();
       }
     }
   }
@@ -457,8 +509,9 @@ void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
             // we set disable navy since we got a BadState from navy
             disableNavy("Delete Failure. BadState");
           } else {
-            // put failed
-            evictCB(key, makeBufferView(val), navy::DestructorEvent::Removed);
+            // put failed, DRAM eviction happened and destructor was not
+            // executed. we unconditionally trigger destructor here for cleanup.
+            evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed);
           }
           putCleanup();
         });
@@ -475,6 +528,9 @@ void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
     }
   });
 
+  // if insertAsync is not executed or put into scheduler queue successfully,
+  // NvmClean is not marked for the item, destructor of the item will be invoked
+  // upon handle release.
   if (!executed) {
     stats().numNvmAbortedPutOnInflightGet.inc();
   }
@@ -791,7 +847,31 @@ std::unordered_map<std::string, double> NvmCache<C>::getStatsMap() const {
     DCHECK_EQ(0, statsMap.count(keyStr));
     statsMap.insert({std::move(keyStr), value});
   });
+  statsMap["items_tracked_for_destructor"] = getNvmItemRemovedSize();
   return statsMap;
+}
+
+template <typename C>
+void NvmCache<C>::markNvmItemRemovedLocked(folly::StringPiece key) {
+  if (itemDestructor_) {
+    itemRemoved_.insert(key);
+  }
+}
+
+template <typename C>
+uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
+  auto lock = getItemDestructorLock();
+  return itemRemoved_.size();
+}
+
+template <typename C>
+bool NvmCache<C>::checkAndUnmarkItemRemovedLocked(folly::StringPiece key) {
+  auto it = itemRemoved_.find(key);
+  if (it != itemRemoved_.end()) {
+    itemRemoved_.erase(it);
+    return true;
+  }
+  return false;
 }
 
 } // namespace cachelib

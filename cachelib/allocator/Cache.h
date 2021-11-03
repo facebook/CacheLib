@@ -54,9 +54,20 @@ enum class AccessMode { kRead, kWrite };
 enum class RemoveContext { kEviction, kNormal };
 // used by ItemDestructor, indicating how the item is destructed
 enum class DestructorContext {
+  // item was in dram and evicted from dram. it could have
+  // been present in nvm as well.
   kEvictedFromRAM,
+
+  // item was only in nvm and evicted from nvm
   kEvictedFromNVM,
+
+  // item was present in dram and removed by user calling
+  // remove()/insertOrReplace, or removed due to expired.
+  // it could have been present in nvm as well.
   kRemovedFromRAM,
+
+  // item was present only in nvm and removed by user calling
+  // remove()/insertOrReplace.
   kRemovedFromNVM
 };
 

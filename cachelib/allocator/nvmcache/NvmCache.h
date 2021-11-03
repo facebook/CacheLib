@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 #include <folly/dynamic.h>
 #include <folly/hash/Hash.h>
 #include <folly/json.h>
@@ -40,6 +41,7 @@
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
+#include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
@@ -210,7 +212,35 @@ class NvmCache {
     return navyCache_->updateMaxRateForDynamicRandomAP(maxRate);
   }
 
+  // This lock is to protect concurrent NvmCache evictCB and CacheAllocator
+  // remove/insertOrReplace/invalidateNvm.
+  // This lock scope within the above functions is
+  // 1. check DRAM visibility in NvmCache evictCB
+  // 2. modify DRAM visibility in CacheAllocator remove/insertOrReplace
+  // 3. check/modify NvmClean, NvmEvicted flag
+  // 4. check/modify itemRemoved_ set
+  // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
+  // eviction must erase item from itemRemoved_, so there won't memory leak or
+  // influence to future item with same key.
+  std::unique_lock<std::mutex> getItemDestructorLock() const {
+    using LockType = std::unique_lock<std::mutex>;
+    return itemDestructor_ ? LockType{itemDestructorMutex_} : LockType{};
+  }
+
+  // For items with this key that are present in NVM, mark the DRAM to be the
+  // authoritative copy for destructor events. This is usually done when items
+  // are in-place mutated/removed/replaced and the nvm copy is being
+  // invalidated by calling NvmCache::remove subsequently.
+  //
+  // caller must make sure itemDestructorLock is locked,
+  // and the item is present in NVM (NvmClean set and NvmEvicted flag unset).
+  void markNvmItemRemovedLocked(folly::StringPiece key);
+
  private:
+  uint64_t getNvmItemRemovedSize() const;
+
+  bool checkAndUnmarkItemRemovedLocked(folly::StringPiece key);
+
   detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }
 
   // creates the RAM item from NvmItem.
@@ -394,6 +424,15 @@ class NvmCache {
   std::array<TombStones, kShards> tombstones_;
 
   const ItemDestructor itemDestructor_;
+
+  mutable std::mutex itemDestructorMutex_;
+  // Used to track the keys of items present in NVM that should be excluded for
+  // executing Destructor upon eviction from NVM, if the item is not present in
+  // DRAM. The ownership of item destructor is already managed elsewhere for
+  // these keys. This data struct is updated prior to issueing NvmCache::remove
+  // to handle any racy eviction from NVM before the NvmCache::remove is
+  // finished.
+  folly::F14FastSet<std::string> itemRemoved_;
 
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 

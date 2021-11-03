@@ -43,6 +43,8 @@ const char* toString(DestructorEvent e) {
     return "Recycled";
   case DestructorEvent::Removed:
     return "Removed";
+  case DestructorEvent::PutFailed:
+    return "PutFailed";
   }
   return "Unknown";
 }

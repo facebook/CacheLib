@@ -2210,6 +2210,10 @@ TEST_F(NvmCacheTest, testItemDestructor) {
     cache.insertOrReplace(handle);
     pushToNvmCacheFromRamForTesting(key);
     removeFromRamForTesting(key);
+    handle.reset();
+    // manual remove will trigger destructor
+    destructorCount = 0;
+    destructedItems.clear();
 
     {
       auto res = this->inspectCache(key);
@@ -2261,10 +2265,9 @@ TEST_F(NvmCacheTest, testItemDestructor) {
     // wait for async remove finish
     cache.flushNvmCache();
 
-    // TODO(zixuan) enable following check in later diff
-    // ASSERT_EQ(0, destructorCount);
-    // ASSERT_TRUE(destructedItems.empty());
-    // ASSERT_FALSE(handle->isNvmEvicted());
+    ASSERT_EQ(0, destructorCount);
+    ASSERT_TRUE(destructedItems.empty());
+    ASSERT_FALSE(handle->isNvmEvicted());
   }
 
   // 3. remove the item that is in both RAM and NVM,
@@ -2295,14 +2298,12 @@ TEST_F(NvmCacheTest, testItemDestructor) {
     // wait for async remove finish
     cache.flushNvmCache();
 
-    // TODO(zixuan) enable following check in later diff
     // handle is still being hold
-    // ASSERT_EQ(0, destructorCount);
-    ASSERT_TRUE(handle->isNvmEvicted());
+    ASSERT_EQ(0, destructorCount);
     ASSERT_TRUE(handle->isNvmClean());
 
     handle.reset();
-    // ASSERT_EQ(1, destructorCount);
+    ASSERT_EQ(1, destructorCount);
   }
 
   // 4. remove the item that is in both RAM and NVM,
@@ -2371,7 +2372,11 @@ TEST_F(NvmCacheTest, testItemDestructorPutFail) {
   }
   // wait for async insert finish
   cache.flushNvmCache();
-  ASSERT_EQ(1, destructorCount);
+  // expecting two destructor count because
+  // we manually push item to nvm without evicting
+  // and remove it, both PutFail and RAM removal
+  // will trigger destructor
+  ASSERT_EQ(2, destructorCount);
   ASSERT_EQ(key, destructoredKey);
 }
 

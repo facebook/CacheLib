@@ -331,6 +331,9 @@ struct GlobalCacheStats {
   // number of remove calls that resulted in a ram hit
   uint64_t numCacheRemoveRamHits{0};
 
+  // number of item destructor calls from ram
+  uint64_t numRamDestructorCalls{0};
+
   // number of nvm gets
   uint64_t numNvmGets{0};
 
@@ -386,6 +389,13 @@ struct GlobalCacheStats {
   // number of evictions that were already expired
   uint64_t numNvmExpiredEvict{0};
 
+  // number of item destructor calls from nvm
+  uint64_t numNvmDestructorCalls{0};
+
+  // number of RefcountOverflow happens causing item destructor
+  // being skipped in nvm
+  uint64_t numNvmDestructorRefcountOverflow{0};
+
   // number of puts to nvm of a clean item in RAM due to nvm eviction.
   uint64_t numNvmPutFromClean{0};
 
@@ -396,6 +406,9 @@ struct GlobalCacheStats {
   uint64_t numNvmAllocForItemDestructor{0};
   // heap allocate errors for item destrutor
   uint64_t numNvmItemDestructorAllocErrors{0};
+
+  // size of itemRemoved_ hash set in nvm
+  uint64_t numNvmItemRemovedSetSize{0};
 
   // number of attempts to allocate an item
   uint64_t allocAttempts{0};
@@ -414,6 +427,9 @@ struct GlobalCacheStats {
 
   // number of refcount overflows
   uint64_t numRefcountOverflow{0};
+
+  // number of exception occurred inside item destructor
+  uint64_t numDestructorExceptions{0};
 
   // number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
