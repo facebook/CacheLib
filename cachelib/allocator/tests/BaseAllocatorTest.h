@@ -112,9 +112,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         stats = allocator->getPoolStats(poolId);
         int classId =
             allocator->getPool(poolId).getAllocationClassId(kItemSize);
-        ASSERT_EQ(nItems,
-                  stats.cacheStats[static_cast<ClassId>(classId + 1)]
-                      .containerStat.numLockByInserts);
         ASSERT_EQ(nItems / 3,
                   stats.cacheStats[static_cast<ClassId>(classId + 1)]
                       .containerStat.numHotAccesses);
