@@ -1654,6 +1654,9 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_decryption_errors"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_max"));
 
+  // item destructor
+  EXPECT_TRUE(cs("items_tracked_for_destructor"));
+
   // there should be no additional stats
   if (nvmStats.size()) {
     for (auto kv : nvmStats) {
