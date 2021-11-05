@@ -47,9 +47,6 @@ std::unique_ptr<facebook::cachelib::LruAllocator> make_shm_lru_allocator(
 std::unique_ptr<LruAllocatorConfig> make_lru_allocator_config() {
   return std::make_unique<LruAllocatorConfig>();
 }
-bool enable_container_memory_monitor(LruAllocatorConfig& config) {
-  return facebook::cachelib::twutil::enableMemoryMonitor(config);
-}
 std::shared_ptr<facebook::cachelib::RebalanceStrategy>
 make_hits_per_slab_rebalancer(double diff_ratio,
                               unsigned int min_retained_slabs,
