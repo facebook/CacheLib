@@ -63,9 +63,9 @@ class NvmCache {
 
   // Context passed in encodeCb or decodeCb. If the item has children,
   // they are passed in the form of a folly::Range.
-  // Chained items must be iterated though @chainedItemRange
-  // internal APIs getNext and getParentItem are broken for
-  // items destructed from NVM.
+  // Chained items must be iterated though @chainedItemRange.
+  // Other APIs used to access chained items are not compatible and should not
+  // be used.
   struct EncodeDecodeContext {
     Item& item;
     folly::Range<ChainedItemIter> chainedItemRange;

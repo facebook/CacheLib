@@ -199,9 +199,9 @@ class CacheAllocator : public CacheBase {
     // when the item is evicted/removed from NVM, the item is created on the
     // heap, functions (e.g. CacheAllocator::getAllocInfo) that assumes item is
     // located in cache slab doesn't work in such case.
-    // chained items must be iterated though @chainedAllocs
-    // internal APIs getNext and getParentItem are broken for
-    // items destructed from NVM.
+    // chained items must be iterated though @chainedAllocs.
+    // Other APIs used to access chained items are not compatible and should not
+    // be used.
     Item& item;
 
     // Iterator range pointing to chained allocs associated with @item

@@ -681,7 +681,7 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
   auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 64);
   config.device = device.get();
 
-  bool done = false, started = false;
+  std::atomic<bool> done = false, started = false;
   config.destructorCb = [&](BufferView, BufferView, DestructorEvent event) {
     started = true;
     // only hangs the insertion not removal
