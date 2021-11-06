@@ -16,26 +16,26 @@
 
 #pragma once
 
-#include "cachelib/navy/block_cache/Index.h"
-#include "cachelib/navy/common/Hash.h"
-#include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/serialization/Serialization.h"
+#include "cachelib/common/PercentileStats.h"
 #include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
-namespace navy {
-// Abstract base class of a reinsertion policy.
-class ReinsertionPolicy {
+// Abstract base class of a reinsertion policy on block cache.
+// When a region reaches eviction, every item in the region will
+// be evaluated by the policy to determine whether or not to reinsert
+// the item back to block cache.
+class BlockCacheReinsertionPolicy {
  public:
-  virtual ~ReinsertionPolicy() = default;
+  virtual ~BlockCacheReinsertionPolicy() = default;
 
-  // Determines whether or not we should keep this key around longer in cache.
+  // When the region an item belongs to is evicted, figure out
+  // whether the item should be inserted to block cache.
   virtual bool shouldReinsert(folly::StringPiece key) = 0;
 
   // Exports policy stats via CounterVisitor.
   virtual void getCounters(const util::CounterVisitor& visitor) const = 0;
 };
-} // namespace navy
+
 } // namespace cachelib
 } // namespace facebook

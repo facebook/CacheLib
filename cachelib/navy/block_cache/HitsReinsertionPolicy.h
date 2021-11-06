@@ -23,9 +23,9 @@
 #include <mutex>
 #include <vector>
 
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/block_cache/Index.h"
-#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 #include "folly/Range.h"
 
 namespace facebook {
@@ -37,7 +37,7 @@ namespace navy {
 // can better approximate a LRU than the region-based LRU. Typically users
 // apply this with a region-granularity FIFO eviction policy, or SFIFO eviction
 // policy.
-class HitsReinsertionPolicy : public ReinsertionPolicy {
+class HitsReinsertionPolicy : public BlockCacheReinsertionPolicy {
  public:
   // @param hitsThreshold how many hits for an item is eligible for reinsertion
   explicit HitsReinsertionPolicy(uint8_t hitsThreshold, const Index& index);

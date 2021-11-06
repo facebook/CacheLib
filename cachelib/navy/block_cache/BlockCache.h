@@ -31,7 +31,6 @@
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
-#include "cachelib/navy/block_cache/ReinsertionPolicy.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/common/SizeDistribution.h"
 #include "cachelib/navy/engine/Engine.h"
@@ -323,7 +322,7 @@ class BlockCache final : public Engine {
   // Create the reinsertion policy from config.
   // This function may need a reference to index and should be called the last
   // in the initialization order.
-  std::unique_ptr<ReinsertionPolicy> makeReinsertionPolicy(
+  std::unique_ptr<BlockCacheReinsertionPolicy> makeReinsertionPolicy(
       const BlockCacheReinsertionConfig& reinsertionConfig);
 
   const serialization::BlockCacheConfig config_;
@@ -361,7 +360,7 @@ class BlockCache final : public Engine {
   Allocator allocator_;
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
-  std::unique_ptr<ReinsertionPolicy> reinsertionPolicy_;
+  std::unique_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
 
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter insertHashCollisionCount_;

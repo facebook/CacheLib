@@ -149,7 +149,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 }
-std::unique_ptr<ReinsertionPolicy> BlockCache::makeReinsertionPolicy(
+std::unique_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
   auto hitsThreshold = reinsertionConfig.getHitsThreshold();
   if (hitsThreshold) {
