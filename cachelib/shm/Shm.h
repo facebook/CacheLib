@@ -48,39 +48,34 @@ class ShmSegment {
   // @param name   name of the segment
   // @param size   size of the segment.
   // @param opts   the options for the segment.
-  ShmSegment(ShmNewT,
-             std::string name,
-             size_t size,
-             ShmSegmentOpts opts = {}) {
-    if (auto *v = std::get_if<FileShmSegmentOpts>(&opts.typeOpts)) {
-      segment_ = std::make_unique<FileShmSegment>(
-        ShmNew, std::move(name), size, opts);
-    } else if (auto *v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
+  ShmSegment(ShmNewT, std::string name, size_t size, ShmSegmentOpts opts = {}) {
+    if (auto* v = std::get_if<FileShmSegmentOpts>(&opts.typeOpts)) {
+      segment_ =
+          std::make_unique<FileShmSegment>(ShmNew, std::move(name), size, opts);
+    } else if (auto* v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
       if (v->usePosix)
-        segment_ = std::make_unique<PosixShmSegment>(
-          ShmNew, std::move(name), size, opts);
+        segment_ = std::make_unique<PosixShmSegment>(ShmNew, std::move(name),
+                                                     size, opts);
       else
-        segment_ = std::make_unique<SysVShmSegment>(
-          ShmNew, std::move(name), size, opts);
+        segment_ = std::make_unique<SysVShmSegment>(ShmNew, std::move(name),
+                                                    size, opts);
     }
   }
 
   // attach to an existing segment with the given key
   // @param name   name of the segment
   // @param opts   the options for the segment.
-  ShmSegment(ShmAttachT,
-             std::string name,
-             ShmSegmentOpts opts = {}) {
+  ShmSegment(ShmAttachT, std::string name, ShmSegmentOpts opts = {}) {
     if (std::get_if<FileShmSegmentOpts>(&opts.typeOpts)) {
-      segment_ = std::make_unique<FileShmSegment>(
-        ShmAttach, std::move(name), opts);
-    } else if (auto *v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
+      segment_ =
+          std::make_unique<FileShmSegment>(ShmAttach, std::move(name), opts);
+    } else if (auto* v = std::get_if<PosixSysVSegmentOpts>(&opts.typeOpts)) {
       if (v->usePosix)
-        segment_ = std::make_unique<PosixShmSegment>(
-          ShmAttach, std::move(name), opts);
+        segment_ =
+            std::make_unique<PosixShmSegment>(ShmAttach, std::move(name), opts);
       else
-        segment_ = std::make_unique<SysVShmSegment>(
-          ShmAttach, std::move(name), opts);
+        segment_ =
+            std::make_unique<SysVShmSegment>(ShmAttach, std::move(name), opts);
     }
   }
 

@@ -37,8 +37,7 @@ void ShmTest::testAttachReadOnly() {
     // attaching to something that does not exist should fail in read only
     // mode.
     ASSERT_TRUE(isPageAlignedSize(shmSize));
-    ASSERT_THROW(ShmSegment(ShmAttach, segmentName, ropts),
-                 std::system_error);
+    ASSERT_THROW(ShmSegment(ShmAttach, segmentName, ropts), std::system_error);
   }
 
   // create a new segment

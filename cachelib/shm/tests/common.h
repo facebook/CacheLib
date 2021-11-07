@@ -98,9 +98,7 @@ class ShmTest : public ShmTestBase {
 
 class ShmTestPosix : public ShmTest {
  public:
-  ShmTestPosix() {
-    opts.typeOpts = PosixSysVSegmentOpts(true);
-  }
+  ShmTestPosix() { opts.typeOpts = PosixSysVSegmentOpts(true); }
 
  private:
   void clearSegment() override {
@@ -116,9 +114,7 @@ class ShmTestPosix : public ShmTest {
 
 class ShmTestSysV : public ShmTest {
  public:
-  ShmTestSysV() {
-    opts.typeOpts = PosixSysVSegmentOpts(false);
-  }
+  ShmTestSysV() { opts.typeOpts = PosixSysVSegmentOpts(false); }
 
  private:
   void clearSegment() override {
@@ -134,9 +130,7 @@ class ShmTestSysV : public ShmTest {
 
 class ShmTestFile : public ShmTest {
  public:
-  ShmTestFile() {
-    opts.typeOpts = FileShmSegmentOpts("/tmp/" + segmentName);
-  }
+  ShmTestFile() { opts.typeOpts = FileShmSegmentOpts("/tmp/" + segmentName); }
 
  private:
   void clearSegment() override {

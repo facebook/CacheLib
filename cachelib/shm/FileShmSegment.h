@@ -47,18 +47,16 @@ class FileShmSegment : public ShmBase {
   //
   // @param name  Name of the segment
   // @param opts  the options for attaching to the segment.
-  FileShmSegment(ShmAttachT,
-                  const std::string& name,
-                  ShmSegmentOpts opts = {});
+  FileShmSegment(ShmAttachT, const std::string& name, ShmSegmentOpts opts = {});
 
   // create a new segment
   // @param name  The name of the segment
   // @param size  The size of the segment. This will be rounded up to the
   //              nearest page size.
   FileShmSegment(ShmNewT,
-                  const std::string& name,
-                  size_t size,
-                  ShmSegmentOpts opts = {});
+                 const std::string& name,
+                 size_t size,
+                 ShmSegmentOpts opts = {});
 
   // destructor
   ~FileShmSegment() override;

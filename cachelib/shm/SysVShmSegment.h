@@ -91,8 +91,7 @@ class SysVShmSegment : public ShmBase {
   // returns the key identifier for the given name.
   static KeyType createKeyForName(const std::string& name) noexcept;
 
-private:
-
+ private:
   static int createNewSegment(key_t key,
                               size_t size,
                               const ShmSegmentOpts& opts);

@@ -30,11 +30,11 @@
 static const std::string namePrefix = "shm-test";
 using namespace facebook::cachelib::tests;
 
+using facebook::cachelib::FileShmSegmentOpts;
+using facebook::cachelib::PosixSysVSegmentOpts;
 using facebook::cachelib::ShmManager;
 using facebook::cachelib::ShmSegmentOpts;
 using facebook::cachelib::ShmTypeOpts;
-using facebook::cachelib::PosixSysVSegmentOpts;
-using facebook::cachelib::FileShmSegmentOpts;
 
 using ShutDownRes = typename facebook::cachelib::ShmManager::ShutDownRes;
 
@@ -68,11 +68,11 @@ class ShmManagerTest : public ShmTestBase {
   }
 
   virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(
-    std::string name) = 0;
+      std::string name) = 0;
   virtual void clearAllSegments() = 0;
 
   std::pair<std::string, ShmSegmentOpts> makeSegment(std::string name,
-    bool addToDestroy = true) {
+                                                     bool addToDestroy = true) {
     auto val = makeSegmentImpl(name);
     if (addToDestroy)
       segmentsToDestroy.push_back(val);
@@ -103,11 +103,11 @@ class ShmManagerTest : public ShmTestBase {
 
 class ShmManagerTestSysV : public ShmManagerTest {
  public:
-  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(std::string name)
-    override {
-      ShmSegmentOpts opts;
-      opts.typeOpts = PosixSysVSegmentOpts{false};
-      return std::pair<std::string, ShmSegmentOpts>{name, opts};
+  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(
+      std::string name) override {
+    ShmSegmentOpts opts;
+    opts.typeOpts = PosixSysVSegmentOpts{false};
+    return std::pair<std::string, ShmSegmentOpts>{name, opts};
   }
 
   void clearAllSegments() override {
@@ -119,11 +119,11 @@ class ShmManagerTestSysV : public ShmManagerTest {
 
 class ShmManagerTestPosix : public ShmManagerTest {
  public:
-  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(std::string name)
-    override {
-      ShmSegmentOpts opts;
-      opts.typeOpts = PosixSysVSegmentOpts{true};
-      return std::pair<std::string, ShmSegmentOpts>{name, opts};
+  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(
+      std::string name) override {
+    ShmSegmentOpts opts;
+    opts.typeOpts = PosixSysVSegmentOpts{true};
+    return std::pair<std::string, ShmSegmentOpts>{name, opts};
   }
 
   void clearAllSegments() override {
@@ -135,11 +135,11 @@ class ShmManagerTestPosix : public ShmManagerTest {
 
 class ShmManagerTestFile : public ShmManagerTest {
  public:
-  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(std::string name)
-    override {
-      ShmSegmentOpts opts;
-      opts.typeOpts = FileShmSegmentOpts{"/tmp/" + name};
-      return std::pair<std::string, ShmSegmentOpts>{name, opts};
+  virtual std::pair<std::string, ShmSegmentOpts> makeSegmentImpl(
+      std::string name) override {
+    ShmSegmentOpts opts;
+    opts.typeOpts = FileShmSegmentOpts{"/tmp/" + name};
+    return std::pair<std::string, ShmSegmentOpts>{name, opts};
   }
 
   void clearAllSegments() override {
@@ -186,8 +186,7 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
   // now try to attach and that should fail.
   {
     ShmManager s(cacheDir, posix);
-    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt),
-      std::invalid_argument);
+    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt), std::invalid_argument);
     auto m = s.createShm(seg1, size, addr, seg1Opt);
     checkMemory(m.addr, m.size, 0);
     writeToMemory(m.addr, m.size, magicVal);
@@ -204,8 +203,7 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
   // now try to attach and that should fail.
   {
     ShmManager s(cacheDir, posix);
-    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt),
-      std::invalid_argument);
+    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt), std::invalid_argument);
     auto m = s.createShm(seg1, size, addr, seg1Opt);
     checkMemory(m.addr, m.size, 0);
     writeToMemory(m.addr, m.size, magicVal);
@@ -224,8 +222,7 @@ void ShmManagerTest::testMetaFileDeletion(bool posix) {
     });
 
     ASSERT_NO_THROW({
-      const auto m2 = s.createShm(seg2, size, nullptr,
-        seg2Opt);
+      const auto m2 = s.createShm(seg2, size, nullptr, seg2Opt);
       writeToMemory(m2.addr, m2.size, magicVal);
       checkMemory(m2.addr, m2.size, magicVal);
     });
@@ -310,8 +307,7 @@ void ShmManagerTest::testDropFile(bool posix) {
   {
     ShmManager s(cacheDir, posix);
     ASSERT_FALSE(facebook::cachelib::util::pathExists(cacheDir + "/ColdRoll"));
-    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt),
-      std::invalid_argument);
+    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt), std::invalid_argument);
     auto m = s.createShm(seg1, size, addr, seg1Opt);
     checkMemory(m.addr, m.size, 0);
     writeToMemory(m.addr, m.size, magicVal);
@@ -344,8 +340,7 @@ void ShmManagerTest::testDropFile(bool posix) {
   // now try to attach and that should fail due to previous cold roll
   {
     ShmManager s(cacheDir, posix);
-    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt),
-      std::invalid_argument);
+    ASSERT_THROW(s.attachShm(seg1, nullptr, seg1Opt), std::invalid_argument);
   }
 }
 
@@ -653,7 +648,8 @@ void ShmManagerTest::testSegments(bool posix) {
       writeToMemory(m1.addr, m1.size, magicVal1);
       checkMemory(m1.addr, m1.size, magicVal1);
 
-      auto m2 = s.createShm(seg2, getRandomSize(), getNewUnmappedAddr(), seg2Opt);
+      auto m2 =
+          s.createShm(seg2, getRandomSize(), getNewUnmappedAddr(), seg2Opt);
       checkMemory(m2.addr, m2.size, 0);
       writeToMemory(m2.addr, m2.size, magicVal2);
       checkMemory(m2.addr, m2.size, magicVal2);
@@ -796,7 +792,7 @@ void ShmManagerTest::testShutDown(bool posix) {
     // destroyed.
     ASSERT_NO_THROW(s.createShm(seg2, seg2Size, nullptr, seg2Opt));
     ASSERT_EQ(s.getShmByName(seg2).getSize(), seg2Size);
-    auto *v = std::get_if<PosixSysVSegmentOpts>(&s.getShmTypeByName(seg2));
+    auto* v = std::get_if<PosixSysVSegmentOpts>(&s.getShmTypeByName(seg2));
     if (v)
       ASSERT_EQ(v->usePosix, posix);
 
