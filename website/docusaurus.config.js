@@ -89,7 +89,7 @@ module.exports = {
             },
             {
               label: 'Twitter',
-              href: 'https://twitter.com/FBOpenSource',
+              href: 'https://twitter.com/MetaOpenSource',
             },
           ],
         },
