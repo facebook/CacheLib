@@ -13,3 +13,7 @@ Updating to this version may cause compliation error because:
 1. CacheAllocator::allocatePermanent_deprecated.
 
 Updating to this version will not require dropping the cache.
+
+## V16
+
+This version is incompatible with versions below 15. Downgrading from this version directly to a version below 15 will require the cache to be dropped. If you need to downgrade from this version, please make sure you downgrade to version 15 first to avoid dropping the cache.

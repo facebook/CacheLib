@@ -2058,7 +2058,6 @@ void CacheAllocator<CacheTrait>::overridePoolConfig(PoolId pid,
                   .getAllocsPerSlab()
             : 0);
     DCHECK_NOTNULL(mmContainers_[pid][cid].get());
-
     mmContainers_[pid][cid]->setConfig(mmConfig);
   }
 }
@@ -2917,7 +2916,6 @@ typename CacheTrait::MMType::LruType CacheAllocator<CacheTrait>::getItemLruType(
 // ---------------------------------
 // | accessContainer_              |
 // | mmContainers_                 |
-// | emptyMMContainers             |
 // | compactCacheManager_          |
 // | allocator_                    |
 // | metadata_                     |
@@ -2969,13 +2967,6 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   MMSerializationTypeContainer mmContainersState =
       serializeMMContainers(mmContainers_);
 
-  // On version 15, persist the empty unevictable mmcontainer.
-  // So that version <= 14 can still load a metadata saved by version 15.
-  // TODO: Remove this on version 16.
-  MMContainers dummyMMContainers = createEmptyMMContainers();
-  MMSerializationTypeContainer unevictableMMContainersState =
-      serializeMMContainers(dummyMMContainers);
-
   AccessSerializationType accessContainerState = accessContainer_->saveState();
   MemoryAllocator::SerializationType allocatorState = allocator_->saveState();
   CCacheManager::SerializationType ccState = compactCacheManager_->saveState();
@@ -2990,7 +2981,6 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   Serializer::serializeToIOBufQueue(queue, allocatorState);
   Serializer::serializeToIOBufQueue(queue, ccState);
   Serializer::serializeToIOBufQueue(queue, mmContainersState);
-  Serializer::serializeToIOBufQueue(queue, unevictableMMContainersState);
   Serializer::serializeToIOBufQueue(queue, accessContainerState);
   Serializer::serializeToIOBufQueue(queue, chainedItemAccessContainerState);
   return queue;
@@ -3122,7 +3112,7 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
     }
   }
   // We need to drop the unevictableMMContainer in the desierializer.
-  // TODO: remove this when all use case are later than version 15.
+  // TODO: remove this at version 17.
   if (metadata_.allocatorVersion_ref() <= 15) {
     deserializer.deserialize<MMSerializationTypeContainer>();
   }
