@@ -1726,7 +1726,8 @@ class CacheAllocator : public CacheBase {
   // @param item    Record the item has been accessed in its mmContainer
   // @param mode    the mode of access
   // @param stats   stats object to avoid a thread local lookup.
-  void recordAccessInMMContainer(Item& item, AccessMode mode);
+  // @return true   if successfully recorded in MMContainer
+  bool recordAccessInMMContainer(Item& item, AccessMode mode);
 
   ItemHandle findChainedItem(const Item& parent) const;
 

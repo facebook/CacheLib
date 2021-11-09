@@ -292,6 +292,16 @@ class CacheAllocatorConfig {
   // smaller than this will always be rejected by NvmAdmissionPolicy.
   CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
 
+  // skip promote children items in chained when parent fail to promote
+  CacheAllocatorConfig& setSkipPromoteChildrenWhenParentFailed() {
+    skipPromoteChildrenWhenParentFailed = true;
+  }
+
+  // skip promote children items in chained when parent fail to promote
+  bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
+    return skipPromoteChildrenWhenParentFailed;
+  }
+
   // @return whether compact cache is enabled
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
@@ -550,6 +560,9 @@ class CacheAllocatorConfig {
   // The minimum TTL an item need to have in order to be admitted into NVM
   // cache.
   uint64_t nvmAdmissionMinTTL{0};
+
+  // skip promote children items in chained when parent fail to promote
+  bool skipPromoteChildrenWhenParentFailed{false};
 
   friend CacheT;
 

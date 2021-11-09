@@ -1754,9 +1754,11 @@ void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
   }
 
   auto& item = *(handle.getInternal());
-  recordAccessInMMContainer(item, mode);
+  bool recorded = recordAccessInMMContainer(item, mode);
 
-  if (LIKELY(!item.hasChainedItem())) {
+  // if parent is not recorded, skip children as well when the config is set
+  if (LIKELY(!item.hasChainedItem() ||
+             (!recorded && config_.isSkipPromoteChildrenWhenParentFailed()))) {
     return;
   }
 
@@ -1766,7 +1768,7 @@ void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
+bool CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
                                                            AccessMode mode) {
   const auto allocInfo =
       allocator_->getAllocInfo(static_cast<const void*>(&item));
@@ -1778,7 +1780,7 @@ void CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item,
   }
 
   auto& mmContainer = getMMContainer(allocInfo.poolId, allocInfo.classId);
-  mmContainer.recordAccess(item, mode);
+  return mmContainer.recordAccess(item, mode);
 }
 
 template <typename CacheTrait>
