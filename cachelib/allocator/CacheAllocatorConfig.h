@@ -293,9 +293,7 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
 
   // skip promote children items in chained when parent fail to promote
-  CacheAllocatorConfig& setSkipPromoteChildrenWhenParentFailed() {
-    skipPromoteChildrenWhenParentFailed = true;
-  }
+  CacheAllocatorConfig& setSkipPromoteChildrenWhenParentFailed();
 
   // skip promote children items in chained when parent fail to promote
   bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
@@ -943,6 +941,14 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
   }
 
   nvmAdmissionMinTTL = ttl;
+  return *this;
+}
+
+// skip promote children items in chained when parent fail to promote
+template <typename T>
+CacheAllocatorConfig<T>&
+CacheAllocatorConfig<T>::setSkipPromoteChildrenWhenParentFailed() {
+  skipPromoteChildrenWhenParentFailed = true;
   return *this;
 }
 
