@@ -20,6 +20,9 @@
 #include <folly/logging/xlog.h>
 
 #include <stdexcept>
+
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
@@ -143,7 +146,7 @@ class DynamicRandomAPConfig {
 class BlockCacheReinsertionConfig {
  public:
   BlockCacheReinsertionConfig& enableHitsBased(uint8_t hitsThreshold) {
-    if (pctThreshold_ > 0) {
+    if (pctThreshold_ > 0 || custom_) {
       throw std::invalid_argument(
           "already set reinsertion percentage threshold, should not set "
           "reinsertion hits threshold");
@@ -154,7 +157,7 @@ class BlockCacheReinsertionConfig {
   }
 
   BlockCacheReinsertionConfig& enablePctBased(unsigned int pctThreshold) {
-    if (hitsThreshold_ > 0) {
+    if (hitsThreshold_ > 0 || custom_) {
       throw std::invalid_argument(
           "already set reinsertion hits threshold, should not set reinsertion "
           "probability threshold");
@@ -169,13 +172,24 @@ class BlockCacheReinsertionConfig {
     return *this;
   }
 
+  BlockCacheReinsertionConfig& enableCustom(
+      std::shared_ptr<BlockCacheReinsertionPolicy> policy) {
+    if (hitsThreshold_ > 0 || pctThreshold_ > 0) {
+      throw std::invalid_argument(
+          "Already set reinsertion hits threshold {}, or reinsertion "
+          "probability threshold {} while trying to set a custom reinsertion "
+          "policy.");
+    }
+    custom_ = policy;
+    return *this;
+  }
+
   BlockCacheReinsertionConfig& validate() {
-    if (pctThreshold_ > 0 && hitsThreshold_ > 0) {
+    if ((pctThreshold_ > 0) + (hitsThreshold_ > 0) + (custom_ != nullptr) > 1) {
       throw std::invalid_argument(folly::sformat(
-          "pctThreshold_ {} and hitsThreshold_ {} can't be set together for "
-          "block "
-          "cache reinsertion policy.",
-          pctThreshold_, hitsThreshold_));
+          "More than one configuration for reinsertion policy is specified: "
+          "pctThreshold_ {}, hitsThreshold_ {}, custom_ {}",
+          pctThreshold_, hitsThreshold_, custom_ != nullptr));
     }
     return *this;
   }
@@ -183,6 +197,10 @@ class BlockCacheReinsertionConfig {
   uint8_t getHitsThreshold() const { return hitsThreshold_; }
 
   unsigned int getPctThreshold() const { return pctThreshold_; }
+
+  std::shared_ptr<BlockCacheReinsertionPolicy> getCustomPolicy() const {
+    return custom_;
+  }
 
  private:
   // Only one of the field below can be initialized.
@@ -194,6 +212,9 @@ class BlockCacheReinsertionConfig {
   // Threshold of a percentage based reinsertion policy with Navy BlockCache.
   // The percentage value is between 0 and 100 for reinsertion.
   unsigned int pctThreshold_{0};
+
+  // Custom created reinsertion policy.
+  std::shared_ptr<BlockCacheReinsertionPolicy> custom_{nullptr};
 };
 
 /**
@@ -234,16 +255,22 @@ class BlockCacheConfig {
   // Enable hit-based reinsertion policy.
   // When evicting regions, items that exceed this threshold of access will be
   // preserved by reinserting them internally.
-  // @throw std::invalid_argument if percentage based reinsertion policy has
-  //        been enabled.
+  // @throw std::invalid_argument if any other reinsertion policy has been
+  // enabled.
   BlockCacheConfig& enableHitsBasedReinsertion(uint8_t hitsThreshold);
 
   // Enable percentage based reinsertion policy.
   // This is used for testing where a certain fraction of evicted items
   // (governed by the percentage) are always reinserted.
-  // @throw std::invalid_argument if hit based reinsertion policy has
+  // @throw std::invalid_argument if any other reinsertion policy has
   //        been enabled or the input value is not in the range of 0~100.
   BlockCacheConfig& enablePctBasedReinsertion(unsigned int pctThreshold);
+
+  // Enable a customized reinsertion policy created by the user.
+  // @throw std::invalid_argument if any other reinsertion policy has been
+  // enabled.
+  BlockCacheConfig& enableCustomReinsertion(
+      std::shared_ptr<BlockCacheReinsertionPolicy> policy);
 
   // Set number of clean regions that are maintained for incoming write and
   // whether the writes are buffered in-memory.
@@ -299,10 +326,8 @@ class BlockCacheConfig {
   // The ratio of segments for segmented FIFO eviction policy.
   // Once segmented FIFO is enabled, lru_ will be false.
   std::vector<unsigned int> sFifoSegmentRatio_;
-
   // Config for constructing reinsertion policy.
   BlockCacheReinsertionConfig reinsertionConfig_;
-
   // Buffer of clean regions to maintain for eviction.
   uint32_t cleanRegions_{1};
   // Number of Navy BlockCache in-memory buffers.

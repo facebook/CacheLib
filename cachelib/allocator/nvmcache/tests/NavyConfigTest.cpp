@@ -19,6 +19,7 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/common/Types.h"
 namespace facebook {
@@ -51,6 +52,14 @@ const uint32_t blockCacheCleanRegions = 4;
 const bool blockCacheDataChecksum = true;
 const std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio = {111, 222,
                                                                        333};
+
+class DummyReinsertionPolicy : public BlockCacheReinsertionPolicy {
+ public:
+  bool shouldReinsert(folly::StringPiece /* key */) override { return true; }
+
+  void getCounters(const util::CounterVisitor& /* visitor */) const override {}
+};
+
 // BigCache settings
 const unsigned int bigHashSizePct = 50;
 const uint32_t bigHashBucketSize = 1024;
@@ -288,6 +297,8 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(blockCacheConfig.getSFifoSegmentRatio(),
             blockCacheSegmentedFifoSegmentRatio);
 
+  auto customPolicy = std::make_shared<DummyReinsertionPolicy>();
+
   // test cannot enable both hits-based and probability-based reinsertion policy
   config = NavyConfig{};
   EXPECT_THROW(
@@ -295,9 +306,12 @@ TEST(NavyConfigTest, BlockCache) {
           .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold)
           .enablePctBasedReinsertion(50),
       std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableCustomReinsertion(customPolicy),
+               std::invalid_argument);
   EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getHitsThreshold(),
             blockCacheReinsertionHitsThreshold);
   EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getPctThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getCustomPolicy(), nullptr);
 
   config = NavyConfig{};
   EXPECT_THROW(
@@ -305,13 +319,29 @@ TEST(NavyConfigTest, BlockCache) {
           .enablePctBasedReinsertion(50)
           .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold),
       std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableCustomReinsertion(customPolicy),
+               std::invalid_argument);
   EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getPctThreshold(), 50);
   EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getHitsThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getCustomPolicy(), nullptr);
 
   // test invalid input for percentage based reinsertion policy
   config = NavyConfig{};
   EXPECT_THROW(config.blockCache().enablePctBasedReinsertion(200),
                std::invalid_argument);
+
+  config = NavyConfig{};
+  EXPECT_THROW(config.blockCache()
+                   .enableCustomReinsertion(customPolicy)
+                   .enablePctBasedReinsertion(50),
+               std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableHitsBasedReinsertion(
+                   blockCacheReinsertionHitsThreshold),
+               std::invalid_argument);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getPctThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getHitsThreshold(), 0);
+  EXPECT_EQ(blockCacheConfig.getReinsertionConfig().getCustomPolicy(),
+            customPolicy);
 }
 
 TEST(NavyConfigTest, BigHash) {

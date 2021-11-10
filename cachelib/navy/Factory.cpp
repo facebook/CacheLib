@@ -19,14 +19,14 @@
 #include <folly/Format.h>
 #include <folly/Random.h>
 
+#include <stdexcept>
+
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/admission_policy/RejectRandomAP.h"
 #include "cachelib/navy/bighash/BigHash.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
-#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/LruPolicy.h"
-#include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 

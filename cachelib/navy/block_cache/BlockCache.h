@@ -322,7 +322,7 @@ class BlockCache final : public Engine {
   // Create the reinsertion policy from config.
   // This function may need a reference to index and should be called the last
   // in the initialization order.
-  std::unique_ptr<BlockCacheReinsertionPolicy> makeReinsertionPolicy(
+  std::shared_ptr<BlockCacheReinsertionPolicy> makeReinsertionPolicy(
       const BlockCacheReinsertionConfig& reinsertionConfig);
 
   const serialization::BlockCacheConfig config_;
@@ -360,7 +360,7 @@ class BlockCache final : public Engine {
   Allocator allocator_;
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
-  std::unique_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
+  std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
 
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter insertHashCollisionCount_;

@@ -159,6 +159,12 @@ BlockCacheConfig& BlockCacheConfig::enablePctBasedReinsertion(
   return *this;
 }
 
+BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
+    std::shared_ptr<BlockCacheReinsertionPolicy> policy) {
+  reinsertionConfig_.enableCustom(policy);
+  return *this;
+}
+
 BlockCacheConfig& BlockCacheConfig::setCleanRegions(
     uint32_t cleanRegions, bool enableInMemBuffer) noexcept {
   cleanRegions_ = cleanRegions;

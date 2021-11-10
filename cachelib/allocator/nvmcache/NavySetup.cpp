@@ -21,7 +21,6 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/Factory.h"
-#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {

@@ -149,18 +149,18 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 }
-std::unique_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
+std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
   auto hitsThreshold = reinsertionConfig.getHitsThreshold();
   if (hitsThreshold) {
-    return std::make_unique<HitsReinsertionPolicy>(hitsThreshold, index_);
+    return std::make_shared<HitsReinsertionPolicy>(hitsThreshold, index_);
   }
 
   auto pctThreshold = reinsertionConfig.getPctThreshold();
   if (pctThreshold) {
-    return std::make_unique<PercentageReinsertionPolicy>(pctThreshold);
+    return std::make_shared<PercentageReinsertionPolicy>(pctThreshold);
   }
-  return nullptr;
+  return reinsertionConfig.getCustomPolicy();
 }
 
 uint32_t BlockCache::serializedSize(uint32_t keySize,
