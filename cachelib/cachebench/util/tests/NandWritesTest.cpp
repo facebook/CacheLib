@@ -319,34 +319,34 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesWesternDigitalDevice) {
 
   constexpr auto& kSmartLogOutput = R"EOF(
   SMART Cloud Attributes :- 
-  Physical media units written -   	        0 101241498038272
-  Physical media units read    - 	        0 197202882916352
-  Bad user nand blocks - Raw			    0
-  Bad user nand blocks - Normalized		    100
-  Bad system nand blocks - Raw			    0
-  Bad system nand blocks - Normalized		100
-  XOR recovery count				        0
-  Uncorrectable read error count		    0
-  Soft ecc error count				        0
-  End to end corrected errors			    0
-  End to end detected errors			    0
-  System data percent used			        0
-  Refresh counts				            0
-  Max User data erase counts			    0
-  Min User data erase counts			    0
-  Number of Thermal throttling events		0
-  Current throttling status		  	        0x0
-  PCIe correctable error count			    6625
-  Incomplete shutdowns				        0
-  Percent free blocks				        99
-  Capacitor health				            109
-  Unaligned I/O					            0
-  Security Version Number			        0
-  NUSE - Namespace utilization			    0
-  PLP start count				            1
-  Endurance estimate				        16896000000000000
-  Log page version				            2
-  Log page GUID					            0xAFD514C97C6F4F9CA4F2BFEA2810AFC5
+  Physical media units written     	      	: 0 609651339018240
+  Physical media units read      	      	: 0 567611790770176
+  Bad user nand blocks Raw			: 0
+  Bad user nand blocks Normalized		: 100
+  Bad system nand blocks Raw			: 0
+  Bad system nand blocks Normalized		: 100
+  XOR recovery count			  	: 0
+  Uncorrectable read error count		: 0
+  Soft ecc error count				: 0
+  End to end corrected errors			: 0
+  End to end detected errors			: 0
+  System data percent used			: 0
+  Refresh counts				: 4
+  Max User data erase counts			: 293
+  Min User data erase counts			: 197
+  Number of Thermal throttling events		: 0
+  Current throttling status			: 0x0
+  PCIe correctable error count			: 0
+  Incomplete shutdowns				: 0
+  Percent free blocks				: 1
+  Capacitor health				: 114
+  Unaligned I/O				: 0
+  Security Version Number			: 0
+  NUSE Namespace utilization			: 0
+  PLP start count				: 42
+  Endurance estimate				: 16896000000000000
+  Log page version				: 2
+  Log page GUID				: 0x0xafd514c97c6f4f9ca4f2bfea2810afc5
 )EOF";
 
   mockFactory_->expectedCommands(
@@ -354,7 +354,7 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesWesternDigitalDevice) {
        {{kNvmePath, "wdc", "vs-smart-add-log", "/dev/nvme1n1"},
         kSmartLogOutput}});
   EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_),
-            101241498038272);
+		  609651339018240);
 }
 
 TEST_F(NandWritesTest, nandWriteBytes_handlesToshibaDevice) {
