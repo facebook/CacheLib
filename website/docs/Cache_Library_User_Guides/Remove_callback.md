@@ -3,6 +3,10 @@ id: Remove_callback
 title: Remove callback
 ---
 
+Use [Item Destructor](Item_Destructor) whenever is possible, contact us if it
+doesn't satisfy your requirement and RemoveCallback has to be used.
+
+
 *Remove callback* provides destructor semantics for an item in the cache. This is useful when you want to execute some logic on removal of an item from the cache. When you use cachelib APIs to concurrently allocate memory from the cache for an item, insert an item into the cache, or remove an item from the cache, the item's lifetime ends when the item is evicted or removed from the cache and the last handle held by all sources drops. *Remove callback* provides you an ability to capture this and take some appropriate action if needed.
 
 For example, suppose you want to maintain a counter for the total number of items in your cache and increment the counter when you call the `insertOrReplace()` method. The item you inserted could be evicted or removed from the cache when you again call `insertOrReplace()` or `allocate()`. To decrement the counter when the item you inserted is evicted or removed by another thread, you can have your logic encapsulated as *remove callback*.
