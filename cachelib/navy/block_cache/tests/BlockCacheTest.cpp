@@ -1967,7 +1967,7 @@ TEST(BlockCache, PersistRecoverWithInMemBuffers) {
 
   int deviceSize = 16 * 1024 * 1024;
   int ioAlignSize = 4096;
-  folly::File f = folly::File(filePath, O_RDWR|O_CREAT, S_IRWXU);
+  folly::File f = folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU);
   auto device = createDirectIoFileDevice(std::move(f), deviceSize, ioAlignSize,
                                          nullptr, 0);
 
@@ -1995,7 +1995,7 @@ TEST(BlockCache, PersistRecoverWithInMemBuffers) {
 
   driver->persist();
 
-  folly::File newF = folly::File(filePath, O_RDWR|O_CREAT, S_IRWXU);
+  folly::File newF = folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU);
   auto newDevice = createDirectIoFileDevice(std::move(newF), deviceSize,
                                             ioAlignSize, nullptr, 0);
   auto newPolicy = std::make_unique<NiceMock<MockPolicy>>(&hits);
