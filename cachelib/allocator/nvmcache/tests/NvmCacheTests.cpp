@@ -2383,6 +2383,51 @@ TEST_F(NvmCacheTest, testItemDestructorPutFail) {
   ASSERT_EQ(key, destructoredKey);
 }
 
+TEST_F(NvmCacheTest, testFindToWriteNvmInvalidation) {
+  uint32_t destructorCount = 0;
+  std::unordered_set<std::pair<std::string, std::string>> destructedItems;
+  getConfig().setRemoveCallback({});
+  getConfig().setItemDestructor([&](const DestructedData& data) {
+    ++destructorCount;
+    std::string val =
+        std::string(reinterpret_cast<const char*>(data.item.getMemory()),
+                    data.item.getSize());
+    for (auto& chained : data.chainedAllocs) {
+      val += std::string(reinterpret_cast<const char*>(chained.getMemory()),
+                         chained.getSize());
+    }
+    destructedItems.insert(std::make_pair(data.item.getKey().toString(), val));
+  });
+  auto& cache = makeCache();
+  auto pid = this->poolId();
+  std::string key = "key" + genRandomStr(10);
+  std::string val = "val" + genRandomStr(200);
+
+  auto handle = cache.allocate(pid, key, val.size());
+  ASSERT_NE(nullptr, handle.get());
+  std::memcpy(handle->getMemory(), val.data(), val.size());
+
+  cache.insertOrReplace(handle);
+  pushToNvmCacheFromRamForTesting(key);
+
+  {
+    auto res = this->inspectCache(key);
+    // in both RAM and nvmcache
+    ASSERT_NE(nullptr, res.first);
+    ASSERT_NE(nullptr, res.second);
+  }
+
+  handle = cache.findToWrite(key);
+  // wait for async remove finish
+  cache.flushNvmCache();
+
+  ASSERT_NE(nullptr, handle.get());
+  ASSERT_EQ(0, destructorCount);
+  ASSERT_TRUE(destructedItems.empty());
+  ASSERT_FALSE(handle->isNvmEvicted());
+  ASSERT_FALSE(handle->isNvmClean());
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

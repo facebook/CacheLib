@@ -446,6 +446,17 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
 
+  // look up an item by its key across the nvm cache as well if enabled. Users
+  // should call this API only when they are going to mutate the item data.
+  //
+  // @param key               the key for lookup
+  // @param isNvmInvalidate   whether to do nvm invalidation;
+  //                          defaults to be true
+  //
+  // @return      the handle for the item or a handle to nullptr if the
+  //              key does not exist.
+  ItemHandle findToWrite(Key key, bool doNvmInvalidation = true);
+
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup.
   //

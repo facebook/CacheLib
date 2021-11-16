@@ -704,15 +704,25 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
     auto poolId = alloc.addPool("default", numBytes);
 
-    auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
-    ASSERT_NE(handle, nullptr);
-    ASSERT_FALSE(isConst(handle->getMemory()));
+    {
+      auto handle = util::allocateAccessible(alloc, poolId, "key", 100);
+      ASSERT_NE(handle, nullptr);
+      ASSERT_FALSE(isConst(handle->getMemory()));
+    }
 
-    // TODO: change it to be auto after find() API change to return const
-    // itemHandle.
-    const auto handle2 = alloc.find("key");
-    ASSERT_NE(handle2, nullptr);
-    ASSERT_TRUE(isConst(handle2->getMemory()));
+    {
+      // TODO: change it to be auto after find() API change to return const
+      // itemHandle.
+      const auto handle = alloc.find("key");
+      ASSERT_NE(handle, nullptr);
+      ASSERT_TRUE(isConst(handle->getMemory()));
+    }
+
+    {
+      auto handle = alloc.findToWrite("key");
+      ASSERT_NE(handle, nullptr);
+      ASSERT_FALSE(isConst(handle->getMemory()));
+    }
   }
 
   // make some allocations without evictions and ensure that we are able to

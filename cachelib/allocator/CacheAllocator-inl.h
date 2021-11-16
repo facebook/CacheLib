@@ -1747,6 +1747,20 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
 }
 
 template <typename CacheTrait>
+typename CacheAllocator<CacheTrait>::ItemHandle
+CacheAllocator<CacheTrait>::findToWrite(typename Item::Key key,
+                                        bool doNvmInvalidation) {
+  auto handle = find(key, AccessMode::kWrite);
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  if (doNvmInvalidation) {
+    invalidateNvm(*handle);
+  }
+  return handle;
+}
+
+template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
                                             AccessMode mode) {
   if (!handle) {
