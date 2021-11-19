@@ -43,7 +43,8 @@ struct TestItem {
 
 struct TestNvmCache;
 
-using TestItemHandle = detail::HandleImpl<TestItem>;
+using TestReadHandle = detail::ReadHandleImpl<TestItem>;
+using TestItemHandle = detail::WriteHandleImpl<TestItem>;
 
 struct TestAllocator {
   using Item = int;
@@ -67,7 +68,7 @@ struct TestAllocator {
     return it != nullptr ? TestItemHandle{it, *this} : TestItemHandle{*this};
   }
 
-  void setHandle(const TestItemHandle& hdl, TestItem* k) {
+  void setHandle(const TestReadHandle& hdl, TestItem* k) {
     hdl.getItemWaitContext()->set(acquire(k));
   }
 
@@ -136,7 +137,7 @@ TEST(ItemHandleTest, WaitContext_set_wait) {
 TEST(ItemHandleTest, WaitContext_set_waitSemiFuture) {
   testing::NiceMock<TestAllocator> t;
   TestItem k;
-  auto hdl = t.getHandle();
+  TestReadHandle hdl = t.getHandle();
 
   folly::Baton<> run;
   folly::Baton<> refCountChecked;
@@ -150,7 +151,7 @@ TEST(ItemHandleTest, WaitContext_set_waitSemiFuture) {
   bool called = false;
   auto future = std::move(hdl)
                     .toSemiFuture()
-                    .deferValue([&](TestItemHandle h) {
+                    .deferValue([&](TestReadHandle h) {
                       called = true;
                       EXPECT_TRUE(h.isReady());
                       EXPECT_EQ(&k, h.get());
@@ -183,7 +184,7 @@ TEST(ItemHandleTest, WaitContext_set_waitSemiFuture_ready) {
   bool called = false;
   auto future = std::move(hdl)
                     .toSemiFuture()
-                    .deferValue([&](decltype(hdl)&& h) {
+                    .deferValue([&](TestReadHandle h) {
                       called = true;
                       EXPECT_TRUE(h.isReady());
                       EXPECT_EQ(&k, h.get());
@@ -200,7 +201,7 @@ TEST(ItemHandleTest, WaitContext_readycb) {
   TestItem k;
   bool cbFired = false;
 
-  auto cb = [&](TestItemHandle it) {
+  auto cb = [&](TestReadHandle it) {
     EXPECT_EQ(&k, it.get());
     cbFired = true;
   };
@@ -227,7 +228,7 @@ TEST(ItemHandleTest, WaitContext_ready_immediate) {
   EXPECT_FALSE(cbFired);
 
   // attaching onReady to ready handle just invokes it inline
-  auto retCallback = hdl.onReady([&](TestItemHandle it) {
+  auto retCallback = hdl.onReady([&](TestReadHandle it) {
     EXPECT_EQ(&k, it.get());
     cbFired = true;
   });
@@ -282,10 +283,10 @@ namespace detail {
 TEST(ItemHandleTest, onReadyWithNoWaitContext) {
   testing::NiceMock<TestAllocator> t;
   TestItem k;
-  TestItemHandle hdl = t.acquire(&k);
+  TestReadHandle hdl = t.acquire(&k);
   EXPECT_TRUE(hdl.isReady());
   bool cbFired = false;
-  auto myCallback = [&](TestItemHandle it) {
+  auto myCallback = [&](TestReadHandle it) {
     EXPECT_EQ(&k, it.get());
     cbFired = true;
   };

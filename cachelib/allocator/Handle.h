@@ -49,12 +49,12 @@ enum class HandleFlags : uint8_t {
 // Handle must be destroyed *before* the instance of the CacheAllocator
 // gets destroyed.
 template <typename T>
-struct HandleImpl {
+struct ReadHandleImpl {
   using Item = T;
   using CacheT = typename T::CacheT;
 
-  HandleImpl() = default;
-  HandleImpl(std::nullptr_t) {}
+  ReadHandleImpl() = default;
+  /*implicit*/ ReadHandleImpl(std::nullptr_t) {}
 
   // reset the handle by releasing the item it holds.
   void reset() noexcept {
@@ -87,58 +87,64 @@ struct HandleImpl {
     return ret;
   }
 
-  ~HandleImpl() noexcept { reset(); }
+  ~ReadHandleImpl() noexcept { reset(); }
 
-  HandleImpl(const HandleImpl&) = delete;
-  HandleImpl& operator=(const HandleImpl&) = delete;
+  ReadHandleImpl(const ReadHandleImpl&) = delete;
+  ReadHandleImpl& operator=(const ReadHandleImpl&) = delete;
 
-  FOLLY_ALWAYS_INLINE HandleImpl(HandleImpl&& other) noexcept
+  FOLLY_ALWAYS_INLINE ReadHandleImpl(ReadHandleImpl&& other) noexcept
       : alloc_(other.alloc_),
         it_(other.releaseItem()),
         waitContext_(std::move(other.waitContext_)),
         flags_(other.getFlags()) {}
 
-  FOLLY_ALWAYS_INLINE HandleImpl& operator=(HandleImpl&& other) noexcept {
+  FOLLY_ALWAYS_INLINE ReadHandleImpl& operator=(
+      ReadHandleImpl&& other) noexcept {
     if (this != &other) {
-      this->~HandleImpl();
-      new (this) HandleImpl(std::move(other));
+      this->~ReadHandleImpl();
+      new (this) ReadHandleImpl(std::move(other));
     }
     return *this;
   }
 
   // == and != operators for comparison with Item*
-  friend bool operator==(const HandleImpl& a, const Item* it) noexcept {
+  friend bool operator==(const ReadHandleImpl& a, const Item* it) noexcept {
     return a.get() == it;
   }
-  friend bool operator==(const Item* it, const HandleImpl& a) noexcept {
+  friend bool operator==(const Item* it, const ReadHandleImpl& a) noexcept {
     return a == it;
   }
-  friend bool operator!=(const HandleImpl& a, const Item* it) noexcept {
+  friend bool operator!=(const ReadHandleImpl& a, const Item* it) noexcept {
     return !(a == it);
   }
-  friend bool operator!=(const Item* it, const HandleImpl& a) noexcept {
+  friend bool operator!=(const Item* it, const ReadHandleImpl& a) noexcept {
     return !(a == it);
   }
 
   // == and != operators for comparison with nullptr
-  friend bool operator==(const HandleImpl& a, std::nullptr_t) noexcept {
+  friend bool operator==(const ReadHandleImpl& a, std::nullptr_t) noexcept {
     return a.get() == nullptr;
   }
-  friend bool operator==(std::nullptr_t nullp, const HandleImpl& a) noexcept {
+  friend bool operator==(std::nullptr_t nullp,
+                         const ReadHandleImpl& a) noexcept {
     return a == nullp;
   }
-  friend bool operator!=(const HandleImpl& a, std::nullptr_t nullp) noexcept {
+  friend bool operator!=(const ReadHandleImpl& a,
+                         std::nullptr_t nullp) noexcept {
     return !(a == nullp);
   }
-  friend bool operator!=(std::nullptr_t nullp, const HandleImpl& a) noexcept {
+  friend bool operator!=(std::nullptr_t nullp,
+                         const ReadHandleImpl& a) noexcept {
     return !(a == nullp);
   }
 
   // == and != operator
-  friend bool operator==(const HandleImpl& a, const HandleImpl& b) noexcept {
+  friend bool operator==(const ReadHandleImpl& a,
+                         const ReadHandleImpl& b) noexcept {
     return a.get() == b.get();
   }
-  friend bool operator!=(const HandleImpl& a, const HandleImpl& b) noexcept {
+  friend bool operator!=(const ReadHandleImpl& a,
+                         const ReadHandleImpl& b) noexcept {
     return !(a == b);
   }
 
@@ -147,23 +153,23 @@ struct HandleImpl {
     return get() != nullptr;
   }
 
-  // accessors. Calling get on handle with isReady() == false blocks the thread
-  // until the handle is ready.
-  FOLLY_ALWAYS_INLINE const Item* operator->() const noexcept { return get(); }
-  FOLLY_ALWAYS_INLINE Item* operator->() noexcept { return get(); }
-  FOLLY_ALWAYS_INLINE const Item& operator*() const noexcept { return *get(); }
-  FOLLY_ALWAYS_INLINE Item& operator*() noexcept { return *get(); }
+  // Accessors always return a const item.
+  FOLLY_ALWAYS_INLINE const Item* operator->() const noexcept {
+    return getInternal();
+  }
+  FOLLY_ALWAYS_INLINE const Item& operator*() const noexcept {
+    return *getInternal();
+  }
   FOLLY_ALWAYS_INLINE const Item* get() const noexcept { return getInternal(); }
-  FOLLY_ALWAYS_INLINE Item* get() noexcept { return getInternal(); }
 
   // Convert to semi future.
-  folly::SemiFuture<HandleImpl> toSemiFuture() && {
+  folly::SemiFuture<ReadHandleImpl> toSemiFuture() && {
     if (isReady()) {
-      return folly::makeSemiFuture(std::forward<HandleImpl>(*this));
+      return folly::makeSemiFuture(std::forward<ReadHandleImpl>(*this));
     }
-    folly::Promise<HandleImpl> promise;
+    folly::Promise<ReadHandleImpl> promise;
     auto semiFuture = promise.getSemiFuture();
-    auto cb = onReady([p = std::move(promise)](HandleImpl handle) mutable {
+    auto cb = onReady([p = std::move(promise)](ReadHandleImpl handle) mutable {
       p.setValue(std::move(handle));
     });
     if (cb) {
@@ -172,7 +178,7 @@ struct HandleImpl {
       cb(std::move(*this));
       return semiFuture;
     } else {
-      return std::move(semiFuture).deferValue([](HandleImpl handle) {
+      return std::move(semiFuture).deferValue([](ReadHandleImpl handle) {
         if (handle) {
           // Increment one refcount on user thread since we transferred a handle
           // from a cachelib internal thread.
@@ -183,7 +189,7 @@ struct HandleImpl {
     }
   }
 
-  using ReadyCallback = folly::Function<void(HandleImpl)>;
+  using ReadyCallback = folly::Function<void(ReadHandleImpl)>;
 
   // Return true iff item handle is ready to use.
   // Empty handles are considered ready with it_ == nullptr.
@@ -217,12 +223,26 @@ struct HandleImpl {
   // @return HandleImpl   return a handle to this item
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  HandleImpl clone() { return cloneInternal(); }
+  ReadHandleImpl clone() const {
+    ReadHandleImpl hdl{};
+    if (alloc_) {
+      hdl = alloc_->acquire(getInternal());
+    }
+    hdl.cloneFlags(*this);
+    return hdl;
+  }
 
-  const HandleImpl clone() const { return cloneInternal(); }
+  bool isWriteHandle() const { return false; }
+
+ protected:
+  // accessor. Calling get on handle with isReady() == false blocks the thread
+  // until the handle is ready.
+  FOLLY_ALWAYS_INLINE Item* getInternal() const noexcept {
+    return waitContext_ ? waitContext_->get() : it_;
+  }
 
  private:
-  struct ItemWaitContext : public WaitContext<HandleImpl> {
+  struct ItemWaitContext : public WaitContext<ReadHandleImpl> {
     explicit ItemWaitContext(CacheT& alloc) : alloc_(alloc) {}
 
     // @return      managed item pointer
@@ -286,12 +306,12 @@ struct HandleImpl {
     //  In addition, we will be bumping the handle count by 1, when SemiFuture
     //  is evaluated (via defer callback). This is because we have cloned
     //  an item handle to be passed to the SemiFuture.
-    void set(HandleImpl hdl) override {
+    void set(ReadHandleImpl hdl) override {
       XDCHECK(!isReady());
       SCOPE_EXIT { hdl.release(); };
 
       flags_ = hdl.getFlags();
-      auto it = hdl.get();
+      auto it = hdl.getInternal();
       it_.store(it, std::memory_order_release);
       // Handles are fulfilled by threads different from the owners. Adjust
       // the refcount tracking accordingly. use the local copy to not make
@@ -307,11 +327,11 @@ struct HandleImpl {
           // to 0 on this thread. In the user thread, they must increment by
           // 1. It is done automatically if the user converted their ItemHandle
           // to a SemiFuture via toSemiFuture().
-          auto itemHandle = hdl.clone();
-          if (itemHandle) {
+          auto readHandle = hdl.clone();
+          if (readHandle) {
             alloc_.adjustHandleCountForThread_private(-1);
           }
-          onReadyCallback_(std::move(itemHandle));
+          onReadyCallback_(std::move(readHandle));
         }
       }
       baton_.post();
@@ -415,19 +435,6 @@ struct HandleImpl {
     return waitContext_;
   }
 
-  FOLLY_ALWAYS_INLINE Item* getInternal() const noexcept {
-    return waitContext_ ? waitContext_->get() : it_;
-  }
-
-  HandleImpl cloneInternal() const {
-    HandleImpl hdl{};
-    if (alloc_) {
-      hdl = alloc_->acquire(getInternal());
-    }
-    hdl.cloneFlags(*this);
-    return hdl;
-  }
-
   // Internal book keeping to track handles that correspond to items that are
   // not present in cache. This state is mutated, but does not affect the user
   // visible meaning of the item handle(public API). Hence this is const.
@@ -452,7 +459,7 @@ struct HandleImpl {
   uint8_t getFlags() const {
     return waitContext_ ? waitContext_->getFlags() : flags_;
   }
-  void cloneFlags(const HandleImpl& other) { flags_ = other.getFlags(); }
+  void cloneFlags(const ReadHandleImpl& other) { flags_ = other.getFlags(); }
 
   Item* releaseItem() noexcept { return std::exchange(it_, nullptr); }
 
@@ -463,13 +470,13 @@ struct HandleImpl {
   }
 
   // Handle which has the item already
-  FOLLY_ALWAYS_INLINE HandleImpl(Item* it, CacheT& alloc) noexcept
+  FOLLY_ALWAYS_INLINE ReadHandleImpl(Item* it, CacheT& alloc) noexcept
       : alloc_(&alloc), it_(it) {}
 
   // handle that has a wait context allocated. Used for async handles
   // In this case, the it_ will be filled in asynchronously and mulitple
   // ItemHandles can wait on the one underlying handle
-  explicit HandleImpl(CacheT& alloc) noexcept
+  explicit ReadHandleImpl(CacheT& alloc) noexcept
       : alloc_(&alloc),
         it_(nullptr),
         waitContext_(std::make_shared<ItemWaitContext>(alloc)) {}
@@ -528,8 +535,80 @@ struct HandleImpl {
   FRIEND_TEST(ItemHandleTest, onReadyWithNoWaitContext);
 };
 
+// WriteHandleImpl is a sub class of ReadHandleImpl to function as a mutable
+// handle. User is able to obtain a mutable item from a "write handle".
 template <typename T>
-std::ostream& operator<<(std::ostream& os, const HandleImpl<T>& it) {
+struct WriteHandleImpl : public ReadHandleImpl<T> {
+  using Item = T;
+  using CacheT = typename T::CacheT;
+  using ReadHandle = ReadHandleImpl<T>;
+  using ReadHandle::ReadHandle; // inherit constructors
+
+  // TODO(jiayueb): remove this constructor after we finish R/W handle
+  // migration. In the end, WriteHandle should only be obtained via
+  // CacheAllocator APIs like findToWrite().
+  explicit WriteHandleImpl(ReadHandle&& readHandle)
+      : ReadHandle(std::move(readHandle)) {}
+
+  // Accessors always return a non-const item.
+  FOLLY_ALWAYS_INLINE Item* operator->() const noexcept {
+    return ReadHandle::getInternal();
+  }
+  FOLLY_ALWAYS_INLINE Item& operator*() const noexcept {
+    return *ReadHandle::getInternal();
+  }
+  FOLLY_ALWAYS_INLINE Item* get() const noexcept {
+    return ReadHandle::getInternal();
+  }
+
+  // Clones write handle. returns an empty handle if it is null.
+  // @return WriteHandleImpl   return a handle to this item
+  // @throw std::overflow_error is the maximum item refcount is execeeded by
+  //        creating this item handle.
+  WriteHandleImpl clone() const { return WriteHandleImpl{ReadHandle::clone()}; }
+
+  bool isWriteHandle() const { return true; }
+
+  // Friends
+  // Only CacheAllocator and NvmCache can create non-default constructed handles
+  friend CacheT;
+  friend typename CacheT::NvmCacheT;
+
+  // Object-cache's c++ allocator will need to create a zero refcount handle in
+  // order to access CacheAllocator API. Search for this function for details.
+  template <typename ItemHandle2, typename Item2, typename Cache2>
+  friend ItemHandle2* objcacheInitializeZeroRefcountHandle(void* handleStorage,
+                                                           Item2* it,
+                                                           Cache2& alloc);
+
+  // A handle is marked as nascent when it was not yet inserted into the cache.
+  // However, user can override it by marking an item as "not nascent" even if
+  // it's not inserted into the cache. Unmarking it means a not-yet-inserted
+  // item will still be processed by RemoveCallback if user frees it. Today,
+  // the only user who can do this is Cachelib's ObjectCache API to ensure the
+  // correct RAII behavior for an object.
+  template <typename ItemHandle2>
+  friend void objcacheUnmarkNascent(const ItemHandle2& hdl);
+
+  // Object-cache's c++ allocator needs to access CacheAllocator directly from
+  // an item handle in order to access CacheAllocator APIs.
+  template <typename ItemHandle2>
+  friend typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl);
+
+  // Following methods are only used in tests where we need to access private
+  // methods in ItemHandle
+  template <typename T1, typename T2>
+  friend T1 createHandleWithWaitContextForTest(T2&);
+  template <typename T1>
+  friend std::shared_ptr<typename T1::ItemWaitContext> getWaitContextForTest(
+      T1&);
+  FRIEND_TEST(ItemHandleTest, WaitContext_readycb);
+  FRIEND_TEST(ItemHandleTest, WaitContext_ready_immediate);
+  FRIEND_TEST(ItemHandleTest, onReadyWithNoWaitContext);
+};
+
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const ReadHandleImpl<T>& it) {
   if (it) {
     os << it->toString();
   } else {

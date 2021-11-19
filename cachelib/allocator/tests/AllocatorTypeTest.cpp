@@ -48,7 +48,7 @@ TYPED_TEST(BaseAllocatorTest, Pools) { this->testPools(); }
 
 // test whether read handle will return read-only memory and write handle can
 // return mutable memory
-TYPED_TEST(BaseAllocatorTest, GetMemory) { this->testGetMemory(); }
+TYPED_TEST(BaseAllocatorTest, ReadWriteHandle) { this->testReadWriteHandle(); }
 
 // make some allocations without evictions and ensure that we are able to
 // fetch them.

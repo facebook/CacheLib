@@ -550,6 +550,7 @@ class ChainedHashTable {
         return !(*this == other);
       }
 
+      // TODO(jiayueb): change to return ReadHandle after fixing all the breaks
       const Handle& asHandle() { return curr(); }
 
       // reset the Iterator to begin of container

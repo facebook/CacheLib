@@ -696,7 +696,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   bool isConst(const void*) { return true; }
   bool isConst(void*) { return false; }
 
-  void testGetMemory() {
+  using WriteHandle = typename AllocatorT::WriteHandle;
+  using ReadHandle = typename AllocatorT::ReadHandle;
+  void testReadWriteHandle() {
     typename AllocatorT::Config config;
     config.setCacheSize(10 * Slab::kSize);
 
@@ -711,17 +713,35 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
 
     {
-      // TODO: change it to be auto after find() API change to return const
-      // itemHandle.
-      const auto handle = alloc.find("key");
+      // TODO: change "ReadHandle" to "auto" when find() API starts to return a
+      // "read handle"
+      ReadHandle handle = alloc.find("key");
       ASSERT_NE(handle, nullptr);
       ASSERT_TRUE(isConst(handle->getMemory()));
+      ASSERT_EQ(handle.isWriteHandle(), false);
+
+      // read handle clone
+      auto handle2 = handle.clone();
+      ASSERT_TRUE(isConst(handle2->getMemory()));
+      ASSERT_EQ(handle2.isWriteHandle(), false);
     }
 
     {
       auto handle = alloc.findToWrite("key");
       ASSERT_NE(handle, nullptr);
       ASSERT_FALSE(isConst(handle->getMemory()));
+      ASSERT_EQ(handle.isWriteHandle(), true);
+
+      // write handle clone
+      auto handle2 = handle.clone();
+      ASSERT_FALSE(isConst(handle2->getMemory()));
+      ASSERT_EQ(handle2.isWriteHandle(), true);
+
+      // downgrade a write handle to a read handle
+      ReadHandle handle3 = handle.clone();
+      ASSERT_NE(handle3, nullptr);
+      ASSERT_TRUE(isConst(handle3->getMemory()));
+      ASSERT_EQ(handle3.isWriteHandle(), false);
     }
   }
 
@@ -2719,7 +2739,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(0, alloc.getHandleCountForThread());
 
       auto semiFuture = std::move(hdl).toSemiFuture().deferValue(
-          [](typename AllocatorT::ItemHandle) { return true; });
+          [](typename AllocatorT::ReadHandle) { return true; });
 
       // This is like doing a "clone" and setting it into wait context
       waitContext->set(alloc.find("test"));

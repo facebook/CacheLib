@@ -234,7 +234,9 @@ class CacheAllocator : public CacheBase {
   // caller is free to use the result of these two as long as the handle is
   // active/alive. Using the result of the above interfaces after destroying
   // the ItemHandle is UB. The ItemHandle safely wraps a pointer to the Item.
-  using ItemHandle = typename Item::Handle;
+  using ReadHandle = typename Item::ReadHandle;
+  using WriteHandle = typename Item::WriteHandle;
+  using ItemHandle = WriteHandle;
   template <typename UserType,
             typename Converter =
                 detail::DefaultUserTypeConverter<Item, UserType>>
@@ -1188,7 +1190,8 @@ class CacheAllocator : public CacheBase {
   // maintain a list of waiters
   std::shared_ptr<WaitContext<ItemHandle>> getWaitContext(
       ItemHandle& hdl) const {
-    return hdl.getItemWaitContext();
+    return std::reinterpret_pointer_cast<WaitContext<ItemHandle>>(
+        hdl.getItemWaitContext());
   }
 
   using MMContainerPtr = std::unique_ptr<MMContainer>;
@@ -1875,7 +1878,7 @@ class CacheAllocator : public CacheBase {
   // END private members
 
   // Make this friend to give access to acquire and release
-  friend ItemHandle;
+  friend ReadHandle;
   friend ReaperAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;

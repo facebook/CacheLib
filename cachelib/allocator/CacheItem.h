@@ -129,7 +129,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * the item is freed when it is not linked to access/mm containers
    * and its refcount drops to 0.
    */
-  using Handle = detail::HandleImpl<CacheItem>;
+  using ReadHandle = detail::ReadHandleImpl<CacheItem>;
+  using WriteHandle = detail::WriteHandleImpl<CacheItem>;
+  using Handle = WriteHandle;
   using HandleMaker = std::function<Handle(CacheItem*)>;
 
   /**
