@@ -196,12 +196,12 @@ For a full list of options that can be configured, see [configuring cachebench](
 
 ## Getting the Results
 
- View results summary through the log file:
+View results summary through the log file:
 
-    ```sh
-    tail -n 50 /tmp/graph_cache_leader.log
-    tail -n 50 /tmp/mc-l2-wc.log
-    ```
+```sh
+tail -n 50 /tmp/graph_cache_leader.log
+tail -n 50 /tmp/mc-l2-wc.log
+```
 ## Plotting latency stats
 The stats output can be parsed to plot SSD latency information over time. To
 do this, first ensure `gnuplot` is installed. For example, on CentOs:
