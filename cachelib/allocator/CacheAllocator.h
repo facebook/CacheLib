@@ -338,7 +338,7 @@ class CacheAllocator : public CacheBase {
   // @return    handle to the chained allocation
   // @throw     std::invalid_argument if the size requested is invalid or
   //            if the item is invalid
-  ItemHandle allocateChainedItem(const ItemHandle& parent, uint32_t size);
+  WriteHandle allocateChainedItem(const ReadHandle& parent, uint32_t size);
 
   // Link a chained item to a parent item and mark this parent handle as having
   // chained allocations.
@@ -1260,8 +1260,8 @@ class CacheAllocator : public CacheBase {
   // @return    handle to the chained allocation
   // @throw     std::invalid_argument if the size requested is invalid or
   //            if the item is invalid
-  ItemHandle allocateChainedItemInternal(const ItemHandle& parent,
-                                         uint32_t size);
+  WriteHandle allocateChainedItemInternal(const ReadHandle& parent,
+                                          uint32_t size);
 
   // Given an item and its parentKey, validate that the parentKey
   // corresponds to an item that's the parent of the supplied item.

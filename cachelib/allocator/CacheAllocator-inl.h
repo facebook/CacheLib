@@ -344,8 +344,8 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
+typename CacheAllocator<CacheTrait>::WriteHandle
+CacheAllocator<CacheTrait>::allocateChainedItem(const ReadHandle& parent,
                                                 uint32_t size) {
   if (!parent) {
     throw std::invalid_argument(
@@ -363,9 +363,9 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ItemHandle& parent,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::allocateChainedItemInternal(
-    const ItemHandle& parent, uint32_t size) {
+    const ReadHandle& parent, uint32_t size) {
   util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
@@ -389,8 +389,9 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 
   SCOPE_FAIL { allocator_->free(memory); };
 
-  auto child = acquire(new (memory) ChainedItem(
-      compressor_.compress(parent.get()), size, util::getCurrentTimeSec()));
+  auto child = acquire(
+      new (memory) ChainedItem(compressor_.compress(parent.getInternal()), size,
+                               util::getCurrentTimeSec()));
 
   if (child) {
     child.markNascent();
