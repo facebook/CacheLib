@@ -497,9 +497,6 @@ TEST_F(Lru2QAllocatorTest, MMReconfigure) {
   this->testMM2QReconfigure(mmConfig);
 }
 
-using LruAllocatorWithMovingTest = BaseAllocatorTest<LruAllocator>;
-using TinyLFUAllocatorWithMovingTest = BaseAllocatorTest<TinyLFUAllocator>;
-
 } // namespace
 
 } // end of namespace tests
