@@ -97,7 +97,7 @@ std::unique_ptr<LargeUserData> userData = getLargeUserData();
 size_t userDataSize = sizeof(LargeUserData) + sizeof(int) * userData->length;
 
 // For simplicity, we'll split the user data into 1MB chunks
-size_t numChunks = userDataSize / (1024 * 1024 * 1024);
+size_t numChunks = userDataSize / (1024 * 1024);
 
 struct CustomParentItem {
   size_t numChunks;
