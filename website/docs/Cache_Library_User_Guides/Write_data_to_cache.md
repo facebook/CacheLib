@@ -78,9 +78,11 @@ auto parent_item_handle = cache->allocate(pool_id, "parent", size);
 
 if (parent_item_handle) {
   // Call allocateChainedItem() to allocate memory for 3 chained items.
-  auto chained_item_handle_1 = cache->allocateChainedItem(parent_item_handle, 2 * size);
-  auto chained_item_handle_2 = cache->allocateChainedItem(parent_item_handle, 4 * size);
-  auto chained_item_handle_3 = cache->allocateChainedItem(parent_item_handle, 6 * size);
+  // 4 * size is invalid, Because there are other costs, see getRequiredSize().
+  // But you can create more chained items.
+  auto chained_item_handle_1 = cache->allocateChainedItem(parent_item_handle, 1 * size);
+  auto chained_item_handle_2 = cache->allocateChainedItem(parent_item_handle, 2 * size);
+  auto chained_item_handle_3 = cache->allocateChainedItem(parent_item_handle, 3 * size);
 }
 ```
 
