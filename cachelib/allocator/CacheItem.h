@@ -472,8 +472,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
 // |  a |       | y |      |
 // |  t |       | l |      |
 // |  i |       | o |      |
-// |  o |       | d |      |
-// |  n |       |   |      |
+// |  o |       | a |      |
+// |  n |       | d |      |
 // | --------------------- |
 template <typename CacheTrait>
 class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
