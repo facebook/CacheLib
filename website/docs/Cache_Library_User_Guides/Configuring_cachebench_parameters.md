@@ -78,7 +78,7 @@ You can adjust `numThreads` to run the benchmark with more threads. Running with
 
 ### Number of keys in cache
 
-To adjust the working set size of the cache, you can increase or decrease the  number of cache keys that the workload picks from.
+To adjust the working set size of the cache, you can increase or decrease the `numKeys` that the workload picks from.
 
 ### Operation ratios
 
@@ -89,7 +89,7 @@ Generates a get request resulting in `find` API call.
 Generates a set request by overriding any previous version of the key if it exists. This results in a call to the `allocate()` API, followed by a call to the `insertOrReplace()` API.
 * `delRatio`
 Generates a remove request to remove a key from the cache.
-* `adChainedRatio`
+* `addChainedRatio`
 Generates operations that allocate a chained allocation and adds it to the existing key. If the key is not present, it is created.
 * `loneGetRatio`
 Generates a get request for a key that is definitely not present in the cache to simulate one-hit-wonders or churn.

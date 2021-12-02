@@ -31,9 +31,9 @@ TEST(Serialization, Serialize) {
   for (auto& entry : *bucket.entries_ref()) {
     entry.key_ref() = i;
     entry.address_ref() = i * 10;
-    entry.sizeHint_ref() = i * 100;
-    entry.totalHits_ref() = i + 1;
-    entry.currentHits_ref() = i + 2;
+    entry.sizeHint_ref() = static_cast<short>(i * 100);
+    entry.totalHits_ref() = static_cast<signed char>(i + 1);
+    entry.currentHits_ref() = static_cast<signed char>(i + 2);
     ++i;
   }
 
