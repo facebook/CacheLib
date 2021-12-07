@@ -60,6 +60,11 @@ class Driver final : public AbstractCache {
   Driver& operator=(const Driver&) = delete;
   ~Driver() override;
 
+  // Return true if item is considered a "large item". This is meant to be
+  // a very fast check to verify a key & value pair will be considered as
+  // "small" or "large" objects.
+  bool isItemLarge(BufferView key, BufferView value) const override;
+
   // synchronous fast lookup if a key probably exists in the cache,
   // it can return a false positive result. this provides an optimization
   // to skip the heavy lookup operation when key doesn't exist in the cache.

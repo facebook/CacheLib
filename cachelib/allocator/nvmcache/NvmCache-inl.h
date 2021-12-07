@@ -254,8 +254,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
         stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
       }
     }
-
-    value.size() > navySmallItemThreshold_
+    navyCache_->isItemLarge(key, value)
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
   }
@@ -379,7 +378,6 @@ NvmCache<C>::NvmCache(C& c,
                       const ItemDestructor& itemDestructor)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
-      navySmallItemThreshold_{config_.navyConfig.getSmallItemThreshold()},
       itemDestructor_(itemDestructor) {
   navyCache_ = createNavyCache(
       config_.navyConfig,

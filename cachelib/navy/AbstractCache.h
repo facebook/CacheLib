@@ -49,6 +49,11 @@ class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
 
+  // Return true if item is considered a "large item". This is meant to be
+  // a very fast check to verify a key & value pair will be considered as
+  // "small" or "large" objects.
+  virtual bool isItemLarge(BufferView key, BufferView value) const = 0;
+
   // Checks if the key could exist in the cache. This can be used as a
   // pre-check to optimize cache lookups to avoid calling lookup in an async IO
   // environment.

@@ -75,11 +75,15 @@ Driver::~Driver() {
 
 std::pair<Engine&, Engine&> Driver::select(BufferView key,
                                            BufferView value) const {
-  if (key.size() + value.size() < smallItemMaxSize_) {
-    return {*smallItemCache_, *largeItemCache_};
-  } else {
+  if (isItemLarge(key, value)) {
     return {*largeItemCache_, *smallItemCache_};
+  } else {
+    return {*smallItemCache_, *largeItemCache_};
   }
+}
+
+bool Driver::isItemLarge(BufferView key, BufferView value) const {
+  return key.size() + value.size() > smallItemMaxSize_;
 }
 
 bool Driver::couldExist(BufferView key) {
