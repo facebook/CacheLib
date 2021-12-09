@@ -66,6 +66,13 @@ ItemHandle NvmCacheTest::fetch(folly::StringPiece key, bool ramOnly) {
   return hdl;
 }
 
+ItemHandle NvmCacheTest::fetchToWrite(folly::StringPiece key, bool ramOnly) {
+  auto hdl = ramOnly ? cache_->findFast(key, AccessMode::kWrite)
+                     : cache_->findToWrite(key);
+  hdl.wait();
+  return hdl;
+}
+
 GlobalCacheStats NvmCacheTest::getStats() const {
   return cache_->getGlobalCacheStats();
 }

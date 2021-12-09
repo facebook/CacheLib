@@ -126,7 +126,7 @@ template <typename C>
 void BufferManager<C>::materializeChainedAllocs() {
   // Copy in reverse order since then the index into the vector will line up
   // with our chained item indices given out in BufferAddr
-  auto allocs = cache_->viewAsChainedAllocs(*parent_);
+  auto allocs = cache_->viewAsWritableChainedAllocs(*parent_);
   buffers_.clear();
   for (auto& item : allocs.getChain()) {
     buffers_.push_back(&item);
@@ -197,7 +197,7 @@ template <typename C>
 void BufferManager<C>::compact() {
   // O(M + N) where M is the number of allocations in the map to compact
   // and N is the number of chained items to compact.
-  auto allocs = cache_->viewAsChainedAllocs(*parent_);
+  auto allocs = cache_->viewAsWritableChainedAllocs(*parent_);
   for (auto& item : allocs.getChain()) {
     Buffer* buffer = item.template getMemoryAs<Buffer>();
 

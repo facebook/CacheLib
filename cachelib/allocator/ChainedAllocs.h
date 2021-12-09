@@ -23,17 +23,16 @@ namespace cachelib {
 // index. The chain is traversed in the LIFO order. The caller needs to ensure
 // that there are no concurrent addChainedItem or popChainedItem while this
 // happens.
-template <typename Cache>
+template <typename Cache, typename Handle, typename Iter>
 class CacheChainedAllocs {
  public:
   using Item = typename Cache::Item;
-  using Iter = typename Cache::ChainedItemIter;
+  using ChainedItem = typename Iter::Item;
 
   CacheChainedAllocs(CacheChainedAllocs&&) = default;
   CacheChainedAllocs& operator=(CacheChainedAllocs&&) = default;
 
   // return the parent of the chain.
-  Item& getParentItem() noexcept { return *parent_; }
   const Item& getParentItem() const noexcept { return *parent_; }
   // iterate and compute the length of the chain. This is O(N) computation.
   //
@@ -45,7 +44,7 @@ class CacheChainedAllocs {
 
   // return the nTh in the chain from the beginning. n = 0 is the first in the
   // chain and last inserted.
-  Item* getNthInChain(size_t n) {
+  ChainedItem* getNthInChain(size_t n) {
     size_t i = 0;
     for (auto& c : getChain()) {
       if (i++ == n) {
@@ -64,7 +63,6 @@ class CacheChainedAllocs {
   using LockType = typename Cache::ChainedItemLock;
   using ReadLockHolder = typename LockType::ReadLockHolder;
   using PtrCompressor = typename Item::PtrCompressor;
-  using ItemHandle = typename Cache::ItemHandle;
 
   CacheChainedAllocs(const CacheChainedAllocs&) = delete;
   CacheChainedAllocs& operator=(const CacheChainedAllocs&) = delete;
@@ -76,7 +74,7 @@ class CacheChainedAllocs {
   // @param head    beginning of the chain of the allocations
   // @param c       pointer compressor to traverse the chain
   CacheChainedAllocs(ReadLockHolder l,
-                     ItemHandle parent,
+                     Handle parent,
                      Item& head,
                      const PtrCompressor& c)
       : lock_(std::move(l)),
@@ -97,7 +95,7 @@ class CacheChainedAllocs {
 
   // handle to the parent item. holding this ensures that remaining of the
   // chain is not evicted.
-  ItemHandle parent_;
+  Handle parent_;
 
   // verify this would not cause issues with the moving slab release logic.
   // Evicting logic is fine since it looks for the parent's refcount

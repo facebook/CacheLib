@@ -53,6 +53,9 @@ class NvmCacheTest : public testing::Test {
   // fetch the key. if _ramOnly_ then we only fetch it if it is in RAM.
   ItemHandle fetch(folly::StringPiece key, bool ramOnly);
 
+  // fetch the key to write. if _ramOnly_ then we only fetch it if it is in RAM.
+  ItemHandle fetchToWrite(folly::StringPiece key, bool ramOnly);
+
   // similar to fetch, but only check if it exists
   bool checkKeyExists(folly::StringPiece key, bool ramOnly);
 

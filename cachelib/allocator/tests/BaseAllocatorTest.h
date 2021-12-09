@@ -2394,7 +2394,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     // Confirm we have all the chained item iobufs
     int i = nChainedAllocs - 1;
-    for (const auto& c : chainedAllocs.getChain()) {
+    for (auto& c : chainedAllocs.getChain()) {
+      ASSERT_TRUE(isConst(c.getMemory()));
       ASSERT_EQ(*reinterpret_cast<const int*>(c.getMemory()), i);
       ASSERT_EQ(&c, chainedAllocs.getNthInChain(nChainedAllocs - i - 1));
       i--;
@@ -2433,8 +2434,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     std::vector<std::thread> threads;
     for (unsigned int i = 0; i < nChainedAllocs; ++i) {
       threads.emplace_back([&expectedMemory, &alloc, i]() {
-        auto parent = alloc.find("parent");
-        auto* nThChain = alloc.viewAsChainedAllocs(parent).getNthInChain(i);
+        auto parent = alloc.findToWrite("parent");
+        auto* nThChain =
+            alloc.viewAsWritableChainedAllocs(parent).getNthInChain(i);
         ASSERT_NE(nullptr, nThChain);
         auto newAlloc = alloc.allocateChainedItem(parent, 50);
 
@@ -2524,8 +2526,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     std::vector<const void*> expectedMemory;
     for (unsigned int i = 0; i < nChainedAllocs; i++) {
-      auto parent = alloc.find("parent");
-      auto* nThChain = alloc.viewAsChainedAllocs(parent).getNthInChain(i);
+      auto parent = alloc.findToWrite("parent");
+      auto* nThChain =
+          alloc.viewAsWritableChainedAllocs(parent).getNthInChain(i);
       ASSERT_NE(nullptr, nThChain);
       auto newAlloc = alloc.allocateChainedItem(parent, 50);
 
@@ -5496,7 +5499,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
   void testChainedItemIterator() {
     typename AllocatorT::Config config;
-    using Iterator = CacheChainedItemIterator<AllocatorT>;
+    using Iterator =
+        CacheChainedItemIterator<AllocatorT, const typename AllocatorT::Item>;
 
     config.configureChainedItems();
     config.setCacheSize(10 * Slab::kSize);
@@ -5532,7 +5536,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
   void testChainIteratorInvalidArg() {
     typename AllocatorT::Config config;
-    using Iterator = CacheChainedItemIterator<AllocatorT>;
+    using Iterator =
+        CacheChainedItemIterator<AllocatorT, const typename AllocatorT::Item>;
 
     config.configureChainedItems();
     config.setCacheSize(10 * Slab::kSize);

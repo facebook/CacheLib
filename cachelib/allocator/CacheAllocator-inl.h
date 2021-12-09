@@ -3245,8 +3245,9 @@ CacheAllocator<CacheTrait>::findChainedItem(const Item& parent) const {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ChainedAllocs
-CacheAllocator<CacheTrait>::viewAsChainedAllocs(const ItemHandle& parent) {
+template <typename Handle, typename Iter>
+CacheChainedAllocs<CacheAllocator<CacheTrait>, Handle, Iter>
+CacheAllocator<CacheTrait>::viewAsChainedAllocsT(const Handle& parent) {
   XDCHECK(parent);
   auto handle = parent.clone();
   if (!handle) {
@@ -3262,7 +3263,8 @@ CacheAllocator<CacheTrait>::viewAsChainedAllocs(const ItemHandle& parent) {
 
   auto l = chainedItemLocks_.lockShared(handle->getKey());
   auto head = findChainedItem(*handle);
-  return ChainedAllocs{std::move(l), std::move(handle), *head, compressor_};
+  return CacheChainedAllocs<CacheAllocator<CacheTrait>, Handle, Iter>{
+      std::move(l), std::move(handle), *head, compressor_};
 }
 
 template <typename CacheTrait>

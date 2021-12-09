@@ -135,6 +135,11 @@ class Cache {
     return cache_->viewAsChainedAllocs(std::forward<Params>(args)...);
   }
 
+  template <typename... Params>
+  auto viewAsWritableChainedAllocs(Params&&... args) {
+    return cache_->viewAsWritableChainedAllocs(std::forward<Params>(args)...);
+  }
+
   // Item specific accessors for the cache. This is needed since cachebench's
   // cache adds some overheads on top of Cache::Item.
 

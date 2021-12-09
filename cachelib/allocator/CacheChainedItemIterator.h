@@ -32,14 +32,13 @@ class BaseAllocatorTest;
 
 // Class to iterate through chained items in the special case that the caller
 // has the item but no itemhandle (e.g. during release)
-template <typename Cache>
+template <typename Cache, typename ItemT>
 class CacheChainedItemIterator
-    : public detail::IteratorFacade<CacheChainedItemIterator<Cache>,
-                                    typename Cache::Item,
+    : public detail::IteratorFacade<CacheChainedItemIterator<Cache, ItemT>,
+                                    ItemT,
                                     std::forward_iterator_tag> {
  public:
-  using Item = typename Cache::Item;
-
+  using Item = ItemT;
   CacheChainedItemIterator() = default;
 
   Item& dereference() const {
@@ -63,7 +62,7 @@ class CacheChainedItemIterator
     }
   }
 
-  bool equal(const CacheChainedItemIterator<Cache>& other) const {
+  bool equal(const CacheChainedItemIterator<Cache, Item>& other) const {
     if (curr_ || other.curr_) {
       return curr_ == other.curr_;
     }
@@ -111,6 +110,7 @@ class CacheChainedItemIterator
   friend Cache;
   friend typename Cache::NvmCacheT;
   friend typename Cache::ChainedAllocs;
+  friend typename Cache::WritableChainedAllocs;
 
   // For testing
   template <typename AllocatorT>

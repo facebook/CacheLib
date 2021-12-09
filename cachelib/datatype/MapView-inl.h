@@ -25,7 +25,7 @@ MapView<K, V, C>::MapView(const Item& parent,
   numBytes_ += parent.getSize();
   for (auto& item : children) {
     numBytes_ += item.getSize();
-    buffers_.push_back(reinterpret_cast<Buffer*>(item.getMemory()));
+    buffers_.push_back(reinterpret_cast<const Buffer*>(item.getMemory()));
   }
   // Copy in reverse order since then the index into the vector will line up
   // with our chained item indices given out in BufferAddr

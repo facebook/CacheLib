@@ -1106,9 +1106,9 @@ TEST_F(NvmCacheTest, ChainedItemsModifyAccessible) {
 
     // Read everything again
     {
-      auto hdl = this->fetch(key, false /* ramOnly*/);
+      auto hdl = this->fetchToWrite(key, false /* ramOnly*/);
       hdl.wait();
-      ASSERT_TRUE(hdl->isNvmClean());
+      ASSERT_FALSE(hdl->isNvmClean());
 
       vals.pop_back();
       auto newItemHandle =
@@ -1118,7 +1118,7 @@ TEST_F(NvmCacheTest, ChainedItemsModifyAccessible) {
 
       {
         auto* firstChainedItem =
-            cache.viewAsChainedAllocs(hdl).getNthInChain(0);
+            cache.viewAsWritableChainedAllocs(hdl).getNthInChain(0);
         Item& oldItem = *firstChainedItem;
         auto oldHandle =
             cache.replaceChainedItem(oldItem, std::move(newItemHandle), *hdl);
@@ -1152,7 +1152,7 @@ TEST_F(NvmCacheTest, EncodeDecode) {
           return false;
         }
 
-        for (Item& item : ctx.chainedItemRange) {
+        for (const Item& item : ctx.chainedItemRange) {
           (void)item;
           ++cnt;
         }
@@ -1164,7 +1164,7 @@ TEST_F(NvmCacheTest, EncodeDecode) {
         auto& cnt = callbacks[it.getKey().str()];
         --cnt;
 
-        for (Item& item : ctx.chainedItemRange) {
+        for (const Item& item : ctx.chainedItemRange) {
           (void)item;
           --cnt;
         }
@@ -2069,7 +2069,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
   }
 }
 
-void verifyItem(const Item& item, Item& iobufItem) {
+void verifyItem(const Item& item, const Item& iobufItem) {
   ASSERT_EQ(item.isChainedItem(), iobufItem.isChainedItem());
   ASSERT_EQ(item.hasChainedItem(), iobufItem.hasChainedItem());
   ASSERT_EQ(item.getCreationTime(), iobufItem.getCreationTime());

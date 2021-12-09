@@ -41,7 +41,7 @@ class MapView {
   using CacheType = C;
 
   using Item = typename CacheType::Item;
-  using ChainedItemIter = CacheChainedItemIterator<CacheType>;
+  using ChainedItemIter = typename CacheType::ChainedItemIter;
   using Map = Map<K, V, C>;
   using EntryKeyValue = typename Map::EntryKeyValue;
 

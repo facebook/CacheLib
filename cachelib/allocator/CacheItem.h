@@ -65,7 +65,7 @@ class ChainedItemPayload;
 template <typename C>
 class NvmCache;
 
-template <typename Cache>
+template <typename Cache, typename Handle, typename Iter>
 class CacheChainedAllocs;
 
 template <typename K, typename V, typename C>
@@ -430,8 +430,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
   friend AccessContainer;
   friend MMContainer;
   friend NvmCacheT;
-  friend CacheChainedAllocs<CacheAllocator<CacheTrait>>;
-  friend CacheChainedItemIterator<CacheAllocator<CacheTrait>>;
+  template <typename Cache, typename Handle, typename Iter>
+  friend class CacheChainedAllocs;
+  template <typename Cache, typename Item>
+  friend class CacheChainedItemIterator;
   friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
   template <typename K, typename V, typename C>
   friend class Map;
@@ -550,8 +552,10 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
 
   friend Payload;
   friend CacheAllocator<CacheTrait>;
-  friend CacheChainedAllocs<CacheAllocator<CacheTrait>>;
-  friend CacheChainedItemIterator<CacheAllocator<CacheTrait>>;
+  template <typename Cache, typename Handle, typename Iter>
+  friend class CacheChainedAllocs;
+  template <typename Cache, typename Item>
+  friend class CacheChainedItemIterator;
   friend NvmCache<CacheAllocator<CacheTrait>>;
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;

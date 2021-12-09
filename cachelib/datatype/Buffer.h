@@ -440,7 +440,7 @@ class BufferManagerIterator
  public:
   explicit BufferManagerIterator(const Mgr& mgr)
       : mgr_(mgr),
-        curr_(mgr_.cache_->viewAsChainedAllocs(*mgr_.parent_)
+        curr_(mgr_.cache_->viewAsWritableChainedAllocs(*mgr_.parent_)
                   .getNthInChain(index_)
                   ->template getMemoryAs<Buffer>()
                   ->begin()),
@@ -493,7 +493,7 @@ class BufferManagerIterator
  private:
   void incrementIntoNextBuffer() {
     while (curr_ == Buffer::Iterator{}) {
-      auto allocs = mgr_.cache_->viewAsChainedAllocs(*mgr_.parent_);
+      auto allocs = mgr_.cache_->viewAsWritableChainedAllocs(*mgr_.parent_);
       auto* item = allocs.getNthInChain(++index_);
       if (!item) {
         // we've reached the end of BufferManager

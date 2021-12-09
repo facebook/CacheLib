@@ -157,9 +157,9 @@ class PersistenceCache {
           for (uint32_t j = 0; j < numChained; ++j) {
             auto chained_item =
                 chained_allocs.getNthInChain(numChained - j - 1);
-            auto chained_data =
-                std::string(reinterpret_cast<char*>(chained_item->getMemory()),
-                            chained_item->getSize());
+            auto chained_data = std::string(
+                reinterpret_cast<const char*>(chained_item->getMemory()),
+                chained_item->getSize());
             ASSERT_EQ(chained_data,
                       folly::sformat("{}_Chained_{}", key.second, j));
           }
