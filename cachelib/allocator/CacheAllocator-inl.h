@@ -3101,7 +3101,13 @@ std::optional<bool> CacheAllocator<CacheTrait>::saveNvmCache() {
     return false;
   }
 
-  nvmCacheState_.value().markSafeShutDown();
+  if (nvmCacheState_.has_value()) {
+    nvmCacheState_.value().markSafeShutDown();
+  }
+  else {
+    XLOG(ERR, "Could not mark NvmCacheState as safe shutdown.");
+    return false;
+  }
   return true;
 }
 

@@ -945,12 +945,12 @@ class CacheAllocator : public CacheBase {
   // @return  time when the cache was created.
   time_t getCacheCreationTime() const noexcept { return cacheCreationTime_; }
 
-  // unix timestamp when the NVM cache was created. If NVM cahce isn't enaled,
-  // the cache creation time is returned instead.
+  // unix timestamp when the NVM cache was created.
+  // Return 0 if NVM cahce isn't enabled.
   //
   // @return  time when the NVM cache was created.
   time_t getNVMCacheCreationTime() const {
-    auto result = getCacheCreationTime();
+    time_t result = 0;
     if (nvmCacheState_.has_value()) {
       result = nvmCacheState_.value().getCreationTime();
     }
