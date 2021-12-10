@@ -1449,7 +1449,7 @@ class CacheAllocator : public CacheBase {
   // @param event AllocatorApiEvent that corresponds to the current operation.
   //              supported events are INSERT, corresponding to the client
   //              insert call, and INSERT_FROM_NVM, cooresponding to the insert
-  //              call that happens when an item is promoted from NVM storate
+  //              call that happens when an item is promoted from NVM storage
   //              to memory.
   //
   // @return true if the handle was successfully inserted into the hashtable
