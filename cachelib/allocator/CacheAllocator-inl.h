@@ -204,8 +204,9 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
     return;
   }
 
-  nvmCacheState_.emplace(NvmCacheState(config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
-                                       config_.isNvmCacheTruncateAllocSizeEnabled()));
+  nvmCacheState_.emplace(
+      NvmCacheState(config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
+                    config_.isNvmCacheTruncateAllocSizeEnabled()));
 
   // for some usecases that create pools, restoring nvmcache when dram cache
   // is not persisted is not supported.
@@ -3103,8 +3104,7 @@ std::optional<bool> CacheAllocator<CacheTrait>::saveNvmCache() {
 
   if (nvmCacheState_.has_value()) {
     nvmCacheState_.value().markSafeShutDown();
-  }
-  else {
+  } else {
     XLOG(ERR, "Could not mark NvmCacheState as safe shutdown.");
     return false;
   }
