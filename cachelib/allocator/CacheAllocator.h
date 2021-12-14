@@ -599,24 +599,44 @@ class CacheAllocator : public CacheBase {
   //                 to an valid item
   ItemHandle getSampleItem();
 
-  // TODO: When Read/Write Handles are ready, change this to allow
-  //       const-only access to data manged by iobuf and offer a
-  //       convertToWritableIOBuf() API.
-  //
-  // Convert an item handle to an IOBuf. The returned IOBuf gives a
+  // Convert a Read Handle to an IOBuf. The returned IOBuf gives a
   // read-only view to the user. The item's ownership is retained by
   // the IOBuf until its destruction.
   //
-  // When the item handle has one or more chained items attached to it,
+  // When the read handle has one or more chained items attached to it,
   // user will also get a series of IOBufs (first of which is the Parent).
   //
-  // @param handle    item handle that will transfer its ownership to an IOBuf
+  // **WARNING**: folly::IOBuf allows mutation to a cachelib item even when the
+  // item is read-only. User is responsible to ensure no mutation occurs (i.e.
+  // only const functions are called). If mutation is required, please use
+  // `convertToIOBufForWrite`.
+  //
+  // @param handle    read handle that will transfer its ownership to an IOBuf
   //
   // @return   an IOBuf that contains the value of the item.
-  //           This IOBuf acts as an Item Handle, on destruction, it will
+  //           This IOBuf acts as a Read Handle, on destruction, it will
   //           properly decrement the refcount (to release the item).
-  // @throw   std::invalid_argument if ItemHandle is nullptr
-  folly::IOBuf convertToIOBuf(ItemHandle handle);
+  // @throw   std::invalid_argument if ReadHandle is nullptr
+  folly::IOBuf convertToIOBuf(ReadHandle handle) {
+    return convertToIOBufT<ReadHandle>(handle);
+  }
+
+  // Convert a Write Handle to an IOBuf. The returned IOBuf gives a
+  // writable view to the user. The item's ownership is retained by
+  // the IOBuf until its destruction.
+  //
+  // When the write handle has one or more chained items attached to it,
+  // user will also get a series of IOBufs (first of which is the Parent).
+  //
+  // @param handle    write handle that will transfer its ownership to an IOBuf
+  //
+  // @return   an IOBuf that contains the value of the item.
+  //           This IOBuf acts as a Write Handle, on destruction, it will
+  //           properly decrement the refcount (to release the item).
+  // @throw   std::invalid_argument if WriteHandle is nullptr
+  folly::IOBuf convertToIOBufForWrite(WriteHandle handle) {
+    return convertToIOBufT<WriteHandle>(handle);
+  }
 
   // TODO: When Read/Write Handles are ready, change this to allow
   //       const-only access to data manged by iobuf and offer a
@@ -1350,6 +1370,11 @@ class CacheAllocator : public CacheBase {
   template <typename Handle, typename Iter>
   CacheChainedAllocs<CacheT, Handle, Iter> viewAsChainedAllocsT(
       const Handle& parent);
+
+  // template class for convertToIOBuf that takes either ReadHandle or
+  // WriteHandle
+  template <typename Handle>
+  folly::IOBuf convertToIOBufT(Handle& handle);
 
   // Moves a chained item to a different slab. This should only be used during
   // slab release after the item's moving bit has been set. The user supplied

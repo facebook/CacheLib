@@ -1852,12 +1852,13 @@ std::vector<std::string> CacheAllocator<CacheTrait>::dumpEvictionIterator(
 }
 
 template <typename CacheTrait>
-folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
+template <typename Handle>
+folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBufT(Handle& handle) {
   if (!handle) {
     throw std::invalid_argument("null item handle for converting to IOBUf");
   }
 
-  Item* item = handle.get();
+  Item* item = handle.getInternal();
   const uint32_t dataOffset = item->getOffsetForMemory();
 
   using ConvertChainedItem = std::function<std::unique_ptr<folly::IOBuf>(
@@ -1869,7 +1870,7 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
   // determine to use a new ItemHandle for each chain items
   // or use shared ItemHandle for all chain items
   if (item->getRefCount() > config_.thresholdForConvertingToIOBuf) {
-    auto sharedHdl = std::make_shared<ItemHandle>(std::move(handle));
+    auto sharedHdl = std::make_shared<Handle>(std::move(handle));
 
     iobuf = folly::IOBuf{
         folly::IOBuf::TAKE_OWNERSHIP, item,
@@ -1880,10 +1881,10 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
         dataOffset + item->getSize(),
 
         [](void*, void* userData) {
-          auto* hdl = reinterpret_cast<std::shared_ptr<ItemHandle>*>(userData);
+          auto* hdl = reinterpret_cast<std::shared_ptr<Handle>*>(userData);
           delete hdl;
         } /* freeFunc */,
-        new std::shared_ptr<ItemHandle>{sharedHdl} /* userData for freeFunc */};
+        new std::shared_ptr<Handle>{sharedHdl} /* userData for freeFunc */};
 
     if (item->hasChainedItem()) {
       converter = [sharedHdl](Item*, ChainedItem& chainedItem) {
@@ -1898,30 +1899,27 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
             chainedItemDataOffset + chainedItem.getSize(),
 
             [](void*, void* userData) {
-              auto* hdl =
-                  reinterpret_cast<std::shared_ptr<ItemHandle>*>(userData);
+              auto* hdl = reinterpret_cast<std::shared_ptr<Handle>*>(userData);
               delete hdl;
             } /* freeFunc */,
-            new std::shared_ptr<ItemHandle>{
-                sharedHdl} /* userData for freeFunc */);
+            new std::shared_ptr<Handle>{sharedHdl} /* userData for freeFunc */);
       };
     }
 
   } else {
-    iobuf =
-        folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, item,
+    iobuf = folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, item,
 
-                     // Since we'll be moving the IOBuf data pointer forward
-                     // by dataOffset, we need to adjust the IOBuf length
-                     // accordingly
-                     dataOffset + item->getSize(),
+                         // Since we'll be moving the IOBuf data pointer forward
+                         // by dataOffset, we need to adjust the IOBuf length
+                         // accordingly
+                         dataOffset + item->getSize(),
 
-                     [](void* buf, void* userData) {
-                       ItemHandle{reinterpret_cast<Item*>(buf),
+                         [](void* buf, void* userData) {
+                           Handle{reinterpret_cast<Item*>(buf),
                                   *reinterpret_cast<decltype(this)>(userData)}
-                           .reset();
-                     } /* freeFunc */,
-                     this /* userData for freeFunc */};
+                               .reset();
+                         } /* freeFunc */,
+                         this /* userData for freeFunc */};
     handle.release();
 
     if (item->hasChainedItem()) {
@@ -1951,7 +1949,7 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBuf(ItemHandle handle) {
               auto* cache = reinterpret_cast<decltype(this)>(userData);
               auto* child = reinterpret_cast<ChainedItem*>(buf);
               auto* parent = &child->getParentItem(cache->compressor_);
-              ItemHandle{parent, *cache}.reset();
+              Handle{parent, *cache}.reset();
             } /* freeFunc */,
             this /* userData for freeFunc */);
       };
