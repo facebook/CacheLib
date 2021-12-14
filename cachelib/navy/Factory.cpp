@@ -287,6 +287,7 @@ folly::File openCacheFile(const std::string& fileName,
   // might not support o_direct. Hence, we might have to default to avoiding
   // o_direct in those cases.
   folly::File f;
+
   try {
     f = folly::File(fileName.c_str(), flags | O_DIRECT);
   } catch (const std::system_error& e) {
@@ -294,6 +295,8 @@ folly::File openCacheFile(const std::string& fileName,
       XLOG(ERR) << "Failed to open with o-direct, trying without. Error: "
                 << e.what();
       f = folly::File(fileName.c_str(), flags);
+    } else {
+      throw;
     }
   }
   XDCHECK_GE(f.fd(), 0);
