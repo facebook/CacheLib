@@ -193,16 +193,18 @@ class CacheAllocator : public CacheBase {
   struct DestructorData {
     DestructorData(DestructorContext ctx,
                    Item& it,
-                   folly::Range<ChainedItemIter> iter)
-        : context(ctx), item(it), chainedAllocs(iter) {}
+                   folly::Range<ChainedItemIter> iter,
+                   PoolId id)
+        : context(ctx), item(it), chainedAllocs(iter), pool(id) {}
 
     // helps to convert RemoveContext to DestructorContext,
     // the context for RemoveCB is re-used to create DestructorData,
     // this can be removed if RemoveCB is dropped.
     DestructorData(RemoveContext ctx,
                    Item& it,
-                   folly::Range<ChainedItemIter> iter)
-        : item(it), chainedAllocs(iter) {
+                   folly::Range<ChainedItemIter> iter,
+                   PoolId id)
+        : item(it), chainedAllocs(iter), pool(id) {
       if (ctx == RemoveContext::kEviction) {
         context = DestructorContext::kEvictedFromRAM;
       } else {
@@ -227,6 +229,9 @@ class CacheAllocator : public CacheBase {
     // heap, functions (e.g. CacheAllocator::getAllocInfo) that assumes items
     // are located in cache slab doesn't work in such case.
     folly::Range<ChainedItemIter> chainedAllocs;
+
+    // the pool that this item is/was
+    PoolId pool;
   };
 
   // call back to execute when moving an item, this could be a simple memcpy

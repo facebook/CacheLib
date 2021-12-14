@@ -924,6 +924,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   void testItemDestructor() {
     std::vector<std::string> evictedKeys;
     std::vector<std::string> removedKeys;
+    PoolId poolId;
     auto itemDestructor = [&](const typename AllocatorT::DestructorData& data) {
       const auto key = data.item.getKey();
       if (data.context == DestructorContext::kEvictedFromRAM) {
@@ -932,14 +933,16 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         // kRemovedFromRAM case, no NVM in this test
         removedKeys.push_back({key.data(), key.size()});
       }
+      ASSERT_EQ(poolId, data.pool);
     };
     typename AllocatorT::Config config;
     config.setItemDestructor(itemDestructor);
     config.setCacheSize(100 * Slab::kSize);
 
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
-    auto poolId = alloc.addPool("foobar", numBytes);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize / 2;
+    alloc.addPool("fake", numBytes);
+    poolId = alloc.addPool("foobar", numBytes);
 
     const unsigned int nSizes = 10;
     const unsigned int keyLen = 100;

@@ -739,8 +739,8 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
       (ctx != RemoveContext::kEviction || !it.isNvmClean() ||
        it.isNvmEvicted())) {
     try {
-      config_.itemDestructor(
-          DestructorData{ctx, it, viewAsChainedAllocsRange(it)});
+      config_.itemDestructor(DestructorData{
+          ctx, it, viewAsChainedAllocsRange(it), allocInfo.poolId});
       stats().numRamDestructorCalls.inc();
     } catch (const std::exception& e) {
       stats().numDestructorExceptions.inc();

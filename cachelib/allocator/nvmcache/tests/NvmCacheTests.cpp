@@ -1953,12 +1953,14 @@ TEST_F(NvmCacheTest, ShardHashIsNotFillMapHash) {
 TEST_F(NvmCacheTest, testEvictCB) {
   bool destructorCalled = false;
   DestructorContext context;
+  PoolId poolid;
   // this test only checks whether the destructor is triggered, but not checking
   // the DestructedData
   allocConfig_.setRemoveCallback({});
   allocConfig_.setItemDestructor([&](const DestructorData& data) {
     destructorCalled = true;
     context = data.context;
+    poolid = data.pool;
   });
   auto& cache = makeCache();
   auto pid = poolId();
@@ -1977,6 +1979,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
             navy::DestructorEvent::Recycled);
     ASSERT_TRUE(destructorCalled);
     ASSERT_EQ(DestructorContext::kEvictedFromNVM, context);
+    ASSERT_EQ(poolid, pid);
   }
   // 2. Recycled event and item in RAM but unclean, destructor should be
   // triggered
@@ -1984,7 +1987,10 @@ TEST_F(NvmCacheTest, testEvictCB) {
     destructorCalled = false;
     std::string key = "key" + genRandomStr(10);
     std::string val = "val" + genRandomStr(10);
-    auto handle = cache.allocate(pid, key, 100);
+    // a new pool
+    auto newPool = cache_->addPool("test", poolSize_, poolAllocsizes_);
+
+    auto handle = cache.allocate(newPool, key, 100);
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getWritableMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
@@ -1995,6 +2001,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_TRUE(destructorCalled);
     ASSERT_FALSE(handle->isNvmEvicted());
     ASSERT_EQ(DestructorContext::kEvictedFromNVM, context);
+    ASSERT_EQ(poolid, newPool);
   }
   // 3. Recycled event and item in RAM and clean, destructor should be skipped
   {
@@ -2029,6 +2036,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     // Removed event, not in RAM
     ASSERT_TRUE(destructorCalled);
     ASSERT_EQ(DestructorContext::kRemovedFromNVM, context);
+    ASSERT_EQ(poolid, pid);
   }
   // 5. Removed event and item in RAM but unclean, destructor should be
   // triggered

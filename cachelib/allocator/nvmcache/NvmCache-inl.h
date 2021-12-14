@@ -349,7 +349,8 @@ void NvmCache<C>::evictCB(navy::BufferView key,
                          : DestructorContext::kEvictedFromNVM;
 
       try {
-        itemDestructor_(DestructorData{context, item, std::move(chained)});
+        itemDestructor_(DestructorData{context, item, std::move(chained),
+                                       nvmItem.poolId()});
         stats().numNvmDestructorCalls.inc();
       } catch (const std::exception& e) {
         stats().numDestructorExceptions.inc();
