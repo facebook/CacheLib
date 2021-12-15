@@ -354,7 +354,7 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesWesternDigitalDevice) {
        {{kNvmePath, "wdc", "vs-smart-add-log", "/dev/nvme1n1"},
         kSmartLogOutput}});
   EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_),
-		  609651339018240);
+            609651339018240);
 }
 
 TEST_F(NandWritesTest, nandWriteBytes_handlesToshibaDevice) {
