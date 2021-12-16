@@ -137,7 +137,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
       const auto parentName =
           "parent" +
           folly::to<std::string>(folly::Random::rand32(0, numParents));
-      auto parent = alloc.find(parentName);
+      auto parent = alloc.findToWrite(parentName);
       ASSERT_NE(nullptr, parent);
       auto childItem = alloc.allocateChainedItem(
           parent, folly::Random::rand32(100, 2 * 1024));
@@ -152,7 +152,10 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     // Remove all the chained items' parent directly,
     // which also removes all the chained items.
     for (unsigned int i = 0; i < numParents; ++i) {
-      auto parent = alloc.find("parent" + folly::to<std::string>(i));
+      // TODO(jiayueb): remove "AccessMode::kRead" after changing remove() API
+      // to take a ReadHandle
+      auto parent =
+          alloc.find("parent" + folly::to<std::string>(i), AccessMode::kRead);
       alloc.remove(parent);
     }
     // to make sure clean the chained items clearly.

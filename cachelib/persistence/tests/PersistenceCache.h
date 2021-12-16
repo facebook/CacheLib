@@ -148,8 +148,9 @@ class PersistenceCache {
     for (auto& key : items) {
       auto handle = cache.find(key.first);
       if (handle) {
-        auto data = std::string(reinterpret_cast<char*>(handle->getMemory()),
-                                handle->getSize());
+        auto data =
+            std::string(reinterpret_cast<const char*>(handle->getMemory()),
+                        handle->getSize());
         ASSERT_EQ(data, key.second);
         if (numChained > 0) {
           auto chained_allocs = cache.viewAsChainedAllocs(handle);

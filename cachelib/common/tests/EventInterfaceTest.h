@@ -234,7 +234,7 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     eventTrackerPtr->check(AllocatorApiEvent::FIND, key,
                            AllocatorApiResult::FOUND, valueSize, ttl);
 
-    auto handle = alloc.find(key);
+    auto handle = alloc.findToWrite(key);
     EXPECT_NE(handle, nullptr);
     handle->updateExpiryTime(0);
 

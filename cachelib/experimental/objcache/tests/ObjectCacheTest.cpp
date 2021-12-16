@@ -277,13 +277,13 @@ TEST(ObjectCache, ObjectHandleInvalid) {
 
   EXPECT_THROW(objcache->find<Vector>("test key"), std::invalid_argument);
   {
-    auto it = objcache->getCacheAlloc().find("test key");
+    auto it = objcache->getCacheAlloc().find("test key", AccessMode::kRead);
     ASSERT_TRUE(it);
     EXPECT_THROW(LruObjectCache::toObjectHandle<Vector>(std::move(it)),
                  std::invalid_argument);
   }
   {
-    auto it = objcache->getCacheAlloc().find("test key");
+    auto it = objcache->getCacheAlloc().find("test key", AccessMode::kRead);
     ASSERT_TRUE(it);
     EXPECT_THROW(LruObjectCache::toSharedPtr<Vector>(std::move(it)),
                  std::invalid_argument);

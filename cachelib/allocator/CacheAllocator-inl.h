@@ -1762,6 +1762,12 @@ CacheAllocator<CacheTrait>::findToWrite(typename Item::Key key,
 }
 
 template <typename CacheTrait>
+typename CacheAllocator<CacheTrait>::ReadHandle
+CacheAllocator<CacheTrait>::find(typename Item::Key key) {
+  return find(key, AccessMode::kRead);
+}
+
+template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
                                             AccessMode mode) {
   if (!handle) {

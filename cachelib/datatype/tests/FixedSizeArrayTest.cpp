@@ -47,7 +47,10 @@ class FixedSizeArrayTest : public ::testing::Test {
 
     // Look up for this array and verify data is the same
     {
-      auto array = Array::fromItemHandle(cache->find("array"));
+      // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
+      // to take a ReadHandle
+      auto array =
+          Array::fromItemHandle(cache->find("array", AccessMode::kRead));
       ASSERT_FALSE(array.isNullItemHandle());
       for (uint32_t i = 0; i < array.size(); ++i) {
         ASSERT_EQ(array[i], i);
@@ -56,7 +59,10 @@ class FixedSizeArrayTest : public ::testing::Test {
 
     // Test out of range access
     {
-      auto array = Array::fromItemHandle(cache->find("array"));
+      // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
+      // to take a ReadHandle
+      auto array =
+          Array::fromItemHandle(cache->find("array", AccessMode::kRead));
       ASSERT_FALSE(array.isNullItemHandle());
 
       // operator[] does not do bounds cheecking

@@ -449,13 +449,21 @@ class CacheAllocator : public CacheBase {
 
   // look up an item by its key across the nvm cache as well if enabled.
   //
+  // @param key       the key for lookup
+  //
+  // @return          the read handle for the item or a handle to nullptr if the
+  //                  key does not exist.
+  ReadHandle find(Key key);
+
+  // look up an item by its key across the nvm cache as well if enabled.
+  //
   // @param key         the key for lookup
-  // @param mode        the mode of access for the lookup. defaults to
-  //                    AccessMode::kRead
+  // @param mode        the mode of access for the lookup.
+  //                    AccessMode::kRead or AccessMode::kWrite
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
+  ItemHandle find(Key key, AccessMode mode);
 
   // look up an item by its key across the nvm cache as well if enabled. Users
   // should call this API only when they are going to mutate the item data.
