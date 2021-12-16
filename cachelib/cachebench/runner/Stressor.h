@@ -20,6 +20,7 @@
 
 #include <atomic>
 #include <memory>
+#include <chrono>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Config.h"
@@ -41,8 +42,12 @@ struct ThroughputStats {
   uint64_t delNotFound{0}; // deletes for non-existent key
   uint64_t addChained{0};
   uint64_t addChainedFailure{0};
-  // current number of ops executed. Read periodically to track progress
   uint64_t ops{0};
+
+  // block replay stats 
+  uint64_t pageGet{0};
+  uint64_t pageSet{0};
+  uint64_t pageGetMiss{0};
 
   // operator overload to aggregate multiple instances of ThroughputStats, one
   // from each  thread
@@ -53,6 +58,10 @@ struct ThroughputStats {
 
   // convenience method to fetch throughput information as counters.
   void render(uint64_t, folly::UserCounters&) const;
+
+  // print block replay related stats
+  void renderBlockReplayStats(uint64_t elapsedTimeNs, std::ostream& out) const;
+
 };
 
 // forward declaration for the workload generator.

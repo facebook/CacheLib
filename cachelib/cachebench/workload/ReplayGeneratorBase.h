@@ -45,10 +45,10 @@ class ReplayGeneratorBase : public GeneratorBase {
           "Cannot replay traces with consistency checking enabled"));
     }
     std::string file;
-    if (config.traceFileName[0] == '/') {
-      file = config.traceFileName;
+    if (config.traceFilePath[0] == '/') {
+      file = config.traceFilePath;
     } else {
-      file = folly::sformat("{}/{}", config.configPath, config.traceFileName);
+      file = folly::sformat("{}/{}", config.configPath, config.traceFilePath);
     }
     infile_.open(file);
     if (infile_.fail()) {
@@ -57,12 +57,8 @@ class ReplayGeneratorBase : public GeneratorBase {
     }
     infile_.rdbuf()->pubsetbuf(infileBuffer_, kIfstreamBufferSize);
 
-    if (config_.skipHeader) {
-      // header
-      std::string row;
-      std::getline(infile_, row);
-    }
-
+    std::string row;
+    std::getline(infile_, row);
   }
 
   virtual ~ReplayGeneratorBase() { infile_.close(); }
@@ -76,11 +72,8 @@ class ReplayGeneratorBase : public GeneratorBase {
     infile_.clear();
     infile_.seekg(0, std::ios::beg);
 
-    if (config_.skipHeader) {
-      // header
-      std::string row;
-      std::getline(infile_, row);
-    }
+    std::string row;
+    std::getline(infile_, row);
   }
 
   const StressorConfig config_;

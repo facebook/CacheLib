@@ -49,7 +49,12 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
 
   JSONSetVal(configJson, maxInconsistencyCount);
 
-  JSONSetVal(configJson, traceFileName);
+  // block cache replay parameters 
+  JSONSetVal(configJson, traceFilePath);
+  JSONSetVal(configJson, diskFilePath);
+  JSONSetVal(configJson, minLBA);
+  JSONSetVal(configJson, traceBlockSize);
+  JSONSetVal(configJson, pageSize);
   JSONSetVal(configJson, configPath);
 
   JSONSetVal(configJson, cachePieceSize);
@@ -76,7 +81,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 456>();
+  checkCorrectSize<StressorConfig, 512>();
 }
 
 bool StressorConfig::usesChainedItems() const {

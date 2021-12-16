@@ -72,6 +72,13 @@ struct Request {
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
           OpType o,
+          uint64_t t)
+      : key(k), sizeBegin(b), sizeEnd(e), op(o), timestamp(t) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          OpType o,
           uint32_t ttl,
           uint64_t reqId,
           const std::unordered_map<std::string, std::string>& admFeatureM)

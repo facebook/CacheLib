@@ -14,9 +14,10 @@ class BlockTraceReplay : public ReplayGeneratorBase {
  public:
   explicit BlockTraceReplay(const StressorConfig& config)
       : ReplayGeneratorBase(config),
+        timestamp_(0),
         sizes_(1),
         op_(OpType::kGet),
-        req_(key_, sizes_.begin(), sizes_.end(), OpType::kGet) {}
+        req_(key_, sizes_.begin(), sizes_.end(), op_, timestamp_) {}
 
   virtual ~BlockTraceReplay() {}
 
@@ -31,15 +32,11 @@ class BlockTraceReplay : public ReplayGeneratorBase {
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   private:
-    long timestamp_;
+    uint64_t timestamp_;
     std::string key_;
     std::vector<size_t> sizes_;
     OpType op_;
     Request req_;
-    std::int16_t startPageIndex_ = 0;
-    std::int16_t endPageIndex_ = 0;
-    std::int16_t lastPageIndex_ = 0;
-
 };
 
 
@@ -47,44 +44,35 @@ const Request& BlockTraceReplay::getReq(uint8_t,
                                       std::mt19937_64&,
                                       std::optional<uint64_t>) {
 
-  if (lastPageIndex_ == endPageIndex_) {
-    std::string row;
-    if (!std::getline(infile_, row)) {
-      throw cachelib::cachebench::EndOfTrace("");
-    }
-    std::stringstream s_stream(row);
-    std::string token;
-
-    std::getline(s_stream, token, ','); // timestamp in seconds
-    timestamp_ = std::stol(token); 
-
-    std::getline(s_stream, token, ','); // LBA  
-    //TODO: take secor size (512) and page size (4096) as input 
-    int start_byte = 512*std::stoi(token); // start byte based on sector size (Default: 512 bytes)
-    startPageIndex_ = floor(start_byte/4096); // compute page index based on page size (Default: 4096 bytes)
-    key_ = std::to_string(startPageIndex_); // page index is unique so used as key 
-
-    std::getline(s_stream, token, ','); // op
-    if (token == "r") {
-      op_ = OpType::kGet;
-      req_.setOp(op_);
-    }
-    else if (token == "w") {
-      op_ = OpType::kSet;
-      req_.setOp(op_);
-    }
-    else
-      throw std::invalid_argument("Unrecognized Operation in the trace file!");
-
-    std::getline(s_stream, token, ','); // size
-    int end_byte = start_byte + std::stoi(token) - 1;
-    endPageIndex_ = int(ceil(end_byte/4096));
-    sizes_[0] = 4096; // 4KB default page size 
-    lastPageIndex_ = startPageIndex_;
-  } else {
-    lastPageIndex_++;
-    key_ = std::to_string(lastPageIndex_);
+  std::string row;
+  if (!std::getline(infile_, row)) {
+    throw cachelib::cachebench::EndOfTrace("");
   }
+
+  std::stringstream row_stream(row);
+  std::string token;
+
+  std::getline(row_stream, token, ','); // timestamp in seconds
+  timestamp_ = std::stoul(token);
+  req_.timestamp = std::stoul(token);
+
+  std::getline(row_stream, token, ','); // LBA  
+  key_ = token;
+
+  std::getline(row_stream, token, ','); // op
+  if (token == "r") {
+    op_ = OpType::kGet;
+    req_.setOp(op_);
+  }
+  else if (token == "w") {
+    op_ = OpType::kSet;
+    req_.setOp(op_);
+  }
+  else
+    throw std::invalid_argument("Unrecognized Operation in the trace file!");
+
+  std::getline(row_stream, token, ','); // size
+  sizes_[0] = std::stoi(token); 
 
   return req_;
 }

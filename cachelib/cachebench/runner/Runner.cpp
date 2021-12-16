@@ -26,7 +26,8 @@ Runner::Runner(const CacheBenchConfig& config)
                                        config.getStressorConfig())} {}
 
 bool Runner::run(std::chrono::seconds progressInterval,
-                 const std::string& progressStatsFile) {
+                 const std::string& progressStatsFile,
+                 const std::string& statOutputFile) {
   ProgressTracker tracker{*stressor_, progressStatsFile};
 
   stressor_->start();
@@ -42,14 +43,22 @@ bool Runner::run(std::chrono::seconds progressInterval,
   auto opsStats = stressor_->aggregateThroughputStats();
   tracker.stop();
 
-  std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats.render(std::cout);
+  if (opsStats.pageGet == 0 & opsStats.pageSet == 0) {
+    std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
+    cacheStats.render(std::cout);
 
-  std::cout << "\n== Throughput for  ==\n";
-  opsStats.render(durationNs, std::cout);
+    std::cout << "\n== Throughput for  ==\n";
+    opsStats.render(durationNs, std::cout);
 
-  stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
-  std::cout << std::endl;
+    stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
+    std::cout << std::endl;
+  } else {
+
+    std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
+    cacheStats.render(std::cout);
+    
+    opsStats.renderBlockReplayStats(durationNs, std::cout);
+  }
 
   stressor_.reset();
   return cacheStats.renderIsTestPassed(std::cout);

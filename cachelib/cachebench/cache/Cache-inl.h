@@ -29,10 +29,6 @@
 #include "cachelib/cachebench/cache/ItemRecords.h"
 #include "cachelib/cachebench/util/NandWrites.h"
 
-extern "C" {
-  #include "cachelib/cachebench/cache/IO.h"
-}
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {

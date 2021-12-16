@@ -1,0 +1,22 @@
+===JSON Config===
+{"cache_config": {"cacheSizeMB": 800}, "test_config": {"enableLookaside": "true", "generator": "block-replay", "numThreads": 1, "traceFileName": "/home/pranav/csv_traces/w16.csv", "traceBlockSize": 512, "diskFilePath": "/home/pranav/disk_files/w16.disk", "pageSize": 4096, "minLBA": 45784}}
+===Stressor Log===
+06:17:57       0.00M ops completed
+== Test Results ==
+== Allocator Stats ==
+Items in RAM  : 0
+Items in NVM  : 0
+Alloc Attempts: 0 Success: 0.00%
+RAM Evictions : 0
+NVM Gets      :               0, Coalesced : 100.00%
+NVM Puts      :               0, Success   :   0.00%, Clean   : 100.00%, AbortsFromDel   :        0, AbortsFromGet   :        0
+NVM Evicts    :               0, Clean     : 100.00%, Unclean :       0, Double          :        0
+NVM Deletes   :               0 Skipped Deletes: 100.00%
+
+== Throughput for  ==
+Total Ops : 0.00 million
+Total sets: 0
+get       :         0/s, success   :   0.00%
+set       :         0/s, success   :   0.00%
+del       :         0/s, found     :   0.00%
+

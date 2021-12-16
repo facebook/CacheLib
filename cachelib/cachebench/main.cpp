@@ -52,6 +52,9 @@ DEFINE_uint64(
 DEFINE_string(progress_stats_file,
               "",
               "Print detailed stats at each progress interval to this file");
+DEFINE_string(stat_output_file,
+              "",
+              "Print a one line CSV entry to this file about the run");
 DEFINE_int32(timeout_seconds,
              0,
              "Maximum allowed seconds for running test. 0 means no timeout");
@@ -139,7 +142,7 @@ int main(int argc, char** argv) {
   }
 
   CacheBenchConfig config(FLAGS_json_test_config);
-  std::cout << "Welcome to OSS version of cachebench" << std::endl;
+  // std::cout << "Welcome to OSS version of cachebench" << std::endl;
 #endif
 
   try {
@@ -149,7 +152,7 @@ int main(int argc, char** argv) {
     setupTimeoutHandler();
 
     return runnerInstance->run(std::chrono::seconds(FLAGS_progress),
-                               FLAGS_progress_stats_file)
+                               FLAGS_progress_stats_file, FLAGS_stat_output_file)
                ? 0
                : 1;
   } catch (const std::exception& e) {

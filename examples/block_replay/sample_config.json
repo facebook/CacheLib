@@ -1,0 +1,17 @@
+{
+    "cache_config": {
+      "cacheSizeMB": 100
+    },
+    "test_config":
+      {
+        "enableLookaside": true,
+        "generator": "block-replay",
+        "numThreads": 1,
+        "traceFilePath": "block_sample.csv",
+        "diskFilePath": "testfile.cache",
+        "minLBA": 0,
+        "traceBlockSize": 512,
+        "pageSize": 4096
+      }
+  
+  }

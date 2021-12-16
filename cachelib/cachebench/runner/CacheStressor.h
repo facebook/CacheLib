@@ -9,7 +9,7 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or iwrite on set miss (write-through)mplied.
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
@@ -19,12 +19,15 @@
 #include <folly/Random.h>
 #include <folly/TokenBucket.h>
 
+#include <chrono>
 #include <atomic>
 #include <cstddef>
 #include <iostream>
 #include <memory>
 #include <thread>
+#include<algorithm>
 #include <unordered_set>
+#include <fmt/format.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
@@ -34,6 +37,12 @@
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
+#include "cachelib/cachebench/workload/BlockTraceReplay.h"
+
+extern "C" {
+  #include "IO.h" 
+}
+
 
 namespace facebook {
 namespace cachelib {
@@ -121,30 +130,49 @@ class CacheStressor : public Stressor {
   // Start the stress test by spawning the worker threads and waiting for them
   // to finish the stress operations.
   void start() override {
+
     {
       std::lock_guard<std::mutex> l(timeMutex_);
       startTime_ = std::chrono::system_clock::now();
     }
-    std::cout << folly::sformat("Total {:.2f}M ops to be run",
-                                config_.numThreads * config_.numOps / 1e6)
-              << std::endl;
 
-    stressWorker_ = std::thread([this] {
-      std::vector<std::thread> workers;
-      for (uint64_t i = 0; i < config_.numThreads; ++i) {
+    if (config_.generator == "block-replay") {
+      std::cout << folly::sformat("===Stressor Log===") << std::endl;
+      stressWorker_ = std::thread([this] {
+        std::vector<std::thread> workers;
         workers.push_back(
-            std::thread([this, throughputStats = &throughputStats_.at(i)]() {
-              stressByDiscreteDistribution(*throughputStats);
-            }));
-      }
-      for (auto& worker : workers) {
-        worker.join();
-      }
-      {
-        std::lock_guard<std::mutex> l(timeMutex_);
-        endTime_ = std::chrono::system_clock::now();
-      }
-    });
+          std::thread([this, throughputStats = &throughputStats_.at(0)]() {
+            stressByBlockReplay(*throughputStats);
+        }));
+        for (auto& worker : workers) {
+          worker.join();
+        }
+        {
+          std::lock_guard<std::mutex> l(timeMutex_);
+          endTime_ = std::chrono::system_clock::now();
+        }
+      });
+    } else {
+      std::cout << folly::sformat("Total {:.2f}M ops to be run",
+                                  config_.numThreads * config_.numOps / 1e6)
+                << std::endl;
+      stressWorker_ = std::thread([this] {
+        std::vector<std::thread> workers;
+        for (uint64_t i = 0; i < config_.numThreads; ++i) {
+          workers.push_back(
+              std::thread([this, throughputStats = &throughputStats_.at(i)]() {
+                stressByDiscreteDistribution(*throughputStats);
+              }));
+        }
+        for (auto& worker : workers) {
+          worker.join();
+        }
+        {
+          std::lock_guard<std::mutex> l(timeMutex_);
+          endTime_ = std::chrono::system_clock::now();
+        }
+      });
+    }
   }
 
   // Block until all stress workers are finished.
@@ -172,7 +200,6 @@ class CacheStressor : public Stressor {
     for (const auto& stats : throughputStats_) {
       res += stats;
     }
-
     return res;
   }
 
@@ -285,7 +312,6 @@ class CacheStressor : public Stressor {
         const auto pid = static_cast<PoolId>(opPoolDist(gen));
         const Request& req(getReq(pid, gen, lastRequestId));
         OpType op = req.getOp();
-
         const std::string* key = &(req.key);
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
@@ -301,8 +327,6 @@ class CacheStressor : public Stressor {
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);
 
-          // direct write on set miss (write-through)
-          direct_write();
           break;
         }
         case OpType::kLoneGet:
@@ -325,17 +349,13 @@ class CacheStressor : public Stressor {
             result = OpResultType::kGetMiss;
 
             if (config_.enableLookaside) {
-              // allocate and insert on miss
+              // allocate and insert on miss++stats.getMiss;
               // upgrade access privledges, (lock_upgrade is not
               // appropriate here)
               slock = {};
               xlock = chainedItemAcquireUniqueLock(*key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                      req.admFeatureMap);
-
-              // direct read on get miss 
-              direct_read();
-              
             }
           } else {
             result = OpResultType::kGetHit;
@@ -420,6 +440,81 @@ class CacheStressor : public Stressor {
       }
     }
     wg_->markFinish();
+  }
+
+
+  void stressByBlockReplay(ThroughputStats& stats) {
+    // parameters for getReq 
+    std::mt19937_64 gen(folly::Random::rand64());
+    std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
+                                            config_.opPoolDistribution.end());
+    const auto pid = static_cast<PoolId>(opPoolDist(gen));
+    std::optional<uint64_t> lastRequestId = std::nullopt;
+
+    const char *diskFilePath = config_.diskFilePath.c_str();
+    uint64_t minOffset = config_.minLBA * config_.traceBlockSize;
+    uint64_t minPageOffset = floor(minOffset/config_.pageSize)*config_.pageSize;                                                                                                                                                                                                
+
+    while (true) {
+      try {
+        const Request& req(getReq(1, gen, lastRequestId));
+        uint64_t lba = (uint64_t) std::stoull(req.key);
+
+        ++stats.ops;
+
+        // compute page indexes (used as key later) from start and end offset of the IO 
+        uint64_t reqStartOffset = lba * config_.traceBlockSize;
+        uint64_t reqEndOffset = reqStartOffset + req.sizeBegin[0];
+        uint64_t startPageIndex = floor(reqStartOffset/config_.pageSize);
+        uint64_t endPageIndex = ceil(reqEndOffset/config_.pageSize);
+
+        OpType op = req.getOp();
+        switch (op) {
+        case OpType::kSet: { 
+          direct_write(diskFilePath, reqStartOffset, req.sizeBegin[0], minPageOffset, config_.pageSize, config_.traceBlockSize);
+          // the key for each page is the index of the page which is computed based on LBA 
+          for (uint64_t curPageIndex = startPageIndex; curPageIndex <= endPageIndex; curPageIndex++) {
+            ++stats.pageSet;
+            std::string pageIndexString = std::to_string(curPageIndex);
+            const std::string* pageKey = &(pageIndexString);
+            auto lock = chainedItemAcquireUniqueLock(*pageKey);
+            setKey(pid, stats, pageKey, config_.pageSize, req.ttlSecs,
+                            req.admFeatureMap);
+          }
+          break;
+        }
+        case OpType::kGet: {
+          ++stats.get;
+          bool cacheHitArray[(endPageIndex - startPageIndex + 1)*sizeof(bool)] = {false};
+          // the key for each page is the index of the page which is computed based on LBA
+          for (uint64_t curPageIndex = startPageIndex; curPageIndex <= endPageIndex; curPageIndex++) {
+            ++stats.pageGet;
+            std::string pageIndexString = std::to_string(curPageIndex);
+            const std::string* pageKey = &(pageIndexString);
+            auto slock = chainedItemAcquireSharedLock(*pageKey);
+            auto xlock = decltype(chainedItemAcquireUniqueLock(*pageKey)){};
+            cache_->recordAccess(*pageKey);
+            auto it = cache_->find(*pageKey, AccessMode::kRead);
+            if (it == nullptr) {
+              ++stats.pageGetMiss;
+              if (config_.enableLookaside) {
+                slock = {};
+                xlock = chainedItemAcquireUniqueLock(*pageKey);
+                setKey(pid, stats, pageKey, config_.pageSize, req.ttlSecs,
+                      req.admFeatureMap);
+              }
+            } else {
+              cacheHitArray[curPageIndex-startPageIndex] = true;
+            }
+          }
+          break;
+        }
+
+        } // switch end        
+      } catch (const cachebench::EndOfTrace& ex) {
+        break;
+      }
+    }
   }
 
   // inserts key into the cache if the admission policy also indicates the
@@ -510,7 +605,7 @@ class CacheStressor : public Stressor {
   // Ticker that syncs the time according to trace timestamp.
   std::shared_ptr<TimeStampTicker> ticker_;
 
-  // main stressor thread
+  // main stressor thread11q  1`
   std::thread stressWorker_;
 
   // mutex to protect reading the timestamps.

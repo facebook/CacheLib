@@ -15,7 +15,6 @@
 add_library (cachelib_cachebench
   ./cache/Cache.cpp
   ./cache/TimeStampTicker.cpp
-  ./cache/IO.c
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
   ./consistency/ValueHistory.cpp
@@ -25,6 +24,7 @@ add_library (cachelib_cachebench
   ./runner/ProgressTracker.cpp
   ./runner/Runner.cpp
   ./runner/Stressor.cpp
+  ./runner/IO.c
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
