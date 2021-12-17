@@ -29,6 +29,7 @@ class CacheAPIWrapperForNvm {
   using ChainedItemIter = typename C::ChainedItemIter;
   using Key = typename Item::Key;
   using ItemHandle = typename C::ItemHandle;
+  using ReadHandle = typename C::ReadHandle;
 
  public:
   // Get chained allocation on the item.
@@ -103,7 +104,7 @@ class CacheAPIWrapperForNvm {
   // @param cache  the cache instance using nvmcache
   // @param handle the handle to acquire the wait context
   // @return the wait context for the handle
-  static std::shared_ptr<WaitContext<ItemHandle>> getWaitContext(
+  static std::shared_ptr<WaitContext<ReadHandle>> getWaitContext(
       C& cache, ItemHandle& handle) {
     return cache.getWaitContext(handle);
   }

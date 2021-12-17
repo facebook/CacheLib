@@ -89,6 +89,7 @@ class NvmCache {
   using DeviceEncryptor = navy::DeviceEncryptor;
 
   using ItemHandle = typename C::ItemHandle;
+  using ReadHandle = typename C::ReadHandle;
   using DeleteTombStoneGuard = typename TombStones::Guard;
   using PutToken = typename InFlightPuts::PutToken;
 
@@ -287,7 +288,7 @@ class NvmCache {
   struct GetCtx {
     NvmCache& cache;       //< the NvmCache instance
     const std::string key; //< key being fetched
-    std::vector<std::shared_ptr<WaitContext<ItemHandle>>> waiters; // list of
+    std::vector<std::shared_ptr<WaitContext<ReadHandle>>> waiters; // list of
                                                                    // waiters
     ItemHandle it; // will be set when Context is being filled
     util::LatencyTracker tracker_;
@@ -295,7 +296,7 @@ class NvmCache {
 
     GetCtx(NvmCache& c,
            folly::StringPiece k,
-           std::shared_ptr<WaitContext<ItemHandle>> ctx,
+           std::shared_ptr<WaitContext<ReadHandle>> ctx,
            util::LatencyTracker tracker)
         : cache(c),
           key(k.toString()),
@@ -322,7 +323,7 @@ class NvmCache {
 
     // enqueue a waiter into the waiter list
     // @param  waiter       WaitContext
-    void addWaiter(std::shared_ptr<WaitContext<ItemHandle>> waiter) {
+    void addWaiter(std::shared_ptr<WaitContext<ReadHandle>> waiter) {
       XDCHECK(waiter);
       waiters.push_back(std::move(waiter));
     }

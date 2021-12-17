@@ -1244,10 +1244,9 @@ class CacheAllocator : public CacheBase {
 
   // acquires the wait context for the handle. This is used by NvmCache to
   // maintain a list of waiters
-  std::shared_ptr<WaitContext<ItemHandle>> getWaitContext(
+  std::shared_ptr<WaitContext<ReadHandle>> getWaitContext(
       ItemHandle& hdl) const {
-    return std::reinterpret_pointer_cast<WaitContext<ItemHandle>>(
-        hdl.getItemWaitContext());
+    return hdl.getItemWaitContext();
   }
 
   using MMContainerPtr = std::unique_ptr<MMContainer>;
