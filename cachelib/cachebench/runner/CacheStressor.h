@@ -28,6 +28,8 @@
 #include<algorithm>
 #include <unordered_set>
 #include <fmt/format.h>
+#include <iostream>
+#include <fstream>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
