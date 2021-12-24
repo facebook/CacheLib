@@ -3655,6 +3655,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.disableCacheEviction();
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
+
+    // Disable slab rebalancing
+    config.enablePoolRebalancing(nullptr, std::chrono::milliseconds{0});
     AllocatorT allocator(config);
 
     const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;

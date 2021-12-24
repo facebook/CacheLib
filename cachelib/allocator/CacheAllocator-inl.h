@@ -2351,7 +2351,7 @@ void CacheAllocator<CacheTrait>::releaseSlabImpl(
     const bool isMoved = moveForSlabRelease(releaseContext, item, throttler);
 
     // if moving fails, evict it
-    if (!isMoved) {
+    if (!isMoved && !config_.disableEviction) {
       evictForSlabRelease(releaseContext, item, throttler);
     }
     XDCHECK(allocator_->isAllocFreed(releaseContext, alloc));
