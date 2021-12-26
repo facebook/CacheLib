@@ -54,7 +54,7 @@ void ThroughputStats::renderBlockReplayStats(uint64_t elapsedTimeNs, std::ostrea
   out << std::fixed;
   out << folly::sformat("===Output===") << std::endl;
   out << folly::sformat("Time(nsec):{}\n Time(sec):{} \nTotal Ops:{} \nRead:{} \nPageRead:{} \nPageWrite:{} \nMiss:{} \n", 
-    elapsedTimeNs
+    elapsedTimeNs,
     elapsedSecs, 
     ops, 
     get, 
