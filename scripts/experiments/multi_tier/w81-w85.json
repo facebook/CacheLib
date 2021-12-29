@@ -1,6 +1,7 @@
 {
 	"cache_config": {
-		"cacheSizeMB": 15000
+		"cacheSizeMB": 50000,
+		"allocSizes": [4135]
 	}, 
 	"test_config": {
 		"enableLookaside": "true", 

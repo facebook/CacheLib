@@ -10,7 +10,8 @@ OUTPUT_JSON_FILE = "cur-config.json"
 def main(trace_path, disk_file_path, t1_size, t2_size, min_lba):
   config_json = {
     "cache_config": {
-      "cacheSizeMB": t1_size
+      "cacheSizeMB": t1_size,
+      "allocSizes": [4135],
     },
     "test_config":
       {
@@ -27,7 +28,10 @@ def main(trace_path, disk_file_path, t1_size, t2_size, min_lba):
 
   if t2_size > 0:
     config_json["cache_config"]["nvmCacheSizeMB"] = t2_size
-    config_json["cache_config"]["nvmCachePaths"] = ["/dev/nvme0n1"] 
+    config_json["cache_config"]["nvmCachePaths"] = ["/flash/cache.file"]
+    config_json["cache_config"]["navyBigHashSizePct"] = 0
+    config_json["cache_config"]["navySizeClasses"] = []
+    config_json["cache_config"]["truncateItemToOriginalAllocSizeInNvm"] = True 
     
   with open(OUTPUT_JSON_FILE, 'w+') as fp:
       json.dump(config_json, fp)
