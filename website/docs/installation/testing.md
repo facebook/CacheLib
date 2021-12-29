@@ -11,7 +11,7 @@ of the cache infrastructure.
 ## Building CacheLib Unit Tests
 
 To build the cachelib unit tests, use one of the following commands
-(see [installation](installation) instructions for more details):
+(see [installation](../installation/) instructions for more details):
 
 1. Use `./contrib/build.sh` script with the `-T` option.
 2. Use `./contrib/build-package.sh -t cachelib` (with the `-t` option)

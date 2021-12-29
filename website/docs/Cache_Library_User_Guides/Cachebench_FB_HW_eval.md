@@ -142,7 +142,7 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     make install
     ```
 
-See [build and installation](../installation/installation) for further details.
+See [build and installation](../installation/) for further details.
 
 ## Running the benchmark for SSD perf testing
 
