@@ -509,6 +509,8 @@ class CacheStressor : public Stressor {
               cacheHitArray[curPageIndex-startPageIndex] = true;
             }
           }
+          direct_read(diskFilePath, reqStartOffset, req.sizeBegin[0], minPageOffset, 
+            config_.pageSize, config_.traceBlockSize, cacheHitArray);
           break;
         }
 

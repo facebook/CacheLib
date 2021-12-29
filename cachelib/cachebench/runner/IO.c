@@ -10,7 +10,7 @@ void direct_write(
     u_int64_t blockSize) {
 
     mode_t mode = 0644;
-    u_int64_t fd = open(diskFilePath, O_RDWR | O_DIRECT, mode);
+    u_int64_t fd = open(diskFilePath, O_RDWR | O_DIRECT | O_SYNC, mode);
     if (fd == -1) 
         perror("Opening the disk file failed in direct_write!");
 
@@ -115,7 +115,7 @@ void direct_read(
             // last block was a hit, this is a miss 
             // track the offset and start the miss count 
             readStartOffset = pageStartOffset + curPageIndex * pageSize;
-            missRun = 1;
+            missRun++;
         } else if (!prevCacheHitFlag & !prevCacheHitFlag) {
             // last block was a miss, this is also a miss 
             // increase the miss run counter 
@@ -134,7 +134,20 @@ void direct_read(
             if (read(fd, buffer, readSize) == -1) 
                 perror("Error reading the disk file during direct read!\n");
             free(buffer);
+            missRun = 0;
         }
     }
+
+    // remaining pages to read 
+    if (missRun > 0) {
+        u_int64_t readSize = ceil((missRun*pageSize)/blockSize)*blockSize;
+        void *buffer = malloc(readSize);
+        if (posix_memalign((void **)&buffer, blockSize, readSize)) 
+            perror("Error in read buffer memory alignment in direct read!\n");
+        if (read(fd, buffer, readSize) == -1) 
+            perror("Error reading the disk file during direct read!\n");
+        free(buffer);
+    }
+
     close(fd);
 }
