@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 // Need to replace this with a CMake build, using https://github.com/XiangpengHao/cxx-cmake-example as inspiration
 
 fn main() {
