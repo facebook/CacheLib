@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 namespace facebook {
 namespace rust {
 namespace cachelib {
