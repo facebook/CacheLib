@@ -379,7 +379,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
   (*stats_.allocAttempts)[pid][cid].inc();
 
   void* memory = allocator_->allocate(pid, requiredSize);
-  if (memory == nullptr) {
+  if (memory == nullptr && !config_.disableEviction) {
     memory = findEviction(pid, cid);
   }
   if (memory == nullptr) {
