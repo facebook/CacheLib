@@ -8,7 +8,7 @@ DEFAULT_PAGE_SIZE = 4096 # bytes
 DEFAULT_OUTPUT_PATH = "cur-config.json"
 DEFAULT_FLASH_PATH = "/flash/cache.file"
 DEFAULT_DISK_PATH = "/disk/disk.file"
-ALLOC_SIZE = DEFAULT_PAGE_SIZE + 39 # 8B key+31B metadata=39 bytes per item
+ALLOC_SIZE = DEFAULT_PAGE_SIZE + 39 + 1 # 8B key+31B metadata=39 bytes per item
 
 def main(trace_path, disk_file_path, t1_size, t2_size, min_lba):
   config_json = {

@@ -26,6 +26,7 @@
 #include <memory>
 #include <thread>
 #include<algorithm>
+#include <chrono>
 #include <unordered_set>
 #include <fmt/format.h>
 #include <iostream>
@@ -446,6 +447,12 @@ class CacheStressor : public Stressor {
 
 
   void stressByBlockReplay(ThroughputStats& stats) {
+
+    using std::chrono::high_resolution_clock;
+    auto t1 = high_resolution_clock::now();
+    auto t2 = high_resolution_clock::now();
+    auto ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+
     // parameters for getReq 
     std::mt19937_64 gen(folly::Random::rand64());
     std::discrete_distribution<> opPoolDist(config_.opPoolDistribution.begin(),
@@ -454,8 +461,18 @@ class CacheStressor : public Stressor {
     std::optional<uint64_t> lastRequestId = std::nullopt;
 
     const char *diskFilePath = config_.diskFilePath.c_str();
-    uint64_t minOffset = config_.minLBA * config_.traceBlockSize;
-    uint64_t minPageOffset = floor(minOffset/config_.pageSize)*config_.pageSize;                                                                                                                                                                                                
+    mode_t mode = 0644;
+    u_int64_t fd = open(diskFilePath, O_RDWR | O_DIRECT | O_SYNC, mode);
+    if (fd == -1) 
+      throw std::runtime_error("Opening the disk file failed in direct_write!");
+
+    uint64_t IOBufferSize = 1024*1024*1024; // 1MB 
+    char *IOBuffer = new char[IOBufferSize];
+    if (posix_memalign((void **)&IOBuffer, config_.traceBlockSize, IOBufferSize)) 
+      throw std::runtime_error("Error in memealign when reading the page when write start byte not aligned \n");
+    // minPageOffset maps to offset 0 of the file
+    // the seeks in the diskFile will happen relative to this value
+    uint64_t minPageOffset = floor((config_.minLBA * config_.traceBlockSize)/config_.pageSize)*config_.pageSize;                                                                                                                                                                                                
 
     while (true) {
       try {
@@ -473,8 +490,56 @@ class CacheStressor : public Stressor {
         OpType op = req.getOp();
         switch (op) {
         case OpType::kSet: { 
-          direct_write(diskFilePath, reqStartOffset, req.sizeBegin[0], minPageOffset, config_.pageSize, config_.traceBlockSize);
-          // the key for each page is the index of the page which is computed based on LBA 
+
+          // check for front align then read 
+          if (reqStartOffset % config_.pageSize > 0) {
+            t1 = high_resolution_clock::now();
+            // not aligned so read the page into the cache so that we have all the data of the page 
+            if (lseek(fd, startPageIndex*config_.pageSize-minPageOffset, SEEK_SET) == -1) {
+              throw std::runtime_error("Error seeking the disk file \n");
+            }
+            
+            if (read(fd, IOBuffer, config_.pageSize) == -1) {
+              throw std::runtime_error(folly::sformat("Error reading the disk file, offset {} size {}\n", 
+                startPageIndex*config_.pageSize-minPageOffset,
+                config_.pageSize));
+            }
+            t2 = high_resolution_clock::now();
+            ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+            std::cout << ms_int.count() << "ms for read of size " << config_.pageSize << "\n";
+          }
+
+          t1 = high_resolution_clock::now();
+          // direct-write to disk 
+          if (lseek(fd, reqStartOffset-minPageOffset, SEEK_SET) == -1) {
+            throw std::runtime_error("Error seeking the disk file \n");
+          }
+          for (int i=0; i<=req.sizeBegin[0]/IOBufferSize; i++) {
+            if (write(fd, IOBuffer, IOBufferSize) == -1) {
+              throw std::runtime_error(folly::sformat("Error writing to the disk file, offset {} size {}\n", 
+                reqStartOffset-minPageOffset, IOBufferSize));
+            }
+          }
+          t2 = high_resolution_clock::now();
+          ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+          std::cout << ms_int.count() << "ms for write of size " << req.sizeBegin[0] << "\n";
+
+          // check for rear align then read 
+          if (reqEndOffset % config_.pageSize > 0) {
+            t1 = high_resolution_clock::now();
+            // not aligned so read the page into the cache so that we have all the data of the page 
+            if (lseek(fd, endPageIndex*config_.pageSize-minPageOffset, SEEK_SET) == -1) {
+              throw std::runtime_error("Error seeking the disk file \n");
+            }
+            if (read(fd, IOBuffer, config_.pageSize) == -1) 
+              throw std::runtime_error(folly::sformat("Error reading the disk file, offset {} size {}\n", 
+                endPageIndex*config_.pageSize-minPageOffset,
+                config_.pageSize));
+            t2 = high_resolution_clock::now();
+            ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+            std::cout << ms_int.count() << "ms for read of size " << config_.pageSize << "\n";
+          }
+
           for (uint64_t curPageIndex = startPageIndex; curPageIndex <= endPageIndex; curPageIndex++) {
             ++stats.pageSet;
             std::string pageIndexString = std::to_string(curPageIndex);
@@ -487,7 +552,6 @@ class CacheStressor : public Stressor {
         }
         case OpType::kGet: {
           ++stats.get;
-          bool cacheHitArray[(endPageIndex - startPageIndex + 1)*sizeof(bool)] = {false};
           // the key for each page is the index of the page which is computed based on LBA
           for (uint64_t curPageIndex = startPageIndex; curPageIndex <= endPageIndex; curPageIndex++) {
             ++stats.pageGet;
@@ -500,22 +564,34 @@ class CacheStressor : public Stressor {
             if (it == nullptr) {
               ++stats.pageGetMiss;
               if (config_.enableLookaside) {
+
+                t1 = high_resolution_clock::now();
+                
+                // read miss so read the page 
+                if (lseek(fd, curPageIndex*config_.pageSize-minPageOffset, SEEK_SET) == -1) 
+                  throw std::runtime_error("Error seeking the disk file \n");
+                
+                if (read(fd, IOBuffer, config_.pageSize) == -1) 
+                  throw std::runtime_error(folly::sformat("Error reading the disk file, offset {} size {}\n", 
+                    curPageIndex*config_.pageSize-minPageOffset,
+                    config_.pageSize));
+            
+                t2 = high_resolution_clock::now();
+                ms_int = std::chrono::duration_cast<std::chrono::milliseconds>(t2 - t1);
+                std::cout << ms_int.count() << "ms for read of size " << config_.pageSize << "\n";
+
                 slock = {};
                 xlock = chainedItemAcquireUniqueLock(*pageKey);
                 setKey(pid, stats, pageKey, config_.pageSize, req.ttlSecs,
                       req.admFeatureMap);
               }
-            } else {
-              cacheHitArray[curPageIndex-startPageIndex] = true;
             }
           }
-          direct_read(diskFilePath, reqStartOffset, req.sizeBegin[0], minPageOffset, 
-            config_.pageSize, config_.traceBlockSize, cacheHitArray);
           break;
         }
-
         } // switch end        
       } catch (const cachebench::EndOfTrace& ex) {
+        close(fd);
         break;
       }
     }

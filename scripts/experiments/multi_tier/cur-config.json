@@ -1,0 +1,18 @@
+{
+    "cache_config": {
+        "cacheSizeMB": 1000,
+        "allocSizes": [
+            4136
+        ]
+    },
+    "test_config": {
+        "enableLookaside": "true",
+        "generator": "block-replay",
+        "numThreads": 1,
+        "traceFilePath": "/home/pranav/csv_traces/w105.csv",
+        "traceBlockSize": 512,
+        "diskFilePath": "/disk/disk.file",
+        "pageSize": 4096,
+        "minLBA": 0
+    }
+}
