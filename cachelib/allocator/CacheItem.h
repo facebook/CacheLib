@@ -252,20 +252,27 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   /**
    * Function to set the timestamp for when to expire an item
-   * Employs a best-effort approach to update the expiryTime. Item's expiry
-   * time can only be updated when the item is a regular item and is part of
-   * the cache and not in the moving state.
+   *
+   * This API will only succeed when an item is a regular item, and user
+   * has already inserted it into the cache (via @insert or @insertOrReplace).
+   * In addition, the item cannot be in a "moving" state.
    *
    * @param expiryTime the expiryTime value to update to
    *
    * @return boolean indicating whether expiry time was successfully updated
+   *         false when item is not linked in cache, or in moving state, or a
+   *         chained item
    */
   bool updateExpiryTime(uint32_t expiryTimeSecs) noexcept;
 
   // Same as @updateExpiryTime, but sets expiry time to @ttl seconds from now.
+  // It has the same restrictions as @updateExpiryTime. An item must be a
+  // regular item and is part of the cache and NOT in the moving state.
   //
   // @param ttl   TTL (from now)
-  // @return Boolean indicating whether expiry time was successfully updated.
+  // @return boolean indicating whether expiry time was successfully updated
+  //         false when item is not linked in cache, or in moving state, or a
+  //         chained item
   bool extendTTL(std::chrono::seconds ttl) noexcept;
 
   // Return the refcount of an item
