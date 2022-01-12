@@ -1553,7 +1553,7 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
-CacheAllocator<CacheTrait>::remove(const ItemHandle& it) {
+CacheAllocator<CacheTrait>::remove(const ReadHandle& it) {
   stats_.numCacheRemoves.inc();
   if (!it) {
     throw std::invalid_argument("Trying to remove a null item handle");

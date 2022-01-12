@@ -553,13 +553,13 @@ class CacheAllocator : public CacheBase {
   // removes the allocation corresponding to the handle. The allocation will
   // be freed when all the existing handles are released.
   //
-  // @param  it   item handle
+  // @param  it   item read handle
   //
   // @return      kSuccess if the item exists and was successfully removed.
   //              kNotFoundInRam otherwise
   //
   // @throw std::invalid_argument if item handle is null
-  RemoveRes remove(const ItemHandle& it);
+  RemoveRes remove(const ReadHandle& it);
 
   // view a read-only parent item as a chain of allocations if it has chained
   // alloc. The returned chained-alloc is good to iterate upon, but will block

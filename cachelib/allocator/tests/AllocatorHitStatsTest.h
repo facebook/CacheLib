@@ -152,10 +152,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     // Remove all the chained items' parent directly,
     // which also removes all the chained items.
     for (unsigned int i = 0; i < numParents; ++i) {
-      // TODO(jiayueb): remove "AccessMode::kRead" after changing remove() API
-      // to take a ReadHandle
-      auto parent =
-          alloc.find("parent" + folly::to<std::string>(i), AccessMode::kRead);
+      auto parent = alloc.find("parent" + folly::to<std::string>(i));
       alloc.remove(parent);
     }
     // to make sure clean the chained items clearly.
