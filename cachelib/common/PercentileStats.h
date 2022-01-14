@@ -55,7 +55,11 @@ class PercentileStats {
   PercentileStats(std::chrono::seconds windowSize) : estimator_{windowSize} {}
 
   // track latency by taking the value of duration directly.
-  void trackValue(double value) { estimator_.addValue(value); }
+  void trackValue(double value,
+                  std::chrono::time_point<std::chrono::steady_clock> tp =
+                      std::chrono::steady_clock::now()) {
+    estimator_.addValue(value, tp);
+  }
 
   // Return the estimates for stat. This is not cheap so do not
   // call frequently. The cost is roughly number of quantiles we
@@ -94,10 +98,11 @@ class LatencyTracker {
   LatencyTracker() {}
   ~LatencyTracker() {
     if (stats_) {
-      auto diffNanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::steady_clock::now() - begin_)
-                           .count();
-      stats_->trackValue(static_cast<double>(diffNanos));
+      auto tp = std::chrono::steady_clock::now();
+      auto diffNanos =
+          std::chrono::duration_cast<std::chrono::nanoseconds>(tp - begin_)
+              .count();
+      stats_->trackValue(static_cast<double>(diffNanos), tp);
     }
   }
 
