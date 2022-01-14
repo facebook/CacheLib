@@ -193,10 +193,16 @@ class BigHash final : public Engine {
   Device& device_;
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[kNumMutexes]};
+
+  // thread local counters in synchronized path
+  mutable TLCounter lookupCount_;
+  mutable TLCounter bfProbeCount_;
+  mutable TLCounter bfRejectCount_;
+
+  // atomic counters in asynchronized path
   mutable AtomicCounter itemCount_;
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter succInsertCount_;
-  mutable AtomicCounter lookupCount_;
   mutable AtomicCounter succLookupCount_;
   mutable AtomicCounter removeCount_;
   mutable AtomicCounter succRemoveCount_;
@@ -205,9 +211,7 @@ class BigHash final : public Engine {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter bfFalsePositiveCount_;
-  mutable AtomicCounter bfProbeCount_;
   mutable AtomicCounter bfRebuildCount_;
-  mutable AtomicCounter bfRejectCount_;
   mutable AtomicCounter checksumErrorCount_;
   mutable SizeDistribution sizeDist_;
   mutable AtomicCounter usedSizeBytes_;

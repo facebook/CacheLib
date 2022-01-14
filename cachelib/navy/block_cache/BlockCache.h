@@ -362,11 +362,14 @@ class BlockCache final : public Engine {
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
 
+  // thread local counters in synchronized/critical path
+  mutable TLCounter lookupCount_;
+  mutable TLCounter succLookupCount_;
+
+  // atomic counters in asynchronized path
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter insertHashCollisionCount_;
   mutable AtomicCounter succInsertCount_;
-  mutable AtomicCounter lookupCount_;
-  mutable AtomicCounter succLookupCount_;
   mutable AtomicCounter lookupFalsePositiveCount_;
   mutable AtomicCounter lookupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter lookupValueChecksumErrorCount_;

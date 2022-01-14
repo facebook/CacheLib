@@ -168,18 +168,21 @@ class Driver final : public AbstractCache {
   std::unique_ptr<Engine> smallItemCache_;
   std::unique_ptr<AdmissionPolicy> admissionPolicy_;
 
-  mutable AtomicCounter insertCount_;
+  // thread local counters in synchronized path
+  mutable TLCounter insertCount_;
+  mutable TLCounter lookupCount_;
+  mutable TLCounter removeCount_;
+  mutable TLCounter rejectedCount_;
+  mutable TLCounter rejectedConcurrentInsertsCount_;
+  mutable TLCounter rejectedParcelMemoryCount_;
+  mutable TLCounter rejectedBytes_;
+  mutable TLCounter acceptedCount_;
+  mutable TLCounter acceptedBytes_;
+
+  // atomic counters in asynchronized path
   mutable AtomicCounter succInsertCount_;
-  mutable AtomicCounter lookupCount_;
   mutable AtomicCounter succLookupCount_;
-  mutable AtomicCounter removeCount_;
   mutable AtomicCounter succRemoveCount_;
-  mutable AtomicCounter rejectedCount_;
-  mutable AtomicCounter rejectedConcurrentInsertsCount_;
-  mutable AtomicCounter rejectedParcelMemoryCount_;
-  mutable AtomicCounter rejectedBytes_;
-  mutable AtomicCounter acceptedCount_;
-  mutable AtomicCounter acceptedBytes_;
   mutable AtomicCounter ioErrorCount_;
   mutable AtomicCounter parcelMemory_; // In bytes
   mutable AtomicCounter concurrentInserts_;
