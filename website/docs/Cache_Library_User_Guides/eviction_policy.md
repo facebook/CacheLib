@@ -30,7 +30,7 @@ This essentially turns the LRU into a two-segmented LRU. Setting this to `1` mea
 
 # LRU 2Q
 
-LRU 2Q deals with bursty accesses. The term *LRU 2Q* is a little misleading. It actually uses 3 LRUs (which are called queue here): hot, warm, and cold. Let us explain how items move between them. Look at the following picture, where the gay arrows indicate promotions:
+LRU 2Q deals with bursty accesses. The term *LRU 2Q* is a little misleading. It actually uses 3 LRUs (which are called queue here): hot, warm, and cold. Let us explain how items move between them. Look at the following picture, where the gray arrows indicate promotions:
 
 
 ![](cachelib_2Q.png)
