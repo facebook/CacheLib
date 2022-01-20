@@ -717,7 +717,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
 
   XDCHECK_LE(pBlob.origAllocSize, item->getSize());
   XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-  ::memcpy(item->getWritableMemory(), pBlob.data.data(), pBlob.origAllocSize);
+  ::memcpy(item->getMemory(), pBlob.data.data(), pBlob.origAllocSize);
   item->markNvmClean();
   item->markNvmEvicted();
 
@@ -744,7 +744,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
       auto chainedItem = new (chained->writableData()) ChainedItem(
           CompressedPtr(), cBlob.origAllocSize, util::getCurrentTimeSec());
       XDCHECK(chainedItem->isChainedItem());
-      ::memcpy(chainedItem->getWritableMemory(), cBlob.data.data(),
+      ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
                cBlob.origAllocSize);
       head->appendChain(std::move(chained));
       item->markHasChainedItem();

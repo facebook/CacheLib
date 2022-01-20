@@ -1972,7 +1972,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(handle));
     evictCB(navy::makeView(key.data()),
             navy::BufferView(buf.length(), buf.data()),
@@ -1992,7 +1992,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
 
     auto handle = cache.allocate(newPool, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(handle));
     evictCB(navy::makeView(key.data()),
@@ -2010,7 +2010,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(handle));
@@ -2028,7 +2028,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(handle));
     evictCB(navy::makeView(key.data()),
             navy::BufferView(buf.length(), buf.data()),
@@ -2046,7 +2046,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(handle));
     evictCB(navy::makeView(key.data()),
@@ -2064,7 +2064,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(handle));
@@ -2127,7 +2127,7 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
     std::string val = "val" + genRandomStr(10);
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     auto dipper = makeNvmItem(handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
@@ -2139,7 +2139,7 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
     std::string val = "val" + genRandomStr(100);
     auto handle = cache.allocate(pid, key, 1000);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     auto dipper = makeNvmItem(handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
@@ -2159,16 +2159,14 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBufChained) {
 
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
 
     for (int i = 0; i < nChained; i++) {
       std::string chainedVal = val + "_chained_" + std::to_string(i);
       auto chainedIt = cache.allocateChainedItem(handle, chainedVal.length());
       ASSERT_TRUE(chainedIt);
-      ::memcpy(chainedIt->getWritableMemory(),
-               chainedVal.data(),
-               chainedVal.length());
+      ::memcpy(chainedIt->getMemory(), chainedVal.data(), chainedVal.length());
       cache.addChainedItem(handle, std::move(chainedIt));
     }
 
@@ -2206,15 +2204,13 @@ TEST_F(NvmCacheTest, testItemDestructor) {
 
     auto handle = cache.allocate(pid, key, val.size());
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     for (int i = 0; i < nChained; i++) {
       std::string chainedVal = val + "_chained_" + std::to_string(i);
       auto chainedIt = cache.allocateChainedItem(handle, chainedVal.length());
       ASSERT_TRUE(chainedIt);
-      ::memcpy(chainedIt->getWritableMemory(),
-               chainedVal.data(),
-               chainedVal.length());
+      ::memcpy(chainedIt->getMemory(), chainedVal.data(), chainedVal.length());
       cache.addChainedItem(handle, std::move(chainedIt));
     }
 
@@ -2260,7 +2256,7 @@ TEST_F(NvmCacheTest, testItemDestructor) {
 
     auto handle = cache.allocate(pid, key, val.size());
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     cache.insertOrReplace(handle);
     pushToNvmCacheFromRamForTesting(key);
@@ -2293,7 +2289,7 @@ TEST_F(NvmCacheTest, testItemDestructor) {
 
     auto handle = cache.allocate(pid, key, val.size());
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     cache.insertOrReplace(handle);
     pushToNvmCacheFromRamForTesting(key);
@@ -2328,7 +2324,7 @@ TEST_F(NvmCacheTest, testItemDestructor) {
 
     auto handle = cache.allocate(pid, key, val.size());
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val.data(), val.size());
+    std::memcpy(handle->getMemory(), val.data(), val.size());
 
     cache.insertOrReplace(handle);
     pushToNvmCacheFromRamForTesting(key);
@@ -2337,7 +2333,7 @@ TEST_F(NvmCacheTest, testItemDestructor) {
     auto val2 = "val" + genRandomStr(25);
     handle = cache.allocate(pid, key, val2.size());
     ASSERT_NE(nullptr, handle.get());
-    std::memcpy(handle->getWritableMemory(), val2.data(), val2.size());
+    std::memcpy(handle->getMemory(), val2.data(), val2.size());
     cache.insertOrReplace(handle);
 
     // wait for async remove finish
