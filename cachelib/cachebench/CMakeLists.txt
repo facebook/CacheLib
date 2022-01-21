@@ -49,6 +49,15 @@ install(
 )
 
 
+if (BUILD_SHARED_LIBS)
+  install(
+    TARGETS cachelib_cachebench
+    EXPORT cachelib-exports
+    DESTINATION ${LIB_INSTALL_DIR}
+  )
+endif ()
+
+
 if (BUILD_TESTS)
   add_library (cachebench_test_support INTERFACE )
   target_link_libraries (cachebench_test_support INTERFACE
