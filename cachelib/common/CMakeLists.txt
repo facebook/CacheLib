@@ -21,15 +21,11 @@ add_library (cachelib_common
   CountDownLatch.cpp
   ${BLOOM_THRIFT_FILES}
   hothash/HotHashDetector.cpp
-  hothash/HotHashDetectorTest.cpp
   PercentileStats.cpp
   PeriodicWorker.cpp
   piecewise/GenericPieces.cpp
-  piecewise/GenericPiecesTest.cpp
   piecewise/RequestRange.cpp
-  piecewise/RequestRangeTest.cpp
   Serialization.cpp
-  TestUtils.cpp
   Utils.cpp
 )
 add_dependencies(cachelib_common thrift_generated_files)
@@ -51,7 +47,12 @@ install(TARGETS cachelib_common
 
 
 if (BUILD_TESTS)
-  add_library (common_test_support INTERFACE)
+  add_library (common_test_support INTERFACE
+    TestUtils.cpp
+    hothash/HotHashDetectorTest.cpp
+    piecewise/GenericPiecesTest.cpp
+    piecewise/RequestRangeTest.cpp
+  )
   target_link_libraries (common_test_support INTERFACE
     cachelib_common
     gflags
