@@ -24,14 +24,18 @@ project (CacheLib VERSION 0.1)
 
 #configure_file(cachelib/cachelib_config.h.in cachelib_config.h)
 
-set(CACHELIB_MAJOR_VERSION 0)
+if (NOT DEFINED CACHELIB_MAJOR_VERSION)
+  set(CACHELIB_MAJOR_VERSION 0)
+endif ()
 set(CACHELIB_MINOR_VERSION 1)
 set(CACHELIB_PATCH_VERSION 0)
 set(CACHELIB_VERSION
  ${CACHELIB_MAJOR_VERSION}.${CACHELIB_MINOR_VERSION}.${CACHELIB_PATCH_VERSION})
 
 set(PACKAGE_NAME      "cachelib")
-set(PACKAGE_VERSION   "${CACHELIB_VERSION}")
+if (NOT DEFINED PACKAGE_VERSION)
+  set(PACKAGE_VERSION   "${CACHELIB_VERSION}")
+endif ()
 set(PACKAGE_STRING    "${PACKAGE_NAME} ${PACKAGE_VERSION}")
 set(PACKAGE_TARNAME   "${PACKAGE_NAME}-${PACKAGE_VERSION}")
 set(PACKAGE_BUGREPORT "https://github.com/facebook/TBD")
@@ -360,6 +364,20 @@ install(EXPORT cachelib-exports
         FILE cachelib-targets.cmake
         #NAMESPACE cachelib::
         DESTINATION ${CMAKE_INSTALL_DIR})
+
+if (BUILD_SHARED_LIBS)
+  set_target_properties(
+    cachelib_allocator
+    cachelib_cachebench
+    cachelib_common
+    cachelib_datatype
+    cachelib_navy
+    cachelib_shm
+    PROPERTIES
+    SOVERSION ${CACHELIB_MAJOR_VERSION}
+    VERSION ${PACKAGE_VERSION}
+  )
+endif ()
 
 if (BUILD_TESTS)
   get_property(TEST_BINARIES GLOBAL PROPERTY TEST_BINARIES)
