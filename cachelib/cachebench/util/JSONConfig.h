@@ -115,8 +115,10 @@ struct Options {};
 
 template <typename Type, size_t size>
 constexpr void checkCorrectSize() {
+#ifndef SKIP_OPTION_SIZE_VERIFY
   Options<sizeof(Type)> var = Options<size>{};
   (void)var;
+#endif
 }
 } // namespace cachebench
 } // namespace cachelib

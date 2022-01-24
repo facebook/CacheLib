@@ -39,6 +39,13 @@ target_link_libraries(cachelib_cachebench PUBLIC
   gflags
 )
 
+if ((CMAKE_SYSTEM_NAME STREQUAL Linux) AND
+    (CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64))
+else()
+  target_compile_definitions(cachelib_cachebench PRIVATE SKIP_OPTION_SIZE_VERIFY)
+endif()
+
+
 add_executable (cachebench main.cpp)
 target_link_libraries(cachebench cachelib_cachebench)
 
