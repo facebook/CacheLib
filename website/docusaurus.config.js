@@ -22,6 +22,21 @@ module.exports = {
 
 
   themeConfig: {
+    algolia: {
+      // If Algolia did not provide you any appId, use 'BH4D9OD16A'
+      appId: 'BH4D9OD16A',
+
+      // Public API key: it is safe to commit it
+      apiKey: 'bb92084c062a63740851123e7f3f4d26',
+
+      indexName: 'cachelib',
+
+      // Optional: see doc section below
+      contextualSearch: true,
+
+      // Optional: Algolia search parameters
+      searchParameters: {},
+    },
     image: 'img/CacheLib-Logo-small.png',
     navbar: {
       title: 'CacheLib',
