@@ -119,7 +119,7 @@ class BloomFilter {
     return bits_.get() + idx * filterByteSize_;
   }
 
-  void serializeBits(RecordWriter& rw, size_t fragmentSize);
+  void serializeBits(RecordWriter& rw, uint64_t fragmentSize);
   void deserializeBits(RecordReader& rr);
 
   static constexpr uint32_t kPersistFragmentSize = 1024 * 1024;

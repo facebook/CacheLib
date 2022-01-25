@@ -141,7 +141,7 @@ void BloomFilter::reset() {
   }
 }
 
-void BloomFilter::serializeBits(RecordWriter& rw, size_t fragmentSize) {
+void BloomFilter::serializeBits(RecordWriter& rw, uint64_t fragmentSize) {
   uint64_t bitsSize = getByteSize();
   uint64_t off = 0;
   while (off < bitsSize) {
