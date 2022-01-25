@@ -42,6 +42,14 @@ add_library (cachelib_navy
   )
 add_dependencies(cachelib_navy thrift_generated_files)
 
+if(CMAKE_SYSTEM_NAME STREQUAL Linux)
+  set(MISSING_FALLOCATE FALSE)
+else()
+  set(MISSING_FALLOCATE TRUE)
+  target_compile_definitions(cachelib_navy PRIVATE MISSING_FALLOCATE)
+  target_compile_definitions(cachelib_navy PRIVATE MISSING_FADVISE)
+endif()
+
 target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
   )
@@ -89,7 +97,9 @@ if (BUILD_TESTS)
   add_test (scheduler/tests/OrderedThreadPoolJobSchedulerTest.cpp)
   add_test (scheduler/tests/ThreadPoolJobSchedulerTest.cpp)
   add_test (driver/tests/DriverTest.cpp)
-  add_test (common/tests/DeviceTest.cpp)
+  if (NOT MISSING_FALLOCATE)
+    add_test (common/tests/DeviceTest.cpp)
+  endif()
   add_test (block_cache/tests/AllocatorTest.cpp)
   add_test (block_cache/tests/RegionManagerTest.cpp)
   add_test (testing/tests/BufferGenTest.cpp)

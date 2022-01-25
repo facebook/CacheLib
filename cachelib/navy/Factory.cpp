@@ -301,6 +301,7 @@ folly::File openCacheFile(const std::string& fileName,
   }
   XDCHECK_GE(f.fd(), 0);
 
+#ifndef MISSING_FALLOCATE
   // TODO: T95780876 detect if file exists and is of expected size. If not,
   // automatically fallocate the file or ftruncate the file.
   if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
@@ -309,11 +310,14 @@ folly::File openCacheFile(const std::string& fileName,
         std::system_category(),
         folly::sformat("failed fallocate with size {}", size));
   }
+#endif
 
+#ifndef MISSING_FADVISE
   if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
     throw std::system_error(errno, std::system_category(),
                             "Error fadvising cache file");
   }
+#endif
 
   return f;
 }
