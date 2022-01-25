@@ -16,6 +16,9 @@
 
 #pragma once
 #include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
 #include <system_error>
 
@@ -24,6 +27,37 @@
 #include <folly/Format.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
+
+/* On Mac OS / FreeBSD, mmap(2) syscall does not support these flags */
+#ifndef MAP_LOCKED
+#define MAP_LOCKED 0
+#endif
+
+#if !(defined MAP_HUGE_SHIFT) || !(defined MAP_HUGETLB)
+#define MAP_HUGE_SHIFT 0
+#define MAP_HUGETLB 0
+#define MAP_HUGE_2MB 0
+#define MAP_HUGE_1GB 0
+#endif
+
+#ifndef SHM_HUGETLB
+#define SHM_HUGE_2MB 0
+#define SHM_HUGE_1GB 0
+#define SHM_HUGETLB 0
+#endif
+
+#ifndef SHM_HUGE_SHIFT
+#define SHM_HUGE_SHIFT 0
+#endif
+
+#ifndef SHM_LOCK
+#define SHM_LOCK 0
+#endif
+
+#ifndef SHM_REMAP
+#define SHM_REMAP 0
+#endif
+
 
 namespace facebook {
 namespace cachelib {
