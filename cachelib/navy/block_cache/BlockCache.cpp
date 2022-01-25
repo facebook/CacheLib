@@ -707,8 +707,8 @@ void BlockCache::persist(RecordWriter& rw) {
   auto config = config_;
   *config.sizeDist_ref() = sizeDist_.getSnapshot();
   *config.allocAlignSize_ref() = allocAlignSize_;
-  config.set_holeCount(holeCount_.get());
-  config.set_holeSizeTotal(holeSizeTotal_.get());
+  config.holeCount_ref() = holeCount_.get();
+  config.holeSizeTotal_ref() = holeSizeTotal_.get();
   *config.reinsertionPolicyEnabled_ref() = (reinsertionPolicy_ != nullptr);
   serializeProto(config, rw);
   regionManager_.persist(rw);

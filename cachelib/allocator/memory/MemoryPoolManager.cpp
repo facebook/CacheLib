@@ -157,15 +157,15 @@ serialization::MemoryPoolManagerObject MemoryPoolManager::saveState() const {
 
   serialization::MemoryPoolManagerObject object;
 
-  object.set_pools({});
+  object.pools_ref().emplace();
   for (PoolId i = 0; i < nextPoolId_; ++i) {
     object.pools_ref()->push_back(pools_[i]->saveState());
   }
-  object.set_poolsByName({});
+  object.poolsByName_ref().emplace();
   for (const auto& kv : poolsByName_) {
     object.poolsByName_ref()->insert(kv);
   }
-  object.set_nextPoolId(nextPoolId_);
+  object.nextPoolId_ref() = nextPoolId_;
 
   return object;
 }
