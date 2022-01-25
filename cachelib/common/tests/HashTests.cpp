@@ -19,6 +19,7 @@
 
 #include <limits>
 #include <string>
+#include <unordered_map>
 
 #include "cachelib/common/Hash.h"
 
