@@ -183,19 +183,13 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   XDCHECK(ctx);
   auto guard = folly::makeGuard([ctx, this]() { removeFromFillMap(*ctx); });
 
-  auto status = navyCache_->lookupAsync(
+  navyCache_->lookupAsync(
       makeBufferView(ctx->getKey()),
       [this, ctx](navy::Status s, navy::BufferView k, navy::Buffer v) {
         this->onGetComplete(*ctx, s, k, v.view());
       });
-  if (status != navy::Status::Ok) {
-    // instead of disabling navy, we enqueue a delete and return a miss.
-    remove(key, createDeleteTombStone(key));
-    stats().numNvmGetMiss.inc();
-  } else {
-    guard.dismiss();
-  }
 
+  guard.dismiss();
   return hdl;
 }
 
