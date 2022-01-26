@@ -15,10 +15,10 @@
  */
 
 #pragma once
-#include <sys/stat.h>
-#include <sys/mman.h>
 #include <sys/ipc.h>
+#include <sys/mman.h>
 #include <sys/shm.h>
+#include <sys/stat.h>
 
 #include <system_error>
 
@@ -57,7 +57,6 @@
 #ifndef SHM_REMAP
 #define SHM_REMAP 0
 #endif
-
 
 namespace facebook {
 namespace cachelib {
