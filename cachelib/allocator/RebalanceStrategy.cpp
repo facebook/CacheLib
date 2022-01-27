@@ -247,7 +247,7 @@ ClassId RebalanceStrategy::pickReceiverWithAllocFailures(const CacheBase& cache,
   auto receivers = stats.getClassIds();
 
   const auto receiverWithAllocFailures =
-      filterByAllocFailure(stats, receivers, getPoolState(pid));
+      filterByAllocFailure(stats, std::move(receivers), getPoolState(pid));
   if (receiverWithAllocFailures.empty()) {
     return Slab::kInvalidClassId;
   }
