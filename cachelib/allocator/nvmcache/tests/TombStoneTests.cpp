@@ -17,6 +17,8 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <random>
 #include <thread>
 #include <vector>
 
@@ -55,7 +57,9 @@ TEST(TombStoneTest, ConcurrentAddRemove) {
   }
 
   auto addFunc = [&t, hashes, &guards](int index) mutable {
-    std::random_shuffle(hashes.begin(), hashes.end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(hashes.begin(), hashes.end(), g);
     for (auto hash : hashes) {
       guards[index].push_back(std::make_unique<TombStones::Guard>(t.add(hash)));
     }
@@ -67,7 +71,9 @@ TEST(TombStoneTest, ConcurrentAddRemove) {
   }
 
   auto removeFunc = [&guards](int index) mutable {
-    std::random_shuffle(guards[index].begin(), guards[index].end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(guards[index].begin(), guards[index].end(), g);
     for (auto& guard : guards[index]) {
       // destroy the guard
       guard.reset();
