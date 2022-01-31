@@ -30,6 +30,11 @@
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
+/* O_DIRECT not available on Mac OS */
+#ifndef O_DIRECT
+#define O_DIRECT 0
+#endif
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
