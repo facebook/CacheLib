@@ -22,6 +22,32 @@
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/cachebench/cache/CacheValue.h"
 
+using DestructorContext = facebook::cachelib::DestructorContext;
+/* From: https://fmt.dev/latest/api.html#udt */
+template <>
+struct fmt::formatter<DestructorContext> : formatter<string_view> {
+  // parse is inherited from formatter<string_view>.
+  template <typename FormatContext>
+  auto format(DestructorContext c, FormatContext& ctx) {
+    string_view name = "unknown";
+    switch (c) {
+    case DestructorContext::kEvictedFromRAM:
+      name = "kEvictedFromRAM";
+      break;
+    case DestructorContext::kEvictedFromNVM:
+      name = "kEvictedFromNVM";
+      break;
+    case DestructorContext::kRemovedFromRAM:
+      name = "kRemovedFromRAM";
+      break;
+    case DestructorContext::kRemovedFromNVM:
+      name = "kRemovedFromNVM";
+      break;
+    }
+    return formatter<string_view>::format(name, ctx);
+  }
+};
+
 namespace facebook::cachelib::cachebench {
 /*
  * ItemRecord and ItemRecords are used for DestructorCheck in cachebench.
