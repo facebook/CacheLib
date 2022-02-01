@@ -24,6 +24,11 @@
 namespace facebook {
 namespace cachelib {
 
+/* Missing madvise(2) flag on Mac OS */
+#ifndef MADV_DODUMP
+#define MADV_DODUMP 0
+#endif
+
 // Thread local class for tracking recently accessed item.
 class TlsActiveItemRing {
   static const size_t KB = 1024ULL;
