@@ -20,6 +20,8 @@ module.exports = {
   organizationName: 'facebook', // Usually your GitHub org/user name.
   projectName: 'CacheLib', // Usually your repo name.
 
+  onBrokenLinks: 'log',
+
 
   themeConfig: {
     algolia: {
@@ -46,7 +48,7 @@ module.exports = {
       },
 	items: [
         {
-          to: 'docs/installation/',
+          to: 'docs/installation/installation',
           activeBasePath: 'docs',
           label: 'Build and Installation',
           position: 'left',
@@ -64,8 +66,8 @@ module.exports = {
           position: 'left',
         },
         {
-          to: 'learnmore', // temporarily redirect here until we add docs.
-          activeBasePath: 'learnmore',
+          to: 'docs/Cache_Library_Architecture_Guide/common_components',
+          activeBasePath: 'docs',
           label: 'Architecture Guide',
           position: 'left',
         },

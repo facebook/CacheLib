@@ -119,7 +119,36 @@ module.exports = {
        label: 'Architecture Guide',
        collapsed: false,
        items: [
-         'Cache_Library_Architecture_Guide/doc4',
+         {
+          type: 'category',
+          label: 'overview',
+          collapsed: true,
+          items: [
+            'Cache_Library_Architecture_Guide/common_components',
+            'Cache_Library_Architecture_Guide/overview_a_random_walk',
+          ]
+         },
+         {
+          type: 'category',
+          label: 'RAM Cache',
+          collapsed: true,
+          items: [
+            'Cache_Library_Architecture_Guide/ram_cache_indexing_and_eviction',
+            'Cache_Library_Architecture_Guide/slab_rebalancing',
+            'Cache_Library_Architecture_Guide/compact_cache_design',
+          ]
+         },
+         {
+          type: 'category',
+          label: 'Hybrid Cache',
+          collapsed: true,
+          items: [
+            'Cache_Library_Architecture_Guide/hybrid_cache',
+            'Cache_Library_Architecture_Guide/navy_architecture_overview',
+            'Cache_Library_Architecture_Guide/small_object_cache',
+            'Cache_Library_Architecture_Guide/large_object_cache',
+	  ]
+	 },
        ]
     }
   ],
