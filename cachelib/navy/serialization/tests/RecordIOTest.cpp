@@ -68,7 +68,7 @@ void checkRecords(RecordReader& rr) {
 } // namespace
 
 TEST(RecordIO, File) {
-  folly::File tmp{"/tmp", O_RDWR | O_TMPFILE};
+  folly::File tmp = folly::File::temporary();
   auto rw = createFileRecordWriter(tmp.fd());
   writeRecords(*rw);
   auto rr = createFileRecordReader(tmp.fd());
