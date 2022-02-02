@@ -29,6 +29,14 @@
 
 #include "cachelib/common/Utils.h"
 
+/* Missing madvise(2) flags on MacOS */
+#ifndef MADV_REMOVE
+#define MADV_REMOVE 0
+#endif
+#ifndef MADV_DONTDUMP
+#define MADV_DONTDUMP 0
+#endif
+
 using namespace facebook::cachelib;
 
 namespace {
