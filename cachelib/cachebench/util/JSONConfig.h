@@ -43,6 +43,27 @@ struct JSONConfig {
     field = val.asInt();
   }
 
+  // On some platforms (e.g Mac OS 12) 'size_t' and 'uint64_t' are not the same
+  // type: while both are unsigned 64bit integers, size_t is "unsigned long"
+  // while "uint64_t" is "unsigned long long". In C they are automatically
+  // converted from one to the other. In C++ with templates, they result in
+  // different types and require explicit specialization.
+  // BUT,
+  // On platforms where "size_t" is the same as "uint64_t" (e.g. Linux/amd64),
+  // template specializing of "size_t" will cause compilation error (due to a
+  // duplicated type). The template code below will safely create the size_t
+  // specialization only if it differs from uint64_t. See here:
+  // https://techoverflow.net/2019/06/13/stdenable_if-and-stdis_same-minimal-example/
+  // and https://eli.thegreenplace.net/2014/sfinae-and-enable_if/
+  // TODO: use std::is_integral<T> to merge uint32/uint64/size_t etc.
+  template <
+      class T = uint64_t,
+      typename std::enable_if<std::negation<std::is_same<size_t, T>>::value,
+                              void*>::type = nullptr>
+  static void setValImpl(size_t& field, const folly::dynamic& val) {
+    field = val.asInt();
+  }
+
   static void setValImpl(double& field, const folly::dynamic& val) {
     field = val.asDouble();
   }
