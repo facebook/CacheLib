@@ -331,6 +331,12 @@ struct GlobalCacheStats {
   // number of nvm misses
   uint64_t numNvmGetMiss{0};
 
+  // number of nvm isses due to internal errors
+  uint64_t numNvmGetMissErrs{0};
+
+  // number of nvm misses due to inflight remove on the same key
+  uint64_t numNvmGetMissDueToInflightRemove{0};
+
   // number of nvm misses that happened synchronously
   uint64_t numNvmGetMissFast{0};
 

@@ -124,6 +124,8 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
       if (hdl->isExpired()) {
         hdl.reset();
         hdl.markExpired();
+        stats().numNvmGetMissExpired.inc();
+        stats().numNvmGetMissFast.inc();
       }
       return hdl;
     }
@@ -597,6 +599,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   // this item expired. return a miss.
   if (nvmItem->isExpired()) {
     stats().numNvmGetMiss.inc();
+    stats().numNvmGetMissExpired.inc();
     ItemHandle hdl{};
     hdl.markExpired();
     hdl.markWentToNvm();
@@ -607,6 +610,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   auto it = createItem(key, *nvmItem);
   if (!it) {
     stats().numNvmGetMiss.inc();
+    stats().numNvmGetMissErrs.inc();
     // we failed to fill due to an internal failure. Return a miss and
     // invalidate what we have in nvmcache
     remove(key, createDeleteTombStone(key));
@@ -619,6 +623,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (hasTombStone(key) || !ctx.isValid()) {
     // a racing remove or evict while we were filling
     stats().numNvmGetMiss.inc();
+    stats().numNvmGetMissDueToInflightRemove.inc();
     return;
   }
 

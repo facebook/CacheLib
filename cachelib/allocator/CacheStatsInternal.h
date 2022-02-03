@@ -63,6 +63,12 @@ struct Stats {
   // number of nvm misses
   TLCounter numNvmGetMiss{0};
 
+  // number of nvm isses due to internal errors
+  TLCounter numNvmGetMissErrs{0};
+
+  // number of nvm misses due to inflight remove on the same key
+  TLCounter numNvmGetMissDueToInflightRemove{0};
+
   // number of nvm gets that are expired
   TLCounter numNvmGetMissExpired{0};
 

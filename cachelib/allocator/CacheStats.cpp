@@ -49,7 +49,7 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<15968>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<16144>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();
@@ -63,6 +63,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numNvmGetMiss = numNvmGetMiss.get();
   ret.numNvmGetMissFast = numNvmGetMissFast.get();
   ret.numNvmGetMissExpired = numNvmGetMissExpired.get();
+  ret.numNvmGetMissDueToInflightRemove = numNvmGetMissDueToInflightRemove.get();
+  ret.numNvmGetMissErrs = numNvmGetMissErrs.get();
   ret.numNvmGetCoalesced = numNvmGetCoalesced.get();
   ret.numNvmPuts = numNvmPuts.get();
   ret.numNvmDeletes = numNvmDeletes.get();
