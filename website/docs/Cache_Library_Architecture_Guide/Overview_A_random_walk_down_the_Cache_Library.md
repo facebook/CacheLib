@@ -18,7 +18,7 @@ Let's put this into more context. Imagine you are an engineer who is looking to 
 
 
 
-The way to interact with CacheLibâs "hashmap" is via Item and ItemHandle, which are basically the raw memory of the content you cached. Logically, an Item is an entry in the map. The ItemHandle of the item is a wrapper for lifetime management. ([Item and item handle](/docs/Cache_Library_User_Guides/Item_and_ItemHandle/ ))
+The way to interact with CacheLib's "hashmap" is via Item and Item's handle, which are basically the raw memory of the content you cached. Logically, an Item is an entry in the map. The "handle" of the item is a wrapper for lifetime management. ([Item and Handle](/docs/Cache_Library_User_Guides/Item_and_Handle/ ))
 
 
 Just like all the caches, there are many knobs you can tune. They are all on the left side panel of the [User Guide wiki page](/docs/Cache_Library_User_Guides/). It's normal that you don't understand all of them right now, but you will at the end of this wiki. Below are some common examples of the knobs.

@@ -55,7 +55,7 @@ module.exports = {
           label: 'Cache memory management',
           collapsed: true,
           items: [
-            'Cache_Library_User_Guides/Item_and_ItemHandle',
+            'Cache_Library_User_Guides/Item_and_Handle',
             'Cache_Library_User_Guides/eviction_policy',
             'Cache_Library_User_Guides/Partition_cache_into_pools',
             'Cache_Library_User_Guides/Configure_HashTable',

@@ -14,7 +14,7 @@ class CacheAllocator : public CacheBase {
     RemoveRes remove(Key key);
 
     // Remove the item pointed to by the specified handle.
-    RemoveRes remove(const ItemHandle& handle);
+    RemoveRes remove(const ReadHandle& handle);
 
     // Remove the first chained item pointed to by the parent handle.
     ItemHandle popChainedItem(const ItemHandle& parent)
@@ -49,9 +49,9 @@ You can also remove the item as follows:
 
 
 ```cpp
-auto item_handle = cache->find("key1");
-if (item_handle) {
-  auto rr = cache->remove(item_handle);
+auto handle = cache->find("key1");
+if (handle) {
+  auto rr = cache->remove(handle);
   if (rr == RemoveRes::kSuccess) {
     std::cout << "Removed the item with key \"key1\"" << '\n';
   }
@@ -68,9 +68,9 @@ std::map<std::string, std::string> dict = {
   { "key3", "item 3" },
 };
 for (auto& itr : dict) {
-  auto item_handle = cache->allocate(pool_id, itr.first, itr.second.size());
-  std::memcpy(item_handle->getMemory(), itr.first.data(), itr.second.size());
-  cache->insertOrReplace(item_handle);
+  auto handle = cache->allocate(poolId, itr.first, itr.second.size());
+  std::memcpy(handle->getMemory(), itr.first.data(), itr.second.size());
+  cache->insertOrReplace(handle);
 }
 ```
 
@@ -116,7 +116,7 @@ To remove the first chained item (`item 1`), call the `popChainedItem()` method:
 
 
 ```cpp
-auto handle = cache->popChainedItem(parent_item_handle);
+auto handle = cache->popChainedItem(parentItemHandle);
 if (handle) {
   cout << "Removed the first chained item" << '\n';
 }
@@ -127,8 +127,8 @@ If you remove the parent item, all its chained items are also removed:
 
 
 ```cpp
-rr = cache->remove(parent_item_handle);
+rr = cache->remove(parentItemHandle);
 if (rr == RemoveRes::kSuccess) {
-  parent_item_handle->reset();
+  parentItemHandle->reset();
 }
 ```

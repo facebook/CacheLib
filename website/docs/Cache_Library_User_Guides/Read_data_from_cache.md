@@ -7,7 +7,7 @@ An item written to cache by cachelib is associated with a key. To read the item 
 
 
 ```cpp
-ItemHandle find(Key key);
+ReadHandle find(Key key);
 ```
 
 
@@ -15,23 +15,24 @@ For example:
 
 
 ```cpp
-auto item_handle = cache->find("key1");
+auto handle = cache->find("key1");
 ```
 
 
-The `find()` method returns an `ItemHandle` that you use to get the memory location of the data:
+The `find()` method returns a `ReadHandle` that provides the read-only view of an item. You can use `ReadHandle` to get the read-only memory location of the data:
 
 
 ```cpp
-void* pdata = item_handle->getMemory();
+const void* pdata = handle->getMemory();
 ```
+where `handle` is of type `ReadHandle`.
 
 
-The `getMemory()` method returns a `void*` pointer. Use `reinterpret_cast<T*>` to cast it to a pointer of a specific type `T`:
+The `getMemory()` method via a `ReadHandle` returns a `const void*` pointer. Use `reinterpret_cast<const T*>` to cast it to a pointer of a specific type `const T`:
 
 
 ```cpp
-auto data = reinterpret_cast<T*>(pdata);
+auto data = reinterpret_cast<const T*>(pdata);
 ```
 
 
@@ -39,9 +40,9 @@ For example:
 
 
 ```cpp
-auto item_handle = cache->find("key1");
-if (item_handle) {
-  auto data = reinterpret_cast<const char*>(item_handle->getMemory());
+auto handle = cache->find("key1");
+if (handle) {
+  auto data = reinterpret_cast<const char*>(handle->getMemory());
   std::cout << data << '\n';
 }
 ```
@@ -49,12 +50,12 @@ if (item_handle) {
 
 You can also use iterators to read all the items written to the cache. See [Visit data in cache](Visit_data_in_cache).
 
-To read data from chained items, start from the parent `ItemHandle`, for example:
+To read data from chained items, start from the parent item handle, for example:
 
 
 ```cpp
-auto chained_allocs = cache->viewAsChainedAllocs(parent_item_handle);
-for (const auto& c : chained_allocs.getChain()) {
+auto chainedAllocs = cache->viewAsChainedAllocs(parent_item_handle);
+for (auto& c : chainedAllocs.getChain()) {
   auto data = reinterpret_cast<const char*>(c.getMemory());
   std::cout << data << '\n';
 }
@@ -63,12 +64,12 @@ for (const auto& c : chained_allocs.getChain()) {
 
 **Refer to [Chained items](chained_items) to see how chained items are ordered in cache.**
 
-To get the *n*th item in the chain, call the `getNthInChain()` method via `CacheChainedAllocs`:
+To get the *n*th item in the chain, call the `getNthInChain()` method via `CacheChainedAllocs`. The returned *n*th item will be read-only:
 
 
 ```cpp
-auto chained_allocs = cache->viewAsChainedAllocs(parent_item_handle);
-auto item = chained_allocs.getNthInChain(1);
+auto chainedAllocs = cache->viewAsChainedAllocs(parentItemHandle);
+auto item = chainedAllocs.getNthInChain(1);
 if (item) {
   std::cout << reinterpret_cast<const char*>(item->getMemory()) << '\n';
 }

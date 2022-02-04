@@ -8,13 +8,14 @@ An item is an object stored in cache. In addition to storing the payload (the
 actual data), it also stores metadata: intrusive hooks, reference count, flags,
 creation time, and expiration time. An item is assigned a `key` that
 cachelib API uses to find the item. For more information, see
-[Items and ItemHandle](Item_and_ItemHandle).
+[Items and Handle](Item_and_Handle).
 
 
-**ItemHandle**
-An ItemHandle is similar to a `std::shared_ptr<Item>`. It is used to
-access an item. For more information, see [Item and
-ItemHandle](Item_and_ItemHandle).
+**WriteHandle and ReadHandle**
+A WriteHandle(fka ItemHandle) is similar to a `std::shared_ptr<Item>`. It is used to
+access a mutable item.
+A ReadHandle is similar to a `std::shared_ptr<const Item>`. It is used to access a read-only item.
+For more information, see [Item and Handle](Item_and_Handle).
 
 
 **Chained item**
