@@ -752,12 +752,6 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
       XDCHECK(item->hasChainedItem());
     }
   }
-
-  // issue the call back to decode and fix up the item if needed.
-  if (config_.decodeCb) {
-    config_.decodeCb(
-        EncodeDecodeContext{*item, viewAsChainedAllocsRange(head.get())});
-  }
   return head;
 }
 
