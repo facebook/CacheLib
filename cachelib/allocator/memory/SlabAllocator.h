@@ -31,6 +31,7 @@
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #pragma GCC diagnostic pop
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/SanitizeThread.h>
 
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/allocator/memory/Slab.h"
@@ -200,6 +201,9 @@ class SlabAllocator {
   // true if the slab is a valid allocated slab in the memory belonging to this
   // allocator.
   FOLLY_ALWAYS_INLINE bool isValidSlab(const Slab* slab) const noexcept {
+    // suppress TSAN race error, this is harmless because nextSlabAllocation_
+    // cannot go backwards and slab can't become invalid once it is valid
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     return slab >= slabMemoryStart_ && slab < nextSlabAllocation_ &&
            getSlabForMemory(static_cast<const void*>(slab)) == slab;
   }
