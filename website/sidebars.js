@@ -124,8 +124,8 @@ module.exports = {
           label: 'overview',
           collapsed: true,
           items: [
-            'Cache_Library_Architecture_Guide/common_components',
             'Cache_Library_Architecture_Guide/overview_a_random_walk',
+            'Cache_Library_Architecture_Guide/common_components',
           ]
          },
          {

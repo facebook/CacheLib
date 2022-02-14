@@ -66,7 +66,7 @@ module.exports = {
           position: 'left',
         },
         {
-          to: 'docs/Cache_Library_Architecture_Guide/common_components',
+          to: 'docs/Cache_Library_Architecture_Guide/overview_a_random_walk',
           activeBasePath: 'docs',
           label: 'Architecture Guide',
           position: 'left',
