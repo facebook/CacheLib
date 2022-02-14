@@ -3163,22 +3163,22 @@ CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
   // TODO:
   // Once everyone is on v8 or later, remove the outter if.
   if (kCachelibVersion > 8) {
-    if (*meta.ramFormatVersion_ref() != kCacheRamFormatVersion) {
+    if (*meta.ramFormatVersion() != kCacheRamFormatVersion) {
       throw std::runtime_error(
           folly::sformat("Expected cache ram format version {}. But found {}.",
-                         kCacheRamFormatVersion, *meta.ramFormatVersion_ref()));
+                         kCacheRamFormatVersion, *meta.ramFormatVersion()));
     }
   }
 
-  if (*meta.accessType_ref() != AccessType::kId) {
+  if (*meta.accessType() != AccessType::kId) {
     throw std::invalid_argument(
-        folly::sformat("Expected {}, got {} for AccessType",
-                       *meta.accessType_ref(), AccessType::kId));
+        folly::sformat("Expected {}, got {} for AccessType", *meta.accessType(),
+                       AccessType::kId));
   }
 
-  if (*meta.mmType_ref() != MMType::kId) {
-    throw std::invalid_argument(folly::sformat(
-        "Expected {}, got {} for MMType", *meta.mmType_ref(), MMType::kId));
+  if (*meta.mmType() != MMType::kId) {
+    throw std::invalid_argument(folly::sformat("Expected {}, got {} for MMType",
+                                               *meta.mmType(), MMType::kId));
   }
   return meta;
 }

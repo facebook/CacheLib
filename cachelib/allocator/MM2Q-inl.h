@@ -21,9 +21,9 @@ namespace cachelib {
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 MM2Q::Container<T, HookPtr>::Container(const serialization::MM2QObject& object,
                                        PtrCompressor compressor)
-    : lru_(*object.lrus_ref(), compressor),
-      tailTrackingEnabled_(*object.tailTrackingEnabled_ref()),
-      config_(*object.config_ref()) {
+    : lru_(*object.lrus(), compressor),
+      tailTrackingEnabled_(*object.tailTrackingEnabled()),
+      config_(*object.config()) {
   lruRefreshTime_ = config_.lruRefreshTime;
   nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
                              ? std::numeric_limits<Time>::max()
@@ -32,9 +32,9 @@ MM2Q::Container<T, HookPtr>::Container(const serialization::MM2QObject& object,
 
   // We need to adjust list positions if the previous version does not have
   // tail lists (WarmTail & ColdTail), in order to potentially avoid cold roll
-  if (object.lrus_ref()->lists_ref()->size() < LruType::NumTypes) {
+  if (object.lrus()->lists()->size() < LruType::NumTypes) {
     XDCHECK_EQ(false, tailTrackingEnabled_);
-    XDCHECK_EQ(object.lrus_ref()->lists_ref()->size() + 2, LruType::NumTypes);
+    XDCHECK_EQ(object.lrus()->lists()->size() + 2, LruType::NumTypes);
     lru_.insertEmptyListAt(LruType::WarmTail, compressor);
     lru_.insertEmptyListAt(LruType::ColdTail, compressor);
   }
@@ -380,18 +380,18 @@ template <typename T, MM2Q::Hook<T> T::*HookPtr>
 serialization::MM2QObject MM2Q::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MM2QConfig configObject;
-  *configObject.lruRefreshTime_ref() = lruRefreshTime_;
-  *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
-  *configObject.updateOnWrite_ref() = config_.updateOnWrite;
-  *configObject.updateOnRead_ref() = config_.updateOnRead;
-  *configObject.hotSizePercent_ref() = config_.hotSizePercent;
-  *configObject.coldSizePercent_ref() = config_.coldSizePercent;
-  *configObject.rebalanceOnRecordAccess_ref() = config_.rebalanceOnRecordAccess;
+  *configObject.lruRefreshTime() = lruRefreshTime_;
+  *configObject.lruRefreshRatio() = config_.lruRefreshRatio;
+  *configObject.updateOnWrite() = config_.updateOnWrite;
+  *configObject.updateOnRead() = config_.updateOnRead;
+  *configObject.hotSizePercent() = config_.hotSizePercent;
+  *configObject.coldSizePercent() = config_.coldSizePercent;
+  *configObject.rebalanceOnRecordAccess() = config_.rebalanceOnRecordAccess;
 
   serialization::MM2QObject object;
-  *object.config_ref() = configObject;
-  *object.tailTrackingEnabled_ref() = tailTrackingEnabled_;
-  *object.lrus_ref() = lru_.saveState();
+  *object.config() = configObject;
+  *object.tailTrackingEnabled() = tailTrackingEnabled_;
+  *object.lrus() = lru_.saveState();
   return object;
 }
 

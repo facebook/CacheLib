@@ -28,11 +28,11 @@ template <typename T, MMLru::Hook<T> T::*HookPtr>
 MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
                                         PtrCompressor compressor)
     : compressor_(std::move(compressor)),
-      lru_(*object.lru_ref(), compressor_),
+      lru_(*object.lru(), compressor_),
       insertionPoint_(compressor_.unCompress(
-          CompressedPtr{*object.compressedInsertionPoint_ref()})),
-      tailSize_(*object.tailSize_ref()),
-      config_(*object.config_ref()) {
+          CompressedPtr{*object.compressedInsertionPoint()})),
+      tailSize_(*object.tailSize()),
+      config_(*object.config()) {
   lruRefreshTime_ = config_.lruRefreshTime;
   nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
                              ? std::numeric_limits<Time>::max()
@@ -307,20 +307,20 @@ template <typename T, MMLru::Hook<T> T::*HookPtr>
 serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMLruConfig configObject;
-  *configObject.lruRefreshTime_ref() =
+  *configObject.lruRefreshTime() =
       lruRefreshTime_.load(std::memory_order_relaxed);
-  *configObject.lruRefreshRatio_ref() = config_.lruRefreshRatio;
-  *configObject.updateOnWrite_ref() = config_.updateOnWrite;
-  *configObject.updateOnRead_ref() = config_.updateOnRead;
-  *configObject.tryLockUpdate_ref() = config_.tryLockUpdate;
-  *configObject.lruInsertionPointSpec_ref() = config_.lruInsertionPointSpec;
+  *configObject.lruRefreshRatio() = config_.lruRefreshRatio;
+  *configObject.updateOnWrite() = config_.updateOnWrite;
+  *configObject.updateOnRead() = config_.updateOnRead;
+  *configObject.tryLockUpdate() = config_.tryLockUpdate;
+  *configObject.lruInsertionPointSpec() = config_.lruInsertionPointSpec;
 
   serialization::MMLruObject object;
-  *object.config_ref() = configObject;
-  *object.compressedInsertionPoint_ref() =
+  *object.config() = configObject;
+  *object.compressedInsertionPoint() =
       compressor_.compress(insertionPoint_).saveState();
-  *object.tailSize_ref() = tailSize_;
-  *object.lru_ref() = lru_.saveState();
+  *object.tailSize() = tailSize_;
+  *object.lru() = lru_.saveState();
   return object;
 }
 

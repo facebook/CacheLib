@@ -67,13 +67,12 @@ class MMLru {
   struct Config {
     // create from serialized config
     explicit Config(SerializationConfigType configState)
-        : Config(
-              *configState.lruRefreshTime_ref(),
-              *configState.lruRefreshRatio_ref(),
-              *configState.updateOnWrite_ref(),
-              *configState.updateOnRead_ref(),
-              *configState.tryLockUpdate_ref(),
-              static_cast<uint8_t>(*configState.lruInsertionPointSpec_ref())) {}
+        : Config(*configState.lruRefreshTime(),
+                 *configState.lruRefreshRatio(),
+                 *configState.updateOnWrite(),
+                 *configState.updateOnRead(),
+                 *configState.tryLockUpdate(),
+                 static_cast<uint8_t>(*configState.lruInsertionPointSpec())) {}
 
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh

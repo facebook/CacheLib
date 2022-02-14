@@ -85,14 +85,12 @@ class SList {
 
   explicit SList(const SListObject& object, PtrCompressor compressor)
       : compressor_(std::move(compressor)),
-        size_(*object.size_ref()),
-        head_(compressor_.unCompress(
-            CompressedPtr{*object.compressedHead_ref()})) {
+        size_(*object.size()),
+        head_(compressor_.unCompress(CompressedPtr{*object.compressedHead()})) {
     // TODO(bwatling): eventually we'll always have 'compressedTail' and we can
     // remove the loop below.
-    if (*object.compressedTail_ref() >= 0) {
-      tail_ =
-          compressor_.unCompress(CompressedPtr{*object.compressedTail_ref()});
+    if (*object.compressedTail() >= 0) {
+      tail_ = compressor_.unCompress(CompressedPtr{*object.compressedTail()});
     } else if (head_) {
       tail_ = head_;
       while (T* next = getNext(*tail_)) {
@@ -108,9 +106,9 @@ class SList {
    */
   SListObject saveState() const {
     SListObject state;
-    *state.compressedHead_ref() = compressor_.compress(head_).saveState();
-    *state.compressedTail_ref() = compressor_.compress(tail_).saveState();
-    *state.size_ref() = size_;
+    *state.compressedHead() = compressor_.compress(head_).saveState();
+    *state.compressedTail() = compressor_.compress(tail_).saveState();
+    *state.size() = size_;
     return state;
   }
 

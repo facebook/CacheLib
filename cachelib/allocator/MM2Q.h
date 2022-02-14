@@ -71,14 +71,14 @@ class MM2Q {
   struct Config {
     // Create from serialized config
     explicit Config(SerializationConfigType configState)
-        : Config(*configState.lruRefreshTime_ref(),
-                 *configState.lruRefreshRatio_ref(),
-                 *configState.updateOnWrite_ref(),
-                 *configState.updateOnRead_ref(),
-                 *configState.tryLockUpdate_ref(),
-                 *configState.rebalanceOnRecordAccess_ref(),
-                 *configState.hotSizePercent_ref(),
-                 *configState.coldSizePercent_ref()) {}
+        : Config(*configState.lruRefreshTime(),
+                 *configState.lruRefreshRatio(),
+                 *configState.updateOnWrite(),
+                 *configState.updateOnRead(),
+                 *configState.tryLockUpdate(),
+                 *configState.rebalanceOnRecordAccess(),
+                 *configState.hotSizePercent(),
+                 *configState.coldSizePercent()) {}
 
     // @param time      the refresh time in seconds to trigger an update in
     // position upon access. An item will be promoted only once in each lru
