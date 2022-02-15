@@ -15,7 +15,7 @@ template <typename CacheTrait>;
 class CacheAllocator : public CacheBase {
   public:
     // Allocate memory of a specific size from cache.
-    ItemHandle allocate(
+    WriteHandle allocate(
       PoolId id,
       Key key,
       uint32_t size,
@@ -32,7 +32,7 @@ For example:
 string data("Hello world");
 
 // Allocate memory for the data.
-auto item_handle = cache->allocate(pool_id, "key1", data.size());
+auto handle = cache->allocate(poolId, "key1", data.size());
 ```
 
 The allocated memory can't be changed at runtime. To extend this memory, use chained allocations:
@@ -46,7 +46,7 @@ The following is the declaration of the `allocateChainedItem()` method:
 template <typename CacheTrait>;
 class CacheAllocator : public CacheBase {
   public:
-    ItemHandle allocateChainedItem(const ItemHandle& parent, uint32_t size);
+    WriteHandle allocateChainedItem(const ReadHandle& parent, uint32_t size);
   // ...
 };
 ```
@@ -56,7 +56,7 @@ Chained items are inserted in LIFO order. When user reads through the chained it
 
 For example:
 
-```
+```cpp
 auto parent = cache->allocate(0, "test key", 0);
 for (int i = 0; i < 3; i++) {
   auto child = cache->allocateChainedItem(parent, sizeof(int));

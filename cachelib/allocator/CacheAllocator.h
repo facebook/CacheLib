@@ -327,11 +327,11 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if the poolId is invalid or the size
   //          requested is invalid or if the key is invalid(key.size() == 0 or
   //          key.size() > 255)
-  ItemHandle allocate(PoolId id,
-                      Key key,
-                      uint32_t size,
-                      uint32_t ttlSecs = 0,
-                      uint32_t creationTime = 0);
+  WriteHandle allocate(PoolId id,
+                       Key key,
+                       uint32_t size,
+                       uint32_t ttlSecs = 0,
+                       uint32_t creationTime = 0);
 
   // Allocate a chained item
   //
@@ -358,7 +358,7 @@ class CacheAllocator : public CacheBase {
   // @param child   chained item that will be linked to the parent
   //
   // @throw std::invalid_argument if parent is nullptr
-  void addChainedItem(ItemHandle& parent, ItemHandle child);
+  void addChainedItem(WriteHandle& parent, WriteHandle child);
 
   // Pop the first chained item assocaited with this parent and unmark this
   // parent handle as having chained allocations.
@@ -431,7 +431,7 @@ class CacheAllocator : public CacheBase {
   //         and is now accessible to everyone. False if there was an error.
   //
   // @throw std::invalid_argument if the handle is already accessible.
-  bool insert(const ItemHandle& handle);
+  bool insert(const WriteHandle& handle);
 
   // Replaces the allocated handle into the AccessContainer, making it
   // accessible for everyone. If an existing handle is already in the
@@ -445,7 +445,7 @@ class CacheAllocator : public CacheBase {
   // @throw cachelib::exception::RefcountOverflow if the item we are replacing
   //        is already out of refcounts.
   // @return handle to the old item that had been replaced
-  ItemHandle insertOrReplace(const ItemHandle& handle);
+  WriteHandle insertOrReplace(const WriteHandle& handle);
 
   // look up an item by its key across the nvm cache as well if enabled.
   //
@@ -1295,11 +1295,11 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if the poolId is invalid or the size
   //          requested is invalid or if the key is invalid(key.size() == 0 or
   //          key.size() > 255)
-  ItemHandle allocateInternal(PoolId id,
-                              Key key,
-                              uint32_t size,
-                              uint32_t creationTime,
-                              uint32_t expiryTime);
+  WriteHandle allocateInternal(PoolId id,
+                               Key key,
+                               uint32_t size,
+                               uint32_t creationTime,
+                               uint32_t expiryTime);
 
   // Allocate a chained item
   //
@@ -1333,11 +1333,11 @@ class CacheAllocator : public CacheBase {
   // Given an existing item, allocate a new one for the
   // existing one to later be moved into.
   //
-  // @param oldItem    handle to item we want to allocate a new item for
+  // @param oldItem    the item we want to allocate a new item for
   //
   // @return  handle to the newly allocated item
   //
-  ItemHandle allocateNewItemForOldItem(const Item& oldItem);
+  WriteHandle allocateNewItemForOldItem(const Item& oldItem);
 
   // internal helper that grabs a refcounted handle to the item. This does
   // not record the access to reflect in the mmContainer.
@@ -1493,7 +1493,7 @@ class CacheAllocator : public CacheBase {
   //         and is now accessible to everyone. False if there was an error.
   //
   // @throw std::invalid_argument if the handle is already accessible or invalid
-  bool insertImpl(const ItemHandle& handle, AllocatorApiEvent event);
+  bool insertImpl(const WriteHandle& handle, AllocatorApiEvent event);
 
   // Removes an item from the access container and MM container.
   //

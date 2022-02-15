@@ -270,7 +270,7 @@ std::unique_ptr<Deserializer> CacheAllocator<CacheTrait>::createDeserializer() {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::allocate(PoolId poolId,
                                      typename Item::Key key,
                                      uint32_t size,
@@ -284,7 +284,7 @@ CacheAllocator<CacheTrait>::allocate(PoolId poolId,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              typename Item::Key key,
                                              uint32_t size,
@@ -307,7 +307,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     memory = findEviction(pid, cid);
   }
 
-  ItemHandle handle;
+  WriteHandle handle;
   if (memory != nullptr) {
     // At this point, we have a valid memory allocation that is ready for use.
     // Ensure that when we abort from here under any circumstances, we free up
@@ -943,12 +943,12 @@ void CacheAllocator<CacheTrait>::insertInMMContainer(Item& item) {
  */
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::insert(const ItemHandle& handle) {
+bool CacheAllocator<CacheTrait>::insert(const WriteHandle& handle) {
   return insertImpl(handle, AllocatorApiEvent::INSERT);
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::insertImpl(const ItemHandle& handle,
+bool CacheAllocator<CacheTrait>::insertImpl(const WriteHandle& handle,
                                             AllocatorApiEvent event) {
   XDCHECK(handle);
   XDCHECK(event == AllocatorApiEvent::INSERT ||
@@ -984,15 +984,15 @@ bool CacheAllocator<CacheTrait>::insertImpl(const ItemHandle& handle,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::insertOrReplace(const ItemHandle& handle) {
+typename CacheAllocator<CacheTrait>::WriteHandle
+CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
   XDCHECK(handle);
   if (handle->isAccessible()) {
     throw std::invalid_argument("Handle is already accessible");
   }
 
   insertInMMContainer(*(handle.getInternal()));
-  ItemHandle replaced;
+  WriteHandle replaced;
   try {
     auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(handle->getKey())
                           : std::unique_lock<std::mutex>();
@@ -2377,7 +2377,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
 
   bool isMoved = false;
   auto startTime = util::getCurrentTimeSec();
-  ItemHandle newItemHdl = allocateNewItemForOldItem(oldItem);
+  WriteHandle newItemHdl = allocateNewItemForOldItem(oldItem);
 
   for (unsigned int itemMovingAttempts = 0;
        itemMovingAttempts < config_.movingTries;
@@ -2464,7 +2464,7 @@ CacheAllocator<CacheTrait>::validateAndGetParentHandleForChainedMoveLocked(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
   if (oldItem.isChainedItem()) {
     const auto& oldChainedItem = oldItem.asChainedItem();

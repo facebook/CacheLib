@@ -7,7 +7,7 @@ After [setting up your cache](Set_up_a_simple_cache), you can start writing data
 
 To use cachelib to write data to your cache:
 
-- Allocate memory for the data from the cache, which will return an item handle to the allocated memory. Item handle provides a reference counted wrapper to access a cache item.
+- Allocate memory for the data from the cache, which will return an item's `WriteHandle` to the allocated memory. Item handle provides a reference counted wrapper to access a cache item.
 - Write the data to the allocated memory and insert the item handle into the cache.
 
 ## Allocate memory for data from cache
@@ -20,7 +20,7 @@ template <typename CacheTrait>;
 class CacheAllocator : public CacheBase {
   public:
     // Allocate memory of a specific size from cache.
-    ItemHandle allocate(
+    WriteHandle allocate(
       PoolId id,
       Key key,
       uint32_t size,
@@ -29,7 +29,7 @@ class CacheAllocator : public CacheBase {
     );
 
     // Allocate memory for a chained item of a specific size from cache.
-    ItemHandle allocateChainedItem(const ItemHandle& parent, uint32_t size);
+    WriteHandle allocateChainedItem(const ReadHandle& parent, uint32_t size);
   // ...
 };
 ```
@@ -43,15 +43,15 @@ auto poolId = cache->addPool(
   "default_pool",
   cache->getCacheMemoryStats().cacheSize
 );
-ItemHandle handle = cache->allocate(pool_id, "key1", 1024);
+WriteHandle handle = cache->allocate(poolId, "key1", 1024);
 ```
 
 
 where:
 - `cache` is a `unique_ptr` to `CacheAllocator<facebook::cachelib::LruAllocator>` (see [Set up a simple dram cache](Set_up_a_simple_cache)).
-- `ItemHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::Handle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::WriteHandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
+- `WriteHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::WriteHandle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::WriteHandleImpl` defined in allocator/Handle.h. If allocation failed, an empty handle will be returned.
 
-To get the writable memory from the allocated memory, call the `getMemory` method via the item handle:
+To get the writable memory from the allocated memory, call the `getMemory` method via the `WriteHandle`:
 
 
 ```cpp
@@ -59,16 +59,16 @@ if (handle) {
   void* pwm = handle->getMemory();
 }
 ```
-where `handle` is of type `ItemHandle` (aka `WriteHandle`).
-
+where `handle` is of type `WriteHandle`.
 
 If the data size is greater than the maximum slab size (4 MB), use [chained items](chained_items) to store the data with multiple items. To allocate memory for additional chained items from cache, call this method:
 
 
 ```cpp
-ItemHandle allocateChainedItem(const ReadHandle& parent, uint32_t size);
+WriteHandle allocateChainedItem(const ReadHandle& parent, uint32_t size);
 ```
-
+where:
+- `ReadHandle` is a `CacheItem<facebook::cachelib::LruAllocator>::ReadHandle` (see allocator/CacheItem.h), which is `facebook::cachelib::detail::ReadHandleImpl` defined in allocator/Handle.h.
 
 For example:
 
@@ -103,13 +103,13 @@ void* memcpy(void* destination, const void* source, size_t num);
 ```
 
 
-To get the destination address, call the `getMemory()` method via the `ItemHandle`(aka `WriteHandle`):
+To get the destination address, call the `getMemory()` method via the `WriteHandle`:
 
 
 ```cpp
 void* pwm = handle->getMemory();
 ```
-where `handle` is of type `ItemHandle`(aka `WriteHandle`).
+where `handle` is of type `WriteHandle`.
 
 
 To insert an item to the cache, call one of the following methods defined in
@@ -121,13 +121,13 @@ template <typename CacheTrait>
 class CacheAllocator : public CacheBase {
   public:
     // will fail insertion if key is already present
-    bool insert(const ItemHandle& handle);
+    bool insert(const WriteHandle& handle);
 
-    // will insert or replace existing item for the key
-    ItemHandle insertOrReplace(const ItemHandle& handle);
+    // will insert or replace existing item for the key and return the handle of the replaced old item
+    WriteHandle insertOrReplace(const WriteHandle& handle);
 
     // link the chained items to the parent
-    void addChainedItem(const ItemHandle& parent, ItemHandle child);
+    void addChainedItem(const WriteHandle& parent, WriteHandle child);
   // ...
 };
 ```
