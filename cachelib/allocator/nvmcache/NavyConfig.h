@@ -278,15 +278,18 @@ class BlockCacheConfig {
   // each clean region that is reserved. This ensures each time we obtain a new
   // in-mem buffer, we have a clean region to flush it to flash once it's ready.
   BlockCacheConfig& setCleanRegions(uint32_t cleanRegions,
-                                    bool enableInMemBuffer) noexcept;
+                                    bool enableInMemBuffer = true) noexcept;
 
   // Set a vector of size classes.
   // If enabled, Navy will configure regions to allocate rounded up to these
   // size classes and evict regions within a size classs. A given region
   // allocates corresponding to a given size class. By default, objects will be
   // stack allocated irrespective of their size on available regions.
-  BlockCacheConfig& useSizeClasses(std::vector<uint32_t> sizeClasses) noexcept {
+  [[deprecated]] BlockCacheConfig& useSizeClasses(
+      std::vector<uint32_t> sizeClasses) noexcept {
     sizeClasses_ = std::move(sizeClasses);
+    // set in-memory buffer to 0
+    numInMemBuffers_ = 0;
     return *this;
   }
 
@@ -331,7 +334,7 @@ class BlockCacheConfig {
   // Buffer of clean regions to maintain for eviction.
   uint32_t cleanRegions_{1};
   // Number of Navy BlockCache in-memory buffers.
-  uint32_t numInMemBuffers_{0};
+  uint32_t numInMemBuffers_{2};
   // A vector of Navy BlockCache size classes (must be multiples of
   // blockSize_).
   std::vector<uint32_t> sizeClasses_;

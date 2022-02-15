@@ -29,6 +29,7 @@ NvmCacheTest::NvmCacheTest() {
   cacheDir_ = folly::sformat("/tmp/nvmcache-cachedir/{}", ::getpid());
   util::makeDir(cacheDir_);
   config_ = utils::getNvmTestConfig(cacheDir_);
+  config_.blockCache().useSizeClasses({});
 
   {
     allocConfig_.enableCachePersistence(cacheDir_);

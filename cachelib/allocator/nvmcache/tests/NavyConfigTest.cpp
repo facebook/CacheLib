@@ -94,9 +94,9 @@ void setBlockCacheTestSettings(NavyConfig& config) {
   config.blockCache()
       .enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio)
       .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold)
+      .useSizeClasses(blockCacheSizeClasses)
       .setCleanRegions(blockCacheCleanRegions, true)
       .setRegionSize(blockCacheRegionSize)
-      .useSizeClasses(blockCacheSizeClasses)
       .setDataChecksum(blockCacheDataChecksum);
 }
 
@@ -140,7 +140,7 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_TRUE(blockCacheConfig.getSizeClasses().empty());
   EXPECT_TRUE(blockCacheConfig.getSFifoSegmentRatio().empty());
   EXPECT_EQ(blockCacheConfig.getDataChecksum(), true);
-  EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), 0);
+  EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), 2);
 
   const auto& bigHashConfig = config.bigHash();
   EXPECT_EQ(bigHashConfig.getBucketSize(), 4096);
@@ -277,9 +277,9 @@ TEST(NavyConfigTest, BlockCache) {
   // test general settings
   config.blockCache()
       .setRegionSize(blockCacheRegionSize)
+      .useSizeClasses(blockCacheSizeClasses)
       .setCleanRegions(blockCacheCleanRegions, true)
-      .setDataChecksum(blockCacheDataChecksum)
-      .useSizeClasses(blockCacheSizeClasses);
+      .setDataChecksum(blockCacheDataChecksum);
   auto& blockCacheConfig = config.blockCache();
   EXPECT_EQ(blockCacheConfig.getRegionSize(), blockCacheRegionSize);
   EXPECT_EQ(blockCacheConfig.getCleanRegions(), blockCacheCleanRegions);
