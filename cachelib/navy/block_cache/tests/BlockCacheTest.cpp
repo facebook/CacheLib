@@ -177,11 +177,13 @@ TEST(BlockCache, InsertLookup) {
 }
 
 TEST(BlockCache, InsertLookupSync) {
+  std::vector<CacheEntry> log;
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {1024});
+  config.numInMemBuffers = 1;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -193,10 +195,26 @@ TEST(BlockCache, InsertLookupSync) {
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
     EXPECT_EQ(e.value(), value.view());
+    log.push_back(std::move(e));
   }
 
+  // Zero hits because the buffer has not been flushed when the lookups
+  // happened. We do not "touch" a region until it has been flushed
+  // to the device.
+  EXPECT_EQ(0, hits[0]);
+  EXPECT_EQ(0, hits[1]);
+  EXPECT_EQ(0, hits[2]);
+  EXPECT_EQ(0, hits[3]);
+
+  for (size_t i = 0; i < 17; i++) {
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    EXPECT_EQ(log[i].value(), value.view());
+  }
+  // Still zero hit in the second region, because we didn't fill it
+  // up. It's not flushed to the device, and thus no hits.
   EXPECT_EQ(16, hits[0]);
-  EXPECT_EQ(1, hits[1]);
+  EXPECT_EQ(0, hits[1]);
   EXPECT_EQ(0, hits[2]);
   EXPECT_EQ(0, hits[3]);
 }

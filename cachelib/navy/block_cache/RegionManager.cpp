@@ -73,6 +73,14 @@ RegionId RegionManager::evict() {
   return rid;
 }
 
+void RegionManager::touch(RegionId rid) {
+  auto& region = getRegion(rid);
+  XDCHECK_EQ(rid, region.id());
+  if (!region.hasBuffer()) {
+    policy_->touch(rid);
+  }
+}
+
 void RegionManager::track(RegionId rid) {
   auto& region = getRegion(rid);
   XDCHECK_EQ(rid, region.id());

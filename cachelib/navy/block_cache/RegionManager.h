@@ -120,8 +120,9 @@ class RegionManager {
   // Gets a region to evict.
   RegionId evict();
 
-  // Records a hit of a region.
-  void touch(RegionId rid) { policy_->touch(rid); }
+  // Promote a region. If this region was still buffered in-mem,
+  // this would be a no-op.
+  void touch(RegionId rid);
 
   // Calling track on tracked regions is noop.
   void track(RegionId rid);
