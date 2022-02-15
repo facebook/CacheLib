@@ -117,8 +117,8 @@ class DeviceMetaDataWriter final : public RecordWriter {
         offset_ += kBlockSize;
         bufIndex_ = 0;
       }
-      auto cpBytes =
-          std::min(static_cast<uint64_t>(kBlockSize - bufIndex_), size);
+      auto cpBytes = std::min(static_cast<uint64_t>(kBlockSize - bufIndex_),
+                              static_cast<uint64_t>(size));
       memcpy(&bufferData[bufIndex_], data + dataOffset, cpBytes);
       dataOffset += cpBytes;
       bufIndex_ += cpBytes;

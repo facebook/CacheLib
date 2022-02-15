@@ -56,7 +56,7 @@ void JobQueue::enqueue(Job job, folly::StringPiece name, QueuePos pos) {
       }
       enqueueCount_++;
     }
-    maxQueueLen_ = std::max(maxQueueLen_, queue_.size());
+    maxQueueLen_ = std::max<uint64_t>(maxQueueLen_, queue_.size());
   }
 
   if (wasEmpty) {
