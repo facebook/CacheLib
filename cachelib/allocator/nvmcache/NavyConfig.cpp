@@ -270,8 +270,6 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       blockCacheConfig_.isLruEnabled() ? "true" : "false";
   configMap["navyConfig::blockCacheRegionSize"] =
       folly::to<std::string>(blockCacheConfig_.getRegionSize());
-  configMap["navyConfig::blockCacheSizeClasses"] =
-      folly::join(",", blockCacheConfig_.getSizeClasses());
   configMap["navyConfig::blockCacheCleanRegions"] =
       folly::to<std::string>(blockCacheConfig_.getCleanRegions());
   configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =

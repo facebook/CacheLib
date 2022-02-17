@@ -43,14 +43,12 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-  std::vector<uint32_t> sizeClasses{1024};
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
+  RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::move(policy),
-      2 * sizeClasses.size() + 1, 0, kFlushRetryLimit);
+      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -147,13 +145,12 @@ TEST(Allocator, TestInMemBufferStates) {
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
 
   std::vector<uint32_t> sizeClasses{1024};
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
+  RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::move(policy),
-      2 * sizeClasses.size() + 1, 0, kFlushRetryLimit);
+      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
   EXPECT_EQ(0, ex.getQueueSize());
 
@@ -221,14 +218,14 @@ TEST(Allocator, UsePriorities) {
   constexpr uint32_t kRegionSize = 16 * 1024;
   auto device =
       createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
+  RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), std::vector<uint32_t>{} /* no size class */,
-      std::move(policy), kNumRegions /* numInMemBuffers */,
-      3 /* numPriorities */, kFlushRetryLimit);
+      std::move(cleanupCb), std::move(policy),
+      kNumRegions /* numInMemBuffers */, 3 /* numPriorities */,
+      kFlushRetryLimit);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
   EXPECT_EQ(0, ex.getQueueSize());
@@ -244,7 +241,6 @@ TEST(Allocator, UsePriorities) {
     std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{pri}, addr.rid());
-    EXPECT_EQ(0, rm->getRegion(addr.rid()).getClassId());
     EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());
     EXPECT_EQ(0, addr.offset());
   }
@@ -254,61 +250,6 @@ TEST(Allocator, UsePriorities) {
   EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 }
 
-TEST(Allocator, UsePrioritiesSizeClass) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<MockPolicy>(&hits);
-  constexpr uint32_t kNumRegions = 7;
-  constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device =
-      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
-  MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), std::vector<uint32_t>{1024, 4096} /* size class */,
-      std::move(policy), kNumRegions /* numInMemBuffers */,
-      3 /* numPriorities */, kFlushRetryLimit);
-
-  Allocator allocator{*rm, 3 /* numPriorities */};
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  // Allocate one item from each priortiy, we should see each allocation
-  // results in a new region being allocated for its priority
-  for (uint16_t pri = 0; pri < 3; pri++) {
-    auto [desc, slotSize, addr] = allocator.allocate(1024, pri);
-    EXPECT_EQ(OpenStatus::Retry, desc.status());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{pri}, addr.rid());
-    EXPECT_EQ(0, rm->getRegion(addr.rid()).getClassId());
-    EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());
-    EXPECT_EQ(0, addr.offset());
-  }
-
-  // Allocate
-  for (uint16_t pri = 0; pri < 3; pri++) {
-    auto [desc, slotSize, addr] = allocator.allocate(2048, pri);
-    EXPECT_EQ(OpenStatus::Retry, desc.status());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-
-    std::tie(desc, slotSize, addr) = allocator.allocate(2048, pri);
-    EXPECT_TRUE(desc.isReady());
-    // +3 to the pri for rid since we allocated 3 regions in the for-loop above
-    EXPECT_EQ(RegionId{static_cast<uint32_t>(pri + 3)}, addr.rid());
-    EXPECT_EQ(1, rm->getRegion(addr.rid()).getClassId());
-    EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());
-    EXPECT_EQ(0, addr.offset());
-  }
-
-  // Reclaim the very last region in the eviction policy
-  EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

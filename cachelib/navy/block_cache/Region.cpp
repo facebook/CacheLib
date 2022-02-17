@@ -98,7 +98,6 @@ bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
 void Region::reset() {
   std::lock_guard<std::mutex> l{lock_};
   XDCHECK_EQ(activeOpenLocked(), 0U);
-  classId_ = kClassIdMax;
   priority_ = 0;
   flags_ = 0;
   activeWriters_ = 0;

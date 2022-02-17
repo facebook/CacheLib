@@ -41,17 +41,15 @@ namespace navy {
 // Callback that is used to clear index.
 //   @rid       Region ID
 //   @buffer    Buffer with region data, valid during callback invocation
-//   @slotSize  Region slot size (0 for stack allocator)
 // Returns number of slots evicted
 using RegionEvictCallback =
-    std::function<uint32_t(RegionId rid, uint32_t slotSize, BufferView buffer)>;
+    std::function<uint32_t(RegionId rid, BufferView buffer)>;
 
 // Callback that is used to clean up region.
 //   @rid       Region ID
 //   @buffer    Buffer with region data, valid during callback invocation
-//   @slotSize  Region slot size (0 for stack allocator)
 using RegionCleanupCallback =
-    std::function<void(RegionId rid, uint32_t slotSize, BufferView buffer)>;
+    std::function<void(RegionId rid, BufferView buffer)>;
 
 // Size class or stack allocator. Thread safe. Syncs access, reclaims regions
 // Controls the allocation of regions, status (open for read/write), and
@@ -70,7 +68,6 @@ class RegionManager {
   // @param scheduler                 JobScheduler to run reclamation jobs
   // @param evictCb                   Callback invoked when region evicted
   // @param cleanupCb                 Callback invoked when region cleaned up
-  // @param sizeClasses               list of size classes
   // @param policy                    eviction policy
   // @param numInMemBuffers           number of in memory buffers
   // @param numPriorities             max number of priorities allowed for
@@ -85,7 +82,6 @@ class RegionManager {
                 JobScheduler& scheduler,
                 RegionEvictCallback evictCb,
                 RegionCleanupCallback cleanupCb,
-                std::vector<uint32_t> sizeClasses,
                 std::unique_ptr<EvictionPolicy> policy,
                 uint32_t numInMemBuffers,
                 uint16_t numPriorities,
@@ -104,9 +100,6 @@ class RegionManager {
     XDCHECK(rid.valid());
     return *regions_[rid.index()];
   }
-
-  // Returns the size classes.
-  const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
 
   // Flushes the in memory buffer attached to a region in either async or
   // sync mode.
@@ -218,15 +211,6 @@ class RegionManager {
   // Exports RegionManager stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const;
 
-  // Gets the size class of a region. Returns 0 when @sizeClasses is empty.
-  uint32_t getRegionSlotSize(RegionId rid) const {
-    const auto& region = getRegion(rid);
-    if (sizeClasses_.empty()) {
-      return 0;
-    }
-    return sizeClasses_[region.getClassId()];
-  }
-
   // Opens a region for reading and returns the region descriptor.
   //
   // @param rid         region ID
@@ -299,8 +283,6 @@ class RegionManager {
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;
-
-  const std::vector<uint32_t> sizeClasses_;
 
   // To understand naming here, let me explain difference between "reclamation"
   // and "eviction". Cache evicts item and makes it inaccessible via lookup. It

@@ -134,11 +134,6 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   } else {
     blockCache->setFifoEvictionPolicy();
   }
-
-  auto sizeClasses = blockCacheConfig.getSizeClasses();
-  if (!sizeClasses.empty()) {
-    blockCache->setSizeClasses(std::move(sizeClasses));
-  }
   blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions());
 
   blockCache->setReinsertionConfig(blockCacheConfig.getReinsertionConfig());

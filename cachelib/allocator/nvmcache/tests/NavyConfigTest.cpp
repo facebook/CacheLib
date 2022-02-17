@@ -46,7 +46,6 @@ const uint32_t deviceMaxWriteSize = 4 * 1024 * 1024;
 
 // BlockCache settings
 const uint32_t blockCacheRegionSize = 16 * 1024 * 1024;
-const std::vector<uint32_t> blockCacheSizeClasses = {1024, 2048, 4096};
 const uint8_t blockCacheReinsertionHitsThreshold = 111;
 const uint32_t blockCacheCleanRegions = 4;
 const bool blockCacheDataChecksum = true;
@@ -94,7 +93,6 @@ void setBlockCacheTestSettings(NavyConfig& config) {
   config.blockCache()
       .enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio)
       .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold)
-      .useSizeClasses(blockCacheSizeClasses)
       .setCleanRegions(blockCacheCleanRegions)
       .setRegionSize(blockCacheRegionSize)
       .setDataChecksum(blockCacheDataChecksum);
@@ -137,7 +135,6 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(blockCacheConfig.isLruEnabled(), true);
   EXPECT_EQ(blockCacheConfig.getRegionSize(), 16 * 1024 * 1024);
   EXPECT_EQ(blockCacheConfig.getCleanRegions(), 1);
-  EXPECT_TRUE(blockCacheConfig.getSizeClasses().empty());
   EXPECT_TRUE(blockCacheConfig.getSFifoSegmentRatio().empty());
   EXPECT_EQ(blockCacheConfig.getDataChecksum(), true);
   EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), 2);
@@ -189,7 +186,6 @@ TEST(NavyConfigTest, Serialization) {
 
   expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";
-  expectedConfigMap["navyConfig::blockCacheSizeClasses"] = "1024,2048,4096";
   expectedConfigMap["navyConfig::blockCacheCleanRegions"] = "4";
   expectedConfigMap["navyConfig::blockCacheReinsertionHitsThreshold"] = "111";
   expectedConfigMap["navyConfig::blockCacheReinsertionPctThreshold"] = "0";
@@ -276,7 +272,6 @@ TEST(NavyConfigTest, BlockCache) {
   NavyConfig config{};
   // test general settings
   config.blockCache()
-      .useSizeClasses(blockCacheSizeClasses)
       .setRegionSize(blockCacheRegionSize)
       .setCleanRegions(blockCacheCleanRegions)
       .setDataChecksum(blockCacheDataChecksum);
@@ -285,7 +280,6 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(blockCacheConfig.getCleanRegions(), blockCacheCleanRegions);
   EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), blockCacheCleanRegions * 2);
   EXPECT_EQ(blockCacheConfig.getDataChecksum(), blockCacheDataChecksum);
-  EXPECT_EQ(blockCacheConfig.getSizeClasses(), blockCacheSizeClasses);
 
   // test FIFO eviction policy
   config.blockCache().enableFifo();

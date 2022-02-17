@@ -57,8 +57,6 @@ class BlockCache final : public Engine {
     // Eviction policy
     std::unique_ptr<EvictionPolicy> evictionPolicy;
     BlockCacheReinsertionConfig reinsertionConfig{};
-    // Sorted list of size classes (empty means stack allocator)
-    std::vector<uint32_t> sizeClasses;
     // Region size, bytes
     uint64_t regionSize{16 * 1024 * 1024};
     // See AbstractCacheProto::setReadBufferSize
@@ -221,7 +219,7 @@ class BlockCache final : public Engine {
   BlockCache(Config&& config, ValidConfigTag);
 
   // Entry disk size (with aux data and aligned)
-  uint32_t serializedSize(uint32_t keySize, uint32_t valueSize, bool aligned);
+  uint32_t serializedSize(uint32_t keySize, uint32_t valueSize);
 
   // Read and write are time consuming. It doesn't worth inlining them from
   // the performance point of view, but makes sense to track them for perf:
@@ -247,10 +245,10 @@ class BlockCache final : public Engine {
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
-  uint32_t onRegionReclaim(RegionId rid, uint32_t slotSize, BufferView buffer);
+  uint32_t onRegionReclaim(RegionId rid, BufferView buffer);
 
   // Allocator cleanup callback
-  void onRegionCleanup(RegionId rid, uint32_t slotSize, BufferView buffer);
+  void onRegionCleanup(RegionId rid, BufferView buffer);
 
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
@@ -264,11 +262,6 @@ class BlockCache final : public Engine {
   // granuality is less than the device io alignment size because we buffer
   // writes in memory until we fill up a region.
   uint32_t calcAllocAlignSize() const;
-
-  // returns size aligned to alloc alignment size
-  uint32_t getAlignedSize(uint32_t size) const {
-    return powTwoAlign(size, allocAlignSize_);
-  }
 
   // Size hint is computed by aligning size up to kMinAllocAlignSize,
   // and then divide by it. It is loosely compressing the size as
@@ -331,8 +324,8 @@ class BlockCache final : public Engine {
   // reference to the under-lying device.
   const Device& device_;
   // alloc alignment size indicates the granularity of entry sizes on device.
-  // this can be as small as 1 and is determined by the size of the device
-  // and size of the address (which is 32-bits).
+  // this is at least kMinAllocAlignSize and is determined by the size of the
+  // device and size of the address (which is 32-bits).
   const uint32_t allocAlignSize_{};
   const uint32_t readBufferSize_{};
   // number of bytes in a region

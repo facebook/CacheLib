@@ -30,7 +30,6 @@ RegionManager::RegionManager(uint32_t numRegions,
                              JobScheduler& scheduler,
                              RegionEvictCallback evictCb,
                              RegionCleanupCallback cleanupCb,
-                             std::vector<uint32_t> sizeClasses,
                              std::unique_ptr<EvictionPolicy> policy,
                              uint32_t numInMemBuffers,
                              uint16_t numPriorities,
@@ -47,7 +46,6 @@ RegionManager::RegionManager(uint32_t numRegions,
       scheduler_{scheduler},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
-      sizeClasses_{sizeClasses},
       numInMemBuffers_{numInMemBuffers} {
   XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
   for (uint32_t i = 0; i < numRegions; i++) {
@@ -69,8 +67,7 @@ RegionId RegionManager::evict() {
   if (!rid.valid()) {
     XLOG(ERR, "Eviction failed");
   } else {
-    auto& region = getRegion(rid);
-    XLOGF(DBG, "Evict {} class {}", rid.index(), region.getClassId());
+    XLOGF(DBG, "Evict {}", rid.index());
   }
   return rid;
 }
@@ -136,7 +133,7 @@ bool RegionManager::detachBuffer(const RegionId& rid) {
 bool RegionManager::cleanupBufferOnFlushFailure(const RegionId& regionId) {
   auto& region = getRegion(regionId);
   auto callBack = [this](RegionId rid, BufferView buffer) {
-    cleanupCb_(rid, getRegionSlotSize(rid), buffer);
+    cleanupCb_(rid, buffer);
     numInMemBufWaitingFlush_.dec();
     numInMemBufFlushFailures_.inc();
   };
@@ -407,7 +404,7 @@ void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
   } else {
     const auto evictStartTime = getSteadyClock();
     XLOGF(DBG, "Evict region {} entries", rid.index());
-    auto numEvicted = evictCb_(rid, getRegionSlotSize(rid), buffer);
+    auto numEvicted = evictCb_(rid, buffer);
     XLOGF(DBG,
           "Evict region {} entries: {} us",
           rid.index(),
@@ -425,12 +422,6 @@ void RegionManager::persist(RecordWriter& rw) const {
     *regionProto.regionId_ref() = i;
     *regionProto.lastEntryEndOffset_ref() =
         regions_[i]->getLastEntryEndOffset();
-    regionProto.pinned_ref() = false;
-    if (*regionProto.pinned_ref()) {
-      *regionProto.classId_ref() = 0;
-    } else {
-      *regionProto.classId_ref() = regions_[i]->getClassId();
-    }
     regionProto.priority_ref() = regions_[i]->getPriority();
     *regionProto.numItems_ref() = regions_[i]->getNumItems();
   }

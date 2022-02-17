@@ -62,9 +62,6 @@ class BlockCacheProto {
   virtual void setSegmentedFifoEvictionPolicy(
       std::vector<unsigned int> segmentRatio) = 0;
 
-  // (Optional) Size classes list. Stack allocator used if not set.
-  virtual void setSizeClasses(std::vector<uint32_t> sizeClasses) = 0;
-
   // (Optional) In case of stack alloc, determines recommended size of the
   // read buffer. Must be multiple of block size.
   virtual void setReadBufferSize(uint32_t size) = 0;

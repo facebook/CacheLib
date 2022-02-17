@@ -37,15 +37,12 @@ class RegionAllocator {
  public:
   // @param classId   size class this region allocator is associated with
   // @param priority  priority this region allocator is associated with
-  explicit RegionAllocator(uint16_t classId, uint16_t priority)
-      : classId_{classId}, priority_{priority} {}
+  explicit RegionAllocator(uint16_t priority) : priority_{priority} {}
 
   RegionAllocator(const RegionAllocator&) = delete;
   RegionAllocator& operator=(const RegionAllocator&) = delete;
   RegionAllocator(RegionAllocator&& other) noexcept
-      : classId_{other.classId_},
-        priority_{other.priority_},
-        rid_{other.rid_} {}
+      : priority_{other.priority_}, rid_{other.rid_} {}
 
   // Sets new region to allocate from. Region allocator has to be reset before
   // calling this.
@@ -57,9 +54,6 @@ class RegionAllocator {
   // Resets allocator to the inital state.
   void reset();
 
-  // Returns the size class this region allocator is associated with.
-  uint16_t classId() const { return classId_; }
-
   // Returns the priority this region allocator is associated with.
   uint16_t priority() const { return priority_; }
 
@@ -67,7 +61,6 @@ class RegionAllocator {
   std::mutex& getLock() const { return mutex_; }
 
  private:
-  const uint16_t classId_{};
   const uint16_t priority_{};
 
   // The current region id from which we are allocating
@@ -87,12 +80,6 @@ class Allocator {
   //                          supports
   // Throws std::exception if invalid arguments
   explicit Allocator(RegionManager& regionManager, uint16_t numPriorities);
-
-  // Checks whether size class is used.
-  // Returns true if @sizeClasses is not empty; false otherwise.
-  bool isSizeClassAllocator() const {
-    return regionManager_.getSizeClasses().size() > 0;
-  }
 
   // Allocates and opens for writing.
   //
@@ -138,11 +125,9 @@ class Allocator {
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateWith(
       RegionAllocator& ra, uint32_t size);
 
-  uint32_t getSlotSizeAndClass(uint32_t size, uint32_t& sc) const;
-
   RegionManager& regionManager_;
-  // Corresponding RegionAllocators (see regionManager_.sizeClasses_)
-  std::vector<std::vector<RegionAllocator>> allocators_;
+  // Multiple allocators when we use priority-based allocation
+  std::vector<RegionAllocator> allocators_;
 };
 } // namespace navy
 } // namespace cachelib

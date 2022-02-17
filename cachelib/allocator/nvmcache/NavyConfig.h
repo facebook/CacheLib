@@ -279,19 +279,6 @@ class BlockCacheConfig {
   // clean region to flush it to flash once it's ready.
   BlockCacheConfig& setCleanRegions(uint32_t cleanRegions) noexcept;
 
-  // Set a vector of size classes.
-  // If enabled, Navy will configure regions to allocate rounded up to these
-  // size classes and evict regions within a size classs. A given region
-  // allocates corresponding to a given size class. By default, objects will be
-  // stack allocated irrespective of their size on available regions.
-  [[deprecated]] BlockCacheConfig& useSizeClasses(
-      std::vector<uint32_t> sizeClasses) noexcept {
-    sizeClasses_ = std::move(sizeClasses);
-    // set in-memory buffer to 0
-    numInMemBuffers_ = 0;
-    return *this;
-  }
-
   BlockCacheConfig& setRegionSize(uint32_t regionSize) noexcept {
     regionSize_ = regionSize;
     return *this;
@@ -311,8 +298,6 @@ class BlockCacheConfig {
   uint32_t getCleanRegions() const { return cleanRegions_; }
 
   uint32_t getNumInMemBuffers() const { return numInMemBuffers_; }
-
-  const std::vector<uint32_t>& getSizeClasses() const { return sizeClasses_; }
 
   uint32_t getRegionSize() const { return regionSize_; }
 
@@ -334,9 +319,6 @@ class BlockCacheConfig {
   uint32_t cleanRegions_{1};
   // Number of Navy BlockCache in-memory buffers.
   uint32_t numInMemBuffers_{2};
-  // A vector of Navy BlockCache size classes (must be multiples of
-  // blockSize_).
-  std::vector<uint32_t> sizeClasses_;
   // Size for a region for Navy BlockCache (must be multiple of
   // blockSize_).
   uint32_t regionSize_{16 * 1024 * 1024};
@@ -556,11 +538,6 @@ class NavyConfig {
   //        the input value is not in the range of 0~100.
   [[deprecated]] void setBlockCacheReinsertionProbabilityThreshold(
       unsigned int blockCacheReinsertionProbabilityThreshold);
-  // Set size classes vector for BlockCache.
-  [[deprecated]] void setBlockCacheSizeClasses(
-      std::vector<uint32_t> blockCacheSizeClasses) noexcept {
-    blockCacheConfig_.useSizeClasses(std::move(blockCacheSizeClasses));
-  }
   // Set region size for BlockCache.
   [[deprecated]] void setBlockCacheRegionSize(
       uint32_t blockCacheRegionSize) noexcept {
