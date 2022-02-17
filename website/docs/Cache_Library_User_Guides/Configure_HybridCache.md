@@ -146,8 +146,7 @@ There are 2 types of admission policy: **"random"** and **"dynamic_random"**. Us
 navyConfig.blockCache()
           .enableSegmentedFifo(sFifoSegmentRatio)
           .enableHitsBasedReinsertion(hitsThreshold)
-          .setCleanRegions(cleanRegions, true /* enable in-mem buffers*/)
-          .useSizeClasses(sizeClasses)
+          .setCleanRegions(cleanRegions)
           .setRegionSize(regionSize)
           .setDataChecksum(false);
 ```
@@ -190,25 +189,13 @@ navyConfig.blockCache()
 
     How many regions do we reserve for future writes. Set this to be equivalent to your per-second write rate. It should ensure your writes will not have to retry to wait for a region reclamation to finish.
 
-  * `in-memory buffer` = `0` (default)
+  * `in-memory buffer` = `2 * clean regions` (default)
 
-    A non-zero value enables in-mem buffering for writes. All writes will first go into a region-sized buffer. Once the buffer is full, we will flush the region to the device. This allows BlockCache to internally pack items closer to each other (saves space) and also improves device read latency (regular sized write IOs means better read performance).
-
-  `clean regions` and `in-mem buffer` will be set together. Once `in-mem buffer` is enabled, it is `2 * clean regions`.
+    All writes will first go into a region-sized buffer. Once the buffer is full, we will flush the region to the device. This allows BlockCache to internally pack items closer to each other (saves space) and also improves device read latency (regular sized write IOs means better read performance).
 
   ```cpp
-   navyConfig.blockCache().setCleanRegions(cleanRegions, true /* enable in-mem buffers*/);
+   navyConfig.blockCache().setCleanRegions(cleanRegions);
   ```
-  **OR**
-  ```cpp
-
-   navyConfig.blockCache().setCleanRegions(cleanRegions); // in-mem buffer is 0.
-  ```
-
-
-* `size classes` = `[]` (default)
-
- A vector of Navy BlockCache size classes (must be multiples of block size). If enabled, Navy will configure regions to allocate rounded up to these size classes and evict regions within a size classs. A given region allocates corresponding to a given size class. By default, objects will be stack allocated irrespective of their size on available regions.
 
 * `region size` = `16777216 (16 Mb)` (default)
 
