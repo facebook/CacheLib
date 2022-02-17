@@ -274,11 +274,10 @@ class BlockCacheConfig {
 
   // Set number of clean regions that are maintained for incoming write and
   // whether the writes are buffered in-memory.
-  // When in-memory buffers are enabled, Navy maintains sufficient buffers for
-  // each clean region that is reserved. This ensures each time we obtain a new
-  // in-mem buffer, we have a clean region to flush it to flash once it's ready.
-  BlockCacheConfig& setCleanRegions(uint32_t cleanRegions,
-                                    bool enableInMemBuffer = true) noexcept;
+  // Navy needs to maintain sufficient buffers for each clean region that is
+  // reserved. This ensures each time we obtain a new in-mem buffer, we have a
+  // clean region to flush it to flash once it's ready.
+  BlockCacheConfig& setCleanRegions(uint32_t cleanRegions) noexcept;
 
   // Set a vector of size classes.
   // If enabled, Navy will configure regions to allocate rounded up to these

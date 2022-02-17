@@ -93,12 +93,22 @@ class NvmCacheTest : public testing::Test {
     cache_->removeFromNvmForTesting(key);
   }
 
-  bool pushToNvmCacheFromRamForTesting(folly::StringPiece key) {
-    // a typical test case is insertOrReplace then push to nvm immediately.
-    // but pending remove job (triggered by insertOrReplace) will fail
-    // the put job due to active TombStone.
-    cache_->flushNvmCache();
+  bool pushToNvmCacheFromRamForTesting(folly::StringPiece key,
+                                       bool flush = true) {
+    if (flush) {
+      // a typical test case is insertOrReplace then push to nvm immediately.
+      // but pending remove job (triggered by insertOrReplace) will fail
+      // the put job due to active TombStone.
+      cache_->flushNvmCache();
+    }
     return cache_->pushToNvmCacheFromRamForTesting(key);
+  }
+
+  void pushToNvmCacheFromRamForTesting(ItemHandle& handle) {
+    auto nvmCache = getNvmCache();
+    if (nvmCache) {
+      nvmCache->put(handle, nvmCache->createPutToken(handle->getKey()));
+    }
   }
 
   std::pair<ItemHandle, ItemHandle> inspectCache(folly::StringPiece key) {

@@ -69,7 +69,7 @@ class BlockCache final : public Engine {
     uint32_t cleanRegionsPool{1};
     // Number of in-memory buffers where writes are buffered before flushed
     // on to the device
-    uint32_t numInMemBuffers{};
+    uint32_t numInMemBuffers{1};
     // whether ItemDestructor is enabled
     bool itemDestructorEnabled{false};
 
@@ -261,9 +261,8 @@ class BlockCache final : public Engine {
   void tryRecover(RecordReader& rr);
 
   // The alloc alignment indicates the granularity of read/write. This
-  // granuality is less than the device io alignment size that can be supported
-  // when in memory buffers are used. Without the in memory buffers the
-  // minimum granularity would be the device io alignment size.
+  // granuality is less than the device io alignment size because we buffer
+  // writes in memory until we fill up a region.
   uint32_t calcAllocAlignSize() const;
 
   // returns size aligned to alloc alignment size
@@ -331,11 +330,7 @@ class BlockCache final : public Engine {
   const bool checksumData_{};
   // reference to the under-lying device.
   const Device& device_;
-  // Indicates if in memory buffers are enabled or not
-  const bool inMemBuffersEnabled_{false};
   // alloc alignment size indicates the granularity of entry sizes on device.
-  // When in memory buffers are not enabled, this would
-  // be same as device IO alignment size. When in memory buffers are enabled,
   // this can be as small as 1 and is determined by the size of the device
   // and size of the address (which is 32-bits).
   const uint32_t allocAlignSize_{};

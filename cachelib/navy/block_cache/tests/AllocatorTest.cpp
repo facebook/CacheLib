@@ -36,87 +36,6 @@ constexpr uint16_t kNumPriorities = 1;
 constexpr uint16_t kFlushRetryLimit = 10;
 } // namespace
 
-TEST(Allocator, RegionSync) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<MockPolicy>(&hits);
-  constexpr uint32_t kNumRegions = 4;
-  constexpr uint32_t kRegionSize = 16 * 1024;
-  auto device =
-      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
-  std::vector<uint32_t> sizeClasses{1024, 2048};
-  RegionEvictCallback evictCb{[](RegionId, uint32_t, BufferView) { return 0; }};
-  RegionCleanupCallback cleanupCb{[](RegionId, uint32_t, BufferView) {}};
-  MockJobScheduler ex;
-  auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-      kFlushRetryLimit);
-
-  Allocator allocator{*rm, kNumPriorities};
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  // Write to 3 regions
-  RelAddress addr;
-  uint32_t slotSize = 0;
-  for (uint32_t i = 0; i < 3; i++) {
-    if (i == 0) {
-      RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
-      EXPECT_EQ(OpenStatus::Retry, desc.status());
-      EXPECT_TRUE(ex.runFirstIf("reclaim"));
-      EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    }
-    // First allocation take a clean region and schedules a reclaim job and
-    // tracks the current region that is full region if present.
-    EXPECT_EQ(0, ex.getQueueSize());
-    {
-      RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
-      EXPECT_TRUE(desc.isReady());
-      EXPECT_EQ(RegionId{i}, addr.rid());
-      EXPECT_EQ(0, addr.offset());
-      EXPECT_TRUE(ex.runFirstIf("reclaim"));
-      EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-      rm->close(std::move(desc));
-    }
-    // 15 allocs exhaust region's space. No reclaims scheduled.
-    for (uint32_t j = 0; j < 15; j++) {
-      RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
-      EXPECT_TRUE(desc.isReady());
-      EXPECT_EQ(RegionId{i}, addr.rid());
-      EXPECT_EQ(1024 * (j + 1), addr.offset());
-      rm->close(std::move(desc));
-    }
-  }
-  EXPECT_EQ(0, ex.getQueueSize());
-
-  // regions 0, 1 should be tracked. last region is still being written to.
-  for (uint32_t i = 0; i < 2; i++) {
-    EXPECT_EQ(16, rm->getRegion(RegionId{i}).getNumItems());
-    EXPECT_EQ(1024 * 16, rm->getRegion(RegionId{i}).getLastEntryEndOffset());
-  }
-  EXPECT_EQ(0, rm->getRegion(RegionId{3}).getNumItems());
-  EXPECT_EQ(0, rm->getRegion(RegionId{3}).getLastEntryEndOffset());
-
-  // Write to region 3
-  EXPECT_EQ(0, ex.getQueueSize());
-  {
-    RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
-    EXPECT_TRUE(desc.isReady());
-    EXPECT_EQ(RegionId{3}, addr.rid());
-    EXPECT_EQ(0, addr.offset());
-    EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
-    rm->close(std::move(desc));
-  }
-
-  // @numItems and @lastEntryEndOffset are updated synchronously, validate them
-  EXPECT_EQ(1, rm->getRegion(RegionId{3}).getNumItems());
-  EXPECT_EQ(1024, rm->getRegion(RegionId{3}).getLastEntryEndOffset());
-}
-
 TEST(Allocator, RegionSyncInMemBuffers) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<MockPolicy>(&hits);
@@ -308,7 +227,8 @@ TEST(Allocator, UsePriorities) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       std::move(cleanupCb), std::vector<uint32_t>{} /* no size class */,
-      std::move(policy), 0, 3 /* numPriorities */, kFlushRetryLimit);
+      std::move(policy), kNumRegions /* numInMemBuffers */,
+      3 /* numPriorities */, kFlushRetryLimit);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
   EXPECT_EQ(0, ex.getQueueSize());
@@ -347,7 +267,8 @@ TEST(Allocator, UsePrioritiesSizeClass) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
       std::move(cleanupCb), std::vector<uint32_t>{1024, 4096} /* size class */,
-      std::move(policy), 0, 3 /* numPriorities */, kFlushRetryLimit);
+      std::move(policy), kNumRegions /* numInMemBuffers */,
+      3 /* numPriorities */, kFlushRetryLimit);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
   EXPECT_EQ(0, ex.getQueueSize());

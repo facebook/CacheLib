@@ -155,9 +155,6 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
 }
 
 void Allocator::flush() {
-  if (!regionManager_.doesBufferingWrites()) {
-    return;
-  }
   for (auto& ras : allocators_) {
     for (auto& ra : ras) {
       std::lock_guard<std::mutex> lock{ra.getLock()};

@@ -57,6 +57,9 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (getNumRegions() < sizeClasses.size() + cleanRegionsPool) {
     throw std::invalid_argument("not enough space on device");
   }
+  if (numInMemBuffers == 0) {
+    throw std::invalid_argument("there must be at least one in-mem buffers");
+  }
   if (numPriorities == 0) {
     throw std::invalid_argument("allocator must have at least one priority");
   }
@@ -67,17 +70,16 @@ BlockCache::Config& BlockCache::Config::validate() {
 }
 
 void BlockCache::validate(BlockCache::Config& config) const {
-  uint32_t deviceIOAlignSize = calcAllocAlignSize();
-  if (!folly::isPowTwo(deviceIOAlignSize)) {
+  uint32_t allocAlignSize = calcAllocAlignSize();
+  if (!folly::isPowTwo(allocAlignSize)) {
     throw std::invalid_argument("invalid block size");
   }
-  if (config.regionSize % deviceIOAlignSize != 0) {
+  if (config.regionSize % allocAlignSize != 0) {
     throw std::invalid_argument("invalid region size");
   }
   auto shiftWidth =
       facebook::cachelib::NumBits<decltype(RelAddress().offset())>::value;
-  if (config.cacheSize > static_cast<uint64_t>(deviceIOAlignSize)
-                             << shiftWidth) {
+  if (config.cacheSize > static_cast<uint64_t>(allocAlignSize) << shiftWidth) {
     throw std::invalid_argument(
         folly::sformat("can't address cache with {} bits", shiftWidth));
   }
@@ -90,9 +92,6 @@ void BlockCache::validate(BlockCache::Config& config) const {
 }
 
 uint32_t BlockCache::calcAllocAlignSize() const {
-  if (!inMemBuffersEnabled_) {
-    return device_.getIOAlignmentSize();
-  }
   // Shift the total device size by <RelAddressWidth-in-bits>,
   // to determine the size of the alloc alignment the device can support
   auto shiftWidth =
@@ -122,7 +121,6 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
       device_{*config.device},
-      inMemBuffersEnabled_{config.numInMemBuffers > 0},
       allocAlignSize_{calcAllocAlignSize()},
       readBufferSize_{config.readBufferSize < kDefReadBufferSize
                           ? kDefReadBufferSize
@@ -146,6 +144,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)},
       sizeDist_{kMinSizeDistribution, config.regionSize,
                 kSizeDistributionGranularityFactor} {
+  validate(config);
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 }
@@ -536,8 +535,7 @@ Status BlockCache::writeEntry(RelAddress addr,
   XDCHECK_LE(addr.offset() + slotSize, regionManager_.regionSize());
   XDCHECK_EQ(slotSize % allocAlignSize_, 0ULL)
       << folly::sformat(" alignSize={}, size={}", allocAlignSize_, slotSize);
-  auto buffer =
-      inMemBuffersEnabled_ ? Buffer(slotSize) : device_.makeIOBuffer(slotSize);
+  auto buffer = Buffer(slotSize);
 
   // Copy descriptor and the key to the end
   size_t descOffset = buffer.size() - sizeof(EntryDesc);
@@ -550,9 +548,7 @@ Status BlockCache::writeEntry(RelAddress addr,
   buffer.copyFrom(descOffset - hk.key().size(), hk.key());
   buffer.copyFrom(0, value);
 
-  if (!regionManager_.write(addr, std::move(buffer))) {
-    return Status::DeviceError;
-  }
+  regionManager_.write(addr, std::move(buffer));
   logicalWrittenCount_.add(hk.key().size() + value.size());
   return Status::Ok;
 }

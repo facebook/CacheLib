@@ -156,8 +156,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)
-                         .setCleanRegions(config_.navyCleanRegions,
-                                          false /*enable in-mem buffer*/)
+                         .setCleanRegions(config_.navyCleanRegions)
                          .setRegionSize(config_.navyRegionSizeMB * MB);
 
     // We have to use the old API to separately set the in-mem buffer
@@ -177,10 +176,6 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       } else {
         bcConfig.enableSegmentedFifo(config_.navySegmentedFifoSegmentRatio);
       }
-    }
-
-    if (!config_.navySizeClasses.empty()) {
-      bcConfig.useSizeClasses(config_.navySizeClasses);
     }
 
     if (config_.navyHitsReinsertionThreshold > 0) {

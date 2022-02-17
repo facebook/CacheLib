@@ -53,12 +53,14 @@ RegionManager::RegionManager(uint32_t numRegions,
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
   }
-  if (doesBufferingWrites()) {
-    for (uint32_t i = 0; i < numInMemBuffers_; i++) {
-      buffers_.push_back(
-          std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
-    }
+
+  XDCHECK_LT(0u, numInMemBuffers_);
+
+  for (uint32_t i = 0; i < numInMemBuffers_; i++) {
+    buffers_.push_back(
+        std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
   }
+
   resetEvictionPolicy();
 }
 
@@ -212,7 +214,7 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
     scheduler_.enqueue(
         [this] { return startReclaim(); }, "reclaim", JobType::Reclaim);
   }
-  if (doesBufferingWrites() && status == OpenStatus::Ready) {
+  if (status == OpenStatus::Ready) {
     status = assignBufferToRegion(rid);
     if (status != OpenStatus::Ready) {
       std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
@@ -225,15 +227,6 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
 void RegionManager::doFlush(RegionId rid, bool async) {
   // We're wasting the remaining bytes of a region, so track it for stats
   externalFragmentation_.add(getRegion(rid).getFragmentationSize());
-
-  // applicable only if configured to use in-memory buffers
-  if (!doesBufferingWrites()) {
-    // If in-memory buffering is not enabled, nothing to flush and
-    // track the region. If in-memory buffer is enabled
-    // tracking is started after flush is successful.
-    track(rid);
-    return;
-  }
 
   getRegion(rid).setPendingFlush();
   numInMemBufWaitingFlush_.inc();
@@ -513,14 +506,10 @@ bool RegionManager::deviceWrite(RelAddress addr, Buffer buf) {
   return true;
 }
 
-bool RegionManager::write(RelAddress addr, Buffer buf) {
-  if (doesBufferingWrites()) {
-    auto rid = addr.rid();
-    auto& region = getRegion(rid);
-    region.writeToBuffer(addr.offset(), buf.view());
-    return true;
-  }
-  return deviceWrite(addr, std::move(buf));
+void RegionManager::write(RelAddress addr, Buffer buf) {
+  auto rid = addr.rid();
+  auto& region = getRegion(rid);
+  region.writeToBuffer(addr.offset(), buf.view());
 }
 
 Buffer RegionManager::read(const RegionDescriptor& desc,
@@ -530,7 +519,7 @@ Buffer RegionManager::read(const RegionDescriptor& desc,
   auto& region = getRegion(rid);
   // Do not expect to read beyond what was already written
   XDCHECK_LE(addr.offset() + size, region.getLastEntryEndOffset());
-  if (doesBufferingWrites() && !desc.isPhysReadMode()) {
+  if (!desc.isPhysReadMode()) {
     auto buffer = Buffer(size);
     XDCHECK(region.hasBuffer());
     region.readFromBuffer(addr.offset(), buffer.mutableView());

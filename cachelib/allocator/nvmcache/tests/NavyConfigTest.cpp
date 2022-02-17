@@ -95,7 +95,7 @@ void setBlockCacheTestSettings(NavyConfig& config) {
       .enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio)
       .enableHitsBasedReinsertion(blockCacheReinsertionHitsThreshold)
       .useSizeClasses(blockCacheSizeClasses)
-      .setCleanRegions(blockCacheCleanRegions, true)
+      .setCleanRegions(blockCacheCleanRegions)
       .setRegionSize(blockCacheRegionSize)
       .setDataChecksum(blockCacheDataChecksum);
 }
@@ -276,9 +276,9 @@ TEST(NavyConfigTest, BlockCache) {
   NavyConfig config{};
   // test general settings
   config.blockCache()
-      .setRegionSize(blockCacheRegionSize)
       .useSizeClasses(blockCacheSizeClasses)
-      .setCleanRegions(blockCacheCleanRegions, true)
+      .setRegionSize(blockCacheRegionSize)
+      .setCleanRegions(blockCacheCleanRegions)
       .setDataChecksum(blockCacheDataChecksum);
   auto& blockCacheConfig = config.blockCache();
   EXPECT_EQ(blockCacheConfig.getRegionSize(), blockCacheRegionSize);

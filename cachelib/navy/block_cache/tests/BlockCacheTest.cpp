@@ -142,6 +142,7 @@ TEST(BlockCache, InsertLookup) {
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
     EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
+    // Flush the first region
     driver->flush();
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
@@ -170,8 +171,8 @@ TEST(BlockCache, InsertLookup) {
     EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
     EXPECT_EQ(log[i].value(), value.view());
   }
-  EXPECT_EQ(17, hits[0]);
-  EXPECT_EQ(1, hits[1]);
+  EXPECT_EQ(2, hits[0]);
+  EXPECT_EQ(16, hits[1]);
   EXPECT_EQ(0, hits[2]);
   EXPECT_EQ(0, hits[3]);
 }
@@ -417,35 +418,21 @@ TEST(BlockCache, SmallAllocClass) {
 }
 
 TEST(BlockCache, UnalignedAllocClass) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
-  auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device, {700});
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-
-  BufferGen bg;
-  std::vector<CacheEntry> log;
-  for (size_t i = 0; i < 20; i++) {
-    CacheEntry e{bg.gen(8), bg.gen(300)};
-    // Insert synchronously to ensure ordering is respected
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
-    log.push_back(std::move(e));
-  }
-
-  // Verify reading the first item is correct
   {
-    Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log.begin()->key(), value));
-    EXPECT_EQ(log.begin()->value(), value.view());
+    std::vector<uint32_t> hits(4);
+    auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+    auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+    auto ex = makeJobScheduler();
+    auto config = makeConfig(*ex, std::move(policy), *device, {700});
+    ASSERT_THROW(makeEngine(std::move(config)), std::invalid_argument);
   }
-
-  // Verify reading the last item is correct
   {
-    Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log.rbegin()->key(), value));
-    EXPECT_EQ(log.rbegin()->value(), value.view());
+    std::vector<uint32_t> hits(4);
+    auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+    auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+    auto ex = makeJobScheduler();
+    auto config = makeConfig(*ex, std::move(policy), *device, {512});
+    ASSERT_NO_THROW(makeEngine(std::move(config)));
   }
 }
 
@@ -584,7 +571,6 @@ TEST(BlockCache, ReclaimCorruption) {
   auto config = makeConfig(*ex, std::move(policy), *device,
                            {} /* specify stack allocation */);
   config.checksum = true;
-  config.numInMemBuffers = 1;
   // items which are accessed once will be reinserted on reclaim
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   auto engine = makeEngine(std::move(config));
@@ -657,105 +643,6 @@ TEST(BlockCache, ReclaimCorruption) {
   });
 }
 
-TEST(BlockCache, ReclaimCorruptionSizeClass) {
-  // This test verifies two behaviors in BlockCache regarding corruption during
-  // reclaim. In the case of an item's entry header corruption, we must abort
-  // the reclaim as we don't have a way to ensure we will safely proceed to read
-  // the next entry. In the case of an item's value corruption, we can bump the
-  // error stat and proceed to the next item.
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto device = std::make_unique<MockDevice>(kDeviceSize, 1 /* ioAlignment */,
-                                             nullptr /* encryption */);
-  auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device,
-                           {1024} /* specify size class */);
-  config.checksum = true;
-  // items which are accessed once will be reinserted on reclaim
-  config.reinsertionConfig = makeHitsReinsertionConfig(1);
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-
-  // Allow any number of writes in between and after our expected writes
-  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(testing::AtLeast(0));
-
-  EXPECT_CALL(*device, writeImpl(0, _, _))
-      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
-                                          const void* data) {
-        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
-        // Skip 500 bytes at the beginning to ensure the value is corrupted
-        std::memcpy(buffer.data() + 500,
-                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
-        return device->getRealDeviceRef().write(offset, std::move(buffer));
-      }));
-  EXPECT_CALL(*device, writeImpl(2048, _, _))
-      .WillOnce(testing::Invoke(
-          [&device](uint64_t offset, uint32_t size, const void* data) {
-            Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
-            // Skip 10 bytes at the end to ensure the header is corrupted
-            std::memcpy(buffer.data(), data, size - 10);
-            return device->getRealDeviceRef().write(offset, std::move(buffer));
-          }));
-  EXPECT_CALL(*device, writeImpl(4096, _, _))
-      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
-                                          const void* data) {
-        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
-        // Skip 500 bytes at the beginning to ensure the value is corrupted
-        std::memcpy(buffer.data() + 500,
-                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
-        return device->getRealDeviceRef().write(offset, std::move(buffer));
-      }));
-  EXPECT_CALL(*device, writeImpl(8192, _, _))
-      .WillOnce(testing::Invoke([&device](uint64_t offset, uint32_t size,
-                                          const void* data) {
-        Buffer buffer = device->getRealDeviceRef().makeIOBuffer(size);
-        // Skip 500 bytes at the beginning to ensure the value is corrupted
-        std::memcpy(buffer.data() + 500,
-                    reinterpret_cast<const uint8_t*>(data) + 500, size - 500);
-        return device->getRealDeviceRef().write(offset, std::move(buffer));
-      }));
-
-  // Allocator region fills every 16 inserts.
-  BufferGen bg;
-  std::vector<CacheEntry> log;
-  for (size_t j = 0; j < 3; j++) {
-    for (size_t i = 0; i < 16; i++) {
-      CacheEntry e{bg.gen(8), bg.gen(800)};
-      EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
-      log.push_back(std::move(e));
-    }
-    driver->flush();
-  }
-  // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters([](folly::StringPiece name, double count) {
-    if (name == "navy_bc_reclaim") {
-      EXPECT_EQ(4, count);
-    }
-  });
-
-  // Force reclamation on region 0 by allocating region 3. There are 4 regions
-  // and the device was configured to require 1 clean region at all times
-  {
-    CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
-    log.push_back(std::move(e));
-  }
-  driver->flush();
-
-  // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters([](folly::StringPiece name, double count) {
-    if (name == "navy_bc_reclaim") {
-      EXPECT_EQ(5, count);
-    }
-    if (name == "navy_bc_reclaim_entry_header_checksum_errors") {
-      EXPECT_EQ(1, count);
-    }
-    if (name == "navy_bc_reclaim_value_checksum_errors") {
-      EXPECT_EQ(3, count);
-    }
-  });
-}
-
 TEST(BlockCache, StackAlloc) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
@@ -792,32 +679,6 @@ TEST(BlockCache, StackAlloc) {
 }
 
 TEST(BlockCache, RegionUnderflow) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  EXPECT_CALL(*device, writeImpl(0, 1024, _));
-  // Although 2k read buffer, shouldn't underflow the region!
-  EXPECT_CALL(*device, readImpl(0, 1024, _));
-  auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device, {});
-  config.numInMemBuffers = 0;
-  config.readBufferSize = 2048;
-
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-
-  BufferGen bg;
-  // 1k entry
-  CacheEntry e{bg.gen(8), bg.gen(800)};
-  EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
-  driver->flush();
-
-  Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
-  EXPECT_EQ(e.value(), value.view());
-}
-
-TEST(BlockCache, RegionUnderflowInMemBuffers) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
@@ -1070,13 +931,11 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   auto exPtr = ex.get();
   // Huge size class to fill a region in 4 allocs
   auto config = makeConfig(*ex, std::move(policy), *device, {4096});
-  config.numInMemBuffers = 0;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   // We expect the first three regions to be filled, last region to be
-  // reclaimed to be the free region. First two regions will be tracked,
-  // and the third region to remain in allocation state.
+  // reclaimed to be the free region. First three regions will be tracked.
   BufferGen bg;
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 4; i++) {
@@ -1089,6 +948,7 @@ TEST(BlockCache, ReadRegionDuringEviction) {
       finishAllJobs(*exPtr);
     }
   }
+  driver->flush();
 
   std::thread lookupThread([&driver, &log] {
     Buffer value;
@@ -1152,21 +1012,29 @@ TEST(BlockCache, ReadRegionDuringEviction) {
 }
 
 TEST(BlockCache, DeviceFailure) {
+  // Test setup:
+  //   - "key1" write fails once but succeeds on retry, read succeeds
+  //   - "key2" write succeeds, read fails
+  //   - "key3" both read and write succeeds
+
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  EXPECT_CALL(*device, readImpl(1024, 1024, _)).WillOnce(Return(false));
-  EXPECT_CALL(*device, readImpl(2048, 1024, _));
+  {
+    testing::InSequence seq;
+    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _)).WillOnce(Return(false));
+    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _));
+    EXPECT_CALL(*device, writeImpl(kRegionSize, kRegionSize, _));
+    EXPECT_CALL(*device, writeImpl(kRegionSize * 2, kRegionSize, _));
 
-  EXPECT_CALL(*device, writeImpl(0, 1024, _)).WillOnce(Return(false));
-  // In case of IO error, allocator moves forward anyways. Expect allocation
-  // in the next slot.
-  EXPECT_CALL(*device, writeImpl(1024, 1024, _));
-  EXPECT_CALL(*device, writeImpl(2048, 1024, _));
+    EXPECT_CALL(*device, readImpl(0, 1024, _));
+    EXPECT_CALL(*device, readImpl(kRegionSize, 1024, _))
+        .WillOnce(Return(false));
+    EXPECT_CALL(*device, readImpl(kRegionSize * 2, 1024, _));
+  }
 
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {1024});
-  config.numInMemBuffers = 0;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -1175,21 +1043,17 @@ TEST(BlockCache, DeviceFailure) {
   auto value2 = bg.gen(800);
   auto value3 = bg.gen(800);
 
-  // Test setup:
-  //   - "key1" write fails, read succeeds
-  //   - "key2" write succeeds, read fails
-  //   - "key3" both read and write succeeds
-
-  EXPECT_EQ(Status::DeviceError,
-            driver->insert(makeView("key1"), value1.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeView("key1"), value1.view()));
+  driver->flush();
   EXPECT_EQ(Status::Ok, driver->insert(makeView("key2"), value2.view()));
+  driver->flush();
   EXPECT_EQ(Status::Ok, driver->insert(makeView("key3"), value3.view()));
+  driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key1"), value));
-  EXPECT_TRUE(value.isNull());
+  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key1"), value));
+  EXPECT_EQ(value1.view(), value.view());
   EXPECT_EQ(Status::DeviceError, driver->lookup(makeView("key2"), value));
-  EXPECT_TRUE(value.isNull());
   EXPECT_EQ(Status::Ok, driver->lookup(makeView("key3"), value));
   EXPECT_EQ(value3.view(), value.view());
 }
@@ -1215,14 +1079,6 @@ TEST(BlockCache, Flush) {
 
 namespace {
 std::unique_ptr<Device> setupResetTestDevice(uint32_t size) {
-  auto device = std::make_unique<NiceMock<MockDevice>>(size, 512);
-  for (uint32_t i = 0; i < 17; i++) {
-    EXPECT_CALL(*device, writeImpl(i * 1024, 1024, _));
-  }
-  return device;
-}
-
-std::unique_ptr<Device> setupResetTestDeviceInMemBuffers(uint32_t size) {
   auto device = std::make_unique<NiceMock<MockDevice>>(size, 512);
   for (uint32_t i = 0; i < 2; i++) {
     EXPECT_CALL(*device, writeImpl(i * 16 * 1024, 16 * 1024, _));
@@ -1261,38 +1117,6 @@ TEST(BlockCache, Reset) {
 
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *proxyPtr, {1024});
-  config.numInMemBuffers = 0;
-
-  expectRegionsTracked(mp, {0, 1, 2, 3});
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-
-  expectRegionsTracked(mp, {0});
-  resetTestRun(*driver);
-
-  EXPECT_CALL(mp, reset());
-  expectRegionsTracked(mp, {0, 1, 2, 3});
-  driver->reset();
-
-  // Create a new device with same expectations
-  proxyPtr->setRealDevice(setupResetTestDevice(config.cacheSize));
-  expectRegionsTracked(mp, {0});
-  resetTestRun(*driver);
-}
-
-TEST(BlockCache, ResetInMemBuffers) {
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto& mp = *policy.get();
-
-  auto proxy = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  auto proxyPtr = proxy.get();
-  // Setup delegating device before creating, because makeIOBuffer is called
-  // during construction.
-  proxyPtr->setRealDevice(setupResetTestDeviceInMemBuffers(kDeviceSize));
-
-  auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *proxyPtr, {1024});
   config.numInMemBuffers = 3;
   expectRegionsTracked(mp, {0, 1, 2, 3});
   auto engine = makeEngine(std::move(config));
@@ -1306,7 +1130,7 @@ TEST(BlockCache, ResetInMemBuffers) {
   driver->reset();
 
   // Create a new device with same expectations
-  proxyPtr->setRealDevice(setupResetTestDeviceInMemBuffers(config.cacheSize));
+  proxyPtr->setRealDevice(setupResetTestDevice(config.cacheSize));
   expectRegionsTracked(mp, {0, 1});
   resetTestRun(*driver);
 }
@@ -1350,6 +1174,7 @@ TEST(BlockCache, DestructorCallback) {
   auto ex = makeJobScheduler();
   auto* exPtr = ex.get();
   auto config = makeConfig(*ex, std::move(policy), *device, {4096});
+  config.numInMemBuffers = 4;
   config.destructorCb = toCallback(cb);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
@@ -1393,78 +1218,6 @@ TEST(BlockCache, DestructorCallback) {
 }
 
 TEST(BlockCache, StackAllocDestructorCallback) {
-  std::vector<CacheEntry> log;
-  {
-    BufferGen bg;
-    // 1st region, 12k
-    log.emplace_back(bg.gen(8), bg.gen(5'000));
-    log.emplace_back(bg.gen(8), bg.gen(7'000));
-    // 2nd region, 14k
-    log.emplace_back(bg.gen(8), bg.gen(5'000));
-    log.emplace_back(bg.gen(8), bg.gen(3'000));
-    log.emplace_back(bg.gen(8), bg.gen(6'000));
-    // 3rd region, 16k, overwrites
-    log.emplace_back(Buffer{log[0].key()}, bg.gen(8'000));
-    log.emplace_back(Buffer{log[3].key()}, bg.gen(8'000));
-    // 4th region, 15k
-    log.emplace_back(bg.gen(8), bg.gen(9'000));
-    log.emplace_back(bg.gen(8), bg.gen(6'000));
-    ASSERT_EQ(9, log.size());
-  }
-
-  MockDestructor cb;
-  {
-    testing::InSequence inSeq;
-    // Region evictions is backwards to the order of insertion.
-    EXPECT_CALL(cb,
-                call(log[4].key(), log[4].value(), DestructorEvent::Recycled));
-    // destructor callback is executed when evicted or explicit removed
-    EXPECT_CALL(cb, call(log[3].key(), log[3].value(), _)).Times(0);
-    EXPECT_CALL(cb, call(log[2].key(), log[2].value(), _)).Times(0);
-  }
-
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto& mp = *policy;
-  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
-  auto ex = makeJobScheduler();
-  auto* exPtr = ex.get();
-  auto config = makeConfig(*ex, std::move(policy), *device, {});
-  config.destructorCb = toCallback(cb);
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-
-  mockRegionsEvicted(mp, {0, 1, 2, 3, 1});
-  for (size_t i = 0; i < 7; i++) {
-    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value()));
-  }
-  EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
-  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value()));
-  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
-
-  Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
-  EXPECT_EQ(log[5].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[5].key(), value));
-  EXPECT_EQ(log[5].value(), value.view());
-
-  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-  EXPECT_EQ(log[1].value(), value.view());
-
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[3].key(), value));
-  EXPECT_EQ(log[6].value(), value.view());
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[4].key(), value));
-
-  EXPECT_EQ(Status::Ok, driver->lookup(log[7].key(), value));
-  EXPECT_EQ(log[7].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value));
-  EXPECT_EQ(log[8].value(), value.view());
-
-  exPtr->finish();
-}
-
-TEST(BlockCache, StackAllocDestructorCallbackInMemBuffers) {
   std::vector<CacheEntry> log;
   {
     BufferGen bg;
@@ -1593,7 +1346,7 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   // We don't fill up a region so won't track any. But we will first evict
   // rid: 0 for the two allocations, and we will evict rid: 1 in order to
   // satisfy the one free region requirement.
-  expectRegionsTracked(mp, {});
+  expectRegionsTracked(mp, {0});
   BufferGen bg;
   for (size_t i = 0; i < 2; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
@@ -1609,7 +1362,7 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   driver->reset();
 
   // Allocator region fills every 7 inserts.
-  expectRegionsTracked(mp, {0, 1});
+  expectRegionsTracked(mp, {0, 1, 2});
   std::vector<CacheEntry> log;
   for (size_t j = 0; j < 3; j++) {
     for (size_t i = 0; i < 7; i++) {
@@ -1621,7 +1374,7 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   }
 
   // Triggers reclamation
-  expectRegionsTracked(mp, {2});
+  expectRegionsTracked(mp, {3});
   for (size_t i = 0; i < 7; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
     EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
@@ -1651,12 +1404,12 @@ TEST(BlockCache, Recovery) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, {4096, 8192});
-  config.numInMemBuffers = 0;
+  config.numInMemBuffers = 2;
   auto engine = makeEngine(std::move(config), metadataSize);
   auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
                            metadataSize);
 
-  expectRegionsTracked(mp, {0, 1});
+  expectRegionsTracked(mp, {0, 1, 2});
   BufferGen bg;
   std::vector<CacheEntry> log;
   // Allocate 3 regions
@@ -1668,6 +1421,7 @@ TEST(BlockCache, Recovery) {
     }
   }
 
+  driver->flush();
   driver->persist();
 
   {
@@ -1675,7 +1429,7 @@ TEST(BlockCache, Recovery) {
     EXPECT_CALL(mp, reset());
     expectRegionsTracked(mp, {0, 1, 2, 3});
     EXPECT_CALL(mp, reset());
-    expectRegionsTracked(mp, {3, 0, 1, 2});
+    expectRegionsTracked(mp, {3, 0, 1, 2, 3});
   }
   EXPECT_TRUE(driver->recover());
 
@@ -1763,6 +1517,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
     }
     // We'll evict the first region to maintain one clean region
     ex->finish();
+    engine->flush();
 
     for (auto& key : keys) {
       Buffer buffer;
@@ -1871,7 +1626,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
 //    * recover the cache
 //    * lookup the 12 items again to make sure they still exist
 //
-TEST(BlockCache, SmallerSlotSizesWithInMemBuffers) {
+TEST(BlockCache, SmallerSlotSizes) {
   std::vector<uint32_t> hits(4);
   std::vector<uint32_t> sizeClasses = {6 * BlockCache::kMinAllocAlignSize,
                                        14 * BlockCache::kMinAllocAlignSize};
@@ -1882,7 +1637,6 @@ TEST(BlockCache, SmallerSlotSizesWithInMemBuffers) {
     size_t metadataSize = 3 * 1024 * 1024;
     auto ex = makeJobScheduler();
     auto config = makeConfig(*ex, std::move(policy), *device, sizeClasses);
-    config.numInMemBuffers = 0;
     try {
       auto engine = makeEngine(std::move(config), metadataSize);
     } catch (const std::invalid_argument& e) {
@@ -1939,7 +1693,7 @@ TEST(BlockCache, SmallerSlotSizesWithInMemBuffers) {
 // Create devices with various sizes and verify that the alloc align size
 // is equal to expected size. Some of the device size are not 2 power aligned
 // and is expected to get aligned alloc size.
-TEST(BlockCache, testAllocAlignSizesInMemBuffers) {
+TEST(BlockCache, testAllocAlignSizes) {
   std::vector<uint32_t> hits(4);
 
   std::vector<std::pair<size_t, uint32_t>> testSizes = {
@@ -1965,68 +1719,6 @@ TEST(BlockCache, testAllocAlignSizesInMemBuffers) {
     auto blockCache = std::make_unique<BlockCache>(std::move(config));
     EXPECT_EQ(blockCache->getAllocAlignSize(), testSizes[i].second);
   }
-}
-
-// This test creates a cache based on RAID devices with in-memory buffers
-// DISABLED, inserts some items and persists the cache. Then creates
-// a cache with the same RAID device with in-memory buffers ENABLED and
-// tries to recover it. Verifies that the recovery fails because enabling
-// in-memory buffers makes alloc align size to be
-// 512(BlockCache::kMinAllocAlignSize) and the cache at the persist has
-// 4K as the alloc align size.
-//
-// We cannot use memory device for this test because we need a way to persist
-// and recover by using different "driver". And this is not possible with
-// in-memory devices. It has to be a file based device where the device
-// name is known
-//
-TEST(BlockCache, PersistRecoverWithInMemBuffers) {
-  auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
-
-  int deviceSize = 16 * 1024 * 1024;
-  int ioAlignSize = 4096;
-  folly::File f = folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU);
-  auto device = createDirectIoFileDevice(std::move(f), deviceSize, ioAlignSize,
-                                         nullptr, 0);
-
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  size_t metadataSize = 3 * 1024 * 1024;
-  auto ex = makeJobScheduler();
-  auto config =
-      makeConfig(*ex, std::move(policy), *device, {4096, 8192}, deviceSize);
-  config.numInMemBuffers = 0;
-  auto engine = makeEngine(std::move(config), metadataSize);
-  auto driver = makeDriver(std::move(engine), std::move(ex), std::move(device),
-                           metadataSize);
-
-  BufferGen bg;
-  std::vector<CacheEntry> log;
-  // Allocate 3 regions
-  for (size_t i = 0; i < 3; i++) {
-    for (size_t j = 0; j < 4; j++) {
-      CacheEntry e{bg.gen(8), bg.gen(3200)};
-      EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
-      log.push_back(std::move(e));
-    }
-  }
-
-  driver->persist();
-
-  folly::File newF = folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU);
-  auto newDevice = createDirectIoFileDevice(std::move(newF), deviceSize,
-                                            ioAlignSize, nullptr, 0);
-  auto newPolicy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto newEx = makeJobScheduler();
-  auto newConfig = makeConfig(*newEx, std::move(newPolicy), *newDevice,
-                              {4096, 8192}, deviceSize);
-  newConfig.numInMemBuffers = 4;
-  auto newEngine = makeEngine(std::move(newConfig), metadataSize);
-  auto newDriver = makeDriver(std::move(newEngine), std::move(newEx),
-                              std::move(newDevice), metadataSize);
-  // recovery should fail because we have enabled in memory buffers which would
-  // change the min alloc alignment to 512.
-  EXPECT_FALSE(newDriver->recover());
 }
 
 TEST(BlockCache, HoleStatsRecovery) {
@@ -2097,7 +1789,7 @@ TEST(BlockCache, RecoveryBadConfig) {
     auto driver = makeDriver(std::move(engine), std::move(ex),
                              std::move(device), metadataSize);
 
-    expectRegionsTracked(mp, {0, 1});
+    expectRegionsTracked(mp, {0, 1, 2});
     BufferGen bg;
     std::vector<CacheEntry> log;
     for (size_t i = 0; i < 3; i++) {
@@ -2106,8 +1798,8 @@ TEST(BlockCache, RecoveryBadConfig) {
         EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
         log.push_back(std::move(e));
       }
+      driver->flush();
     }
-    driver->flush();
 
     driver->persist();
   }
@@ -2348,6 +2040,7 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
     }
   }
 
+  driver->flush();
   driver->persist();
   EXPECT_TRUE(driver->recover());
 

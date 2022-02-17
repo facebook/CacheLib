@@ -166,15 +166,13 @@ BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
 }
 
 BlockCacheConfig& BlockCacheConfig::setCleanRegions(
-    uint32_t cleanRegions, bool enableInMemBuffer) noexcept {
+    uint32_t cleanRegions) noexcept {
   cleanRegions_ = cleanRegions;
-  if (enableInMemBuffer) {
-    // Increasing number of in-mem buffers is a short-term mitigation
-    // to avoid reinsertion failure when all buffers in clean regions
-    // are pending flush and the reclaim job is running before flushing complete
-    // (see T93961857, T93959811)
-    numInMemBuffers_ = 2 * cleanRegions;
-  }
+  // Increasing number of in-mem buffers is a short-term mitigation
+  // to avoid reinsertion failure when all buffers in clean regions
+  // are pending flush and the reclaim job is running before flushing complete
+  // (see T93961857, T93959811)
+  numInMemBuffers_ = 2 * cleanRegions;
   return *this;
 }
 

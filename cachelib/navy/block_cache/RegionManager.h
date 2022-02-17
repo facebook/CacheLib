@@ -166,7 +166,7 @@ class RegionManager {
   // Writes buffer @buf at the @addr.
   // @addr must be the address returned by Region::open(OpenMode::Write)
   // @buf may be mutated and will be de-allocated at the end of this
-  bool write(RelAddress addr, Buffer buf);
+  void write(RelAddress addr, Buffer buf);
 
   // Returns a buffer with data read from the device the @addr of size bytes
   // @addr must be the address returned by Region::open(OpenMode::Read).
@@ -258,9 +258,6 @@ class RegionManager {
 
   // Evicts a region by calling @evictCb_ during region reclamation.
   void doEviction(RegionId rid, BufferView buffer) const;
-
-  // Checks whether in-mem buffer is enabled.
-  bool doesBufferingWrites() const { return numInMemBuffers_ > 0; }
 
  private:
   using LockGuard = std::lock_guard<std::mutex>;

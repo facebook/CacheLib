@@ -59,8 +59,8 @@ TEST(RegionManager, ReclaimLruAsFifo) {
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-      kFlushRetryLimit);
+      std::move(cleanupCb), sizeClasses, std::move(policy),
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
   // without touch, the first region inserted is reclaimed
   EXPECT_EQ(kRegion0.id(), rm->evict());
@@ -87,8 +87,8 @@ TEST(RegionManager, ReclaimLru) {
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-      kFlushRetryLimit);
+      std::move(cleanupCb), sizeClasses, std::move(policy),
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
   rm->touch(kRegion0.id());
   rm->touch(kRegion1.id());
@@ -117,8 +117,8 @@ TEST(RegionManager, Recovery) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     // Empty region, like it was evicted and reclaimed
     rm->getRegion(RegionId{0}).setClassId(0);
@@ -159,8 +159,8 @@ TEST(RegionManager, Recovery) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -198,8 +198,8 @@ TEST(RegionManager, ReadWrite) {
   MockJobScheduler ex;
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, kBaseOffset, *device, 1, ex, std::move(evictCb),
-      std::move(cleanupCb), sizeClasses, std::make_unique<LruPolicy>(4), 0, 0,
-      kFlushRetryLimit);
+      std::move(cleanupCb), sizeClasses, std::make_unique<LruPolicy>(4),
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
   constexpr uint32_t kLocalOffset = 3 * 1024;
   constexpr uint32_t kSize = 1024;
@@ -220,12 +220,15 @@ TEST(RegionManager, ReadWrite) {
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(kSize);
   auto wAddr = RelAddress{rid, kLocalOffset};
-  EXPECT_TRUE(rm->write(wAddr, buf.copy()));
+  rm->write(wAddr, buf.copy());
   auto rDesc = rm->openForRead(rid, 1);
   auto bufRead = rm->read(rDesc, wAddr, kSize);
   EXPECT_TRUE(bufRead.size() == kSize);
   EXPECT_EQ(buf.view(), bufRead.view());
 
+  // flush buffer
+  region.close(std::move(wDesc));
+  EXPECT_EQ(Region::FlushRes::kSuccess, rm->flushBuffer(rid));
   // Check device directly at the offset we expect data to be written
   auto expectedOfs = kBaseOffset + kRegionSize + kLocalOffset;
   Buffer bufReadDirect{kSize};
@@ -249,8 +252,8 @@ TEST(RegionManager, RecoveryLRUOrder) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
@@ -280,8 +283,8 @@ TEST(RegionManager, RecoveryLRUOrder) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -313,8 +316,8 @@ TEST(RegionManager, Fragmentation) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
@@ -354,8 +357,8 @@ TEST(RegionManager, Fragmentation) {
     MockJobScheduler ex;
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, ex, std::move(evictCb),
-        std::move(cleanupCb), sizeClasses, std::move(policy), 0, 0,
-        kFlushRetryLimit);
+        std::move(cleanupCb), sizeClasses, std::move(policy),
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
     rm->getCounters([](folly::StringPiece name, double count) {
       if (name == "navy_bc_external_fragmentation") {
@@ -409,7 +412,7 @@ TEST(RegionManager, cleanupRegionFailureSync) {
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(1024);
   auto wAddr = RelAddress{rid, 0};
-  EXPECT_TRUE(rm->write(wAddr, buf.copy()));
+  rm->write(wAddr, buf.copy());
   region.close(std::move(wDesc));
 
   SeqPoints sp;
@@ -505,7 +508,7 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(1024);
   auto wAddr = RelAddress{rid, 0};
-  EXPECT_TRUE(rm->write(wAddr, buf.copy()));
+  rm->write(wAddr, buf.copy());
   region.close(std::move(wDesc));
 
   SeqPoints sp;

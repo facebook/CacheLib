@@ -148,8 +148,9 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
     auto key = folly::sformat("key{}", i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    insertOrReplace(it);
+    nvm.insertOrReplace(it);
   }
+  nvm.flushNvmCache();
 
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
@@ -204,7 +205,7 @@ TEST_F(NvmCacheTest, EvictToNvmGetCheckCtime) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    insertOrReplace(it);
+    cache_->insertOrReplace(it);
     keyToCtime.insert({key, it->getCreationTime()});
   }
 
@@ -291,8 +292,9 @@ TEST_F(NvmCacheTest, Delete) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
-    insertOrReplace(it);
+    nvm.insertOrReplace(it);
   }
+  nvm.flushNvmCache();
 
   // fetch all of them
   for (unsigned int i = 0; i < nKeys; i++) {
@@ -399,7 +401,7 @@ TEST_F(NvmCacheTest, NvmClean) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
-    insertOrReplace(it);
+    cache_->insertOrReplace(it);
   }
 
   auto nEvictions = this->evictionCount() - evictBefore;
@@ -465,8 +467,9 @@ TEST_F(NvmCacheTest, NvmEvicted) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
-    insertOrReplace(it);
+    nvm.insertOrReplace(it);
   }
+  nvm.flushNvmCache();
 
   // read everything again. This should churn and cause the current ones to be
   // evicted to nvmcache.
@@ -1761,6 +1764,7 @@ TEST_F(NvmCacheTest, Raid0OrderChange) {
       ::memcpy(it->getMemory(), val.data(), val.length());
       nvm.insertOrReplace(it);
     }
+    nvm.flushNvmCache();
 
     // item is only in RAM
     for (int i = 0; i < nKeys; i++) {
@@ -1771,9 +1775,10 @@ TEST_F(NvmCacheTest, Raid0OrderChange) {
 
       // must not be in nvmcache
       ASSERT_EQ(nullptr, res.second);
-      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->pushToNvmCacheFromRamForTesting(makeKey(i), false);
       this->removeFromRamForTesting(makeKey(i));
     }
+    nvm.flushNvmCache();
 
     for (int i = 0; i < nKeys; i++) {
       auto res = this->inspectCache(makeKey(i));
@@ -1833,6 +1838,7 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange) {
       ::memcpy(it->getMemory(), val.data(), val.length());
       nvm.insertOrReplace(it);
     }
+    nvm.flushNvmCache();
 
     // item is only in RAM
     for (int i = 0; i < nKeys; i++) {
@@ -1843,9 +1849,10 @@ TEST_F(NvmCacheTest, Raid0NumFilesChange) {
 
       // must not be in nvmcache
       ASSERT_EQ(nullptr, res.second);
-      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->pushToNvmCacheFromRamForTesting(makeKey(i), false);
       this->removeFromRamForTesting(makeKey(i));
     }
+    nvm.flushNvmCache();
 
     for (int i = 0; i < nKeys; i++) {
       auto res = this->inspectCache(makeKey(i));
@@ -1903,6 +1910,7 @@ TEST_F(NvmCacheTest, Raid0SizeChange) {
       ::memcpy(it->getMemory(), val.data(), val.length());
       nvm.insertOrReplace(it);
     }
+    nvm.flushNvmCache();
 
     // item is only in RAM
     for (int i = 0; i < nKeys; i++) {
@@ -1913,9 +1921,10 @@ TEST_F(NvmCacheTest, Raid0SizeChange) {
 
       // must not be in nvmcache
       ASSERT_EQ(nullptr, res.second);
-      this->pushToNvmCacheFromRamForTesting(makeKey(i));
+      this->pushToNvmCacheFromRamForTesting(makeKey(i), false);
       this->removeFromRamForTesting(makeKey(i));
     }
+    nvm.flushNvmCache();
 
     for (int i = 0; i < nKeys; i++) {
       auto res = this->inspectCache(makeKey(i));
@@ -2370,20 +2379,16 @@ TEST_F(NvmCacheTest, testItemDestructorPutFail) {
     // val size larger than BlockCacheRegionSize
     auto handle = cache.allocate(pid, key, 10000);
     ASSERT_NE(nullptr, handle.get());
-    cache.insertOrReplace(handle);
     // NVM::put will fail
-    pushToNvmCacheFromRamForTesting(key);
+    pushToNvmCacheFromRamForTesting(handle);
     ASSERT_TRUE(handle->isNvmClean());
     ASSERT_FALSE(handle->isNvmEvicted());
-    removeFromRamForTesting(key);
   }
   // wait for async insert finish
   cache.flushNvmCache();
-  // expecting two destructor count because
-  // we manually push item to nvm without evicting
-  // and remove it, both PutFail and RAM removal
-  // will trigger destructor
-  ASSERT_EQ(2, destructorCount);
+  // we manually push item to nvm without inserted into dram cache,
+  // PutFail will trigger destructor
+  ASSERT_EQ(1, destructorCount);
   ASSERT_EQ(key, destructoredKey);
 }
 
