@@ -76,6 +76,10 @@ Growing cache while process RSS size is increasing can cause OOMs. This configur
 
 For example, if you have configured 100 GB cache on a 144 GB container. Setting `maxProcessSize=120GB` and `minProcessSize=110GB` tells cachelib to start shrinking the cache when the process RSS grows beyond 120 GB. When the regression goes away and the process RSS is below 110 GB, cachelib slowly grows back the cache memory until the process RSS reaches 120 GB.
 
+Below is a diagram for how Memory Monitor works in RSS mode. For free-memory mode, the upper and lower bounds are reversed.
+
+![](advise.png)
+
 # Pools and MemoryMonitor
 
 When pools are enabled, cachelib grows and shrinks the cache relative to each pool size. For example, if you have pools `A`, `B`, `C`, each taking up 30%, 50%, and 20% of the cache and cachelib decides to shrink the cache by 1 GB, `A` would shrink by 300 MB, `B` would shrink by 500 MB, and `C` would shrink by 200 MB to make up for the 1 GB.  The pools would grow back in similar fashion when memory pressure eases.
