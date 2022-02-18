@@ -105,12 +105,12 @@ class PersistenceManager {
  public:
   template <typename CachelibConfig>
   explicit PersistenceManager(const CachelibConfig& config) {
-    versions_.allocatorVersion_ref() = kCachelibVersion;
-    versions_.ramFormatVerson_ref() = kCacheRamFormatVersion;
-    versions_.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-    versions_.persistenceVersion_ref() = kPersistenceVersion;
+    versions_.allocatorVersion() = kCachelibVersion;
+    versions_.ramFormatVerson() = kCacheRamFormatVersion;
+    versions_.nvmFormatVersion() = kCacheNvmFormatVersion;
+    versions_.persistenceVersion() = kPersistenceVersion;
 
-    config_.cacheName_ref() = config.getCacheName();
+    config_.cacheName() = config.getCacheName();
     cacheDir_ = config.getCacheDir();
 
     CACHELIB_CHECK_THROW(config.isUsingPosixShm(),
