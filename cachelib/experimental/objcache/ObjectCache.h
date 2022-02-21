@@ -440,16 +440,16 @@ class ObjectCache {
         continue;
       }
       serialization::Item item;
-      item.poolId_ref().value() = cache_->getAllocInfo(it->getMemory()).poolId;
+      item.poolId().value() = cache_->getAllocInfo(it->getMemory()).poolId;
       // TODO: we need to actually recover creation and persistence as well
       //       we need to modify the create allocator resource logic to allow
       //       us to pass in creation and expiry times.
-      item.creationTime_ref().value() = it->getCreationTime();
-      item.expiryTime_ref().value() = it->getExpiryTime();
-      item.key_ref().value() = it->getKey().str();
-      item.payload_ref().value().resize(iobuf->length());
+      item.creationTime().value() = it->getCreationTime();
+      item.expiryTime().value() = it->getExpiryTime();
+      item.key().value() = it->getKey().str();
+      item.payload().value().resize(iobuf->length());
       std::memcpy(
-          item.payload_ref().value().data(), iobuf->data(), iobuf->length());
+          item.payload().value().data(), iobuf->data(), iobuf->length());
       rw.writeRecord(Serializer::serializeToIOBuf(item));
     }
   }
@@ -464,13 +464,12 @@ class ObjectCache {
 
       // TODO: support creationTime and expiryTime
 
-      auto hdl = deserializationCallback_(item.poolId_ref().value(),
-                                          item.key_ref().value(),
-                                          item.payload_ref().value(),
+      auto hdl = deserializationCallback_(item.poolId().value(),
+                                          item.key().value(),
+                                          item.payload().value(),
                                           *this);
       if (!hdl) {
-        XLOG(ERR) << "Failed to deserialize for key: "
-                  << item.key_ref().value();
+        XLOG(ERR) << "Failed to deserialize for key: " << item.key().value();
         continue;
       }
       cache_->insertOrReplace(hdl);
