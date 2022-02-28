@@ -140,6 +140,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 
   blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
   blockCache->setItemDestructorEnabled(itemDestructorEnabled);
+  blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
 
   proto.setBlockCache(std::move(blockCache));
 }

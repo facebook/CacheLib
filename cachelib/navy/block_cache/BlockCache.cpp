@@ -121,6 +121,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                           : config.readBufferSize},
       regionSize_{config.regionSize},
       itemDestructorEnabled_{config.itemDestructorEnabled},
+      preciseRemove_{config.preciseRemove},
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,
@@ -255,7 +256,7 @@ Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
 
   Buffer value;
-  if (itemDestructorEnabled_ && destructorCb_) {
+  if ((itemDestructorEnabled_ && destructorCb_) || preciseRemove_) {
     Status status = lookup(hk, value);
 
     if (status != Status::Ok) {
@@ -267,6 +268,12 @@ Status BlockCache::remove(HashedKey hk) {
         lookupForItemDestructorErrorCount_.inc();
         // still fail after retry, return a BadState to disable navy
         return Status::BadState;
+      } else {
+        // NotFound
+        removeAttemptCollisions_.inc();
+        if (preciseRemove_) {
+          return status;
+        }
       }
     }
   }
@@ -627,6 +634,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get());
   visitor("navy_bc_lookup_for_item_destructor_errors",
           lookupForItemDestructorErrorCount_.get());
+  visitor("navy_bc_remove_attempt_collisions", removeAttemptCollisions_.get());
 
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {

@@ -79,6 +79,9 @@ class BlockCacheProto {
 
   // (Optional) Set if the item destructor feature is enabled.
   virtual void setItemDestructorEnabled(bool itemDestructorEnabled) = 0;
+
+  // (Optional) Set if the preciseRemove flag.
+  virtual void setPreciseRemove(bool preciseRemove) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

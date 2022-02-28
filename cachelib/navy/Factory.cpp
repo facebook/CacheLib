@@ -109,6 +109,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.itemDestructorEnabled = itemDestructorEnabled;
   }
 
+  void setPreciseRemove(bool preciseRemove) override {
+    config_.preciseRemove = preciseRemove;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  DestructorCallback cb) && {
     config_.scheduler = &scheduler;

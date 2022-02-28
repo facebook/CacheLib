@@ -81,6 +81,9 @@ class BlockCache final : public Engine {
     // eviction policy. There must be at least one priority.
     uint16_t numPriorities{1};
 
+    // whether to remove an item by checking the full key.
+    bool preciseRemove{false};
+
     // Calculates the total region number.
     uint32_t getNumRegions() const { return cacheSize / regionSize; }
 
@@ -332,6 +335,8 @@ class BlockCache final : public Engine {
   const uint64_t regionSize_{};
   // whether ItemDestructor is enabled
   const bool itemDestructorEnabled_{false};
+  // whether preciseRemove is enabled
+  const bool preciseRemove_{false};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset 0
@@ -373,6 +378,7 @@ class BlockCache final : public Engine {
   mutable AtomicCounter reinsertionBytes_;
   mutable AtomicCounter reclaimEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter reclaimValueChecksumErrorCount_;
+  mutable AtomicCounter removeAttemptCollisions_;
   mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable SizeDistribution sizeDist_;

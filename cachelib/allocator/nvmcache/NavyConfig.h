@@ -289,6 +289,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setPreciseRemove(bool preciseRemove) noexcept {
+    preciseRemove_ = preciseRemove;
+    return *this;
+  }
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -307,6 +312,8 @@ class BlockCacheConfig {
     return reinsertionConfig_;
   }
 
+  bool isPreciseRemove() const { return preciseRemove_; }
+
  private:
   // Whether Navy BlockCache will use region-based LRU eviction policy.
   bool lru_{true};
@@ -324,6 +331,9 @@ class BlockCacheConfig {
   uint32_t regionSize_{16 * 1024 * 1024};
   // Whether enabling data checksum for Navy BlockCache.
   bool dataChecksum_{true};
+  // Whether to remove an item by checking the key (true) or only the hash value
+  // (false).
+  bool preciseRemove_{false};
 
   friend class NavyConfig;
 };

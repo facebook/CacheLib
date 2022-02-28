@@ -25,6 +25,7 @@
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
+#include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/testing/BufferGen.h"
@@ -123,6 +124,55 @@ void finishAllJobs(MockJobScheduler& ex) {
     ex.runFirst();
   }
 }
+
+// This class creates a Driver that has an entry on its device with a similar
+// situation as hash collision.
+class CollisionCreator {
+ public:
+  // After the initialization:
+  // It has the hash value of key in block cache index.
+  // On the block cache device, it has an entry with key+addtion as key, and val
+  // as value.
+  CollisionCreator(
+      const char* key,
+      const char* val,
+      const char* addition,
+      std::function<void(BlockCache::Config&)> configModifier = {}) {
+    auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+    device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+    auto ex = makeJobScheduler();
+    auto config = makeConfig(*ex, std::move(policy), *device);
+    if (configModifier) {
+      configModifier(config);
+    }
+    auto engine = makeEngine(std::move(config));
+    driver = makeDriver(std::move(engine), std::move(ex));
+    CacheEntry e{strzBuffer(key), strzBuffer(val)};
+    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+
+    Buffer value;
+    EXPECT_EQ(Status::Ok, driver->lookup(makeView(key), value));
+    EXPECT_EQ(makeView(val), value.view());
+    driver->flush();
+
+    uint8_t buf[512]{}; // 512 is the minimal alloc alignment size
+    EXPECT_TRUE(device->read(0, sizeof(buf), buf));
+    size_t kKeySize{strlen(key)}; // "key"
+    size_t keyOffset = sizeof(buf) - kSizeOfEntryDesc - kKeySize;
+    BufferView keyOnDevice{kKeySize, buf + keyOffset};
+    EXPECT_EQ(keyOnDevice, makeView(key));
+
+    std::memcpy(buf + keyOffset, addition, strlen(addition));
+    EXPECT_TRUE(device->write(0, Buffer{BufferView{sizeof(buf), buf}}));
+  }
+
+  std::unique_ptr<Driver> driver;
+
+ private:
+  std::vector<uint32_t> hits{4};
+  std::unique_ptr<Device> device;
+};
+
 } // namespace
 
 TEST(BlockCache, InsertLookup) {
@@ -322,35 +372,67 @@ TEST(BlockCache, Remove) {
   EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
 }
 
+// Test precise remove flag works
+TEST(BlockCache, PreciseRemove) {
+  {
+    // default, not preciseRemove.
+    auto collision = CollisionCreator("key", "value", "abc");
+    Buffer value;
+    // Behavior: old "key" can remove the entry "key"+"abc": "value".
+    EXPECT_EQ(Status::Ok, collision.driver->remove(makeView("key")));
+    collision.driver->getCounters([](folly::StringPiece name, double count) {
+      // The counter is not populated because preciseRemove_ and item
+      // destructors are not triggered.
+      if (name == "navy_bc_remove_attempt_collisions") {
+        EXPECT_EQ(0, count);
+      }
+    });
+  }
+
+  {
+    // With preciseRemove.
+    auto collision =
+        CollisionCreator("key", "value", "abc",
+                         [](BlockCache::Config& c) { c.preciseRemove = true; });
+    Buffer value;
+    // Behavior: old "key" can not remove the entry "key"+"abc": "value"
+    EXPECT_EQ(Status::NotFound, collision.driver->remove(makeView("key")));
+    collision.driver->getCounters([](folly::StringPiece name, double count) {
+      // The counter is populated
+      if (name == "navy_bc_remove_attempt_collisions") {
+        EXPECT_EQ(1, count);
+      }
+    });
+  }
+
+  {
+    // Without preciseRemove, with item destructor. Remove is not precise, but
+    // the ODS counter should be incremented.
+    MockDestructor cb;
+
+    auto collision =
+        CollisionCreator("key", "value", "abc", [&cb](BlockCache::Config& c) {
+          c.itemDestructorEnabled = true;
+          c.destructorCb = toCallback(cb);
+        });
+    Buffer value;
+
+    // Behavior: old "key" can not remove the entry "key"+"abc": "value"
+    EXPECT_EQ(Status::Ok, collision.driver->remove(makeView("key")));
+    collision.driver->getCounters([](folly::StringPiece name, double count) {
+      // The counter is populated.
+      if (name == "navy_bc_remove_attempt_collisions") {
+        EXPECT_EQ(1, count);
+      }
+    });
+  }
+}
+
 TEST(BlockCache, CollisionOverwrite) {
-  // We can't make up a collision easily. Instead, let's write a key and then
-  // modify it on device (memory device in this case).
-  std::vector<uint32_t> hits(4);
-  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
-  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
-  auto ex = makeJobScheduler();
-  auto config = makeConfig(*ex, std::move(policy), *device);
-  auto engine = makeEngine(std::move(config));
-  auto driver = makeDriver(std::move(engine), std::move(ex));
-  CacheEntry e{strzBuffer("key"), strzBuffer("value")};
-  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
-
+  auto collision = CollisionCreator("key", "value", "abc");
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), value));
-  EXPECT_EQ(makeView("value"), value.view());
-  driver->flush();
-
-  uint8_t buf[512]{}; // 512 is the minimal alloc alignment size
-  ASSERT_TRUE(device->read(0, sizeof(buf), buf));
-  constexpr uint32_t kKeySize{3}; // "key"
-  size_t keyOffset = sizeof(buf) - kSizeOfEntryDesc - kKeySize;
-  BufferView keyOnDevice{kKeySize, buf + keyOffset};
-  ASSERT_EQ(keyOnDevice, makeView("key"));
-
-  std::memcpy(buf + keyOffset, "abc", 3);
-  ASSERT_TRUE(device->write(0, Buffer{BufferView{sizeof(buf), buf}}));
   // Original key is not found, because it didn't pass key equality check
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), value));
+  EXPECT_EQ(Status::NotFound, collision.driver->lookup(makeView("key"), value));
 }
 
 TEST(BlockCache, SimpleReclaim) {

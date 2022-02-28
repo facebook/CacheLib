@@ -1527,6 +1527,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reclaim_value_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_cleanup_entry_header_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_cleanup_value_checksum_errors"));
+  EXPECT_TRUE(cs("navy_bc_remove_attempt_collisions"));
   for (int size = 64;;
        size = std::min(4 * 1024 * 1024, static_cast<int>(size * 1.25))) {
     EXPECT_TRUE(cs(folly::sformat("navy_bc_approx_bytes_in_size_{}", size)));
