@@ -128,7 +128,8 @@ class ItemRecords {
     ptr->setIdx(idx);
     ptr->setVersion(0);
     auto [lock, records] = getItemRecords(idx);
-    records.resize(std::max(idx / itemRecords_.size() + 1, records.size()));
+    records.resize(
+        std::max<size_t>(idx / itemRecords_.size() + 1, records.size()));
     records[idx / itemRecords_.size()].key = handle->getKey().toString();
   }
 

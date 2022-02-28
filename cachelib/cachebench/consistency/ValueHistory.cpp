@@ -267,7 +267,8 @@ bool ValueHistory::isConsistent(uint64_t endGetIdx, EventStream* es) const {
     // Find a log record @kHistoryContext from @beginSetIdx, not beyond the
     // first. Do not subtract from @beginSetIdx - it is unsigned.
     const auto historyBeginIdx =
-        std::max(beginSetIdx, log_.first() + kHistoryContext) - kHistoryContext;
+        std::max<uint64_t>(beginSetIdx, log_.first() + kHistoryContext) -
+        kHistoryContext;
     const auto numEvents = endGetIdx - historyBeginIdx;
     for (uint32_t i = 0; i <= numEvents; i++) {
       auto rec = log_.getAt(endGetIdx - i);
