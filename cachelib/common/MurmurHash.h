@@ -15,9 +15,12 @@
  */
 
 #pragma once
+
 #include <folly/CppAttributes.h>
 
 #include <cstdint>
+
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -39,7 +42,7 @@ inline uint32_t murmurHash2(const void* key, int len, uint32_t seed) {
   const unsigned char* data = static_cast<const unsigned char*>(key);
 
   while (len >= 4) {
-    uint32_t k = *reinterpret_cast<const uint32_t*>(data);
+    uint32_t k = util::strict_aliasing_safe_read32(data);
 
     k *= m;
     k ^= k >> r;

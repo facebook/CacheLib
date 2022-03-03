@@ -19,6 +19,7 @@
 #include <cstdint>
 
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -61,7 +62,8 @@ uint64_t murmurHash64A(const void* key, int len, uint64_t seed) {
   const uint64_t* end = data + (len / 8);
 
   while (data != end) {
-    uint64_t k = *data++;
+    uint64_t k = util::strict_aliasing_safe_read64(data);
+    data++;
 
     k *= m;
     k ^= k >> r;
