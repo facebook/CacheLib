@@ -221,6 +221,24 @@ T narrow_cast(double i) {
   }
   return static_cast<T>(i);
 }
+
+// To force the compiler to NOT optimize away the store/load
+// when user supplies void* and we need to read it in 32bit chunks.
+// The compiler should be able to optimize this into just a single load.
+inline uint32_t strict_aliasing_safe_read32(const void* ptr) {
+  uint32_t result;
+  memcpy(&result, ptr, sizeof(result));
+  return result;
+}
+
+// To force the compiler to NOT optimize away the store/load
+// when user supplies void* and we need to read it in 64bit chunks.
+// The compiler should be able to optimize this into just a single load.
+inline uint64_t strict_aliasing_safe_read64(const void* ptr) {
+  uint64_t result;
+  memcpy(&result, ptr, sizeof(result));
+  return result;
+}
 } // namespace util
 } // namespace cachelib
 } // namespace facebook
