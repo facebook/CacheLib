@@ -44,7 +44,6 @@ class FOLLY_PACK_ATTR HashTable {
     bool isNull() const { return addr == nullptr; }
     void setNull() { addr = nullptr; }
 
-    Entry(const Entry& rhs) = default;
     Entry& operator=(const Entry& rhs) = default;
   };
 
@@ -59,7 +58,7 @@ class FOLLY_PACK_ATTR HashTable {
     return static_cast<uint32_t>(totalSize);
   }
 
-  explicit HashTable(size_t capacity);
+  HashTable(size_t capacity);
 
   // @throw std::invalid_argument if capacity is smaller than "other"
   HashTable(size_t capacity, const HashTable& other);
