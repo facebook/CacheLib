@@ -98,7 +98,8 @@ std::unique_ptr<LruItemHandle> allocate_item(
     const facebook::cachelib::LruAllocator& cache,
     facebook::cachelib::PoolId id,
     folly::StringPiece key,
-    size_t size);
+    size_t size,
+    uint32_t ttlSecs);
 
 bool insert_handle(const facebook::cachelib::LruAllocator& cache,
                    LruItemHandle& handle);

@@ -138,6 +138,7 @@ mod ffi {
             id: i8,
             key: StringPiece<'_>,
             size: usize,
+            ttl_secs: u32,
         ) -> Result<UniquePtr<LruItemHandle>>;
 
         fn insert_handle(cache: &LruAllocator, handle: Pin<&mut LruItemHandle>) -> Result<bool>;
