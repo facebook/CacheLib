@@ -34,6 +34,11 @@ class CacheAllocatorFindApiWrapper {
                                                  AccessMode mode) {
     return alloc.findImpl(key, mode);
   }
+
+  static typename Allocator::ItemHandle findFastImpl(
+      Allocator& alloc, typename Allocator::Key key, AccessMode mode) {
+    return alloc.findFastImpl(key, mode);
+  }
 };
 
 } // namespace facebook::cachelib

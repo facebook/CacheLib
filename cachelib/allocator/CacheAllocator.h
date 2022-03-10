@@ -494,12 +494,23 @@ class CacheAllocator : public CacheBase {
   // lookup.
   //
   // @param key         the key for lookup
-  // @param mode        the mode of access for the lookup. defaults to
-  //                    AccessMode::kRead
   //
-  // @return      the handle for the item or a handle to nullptr if the key does
-  //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFast(Key key, AccessMode mode);
+  // @return      the read handle for the item or a handle to nullptr if the key
+  //              does not exist.
+  FOLLY_ALWAYS_INLINE ReadHandle findFast(Key key);
+
+  // look up an item by its key. This ignores the nvm cache and only does RAM
+  // lookup. Users should call this API only when they are going to mutate the
+  // item data.
+  //
+  // @param key         the key for lookup
+  // @param isNvmInvalidate   whether to do nvm invalidation;
+  //                          defaults to be true
+  //
+  // @return      the write handle for the item or a handle to nullptr if the
+  //              key does not exist.
+  FOLLY_ALWAYS_INLINE WriteHandle
+  findFastToWrite(Key key, bool doNvmInvalidation = true);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup. This API does not update the stats related to cache gets and misses
@@ -1372,12 +1383,12 @@ class CacheAllocator : public CacheBase {
   // lookup.
   //
   // @param key         the key for lookup
-  // @param mode        the mode of access for the lookup. defaults to
-  //                    AccessMode::kRead
+  // @param mode        the mode of access for the lookup.
+  //                    AccessMode::kRead or AccessMode::kWrite
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE ItemHandle findFastInternal(Key key, AccessMode mode);
 
   // look up an item by its key across the nvm cache as well if enabled.
   //
@@ -1388,6 +1399,17 @@ class CacheAllocator : public CacheBase {
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
   FOLLY_ALWAYS_INLINE ItemHandle findImpl(Key key, AccessMode mode);
+
+  // look up an item by its key. This ignores the nvm cache and only does RAM
+  // lookup.
+  //
+  // @param key         the key for lookup
+  // @param mode        the mode of access for the lookup.
+  //                    AccessMode::kRead or AccessMode::kWrite
+  //
+  // @return      the handle for the item or a handle to nullptr if the key does
+  //              not exist.
+  FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
 
   // Moves a regular item to a different slab. This should only be used during
   // slab release after the item's moving bit has been set. The user supplied

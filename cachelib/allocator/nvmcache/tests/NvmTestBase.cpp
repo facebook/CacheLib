@@ -60,15 +60,14 @@ bool NvmCacheTest::checkKeyExists(folly::StringPiece key, bool ramOnly) {
 }
 
 ItemHandle NvmCacheTest::fetch(folly::StringPiece key, bool ramOnly) {
-  auto hdl = ramOnly ? cache_->findFast(key, AccessMode::kRead)
+  auto hdl = ramOnly ? cache_->findFastImpl(key, AccessMode::kRead)
                      : cache_->findImpl(key, AccessMode::kRead);
   hdl.wait();
   return hdl;
 }
 
 ItemHandle NvmCacheTest::fetchToWrite(folly::StringPiece key, bool ramOnly) {
-  auto hdl = ramOnly ? cache_->findFast(key, AccessMode::kWrite)
-                     : cache_->findToWrite(key);
+  auto hdl = ramOnly ? cache_->findFastToWrite(key) : cache_->findToWrite(key);
   hdl.wait();
   return hdl;
 }

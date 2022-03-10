@@ -1670,8 +1670,8 @@ CacheAllocator<CacheTrait>::inspectCache(typename Item::Key key) {
 // compiler which executions we don't want to optimize on.
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
-                                         AccessMode mode) {
+CacheAllocator<CacheTrait>::findFastInternal(typename Item::Key key,
+                                             AccessMode mode) {
   auto handle = findInternal(key);
 
   stats_.numCacheGets.inc();
@@ -1686,8 +1686,9 @@ CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::findFast(typename Item::Key key, AccessMode mode) {
-  auto handle = findFastImpl(key, mode);
+CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
+                                         AccessMode mode) {
+  auto handle = findFastInternal(key, mode);
   auto eventTracker = getEventTracker();
   if (UNLIKELY(eventTracker != nullptr)) {
     if (handle) {
@@ -1704,9 +1705,29 @@ CacheAllocator<CacheTrait>::findFast(typename Item::Key key, AccessMode mode) {
 }
 
 template <typename CacheTrait>
+typename CacheAllocator<CacheTrait>::ReadHandle
+CacheAllocator<CacheTrait>::findFast(typename Item::Key key) {
+  return findFastImpl(key, AccessMode::kRead);
+}
+
+template <typename CacheTrait>
+typename CacheAllocator<CacheTrait>::WriteHandle
+CacheAllocator<CacheTrait>::findFastToWrite(typename Item::Key key,
+                                            bool doNvmInvalidation) {
+  auto handle = findFastImpl(key, AccessMode::kWrite);
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  if (doNvmInvalidation) {
+    invalidateNvm(*handle);
+  }
+  return handle;
+}
+
+template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
 CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
-  auto handle = findFastImpl(key, mode);
+  auto handle = findFastInternal(key, mode);
 
   if (handle) {
     if (UNLIKELY(handle->isExpired())) {
