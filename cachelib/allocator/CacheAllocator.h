@@ -528,7 +528,7 @@ class CacheAllocator : public CacheBase {
   // @param handle        the item handle
   // @param mode          the mode of access for the lookup. defaults to
   //                      AccessMode::kRead
-  void markUseful(const ItemHandle& handle, AccessMode mode);
+  void markUseful(const ReadHandle& handle, AccessMode mode);
 
   using AccessIterator = typename AccessContainer::Iterator;
   // Iterator interface for the cache. It guarantees that all keys that were

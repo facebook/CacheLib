@@ -1789,7 +1789,7 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key) {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::markUseful(const ItemHandle& handle,
+void CacheAllocator<CacheTrait>::markUseful(const ReadHandle& handle,
                                             AccessMode mode) {
   if (!handle) {
     return;
