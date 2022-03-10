@@ -123,9 +123,7 @@ void setup() {
 
 void benchCachelibRangeMap() {
   auto getCachelibRangeMap = [] {
-    // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
-    // to take a ReadHandle
-    auto it = cache->find(kClMap, AccessMode::kRead);
+    auto it = cache->findImpl(kClMap, AccessMode::kRead);
     XDCHECK(it);
     return CachelibRangeMap::fromItemHandle(*cache, std::move(it));
   };

@@ -784,9 +784,7 @@ class MapTest : public ::testing::Test {
     ASSERT_EQ(numKey, map.size());
 
     cache->insert(map.viewItemHandle());
-    // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
-    // to take a ReadHandle
-    auto oldHandle = cache->find("my_map", AccessMode::kRead);
+    auto oldHandle = cache->findImpl("my_map", AccessMode::kRead);
     ASSERT_NE(nullptr, oldHandle);
     ASSERT_NE(nullptr, cache->find("my_map"));
 
@@ -798,9 +796,7 @@ class MapTest : public ::testing::Test {
     }
 
     // new map is visible
-    // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
-    // to take a ReadHandle
-    auto newHandle = cache->find("my_map", AccessMode::kRead);
+    auto newHandle = cache->findImpl("my_map", AccessMode::kRead);
     ASSERT_NE(nullptr, newHandle);
     auto newMap = BasicMap::fromItemHandle(*cache, std::move(newHandle));
     ASSERT_FALSE(newMap.isNullItemHandle());
@@ -845,9 +841,7 @@ class MapTest : public ::testing::Test {
     ASSERT_EQ(numKey, map.size());
 
     cache->insert(map.viewItemHandle());
-    // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
-    // to take a ReadHandle
-    auto oldHandle = cache->find("my_map", AccessMode::kRead);
+    auto oldHandle = cache->findImpl("my_map", AccessMode::kRead);
     ASSERT_NE(nullptr, oldHandle);
     ASSERT_NE(nullptr, cache->find("my_map"));
 
@@ -858,9 +852,7 @@ class MapTest : public ::testing::Test {
     }
 
     // new map is visible
-    // TODO(jiayueb): remove "AccessMode::kRead" after changing fromItemHandle
-    // to take a ReadHandle
-    auto newHandle = cache->find("my_map", AccessMode::kRead);
+    auto newHandle = cache->findImpl("my_map", AccessMode::kRead);
     ASSERT_NE(nullptr, newHandle);
     auto newMap = BasicMap::fromItemHandle(*cache, std::move(newHandle));
     ASSERT_FALSE(newMap.isNullItemHandle());

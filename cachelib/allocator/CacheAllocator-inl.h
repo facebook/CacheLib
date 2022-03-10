@@ -1705,7 +1705,7 @@ CacheAllocator<CacheTrait>::findFast(typename Item::Key key, AccessMode mode) {
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
+CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
   auto handle = findFastImpl(key, mode);
 
   if (handle) {
@@ -1748,10 +1748,10 @@ CacheAllocator<CacheTrait>::find(typename Item::Key key, AccessMode mode) {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findToWrite(typename Item::Key key,
                                         bool doNvmInvalidation) {
-  auto handle = find(key, AccessMode::kWrite);
+  auto handle = findImpl(key, AccessMode::kWrite);
   if (handle == nullptr) {
     return nullptr;
   }
@@ -1764,7 +1764,7 @@ CacheAllocator<CacheTrait>::findToWrite(typename Item::Key key,
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::find(typename Item::Key key) {
-  return find(key, AccessMode::kRead);
+  return findImpl(key, AccessMode::kRead);
 }
 
 template <typename CacheTrait>

@@ -153,9 +153,7 @@ void lookupStdUnorderedMap() {
 }
 
 void lookupCachelibBufferManagerOnly() {
-  // TODO(jiayueb): remove "AccessMode::kRead" to migrate to the
-  // new find() API
-  auto parent = cache->find("lookup_buffer_manager", AccessMode::kRead);
+  auto parent = cache->findImpl("lookup_buffer_manager", AccessMode::kRead);
   XDCHECK(parent != nullptr);
 
   CachelibBM bm{*cache, parent};
@@ -176,9 +174,7 @@ void lookupCachelibHashtableOnly() {
 }
 
 void lookupCachelibMap() {
-  // TODO(jiayueb): remove "cachelib::AccessMode::kRead" to migrate to the
-  // new find() API
-  auto handle = cache->find("lookup_benchmark_map", AccessMode::kRead);
+  auto handle = cache->findImpl("lookup_benchmark_map", AccessMode::kRead);
   XDCHECK(handle != nullptr);
 
   CachelibMap m = CachelibMap::fromItemHandle(*cache, std::move(handle));

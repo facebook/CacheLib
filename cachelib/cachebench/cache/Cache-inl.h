@@ -415,7 +415,7 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
       tracker = util::LatencyTracker(cacheFindLatency_);
     }
     // find from cache and wait for the result to be ready.
-    auto it = cache_->find(key, mode);
+    auto it = cache_->findImpl(key, mode);
     it.wait();
     return it;
   };

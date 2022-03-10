@@ -372,7 +372,7 @@ TEST_F(NvmCacheTest, ConcurrentFills) {
     std::vector<std::thread> thr;
     for (unsigned int j = 0; j < 50; j++) {
       thr.push_back(std::thread([&]() {
-        auto hdl = nvm.find(key, AccessMode::kRead);
+        auto hdl = nvm.find(key);
         hdl.wait();
         ASSERT_NE(hdl, nullptr);
         ASSERT_EQ(id, *(int*)hdl->getMemory());

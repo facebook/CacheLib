@@ -547,7 +547,7 @@ class ObjectCache {
   template <typename T>
   ObjectHandle<T> find(folly::StringPiece key,
                        AccessMode mode = AccessMode::kRead) {
-    auto handle = cache_->find(key, mode);
+    auto handle = cache_->findImpl(key, mode);
     return toObjectHandle<T>(std::move(handle));
   }
 

@@ -61,7 +61,7 @@ bool NvmCacheTest::checkKeyExists(folly::StringPiece key, bool ramOnly) {
 
 ItemHandle NvmCacheTest::fetch(folly::StringPiece key, bool ramOnly) {
   auto hdl = ramOnly ? cache_->findFast(key, AccessMode::kRead)
-                     : cache_->find(key, AccessMode::kRead);
+                     : cache_->findImpl(key, AccessMode::kRead);
   hdl.wait();
   return hdl;
 }

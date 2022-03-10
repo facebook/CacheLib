@@ -21,6 +21,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
+#include <gtest/gtest.h>
 
 #include <functional>
 #include <memory>
@@ -82,6 +83,9 @@ namespace cachelib {
 template <typename AllocatorT>
 class FbInternalRuntimeUpdateWrapper;
 
+template <typename AllocatorT>
+class CacheAllocatorFindApiWrapper;
+
 namespace cachebench {
 template <typename Allocator>
 class Cache;
@@ -100,6 +104,12 @@ class AllocatorHitStatsTest;
 template <typename AllocatorT>
 class AllocatorResizeTest;
 
+template <typename AllocatorT>
+class FixedSizeArrayTest;
+
+template <typename AllocatorT>
+class MapTest;
+
 class NvmCacheTest;
 
 template <typename AllocatorT>
@@ -110,6 +120,20 @@ class NvmAdmissionPolicyTest;
 class CacheAllocatorTestWrapper;
 class PersistenceCache;
 } // namespace tests
+
+namespace objcache {
+template <typename CacheDescriptor, typename AllocatorRes>
+class ObjectCache;
+namespace test {
+#define GET_CLASS_NAME(test_case_name, test_name) \
+  test_case_name##_##test_name##_Test
+
+#define GET_DECORATED_CLASS_NAME(namespace, test_case_name, test_name) \
+  namespace ::GET_CLASS_NAME(test_case_name, test_name)
+
+class GET_CLASS_NAME(ObjectCache, ObjectHandleInvalid);
+} // namespace test
+} // namespace objcache
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
 // takes two templated types that control how the allocation is
@@ -455,16 +479,6 @@ class CacheAllocator : public CacheBase {
   //                  key does not exist.
   ReadHandle find(Key key);
 
-  // look up an item by its key across the nvm cache as well if enabled.
-  //
-  // @param key         the key for lookup
-  // @param mode        the mode of access for the lookup.
-  //                    AccessMode::kRead or AccessMode::kWrite
-  //
-  // @return      the handle for the item or a handle to nullptr if the key does
-  //              not exist.
-  ItemHandle find(Key key, AccessMode mode);
-
   // look up an item by its key across the nvm cache as well if enabled. Users
   // should call this API only when they are going to mutate the item data.
   //
@@ -472,9 +486,9 @@ class CacheAllocator : public CacheBase {
   // @param isNvmInvalidate   whether to do nvm invalidation;
   //                          defaults to be true
   //
-  // @return      the handle for the item or a handle to nullptr if the
+  // @return      the write handle for the item or a handle to nullptr if the
   //              key does not exist.
-  ItemHandle findToWrite(Key key, bool doNvmInvalidation = true);
+  WriteHandle findToWrite(Key key, bool doNvmInvalidation = true);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup.
@@ -1365,6 +1379,16 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
 
+  // look up an item by its key across the nvm cache as well if enabled.
+  //
+  // @param key         the key for lookup
+  // @param mode        the mode of access for the lookup.
+  //                    AccessMode::kRead or AccessMode::kWrite
+  //
+  // @return      the handle for the item or a handle to nullptr if the key does
+  //              not exist.
+  FOLLY_ALWAYS_INLINE ItemHandle findImpl(Key key, AccessMode mode);
+
   // Moves a regular item to a different slab. This should only be used during
   // slab release after the item's moving bit has been set. The user supplied
   // callback is responsible for copying the contents and fixing the semantics
@@ -1949,6 +1973,7 @@ class CacheAllocator : public CacheBase {
   friend ReaperAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
+  friend class CacheAllocatorFindApiWrapper<CacheT>;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
@@ -1963,11 +1988,26 @@ class CacheAllocator : public CacheBase {
   friend class facebook::cachelib::tests::NvmAdmissionPolicyTest;
   friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
   friend class facebook::cachelib::tests::PersistenceCache;
+  template <typename AllocatorT>
+  friend class facebook::cachelib::tests::FixedSizeArrayTest;
+  template <typename AllocatorT>
+  friend class facebook::cachelib::tests::MapTest;
 
   // benchmarks
   template <typename Allocator>
   friend class facebook::cachelib::cachebench::Cache;
   friend class facebook::cachelib::cachebench::tests::CacheTest;
+  friend void lookupCachelibBufferManagerOnly();
+  friend void lookupCachelibMap();
+  friend void benchCachelibMap();
+  friend void benchCachelibRangeMap();
+
+  // objectCache
+  template <typename CacheDescriptor, typename AllocatorRes>
+  friend class facebook::cachelib::objcache::ObjectCache;
+  friend class GET_DECORATED_CLASS_NAME(objcache::test,
+                                        ObjectCache,
+                                        ObjectHandleInvalid);
 };
 } // namespace cachelib
 } // namespace facebook
