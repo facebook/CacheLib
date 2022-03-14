@@ -355,10 +355,13 @@ void PersistenceManager::saveDataInBlocks(PersistenceStreamWriter& writer,
       // length of data, we can avoid the extra data copy.
       DataBlockHeader dbh;
       dbh.setLengthAndComputeChecksum(kDataBlockSize, ptr);
-      writer.write(folly::IOBuf(CopyBufferOp::COPY_BUFFER, &dbh,
-                                sizeof(DataBlockHeader)));
+      auto buf = folly::IOBuf(CopyBufferOp::COPY_BUFFER, &dbh,
+                              sizeof(DataBlockHeader));
+      // chained header and data to make a single write and be consistent with
+      // restore
+      buf.appendToChain(folly::IOBuf::wrapBuffer(ptr, kDataBlockSize));
       // we will trigger flush before shm dropped, so wrapBuffer is safe
-      writer.write(folly::IOBuf::wrapBufferAsValue(ptr, kDataBlockSize));
+      writer.write(std::move(buf));
       ptr += kDataBlockSize;
     }
   }
