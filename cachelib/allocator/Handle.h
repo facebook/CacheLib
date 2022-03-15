@@ -43,6 +43,9 @@ enum class HandleFlags : uint8_t {
   kWentToNvm = 1 << 2,
 };
 
+template <typename T>
+struct WriteHandleImpl;
+
 // RAII class that manages cache item pointer lifetime. These handles
 // can only be created by a CacheAllocator and upon destruction the handle
 // takes care of releasing the item to the correct cache allocator instance.
@@ -187,6 +190,12 @@ struct ReadHandleImpl {
         return handle;
       });
     }
+  }
+
+  WriteHandleImpl<T> toWriteHandle() && {
+    XDCHECK_NE(alloc_, nullptr);
+    alloc_->invalidateNvm(*it_);
+    return WriteHandleImpl<T>{std::move(*this)};
   }
 
   using ReadyCallback = folly::Function<void(ReadHandleImpl)>;

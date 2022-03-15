@@ -722,6 +722,11 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       auto handle2 = handle.clone();
       ASSERT_TRUE(isConst(handle2->getMemory()));
       ASSERT_EQ(handle2.isWriteHandle(), false);
+
+      // upgrade a read handle to a write handle
+      auto handle3 = std::move(handle).toWriteHandle();
+      ASSERT_FALSE(isConst(handle3->getMemory()));
+      ASSERT_EQ(handle3.isWriteHandle(), true);
     }
 
     {
