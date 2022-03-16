@@ -77,7 +77,8 @@ install(TARGETS cachelib_allocator
         DESTINATION ${LIB_INSTALL_DIR} )
 
 if (BUILD_TESTS)
-  add_library (allocator_test_support
+  add_library (allocator_test_support OBJECT
+    ../common/TestUtils.cpp
     ${DATASTRUCT_TESTS_THRIFT_FILES}
     ./nvmcache/tests/NvmTestBase.cpp
     ./memory/tests/TestBase.cpp

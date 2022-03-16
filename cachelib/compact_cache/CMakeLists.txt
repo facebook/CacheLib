@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library (compact_cache_test_support INTERFACE)
-add_dependencies(compact_cache_test_support INTERFACE thrift_generated_files)
-
 if (BUILD_TESTS)
-  target_link_libraries (compact_cache_test_support INTERFACE
+  add_library (compact_cache_test_support OBJECT ../common/TestUtils.cpp)
+
+  target_link_libraries (compact_cache_test_support PUBLIC
     cachelib_allocator
     glog::glog
     gflags
