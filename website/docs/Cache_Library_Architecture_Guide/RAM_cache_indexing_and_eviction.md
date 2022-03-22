@@ -39,7 +39,7 @@ It has the following major API functions:
 * remove: Remove an item from the AccessContainer, making it not accessible to
     future find requests. This is used when the client removes an item from the
     cache. This is also used when moving an item (more details on
-    [moving](/docs/Cache_Library_Architecture_Guide/Slab_Rebalancing_-_How_Does_It_Work/#4-how-do-we-handle-chain)).
+    [4. How do we handle chained items](/docs/Cache_Library_Architecture_Guide/slab_rebalancing)).
     * Example call-site: `CacheAllocator::removeImpl`.
 
 The full API can be found in `ChainedHashTable::Container`.
@@ -136,7 +136,7 @@ next and previous item (`struct DListHook` in
 
 ### **LRU**
 
-[MMLru](`class MMLru` in `cachelib/allocator/MMLru.h`) powers the LRU (see [/docs/Cache_Library_User_Guides/eviction_policy/#lru]).
+[MMLru](`class MMLru` in `cachelib/allocator/MMLru.h`) powers the LRU (see [lru](/docs/Cache_Library_User_Guides/eviction_policy/)).
 
 It is powered by a single DList, which holds the head and tail of the queue. It
 also has a reference to *the insertion
@@ -152,7 +152,7 @@ linked list operation that takes constant time:
 ### **LRU-2Q**
 
 MM2Q powers [LRU2Q](/docs/Cache_Library_User_Guides/eviction_policy/#lru-2q).
-It is powered by `MultiDList` (variable LruList` in `struct Container` in `cachelib/allocator/MM2Q.h`).
+It is powered by `MultiDList` (variable `LruList` in `struct Container` in `cachelib/allocator/MM2Q.h`).
 Underneath, it contains 5 DLists: Hot, Warm, WarmTail, Cold, ColdTail.
 
 * Insert: A new item is inserted to the head of the Hot queue.
@@ -167,8 +167,7 @@ The Tail lists are optional queues designed to supply statistics on access
 counts on the last 1 slab worths of items on the Cold and Warm queue. This
 stats can help us understand if assigning one more slab to this particular
 allocation class would be a good tradeoff. The marginal hits policy of
-rebalancing relies on this statistics (more details in
-[/docs/Cache_Library_Architecture_Guide/Slab_Rebalancing_-_How_Does_It_Work/#2-how-do-we-pick-a-slab]).
+rebalancing relies on this statistics (more details in [2. How do we pick a slab](/docs/Cache_Library_Architecture_Guide/slab_rebalancing)).
 
 ### **TINY-LFU**
 
@@ -256,7 +255,7 @@ the CacheItem. For public API in CacheAllocator, AccessContainer and
 MMContainer works together to perform indexing and eviction management
 efficiently.
 
-Usually, when the API takes a key from the client, AccessContainer::find is
+Usually, when the API takes a key from the client, `AccessContainer::find` is
 used to locate the CacheItem. Then the MMContainer can be identified from the
 item and operation can be performed in constant time.  The most time overhead
 on common cache operations (find, insert, remove) is two iterations on the hash

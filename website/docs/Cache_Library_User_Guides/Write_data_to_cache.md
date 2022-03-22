@@ -75,7 +75,7 @@ For example:
 
 ```cpp
 size_t size = 1024 * 1024;
-auto parentItemHandle = cache->allocate(pool_id, "parent", size);
+auto parentItemHandle = cache->allocate(poolId, "parent", size);
 
 if (parentItemHandle) {
   // Call allocateChainedItem() to allocate memory for 3 chained items.

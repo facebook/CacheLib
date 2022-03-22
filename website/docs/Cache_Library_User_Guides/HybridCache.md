@@ -23,7 +23,7 @@ For example:
 
 
 ```cpp
-nvmConfig.navyConfig.set<OPTION NAME> = <YOUR OPTION VALUE>;
+nvmConfig.navyConfig.set<SETTING NAME> = <YOUR SETTING VALUE>;
 
 // set the nvmConfig in the main cache config.
 lruAllocatorConfig.enableNvmCache(nvmConfig);
@@ -34,7 +34,7 @@ After seting up a HybridCache, you can use the cache almost the same way as a pu
 
 ### Allocating items
 
-Use the `allocate()` API to allocate memory for an item and get an `ItemHandle`:
+Use the `allocate()` API to allocate memory for an item and get a `WriteHandle`:
 
 
 ```cpp
@@ -51,7 +51,7 @@ cache.insertOrReplace(handle);
 
 ### Accessing items on cache
 
-When you call the `find()` API to look up an item by it key, cachelib returns a handle as before. However, the handle might not be immediately *ready* to dereference and access the item's memory.  CacheLib will promote the item from NVM to DRAM and notify the handle to be ready. Note that`Handle` will always eventually become ready. Cachelib provides the following `Handle`  states and corresponding APIs to distinguish the semantics
+When you call the `find()` API to look up an item by it key, cachelib returns a handle as before. However, the handle might not be immediately *ready* to dereference and access the item's memory.  CacheLib will promote the item from NVM to DRAM and notify the handle to be ready. Note that `Handle` will always eventually become ready. Cachelib provides the following `Handle`  states and corresponding APIs to distinguish the semantics
 
 1. **Ready**
 This indicates that the item is in DRAM and accessing the Item's memory through the `Handle` will not block.

@@ -58,8 +58,8 @@ the cache in response to certain internal events like Pool rebalancing.
 Removal refers to an item exiting the cache when the `remove` api is invoked.
 
 **Expiry**
-Expiry refers to an item exiting the cache when it's time to live (TTL) is
-exhausted. By default, item's don't expire unless a TTL is explicitly set.
+Expiry refers to an item exiting the cache when its time to live (TTL) is
+exhausted. By default, items don't expire unless a TTL is explicitly set.
 
 
 **Item lifetime**
@@ -67,7 +67,7 @@ Time in cache since the creation of the `Item` up until eviction of the `Item` f
 
 
 **Eviction Age**
-Time in cache for an Item  from it's last access time up to its eviction.
+Time in cache for an Item from its last access time up to its eviction.
 
 **HybridCache**
 HybridCache is non-volatile memory (NVM) cache (flash). When you use HybridCache, items allocated in cache can live on NVM or DRAM. For more information, see [HybridCache](HybridCache).

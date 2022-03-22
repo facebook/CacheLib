@@ -121,7 +121,7 @@ module.exports = {
        items: [
          {
           type: 'category',
-          label: 'overview',
+          label: 'Overview',
           collapsed: true,
           items: [
             'Cache_Library_Architecture_Guide/overview_a_random_walk',

@@ -2,7 +2,7 @@
 id: Item_Destructor
 title: Item Destructor
 ---
-# Introduction
+## Introduction
 
 *Item Destructor* provides destructor semantics for an item in the cache. This
 is useful when you want to execute some logic on removal of an item from the
@@ -21,7 +21,7 @@ from the cache, includes **both DRAM and NVM**. If Nvm Cache is not enabled,
 *Item Destructor* does the exact same behavior as *Remove Callback*. These two
 features can't be used at the same time.
 
-# Example
+## Example
 
 For example, suppose you want to maintain a counter for the total number of
 items in your cache and increment the counter when you call the
@@ -50,7 +50,7 @@ for (int i = 0; i &lt; 1000; i++) {
 std::cout &lt;&lt; totalItems &lt;&lt; std::endl; // this will print 5.
 ```
 
-# DestructorData
+## DestructorData
 
 *Item Destructor* gets called with the following pieces of information:
 
@@ -118,7 +118,7 @@ details on what chained allocations are, see
 cache]].Chained items must be iterated though `chainedAllocs`, internal APIs
 `getNext` and `getParentItem` are broken for items destructed from NVM.
 
-# Guarantees
+## Guarantees
 
 Cachelib guarantees the following for *Item Destructor* executions:
 
@@ -138,7 +138,7 @@ you already have an item in cache and call `insertOrReplace()` to replace it
 with another item with same key (even same value), cachelib will execute the
 destructor for the replaced item.
 
-# Performance Impact
+## Performance Impact
 
 1. One lock is added to protect against race conditions for concurrent
 operations, but the lock is sharded and performance impact is minimal.
@@ -146,7 +146,7 @@ operations, but the lock is sharded and performance impact is minimal.
 destructor, it will be retried if the region is being reclaimed, and fail to
 read (e.g. io error) will disable Nvm Cache.
 
-# Migrate from RemoveCallback
+## Migrate from RemoveCallback
 
 The migration is very simple:
 
@@ -162,7 +162,7 @@ item kicked off from the whole cache, and there is some performance impact but
 it should be minimal (see 'Performance Impact' section for
 details).
 
-# **Known Issue**
+## **Known Issue**
 
 We try our best to guarantee that the destructor is triggered once and only
 once for each item, but there is one scenario which the destructor would not be

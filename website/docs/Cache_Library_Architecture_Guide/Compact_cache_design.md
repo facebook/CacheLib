@@ -4,11 +4,11 @@ title: "Compact Cache Design"
 ---
 
 
-# What is Compact Cache?
+## What is Compact Cache?
 
 Compact Cache is  designed to cache small items with low overheads (0-4 bytes) compared to the regular items cache (32 bytes), making it space efficient when storing small items (tens of bytes). To use compact cache, the key size must be fixed at compile time  for a given instance of compact cache, and value size can be fixed or variable.
 
-# High level design
+## High level design
 
 Cache library's memory management component divides pre-allocated memory into 4MB pieces (slabs), and distribute them to each memory pools according to config. A compact cache instance leverages a memory pool to allocate memory in large chunks and caches smaller object using that.
 
@@ -20,19 +20,19 @@ Each slab is sliced into buckets, the size of each bucket is *(key_size + value_
 
 ![](Compact_Cache_Design_image.png)
 
-## Finding the bucket for an entry
+### Finding the bucket for an entry
 
 First, the key is hashed into a number (key_hash), and *key_hash % num_of_slabs* to identify the slab for the key_hash. Inside the slab, *key_hash % num_of_buckets* will find the right bucket. To transparently expand the capacity of the compact cache without losing all its contents, compact cache uses a consistent hashing scheme to map the key hash to slab.
 
-## Reading an entry
+### Reading an entry
 
 After locating the right bucket for the key of entry,  the bucket is locked in shared mode and each entry is iterated in the bucket to match the full key. If a match is found, the value is copied and returned, and the entry is promoted  to the head of the bucket if the option is enabled.
 
-## Writing an entry into compact cache
+### Writing an entry into compact cache
 
 After locating the right bucket for the key of the entry, the bucket is locked in exclusive mode. Next, a scan is performed to see if key has  exists in the bucket. If the key exists, the value is replaced with the new one and  the entry is promoted to the head of the bucket. Otherwise the a suitable  entry is evicted from the tail of the bucket, and the new entry is inserted at the head of the bucket.
 
-## Compact cache with  variable size values
+### Compact cache with variable size values
 
 Compact cache supports variable size values. In this mode, each bucket is fixed size and entries with various sizes are fitted into it by fitting the fixed size keys first and then using the remaining space for variable sized values.
 
@@ -40,7 +40,7 @@ Compact cache supports variable size values. In this mode, each bucket is fixed 
 
 Upon insertion, if there is not enough empty space in the middle, entries are evicted and the new entry is inserted.
 
-# Comparison with regular items cache
+## Comparison with regular items cache
 
 By design, Compact cache is meant to be low or zero overhead, which is clearly an advantage from items cache, especially when the item key+value size is very small. It is advised to have key + value sizes be smaller than a cache line size to leverage the efficiency of compact cache.   But there are some limitations also:
 
@@ -55,7 +55,7 @@ By design, Compact cache is meant to be low or zero overhead, which is clearly a
 * There is no native TTL support
 * Compact Cache has totally different set of interface compared to items cache
 
-# Possible future improvements
+## Possible future improvements
 
 Some explorative ideas to improve the trade-off benefits of compact cache
 

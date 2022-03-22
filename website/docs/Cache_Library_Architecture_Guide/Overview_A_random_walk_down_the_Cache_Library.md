@@ -3,8 +3,8 @@ id: overview_a_random_walk
 title: "Overview: A random walk down the Cache Library"
 ---
 
-This wiki is intended for people without background knowledge in CacheLib who
-are interested in how CacheLib works. It contains links to code and other wikis
+This guide is intended for people without background knowledge in CacheLib who
+are interested in how CacheLib works. It contains links to code and other guides
 of CacheLib but it should be selfcontained without referring to any of those.
 
 ## So what is CacheLib?
@@ -21,10 +21,10 @@ Let's put this into more context. Imagine you are an engineer who is looking to 
 The way to interact with CacheLib's "hashmap" is via Item and Item's handle, which are basically the raw memory of the content you cached. Logically, an Item is an entry in the map. The "handle" of the item is a wrapper for lifetime management. ([Item and Handle](/docs/Cache_Library_User_Guides/Item_and_Handle/ ))
 
 
-Just like all the caches, there are many knobs you can tune. They are all on the left side panel of the [User Guide wiki page](/docs/Cache_Library_User_Guides/). It's normal that you don't understand all of them right now, but you will at the end of this wiki. Below are some common examples of the knobs.
+Just like all the caches, there are many knobs you can tune. They are all on the left side panel of the [User Guide page](/docs/Cache_Library_User_Guides/About_CacheLib). It's normal that you don't understand all of them right now, but you will at the end of this guide. Below are some common examples of the knobs.
 
 * Eviction policy in memory: We support three flavors of evictions in DRAM: LRU (with custom insert point) , a variation of 2Q (hot, warm, cold queues), LFU (LRU + frequency estimator). They are all LRUs with variations, trying to achieve better hit rate with different attempts. ([DRAM eviction policy](/docs/Cache_Library_User_Guides/eviction_policy/ ))
-* Remove callback/Item desctructor: A callback that's called when the item is removed from RAM (remove callback) or from the cache (item destructor). Typical intended use case is to do book-keeping of items when they are destroyed (for example, counters). ([Remove callback](/docs/Cache_Library_User_Guides/Remove_callback/), [[Cache_Library_User_Guides/Item_Destructor/|Item Destructor]])
+* Remove callback/Item desctructor: A callback that's called when the item is removed from RAM (remove callback) or from the cache (item destructor). Typical intended use case is to do book-keeping of items when they are destroyed (for example, counters). ([Remove callback](/docs/Cache_Library_User_Guides/Remove_callback/), [Item Destructor](/docs/Cache_Library_User_Guides/Item_Destructor/))
 * Persistence between restarts: ([Cache Persistence](/docs/Cache_Library_User_Guides/Cache_persistence/))
    * You can avoid dropping the cache between restarts by this feature, however
    * this "persistence" only works if the process shuts down normally. Cachelib is not a persistent storage engine and the cache content will not survive power failure.
@@ -57,11 +57,11 @@ There will be a section discussing each of the bullets below.
 * Pool is defined by user, usually based on the purpose. For example in a cache use case for a social graph, the cache can be divided into two pools: one for the edges and one for the nodes.
 * An allocation class is saying that all the items in the class have the same size allocated. This reduces fragmentation and helps with pointer compression with an index offset in the slab.
 * A slab is the physical continuous unit of memory. Each slab is assigned to one allocation class in one particular pool, or unassigned. Each allocation class have a number of slabs. The slabs belonging to the same allocation class do not have to be next to each other physically.
-* Indexing: When the client wants to access an item, a hash table (`allocator/ChainedHashTable.h?lines=26`) is looked up. This hash table is from the cache's key to the cache item's compressed pointer. The compressed pointer is the slab index plus the item index within that slab. ([Indexing Wiki](/docs/Cache_Library_Architecture_Guide/RAM_cache_indexing_and_eviction/#accesscontainer))
+* Indexing: When the client wants to access an item, a hash table (`allocator/ChainedHashTable.h?lines=26`) is looked up. This hash table is from the cache's key to the cache item's compressed pointer. The compressed pointer is the slab index plus the item index within that slab. ([Indexing](/docs/Cache_Library_Architecture_Guide/RAM_cache_indexing_and_eviction/#accesscontainer))
    * This component is called AccessContainer. ChainedHashTable is one type of such AccessContainer, called an AccessType.
    * From the slab index, you can retrieve the slab. In the slab header, it contains what allocation class it is assigned to. And from there you can calculate the exact address from the item index within the slab.
    * We have one single AccessContainer for the entire DRAM cache. So when quering, you don't need to know the pool, size (allocation class), the cache will return all that for you if it is a hit.
-* Eviction: The number of LRUs mentioned in the user wiki are implemented. ([Eviction Wiki](/docs/Cache_Library_Architecture_Guide/RAM_cache_indexing_and_eviction/#mmcontainer))
+* Eviction: The number of LRUs mentioned in the user guide are implemented. ([Eviction](/docs/Cache_Library_Architecture_Guide/RAM_cache_indexing_and_eviction/#mmcontainer))
    * LRU: `allocator/MMLru.h`; LRU2Q: `allocator/MM2Q.h`; TinyLFU: `allocator/MMTinyLFU.h`
    * The eviction queues are implemented via a doubly linked list.
    * This component is formally known as MMContainer. Each of these LRUs is one MMType.
@@ -116,7 +116,7 @@ In the later sections, we will go over the design of Navy in the reverse order: 
 
 
 ## BigHash: the small item engine
-[BigHash Wiki Page](/docs/Cache_Library_Architecture_Guide/Small_Object_Cache )
+[BigHash Page](/docs/Cache_Library_Architecture_Guide/Small_Object_Cache )
 
 The space managed by BigHash is divided into buckets.
 
@@ -124,7 +124,7 @@ The space managed by BigHash is divided into buckets.
 * Eviction: Each bucket has a FIFO queue for the items in it.
 
 ## BlockCache: the large item engine
-[BlockCache Wiki Page](/docs/Cache_Library_Architecture_Guide/Large_Object_Cache )
+[BlockCache Page](/docs/Cache_Library_Architecture_Guide/Large_Object_Cache )
 
 The space managed by BlockCache is divided into regions. Each region belongs to one certain "size class", which means all the items in that regions will be of the same size.
 
@@ -179,13 +179,13 @@ The component that decides which cache engine to go, and part of ordering.
 
 ## Recap: what are those knobs again?
 
-That's most of the skeleton of CacheLib RAM / Flash stack. Let's go back to the user wiki and see what exactly each knob is about.
+That's most of the skeleton of CacheLib RAM / Flash stack. Let's go back to the user guide and see what exactly each knob is about.
 
-* EvictionPolicy: This is in regard of the DRAM cache only. You can't change the eviction policy for CompactCache and BigHash. BlockCache's eviction policy is configured via another way. LRU, LFU, 2Q translates to the three MMType in `allocator/CacheTraits.h`. ([Eviction Policy Wiki](/docs/Cache_Library_User_Guides/eviction_policy))
-* Remove callback: This is called when an item leaves the DRAM cache. It does not indicate whether the item is actually leaving the cache since it might get admitted into flash. And the callback for removing from the entire cache is Item Destructor. ([Remove callback](/docs/Cache_Library_User_Guides/Remove_callback/), [[Cache_Library_User_Guides/Item_Destructor/|Item Destructor]])
+* EvictionPolicy: This is in regard of the DRAM cache only. You can't change the eviction policy for CompactCache and BigHash. BlockCache's eviction policy is configured via another way. LRU, LFU, 2Q translates to the three MMType in `allocator/CacheTraits.h`. ([Eviction Policy](/docs/Cache_Library_User_Guides/eviction_policy))
+* Remove callback: This is called when an item leaves the DRAM cache. It does not indicate whether the item is actually leaving the cache since it might get admitted into flash. And the callback for removing from the entire cache is Item Destructor. ([Remove callback](/docs/Cache_Library_User_Guides/Remove_callback/), [Item Destructor](/docs/Cache_Library_User_Guides/Item_Destructor/))
 * Persistence between restarts: This is self-explanatory. Please remember it requires a proper shutdown to be called.
-* Pools: This refers to the DRAM cache only. ([Cache Pool Wiki](/docs/Cache_Library_User_Guides/Partition_cache_into_pools/))
-* TTL: This applies across DRAM and flash. If an item in flash passes TTL, it won't get reinserted to RAM. But it also won't get evicted directly. Eviction happens with the region. ([Time-to-live Wiki](/docs/Cache_Library_User_Guides/ttl_reaper/))
+* Pools: This refers to the DRAM cache only. ([Cache Pool](/docs/Cache_Library_User_Guides/Partition_cache_into_pools/))
+* TTL: This applies across DRAM and flash. If an item in flash passes TTL, it won't get reinserted to RAM. But it also won't get evicted directly. Eviction happens with the region. ([Time-to-live](/docs/Cache_Library_User_Guides/ttl_reaper/))
 * Configurable hash table: This is for DRAM only as parameters of ChainedHashTable. ([Configure Hashtable](/docs/Cache_Library_User_Guides/Configure_HashTable/))
 
 Hopefully now you have a high level picture of the CacheLib cache!
@@ -196,5 +196,5 @@ Hopefully now you have a high level picture of the CacheLib cache!
 
 ## Things we skipped (most of them only has client guide but not a deep dive):
 
-* Chained items: What if you have item that can grow its size? [Chained Items Wiki](/docs/Cache_Library_User_Guides/chained_items/ )
-* Memory advising: How the memory management interacts with the kernel. [OOM Protection Wiki](/docs/Cache_Library_User_Guides/oom_protection/ )
+* Chained items: What if you have item that can grow its size? [Chained Items](/docs/Cache_Library_User_Guides/chained_items/ )
+* Memory advising: How the memory management interacts with the kernel. [OOM Protection](/docs/Cache_Library_User_Guides/oom_protection/ )

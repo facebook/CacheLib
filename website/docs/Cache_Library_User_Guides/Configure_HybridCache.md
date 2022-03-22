@@ -5,7 +5,7 @@ title: Configure HybridCache
 
 ## Enabling hybrid cache
 
-You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the NvmCache::Config::navyConfig in the Cache config by using APIs provided in navy::NavyConfig, for example:
+You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the `NvmCache::Config::navyConfig` in the Cache config by using APIs provided in `navy::NavyConfig`, for example:
 
 
 

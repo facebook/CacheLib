@@ -28,4 +28,4 @@ To get started with cachelib, read these guides:
 - [Remove data from the cache](Cache_Library_User_Guides/Remove_data_from_cache).
 - [Visit data in the cache](Cache_Library_User_Guides/Visit_data_in_cache).
 
-Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer [architecture guide](../learnmore).
+Are you looking for a guide on how CacheLib is designed and how to add new features to it? Please refer [architecture guide](Cache_Library_Architecture_Guide/overview_a_random_walk).

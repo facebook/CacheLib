@@ -54,7 +54,7 @@ To read data from chained items, start from the parent item handle, for example:
 
 
 ```cpp
-auto chainedAllocs = cache->viewAsChainedAllocs(parent_item_handle);
+auto chainedAllocs = cache->viewAsChainedAllocs(parentItemHandle);
 for (auto& c : chainedAllocs.getChain()) {
   auto data = reinterpret_cast<const char*>(c.getMemory());
   std::cout << data << '\n';
