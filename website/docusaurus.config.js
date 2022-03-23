@@ -66,7 +66,7 @@ module.exports = {
       },
 	items: [
         {
-          to: 'docs/installation/',
+          to: 'docs/installation/installation',
           activeBasePath: 'docs',
           label: 'Build and Installation',
           position: 'left',
