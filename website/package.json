@@ -1,5 +1,5 @@
 {
-  "name": "my-website",
+  "name": "cachelib",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -16,17 +16,16 @@
     "prettier:diff": "prettier --config .prettierrc --list-different \"**/*.{js,md}\""
   },
   "dependencies": {
-    "@docusaurus/core": "^2.0.0-beta.8",
-    "@docusaurus/preset-classic": "^2.0.0-beta.8",
-    "@docusaurus/theme-search-algolia": "^2.0.0-beta.8",
-    "@mdx-js/react": "^1.6.21",
-    "@types/react": "^17.0.38",
-    "clsx": "^1.1.1",
-    "docusaurus-plugin-internaldocs-fb": "^0.5.7",
-    "prism-react-renderer": "^1.2.1",
-    "react": "^16.8.4",
-    "react-dom": "^16.8.4",
-    "typescript": "^4.5.5"
+    "@docusaurus/core": "=2.0.0-beta.6",
+    "@docusaurus/plugin-content-docs": "=2.0.0-beta.6",
+    "@docusaurus/preset-classic": "=2.0.0-beta.6",
+    "@docusaurus/theme-classic": "=2.0.0-beta.6",
+    "@docusaurus/theme-common": "=2.0.0-beta.6",
+    "@docusaurus/theme-search-algolia": "=2.0.0-beta.6",
+    "docusaurus-plugin-internaldocs-fb": "^0.10.7",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "typescript": "^4.5.2"
   },
   "devDependencies": {
     "babel-eslint": "^10.0.3",

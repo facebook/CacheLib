@@ -7,6 +7,8 @@
  * @format
  */
 
+const {fbInternalOnly, fbContent} = require('internaldocs-fb-helpers');
+
 module.exports = {
   installationSidebar: [
     {
@@ -34,6 +36,7 @@ module.exports = {
           items: [
             'Cache_Library_User_Guides/About_CacheLib',
             'Cache_Library_User_Guides/terms',
+            ...fbInternalOnly(['facebook/internal-test']),
           ],
         },
         {

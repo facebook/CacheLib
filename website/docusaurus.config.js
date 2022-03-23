@@ -7,8 +7,15 @@
  * @format
  */
 
+// start-import-example
+const {fbContent, fbInternalOnly} = require('internaldocs-fb-helpers');
+// end-import-example
+
 module.exports = {
-  title: 'CacheLib',
+  title: fbContent({
+    internal: 'CacheLib @FB',
+    external: 'CacheLib',
+  }),
   tagline: 'Pluggable caching engine to build and scale high performance cache services',
   favicon: 'img/favicon.ico',
 
@@ -32,21 +39,24 @@ module.exports = {
       textColor: '#fff',
       isCloseable: false,
     },
-    algolia: {
-      // If Algolia did not provide you any appId, use 'BH4D9OD16A'
-      appId: 'BH4D9OD16A',
+    algolia:  fbContent({
+      internal: undefined,
+      external:{
+        // If Algolia did not provide you any appId, use 'BH4D9OD16A'
+        appId: 'BH4D9OD16A',
 
-      // Public API key: it is safe to commit it
-      apiKey: 'bb92084c062a63740851123e7f3f4d26',
+        // Public API key: it is safe to commit it
+        apiKey: 'bb92084c062a63740851123e7f3f4d26',
 
-      indexName: 'cachelib',
+        indexName: 'cachelib',
 
-      // Optional: see doc section below
-      contextualSearch: true,
+        // Optional: see doc section below
+        contextualSearch: true,
 
-      // Optional: Algolia search parameters
-      searchParameters: {},
-    },
+        // Optional: Algolia search parameters
+        searchParameters: {},
+       },
+     }),
     image: 'img/CacheLib-Logo-small.png',
     navbar: {
       title: 'CacheLib',
@@ -159,18 +169,30 @@ module.exports = {
   },
   presets: [
     [
-      '@docusaurus/preset-classic',
+      require.resolve('docusaurus-plugin-internaldocs-fb/docusaurus-preset'),
       {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
           // Please change this to your repo.
-          editUrl:
-            'https://github.com/facebook/docusaurus/edit/master/website/',
+          editUrl: fbContent({
+            internal: 'https://www.internalfb.com/code/fbsource/fbcode/cachelib/public_tld/website/',
+            external: 'https://github.com/facebook/docusaurus/edit/master/website/',
+          }),
         },
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
+        staticDocsProject: 'cachelib',
+        trackingFile: 'cachelib/staticdocs/WATCHED_FILES',
+        enableEditor: true,
+        'remark-code-snippets': {
+          baseDir: '..',
+        },
       },
     ],
   ],
+  customFields: {
+    fbRepoName: 'fbsource',
+    ossRepoPath: 'xplat/sonar',
+  },
 };
