@@ -43,8 +43,6 @@ class FOLLY_PACK_ATTR HashTable {
 
     bool isNull() const { return addr == nullptr; }
     void setNull() { addr = nullptr; }
-
-    Entry& operator=(const Entry& rhs) = default;
   };
 
   // @param capacity   number of maximum entries for the hash table
