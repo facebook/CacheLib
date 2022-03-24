@@ -13,7 +13,7 @@ const {fbContent, fbInternalOnly} = require('internaldocs-fb-helpers');
 
 module.exports = {
   title: fbContent({
-    internal: 'CacheLib @FB',
+    internal: 'CacheLib (Internal)',
     external: 'CacheLib',
   }),
   tagline: 'Pluggable caching engine to build and scale high performance cache services',
@@ -89,6 +89,18 @@ module.exports = {
           label: 'Architecture Guide',
           position: 'left',
         },
+        fbContent({
+           internal: {
+                        to: 'docs/facebook/internal-page1',
+                        activeBasePath: 'docs',
+                        label: 'Internals',
+                        position: 'left',
+                     },
+           external: {
+			href: '/',
+                        label: '\u200C', // Zero width non-joiner unicode character
+                     },
+        }),
         {
           to: 'learnmore/',
           activeBasePath: 'learnmore',
