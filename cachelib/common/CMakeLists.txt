@@ -47,13 +47,13 @@ install(TARGETS cachelib_common
 
 
 if (BUILD_TESTS)
-  add_library (common_test_support INTERFACE
+  add_library (common_test_support PUBLIC
     TestUtils.cpp
     hothash/HotHashDetectorTest.cpp
     piecewise/GenericPiecesTest.cpp
     piecewise/RequestRangeTest.cpp
   )
-  target_link_libraries (common_test_support INTERFACE
+  target_link_libraries (common_test_support PUBLIC
     cachelib_common
     gflags
     GTest::gtest
