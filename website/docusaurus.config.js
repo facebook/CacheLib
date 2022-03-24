@@ -188,7 +188,7 @@ module.exports = {
           // Please change this to your repo.
           editUrl: fbContent({
             internal: 'https://www.internalfb.com/code/fbsource/fbcode/cachelib/public_tld/website/',
-            external: 'https://github.com/facebook/docusaurus/edit/master/website/',
+            external: 'https://github.com/facebook/CacheLib/edit/main/website/',
           }),
         },
         theme: {
