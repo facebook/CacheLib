@@ -13,10 +13,11 @@
 # limitations under the License.
 
 if (BUILD_TESTS)
-  add_library (compact_cache_test_support OBJECT ../common/TestUtils.cpp)
+  add_library (compact_cache_test_support INTERFACE)
 
-  target_link_libraries (compact_cache_test_support PUBLIC
+  target_link_libraries (compact_cache_test_support INTERFACE
     cachelib_allocator
+    common_test_utils
     glog::glog
     gflags
     GTest::gtest

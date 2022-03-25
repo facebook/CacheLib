@@ -78,7 +78,6 @@ install(TARGETS cachelib_allocator
 
 if (BUILD_TESTS)
   add_library (allocator_test_support OBJECT
-    ../common/TestUtils.cpp
     ${DATASTRUCT_TESTS_THRIFT_FILES}
     ./nvmcache/tests/NvmTestBase.cpp
     ./memory/tests/TestBase.cpp
@@ -86,6 +85,7 @@ if (BUILD_TESTS)
   add_dependencies(allocator_test_support thrift_generated_files)
   target_link_libraries (allocator_test_support PUBLIC
     cachelib_allocator
+    common_test_utils
     glog::glog
     gflags
     GTest::gtest
