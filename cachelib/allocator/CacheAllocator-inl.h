@@ -1934,6 +1934,9 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBufT(Handle& handle) {
     }
 
   } else {
+    // following IOBuf will take the item's ownership and trigger freeFunc to
+    // release the reference count.
+    handle.release();
     iobuf = folly::IOBuf{folly::IOBuf::TAKE_OWNERSHIP, item,
 
                          // Since we'll be moving the IOBuf data pointer forward
@@ -1947,7 +1950,6 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBufT(Handle& handle) {
                                .reset();
                          } /* freeFunc */,
                          this /* userData for freeFunc */};
-    handle.release();
 
     if (item->hasChainedItem()) {
       converter = [this](Item* parentItem, ChainedItem& chainedItem) {
