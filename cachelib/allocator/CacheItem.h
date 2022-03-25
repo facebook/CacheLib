@@ -171,11 +171,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // piece of memory.
   void* getMemory() noexcept;
 
-  // (deprecated) Writable memory for this allocation. The caller is free to do
-  // whatever he wants with it and needs to ensure thread sage for access into
-  // this piece of memory.
-  [[deprecated("Use getMemory() instead")]] void* getWritableMemory() const;
-
   // Cast item's readonly memory to a readonly user type
   template <typename T>
   const T* getMemoryAs() const noexcept {
@@ -186,13 +181,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
   template <typename T>
   T* getMemoryAs() noexcept {
     return reinterpret_cast<T*>(getMemory());
-  }
-
-  // (Deprecated) Cast item's writable memory to a writable user type
-  template <typename T>
-  [[deprecated("Use getMemoryAs() instead")]] T*
-  getWritableMemoryAs() noexcept {
-    return reinterpret_cast<T*>(getWritableMemory());
   }
 
   // This is the size of the memory allocation requested by the user.
