@@ -378,10 +378,6 @@ class NvmCache {
   // Logs and disables navy usage
   void disableNavy(const std::string& msg);
 
-  // returns true if there is a concurrent get request in flight fetching from
-  // nvm.
-  bool mightHaveConcurrentFill(size_t shard, folly::StringPiece key);
-
   // map of concurrent fills by key. The key is a string piece wrapper around
   // GetCtx's std::string. This makes the lookups possible without
   // constructing a string key.

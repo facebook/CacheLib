@@ -538,36 +538,7 @@ void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
 template <typename C>
 typename NvmCache<C>::PutToken NvmCache<C>::createPutToken(
     folly::StringPiece key) {
-  const auto shard = getShardForKey(key);
-
-  // if there is a concurrent get in flight, then it is possible that it
-  // started before the item was visible in the cache. ie the RAM was empty
-  // and while the get was in-flight to nvmcache, we inserted something in RAM
-  // and are evicting it. See D7861709 for an example race.
-  if (mightHaveConcurrentFill(shard, key)) {
-    return PutToken{};
-  }
-
-  return inflightPuts_[shard].tryAcquireToken(key);
-}
-
-template <typename C>
-bool NvmCache<C>::mightHaveConcurrentFill(size_t shard,
-                                          folly::StringPiece key) {
-  XDCHECK_EQ(shard, getShardForKey(key));
-  std::unique_lock<std::mutex> l(fillLock_[shard].fillLock_, std::try_to_lock);
-  if (!l.owns_lock()) {
-    return true;
-  }
-
-  const auto& map = getFillMapForShard(shard);
-  const bool found = map.find(key) != map.end();
-  l.unlock();
-
-  if (found) {
-    stats().numNvmAbortedPutOnInflightGet.inc();
-  }
-  return found;
+  return inflightPuts_[getShardForKey(key)].tryAcquireToken(key);
 }
 
 template <typename C>
