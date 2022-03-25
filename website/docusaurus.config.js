@@ -91,7 +91,7 @@ module.exports = {
         },
         fbContent({
            internal: {
-                        to: 'docs/facebook/auto/Cache_Library_onboarding_questionnaire',
+                        to: 'docs/facebook/Cache_Monitoring/Cache_Admin_Overview',
                         activeBasePath: 'docs',
                         label: 'Internals',
                         position: 'left',

@@ -24,6 +24,7 @@ module.exports = {
 
   userguideSidebar: [
     'cache_library_intro',
+    ...fbInternalOnly(['facebook/Cache_Library_onboarding_questionnaire']),
     {
       type: 'category',
       label: 'User Guide',
@@ -48,9 +49,8 @@ module.exports = {
             'Cache_Library_User_Guides/Read_data_from_cache',
             'Cache_Library_User_Guides/Remove_data_from_cache',
             'Cache_Library_User_Guides/Visit_data_in_cache',
-            ...fbInternalOnly(['facebook/Cache_Admin/Add_monitoring_for_cache']),
+            ...fbInternalOnly(['facebook/Cache_Monitoring/Add_monitoring_for_cache']),
             'Cache_Library_User_Guides/faq',
-            ...fbInternalOnly(['facebook/FAQ_internal']),
           ],
         },
 
@@ -164,11 +164,11 @@ module.exports = {
         },
         {
           type: 'category',
-          label: 'Cache Admin',
+          label: 'Cache Monitoring (ODS, Scuba, etc.)',
           collapsed: true,
           items: [
-            'facebook/Cache_Admin/Cache_Admin_Overview',
-            'facebook/Cache_Admin/monitoring',
+            'facebook/Cache_Monitoring/Cache_Admin_Overview',
+            'facebook/Cache_Monitoring/monitoring',
           ]
         },
         {
@@ -194,11 +194,11 @@ module.exports = {
         },
         {
           type: 'category',
-          label: 'Eng',
+          label: 'CacheLib Developers',
           collapsed: true,
           items: [
-            'facebook/Eng/Cachelib_onboarding_guide',
-            'facebook/Eng/How_To_Debug_A_Core',
+            'facebook/Cachelib_Developers/Cachelib_onboarding_guide',
+            'facebook/Cachelib_Developers/How_To_Debug_A_Core',
           ]
         },
        ],
