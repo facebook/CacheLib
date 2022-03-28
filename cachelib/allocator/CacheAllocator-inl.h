@@ -303,7 +303,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
   (*stats_.allocAttempts)[pid][cid].inc();
 
   void* memory = allocator_->allocate(pid, requiredSize);
-  if (memory == nullptr && !config_.disableEviction) {
+  if (memory == nullptr && !config_.isEvictionDisabled()) {
     memory = findEviction(pid, cid);
   }
 
@@ -2580,7 +2580,7 @@ bool CacheAllocator<CacheTrait>::tryMovingForSlabRelease(
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::evictForSlabRelease(
     const SlabReleaseContext& ctx, Item& item, util::Throttler& throttler) {
-  XDCHECK(!config_.disableEviction);
+  XDCHECK(!config_.isEvictionDisabled());
 
   auto startTime = util::getCurrentTimeSec();
   while (true) {

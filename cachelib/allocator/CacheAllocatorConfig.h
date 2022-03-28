@@ -295,6 +295,13 @@ class CacheAllocatorConfig {
   // skip promote children items in chained when parent fail to promote
   CacheAllocatorConfig& setSkipPromoteChildrenWhenParentFailed();
 
+  // (deprecated) Disable cache eviction.
+  // Please do not create new callers. CacheLib will stop supporting disabled
+  // eviction.
+  [[deprecated]] CacheAllocatorConfig& deprecated_disableEviction();
+
+  bool isEvictionDisabled() const noexcept { return disableEviction; }
+
   // skip promote children items in chained when parent fail to promote
   bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
     return skipPromoteChildrenWhenParentFailed;
@@ -461,11 +468,6 @@ class CacheAllocatorConfig {
   // ABOVE are the config for various cache workers
   //
 
-  // if turned on, cache allocator will not evict any item when the
-  // system is out of memory. The user must free previously allocated
-  // items to make more room.
-  bool disableEviction = false;
-
   // the number of tries to search for an item to evict
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
@@ -572,6 +574,11 @@ class CacheAllocatorConfig {
   std::string stringifyAddr(const void* addr) const;
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
+
+  // if turned on, cache allocator will not evict any item when the
+  // system is out of memory. The user must free previously allocated
+  // items to make more room.
+  bool disableEviction = false;
 };
 
 template <typename T>
@@ -949,6 +956,12 @@ template <typename T>
 CacheAllocatorConfig<T>&
 CacheAllocatorConfig<T>::setSkipPromoteChildrenWhenParentFailed() {
   skipPromoteChildrenWhenParentFailed = true;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::deprecated_disableEviction() {
+  disableEviction = true;
   return *this;
 }
 
