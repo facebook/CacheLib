@@ -63,63 +63,6 @@ RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
   return *this;
 }
 
-void NavyConfig::setAdmissionPolicy(const std::string& admissionPolicy) {
-  if (admissionPolicy == "") {
-    throw std::invalid_argument("admission policy should not be empty");
-  }
-  admissionPolicy_ = admissionPolicy;
-}
-
-void NavyConfig::setAdmissionProbability(double admissionProbability) {
-  if (admissionPolicy_ != kAdmPolicyRandom) {
-    throw std::invalid_argument(
-        folly::sformat("admission probability is only for random policy, but "
-                       "{} policy was set",
-                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
-  }
-  randomAPConfig_.setAdmProbability(admissionProbability);
-}
-
-void NavyConfig::setAdmissionWriteRate(uint64_t admissionWriteRate) {
-  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
-    throw std::invalid_argument(
-        folly::sformat("admission write rate is only for dynamic_random "
-                       "policy, but {} policy was set",
-                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
-  }
-  dynamicRandomAPConfig_.setAdmWriteRate(admissionWriteRate);
-}
-
-void NavyConfig::setMaxWriteRate(uint64_t maxWriteRate) {
-  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
-    throw std::invalid_argument(
-        folly::sformat("max write rate is only for dynamic_random "
-                       "policy, but {} policy was set",
-                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
-  }
-  dynamicRandomAPConfig_.setMaxWriteRate(maxWriteRate);
-}
-
-void NavyConfig::setAdmissionSuffixLength(size_t admissionSuffixLen) {
-  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
-    throw std::invalid_argument(
-        folly::sformat("admission suffix length is only for dynamic_random "
-                       "policy, but {} policy was set",
-                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
-  }
-  dynamicRandomAPConfig_.setAdmSuffixLength(admissionSuffixLen);
-}
-
-void NavyConfig::setAdmissionProbBaseSize(uint32_t admissionProbBaseSize) {
-  if (admissionPolicy_ != kAdmPolicyDynamicRandom) {
-    throw std::invalid_argument(
-        folly::sformat("admission probability base size is only for "
-                       "dynamic_random policy, but {} policy was set",
-                       admissionPolicy_.empty() ? "no" : admissionPolicy_));
-  }
-  dynamicRandomAPConfig_.setAdmProbBaseSize(admissionProbBaseSize);
-}
-
 // file settings
 void NavyConfig::setSimpleFile(const std::string& fileName,
                                uint64_t fileSize,
@@ -176,29 +119,6 @@ BlockCacheConfig& BlockCacheConfig::setCleanRegions(
   return *this;
 }
 
-void NavyConfig::setBlockCacheLru(bool blockCacheLru) {
-  if (!blockCacheLru) {
-    blockCacheConfig_.enableFifo();
-  }
-}
-
-void NavyConfig::setBlockCacheSegmentedFifoSegmentRatio(
-    std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio) {
-  blockCacheConfig_.enableSegmentedFifo(blockCacheSegmentedFifoSegmentRatio);
-}
-
-void NavyConfig::setBlockCacheReinsertionHitsThreshold(
-    uint8_t blockCacheReinsertionHitsThreshold) {
-  blockCacheConfig_.reinsertionConfig_.enableHitsBased(
-      blockCacheReinsertionHitsThreshold);
-}
-
-void NavyConfig::setBlockCacheReinsertionProbabilityThreshold(
-    unsigned int blockCacheReinsertionProbabilityThreshold) {
-  blockCacheConfig_.reinsertionConfig_.enablePctBased(
-      blockCacheReinsertionProbabilityThreshold);
-}
-
 // BigHash settings
 BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
     unsigned int sizePct, uint64_t smallItemMaxSize) {
@@ -216,15 +136,6 @@ BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
   return *this;
 }
 
-void NavyConfig::setBigHash(unsigned int bigHashSizePct,
-                            uint32_t bigHashBucketSize,
-                            uint64_t bigHashBucketBfSize,
-                            uint64_t bigHashSmallItemMaxSize) {
-  bigHashConfig_
-      .setSizePctAndMaxItemSize(bigHashSizePct, bigHashSmallItemMaxSize)
-      .setBucketSize(bigHashBucketSize)
-      .setBucketBfSize(bigHashBucketBfSize);
-}
 // job scheduler settings
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards == 0) {

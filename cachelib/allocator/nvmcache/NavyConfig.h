@@ -25,6 +25,10 @@
 
 namespace facebook {
 namespace cachelib {
+namespace cachebench {
+template <typename Allocator>
+class Cache;
+}
 namespace navy {
 /**
  * RandomAPConfig provides APIs for users to configure one of the admission
@@ -315,6 +319,12 @@ class BlockCacheConfig {
   bool isPreciseRemove() const { return preciseRemove_; }
 
  private:
+  // only for cachebench configuration
+  void setNumInMemBuffers(uint32_t numInMemBuffers) noexcept {
+    numInMemBuffers_ = numInMemBuffers;
+  }
+
+ private:
   // Whether Navy BlockCache will use region-based LRU eviction policy.
   bool lru_{true};
   // The ratio of segments for segmented FIFO eviction policy.
@@ -336,6 +346,8 @@ class BlockCacheConfig {
   bool preciseRemove_{false};
 
   friend class NavyConfig;
+  template <typename Allocator>
+  friend class cachebench::Cache;
 };
 
 /**
@@ -465,36 +477,11 @@ class NavyConfig {
   unsigned int getWriterThreads() const { return writerThreads_; }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
-  // other settings
+  // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
 
   // Setters:
-  // ============ AP settings =============
-  // Set the admission policy (e.g. "random", "dynamic_random").
-  // @throw std::invalid_argument on empty string.
-  [[deprecated]] void setAdmissionPolicy(const std::string& admissionPolicy);
-  // Set admission probability.
-  // @throw std::std::invalid_argument if the admission policy is not
-  //        "random" or the input value is not in the range of 0~1.
-  [[deprecated]] void setAdmissionProbability(double admissionProbability);
-  // Set admission policy target rate in bytes/s.
-  // @throw std::invalid_argument if the admission policy is not
-  //        "dynamic_random".
-  [[deprecated]] void setAdmissionWriteRate(uint64_t admissionWriteRate);
-  // Set the max write rate to device in bytes/s.
-  // @throw std::invalid_argument if the admission policy is not
-  //        "dynamic_random".
-  [[deprecated]] void setMaxWriteRate(uint64_t maxWriteRate);
-  // Set the length of suffix in key to be ignored when hashing for
-  // probability.
-  // @throw std::invalid_argument if the admission policy is not
-  //        "dynamic_random".
-  [[deprecated]] void setAdmissionSuffixLength(size_t admissionSuffixLen);
-  // Set the Navy item base size of baseProbability calculation.
-  // @throw std::invalid_argument if the admission policy is not
-  //        "dynamic_random".
-  [[deprecated]] void setAdmissionProbBaseSize(uint32_t admissionProbBaseSize);
   // Enable "dynamic_random" admission policy.
   // @return DynamicRandomAPConfig (for configuration)
   // @throw  invalid_argument if admissionPolicy_ is not empty
@@ -530,55 +517,10 @@ class NavyConfig {
   }
 
   // ============ BlockCache settings =============
-  // Set whether LRU policy will be used.
-  // @throw std::invalid_argument if segmentedFifoSegmentRatio has been set and
-  //        blockCacheLru = true.
-  [[deprecated]] void setBlockCacheLru(bool blockCacheLru);
-  // Set segmentedFifoSegmentRatio for BlockCache.
-  // @throw std::invalid_argument if LRU policy is used.
-  [[deprecated]] void setBlockCacheSegmentedFifoSegmentRatio(
-      std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio);
-  // Set reinsertionHitsThreshold for BlockCache.
-  // @throw std::invalid_argument if reinsertionProbabilityThreshold has been
-  //        set.
-  [[deprecated]] void setBlockCacheReinsertionHitsThreshold(
-      uint8_t blockCacheReinsertionHitsThreshold);
-  // Set ReinsertionProbabilityThreshold for BlockCache.
-  // @throw std::invalid_argument if reinsertionHitsThreshold has been set or
-  //        the input value is not in the range of 0~100.
-  [[deprecated]] void setBlockCacheReinsertionProbabilityThreshold(
-      unsigned int blockCacheReinsertionProbabilityThreshold);
-  // Set region size for BlockCache.
-  [[deprecated]] void setBlockCacheRegionSize(
-      uint32_t blockCacheRegionSize) noexcept {
-    blockCacheConfig_.setRegionSize(blockCacheRegionSize);
-  }
-  // Set number of clean regions for BlockCache.
-  [[deprecated]] void setBlockCacheCleanRegions(
-      uint32_t blockCacheCleanRegions) noexcept {
-    blockCacheConfig_.cleanRegions_ = blockCacheCleanRegions;
-  }
-  // Set number of in-mem buffers for BlockCache.
-  [[deprecated]] void setBlockCacheNumInMemBuffers(
-      uint32_t blockCacheNumInMemBuffers) noexcept {
-    blockCacheConfig_.numInMemBuffers_ = blockCacheNumInMemBuffers;
-  }
-  // Set whether enable data checksum for BlockCache.
-  [[deprecated]] void setBlockCacheDataChecksum(
-      bool blockCacheDataChecksum) noexcept {
-    blockCacheConfig_.setDataChecksum(blockCacheDataChecksum);
-  }
   // Return BlockCacheConfig for configuration.
   BlockCacheConfig& blockCache() noexcept { return blockCacheConfig_; }
 
   // ============ BigHash settings =============
-  // Set the parameters for BigHash.
-  // @throw std::invalid_argument if bigHashSizePct is not in the range of
-  //        0~100.
-  [[deprecated]] void setBigHash(unsigned int bigHashSizePct,
-                                 uint32_t bigHashBucketSize,
-                                 uint64_t bigHashBucketBfSize,
-                                 uint64_t bigHashSmallItemMaxSize);
   // Return BigHashConfig for configuration.
   BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
 
