@@ -81,10 +81,6 @@ class NvmCache {
   // needed.
   using DecodeCB = std::function<void(EncodeDecodeContext)>;
 
-  // call back invoked everytime item inserted back from NVM into RAM
-  // @param it      item we have inserted
-  using MemoryInsertCB = std::function<void(const Item& it)>;
-
   // encrypt everything written to the device and decrypt on every read
   using DeviceEncryptor = navy::DeviceEncryptor;
 
@@ -102,10 +98,6 @@ class NvmCache {
     // before encryption and after decryption respectively if enabled.
     EncodeCB encodeCb{};
     DecodeCB decodeCb{};
-
-    // (Optional) call back invoked item restored from NVM and inserted to
-    // memory.
-    MemoryInsertCB memoryInsertCb{};
 
     // (Optional) This enables encryption on a device level. Everything we write
     // into the nvm device will be encrypted.

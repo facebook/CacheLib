@@ -23,7 +23,6 @@ std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
   configMap = navyConfig.serialize();
   configMap["encodeCB"] = encodeCb ? "set" : "empty";
   configMap["decodeCb"] = decodeCb ? "set" : "empty";
-  configMap["memoryInsertCb"] = memoryInsertCb ? "set" : "empty";
   configMap["encryption"] = deviceEncryptor ? "set" : "empty";
   configMap["truncateItemToOriginalAllocSizeInNvm"] =
       truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
@@ -601,9 +600,6 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
   if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {
-    if (config_.memoryInsertCb) {
-      config_.memoryInsertCb(*it);
-    }
     it.markWentToNvm();
     ctx.setItemHandle(std::move(it));
   }
