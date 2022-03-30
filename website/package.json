@@ -40,6 +40,9 @@
     "prettier": "^2.0.2",
     "stylelint": "^13.2.1"
   },
+  "resolutions": {
+    "ansi-html": "0.0.8"
+  },
   "browserslist": {
     "production": [
       ">0.5%",
