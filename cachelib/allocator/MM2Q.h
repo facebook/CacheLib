@@ -241,9 +241,18 @@ class MM2Q {
     // Make sure that the size percent numbers are sane.
     void checkLruSizes() {
       auto warmSizePercent = getWarmSizePercent();
-      if (hotSizePercent <= 0 || hotSizePercent >= 100 ||
-          coldSizePercent <= 0 || coldSizePercent >= 100 ||
-          warmSizePercent <= 0 || warmSizePercent >= 100) {
+      // 100% hot is allowed as a drop-in replacement for LRU
+
+      if (hotSizePercent == 100) {
+        if (coldSizePercent != 0 && warmSizePercent != 0) {
+          throw std::invalid_argument(folly::sformat(
+              "Invalid hot/cold/warm lru size {}/{}/{}. When Hot is 100%,"
+              " Warm and Cold must be 0.",
+              hotSizePercent, coldSizePercent, warmSizePercent));
+        }
+      } else if (hotSizePercent <= 0 || hotSizePercent > 100 ||
+                 coldSizePercent <= 0 || coldSizePercent >= 100 ||
+                 warmSizePercent <= 0 || warmSizePercent >= 100) {
         throw std::invalid_argument(
             folly::sformat("Invalid hot/cold/warm lru size {}/{}/{}. Hot, "
                            "Warm and Cold lru's "
