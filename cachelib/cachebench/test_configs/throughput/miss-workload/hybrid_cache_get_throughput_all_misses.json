@@ -1,0 +1,40 @@
+// @nolint
+// T10 Skylake devvm
+// == Throughput for  ==
+// Total Ops : 480.00 million
+// Total sets: 0
+// get       : 8,494,091/s, success   :   0.00%
+// set       :         0/s, success   :   0.00%
+// del       :         0/s, found     :   0.00%
+//
+// Note that without fast negative lookup, relying on Navy workers,
+// the get throughput falls to only 700K/s.
+{
+  "cache_config" : {
+    "cacheSizeMB" : 5120,
+    "poolRebalanceIntervalSec" : 0,
+
+    "navyReaderThreads": 64,
+    "navyWriterThreads": 64,
+    "nvmCacheSizeMB" : 2048,
+    "navyBigHashSizePct" : 50
+  },
+  "test_config" :
+    {
+      "numOps" : 10000000,
+      "numThreads" : 48,
+      "numKeys" : 100000,
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "valSizeRange" : [1, 102400],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 1.0,
+      "setRatio" : 0.0,
+      "delRatio" : 0.0,
+      "addChainedRatio" : 0.0
+    }
+
+}

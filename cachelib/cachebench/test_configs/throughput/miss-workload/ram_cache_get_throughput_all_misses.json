@@ -1,15 +1,22 @@
+// @nolint
+// T10 Skylake devvm
+// == Throughput for  ==
+// Total Ops : 480.00 million
+// Total sets: 0
+// get       : 24,410,746/s, success   :   0.00%
+// set       :         0/s, success   :   0.00%
+// del       :         0/s, found     :   0.00%
 {
   "cache_config" : {
     "cacheSizeMB" : 5120,
     "poolRebalanceIntervalSec" : 0
   },
-  "test_config" : 
+  "test_config" :
     {
-      
+
       "numOps" : 10000000,
       "numThreads" : 48,
       "numKeys" : 100000,
-      
 
       "keySizeRange" : [1, 8, 64],
       "keySizeRangeProbability" : [0.3, 0.7],
@@ -22,5 +29,4 @@
       "delRatio" : 0.0,
       "addChainedRatio" : 0.0
     }
- 
 }
