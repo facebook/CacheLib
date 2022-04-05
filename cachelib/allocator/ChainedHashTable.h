@@ -276,10 +276,14 @@ class ChainedHashTable {
       // The percentage of used buckets vs unused buckets is measured by a load
       // factor. For optimal performance, the load factor should not be more
       // than 60%.
-      bucketsPower_ = std::max<unsigned int>(
-          kMaxBucketPower,
-          static_cast<size_t>(
-              ceil(log2(cacheEntries * 1.6 /* load factor */))));
+      bucketsPower_ =
+          static_cast<size_t>(ceil(log2(cacheEntries * 1.6 /* load factor */)));
+
+      if (bucketsPower_ > kMaxBucketPower) {
+        throw std::invalid_argument(folly::sformat(
+            "Invalid arguments to the config constructor cacheEntries =  {}",
+            cacheEntries));
+      }
 
       // 1 lock per 1000 buckets.
       locksPower_ = std::max<unsigned int>(1, bucketsPower_ - 10);
