@@ -25,6 +25,7 @@
 #include <stdexcept>
 
 #include "cachelib/navy/common/Buffer.h"
+#include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -36,12 +37,12 @@ namespace navy {
 // captures them in the callback. And this capture can be unique_ptr which is
 // not possible with std::function.
 
-using InsertCallback = folly::Function<void(Status status, BufferView key)>;
+using InsertCallback = folly::Function<void(Status status, HashedKey key)>;
 
 using LookupCallback =
-    folly::Function<void(Status status, BufferView key, Buffer value)>;
+    folly::Function<void(Status status, HashedKey key, Buffer value)>;
 
-using RemoveCallback = folly::Function<void(Status status, BufferView key)>;
+using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 
 // Generic cache interface.
 // All functions are synchronous, unless stated the opposite.
@@ -52,17 +53,17 @@ class AbstractCache {
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as
   // "small" or "large" objects.
-  virtual bool isItemLarge(BufferView key, BufferView value) const = 0;
+  virtual bool isItemLarge(HashedKey key, BufferView value) const = 0;
 
   // Checks if the key could exist in the cache. This can be used as a
   // pre-check to optimize cache lookups to avoid calling lookup in an async IO
   // environment.
   // Returns: false if the key definitely does not exist and true if it could.
-  virtual bool couldExist(BufferView key) = 0;
+  virtual bool couldExist(HashedKey key) = 0;
 
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
-  virtual Status insert(BufferView key, BufferView value) = 0;
+  virtual Status insert(HashedKey key, BufferView value) = 0;
 
   // Asynchronously inserts entry into the cache.
   // Invokes callback when done on a worker thread. Callback is optional.
@@ -71,13 +72,13 @@ class AbstractCache {
   // async job added to the queue.
   //
   // Returns: Ok, Rejected
-  virtual Status insertAsync(BufferView key,
+  virtual Status insertAsync(HashedKey key,
                              BufferView value,
                              InsertCallback cb) = 0;
 
   // Looks up value. Returns non-null buffer if found.
   // Returns: Ok, NotFound, DeviceError
-  virtual Status lookup(BufferView key, Buffer& value) = 0;
+  virtual Status lookup(HashedKey key, Buffer& value) = 0;
 
   // Asynchronously looks up value.
   // Invokes callback when done on a worker thread.
@@ -86,11 +87,11 @@ class AbstractCache {
   // is user responsibility to make a copy if needed (capture in callback).
   //
   // Returns: Ok, Rejected
-  virtual Status lookupAsync(BufferView key, LookupCallback cb) = 0;
+  virtual Status lookupAsync(HashedKey key, LookupCallback cb) = 0;
 
   // Removes from the index, space reused after reclamation.
   // Returns: Ok, NotFound
-  virtual Status remove(BufferView key) = 0;
+  virtual Status remove(HashedKey key) = 0;
 
   // Asynchronously removes key from the index, space reused after reclamation.
   // Callback is optional.
@@ -98,7 +99,7 @@ class AbstractCache {
   // See @lookupAsync about @key lifetime.
   //
   // Returns: Ok, Rejected
-  virtual Status removeAsync(BufferView key, RemoveCallback cb) = 0;
+  virtual Status removeAsync(HashedKey key, RemoveCallback cb) = 0;
 
   // Executes all queued operations and makes sure result is reflected on the
   // device.

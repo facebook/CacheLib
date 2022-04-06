@@ -397,7 +397,7 @@ class NvmCache {
 
   void onGetComplete(GetCtx& ctx,
                      navy::Status s,
-                     navy::BufferView key,
+                     HashedKey hk,
                      navy::BufferView value);
 
   void evictCB(HashedKey hk, navy::BufferView val, navy::DestructorEvent e);

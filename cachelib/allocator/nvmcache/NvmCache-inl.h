@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "cachelib/common/Hash.h"
+#include "cachelib/navy/common/Hash.h"
 namespace facebook {
 namespace cachelib {
 
@@ -153,7 +155,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
     // will prevent the put from being enqueued.
     if (config_.enableFastNegativeLookups && it == fillMap.end() &&
         !putContexts_[shard].hasContexts() &&
-        !navyCache_->couldExist(makeBufferView(key))) {
+        !navyCache_->couldExist(HashedKey{key})) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
       return ItemHandle{};
@@ -185,8 +187,8 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(folly::StringPiece key) {
   auto guard = folly::makeGuard([ctx, this]() { removeFromFillMap(*ctx); });
 
   auto status = navyCache_->lookupAsync(
-      makeBufferView(ctx->getKey()),
-      [this, ctx](navy::Status s, navy::BufferView k, navy::Buffer v) {
+      HashedKey{ctx->getKey()},
+      [this, ctx](navy::Status s, HashedKey k, navy::Buffer v) {
         this->onGetComplete(*ctx, s, k, v.view());
       });
 
@@ -209,8 +211,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
   // no need for fill lock or inspecting the state of other concurrent
   // operations since we only want to check the state for debugging purposes.
   auto status = navyCache_->lookupAsync(
-      makeBufferView(key),
-      [&, this](navy::Status st, navy::BufferView, navy::Buffer v) {
+      HashedKey{key}, [&, this](navy::Status st, HashedKey, navy::Buffer v) {
         if (st != navy::Status::NotFound) {
           auto nvmItem = reinterpret_cast<const NvmItem*>(v.data());
           hdl = createItem(key, *nvmItem);
@@ -249,7 +250,7 @@ void NvmCache<C>::evictCB(HashedKey hk,
         stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
       }
     }
-    navyCache_->isItemLarge(navy::makeView(hk.key()), value)
+    navyCache_->isItemLarge(hk, value)
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
   }
@@ -494,26 +495,24 @@ void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
   // eviction, and we should abandon this write to navy since we already
   // reported the key doesn't exist in the cache.
   const bool executed = token.executeIfValid([&]() {
-    auto status =
-        navyCache_->insertAsync(makeBufferView(ctx.key()), makeBufferView(val),
-                                [this, putCleanup, valSize,
-                                 val](navy::Status st, navy::BufferView key) {
-                                  if (st == navy::Status::Ok) {
-                                    stats().nvmPutSize_.trackValue(valSize);
-                                  } else if (st == navy::Status::BadState) {
-                                    // we set disable navy since we got a
-                                    // BadState from navy
-                                    disableNavy("Delete Failure. BadState");
-                                  } else {
-                                    // put failed, DRAM eviction happened and
-                                    // destructor was not executed. we
-                                    // unconditionally trigger destructor here
-                                    // for cleanup.
-                                    evictCB(makeHK(key), makeBufferView(val),
-                                            navy::DestructorEvent::PutFailed);
-                                  }
-                                  putCleanup();
-                                });
+    auto status = navyCache_->insertAsync(
+        HashedKey{ctx.key()}, makeBufferView(val),
+        [this, putCleanup, valSize, val](navy::Status st, HashedKey hk) {
+          if (st == navy::Status::Ok) {
+            stats().nvmPutSize_.trackValue(valSize);
+          } else if (st == navy::Status::BadState) {
+            // we set disable navy since we got a
+            // BadState from navy
+            disableNavy("Delete Failure. BadState");
+          } else {
+            // put failed, DRAM eviction happened and
+            // destructor was not executed. we
+            // unconditionally trigger destructor here
+            // for cleanup.
+            evictCB(hk, makeBufferView(val), navy::DestructorEvent::PutFailed);
+          }
+          putCleanup();
+        });
 
     if (status == navy::Status::Ok) {
       guard.dismiss();
@@ -544,10 +543,9 @@ typename NvmCache<C>::PutToken NvmCache<C>::createPutToken(
 template <typename C>
 void NvmCache<C>::onGetComplete(GetCtx& ctx,
                                 navy::Status status,
-                                navy::BufferView k,
+                                HashedKey hk,
                                 navy::BufferView val) {
-  auto key =
-      folly::StringPiece{reinterpret_cast<const char*>(k.data()), k.size()};
+  auto key = hk.key();
   auto guard = folly::makeGuard([&ctx]() { ctx.cache.removeFromFillMap(ctx); });
   // navy got disabled while we were fetching. If so, safely return a miss.
   // If navy gets disabled beyond this point, it is okay since we fetched it
@@ -758,7 +756,7 @@ void NvmCache<C>::remove(folly::StringPiece key,
   // created after couldExist api returns does not matter, since the put
   // token is invalidated before all of this begins.
   if (config_.enableFastNegativeLookups && !putContexts_[shard].hasContexts() &&
-      !navyCache_->couldExist(makeBufferView(key))) {
+      !navyCache_->couldExist(HashedKey{key})) {
     stats().numNvmSkippedDeletes.inc();
     return;
   }
@@ -768,7 +766,7 @@ void NvmCache<C>::remove(folly::StringPiece key,
 
   // capture array reference for delContext. it is stable
   auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
-                                               navy::BufferView) mutable {
+                                               HashedKey) mutable {
     delContexts.destroyContext(ctx);
     if (status == navy::Status::Ok || status == navy::Status::NotFound) {
       return;
@@ -778,9 +776,9 @@ void NvmCache<C>::remove(folly::StringPiece key,
                                static_cast<int>(status)));
   };
 
-  auto status = navyCache_->removeAsync(makeBufferView(ctx.key()), delCleanup);
+  auto status = navyCache_->removeAsync(HashedKey{ctx.key()}, delCleanup);
   if (status != navy::Status::Ok) {
-    delCleanup(status, {});
+    delCleanup(status, HashedKey::precomputed("", 0));
   }
 }
 

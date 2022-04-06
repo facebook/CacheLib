@@ -73,7 +73,7 @@ Driver::~Driver() {
   scheduler_.reset();
 }
 
-std::pair<Engine&, Engine&> Driver::select(BufferView key,
+std::pair<Engine&, Engine&> Driver::select(HashedKey key,
                                            BufferView value) const {
   if (isItemLarge(key, value)) {
     return {*largeItemCache_, *smallItemCache_};
@@ -82,12 +82,11 @@ std::pair<Engine&, Engine&> Driver::select(BufferView key,
   }
 }
 
-bool Driver::isItemLarge(BufferView key, BufferView value) const {
-  return key.size() + value.size() > smallItemMaxSize_;
+bool Driver::isItemLarge(HashedKey key, BufferView value) const {
+  return key.key().size() + value.size() > smallItemMaxSize_;
 }
 
-bool Driver::couldExist(BufferView key) {
-  const HashedKey hk = makeHK(key);
+bool Driver::couldExist(HashedKey hk) {
   auto couldExist =
       smallItemCache_->couldExist(hk) || largeItemCache_->couldExist(hk);
   if (!couldExist) {
@@ -96,11 +95,11 @@ bool Driver::couldExist(BufferView key) {
   return couldExist;
 }
 
-Status Driver::insert(BufferView key, BufferView value) {
+Status Driver::insert(HashedKey key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};
   auto status = insertAsync(key, value,
-                            [&done, &cbStatus](Status s, BufferView /* key */) {
+                            [&done, &cbStatus](Status s, HashedKey /* key */) {
                               cbStatus = s;
                               done.post();
                             });
@@ -143,13 +142,10 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   return false;
 }
 
-Status Driver::insertAsync(BufferView key,
-                           BufferView value,
-                           InsertCallback cb) {
+Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
   insertCount_.inc();
 
-  const HashedKey hk = makeHK(key);
-  if (key.size() > kMaxKeySize) {
+  if (hk.key().size() > kMaxKeySize) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
     return Status::Rejected;
@@ -161,7 +157,7 @@ Status Driver::insertAsync(BufferView key,
 
   scheduler_->enqueueWithKey(
       [this, cb = std::move(cb), hk, value, skipInsertion = false]() mutable {
-        auto selection = select(makeView(hk.key()), value);
+        auto selection = select(hk, value);
         Status status = Status::Ok;
         if (!skipInsertion) {
           status = selection.first.insert(hk, value);
@@ -182,7 +178,7 @@ Status Driver::insertAsync(BufferView key,
         }
 
         if (cb) {
-          cb(status, makeView(hk.key()));
+          cb(status, hk);
         }
         parcelMemory_.sub(hk.key().size() + value.size());
         concurrentInserts_.dec();
@@ -217,10 +213,9 @@ void Driver::updateLookupStats(Status status) const {
   }
 }
 
-Status Driver::lookup(BufferView key, Buffer& value) {
+Status Driver::lookup(HashedKey hk, Buffer& value) {
   // We do busy wait because we don't expect many retries.
   lookupCount_.inc();
-  const HashedKey hk = makeHK(key);
   Status status{Status::NotFound};
   while ((status = largeItemCache_->lookup(hk, value)) == Status::Retry) {
     std::this_thread::yield();
@@ -234,9 +229,8 @@ Status Driver::lookup(BufferView key, Buffer& value) {
   return status;
 }
 
-Status Driver::lookupAsync(BufferView key, LookupCallback cb) {
+Status Driver::lookupAsync(HashedKey hk, LookupCallback cb) {
   lookupCount_.inc();
-  const HashedKey hk = makeHK(key);
   XDCHECK(cb);
 
   scheduler_->enqueueWithKey(
@@ -258,7 +252,7 @@ Status Driver::lookupAsync(BufferView key, LookupCallback cb) {
         }
 
         if (cb) {
-          cb(status, makeView(hk.key()), std::move(value));
+          cb(status, hk, std::move(value));
         }
 
         updateLookupStats(status);
@@ -292,8 +286,7 @@ Status Driver::removeHashedKey(HashedKey hk, bool& skipSmallItemCache) {
   return status;
 }
 
-Status Driver::remove(BufferView key) {
-  const HashedKey hk = makeHK(key);
+Status Driver::remove(HashedKey hk) {
   Status status{Status::Ok};
   bool skipSmallItemCache = false;
   while ((status = removeHashedKey(hk, skipSmallItemCache)) == Status::Retry) {
@@ -302,8 +295,7 @@ Status Driver::remove(BufferView key) {
   return status;
 }
 
-Status Driver::removeAsync(BufferView key, RemoveCallback cb) {
-  const HashedKey hk = makeHK(key);
+Status Driver::removeAsync(HashedKey hk, RemoveCallback cb) {
   scheduler_->enqueueWithKey(
       [this, cb = std::move(cb), hk = hk,
        skipSmallItemCache = false]() mutable {
@@ -312,7 +304,7 @@ Status Driver::removeAsync(BufferView key, RemoveCallback cb) {
           return JobExitCode::Reschedule;
         }
         if (cb) {
-          cb(status, makeView(hk.key()));
+          cb(status, hk);
         }
         return JobExitCode::Done;
       },

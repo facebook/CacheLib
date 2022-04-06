@@ -105,10 +105,12 @@ Buffer strzBuffer(const char* strz) { return Buffer{makeView(strz)}; }
 class CacheEntry {
  public:
   CacheEntry(Buffer k, Buffer v) : key_{std::move(k)}, value_{std::move(v)} {}
+  CacheEntry(HashedKey k, Buffer v)
+      : key_{makeView(k.key())}, value_{std::move(v)} {}
   CacheEntry(CacheEntry&&) = default;
   CacheEntry& operator=(CacheEntry&&) = default;
 
-  BufferView key() const { return key_.view(); }
+  HashedKey key() const { return makeHK(key_); }
 
   BufferView value() const { return value_.view(); }
 
@@ -117,7 +119,7 @@ class CacheEntry {
 };
 
 InsertCallback saveEntryCb(CacheEntry&& e) {
-  return [entry = std::move(e)](Status /* status */, BufferView /* key */) {};
+  return [entry = std::move(e)](Status /* status */, HashedKey /* key */) {};
 }
 
 void finishAllJobs(MockJobScheduler& ex) {
@@ -152,7 +154,7 @@ class CollisionCreator {
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(makeView(key), value));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key), value));
     EXPECT_EQ(makeView(val), value.view());
     driver->flush();
 
@@ -300,36 +302,36 @@ TEST(BlockCache, AsyncCallbacks) {
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
   MockInsertCB cbInsert;
-  EXPECT_CALL(cbInsert, call(Status::Ok, makeView("key")));
+  EXPECT_CALL(cbInsert, call(Status::Ok, makeHK("key")));
   EXPECT_EQ(Status::Ok,
-            driver->insertAsync(makeView("key"), makeView("value"),
+            driver->insertAsync(makeHK("key"), makeView("value"),
                                 toCallback(cbInsert)));
   driver->flush();
 
   MockLookupCB cbLookup;
-  EXPECT_CALL(cbLookup, call(Status::Ok, makeView("key"), makeView("value")));
-  EXPECT_CALL(cbLookup, call(Status::NotFound, makeView("cat"), BufferView{}));
+  EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value")));
+  EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}));
   EXPECT_EQ(Status::Ok,
             driver->lookupAsync(
-                makeView("key"),
-                [&cbLookup](Status status, BufferView key, Buffer value) {
+                makeHK("key"),
+                [&cbLookup](Status status, HashedKey key, Buffer value) {
                   cbLookup.call(status, key, value.view());
                 }));
   EXPECT_EQ(Status::Ok,
             driver->lookupAsync(
-                makeView("cat"),
-                [&cbLookup](Status status, BufferView key, Buffer value) {
+                makeHK("cat"),
+                [&cbLookup](Status status, HashedKey key, Buffer value) {
                   cbLookup.call(status, key, value.view());
                 }));
   driver->flush();
 
   MockRemoveCB cbRemove;
-  EXPECT_CALL(cbRemove, call(Status::Ok, makeView("key")));
-  EXPECT_CALL(cbRemove, call(Status::NotFound, makeView("cat")));
+  EXPECT_CALL(cbRemove, call(Status::Ok, makeHK("key")));
+  EXPECT_CALL(cbRemove, call(Status::NotFound, makeHK("cat")));
   EXPECT_EQ(Status::Ok,
-            driver->removeAsync(makeView("key"), toCallback(cbRemove)));
+            driver->removeAsync(makeHK("key"), toCallback(cbRemove)));
   EXPECT_EQ(Status::Ok,
-            driver->removeAsync(makeView("cat"), toCallback(cbRemove)));
+            driver->removeAsync(makeHK("cat"), toCallback(cbRemove)));
   driver->flush();
 }
 
@@ -361,14 +363,14 @@ TEST(BlockCache, Remove) {
   EXPECT_EQ(log[0].value(), value.view());
   EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
   EXPECT_EQ(log[1].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->remove(makeView("dog")));
-  EXPECT_EQ(Status::NotFound, driver->remove(makeView("fox")));
+  EXPECT_EQ(Status::Ok, driver->remove(makeHK("dog")));
+  EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
   EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
   EXPECT_EQ(log[0].value(), value.view());
   EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
-  EXPECT_EQ(Status::NotFound, driver->remove(makeView("dog")));
-  EXPECT_EQ(Status::NotFound, driver->remove(makeView("fox")));
-  EXPECT_EQ(Status::Ok, driver->remove(makeView("cat")));
+  EXPECT_EQ(Status::NotFound, driver->remove(makeHK("dog")));
+  EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
+  EXPECT_EQ(Status::Ok, driver->remove(makeHK("cat")));
   EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
   EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
 }
@@ -380,7 +382,7 @@ TEST(BlockCache, PreciseRemove) {
     auto collision = CollisionCreator("key", "value", "abc");
     Buffer value;
     // Behavior: old "key" can remove the entry "key"+"abc": "value".
-    EXPECT_EQ(Status::Ok, collision.driver->remove(makeView("key")));
+    EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
     collision.driver->getCounters([](folly::StringPiece name, double count) {
       // The counter is not populated because preciseRemove_ and item
       // destructors are not triggered.
@@ -397,7 +399,7 @@ TEST(BlockCache, PreciseRemove) {
                          [](BlockCache::Config& c) { c.preciseRemove = true; });
     Buffer value;
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
-    EXPECT_EQ(Status::NotFound, collision.driver->remove(makeView("key")));
+    EXPECT_EQ(Status::NotFound, collision.driver->remove(makeHK("key")));
     collision.driver->getCounters([](folly::StringPiece name, double count) {
       // The counter is populated
       if (name == "navy_bc_remove_attempt_collisions") {
@@ -419,7 +421,7 @@ TEST(BlockCache, PreciseRemove) {
     Buffer value;
 
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
-    EXPECT_EQ(Status::Ok, collision.driver->remove(makeView("key")));
+    EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
     collision.driver->getCounters([](folly::StringPiece name, double count) {
       // The counter is populated.
       if (name == "navy_bc_remove_attempt_collisions") {
@@ -433,7 +435,7 @@ TEST(BlockCache, CollisionOverwrite) {
   auto collision = CollisionCreator("key", "value", "abc");
   Buffer value;
   // Original key is not found, because it didn't pass key equality check
-  EXPECT_EQ(Status::NotFound, collision.driver->lookup(makeView("key"), value));
+  EXPECT_EQ(Status::NotFound, collision.driver->lookup(makeHK("key"), value));
 }
 
 TEST(BlockCache, SimpleReclaim) {
@@ -940,7 +942,7 @@ TEST(BlockCache, ReadRegionDuringEviction) {
     for (size_t i = 0; i < 4; i++) {
       CacheEntry e{bg.gen(8), bg.gen(3800)};
       driver->insertAsync(e.key(), e.value(),
-                          [](Status status, BufferView /*key */) {
+                          [](Status status, HashedKey /*key */) {
                             EXPECT_EQ(Status::Ok, status);
                           });
       log.push_back(std::move(e));
@@ -966,10 +968,9 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   // to evict the first region eventually for the reclaim.
   CacheEntry e{bg.gen(8), bg.gen(1000)};
   EXPECT_EQ(0, exPtr->getQueueSize());
-  driver->insertAsync(e.key(), e.value(),
-                      [](Status status, BufferView /*key */) {
-                        EXPECT_EQ(Status::Ok, status);
-                      });
+  driver->insertAsync(
+      e.key(), e.value(),
+      [](Status status, HashedKey /*key */) { EXPECT_EQ(Status::Ok, status); });
   // Insert finds region is full and  puts region for tracking, resets allocator
   // and retries.
   EXPECT_TRUE(exPtr->runFirstIf("insert"));
@@ -1042,18 +1043,18 @@ TEST(BlockCache, DeviceFailure) {
   auto value2 = bg.gen(800);
   auto value3 = bg.gen(800);
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key1"), value1.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key1"), value1.view()));
   driver->flush();
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key2"), value2.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key2"), value2.view()));
   driver->flush();
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key3"), value3.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key3"), value3.view()));
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key1"), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key1"), value));
   EXPECT_EQ(value1.view(), value.view());
-  EXPECT_EQ(Status::DeviceError, driver->lookup(makeView("key2"), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key3"), value));
+  EXPECT_EQ(Status::DeviceError, driver->lookup(makeHK("key2"), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key3"), value));
   EXPECT_EQ(value3.view(), value.view());
 }
 
@@ -1146,8 +1147,8 @@ TEST(BlockCache, DestructorCallback) {
     log.emplace_back(bg.gen(8), bg.gen(3'000));
     log.emplace_back(bg.gen(8), bg.gen(6'000));
     // 3rd region, 16k, overwrites
-    log.emplace_back(Buffer{log[0].key()}, bg.gen(8'000));
-    log.emplace_back(Buffer{log[3].key()}, bg.gen(8'000));
+    log.emplace_back(log[0].key(), bg.gen(8'000));
+    log.emplace_back(log[3].key(), bg.gen(8'000));
     // 4th region, 15k
     log.emplace_back(bg.gen(8), bg.gen(9'000));
     log.emplace_back(bg.gen(8), bg.gen(6'000));
@@ -1158,12 +1159,11 @@ TEST(BlockCache, DestructorCallback) {
   {
     testing::InSequence inSeq;
     // Region evictions is backwards to the order of insertion.
-    EXPECT_CALL(
-        cb,
-        call(makeHK(log[4].key()), log[4].value(), DestructorEvent::Recycled));
+    EXPECT_CALL(cb,
+                call(log[4].key(), log[4].value(), DestructorEvent::Recycled));
     // destructor callback is executed when evicted or explicit removed
-    EXPECT_CALL(cb, call(makeHK(log[3].key()), log[3].value(), _)).Times(0);
-    EXPECT_CALL(cb, call(makeHK(log[2].key()), log[2].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(log[3].key(), log[3].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(log[2].key(), log[2].value(), _)).Times(0);
   }
 
   std::vector<uint32_t> hits(4);
@@ -2126,8 +2126,8 @@ TEST(BlockCache, testItemDestructor) {
     log.emplace_back(Buffer{makeView("key_003")}, bg.gen(3'000));
     log.emplace_back(Buffer{makeView("key_004")}, bg.gen(6'000));
     // 3rd region, 16k, overwrites
-    log.emplace_back(Buffer{log[0].key()}, bg.gen(8'000));
-    log.emplace_back(Buffer{log[3].key()}, bg.gen(8'000));
+    log.emplace_back(log[0].key(), bg.gen(8'000));
+    log.emplace_back(log[3].key(), bg.gen(8'000));
     // 4th region, 15k
     log.emplace_back(Buffer{makeView("key_007")}, bg.gen(9'000));
     log.emplace_back(Buffer{makeView("key_008")}, bg.gen(6'000));
@@ -2145,19 +2145,16 @@ TEST(BlockCache, testItemDestructor) {
   {
     testing::InSequence inSeq;
     // explicit remove 2
-    EXPECT_CALL(
-        cb,
-        call(makeHK(log[2].key()), log[2].value(), DestructorEvent::Removed));
+    EXPECT_CALL(cb,
+                call(log[2].key(), log[2].value(), DestructorEvent::Removed));
     // explicit remove 0
-    EXPECT_CALL(
-        cb,
-        call(makeHK(log[0].key()), log[5].value(), DestructorEvent::Removed));
+    EXPECT_CALL(cb,
+                call(log[0].key(), log[5].value(), DestructorEvent::Removed));
     // Region evictions is backwards to the order of insertion.
-    EXPECT_CALL(
-        cb,
-        call(makeHK(log[4].key()), log[4].value(), DestructorEvent::Recycled));
-    EXPECT_CALL(cb, call(makeHK(log[3].key()), log[3].value(), _)).Times(0);
-    EXPECT_CALL(cb, call(makeHK(log[2].key()), log[2].value(), _)).Times(0);
+    EXPECT_CALL(cb,
+                call(log[4].key(), log[4].value(), DestructorEvent::Recycled));
+    EXPECT_CALL(cb, call(log[3].key(), log[3].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(log[2].key(), log[2].value(), _)).Times(0);
   }
 
   std::vector<uint32_t> hits(4);
@@ -2175,26 +2172,26 @@ TEST(BlockCache, testItemDestructor) {
 
   mockRegionsEvicted(mp, {0, 1, 2, 3, 1});
   for (size_t i = 0; i < 7; i++) {
-    XLOG(ERR, "insert ") << toString(log[i].key());
+    XLOG(ERR, "insert ") << log[i].key().key();
     EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value()));
   }
 
   // remove with cb triggers destructor Immediately
-  XLOG(ERR, "remove ") << toString(log[2].key());
+  XLOG(ERR, "remove ") << log[2].key().key();
   EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
 
   // remove with cb triggers destructor Immediately
-  XLOG(ERR, "remove ") << toString(log[0].key());
+  XLOG(ERR, "remove ") << log[0].key().key();
   EXPECT_EQ(Status::Ok, driver->remove(log[0].key()));
 
   // remove again
   EXPECT_EQ(Status::NotFound, driver->remove(log[2].key()));
   EXPECT_EQ(Status::NotFound, driver->remove(log[0].key()));
 
-  XLOG(ERR, "insert ") << toString(log[7].key());
+  XLOG(ERR, "insert ") << log[7].key().key();
   EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value()));
   // insert will trigger evictions
-  XLOG(ERR, "insert ") << toString(log[8].key());
+  XLOG(ERR, "insert ") << log[8].key().key();
   EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
 
   Buffer value;

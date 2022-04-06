@@ -42,15 +42,15 @@ struct MockCounterVisitor {
 };
 
 struct MockInsertCB {
-  MOCK_METHOD2(call, void(Status, BufferView));
+  MOCK_METHOD2(call, void(Status, HashedKey));
 };
 
 struct MockLookupCB {
-  MOCK_METHOD3(call, void(Status, BufferView, BufferView));
+  MOCK_METHOD3(call, void(Status, HashedKey, BufferView));
 };
 
 struct MockRemoveCB {
-  MOCK_METHOD2(call, void(Status, BufferView));
+  MOCK_METHOD2(call, void(Status, HashedKey));
 };
 
 template <typename MockCB>

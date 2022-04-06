@@ -63,18 +63,18 @@ class Driver final : public AbstractCache {
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as
   // "small" or "large" objects.
-  bool isItemLarge(BufferView key, BufferView value) const override;
+  bool isItemLarge(HashedKey key, BufferView value) const override;
 
   // synchronous fast lookup if a key probably exists in the cache,
   // it can return a false positive result. this provides an optimization
   // to skip the heavy lookup operation when key doesn't exist in the cache.
-  bool couldExist(BufferView key) override;
+  bool couldExist(HashedKey key) override;
 
   // insert a key and value into the cache
   // @param key    the item key
   // @param value  the item value
   // @return a status indicates success or failure, and the reason for failure
-  Status insert(BufferView key, BufferView value) override;
+  Status insert(HashedKey key, BufferView value) override;
 
   // insert a key and value into the cache asynchronously.
   // @param key    the item key
@@ -82,7 +82,7 @@ class Driver final : public AbstractCache {
   // @param cb     a callback function be triggered when the insertion complete
   // @return       a status indicates success or failure enqueued, and the
   //               reason for failure
-  Status insertAsync(BufferView key,
+  Status insertAsync(HashedKey key,
                      BufferView value,
                      InsertCallback cb) override;
 
@@ -91,7 +91,7 @@ class Driver final : public AbstractCache {
   // @param value  the returned value for the key if found
   // @return       a status indicates success or failure, and the reason for
   //               failure
-  Status lookup(BufferView key, Buffer& value) override;
+  Status lookup(HashedKey key, Buffer& value) override;
 
   // lookup a key in the cache asynchronously.
   // @param key  the item key to lookup
@@ -99,19 +99,19 @@ class Driver final : public AbstractCache {
   //             the result will be provided to the function.
   // @return     a status indicates success or failure enqueued, and the reason
   //             for failure
-  Status lookupAsync(BufferView key, LookupCallback cb) override;
+  Status lookupAsync(HashedKey key, LookupCallback cb) override;
 
   // remove the key from cache
   // @param key  the item key to be removed
   // @return a status indicates success or failure, and the reason for failure
-  Status remove(BufferView key) override;
+  Status remove(HashedKey key) override;
 
   // remove the key from cache asynchronously.
   // @param key  the item key to be removed
   // @param cb   a callback function be triggered when the remove complete.
   // @return     a status indicates success or failure enqueued, and the reason
   //             for failure
-  Status removeAsync(BufferView key, RemoveCallback cb) override;
+  Status removeAsync(HashedKey key, RemoveCallback cb) override;
 
   // ensure all pending job have been completed and data has been flush to
   // device(s).
@@ -149,7 +149,7 @@ class Driver final : public AbstractCache {
   // Select engine to insert key/value. Returns a pair:
   //   - first: engine to insert key/value
   //   - second: the other engine to remove key
-  std::pair<Engine&, Engine&> select(BufferView key, BufferView value) const;
+  std::pair<Engine&, Engine&> select(HashedKey key, BufferView value) const;
   void updateLookupStats(Status status) const;
   Status removeHashedKey(HashedKey hk, bool& skipSmallItemCache);
   bool admissionTest(HashedKey hk, BufferView value) const;

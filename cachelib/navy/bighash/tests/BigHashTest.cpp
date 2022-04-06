@@ -506,17 +506,17 @@ TEST(BigHash, ConcurrentRead) {
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 3"), makeView("3")));
 
   struct MockLookupHelper {
-    MOCK_METHOD2(call, void(BufferView, BufferView));
+    MOCK_METHOD2(call, void(HashedKey, BufferView));
   };
   MockLookupHelper helper;
-  EXPECT_CALL(helper, call(makeView("key 1"), makeView("1")));
-  EXPECT_CALL(helper, call(makeView("key 2"), makeView("2")));
-  EXPECT_CALL(helper, call(makeView("key 3"), makeView("3")));
+  EXPECT_CALL(helper, call(makeHK("key 1"), makeView("1")));
+  EXPECT_CALL(helper, call(makeHK("key 2"), makeView("2")));
+  EXPECT_CALL(helper, call(makeHK("key 3"), makeView("3")));
 
   auto runRead = [&bh, &helper](HashedKey hk) {
     Buffer value;
     EXPECT_EQ(Status::Ok, bh.lookup(hk, value));
-    helper.call(makeView(hk.key()), value.view());
+    helper.call(hk, value.view());
   };
 
   auto t1 = std::thread(runRead, makeHK("key 1"));

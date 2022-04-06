@@ -19,7 +19,6 @@
 
 #include <unordered_map>
 
-#include "cachelib/common/Hash.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/driver/NoopEngine.h"
@@ -200,17 +199,17 @@ void testCouldExistWithOneEngine(bool small) {
 
   auto config = makeDriverConfig(std::move(li), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
-  EXPECT_FALSE(driver->couldExist(makeView("key")));
+  EXPECT_FALSE(driver->couldExist(makeHK("key")));
 
   // Test async insert for small item cache
   auto valCopy = Buffer{value.view()};
   auto valView = valCopy.view();
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), valView));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), valView));
   exPtr->finish();
-  EXPECT_TRUE(driver->couldExist(makeView("key")));
+  EXPECT_TRUE(driver->couldExist(makeHK("key")));
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
-  EXPECT_FALSE(driver->couldExist(makeView("key1")));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_FALSE(driver->couldExist(makeHK("key1")));
 
   uint32_t numLookups{std::numeric_limits<uint32_t>::max()};
   uint32_t numLookupSuccess{std::numeric_limits<uint32_t>::max()};
@@ -257,24 +256,23 @@ TEST(Driver, SmallItem) {
   auto driver = std::make_unique<Driver>(std::move(config));
 
   MockInsertCB cbInsert;
-  EXPECT_CALL(cbInsert, call(Status::Ok, makeView("key")));
+  EXPECT_CALL(cbInsert, call(Status::Ok, makeHK("key")));
 
-  EXPECT_FALSE(driver->couldExist(makeView("key")));
+  EXPECT_FALSE(driver->couldExist(makeHK("key")));
 
   // Test async insert for small item cache
   auto valCopy = Buffer{value.view()};
   auto valView = valCopy.view();
   EXPECT_EQ(Status::Ok,
-            driver->insertAsync(makeView("key"),
-                                valView,
-                                [&cbInsert, v = std::move(valCopy)](
-                                    Status status, BufferView k) {
-                                  cbInsert.call(status, k);
-                                }));
+            driver->insertAsync(
+                makeHK("key"),
+                valView,
+                [&cbInsert, v = std::move(valCopy)](
+                    Status status, HashedKey k) { cbInsert.call(status, k); }));
   exPtr->finish();
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(value.view(), valueLookup.view());
 }
 
@@ -297,22 +295,21 @@ TEST(Driver, LargeItem) {
   auto driver = std::make_unique<Driver>(std::move(config));
 
   MockInsertCB cbInsert;
-  EXPECT_CALL(cbInsert, call(Status::Ok, makeView("key")));
+  EXPECT_CALL(cbInsert, call(Status::Ok, makeHK("key")));
 
   // Test async insert for large item cache
   auto valCopy = Buffer{value.view()};
   auto valView = valCopy.view();
   EXPECT_EQ(Status::Ok,
-            driver->insertAsync(makeView("key"),
-                                valView,
-                                [&cbInsert, v = std::move(valCopy)](
-                                    Status status, BufferView k) {
-                                  cbInsert.call(status, k);
-                                }));
+            driver->insertAsync(
+                makeHK("key"),
+                valView,
+                [&cbInsert, v = std::move(valCopy)](
+                    Status status, HashedKey k) { cbInsert.call(status, k); }));
   exPtr->finish();
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(value.view(), valueLookup.view());
 }
 
@@ -337,11 +334,11 @@ TEST(Driver, SmallAndLargeItem) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), largeValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 }
 
@@ -368,12 +365,12 @@ TEST(Driver, InsertFailed) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
   EXPECT_EQ(Status::DeviceError,
-            driver->insert(makeView("key"), largeValue.view()));
+            driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 }
 
@@ -400,14 +397,13 @@ TEST(Driver, InsertFailedRemoveOther) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
-  EXPECT_EQ(Status::BadState,
-            driver->insert(makeView("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::BadState, driver->insert(makeHK("key"), largeValue.view()));
 
   // We don't provide any guarantees what is available. But in our test we
   // can check what is visible.
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 }
 
@@ -441,17 +437,17 @@ TEST(Driver, Remove) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 
-  EXPECT_EQ(Status::Ok, driver->remove(makeView("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->remove(makeHK("key")));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
 
-  EXPECT_EQ(Status::Ok, driver->remove(makeView("test retry")));
+  EXPECT_EQ(Status::Ok, driver->remove(makeHK("test retry")));
 }
 
 // Comment about EvictionBlockCache and EvictionSmallItemCache:
@@ -496,11 +492,11 @@ TEST(Driver, EvictBlockCache) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 
   // If we inserted in block cache, eviction from small cache should not
@@ -509,7 +505,7 @@ TEST(Driver, EvictBlockCache) {
 
   // But it can be evicted from block cache
   EXPECT_TRUE(bcPtr->evict(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
 }
 
 TEST(Driver, EvictSmallItemCache) {
@@ -544,17 +540,17 @@ TEST(Driver, EvictSmallItemCache) {
   auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), largeValue.view()));
-  EXPECT_EQ(Status::Ok, driver->insert(makeView("key"), smallValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 
   EXPECT_FALSE(bcPtr->evict(makeHK("key")));
 
   EXPECT_TRUE(siPtr->evict(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
 }
 
 TEST(Driver, Recovery) {
@@ -623,13 +619,13 @@ TEST(Driver, ConcurrentInserts) {
   config.maxConcurrentInserts = 2;
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeView("1"), makeView("v1"), {}));
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeView("2"), makeView("v2"), {}));
+  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("1"), makeView("v1"), {}));
+  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("2"), makeView("v2"), {}));
 
   sp.wait(0);
   sp.wait(1);
   EXPECT_EQ(Status::Rejected,
-            driver->insertAsync(makeView("3"), makeView("v3"), {}));
+            driver->insertAsync(makeHK("3"), makeView("v3"), {}));
   sp.reached(2);
 
   uint32_t statRejected = 0;
@@ -668,20 +664,19 @@ TEST(Driver, ParcelMemory) {
   config.maxParcelMemory = 3000;
   auto driver = std::make_unique<Driver>(std::move(config));
 
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeView("1"), v1.view(), {}));
-  EXPECT_EQ(Status::Ok, driver->insertAsync(makeView("2"), v2.view(), {}));
+  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("1"), v1.view(), {}));
+  EXPECT_EQ(Status::Ok, driver->insertAsync(makeHK("2"), v2.view(), {}));
   sp.wait(0);
   sp.wait(1);
 
-  EXPECT_EQ(Status::Rejected,
-            driver->insertAsync(makeView("3"), v3.view(), {}));
+  EXPECT_EQ(Status::Rejected, driver->insertAsync(makeHK("3"), v3.view(), {}));
 
   sp.reached(2);
   // There is some gap between we unblock callback and counters go down. Keep
   // counting rejects.
   uint32_t rejects = 1;
   Status st;
-  while ((st = driver->insertAsync(makeView("3"), v3.view(), {})) ==
+  while ((st = driver->insertAsync(makeHK("3"), v3.view(), {})) ==
          Status::Rejected) {
     rejects++;
     std::this_thread::yield();
