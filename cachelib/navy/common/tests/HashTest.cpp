@@ -23,8 +23,8 @@ namespace cachelib {
 namespace navy {
 namespace tests {
 TEST(Hash, HashedKeyCollision) {
-  HashedKey hk1{makeView("key 1")};
-  HashedKey hk2{makeView("key 2")};
+  HashedKey hk1{"key 1"};
+  HashedKey hk2{"key 2"};
 
   // Simulate a case where hash matches but key doesn't.
   HashedKey hk3 = HashedKey::precomputed(hk2.key(), hk1.keyHash());

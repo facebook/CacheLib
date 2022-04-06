@@ -55,7 +55,8 @@ class MockEngine final : public Engine {
             }} {
     ON_CALL(*this, insert(_, _))
         .WillByDefault(Invoke([this](HashedKey hk, BufferView value) {
-          auto entry = std::make_pair(Buffer{hk.key()}, Buffer{value});
+          auto entry =
+              std::make_pair(Buffer{makeView(hk.key())}, Buffer{value});
           auto entryHK = makeHK(entry.first); // Capture before std::move
           cache_[entryHK] = std::move(entry);
           return Status::Ok;
@@ -78,7 +79,7 @@ class MockEngine final : public Engine {
     }));
 
     ON_CALL(*this, remove(_)).WillByDefault(Invoke([this](HashedKey hk) {
-      Buffer buf{hk.key()};
+      Buffer buf{makeView(hk.key())};
       return evict(buf.view()) ? Status::Ok : Status::NotFound;
     }));
     ON_CALL(*this, flush()).WillByDefault(Return());

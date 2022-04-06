@@ -142,9 +142,11 @@ class FOLLY_PACK_ATTR BucketEntry {
 
   BufferView key() const { return {keySize_, data_}; }
 
-  bool keyEqualsTo(HashedKey hk) const {
-    return hk == HashedKey::precomputed(key(), keyHash_);
+  HashedKey hashedKey() const {
+    return HashedKey::precomputed(toStringPiece(key()), keyHash_);
   }
+
+  bool keyEqualsTo(HashedKey hk) const { return hk == hashedKey(); }
 
   uint64_t keyHash() const { return keyHash_; }
 
@@ -156,7 +158,7 @@ class FOLLY_PACK_ATTR BucketEntry {
         valueSize_{static_cast<uint32_t>(value.size())},
         keyHash_{hk.keyHash()} {
     static_assert(sizeof(BucketEntry) == 16, "BucketEntry overhead");
-    hk.key().copyTo(data_);
+    makeView(hk.key()).copyTo(data_);
     value.copyTo(data_ + keySize_);
   }
 

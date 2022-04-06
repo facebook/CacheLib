@@ -407,7 +407,8 @@ Status BigHash::remove(HashedKey hk) {
   }
 
   if (!valueCopy.isNull()) {
-    destructorCb_(hk.key(), valueCopy.view(), DestructorEvent::Removed);
+    destructorCb_(
+        makeView(hk.key()), valueCopy.view(), DestructorEvent::Removed);
   }
 
   XDCHECK_LE(oldRemainingBytes, newRemainingBytes);

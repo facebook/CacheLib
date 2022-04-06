@@ -87,7 +87,7 @@ bool Driver::isItemLarge(BufferView key, BufferView value) const {
 }
 
 bool Driver::couldExist(BufferView key) {
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   auto couldExist =
       smallItemCache_->couldExist(hk) || largeItemCache_->couldExist(hk);
   if (!couldExist) {
@@ -148,7 +148,7 @@ Status Driver::insertAsync(BufferView key,
                            InsertCallback cb) {
   insertCount_.inc();
 
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   if (key.size() > kMaxKeySize) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
@@ -161,7 +161,7 @@ Status Driver::insertAsync(BufferView key,
 
   scheduler_->enqueueWithKey(
       [this, cb = std::move(cb), hk, value, skipInsertion = false]() mutable {
-        auto selection = select(hk.key(), value);
+        auto selection = select(makeView(hk.key()), value);
         Status status = Status::Ok;
         if (!skipInsertion) {
           status = selection.first.insert(hk, value);
@@ -182,7 +182,7 @@ Status Driver::insertAsync(BufferView key,
         }
 
         if (cb) {
-          cb(status, hk.key());
+          cb(status, makeView(hk.key()));
         }
         parcelMemory_.sub(hk.key().size() + value.size());
         concurrentInserts_.dec();
@@ -220,7 +220,7 @@ void Driver::updateLookupStats(Status status) const {
 Status Driver::lookup(BufferView key, Buffer& value) {
   // We do busy wait because we don't expect many retries.
   lookupCount_.inc();
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   Status status{Status::NotFound};
   while ((status = largeItemCache_->lookup(hk, value)) == Status::Retry) {
     std::this_thread::yield();
@@ -236,7 +236,7 @@ Status Driver::lookup(BufferView key, Buffer& value) {
 
 Status Driver::lookupAsync(BufferView key, LookupCallback cb) {
   lookupCount_.inc();
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   XDCHECK(cb);
 
   scheduler_->enqueueWithKey(
@@ -258,7 +258,7 @@ Status Driver::lookupAsync(BufferView key, LookupCallback cb) {
         }
 
         if (cb) {
-          cb(status, hk.key(), std::move(value));
+          cb(status, makeView(hk.key()), std::move(value));
         }
 
         updateLookupStats(status);
@@ -293,7 +293,7 @@ Status Driver::removeHashedKey(HashedKey hk, bool& skipSmallItemCache) {
 }
 
 Status Driver::remove(BufferView key) {
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   Status status{Status::Ok};
   bool skipSmallItemCache = false;
   while ((status = removeHashedKey(hk, skipSmallItemCache)) == Status::Retry) {
@@ -303,7 +303,7 @@ Status Driver::remove(BufferView key) {
 }
 
 Status Driver::removeAsync(BufferView key, RemoveCallback cb) {
-  const HashedKey hk{key};
+  const HashedKey hk = makeHK(key);
   scheduler_->enqueueWithKey(
       [this, cb = std::move(cb), hk = hk,
        skipSmallItemCache = false]() mutable {
@@ -312,7 +312,7 @@ Status Driver::removeAsync(BufferView key, RemoveCallback cb) {
           return JobExitCode::Reschedule;
         }
         if (cb) {
-          cb(status, hk.key());
+          cb(status, makeView(hk.key()));
         }
         return JobExitCode::Done;
       },

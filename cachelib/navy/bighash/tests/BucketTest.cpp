@@ -69,8 +69,7 @@ TEST(Bucket, CollisionKeys) {
   EXPECT_EQ(value1, bucket.find(hk));
 
   // Simulate a key that collides on the same hash
-  const auto collidedHk =
-      HashedKey::precomputed(makeView("key 2"), hk.keyHash());
+  const auto collidedHk = HashedKey::precomputed("key 2", hk.keyHash());
   auto value2 = makeView("value 2");
   bucket.insert(collidedHk, value2, nullptr);
 

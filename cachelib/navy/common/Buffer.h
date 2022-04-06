@@ -27,6 +27,7 @@
 #include <string>
 
 #include "cachelib/navy/common/Utils.h"
+#include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
@@ -254,6 +255,14 @@ inline BufferView toView(MutableBufferView mutableView) {
 // Trailing 0 is not included
 inline BufferView makeView(const char* cstr) {
   return {std::strlen(cstr), reinterpret_cast<const uint8_t*>(cstr)};
+}
+
+inline BufferView makeView(folly::StringPiece str) {
+  return {str.size(), reinterpret_cast<const uint8_t*>(str.data())};
+}
+
+inline folly::StringPiece toStringPiece(BufferView view) {
+  return {reinterpret_cast<const char*>(view.data()), view.size()};
 }
 
 // Convert to string suitable for debug prints the best

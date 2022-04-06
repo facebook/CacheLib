@@ -516,7 +516,7 @@ TEST(BigHash, ConcurrentRead) {
   auto runRead = [&bh, &helper](HashedKey hk) {
     Buffer value;
     EXPECT_EQ(Status::Ok, bh.lookup(hk, value));
-    helper.call(hk.key(), value.view());
+    helper.call(makeView(hk.key()), value.view());
   };
 
   auto t1 = std::thread(runRead, makeHK("key 1"));

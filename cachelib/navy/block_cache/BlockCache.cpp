@@ -284,7 +284,7 @@ Status BlockCache::remove(HashedKey hk) {
     holeCount_.inc();
     succRemoveCount_.inc();
     if (!value.isNull()) {
-      destructorCb_(hk.key(), value.view(), DestructorEvent::Removed);
+      destructorCb_(makeView(hk.key()), value.view(), DestructorEvent::Removed);
     }
     return Status::Ok;
   }
@@ -322,8 +322,8 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     }
 
     const auto entrySize = serializedSize(desc.keySize, desc.valueSize);
-    HashedKey hk{
-        BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
+    HashedKey hk =
+        makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
     BufferView value{desc.valueSize, entryEnd - entrySize};
     if (checksumData_ && desc.cs != checksum(value)) {
       // We do not need to abort here since the EntryDesc checksum was good, so
@@ -346,7 +346,7 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     }
 
     if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
-      destructorCb_(hk.key(), value, DestructorEvent::Recycled);
+      destructorCb_(makeView(hk.key()), value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -377,8 +377,8 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
     }
 
     const auto entrySize = serializedSize(desc.keySize, desc.valueSize);
-    HashedKey hk{
-        BufferView{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize}};
+    HashedKey hk =
+        makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
     BufferView value{desc.valueSize, entryEnd - entrySize};
     if (checksumData_ && desc.cs != checksum(value)) {
       // We do not need to abort here since the EntryDesc checksum was good, so
@@ -395,7 +395,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
       holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
     }
     if (destructorCb_ && removeRes) {
-      destructorCb_(hk.key(), value, DestructorEvent::Recycled);
+      destructorCb_(makeView(hk.key()), value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -505,7 +505,7 @@ Status BlockCache::writeEntry(RelAddress addr,
     desc->cs = checksum(value);
   }
 
-  buffer.copyFrom(descOffset - hk.key().size(), hk.key());
+  buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
   buffer.copyFrom(0, value);
 
   regionManager_.write(addr, std::move(buffer));
@@ -550,7 +550,9 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     return Status::DeviceError;
   }
 
-  BufferView key{desc.keySize, entryEnd - sizeof(EntryDesc) - desc.keySize};
+  folly::StringPiece key{reinterpret_cast<const char*>(
+                             entryEnd - sizeof(EntryDesc) - desc.keySize),
+                         desc.keySize};
   if (HashedKey::precomputed(key, desc.keyHash) != expected) {
     lookupFalsePositiveCount_.inc();
     return Status::NotFound;
