@@ -26,6 +26,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
+#include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
@@ -284,7 +285,7 @@ Status BlockCache::remove(HashedKey hk) {
     holeCount_.inc();
     succRemoveCount_.inc();
     if (!value.isNull()) {
-      destructorCb_(makeView(hk.key()), value.view(), DestructorEvent::Removed);
+      destructorCb_(hk, value.view(), DestructorEvent::Removed);
     }
     return Status::Ok;
   }
@@ -346,7 +347,7 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     }
 
     if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
-      destructorCb_(makeView(hk.key()), value, DestructorEvent::Recycled);
+      destructorCb_(hk, value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -395,7 +396,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
       holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
     }
     if (destructorCb_ && removeRes) {
-      destructorCb_(makeView(hk.key()), value, DestructorEvent::Recycled);
+      destructorCb_(hk, value, DestructorEvent::Recycled);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -432,10 +433,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   }
 
-  folly::StringPiece strKey{reinterpret_cast<const char*>(hk.key().data()),
-                            hk.key().size()};
-
-  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(strKey)) {
+  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk.key())) {
     return removeItem();
   }
 

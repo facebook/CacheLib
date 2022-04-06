@@ -34,7 +34,7 @@ namespace navy {
 //
 
 struct MockDestructor {
-  MOCK_METHOD3(call, void(BufferView, BufferView, DestructorEvent));
+  MOCK_METHOD3(call, void(HashedKey, BufferView, DestructorEvent));
 };
 
 struct MockCounterVisitor {

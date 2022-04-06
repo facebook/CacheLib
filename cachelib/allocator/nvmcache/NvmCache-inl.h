@@ -225,13 +225,11 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
 }
 
 template <typename C>
-void NvmCache<C>::evictCB(navy::BufferView key,
+void NvmCache<C>::evictCB(HashedKey hk,
                           navy::BufferView value,
                           navy::DestructorEvent event) {
-  folly::StringPiece itemKey{reinterpret_cast<const char*>(key.data()),
-                             key.size()};
   // invalidate any inflight lookup that is on flight since we are evicting it.
-  invalidateFill(itemKey);
+  invalidateFill(hk);
 
   const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
 
@@ -251,7 +249,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
         stats().nvmEvictionSecondsToExpiry_.trackValue(expiryTime - timeNow);
       }
     }
-    navyCache_->isItemLarge(key, value)
+    navyCache_->isItemLarge(navy::makeView(hk.key()), value)
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
   }
@@ -266,10 +264,10 @@ void NvmCache<C>::evictCB(navy::BufferView key,
     // Concurrent DRAM cache remove/replace/update for same item could
     // modify DRAM index, check NvmClean/NvmEvicted flag, update itemRemoved_
     // set, and unmark NvmClean flag.
-    auto lock = getItemDestructorLock(itemKey);
+    auto lock = getItemDestructorLock(hk.key());
     ItemHandle hdl;
     try {
-      hdl = cache_.peek(itemKey);
+      hdl = cache_.peek(hk.key());
     } catch (const exception::RefcountOverflow& ex) {
       // TODO(zixuan) item exists in DRAM, but we can't obtain the handle
       // and mark it as NvmEvicted. In this scenario, there are two
@@ -288,8 +286,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
       XLOGF(ERR,
             "Refcount overflowed when trying peek at an item in "
             "NvmCache::evictCB. key: {}, ex: {}",
-            folly::StringPiece{reinterpret_cast<const char*>(key.data()),
-                               key.size()},
+            hk.key(),
             ex.what());
       stats().numNvmDestructorRefcountOverflow.inc();
       return;
@@ -326,7 +323,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
       // but it could exist in itemRemoved_ due to in-place mutation and the
       // legacy copy in NVM is still pending to be removed.
       if (event != cachelib::navy::DestructorEvent::PutFailed &&
-          checkAndUnmarkItemRemovedLocked(itemKey)) {
+          checkAndUnmarkItemRemovedLocked(hk.key())) {
         needDestructor = false;
       }
     }
@@ -336,7 +333,7 @@ void NvmCache<C>::evictCB(navy::BufferView key,
   if (itemDestructor_ && needDestructor) {
     // create the item on heap instead of memory pool to avoid allocation
     // failure and evictions from cache for a temporary item.
-    auto iobuf = createItemAsIOBuf(itemKey, nvmItem);
+    auto iobuf = createItemAsIOBuf(hk.key(), nvmItem);
     if (iobuf) {
       auto& item = *reinterpret_cast<Item*>(iobuf->writableData());
       // make chained items
@@ -379,8 +376,8 @@ NvmCache<C>::NvmCache(C& c,
       itemDestructor_(itemDestructor) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
-      [this](navy::BufferView k, navy::BufferView v, navy::DestructorEvent e) {
-        this->evictCB(k, v, e);
+      [this](HashedKey hk, navy::BufferView v, navy::DestructorEvent e) {
+        this->evictCB(hk, v, e);
       },
       truncate,
       std::move(config.deviceEncryptor),
@@ -497,22 +494,26 @@ void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
   // eviction, and we should abandon this write to navy since we already
   // reported the key doesn't exist in the cache.
   const bool executed = token.executeIfValid([&]() {
-    auto status = navyCache_->insertAsync(
-        makeBufferView(ctx.key()), makeBufferView(val),
-        [this, putCleanup, valSize, val](navy::Status st,
-                                         navy::BufferView key) {
-          if (st == navy::Status::Ok) {
-            stats().nvmPutSize_.trackValue(valSize);
-          } else if (st == navy::Status::BadState) {
-            // we set disable navy since we got a BadState from navy
-            disableNavy("Delete Failure. BadState");
-          } else {
-            // put failed, DRAM eviction happened and destructor was not
-            // executed. we unconditionally trigger destructor here for cleanup.
-            evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed);
-          }
-          putCleanup();
-        });
+    auto status =
+        navyCache_->insertAsync(makeBufferView(ctx.key()), makeBufferView(val),
+                                [this, putCleanup, valSize,
+                                 val](navy::Status st, navy::BufferView key) {
+                                  if (st == navy::Status::Ok) {
+                                    stats().nvmPutSize_.trackValue(valSize);
+                                  } else if (st == navy::Status::BadState) {
+                                    // we set disable navy since we got a
+                                    // BadState from navy
+                                    disableNavy("Delete Failure. BadState");
+                                  } else {
+                                    // put failed, DRAM eviction happened and
+                                    // destructor was not executed. we
+                                    // unconditionally trigger destructor here
+                                    // for cleanup.
+                                    evictCB(makeHK(key), makeBufferView(val),
+                                            navy::DestructorEvent::PutFailed);
+                                  }
+                                  putCleanup();
+                                });
 
     if (status == navy::Status::Ok) {
       guard.dismiss();

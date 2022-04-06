@@ -19,6 +19,7 @@
 
 #include <unordered_map>
 
+#include "cachelib/common/Hash.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/driver/NoopEngine.h"
@@ -48,7 +49,7 @@ class MockEngine final : public Engine {
   explicit MockEngine(std::string name = "", MockDestructor* cb = nullptr)
       : name_(name),
         destructorCb_{
-            [cb](BufferView key, BufferView value, DestructorEvent event) {
+            [cb](HashedKey key, BufferView value, DestructorEvent event) {
               if (cb) {
                 cb->call(key, value, event);
               }
@@ -79,8 +80,7 @@ class MockEngine final : public Engine {
     }));
 
     ON_CALL(*this, remove(_)).WillByDefault(Invoke([this](HashedKey hk) {
-      Buffer buf{makeView(hk.key())};
-      return evict(buf.view()) ? Status::Ok : Status::NotFound;
+      return evict(hk) ? Status::Ok : Status::NotFound;
     }));
     ON_CALL(*this, flush()).WillByDefault(Return());
     ON_CALL(*this, reset()).WillByDefault(Return());
@@ -116,8 +116,8 @@ class MockEngine final : public Engine {
   uint64_t getMaxItemSize() const override { return UINT32_MAX; }
 
   // Returns true if key found and can be actually evicted in the real world
-  bool evict(BufferView key) {
-    auto itr = cache_.find(makeHK(key));
+  bool evict(HashedKey key) {
+    auto itr = cache_.find(key);
     if (itr == cache_.end()) {
       return false;
     }
@@ -471,9 +471,8 @@ TEST(Driver, EvictBlockCache) {
   auto largeValue = bg.gen(32);
 
   MockDestructor ecbBC;
-  EXPECT_CALL(
-      ecbBC,
-      call(makeView("key"), largeValue.view(), DestructorEvent::Removed));
+  EXPECT_CALL(ecbBC,
+              call(makeHK("key"), largeValue.view(), DestructorEvent::Removed));
   auto bc = std::make_unique<MockEngine>("", &ecbBC);
   auto bcPtr = bc.get();
 
@@ -506,10 +505,10 @@ TEST(Driver, EvictBlockCache) {
 
   // If we inserted in block cache, eviction from small cache should not
   // happen, because it is removed.
-  EXPECT_FALSE(siPtr->evict(makeView("key")));
+  EXPECT_FALSE(siPtr->evict(makeHK("key")));
 
   // But it can be evicted from block cache
-  EXPECT_TRUE(bcPtr->evict(makeView("key")));
+  EXPECT_TRUE(bcPtr->evict(makeHK("key")));
   EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
 }
 
@@ -524,9 +523,8 @@ TEST(Driver, EvictSmallItemCache) {
   auto bcPtr = bc.get();
 
   MockDestructor ecbSI;
-  EXPECT_CALL(
-      ecbSI,
-      call(makeView("key"), smallValue.view(), DestructorEvent::Removed));
+  EXPECT_CALL(ecbSI,
+              call(makeHK("key"), smallValue.view(), DestructorEvent::Removed));
   auto si = std::make_unique<MockEngine>("", &ecbSI);
   auto siPtr = si.get();
 
@@ -553,9 +551,9 @@ TEST(Driver, EvictSmallItemCache) {
   EXPECT_EQ(Status::Ok, driver->lookup(makeView("key"), valueLookup));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 
-  EXPECT_FALSE(bcPtr->evict(makeView("key")));
+  EXPECT_FALSE(bcPtr->evict(makeHK("key")));
 
-  EXPECT_TRUE(siPtr->evict(makeView("key")));
+  EXPECT_TRUE(siPtr->evict(makeHK("key")));
   EXPECT_EQ(Status::NotFound, driver->lookup(makeView("key"), valueLookup));
 }
 

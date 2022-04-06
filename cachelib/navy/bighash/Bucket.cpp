@@ -102,7 +102,8 @@ uint32_t Bucket::makeSpace(uint32_t size,
 
     if (destructorCb) {
       auto* entry = getIteratorEntry(itr);
-      destructorCb(entry->key(), entry->value(), DestructorEvent::Recycled);
+      destructorCb(
+          entry->hashedKey(), entry->value(), DestructorEvent::Recycled);
     }
 
     curFreeSpace += BucketStorage::slotSize(itr.view().size());
@@ -122,7 +123,8 @@ uint32_t Bucket::remove(HashedKey hk, const DestructorCallback& destructorCb) {
     auto* entry = getIteratorEntry(itr);
     if (entry->keyEqualsTo(hk)) {
       if (destructorCb) {
-        destructorCb(entry->key(), entry->value(), DestructorEvent::Removed);
+        destructorCb(
+            entry->hashedKey(), entry->value(), DestructorEvent::Removed);
       }
       storage_.remove(itr);
       return 1;

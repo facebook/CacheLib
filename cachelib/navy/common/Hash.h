@@ -45,6 +45,7 @@ inline HashedKey makeHK(const Buffer& key) {
 inline HashedKey makeHK(const char* cstr) {
   return HashedKey{folly::StringPiece{cstr}};
 }
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

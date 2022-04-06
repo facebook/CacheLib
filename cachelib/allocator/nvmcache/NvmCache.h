@@ -39,6 +39,7 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
+#include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
 #include "folly/Range.h"
@@ -357,11 +358,11 @@ class NvmCache {
 
   // Erase entry for the ctx from the fill map
   // @param     key   item key
-  void invalidateFill(folly::StringPiece key) {
-    auto shard = getShardForKey(key);
+  void invalidateFill(HashedKey hk) {
+    auto shard = getShardForKey(hk.key());
     auto lock = getFillLockForShard(shard);
     auto& map = getFillMapForShard(shard);
-    auto it = map.find(key);
+    auto it = map.find(hk.key());
     if (it != map.end() && it->second) {
       it->second->invalidate();
     }
@@ -399,9 +400,7 @@ class NvmCache {
                      navy::BufferView key,
                      navy::BufferView value);
 
-  void evictCB(navy::BufferView key,
-               navy::BufferView val,
-               navy::DestructorEvent e);
+  void evictCB(HashedKey hk, navy::BufferView val, navy::DestructorEvent e);
 
   static navy::BufferView makeBufferView(folly::ByteRange b) {
     return navy::BufferView{b.size(), b.data()};

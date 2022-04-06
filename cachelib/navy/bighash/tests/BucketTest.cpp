@@ -43,9 +43,8 @@ TEST(Bucket, SingleKey) {
 
   MockDestructor helper;
   EXPECT_CALL(helper, call(_, _, _)).Times(0);
-  EXPECT_CALL(
-      helper,
-      call(makeView("key"), makeView("value"), DestructorEvent::Removed));
+  EXPECT_CALL(helper,
+              call(makeHK("key"), makeView("value"), DestructorEvent::Removed));
   auto cb = toCallback(helper);
   EXPECT_EQ(1, bucket.remove(hk, cb));
   EXPECT_EQ(0, bucket.size());
@@ -211,7 +210,7 @@ TEST(Bucket, EvictionOne) {
   MockDestructor helper;
   EXPECT_CALL(
       helper,
-      call(makeView("key 1"), makeView("value 1"), DestructorEvent::Recycled));
+      call(makeHK("key 1"), makeView("value 1"), DestructorEvent::Recycled));
   auto cb = toCallback(helper);
   ASSERT_EQ(1, bucket.insert(hk4, makeView("value 4"), cb));
 
@@ -238,13 +237,13 @@ TEST(Bucket, EvictionAll) {
   MockDestructor helper;
   EXPECT_CALL(
       helper,
-      call(makeView("key 1"), makeView("value 1"), DestructorEvent::Recycled));
+      call(makeHK("key 1"), makeView("value 1"), DestructorEvent::Recycled));
   EXPECT_CALL(
       helper,
-      call(makeView("key 2"), makeView("value 2"), DestructorEvent::Recycled));
+      call(makeHK("key 2"), makeView("value 2"), DestructorEvent::Recycled));
   EXPECT_CALL(
       helper,
-      call(makeView("key 3"), makeView("value 3"), DestructorEvent::Recycled));
+      call(makeHK("key 3"), makeView("value 3"), DestructorEvent::Recycled));
   auto cb = toCallback(helper);
 
   Buffer bigValue(50);

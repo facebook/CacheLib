@@ -1984,7 +1984,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
     ASSERT_TRUE(destructorCalled);
@@ -2005,7 +2005,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
     ASSERT_TRUE(destructorCalled);
@@ -2024,7 +2024,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
     // Recycled event, in RAM and clean
@@ -2040,7 +2040,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
     // Removed event, not in RAM
@@ -2059,7 +2059,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
     // Removed event, in RAM but unclean
@@ -2078,7 +2078,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(handle));
-    evictCB(navy::makeView(key.data()),
+    evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
     // Removed event, in RAM and clean

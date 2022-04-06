@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
+#include "cachelib/common/Hash.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
@@ -1157,11 +1158,12 @@ TEST(BlockCache, DestructorCallback) {
   {
     testing::InSequence inSeq;
     // Region evictions is backwards to the order of insertion.
-    EXPECT_CALL(cb,
-                call(log[4].key(), log[4].value(), DestructorEvent::Recycled));
+    EXPECT_CALL(
+        cb,
+        call(makeHK(log[4].key()), log[4].value(), DestructorEvent::Recycled));
     // destructor callback is executed when evicted or explicit removed
-    EXPECT_CALL(cb, call(log[3].key(), log[3].value(), _)).Times(0);
-    EXPECT_CALL(cb, call(log[2].key(), log[2].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(makeHK(log[3].key()), log[3].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(makeHK(log[2].key()), log[2].value(), _)).Times(0);
   }
 
   std::vector<uint32_t> hits(4);
@@ -2135,24 +2137,27 @@ TEST(BlockCache, testItemDestructor) {
   MockDestructor cb;
   ON_CALL(cb, call(_, _, _))
       .WillByDefault(
-          Invoke([](BufferView key, BufferView val, DestructorEvent event) {
-            XLOGF(ERR, "cb key: {}, val: {}, event: {}", toString(key),
+          Invoke([](HashedKey key, BufferView val, DestructorEvent event) {
+            XLOGF(ERR, "cb key: {}, val: {}, event: {}", key.key(),
                   toString(val).substr(0, 20), toString(event));
           }));
 
   {
     testing::InSequence inSeq;
     // explicit remove 2
-    EXPECT_CALL(cb,
-                call(log[2].key(), log[2].value(), DestructorEvent::Removed));
+    EXPECT_CALL(
+        cb,
+        call(makeHK(log[2].key()), log[2].value(), DestructorEvent::Removed));
     // explicit remove 0
-    EXPECT_CALL(cb,
-                call(log[0].key(), log[5].value(), DestructorEvent::Removed));
+    EXPECT_CALL(
+        cb,
+        call(makeHK(log[0].key()), log[5].value(), DestructorEvent::Removed));
     // Region evictions is backwards to the order of insertion.
-    EXPECT_CALL(cb,
-                call(log[4].key(), log[4].value(), DestructorEvent::Recycled));
-    EXPECT_CALL(cb, call(log[3].key(), log[3].value(), _)).Times(0);
-    EXPECT_CALL(cb, call(log[2].key(), log[2].value(), _)).Times(0);
+    EXPECT_CALL(
+        cb,
+        call(makeHK(log[4].key()), log[4].value(), DestructorEvent::Recycled));
+    EXPECT_CALL(cb, call(makeHK(log[3].key()), log[3].value(), _)).Times(0);
+    EXPECT_CALL(cb, call(makeHK(log[2].key()), log[2].value(), _)).Times(0);
   }
 
   std::vector<uint32_t> hits(4);
