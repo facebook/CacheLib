@@ -134,7 +134,7 @@ class NvmCache {
   // Look up item by key
   // @param key         key to lookup
   // @return            ItemHandle
-  ItemHandle find(folly::StringPiece key);
+  ItemHandle find(HashedKey key);
 
   // Try to mark the key as in process of being evicted from RAM to NVM.
   // This is used to maintain the consistency between the RAM cache and
@@ -161,10 +161,10 @@ class NvmCache {
   // creates a delete tombstone for the key. This will ensure that all
   // concurrent gets and puts to nvmcache can synchronize with an upcoming
   // delete to make the cache consistent.
-  DeleteTombStoneGuard createDeleteTombStone(folly::StringPiece key);
+  DeleteTombStoneGuard createDeleteTombStone(HashedKey hk);
 
   // remove an item by key
-  // @param key         key to remove
+  // @param hk          key to remove with hash
   // @param tombstone   the tombstone guard associated for this key. See
   //                    CacheAllocator::remove on how tombstone maintain
   //                    consistency with presence of concurrent get/puts to the
@@ -176,7 +176,7 @@ class NvmCache {
   //                    the remove called if caller is only removing item in
   //                    nvm; if the caller is also removing the item from ram,
   //                    tombstone should be created before removing item in ram.
-  void remove(folly::StringPiece key, DeleteTombStoneGuard tombstone);
+  void remove(HashedKey hk, DeleteTombStoneGuard tombstone);
 
   // peek the nvmcache without bringing the item into the cache. creates a
   // temporary item handle with the content of the nvmcache. this is intended
@@ -216,10 +216,9 @@ class NvmCache {
   // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
   // eviction must erase item from itemRemoved_, so there won't memory leak or
   // influence to future item with same key.
-  std::unique_lock<std::mutex> getItemDestructorLock(
-      folly::StringPiece key) const {
+  std::unique_lock<std::mutex> getItemDestructorLock(HashedKey hk) const {
     using LockType = std::unique_lock<std::mutex>;
-    return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(key)]}
+    return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(hk)]}
                            : LockType{};
   }
 
@@ -230,7 +229,7 @@ class NvmCache {
   //
   // caller must make sure itemDestructorLock is locked,
   // and the item is present in NVM (NvmClean set and NvmEvicted flag unset).
-  void markNvmItemRemovedLocked(folly::StringPiece key);
+  void markNvmItemRemovedLocked(HashedKey hk);
 
  private:
   // returns the itemRemoved_ set size
@@ -238,7 +237,7 @@ class NvmCache {
   // and were removed from dram but not yet removed from nvm
   uint64_t getNvmItemRemovedSize() const;
 
-  bool checkAndUnmarkItemRemovedLocked(folly::StringPiece key);
+  bool checkAndUnmarkItemRemovedLocked(HashedKey hk);
 
   detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }
 
@@ -267,7 +266,7 @@ class NvmCache {
   folly::Range<ChainedItemIter> viewAsChainedAllocsRange(folly::IOBuf*) const;
 
   // returns true if there is tombstone entry for the key.
-  bool hasTombStone(folly::StringPiece key);
+  bool hasTombStone(HashedKey hk);
 
   std::unique_ptr<NvmItem> makeNvmItem(const ItemHandle& handle);
 
@@ -350,16 +349,15 @@ class NvmCache {
 
   // Erase entry for the ctx from the fill map
   // @param     ctx   ctx to erase
-  void removeFromFillMap(const GetCtx& ctx) {
-    auto key = ctx.getKey();
-    auto lock = getFillLock(key);
-    getFillMap(key).erase(key);
+  void removeFromFillMap(HashedKey hk) {
+    auto lock = getFillLock(hk);
+    getFillMap(hk).erase(hk.key());
   }
 
   // Erase entry for the ctx from the fill map
   // @param     key   item key
   void invalidateFill(HashedKey hk) {
-    auto shard = getShardForKey(hk.key());
+    auto shard = getShardForKey(hk);
     auto lock = getFillLockForShard(shard);
     auto& map = getFillMapForShard(shard);
     auto it = map.find(hk.key());
@@ -377,27 +375,29 @@ class NvmCache {
   using FillMap =
       folly::F14ValueMap<folly::StringPiece, std::unique_ptr<GetCtx>>;
 
+  static size_t getShardForKey(HashedKey hk) { return hk.keyHash() % kShards; }
+
   static size_t getShardForKey(folly::StringPiece key) {
-    return folly::Hash()(key) % kShards;
+    return getShardForKey(HashedKey{key});
   }
 
   FillMap& getFillMapForShard(size_t shard) { return fills_[shard].fills_; }
 
-  FillMap& getFillMap(folly::StringPiece key) {
-    return getFillMapForShard(getShardForKey(key));
+  FillMap& getFillMap(HashedKey hk) {
+    return getFillMapForShard(getShardForKey(hk));
   }
 
   std::unique_lock<std::mutex> getFillLockForShard(size_t shard) {
     return std::unique_lock<std::mutex>(fillLock_[shard].fillLock_);
   }
 
-  std::unique_lock<std::mutex> getFillLock(folly::StringPiece key) {
-    return getFillLockForShard(getShardForKey(key));
+  std::unique_lock<std::mutex> getFillLock(HashedKey hk) {
+    return getFillLockForShard(getShardForKey(hk));
   }
 
   void onGetComplete(GetCtx& ctx,
                      navy::Status s,
-                     HashedKey hk,
+                     HashedKey key,
                      navy::BufferView value);
 
   void evictCB(HashedKey hk, navy::BufferView val, navy::DestructorEvent e);

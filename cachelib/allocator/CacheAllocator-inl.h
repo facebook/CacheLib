@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cachelib/common/Hash.h"
 namespace facebook {
 namespace cachelib {
 
@@ -991,10 +992,12 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
     throw std::invalid_argument("Handle is already accessible");
   }
 
+  HashedKey hk{handle->getKey()};
+
   insertInMMContainer(*(handle.getInternal()));
   WriteHandle replaced;
   try {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(handle->getKey())
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
                           : std::unique_lock<std::mutex>();
 
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
@@ -1003,7 +1006,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
       // item is to be replaced and the destructor will be executed
       // upon memory released, mark it in nvm to avoid destructor
       // executed from nvm
-      nvmCache_->markNvmItemRemovedLocked(handle->getKey());
+      nvmCache_->markNvmItemRemovedLocked(hk);
     }
   } catch (const std::exception&) {
     removeFromMMContainer(*(handle.getInternal()));
@@ -1026,8 +1029,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
     // We can avoid nvm delete only if we have non nvm clean item in cache.
     // In all other cases we must enqueue delete.
     if (!replaced || replaced->isNvmClean()) {
-      nvmCache_->remove(handle->getKey(),
-                        nvmCache_->createDeleteTombStone(handle->getKey()));
+      nvmCache_->remove(hk, nvmCache_->createDeleteTombStone(hk));
     }
   }
 
@@ -1483,14 +1485,15 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
   // flight after removing from the hashtable.
   //
   stats_.numCacheRemoves.inc();
+  HashedKey hk{key};
 
   using Guard = typename NvmCacheT::DeleteTombStoneGuard;
-  auto tombStone = nvmCache_ ? nvmCache_->createDeleteTombStone(key) : Guard{};
+  auto tombStone = nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : Guard{};
 
   auto handle = findInternal(key);
   if (!handle) {
     if (nvmCache_) {
-      nvmCache_->remove(key, std::move(tombStone));
+      nvmCache_->remove(hk, std::move(tombStone));
     }
     if (auto eventTracker = getEventTracker()) {
       eventTracker->record(AllocatorApiEvent::REMOVE, key,
@@ -1499,13 +1502,13 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
     return RemoveRes::kNotFoundInRam;
   }
 
-  return removeImpl(*handle, std::move(tombStone));
+  return removeImpl(hk, *handle, std::move(tombStone));
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::removeFromRamForTesting(
     typename Item::Key key) {
-  return removeImpl(*findInternal(key), DeleteTombStoneGuard{},
+  return removeImpl(HashedKey{key}, *findInternal(key), DeleteTombStoneGuard{},
                     false /* removeFromNvm */) == RemoveRes::kSuccess;
 }
 
@@ -1513,7 +1516,8 @@ template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::removeFromNvmForTesting(
     typename Item::Key key) {
   if (nvmCache_) {
-    nvmCache_->remove(key, nvmCache_->createDeleteTombStone(key));
+    HashedKey hk{key};
+    nvmCache_->remove(hk, nvmCache_->createDeleteTombStone(hk));
   }
 }
 
@@ -1546,9 +1550,10 @@ CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
                          AllocatorApiResult::REMOVED, it->getSize(),
                          it->getConfiguredTTL().count());
   }
-  auto tombstone = nvmCache_ ? nvmCache_->createDeleteTombStone(it->getKey())
-                             : DeleteTombStoneGuard{};
-  return removeImpl(*it, std::move(tombstone));
+  HashedKey hk{it->getKey()};
+  auto tombstone =
+      nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : DeleteTombStoneGuard{};
+  return removeImpl(hk, *it, std::move(tombstone));
 }
 
 template <typename CacheTrait>
@@ -1558,20 +1563,22 @@ CacheAllocator<CacheTrait>::remove(const ReadHandle& it) {
   if (!it) {
     throw std::invalid_argument("Trying to remove a null item handle");
   }
-  auto tombstone = nvmCache_ ? nvmCache_->createDeleteTombStone(it->getKey())
-                             : DeleteTombStoneGuard{};
-  return removeImpl(*(it.getInternal()), std::move(tombstone));
+  HashedKey hk{it->getKey()};
+  auto tombstone =
+      nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : DeleteTombStoneGuard{};
+  return removeImpl(hk, *(it.getInternal()), std::move(tombstone));
 }
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
-CacheAllocator<CacheTrait>::removeImpl(Item& item,
+CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
+                                       Item& item,
                                        DeleteTombStoneGuard tombstone,
                                        bool removeFromNvm,
                                        bool recordApiEvent) {
   bool success = false;
   {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(item.getKey())
+    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
                           : std::unique_lock<std::mutex>();
 
     success = accessContainer_->remove(item);
@@ -1580,7 +1587,7 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
       // item is to be removed and the destructor will be executed
       // upon memory released, mark it in nvm to avoid destructor
       // executed from nvm
-      nvmCache_->markNvmItemRemovedLocked(item.getKey());
+      nvmCache_->markNvmItemRemovedLocked(hk);
     }
   }
   XDCHECK(!item.isAccessible());
@@ -1594,7 +1601,7 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
   // have it be written to NVM.
   if (removeFromNvm && item.isNvmClean()) {
     XDCHECK(tombstone);
-    nvmCache_->remove(item.getKey(), std::move(tombstone));
+    nvmCache_->remove(hk, std::move(tombstone));
   }
 
   auto eventTracker = getEventTracker();
@@ -1617,17 +1624,17 @@ CacheAllocator<CacheTrait>::removeImpl(Item& item,
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::invalidateNvm(Item& item) {
   if (nvmCache_ != nullptr && item.isAccessible() && item.isNvmClean()) {
+    HashedKey hk{item.getKey()};
     {
-      auto lock = nvmCache_->getItemDestructorLock(item.getKey());
+      auto lock = nvmCache_->getItemDestructorLock(hk);
       if (!item.isNvmEvicted() && item.isNvmClean() && item.isAccessible()) {
         // item is being updated and invalidated in nvm. Mark the item to avoid
         // destructor to be executed from nvm
-        nvmCache_->markNvmItemRemovedLocked(item.getKey());
+        nvmCache_->markNvmItemRemovedLocked(hk);
       }
       item.unmarkNvmClean();
     }
-    nvmCache_->remove(item.getKey(),
-                      nvmCache_->createDeleteTombStone(item.getKey()));
+    nvmCache_->remove(hk, nvmCache_->createDeleteTombStone(hk));
   }
 }
 
@@ -1756,7 +1763,7 @@ CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
   auto eventResult = AllocatorApiResult::NOT_FOUND;
 
   if (nvmCache_) {
-    handle = nvmCache_->find(key);
+    handle = nvmCache_->find(HashedKey{key});
     eventResult = AllocatorApiResult::NOT_FOUND_IN_MEMORY;
   }
 

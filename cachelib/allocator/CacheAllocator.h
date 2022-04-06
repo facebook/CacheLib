@@ -1543,13 +1543,15 @@ class CacheAllocator : public CacheBase {
 
   // Removes an item from the access container and MM container.
   //
+  // @param hk               the hashed key for the item
   // @param it               Item to remove
   // @param tombstone        A tombstone for nvm::remove job created by
   //                         nvm::createDeleteTombStone, can be empty if nvm is
   //                         not enable, or removeFromNvm is false
   // @param removeFromNvm    if true clear key from nvm
   // @param recordApiEvent   should we record API event for this operation.
-  RemoveRes removeImpl(Item& it,
+  RemoveRes removeImpl(HashedKey hk,
+                       Item& it,
                        DeleteTombStoneGuard tombstone,
                        bool removeFromNvm = true,
                        bool recordApiEvent = true);
