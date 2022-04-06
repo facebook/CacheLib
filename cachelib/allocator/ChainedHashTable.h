@@ -272,7 +272,7 @@ class ChainedHashTable {
     }
 
     // Estimate bucketsPower and LocksPower based on cache entries.
-    void sizeBucketsPowerAndLocksPower(size_t cacheEntries) noexcept {
+    void sizeBucketsPowerAndLocksPower(size_t cacheEntries) {
       // The percentage of used buckets vs unused buckets is measured by a load
       // factor. For optimal performance, the load factor should not be more
       // than 60%.
