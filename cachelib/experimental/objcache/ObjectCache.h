@@ -98,6 +98,8 @@ class CacheObjectHandle {
   // underlying CacheAllocator directly with an ItemHandle
   const ItemHandle& viewItemHandle() const noexcept { return handle_; }
 
+  ItemHandle& viewItemHandle() { return handle_; }
+
   // Moves ownership into a regular item handle.
   ItemHandle releaseItemHandle() && {
     // Reset "pointer" since we're converting this into a regular item handle

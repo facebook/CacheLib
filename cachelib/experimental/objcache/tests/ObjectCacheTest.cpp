@@ -984,6 +984,7 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
     }
   });
   auto objcache = createCache(config);
+  const auto ttl = std::chrono::seconds(5);
 
   std::vector<folly::SemiFuture<
       std::pair<ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>>>
@@ -992,6 +993,13 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
     auto p = objcache->create<StrPromiseWrapper>(
         0 /* poolId */, "promise str", folly::SharedPromise<ObjCacheString*>{});
     objcache->insertOrReplace(p);
+
+    EXPECT_EQ(0, p.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(0, p.viewItemHandle()->getConfiguredTTL().count());
+    // extend ttl
+    p.viewItemHandle()->extendTTL(ttl);
+    EXPECT_NE(0, p.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, p.viewItemHandle()->getConfiguredTTL());
 
     auto sp = std::move(p).toSharedPtr();
 
@@ -1020,6 +1028,9 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
 
   {
     auto p = objcache->find<StrPromiseWrapper>("promise str");
+
+    EXPECT_NE(0, p.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, p.viewItemHandle()->getConfiguredTTL());
 
     // Create a string backed by the same allocator
     ObjCacheString* str =
