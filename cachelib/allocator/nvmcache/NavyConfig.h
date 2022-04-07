@@ -25,10 +25,6 @@
 
 namespace facebook {
 namespace cachelib {
-namespace cachebench {
-template <typename Allocator>
-class Cache;
-}
 namespace navy {
 /**
  * RandomAPConfig provides APIs for users to configure one of the admission
@@ -319,12 +315,6 @@ class BlockCacheConfig {
   bool isPreciseRemove() const { return preciseRemove_; }
 
  private:
-  // only for cachebench configuration
-  void setNumInMemBuffers(uint32_t numInMemBuffers) noexcept {
-    numInMemBuffers_ = numInMemBuffers;
-  }
-
- private:
   // Whether Navy BlockCache will use region-based LRU eviction policy.
   bool lru_{true};
   // The ratio of segments for segmented FIFO eviction policy.
@@ -346,8 +336,6 @@ class BlockCacheConfig {
   bool preciseRemove_{false};
 
   friend class NavyConfig;
-  template <typename Allocator>
-  friend class cachebench::Cache;
 };
 
 /**
