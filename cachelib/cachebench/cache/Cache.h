@@ -219,6 +219,8 @@ class Cache {
     return !isRamOnly() && !cache_->isNvmCacheEnabled();
   }
 
+  bool hasNvmCacheWarmedUp() const;
+
   // enables consistency checking for the cache. This should be done before
   // any find/insert/remove is called.
   //

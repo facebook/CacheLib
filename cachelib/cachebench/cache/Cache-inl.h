@@ -559,6 +559,16 @@ Stats Cache<Allocator>::getStats() const {
 }
 
 template <typename Allocator>
+bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
+  const auto& nvmStats = cache_->getNvmCacheStatsMap();
+  const auto it = nvmStats.find("navy_bc_evicted");
+  if (it == nvmStats.end()) {
+    return false;
+  }
+  return it->second > 0;
+}
+
+template <typename Allocator>
 void Cache<Allocator>::clearCache(uint64_t errorLimit) {
   if (config_.enableItemDestructorCheck) {
     // all items leftover in the cache must be removed

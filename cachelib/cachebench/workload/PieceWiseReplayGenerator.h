@@ -76,6 +76,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
+  void setNvmCacheWarmedUp() override {
+    pieceCacheAdapter_.setNvmCacheWarmedUp();
+  }
+
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const override {
     pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
   }

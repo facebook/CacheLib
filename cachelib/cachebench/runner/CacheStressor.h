@@ -39,6 +39,8 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+constexpr uint32_t kNvmCacheWarmUpCheckRate = 1000;
+
 // Implementation of stressor that uses a workload generator to stress an
 // instance of the cache.  All item's value in CacheStressor follows CacheValue
 // schema, which contains a few integers for sanity checks use. So it is invalid
@@ -469,6 +471,11 @@ class CacheStressor : public Stressor {
       if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
         continue;
       }
+      // TODO: allow callback on nvm eviction instead of checking it repeatedly.
+      if (config_.checkNvmCacheWarmUp &&
+          folly::Random::oneIn(kNvmCacheWarmUpCheckRate)) {
+        checkNvmCacheWarmedUp();
+      }
       return req;
     }
   }
@@ -478,6 +485,21 @@ class CacheStressor : public Stressor {
       return;
     }
     rateLimiter_->consumeWithBorrowAndWait(1);
+  }
+
+  void checkNvmCacheWarmedUp() {
+    if (hasNvmCacheWarmedUp_) {
+      // already notified, nothing to do
+      return;
+    }
+    if (cache_->isNvmCacheDisabled()) {
+      return;
+    }
+    if (cache_->hasNvmCacheWarmedUp()) {
+      wg_->setNvmCacheWarmedUp();
+      XLOG(INFO) << "NVM cache has been warmed up";
+      hasNvmCacheWarmedUp_ = true;
+    }
   }
 
   const StressorConfig config_; // config for the stress run
@@ -517,6 +539,9 @@ class CacheStressor : public Stressor {
 
   // Token bucket used to limit the operations per second.
   std::unique_ptr<folly::BasicTokenBucket<>> rateLimiter_;
+
+  // Whether flash cache has been warmed up
+  bool hasNvmCacheWarmedUp_{false};
 };
 } // namespace cachebench
 } // namespace cachelib

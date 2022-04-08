@@ -201,6 +201,11 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
       renderStatsInternal(extraStatsV_[fieldStatIdx], elapsedSecs, out);
     }
   }
+
+  if (hasNvmCacheWarmedUp_) {
+    out << "= Overall stats after warmup =" << std::endl;
+    renderStatsInternal(statsAfterWarmUp_, elapsedSecs, out);
+  }
 }
 
 void PieceWiseCacheStats::renderStats(uint64_t /* elapsedTimeNs */,

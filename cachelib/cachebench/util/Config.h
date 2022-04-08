@@ -190,6 +190,10 @@ struct StressorConfig : public JSONConfig {
   // If enabled, stressor will verify operations' results are consistent.
   bool checkConsistency{false};
 
+  // If enabled, stressor will check whether nvm cache has been warmed up and
+  // output stats after warmup.
+  bool checkNvmCacheWarmUp{false};
+
   uint64_t numOps{0};     // operation per thread
   uint64_t numThreads{0}; // number of threads that will run
   uint64_t numKeys{0};    // number of keys that will be used

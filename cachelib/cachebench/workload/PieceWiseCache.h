@@ -156,9 +156,14 @@ class PieceWiseCacheStats {
 
   void renderWindowStats(double elapsedSecs, std::ostream& out) const;
 
+  void setNvmCacheWarmedUp() { hasNvmCacheWarmedUp_ = true; }
+
  private:
   // Overall hit rate stats
   InternalStats stats_;
+
+  // Stats after cache has been warmed up
+  InternalStats statsAfterWarmUp_;
 
   // The stats for the data since the last time we rendered.
   mutable InternalStats lastWindowStats_;
@@ -176,12 +181,17 @@ class PieceWiseCacheStats {
   // Latency stats
   mutable util::PercentileStats reqLatencyStats_;
 
+  bool hasNvmCacheWarmedUp_{false};
+
   template <typename F, typename... Args>
   void recordStats(F& func,
                    const std::vector<std::string>& fields,
                    Args... args) {
     func(stats_, args...);
     func(lastWindowStats_, args...);
+    if (hasNvmCacheWarmedUp_) {
+      func(statsAfterWarmUp_, args...);
+    }
 
     for (const auto& [fieldNum, statM] : extraStatsIndexM_) {
       XDCHECK_LT(fieldNum, fields.size());
@@ -301,6 +311,8 @@ class PieceWiseCacheAdapter {
   bool processReq(PieceWiseReqWrapper& rw, OpResultType result);
 
   const PieceWiseCacheStats& getStats() const { return stats_; }
+
+  void setNvmCacheWarmedUp() { stats_.setNvmCacheWarmedUp(); }
 
  private:
   // Called when rw is piecewise cached. The method updates rw to the next
