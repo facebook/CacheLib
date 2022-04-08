@@ -8,7 +8,7 @@ An item is an object stored in cache. In addition to storing the payload (the
 actual data), it also stores metadata: intrusive hooks, reference count, flags,
 creation time, and expiration time. An item is assigned a `key` that
 cachelib API uses to find the item. For more information, see
-[Items and Handle](Item_and_Handle).
+[Item and Handle](Item_and_Handle).
 
 
 **WriteHandle and ReadHandle**
