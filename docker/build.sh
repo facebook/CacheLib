@@ -27,7 +27,7 @@ TAG="${OS}-${OS_VER}-${IMG_VER}"
 IMAGE_NAME=${CONTAINER_REG}:${TAG}
 CONTAINER_NAME=CacheLib-${OS}-${OS_VER}
 WORKDIR=/CacheLib  # working dir within Docker container
-SCRIPTSDIR=${WORKDIR}/utils/docker
+SCRIPTSDIR=${WORKDIR}/docker
 
 if [[ -z "${OS}" || -z "${OS_VER}" ]]; then
 	echo "ERROR: The variables OS and OS_VER have to be set " \
@@ -94,3 +94,4 @@ docker run --privileged=true --name=${CONTAINER_NAME} -i \
 	-v /etc/localtime:/etc/localtime \
 	-w ${SCRIPTSDIR} \
 	${IMAGE_NAME} ${COMMAND}
+

@@ -1,0 +1,47 @@
+name: build-cachelib-docker
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-cachelib-docker:
+    name: "CentOS/latest - Build CacheLib with all dependencies"
+    runs-on: ubuntu-latest
+    env:
+      REPO:           cachelib
+      GITHUB_REPO:    pmem/CacheLib
+      CONTAINER_REG:  ghcr.io/pmem/cachelib
+      CONTAINER_REG_USER:   ${{ secrets.GH_CR_USER }}
+      CONTAINER_REG_PASS:   ${{ secrets.GH_CR_PAT }}
+      FORCE_IMAGE_ACTION:   ${{ secrets.FORCE_IMAGE_ACTION }}
+      HOST_WORKDIR:         ${{ github.workspace }}
+      WORKDIR:              docker
+      IMG_VER:              devel
+    strategy:
+      matrix:
+        CONFIG: ["OS=centos OS_VER=8streams PUSH_IMAGE=1"]
+    steps:
+      - name: "System Information"
+        run: |
+          echo === uname ===
+          uname -a
+          echo === /etc/os-release ===
+          cat /etc/os-release
+          echo === df -hl ===
+          df -hl
+          echo === free -h ===
+          free -h
+          echo === top ===
+          top -b -n1 -1 -Eg || timeout 1 top -b -n1
+          echo === env ===
+          env
+          echo === gcc -v ===
+          gcc -v
+      - name: "checkout sources"
+        uses: actions/checkout@v2
+
+      - name: Pull the image or rebuild and push it
+        run: cd $WORKDIR && ${{ matrix.CONFIG }} ./pull-or-rebuild-image.sh $FORCE_IMAGE_ACTION
+
+      - name: Run the build
+        run: cd $WORKDIR && ${{ matrix.CONFIG }} ./build.sh
