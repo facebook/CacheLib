@@ -519,7 +519,7 @@ class CacheAllocator : public CacheBase {
   // @param key   the key for lookup
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle peek(Key key);
+  FOLLY_ALWAYS_INLINE ReadHandle peek(Key key);
 
   // Mark an item that was fetched through peek as useful. This is useful when
   // users want to look into the cache and only mark items as useful when they
@@ -1114,9 +1114,9 @@ class CacheAllocator : public CacheBase {
   // Inspects the cache without changing its state.
   //
   // @param key     for the cache item
-  // @return  std::pair<ItemHandle, ItemHandle> the first represents the state
+  // @return  std::pair<ReadHandle, ReadHandle> the first represents the state
   //          in the RAM and the second is a copy of the state in NVM
-  std::pair<ItemHandle, ItemHandle> inspectCache(Key key);
+  std::pair<ReadHandle, ReadHandle> inspectCache(Key key);
 
   // blocks until the inflight operations are flushed to nvmcache. Used for
   // benchmarking when we want to load up the cache first with some data and
@@ -1722,7 +1722,7 @@ class CacheAllocator : public CacheBase {
   // Helper function to remove a item if expired.
   //
   // @return true if it item expire and removed successfully.
-  bool removeIfExpired(const ItemHandle& handle);
+  bool removeIfExpired(const ReadHandle& handle);
 
   // exposed for the Reaper to iterate through the memory and find items to
   // reap under the super charged mode. This is faster if there are lots of

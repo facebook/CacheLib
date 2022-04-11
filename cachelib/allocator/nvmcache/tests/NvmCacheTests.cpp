@@ -1056,7 +1056,7 @@ TEST_F(NvmCacheTest, ChainedItemsModifyAccessible) {
           << item.toString();
     };
 
-    auto verifyChainedAllcos = [&](const ItemHandle& hdl, uint32_t nChained) {
+    auto verifyChainedAllcos = [&](const ReadHandle& hdl, uint32_t nChained) {
       auto allocs = cache.viewAsChainedAllocs(hdl);
       verifyItem(allocs.getParentItem(), vals[0]);
 

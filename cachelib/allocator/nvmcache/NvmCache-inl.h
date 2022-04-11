@@ -264,7 +264,7 @@ void NvmCache<C>::evictCB(HashedKey hk,
     auto lock = getItemDestructorLock(hk);
     ItemHandle hdl;
     try {
-      hdl = cache_.peek(hk.key());
+      hdl = ItemHandle{cache_.peek(hk.key())};
     } catch (const exception::RefcountOverflow& ex) {
       // TODO(zixuan) item exists in DRAM, but we can't obtain the handle
       // and mark it as NvmEvicted. In this scenario, there are two

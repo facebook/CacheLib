@@ -29,6 +29,7 @@ namespace tests {
 using AllocatorT = LruAllocator;
 using Item = AllocatorT::Item;
 using ItemHandle = AllocatorT::ItemHandle;
+using ReadHandle = AllocatorT::ReadHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
 using DestructorData = typename AllocatorT::DestructorData;
 using ChainedItemIter = AllocatorT::ChainedItemIter;
@@ -111,7 +112,7 @@ class NvmCacheTest : public testing::Test {
     }
   }
 
-  std::pair<ItemHandle, ItemHandle> inspectCache(folly::StringPiece key) {
+  std::pair<ReadHandle, ReadHandle> inspectCache(folly::StringPiece key) {
     return cache_->inspectCache(key);
   }
 

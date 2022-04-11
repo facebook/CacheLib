@@ -32,7 +32,7 @@ struct ReaperAPIWrapper {
     return cache.getRegularPoolIds();
   }
 
-  static bool removeIfExpired(C& cache, const typename C::ItemHandle& handle) {
+  static bool removeIfExpired(C& cache, const typename C::ReadHandle& handle) {
     return cache.removeIfExpired(handle);
   }
 

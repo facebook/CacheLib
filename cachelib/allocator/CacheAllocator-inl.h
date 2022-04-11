@@ -1656,17 +1656,16 @@ CacheAllocator<CacheTrait>::getMMContainer(PoolId pid,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
-  auto handle = findInternal(key);
-  return handle;
+  return findInternal(key);
 }
 
 template <typename CacheTrait>
-std::pair<typename CacheAllocator<CacheTrait>::ItemHandle,
-          typename CacheAllocator<CacheTrait>::ItemHandle>
+std::pair<typename CacheAllocator<CacheTrait>::ReadHandle,
+          typename CacheAllocator<CacheTrait>::ReadHandle>
 CacheAllocator<CacheTrait>::inspectCache(typename Item::Key key) {
-  std::pair<ItemHandle, ItemHandle> res;
+  std::pair<ReadHandle, ReadHandle> res;
   res.first = findInternal(key);
   res.second = nvmCache_ ? nvmCache_->peek(key) : nullptr;
   return res;
@@ -2805,7 +2804,7 @@ CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::removeIfExpired(const ItemHandle& handle) {
+bool CacheAllocator<CacheTrait>::removeIfExpired(const ReadHandle& handle) {
   if (!handle) {
     return false;
   }
