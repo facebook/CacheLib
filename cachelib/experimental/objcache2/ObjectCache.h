@@ -28,6 +28,7 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/Time.h"
+#include "cachelib/experimental/objcache2/ObjectCacheBase.h"
 
 namespace facebook {
 namespace cachelib {
@@ -62,7 +63,7 @@ struct ObjectCacheConfig {
   bool placeHolderDisabled{false};
 };
 
-class ObjectCache {
+class ObjectCache : public ObjectCacheBase {
  private:
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
@@ -72,7 +73,8 @@ class ObjectCache {
 
  public:
   explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
-      : l1NumShards_{config.l1NumShards} {}
+      : l1NumShards_{config.l1NumShards},
+        l1EntriesLimit_(config.l1EntriesLimit) {}
 
   template <typename T>
   static std::unique_ptr<ObjectCache> create(ObjectCacheConfig config);
@@ -107,14 +109,18 @@ class ObjectCache {
 
   void remove(folly::StringPiece key);
 
-  void getCounters(
-      std::function<void(folly::StringPiece, uint64_t)> visitor) const;
+  void getObjectCacheCounters(
+      std::function<void(folly::StringPiece, uint64_t)> visitor) const override;
 
   uint64_t getNumEntries() const {
     return l1Cache_->getGlobalCacheStats().numItems;
   }
 
   LruAllocator& getL1Cache() { return *l1Cache_; }
+
+ protected:
+  // serialize cache allocator config for exporting to Scuba
+  std::map<std::string, std::string> serializeConfigParams() const override;
 
  private:
   template <typename T>
@@ -125,7 +131,9 @@ class ObjectCache {
   // Number of shards (LRUs) to lessen the contention on L1 cache
   const size_t l1NumShards_{};
 
-  std::unique_ptr<LruAllocator> l1Cache_;
+  // Above this many entries, L1 will start evicting
+  const size_t l1EntriesLimit_{};
+
   // They take up space so we can control exact number of items in cache
   std::vector<LruAllocator::WriteHandle> placeholders_;
 
