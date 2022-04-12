@@ -194,7 +194,8 @@ struct ReadHandleImpl {
 
   WriteHandleImpl<T> toWriteHandle() && {
     XDCHECK_NE(alloc_, nullptr);
-    alloc_->invalidateNvm(*it_);
+    XDCHECK_NE(getInternal(), nullptr);
+    alloc_->invalidateNvm(*getInternal());
     return WriteHandleImpl<T>{std::move(*this)};
   }
 
@@ -244,8 +245,8 @@ struct ReadHandleImpl {
   bool isWriteHandle() const { return false; }
 
  protected:
-  // accessor. Calling get on handle with isReady() == false blocks the thread
-  // until the handle is ready.
+  // accessor. Calling getInternal() on handle with isReady() == false blocks
+  // the thread until the handle is ready.
   FOLLY_ALWAYS_INLINE Item* getInternal() const noexcept {
     return waitContext_ ? waitContext_->get() : it_;
   }

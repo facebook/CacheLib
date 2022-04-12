@@ -746,6 +746,17 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_TRUE(isConst(handle3->getMemory()));
       ASSERT_EQ(handle3.isWriteHandle(), false);
     }
+
+    {
+      // test upgrade function with waitContext
+      ReadHandle handle = detail::createHandleWithWaitContextForTest<
+          typename AllocatorT::WriteHandle, AllocatorT>(alloc);
+      auto waitContext = detail::getWaitContextForTest(handle);
+      // This is like doing a "clone" and setting it into wait context
+      waitContext->set(alloc.find("key"));
+      auto handle2 = std::move(handle).toWriteHandle();
+      ASSERT_EQ(handle2.isWriteHandle(), true);
+    }
   }
 
   // make some allocations without evictions and ensure that we are able to
