@@ -43,7 +43,6 @@ TEST_F(MM2QTest, RemoveWithSmallQueues) {
 
   // trying to remove through iterator should work as expected.
   // no need of iter++ since remove will do that.
-  verifyIterationVariants(c);
   for (auto iter = c.getEvictionIterator(); iter;) {
     auto& node = *iter;
     ASSERT_TRUE(node.isInMMContainer());
@@ -55,7 +54,6 @@ TEST_F(MM2QTest, RemoveWithSmallQueues) {
       ASSERT_NE((*iter).getId(), node.getId());
     }
   }
-  verifyIterationVariants(c);
 
   ASSERT_EQ(c.getStats().size, 0);
   for (const auto& node : nodes) {
@@ -77,9 +75,9 @@ TEST_F(MM2QTest, RecordAccessWrites) {
   // ensure that nodes are updated in lru with access mode write (read) only
   // when updateOnWrite (updateOnRead) is enabled.
 
-  auto testWithAccessMode = [this](Container& c_, const Nodes& nodes_,
-                                   AccessMode mode, bool updateOnWrites,
-                                   bool updateOnReads) {
+  auto testWithAccessMode = [](Container& c_, const Nodes& nodes_,
+                               AccessMode mode, bool updateOnWrites,
+                               bool updateOnReads) {
     // accessing must at least update the update time. to do so, first set the
     // updateTime of the node to be in the past.
     const uint32_t timeInPastStart = 100;
@@ -97,7 +95,6 @@ TEST_F(MM2QTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderPrev.push_back(itr->getId());
     }
-    verifyIterationVariants(c_);
 
     int nAccess = 1000;
     std::set<int> accessedNodes;
@@ -125,7 +122,6 @@ TEST_F(MM2QTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderCurr.push_back(itr->getId());
     }
-    verifyIterationVariants(c_);
 
     if ((mode == AccessMode::kWrite && updateOnWrites) ||
         (mode == AccessMode::kRead && updateOnReads)) {
@@ -213,7 +209,6 @@ TEST_F(MM2QTest, RecordAccessWrites) {
 template <typename MMType>
 void MMTypeTest<MMType>::testIterate(std::vector<std::unique_ptr<Node>>& nodes,
                                      Container& c) {
-  verifyIterationVariants(c);
   auto it2q = c.getEvictionIterator();
   auto it = nodes.begin();
   while (it2q) {
@@ -228,7 +223,6 @@ void MMTypeTest<MMType>::testMatch(std::string expected,
                                    MMTypeTest<MMType>::Container& c) {
   int index = -1;
   std::string actual;
-  verifyIterationVariants(c);
   auto it2q = c.getEvictionIterator();
   while (it2q) {
     ++index;
@@ -698,41 +692,6 @@ TEST_F(MM2QTest, TailTrackingEnabledCheck) {
     newConfig.addExtraConfig(2);
 
     EXPECT_THROW(c.setConfig(newConfig), std::invalid_argument);
-  }
-}
-
-TEST_F(MM2QTest, CombinedLockingIteration) {
-  MM2QTest::Config config{};
-  config.useCombinedLockForIterators = true;
-  config.lruRefreshTime = 0;
-  Container c(config, {});
-  std::vector<std::unique_ptr<Node>> nodes;
-  createSimpleContainer(c, nodes);
-
-  // access to move items from cold to warm
-  for (auto& node : nodes) {
-    ASSERT_TRUE(c.recordAccess(*node, AccessMode::kRead));
-  }
-
-  // trying to remove through iterator should work as expected.
-  // no need of iter++ since remove will do that.
-  verifyIterationVariants(c);
-  for (auto iter = c.getEvictionIterator(); iter;) {
-    auto& node = *iter;
-    ASSERT_TRUE(node.isInMMContainer());
-
-    // this will move the iter.
-    c.remove(iter);
-    ASSERT_FALSE(node.isInMMContainer());
-    if (iter) {
-      ASSERT_NE((*iter).getId(), node.getId());
-    }
-  }
-  verifyIterationVariants(c);
-
-  ASSERT_EQ(c.getStats().size, 0);
-  for (const auto& node : nodes) {
-    ASSERT_FALSE(node->isInMMContainer());
   }
 }
 } // namespace cachelib

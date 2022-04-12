@@ -108,7 +108,7 @@ class NvmCacheTest : public testing::Test {
   void pushToNvmCacheFromRamForTesting(WriteHandle& handle) {
     auto nvmCache = getNvmCache();
     if (nvmCache) {
-      nvmCache->put(handle, nvmCache->createPutToken(handle->getKey()));
+      nvmCache->put(*handle, nvmCache->createPutToken(handle->getKey()));
     }
   }
 
@@ -127,7 +127,7 @@ class NvmCacheTest : public testing::Test {
   }
 
   std::unique_ptr<NvmItem> makeNvmItem(const WriteHandle& handle) {
-    return getNvmCache()->makeNvmItem(handle);
+    return getNvmCache()->makeNvmItem(*handle);
   }
 
   std::unique_ptr<folly::IOBuf> createItemAsIOBuf(folly::StringPiece key,

@@ -289,16 +289,6 @@ class CacheStressor : public Stressor {
       try {
         // at the end of every operation, throttle per the config.
         SCOPE_EXIT { throttleFn(); };
-          // detect refcount leaks when run in  debug mode.
-#ifndef NDEBUG
-        auto checkCnt = [](int cnt) {
-          if (cnt != 0) {
-            throw std::runtime_error(folly::sformat("Refcount leak {}", cnt));
-          }
-        };
-        checkCnt(cache_->getHandleCountForThread());
-        SCOPE_EXIT { checkCnt(cache_->getHandleCountForThread()); };
-#endif
         ++stats.ops;
 
         const auto pid = static_cast<PoolId>(opPoolDist(gen));

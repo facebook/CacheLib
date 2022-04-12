@@ -149,7 +149,6 @@ class MMTypeTest : public testing::Test {
   void testIterate(std::vector<std::unique_ptr<Node>>& nodes, Container& c);
   void testMatch(std::string expected, Container& c);
   size_t getListSize(const Container& c, typename MMType::LruType list);
-  void verifyIterationVariants(Container& c);
 };
 
 template <typename MMType>
@@ -188,7 +187,6 @@ void MMTypeTest<MMType>::testAddBasic(
   }
   EXPECT_EQ(foundNodes.size(), c.getStats().size);
   EXPECT_EQ(foundNodes.size(), c.size());
-  verifyIterationVariants(c);
 }
 
 template <typename MMType>
@@ -234,7 +232,6 @@ void MMTypeTest<MMType>::testRemoveBasic(Config config) {
   for (auto itr = c.getEvictionIterator(); itr; ++itr) {
     foundNodes.insert(itr->getId());
   }
-  verifyIterationVariants(c);
 
   for (const auto& node : removedNodes) {
     ASSERT_EQ(foundNodes.find(node->getId()), foundNodes.end());
@@ -252,7 +249,6 @@ void MMTypeTest<MMType>::testRemoveBasic(Config config) {
       ASSERT_NE((*iter).getId(), node.getId());
     }
   }
-  verifyIterationVariants(c);
 
   EXPECT_EQ(c.getStats().size, 0);
   EXPECT_EQ(c.size(), 0);
@@ -332,7 +328,6 @@ void MMTypeTest<MMType>::testSerializationBasic(Config config) {
         break;
       }
     }
-    verifyIterationVariants(c2);
     ASSERT_TRUE(foundNode);
     foundNode = false;
   }
@@ -347,29 +342,6 @@ size_t MMTypeTest<MMType>::getListSize(const Container& c,
     return c.lru_.getList(list).size();
   }
   throw std::invalid_argument("LruType not existing");
-}
-
-// Verifies that using getEvictionIterator and withEvictionIterator
-// yields the same elements, in the same order.
-template <typename MMType>
-void MMTypeTest<MMType>::verifyIterationVariants(Container& c) {
-  std::vector<Node*> nodes;
-  for (auto iter = c.getEvictionIterator(); iter; ++iter) {
-    nodes.push_back(&(*iter));
-  }
-
-  size_t i = 0;
-  c.withEvictionIterator([&nodes, &i](auto&& iter) {
-    while (iter) {
-      auto& node = *iter;
-      ASSERT_EQ(&node, nodes[i]);
-
-      ++iter;
-      ++i;
-    }
-
-    ASSERT_EQ(i, nodes.size());
-  });
 }
 } // namespace cachelib
 } // namespace facebook

@@ -364,6 +364,7 @@ class MMTinyLFU {
       Iterator(const Iterator&) = delete;
       Iterator& operator=(const Iterator&) = delete;
       Iterator(Iterator&&) noexcept = default;
+      Iterator& operator=(Iterator&&) noexcept = default;
 
       Iterator& operator++() noexcept {
         ++getIter();
@@ -407,11 +408,7 @@ class MMTinyLFU {
         mIter_.resetToBegin();
       }
 
-     protected:
-      // private because it's easy to misuse and cause deadlock for MMTinyLFU
-      Iterator& operator=(Iterator&&) noexcept = default;
-
-      // create an lru iterator
+     private:
       explicit Iterator(const Container<T, HookPtr>& c) noexcept;
 
       const ListIterator& getIter() const noexcept {

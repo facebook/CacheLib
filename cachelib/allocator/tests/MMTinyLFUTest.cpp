@@ -42,9 +42,9 @@ TEST_F(MMTinyLFUTest, RecordAccessWrites) {
   // ensure that nodes are updated in lru with access mode write (read) only
   // when updateOnWrite (updateOnRead) is enabled.
 
-  auto testWithAccessMode = [this](Container& c_, const Nodes& nodes_,
-                                   AccessMode mode, bool updateOnWrites,
-                                   bool updateOnReads) {
+  auto testWithAccessMode = [](Container& c_, const Nodes& nodes_,
+                               AccessMode mode, bool updateOnWrites,
+                               bool updateOnReads) {
     // accessing must at least update the update time. to do so, first set the
     // updateTime of the node to be in the past.
     const uint32_t timeInPastStart = 100;
@@ -62,7 +62,6 @@ TEST_F(MMTinyLFUTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderPrev.push_back(itr->getId());
     }
-    verifyIterationVariants(c_);
 
     int nAccess = 1000;
     std::set<int> accessedNodes;
@@ -90,7 +89,6 @@ TEST_F(MMTinyLFUTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderCurr.push_back(itr->getId());
     }
-    verifyIterationVariants(c_);
 
     if ((mode == AccessMode::kWrite && updateOnWrites) ||
         (mode == AccessMode::kRead && updateOnReads)) {
@@ -172,7 +170,6 @@ TEST_F(MMTinyLFUTest, TinyLFUBasic) {
 
   auto checkTlfuConfig = [&](Container& container, std::string expected,
                              std::string context) {
-    verifyIterationVariants(container);
     auto it = container.getEvictionIterator();
     std::string actual;
     while (it) {
