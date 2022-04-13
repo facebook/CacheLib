@@ -50,6 +50,9 @@ if (BUILD_TESTS)
   add_library (common_test_utils STATIC
     TestUtils.cpp
   )
+  target_link_libraries(common_test_utils PUBLIC
+    Folly::folly
+  )
   add_library (common_test_support OBJECT
     hothash/HotHashDetectorTest.cpp
     piecewise/GenericPiecesTest.cpp
