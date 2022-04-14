@@ -57,6 +57,11 @@ void ObjectCache::init(ObjectCacheConfig config) {
 
   l1Cache_ = std::make_unique<LruAllocator>(l1Config);
   size_t perPoolSize = l1Cache_->getCacheMemoryStats().cacheSize / l1NumShards_;
+  // pool size can't be smaller than slab size
+  perPoolSize = std::max(perPoolSize, Slab::kSize);
+  // num of pool need to be modified properly as well
+  l1NumShards_ = std::min(
+      l1NumShards_, l1Cache_->getCacheMemoryStats().cacheSize / perPoolSize);
   for (size_t i = 0; i < l1NumShards_; i++) {
     l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
   }

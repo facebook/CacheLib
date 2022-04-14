@@ -129,7 +129,7 @@ class ObjectCache : public ObjectCacheBase {
                                            uint32_t creationTime);
 
   // Number of shards (LRUs) to lessen the contention on L1 cache
-  const size_t l1NumShards_{};
+  size_t l1NumShards_{};
 
   // Above this many entries, L1 will start evicting
   const size_t l1EntriesLimit_{};
