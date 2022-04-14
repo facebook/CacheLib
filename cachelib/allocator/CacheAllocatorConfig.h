@@ -292,7 +292,7 @@ class CacheAllocatorConfig {
   // smaller than this will always be rejected by NvmAdmissionPolicy.
   CacheAllocatorConfig& setNvmAdmissionMinTTL(uint64_t ttl);
 
-  // skip promote children items in chained when parent fail to promote
+  // Skip promote children items in chained when parent fail to promote
   CacheAllocatorConfig& setSkipPromoteChildrenWhenParentFailed();
 
   // (deprecated) Disable cache eviction.
@@ -301,6 +301,10 @@ class CacheAllocatorConfig {
   [[deprecated]] CacheAllocatorConfig& deprecated_disableEviction();
 
   bool isEvictionDisabled() const noexcept { return disableEviction; }
+
+  // We will delay worker start until user explicitly calls
+  // CacheAllocator::startCacheWorkers()
+  CacheAllocatorConfig& setDelayCacheWorkersStart();
 
   // skip promote children items in chained when parent fail to promote
   bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
@@ -561,8 +565,12 @@ class CacheAllocatorConfig {
   // cache.
   uint64_t nvmAdmissionMinTTL{0};
 
-  // skip promote children items in chained when parent fail to promote
+  // Skip promote children items in chained when parent fail to promote
   bool skipPromoteChildrenWhenParentFailed{false};
+
+  // If true, we will delay worker start until user explicitly calls
+  // CacheAllocator::startCacheWorkers()
+  bool delayCacheWorkersStart{false};
 
   friend CacheT;
 
@@ -951,7 +959,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmAdmissionMinTTL(
   return *this;
 }
 
-// skip promote children items in chained when parent fail to promote
 template <typename T>
 CacheAllocatorConfig<T>&
 CacheAllocatorConfig<T>::setSkipPromoteChildrenWhenParentFailed() {
@@ -962,6 +969,12 @@ CacheAllocatorConfig<T>::setSkipPromoteChildrenWhenParentFailed() {
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::deprecated_disableEviction() {
   disableEviction = true;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDelayCacheWorkersStart() {
+  delayCacheWorkersStart = true;
   return *this;
 }
 

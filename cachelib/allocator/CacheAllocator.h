@@ -881,6 +881,11 @@ class CacheAllocator : public CacheBase {
   //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
   ShutDownStatus shutDown();
 
+  // No-op for workers that are already running. Typically user uses this in
+  // conjunction with `config.delayWorkerStart()` to avoid initialization
+  // ordering issues with user callback for cachelib's workers.
+  void startCacheWorkers();
+
   // Functions that stop existing ones (if any) and create new workers
 
   // start pool rebalancer

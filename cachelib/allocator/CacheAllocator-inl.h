@@ -197,7 +197,10 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
   }
   initStats();
   initNvmCache(dramCacheAttached);
-  initWorkers();
+
+  if (!config_.delayCacheWorkersStart) {
+    initWorkers();
+  }
 }
 
 template <typename CacheTrait>
@@ -226,19 +229,19 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initWorkers() {
-  if (config_.poolResizingEnabled()) {
+  if (config_.poolResizingEnabled() && !poolResizer_) {
     startNewPoolResizer(config_.poolResizeInterval,
                         config_.poolResizeSlabsPerIter,
                         config_.poolResizeStrategy);
   }
 
-  if (config_.poolRebalancingEnabled()) {
+  if (config_.poolRebalancingEnabled() && !poolRebalancer_) {
     startNewPoolRebalancer(config_.poolRebalanceInterval,
                            config_.defaultPoolRebalanceStrategy,
                            config_.poolRebalancerFreeAllocThreshold);
   }
 
-  if (config_.memMonitoringEnabled()) {
+  if (config_.memMonitoringEnabled() && !memMonitor_) {
     if (!isOnShm_) {
       throw std::invalid_argument(
           "Memory monitoring is not supported for cache on heap. It is "
@@ -250,11 +253,11 @@ void CacheAllocator<CacheTrait>::initWorkers() {
                        config_.poolAdviseStrategy);
   }
 
-  if (config_.itemsReaperEnabled()) {
+  if (config_.itemsReaperEnabled() && !reaper_) {
     startNewReaper(config_.reaperInterval, config_.reaperConfig);
   }
 
-  if (config_.poolOptimizerEnabled()) {
+  if (config_.poolOptimizerEnabled() && !poolOptimizer_) {
     startNewPoolOptimizer(config_.regularPoolOptimizeInterval,
                           config_.compactCacheOptimizeInterval,
                           config_.poolOptimizeStrategy,
@@ -3352,6 +3355,11 @@ bool CacheAllocator<CacheTrait>::autoResizeEnabledForPool(PoolId pid) const {
     // by default all regular pools participate in auto resizing
     return true;
   }
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::startCacheWorkers() {
+  initWorkers();
 }
 
 template <typename CacheTrait>
