@@ -194,6 +194,14 @@ module.exports = {
         },
         {
           type: 'category',
+          label: 'Object Cache',
+          collapsed: true,
+          items: [
+            'facebook/Object_Cache/Object_Cache_Decision_Guide',
+          ]
+        },
+        {
+          type: 'category',
           label: 'CacheLib Developers',
           collapsed: true,
           items: [
