@@ -19,8 +19,9 @@ namespace facebook {
 namespace cachelib {
 namespace objcache2 {
 
+template <typename CacheTrait>
 template <typename T>
-void ObjectCache::init(ObjectCacheConfig config) {
+void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
   auto cacheSize = config.l1CacheSize;
   if (cacheSize == 0) {
     // compute the approximate cache size using the l1EntriesLimit and
@@ -55,15 +56,17 @@ void ObjectCache::init(ObjectCacheConfig config) {
     };
   });
 
-  l1Cache_ = std::make_unique<LruAllocator>(l1Config);
-  size_t perPoolSize = l1Cache_->getCacheMemoryStats().cacheSize / l1NumShards_;
+  this->l1Cache_ = std::make_unique<LruAllocator>(l1Config);
+  size_t perPoolSize =
+      this->l1Cache_->getCacheMemoryStats().cacheSize / l1NumShards_;
   // pool size can't be smaller than slab size
   perPoolSize = std::max(perPoolSize, Slab::kSize);
   // num of pool need to be modified properly as well
-  l1NumShards_ = std::min(
-      l1NumShards_, l1Cache_->getCacheMemoryStats().cacheSize / perPoolSize);
+  l1NumShards_ =
+      std::min(l1NumShards_,
+               this->l1Cache_->getCacheMemoryStats().cacheSize / perPoolSize);
   for (size_t i = 0; i < l1NumShards_; i++) {
-    l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
+    this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
   }
 
   if (!config.placeHolderDisabled) {
@@ -87,17 +90,20 @@ void ObjectCache::init(ObjectCacheConfig config) {
   }
 }
 
+template <typename CacheTrait>
 template <typename T>
-std::unique_ptr<ObjectCache> ObjectCache::create(ObjectCacheConfig config) {
+std::unique_ptr<ObjectCache<CacheTrait>> ObjectCache<CacheTrait>::create(
+    ObjectCacheConfig config) {
   auto obj = std::make_unique<ObjectCache>(InternalConstructor(), config);
-  obj->init<T>(std::move(config));
+  obj->template init<T>(std::move(config));
   return obj;
 }
 
+template <typename CacheTrait>
 template <typename T>
-std::shared_ptr<const T> ObjectCache::find(folly::StringPiece key) {
+std::shared_ptr<const T> ObjectCache<CacheTrait>::find(folly::StringPiece key) {
   lookups_.inc();
-  auto found = l1Cache_->find(key);
+  auto found = this->l1Cache_->find(key);
   if (!found) {
     return nullptr;
   }
@@ -109,10 +115,12 @@ std::shared_ptr<const T> ObjectCache::find(folly::StringPiece key) {
   return std::shared_ptr<const T>(*ptrPtr, std::move(deleter));
 }
 
+template <typename CacheTrait>
 template <typename T>
-std::shared_ptr<T> ObjectCache::findToWrite(folly::StringPiece key) {
+std::shared_ptr<T> ObjectCache<CacheTrait>::findToWrite(
+    folly::StringPiece key) {
   lookups_.inc();
-  auto found = l1Cache_->findToWrite(key);
+  auto found = this->l1Cache_->findToWrite(key);
   if (!found) {
     return nullptr;
   }
@@ -137,8 +145,9 @@ std::shared_ptr<T> ObjectCache::findToWrite(folly::StringPiece key) {
 //        is already out of refcounts.
 // @return a pair of allocation status and shared_ptr of newly inserted
 // object.
+template <typename CacheTrait>
 template <typename T>
-std::pair<bool, std::shared_ptr<T>> ObjectCache::insertOrReplace(
+std::pair<bool, std::shared_ptr<T>> ObjectCache<CacheTrait>::insertOrReplace(
     folly::StringPiece key,
     std::unique_ptr<T> object,
     uint32_t ttlSecs,
@@ -154,7 +163,7 @@ std::pair<bool, std::shared_ptr<T>> ObjectCache::insertOrReplace(
   T* ptr = object.release();
   *handle->template getMemoryAs<T*>() = ptr;
 
-  auto replaced = l1Cache_->insertOrReplace(handle);
+  auto replaced = this->l1Cache_->insertOrReplace(handle);
 
   if (replaced) {
     replaces_.inc();
@@ -172,16 +181,50 @@ std::pair<bool, std::shared_ptr<T>> ObjectCache::insertOrReplace(
   return {true, std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
+template <typename CacheTrait>
 template <typename T>
-LruAllocator::WriteHandle ObjectCache::allocateFromL1(folly::StringPiece key,
-                                                      uint32_t ttl,
-                                                      uint32_t creationTime) {
+typename CacheTrait::WriteHandle ObjectCache<CacheTrait>::allocateFromL1(
+    folly::StringPiece key, uint32_t ttl, uint32_t creationTime) {
   PoolId poolId = 0;
   if (l1NumShards_ > 1) {
     auto hash = cachelib::MurmurHash2{}(key.data(), key.size());
     poolId = static_cast<PoolId>(hash % l1NumShards_);
   }
-  return l1Cache_->allocate(poolId, key, sizeof(T*), ttl, creationTime);
+  return this->l1Cache_->allocate(poolId, key, sizeof(T*), ttl, creationTime);
+}
+
+template <typename CacheTrait>
+ObjectCache<CacheTrait>::~ObjectCache() {
+  for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
+       ++itr) {
+    this->l1Cache_->remove(itr.asHandle());
+  }
+}
+
+template <typename CacheTrait>
+void ObjectCache<CacheTrait>::remove(folly::StringPiece key) {
+  removes_.inc();
+  this->l1Cache_->remove(key);
+}
+
+template <typename CacheTrait>
+void ObjectCache<CacheTrait>::getObjectCacheCounters(
+    std::function<void(folly::StringPiece, uint64_t)> visitor) const {
+  visitor("objcache.lookups", lookups_.get());
+  visitor("objcache.lookups.l1_hits", succL1Lookups_.get());
+  visitor("objcache.inserts", inserts_.get());
+  visitor("objcache.inserts.errors", insertErrors_.get());
+  visitor("objcache.replaces", replaces_.get());
+  visitor("objcache.removes", removes_.get());
+  visitor("objcache.evictions", evictions_.get());
+}
+
+template <typename CacheTrait>
+std::map<std::string, std::string>
+ObjectCache<CacheTrait>::serializeConfigParams() const {
+  auto config = this->l1Cache_->serializeConfigParams();
+  config["l1EntriesLimit"] = std::to_string(l1EntriesLimit_);
+  return config;
 }
 
 } // namespace objcache2

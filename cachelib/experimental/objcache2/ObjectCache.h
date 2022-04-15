@@ -63,7 +63,8 @@ struct ObjectCacheConfig {
   bool placeHolderDisabled{false};
 };
 
-class ObjectCache : public ObjectCacheBase {
+template <typename CacheTrait>
+class ObjectCache : public ObjectCacheBase<CacheTrait> {
  private:
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
@@ -77,7 +78,8 @@ class ObjectCache : public ObjectCacheBase {
         l1EntriesLimit_(config.l1EntriesLimit) {}
 
   template <typename T>
-  static std::unique_ptr<ObjectCache> create(ObjectCacheConfig config);
+  static std::unique_ptr<ObjectCache<CacheTrait>> create(
+      ObjectCacheConfig config);
 
   ~ObjectCache();
 
@@ -113,10 +115,10 @@ class ObjectCache : public ObjectCacheBase {
       std::function<void(folly::StringPiece, uint64_t)> visitor) const override;
 
   uint64_t getNumEntries() const {
-    return l1Cache_->getGlobalCacheStats().numItems;
+    return this->l1Cache_->getGlobalCacheStats().numItems;
   }
 
-  LruAllocator& getL1Cache() { return *l1Cache_; }
+  CacheTrait& getL1Cache() { return *this->l1Cache_; }
 
  protected:
   // serialize cache allocator config for exporting to Scuba
@@ -124,9 +126,9 @@ class ObjectCache : public ObjectCacheBase {
 
  private:
   template <typename T>
-  LruAllocator::WriteHandle allocateFromL1(folly::StringPiece key,
-                                           uint32_t ttl,
-                                           uint32_t creationTime);
+  typename CacheTrait::WriteHandle allocateFromL1(folly::StringPiece key,
+                                                  uint32_t ttl,
+                                                  uint32_t creationTime);
 
   // Number of shards (LRUs) to lessen the contention on L1 cache
   size_t l1NumShards_{};
@@ -135,7 +137,7 @@ class ObjectCache : public ObjectCacheBase {
   const size_t l1EntriesLimit_{};
 
   // They take up space so we can control exact number of items in cache
-  std::vector<LruAllocator::WriteHandle> placeholders_;
+  std::vector<typename CacheTrait::WriteHandle> placeholders_;
 
   TLCounter evictions_{};
   TLCounter lookups_;

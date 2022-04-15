@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/experimental/objcache2/ObjectCache.h"
 
 namespace facebook {
@@ -17,7 +18,7 @@ struct Foo {
 TEST(ObjectCache, Simple) {
   ObjectCacheConfig config;
   config.l1EntriesLimit = 10'000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto found1 = objcache->find<Foo>("Foo");
   EXPECT_EQ(nullptr, found1);
@@ -43,7 +44,7 @@ TEST(ObjectCache, Simple) {
 TEST(ObjectCache, Expiration) {
   ObjectCacheConfig config;
   config.l1EntriesLimit = 10'000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto foo = std::make_unique<Foo>();
   foo->a = 1;
@@ -66,7 +67,7 @@ TEST(ObjectCache, Expiration) {
 TEST(ObjectCache, Replace) {
   ObjectCacheConfig config;
   config.l1EntriesLimit = 10'000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto foo1 = std::make_unique<Foo>();
   foo1->a = 1;
@@ -104,7 +105,7 @@ TEST(ObjectCache, Replace) {
 TEST(ObjectCache, Eviction) {
   ObjectCacheConfig config;
   config.l1EntriesLimit = 1024;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   for (int i = 0; i < 1025; i++) {
     auto foo = std::make_unique<Foo>();
@@ -124,7 +125,7 @@ TEST(ObjectCache, Multithread_Replace) {
   // threads are safe.
   ObjectCacheConfig config;
   config.l1EntriesLimit = 10'000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto runReplaceOps = [&] {
     for (int i = 0; i < 2000; i++) {
@@ -149,7 +150,7 @@ TEST(ObjectCache, Multithread_Eviction) {
   // threads are safe.
   ObjectCacheConfig config;
   config.l1EntriesLimit = 1000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto runInsertOps = [&](int id) {
     for (int i = 0; i < 2000; i++) {
@@ -173,7 +174,7 @@ TEST(ObjectCache, Multithread_FindAndReplace) {
   // across mutliple threads are safe.
   ObjectCacheConfig config;
   config.l1EntriesLimit = 10'000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto runReplaceOps = [&] {
     for (int i = 0; i < 2000; i++) {
@@ -209,7 +210,7 @@ TEST(ObjectCache, Multithread_FindAndEviction) {
   // threads are safe.
   ObjectCacheConfig config;
   config.l1EntriesLimit = 1000;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto runInsertOps = [&](int id) {
     for (int i = 0; i < 2000; i++) {
@@ -244,7 +245,7 @@ TEST(ObjectCache, Multithread_FindAndReplaceWith10Shards) {
   ObjectCacheConfig config;
   config.l1EntriesLimit = 100'000;
   config.l1NumShards = 10;
-  auto objcache = ObjectCache::create<Foo>(config);
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
 
   auto runReplaceOps = [&] {
     for (int i = 0; i < 2000; i++) {

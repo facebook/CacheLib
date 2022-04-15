@@ -17,36 +17,6 @@
 
 namespace facebook {
 namespace cachelib {
-namespace objcache2 {
-
-ObjectCache::~ObjectCache() {
-  for (auto itr = l1Cache_->begin(); itr != l1Cache_->end(); ++itr) {
-    l1Cache_->remove(itr.asHandle());
-  }
-}
-
-void ObjectCache::remove(folly::StringPiece key) {
-  removes_.inc();
-  l1Cache_->remove(key);
-}
-
-void ObjectCache::getObjectCacheCounters(
-    std::function<void(folly::StringPiece, uint64_t)> visitor) const {
-  visitor("objcache.lookups", lookups_.get());
-  visitor("objcache.lookups.l1_hits", succL1Lookups_.get());
-  visitor("objcache.inserts", inserts_.get());
-  visitor("objcache.inserts.errors", insertErrors_.get());
-  visitor("objcache.replaces", replaces_.get());
-  visitor("objcache.removes", removes_.get());
-  visitor("objcache.evictions", evictions_.get());
-}
-
-std::map<std::string, std::string> ObjectCache::serializeConfigParams() const {
-  auto config = l1Cache_->serializeConfigParams();
-  config["l1EntriesLimit"] = std::to_string(l1EntriesLimit_);
-  return config;
-}
-
-} // namespace objcache2
+namespace objcache2 {} // namespace objcache2
 } // namespace cachelib
 } // namespace facebook

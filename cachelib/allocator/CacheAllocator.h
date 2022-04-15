@@ -87,7 +87,10 @@ template <typename AllocatorT>
 class CacheAllocatorFindApiWrapper;
 
 namespace objcache2 {
+template <typename AllocatorT>
 class ObjectCache;
+
+template <typename AllocatorT>
 class ObjectCacheBase;
 } // namespace objcache2
 
@@ -2008,8 +2011,8 @@ class CacheAllocator : public CacheBase {
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
   friend class CacheAllocatorFindApiWrapper<CacheT>;
-  friend class objcache2::ObjectCache;
-  friend class objcache2::ObjectCacheBase;
+  friend class objcache2::ObjectCache<CacheT>;
+  friend class objcache2::ObjectCacheBase<CacheT>;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
