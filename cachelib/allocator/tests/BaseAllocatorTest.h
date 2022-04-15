@@ -6050,6 +6050,34 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
     EXPECT_EQ(true, isRemoveCbTriggered);
   }
+
+  void testDelayWorkersStart() {
+    // Configure reaper and create an item with TTL
+    // Verify without explicitly starting workers, the item is not reaped
+    // And then verify after explicitly starting workers, the item is reaped
+    typename AllocatorT::Config config;
+    config.enableItemReaperInBackground(std::chrono::milliseconds{10})
+        .setDelayCacheWorkersStart();
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("default", numBytes);
+
+    {
+      auto handle = alloc.allocate(poolId, "test", 100, 2);
+      alloc.insertOrReplace(handle);
+    }
+
+    EXPECT_NE(nullptr, alloc.peek("test"));
+    std::this_thread::sleep_for(std::chrono::seconds{3});
+    // Still here because we haven't started the workers
+    EXPECT_NE(nullptr, alloc.peek("test"));
+
+    alloc.startCacheWorkers();
+    std::this_thread::sleep_for(std::chrono::seconds{1});
+    // Once reaper starts it will have expired this item quickly
+    EXPECT_EQ(nullptr, alloc.peek("test"));
+  }
 };
 } // namespace tests
 } // namespace cachelib

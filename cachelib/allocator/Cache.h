@@ -187,6 +187,10 @@ class CacheBase {
   // pool id
   virtual const ICompactCache& getCompactCache(PoolId pid) const = 0;
 
+  // return object cache stats
+  virtual void getObjectCacheCounters(
+      std::function<void(folly::StringPiece, uint64_t)>) const {}
+
  protected:
   // move bytes from one pool to another. The source pool should be at least
   // _bytes_ in size.

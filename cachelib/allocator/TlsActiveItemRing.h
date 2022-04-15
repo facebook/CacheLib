@@ -85,9 +85,17 @@ class TlsActiveItemRing {
    * @return number of bytes included in the core
    */
   size_t madviseItem(uintptr_t it, size_t size) const {
+    // The item can be in any mem addr, but we have to madvise on page
+    // boundaries. This means we need to find out where a prior page starts, and
+    // where the last page ends. Note that an item can be in a single page or
+    // straddles across multiple pages.
+    //
+    // |----------- *************** ----------|
+    // ^            ^             ^           ^
+    // Page begin   Item begin    Item end    Page End
     auto pageBegin = it & pageMask_;
-    size_t sizeBegin = size + (it - pageBegin);
-    size_t sizeTotal = ((sizeBegin - 1) | pageMask_) + 1;
+    auto pageEnd = (it + size + (pageSize_ - 1)) & pageMask_;
+    size_t sizeTotal = pageEnd - pageBegin;
 
     ::madvise(reinterpret_cast<void*>(pageBegin), sizeTotal, MADV_DODUMP);
     return sizeTotal;

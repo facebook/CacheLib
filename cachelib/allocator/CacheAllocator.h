@@ -86,6 +86,14 @@ class FbInternalRuntimeUpdateWrapper;
 template <typename AllocatorT>
 class CacheAllocatorFindApiWrapper;
 
+namespace objcache2 {
+template <typename AllocatorT>
+class ObjectCache;
+
+template <typename AllocatorT>
+class ObjectCacheBase;
+} // namespace objcache2
+
 namespace cachebench {
 template <typename Allocator>
 class Cache;
@@ -875,6 +883,11 @@ class CacheAllocator : public CacheBase {
   //                    cache dir
   //          kSavedOnlyDRAM and kSavedOnlyNvmCache - partial content saved
   ShutDownStatus shutDown();
+
+  // No-op for workers that are already running. Typically user uses this in
+  // conjunction with `config.delayWorkerStart()` to avoid initialization
+  // ordering issues with user callback for cachelib's workers.
+  void startCacheWorkers();
 
   // Functions that stop existing ones (if any) and create new workers
 
@@ -1998,6 +2011,8 @@ class CacheAllocator : public CacheBase {
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
   friend class CacheAllocatorFindApiWrapper<CacheT>;
+  friend class objcache2::ObjectCache<CacheT>;
+  friend class objcache2::ObjectCacheBase<CacheT>;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
