@@ -212,8 +212,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     if (config_.navyEncryption && config_.createEncryptor) {
       allocatorConfig_.enableNvmCacheEncryption(config_.createEncryptor());
     }
-    if (!config_.mlNvmAdmissionPolicy.empty() &&
-        config_.nvmAdmissionPolicyFactory) {
+    if (config_.nvmAdmissionPolicyFactory) {
       try {
         nvmAdmissionPolicy_ =
             std::any_cast<std::shared_ptr<NvmAdmissionPolicy<Allocator>>>(
