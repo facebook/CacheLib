@@ -2438,6 +2438,49 @@ TEST_F(NvmCacheTest, testFindToWriteNvmInvalidation) {
   ASSERT_FALSE(handle->isNvmClean());
 }
 
+TEST_F(NvmCacheTest, IsNewCacheInstanceStat) {
+  // A new instane of cache should have this stat set to true
+  // A cache that is recovered successfully should set it to false
+
+  auto stats = getStats();
+  EXPECT_TRUE(stats.isNewRamCache);
+  EXPECT_TRUE(stats.isNewNvmCache);
+
+  // Use SHM. This is also a new cache instance
+  this->convertToShmCache();
+  EXPECT_TRUE(stats.isNewRamCache);
+  EXPECT_TRUE(stats.isNewNvmCache);
+
+  warmRoll();
+  stats = getStats();
+  EXPECT_FALSE(stats.isNewRamCache);
+  EXPECT_FALSE(stats.isNewNvmCache);
+
+  coldRoll();
+  stats = getStats();
+  EXPECT_TRUE(stats.isNewRamCache);
+  EXPECT_FALSE(stats.isNewNvmCache);
+
+  warmRoll();
+  stats = getStats();
+  EXPECT_FALSE(stats.isNewRamCache);
+  EXPECT_FALSE(stats.isNewNvmCache);
+
+  iceRoll();
+  stats = getStats();
+  EXPECT_FALSE(stats.isNewRamCache);
+  EXPECT_TRUE(stats.isNewNvmCache);
+
+  warmRoll();
+  stats = getStats();
+  EXPECT_FALSE(stats.isNewRamCache);
+  EXPECT_FALSE(stats.isNewNvmCache);
+
+  iceColdRoll();
+  stats = getStats();
+  EXPECT_TRUE(stats.isNewRamCache);
+  EXPECT_TRUE(stats.isNewNvmCache);
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

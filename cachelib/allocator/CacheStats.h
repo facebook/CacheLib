@@ -458,11 +458,25 @@ struct GlobalCacheStats {
   util::PercentileStats::Estimates nvmEvictionSecondsToExpiry{};
   util::PercentileStats::Estimates nvmPutSize{};
 
+  // time when CacheAllocator structure is created. Whenever a process restarts
+  // and even if cache content is persisted, this will be reset. It's similar
+  // to process uptime. (But alternatively if user explicitly shuts down and
+  // re-attach cache, this will be reset as well)
+  uint64_t cacheInstanceUpTime{0};
+
   // time since the ram cache was created in seconds
   uint64_t ramUpTime{0};
 
   // time since the nvm cache was created in seconds
   uint64_t nvmUpTime{0};
+
+  // If true, it means ram cache is brand new, or it was not restored from a
+  // previous cache instance
+  bool isNewRamCache{false};
+
+  // If true, it means nvm cache is brand new, or it was not restored from a
+  // previous cache instance
+  bool isNewNvmCache{false};
 
   // if nvmcache is currently active and serving gets
   bool nvmCacheEnabled;

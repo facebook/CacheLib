@@ -44,7 +44,8 @@ class NvmCacheState {
   static std::string getNvmCacheStateFilePath(folly::StringPiece cacheDir);
 
   // Intialize the object for the cacheDir.
-  explicit NvmCacheState(const std::string& cacheDir,
+  explicit NvmCacheState(uint32_t currentTimeSecs,
+                         const std::string& cacheDir,
                          bool encryptionEnabled,
                          bool truncateAllocSize);
 

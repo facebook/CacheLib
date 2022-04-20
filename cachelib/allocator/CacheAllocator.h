@@ -1982,7 +1982,13 @@ class CacheAllocator : public CacheBase {
   mutable std::mutex workersMutex_;
 
   // time when the ram cache was first created
-  const time_t cacheCreationTime_{0};
+  const uint32_t cacheCreationTime_{0};
+
+  // time when CacheAllocator structure is created. Whenever a process restarts
+  // and even if cache content is persisted, this will be reset. It's similar
+  // to process uptime. (But alternatively if user explicitly shuts down and
+  // re-attach cache, this will be reset as well)
+  const uint32_t cacheInstanceCreationTime_{0};
 
   // thread local accumulation of handle counts
   mutable util::FastStats<int64_t> handleCount_{};

@@ -73,11 +73,12 @@ std::string NvmCacheState::getNvmCacheStateFilePath(
   return constructFilePath(cacheDir, kNvmCacheState);
 }
 
-NvmCacheState::NvmCacheState(const std::string& cacheDir,
+NvmCacheState::NvmCacheState(uint32_t currentTimeSecs,
+                             const std::string& cacheDir,
                              bool encryptionEnabled,
                              bool truncateAllocSize)
     : cacheDir_(cacheDir),
-      creationTime_{util::getCurrentTimeSec()},
+      creationTime_{currentTimeSecs},
       encryptionEnabled_{encryptionEnabled},
       truncateAllocSize_{truncateAllocSize} {
   if (cacheDir_.empty()) {

@@ -45,7 +45,13 @@ CacheAllocator<CacheTrait>::CacheAllocator(Config config)
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
       cacheCreationTime_{util::getCurrentTimeSec()},
-      nvmCacheState_{config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
+      // Keep cacheInstanceCreationTime_ in sync with cacheCreationTime_ as
+      // both are current time
+      cacheInstanceCreationTime_{cacheCreationTime_},
+      // Pass in cacheInstnaceCreationTime_ as the current time to keep
+      // nvmCacheState's current time in sync
+      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
+                     config_.isNvmCacheEncryptionEnabled(),
                      config_.isNvmCacheTruncateAllocSizeEnabled()} {
   initCommon(false);
 }
@@ -84,7 +90,13 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
       cacheCreationTime_{util::getCurrentTimeSec()},
-      nvmCacheState_{config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
+      // Keep cacheInstanceCreationTime_ in sync with cacheCreationTime_ as
+      // both are current time
+      cacheInstanceCreationTime_{cacheCreationTime_},
+      // Pass in cacheInstnaceCreationTime_ as the current time to keep
+      // nvmCacheState's current time in sync
+      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
+                     config_.isNvmCacheEncryptionEnabled(),
                      config_.isNvmCacheTruncateAllocSizeEnabled()} {
   initCommon(false);
   shmManager_->removeShm(detail::kShmInfoName);
@@ -116,8 +128,13 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
           [this](Item* it) -> ItemHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{*metadata_.cacheCreationTime_ref()},
-      nvmCacheState_{config_.cacheDir, config_.isNvmCacheEncryptionEnabled(),
+      cacheCreationTime_{
+          static_cast<uint32_t>(*metadata_.cacheCreationTime_ref())},
+      cacheInstanceCreationTime_{util::getCurrentTimeSec()},
+      // Pass in cacheInstnaceCreationTime_ as the current time to keep
+      // nvmCacheState's current time in sync
+      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
+                     config_.isNvmCacheEncryptionEnabled(),
                      config_.isNvmCacheTruncateAllocSizeEnabled()} {
   for (auto pid : *metadata_.compactCachePools_ref()) {
     isCompactCachePool_[pid] = true;
@@ -3311,11 +3328,16 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.numItems = accessContainer_->getStats().numKeys;
 
   const uint64_t currTime = util::getCurrentTimeSec();
+  ret.cacheInstanceUpTime = currTime - cacheInstanceCreationTime_;
   ret.ramUpTime = currTime - cacheCreationTime_;
   ret.nvmUpTime = currTime - nvmCacheState_.getCreationTime();
   ret.nvmCacheEnabled = nvmCache_ ? nvmCache_->isEnabled() : false;
   ret.reaperStats = getReaperStats();
   ret.numActiveHandles = getNumActiveHandles();
+
+  ret.isNewRamCache = cacheCreationTime_ == cacheInstanceCreationTime_;
+  ret.isNewNvmCache =
+      nvmCacheState_.getCreationTime() == cacheInstanceCreationTime_;
 
   return ret;
 }
