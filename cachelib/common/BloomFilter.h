@@ -134,17 +134,17 @@ class BloomFilter {
 template <typename SerializationProto>
 void BloomFilter::persist(RecordWriter& rw) {
   serialization::BloomFilterPersistentData bd;
-  *bd.numFilters_ref() = numFilters_;
-  *bd.hashTableBitSize_ref() = hashTableBitSize_;
-  *bd.filterByteSize_ref() = filterByteSize_;
-  *bd.fragmentSize_ref() = kPersistFragmentSize;
-  bd.seeds_ref()->resize(seeds_.size());
+  *bd.numFilters() = numFilters_;
+  *bd.hashTableBitSize() = hashTableBitSize_;
+  *bd.filterByteSize() = filterByteSize_;
+  *bd.fragmentSize() = kPersistFragmentSize;
+  bd.seeds()->resize(seeds_.size());
   for (uint32_t i = 0; i < seeds_.size(); i++) {
-    bd.seeds_ref()[i] = seeds_[i];
+    bd.seeds()[i] = seeds_[i];
   }
   facebook::cachelib::serializeProto<serialization::BloomFilterPersistentData,
                                      SerializationProto>(bd, rw);
-  serializeBits(rw, *bd.fragmentSize_ref());
+  serializeBits(rw, *bd.fragmentSize());
 }
 
 template <typename SerializationProto>
