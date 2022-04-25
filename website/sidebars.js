@@ -18,6 +18,7 @@ module.exports = {
 	  'installation/installation',
 	  'installation/testing',
           'installation/website',
+            ...fbInternalOnly(['facebook/website-internal']),
 	  'installation/github-squash-sync',
          ]
     }
