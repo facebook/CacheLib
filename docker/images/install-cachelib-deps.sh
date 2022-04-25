@@ -3,6 +3,9 @@
 # Copyright 2022, Intel Corporation
 
 git clone https://github.com/pmem/CacheLib CacheLib
+cd CacheLib
+git checkout main
+cd ..
 
 ./CacheLib/contrib/prerequisites-centos8.sh
 

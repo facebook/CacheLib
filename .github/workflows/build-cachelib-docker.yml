@@ -16,7 +16,7 @@ jobs:
       FORCE_IMAGE_ACTION:   ${{ secrets.FORCE_IMAGE_ACTION }}
       HOST_WORKDIR:         ${{ github.workspace }}
       WORKDIR:              docker
-      IMG_VER:              devel
+      IMG_VER:              main
     strategy:
       matrix:
         CONFIG: ["OS=centos OS_VER=8streams PUSH_IMAGE=1"]
