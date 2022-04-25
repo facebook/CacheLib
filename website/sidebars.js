@@ -17,6 +17,7 @@ module.exports = {
       items: [
 	  'installation/installation',
 	  'installation/testing',
+          'installation/website',
 	  'installation/github-squash-sync',
          ]
     }
