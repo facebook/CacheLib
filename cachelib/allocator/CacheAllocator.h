@@ -401,7 +401,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return ChainedItem  head if there exists one
   //         nullptr      otherwise
-  ItemHandle popChainedItem(ItemHandle& parent);
+  WriteHandle popChainedItem(WriteHandle& parent);
 
   // Return the key to the parent item.
   //
@@ -427,9 +427,9 @@ class CacheAllocator : public CacheBase {
   // @return  handle to the oldItem on return.
   //
   // @throw std::invalid_argument if any of the pre-conditions fails
-  ItemHandle replaceChainedItem(Item& oldItem,
-                                ItemHandle newItem,
-                                Item& parent);
+  WriteHandle replaceChainedItem(Item& oldItem,
+                                 WriteHandle newItem,
+                                 Item& parent);
 
   // Transfers the ownership of the chain from the current parent to the new
   // parent and inserts the new parent into the cache. Parent will be unmarked
@@ -450,7 +450,7 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if the parent does not have chained item or
   //          incorrect state of chained item or if any of the pre-conditions
   //          are not met
-  void transferChainAndReplace(ItemHandle& parent, ItemHandle& newParent);
+  void transferChainAndReplace(WriteHandle& parent, WriteHandle& newParent);
 
   // Inserts the allocated handle into the AccessContainer, making it
   // accessible for everyone. This needs to be the handle that the caller
@@ -1363,9 +1363,9 @@ class CacheAllocator : public CacheBase {
   // @param parentKey  key of the item's parent
   //
   // @return  handle to the parent item if the validations pass
-  //          otherwise, an empty ItemHandle is returned.
+  //          otherwise, an empty Handle is returned.
   //
-  ItemHandle validateAndGetParentHandleForChainedMoveLocked(
+  ReadHandle validateAndGetParentHandleForChainedMoveLocked(
       const ChainedItem& item, const Key& parentKey);
 
   // Given an existing item, allocate a new one for the
@@ -1461,7 +1461,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveChainedItem(ChainedItem& oldItem, ItemHandle& newItemHdl);
+  bool moveChainedItem(ChainedItem& oldItem, WriteHandle& newItemHdl);
 
   // Transfers the chain ownership from parent to newParent. Parent
   // will be unmarked as having chained allocations. Parent will not be null
@@ -1478,7 +1478,7 @@ class CacheAllocator : public CacheBase {
   // @param newParent the new parent for the chain
   //
   // @throw if any of the conditions for parent or newParent are not met.
-  void transferChainLocked(ItemHandle& parent, ItemHandle& newParent);
+  void transferChainLocked(WriteHandle& parent, WriteHandle& newParent);
 
   // replace a chained item in the existing chain. This needs to be called
   // with the chained item lock held exclusive
@@ -1488,9 +1488,9 @@ class CacheAllocator : public CacheBase {
   // @param parent   the parent for the chain
   //
   // @return handle to the oldItem
-  ItemHandle replaceChainedItemLocked(Item& oldItem,
-                                      ItemHandle newItemHdl,
-                                      const Item& parent);
+  WriteHandle replaceChainedItemLocked(Item& oldItem,
+                                       WriteHandle newItemHdl,
+                                       const Item& parent);
 
   // Insert an item into MM container. The caller must hold a valid handle for
   // the item.
@@ -1870,7 +1870,7 @@ class CacheAllocator : public CacheBase {
   // @return true   if successfully recorded in MMContainer
   bool recordAccessInMMContainer(Item& item, AccessMode mode);
 
-  ItemHandle findChainedItem(const Item& parent) const;
+  WriteHandle findChainedItem(const Item& parent) const;
 
   // Get the thread local version of the Stats
   detail::Stats& stats() const noexcept { return stats_; }

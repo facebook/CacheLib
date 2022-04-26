@@ -405,7 +405,7 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
   }
   if (memory == nullptr) {
     (*stats_.allocFailures)[pid][cid].inc();
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   SCOPE_FAIL { allocator_->free(memory); };
@@ -424,8 +424,8 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::addChainedItem(ItemHandle& parent,
-                                                ItemHandle child) {
+void CacheAllocator<CacheTrait>::addChainedItem(WriteHandle& parent,
+                                                WriteHandle child) {
   if (!parent || !child || !child->isChainedItem()) {
     throw std::invalid_argument(
         folly::sformat("Invalid parent or child. parent: {}, child: {}",
@@ -469,14 +469,14 @@ void CacheAllocator<CacheTrait>::addChainedItem(ItemHandle& parent,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
-CacheAllocator<CacheTrait>::popChainedItem(ItemHandle& parent) {
+typename CacheAllocator<CacheTrait>::WriteHandle
+CacheAllocator<CacheTrait>::popChainedItem(WriteHandle& parent) {
   if (!parent || !parent->hasChainedItem()) {
     throw std::invalid_argument(folly::sformat(
         "Invalid parent {}", parent ? parent->toString() : nullptr));
   }
 
-  ItemHandle head;
+  WriteHandle head;
   { // scope of chained item lock.
     auto l = chainedItemLocks_.lockExclusive(parent->getKey());
 
@@ -523,8 +523,8 @@ CacheAllocator<CacheTrait>::getParentKey(const Item& chainedItem) {
 }
 
 template <typename CacheTrait>
-void CacheAllocator<CacheTrait>::transferChainLocked(ItemHandle& parent,
-                                                     ItemHandle& newParent) {
+void CacheAllocator<CacheTrait>::transferChainLocked(WriteHandle& parent,
+                                                     WriteHandle& newParent) {
   // parent must be in a state to not have concurrent readers. Eviction code
   // paths rely on holding the last item handle. Since we hold on to an item
   // handle here, the chain will not be touched by any eviction code path.
@@ -566,7 +566,7 @@ void CacheAllocator<CacheTrait>::transferChainLocked(ItemHandle& parent,
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::transferChainAndReplace(
-    ItemHandle& parent, ItemHandle& newParent) {
+    WriteHandle& parent, WriteHandle& newParent) {
   if (!parent || !newParent) {
     throw std::invalid_argument("invalid parent or new parent");
   }
@@ -612,9 +612,9 @@ bool CacheAllocator<CacheTrait>::replaceIfAccessible(Item& oldItem,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::replaceChainedItem(Item& oldItem,
-                                               ItemHandle newItemHandle,
+                                               WriteHandle newItemHandle,
                                                Item& parent) {
   if (!newItemHandle) {
     throw std::invalid_argument("Empty handle for newItem");
@@ -639,9 +639,9 @@ CacheAllocator<CacheTrait>::replaceChainedItem(Item& oldItem,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::replaceChainedItemLocked(Item& oldItem,
-                                                     ItemHandle newItemHdl,
+                                                     WriteHandle newItemHdl,
                                                      const Item& parent) {
   XDCHECK(newItemHdl != nullptr);
   XDCHECK_GE(1u, oldItem.getRefCount());
@@ -1148,7 +1148,7 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
-                                                 ItemHandle& newItemHdl) {
+                                                 WriteHandle& newItemHdl) {
   XDCHECK(config_.moveCb);
   util::LatencyTracker tracker{stats_.moveChainedLatency_};
 
@@ -1189,7 +1189,7 @@ bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
     return false;
   }
 
-  auto parentPtr = parentHandle.get();
+  auto parentPtr = parentHandle.getInternal();
 
   XDCHECK_EQ(reinterpret_cast<uintptr_t>(parentPtr),
              reinterpret_cast<uintptr_t>(&oldItem.getParentItem(compressor_)));
@@ -1866,7 +1866,7 @@ CacheAllocator<CacheTrait>::getSampleItem() {
   const auto* item =
       reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
   if (!item) {
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   auto handle = findInternal(item->getKey());
@@ -1874,7 +1874,7 @@ CacheAllocator<CacheTrait>::getSampleItem() {
   if (handle.get() == item) {
     return handle;
   }
-  return ItemHandle{};
+  return WriteHandle{};
 }
 
 template <typename CacheTrait>
@@ -2493,10 +2493,10 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::validateAndGetParentHandleForChainedMoveLocked(
     const ChainedItem& item, const Key& parentKey) {
-  ItemHandle parentHandle{};
+  ReadHandle parentHandle{};
   try {
     parentHandle = findInternal(parentKey);
     // If the parent is not the same as the parent of the chained item,
@@ -2537,7 +2537,7 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
     }
 
     XDCHECK_EQ(newItemHdl->getSize(), oldChainedItem.getSize());
-    auto parentPtr = parentHandle.get();
+    auto parentPtr = parentHandle.getInternal();
     XDCHECK_EQ(reinterpret_cast<uintptr_t>(parentPtr),
                reinterpret_cast<uintptr_t>(
                    &oldChainedItem.getParentItem(compressor_)));
@@ -3290,7 +3290,7 @@ void CacheAllocator<CacheTrait>::forEachChainedItem(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findChainedItem(const Item& parent) const {
   const auto cPtr = compressor_.compress(&parent);
   return chainedItemAccessContainer_->find(
