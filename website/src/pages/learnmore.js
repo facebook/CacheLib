@@ -114,12 +114,27 @@ function LearnMore() {
 	</p>
 
     <p align="center">
-	<iframe width="500" height="300" src="https://www.youtube.com/embed/wp_X-Zg9WEo" 
+	<iframe width="500" height="300" src="https://www.youtube.com/embed/wp_X-Zg9WEo"
 		frameborder="0"
 		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
 	</iframe>
     </p>
-      <p align="center"> <b> More architecture docs coming soon!</b> </p> 
+
+	<p>
+	    <a href="https://dl.acm.org/doi/10.1145/3477132.3483568">
+		Kangaroo: Caching Billions of Tiny Objects on Flash
+	    </a> was published at the <i>SOSP 2021</i> conference, and won the
+		<a href="https://sosp2021.mpi-sws.org/awards.html"> best paper award</a>! The publication can be accessed
+		<a href="https://www.pdl.cmu.edu/PDL-FTP/NVM/McAllister-SOSP21.pdf"> here </a>
+		and the video of the presentation is below.
+	</p>
+
+    <p align="center">
+	<iframe width="500" height="300" src="https://www.youtube.com/embed/d1dFmF3IJOI"
+		frameborder="0"
+		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
+	</iframe>
+    </p>
 	  </div>
 	  </div>
 
