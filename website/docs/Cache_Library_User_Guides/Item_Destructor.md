@@ -44,10 +44,10 @@ void addToCache(std::string key, size_t val) {
 }
 // Suppose your cache can contain at most 5 items and
 // it evicts beyond that.
-for (int i = 0; i &lt; 1000; i++) {
+for (int i = 0; i < 1000; i++) {
   addToCache(std::to_string(i), 100);
 }
-std::cout &lt;&lt; totalItems &lt;&lt; std::endl; // this will print 5.
+std::cout << totalItems << std::endl; // this will print 5.
 ```
 
 ## DestructorData
@@ -91,7 +91,7 @@ struct DestructorData {
   // when chained items are evicted/removed from NVM, items are created on the
   // heap, functions (e.g. CacheAllocator::getAllocInfo) that assumes items
   // are located in cache slab doesn't work in such case.
-  folly::Range&lt;ChainedItemIter&gt; chainedAllocs;
+  folly::Range<ChainedItemIter> chainedAllocs;
 };
 ```
 
