@@ -186,10 +186,11 @@ class CacheAllocator : public CacheBase {
 
   // the holder for the item when we hand it to the caller. This ensures
   // that the reference count is maintained when the caller is done with the
-  // item. The ItemHandle provides a getMemory() and getKey() interface. The
-  // caller is free to use the result of these two as long as the handle is
-  // active/alive. Using the result of the above interfaces after destroying
-  // the ItemHandle is UB. The ItemHandle safely wraps a pointer to the Item.
+  // item. The ReadHandle/WriteHandle provides a getMemory() and getKey()
+  // interface. The caller is free to use the result of these two as long as the
+  // handle is active/alive. Using the result of the above interfaces after
+  // destroying the ReadHandle/WriteHandle is UB. The ReadHandle/WriteHandle
+  // safely wraps a pointer to the "const Item"/"Item".
   using ReadHandle = typename Item::ReadHandle;
   using WriteHandle = typename Item::WriteHandle;
   using ItemHandle = WriteHandle;
@@ -564,7 +565,7 @@ class CacheAllocator : public CacheBase {
   // removes the allocation corresponding to the key, if present in the hash
   // table. The key will not be accessible through find() after this returns
   // success. The allocation for the key will be recycled once all active
-  // ItemHandles are released.
+  // Item handles are released.
   //
   // @param key   the key for the allocation.
   // @return      kSuccess if the key exists and was successfully removed.
@@ -1272,18 +1273,18 @@ class CacheAllocator : public CacheBase {
 
   // acquires an handle on the item. returns an empty handle if it is null.
   // @param it    pointer to an item
-  // @return ItemHandle   return a handle to this item
+  // @return WriteHandle   return a handle to this item
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  ItemHandle acquire(Item* it);
+  WriteHandle acquire(Item* it);
 
   // creates an item handle with wait context.
-  ItemHandle createNvmCacheFillHandle() { return ItemHandle{*this}; }
+  WriteHandle createNvmCacheFillHandle() { return WriteHandle{*this}; }
 
   // acquires the wait context for the handle. This is used by NvmCache to
   // maintain a list of waiters
   std::shared_ptr<WaitContext<ReadHandle>> getWaitContext(
-      ItemHandle& hdl) const {
+      ReadHandle& hdl) const {
     return hdl.getItemWaitContext();
   }
 
@@ -1386,7 +1387,7 @@ class CacheAllocator : public CacheBase {
   //
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  ItemHandle findInternal(Key key) {
+  WriteHandle findInternal(Key key) {
     // Note: this method can not be const because we need  a non-const
     // reference to create the ItemReleaser.
     return accessContainer_->find(key);
@@ -1401,7 +1402,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFastInternal(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findFastInternal(Key key, AccessMode mode);
 
   // look up an item by its key across the nvm cache as well if enabled.
   //
@@ -1411,7 +1412,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findImpl(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findImpl(Key key, AccessMode mode);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup.
@@ -1422,7 +1423,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findFastImpl(Key key, AccessMode mode);
 
   // Moves a regular item to a different slab. This should only be used during
   // slab release after the item's moving bit has been set. The user supplied
@@ -1434,7 +1435,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveRegularItem(Item& oldItem, ItemHandle& newItemHdl);
+  bool moveRegularItem(Item& oldItem, WriteHandle& newItemHdl);
 
   // template class for viewAsChainedAllocs that takes either ReadHandle or
   // WriteHandle
@@ -1586,8 +1587,8 @@ class CacheAllocator : public CacheBase {
   //
   // @return  valid handle to regular item on success. This will be the last
   //          handle to the item. On failure an empty handle.
-  ItemHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
-                                                   EvictionIterator& itr);
+  WriteHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
+                                                    EvictionIterator& itr);
 
   // Advance the current iterator and try to evict a chained item
   // Iterator may also be reset during the course of this function
@@ -1596,7 +1597,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return  valid handle to the parent item on success. This will be the last
   //          handle to the item
-  ItemHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
+  WriteHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
@@ -1707,7 +1708,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return    true  if the item has been moved
   //            false if we have exhausted moving attempts
-  bool tryMovingForSlabRelease(Item& item, ItemHandle& newItemHdl);
+  bool tryMovingForSlabRelease(Item& item, WriteHandle& newItemHdl);
 
   // Evict an item from access and mm containers and
   // ensure it is safe for freeing.
@@ -1723,14 +1724,14 @@ class CacheAllocator : public CacheBase {
   //
   // @return last handle for corresponding to item on success. empty handle on
   // failure. caller can retry if needed.
-  ItemHandle evictNormalItemForSlabRelease(Item& item);
+  WriteHandle evictNormalItemForSlabRelease(Item& item);
 
   // Helper function to evict a child item for slab release
   // As a side effect, the parent item is also evicted
   //
   // @return  last handle to the parent item of the child on success. empty
   // handle on failure. caller can retry.
-  ItemHandle evictChainedItemForSlabRelease(ChainedItem& item);
+  WriteHandle evictChainedItemForSlabRelease(ChainedItem& item);
 
   // Helper function to remove a item if expired.
   //

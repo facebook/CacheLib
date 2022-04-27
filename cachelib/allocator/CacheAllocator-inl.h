@@ -37,11 +37,11 @@ CacheAllocator<CacheTrait>::CacheAllocator(Config config)
       accessContainer_(std::make_unique<AccessContainer>(
           config_.accessConfig,
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemAccessContainer_(std::make_unique<AccessContainer>(
           config_.chainedItemAccessConfig,
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
       cacheCreationTime_{util::getCurrentTimeSec()},
@@ -75,7 +75,7 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
                           ShmSegmentOpts(config_.accessConfig.getPageSize()))
               .addr,
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemAccessContainer_(std::make_unique<AccessContainer>(
           config_.chainedItemAccessConfig,
           shmManager_
@@ -86,7 +86,7 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
                           ShmSegmentOpts(config_.accessConfig.getPageSize()))
               .addr,
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
       cacheCreationTime_{util::getCurrentTimeSec()},
@@ -119,13 +119,13 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
           config_.accessConfig,
           shmManager_->attachShm(detail::kShmHashTableName),
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemAccessContainer_(std::make_unique<AccessContainer>(
           deserializer_->deserialize<AccessSerializationType>(),
           config_.chainedItemAccessConfig,
           shmManager_->attachShm(detail::kShmChainedItemHashTableName),
           compressor_,
-          [this](Item* it) -> ItemHandle { return acquire(it); })),
+          [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
       cacheCreationTime_{
@@ -871,16 +871,16 @@ RefcountWithFlags::Value CacheAllocator<CacheTrait>::decRef(Item& it) {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::acquire(Item* it) {
   if (UNLIKELY(!it)) {
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   SCOPE_FAIL { stats_.numRefcountOverflow.inc(); };
 
   incRef(*it);
-  return ItemHandle{it, *this};
+  return WriteHandle{it, *this};
 }
 
 template <typename CacheTrait>
@@ -1069,7 +1069,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
-                                                 ItemHandle& newItemHdl) {
+                                                 WriteHandle& newItemHdl) {
   XDCHECK(config_.moveCb);
   util::LatencyTracker tracker{stats_.moveRegularLatency_};
 
@@ -1102,7 +1102,7 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
   // there is no point to replace it since it had already been removed
   // or in the process of being removed. If the item is in cache but the
   // refcount is non-zero, it means user could be attempting to remove
-  // this item through an API such as remove(ItemHandle). In this case,
+  // this item through an API such as remove(itemHandle). In this case,
   // it is unsafe to replace the old item with a new one, so we should
   // also abort.
   if (!accessContainer_->replaceIf(oldItem, *newItemHdl, itemMovingPredicate)) {
@@ -1322,7 +1322,7 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
     MMContainer& mmContainer, EvictionIterator& itr) {
   // we should flush this to nvmcache if it is not already present in nvmcache
@@ -1337,7 +1337,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
   if (evictToNvmCache && !token.isValid()) {
     ++itr;
     stats_.evictFailConcurrentFill.inc();
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   // If there are other accessors, we should abort. Acquire a handle here since
@@ -1364,7 +1364,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
   // is set. Iterator was already advance by the remove call above.
   if (evictHandle->isMoving()) {
     stats_.evictFailMove.inc();
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   // Invalidate iterator since later on if we are not evicting this
@@ -1388,7 +1388,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
     EvictionIterator& itr) {
   XDCHECK(itr->isChainedItem());
@@ -1410,7 +1410,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   // if token is invalid, return. iterator is already advanced.
   if (evictToNvmCache && !token.isValid()) {
     stats_.evictFailConcurrentFill.inc();
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   // check if the parent exists in the hashtable and refcount is drained.
@@ -1446,7 +1446,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   // here since moving bit is set.
   if (parentHandle->isMoving()) {
     stats_.evictFailParentMove.inc();
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(*parentHandle)) {
@@ -1695,7 +1695,7 @@ CacheAllocator<CacheTrait>::inspectCache(typename Item::Key key) {
 // CacheAllocator. Hence the sprinkling of UNLIKELY/LIKELY to tell the
 // compiler which executions we don't want to optimize on.
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findFastInternal(typename Item::Key key,
                                              AccessMode mode) {
   auto handle = findInternal(key);
@@ -1711,7 +1711,7 @@ CacheAllocator<CacheTrait>::findFastInternal(typename Item::Key key,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
                                          AccessMode mode) {
   auto handle = findFastInternal(key, mode);
@@ -1751,7 +1751,7 @@ CacheAllocator<CacheTrait>::findFastToWrite(typename Item::Key key,
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
   auto handle = findFastInternal(key, mode);
 
@@ -1765,7 +1765,7 @@ CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
         eventTracker->record(AllocatorApiEvent::FIND, key,
                              AllocatorApiResult::NOT_FOUND);
       }
-      ItemHandle ret;
+      WriteHandle ret;
       ret.markExpired();
       return ret;
     }
@@ -1920,8 +1920,8 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBufT(Handle& handle) {
   ConvertChainedItem converter;
 
   // based on current refcount and threshold from config
-  // determine to use a new ItemHandle for each chain items
-  // or use shared ItemHandle for all chain items
+  // determine to use a new Item Handle for each chain items
+  // or use shared Item Handle for all chain items
   if (item->getRefCount() > config_.thresholdForConvertingToIOBuf) {
     auto sharedHdl = std::make_shared<Handle>(std::move(handle));
 
@@ -2568,7 +2568,7 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::tryMovingForSlabRelease(
-    Item& oldItem, ItemHandle& newItemHdl) {
+    Item& oldItem, WriteHandle& newItemHdl) {
   // By holding onto a user-level synchronization object, we ensure moving
   // a regular item or chained item is synchronized with any potential
   // user-side mutation.
@@ -2685,12 +2685,12 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::evictNormalItemForSlabRelease(Item& item) {
   XDCHECK(item.isMoving());
 
   if (item.isOnlyMoving()) {
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   auto predicate = [](const Item& it) { return it.getRefCount() == 0; };
@@ -2723,7 +2723,7 @@ CacheAllocator<CacheTrait>::evictNormalItemForSlabRelease(Item& item) {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
   XDCHECK(child.isMoving());
 
