@@ -39,6 +39,8 @@ jobs:
           gcc -v
       - name: "checkout sources"
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - name: Pull the image or rebuild and push it
         run: cd $WORKDIR && ${{ matrix.CONFIG }} ./pull-or-rebuild-image.sh $FORCE_IMAGE_ACTION
