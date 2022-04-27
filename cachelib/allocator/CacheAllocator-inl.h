@@ -1861,20 +1861,20 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ItemHandle
+typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::getSampleItem() {
   const auto* item =
       reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
   if (!item) {
-    return WriteHandle{};
+    return ReadHandle{};
   }
 
-  auto handle = findInternal(item->getKey());
+  ReadHandle handle = findInternal(item->getKey());
   // Check that item returned is the same that was sampled
   if (handle.get() == item) {
     return handle;
   }
-  return WriteHandle{};
+  return ReadHandle{};
 }
 
 template <typename CacheTrait>

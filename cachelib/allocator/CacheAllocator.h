@@ -639,11 +639,11 @@ class CacheAllocator : public CacheBase {
   // Get a random item from memory
   // This is useful for profiling and sampling cachelib managed memory
   //
-  // @return ItemHandle if an valid item is found
+  // @return ReadHandle if an valid item is found
   //
   //         nullptr if the randomly chosen memory does not belong
   //                 to an valid item
-  ItemHandle getSampleItem();
+  ReadHandle getSampleItem();
 
   // Convert a Read Handle to an IOBuf. The returned IOBuf gives a
   // read-only view to the user. The item's ownership is retained by
