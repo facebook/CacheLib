@@ -11,7 +11,7 @@ A `ReadHandle` is similar to a `std::shared_ptr<const Item>`. Cachelib APIs like
 
 A `WriteHandle` is similar to a `std::shared_ptr<Item>`. Cachelib APIs like `allocate()`, `findToWrite()`and `insertOrReplace()` return a `WriteHandle`.
 
-`ItemHandle` is the old name of a `WriteHandle`, which will be deprecated in the future.
+`ItemHandle` is the old name of a `ItemHandle`, which will be deprecated in the future.
 
 Because an item may be accessed concurrently, to ensure that the underlying memory backing the item is valid, use its `ReadHandle` to access it for read-only purpose and use `WriteHandle` to access it for read & write purpose. This guarantees that during the lifetime of the `ReadHandle` / `WriteHandle`, its item will never be evicted or reclaimed by any other thread.
 
