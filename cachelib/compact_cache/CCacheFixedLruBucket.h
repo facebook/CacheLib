@@ -48,7 +48,7 @@ struct FixedLruBucket {
 
   /** Type of the data stored in a bucket entry.
    *  This contains the key and the value (if any). */
-  using Entry = struct {
+  struct Entry {
     Key key;
     /* Expands to NoValue (size 0) if this cache does not store values */
     Value val;
@@ -56,7 +56,7 @@ struct FixedLruBucket {
 
   /** Type of a bucket.
    * Empty entry slots must be zeroed out to avoid spurious matches! */
-  using Bucket = struct {
+  struct Bucket {
     Entry entries[kEntriesPerBucket];
   } __attribute__((__packed__));
 
