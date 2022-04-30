@@ -131,7 +131,7 @@ struct VariableLruBucket {
   constexpr static size_t kMaxEntries = std::numeric_limits<EntryNum>::max();
 
   /** An entry header. */
-  using EntryHdr = struct {
+  struct EntryHdr {
     Key key;
     /* Size in bytes of the corresponding EntryData's data field. */
     EntryDataSize dataSize;
@@ -140,7 +140,7 @@ struct VariableLruBucket {
     EntryDataOffset dataOffset;
   } __attribute__((__packed__));
 
-  using EntryData = struct {
+  struct EntryData {
     /* Index of the corresponding EntryHdr header in the 'Entry
      * Headers' section. This is a value between 0 and the number of entries
      * in the bucket. */
@@ -155,7 +155,7 @@ struct VariableLruBucket {
   constexpr static size_t kBucketDataSize =
       kMaxValueSize + sizeof(EntryHdr) + sizeof(EntryData);
 
-  using Bucket = struct {
+  struct Bucket {
     /* Number of entries in the bucket. */
     EntryNum numEntries;
     /* Size of the "Data" section.

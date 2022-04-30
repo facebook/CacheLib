@@ -159,7 +159,7 @@ template <unsigned MaxSize>
 struct VariableSizedValueDescriptor {
   constexpr static bool kFixedSize = false;
 
-  using Value = struct {
+  struct Value {
     char data[0];
     // Data is here.
   } __attribute__((__packed__));
