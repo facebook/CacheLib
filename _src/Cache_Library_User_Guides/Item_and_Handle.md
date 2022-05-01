@@ -25,7 +25,7 @@ For more details about `ReadHandle` and `WriteHandle`, see allocator/Handle.h.
 
 ## Item memory overhead
 
-When you call the `allocate()` method to allocate memory from cache for an item, cachelib allocates extra 31 bytes (overhead) for the item's metadata, which is used to manage the item's lifetime and other aspects. For example, cachelib stores a refcount, pointer hooks to the intrusive data structures for cache like hash table, LRU, creation time, and expiration time. Some of these are for internal book keeping; and others are accessible through the item's public API. For details, see allocator/CacheItem.h.
+When you call the `allocate()` method to allocate memory from cache for an item, cachelib allocates extra 32 bytes (overhead) for the item's metadata, which is used to manage the item's lifetime and other aspects. For example, cachelib stores a refcount, pointer hooks to the intrusive data structures for cache like hash table, LRU, creation time, and expiration time. Some of these are for internal book keeping; and others are accessible through the item's public API. For details, see allocator/CacheItem.h.
 
 ## Handle lifetime
 

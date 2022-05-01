@@ -17,7 +17,7 @@ class CacheAllocator : public CacheBase {
     RemoveRes remove(const ReadHandle& handle);
 
     // Remove the first chained item pointed to by the parent handle.
-    ItemHandle popChainedItem(const ItemHandle& parent)
+    WriteHandle popChainedItem(WriteHandle& parent)
   ...
 };
 ```
