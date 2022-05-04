@@ -1624,7 +1624,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return  valid handle to the parent item on success. This will be the last
   //          handle to the item
-  WriteHandle tryEvictChainedItem(Item& item);
+  WriteHandle tryEvictChainedItem(MMContainer& mmContainer, Item& item);
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
@@ -1877,7 +1877,7 @@ class CacheAllocator : public CacheBase {
   }
 
   static bool itemEvictionPredicate(const Item& item) {
-    return item.getRefCount() == 0 && !item.isMoving();
+    return item.getRefCount() == 1 && !item.isMoving();
   }
 
   static bool itemExpiryPredicate(const Item& item) {
