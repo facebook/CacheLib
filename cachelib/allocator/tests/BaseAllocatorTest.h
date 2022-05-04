@@ -229,9 +229,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                                           test_util::getRandomAsciiStr(256),
                                           sizes1[0]),
                  std::invalid_argument);
-    ASSERT_THROW(
-        util::allocateAccessible(alloc, poolId1, {nullptr, 10}, sizes1[0]),
-        std::invalid_argument);
+    // Note: we don't test for a null stringpiece with positive size as the key
+    //       because folly::StringPiece now throws an exception for it
 
     // allocate until we evict the key.
     this->fillUpPoolUntilEvictions(alloc, poolId2, sizes2, keyLen);
@@ -5832,14 +5831,10 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_FALSE(util::isKeyValid(key));
       EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
     }
+    // Note: we don't test for a null stringpiece with positive size as the key
+    //       because folly::StringPiece now throws an exception for it
     {
-      // 3) invalid due to folly::StringPiece being invalid
-      auto key = folly::StringPiece{nullptr, std::size_t{10}};
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
-    }
-    {
-      // (2) and (3) invalid due to both length and start pointer
+      // 3) invalid due due a null key
       auto key = folly::StringPiece{nullptr, std::size_t{0}};
       EXPECT_FALSE(util::isKeyValid(key));
       EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);

@@ -366,7 +366,7 @@ TYPED_TEST(BaseAllocatorTest, ConfigValidation) {
   this->testConfigValidation();
 }
 
-TYPED_TEST(BaseAllocatorTest, CackeKeyValidity) {
+TYPED_TEST(BaseAllocatorTest, CacheKeyValidity) {
   this->testCacheKeyValidity();
 }
 
