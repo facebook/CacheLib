@@ -34,6 +34,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, samplingIntervalMs);
 
   JSONSetVal(configJson, checkConsistency);
+  JSONSetVal(configJson, touchValue);
 
   JSONSetVal(configJson, numOps);
   JSONSetVal(configJson, numThreads);
