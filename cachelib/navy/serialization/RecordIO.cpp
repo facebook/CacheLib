@@ -63,25 +63,29 @@ class FileRecordReader final : public RecordReader {
 class DeviceMetaDataWriter final : public RecordWriter {
  public:
   explicit DeviceMetaDataWriter(Device& dev, size_t metadataSize)
-      : dev_(dev), metadataSize_{metadataSize} {}
+      : dev_(dev),
+        metadataSize_{metadataSize},
+        blockSize_{dev_.getIOAlignmentSize() >= kBlockSizeDefault
+                       ? dev_.getIOAlignmentSize()
+                       : kBlockSizeDefault} {}
 
   ~DeviceMetaDataWriter() override {
     uint8_t* bufferData = buffer_.data();
     // Write the last remaining bytes to the device
     if (bufIndex_ > 0) {
-      if (offset_ + kBlockSize < metadataSize_) {
-        Buffer buffer = dev_.makeIOBuffer(kBlockSize);
+      if (offset_ + blockSize_ < metadataSize_) {
+        Buffer buffer = dev_.makeIOBuffer(blockSize_);
         memcpy(buffer.data(), bufferData, bufIndex_);
-        memset(buffer.data() + bufIndex_, 0, kBlockSize - bufIndex_);
+        memset(buffer.data() + bufIndex_, 0, blockSize_ - bufIndex_);
         dev_.write(offset_, std::move(buffer));
-        offset_ += kBlockSize;
+        offset_ += blockSize_;
       }
     }
-    if (offset_ + kBlockSize <= metadataSize_) {
+    if (offset_ + blockSize_ <= metadataSize_) {
       // Write an additional block of zeroed out memory just to make the end
       // of metadata clear
-      Buffer buffer = dev_.makeIOBuffer(kBlockSize);
-      memset(buffer.data(), 0, kBlockSize);
+      Buffer buffer = dev_.makeIOBuffer(blockSize_);
+      memset(buffer.data(), 0, blockSize_);
       dev_.write(offset_, std::move(buffer));
     }
   }
@@ -99,25 +103,39 @@ class DeviceMetaDataWriter final : public RecordWriter {
     auto dataOffset = 0;
     uint8_t* bufferData = buffer_.data();
 
-    do {
-      if (bufIndex_ + headerSize() > kBlockSize) {
-        auto extraBytes = kBlockSize - bufIndex_;
-        // zero the unused bytes in the buffer
-        memset(&bufferData[bufIndex_], 0, extraBytes);
-        // Make sure we do not write beyond the maximum allocated for metadata
-        if (offset_ + kBlockSize > metadataSize_) {
-          throw std::logic_error("exceeding metadata limit");
-        }
-        Buffer buffer = dev_.makeIOBuffer(kBlockSize);
-        memcpy(buffer.data(), bufferData, kBlockSize);
-        if (!dev_.write(offset_, std::move(buffer))) {
-          throw std::invalid_argument(
-              folly::sformat("write failed: offset = {}", offset_));
-        }
-        offset_ += kBlockSize;
-        bufIndex_ = 0;
+    auto flushBuffer = [=]() mutable {
+      auto extraBytes = blockSize_ - bufIndex_;
+      // zero the unused bytes in the buffer
+      memset(&bufferData[bufIndex_], 0, extraBytes);
+      Buffer buffer = dev_.makeIOBuffer(blockSize_);
+      memcpy(buffer.data(), bufferData, blockSize_);
+
+      if (!dev_.write(offset_, std::move(buffer))) {
+        throw std::invalid_argument(
+            folly::sformat("write failed: offset = {}", offset_));
       }
-      auto cpBytes = std::min(static_cast<uint64_t>(kBlockSize - bufIndex_),
+
+      offset_ += blockSize_;
+      bufIndex_ = 0;
+    };
+
+    do {
+      // flush current buffer if it has no room for header
+      if (bufIndex_ + headerSize() > blockSize_) {
+        flushBuffer();
+      }
+
+      // if current input data total size is larger than capped size,
+      // flush current buffer and raise exception.
+      if (offset_ + bufIndex_ + size > metadataSize_) {
+        if (bufIndex_ != 0) {
+          flushBuffer();
+        }
+        throw std::logic_error("exceeding metadata limit");
+      }
+
+      // fill local buffer with input data
+      auto cpBytes = std::min(static_cast<uint64_t>(blockSize_ - bufIndex_),
                               static_cast<uint64_t>(size));
       memcpy(&bufferData[bufIndex_], data + dataOffset, cpBytes);
       dataOffset += cpBytes;
@@ -127,24 +145,29 @@ class DeviceMetaDataWriter final : public RecordWriter {
   }
 
   bool invalidate() override {
-    Buffer invalidateBuffer{kBlockSize, kBlockSize};
-    memset(invalidateBuffer.data(), 0, kBlockSize);
+    Buffer invalidateBuffer{blockSize_, blockSize_};
+    memset(invalidateBuffer.data(), 0, blockSize_);
     return dev_.write(0, std::move(invalidateBuffer));
   }
 
  private:
-  static constexpr uint32_t kBlockSize{4096};
+  static constexpr size_t kBlockSizeDefault = 4096;
   Device& dev_;
+  size_t metadataSize_;
+  const size_t blockSize_;
   uint64_t offset_{0};
-  size_t metadataSize_{0};
-  Buffer buffer_{kBlockSize, kBlockSize};
   uint32_t bufIndex_{0};
+  Buffer buffer_{blockSize_, blockSize_};
 };
 
 class DeviceMetaDataReader final : public RecordReader {
  public:
   explicit DeviceMetaDataReader(Device& dev, size_t metadataSize)
-      : dev_{dev}, metadataSize_{metadataSize} {}
+      : dev_{dev},
+        metadataSize_{metadataSize},
+        blockSize_{dev_.getIOAlignmentSize() >= kBlockSizeDefault
+                       ? dev_.getIOAlignmentSize()
+                       : kBlockSizeDefault} {}
   ~DeviceMetaDataReader() override = default;
 
   std::unique_ptr<folly::IOBuf> readRecord() override {
@@ -159,18 +182,18 @@ class DeviceMetaDataReader final : public RecordReader {
       // This is true when we have to read a header and there are not
       // enough bytes in the buffer OR we have to read the next block
       // in the multi-block read
-      if (bufIndex_ + headerSize() > kBlockSize) {
+      if (bufIndex_ + headerSize() > blockSize_) {
         // read new block from the device if the number of bytes left from
         // previous read are less than header size.
-        if (offset_ + kBlockSize > metadataSize_) {
+        if (offset_ + blockSize_ > metadataSize_) {
           throw std::logic_error("exceeding metadata limit");
         }
         // read from device to the middle of the buffer 'kReadOffset'
-        if (!dev_.read(offset_, kBlockSize, bufferData)) {
+        if (!dev_.read(offset_, blockSize_, bufferData)) {
           throw std::invalid_argument(
               folly::sformat("read failed: offset = {}", offset_));
         }
-        offset_ += kBlockSize;
+        offset_ += blockSize_;
         bufIndex_ = 0;
       }
 
@@ -179,7 +202,7 @@ class DeviceMetaDataReader final : public RecordReader {
         readHeader = false;
         auto valid = validateRecordHeader(
             folly::Range<unsigned char*>(&bufferData[bufIndex_],
-                                         kBlockSize - bufIndex_),
+                                         blockSize_ - bufIndex_),
             kMetadataHeaderFileId);
         if (!valid) {
           throw std::logic_error("Invalid record header");
@@ -198,7 +221,7 @@ class DeviceMetaDataReader final : public RecordReader {
         dataOffset = 0;
       }
       auto cpSize =
-          std::min(static_cast<uint64_t>(kBlockSize - bufIndex_), size);
+          std::min(static_cast<uint64_t>(blockSize_ - bufIndex_), size);
       memcpy(data + dataOffset, &bufferData[bufIndex_], cpSize);
       bufIndex_ += cpSize;
       dataOffset += cpSize;
@@ -218,30 +241,29 @@ class DeviceMetaDataReader final : public RecordReader {
   }
 
   bool isEnd() const override {
-    Buffer headerBuf{kBlockSize, kBlockSize};
-    if (offset_ + kBlockSize > metadataSize_) {
+    Buffer headerBuf{blockSize_, blockSize_};
+    if (offset_ + blockSize_ > metadataSize_) {
       return true;
     }
-    auto res = dev_.read(offset_, kBlockSize, headerBuf.data());
+    auto res = dev_.read(offset_, blockSize_, headerBuf.data());
     if (!res) {
       return true;
     }
     auto valid = validateRecordHeader(
-        folly::Range<unsigned char*>(headerBuf.data(), kBlockSize),
+        folly::Range<unsigned char*>(headerBuf.data(), blockSize_),
         kMetadataHeaderFileId);
 
     return !valid;
   }
 
  private:
-  // TODO: T95780004 get block size from device or through constructor
-  static constexpr size_t kBlockSize = 4096;
-
+  static constexpr size_t kBlockSizeDefault = 4096;
   Device& dev_;
+  size_t metadataSize_;
+  const size_t blockSize_;
   uint64_t offset_{0};
-  size_t metadataSize_{0};
-  uint64_t bufIndex_{kBlockSize};
-  Buffer buffer_{kBlockSize, kBlockSize};
+  uint64_t bufIndex_{blockSize_};
+  Buffer buffer_{blockSize_, blockSize_};
 };
 
 } // namespace

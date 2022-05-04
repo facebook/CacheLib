@@ -83,36 +83,47 @@ TEST(RecordIO, Memory) {
   checkRecords(*rr);
 }
 
+/**
+  MemoryDevice test has each data payload fixed 4k in size; with header size
+  included would be larger than 4k.
+  DeviceMetaDataWriter/DeviceMetaDataReader capped its capacity size with
+  'metadataSize'.
+  Each callable 'runTest' intended to write/read two payloads sequentially
+  to/from DeviceMetaDataWriter/DeviceMetaDataReader.
+*/
 TEST(RecordIO, MemoryDevice) {
-  auto metadataSize = 4 * 1024 * 1024;
+  constexpr uint32_t ioAlignSize = 4096;
+  constexpr uint32_t testSize = 4096;
+  constexpr char testChar = testSize % 26 + 'A';
+  constexpr int32_t nIter = 2;
 
-  // Test various sizes of records
-  std::vector<uint32_t> testSizes = {16,   33,    731,    4095,  4097,
-                                     8193, 15977, 121903, 693728};
-  for (size_t i = 0; i < testSizes.size(); i++) {
-    auto dev = createMemoryDevice(10 * metadataSize, nullptr /* encryption */);
-    auto testSize = testSizes[i];
-    char testChar = testSize % 26 + 'A';
-    uint32_t failedIter = 0;
-    uint32_t nIter = 1000;
+  auto runTest = [=](auto metadataSize, bool expectWriteFailed,
+                     bool expectReadFailed) {
+    int32_t failedIter = -1;
+    bool writeFailed = false;
+    bool readFailed = false;
+    auto dev = createMemoryDevice(10 * metadataSize, nullptr /* encryption */,
+                                  ioAlignSize);
     {
       auto rw = createMetadataRecordWriter(*dev, metadataSize);
-      for (uint32_t j = 0; j < nIter; j++) {
+      for (auto j = 0; j < nIter; j++) {
         auto wbuf = folly::IOBuf::create(testSize);
         wbuf->append(testSize);
         memset(wbuf->writableData(), testChar, testSize);
         try {
           rw->writeRecord(std::move(wbuf));
         } catch (std::logic_error& e) {
+          writeFailed = true;
           failedIter = j;
           break;
-          /* ignore */
         }
       }
     }
+    EXPECT_EQ(expectWriteFailed, writeFailed);
+
     {
       auto rr = createMetadataRecordReader(*dev, metadataSize);
-      for (uint32_t j = 0; j < nIter; j++) {
+      for (auto j = 0; j < nIter; j++) {
         try {
           auto rbuf = rr->readRecord();
           auto data = rbuf->data();
@@ -120,14 +131,85 @@ TEST(RecordIO, MemoryDevice) {
             EXPECT_EQ(data[k], testChar);
           }
         } catch (std::logic_error& e) {
-          // read should fail when we cannot write beyond the metadataSize
+          readFailed = true;
           EXPECT_EQ(j, failedIter);
           break;
         }
       }
     }
+    EXPECT_EQ(expectReadFailed, readFailed);
+  };
+
+  // Expecting both write/read to fail in first iteration due to data size
+  // (header + payload) is greater than capped size 4k.
+  runTest(4096 /* metadataSize */,
+          true /* expectWriteFailed */,
+          true /* expectReadFailed */);
+  // Expecting both write/read to fail in second iteration due to data size
+  // (header + payload) * 2 is greater than capped size 8k.
+  runTest(8192 /* metadataSize */,
+          true /* expectWriteFailed */,
+          true /* expectReadFailed */);
+  // Expecting both write/read to succeed while (header + payload) * 2 is under
+  // capped size 16k.
+  runTest(16384 /* metadataSize */,
+          false /* expectWriteFailed */,
+          false /* expectReadFailed */);
+}
+
+TEST(RecordIO, MemoryDeviceVariousPayloads) {
+  auto metadataSize = 4 * 1024 * 1024;
+  // Test various sizes of ioAlignSize start with 4096 with the number
+  // being the power of 2.
+  std::array<uint32_t, 3> ioAlignSizes = {4096, 8192, 16384};
+
+  // Test various sizes of records
+  std::vector<uint32_t> testSizes = {16,   33,    731,    4095,  4097,
+                                     8193, 15977, 121903, 693728};
+
+  for (auto ioAlignSize : ioAlignSizes) {
+    for (size_t i = 0; i < testSizes.size(); i++) {
+      auto dev = createMemoryDevice(10 * metadataSize, nullptr /* encryption */,
+                                    ioAlignSize);
+      auto testSize = testSizes[i];
+      char testChar = testSize % 26 + 'A';
+      uint32_t failedIter = 0;
+      uint32_t nIter = 1000;
+      {
+        auto rw = createMetadataRecordWriter(*dev, metadataSize);
+        for (uint32_t j = 0; j < nIter; j++) {
+          auto wbuf = folly::IOBuf::create(testSize);
+          wbuf->append(testSize);
+          memset(wbuf->writableData(), testChar, testSize);
+          try {
+            rw->writeRecord(std::move(wbuf));
+          } catch (std::logic_error& e) {
+            failedIter = j;
+            break;
+            /* ignore */
+          }
+        }
+      }
+      {
+        auto rr = createMetadataRecordReader(*dev, metadataSize);
+        for (uint32_t j = 0; j < nIter; j++) {
+          try {
+            auto rbuf = rr->readRecord();
+            auto data = rbuf->data();
+            for (uint32_t k = 0; k < testSize; k++) {
+              EXPECT_EQ(data[k], testChar);
+            }
+          } catch (std::logic_error& e) {
+            // read should fail when we cannot write beyond the metadataSize
+            EXPECT_EQ(j, failedIter);
+            break;
+          }
+        }
+      }
+    }
   }
 }
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib
