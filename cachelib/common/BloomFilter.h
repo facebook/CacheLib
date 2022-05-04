@@ -152,16 +152,16 @@ void BloomFilter::recover(RecordReader& rr) {
   const auto bd = facebook::cachelib::deserializeProto<
       serialization::BloomFilterPersistentData,
       SerializationProto>(rr);
-  if (numFilters_ != static_cast<uint32_t>(*bd.numFilters_ref()) ||
-      hashTableBitSize_ != static_cast<uint64_t>(*bd.hashTableBitSize_ref()) ||
-      filterByteSize_ != static_cast<uint64_t>(*bd.filterByteSize_ref()) ||
-      static_cast<uint32_t>(*bd.fragmentSize_ref()) != kPersistFragmentSize) {
+  if (numFilters_ != static_cast<uint32_t>(*bd.numFilters()) ||
+      hashTableBitSize_ != static_cast<uint64_t>(*bd.hashTableBitSize()) ||
+      filterByteSize_ != static_cast<uint64_t>(*bd.filterByteSize()) ||
+      static_cast<uint32_t>(*bd.fragmentSize()) != kPersistFragmentSize) {
     throw std::invalid_argument(
         "Could not recover BloomFilter. Invalid BloomFilter.");
   }
 
-  for (uint32_t i = 0; i < bd.seeds_ref()->size(); i++) {
-    seeds_[i] = bd.seeds_ref()[i];
+  for (uint32_t i = 0; i < bd.seeds()->size(); i++) {
+    seeds_[i] = bd.seeds()[i];
   }
   deserializeBits(rr);
 }

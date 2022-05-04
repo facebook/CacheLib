@@ -104,9 +104,9 @@ TEST_F(NvmCacheStateTest, CreationTime) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion - 1;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion - 1;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
@@ -143,10 +143,10 @@ TEST_F(NvmCacheStateTest, Encryption) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
-    *metadata.encryptionEnabled_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
+    *metadata.encryptionEnabled() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
@@ -181,10 +181,10 @@ TEST_F(NvmCacheStateTest, TruncateAllocSize) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
-    *metadata.truncateAllocSize_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
+    *metadata.truncateAllocSize() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};

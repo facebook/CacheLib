@@ -1457,7 +1457,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
           Deserializer deserializer{iobuf->data(),
                                     iobuf->data() + iobuf->length()};
           auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
-          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          c.cacheSize() = *c.cacheSize() + 4096;
           serializeProto(c, rw2);
         }));
     engine->persist(rw2);
@@ -1470,8 +1470,8 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
           Deserializer deserializer{iobuf->data(),
                                     iobuf->data() + iobuf->length()};
           auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
-          c.version_ref() = 11;
-          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          c.version() = 11;
+          c.cacheSize() = *c.cacheSize() + 4096;
           serializeProto(c, rw3);
         }));
     engine->persist(rw3);

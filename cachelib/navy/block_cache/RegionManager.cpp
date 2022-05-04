@@ -415,31 +415,30 @@ void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
 
 void RegionManager::persist(RecordWriter& rw) const {
   serialization::RegionData regionData;
-  *regionData.regionSize_ref() = regionSize_;
-  regionData.regions_ref()->resize(numRegions_);
+  *regionData.regionSize() = regionSize_;
+  regionData.regions()->resize(numRegions_);
   for (uint32_t i = 0; i < numRegions_; i++) {
-    auto& regionProto = regionData.regions_ref()[i];
-    *regionProto.regionId_ref() = i;
-    *regionProto.lastEntryEndOffset_ref() =
-        regions_[i]->getLastEntryEndOffset();
-    regionProto.priority_ref() = regions_[i]->getPriority();
-    *regionProto.numItems_ref() = regions_[i]->getNumItems();
+    auto& regionProto = regionData.regions()[i];
+    *regionProto.regionId() = i;
+    *regionProto.lastEntryEndOffset() = regions_[i]->getLastEntryEndOffset();
+    regionProto.priority() = regions_[i]->getPriority();
+    *regionProto.numItems() = regions_[i]->getNumItems();
   }
   serializeProto(regionData, rw);
 }
 
 void RegionManager::recover(RecordReader& rr) {
   auto regionData = deserializeProto<serialization::RegionData>(rr);
-  if (regionData.regions_ref()->size() != numRegions_ ||
-      static_cast<uint32_t>(*regionData.regionSize_ref()) != regionSize_) {
+  if (regionData.regions()->size() != numRegions_ ||
+      static_cast<uint32_t>(*regionData.regionSize()) != regionSize_) {
     throw std::invalid_argument(
         "Could not recover RegionManager. Invalid RegionData.");
   }
 
-  for (auto& regionProto : *regionData.regions_ref()) {
-    uint32_t index = *regionProto.regionId_ref();
+  for (auto& regionProto : *regionData.regions()) {
+    uint32_t index = *regionProto.regionId();
     if (index >= numRegions_ ||
-        static_cast<uint32_t>(*regionProto.lastEntryEndOffset_ref()) >
+        static_cast<uint32_t>(*regionProto.lastEntryEndOffset()) >
             regionSize_) {
       throw std::invalid_argument(
           "Could not recover RegionManager. Invalid RegionId.");
@@ -447,11 +446,11 @@ void RegionManager::recover(RecordReader& rr) {
     // To handle compatibility between different priorities. If the current
     // setup has fewer priorities than the last run, automatically downgrade
     // all higher priorties to the current max.
-    if (numPriorities_ > 0 && regionProto.priority_ref() >= numPriorities_) {
-      regionProto.priority_ref() = numPriorities_ - 1;
+    if (numPriorities_ > 0 && regionProto.priority() >= numPriorities_) {
+      regionProto.priority() = numPriorities_ - 1;
     }
     regions_[index] =
-        std::make_unique<Region>(regionProto, *regionData.regionSize_ref());
+        std::make_unique<Region>(regionProto, *regionData.regionSize());
   }
 
   // Reset policy and reinitialize it per the recovered state

@@ -112,23 +112,23 @@ void NvmCacheState::restoreState() {
     }
 
     auto metadata = loadMetadata(getFileNameFor(kNvmCacheState));
-    wasCleanshutDown_ = *metadata.safeShutDown_ref();
+    wasCleanshutDown_ = *metadata.safeShutDown();
 
     if (!shouldStartFresh()) {
-      if (*metadata.nvmFormatVersion_ref() == kCacheNvmFormatVersion &&
-          encryptionEnabled_ == *metadata.encryptionEnabled_ref() &&
-          truncateAllocSize_ == *metadata.truncateAllocSize_ref()) {
-        creationTime_ = *metadata.creationTime_ref();
+      if (*metadata.nvmFormatVersion() == kCacheNvmFormatVersion &&
+          encryptionEnabled_ == *metadata.encryptionEnabled() &&
+          truncateAllocSize_ == *metadata.truncateAllocSize()) {
+        creationTime_ = *metadata.creationTime();
       } else {
         XLOGF(ERR,
               "Expected nvm format version {}, but found {}. Expected "
               "encryption to be {}, but found {}. Expected truncateAllocSize "
               "to be {}, but found {}. Dropping NvmCache",
-              kCacheNvmFormatVersion, *metadata.nvmFormatVersion_ref(),
+              kCacheNvmFormatVersion, *metadata.nvmFormatVersion(),
               encryptionEnabled_ ? "true" : "false",
-              *metadata.encryptionEnabled_ref() ? "true" : "false",
+              *metadata.encryptionEnabled() ? "true" : "false",
               truncateAllocSize_ ? "true" : "false",
-              *metadata.truncateAllocSize_ref() ? "true" : "false");
+              *metadata.truncateAllocSize() ? "true" : "false");
         shouldDropNvmCache_ = true;
       }
     }
@@ -160,11 +160,11 @@ void NvmCacheState::clearPrevState() {
 void NvmCacheState::markSafeShutDown() {
   XDCHECK(metadataFile_);
   serialization::NvmCacheMetadata metadata;
-  *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-  *metadata.creationTime_ref() = creationTime_;
-  *metadata.safeShutDown_ref() = true;
-  *metadata.encryptionEnabled_ref() = encryptionEnabled_;
-  *metadata.truncateAllocSize_ref() = truncateAllocSize_;
+  *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
+  *metadata.creationTime() = creationTime_;
+  *metadata.safeShutDown() = true;
+  *metadata.encryptionEnabled() = encryptionEnabled_;
+  *metadata.truncateAllocSize() = truncateAllocSize_;
   saveMetadata(*metadataFile_, metadata);
 }
 

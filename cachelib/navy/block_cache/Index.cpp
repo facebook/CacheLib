@@ -167,39 +167,39 @@ size_t Index::computeSize() const {
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    *bucket.bucketId_ref() = i;
+    *bucket.bucketId() = i;
     // Convert index entries to thrift objects
     for (const auto& [key, record] : buckets_[i]) {
       serialization::IndexEntry entry;
-      entry.key_ref() = key;
-      entry.address_ref() = record.address;
-      entry.sizeHint_ref() = record.sizeHint;
-      entry.totalHits_ref() = record.totalHits;
-      entry.currentHits_ref() = record.currentHits;
-      bucket.entries_ref()->push_back(entry);
+      entry.key() = key;
+      entry.address() = record.address;
+      entry.sizeHint() = record.sizeHint;
+      entry.totalHits() = record.totalHits;
+      entry.currentHits() = record.currentHits;
+      bucket.entries()->push_back(entry);
     }
     // Serialize bucket then clear contents to reuse memory.
     serializeProto(bucket, rw);
-    bucket.entries_ref()->clear();
+    bucket.entries()->clear();
   }
 }
 
 void Index::recover(RecordReader& rr) {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     auto bucket = deserializeProto<serialization::IndexBucket>(rr);
-    uint32_t id = *bucket.bucketId_ref();
+    uint32_t id = *bucket.bucketId();
     if (id >= kNumBuckets) {
       throw std::invalid_argument{
           folly::sformat("Invalid bucket id. Max buckets: {}, bucket id: {}",
                          kNumBuckets,
                          id)};
     }
-    for (auto& entry : *bucket.entries_ref()) {
-      buckets_[id].try_emplace(*entry.key_ref(),
-                               *entry.address_ref(),
-                               *entry.sizeHint_ref(),
-                               *entry.totalHits_ref(),
-                               *entry.currentHits_ref());
+    for (auto& entry : *bucket.entries()) {
+      buckets_[id].try_emplace(*entry.key(),
+                               *entry.address(),
+                               *entry.sizeHint(),
+                               *entry.totalHits(),
+                               *entry.currentHits());
     }
   }
 }
