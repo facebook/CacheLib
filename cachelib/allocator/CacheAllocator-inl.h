@@ -1228,15 +1228,23 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
     (*stats_.evictionAttempts)[pid][cid].inc();
 
     Item* candidate = itr.get();
-    mmContainer.remove(itr);
+
+    // make sure no other thead is evicting the item
+    if (candidate->getRefCount() != 0) {
+      ++itr;
+      continue;
+    }
+  
+    incRef(*candidate);
     itr.destroy();
 
     // for chained items, the ownership of the parent can change. We try to
     // evict what we think as parent and see if the eviction of parent
     // recycles the child we intend to.
     auto toReleaseHandle = candidate->isChainedItem()
-                               ? tryEvictChainedItem(*candidate)
+                               ? tryEvictChainedItem(mmContainer, *candidate)
                                : tryEvictRegularItem(mmContainer, *candidate);
+                               // XXX: fix chained item
 
     if (toReleaseHandle) {
       if (toReleaseHandle->hasChainedItem()) {
@@ -1255,7 +1263,7 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       // we must be the last handle and for chained items, this will be
       // the parent.
       XDCHECK(toReleaseHandle.get() == candidate || candidate->isChainedItem());
-      XDCHECK_EQ(1u, toReleaseHandle->getRefCount());
+      XDCHECK_EQ(2u, toReleaseHandle->getRefCount());
 
       // We manually release the item here because we don't want to
       // invoke the Item Handle's destructor which will be decrementing
@@ -1263,6 +1271,7 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       auto& itemToRelease = *toReleaseHandle.release();
 
       // Decrementing the refcount because we want to recycle the item
+      decRef(itemToRelease);
       const auto ref = decRef(itemToRelease);
       XDCHECK_EQ(0u, ref);
 
@@ -1275,9 +1284,13 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       }
     }
 
-    // Insert item back to the mmContainer if eviction failed.
-    mmContainer.add(*candidate);
-    itr.resetToBegin();
+    // If we destroyed the itr to possibly evict and failed, we restart
+    // from the beginning again
+    if (!itr) {
+      itr.resetToBegin();
+      for (int i = 0; i < searchTries; i++)
+        ++itr;
+    }
   }
   return nullptr;
 }
@@ -1344,6 +1357,7 @@ CacheAllocator<CacheTrait>::tryEvictRegularItem(MMContainer& mmContainer,
   // stalling eviction.
   if (evictToNvmCache && !token.isValid()) {
     stats_.evictFailConcurrentFill.inc();
+    decRef(item);
     return WriteHandle{};
   }
 
@@ -1355,9 +1369,12 @@ CacheAllocator<CacheTrait>::tryEvictRegularItem(MMContainer& mmContainer,
 
   if (!evictHandle) {
     stats_.evictFailAC.inc();
+    decRef(item);
     return evictHandle;
   }
 
+  auto removed = mmContainer.remove(item);
+  XDCHECK(removed);
   XDCHECK_EQ(reinterpret_cast<uintptr_t>(evictHandle.get()),
              reinterpret_cast<uintptr_t>(&item));
   XDCHECK(!evictHandle->isInMMContainer());
@@ -1369,12 +1386,13 @@ CacheAllocator<CacheTrait>::tryEvictRegularItem(MMContainer& mmContainer,
   // is set. Iterator was already advance by the remove call above.
   if (evictHandle->isMoving()) {
     stats_.evictFailMove.inc();
+    decRef(item);
     return WriteHandle{};
   }
 
   // Ensure that there are no accessors after removing from the access
   // container
-  XDCHECK(evictHandle->getRefCount() == 1);
+  XDCHECK(evictHandle->getRefCount() == 2);
 
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(item)) {
     XDCHECK(token.isValid());
@@ -1385,7 +1403,7 @@ CacheAllocator<CacheTrait>::tryEvictRegularItem(MMContainer& mmContainer,
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
-CacheAllocator<CacheTrait>::tryEvictChainedItem(Item& item) {
+CacheAllocator<CacheTrait>::tryEvictChainedItem(MMContainer& mmContainer, Item& item) {
   XDCHECK(item.isChainedItem());
 
   ChainedItem* candidate = &item.asChainedItem();
@@ -1417,9 +1435,11 @@ CacheAllocator<CacheTrait>::tryEvictChainedItem(Item& item) {
 
   // Ensure we have the correct parent and we're the only user of the
   // parent, then free it from access container. Otherwise, we abort
+  auto removed = mmContainer.remove(item);
+  XDCHECK(removed);
   XDCHECK_EQ(reinterpret_cast<uintptr_t>(&parent),
              reinterpret_cast<uintptr_t>(parentHandle.get()));
-  XDCHECK_EQ(1u, parent.getRefCount());
+  XDCHECK_EQ(2u, parent.getRefCount()); // XXX?
   XDCHECK(!parent.isInMMContainer());
   XDCHECK(!parent.isAccessible());
 
