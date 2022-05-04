@@ -128,15 +128,14 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
           [this](Item* it) -> WriteHandle { return acquire(it); })),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{
-          static_cast<uint32_t>(*metadata_.cacheCreationTime_ref())},
+      cacheCreationTime_{static_cast<uint32_t>(*metadata_.cacheCreationTime())},
       cacheInstanceCreationTime_{util::getCurrentTimeSec()},
       // Pass in cacheInstnaceCreationTime_ as the current time to keep
       // nvmCacheState's current time in sync
       nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
                      config_.isNvmCacheEncryptionEnabled(),
                      config_.isNvmCacheTruncateAllocSizeEnabled()} {
-  for (auto pid : *metadata_.compactCachePools_ref()) {
+  for (auto pid : *metadata_.compactCachePools()) {
     isCompactCachePool_[pid] = true;
   }
 
@@ -2995,31 +2994,31 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
         "There are still slabs being released at the moment");
   }
 
-  *metadata_.allocatorVersion_ref() = kCachelibVersion;
-  *metadata_.ramFormatVersion_ref() = kCacheRamFormatVersion;
-  *metadata_.cacheCreationTime_ref() = static_cast<int64_t>(cacheCreationTime_);
-  *metadata_.mmType_ref() = MMType::kId;
-  *metadata_.accessType_ref() = AccessType::kId;
+  *metadata_.allocatorVersion() = kCachelibVersion;
+  *metadata_.ramFormatVersion() = kCacheRamFormatVersion;
+  *metadata_.cacheCreationTime() = static_cast<int64_t>(cacheCreationTime_);
+  *metadata_.mmType() = MMType::kId;
+  *metadata_.accessType() = AccessType::kId;
 
-  metadata_.compactCachePools_ref()->clear();
+  metadata_.compactCachePools()->clear();
   const auto pools = getPoolIds();
   {
     folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
     for (PoolId pid : pools) {
       for (unsigned int cid = 0; cid < (*stats_.fragmentationSize)[pid].size();
            ++cid) {
-        metadata_.fragmentationSize_ref()[pid][static_cast<ClassId>(cid)] =
+        metadata_.fragmentationSize()[pid][static_cast<ClassId>(cid)] =
             (*stats_.fragmentationSize)[pid][cid].get();
       }
       if (isCompactCachePool_[pid]) {
-        metadata_.compactCachePools_ref()->push_back(pid);
+        metadata_.compactCachePools()->push_back(pid);
       }
     }
   }
 
-  *metadata_.numChainedParentItems_ref() = stats_.numChainedParentItems.get();
-  *metadata_.numChainedChildItems_ref() = stats_.numChainedChildItems.get();
-  *metadata_.numAbortedSlabReleases_ref() = stats_.numAbortedSlabReleases.get();
+  *metadata_.numChainedParentItems() = stats_.numChainedParentItems.get();
+  *metadata_.numChainedChildItems() = stats_.numChainedChildItems.get();
+  *metadata_.numAbortedSlabReleases() = stats_.numAbortedSlabReleases.get();
 
   auto serializeMMContainers = [](MMContainers& mmContainers) {
     MMSerializationTypeContainer state;
@@ -3181,7 +3180,7 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
   }
   // We need to drop the unevictableMMContainer in the desierializer.
   // TODO: remove this at version 17.
-  if (metadata_.allocatorVersion_ref() <= 15) {
+  if (metadata_.allocatorVersion() <= 15) {
     deserializer.deserialize<MMSerializationTypeContainer>();
   }
   return mmContainers;
@@ -3258,7 +3257,7 @@ void CacheAllocator<CacheTrait>::initStats() {
   stats_.init();
 
   // deserialize the fragmentation size of each thread.
-  for (const auto& pid : *metadata_.fragmentationSize_ref()) {
+  for (const auto& pid : *metadata_.fragmentationSize()) {
     for (const auto& cid : pid.second) {
       (*stats_.fragmentationSize)[pid.first][cid.first].set(
           static_cast<uint64_t>(cid.second));
@@ -3266,10 +3265,10 @@ void CacheAllocator<CacheTrait>::initStats() {
   }
 
   // deserialize item counter stats
-  stats_.numChainedParentItems.set(*metadata_.numChainedParentItems_ref());
-  stats_.numChainedChildItems.set(*metadata_.numChainedChildItems_ref());
+  stats_.numChainedParentItems.set(*metadata_.numChainedParentItems());
+  stats_.numChainedChildItems.set(*metadata_.numChainedChildItems());
   stats_.numAbortedSlabReleases.set(
-      static_cast<uint64_t>(*metadata_.numAbortedSlabReleases_ref()));
+      static_cast<uint64_t>(*metadata_.numAbortedSlabReleases()));
 }
 
 template <typename CacheTrait>
