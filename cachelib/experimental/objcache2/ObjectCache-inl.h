@@ -34,12 +34,12 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
     cacheSize = l1SizeRequiredSlabGranularity + Slab::kSize;
   }
 
-  LruAllocator::Config l1Config;
+  typename CacheTrait::Config l1Config;
   l1Config.setCacheName(config.cacheName)
       .setCacheSize(cacheSize)
       .setAccessConfig({config.l1HashTablePower, config.l1LockPower})
       .setDefaultAllocSizes({config.l1AllocSize});
-  l1Config.setItemDestructor([this](LruAllocator::DestructorData ctx) {
+  l1Config.setItemDestructor([this](typename CacheTrait::DestructorData ctx) {
     if (ctx.context == DestructorContext::kEvictedFromRAM) {
       evictions_.inc();
     }
@@ -56,7 +56,7 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
     };
   });
 
-  this->l1Cache_ = std::make_unique<LruAllocator>(l1Config);
+  this->l1Cache_ = std::make_unique<CacheTrait>(l1Config);
   size_t perPoolSize =
       this->l1Cache_->getCacheMemoryStats().cacheSize / l1NumShards_;
   // pool size can't be smaller than slab size
