@@ -115,7 +115,7 @@ class ObjectCache : public ObjectCacheBase<CacheTrait> {
       std::function<void(folly::StringPiece, uint64_t)> visitor) const override;
 
   uint64_t getNumEntries() const {
-    return this->l1Cache_->getGlobalCacheStats().numItems;
+    return this->l1Cache_->getAccessContainerNumKeys();
   }
 
   CacheTrait& getL1Cache() { return *this->l1Cache_; }

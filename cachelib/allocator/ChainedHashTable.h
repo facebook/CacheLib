@@ -636,7 +636,9 @@ class ChainedHashTable {
     Stats getStats() const noexcept { return {numKeys_, ht_.getNumBuckets()}; }
 
     // Get the total number of keys inserted into the hash table
-    uint64_t getNumKeys() const noexcept { return numKeys_; }
+    uint64_t getNumKeys() const noexcept {
+      return numKeys_.load(std::memory_order_relaxed);
+    }
 
    private:
     using Hashtable = Impl<T, HookPtr>;

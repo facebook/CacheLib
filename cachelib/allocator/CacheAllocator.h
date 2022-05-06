@@ -1062,6 +1062,11 @@ class CacheAllocator : public CacheBase {
     return accessContainer_->getStats();
   }
 
+  // Get the total number of keys inserted into the access container
+  uint64_t getAccessContainerNumKeys() const {
+    return accessContainer_->getNumKeys();
+  }
+
   // returns the reaper stats
   ReaperStats getReaperStats() const {
     auto stats = reaper_ ? reaper_->getStats() : ReaperStats{};
