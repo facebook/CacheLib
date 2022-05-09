@@ -2445,41 +2445,53 @@ TEST_F(NvmCacheTest, IsNewCacheInstanceStat) {
   auto stats = getStats();
   EXPECT_TRUE(stats.isNewRamCache);
   EXPECT_TRUE(stats.isNewNvmCache);
+  // The sleep calls in this test is to make sure the time
+  // has moved forward by a second or two so the cache uptime
+  // checks we rely on for determining new/warm cache is valid.
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   // Use SHM. This is also a new cache instance
   this->convertToShmCache();
+  stats = getStats();
   EXPECT_TRUE(stats.isNewRamCache);
   EXPECT_TRUE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   warmRoll();
   stats = getStats();
   EXPECT_FALSE(stats.isNewRamCache);
   EXPECT_FALSE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   coldRoll();
   stats = getStats();
   EXPECT_TRUE(stats.isNewRamCache);
   EXPECT_FALSE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   warmRoll();
   stats = getStats();
   EXPECT_FALSE(stats.isNewRamCache);
   EXPECT_FALSE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   iceRoll();
   stats = getStats();
   EXPECT_FALSE(stats.isNewRamCache);
   EXPECT_TRUE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   warmRoll();
   stats = getStats();
   EXPECT_FALSE(stats.isNewRamCache);
   EXPECT_FALSE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 
   iceColdRoll();
   stats = getStats();
   EXPECT_TRUE(stats.isNewRamCache);
   EXPECT_TRUE(stats.isNewNvmCache);
+  std::this_thread::sleep_for(std::chrono::seconds{2});
 }
 } // namespace tests
 } // namespace cachelib
