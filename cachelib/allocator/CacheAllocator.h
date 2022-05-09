@@ -1755,7 +1755,8 @@ class CacheAllocator : public CacheBase {
     // primitives. So we consciously exempt ourselves here from TSAN data race
     // detection.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
-    allocator_->forEachAllocation(std::forward<Fn>(f));
+    auto slabsSkipped = allocator_->forEachAllocation(std::forward<Fn>(f));
+    stats().numSkippedSlabReleases.add(slabsSkipped);
   }
 
   // returns true if nvmcache is enabled and we should write this item to

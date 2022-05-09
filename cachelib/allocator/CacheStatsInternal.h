@@ -175,6 +175,7 @@ struct Stats {
   AtomicCounter numReleasedForResize{0};
   AtomicCounter numReleasedForAdvise{0};
   AtomicCounter numAbortedSlabReleases{0};
+  AtomicCounter numSkippedSlabReleases{0};
 
   // allocations with invalid parameters
   AtomicCounter invalidAllocs{0};

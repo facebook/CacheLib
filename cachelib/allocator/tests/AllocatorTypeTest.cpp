@@ -221,6 +221,14 @@ TYPED_TEST(BaseAllocatorTest, ReaperOutOfBound) {
   this->testReaperOutOfBound();
 }
 
+TYPED_TEST(BaseAllocatorTest, ReaperSkippingSlabConcurrentTraversal) {
+  this->testReaperSkippingSlabConcurrentTraversal();
+}
+
+TYPED_TEST(BaseAllocatorTest, ReaperSkippingSlabTraversalWhileSlabReleasing) {
+  this->testReaperSkippingSlabTraversalWhileSlabReleasing();
+}
+
 TYPED_TEST(BaseAllocatorTest, ReaperShutDown) { this->testReaperShutDown(); }
 
 TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {

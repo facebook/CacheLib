@@ -495,6 +495,9 @@ struct GlobalCacheStats {
   // Number of times slab release was aborted due to shutdown
   uint64_t numAbortedSlabReleases{0};
 
+  // Number of times slab was skipped when reaper runs
+  uint64_t numSkippedSlabReleases{0};
+
   // current active handles outstanding. This stat should
   // not go to negative. If it's negative, it means we have
   // leaked handles (or some sort of accounting bug internally)
