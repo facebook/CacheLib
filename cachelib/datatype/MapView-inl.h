@@ -33,6 +33,21 @@ MapView<K, V, C>::MapView(const Item& parent,
 }
 
 template <typename K, typename V, typename C>
+MapView<K, V, C>::MapView(MapView&& other) noexcept
+    : hashtable_(other.hashtable_),
+      buffers_(std::move(other.buffers_)),
+      numBytes_(other.numBytes_) {}
+
+template <typename K, typename V, typename C>
+MapView<K, V, C>& MapView<K, V, C>::operator=(MapView&& other) noexcept {
+  if (this != &other) {
+    this->~MapView();
+    new (this) MapView(std::move(other));
+  }
+  return *this;
+}
+
+template <typename K, typename V, typename C>
 size_t MapView<K, V, C>::sizeInBytes() const {
   return numBytes_;
 }
@@ -65,5 +80,33 @@ const typename MapView<K, V, C>::EntryKeyValue* MapView<K, V, C>::get(
   auto* buffer = buffers_.at(itemOffset);
   return reinterpret_cast<const EntryKeyValue*>(buffer->getData(byteOffset));
 }
+
+template <typename K, typename V, typename C>
+ReadOnlyMap<K, V, C>::ReadOnlyMap(ReadOnlyMap&& other) noexcept
+    : MapView(std::move(other)), handle_(std::move(other.handle_)) {}
+
+template <typename K, typename V, typename C>
+ReadOnlyMap<K, V, C>& ReadOnlyMap<K, V, C>::operator=(
+    ReadOnlyMap&& other) noexcept {
+  if (this != &other) {
+    this->~ReadOnlyMap();
+    new (this) ReadOnlyMap(std::move(other));
+  }
+  return *this;
+}
+
+template <typename K, typename V, typename C>
+ReadOnlyMap<K, V, C> ReadOnlyMap<K, V, C>::fromReadHandle(CacheType& cache,
+                                                          ReadHandle handle) {
+  if (!handle) {
+    return {nullptr};
+  }
+  return ReadOnlyMap(cache, std::move(handle));
+}
+
+template <typename K, typename V, typename C>
+ReadOnlyMap<K, V, C>::ReadOnlyMap(CacheType& cache, ReadHandle handle)
+    : MapView(*handle, cache.viewAsChainedAllocsRange(*handle)),
+      handle_(std::move(handle)) {}
 } // namespace cachelib
 } // namespace facebook

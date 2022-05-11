@@ -86,6 +86,9 @@ class FbInternalRuntimeUpdateWrapper;
 template <typename AllocatorT>
 class CacheAllocatorFindApiWrapper;
 
+template <typename K, typename V, typename C>
+class ReadOnlyMap;
+
 namespace objcache2 {
 template <typename AllocatorT>
 class ObjectCache;
@@ -2026,6 +2029,8 @@ class CacheAllocator : public CacheBase {
   friend class CacheAllocatorFindApiWrapper<CacheT>;
   friend class objcache2::ObjectCache<CacheT>;
   friend class objcache2::ObjectCacheBase<CacheT>;
+  template <typename K, typename V, typename C>
+  friend class ReadOnlyMap;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
