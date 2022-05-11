@@ -2,6 +2,7 @@ name: build-cachelib-docker
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-cachelib-docker:
