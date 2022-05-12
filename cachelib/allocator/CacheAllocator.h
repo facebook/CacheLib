@@ -83,9 +83,6 @@ namespace cachelib {
 template <typename AllocatorT>
 class FbInternalRuntimeUpdateWrapper;
 
-template <typename AllocatorT>
-class CacheAllocatorFindApiWrapper;
-
 template <typename K, typename V, typename C>
 class ReadOnlyMap;
 
@@ -2026,7 +2023,6 @@ class CacheAllocator : public CacheBase {
   friend ReaperAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
-  friend class CacheAllocatorFindApiWrapper<CacheT>;
   friend class objcache2::ObjectCache<CacheT>;
   friend class objcache2::ObjectCacheBase<CacheT>;
   template <typename K, typename V, typename C>
