@@ -47,25 +47,22 @@ struct ObjectCacheConfig {
   // Number of shards to improve insert/remove concurrency
   size_t l1NumShards{1};
 
-  // default alloc size for l1 cache, only single alloc size is supported now
-  // this is an internal per-item overhead, used to approximately control cache
-  // limit temporarily before size awareness is available.
-  uint32_t l1AllocSize{1024};
-
-  // the l1 cache size, if it is default, we will calculate base on
+  // The l1 cache size, if it is default, we will calculate base on
   // l1EntriesLimit
   size_t l1CacheSize{0};
 
-  // cache name
+  // The cache name
   std::string cacheName;
-
-  // disable place holder, which is used to control the total number of entries
-  bool placeHolderDisabled{false};
 };
 
 template <typename CacheTrait>
 class ObjectCache : public ObjectCacheBase<CacheTrait> {
  private:
+  // default alloc size for l1 cache, only single alloc size is supported now
+  // this is an internal per-item overhead, used to approximately control cache
+  // limit temporarily before size awareness is available.
+  static constexpr uint32_t kL1AllocSize = 64;
+
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
 

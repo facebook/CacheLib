@@ -25,9 +25,9 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
   auto cacheSize = config.l1CacheSize;
   if (cacheSize == 0) {
     // compute the approximate cache size using the l1EntriesLimit and
-    // l1AllocSize
+    // kL1AllocSize
     XCHECK(config.l1EntriesLimit);
-    const size_t l1SizeRequired = config.l1EntriesLimit * config.l1AllocSize;
+    const size_t l1SizeRequired = config.l1EntriesLimit * kL1AllocSize;
     const size_t l1SizeRequiredSlabGranularity =
         (l1SizeRequired / Slab::kSize + (l1SizeRequired % Slab::kSize != 0)) *
         Slab::kSize;
@@ -38,7 +38,7 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
   l1Config.setCacheName(config.cacheName)
       .setCacheSize(cacheSize)
       .setAccessConfig({config.l1HashTablePower, config.l1LockPower})
-      .setDefaultAllocSizes({config.l1AllocSize});
+      .setDefaultAllocSizes({kL1AllocSize});
   l1Config.setItemDestructor([this](typename CacheTrait::DestructorData ctx) {
     if (ctx.context == DestructorContext::kEvictedFromRAM) {
       evictions_.inc();
@@ -69,24 +69,22 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
     this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
   }
 
-  if (!config.placeHolderDisabled) {
-    // the placeholder is used to make sure each pool
-    // won't store objects more than l1EntriesLimit / l1NumShards
-    const size_t l1PlaceHolders = ((perPoolSize / config.l1AllocSize) -
-                                   (config.l1EntriesLimit / l1NumShards_)) *
-                                  l1NumShards_;
-    for (size_t i = 0; i < l1PlaceHolders; i++) {
-      // Allocate placeholder items such that the cache will fit exactly
-      // "l1EntriesLimit" objects
-      auto key = fmt::format("_cl_ph_{}", i);
-      auto hdl = allocateFromL1<T>(key, 0 /* no ttl */,
+  // the placeholder is used to make sure each pool
+  // won't store objects more than l1EntriesLimit / l1NumShards
+  const size_t l1PlaceHolders =
+      ((perPoolSize / kL1AllocSize) - (config.l1EntriesLimit / l1NumShards_)) *
+      l1NumShards_;
+  for (size_t i = 0; i < l1PlaceHolders; i++) {
+    // Allocate placeholder items such that the cache will fit exactly
+    // "l1EntriesLimit" objects
+    auto key = fmt::format("_cl_ph_{}", i);
+    auto hdl = allocateFromL1<T>(key, 0 /* no ttl */,
                                      0 /* use current time as creationTime
                                      */);
-      if (!hdl) {
-        throw std::runtime_error(fmt::format("Couldn't allocate {}", key));
-      }
-      placeholders_.push_back(std::move(hdl));
+    if (!hdl) {
+      throw std::runtime_error(fmt::format("Couldn't allocate {}", key));
     }
+    placeholders_.push_back(std::move(hdl));
   }
 }
 
