@@ -44,7 +44,7 @@ class MemoryTierCacheConfig {
   // between total cache size and sum of all tier sizes resulted from
   // round off error is accounted for when calculating the last tier's
   // size to make the totals equal.
-  MemoryTierCacheConfig& setRatio(double _ratio) {
+  MemoryTierCacheConfig& setRatio(size_t _ratio) {
     ratio = _ratio;
     return *this;
   }
