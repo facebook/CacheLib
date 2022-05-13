@@ -130,33 +130,20 @@ std::shared_ptr<T> ObjectCache<CacheTrait>::findToWrite(
   return std::shared_ptr<T>(*ptrPtr, std::move(deleter));
 }
 
-// Insert the object into the cache with given key, if the key exists in the
-// cache, it will be replaced with new obejct.
-//
-// @param key          the key.
-// @param object       unique pointer for the object to be inserted.
-// @param ttlSecs      object expiring seconds.
-// @param replacedPtr  a pointer to a shared_ptr, if it is not nullptr it will
-// be assigned to the replaced object.
-//
-// @throw cachelib::exception::RefcountOverflow if the item we are replacing
-//        is already out of refcounts.
-// @return a pair of allocation status and shared_ptr of newly inserted
-// object.
 template <typename CacheTrait>
 template <typename T>
-std::pair<bool, std::shared_ptr<T>> ObjectCache<CacheTrait>::insertOrReplace(
-    folly::StringPiece key,
-    std::unique_ptr<T> object,
-    uint32_t ttlSecs,
-    std::shared_ptr<T>* replacedPtr) {
+std::pair<typename ObjectCache<CacheTrait>::AllocStatus, std::shared_ptr<T>>
+ObjectCache<CacheTrait>::insertOrReplace(folly::StringPiece key,
+                                         std::unique_ptr<T> object,
+                                         uint32_t ttlSecs,
+                                         std::shared_ptr<T>* replacedPtr) {
   inserts_.inc();
 
   auto handle =
       allocateFromL1<T>(key, ttlSecs, 0 /* use current time as creationTime */);
   if (!handle) {
     insertErrors_.inc();
-    return {false, std::shared_ptr<T>(std::move(object))};
+    return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
   }
   T* ptr = object.release();
   *handle->template getMemoryAs<T*>() = ptr;
@@ -176,7 +163,38 @@ std::pair<bool, std::shared_ptr<T>> ObjectCache<CacheTrait>::insertOrReplace(
 
   // Just release the handle. Cache destorys object when all handles released.
   auto deleter = [h = std::move(handle)](T*) {};
-  return {true, std::shared_ptr<T>(ptr, std::move(deleter))};
+  return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter))};
+}
+
+template <typename CacheTrait>
+template <typename T>
+std::pair<typename ObjectCache<CacheTrait>::AllocStatus, std::shared_ptr<T>>
+ObjectCache<CacheTrait>::insert(folly::StringPiece key,
+                                std::unique_ptr<T> object,
+                                uint32_t ttlSecs) {
+  inserts_.inc();
+
+  auto handle =
+      allocateFromL1<T>(key, ttlSecs, 0 /* use current time as creationTime */);
+  if (!handle) {
+    insertErrors_.inc();
+    return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
+  }
+  T* ptr = object.get();
+  *handle->template getMemoryAs<T*>() = ptr;
+
+  auto success = this->l1Cache_->insert(handle);
+  if (success) {
+    // Release the handle now since we have inserted the handle into the cache,
+    // and from now the Cache will be responsible for destroying the object
+    // when it's evicted/removed.
+    object.release();
+  }
+
+  // Just release the handle. Cache destorys object when all handles released.
+  auto deleter = [h = std::move(handle)](T*) {};
+  return {success ? AllocStatus::kSuccess : AllocStatus::kKeyAlreadyExists,
+          std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
 template <typename CacheTrait>

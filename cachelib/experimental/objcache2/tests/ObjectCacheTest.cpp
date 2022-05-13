@@ -31,7 +31,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo->b = 2;
     foo->c = 3;
     auto res = objcache->insertOrReplace("Foo", std::move(foo));
-    EXPECT_TRUE(res.first);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
     ASSERT_NE(nullptr, res.second);
     EXPECT_EQ(1, res.second->a);
     EXPECT_EQ(2, res.second->b);
@@ -78,7 +78,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->c = 3;
     std::shared_ptr<Foo> replaced;
     auto res = objcache->insertOrReplace("Foo", std::move(foo1), 0, &replaced);
-    EXPECT_TRUE(res.first);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
     EXPECT_EQ(nullptr, replaced);
 
     auto found1 = objcache->template find<Foo>("Foo");
@@ -92,7 +92,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->b = 20;
     foo2->c = 30;
     res = objcache->insertOrReplace("Foo", std::move(foo2), 0, &replaced);
-    EXPECT_TRUE(res.first);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
     ASSERT_NE(nullptr, replaced);
     EXPECT_EQ(1, replaced->a);
     EXPECT_EQ(2, replaced->b);
@@ -103,6 +103,41 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(10, found2->a);
     EXPECT_EQ(20, found2->b);
     EXPECT_EQ(30, found2->c);
+  }
+
+  void testUniqueInsert() {
+    ObjectCacheConfig config;
+    config.l1EntriesLimit = 10'000;
+    auto objcache = ObjectCache<AllocatorT>::template create<Foo>(config);
+
+    auto foo1 = std::make_unique<Foo>();
+    foo1->a = 1;
+    foo1->b = 2;
+    foo1->c = 3;
+    auto res = objcache->insert("Foo", std::move(foo1), 0);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+
+    auto found1 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found1);
+    EXPECT_EQ(1, found1->a);
+    EXPECT_EQ(2, found1->b);
+    EXPECT_EQ(3, found1->c);
+
+    auto foo2 = std::make_unique<Foo>();
+    foo2->a = 10;
+    foo2->b = 20;
+    foo2->c = 30;
+    res = objcache->insert("Foo", std::move(foo2), 0);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kKeyAlreadyExists,
+              res.first);
+
+    auto found2 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found1);
+    EXPECT_EQ(1, found2->a);
+    EXPECT_EQ(2, found2->b);
+    EXPECT_EQ(3, found2->c);
+
+    objcache->remove("Foo");
   }
 
   void testMultithreadReplace() {
@@ -270,6 +305,7 @@ TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
 TYPED_TEST(ObjectCacheTest, Basic) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
 TYPED_TEST(ObjectCacheTest, Replace) { this->testReplace(); }
+TYPED_TEST(ObjectCacheTest, UniqueInsert) { this->testUniqueInsert(); }
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
   this->testMultithreadReplace();
 }
