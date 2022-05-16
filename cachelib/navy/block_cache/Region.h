@@ -61,11 +61,11 @@ class Region {
   // @param d          previously serialized state of Region.
   // @param regionSize size of the region.
   Region(const serialization::Region& d, uint64_t regionSize)
-      : regionId_{static_cast<uint32_t>(*d.regionId_ref())},
+      : regionId_{static_cast<uint32_t>(*d.regionId())},
         regionSize_{regionSize},
-        priority_{static_cast<uint16_t>(*d.priority_ref())},
-        lastEntryEndOffset_{static_cast<uint32_t>(*d.lastEntryEndOffset_ref())},
-        numItems_{static_cast<uint32_t>(*d.numItems_ref())} {}
+        priority_{static_cast<uint16_t>(*d.priority())},
+        lastEntryEndOffset_{static_cast<uint32_t>(*d.lastEntryEndOffset())},
+        numItems_{static_cast<uint32_t>(*d.numItems())} {}
 
   // Disable copy constructor to avoid mistakes like below:
   //   auto r = RegionManager.getRegion(rid);

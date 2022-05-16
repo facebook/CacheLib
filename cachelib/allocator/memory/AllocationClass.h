@@ -39,6 +39,12 @@ namespace tests {
 class AllocTestBase;
 }
 
+enum class SlabIterationStatus {
+  kFinishedCurrentSlabAndContinue,
+  kSkippedCurrentSlabAndContinue,
+  kAbortIteration
+};
+
 // An AllocationClass is used to allocate memory for a given allocation size
 // from Slabs
 class AllocationClass {
@@ -153,16 +159,17 @@ class AllocationClass {
   // AllocTraversalFn    Allocator traversal function
   // @param ptr          pointer to allocation
   // @param allocInfo    AllocInfo of the allocation
-  // @return   true to continue with traversal, false to abort traversal.
+  // @return SlabIterationStatus
   template <typename AllocTraversalFn>
-  bool forEachAllocation(Slab* slab, AllocTraversalFn&& callback) {
+  SlabIterationStatus forEachAllocation(Slab* slab,
+                                        AllocTraversalFn&& callback) {
     // Take a try_lock on this allocation class beginning any new slab release.
     std::unique_lock<std::mutex> startSlabReleaseLockHolder(
         startSlabReleaseLock_, std::defer_lock);
 
     // If the try_lock fails, skip this slab
     if (!startSlabReleaseLockHolder.try_lock()) {
-      return true;
+      return SlabIterationStatus::kSkippedCurrentSlabAndContinue;
     }
 
     // check for the header to be valid.
@@ -179,7 +186,7 @@ class AllocationClass {
       return Return{{slabHdr->poolId, slabHdr->classId, slabHdr->allocSize}};
     });
     if (!allocInfo) {
-      return true;
+      return SlabIterationStatus::kSkippedCurrentSlabAndContinue;
     }
 
     // Prefetch the first kForEachAllocPrefetchPffset items in the slab.
@@ -198,12 +205,12 @@ class AllocationClass {
       // Prefetch ahead the kForEachAllocPrefetchOffset item.
       __builtin_prefetch(prefetchOffsetPtr, 0, 0);
       if (!callback(ptr, allocInfo.value())) {
-        return false;
+        return SlabIterationStatus::kAbortIteration;
       }
       ptr = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) +
                                     allocationSize_);
     }
-    return true;
+    return SlabIterationStatus::kFinishedCurrentSlabAndContinue;
   }
 
   // release the memory back to the slab class.

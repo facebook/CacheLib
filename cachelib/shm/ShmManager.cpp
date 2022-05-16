@@ -133,12 +133,12 @@ bool ShmManager::initFromFile() {
   }
 
   if (static_cast<bool>(usePosix_) ^
-      (*object.shmVal_ref() == static_cast<int8_t>(ShmVal::SHM_POSIX))) {
+      (*object.shmVal() == static_cast<int8_t>(ShmVal::SHM_POSIX))) {
     throw std::invalid_argument(folly::sformat(
-        "Invalid value for attach. ShmVal: {}", *object.shmVal_ref()));
+        "Invalid value for attach. ShmVal: {}", *object.shmVal()));
   }
 
-  for (const auto& kv : *object.nameToKeyMap_ref()) {
+  for (const auto& kv : *object.nameToKeyMap()) {
     nameToKey_.insert({kv.first, kv.second});
   }
 
@@ -162,8 +162,8 @@ typename ShmManager::ShutDownRes ShmManager::writeActiveSegmentsToFile() {
 
   serialization::ShmManagerObject object;
 
-  object.shmVal_ref() = usePosix_ ? static_cast<int8_t>(ShmVal::SHM_POSIX)
-                                  : static_cast<int8_t>(ShmVal::SHM_SYS_V);
+  object.shmVal() = usePosix_ ? static_cast<int8_t>(ShmVal::SHM_POSIX)
+                              : static_cast<int8_t>(ShmVal::SHM_SYS_V);
 
   for (const auto& kv : nameToKey_) {
     const auto& name = kv.first;
@@ -171,7 +171,7 @@ typename ShmManager::ShutDownRes ShmManager::writeActiveSegmentsToFile() {
     const auto it = segments_.find(name);
     // segment exists and is active.
     if (it != segments_.end() && it->second->isActive()) {
-      object.nameToKeyMap_ref()[name] = key;
+      object.nameToKeyMap()[name] = key;
     }
   }
 

@@ -144,12 +144,15 @@ Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,
                                 std::unique_ptr<Engine> si,
                                 std::unique_ptr<JobScheduler> ex) {
   constexpr uint64_t kDeviceSize{64 * 1024};
+  uint32_t ioAlignSize = 4096;
   size_t metadataSize = 3 * 1024 * 1024;
   auto deviceSize = metadataSize + kDeviceSize;
   Driver::Config config;
   config.scheduler = std::move(ex);
   config.largeItemCache = std::move(bc);
-  config.device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
+  config.device =
+      createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   config.smallItemMaxSize = kSmallItemMaxSize;
   config.smallItemCache = std::move(si);
   config.metadataSize = metadataSize;

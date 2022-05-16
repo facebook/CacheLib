@@ -77,7 +77,7 @@ void PersistenceManager::saveCache(PersistenceStreamWriter& writer) {
   timer.startOrResume();
 
   XLOGF(INFO, "Start saving cache: cacheName {}, cacheDir {}",
-        *config_.cacheName_ref(), cacheDir_);
+        *config_.cacheName(), cacheDir_);
   writer.write(DATA_BEGIN_CHAR);
 
   // save versions
@@ -166,7 +166,7 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
   timer.startOrResume();
 
   XLOGF(INFO, "Start restoring cache: cacheName {}, cacheDir {}",
-        *config_.cacheName_ref(), cacheDir_);
+        *config_.cacheName(), cacheDir_);
 
   CACHELIB_CHECK_THROW(reader.read() == DATA_BEGIN_CHAR,
                        "invalid beginning character");
@@ -182,12 +182,12 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
     auto headerBuf = reader.read(headerLength);
     CACHELIB_CHECK_THROW(headerBuf.length() == headerLength, "invalid data");
     auto header = deserialize<PersistenceHeader>(headerBuf);
-    size_t dataLen = static_cast<size_t>(*header.length_ref());
+    size_t dataLen = static_cast<size_t>(*header.length());
 
     XLOGF(INFO, "restoreCache: type {}, len {}, header_len {}",
-          static_cast<int>(*header.type_ref()), dataLen, headerLength);
+          static_cast<int>(*header.type()), dataLen, headerLength);
 
-    switch (*header.type_ref()) {
+    switch (*header.type()) {
     case PersistenceType::Versions: {
       auto buf = reader.read(dataLen);
       CACHELIB_CHECK_THROW(buf.length() == dataLen, "invalid data");
@@ -200,7 +200,7 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
 
       auto config = deserialize<PersistCacheLibConfig>(buf);
       CACHELIB_CHECK_THROWF(config == config_, "Config doesn't match: {}|{}",
-                            *config.cacheName_ref(), *config_.cacheName_ref());
+                            *config.cacheName(), *config_.cacheName());
       break;
     }
     case PersistenceType::NvmCacheState: {
@@ -228,14 +228,14 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
     case PersistenceType::ShmData: {
       ShmSegmentOpts opts;
       opts.alignment = sizeof(Slab); // 4MB
-      auto shm = shmManager.createShm(detail::kShmCacheName,
-                                      *header.length_ref(), nullptr, opts);
+      auto shm = shmManager.createShm(detail::kShmCacheName, *header.length(),
+                                      nullptr, opts);
       restoreDataFromBlocks(reader, static_cast<uint8_t*>(shm.addr),
-                            *header.length_ref());
+                            *header.length());
       break;
     }
     case PersistenceType::NavyPartition: {
-      int32_t navyFileSize = *header.length_ref();
+      int32_t navyFileSize = *header.length();
       int32_t numBlock =
           util::getAlignedSize(navyFileSize, kDataBlockSize) / kDataBlockSize;
 
@@ -256,7 +256,7 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
     }
     default:
       CACHELIB_CHECK_THROWF(false, "Unknow header type: {}",
-                            static_cast<int>(*header.type_ref()));
+                            static_cast<int>(*header.type()));
     }
 
     char mark = reader.read();
@@ -277,8 +277,8 @@ void PersistenceManager::restoreCache(PersistenceStreamReader& reader) {
 folly::IOBuf PersistenceManager::makeHeader(PersistenceType type,
                                             size_t length) {
   PersistenceHeader header;
-  header.type_ref() = type;
-  header.length_ref() = length;
+  header.type() = type;
+  header.length() = length;
   // we must use apache::thrift::BinarySerializer not compact serializer,
   // so the integer is not compress (variant encoding)
   auto buf =
@@ -385,19 +385,19 @@ void PersistenceManager::restoreDataFromBlocks(PersistenceStreamReader& reader,
 void PersistenceManager::deserializeAndValidateVersions(
     const folly::IOBuf& buf) {
   auto versions = deserialize<CacheLibVersions>(buf);
-  CACHELIB_CHECK_THROWF(*versions.persistenceVersion_ref() ==
-                            *versions_.persistenceVersion_ref(),
+  CACHELIB_CHECK_THROWF(*versions.persistenceVersion() ==
+                            *versions_.persistenceVersion(),
                         "Persistence Version doesn't match: {}|{}",
-                        *versions.persistenceVersion_ref(),
-                        *versions_.persistenceVersion_ref());
+                        *versions.persistenceVersion(),
+                        *versions_.persistenceVersion());
   if (versions != versions_) {
     // print a warning log for cache version mismatch,
     // attaching the cache will might be anble to do upgrade
     // even cache format changed.
     XLOGF(WARN, "Cache Version doesn't match: {}|{} {}|{}, {}|{}",
-          *versions.allocatorVersion_ref(), *versions_.allocatorVersion_ref(),
-          *versions.ramFormatVerson_ref(), *versions_.ramFormatVerson_ref(),
-          *versions.nvmFormatVersion_ref(), *versions_.nvmFormatVersion_ref());
+          *versions.allocatorVersion(), *versions_.allocatorVersion(),
+          *versions.ramFormatVerson(), *versions_.ramFormatVerson(),
+          *versions.nvmFormatVersion(), *versions_.nvmFormatVersion());
   }
 }
 

@@ -562,39 +562,39 @@ TEST_F(MemoryPoolTest, InvalidDeSerialization) {
 
   // check with invalid id
   auto incorrectIdState = correctState;
-  *incorrectIdState.id_ref() = -5;
+  *incorrectIdState.id() = -5;
 
   ASSERT_THROW(MemoryPool(incorrectIdState, *slabAlloc), std::invalid_argument);
 
   // check with invalid currSlabAllocSize and invalid currAllocSize
   auto incorrectAllocSizeState = correctState;
-  *incorrectAllocSizeState.currAllocSize_ref() =
-      *correctState.currSlabAllocSize_ref() +
+  *incorrectAllocSizeState.currAllocSize() =
+      *correctState.currSlabAllocSize() +
       folly::Random::rand32() % Slab::kSize + 1;
 
   ASSERT_THROW(MemoryPool(incorrectAllocSizeState, *slabAlloc),
                std::invalid_argument);
 
   auto incorrectSlabAllocSizeState = correctState;
-  *incorrectSlabAllocSizeState.currSlabAllocSize_ref() =
-      *correctState.currAllocSize_ref() -
-      (folly::Random::rand32() % Slab::kSize) - 1;
+  *incorrectSlabAllocSizeState.currSlabAllocSize() =
+      *correctState.currAllocSize() - (folly::Random::rand32() % Slab::kSize) -
+      1;
 
-  ASSERT_GT(*incorrectSlabAllocSizeState.currAllocSize_ref(),
-            *incorrectSlabAllocSizeState.currSlabAllocSize_ref());
+  ASSERT_GT(*incorrectSlabAllocSizeState.currAllocSize(),
+            *incorrectSlabAllocSizeState.currSlabAllocSize());
   ASSERT_THROW(MemoryPool(incorrectSlabAllocSizeState, *slabAlloc),
                std::invalid_argument);
 
   // mismatching number of allocation sizes and serialized alloc objects.
   auto incorrectSizesState = correctState;
-  incorrectSizesState.acSizes_ref()->push_back(folly::Random::rand32());
+  incorrectSizesState.acSizes()->push_back(folly::Random::rand32());
 
   ASSERT_THROW(MemoryPool(incorrectSizesState, *slabAlloc),
                std::invalid_argument);
 
   incorrectSizesState = correctState;
   std::vector<uint32_t> sizes;
-  for (auto size : *incorrectSizesState.acSizes_ref()) {
+  for (auto size : *incorrectSizesState.acSizes()) {
     sizes.push_back(size);
   }
 
@@ -602,24 +602,23 @@ TEST_F(MemoryPoolTest, InvalidDeSerialization) {
   std::shuffle(sizes.begin(), sizes.end(), g);
 
   for (size_t i = 0; i < sizes.size(); i++) {
-    incorrectSizesState.acSizes_ref()[i] = sizes[i];
+    incorrectSizesState.acSizes()[i] = sizes[i];
   }
 
   ASSERT_THROW(MemoryPool(incorrectSizesState, *slabAlloc),
                std::invalid_argument);
 
   incorrectSizesState = correctState;
-  incorrectSizesState.acSizes_ref()->push_back(
-      incorrectSizesState.acSizes_ref()->back());
+  incorrectSizesState.acSizes()->push_back(
+      incorrectSizesState.acSizes()->back());
 
   ASSERT_THROW(MemoryPool(incorrectSizesState, *slabAlloc),
                std::invalid_argument);
 
   auto invalidAcObjectState = correctState;
-  const auto idx =
-      folly::Random::rand32() % invalidAcObjectState.ac_ref()->size();
-  auto& obj = invalidAcObjectState.ac_ref()[idx];
-  *obj.allocationSize_ref() = folly::Random::rand32() % Slab::kSize + 1;
+  const auto idx = folly::Random::rand32() % invalidAcObjectState.ac()->size();
+  auto& obj = invalidAcObjectState.ac()[idx];
+  *obj.allocationSize() = folly::Random::rand32() % Slab::kSize + 1;
 
   ASSERT_THROW(MemoryPool(invalidAcObjectState, *slabAlloc),
                std::invalid_argument);

@@ -127,6 +127,10 @@ struct JSONConfig {
       }
     }
   }
+
+  static void setValImpl(folly::dynamic& field, const folly::dynamic& val) {
+    field = val;
+  }
 };
 
 namespace {

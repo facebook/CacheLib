@@ -83,8 +83,8 @@ namespace cachelib {
 template <typename AllocatorT>
 class FbInternalRuntimeUpdateWrapper;
 
-template <typename AllocatorT>
-class CacheAllocatorFindApiWrapper;
+template <typename K, typename V, typename C>
+class ReadOnlyMap;
 
 namespace objcache2 {
 template <typename AllocatorT>
@@ -186,10 +186,11 @@ class CacheAllocator : public CacheBase {
 
   // the holder for the item when we hand it to the caller. This ensures
   // that the reference count is maintained when the caller is done with the
-  // item. The ItemHandle provides a getMemory() and getKey() interface. The
-  // caller is free to use the result of these two as long as the handle is
-  // active/alive. Using the result of the above interfaces after destroying
-  // the ItemHandle is UB. The ItemHandle safely wraps a pointer to the Item.
+  // item. The ReadHandle/WriteHandle provides a getMemory() and getKey()
+  // interface. The caller is free to use the result of these two as long as the
+  // handle is active/alive. Using the result of the above interfaces after
+  // destroying the ReadHandle/WriteHandle is UB. The ReadHandle/WriteHandle
+  // safely wraps a pointer to the "const Item"/"Item".
   using ReadHandle = typename Item::ReadHandle;
   using WriteHandle = typename Item::WriteHandle;
   using ItemHandle = WriteHandle;
@@ -401,7 +402,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return ChainedItem  head if there exists one
   //         nullptr      otherwise
-  ItemHandle popChainedItem(ItemHandle& parent);
+  WriteHandle popChainedItem(WriteHandle& parent);
 
   // Return the key to the parent item.
   //
@@ -427,9 +428,9 @@ class CacheAllocator : public CacheBase {
   // @return  handle to the oldItem on return.
   //
   // @throw std::invalid_argument if any of the pre-conditions fails
-  ItemHandle replaceChainedItem(Item& oldItem,
-                                ItemHandle newItem,
-                                Item& parent);
+  WriteHandle replaceChainedItem(Item& oldItem,
+                                 WriteHandle newItem,
+                                 Item& parent);
 
   // Transfers the ownership of the chain from the current parent to the new
   // parent and inserts the new parent into the cache. Parent will be unmarked
@@ -450,7 +451,7 @@ class CacheAllocator : public CacheBase {
   // @throw   std::invalid_argument if the parent does not have chained item or
   //          incorrect state of chained item or if any of the pre-conditions
   //          are not met
-  void transferChainAndReplace(ItemHandle& parent, ItemHandle& newParent);
+  void transferChainAndReplace(WriteHandle& parent, WriteHandle& newParent);
 
   // Inserts the allocated handle into the AccessContainer, making it
   // accessible for everyone. This needs to be the handle that the caller
@@ -564,7 +565,7 @@ class CacheAllocator : public CacheBase {
   // removes the allocation corresponding to the key, if present in the hash
   // table. The key will not be accessible through find() after this returns
   // success. The allocation for the key will be recycled once all active
-  // ItemHandles are released.
+  // Item handles are released.
   //
   // @param key   the key for the allocation.
   // @return      kSuccess if the key exists and was successfully removed.
@@ -639,11 +640,11 @@ class CacheAllocator : public CacheBase {
   // Get a random item from memory
   // This is useful for profiling and sampling cachelib managed memory
   //
-  // @return ItemHandle if an valid item is found
+  // @return ReadHandle if an valid item is found
   //
   //         nullptr if the randomly chosen memory does not belong
   //                 to an valid item
-  ItemHandle getSampleItem();
+  ReadHandle getSampleItem();
 
   // Convert a Read Handle to an IOBuf. The returned IOBuf gives a
   // read-only view to the user. The item's ownership is retained by
@@ -1061,6 +1062,11 @@ class CacheAllocator : public CacheBase {
     return accessContainer_->getStats();
   }
 
+  // Get the total number of keys inserted into the access container
+  uint64_t getAccessContainerNumKeys() const {
+    return accessContainer_->getNumKeys();
+  }
+
   // returns the reaper stats
   ReaperStats getReaperStats() const {
     auto stats = reaper_ ? reaper_->getStats() : ReaperStats{};
@@ -1272,18 +1278,18 @@ class CacheAllocator : public CacheBase {
 
   // acquires an handle on the item. returns an empty handle if it is null.
   // @param it    pointer to an item
-  // @return ItemHandle   return a handle to this item
+  // @return WriteHandle   return a handle to this item
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  ItemHandle acquire(Item* it);
+  WriteHandle acquire(Item* it);
 
   // creates an item handle with wait context.
-  ItemHandle createNvmCacheFillHandle() { return ItemHandle{*this}; }
+  WriteHandle createNvmCacheFillHandle() { return WriteHandle{*this}; }
 
   // acquires the wait context for the handle. This is used by NvmCache to
   // maintain a list of waiters
   std::shared_ptr<WaitContext<ReadHandle>> getWaitContext(
-      ItemHandle& hdl) const {
+      ReadHandle& hdl) const {
     return hdl.getItemWaitContext();
   }
 
@@ -1363,9 +1369,9 @@ class CacheAllocator : public CacheBase {
   // @param parentKey  key of the item's parent
   //
   // @return  handle to the parent item if the validations pass
-  //          otherwise, an empty ItemHandle is returned.
+  //          otherwise, an empty Handle is returned.
   //
-  ItemHandle validateAndGetParentHandleForChainedMoveLocked(
+  ReadHandle validateAndGetParentHandleForChainedMoveLocked(
       const ChainedItem& item, const Key& parentKey);
 
   // Given an existing item, allocate a new one for the
@@ -1386,7 +1392,7 @@ class CacheAllocator : public CacheBase {
   //
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
-  ItemHandle findInternal(Key key) {
+  WriteHandle findInternal(Key key) {
     // Note: this method can not be const because we need  a non-const
     // reference to create the ItemReleaser.
     return accessContainer_->find(key);
@@ -1401,7 +1407,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFastInternal(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findFastInternal(Key key, AccessMode mode);
 
   // look up an item by its key across the nvm cache as well if enabled.
   //
@@ -1411,7 +1417,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findImpl(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findImpl(Key key, AccessMode mode);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup.
@@ -1422,7 +1428,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return      the handle for the item or a handle to nullptr if the key does
   //              not exist.
-  FOLLY_ALWAYS_INLINE ItemHandle findFastImpl(Key key, AccessMode mode);
+  FOLLY_ALWAYS_INLINE WriteHandle findFastImpl(Key key, AccessMode mode);
 
   // Moves a regular item to a different slab. This should only be used during
   // slab release after the item's moving bit has been set. The user supplied
@@ -1434,7 +1440,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveRegularItem(Item& oldItem, ItemHandle& newItemHdl);
+  bool moveRegularItem(Item& oldItem, WriteHandle& newItemHdl);
 
   // template class for viewAsChainedAllocs that takes either ReadHandle or
   // WriteHandle
@@ -1461,7 +1467,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveChainedItem(ChainedItem& oldItem, ItemHandle& newItemHdl);
+  bool moveChainedItem(ChainedItem& oldItem, WriteHandle& newItemHdl);
 
   // Transfers the chain ownership from parent to newParent. Parent
   // will be unmarked as having chained allocations. Parent will not be null
@@ -1478,7 +1484,7 @@ class CacheAllocator : public CacheBase {
   // @param newParent the new parent for the chain
   //
   // @throw if any of the conditions for parent or newParent are not met.
-  void transferChainLocked(ItemHandle& parent, ItemHandle& newParent);
+  void transferChainLocked(WriteHandle& parent, WriteHandle& newParent);
 
   // replace a chained item in the existing chain. This needs to be called
   // with the chained item lock held exclusive
@@ -1488,9 +1494,9 @@ class CacheAllocator : public CacheBase {
   // @param parent   the parent for the chain
   //
   // @return handle to the oldItem
-  ItemHandle replaceChainedItemLocked(Item& oldItem,
-                                      ItemHandle newItemHdl,
-                                      const Item& parent);
+  WriteHandle replaceChainedItemLocked(Item& oldItem,
+                                       WriteHandle newItemHdl,
+                                       const Item& parent);
 
   // Insert an item into MM container. The caller must hold a valid handle for
   // the item.
@@ -1586,8 +1592,8 @@ class CacheAllocator : public CacheBase {
   //
   // @return  valid handle to regular item on success. This will be the last
   //          handle to the item. On failure an empty handle.
-  ItemHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
-                                                   EvictionIterator& itr);
+  WriteHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
+                                                    EvictionIterator& itr);
 
   // Advance the current iterator and try to evict a chained item
   // Iterator may also be reset during the course of this function
@@ -1596,7 +1602,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return  valid handle to the parent item on success. This will be the last
   //          handle to the item
-  ItemHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
+  WriteHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
@@ -1707,7 +1713,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return    true  if the item has been moved
   //            false if we have exhausted moving attempts
-  bool tryMovingForSlabRelease(Item& item, ItemHandle& newItemHdl);
+  bool tryMovingForSlabRelease(Item& item, WriteHandle& newItemHdl);
 
   // Evict an item from access and mm containers and
   // ensure it is safe for freeing.
@@ -1723,14 +1729,14 @@ class CacheAllocator : public CacheBase {
   //
   // @return last handle for corresponding to item on success. empty handle on
   // failure. caller can retry if needed.
-  ItemHandle evictNormalItemForSlabRelease(Item& item);
+  WriteHandle evictNormalItemForSlabRelease(Item& item);
 
   // Helper function to evict a child item for slab release
   // As a side effect, the parent item is also evicted
   //
   // @return  last handle to the parent item of the child on success. empty
   // handle on failure. caller can retry.
-  ItemHandle evictChainedItemForSlabRelease(ChainedItem& item);
+  WriteHandle evictChainedItemForSlabRelease(ChainedItem& item);
 
   // Helper function to remove a item if expired.
   //
@@ -1749,7 +1755,8 @@ class CacheAllocator : public CacheBase {
     // primitives. So we consciously exempt ourselves here from TSAN data race
     // detection.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
-    allocator_->forEachAllocation(std::forward<Fn>(f));
+    auto slabsSkipped = allocator_->forEachAllocation(std::forward<Fn>(f));
+    stats().numSkippedSlabReleases.add(slabsSkipped);
   }
 
   // returns true if nvmcache is enabled and we should write this item to
@@ -1870,7 +1877,7 @@ class CacheAllocator : public CacheBase {
   // @return true   if successfully recorded in MMContainer
   bool recordAccessInMMContainer(Item& item, AccessMode mode);
 
-  ItemHandle findChainedItem(const Item& parent) const;
+  WriteHandle findChainedItem(const Item& parent) const;
 
   // Get the thread local version of the Stats
   detail::Stats& stats() const noexcept { return stats_; }
@@ -1982,7 +1989,13 @@ class CacheAllocator : public CacheBase {
   mutable std::mutex workersMutex_;
 
   // time when the ram cache was first created
-  const time_t cacheCreationTime_{0};
+  const uint32_t cacheCreationTime_{0};
+
+  // time when CacheAllocator structure is created. Whenever a process restarts
+  // and even if cache content is persisted, this will be reset. It's similar
+  // to process uptime. (But alternatively if user explicitly shuts down and
+  // re-attach cache, this will be reset as well)
+  const uint32_t cacheInstanceCreationTime_{0};
 
   // thread local accumulation of handle counts
   mutable util::FastStats<int64_t> handleCount_{};
@@ -2010,9 +2023,10 @@ class CacheAllocator : public CacheBase {
   friend ReaperAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
-  friend class CacheAllocatorFindApiWrapper<CacheT>;
   friend class objcache2::ObjectCache<CacheT>;
   friend class objcache2::ObjectCacheBase<CacheT>;
+  template <typename K, typename V, typename C>
+  friend class ReadOnlyMap;
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;

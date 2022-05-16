@@ -1315,11 +1315,14 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
 
 TEST(BlockCache, Recovery) {
   std::vector<uint32_t> hits(4);
+  uint32_t ioAlignSize = 4096;
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto& mp = *policy;
   size_t metadataSize = 3 * 1024 * 1024;
   auto deviceSize = metadataSize + kDeviceSize;
-  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
+  auto device =
+      createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
   config.numInMemBuffers = 2;
@@ -1457,7 +1460,7 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
           Deserializer deserializer{iobuf->data(),
                                     iobuf->data() + iobuf->length()};
           auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
-          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          c.cacheSize() = *c.cacheSize() + 4096;
           serializeProto(c, rw2);
         }));
     engine->persist(rw2);
@@ -1470,8 +1473,8 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
           Deserializer deserializer{iobuf->data(),
                                     iobuf->data() + iobuf->length()};
           auto c = deserializer.deserialize<serialization::BlockCacheConfig>();
-          c.version_ref() = 11;
-          c.cacheSize_ref() = *c.cacheSize_ref() + 4096;
+          c.version() = 11;
+          c.cacheSize() = *c.cacheSize() + 4096;
           serializeProto(c, rw3);
         }));
     engine->persist(rw3);
@@ -1545,6 +1548,8 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
 //
 TEST(BlockCache, SmallerSlotSizes) {
   std::vector<uint32_t> hits(4);
+  uint32_t ioAlignSize = 4096;
+
   {
     auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
     auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
@@ -1559,7 +1564,9 @@ TEST(BlockCache, SmallerSlotSizes) {
     }
   }
   const uint64_t myDeviceSize = 16 * 1024 * 1024;
-  auto device = createMemoryDevice(myDeviceSize, nullptr /* encryption */);
+  // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
+  auto device =
+      createMemoryDevice(myDeviceSize, nullptr /* encryption */, ioAlignSize);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   size_t metadataSize = 3 * 1024 * 1024;
   auto ex = makeJobScheduler();
@@ -1606,10 +1613,13 @@ TEST(BlockCache, SmallerSlotSizes) {
 
 TEST(BlockCache, HoleStatsRecovery) {
   std::vector<uint32_t> hits(4);
+  uint32_t ioAlignSize = 4096;
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   size_t metadataSize = 3 * 1024 * 1024;
   auto deviceSize = metadataSize + kDeviceSize;
-  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
+  auto device =
+      createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
   auto engine = makeEngine(std::move(config), metadataSize);
@@ -1901,10 +1911,13 @@ TEST(BlockCache, HitsReinsertionPolicy) {
 
 TEST(BlockCache, HitsReinsertionPolicyRecovery) {
   std::vector<uint32_t> hits(4);
+  uint32_t ioAlignSize = 4096;
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   size_t metadataSize = 3 * 1024 * 1024;
   auto deviceSize = metadataSize + kDeviceSize;
-  auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
+  // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
+  auto device =
+      createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
   config.reinsertionConfig = makeHitsReinsertionConfig(1);

@@ -24,6 +24,7 @@
 #include "cachelib/allocator/NvmCacheState.h"
 #include "cachelib/allocator/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/Serialization.h"
+#include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -50,7 +51,8 @@ class NvmCacheStateTest : public testing::Test {
 
 TEST_F(NvmCacheStateTest, FreshStart) {
   auto dir = getCacheDir();
-  NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+  NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                  false /* truncateAllocSize */);
 
   // directory is empty at this point
   ASSERT_FALSE(s.shouldDropNvmCache());
@@ -61,7 +63,8 @@ TEST_F(NvmCacheStateTest, ClearState) {
   auto dir = getCacheDir();
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
 
     // directory is empty at this point
     ASSERT_FALSE(s.wasCleanShutDown());
@@ -72,7 +75,8 @@ TEST_F(NvmCacheStateTest, ClearState) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.shouldDropNvmCache());
     ASSERT_FALSE(s.wasCleanShutDown());
   }
@@ -83,13 +87,15 @@ TEST_F(NvmCacheStateTest, CreationTime) {
 
   time_t creationTime = 0;
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_EQ(creationTime, s.getCreationTime());
     s.clearPrevState();
@@ -98,9 +104,9 @@ TEST_F(NvmCacheStateTest, CreationTime) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion - 1;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion - 1;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
@@ -109,7 +115,8 @@ TEST_F(NvmCacheStateTest, CreationTime) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
 
     // Creation time is reset because of version mismatch
@@ -121,12 +128,14 @@ TEST_F(NvmCacheStateTest, Encryption) {
   auto dir = getCacheDir();
 
   {
-    NvmCacheState s(dir, true /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, true /* encryption */,
+                    false /* truncateAllocSize */);
     s.markSafeShutDown();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_TRUE(s.shouldDropNvmCache());
   }
@@ -134,10 +143,10 @@ TEST_F(NvmCacheStateTest, Encryption) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
-    *metadata.encryptionEnabled_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
+    *metadata.encryptionEnabled() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
@@ -146,7 +155,8 @@ TEST_F(NvmCacheStateTest, Encryption) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_TRUE(s.shouldDropNvmCache());
   }
@@ -156,12 +166,14 @@ TEST_F(NvmCacheStateTest, TruncateAllocSize) {
   auto dir = getCacheDir();
 
   {
-    NvmCacheState s(dir, false /* encryption */, true /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    true /* truncateAllocSize */);
     s.markSafeShutDown();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_TRUE(s.shouldDropNvmCache());
   }
@@ -169,10 +181,10 @@ TEST_F(NvmCacheStateTest, TruncateAllocSize) {
   {
     // Intentionally write a bad metadata file
     serialization::NvmCacheMetadata metadata;
-    *metadata.nvmFormatVersion_ref() = kCacheNvmFormatVersion;
-    *metadata.creationTime_ref() = 12345;
-    *metadata.safeShutDown_ref() = true;
-    *metadata.truncateAllocSize_ref() = true;
+    *metadata.nvmFormatVersion() = kCacheNvmFormatVersion;
+    *metadata.creationTime() = 12345;
+    *metadata.safeShutDown() = true;
+    *metadata.truncateAllocSize() = true;
     auto metadataIoBuf = Serializer::serializeToIOBuf(metadata);
     folly::File shutDownFile{folly::sformat("{}/{}", dir, "NvmCacheState"),
                              O_CREAT | O_TRUNC | O_RDWR};
@@ -181,7 +193,8 @@ TEST_F(NvmCacheStateTest, TruncateAllocSize) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_TRUE(s.shouldDropNvmCache());
   }
@@ -192,20 +205,23 @@ TEST_F(NvmCacheStateTest, SafeShutDown) {
 
   time_t creationTime = 0;
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_EQ(creationTime, s.getCreationTime());
     s.clearPrevState();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_FALSE(s.wasCleanShutDown());
   }
 }
@@ -215,21 +231,24 @@ TEST_F(NvmCacheStateTest, SafeShutDownLegacy) {
 
   time_t creationTime = 0;
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
     ::unlink("NvmCacheState");
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_EQ(creationTime, s.getCreationTime());
     s.clearPrevState();
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_FALSE(s.wasCleanShutDown());
   }
 }
@@ -239,7 +258,8 @@ TEST_F(NvmCacheStateTest, Drop) {
 
   time_t creationTime = 0;
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
   }
@@ -252,7 +272,8 @@ TEST_F(NvmCacheStateTest, Drop) {
 
   {
     std::this_thread::sleep_for(std::chrono::seconds{1});
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.shouldDropNvmCache());
     // we explicitly marked that shutdown was fine.
     ASSERT_TRUE(s.wasCleanShutDown());
@@ -262,7 +283,8 @@ TEST_F(NvmCacheStateTest, Drop) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_TRUE(s.shouldDropNvmCache());
     ASSERT_FALSE(s.wasCleanShutDown());
     ASSERT_FALSE(util::getStatIfExists(dropFile, nullptr));
@@ -271,7 +293,8 @@ TEST_F(NvmCacheStateTest, Drop) {
     s.markSafeShutDown();
   }
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_FALSE(s.shouldDropNvmCache());
     ASSERT_TRUE(s.wasCleanShutDown());
   }
@@ -282,14 +305,16 @@ TEST_F(NvmCacheStateTest, Truncated) {
 
   time_t creationTime = 0;
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     creationTime = s.getCreationTime();
     s.markSafeShutDown();
   }
 
   {
     std::this_thread::sleep_for(std::chrono::seconds{1});
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     // we explicitly marked that shutdown was fine.
     ASSERT_TRUE(s.wasCleanShutDown());
     ASSERT_EQ(creationTime, s.getCreationTime());
@@ -299,11 +324,11 @@ TEST_F(NvmCacheStateTest, Truncated) {
   }
 
   {
-    NvmCacheState s(dir, false /* encryption */, false /* truncateAllocSize */);
+    NvmCacheState s(util::getCurrentTimeSec(), dir, false /* encryption */,
+                    false /* truncateAllocSize */);
     ASSERT_FALSE(s.shouldDropNvmCache());
     ASSERT_TRUE(s.wasCleanShutDown());
   }
 }
-
 } // namespace cachelib
 } // namespace facebook

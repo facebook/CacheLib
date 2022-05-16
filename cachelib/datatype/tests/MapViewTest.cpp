@@ -119,12 +119,64 @@ class MapViewTest : public ::testing::Test {
     }
     ASSERT_EQ(i, mapView.size());
   }
+
+  void testConstructReadOnlyMap() {
+    auto cache = DataTypeTest::createCache<AllocatorT>();
+    const auto pid = cache->getPoolId(DataTypeTest::kDefaultPool);
+
+    using BasicMap = cachelib::Map<int, int, AllocatorT>;
+    using BasicReadOnlyMap = cachelib::ReadOnlyMap<int, int, AllocatorT>;
+
+    auto map = BasicMap::create(*cache, pid, "my_map");
+    std::vector<int> keys = {123, 456, 789};
+    std::vector<int> values = {100, 200, 300};
+    for (unsigned int i = 0; i < keys.size(); ++i) {
+      ASSERT_TRUE(map.insert(keys.at(i), values.at(i)));
+    }
+    cache->insert(map.viewItemHandle());
+    {
+      auto handle = cache->find("your_map");
+      ASSERT_EQ(nullptr, handle);
+      auto readOnlyMap =
+          BasicReadOnlyMap::fromReadHandle(*cache, std::move(handle));
+      ASSERT_TRUE(readOnlyMap.isNullReadHandle());
+    }
+    {
+      auto handle = cache->find("my_map");
+      ASSERT_NE(nullptr, handle);
+      auto readOnlyMap =
+          BasicReadOnlyMap::fromReadHandle(*cache, std::move(handle));
+      ASSERT_FALSE(readOnlyMap.isNullReadHandle());
+
+      unsigned int i = 0;
+      for (auto& kv : readOnlyMap) {
+        ASSERT_EQ(kv.key, keys.at(i));
+        ASSERT_EQ(kv.value, values.at(i));
+        i++;
+      }
+      ASSERT_EQ(i, readOnlyMap.size());
+
+      auto readOnlyMap2 = std::move(readOnlyMap);
+      ASSERT_FALSE(readOnlyMap2.isNullReadHandle());
+
+      i = 0;
+      for (auto& kv : readOnlyMap2) {
+        ASSERT_EQ(kv.key, keys.at(i));
+        ASSERT_EQ(kv.value, values.at(i));
+        i++;
+      }
+      ASSERT_EQ(i, readOnlyMap.size());
+    }
+  }
 };
 TYPED_TEST_CASE(MapViewTest, AllocatorTypes);
 TYPED_TEST(MapViewTest, Basic) { this->testBasic(); }
 TYPED_TEST(MapViewTest, MapToMapView) { this->testMapToMapView(); }
 TYPED_TEST(MapViewTest, EmptyIterator) { this->testEmptyIterator(); }
 TYPED_TEST(MapViewTest, Iterator) { this->testIterator(); }
+TYPED_TEST(MapViewTest, ConstructReadOnlyMap) {
+  this->testConstructReadOnlyMap();
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

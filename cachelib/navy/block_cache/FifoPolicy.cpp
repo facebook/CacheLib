@@ -60,12 +60,12 @@ void FifoPolicy::reset() {
 
 void FifoPolicy::persist(RecordWriter& rw) const {
   serialization::FifoPolicyData fifoPolicyData;
-  fifoPolicyData.queue_ref()->resize(queue_.size());
+  fifoPolicyData.queue()->resize(queue_.size());
 
   for (uint32_t i = 0; i < queue_.size(); i++) {
-    auto& proto = (*fifoPolicyData.queue_ref())[i];
-    proto.idx_ref() = queue_[i].rid.index();
-    proto.trackTime_ref() = queue_[i].trackTime.count();
+    auto& proto = (*fifoPolicyData.queue())[i];
+    proto.idx() = queue_[i].rid.index();
+    proto.trackTime() = queue_[i].trackTime.count();
   }
 
   serializeProto(fifoPolicyData, rw);
@@ -74,11 +74,11 @@ void FifoPolicy::persist(RecordWriter& rw) const {
 void FifoPolicy::recover(RecordReader& rr) {
   auto fifoPolicyData = deserializeProto<serialization::FifoPolicyData>(rr);
   queue_.clear();
-  for (uint32_t i = 0; i < fifoPolicyData.queue_ref().value().size(); i++) {
-    const auto& proto = fifoPolicyData.queue_ref().value()[i];
+  for (uint32_t i = 0; i < fifoPolicyData.queue().value().size(); i++) {
+    const auto& proto = fifoPolicyData.queue().value()[i];
     queue_.push_back(
-        detail::Node{RegionId{static_cast<uint32_t>(proto.idx_ref().value())},
-                     std::chrono::seconds{proto.trackTime_ref().value()}});
+        detail::Node{RegionId{static_cast<uint32_t>(proto.idx().value())},
+                     std::chrono::seconds{proto.trackTime().value()}});
   }
 }
 

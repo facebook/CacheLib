@@ -53,16 +53,16 @@ MemoryAllocator::MemoryAllocator(
     void* memoryStart,
     size_t memSize,
     bool disableCoredump)
-    : config_(std::set<uint32_t>{object.allocSizes_ref()->begin(),
-                                 object.allocSizes_ref()->end()},
-              *object.enableZeroedSlabAllocs_ref(),
+    : config_(std::set<uint32_t>{object.allocSizes()->begin(),
+                                 object.allocSizes()->end()},
+              *object.enableZeroedSlabAllocs(),
               disableCoredump,
-              *object.lockMemory_ref()),
-      slabAllocator_(*object.slabAllocator_ref(),
+              *object.lockMemory()),
+      slabAllocator_(*object.slabAllocator(),
                      memoryStart,
                      memSize,
                      {config_.disableFullCoredump, config_.lockMemory}),
-      memoryPoolManager_(*object.memoryPoolManager_ref(), slabAllocator_) {
+      memoryPoolManager_(*object.memoryPoolManager(), slabAllocator_) {
   checkConfig(config_);
 }
 
@@ -134,12 +134,12 @@ ClassId MemoryAllocator::getAllocationClassId(PoolId poolId,
 
 serialization::MemoryAllocatorObject MemoryAllocator::saveState() {
   serialization::MemoryAllocatorObject object;
-  object.allocSizes_ref()->insert(config_.allocSizes.begin(),
-                                  config_.allocSizes.end());
-  *object.enableZeroedSlabAllocs_ref() = config_.enableZeroedSlabAllocs;
-  *object.lockMemory_ref() = config_.lockMemory;
-  *object.slabAllocator_ref() = slabAllocator_.saveState();
-  *object.memoryPoolManager_ref() = memoryPoolManager_.saveState();
+  object.allocSizes()->insert(config_.allocSizes.begin(),
+                              config_.allocSizes.end());
+  *object.enableZeroedSlabAllocs() = config_.enableZeroedSlabAllocs;
+  *object.lockMemory() = config_.lockMemory;
+  *object.slabAllocator() = slabAllocator_.saveState();
+  *object.memoryPoolManager() = memoryPoolManager_.saveState();
   return object;
 }
 

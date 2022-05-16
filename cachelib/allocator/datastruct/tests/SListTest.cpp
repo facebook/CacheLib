@@ -410,8 +410,8 @@ TEST_F(SListTest, TestRestoreListWarmRollFromOldFormat) {
   // Save the state, then copy it into the old format (dropping compressedTail).
   const auto state = list1.saveState();
   test_serialization::SListObjectNoCompressedTail oldState;
-  *oldState.size_ref() = *state.size_ref();
-  *oldState.compressedHead_ref() = *state.compressedHead_ref();
+  *oldState.size() = *state.size();
+  *oldState.compressedHead() = *state.compressedHead();
 
   // Now serialize the old object and deserialize it with the latest format.
   auto oldStateBuf = Serializer::serializeToIOBuf(oldState);
@@ -420,9 +420,9 @@ TEST_F(SListTest, TestRestoreListWarmRollFromOldFormat) {
                             oldStateBuf->data() + oldStateBuf->length());
   const auto newFromOld =
       deserializer.deserialize<serialization::SListObject>();
-  EXPECT_EQ(*state.size_ref(), *newFromOld.size_ref());
-  EXPECT_EQ(*state.compressedHead_ref(), *newFromOld.compressedHead_ref());
-  EXPECT_EQ(-1, *newFromOld.compressedTail_ref());
+  EXPECT_EQ(*state.size(), *newFromOld.size());
+  EXPECT_EQ(*state.compressedHead(), *newFromOld.compressedHead());
+  EXPECT_EQ(-1, *newFromOld.compressedTail());
 
   SListImpl list2{newFromOld, SListNode::PtrCompressor{}};
   auto it = list2.begin();
@@ -448,7 +448,7 @@ TEST_F(SListTest, TestRestoreListNoTail) {
   list1.insert(node1);
 
   auto state = list1.saveState();
-  *state.compressedTail_ref() = -1;
+  *state.compressedTail() = -1;
   SListImpl list2{state, SListNode::PtrCompressor{}};
   auto it = list2.begin();
   EXPECT_EQ(*it, node1);
@@ -474,11 +474,11 @@ TEST_F(SListTest, TestInvalidRestore) {
 
   auto state = list1.saveState();
   auto invalidState = state;
-  *invalidState.compressedHead_ref() = 0;
+  *invalidState.compressedHead() = 0;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
   invalidState = state;
-  *invalidState.compressedTail_ref() = 0;
+  *invalidState.compressedTail() = 0;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
 
@@ -498,7 +498,7 @@ TEST_F(SListTest, TestInvalidRestore) {
 
   state = list2.saveState();
   invalidState = state;
-  *invalidState.size_ref() = 5;
+  *invalidState.size() = 5;
   ASSERT_THROW(SListImpl(invalidState, SListNode::PtrCompressor{}),
                std::invalid_argument);
 

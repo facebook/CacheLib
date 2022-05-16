@@ -103,8 +103,14 @@ using ScopedTestAllocator =
     std::scoped_allocator_adaptor<Allocator<char, TestAllocatorResource>>;
 using TestString =
     std::basic_string<char, std::char_traits<char>, ScopedTestAllocator>;
+
 template <typename K, typename V>
-using TestMap = std::map<K, V, std::less<K>, ScopedTestAllocator>;
+using TestMap =
+    std::map<K,
+             V,
+             std::less<K>,
+             std::scoped_allocator_adaptor<
+                 Allocator<std::pair<const K, V>, TestAllocatorResource>>>;
 
 template <typename T>
 using TestF14TemplateAllocator = Allocator<T, TestAllocatorResource>;

@@ -25,6 +25,14 @@ namespace facebook {
 namespace cachelib {
 namespace objcache {
 namespace test {
+namespace {
+template <typename T>
+using Alloc = Allocator<T, TestAllocatorResource>;
+
+template <typename T, typename... U>
+using ScopedAlloc = std::scoped_allocator_adaptor<Alloc<T>, Alloc<U>...>;
+} // namespace
+
 TEST(Allocator, Propogation) {
   // This test is to ensure our allocator behaves as expected per our
   // propogation rules. I.e. no propagation allowed for copy-assignment,
@@ -79,10 +87,10 @@ TEST(Allocator, ScopedAllocatorWithVector) {
   {
     // If our ScopedAlloc only has a single allocator, it will be used
     // for all inner members.
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc>;
-    using Vector = std::vector<std::vector<int, Alloc>, ScopedAlloc>;
-    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    using InnerVector = std::vector<int, Alloc<int>>;
+    using Vector = std::vector<InnerVector, ScopedAlloc<InnerVector>>;
+    ScopedAlloc<InnerVector> alloc{
+        Alloc<InnerVector>{TestAllocatorResource{"1"}}};
     Vector vec{alloc};
     vec = {{1, 2}, {3, 4}};
 
@@ -97,12 +105,12 @@ TEST(Allocator, ScopedAllocatorWithVector) {
   {
     // If a type has all "ScopedAlloc" type, then using a single allocator
     // ScopedAlloc will correctly forward the allocator to all levels
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc>;
-    using Vector =
-        std::vector<std::vector<std::vector<int, ScopedAlloc>, ScopedAlloc>,
-                    ScopedAlloc>;
-    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+    using InnerInnerVector = std::vector<int, Alloc<int>>;
+    using InnerVector =
+        std::vector<InnerInnerVector, ScopedAlloc<InnerInnerVector>>;
+    using Vector = std::vector<InnerVector, ScopedAlloc<InnerVector>>;
+    ScopedAlloc<InnerVector> alloc{
+        Alloc<InnerVector>{TestAllocatorResource{"1"}}};
     Vector vec{alloc};
     vec = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};
 
@@ -124,11 +132,11 @@ TEST(Allocator, ScopedAllocatorWithVector) {
     // This verifies the behavior that with a two-level container and a
     // ScopeAlloc with two allocators. "1" will be used for the top level,
     // and "2" will be used for the lower level.
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAlloc = std::scoped_allocator_adaptor<Alloc, Alloc>;
-    using Vector = std::vector<std::vector<int, Alloc>, ScopedAlloc>;
-    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}},
-                      Alloc{TestAllocatorResource{"2"}}};
+    using InnerVector = std::vector<int, Alloc<int>>;
+    using Vector = std::vector<InnerVector, ScopedAlloc<InnerVector, int>>;
+    ScopedAlloc<InnerVector, int> alloc{
+        Alloc<InnerVector>{TestAllocatorResource{"1"}},
+        Alloc<int>{TestAllocatorResource{"2"}}};
     Vector vec{alloc};
     vec = {{1, 2}, {3, 4}};
 
@@ -144,16 +152,14 @@ TEST(Allocator, ScopedAllocatorWithVector) {
     // This verifies the behavior that with a three-level container and a
     // ScopeAlloc with three allocators. "1" will be used for the top level,
     // "2" will be used for the second level, and "3" for the last level.
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAllocInner = std::scoped_allocator_adaptor<Alloc, Alloc>;
-    using ScopedAllocOuter =
-        std::scoped_allocator_adaptor<Alloc, ScopedAllocInner>;
-    using Vector =
-        std::vector<std::vector<std::vector<int, Alloc>, ScopedAllocInner>,
-                    ScopedAllocOuter>;
-    ScopedAllocOuter alloc{Alloc{TestAllocatorResource{"1"}},
-                           ScopedAllocInner{Alloc{TestAllocatorResource{"2"}},
-                                            Alloc{TestAllocatorResource{"3"}}}};
+    using InnerInnerVector = std::vector<int, Alloc<int>>;
+    using ScopedAllocInner = ScopedAlloc<InnerInnerVector, int>;
+    using InnerVector = std::vector<InnerInnerVector, ScopedAllocInner>;
+    using ScopedAllocOuter = ScopedAlloc<InnerVector, InnerInnerVector, int>;
+    using Vector = std::vector<InnerVector, ScopedAllocOuter>;
+    ScopedAllocOuter alloc{Alloc<InnerVector>{TestAllocatorResource{"1"}},
+                           Alloc<InnerInnerVector>{TestAllocatorResource{"2"}},
+                           Alloc<int>{TestAllocatorResource{"3"}}};
     Vector vec{alloc};
     vec = {{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}};
 
@@ -180,45 +186,14 @@ TEST(Allocator, ScopedAllocatorWithMap) {
   {
     // If our ScopedAlloc only has a single allocator, it will be used
     // for all inner members
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAlloc =
-        std::scoped_allocator_adaptor<Allocator<char, TestAllocatorResource>>;
+    using InnerVector = std::vector<int, Alloc<int>>;
+    using Vector = std::vector<InnerVector, ScopedAlloc<InnerVector>>;
     using NestedContainer =
-        std::map<std::vector<int, Alloc>,
-                 std::vector<std::vector<int, Alloc>, ScopedAlloc>,
-                 std::less<std::vector<int, Alloc>>, ScopedAlloc>;
-
-    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
-    NestedContainer nc{alloc};
-    nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
-
-    EXPECT_EQ("1", nc.get_allocator().getAllocatorResource().getName());
-
-    auto itr = nc.begin();
-    ASSERT_NE(itr, nc.end());
-    EXPECT_EQ("1", itr->first.get_allocator().getAllocatorResource().getName());
-    EXPECT_EQ("1",
-              itr->second.get_allocator().getAllocatorResource().getName());
-
-    auto vecItr = itr->second.begin();
-    ASSERT_NE(vecItr, itr->second.end());
-    for (; vecItr != itr->second.end(); vecItr++) {
-      EXPECT_EQ("1", vecItr->get_allocator().getAllocatorResource().getName());
-    }
-  }
-
-  {
-    // If a type has all "ScopedAlloc" type, then using a single allocator
-    // ScopedAlloc will correctly forward the allocator to all levels.
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAlloc =
-        std::scoped_allocator_adaptor<Allocator<char, TestAllocatorResource>>;
-    using NestedContainer =
-        std::map<std::vector<int, ScopedAlloc>,
-                 std::vector<std::vector<int, ScopedAlloc>, ScopedAlloc>,
-                 std::less<std::vector<int, ScopedAlloc>>, ScopedAlloc>;
-
-    ScopedAlloc alloc{Alloc{TestAllocatorResource{"1"}}};
+        std::map<InnerVector, Vector, std::less<InnerVector>,
+                 ScopedAlloc<std::pair<const InnerVector, Vector>>>;
+    ScopedAlloc<std::pair<const InnerVector, Vector>> alloc{
+        Alloc<std::pair<const InnerVector, Vector>>{
+            TestAllocatorResource{"1"}}};
     NestedContainer nc{alloc};
     nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
 
@@ -241,18 +216,15 @@ TEST(Allocator, ScopedAllocatorWithMap) {
     // This verifies the behavior that with a three-level container and a
     // ScopeAlloc with three allocators. "1" will be used for the top level,
     // "2" will be used for the second level, and "3" for the last level.
-    using Alloc = Allocator<char, TestAllocatorResource>;
-    using ScopedAllocInner = std::scoped_allocator_adaptor<Alloc, Alloc>;
-    using ScopedAllocOuter =
-        std::scoped_allocator_adaptor<Alloc, ScopedAllocInner>;
-    using NestedContainer =
-        std::map<std::vector<int, Alloc>,
-                 std::vector<std::vector<int, Alloc>, ScopedAllocInner>,
-                 std::less<std::vector<int, Alloc>>, ScopedAllocOuter>;
-
-    ScopedAllocOuter alloc{Alloc{TestAllocatorResource{"1"}},
-                           ScopedAllocInner{Alloc{TestAllocatorResource{"2"}},
-                                            Alloc{TestAllocatorResource{"3"}}}};
+    using InnerVector = std::vector<int, Alloc<int>>;
+    using Vector = std::vector<InnerVector, ScopedAlloc<InnerVector, int>>;
+    using NestedContainer = std::map<
+        InnerVector, Vector, std::less<InnerVector>,
+        ScopedAlloc<std::pair<const InnerVector, Vector>, InnerVector, int>>;
+    ScopedAlloc<std::pair<const InnerVector, Vector>, InnerVector, int> alloc{
+        Alloc<std::pair<const InnerVector, Vector>>{TestAllocatorResource{"1"}},
+        Alloc<InnerVector>{TestAllocatorResource{"2"}},
+        Alloc<int>{TestAllocatorResource{"3"}}};
     NestedContainer nc{alloc};
     nc[{1, 2, 3}] = {{4, 5, 6}, {7, 8, 9}};
 

@@ -194,18 +194,6 @@ struct CacheConfig : public JSONConfig {
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};
 
-  // If enabled, we will use nvm admission policy tuned for ML use cases
-  std::string mlNvmAdmissionPolicy{""};
-
-  // This must be non-empty if @mlNvmAdmissionPolicy is true. We specify
-  // a location for the ML model using this argument.
-  std::string mlNvmAdmissionPolicyLocation{""};
-
-  // The target recall of the ML model.
-  // TODO: use an opaque config file path and put that path location here if we
-  // need to expose more configs related to ML model.
-  double mlNvmAdmissionTargetRecall{0.9};
-
   // If enabled, we will use the timestamps from the trace file in the ticker
   // so that the cachebench will observe time based on timestamps from the trace
   // instead of the system time.
@@ -220,6 +208,15 @@ struct CacheConfig : public JSONConfig {
   // always be processing traces from the same hour at any time.
   // When set to 0, TimeStampTicker is not used.
   uint64_t tickerSynchingSeconds{0};
+
+  // Check if ItemDestructor is triggered properly for every item.
+  // Be careful that this will keep a record of every item allocated,
+  // and won't be dropped after item is removed from cache, it the size
+  // is not bounded by the size of cache.
+  bool enableItemDestructorCheck{false};
+  // enable the ItemDestructor feature, but not check correctness,
+  // this verifies whether the feature affects throughputs.
+  bool enableItemDestructor{false};
 
   //
   // Options below are not to be populated with JSON
@@ -243,14 +240,9 @@ struct CacheConfig : public JSONConfig {
   // simulation. Stressor uses this to pass the ticker into the cache.
   std::shared_ptr<cachelib::Ticker> ticker;
 
-  // Check if ItemDestructor is triggered properly for every item.
-  // Be careful that this will keep a record of every item allocated,
-  // and won't be dropped after item is removed from cache, it the size
-  // is not bounded by the size of cache.
-  bool enableItemDestructorCheck{false};
-  // enable the ItemDestructor feature, but not check correctness,
-  // this verifies whether the feature affects throughputs.
-  bool enableItemDestructor{false};
+  // A nested dynamic for custom config. Customized configs can be put under
+  // this field and be consumed during the initialization of the cache.
+  folly::dynamic customConfigJson;
 
   explicit CacheConfig(const folly::dynamic& configJson);
 

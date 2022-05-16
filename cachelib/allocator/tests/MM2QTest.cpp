@@ -628,7 +628,7 @@ TEST_F(MM2QTest, TailTrackingEnabledCheck) {
 
     // and serialization should preserve that
     auto serializedData = c1.saveState();
-    lrus = *serializedData.lrus_ref();
+    lrus = *serializedData.lrus();
     Container c2(serializedData, {});
     EXPECT_TRUE(c2.tailTrackingEnabled_);
 
@@ -639,10 +639,10 @@ TEST_F(MM2QTest, TailTrackingEnabledCheck) {
 
   {
     serialization::MM2QObject serializedData;
-    EXPECT_FALSE(*serializedData.tailTrackingEnabled_ref());
-    *serializedData.config_ref()->hotSizePercent_ref() = 10;
-    *serializedData.config_ref()->coldSizePercent_ref() = 20;
-    *serializedData.lrus_ref() = lrus;
+    EXPECT_FALSE(*serializedData.tailTrackingEnabled());
+    *serializedData.config()->hotSizePercent() = 10;
+    *serializedData.config()->coldSizePercent() = 20;
+    *serializedData.lrus() = lrus;
 
     // serialization object should by default have the flags dirty
     Container c(serializedData, {});

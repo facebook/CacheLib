@@ -288,11 +288,11 @@ class MemoryPool {
   //
   // @param callback   Callback to be executed on each allocation
   //
-  // @return           true to conitnue with iteration, false to abort.
+  // @return           SlabIterationStatus
   template <typename AllocTraversalFn>
-  bool forEachAllocation(ClassId classId,
-                         Slab* slab,
-                         AllocTraversalFn&& callback) {
+  SlabIterationStatus forEachAllocation(ClassId classId,
+                                        Slab* slab,
+                                        AllocTraversalFn&& callback) {
     auto& allocClass = getAllocationClassFor(classId);
     return allocClass.forEachAllocation(
         slab, std::forward<AllocTraversalFn>(callback));
