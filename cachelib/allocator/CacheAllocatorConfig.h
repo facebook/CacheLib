@@ -213,8 +213,9 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
   // Sets total cache size and configures cache memory tiers. This method
-  // can be used when configuring cache memory tears whose sizes are specified
-  // via ratios of total cache size.
+  // can be used when configuring cache memory tiers whose sizes are specified
+  // via ratios of total cache size. If tier sizes are specified explicitly
+  // then the sum of tier sizes must match provided total cache size
   CacheAllocatorConfig& configureMemoryTiers(size_t totalCacheSize,
                                              const MemoryTierConfigs& configs);
 
@@ -384,13 +385,17 @@ class CacheAllocatorConfig {
   bool validateStrategy(
       const std::shared_ptr<PoolOptimizeStrategy>& strategy) const;
 
+  // check whether sizes are set for each memoriy tier and the
+  // sum of sizes matches total cache size
+  void validateMemoryTierSizes() const;
+
   // @return a map representation of the configs
   std::map<std::string, std::string> serialize() const;
 
   // Cache name for users to indentify their own cache.
   std::string cacheName{""};
 
-  // Amount of memory for this cache instance
+  // Amount of memory for this cache instance (sum of all memory tiers' sizes)
   size_t size = 1 * 1024 * 1024 * 1024;
 
   // Directory for shared memory related metadata
@@ -1131,6 +1136,9 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
     throw std::invalid_argument(
         "It's not allowed to enable both RemoveCB and ItemDestructor.");
   }
+
+  validateMemoryTierSizes();
+
   return *this;
 }
 
@@ -1156,6 +1164,24 @@ bool CacheAllocatorConfig<T>::validateStrategy(
   auto type = strategy->getType();
   return type != PoolOptimizeStrategy::NumTypes &&
          (type != PoolOptimizeStrategy::MarginalHits || trackTailHits);
+}
+
+template <typename T>
+void CacheAllocatorConfig<T>::validateMemoryTierSizes() const {
+  size_t sumSizes = 0;
+
+  for (const auto& tierConfig : memoryTierConfigs) {
+    if (!tierConfig.getSize()) {
+      throw std::invalid_argument("Each cache tier must have size set.");
+    } else {
+      sumSizes += tierConfig.getSize();
+    }
+  }
+
+  if (sumSizes != size) {
+    throw std::invalid_argument(
+        "Sum of sizes of all cache tiers must equal to total cache size.");
+  }
 }
 
 template <typename T>

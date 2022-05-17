@@ -130,6 +130,29 @@ TEST_F(CacheAllocatorConfigTest, SumTierSizes) {
             sumTierSizes(config2.getMemoryTierConfigs()));
 }
 
+TEST_F(CacheAllocatorConfigTest, TotalCacheSizeReset1Tier) {
+  AllocatorT::Config config1, config2;
+  size_t numTiers = 1;
+  MemoryTierConfigs sizeConfigs = generateTierConfigs(
+      numTiers,
+      MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize / numTiers));
+  MemoryTierConfigs ratioConfigs = generateTierConfigs(
+      numTiers, MemoryTierCacheConfig::fromShm().setRatio(1));
+
+  // Throws if ctotal cache size is reset to an invalid
+  // number after tiers are sert up (TODO: expand for tnumTiers > 1
+  // when enabled)
+  config1.setCacheSize(defaultTotalSize)
+      .configureMemoryTiers(sizeConfigs)
+      .setCacheSize(defaultTotalSize + 1);
+  EXPECT_THROW(config1.validate(), std::invalid_argument);
+
+  config2.setCacheSize(defaultTotalSize)
+      .configureMemoryTiers(ratioConfigs)
+      .setCacheSize(defaultTotalSize + 1);
+  EXPECT_THROW(config2.validate(), std::invalid_argument);
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
