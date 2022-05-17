@@ -46,70 +46,48 @@ size_t sumTierSizes(const MemoryTierConfigs& configs) {
 }
 
 TEST_F(CacheAllocatorConfigTest, MultipleTier0Config) {
-  AllocatorT::Config config1, config2;
+  AllocatorT::Config config;
   // Throws if vector of tier configs is emptry
-  EXPECT_THROW(config1.configureMemoryTiers(MemoryTierConfigs()),
+  EXPECT_THROW(config.configureMemoryTiers(MemoryTierConfigs()),
                std::invalid_argument);
-  EXPECT_THROW(
-      config2.configureMemoryTiers(defaultTotalSize, MemoryTierConfigs()),
-      std::invalid_argument);
 }
 
 TEST_F(CacheAllocatorConfigTest, MultipleTier1Config) {
-  AllocatorT::Config config1, config2, config3;
+  AllocatorT::Config config1, config2;
   // Accepts single-tier configuration
   config1.setCacheSize(defaultTotalSize)
       .configureMemoryTiers(
           {MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)});
   config2.setCacheSize(0).configureMemoryTiers(
       {MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)});
-  config3.configureMemoryTiers(defaultTotalSize,
-                               {MemoryTierCacheConfig::fromShm().setRatio(1)});
 }
 
 TEST_F(CacheAllocatorConfigTest, MultipleTier2Config) {
-  AllocatorT::Config config1, config2;
+  AllocatorT::Config config;
   // Throws if vector of tier configs > 1
-  EXPECT_THROW(config1.configureMemoryTiers(generateTierConfigs(
+  EXPECT_THROW(config.configureMemoryTiers(generateTierConfigs(
                    maxNumTiers + 1,
                    MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize))),
                std::invalid_argument);
-  EXPECT_THROW(
-      config2.configureMemoryTiers(
-          defaultTotalSize,
-          generateTierConfigs(maxNumTiers + 1,
-                              MemoryTierCacheConfig::fromShm().setRatio(1))),
-      std::invalid_argument);
 }
 
 TEST_F(CacheAllocatorConfigTest, TotalCacheSizeSet0) {
-  AllocatorT::Config config1, config2;
+  AllocatorT::Config config;
   // If total cache size is set to zero and each individual tier specifies its
   // size then total cache size is set to the sum of tier sizes
   MemoryTierConfigs tierConfigs = {
       MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)};
-  config1.setCacheSize(0).configureMemoryTiers(tierConfigs);
-  ASSERT_EQ(config1.getCacheSize(),
-            sumTierSizes(config1.getMemoryTierConfigs()));
-
-  // Throws if total cache size is set to 0 and ratios are used to specify sizes
-  EXPECT_THROW(config2.configureMemoryTiers(
-                   0, {MemoryTierCacheConfig::fromShm().setRatio(1)}),
-               std::invalid_argument);
+  config.setCacheSize(0).configureMemoryTiers(tierConfigs);
+  ASSERT_EQ(config.getCacheSize(), sumTierSizes(config.getMemoryTierConfigs()));
 }
 
 TEST_F(CacheAllocatorConfigTest, TotalCacheSizeLessThanRatios) {
-  AllocatorT::Config config1, config2;
+  AllocatorT::Config config;
   // Throws if total cache size is set to 0
   EXPECT_THROW(
-      config1.setCacheSize(defaultTotalSize)
+      config.setCacheSize(defaultTotalSize)
           .configureMemoryTiers({MemoryTierCacheConfig::fromShm().setRatio(
               defaultTotalSize + 1)}),
-      std::invalid_argument);
-  EXPECT_THROW(
-      config2.configureMemoryTiers(
-          defaultTotalSize,
-          {MemoryTierCacheConfig::fromShm().setRatio(defaultTotalSize + 1)}),
       std::invalid_argument);
 }
 
@@ -139,17 +117,17 @@ TEST_F(CacheAllocatorConfigTest, TotalCacheSizeReset1Tier) {
   MemoryTierConfigs ratioConfigs = generateTierConfigs(
       numTiers, MemoryTierCacheConfig::fromShm().setRatio(1));
 
-  // Throws if ctotal cache size is reset to an invalid
-  // number after tiers are sert up (TODO: expand for tnumTiers > 1
+  // Throws if total cache size is reset to an invalid
+  // number after tiers are set up (TODO: expand for tnumTiers > 1
   // when enabled)
   config1.setCacheSize(defaultTotalSize)
       .configureMemoryTiers(sizeConfigs)
-      .setCacheSize(defaultTotalSize + 1);
+      .setCacheSize(defaultTotalSize - 1);
   EXPECT_THROW(config1.validate(), std::invalid_argument);
 
   config2.setCacheSize(defaultTotalSize)
       .configureMemoryTiers(ratioConfigs)
-      .setCacheSize(defaultTotalSize + 1);
+      .setCacheSize(defaultTotalSize - 1);
   EXPECT_THROW(config2.validate(), std::invalid_argument);
 }
 

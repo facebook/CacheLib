@@ -893,7 +893,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableItemReaperInBackground(
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureMemoryTiers(
     size_t totalCacheSize, const MemoryTierConfigs& config) {
-  setCacheSizeImpl(totalCacheSize);
+  setCacheSize(totalCacheSize);
   if (!getCacheSize()) {
     throw std::invalid_argument("Total cache size must be greater than 0.");
   }
