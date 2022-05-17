@@ -201,14 +201,15 @@ class CacheAllocatorConfig {
   // cachePersistence()
   CacheAllocatorConfig& usePosixForShm();
 
-  // Configures cache memory tiers. Accepts vector of MemoryTierCacheConfig.
-  // Each vector element describes configuration for a single memory cache tier.
-  // Tiers can be set up as ratios of total cache size or have their sizes
-  // explicitly specified. If ratios are used, then total cache size must be set
-  // before this method is called; if sizes are explicitly specified, then
-  // their sum sizes must match the total cache size if it's previously set; if
-  // the total size has not been set then this method will set it as a sum of
-  // all tier sizes
+  // Configures cache memory tiers. Each tier represents a chache region inside
+  // byte-addressible memory such as DRAM, Pmem, CXLmem.
+  // Accepts vector of MemoryTierCacheConfig. Each vector element describes
+  // configuration for a single memory cache tier. Tiers can be set up as ratios
+  // of total cache size or have their sizes explicitly specified. If ratios are
+  // used, then total cache size must be set before this method is called; if
+  // sizes are explicitly specified, then their sum sizes must match the total
+  // cache size if it's previously set; if the total size has not been set then
+  // this method will set it as a sum of all tier sizes
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
   // Sets total cache size and configures cache memory tiers. This method
