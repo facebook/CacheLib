@@ -19,7 +19,6 @@
 #include <cmath>
 #include <limits>
 
-#include "cachelib/common/CountMinSketch.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 
