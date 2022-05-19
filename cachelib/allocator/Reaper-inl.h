@@ -29,7 +29,7 @@ void Reaper<CacheT>::TraversalStats::recordTraversalTime(uint64_t msTaken) {
   lastTraversalTimeMs_.store(msTaken, std::memory_order_relaxed);
   minTraversalTimeMs_.store(std::min(minTraversalTimeMs_.load(), msTaken),
                             std::memory_order_relaxed);
-  maxTraversalTimeMs_.store(std::max(minTraversalTimeMs_.load(), msTaken),
+  maxTraversalTimeMs_.store(std::max(maxTraversalTimeMs_.load(), msTaken),
                             std::memory_order_relaxed);
   totalTraversalTimeMs_.fetch_add(msTaken, std::memory_order_relaxed);
 }
