@@ -22,17 +22,14 @@ namespace objcache2 {
 template <typename CacheTrait>
 template <typename T>
 void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
-  auto cacheSize = config.l1CacheSize;
-  if (cacheSize == 0) {
-    // compute the approximate cache size using the l1EntriesLimit and
-    // kL1AllocSize
-    XCHECK(config.l1EntriesLimit);
-    const size_t l1SizeRequired = config.l1EntriesLimit * kL1AllocSize;
-    const size_t l1SizeRequiredSlabGranularity =
-        (l1SizeRequired / Slab::kSize + (l1SizeRequired % Slab::kSize != 0)) *
-        Slab::kSize;
-    cacheSize = l1SizeRequiredSlabGranularity + Slab::kSize;
-  }
+  // compute the approximate cache size using the l1EntriesLimit and
+  // kL1AllocSize
+  XCHECK(config.l1EntriesLimit);
+  const size_t l1SizeRequired = config.l1EntriesLimit * kL1AllocSize;
+  const size_t l1SizeRequiredSlabGranularity =
+      (l1SizeRequired / Slab::kSize + (l1SizeRequired % Slab::kSize != 0)) *
+      Slab::kSize;
+  auto cacheSize = l1SizeRequiredSlabGranularity + Slab::kSize;
 
   typename CacheTrait::Config l1Config;
   l1Config.setCacheName(config.cacheName)

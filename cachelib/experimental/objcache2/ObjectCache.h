@@ -47,10 +47,6 @@ struct ObjectCacheConfig {
   // Number of shards to improve insert/remove concurrency
   size_t l1NumShards{1};
 
-  // The l1 cache size, if it is default, we will calculate base on
-  // l1EntriesLimit
-  size_t l1CacheSize{0};
-
   // The cache name
   std::string cacheName;
 };
