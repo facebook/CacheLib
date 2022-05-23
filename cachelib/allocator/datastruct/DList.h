@@ -63,7 +63,14 @@ struct CACHELIB_PACKED_ATTR DListHook {
 
   // set and get the time when the node was updated in the lru.
   void setUpdateTime(Time time) noexcept { updateTime_ = time; }
-  Time getUpdateTime() const noexcept { return updateTime_; }
+
+  Time getUpdateTime() const noexcept {
+    // Suppress TSAN here because we don't care if an item is promoted twice by
+    // two get operations running concurrently. It should be very rarely and is
+    // just a minor inefficiency if it happens.
+    folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
+    return updateTime_;
+  }
 
  private:
   CompressedPtr next_{}; // next node in the linked list
