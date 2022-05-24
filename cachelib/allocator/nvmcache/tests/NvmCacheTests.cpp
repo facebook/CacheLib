@@ -403,6 +403,7 @@ TEST_F(NvmCacheTest, NvmClean) {
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);
   }
+  nvm.flushNvmCache();
 
   auto nEvictions = this->evictionCount() - evictBefore;
   auto nPuts = this->getStats().numNvmPuts - putsBefore;
