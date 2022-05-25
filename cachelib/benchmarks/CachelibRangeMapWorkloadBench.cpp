@@ -96,7 +96,7 @@ void setup() {
   // insert CachelibRangeMap into cache
   {
     auto m = CachelibRangeMap::create(*cache, poolId, kClMap);
-    cache->insert(m.viewItemHandle());
+    cache->insert(m.viewWriteHandle());
   }
 
   // insert StdMap
@@ -125,7 +125,7 @@ void benchCachelibRangeMap() {
   auto getCachelibRangeMap = [] {
     auto it = cache->findImpl(kClMap, AccessMode::kRead);
     XDCHECK(it);
-    return CachelibRangeMap::fromItemHandle(*cache, std::move(it));
+    return CachelibRangeMap::fromWriteHandle(*cache, std::move(it));
   };
   std::mt19937 gen{1};
   std::discrete_distribution<> rwDist({1 - FLAGS_write_rate, FLAGS_write_rate});

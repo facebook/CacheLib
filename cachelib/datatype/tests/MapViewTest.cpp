@@ -36,7 +36,7 @@ class MapViewTest : public ::testing::Test {
 
     auto map = BasicMap::create(*cache, pid, "my_map");
     ASSERT_TRUE(map.insert(123, 100));
-    auto& parent = map.viewItemHandle();
+    auto& parent = map.viewWriteHandle();
     auto allocs = cache->viewAsChainedAllocs(parent);
 
     BasicMapView mapView{*parent, allocs.getChain()};
@@ -84,7 +84,7 @@ class MapViewTest : public ::testing::Test {
     using BasicMapView = cachelib::MapView<int, int, AllocatorT>;
 
     auto map = BasicMap::create(*cache, pid, "my_map");
-    auto& parent = map.viewItemHandle();
+    auto& parent = map.viewWriteHandle();
     auto allocs = cache->viewAsChainedAllocs(parent);
 
     BasicMapView mapView{*parent, allocs.getChain()};
@@ -107,7 +107,7 @@ class MapViewTest : public ::testing::Test {
     for (unsigned int i = 0; i < keys.size(); ++i) {
       ASSERT_TRUE(map.insert(keys.at(i), values.at(i)));
     }
-    auto& parent = map.viewItemHandle();
+    auto& parent = map.viewWriteHandle();
     auto allocs = cache->viewAsChainedAllocs(parent);
 
     BasicMapView mapView{*parent, allocs.getChain()};
@@ -133,7 +133,7 @@ class MapViewTest : public ::testing::Test {
     for (unsigned int i = 0; i < keys.size(); ++i) {
       ASSERT_TRUE(map.insert(keys.at(i), values.at(i)));
     }
-    cache->insert(map.viewItemHandle());
+    cache->insert(map.viewWriteHandle());
     {
       auto handle = cache->find("your_map");
       ASSERT_EQ(nullptr, handle);

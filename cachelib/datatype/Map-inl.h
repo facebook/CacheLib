@@ -204,21 +204,21 @@ auto copyHashTable(
   const auto newSize = HT::computeStorageSize(newCapacity);
   const size_t kMaxHashTableSize =
       1024 * 1024 - HT::computeStorageSize(0) -
-      C::Item::getRequiredSize(oldHashTable.viewItemHandle()->getKey(), 0);
+      C::Item::getRequiredSize(oldHashTable.viewWriteHandle()->getKey(), 0);
   if (newSize > kMaxHashTableSize) {
     // This shouldn't happen. Too many entries for a single object in memory.
     auto exStr = folly::sformat(
         "Index has maxed out for key: {}. Existing entries: {}, New requested "
         "capacity: {}. New requested size: {}",
-        oldHashTable.viewItemHandle()->getKey(), oldHashTable->numEntries(),
+        oldHashTable.viewWriteHandle()->getKey(), oldHashTable->numEntries(),
         newCapacity, newSize);
     throw cachelib::MapIndexMaxedOut(exStr.c_str());
   }
 
   const auto poolId =
-      cache.getAllocInfo(oldHashTable.viewItemHandle()->getMemory()).poolId;
+      cache.getAllocInfo(oldHashTable.viewWriteHandle()->getMemory()).poolId;
   auto newHandle =
-      cache.allocate(poolId, oldHashTable.viewItemHandle()->getKey(), newSize);
+      cache.allocate(poolId, oldHashTable.viewWriteHandle()->getKey(), newSize);
   if (!newHandle) {
     return HTHandle{nullptr};
   }
@@ -254,7 +254,8 @@ Map<K, V, C> Map<K, V, C>::create(CacheType& cache,
 }
 
 template <typename K, typename V, typename C>
-Map<K, V, C> Map<K, V, C>::fromItemHandle(CacheType& cache, ItemHandle handle) {
+Map<K, V, C> Map<K, V, C>::fromWriteHandle(CacheType& cache,
+                                           WriteHandle handle) {
   if (!handle) {
     return nullptr;
   }
@@ -270,19 +271,19 @@ Map<K, V, C>::Map(CacheType& cache,
     : cache_(&cache),
       hashtable_(detail::createHashTable<K, C>(*cache_, pid, key, numEntries)),
       bufferManager_(
-          BufferManager{*cache_, hashtable_.viewItemHandle(), numBytes}) {}
+          BufferManager{*cache_, hashtable_.viewWriteHandle(), numBytes}) {}
 
 template <typename K, typename V, typename C>
-Map<K, V, C>::Map(CacheType& cache, ItemHandle handle)
+Map<K, V, C>::Map(CacheType& cache, WriteHandle handle)
     : cache_(&cache),
       hashtable_(std::move(handle)),
-      bufferManager_(*cache_, hashtable_.viewItemHandle()) {}
+      bufferManager_(*cache_, hashtable_.viewWriteHandle()) {}
 
 template <typename K, typename V, typename C>
 Map<K, V, C>::Map(Map&& other)
     : cache_(other.cache_),
       hashtable_(std::move(other.hashtable_)),
-      bufferManager_(*cache_, hashtable_.viewItemHandle()) {}
+      bufferManager_(*cache_, hashtable_.viewWriteHandle()) {}
 
 template <typename K, typename V, typename C>
 Map<K, V, C>& Map<K, V, C>::operator=(Map&& other) {
@@ -318,7 +319,7 @@ template <typename K, typename V, typename C>
 typename Map<K, V, C>::InsertOrReplaceResult Map<K, V, C>::insertImpl(
     const EntryKey& key, const EntryValue& value) {
   bool chainCloned = false;
-  auto accessible = hashtable_.viewItemHandle()->isAccessible();
+  auto accessible = hashtable_.viewWriteHandle()->isAccessible();
   // We try to expand hash table if it's full, if we can't do it
   // we have to abort this insert because we may not be albe to insert
   if (hashtable_->overLimit()) {
@@ -349,13 +350,13 @@ typename Map<K, V, C>::InsertOrReplaceResult Map<K, V, C>::insertImpl(
       }
 
       auto newBufferManager =
-          bufferManager_.clone(newHashTable.viewItemHandle());
+          bufferManager_.clone(newHashTable.viewWriteHandle());
       if (newBufferManager.empty()) {
         throw std::bad_alloc();
       }
 
       hashtable_ = std::move(newHashTable);
-      bufferManager_ = BufferManager(*cache_, hashtable_.viewItemHandle());
+      bufferManager_ = BufferManager(*cache_, hashtable_.viewWriteHandle());
       chainCloned = true;
     }
     if (bufferManager_.expand(keySize + valueSize)) {
@@ -363,7 +364,7 @@ typename Map<K, V, C>::InsertOrReplaceResult Map<K, V, C>::insertImpl(
     }
   }
   if (chainCloned && accessible) {
-    cache_->insertOrReplace(hashtable_.viewItemHandle());
+    cache_->insertOrReplace(hashtable_.viewWriteHandle());
   }
   if (!addr) {
     throw std::bad_alloc();
@@ -417,7 +418,7 @@ template <typename K, typename V, typename C>
 size_t Map<K, V, C>::sizeInBytes() const {
   size_t numBytes = 0;
 
-  const ItemHandle& parent = hashtable_.viewItemHandle();
+  const WriteHandle& parent = hashtable_.viewWriteHandle();
   numBytes += parent->getSize();
 
   auto allocs = cache_->viewAsChainedAllocs(parent);
@@ -460,19 +461,19 @@ bool Map<K, V, C>::expandHashTable() {
   // Clone the buffers (chaind items) when expanding hash table, so that if a
   // user holds an old handle to the old hashtable, it will still be valid and
   // can still access the old Map.
-  auto newBufferManager = bufferManager_.clone(newHashTable.viewItemHandle());
+  auto newBufferManager = bufferManager_.clone(newHashTable.viewWriteHandle());
   if (newBufferManager.empty()) {
     return false;
   }
 
   hashtable_ = std::move(newHashTable);
-  bufferManager_ = BufferManager{*cache_, hashtable_.viewItemHandle()};
+  bufferManager_ = BufferManager{*cache_, hashtable_.viewWriteHandle()};
   return true;
 }
 
 template <typename K, typename V, typename C>
 MapView<K, V, C> Map<K, V, C>::toView() const {
-  auto& parent = hashtable_.viewItemHandle();
+  auto& parent = hashtable_.viewWriteHandle();
   auto allocs = cache_->viewAsChainedAllocs(parent);
   return MapView<K, V, C>{*parent, allocs.getChain()};
 }

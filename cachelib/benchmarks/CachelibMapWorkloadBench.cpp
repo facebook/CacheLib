@@ -85,7 +85,7 @@ void setup() {
   // insert CachelibMap into cache
   {
     auto m = CachelibMap::create(*cache, poolId, kClMap);
-    cache->insert(m.viewItemHandle());
+    cache->insert(m.viewWriteHandle());
   }
 
   // insert StdUnorderedMap
@@ -115,7 +115,7 @@ void benchCachelibMap() {
   auto getCachelibMap = [] {
     auto it = cache->findImpl(kClMap, AccessMode::kRead);
     XDCHECK(it);
-    return CachelibMap::fromItemHandle(*cache, std::move(it));
+    return CachelibMap::fromWriteHandle(*cache, std::move(it));
   };
   std::mt19937 gen{1};
   std::discrete_distribution<> rwDist({1 - FLAGS_write_rate, FLAGS_write_rate});

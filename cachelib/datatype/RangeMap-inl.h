@@ -201,8 +201,8 @@ RangeMap<K, V, C> RangeMap<K, V, C>::create(Cache& cache,
 }
 
 template <typename K, typename V, typename C>
-RangeMap<K, V, C> RangeMap<K, V, C>::fromItemHandle(Cache& cache,
-                                                    ItemHandle handle) {
+RangeMap<K, V, C> RangeMap<K, V, C>::fromWriteHandle(Cache& cache,
+                                                     WriteHandle handle) {
   if (!handle) {
     return {};
   }
@@ -230,7 +230,7 @@ RangeMap<K, V, C>::RangeMap(Cache& cache,
 }
 
 template <typename K, typename V, typename C>
-RangeMap<K, V, C>::RangeMap(Cache& cache, ItemHandle handle)
+RangeMap<K, V, C>::RangeMap(Cache& cache, WriteHandle handle)
     : cache_{&cache},
       handle_{std::move(handle)},
       bufferManager_{*cache_, handle_} {}

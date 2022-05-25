@@ -45,7 +45,7 @@ class RangeMap {
   using EntryValue = V;
   using Cache = C;
   using Item = typename Cache::Item;
-  using ItemHandle = typename Item::Handle;
+  using WriteHandle = typename Item::WriteHandle;
 
   struct FOLLY_PACK_ATTR EntryKeyValue {
     EntryKey key;
@@ -73,11 +73,11 @@ class RangeMap {
                          uint32_t numEntries = kDefaultNumEntries,
                          uint32_t numBytes = kDefaultNumBytes);
 
-  // Convert a item handle to a cachelib::RangeMap
+  // Convert a write handle to a cachelib::RangeMap
   // @param cache   cache allocator to allocate from
   // @param handle  parent handle for this cachelib::RangeMap
   // @return cachelib::RangeMap
-  static RangeMap fromItemHandle(Cache& cache, ItemHandle handle);
+  static RangeMap fromWriteHandle(Cache& cache, WriteHandle handle);
 
   // Constructs null cachelib map
   RangeMap() = default;
@@ -168,17 +168,17 @@ class RangeMap {
   }
 
   // This does not modify the content of this structure.
-  // It resets it to an item handle, which can be used with any API in
-  // CacheAllocator that deals with ItemHandle. After invoking this function,
-  // this structure is left in a null state.
-  ItemHandle resetToItemHandle() && { return std::move(handle_); }
+  // It resets it to a write handle, which can be used with any API in
+  // CacheAllocator that deals with ReadHandle/WriteHandle. After invoking this
+  // function, this structure is left in a null state.
+  WriteHandle resetToWriteHandle() && { return std::move(handle_); }
 
-  // Borrow the item handle underneath this structure. This is useful to
+  // Borrow the write handle underneath this structure. This is useful to
   // implement insertion into CacheAllocator.
-  const ItemHandle& viewItemHandle() const { return handle_; }
-  ItemHandle& viewItemHandle() { return handle_; }
+  const WriteHandle& viewWriteHandle() const { return handle_; }
+  WriteHandle& viewWriteHandle() { return handle_; }
 
-  bool isNullItemHandle() const { return handle_ == nullptr; }
+  bool isNullWriteHandle() const { return handle_ == nullptr; }
 
  private:
   using BinaryIndex = detail::BinaryIndex<EntryKey>;
@@ -197,7 +197,7 @@ class RangeMap {
            uint32_t numBytes);
 
   // Attach to an existing cachelib::RangeMap
-  RangeMap(Cache& cache, ItemHandle handle);
+  RangeMap(Cache& cache, WriteHandle handle);
 
   // Expand index or storage if insufficient space
   InsertOrReplaceResult insertOrReplaceInternal(const EntryKey& key,
@@ -206,7 +206,7 @@ class RangeMap {
                                            bool expandIndex);
 
   Cache* cache_{nullptr};
-  ItemHandle handle_;
+  WriteHandle handle_;
   BufferManager bufferManager_{nullptr};
 };
 

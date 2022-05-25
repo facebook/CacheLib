@@ -288,7 +288,7 @@ class BufferManager {
   using CacheType = C;
   using ChainedAllocs = typename CacheType::ChainedAllocs;
   using Item = typename CacheType::Item;
-  using ItemHandle = typename CacheType::ItemHandle;
+  using WriteHandle = typename Item::WriteHandle;
 
   // TODO: T95574601 remove compaction callback in favor of using iterator to
   //       update hash table.
@@ -311,7 +311,7 @@ class BufferManager {
   // Construct a new BufferManager
   // @throw cachelib::exceptions::OutOfMemory if failing to add a new buffer
   //        std::invalid_argument if initialCapacity is bigger than the max
-  BufferManager(CacheType& cache, ItemHandle& parent, uint32_t initialCapacity)
+  BufferManager(CacheType& cache, WriteHandle& parent, uint32_t initialCapacity)
       : cache_(&cache), parent_(&parent) {
     if (initialCapacity > kMaxBufferCapacity) {
       throw std::invalid_argument(
@@ -329,7 +329,7 @@ class BufferManager {
   }
 
   // Initialize a BufferManager with an existing parent
-  BufferManager(CacheType& cache, ItemHandle& parent)
+  BufferManager(CacheType& cache, WriteHandle& parent)
       : cache_(&cache), parent_(&parent) {
     if (parent) {
       materializeChainedAllocs();
@@ -381,7 +381,7 @@ class BufferManager {
   T* get(BufferAddr addr) const;
 
   // Clone a buffer manager within the same cache under another parent
-  BufferManager<C> clone(ItemHandle& parent) const;
+  BufferManager<C> clone(WriteHandle& parent) const;
 
   // Compact buffers underneath. The layout of existing allocations may change
   // as a result.
@@ -419,7 +419,7 @@ class BufferManager {
 
   // BEGIN private members
   CacheType* cache_{nullptr};
-  ItemHandle* parent_{nullptr};
+  WriteHandle* parent_{nullptr};
   std::vector<Item*> buffers_{};
   // END private members
 

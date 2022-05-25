@@ -123,7 +123,7 @@ class Map {
   using CacheType = C;
 
   using Item = typename CacheType::Item;
-  using ItemHandle = typename Item::Handle;
+  using WriteHandle = typename Item::WriteHandle;
 
   struct FOLLY_PACK_ATTR EntryKeyValue {
     EntryKey key;
@@ -137,18 +137,18 @@ class Map {
   // @param numEntries   number of entries this map can contain initially
   // @param numBytes     number of bytes allocated for value storage initially
   // @return  valid cachelib::Map on success,
-  //          cachelib::Map::isNullItemHandle() == true on failure
+  //          cachelib::Map::isNullWriteHandle() == true on failure
   static Map create(CacheType& cache,
                     PoolId pid,
                     typename CacheType::Key key,
                     uint32_t numEntries = kDefaultNumEntries,
                     uint32_t numBytes = kDefaultNumBytes);
 
-  // Convert a item handle to a cachelib::Map
+  // Convert a write handle to a cachelib::Map
   // @param cache   cache allocator to allocate from
   // @param handle  parent handle for this cachelib::Map
   // @return cachelib::Map
-  static Map fromItemHandle(CacheType& cache, ItemHandle handle);
+  static Map fromWriteHandle(CacheType& cache, WriteHandle handle);
 
   // Constructs null cachelib map
   Map() = default;
@@ -227,22 +227,22 @@ class Map {
   void compact();
 
   // This does not modify the content of this structure.
-  // It resets it to an item handle, which can be used with any API in
-  // CacheAllocator that deals with ItemHandle. After invoking this function,
+  // It resets it to a write handle, which can be used with any API in
+  // CacheAllocator that deals with WriteHandle. After invoking this function,
   // this structure is left in a null state.
-  ItemHandle resetToItemHandle() && {
-    return std::move(hashtable_).resetToItemHandle();
+  WriteHandle resetToWriteHandle() && {
+    return std::move(hashtable_).resetToWriteHandle();
   }
 
-  // Borrow the item handle underneath this structure. This is useful to
+  // Borrow the write handle underneath this structure. This is useful to
   // implement insertion into CacheAllocator.
-  const ItemHandle& viewItemHandle() const {
-    return hashtable_.viewItemHandle();
+  const WriteHandle& viewWriteHandle() const {
+    return hashtable_.viewWriteHandle();
   }
 
-  ItemHandle& viewItemHandle() { return hashtable_.viewItemHandle(); }
+  WriteHandle& viewWriteHandle() { return hashtable_.viewWriteHandle(); }
 
-  bool isNullItemHandle() const { return hashtable_ == nullptr; }
+  bool isNullWriteHandle() const { return hashtable_ == nullptr; }
 
   // Convert a Map to a read-only MapView.
   // The view will become invalid as soon as any mutation happens to the
@@ -278,7 +278,7 @@ class Map {
       uint32_t numBytes);
 
   // Attach to an existing cachelib::Map
-  Map(CacheType& cache, ItemHandle handle);
+  Map(CacheType& cache, WriteHandle handle);
 
   // @return nullptr if not found
   const EntryValue* findImpl(const EntryKey& key) const;

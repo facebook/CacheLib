@@ -34,7 +34,7 @@ struct DefaultUserTypeConverter {
 };
 } // namespace detail
 
-// Converts an ItemHandle to a Typed Handle that will acts as
+// Converts a WriteHandle to a Typed Handle that will acts as
 // a smart pointer for a user defined type.
 //
 // Example usage:
@@ -56,7 +56,7 @@ template <typename T,
 class TypedHandleImpl {
  public:
   using Item = T;
-  using ItemHandle = typename Item::Handle;
+  using WriteHandle = typename Item::WriteHandle;
   using UserType = U;
 
   TypedHandleImpl() = default;
@@ -67,7 +67,7 @@ class TypedHandleImpl {
   TypedHandleImpl& operator=(const TypedHandleImpl&) = delete;
 
   /* implicit */ TypedHandleImpl(std::nullptr_t) {}
-  explicit TypedHandleImpl(ItemHandle handle) : h_(std::move(handle)) {}
+  explicit TypedHandleImpl(WriteHandle handle) : h_(std::move(handle)) {}
 
   explicit operator bool() const noexcept { return h_.get(); }
 
@@ -99,15 +99,15 @@ class TypedHandleImpl {
     return get();
   }
 
-  const ItemHandle& viewItemHandle() const { return h_; }
-  ItemHandle& viewItemHandle() { return h_; }
+  const WriteHandle& viewWriteHandle() const { return h_; }
+  WriteHandle& viewWriteHandle() { return h_; }
 
   void reset() { h_.reset(); }
 
-  ItemHandle resetToItemHandle() && { return ItemHandle{std::move(h_)}; }
+  WriteHandle resetToWriteHandle() && { return WriteHandle{std::move(h_)}; }
 
  private:
-  ItemHandle h_{};
+  WriteHandle h_{};
 
   static UserType& toUserType(Item& it) { return Converter()(it); }
   static const UserType& toUserType(const Item& it) { return Converter()(it); }
