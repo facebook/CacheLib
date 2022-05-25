@@ -212,13 +212,6 @@ class CacheAllocatorConfig {
   // this method will set it as a sum of all tier sizes
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
-  // Sets total cache size and configures cache memory tiers. This method
-  // can be used when configuring cache memory tiers whose sizes are specified
-  // via ratios of total cache size. If tier sizes are specified explicitly
-  // then the sum of tier sizes must match provided total cache size
-  CacheAllocatorConfig& configureMemoryTiers(size_t totalCacheSize,
-                                             const MemoryTierConfigs& configs);
-
   // Return reference to MemoryTierCacheConfigs.
   const MemoryTierConfigs& getMemoryTierConfigs();
 
@@ -606,7 +599,7 @@ class CacheAllocatorConfig {
 
   // Configuration for memory tiers.
   MemoryTierConfigs memoryTierConfigs{
-      {MemoryTierCacheConfig::fromShm().setRatio(1)}};
+      {MemoryTierCacheConfig::fromShm().setRatio(1).setSize(size)}};
 
   void mergeWithPrefix(
       std::map<std::string, std::string>& configMap,
@@ -888,17 +881,6 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableItemReaperInBackground(
   reaperInterval = interval;
   reaperConfig = config;
   return *this;
-}
-
-template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureMemoryTiers(
-    size_t totalCacheSize, const MemoryTierConfigs& config) {
-  setCacheSize(totalCacheSize);
-  if (!getCacheSize()) {
-    throw std::invalid_argument("Total cache size must be greater than 0.");
-  }
-
-  return configureMemoryTiers(config);
 }
 
 template <typename T>
