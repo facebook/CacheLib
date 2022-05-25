@@ -1236,6 +1236,12 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
         (*stats_.regularItemEvictions)[pid][cid].inc();
       }
 
+      if (auto eventTracker = getEventTracker()) {
+        eventTracker->record(
+            AllocatorApiEvent::DRAM_EVICT, toReleaseHandle->getKey(),
+            AllocatorApiResult::DRAM_EVICTED, toReleaseHandle->getSize(),
+            toReleaseHandle->getConfiguredTTL().count());
+      }
       // Invalidate iterator since later on we may use this mmContainer
       // again, which cannot be done unless we drop this iterator
       itr.destroy();
