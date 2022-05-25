@@ -34,6 +34,11 @@ namespace facebook {
 namespace cachelib {
 namespace objcache2 {
 
+namespace test {
+template <typename AllocatorT>
+class ObjectCacheTest;
+}
+
 struct ObjectCacheConfig {
   // Above this many entries, L1 will start evicting
   size_t l1EntriesLimit{};
@@ -49,16 +54,15 @@ struct ObjectCacheConfig {
 
   // The cache name
   std::string cacheName;
+
+  // The maximum key size in bytes. Default to 255 bytes which is the maximum
+  // key size cachelib supports.
+  uint8_t maxKeySizeBytes{255};
 };
 
-template <typename CacheTrait>
-class ObjectCache : public ObjectCacheBase<CacheTrait> {
+template <typename AllocatorT>
+class ObjectCache : public ObjectCacheBase<AllocatorT> {
  private:
-  // default alloc size for l1 cache, only single alloc size is supported now
-  // this is an internal per-item overhead, used to approximately control cache
-  // limit temporarily before size awareness is available.
-  static constexpr uint32_t kL1AllocSize = 64;
-
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
 
@@ -73,7 +77,7 @@ class ObjectCache : public ObjectCacheBase<CacheTrait> {
         l1EntriesLimit_(config.l1EntriesLimit) {}
 
   template <typename T>
-  static std::unique_ptr<ObjectCache<CacheTrait>> create(
+  static std::unique_ptr<ObjectCache<AllocatorT>> create(
       ObjectCacheConfig config);
 
   ~ObjectCache();
@@ -150,17 +154,24 @@ class ObjectCache : public ObjectCacheBase<CacheTrait> {
 
   // Get direct access to the interal CacheAllocator.
   // This is only used in tests.
-  CacheTrait& getL1Cache() { return *this->l1Cache_; }
+  AllocatorT& getL1Cache() { return *this->l1Cache_; }
+
+  // Get the default l1 allocation size in bytes.
+  template <typename T>
+  static uint32_t getL1AllocSize(uint8_t maxKeySizeBytes);
 
  protected:
   // Serialize cache allocator config for exporting to Scuba
   std::map<std::string, std::string> serializeConfigParams() const override;
 
  private:
+  // minimum alloc size in bytes for l1 cache.
+  static constexpr uint32_t kL1AllocSizeMin = 64;
+
   // Allocate an item handle from the interal cache allocator. This item's
   // storage is used to cache pointer to objects in object-cache.
   template <typename T>
-  typename CacheTrait::WriteHandle allocateFromL1(folly::StringPiece key,
+  typename AllocatorT::WriteHandle allocateFromL1(folly::StringPiece key,
                                                   uint32_t ttl,
                                                   uint32_t creationTime);
 
@@ -171,7 +182,7 @@ class ObjectCache : public ObjectCacheBase<CacheTrait> {
   const size_t l1EntriesLimit_{};
 
   // They take up space so we can control exact number of items in cache
-  std::vector<typename CacheTrait::WriteHandle> placeholders_;
+  std::vector<typename AllocatorT::WriteHandle> placeholders_;
 
   TLCounter evictions_{};
   TLCounter lookups_;
@@ -180,6 +191,8 @@ class ObjectCache : public ObjectCacheBase<CacheTrait> {
   TLCounter insertErrors_;
   TLCounter replaces_;
   TLCounter removes_;
+
+  friend class test::ObjectCacheTest<AllocatorT>;
 };
 } // namespace objcache2
 } // namespace cachelib

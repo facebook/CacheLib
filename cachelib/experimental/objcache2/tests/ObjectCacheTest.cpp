@@ -18,6 +18,25 @@ struct Foo {
 template <typename AllocatorT>
 class ObjectCacheTest : public ::testing::Test {
  public:
+  void testGetAllocSize() {
+    std::vector<uint8_t> maxKeySizes{};
+    std::vector<uint32_t> allocSizes{};
+
+    for (uint8_t keySize = 8; keySize < 255; keySize++) {
+      maxKeySizes.push_back(keySize);
+      allocSizes.push_back(
+          ObjectCache<AllocatorT>::template getL1AllocSize<Foo>(keySize));
+    }
+
+    for (size_t i = 0; i < maxKeySizes.size(); i++) {
+      EXPECT_TRUE(allocSizes[i] >= ObjectCache<AllocatorT>::kL1AllocSizeMin);
+      EXPECT_TRUE(maxKeySizes[i] + sizeof(Foo*) +
+                      sizeof(typename AllocatorT::Item) <=
+                  allocSizes[i]);
+      EXPECT_TRUE(allocSizes[i] % 8 == 0);
+    }
+  }
+
   void testSimple() {
     ObjectCacheConfig config;
     config.l1EntriesLimit = 10'000;
@@ -302,7 +321,8 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
                                         TinyLFUAllocator,
                                         LruAllocatorSpinBuckets>;
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
-TYPED_TEST(ObjectCacheTest, Basic) { this->testSimple(); }
+TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
+TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
 TYPED_TEST(ObjectCacheTest, Replace) { this->testReplace(); }
 TYPED_TEST(ObjectCacheTest, UniqueInsert) { this->testUniqueInsert(); }

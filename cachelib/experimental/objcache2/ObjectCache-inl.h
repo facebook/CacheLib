@@ -19,24 +19,25 @@ namespace facebook {
 namespace cachelib {
 namespace objcache2 {
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
+void ObjectCache<AllocatorT>::init(ObjectCacheConfig config) {
   // compute the approximate cache size using the l1EntriesLimit and
-  // kL1AllocSize
+  // l1AllocSize
   XCHECK(config.l1EntriesLimit);
-  const size_t l1SizeRequired = config.l1EntriesLimit * kL1AllocSize;
+  auto l1AllocSize = getL1AllocSize<T>(config.maxKeySizeBytes);
+  const size_t l1SizeRequired = config.l1EntriesLimit * l1AllocSize;
   const size_t l1SizeRequiredSlabGranularity =
       (l1SizeRequired / Slab::kSize + (l1SizeRequired % Slab::kSize != 0)) *
       Slab::kSize;
   auto cacheSize = l1SizeRequiredSlabGranularity + Slab::kSize;
 
-  typename CacheTrait::Config l1Config;
+  typename AllocatorT::Config l1Config;
   l1Config.setCacheName(config.cacheName)
       .setCacheSize(cacheSize)
       .setAccessConfig({config.l1HashTablePower, config.l1LockPower})
-      .setDefaultAllocSizes({kL1AllocSize});
-  l1Config.setItemDestructor([this](typename CacheTrait::DestructorData ctx) {
+      .setDefaultAllocSizes({l1AllocSize});
+  l1Config.setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
     if (ctx.context == DestructorContext::kEvictedFromRAM) {
       evictions_.inc();
     }
@@ -53,7 +54,7 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
     };
   });
 
-  this->l1Cache_ = std::make_unique<CacheTrait>(l1Config);
+  this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   size_t perPoolSize =
       this->l1Cache_->getCacheMemoryStats().cacheSize / l1NumShards_;
   // pool size can't be smaller than slab size
@@ -69,7 +70,7 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
   // the placeholder is used to make sure each pool
   // won't store objects more than l1EntriesLimit / l1NumShards
   const size_t l1PlaceHolders =
-      ((perPoolSize / kL1AllocSize) - (config.l1EntriesLimit / l1NumShards_)) *
+      ((perPoolSize / l1AllocSize) - (config.l1EntriesLimit / l1NumShards_)) *
       l1NumShards_;
   for (size_t i = 0; i < l1PlaceHolders; i++) {
     // Allocate placeholder items such that the cache will fit exactly
@@ -85,18 +86,18 @@ void ObjectCache<CacheTrait>::init(ObjectCacheConfig config) {
   }
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-std::unique_ptr<ObjectCache<CacheTrait>> ObjectCache<CacheTrait>::create(
+std::unique_ptr<ObjectCache<AllocatorT>> ObjectCache<AllocatorT>::create(
     ObjectCacheConfig config) {
   auto obj = std::make_unique<ObjectCache>(InternalConstructor(), config);
   obj->template init<T>(std::move(config));
   return obj;
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-std::shared_ptr<const T> ObjectCache<CacheTrait>::find(folly::StringPiece key) {
+std::shared_ptr<const T> ObjectCache<AllocatorT>::find(folly::StringPiece key) {
   lookups_.inc();
   auto found = this->l1Cache_->find(key);
   if (!found) {
@@ -110,9 +111,9 @@ std::shared_ptr<const T> ObjectCache<CacheTrait>::find(folly::StringPiece key) {
   return std::shared_ptr<const T>(*ptrPtr, std::move(deleter));
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-std::shared_ptr<T> ObjectCache<CacheTrait>::findToWrite(
+std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
     folly::StringPiece key) {
   lookups_.inc();
   auto found = this->l1Cache_->findToWrite(key);
@@ -127,10 +128,10 @@ std::shared_ptr<T> ObjectCache<CacheTrait>::findToWrite(
   return std::shared_ptr<T>(*ptrPtr, std::move(deleter));
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-std::pair<typename ObjectCache<CacheTrait>::AllocStatus, std::shared_ptr<T>>
-ObjectCache<CacheTrait>::insertOrReplace(folly::StringPiece key,
+std::pair<typename ObjectCache<AllocatorT>::AllocStatus, std::shared_ptr<T>>
+ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
                                          std::unique_ptr<T> object,
                                          uint32_t ttlSecs,
                                          std::shared_ptr<T>* replacedPtr) {
@@ -163,10 +164,10 @@ ObjectCache<CacheTrait>::insertOrReplace(folly::StringPiece key,
   return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-std::pair<typename ObjectCache<CacheTrait>::AllocStatus, std::shared_ptr<T>>
-ObjectCache<CacheTrait>::insert(folly::StringPiece key,
+std::pair<typename ObjectCache<AllocatorT>::AllocStatus, std::shared_ptr<T>>
+ObjectCache<AllocatorT>::insert(folly::StringPiece key,
                                 std::unique_ptr<T> object,
                                 uint32_t ttlSecs) {
   inserts_.inc();
@@ -194,9 +195,9 @@ ObjectCache<CacheTrait>::insert(folly::StringPiece key,
           std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 template <typename T>
-typename CacheTrait::WriteHandle ObjectCache<CacheTrait>::allocateFromL1(
+typename AllocatorT::WriteHandle ObjectCache<AllocatorT>::allocateFromL1(
     folly::StringPiece key, uint32_t ttl, uint32_t creationTime) {
   PoolId poolId = 0;
   if (l1NumShards_ > 1) {
@@ -206,22 +207,34 @@ typename CacheTrait::WriteHandle ObjectCache<CacheTrait>::allocateFromL1(
   return this->l1Cache_->allocate(poolId, key, sizeof(T*), ttl, creationTime);
 }
 
-template <typename CacheTrait>
-ObjectCache<CacheTrait>::~ObjectCache() {
+template <typename AllocatorT>
+template <typename T>
+uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
+  auto requiredSizeBytes =
+      maxKeySizeBytes + sizeof(T*) + sizeof(typename AllocatorT::Item);
+  if (requiredSizeBytes <= kL1AllocSizeMin) {
+    return kL1AllocSizeMin;
+  }
+  return util::getAlignedSize(static_cast<uint32_t>(requiredSizeBytes),
+                              8 /* alloc size must be aligned to 8 bytes */);
+}
+
+template <typename AllocatorT>
+ObjectCache<AllocatorT>::~ObjectCache() {
   for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
        ++itr) {
     this->l1Cache_->remove(itr.asHandle());
   }
 }
 
-template <typename CacheTrait>
-void ObjectCache<CacheTrait>::remove(folly::StringPiece key) {
+template <typename AllocatorT>
+void ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
   removes_.inc();
   this->l1Cache_->remove(key);
 }
 
-template <typename CacheTrait>
-void ObjectCache<CacheTrait>::getObjectCacheCounters(
+template <typename AllocatorT>
+void ObjectCache<AllocatorT>::getObjectCacheCounters(
     std::function<void(folly::StringPiece, uint64_t)> visitor) const {
   visitor("objcache.lookups", lookups_.get());
   visitor("objcache.lookups.l1_hits", succL1Lookups_.get());
@@ -232,9 +245,9 @@ void ObjectCache<CacheTrait>::getObjectCacheCounters(
   visitor("objcache.evictions", evictions_.get());
 }
 
-template <typename CacheTrait>
+template <typename AllocatorT>
 std::map<std::string, std::string>
-ObjectCache<CacheTrait>::serializeConfigParams() const {
+ObjectCache<AllocatorT>::serializeConfigParams() const {
   auto config = this->l1Cache_->serializeConfigParams();
   config["l1EntriesLimit"] = std::to_string(l1EntriesLimit_);
   return config;
