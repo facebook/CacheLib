@@ -643,7 +643,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheSizeImpl(
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setCacheSize(size_t _size) {
   if (memoryTierConfigs.size() == 1) {
-    memoryTierConfigs[0].setSize(size);
+    memoryTierConfigs[0].setSize(_size);
   } else {
     throw std::invalid_argument(
         "Cannot set cache size after configuring memory tiers.");
