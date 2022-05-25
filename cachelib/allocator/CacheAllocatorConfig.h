@@ -201,7 +201,7 @@ class CacheAllocatorConfig {
   // cachePersistence()
   CacheAllocatorConfig& usePosixForShm();
 
-  // Configures cache memory tiers. Each tier represents a chache region inside
+  // Configures cache memory tiers. Each tier represents a cache region inside
   // byte-addressible memory such as DRAM, Pmem, CXLmem.
   // Accepts vector of MemoryTierCacheConfig. Each vector element describes
   // configuration for a single memory cache tier. Tiers can be set up as ratios
