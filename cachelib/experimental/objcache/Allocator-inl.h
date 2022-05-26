@@ -191,7 +191,9 @@ createMonotonicBufferResource(Cache& cache,
                               folly::StringPiece key,
                               uint32_t reservedBytes,
                               uint32_t additionalBytes,
-                              size_t alignment) {
+                              size_t alignment,
+                              uint32_t ttlSecs = 0,
+                              uint32_t creationTime = 0) {
   // The layout in our parent item is as follows.
   //
   // |-header-|-key-|-metadata-|-GAP-|-reserved-|-additional-|
@@ -213,7 +215,8 @@ createMonotonicBufferResource(Cache& cache,
     extraBytes = alignment + 8 * (alignment > std::alignment_of<uint64_t>());
   }
 
-  auto hdl = cache.allocate(poolId, key, bytes + extraBytes);
+  auto hdl =
+      cache.allocate(poolId, key, bytes + extraBytes, ttlSecs, creationTime);
   if (!hdl) {
     throw exception::ObjectCacheAllocationError(folly::sformat(
         "Unable to allocate a new item for allocator. Key: {}, Requested "

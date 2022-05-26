@@ -672,6 +672,8 @@ TEST(ObjectCache, PersistenceSimple) {
       [](PoolId poolId,
          folly::StringPiece key,
          folly::StringPiece payload,
+         uint32_t creationTime,
+         uint32_t expiryTime,
          LruObjectCache& cache) {
         if (key == "my obj") {
           Deserializer deserializer{
@@ -686,7 +688,11 @@ TEST(ObjectCache, PersistenceSimple) {
           if (!vecTmp) {
             return LruObjectCache::ItemHandle{};
           }
-          auto vec = cache.createCompact<Vector>(poolId, key, *vecTmp);
+
+          std::chrono::seconds ttl = std::chrono::seconds(
+              expiryTime > 0 ? expiryTime - creationTime : 0);
+          auto vec = cache.createCompact<Vector>(poolId, key, *vecTmp,
+                                                 ttl.count(), creationTime);
           if (!vec) {
             return LruObjectCache::ItemHandle{};
           }
@@ -697,6 +703,7 @@ TEST(ObjectCache, PersistenceSimple) {
 
   folly::IOBufQueue queue;
   // Create a new vector in cache
+  const auto ttl = std::chrono::seconds(5);
   {
     auto objcache = createCache(config);
     auto vec = objcache->create<Vector>(0 /* poolId */, "my obj");
@@ -711,6 +718,10 @@ TEST(ObjectCache, PersistenceSimple) {
 
     // Insert into cache
     objcache->insertOrReplace(vec);
+    // extend ttl
+    vec.viewItemHandle()->extendTTL(ttl);
+    EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
 
     // Persist
     auto rw = createMemoryRecordWriter(queue);
@@ -724,7 +735,12 @@ TEST(ObjectCache, PersistenceSimple) {
 
     auto vec = objcache->find<Vector>("my obj");
     ASSERT_TRUE(vec);
-
+    EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
+    XLOG(INFO)
+        << "ttl = " << vec.viewItemHandle()->getConfiguredTTL().count()
+        << ", creation time = " << vec.viewItemHandle()->getCreationTime()
+        << ", expiry time = " << vec.viewItemHandle()->getExpiryTime();
     EXPECT_EQ(1001, vec->size());
 
     for (int i = 999; i >= 0; i--) {
@@ -774,6 +790,8 @@ TEST(ObjectCache, PersistenceMultipleTypes) {
       [](PoolId poolId,
          folly::StringPiece key,
          folly::StringPiece payload,
+         uint32_t /* unused creationTime */,
+         uint32_t /* unused expiryTime */,
          LruObjectCache& cache) {
         Deserializer deserializer{
             reinterpret_cast<const uint8_t*>(payload.begin()),

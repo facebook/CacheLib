@@ -372,6 +372,8 @@ class ObjectCache {
       std::function<typename ObjectCache::ItemHandle(PoolId poolId,
                                                      folly::StringPiece key,
                                                      folly::StringPiece payload,
+                                                     uint32_t creationTime,
+                                                     uint32_t expiryTime,
                                                      ObjectCache& cache)>;
 
   template <typename T>
@@ -450,8 +452,8 @@ class ObjectCache {
       item.expiryTime().value() = it->getExpiryTime();
       item.key().value() = it->getKey().str();
       item.payload().value().resize(iobuf->length());
-      std::memcpy(
-          item.payload().value().data(), iobuf->data(), iobuf->length());
+      std::memcpy(item.payload().value().data(), iobuf->data(),
+                  iobuf->length());
       rw.writeRecord(Serializer::serializeToIOBuf(item));
     }
   }
@@ -464,12 +466,9 @@ class ObjectCache {
       Deserializer deserializer(iobuf->data(), iobuf->data() + iobuf->length());
       auto item = deserializer.deserialize<serialization::Item>();
 
-      // TODO: support creationTime and expiryTime
-
-      auto hdl = deserializationCallback_(item.poolId().value(),
-                                          item.key().value(),
-                                          item.payload().value(),
-                                          *this);
+      auto hdl = deserializationCallback_(
+          item.poolId().value(), item.key().value(), item.payload().value(),
+          item.creationTime().value(), item.expiryTime().value(), *this);
       if (!hdl) {
         XLOG(ERR) << "Failed to deserialize for key: " << item.key().value();
         continue;
@@ -493,14 +492,30 @@ class ObjectCache {
   ObjectHandle<T> create(PoolId poolId,
                          folly::StringPiece key,
                          Args&&... args) {
+    return createWithTtl<T>(poolId, key, 0 /* ttlSecs*/, 0 /* creationTime */,
+                            std::forward<Args>(args)...);
+  }
+
+  // Same as above where you can pass ttl and creation time of the object.
+  // @param poolId    Cache pool this object will be allocated from.
+  // @param key       Key associated with the object
+  // @param ttlSecs   Time To Live(second) for the item,
+  // @param args...   Arguments for T's constructor
+  // @return  a handle to an object
+  // @throw   ObjectCacheAllocationError on allocation error
+  //          Any exceptions from within T's constructor
+  template <typename T, typename... Args>
+  ObjectHandle<T> createWithTtl(PoolId poolId,
+                                folly::StringPiece key,
+                                uint32_t ttlSecs,
+                                uint32_t creationTime,
+                                Args&&... args) {
     // TODO: Allow user to specify any compatible allocator resource
     auto [handle, mbr] = createMonotonicBufferResource<AllocatorResource>(
-        *cache_,
-        poolId,
-        key,
+        *cache_, poolId, key,
         getTypeSize<T>() /* reserve minimum space for this object */,
-        0 /* additional bytes for storage */,
-        std::alignment_of<T>());
+        0 /* additional bytes for storage */, std::alignment_of<T>(), ttlSecs,
+        creationTime);
     new (getType<T, AllocatorResource>(handle->getMemory()))
         T(std::forward<Args>(args)..., Alloc<char>{mbr});
 
@@ -518,7 +533,9 @@ class ObjectCache {
   template <typename T>
   ObjectHandle<T> createCompact(PoolId poolId,
                                 folly::StringPiece key,
-                                const T& oldObject) {
+                                const T& oldObject,
+                                uint32_t ttlSecs = 0,
+                                uint32_t creationTime = 0) {
     // TODO: handle when this is bigger than 4MB
     const uint32_t usedBytes = oldObject.get_allocator()
                                    .getAllocatorResource()
@@ -527,12 +544,10 @@ class ObjectCache {
 
     // TODO: Allow user to specify any compatible allocator resource
     auto [handle, mbr] = createMonotonicBufferResource<AllocatorResource>(
-        *cache_,
-        poolId,
-        key,
+        *cache_, poolId, key,
         getTypeSize<T>() /* reserve minimum space for this object */,
-        usedBytes /* additional bytes for storage */,
-        std::alignment_of<T>());
+        usedBytes /* additional bytes for storage */, std::alignment_of<T>(),
+        ttlSecs, creationTime);
     new (getType<T, AllocatorResource>(handle->getMemory()))
         T(oldObject, Alloc<char>{mbr});
 
