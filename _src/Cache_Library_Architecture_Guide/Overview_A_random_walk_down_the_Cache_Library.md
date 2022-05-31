@@ -162,9 +162,9 @@ The component that decides which cache engine to go, and part of ordering.
 * The item is inserted into BigHash if it is small:
    * Compute hash. Find the bucket. Insert. Evict the last item in the bucket if necessary. Update the bloom filter.
 * The item is inserted into BlockCache if it is large:
-   * Find its allocation size's active region. Write to the region and promote the region. Update the in-memory index map. Evict a region is there's no more region available.
+   * Find its allocation size's active region. Write to the region and promote the region. Update the in-memory index map. Evict a region if there's no more region available.
 
-## Flash recap: find (looking up from flash and reinserting to DRAM)
+## Flash recap: Find (looking up from flash and reinserting to DRAM)
 
 * The client asks for a key and it gets a miss in DRAM and now is going to NVM.
 * NvmCache schedules the read and cancels all existing writes from Navy driver.

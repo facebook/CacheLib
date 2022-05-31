@@ -42,7 +42,7 @@ void initializeCache() {
 
   CacheAdmin::Config adminConfig; // default config should work just fine
   adminConfig.oncall = "my_team_oncall_shortname"; // Please do not forget to add your team's oncall shortname!
-  admin = std::make_unique<CacheAdmin>(cache, adminConfig);
+  admin = std::make_unique<CacheAdmin>(*cache, adminConfig);
 }
 ```
 
