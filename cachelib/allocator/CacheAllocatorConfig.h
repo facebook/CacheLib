@@ -18,6 +18,7 @@
 
 #include <folly/Optional.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <set>
@@ -259,7 +260,11 @@ class CacheAllocatorConfig {
       ChainedItemMovingSync sync = {},
       uint32_t movingAttemptsLimit = 10);
 
-  // This customizes how many items we try to evict before giving up.
+  // Specify a threshold for detecting slab release stuck
+  CacheAllocatorConfig& setSlabReleaseStuckThreashold(
+      std::chrono::milliseconds threshold);
+
+  // This customizes how many items we try to evict before giving up.s
   // We may fail to evict if someone else (another thread) is using an item.
   // Setting this to a high limit leads to a higher chance of successful
   // evictions but it can lead to higher allocation latency as well.
@@ -432,6 +437,10 @@ class CacheAllocatorConfig {
   // rebalance to avoid alloc fialures.
   std::shared_ptr<RebalanceStrategy> defaultPoolRebalanceStrategy{
       new RebalanceStrategy{}};
+
+  // The slab release process is considered as being stuck if it does not
+  // make any progress for the below threshold
+  std::chrono::milliseconds slabReleaseStuckThreshold{std::chrono::seconds(60)};
 
   // time interval to sleep between iterations of pool size optimization,
   // for regular pools and compact caches
@@ -919,6 +928,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableMovingOnSlabRelease(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabReleaseStuckThreashold(
+    std::chrono::milliseconds threshold) {
+  slabReleaseStuckThreshold = threshold;
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEvictionSearchLimit(
     uint32_t limit) {
   evictionSearchTries = limit;
@@ -1052,6 +1068,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["poolResizeSlabsPerIter"] = std::to_string(poolResizeSlabsPerIter);
 
   configMap["poolRebalanceInterval"] = util::toString(poolRebalanceInterval);
+  configMap["slabReleaseStuckThreshold"] =
+      util::toString(slabReleaseStuckThreshold);
   configMap["trackTailHits"] = std::to_string(trackTailHits);
   // Stringify enum
   switch (memMonitorConfig.mode) {

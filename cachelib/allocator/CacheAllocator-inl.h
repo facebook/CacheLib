@@ -16,6 +16,11 @@
 
 #pragma once
 
+#include <cachelib/allocator/CacheStats.h>
+#include <cachelib/common/Time.h>
+
+#include <chrono>
+
 #include "cachelib/common/Hash.h"
 namespace facebook {
 namespace cachelib {
@@ -2376,13 +2381,31 @@ SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats()
                           stats_.numMoveAttempts.get(),
                           stats_.numMoveSuccesses.get(),
                           stats_.numEvictionAttempts.get(),
-                          stats_.numEvictionSuccesses.get()};
+                          stats_.numEvictionSuccesses.get(),
+                          stats_.numSlabReleaseStuck.get()};
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::releaseSlabImpl(
     const SlabReleaseContext& releaseContext) {
-  util::Throttler throttler(config_.throttleConfig);
+  auto startTime = std::chrono::milliseconds(util::getCurrentTimeMs());
+  bool releaseStuck = false;
+
+  SCOPE_EXIT {
+    if (releaseStuck) {
+      stats_.numSlabReleaseStuck.dec();
+    }
+  };
+
+  util::Throttler throttler(
+      config_.throttleConfig,
+      [this, &startTime, &releaseStuck](std::chrono::milliseconds curTime) {
+        if (!releaseStuck &&
+            curTime >= startTime + config_.slabReleaseStuckThreshold) {
+          stats().numSlabReleaseStuck.inc();
+          releaseStuck = true;
+        }
+      });
 
   // Active allocations need to be freed before we can release this slab
   // The idea is:
