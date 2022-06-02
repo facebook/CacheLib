@@ -454,6 +454,21 @@ template <typename T,
           typename ChainedHashTable::Hook<T> T::*HookPtr,
           typename LockT>
 typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::find(
+    T& node) const {
+  const auto bucket = ht_.getBucket(node.getKey());
+  auto l = locks_.lockShared(bucket);
+
+  if (!node.isAccessible()) {
+    return {};
+  }
+
+  return handleMaker_(&node);
+}
+
+template <typename T,
+          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename LockT>
+typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::find(
     Key key) const {
   const auto bucket = ht_.getBucket(key);
   auto l = locks_.lockShared(bucket);

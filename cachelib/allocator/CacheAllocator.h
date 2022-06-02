@@ -1609,22 +1609,14 @@ class CacheAllocator : public CacheBase {
 
   using EvictionIterator = typename MMContainer::Iterator;
 
-  // Try to evict a regular item.
+  // Try to evict an item.
   //
   // @param  mmContainer  the container to look for evictions.
-  // @param  item         item to evict
+  // @param  handle       handle to item to evict. eviction will fail if
+  //                      this is not an owning handle.
   //
-  // @return  valid handle to regular item on success. This will be the last
-  //          handle to the item. On failure an empty handle.
-  WriteHandle tryEvictRegularItem(MMContainer& mmContainer, Item& item);
-
-  // Try to evict a chained item.
-  //
-  // @param  item         item to evict
-  //
-  // @return  valid handle to the parent item on success. This will be the last
-  //          handle to the item
-  WriteHandle tryEvictChainedItem(MMContainer& mmContainer, Item& item);
+  // @return  whether eviction succeeded
+  bool tryEvictItem(MMContainer& mmContainer, WriteHandle&& handle);
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
