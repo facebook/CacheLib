@@ -95,19 +95,10 @@ bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
 cachelib::EvictionAgeStat MMLru::Container<T, HookPtr>::getEvictionAgeStat(
-    uint64_t projectedLen) const noexcept {
-  // we only need the projectedAge and warmQueueStat data items so we extract
-  // those and return an EvictionAgeStat instance constructed from that data
-  auto warmQueueStatAndAge = lruMutex_->lock_combine([this, projectedLen]() {
-    auto stat = getEvictionAgeStatLocked(projectedLen);
-    XDCHECK(detail::areBytesSame(stat.hotQueueStat, EvictionStatPerType{}));
-    XDCHECK(detail::areBytesSame(stat.coldQueueStat, EvictionStatPerType{}));
-    return std::make_pair(stat.warmQueueStat, stat.projectedAge);
+    uint64_t projectedLength) const noexcept {
+  return lruMutex_->lock_combine([this, projectedLength]() {
+    return getEvictionAgeStatLocked(projectedLength);
   });
-
-  auto warmQueueStat = warmQueueStatAndAge.first;
-  auto age = warmQueueStatAndAge.second;
-  return EvictionAgeStat{warmQueueStat, {}, {}, age};
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
@@ -123,8 +114,10 @@ MMLru::Container<T, HookPtr>::getEvictionAgeStatLocked(
   for (size_t numSeen = 0; numSeen < projectedLength && node != nullptr;
        numSeen++, node = lru_.getPrev(*node)) {
   }
-  stat.projectedAge = node ? currTime - getUpdateTime(*node)
-                           : stat.warmQueueStat.oldestElementAge;
+  stat.warmQueueStat.projectedAge = node ? currTime - getUpdateTime(*node)
+                                         : stat.warmQueueStat.oldestElementAge;
+  XDCHECK(detail::areBytesSame(stat.hotQueueStat, EvictionStatPerType{}));
+  XDCHECK(detail::areBytesSame(stat.coldQueueStat, EvictionStatPerType{}));
   return stat;
 }
 

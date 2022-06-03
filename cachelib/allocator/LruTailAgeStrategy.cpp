@@ -29,6 +29,42 @@ namespace cachelib {
 LruTailAgeStrategy::LruTailAgeStrategy(Config config)
     : RebalanceStrategy(LruTailAge), config_(std::move(config)) {}
 
+uint64_t LruTailAgeStrategy::getOldestElementAge(
+    const PoolEvictionAgeStats& poolEvictionAgeStats, ClassId cid) const {
+  switch (config_.queueSelector) {
+  case Config::QueueSelector::kHot:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .hotQueueStat.oldestElementAge;
+  case Config::QueueSelector::kWarm:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .warmQueueStat.oldestElementAge;
+  case Config::QueueSelector::kCold:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .coldQueueStat.oldestElementAge;
+  default:
+    XDCHECK(false) << "queue selector is invalid";
+    return 0;
+  }
+}
+
+uint64_t LruTailAgeStrategy::getProjectedAge(
+    const PoolEvictionAgeStats& poolEvictionAgeStats, ClassId cid) const {
+  switch (config_.queueSelector) {
+  case Config::QueueSelector::kHot:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .hotQueueStat.projectedAge;
+  case Config::QueueSelector::kWarm:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .warmQueueStat.projectedAge;
+  case Config::QueueSelector::kCold:
+    return poolEvictionAgeStats.classEvictionAgeStats.at(cid)
+        .coldQueueStat.projectedAge;
+  default:
+    XDCHECK(false) << "queue selector is invalid";
+    return 0;
+  }
+}
+
 // The list of allocation classes to be rebalanced is determined by:
 //
 // 0. Filter out classes that have below minSlabThreshold_
@@ -70,9 +106,9 @@ ClassId LruTailAgeStrategy::pickVictim(
   return *std::max_element(
       victims.begin(), victims.end(), [&](ClassId a, ClassId b) {
         return (
-            poolEvictionAgeStats.getProjectedAge(a) *
+            getProjectedAge(poolEvictionAgeStats, a) *
                 (config.getWeight ? config.getWeight(pid, a, poolStats) : 1.0) <
-            poolEvictionAgeStats.getProjectedAge(b) *
+            getProjectedAge(poolEvictionAgeStats, b) *
                 (config.getWeight ? config.getWeight(pid, b, poolStats) : 1.0));
       });
 }
@@ -94,9 +130,9 @@ ClassId LruTailAgeStrategy::pickReceiver(
   // the youngest age among the potenital receivers
   return *std::min_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
-        return (poolEvictionAgeStats.getOldestElementAge(a) *
+        return (getOldestElementAge(poolEvictionAgeStats, a) *
                     (config.getWeight ? config.getWeight(pid, a, stats) : 1.0) <
-                poolEvictionAgeStats.getOldestElementAge(b) *
+                getOldestElementAge(poolEvictionAgeStats, b) *
                     (config.getWeight ? config.getWeight(pid, b, stats) : 1.0));
       });
 }
@@ -131,9 +167,9 @@ RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
 
   if (!config.getWeight) {
     const auto victimProjectedTailAge =
-        poolEvictionAgeStats.getProjectedAge(ctx.victimClassId);
+        getProjectedAge(poolEvictionAgeStats, ctx.victimClassId);
     const auto receiverTailAge =
-        poolEvictionAgeStats.getOldestElementAge(ctx.receiverClassId);
+        getOldestElementAge(poolEvictionAgeStats, ctx.receiverClassId);
 
     XLOGF(DBG, "Rebalancing: receiver = {}, receiverTailAge = {}, victim = {}",
           static_cast<int>(ctx.receiverClassId), receiverTailAge,

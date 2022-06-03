@@ -53,6 +53,14 @@ class LruTailAgeStrategy : public RebalanceStrategy {
         const PoolId pid, const ClassId classId, const PoolStats& pStats)>;
     WeightFn getWeight = {};
 
+    // This lets us specify which queue's eviction age to use.
+    // Note not all eviction policies provide hot, warm, and cold queues.
+    // We leave it up to the policy to determine how to define hot, warm, cold
+    // eviction ages. For exmaple, in LRU, we use the same eviction-age
+    // for all three stats.
+    enum class QueueSelector { kHot, kWarm, kCold };
+    QueueSelector queueSelector{QueueSelector::kWarm};
+
     // The free memory threshold to be used to pick victim class.
     size_t getFreeMemThreshold() const noexcept {
       return numSlabsFreeMem * Slab::kSize;
@@ -109,6 +117,12 @@ class LruTailAgeStrategy : public RebalanceStrategy {
                        const PoolStats& stats,
                        ClassId victim,
                        const PoolEvictionAgeStats& poolEvictionAgeStats) const;
+
+  uint64_t getOldestElementAge(const PoolEvictionAgeStats& poolEvictionAgeStats,
+                               ClassId cid) const;
+
+  uint64_t getProjectedAge(const PoolEvictionAgeStats& poolEvictionAgeStats,
+                           ClassId cid) const;
 
   // Config for this strategy, this can be updated anytime.
   // Do not access this directly, always use `getConfig()` to
