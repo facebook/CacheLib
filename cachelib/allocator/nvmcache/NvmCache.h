@@ -85,7 +85,7 @@ class NvmCache {
   // encrypt everything written to the device and decrypt on every read
   using DeviceEncryptor = navy::DeviceEncryptor;
 
-  using ItemHandle = typename C::ItemHandle;
+  using WriteHandle = typename C::WriteHandle;
   using ReadHandle = typename C::ReadHandle;
   using DeleteTombStoneGuard = typename TombStones::Guard;
   using PutToken = typename InFlightPuts::PutToken;
@@ -133,8 +133,8 @@ class NvmCache {
 
   // Look up item by key
   // @param key         key to lookup
-  // @return            ItemHandle
-  ItemHandle find(HashedKey key);
+  // @return            WriteHandle
+  WriteHandle find(HashedKey key);
 
   // Try to mark the key as in process of being evicted from RAM to NVM.
   // This is used to maintain the consistency between the RAM cache and
@@ -152,7 +152,7 @@ class NvmCache {
   // @param token       the put token for the item. this must have been
   //                    obtained before enqueueing the put to maintain
   //                    consistency
-  void put(ItemHandle& hdl, PutToken token);
+  void put(WriteHandle& hdl, PutToken token);
 
   // returns the current state of whether nvmcache is enabled or not. nvmcache
   // can be disabled if the backend implementation ends up in a corrupt state
@@ -186,7 +186,7 @@ class NvmCache {
   // @return    handle to the item in nvmcache if present. if not, nullptr is
   //            returned. if a handle is returned, it is not inserted into
   //            cache and is temporary.
-  ItemHandle peek(folly::StringPiece key);
+  WriteHandle peek(folly::StringPiece key);
 
   // safely shut down the cache. must be called after stopping all concurrent
   // access to cache. using nvmcache after this will result in no-op.
@@ -248,7 +248,7 @@ class NvmCache {
   //
   // @param   return an item handle allocated and initialized to the right state
   //          based on the NvmItem
-  ItemHandle createItem(folly::StringPiece key, const NvmItem& nvmItem);
+  WriteHandle createItem(folly::StringPiece key, const NvmItem& nvmItem);
 
   // creates the item into IOBuf from NvmItem, if the item has chained items,
   // chained IOBufs will be created.
@@ -268,7 +268,7 @@ class NvmCache {
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(HashedKey hk);
 
-  std::unique_ptr<NvmItem> makeNvmItem(const ItemHandle& handle);
+  std::unique_ptr<NvmItem> makeNvmItem(const WriteHandle& handle);
 
   // wrap an item into a blob for writing into navy.
   Blob makeBlob(const Item& it);
@@ -282,7 +282,7 @@ class NvmCache {
     const std::string key; //< key being fetched
     std::vector<std::shared_ptr<WaitContext<ReadHandle>>> waiters; // list of
                                                                    // waiters
-    ItemHandle it; // will be set when Context is being filled
+    WriteHandle it; // will be set when Context is being filled
     util::LatencyTracker tracker_;
     bool valid_;
 
@@ -311,7 +311,7 @@ class NvmCache {
     // record the item handle. Upon destruction we will wake up the waiters
     // and pass a clone of the handle to the callBack. By default we pass
     // a null handle
-    void setItemHandle(ItemHandle _it) { it = std::move(_it); }
+    void setWriteHandle(WriteHandle _it) { it = std::move(_it); }
 
     // enqueue a waiter into the waiter list
     // @param  waiter       WaitContext
@@ -327,7 +327,7 @@ class NvmCache {
         // If refcount overflowed earlier, then we will return miss to
         // all subsequent waitors.
         if (refcountOverflowed) {
-          w->set(ItemHandle{});
+          w->set(WriteHandle{});
           continue;
         }
 

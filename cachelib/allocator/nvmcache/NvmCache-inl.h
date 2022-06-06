@@ -98,9 +98,9 @@ bool NvmCache<C>::hasTombStone(HashedKey hk) {
 }
 
 template <typename C>
-typename NvmCache<C>::ItemHandle NvmCache<C>::find(HashedKey hk) {
+typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
   if (!isEnabled()) {
-    return ItemHandle{};
+    return WriteHandle{};
   }
 
   util::LatencyTracker tracker(stats().nvmLookupLatency_);
@@ -113,7 +113,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(HashedKey hk) {
   stats().numNvmGets.inc();
 
   GetCtx* ctx{nullptr};
-  ItemHandle hdl{nullptr};
+  WriteHandle hdl{nullptr};
   {
     auto lock = getFillLockForShard(shard);
     // do not use the Cache::find() since that will call back into us.
@@ -154,7 +154,7 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(HashedKey hk) {
         !putContexts_[shard].hasContexts() && !navyCache_->couldExist(hk)) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
-      return ItemHandle{};
+      return WriteHandle{};
     }
 
     hdl = CacheAPIWrapperForNvm<C>::createNvmCacheFillHandle(cache_);
@@ -195,13 +195,13 @@ typename NvmCache<C>::ItemHandle NvmCache<C>::find(HashedKey hk) {
 }
 
 template <typename C>
-typename NvmCache<C>::ItemHandle NvmCache<C>::peek(folly::StringPiece key) {
+typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
   if (!isEnabled()) {
     return nullptr;
   }
 
   folly::Baton b;
-  ItemHandle hdl{};
+  WriteHandle hdl{};
   hdl.markWentToNvm();
 
   // no need for fill lock or inspecting the state of other concurrent
@@ -262,9 +262,9 @@ void NvmCache<C>::evictCB(HashedKey hk,
     // modify DRAM index, check NvmClean/NvmEvicted flag, update itemRemoved_
     // set, and unmark NvmClean flag.
     auto lock = getItemDestructorLock(hk);
-    ItemHandle hdl;
+    WriteHandle hdl;
     try {
-      hdl = ItemHandle{cache_.peek(hk.key())};
+      hdl = WriteHandle{cache_.peek(hk.key())};
     } catch (const exception::RefcountOverflow& ex) {
       // TODO(zixuan) item exists in DRAM, but we can't obtain the handle
       // and mark it as NvmEvicted. In this scenario, there are two
@@ -399,7 +399,7 @@ uint32_t NvmCache<C>::getStorageSizeInNvm(const Item& it) {
 }
 
 template <typename C>
-std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const ItemHandle& hdl) {
+std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const WriteHandle& hdl) {
   const auto& item = *hdl;
   auto poolId = cache_.getAllocInfo((void*)(&item)).poolId;
 
@@ -435,7 +435,7 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const ItemHandle& hdl) {
 }
 
 template <typename C>
-void NvmCache<C>::put(ItemHandle& hdl, PutToken token) {
+void NvmCache<C>::put(WriteHandle& hdl, PutToken token) {
   util::LatencyTracker tracker(stats().nvmInsertLatency_);
   HashedKey hk{hdl->getKey()};
 
@@ -563,10 +563,10 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (nvmItem->isExpired()) {
     stats().numNvmGetMiss.inc();
     stats().numNvmGetMissExpired.inc();
-    ItemHandle hdl{};
+    WriteHandle hdl{};
     hdl.markExpired();
     hdl.markWentToNvm();
-    ctx.setItemHandle(std::move(hdl));
+    ctx.setWriteHandle(std::move(hdl));
     return;
   }
 
@@ -594,12 +594,12 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   // disregard.
   if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {
     it.markWentToNvm();
-    ctx.setItemHandle(std::move(it));
+    ctx.setWriteHandle(std::move(it));
   }
 } // namespace cachelib
 
 template <typename C>
-typename NvmCache<C>::ItemHandle NvmCache<C>::createItem(
+typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
     folly::StringPiece key, const NvmItem& nvmItem) {
   const size_t numBufs = nvmItem.getNumBlobs();
   // parent item

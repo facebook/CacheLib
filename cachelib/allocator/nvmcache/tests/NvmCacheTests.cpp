@@ -980,7 +980,7 @@ TEST_F(NvmCacheTest, ChainedItems) {
         << item.toString();
   };
 
-  auto verifyChainedAllcos = [&](const ItemHandle& hdl) {
+  auto verifyChainedAllcos = [&](const WriteHandle& hdl) {
     auto allocs = cache.viewAsChainedAllocs(hdl);
     verifyItem(allocs.getParentItem(), vals[0]);
 
@@ -2101,7 +2101,7 @@ void verifyItem(const Item& item, const Item& iobufItem) {
 }
 
 void NvmCacheTest::verifyItemInIOBuf(const std::string& key,
-                                     const ItemHandle& handle,
+                                     const ReadHandle& handle,
                                      folly::IOBuf* iobuf) {
   Item& item = *reinterpret_cast<Item*>(iobuf->writableData());
   ASSERT_EQ(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
