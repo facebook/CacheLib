@@ -1125,6 +1125,8 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
   configMap["eventTracker"] = eventTracker ? "set" : "empty";
   configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
+  configMap["delayCacheWorkersStart"] =
+      delayCacheWorkersStart ? "true" : "false";
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),
