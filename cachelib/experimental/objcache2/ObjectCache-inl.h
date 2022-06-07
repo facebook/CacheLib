@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include <stdexcept>
 namespace facebook {
 namespace cachelib {
 namespace objcache2 {
@@ -43,14 +44,20 @@ void ObjectCache<AllocatorT>::init(ObjectCacheConfig config) {
     }
 
     auto& item = ctx.item;
-    auto ptr = *reinterpret_cast<T**>(item.getMemory());
+
+    auto itemPtr = reinterpret_cast<ObjectCacheItem<T>*>(item.getMemory());
 
     SCOPE_EXIT {
+      if (objectSizeTrackingEnabled_) {
+        // update total object size
+        totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                        std::memory_order_relaxed);
+      }
       // Explicitly invoke destructor because cachelib does not
       // free memory and neither does it call destructor by default.
       // TODO: support user-defined destructor, currently we can only support
       // identical object type.
-      delete ptr;
+      delete itemPtr->objectPtr;
     };
   });
 
@@ -105,10 +112,10 @@ std::shared_ptr<const T> ObjectCache<AllocatorT>::find(folly::StringPiece key) {
   }
   succL1Lookups_.inc();
 
-  auto ptrPtr = found->template getMemoryAs<const T*>();
+  auto ptr = found->template getMemoryAs<ObjectCacheItem<const T>>()->objectPtr;
   // Just release the handle. Cache destorys object when all handles released.
   auto deleter = [h = std::move(found)](const T*) {};
-  return std::shared_ptr<const T>(*ptrPtr, std::move(deleter));
+  return std::shared_ptr<const T>(ptr, std::move(deleter));
 }
 
 template <typename AllocatorT>
@@ -122,10 +129,10 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
   }
   succL1Lookups_.inc();
 
-  auto ptrPtr = found->template getMemoryAs<T*>();
+  auto ptr = found->template getMemoryAs<ObjectCacheItem<T>>()->objectPtr;
   // Just release the handle. Cache destorys object when all handles released.
   auto deleter = [h = std::move(found)](T*) {};
-  return std::shared_ptr<T>(*ptrPtr, std::move(deleter));
+  return std::shared_ptr<T>(ptr, std::move(deleter));
 }
 
 template <typename AllocatorT>
@@ -133,8 +140,14 @@ template <typename T>
 std::pair<typename ObjectCache<AllocatorT>::AllocStatus, std::shared_ptr<T>>
 ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
                                          std::unique_ptr<T> object,
+                                         size_t objectSize,
                                          uint32_t ttlSecs,
                                          std::shared_ptr<T>* replacedPtr) {
+  if (objectSizeTrackingEnabled_ && objectSize == 0) {
+    throw std::invalid_argument(
+        "Object size tracking is enabled but object size is set to be 0.");
+  }
+
   inserts_.inc();
 
   auto handle =
@@ -143,24 +156,37 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
     insertErrors_.inc();
     return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
   }
-  T* ptr = object.release();
-  *handle->template getMemoryAs<T*>() = ptr;
+  // We don't release the object here because insertOrReplace could throw when
+  // the replaced item is out of refcount; in this case, the object isn't
+  // inserted to the cache and releasing the object will cause memory leak.
+  T* ptr = object.get();
+  *handle->template getMemoryAs<ObjectCacheItem<T>>() =
+      ObjectCacheItem<T>{ptr, objectSize};
 
   auto replaced = this->l1Cache_->insertOrReplace(handle);
 
   if (replaced) {
     replaces_.inc();
     if (replacedPtr) {
-      auto ptrPtr = reinterpret_cast<T**>(replaced->getMemory());
+      auto itemPtr =
+          reinterpret_cast<ObjectCacheItem<T>*>(replaced->getMemory());
       // Just release the handle. Cache destorys object when all handles
       // released.
       auto deleter = [h = std::move(replaced)](T*) {};
-      *replacedPtr = std::shared_ptr<T>(*ptrPtr, std::move(deleter));
+      *replacedPtr = std::shared_ptr<T>(itemPtr->objectPtr, std::move(deleter));
     }
   }
 
   // Just release the handle. Cache destorys object when all handles released.
   auto deleter = [h = std::move(handle)](T*) {};
+
+  // update total object size
+  if (objectSizeTrackingEnabled_) {
+    totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+  }
+
+  // Release the object as it has been successfully inserted to the cache.
+  object.release();
   return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
@@ -169,7 +195,13 @@ template <typename T>
 std::pair<typename ObjectCache<AllocatorT>::AllocStatus, std::shared_ptr<T>>
 ObjectCache<AllocatorT>::insert(folly::StringPiece key,
                                 std::unique_ptr<T> object,
+                                size_t objectSize,
                                 uint32_t ttlSecs) {
+  if (objectSizeTrackingEnabled_ && objectSize == 0) {
+    throw std::invalid_argument(
+        "Object size tracking is enabled but object size is set to be 0.");
+  }
+
   inserts_.inc();
 
   auto handle =
@@ -183,6 +215,10 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
 
   auto success = this->l1Cache_->insert(handle);
   if (success) {
+    // update total object size
+    if (objectSizeTrackingEnabled_) {
+      totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+    }
     // Release the handle now since we have inserted the handle into the cache,
     // and from now the Cache will be responsible for destroying the object
     // when it's evicted/removed.
@@ -204,14 +240,15 @@ typename AllocatorT::WriteHandle ObjectCache<AllocatorT>::allocateFromL1(
     auto hash = cachelib::MurmurHash2{}(key.data(), key.size());
     poolId = static_cast<PoolId>(hash % l1NumShards_);
   }
-  return this->l1Cache_->allocate(poolId, key, sizeof(T*), ttl, creationTime);
+  return this->l1Cache_->allocate(poolId, key, sizeof(ObjectCacheItem<T>), ttl,
+                                  creationTime);
 }
 
 template <typename AllocatorT>
 template <typename T>
 uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
-  auto requiredSizeBytes =
-      maxKeySizeBytes + sizeof(T*) + sizeof(typename AllocatorT::Item);
+  auto requiredSizeBytes = maxKeySizeBytes + sizeof(ObjectCacheItem<T>) +
+                           sizeof(typename AllocatorT::Item);
   if (requiredSizeBytes <= kL1AllocSizeMin) {
     return kL1AllocSizeMin;
   }
@@ -243,6 +280,7 @@ void ObjectCache<AllocatorT>::getObjectCacheCounters(
   visitor("objcache.replaces", replaces_.get());
   visitor("objcache.removes", removes_.get());
   visitor("objcache.evictions", evictions_.get());
+  visitor("objcache.object_size_bytes", getTotalObjectSize());
 }
 
 template <typename AllocatorT>

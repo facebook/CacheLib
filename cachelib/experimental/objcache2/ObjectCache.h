@@ -58,6 +58,15 @@ struct ObjectCacheConfig {
   // The maximum key size in bytes. Default to 255 bytes which is the maximum
   // key size cachelib supports.
   uint8_t maxKeySizeBytes{255};
+
+  // If this is enabled, user has to pass the object size upon insertion
+  bool objectSizeTrackingEnabled{false};
+};
+
+template <typename T>
+struct FOLLY_PACK_ATTR ObjectCacheItem {
+  T* objectPtr;
+  size_t objectSize;
 };
 
 template <typename AllocatorT>
@@ -74,7 +83,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
       : l1NumShards_{config.l1NumShards},
-        l1EntriesLimit_(config.l1EntriesLimit) {}
+        l1EntriesLimit_(config.l1EntriesLimit),
+        objectSizeTrackingEnabled_(config.objectSizeTrackingEnabled) {}
 
   template <typename T>
   static std::unique_ptr<ObjectCache<AllocatorT>> create(
@@ -105,18 +115,24 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   //
   // @param key          the key to the object.
   // @param object       unique pointer for the object to be inserted.
+  // @param objectSize   size of the object to be inserted.
+  //                     if objectSizeTracking is enabled, a non-zero value must
+  //                     be passed.
   // @param ttlSecs      object expiring seconds.
   // @param replacedPtr  a pointer to a shared_ptr, if it is not nullptr it will
-  // be assigned to the replaced object.
+  //                     be assigned to the replaced object.
   //
   // @throw cachelib::exception::RefcountOverflow if the item we are replacing
   //        is already out of refcounts.
+  // @throw std::invalid_argument if objectSizeTracking is enabled but
+  //        objectSize is 0.
   // @return a pair of allocation status and shared_ptr of newly inserted
   //         object.
   template <typename T>
   std::pair<AllocStatus, std::shared_ptr<T>> insertOrReplace(
       folly::StringPiece key,
       std::unique_ptr<T> object,
+      size_t objectSize = 0,
       uint32_t ttlSecs = 0,
       std::shared_ptr<T>* replacedPtr = nullptr);
 
@@ -125,16 +141,22 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   //
   // @param key          the key to the object.
   // @param object       unique pointer for the object to be inserted.
+  // @param objectSize   size of the object to be inserted.
+  //                     if objectSizeTracking is enabled, a non-zero value must
+  //                     be passed.
   // @param ttlSecs      object expiring seconds.
   //
   // @throw cachelib::exception::RefcountOverflow if the item we are replacing
   //        is already out of refcounts.
+  // @throw std::invalid_argument if objectSizeTracking is enabled but
+  //        objectSize is 0.
   // @return a pair of allocation status and shared_ptr of newly inserted
   //         object. Note that even if object is not inserted, it will still
   //         be converted to a shared_ptr and returned.
   template <typename T>
   std::pair<AllocStatus, std::shared_ptr<T>> insert(folly::StringPiece key,
                                                     std::unique_ptr<T> object,
+                                                    size_t objectSize = 0,
                                                     uint32_t ttlSecs = 0);
 
   // Remove an object from cache by its key. No-op if object doesn't exist.
@@ -160,6 +182,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   template <typename T>
   static uint32_t getL1AllocSize(uint8_t maxKeySizeBytes);
 
+  // Get the total size of all cached objects in bytes.
+  size_t getTotalObjectSize() const {
+    return totalObjectSizeBytes_.load(std::memory_order_relaxed);
+  }
+
  protected:
   // Serialize cache allocator config for exporting to Scuba
   std::map<std::string, std::string> serializeConfigParams() const override;
@@ -181,6 +208,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Above this many entries, L1 will start evicting
   const size_t l1EntriesLimit_{};
 
+  // Whether tracking the size of each object inside object-cache
+  const bool objectSizeTrackingEnabled_{};
+
   // They take up space so we can control exact number of items in cache
   std::vector<typename AllocatorT::WriteHandle> placeholders_;
 
@@ -191,6 +221,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   TLCounter insertErrors_;
   TLCounter replaces_;
   TLCounter removes_;
+  std::atomic<size_t> totalObjectSizeBytes_{0};
 
   friend class test::ObjectCacheTest<AllocatorT>;
 };

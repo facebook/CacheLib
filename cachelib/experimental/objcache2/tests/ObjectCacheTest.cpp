@@ -30,7 +30,7 @@ class ObjectCacheTest : public ::testing::Test {
 
     for (size_t i = 0; i < maxKeySizes.size(); i++) {
       EXPECT_TRUE(allocSizes[i] >= ObjectCache<AllocatorT>::kL1AllocSizeMin);
-      EXPECT_TRUE(maxKeySizes[i] + sizeof(Foo*) +
+      EXPECT_TRUE(maxKeySizes[i] + sizeof(ObjectCacheItem<Foo>) +
                       sizeof(typename AllocatorT::Item) <=
                   allocSizes[i]);
       EXPECT_TRUE(allocSizes[i] % 8 == 0);
@@ -73,7 +73,8 @@ class ObjectCacheTest : public ::testing::Test {
     foo->b = 2;
     foo->c = 3;
 
-    objcache->insertOrReplace("Foo", std::move(foo), 2 /* seconds */);
+    objcache->insertOrReplace("Foo", std::move(foo), 0 /*object size*/,
+                              2 /* seconds */);
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -96,7 +97,8 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->b = 2;
     foo1->c = 3;
     std::shared_ptr<Foo> replaced;
-    auto res = objcache->insertOrReplace("Foo", std::move(foo1), 0, &replaced);
+    auto res =
+        objcache->insertOrReplace("Foo", std::move(foo1), 0, 0, &replaced);
     EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
     EXPECT_EQ(nullptr, replaced);
 
@@ -110,7 +112,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->a = 10;
     foo2->b = 20;
     foo2->c = 30;
-    res = objcache->insertOrReplace("Foo", std::move(foo2), 0, &replaced);
+    res = objcache->insertOrReplace("Foo", std::move(foo2), 0, 0, &replaced);
     EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
     ASSERT_NE(nullptr, replaced);
     EXPECT_EQ(1, replaced->a);
@@ -118,7 +120,7 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(3, replaced->c);
 
     auto found2 = objcache->template find<Foo>("Foo");
-    ASSERT_NE(nullptr, found1);
+    ASSERT_NE(nullptr, found2);
     EXPECT_EQ(10, found2->a);
     EXPECT_EQ(20, found2->b);
     EXPECT_EQ(30, found2->c);
@@ -133,7 +135,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->a = 1;
     foo1->b = 2;
     foo1->c = 3;
-    auto res = objcache->insert("Foo", std::move(foo1), 0);
+    auto res = objcache->insert("Foo", std::move(foo1));
     EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
 
     auto found1 = objcache->template find<Foo>("Foo");
@@ -146,7 +148,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->a = 10;
     foo2->b = 20;
     foo2->c = 30;
-    res = objcache->insert("Foo", std::move(foo2), 0);
+    res = objcache->insert("Foo", std::move(foo2));
     EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kKeyAlreadyExists,
               res.first);
 
@@ -157,6 +159,106 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(3, found2->c);
 
     objcache->remove("Foo");
+  }
+
+  void testObjectSizeTrackingBasics() {
+    ObjectCacheConfig config;
+    config.l1EntriesLimit = 10'000;
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache<AllocatorT>::template create<Foo>(config);
+    EXPECT_EQ(objcache->getTotalObjectSize(), 0);
+    auto foo1 = std::make_unique<Foo>();
+    foo1->a = 1;
+    foo1->b = 2;
+    foo1->c = 3;
+    auto foo1Size = 64;
+    auto foo2 = std::make_unique<Foo>();
+    foo2->a = 10;
+    foo2->b = 20;
+    foo2->c = 30;
+    auto foo2Size = 128;
+
+    // will throw without the object size
+    ASSERT_THROW(objcache->insertOrReplace("Foo", std::make_unique<Foo>()),
+                 std::invalid_argument);
+
+    // insert foo1
+    {
+      auto res = objcache->insertOrReplace("Foo", std::move(foo1), foo1Size);
+      ASSERT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+
+      auto found = objcache->template find<Foo>("Foo");
+      ASSERT_NE(nullptr, found);
+      ASSERT_EQ(1, found->a);
+      ASSERT_EQ(2, found->b);
+      ASSERT_EQ(3, found->c);
+    }
+    ASSERT_EQ(objcache->getNumEntries(), 1);
+    ASSERT_EQ(objcache->getTotalObjectSize(), foo1Size);
+
+    // replace foo1 with foo2
+    {
+      auto res = objcache->insertOrReplace("Foo", std::move(foo2), foo2Size);
+      ASSERT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+
+      auto found = objcache->template find<Foo>("Foo");
+      ASSERT_NE(nullptr, found);
+      ASSERT_EQ(10, found->a);
+      ASSERT_EQ(20, found->b);
+      ASSERT_EQ(30, found->c);
+    }
+    ASSERT_EQ(objcache->getNumEntries(), 1);
+    ASSERT_EQ(objcache->getTotalObjectSize(), foo2Size);
+
+    // remove foo2
+    objcache->remove("Foo");
+    ASSERT_EQ(nullptr, objcache->template find<Foo>("Foo"));
+    ASSERT_EQ(objcache->getNumEntries(), 0);
+    ASSERT_EQ(objcache->getTotalObjectSize(), 0);
+  }
+
+  void testObjectSizeTrackingUniqueInsert() {
+    ObjectCacheConfig config;
+    config.l1EntriesLimit = 10'000;
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache<AllocatorT>::template create<Foo>(config);
+
+    // will throw without the object size
+    ASSERT_THROW(objcache->insert("Foo", std::make_unique<Foo>()),
+                 std::invalid_argument);
+
+    auto foo1 = std::make_unique<Foo>();
+    foo1->a = 1;
+    foo1->b = 2;
+    foo1->c = 3;
+    auto foo1Size = 64;
+    auto res = objcache->insert("Foo", std::move(foo1), foo1Size);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    ASSERT_EQ(objcache->getNumEntries(), 1);
+    ASSERT_EQ(objcache->getTotalObjectSize(), foo1Size);
+
+    auto found1 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found1);
+    EXPECT_EQ(1, found1->a);
+    EXPECT_EQ(2, found1->b);
+    EXPECT_EQ(3, found1->c);
+
+    auto foo2 = std::make_unique<Foo>();
+    foo2->a = 10;
+    foo2->b = 20;
+    foo2->c = 30;
+    auto foo2Size = 128;
+    res = objcache->insert("Foo", std::move(foo2), foo2Size);
+    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kKeyAlreadyExists,
+              res.first);
+    ASSERT_EQ(objcache->getNumEntries(), 1);
+    ASSERT_EQ(objcache->getTotalObjectSize(), foo1Size);
+
+    auto found2 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found2);
+    EXPECT_EQ(1, found2->a);
+    EXPECT_EQ(2, found2->b);
+    EXPECT_EQ(3, found2->c);
   }
 
   void testMultithreadReplace() {
@@ -326,6 +428,12 @@ TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
 TYPED_TEST(ObjectCacheTest, Replace) { this->testReplace(); }
 TYPED_TEST(ObjectCacheTest, UniqueInsert) { this->testUniqueInsert(); }
+TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingBasics) {
+  this->testObjectSizeTrackingBasics();
+}
+TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingUniqueInsert) {
+  this->testObjectSizeTrackingUniqueInsert();
+}
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
   this->testMultithreadReplace();
 }
@@ -358,6 +466,36 @@ TEST(ObjectCacheTest, LruEviction) {
   }
   auto found = objcache->find<Foo>("key_0");
   EXPECT_EQ(nullptr, found);
+}
+
+TEST(ObjectCacheTest, LruEvictionWithSizeTracking) {
+  ObjectCacheConfig config;
+  config.l1EntriesLimit = 1024;
+  config.objectSizeTrackingEnabled = true;
+  auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
+  int totalObjectSize = 0;
+
+  // After the loop, the first item will be evicted and the total object
+  // size will be the sum of remaining items.
+  for (size_t i = 0; i < config.l1EntriesLimit + 1; i++) {
+    auto foo = std::make_unique<Foo>();
+    foo->a = i;
+    auto key = folly::sformat("key_{}", i);
+    auto objectSize = 8 * (i + 1);
+    objcache->insertOrReplace(key, std::move(foo), objectSize);
+    totalObjectSize += objectSize;
+    auto found = objcache->find<Foo>(key);
+    ASSERT_NE(nullptr, found);
+    EXPECT_EQ(i, found->a);
+    if (i < config.l1EntriesLimit) {
+      ASSERT_EQ(objcache->getNumEntries(), i + 1);
+      EXPECT_EQ(totalObjectSize, objcache->getTotalObjectSize());
+    } else {
+      EXPECT_EQ(nullptr, objcache->find<Foo>("key_0"));
+      ASSERT_EQ(objcache->getNumEntries(), i);
+      EXPECT_EQ(totalObjectSize - 8, objcache->getTotalObjectSize());
+    }
+  }
 }
 } // namespace test
 } // namespace objcache2
