@@ -397,13 +397,30 @@ TEST_F(NvmCacheTest, NvmClean) {
   const int nKeys = 1024;
   const uint32_t allocSize = 15 * 1024;
 
+  // We determine how many keys fit into a Navy block-cache region.
+  const uint32_t numKeysPerRegion =
+      config_.blockCache().getRegionSize() / allocSize;
+
   for (unsigned int i = 0; i < nKeys; i++) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);
+
+    if (i % numKeysPerRegion == 0) {
+      // Flush nvm-cache. The reason we flush is to make sure remove jobs
+      // enqueued when we call "insertOrReplace()" is finished to avoid
+      // a scenario where we evict key "Foo" from cache while a previously
+      // enqueued remove job for "Foo" is still pending, which would lead
+      // to "Foo" not being inserted into the cache. And the reason we only
+      // flush every "numKeysPerRegion" is to make sure we don't end up
+      // trigger evictions from flash-cache by flushing too frequently.
+      // If we flush after each insertion, then one region only fits a single
+      // item.
+      cache_->flushNvmCache();
+    }
   }
-  nvm.flushNvmCache();
+  cache_->flushNvmCache();
 
   auto nEvictions = this->evictionCount() - evictBefore;
   auto nPuts = this->getStats().numNvmPuts - putsBefore;
@@ -415,7 +432,7 @@ TEST_F(NvmCacheTest, NvmClean) {
   // read everything again. This should churn and cause the current ones to be
   // evicted to nvmcache.
   size_t numClean = 0;
-  for (unsigned int i = nKeys - 1; i > 0; i--) {
+  for (unsigned int i = nKeys; i > 0; i--) {
     auto key = std::string("blah") + folly::to<std::string>(i - 1);
     bool missInRam = !this->checkKeyExists(key, true /* ramOnly */);
     auto hdl = this->fetch(key, false /* ramOnly */);
@@ -426,7 +443,6 @@ TEST_F(NvmCacheTest, NvmClean) {
       ASSERT_TRUE(hdl->isNvmClean());
     }
   }
-
   ASSERT_LT(0, numClean);
 
   // we must have done evictions from ram to navy
@@ -443,7 +459,7 @@ TEST_F(NvmCacheTest, NvmClean) {
     auto key = std::string("blah") + folly::to<std::string>(i);
     auto hdl = this->fetch(key, false /* ramOnly */);
     hdl.wait();
-    XDCHECK(hdl);
+    ASSERT_TRUE(hdl);
     ASSERT_TRUE(hdl->isNvmClean());
   }
   ASSERT_EQ(0, this->getStats().numNvmEvictions);
