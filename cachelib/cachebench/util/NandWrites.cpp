@@ -330,11 +330,12 @@ std::optional<uint64_t> micronWriteBytes(
     const folly::StringPiece devicePath) {
   // For Micron devices, the output is in number of bytes hex format.
   //
-  return getBytesWritten(processFactory,
-                         nvmePath,
-                         {"micron", "vs-smart-add-log", devicePath.str(), "-f normal"},
-                         6 /* field num */,
-                         1 /* factor */);
+  return getBytesWritten(
+      processFactory,
+      nvmePath,
+      {"micron", "vs-smart-add-log", devicePath.str(), "-f normal"},
+      6 /* field num */,
+      1 /* factor */);
 }
 
 // I don't have access to hosts with Liteon, or SKHMS flash drives that I
