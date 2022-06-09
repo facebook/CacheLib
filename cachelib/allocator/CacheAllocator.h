@@ -1615,14 +1615,6 @@ class CacheAllocator : public CacheBase {
       Deserializer& deserializer,
       const typename Item::PtrCompressor& compressor);
 
-  // Create a copy of empty MMContainers according to the configs of
-  // mmContainers_ This function is used when serilizing for persistence for the
-  // reason of backward compatibility. A copy of empty MMContainers from
-  // mmContainers_ will be created and serialized as unevictable mm containers
-  // and written to metadata so that previous CacheLib versions can restore from
-  // such a serialization. This function will be removed in the next version.
-  MMContainers createEmptyMMContainers();
-
   unsigned int reclaimSlabs(PoolId id, size_t numSlabs) final {
     return allocator_->reclaimSlabsAndGrow(id, numSlabs);
   }

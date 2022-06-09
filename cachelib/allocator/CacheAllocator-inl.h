@@ -3216,23 +3216,6 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::MMContainers
-CacheAllocator<CacheTrait>::createEmptyMMContainers() {
-  MMContainers mmContainers;
-  for (unsigned int i = 0; i < mmContainers_.size(); i++) {
-    for (unsigned int j = 0; j < mmContainers_[i].size(); j++) {
-      if (mmContainers_[i][j]) {
-        MMContainerPtr ptr =
-            std::make_unique<typename MMContainerPtr::element_type>(
-                mmContainers_[i][j]->getConfig(), compressor_);
-        mmContainers[i][j] = std::move(ptr);
-      }
-    }
-  }
-  return mmContainers;
-}
-
-template <typename CacheTrait>
 serialization::CacheAllocatorMetadata
 CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
     Deserializer& deserializer) {
