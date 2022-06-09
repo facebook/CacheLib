@@ -226,8 +226,8 @@ bool CacheItem<CacheTrait>::markMoving() noexcept {
 }
 
 template <typename CacheTrait>
-void CacheItem<CacheTrait>::unmarkMoving() noexcept {
-  ref_.unmarkMoving();
+RefcountWithFlags::Value CacheItem<CacheTrait>::unmarkMoving() noexcept {
+  return ref_.unmarkMoving();
 }
 
 template <typename CacheTrait>

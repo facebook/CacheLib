@@ -1661,15 +1661,6 @@ class CacheAllocator : public CacheBase {
 
   using EvictionIterator = typename MMContainer::Iterator;
 
-  // Try to evict an item.
-  //
-  // @param  mmContainer  the container to look for evictions.
-  // @param  handle       handle to item to evict. eviction will fail if
-  //                      this is not an owning handle.
-  //
-  // @return  whether eviction succeeded
-  bool tryEvictItem(MMContainer& mmContainer, WriteHandle&& handle);
-
   // Deserializer CacheAllocatorMetadata and verify the version
   //
   // @param  deserializer   Deserializer object
@@ -1787,7 +1778,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return last handle for corresponding to item on success. empty handle on
   // failure. caller can retry if needed.
-  WriteHandle evictNormalItemForSlabRelease(Item& item);
+  WriteHandle evictNormalItem(Item& item, bool skipIfTokenInvalid = false);
 
   // Helper function to evict a child item for slab release
   // As a side effect, the parent item is also evicted
@@ -1918,10 +1909,6 @@ class CacheAllocator : public CacheBase {
 
   static bool itemMovingPredicate(const Item& item) {
     return item.getRefCount() == 0;
-  }
-
-  static bool itemEvictionPredicate(const Item& item) {
-    return item.getRefCount() == 1 && !item.isMoving();
   }
 
   static bool itemExpiryPredicate(const Item& item) {
