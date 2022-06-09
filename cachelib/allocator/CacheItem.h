@@ -357,7 +357,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * Unmarking moving does not depend on `isInMMContainer`
    */
   bool markMoving() noexcept;
-  void unmarkMoving() noexcept;
+  RefcountWithFlags::Value unmarkMoving() noexcept;
   bool isMoving() const noexcept;
   bool isOnlyMoving() const noexcept;
 

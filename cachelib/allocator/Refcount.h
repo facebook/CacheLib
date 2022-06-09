@@ -247,10 +247,10 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   /**
    * The following four functions are used to track whether or not
    * an item is currently in the process of being moved. This happens during a
-   * slab rebalance or resize operation.
+   * slab rebalance or resize operation or during eviction.
    *
-   * An item can only be marked moving when `isInMMContainer` returns true.
-   * This operation is atomic.
+   * An item can only be marked moving when `isInMMContainer` returns true and
+   * the item is not yet marked as moving. This operation is atomic.
    *
    * User can also query if an item "isOnlyMoving". This returns true only
    * if the refcount is 0 and only the moving bit is set.
@@ -267,7 +267,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const bool flagSet = curValue & conditionBitMask;
-      if (!flagSet) {
+      const bool alreadyMoving = curValue & bitMask;
+      if (!flagSet || alreadyMoving) {
         return false;
       }
 
@@ -286,9 +287,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
       }
     }
   }
-  void unmarkMoving() noexcept {
+  Value unmarkMoving() noexcept {
     Value bitMask = ~getAdminRef<kMoving>();
-    __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
+    return __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL) & kRefMask;
   }
   bool isMoving() const noexcept { return getRaw() & getAdminRef<kMoving>(); }
   bool isOnlyMoving() const noexcept {

@@ -496,17 +496,6 @@ class ChainedHashTable {
     //        creating this item handle.
     Handle find(Key key) const;
 
-    // returns a handle to specified node.
-    //
-    // @param  node       requested node
-    //
-    // @return handle to the node if find was sucessfull. returns a
-    // null handle if the node was not in the container.
-    //
-    // @throw std::overflow_error is the maximum item refcount is execeeded by
-    //        creating this item handle.
-    Handle find(T& node) const;
-
     // for saving the state of the hash table
     //
     // precondition:  serialization must happen without any reader or writer
