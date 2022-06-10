@@ -737,6 +737,131 @@ TEST(ObjectCache, PersistenceSimple) {
     ASSERT_TRUE(vec);
     EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
     EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
+    EXPECT_EQ(1001, vec->size());
+
+    for (int i = 999; i >= 0; i--) {
+      ASSERT_EQ(i, vec->back());
+      vec->pop_back();
+    }
+    EXPECT_EQ(1, vec->size());
+    EXPECT_EQ(123, vec->back());
+  }
+}
+
+TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
+  using Vector = std::vector<int, LruObjectCache::Alloc<int>>;
+
+  LruAllocator::Config cacheAllocatorConfig;
+  cacheAllocatorConfig.setCacheSize(100 * 1024 * 1024);
+  LruObjectCache::Config config;
+  config.setCacheAllocatorConfig(cacheAllocatorConfig);
+  config.enablePersistence(
+      [](folly::StringPiece key, void* unalignedMem) {
+        if (key == "my obj one" || key == "my obj two") {
+          auto* vec =
+              getType<Vector,
+                      MonotonicBufferResource<CacheDescriptor<LruAllocator>>>(
+                  unalignedMem);
+          return Serializer::serializeToIOBuf(*vec);
+        }
+        return std::unique_ptr<folly::IOBuf>(nullptr);
+      },
+      [](PoolId poolId,
+         folly::StringPiece key,
+         folly::StringPiece payload,
+         uint32_t creationTime,
+         uint32_t expiryTime,
+         LruObjectCache& cache) {
+        // add a sleep to mimic delay in deserialization and recovery of cache
+        // content.
+        /* sleep override */
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+
+        if (key == "my obj one" || key == "my obj two") {
+          Deserializer deserializer{
+              reinterpret_cast<const uint8_t*>(payload.begin()),
+              reinterpret_cast<const uint8_t*>(payload.end())};
+          auto tmp = deserializer.deserialize<Vector>();
+
+          // TODO: we're compacting here for better space efficiency. However,
+          //       this requires 3 copies. Deserialize -> first object ->
+          //       compacted object. It's wasteful. Can we do better?
+          auto vecTmp = cache.create<Vector>(poolId, key, tmp);
+          if (!vecTmp) {
+            return LruObjectCache::ItemHandle{};
+          }
+
+          std::chrono::seconds ttl = std::chrono::seconds(
+              expiryTime > 0 ? expiryTime - creationTime : 0);
+          auto vec = cache.createCompact<Vector>(poolId, key, *vecTmp,
+                                                 ttl.count(), creationTime);
+          if (!vec) {
+            return LruObjectCache::ItemHandle{};
+          }
+          return std::move(vec).releaseItemHandle();
+        }
+        return LruObjectCache::ItemHandle{};
+      });
+
+  folly::IOBufQueue queue;
+  // Create two vectors in cache
+  const auto ttl = std::chrono::seconds(5);
+  {
+    auto objcache = createCache(config);
+    auto vecOne = objcache->create<Vector>(0 /* poolId */, "my obj one");
+    ASSERT_TRUE(vecOne);
+    EXPECT_EQ(0, vecOne->size());
+    vecOne->push_back(123);
+    EXPECT_EQ(1, vecOne->size());
+    for (int i = 0; i < 1000; i++) {
+      vecOne->push_back(i);
+    }
+    EXPECT_EQ(1001, vecOne->size());
+
+    // Insert into cache
+    objcache->insertOrReplace(vecOne);
+    // extend ttl
+    vecOne.viewItemHandle()->extendTTL(ttl);
+    EXPECT_NE(0, vecOne.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, vecOne.viewItemHandle()->getConfiguredTTL());
+
+    auto vecTwo = objcache->create<Vector>(0 /* poolId */, "my obj two");
+    ASSERT_TRUE(vecTwo);
+    EXPECT_EQ(0, vecTwo->size());
+    vecTwo->push_back(123);
+    EXPECT_EQ(1, vecTwo->size());
+    for (int i = 0; i < 1000; i++) {
+      vecTwo->push_back(i);
+    }
+    EXPECT_EQ(1001, vecTwo->size());
+
+    // Insert into cache
+    objcache->insertOrReplace(vecTwo);
+    // extend ttl
+    vecTwo.viewItemHandle()->extendTTL(ttl);
+    EXPECT_NE(0, vecTwo.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, vecTwo.viewItemHandle()->getConfiguredTTL());
+
+    // Persist
+    auto rw = createMemoryRecordWriter(queue);
+    objcache->persist(*rw);
+  }
+
+  {
+    auto objcache = createCache(config);
+    auto rr = createMemoryRecordReader(queue);
+    uint32_t timeOutDurationInSec = 4;
+    objcache->recover(*rr, timeOutDurationInSec);
+
+    // due to time out we should be able to only recover one vector
+    auto vecOne = objcache->find<Vector>("my obj one");
+    auto vecTwo = objcache->find<Vector>("my obj two");
+    ASSERT_TRUE(vecOne || vecTwo);
+    ASSERT_FALSE(vecOne && vecTwo);
+
+    auto& vec = vecOne ? vecOne : vecTwo;
+    EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
+    EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
     XLOG(INFO)
         << "ttl = " << vec.viewItemHandle()->getConfiguredTTL().count()
         << ", creation time = " << vec.viewItemHandle()->getCreationTime()
@@ -847,6 +972,30 @@ TEST(ObjectCache, PersistenceMultipleTypes) {
     auto objcache = createCache(config);
     auto rr = createMemoryRecordReader(queue);
     objcache->recover(*rr);
+
+    auto vecInt = objcache->find<VecInt>("vec_int test");
+    ASSERT_TRUE(vecInt);
+    EXPECT_EQ(123, vecInt->back());
+
+    auto vecStr = objcache->find<VecStr>("vec_str test");
+    ASSERT_TRUE(vecStr);
+    EXPECT_EQ("hello world 1234567890", vecStr->back());
+
+    auto mapStr = objcache->find<MapStr>("map_str test");
+    ASSERT_TRUE(mapStr);
+    EXPECT_EQ("hello world 1234567890", (*mapStr)["random key 123"]);
+
+    // Persist cache again
+    queue.reset();
+    auto rw = createMemoryRecordWriter(queue);
+    objcache->persist(*rw);
+  }
+
+  {
+    auto objcache = createCache(config);
+    auto rr = createMemoryRecordReader(queue);
+    uint32_t timeOutDurationInSec = 5;
+    objcache->recover(*rr, timeOutDurationInSec);
 
     auto vecInt = objcache->find<VecInt>("vec_int test");
     ASSERT_TRUE(vecInt);

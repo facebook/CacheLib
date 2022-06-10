@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <scoped_allocator>
 
 #include "cachelib/common/PeriodicWorker.h"
@@ -458,8 +459,10 @@ class ObjectCache {
     }
   }
 
-  void recover(RecordReader& rr) {
+  void recover(RecordReader& rr, uint32_t timeOutDurationInSec = 0) {
     XDCHECK(deserializationCallback_);
+    auto recoveryStartTime = std::chrono::system_clock::now();
+    uint32_t timeElapsedInSec = 0;
     while (!rr.isEnd()) {
       auto iobuf = rr.readRecord();
       XDCHECK(iobuf);
@@ -474,6 +477,19 @@ class ObjectCache {
         continue;
       }
       cache_->insertOrReplace(hdl);
+      timeElapsedInSec =
+          timeOutDurationInSec > 0
+              ? std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now() - recoveryStartTime)
+                    .count()
+              : 0;
+      if (timeElapsedInSec > timeOutDurationInSec) {
+        XLOG(INFO) << "Recover timed out and couldn't finish completely, "
+                      "timeOutDurationInSec =  "
+                   << timeOutDurationInSec
+                   << ", timeElapsedInSec = " << timeElapsedInSec;
+        break;
+      }
     }
   }
 
