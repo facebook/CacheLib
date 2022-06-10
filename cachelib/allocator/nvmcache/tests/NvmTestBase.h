@@ -28,7 +28,7 @@ namespace tests {
 
 using AllocatorT = LruAllocator;
 using Item = AllocatorT::Item;
-using ItemHandle = AllocatorT::ItemHandle;
+using WriteHandle = AllocatorT::WriteHandle;
 using ReadHandle = AllocatorT::ReadHandle;
 using ChainedAllocs = AllocatorT::ChainedAllocs;
 using DestructorData = typename AllocatorT::DestructorData;
@@ -52,10 +52,10 @@ class NvmCacheTest : public testing::Test {
   PoolId poolId() const noexcept { return id_; }
 
   // fetch the key. if _ramOnly_ then we only fetch it if it is in RAM.
-  ItemHandle fetch(folly::StringPiece key, bool ramOnly);
+  WriteHandle fetch(folly::StringPiece key, bool ramOnly);
 
   // fetch the key to write. if _ramOnly_ then we only fetch it if it is in RAM.
-  ItemHandle fetchToWrite(folly::StringPiece key, bool ramOnly);
+  WriteHandle fetchToWrite(folly::StringPiece key, bool ramOnly);
 
   // similar to fetch, but only check if it exists
   bool checkKeyExists(folly::StringPiece key, bool ramOnly);
@@ -75,7 +75,7 @@ class NvmCacheTest : public testing::Test {
   void iceColdRoll();
   auto shutDownCache() { return cache_->shutDown(); }
 
-  void insertOrReplace(ItemHandle& handle) {
+  void insertOrReplace(WriteHandle& handle) {
     cache_->insertOrReplace(handle);
     // enforce nvm to complete remove job (triggered by insertOrReplace).
     // o/w it will cause an immediate eviction's put job  to fail.
@@ -105,7 +105,7 @@ class NvmCacheTest : public testing::Test {
     return cache_->pushToNvmCacheFromRamForTesting(key);
   }
 
-  void pushToNvmCacheFromRamForTesting(ItemHandle& handle) {
+  void pushToNvmCacheFromRamForTesting(WriteHandle& handle) {
     auto nvmCache = getNvmCache();
     if (nvmCache) {
       nvmCache->put(handle, nvmCache->createPutToken(handle->getKey()));
@@ -126,7 +126,7 @@ class NvmCacheTest : public testing::Test {
     return cache_ ? cache_->nvmCache_.get() : nullptr;
   }
 
-  std::unique_ptr<NvmItem> makeNvmItem(const ItemHandle& handle) {
+  std::unique_ptr<NvmItem> makeNvmItem(const WriteHandle& handle) {
     return getNvmCache()->makeNvmItem(handle);
   }
 
@@ -154,7 +154,7 @@ class NvmCacheTest : public testing::Test {
   }
 
   void verifyItemInIOBuf(const std::string& key,
-                         const ItemHandle& handle,
+                         const ReadHandle& handle,
                          folly::IOBuf* iobuf);
 
   folly::dynamic options_;

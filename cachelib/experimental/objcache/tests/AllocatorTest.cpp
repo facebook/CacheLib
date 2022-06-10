@@ -292,7 +292,8 @@ TEST(MonotonicBufferResource, SimpleAllocation) {
   auto cache = createCache();
   auto [hdl, mbr] = createMonotonicBufferResource<Mbr>(
       *cache, 0 /* poolId */, "my_alloc", 0 /* reserved bytes */,
-      10 /* additional bytes */, 1 /* alignment */);
+      10 /* additional bytes */, 1 /* alignment */, 0 /* ttlSec */,
+      0 /* creationTime */);
   EXPECT_FALSE(hdl->hasChainedItem());
 
   // First allocation uses the additional reserved bytes so we don't need
@@ -327,7 +328,8 @@ TEST(MonotonicBufferResource, Alignment) {
     for (auto alignment : alignments) {
       auto [hdl, mbr] = createMonotonicBufferResource<Mbr>(
           *cache, 0 /* poolId */, folly::sformat("key_{}", loops),
-          100 /* reserved bytes */, 100 /* additional bytes */, alignment);
+          100 /* reserved bytes */, 100 /* additional bytes */, alignment,
+          0 /* ttlSec */, 0 /* creationTime */);
 
       uintptr_t reservedStorageStart = reinterpret_cast<uintptr_t>(
           Mbr::getReservedStorage(hdl->getMemory(), alignment));
@@ -358,7 +360,8 @@ TEST(MonotonicBufferResource, VectorAllocation) {
   auto cache = createCache();
   auto [hdl, mbr] = createMonotonicBufferResource<Mbr>(
       *cache, 0 /* poolId */, "my_alloc", 0 /* reserved bytes */,
-      0 /* additional bytes */, 1 /* alignment */);
+      0 /* additional bytes */, 1 /* alignment */, 0 /* ttlSec */,
+      0 /* creationTime */);
   MbrVector<int> intVec{MbrAlloc<int>{mbr}};
   for (int i = 0; i < 10; i++) {
     intVec.push_back(i);
@@ -375,7 +378,7 @@ TEST(MonotonicBufferResource, VectorAllocation2) {
   auto [hdl, mbr] = createMonotonicBufferResource<Mbr>(
       *cache, 0 /* poolId */, "my_alloc",
       sizeof(MbrVector<int>) /* reserved bytes */, 0 /* additional bytes */,
-      1 /* alignment */);
+      1 /* alignment */, 0 /* ttlSec */, 0 /* creationTime */);
   auto* intVec = new (hdl->getMemoryAs<uint8_t>() + Mbr::metadataSize())
       MbrVector<int>(MbrAlloc<int>{mbr});
   for (int i = 0; i < 10; i++) {

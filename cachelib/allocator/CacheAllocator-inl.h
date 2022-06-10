@@ -16,6 +16,11 @@
 
 #pragma once
 
+#include <cachelib/allocator/CacheStats.h>
+#include <cachelib/common/Time.h>
+
+#include <chrono>
+
 #include "cachelib/common/Hash.h"
 namespace facebook {
 namespace cachelib {
@@ -1236,6 +1241,12 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
         (*stats_.regularItemEvictions)[pid][cid].inc();
       }
 
+      if (auto eventTracker = getEventTracker()) {
+        eventTracker->record(
+            AllocatorApiEvent::DRAM_EVICT, toReleaseHandle->getKey(),
+            AllocatorApiResult::DRAM_EVICTED, toReleaseHandle->getSize(),
+            toReleaseHandle->getConfiguredTTL().count());
+      }
       // Invalidate iterator since later on we may use this mmContainer
       // again, which cannot be done unless we drop this iterator
       itr.destroy();
@@ -2370,13 +2381,31 @@ SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats()
                           stats_.numMoveAttempts.get(),
                           stats_.numMoveSuccesses.get(),
                           stats_.numEvictionAttempts.get(),
-                          stats_.numEvictionSuccesses.get()};
+                          stats_.numEvictionSuccesses.get(),
+                          stats_.numSlabReleaseStuck.get()};
 }
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::releaseSlabImpl(
     const SlabReleaseContext& releaseContext) {
-  util::Throttler throttler(config_.throttleConfig);
+  auto startTime = std::chrono::milliseconds(util::getCurrentTimeMs());
+  bool releaseStuck = false;
+
+  SCOPE_EXIT {
+    if (releaseStuck) {
+      stats_.numSlabReleaseStuck.dec();
+    }
+  };
+
+  util::Throttler throttler(
+      config_.throttleConfig,
+      [this, &startTime, &releaseStuck](std::chrono::milliseconds curTime) {
+        if (!releaseStuck &&
+            curTime >= startTime + config_.slabReleaseStuckThreshold) {
+          stats().numSlabReleaseStuck.inc();
+          releaseStuck = true;
+        }
+      });
 
   // Active allocations need to be freed before we can release this slab
   // The idea is:
@@ -3182,23 +3211,6 @@ CacheAllocator<CacheTrait>::deserializeMMContainers(
   // TODO: remove this at version 17.
   if (metadata_.allocatorVersion() <= 15) {
     deserializer.deserialize<MMSerializationTypeContainer>();
-  }
-  return mmContainers;
-}
-
-template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::MMContainers
-CacheAllocator<CacheTrait>::createEmptyMMContainers() {
-  MMContainers mmContainers;
-  for (unsigned int i = 0; i < mmContainers_.size(); i++) {
-    for (unsigned int j = 0; j < mmContainers_[i].size(); j++) {
-      if (mmContainers_[i][j]) {
-        MMContainerPtr ptr =
-            std::make_unique<typename MMContainerPtr::element_type>(
-                mmContainers_[i][j]->getConfig(), compressor_);
-        mmContainers[i][j] = std::move(ptr);
-      }
-    }
   }
   return mmContainers;
 }

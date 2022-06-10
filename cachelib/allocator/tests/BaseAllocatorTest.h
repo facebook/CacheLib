@@ -6149,6 +6149,71 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Once reaper starts it will have expired this item quickly
     EXPECT_EQ(nullptr, alloc.peek("test"));
   }
+
+  // Test to validate the logic to detect/export the slab release stuck.
+  // To do so, allocate two items and intentionally hold references
+  // while checking the stuck counter.
+  void testSlabReleaseStuck() {
+    const unsigned int releaseStuckThreshold = 10;
+    typename AllocatorT::Config config{};
+    config.setCacheSize(3 * Slab::kSize);
+    config.setSlabReleaseStuckThreashold(
+        std::chrono::seconds(releaseStuckThreshold));
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+
+    // 3/4 * kSize to make sure items are allocated in different slabs
+    std::vector<uint32_t> sizes = {Slab::kSize * 3 / 4};
+
+    // Allocate two items to be used for tests
+    auto handle1 = util::allocateAccessible(alloc, poolId, "key1", sizes[0]);
+    ASSERT_NE(nullptr, handle1);
+
+    auto handle2 = util::allocateAccessible(alloc, poolId, "key2", sizes[0]);
+    ASSERT_NE(nullptr, handle2);
+
+    const uint8_t classId = alloc.getAllocInfo(handle1->getMemory()).classId;
+    ASSERT_EQ(classId, alloc.getAllocInfo(handle2->getMemory()).classId);
+
+    // Assert that numSlabReleaseStuck is not set
+    ASSERT_EQ(0, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+
+    // Trying to remove the slab where the item is allocated. Thus, the release
+    // will be stuck until the reference is dropped below.
+    auto r1 = std::async(std::launch::async, [&] {
+      alloc.releaseSlab(poolId, classId, SlabReleaseMode::kResize,
+                        handle1->getMemory());
+      ASSERT_EQ(nullptr, handle1);
+    });
+
+    // Sleep for 2 + <releaseStuckThreshold> seconds; 2 seconds is an arbitrary
+    // margin to allow the release is detected as being stuck after
+    // <releaseStuckThreshold> seconds.
+    /* sleep override */ sleep(2 + releaseStuckThreshold);
+
+    ASSERT_EQ(1, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+
+    // Do the same for another item
+    auto r2 = std::async(std::launch::async, [&] {
+      alloc.releaseSlab(poolId, classId, SlabReleaseMode::kResize,
+                        handle2->getMemory());
+      ASSERT_EQ(nullptr, handle2);
+    });
+
+    /* sleep override */ sleep(2 + releaseStuckThreshold);
+
+    ASSERT_EQ(2, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+
+    // Now, release handles so the releaseSlab can proceed
+    handle1.reset();
+    r1.wait();
+    ASSERT_EQ(1, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+
+    handle2.reset();
+    r2.wait();
+    ASSERT_EQ(0, alloc.getSlabReleaseStats().numSlabReleaseStuck);
+  }
 };
 } // namespace tests
 } // namespace cachelib

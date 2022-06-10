@@ -15,11 +15,11 @@ For a complete list of FixedSizeArray APIs, see `cachelib/datatype/FixedSizeArra
 
 User must specify the size of the array before creating it. Creating the array does NOT initialize any data. Users are responsible for initializing the values in the array.
 ```cpp
-// Construct a fixed size array from an ItemHandle
+// Construct a fixed size array from a WriteHandle
 // This modifies the item's memory
 // @throw std::invalid_argument  if the item does not have enough memory
 template <typename SizeT>
-FixedSizeArray(ItemHandle handle, SizeT numElements)
+FixedSizeArray(WriteHandle handle, SizeT numElements)
 
 // Undefined behavior if index is out of range
 Element& operator[](uint32_t index) { return (*layout_)[index]; }
@@ -89,14 +89,14 @@ static Map create(
 ```
 
 
-To convert an existing ItemHandle from cache into a `Map`, call the following method:
+To convert an existing WriteHandle from cache into a `Map`, call the following method:
 
 
 ```cpp
 // @cache: Your cache object (i.e. CacheAllocator)
-// @handle: Item handle that you just looked up using the
+// @handle: Write handle that you just looked up using the
 //           same key as when you called Map::create()
-static Map fromItemHandle(CacheType& cache, ItemHandle handle);
+static Map fromWriteHandle(CacheType& cache, WriteHandle handle);
 ```
 
 
@@ -206,7 +206,7 @@ To create a RangeMap, call the `create()` method:
 // @param numEntries   number of entries this map can contain initially
 // @param numBytes     number of bytes allocated for value storage initially
 // @return  valid cachelib::RangeMap on success,
-//          cachelib::RangeMap::isNullItemHandle() == true on failure
+//          cachelib::RangeMap::isNullWriteHandle() == true on failure
 static RangeMap create(
   Cache& cache,
   PoolId pid,
@@ -217,7 +217,7 @@ static RangeMap create(
 ```
 
 
-To convert an existing `ItemHandle` from cache into a `RangeMap`, call the following method:
+To convert an existing `WriteHandle` from cache into a `RangeMap`, call the following method:
 
 
 ```cpp
@@ -225,7 +225,7 @@ To convert an existing `ItemHandle` from cache into a `RangeMap`, call the follo
 // @param cache   cache allocator to allocate from
 // @param handle  parent handle for this cachelib::RangeMap
 // @return cachelib::RangeMap
-static RangeMap fromItemHandle(Cache& cache, ItemHandle handle);
+static RangeMap fromWriteHandle(Cache& cache, WriteHandle handle);
 ```
 
 

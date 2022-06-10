@@ -120,29 +120,41 @@ cachelib::EvictionAgeStat MM2Q::Container<T, HookPtr>::getEvictionAgeStat(
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 cachelib::EvictionAgeStat MM2Q::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
-  EvictionAgeStat stat;
-  const auto curr = static_cast<Time>(util::getCurrentTimeSec());
+  const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
-  stat.hotQueueStat.oldestElementAge = getOldestAgeLocked(LruType::Hot, curr);
+  auto getProjectedAge = [this, currTime, projectedLength](
+                             auto lruType, auto oldestElementAge) {
+    auto it = lru_.rbegin(lruType);
+    for (size_t numSeen = 0; numSeen < projectedLength && it != lru_.rend();
+         ++numSeen, ++it) {
+    }
+    return (it != lru_.rend()) ? currTime - getUpdateTime(*it)
+                               : oldestElementAge;
+  };
+
+  EvictionAgeStat stat;
+
+  stat.hotQueueStat.oldestElementAge =
+      getOldestAgeLocked(LruType::Hot, currTime);
   stat.hotQueueStat.size = lru_.getList(LruType::Hot).size();
+  stat.hotQueueStat.projectedAge =
+      getProjectedAge(LruType::Hot, stat.hotQueueStat.oldestElementAge);
 
   // sum the tail and the main list for the ones that have tail.
   stat.warmQueueStat.oldestElementAge =
-      getOldestAgeLocked(LruType::WarmTail, curr);
+      getOldestAgeLocked(LruType::WarmTail, currTime);
   stat.warmQueueStat.size = lru_.getList(LruType::Warm).size() +
                             lru_.getList(LruType::WarmTail).size();
+  stat.warmQueueStat.projectedAge =
+      getProjectedAge(LruType::WarmTail, stat.warmQueueStat.oldestElementAge);
 
   stat.coldQueueStat.oldestElementAge =
-      getOldestAgeLocked(LruType::ColdTail, curr);
+      getOldestAgeLocked(LruType::ColdTail, currTime);
   stat.coldQueueStat.size = lru_.getList(LruType::ColdTail).size() +
                             lru_.getList(LruType::Cold).size();
+  stat.coldQueueStat.projectedAge =
+      getProjectedAge(LruType::ColdTail, stat.coldQueueStat.oldestElementAge);
 
-  auto it = lru_.rbegin(LruType::WarmTail);
-  for (size_t numSeen = 0; numSeen < projectedLength && it != lru_.rend();
-       ++numSeen, ++it) {
-  }
-  stat.projectedAge = (it != lru_.rend()) ? curr - getUpdateTime(*it)
-                                          : stat.warmQueueStat.oldestElementAge;
   return stat;
 }
 

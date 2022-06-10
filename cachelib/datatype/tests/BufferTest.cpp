@@ -369,7 +369,7 @@ class BufferManagerTest : public ::testing::Test {
     }
     {
       // Allocate all memory so buffer manager creation will fail
-      std::vector<typename AllocatorT::ItemHandle> handles;
+      std::vector<typename AllocatorT::WriteHandle> handles;
       for (int i = 0;; i++) {
         auto handle = cache->allocate(pid,
                                       folly::sformat("key_{}", i),

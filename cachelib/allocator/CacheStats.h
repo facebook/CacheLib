@@ -34,8 +34,12 @@ namespace cachelib {
 struct EvictionStatPerType {
   // the age of the oldest element in seconds
   uint64_t oldestElementAge = 0ULL;
+
   // number of elements in the eviction queue
   uint64_t size = 0ULL;
+
+  // the estimated age after removing a slab worth of elements
+  uint64_t projectedAge = 0ULL;
 };
 
 // stats class for one MM container (a.k.a one allocation class) related to
@@ -46,9 +50,6 @@ struct EvictionAgeStat {
   EvictionStatPerType hotQueueStat;
 
   EvictionStatPerType coldQueueStat;
-
-  // this is the estimated age after removing a slab worth of elements
-  uint64_t projectedAge;
 };
 
 // stats related to evictions for a pool
@@ -70,10 +71,6 @@ struct PoolEvictionAgeStats {
 
   const EvictionStatPerType& getColdEvictionStat(ClassId cid) const {
     return classEvictionAgeStats.at(cid).coldQueueStat;
-  }
-
-  uint64_t getProjectedAge(ClassId cid) const {
-    return classEvictionAgeStats.at(cid).projectedAge;
   }
 };
 
@@ -257,6 +254,7 @@ struct SlabReleaseStats {
   uint64_t numMoveSuccesses;
   uint64_t numEvictionAttempts;
   uint64_t numEvictionSuccesses;
+  uint64_t numSlabReleaseStuck;
 };
 
 // Stats for reaper

@@ -38,18 +38,18 @@ class FixedSizeArrayTest : public ::testing::Test {
           cache->allocate(pid, "array",
                           Array::computeStorageSize(100 /* numElements */)),
           100 /* numElements */};
-      ASSERT_FALSE(array.isNullItemHandle());
+      ASSERT_FALSE(array.isNullWriteHandle());
       for (uint32_t i = 0; i < array.size(); ++i) {
         array[i] = i;
       }
-      cache->insertOrReplace(array.viewItemHandle());
+      cache->insertOrReplace(array.viewWriteHandle());
     }
 
     // Look up for this array and verify data is the same
     {
       auto array =
-          Array::fromItemHandle(cache->findImpl("array", AccessMode::kRead));
-      ASSERT_FALSE(array.isNullItemHandle());
+          Array::fromWriteHandle(cache->findImpl("array", AccessMode::kRead));
+      ASSERT_FALSE(array.isNullWriteHandle());
       for (uint32_t i = 0; i < array.size(); ++i) {
         ASSERT_EQ(array[i], i);
       }
@@ -58,8 +58,8 @@ class FixedSizeArrayTest : public ::testing::Test {
     // Test out of range access
     {
       auto array =
-          Array::fromItemHandle(cache->findImpl("array", AccessMode::kRead));
-      ASSERT_FALSE(array.isNullItemHandle());
+          Array::fromWriteHandle(cache->findImpl("array", AccessMode::kRead));
+      ASSERT_FALSE(array.isNullWriteHandle());
 
       // operator[] does not do bounds cheecking
       ASSERT_NO_THROW(array[array.size()]);
@@ -67,8 +67,8 @@ class FixedSizeArrayTest : public ::testing::Test {
       // at() throws if out of bound
       ASSERT_THROW(array.at(array.size()), std::out_of_range);
 
-      EXPECT_NE(std::move(array).resetToItemHandle(), nullptr);
-      EXPECT_TRUE(array.isNullItemHandle());
+      EXPECT_NE(std::move(array).resetToWriteHandle(), nullptr);
+      EXPECT_TRUE(array.isNullWriteHandle());
     }
   }
 
@@ -80,7 +80,7 @@ class FixedSizeArrayTest : public ::testing::Test {
         Array{cache->allocate(pid, "array",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array.isNullItemHandle());
+    ASSERT_FALSE(array.isNullWriteHandle());
 
     // Use iterator to populate the array
     {
@@ -125,21 +125,21 @@ class FixedSizeArrayTest : public ::testing::Test {
         Array{cache->allocate(pid, "array1",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array1.isNullItemHandle());
+    ASSERT_FALSE(array1.isNullWriteHandle());
 
     auto array2 =
         Array{cache->allocate(pid, "array2",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array2.isNullItemHandle());
+    ASSERT_FALSE(array2.isNullWriteHandle());
 
-    ASSERT_EQ("array1", array1.viewItemHandle().getKey());
-    ASSERT_EQ("array2", array2.viewItemHandle().getKey());
+    ASSERT_EQ("array1", array1.viewWriteHandle().getKey());
+    ASSERT_EQ("array2", array2.viewWriteHandle().getKey());
 
     // Move array2 into array1
     array1 = std::move(array2);
-    ASSERT_TRUE(array2.isNullItemHandle());
-    ASSERT_EQ("array2", array1.viewItemHandle().getKey());
+    ASSERT_TRUE(array2.isNullWriteHandle());
+    ASSERT_EQ("array2", array1.viewWriteHandle().getKey());
   }
 
   void testEquality() {
@@ -150,7 +150,7 @@ class FixedSizeArrayTest : public ::testing::Test {
         Array{cache->allocate(pid, "array1",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array1.isNullItemHandle());
+    ASSERT_FALSE(array1.isNullWriteHandle());
     for (auto& element : array1) {
       element = 0;
     }
@@ -159,7 +159,7 @@ class FixedSizeArrayTest : public ::testing::Test {
         Array{cache->allocate(pid, "array2",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array2.isNullItemHandle());
+    ASSERT_FALSE(array2.isNullWriteHandle());
     for (auto& element : array2) {
       element = 1;
     }
@@ -168,7 +168,7 @@ class FixedSizeArrayTest : public ::testing::Test {
         Array{cache->allocate(pid, "array3",
                               Array::computeStorageSize(100 /* numElements */)),
               100 /* numElements */};
-    ASSERT_FALSE(array3.isNullItemHandle());
+    ASSERT_FALSE(array3.isNullWriteHandle());
     for (auto& element : array3) {
       element = 0;
     }

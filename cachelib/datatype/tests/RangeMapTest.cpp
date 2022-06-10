@@ -315,13 +315,13 @@ TEST(RangeMap, Basic) {
 
   auto cache = createCache();
   auto rm = RM::create(*cache, 0, "range_map");
-  EXPECT_FALSE(rm.isNullItemHandle());
+  EXPECT_FALSE(rm.isNullWriteHandle());
 
   EXPECT_EQ(0, rm.wastedBytes());
   EXPECT_EQ(160, rm.remainingBytes());
 
   auto rm2 = std::move(rm);
-  EXPECT_FALSE(rm2.isNullItemHandle());
+  EXPECT_FALSE(rm2.isNullWriteHandle());
 
   EXPECT_EQ(rm2.begin(), rm2.end());
   EXPECT_EQ(rm2.end(), rm2.lookup(1));
@@ -351,7 +351,7 @@ TEST(RangeMap, InsertStorageExpansion) {
   auto rm = RM::create(*cache, 0, "range_map", 10 /* entries */,
                        50 /* storage bytes */);
 
-  EXPECT_FALSE(rm.isNullItemHandle());
+  EXPECT_FALSE(rm.isNullWriteHandle());
   EXPECT_EQ(190, rm.sizeInBytes());
   EXPECT_EQ(0, rm.size());
   EXPECT_EQ(10, rm.capacity());
@@ -388,7 +388,7 @@ TEST(RangeMap, InsertIndexExpansion) {
   auto rm = RM::create(*cache, 0, "range_map", 2 /* entries */,
                        50 /* storage bytes */);
 
-  EXPECT_FALSE(rm.isNullItemHandle());
+  EXPECT_FALSE(rm.isNullWriteHandle());
   EXPECT_EQ(94, rm.sizeInBytes());
   EXPECT_EQ(0, rm.size());
   EXPECT_EQ(2, rm.capacity());
@@ -591,7 +591,7 @@ TEST(RangeMap, LargeMap) {
   auto cache = createCache();
 
   // Allocate everything from cache to we will fail to allocate range map
-  std::vector<LruAllocator::ItemHandle> handles;
+  std::vector<LruAllocator::WriteHandle> handles;
   for (int i = 0;; i++) {
     auto handle = cache->allocate(0, folly::sformat("key_{}", i), 100'000);
     if (!handle) {
@@ -602,7 +602,7 @@ TEST(RangeMap, LargeMap) {
 
   auto rm = RM::create(*cache, 0, "range_map", 100'000 /* entries */,
                        1024 * 1024ul - 100 /* storage bytes */);
-  EXPECT_TRUE(rm.isNullItemHandle());
+  EXPECT_TRUE(rm.isNullWriteHandle());
 }
 } // namespace tests
 } // namespace cachelib

@@ -121,14 +121,15 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       auto responseHeaderSizeT =
           folly::tryTo<size_t>(fields[SampleFields::RESPONSE_HEADER_SIZE]);
       auto ttlT = folly::tryTo<uint32_t>(fields[SampleFields::TTL]);
-      // Invalid sample: cacheKey is empty, objectSize is not positive,
-      // responseSize is not positive, responseHeaderSize is not positive,
-      // ttl is not positive
+      // Invalid sample: cacheKey is empty, responseSize is not positive,
+      // responseHeaderSize is not positive, or ttl is not positive.
+      // objectSize can be zero for request handler like
+      // interncache_everstore_metadata. Hence it is valid.
       if (!fields[1].compare("-") || !fields[1].compare("") ||
-          !fullContentSizeT.hasValue() || fullContentSizeT.value() == 0 ||
-          !responseSizeT.hasValue() || responseSizeT.value() == 0 ||
-          !responseHeaderSizeT.hasValue() || responseHeaderSizeT.value() == 0 ||
-          !ttlT.hasValue() || ttlT.value() == 0) {
+          !fullContentSizeT.hasValue() || !responseSizeT.hasValue() ||
+          responseSizeT.value() == 0 || !responseHeaderSizeT.hasValue() ||
+          responseHeaderSizeT.value() == 0 || !ttlT.hasValue() ||
+          ttlT.value() == 0) {
         invalidSamples_.inc();
         continue;
       }
@@ -141,12 +142,9 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       auto responseSize = responseSizeT.value();
       auto responseHeaderSize = responseHeaderSizeT.value();
       auto ttl = ttlT.value();
-      // When responseSize and responseHeaderSize is equal, responseBodySize
-      // becomes 0 which can make range calculation incorrect. Simply ignore
-      // such requests for now.
-      // TODO: better handling non-GET requests
-      if (responseSize == responseHeaderSize) {
-        nonGetSamples_.inc();
+
+      if (responseSize < responseHeaderSize) {
+        invalidSamples_.inc();
         continue;
       }
 
@@ -175,6 +173,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         // No range request setting, but responseBodySize is smaller than
         // fullContentSize. Convert the sample to range request.
         if (responseBodySize < fullContentSize) {
+          if (responseBodySize == 0) {
+            invalidSamples_.inc();
+            continue;
+          }
           rangeStart = 0;
           rangeEnd = responseBodySize - 1;
         }
@@ -184,6 +186,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         size_t rangeSize = rangeEnd ? (*rangeEnd - *rangeStart + 1)
                                     : (fullContentSize - *rangeStart);
         if (responseBodySize < rangeSize) {
+          if (responseBodySize + *rangeStart == 0) {
+            invalidSamples_.inc();
+            continue;
+          }
           rangeEnd = responseBodySize + *rangeStart - 1;
         }
       }

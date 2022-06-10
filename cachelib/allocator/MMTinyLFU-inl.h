@@ -122,7 +122,8 @@ MMTinyLFU::Container<T, HookPtr>::getEvictionAgeStatLocked(
   for (size_t numSeen = 0; numSeen < projectedLength && it != list.rend();
        ++numSeen, ++it) {
   }
-  stat.projectedAge = it != list.rend() ? curr - getUpdateTime(*it)
+  stat.warmQueueStat.projectedAge = it != list.rend()
+                                        ? curr - getUpdateTime(*it)
                                         : stat.warmQueueStat.oldestElementAge;
   return stat;
 }

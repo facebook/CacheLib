@@ -398,6 +398,10 @@ TYPED_TEST(BaseAllocatorTest, DelayWorkersStart) {
   this->testDelayWorkersStart();
 }
 
+TYPED_TEST(BaseAllocatorTest, SlabReleaseStuck) {
+  this->testSlabReleaseStuck();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;

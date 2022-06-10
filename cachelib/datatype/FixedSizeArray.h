@@ -168,16 +168,16 @@ class FixedSizeArray {
 
   using CacheType = C;
   using Item = typename CacheType::Item;
-  using ItemHandle = typename Item::Handle;
+  using WriteHandle = typename Item::WriteHandle;
 
   using Layout = detail::FixedSizeArrayLayout<Element>;
   using LayoutHandle = TypedHandleImpl<Item, Layout>;
   using Iterator = typename Layout::Iterator;
   using ConstIterator = typename Layout::ConstIterator;
 
-  // Convert to a fixed size array from an ItemHandle
+  // Convert to a fixed size array from a WriteHandle
   // This does not modify anything in the item
-  static FixedSizeArray fromItemHandle(ItemHandle handle) {
+  static FixedSizeArray fromWriteHandle(WriteHandle handle) {
     return FixedSizeArray<T, C>{std::move(handle)};
   }
 
@@ -186,27 +186,27 @@ class FixedSizeArray {
     return Layout::computeStorageSize(numElements);
   }
 
-  // Construct a fixed size array from an ItemHandle
+  // Construct a fixed size array from a WriteHandle
   // This modifies the item's memory
   // @throw std::invalid_argument  if the item does not have enough memory
   template <typename SizeT>
-  FixedSizeArray(ItemHandle handle, SizeT numElements)
+  FixedSizeArray(WriteHandle handle, SizeT numElements)
       : layout_{std::move(handle)} {
     const auto requiredSize = computeStorageSize(numElements);
-    const auto itemSize = layout_.viewItemHandle()->getSize();
+    const auto itemSize = layout_.viewWriteHandle()->getSize();
     if (requiredSize > itemSize) {
       throw std::invalid_argument(folly::sformat(
           "Item size too small. Expected at least: {}, Actual: {}",
           requiredSize, itemSize));
     }
-    new (layout_.viewItemHandle()->getMemory())
+    new (layout_.viewWriteHandle()->getMemory())
         detail::FixedSizeArrayLayout<Element>(numElements);
   }
 
   // FixedSizeArray can be moved but not copied
   FixedSizeArray(FixedSizeArray&& rhs) : layout_{std::move(rhs.layout_)} {}
   FixedSizeArray& operator=(FixedSizeArray&& rhs) {
-    resetToItemHandle();
+    resetToWriteHandle();
     new (this) FixedSizeArray{std::move(rhs)};
   }
 
@@ -249,25 +249,27 @@ class FixedSizeArray {
   }
 
   // This does not modify the content of this structure.
-  // It resets it to an item handle, which can be used with any API in
-  // CacheAllocator that deals with ItemHandle. After invoking this function,
+  // It resets it to a write handle, which can be used with any API in
+  // CacheAllocator that deals with WriteHandle. After invoking this function,
   // this structure is left in a null state.
-  ItemHandle resetToItemHandle() && {
-    return std::move(layout_).resetToItemHandle();
+  WriteHandle resetToWriteHandle() && {
+    return std::move(layout_).resetToWriteHandle();
   }
 
-  // Borrow the item handle underneath this structure. This is useful to
+  // Borrow the write handle underneath this structure. This is useful to
   // implement insertion into CacheAllocator.
-  const ItemHandle& viewItemHandle() const { return layout_.viewItemHandle(); }
+  const WriteHandle& viewWriteHandle() const {
+    return layout_.viewWriteHandle();
+  }
 
-  bool isNullItemHandle() const { return layout_ == nullptr; }
+  bool isNullWriteHandle() const { return layout_ == nullptr; }
 
  private:
   LayoutHandle layout_;
 
-  // Convert to a fixed size array from an ItemHandle
+  // Convert to a fixed size array from a WriteHandle
   // This does not modify anything in the item
-  explicit FixedSizeArray(ItemHandle handle) : layout_{std::move(handle)} {}
+  explicit FixedSizeArray(WriteHandle handle) : layout_{std::move(handle)} {}
 };
 
 template <typename T, typename C>

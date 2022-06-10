@@ -18,6 +18,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <string>
 #include <thread>
@@ -36,7 +37,9 @@ class Throttler {
   // indicates the time we yield when we decide to be throttled.  WorkMs
   // indicates the time we run un-throttled.
 
-  //
+  // The callback to be called when the time is checked for throttling
+  using ThrottleCb = std::function<void(std::chrono::milliseconds curTime)>;
+
   // this config indicates that we sleep for sleepMs time every
   // workMs time at least.
   struct Config {
@@ -69,6 +72,9 @@ class Throttler {
     }
 
     uint64_t curr = util::getCurrentTimeMs();
+    if (throttleCb_) {
+      throttleCb_(std::chrono::milliseconds(curr));
+    }
     if (curr - currWorkStartMs_ > config_.workMs) {
       /* sleep override */
       std::this_thread::sleep_for(std::chrono::milliseconds(config_.sleepMs));
@@ -82,9 +88,10 @@ class Throttler {
 
   uint64_t numThrottles() const noexcept { return throttleCounter_; }
 
-  explicit Throttler(Config config)
+  explicit Throttler(Config config, ThrottleCb&& throttleCb = nullptr)
       : config_(std::move(config)),
-        currWorkStartMs_(util::getCurrentTimeMs()) {}
+        currWorkStartMs_(util::getCurrentTimeMs()),
+        throttleCb_(std::move(throttleCb)) {}
   explicit Throttler() : Throttler(Config{}) {}
 
  private:
@@ -95,6 +102,7 @@ class Throttler {
   uint64_t currWorkStartMs_;    // time when we started to not throttle
   uint64_t counter_{0};         // counter to track the calls.
   uint64_t throttleCounter_{0}; // number of times we've throttled
+  ThrottleCb throttleCb_;
 };
 
 } // namespace util
