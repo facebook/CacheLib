@@ -27,119 +27,20 @@ namespace cachelib {
 
 template <typename CacheTrait>
 CacheAllocator<CacheTrait>::CacheAllocator(Config config)
-    : isOnShm_{config.memMonitoringEnabled()},
-      config_(config.validate()),
-      tempShm_(isOnShm_ ? std::make_unique<TempShmMapping>(config_.size)
-                        : nullptr),
-      allocator_(isOnShm_ ? std::make_unique<MemoryAllocator>(
-                                getAllocatorConfig(config_),
-                                tempShm_->getAddr(),
-                                config_.size)
-                          : std::make_unique<MemoryAllocator>(
-                                getAllocatorConfig(config_), config_.size)),
-      compactCacheManager_(std::make_unique<CCacheManager>(*allocator_)),
-      compressor_(createPtrCompressor()),
-      accessContainer_(std::make_unique<AccessContainer>(
-          config_.accessConfig,
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemAccessContainer_(std::make_unique<AccessContainer>(
-          config_.chainedItemAccessConfig,
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemLocks_(config_.chainedItemsLockPower,
-                        std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{util::getCurrentTimeSec()},
-      // Keep cacheInstanceCreationTime_ in sync with cacheCreationTime_ as
-      // both are current time
-      cacheInstanceCreationTime_{cacheCreationTime_},
-      // Pass in cacheInstnaceCreationTime_ as the current time to keep
-      // nvmCacheState's current time in sync
-      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
-                     config_.isNvmCacheEncryptionEnabled(),
-                     config_.isNvmCacheTruncateAllocSizeEnabled()} {
+    : CacheAllocator(InitMemType::kNone, config) {
   initCommon(false);
 }
 
 template <typename CacheTrait>
 CacheAllocator<CacheTrait>::CacheAllocator(SharedMemNewT, Config config)
-    : isOnShm_{true},
-      config_(config.validate()),
-      shmManager_(
-          std::make_unique<ShmManager>(config_.cacheDir, config_.usePosixShm)),
-      allocator_(createNewMemoryAllocator()),
-      compactCacheManager_(std::make_unique<CCacheManager>(*allocator_)),
-      compressor_(createPtrCompressor()),
-      accessContainer_(std::make_unique<AccessContainer>(
-          config_.accessConfig,
-          shmManager_
-              ->createShm(detail::kShmHashTableName,
-                          AccessContainer::getRequiredSize(
-                              config_.accessConfig.getNumBuckets()),
-                          nullptr,
-                          ShmSegmentOpts(config_.accessConfig.getPageSize()))
-              .addr,
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemAccessContainer_(std::make_unique<AccessContainer>(
-          config_.chainedItemAccessConfig,
-          shmManager_
-              ->createShm(detail::kShmChainedItemHashTableName,
-                          AccessContainer::getRequiredSize(
-                              config_.chainedItemAccessConfig.getNumBuckets()),
-                          nullptr,
-                          ShmSegmentOpts(config_.accessConfig.getPageSize()))
-              .addr,
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemLocks_(config_.chainedItemsLockPower,
-                        std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{util::getCurrentTimeSec()},
-      // Keep cacheInstanceCreationTime_ in sync with cacheCreationTime_ as
-      // both are current time
-      cacheInstanceCreationTime_{cacheCreationTime_},
-      // Pass in cacheInstnaceCreationTime_ as the current time to keep
-      // nvmCacheState's current time in sync
-      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
-                     config_.isNvmCacheEncryptionEnabled(),
-                     config_.isNvmCacheTruncateAllocSizeEnabled()} {
+    : CacheAllocator(InitMemType::kMemNew, config) {
   initCommon(false);
   shmManager_->removeShm(detail::kShmInfoName);
 }
 
 template <typename CacheTrait>
 CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
-    : isOnShm_{true},
-      config_(config.validate()),
-      shmManager_(
-          std::make_unique<ShmManager>(config_.cacheDir, config_.usePosixShm)),
-      deserializer_(createDeserializer()),
-      metadata_{deserializeCacheAllocatorMetadata(*deserializer_)},
-      allocator_(restoreMemoryAllocator()),
-      compactCacheManager_(restoreCCacheManager()),
-      compressor_(createPtrCompressor()),
-      mmContainers_(deserializeMMContainers(*deserializer_, compressor_)),
-      accessContainer_(std::make_unique<AccessContainer>(
-          deserializer_->deserialize<AccessSerializationType>(),
-          config_.accessConfig,
-          shmManager_->attachShm(detail::kShmHashTableName),
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemAccessContainer_(std::make_unique<AccessContainer>(
-          deserializer_->deserialize<AccessSerializationType>(),
-          config_.chainedItemAccessConfig,
-          shmManager_->attachShm(detail::kShmChainedItemHashTableName),
-          compressor_,
-          [this](Item* it) -> WriteHandle { return acquire(it); })),
-      chainedItemLocks_(config_.chainedItemsLockPower,
-                        std::make_shared<MurmurHash2>()),
-      cacheCreationTime_{static_cast<uint32_t>(*metadata_.cacheCreationTime())},
-      cacheInstanceCreationTime_{util::getCurrentTimeSec()},
-      // Pass in cacheInstnaceCreationTime_ as the current time to keep
-      // nvmCacheState's current time in sync
-      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
-                     config_.isNvmCacheEncryptionEnabled(),
-                     config_.isNvmCacheTruncateAllocSizeEnabled()} {
+    : CacheAllocator(InitMemType::kMemAttach, config) {
   for (auto pid : *metadata_.compactCachePools()) {
     isCompactCachePool_[pid] = true;
   }
@@ -151,6 +52,53 @@ CacheAllocator<CacheTrait>::CacheAllocator(SharedMemAttachT, Config config)
   // than this one, creating new one will fail.
   shmManager_->removeShm(detail::kShmInfoName);
 }
+
+template <typename CacheTrait>
+CacheAllocator<CacheTrait>::CacheAllocator(
+    typename CacheAllocator<CacheTrait>::InitMemType type, Config config)
+    : isOnShm_{type != InitMemType::kNone ? true
+                                          : config.memMonitoringEnabled()},
+      config_(config.validate()),
+      tempShm_(type == InitMemType::kNone && isOnShm_
+                   ? std::make_unique<TempShmMapping>(config_.size)
+                   : nullptr),
+      shmManager_(type != InitMemType::kNone
+                      ? std::make_unique<ShmManager>(config_.cacheDir,
+                                                     config_.usePosixShm)
+                      : nullptr),
+      deserializer_(type == InitMemType::kMemAttach ? createDeserializer()
+                                                    : nullptr),
+      metadata_{type == InitMemType::kMemAttach
+                    ? deserializeCacheAllocatorMetadata(*deserializer_)
+                    : serialization::CacheAllocatorMetadata{}},
+      allocator_(initAllocator(type)),
+      compactCacheManager_(type != InitMemType::kMemAttach
+                               ? std::make_unique<CCacheManager>(*allocator_)
+                               : restoreCCacheManager()),
+      compressor_(createPtrCompressor()),
+      mmContainers_(type == InitMemType::kMemAttach
+                        ? deserializeMMContainers(*deserializer_, compressor_)
+                        : MMContainers{}),
+      accessContainer_(initAccessContainer(
+          type, detail::kShmHashTableName, config.accessConfig)),
+      chainedItemAccessContainer_(
+          initAccessContainer(type,
+                              detail::kShmChainedItemHashTableName,
+                              config.chainedItemAccessConfig)),
+      chainedItemLocks_(config_.chainedItemsLockPower,
+                        std::make_shared<MurmurHash2>()),
+      cacheCreationTime_{
+          type != InitMemType::kMemAttach
+              ? util::getCurrentTimeSec()
+              : static_cast<uint32_t>(*metadata_.cacheCreationTime())},
+      cacheInstanceCreationTime_{type != InitMemType::kMemAttach
+                                     ? cacheCreationTime_
+                                     : util::getCurrentTimeSec()},
+      // Pass in cacheInstnaceCreationTime_ as the current time to keep
+      // nvmCacheState's current time in sync
+      nvmCacheState_{cacheInstanceCreationTime_, config_.cacheDir,
+                     config_.isNvmCacheEncryptionEnabled(),
+                     config_.isNvmCacheTruncateAllocSizeEnabled()} {}
 
 template <typename CacheTrait>
 CacheAllocator<CacheTrait>::~CacheAllocator() {
@@ -284,6 +232,65 @@ void CacheAllocator<CacheTrait>::initWorkers() {
                           config_.poolOptimizeStrategy,
                           config_.ccacheOptimizeStepSizePercent);
   }
+}
+
+template <typename CacheTrait>
+std::unique_ptr<MemoryAllocator> CacheAllocator<CacheTrait>::initAllocator(
+    InitMemType type) {
+  if (type == InitMemType::kNone) {
+    if (isOnShm_ == true) {
+      return std::make_unique<MemoryAllocator>(
+          getAllocatorConfig(config_), tempShm_->getAddr(), config_.size);
+    } else {
+      return std::make_unique<MemoryAllocator>(getAllocatorConfig(config_),
+                                               config_.size);
+    }
+  } else if (type == InitMemType::kMemNew) {
+    return createNewMemoryAllocator();
+  } else if (type == InitMemType::kMemAttach) {
+    return restoreMemoryAllocator();
+  }
+
+  // Invalid type
+  throw std::runtime_error(folly::sformat(
+      "Cannot initialize memory allocator, unknown InitMemType: {}.",
+      static_cast<int>(type)));
+}
+
+template <typename CacheTrait>
+std::unique_ptr<typename CacheAllocator<CacheTrait>::AccessContainer>
+CacheAllocator<CacheTrait>::initAccessContainer(InitMemType type,
+                                                const std::string name,
+                                                AccessConfig config) {
+  if (type == InitMemType::kNone) {
+    return std::make_unique<AccessContainer>(
+        config, compressor_,
+        [this](Item* it) -> WriteHandle { return acquire(it); });
+  } else if (type == InitMemType::kMemNew) {
+    return std::make_unique<AccessContainer>(
+        config,
+        shmManager_
+            ->createShm(
+                name,
+                AccessContainer::getRequiredSize(config.getNumBuckets()),
+                nullptr,
+                ShmSegmentOpts(config.getPageSize()))
+            .addr,
+        compressor_,
+        [this](Item* it) -> WriteHandle { return acquire(it); });
+  } else if (type == InitMemType::kMemAttach) {
+    return std::make_unique<AccessContainer>(
+        deserializer_->deserialize<AccessSerializationType>(),
+        config,
+        shmManager_->attachShm(name),
+        compressor_,
+        [this](Item* it) -> WriteHandle { return acquire(it); });
+  }
+
+  // Invalid type
+  throw std::runtime_error(folly::sformat(
+      "Cannot initialize access container, unknown InitMemType: {}.",
+      static_cast<int>(type)));
 }
 
 template <typename CacheTrait>

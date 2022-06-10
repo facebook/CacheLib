@@ -1240,6 +1240,14 @@ class CacheAllocator : public CacheBase {
   // allocator and executes the necessary callbacks. no-op if it is nullptr.
   FOLLY_ALWAYS_INLINE void release(Item* it, bool isNascent);
 
+  // Differtiate different memory setting for the initialization
+  enum class InitMemType { kNone, kMemNew, kMemAttach };
+  // instantiates a cache allocator for common initialization
+  //
+  // @param types         the type of the memory used
+  // @param config        the configuration for the whole cache allocator
+  CacheAllocator(InitMemType types, Config config);
+
   // This is the last step in item release. We also use this for the eviction
   // scenario where we have to do everything, but not release the allocation
   // to the allocator and instead recycle it for another new allocation. If
@@ -1833,6 +1841,19 @@ class CacheAllocator : public CacheBase {
   void initCommon(bool dramCacheAttached);
   void initNvmCache(bool dramCacheAttached);
   void initWorkers();
+
+  // @param type        the type of initialization
+  // @return nullptr if the type is invalid
+  // @return pointer to memory allocator
+  // @throw std::runtime_error if type is invalid
+  std::unique_ptr<MemoryAllocator> initAllocator(InitMemType type);
+  // @param type        the type of initialization
+  // @return nullptr if the type is invalid
+  // @return pointer to access container
+  // @throw std::runtime_error if type is invalid
+  std::unique_ptr<AccessContainer> initAccessContainer(InitMemType type,
+                                                       const std::string name,
+                                                       AccessConfig config);
 
   std::optional<bool> saveNvmCache();
   void saveRamCache();
