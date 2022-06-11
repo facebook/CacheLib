@@ -3570,7 +3570,7 @@ CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
                        : std::unordered_map<std::string, double>{};
   if (nvmAdmissionPolicy_) {
     auto policyStats = nvmAdmissionPolicy_->getCounters();
-    for (const auto kv : policyStats) {
+    for (const auto& kv : policyStats) {
       ret[kv.first] = kv.second;
     }
   }
