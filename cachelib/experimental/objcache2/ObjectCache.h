@@ -16,6 +16,7 @@
 #pragma once
 
 #include <folly/ScopeGuard.h>
+#include <folly/logging/xlog.h>
 
 #include <any>
 #include <atomic>
@@ -29,6 +30,7 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/experimental/objcache2/ObjectCacheBase.h"
+#include "cachelib/experimental/objcache2/ObjectCacheSizeController.h"
 
 namespace facebook {
 namespace cachelib {
@@ -40,7 +42,9 @@ class ObjectCacheTest;
 }
 
 struct ObjectCacheConfig {
-  // Above this many entries, L1 will start evicting
+  // With size controller disabled, above this many entries, L1 will start
+  // evicting.
+  // With size controller enabled, this is only a hint used for initialization.
   size_t l1EntriesLimit{};
 
   // This controls how many buckets are present in L1's hashtable
@@ -61,6 +65,17 @@ struct ObjectCacheConfig {
 
   // If this is enabled, user has to pass the object size upon insertion
   bool objectSizeTrackingEnabled{false};
+
+  // Period to fire size controller in milliseconds. 0 means size controller is
+  // disabled.
+  int sizeControllerIntervalMs{0};
+
+  // With size controller enabled, if total object size is above this limit,
+  // L1 will start evicting
+  size_t cacheSizeLimit{};
+
+  // Throttler config of size controller
+  util::Throttler::Config sizeControllerThrottlerConfig{};
 };
 
 template <typename T>
@@ -82,9 +97,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
   explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
-      : l1NumShards_{config.l1NumShards},
-        l1EntriesLimit_(config.l1EntriesLimit),
-        objectSizeTrackingEnabled_(config.objectSizeTrackingEnabled) {}
+      : l1EntriesLimit_(config.l1EntriesLimit),
+        objectSizeTrackingEnabled_(config.objectSizeTrackingEnabled),
+        sizeControllerIntervalMs_(config.sizeControllerIntervalMs),
+        cacheSizeLimit_{config.cacheSizeLimit},
+        l1NumShards_{config.l1NumShards} {}
 
   template <typename T>
   static std::unique_ptr<ObjectCache<AllocatorT>> create(
@@ -187,13 +204,25 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return totalObjectSizeBytes_.load(std::memory_order_relaxed);
   }
 
+  // Get the current L1 entries number limit.
+  size_t getCurrentEntriesLimit() const {
+    return sizeController_ == nullptr
+               ? l1EntriesLimit_
+               : sizeController_->getCurrentEntriesLimit();
+  }
+
  protected:
   // Serialize cache allocator config for exporting to Scuba
   std::map<std::string, std::string> serializeConfigParams() const override;
 
  private:
-  // minimum alloc size in bytes for l1 cache.
+  // Minimum alloc size in bytes for l1 cache.
   static constexpr uint32_t kL1AllocSizeMin = 64;
+
+  // Generate the key for the ith placeholder.
+  static std::string getPlaceHolderKey(size_t i) {
+    return fmt::format("_cl_ph_{}", i);
+  }
 
   // Allocate an item handle from the interal cache allocator. This item's
   // storage is used to cache pointer to objects in object-cache.
@@ -202,17 +231,55 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
                                                   uint32_t ttl,
                                                   uint32_t creationTime);
 
-  // Number of shards (LRUs) to lessen the contention on L1 cache
-  size_t l1NumShards_{};
+  // Allocate the placeholder and add it to the placeholder vector.
+  //
+  // @return true if the allocation is successful
+  template <typename T>
+  bool allocatePlaceholder(std::string key);
 
-  // Above this many entries, L1 will start evicting
+  // Start size controller
+  //
+  // @param interval   the period this worker fires
+  // @param config     throttling config
+  // @return true if size controller has been successfully started
+  bool startSizeController(std::chrono::milliseconds interval,
+                           const util::Throttler::Config& config);
+
+  // Stop size controller
+  //
+  // @return true if size controller has been successfully stopped
+  bool stopSizeController(std::chrono::seconds timeout = std::chrono::seconds{
+                              0});
+
+  // With size controller disabled, above this many entries, L1 will start
+  // evicting.
+  // With size controller enabled, this is only a hint used for initialization.
+  // The actual object number limit is adjusted based on cacheSizeLimit.
   const size_t l1EntriesLimit_{};
 
   // Whether tracking the size of each object inside object-cache
   const bool objectSizeTrackingEnabled_{};
 
+  // Period to fire size controller in milliseconds. 0 to disable size
+  // controller.
+  const int sizeControllerIntervalMs_{};
+
+  // If both object size tracking and size-controller are enabled, L1 will start
+  // evicting when total object size is above this limit
+  const size_t cacheSizeLimit_{};
+
+  // Number of shards (LRUs) to lessen the contention on L1 cache
+  size_t l1NumShards_{};
+
   // They take up space so we can control exact number of items in cache
   std::vector<typename AllocatorT::WriteHandle> placeholders_;
+
+  // A periodic worker that controls the total object size to be limited by
+  // cache size limit
+  std::unique_ptr<ObjectCacheSizeController<AllocatorT>> sizeController_;
+
+  // Actual object size in total
+  std::atomic<size_t> totalObjectSizeBytes_{0};
 
   TLCounter evictions_{};
   TLCounter lookups_;
@@ -221,9 +288,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   TLCounter insertErrors_;
   TLCounter replaces_;
   TLCounter removes_;
-  std::atomic<size_t> totalObjectSizeBytes_{0};
 
   friend class test::ObjectCacheTest<AllocatorT>;
+
+  template <typename AllocatorT2>
+  friend class ObjectCacheSizeController;
 };
 } // namespace objcache2
 } // namespace cachelib

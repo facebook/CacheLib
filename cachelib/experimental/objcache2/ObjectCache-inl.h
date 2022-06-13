@@ -82,14 +82,16 @@ void ObjectCache<AllocatorT>::init(ObjectCacheConfig config) {
   for (size_t i = 0; i < l1PlaceHolders; i++) {
     // Allocate placeholder items such that the cache will fit exactly
     // "l1EntriesLimit" objects
-    auto key = fmt::format("_cl_ph_{}", i);
-    auto hdl = allocateFromL1<T>(key, 0 /* no ttl */,
-                                     0 /* use current time as creationTime
-                                     */);
-    if (!hdl) {
+    auto key = getPlaceHolderKey(i);
+    bool success = allocatePlaceholder<T>(key);
+    if (!success) {
       throw std::runtime_error(fmt::format("Couldn't allocate {}", key));
     }
-    placeholders_.push_back(std::move(hdl));
+  }
+
+  if (objectSizeTrackingEnabled_ && sizeControllerIntervalMs_ != 0) {
+    startSizeController(std::chrono::milliseconds{sizeControllerIntervalMs_},
+                        config.sizeControllerThrottlerConfig);
   }
 }
 
@@ -246,6 +248,19 @@ typename AllocatorT::WriteHandle ObjectCache<AllocatorT>::allocateFromL1(
 
 template <typename AllocatorT>
 template <typename T>
+bool ObjectCache<AllocatorT>::allocatePlaceholder(std::string key) {
+  auto hdl = allocateFromL1<T>(key, 0 /* no ttl */,
+                                     0 /* use current time as creationTime
+                                     */);
+  if (!hdl) {
+    return false;
+  }
+  placeholders_.push_back(std::move(hdl));
+  return true;
+}
+
+template <typename AllocatorT>
+template <typename T>
 uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
   auto requiredSizeBytes = maxKeySizeBytes + sizeof(ObjectCacheItem<T>) +
                            sizeof(typename AllocatorT::Item);
@@ -258,6 +273,10 @@ uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
 
 template <typename AllocatorT>
 ObjectCache<AllocatorT>::~ObjectCache() {
+  if (objectSizeTrackingEnabled_) {
+    stopSizeController();
+  }
+
   for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
        ++itr) {
     this->l1Cache_->remove(itr.asHandle());
@@ -288,7 +307,51 @@ std::map<std::string, std::string>
 ObjectCache<AllocatorT>::serializeConfigParams() const {
   auto config = this->l1Cache_->serializeConfigParams();
   config["l1EntriesLimit"] = std::to_string(l1EntriesLimit_);
+  if (objectSizeTrackingEnabled_ && sizeControllerIntervalMs_ > 0) {
+    config["l1CacheSizeLimit"] = std::to_string(cacheSizeLimit_);
+    config["sizeControllerIntervalMs"] =
+        std::to_string(sizeControllerIntervalMs_);
+  }
   return config;
+}
+
+template <typename AllocatorT>
+bool ObjectCache<AllocatorT>::startSizeController(
+    std::chrono::milliseconds interval, const util::Throttler::Config& config) {
+  if (!stopSizeController()) {
+    XLOG(ERR) << "Size controller is already running. Cannot start it again.";
+    return false;
+  }
+
+  sizeController_ =
+      std::make_unique<ObjectCacheSizeController<AllocatorT>>(*this, config);
+  bool ret = sizeController_->start(interval, "ObjectCache-SizeController");
+  if (ret) {
+    XLOG(DBG) << "Started ObjectCache SizeController";
+  } else {
+    XLOGF(
+        ERR,
+        "Couldn't start ObjectCache SizeController, interval: {} milliseconds",
+        interval.count());
+  }
+  return ret;
+}
+
+template <typename AllocatorT>
+bool ObjectCache<AllocatorT>::stopSizeController(std::chrono::seconds timeout) {
+  if (!sizeController_) {
+    return true;
+  }
+
+  bool ret = sizeController_->stop(timeout);
+  if (ret) {
+    XLOG(DBG) << "Stopped ObjectCache SizeController";
+  } else {
+    XLOGF(ERR, "Couldn't stop ObjectCache SizeController, timeout: {} seconds",
+          timeout.count());
+  }
+  sizeController_.reset();
+  return ret;
 }
 
 } // namespace objcache2

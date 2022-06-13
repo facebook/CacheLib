@@ -310,6 +310,34 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testMultithreadSizeControl() {
+    ObjectCacheConfig config;
+    config.l1EntriesLimit = 20000;
+    config.objectSizeTrackingEnabled = true;
+    config.cacheSizeLimit = 100000;
+    config.sizeControllerIntervalMs = 100;
+    auto objcache = ObjectCache<AllocatorT>::template create<Foo>(config);
+
+    auto runInsertOps = [&](int id) {
+      for (int i = 0; i < 2000; i++) {
+        auto key = folly::sformat("key_{}_{}", id, i);
+        auto foo2 = std::make_unique<Foo>();
+        objcache->insertOrReplace(key, std::move(foo2), 100);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+      }
+    };
+
+    std::vector<std::thread> ts;
+    for (int i = 0; i < 10; i++) {
+      ts.push_back(std::thread{runInsertOps, i});
+    }
+    for (int i = 0; i < 10; i++) {
+      ts[i].join();
+    }
+
+    EXPECT_EQ(objcache->getCurrentEntriesLimit(), 1000);
+  }
+
   void testMultithreadFindAndReplace() {
     // Sanity test to see if find and insertions at the same time
     // across mutliple threads are safe.
@@ -440,6 +468,9 @@ TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
 TYPED_TEST(ObjectCacheTest, MultithreadEviction) {
   this->testMultithreadEviction();
 }
+TYPED_TEST(ObjectCacheTest, MultithreadSizeControl) {
+  this->testMultithreadSizeControl();
+}
 TYPED_TEST(ObjectCacheTest, MultithreadFindAndReplace) {
   this->testMultithreadFindAndReplace();
 }
@@ -495,6 +526,97 @@ TEST(ObjectCacheTest, LruEvictionWithSizeTracking) {
       ASSERT_EQ(objcache->getNumEntries(), i);
       EXPECT_EQ(totalObjectSize - 8, objcache->getTotalObjectSize());
     }
+  }
+}
+
+TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
+  ObjectCacheConfig config;
+  config.l1EntriesLimit = 50;
+  config.objectSizeTrackingEnabled = true;
+  config.cacheSizeLimit = 100;
+  config.sizeControllerIntervalMs = 100;
+  // insert objects with equal size
+  {
+    auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
+    for (size_t i = 0; i < 5; i++) {
+      auto key = folly::sformat("key_{}", i);
+      objcache->insertOrReplace(key, std::make_unique<Foo>(), 25);
+    }
+    ASSERT_EQ(objcache->getTotalObjectSize(), 125);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), config.l1EntriesLimit);
+    ASSERT_EQ(objcache->getNumEntries(), 5);
+    // wait for size controller
+    std::this_thread::sleep_for(std::chrono::milliseconds{150});
+    // key_0 should be evicted
+    ASSERT_EQ(objcache->getTotalObjectSize(), 100);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), 4);
+    ASSERT_EQ(objcache->getNumEntries(), 4);
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_0"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_1"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_2"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_3"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_4"));
+  }
+
+  // insert and then access objects from the tail
+  {
+    auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
+    for (size_t i = 0; i < 10; i++) {
+      auto key = folly::sformat("key_{}", i);
+      objcache->insertOrReplace(key, std::make_unique<Foo>(), 25);
+    }
+    // access key_0 ~ key_3 from the tail
+    objcache->find<Foo>("key_0");
+    objcache->find<Foo>("key_1");
+    objcache->find<Foo>("key_2");
+    objcache->find<Foo>("key_3");
+    ASSERT_EQ(objcache->getTotalObjectSize(), 250);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), config.l1EntriesLimit);
+    ASSERT_EQ(objcache->getNumEntries(), 10);
+    // wait for size controller
+    std::this_thread::sleep_for(std::chrono::milliseconds{150});
+    // key_0 ~ key_3 should be kept
+    ASSERT_EQ(objcache->getTotalObjectSize(), 100);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), 4);
+    ASSERT_EQ(objcache->getNumEntries(), 4);
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_0"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_1"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_2"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_3"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_4"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_5"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_6"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_7"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_8"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_9"));
+  }
+
+  // insert objects with different sizes
+  {
+    auto objcache = ObjectCache<LruAllocator>::create<Foo>(config);
+    for (size_t i = 0; i < 10; i++) {
+      auto key = folly::sformat("key_{}", i);
+      objcache->insertOrReplace(key, std::make_unique<Foo>(), 25 + i);
+    }
+    ASSERT_EQ(objcache->getTotalObjectSize(), 295);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), config.l1EntriesLimit);
+    ASSERT_EQ(objcache->getNumEntries(), 10);
+    // wait for size controller
+    std::this_thread::sleep_for(std::chrono::milliseconds{150});
+    // key_0 ~ key_6 should be evicted
+    ASSERT_EQ(objcache->getTotalObjectSize(), 99);
+    ASSERT_EQ(objcache->getCurrentEntriesLimit(), 3);
+    ASSERT_EQ(objcache->getNumEntries(), 3);
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_0"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_1"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_2"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_3"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_4"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_5"));
+    EXPECT_EQ(nullptr, objcache->find<Foo>("key_6"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_7"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_8"));
+    EXPECT_NE(nullptr, objcache->find<Foo>("key_9"));
   }
 }
 } // namespace test
