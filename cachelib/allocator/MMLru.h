@@ -332,6 +332,11 @@ class MMLru {
     // container and only one such iterator can exist at a time
     Iterator getEvictionIterator() const noexcept;
 
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withEvictionIterator(F&& f);
+
     // get copy of current config
     Config getConfig() const;
 

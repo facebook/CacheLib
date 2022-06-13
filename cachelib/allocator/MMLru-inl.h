@@ -219,6 +219,14 @@ MMLru::Container<T, HookPtr>::getEvictionIterator() const noexcept {
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename F>
+void MMLru::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
+  lruMutex_->lock_combine([this, &fun]() {
+    fun(Iterator{LockHolder{}, lru_.rbegin()});
+  });
+}
+
+template <typename T, MMLru::Hook<T> T::*HookPtr>
 void MMLru::Container<T, HookPtr>::ensureNotInsertionPoint(T& node) noexcept {
   // If we are removing the insertion point node, grow tail before we remove
   // so that insertionPoint_ is valid (or nullptr) after removal
