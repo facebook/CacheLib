@@ -491,6 +491,11 @@ class MMTinyLFU {
     // container and only one such iterator can exist at a time
     Iterator getEvictionIterator() const noexcept;
 
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withEvictionIterator(F&& f);
+
     // for saving the state of the lru
     //
     // precondition:  serialization must happen without any reader or writer
