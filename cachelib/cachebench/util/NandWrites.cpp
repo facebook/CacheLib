@@ -314,6 +314,30 @@ std::optional<uint64_t> wdcWriteBytes(
                          1 /* factor */);
 }
 
+// The output for a Micron device looks like:
+//
+// clang-format off
+// Additional Smart Log for NVME device:nvme0 namespace-id:ffffffff
+// key                                      : raw
+// ...
+// Physical Media Units Written             : 0xd848690000
+// ...
+// clang-format on
+//
+std::optional<uint64_t> micronWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
+  // For Micron devices, the output is in number of bytes hex format.
+  //
+  return getBytesWritten(
+      processFactory,
+      nvmePath,
+      {"micron", "vs-smart-add-log", devicePath.str(), "-f normal"},
+      6 /* field num */,
+      1 /* factor */);
+}
+
 // I don't have access to hosts with Liteon, or SKHMS flash drives that I
 // can use to test this code, so I've left these functions commented out for
 // now.
@@ -392,7 +416,8 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
                 {"toshiba", toshibaWriteBytes},
                 {"wus4bb019d4m9e7", wdcWriteBytes},
                 {"wus4bb019djese7", wdcWriteBytes},
-                {"wus4bb038djese7", wdcWriteBytes}};
+                {"wus4bb038djese7", wdcWriteBytes},
+                {"micron", micronWriteBytes}};
   for (const auto& [vendor, func] : vendorMap) {
     XLOG(DBG) << "Looking for vendor " << vendor << " in device model string \""
               << modelNumber.value() << "\".";
