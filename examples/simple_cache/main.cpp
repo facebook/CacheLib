@@ -22,7 +22,7 @@ namespace cachelib_examples {
 using Cache = cachelib::LruAllocator; // or Lru2QAllocator, or TinyLFUAllocator
 using CacheConfig = typename Cache::Config;
 using CacheKey = typename Cache::Key;
-using CacheItemHandle = typename Cache::ItemHandle;
+using CacheReadHandle = typename Cache::ReadHandle;
 
 // Global cache object and a default cache pool
 std::unique_ptr<Cache> gCache_;
@@ -44,7 +44,7 @@ void initializeCache() {
 
 void destroyCache() { gCache_.reset(); }
 
-CacheItemHandle get(CacheKey key) { return gCache_->find(key); }
+CacheReadHandle get(CacheKey key) { return gCache_->find(key); }
 
 bool put(CacheKey key, const std::string& value) {
   auto handle = gCache_->allocate(defaultPool_, key, value.size());
