@@ -60,14 +60,15 @@ void HighRefcountStressor::start() {
 
 void HighRefcountStressor::testLoop() {
   try {
-    auto it = cache_->find("high_refcount", AccessMode::kRead);
+    auto it = cache_->find("high_refcount");
     if (!it) {
       // Item was likely evicted during slab release. Try to allocate a new
       // one. It's fine to fail as the small alloc class may not have any
       // slab left.
-      it = cache_->allocate(PoolId{0} /* pid */, "high_refcount", 1 /* size */);
-      if (it) {
-        cache_->insertOrReplace(it);
+      auto newIt =
+          cache_->allocate(PoolId{0} /* pid */, "high_refcount", 1 /* size */);
+      if (newIt) {
+        cache_->insertOrReplace(newIt);
       }
     }
     uint32_t delay = 1 + folly::Random::rand32(10);
@@ -146,7 +147,8 @@ void CachelibMapStressor::testLoop() {
   try {
     if (it) {
       folly::SharedMutex::ReadHolder r{getLock(key)};
-      auto map = TestMap::fromWriteHandle(*cache_, std::move(it));
+      auto map =
+          TestMap::fromWriteHandle(*cache_, std::move(it).toWriteHandle());
       if (map.size() > kMapSizeUpperbound &&
           folly::Random::oneIn(kMapDeletionRate)) {
         cache_->remove(map.viewWriteHandle());
@@ -284,7 +286,8 @@ void CachelibRangeMapStressor::testLoop() {
   try {
     if (it) {
       folly::SharedMutex::ReadHolder r{getLock(key)};
-      auto map = TestMap::fromWriteHandle(*cache_, std::move(it));
+      auto map =
+          TestMap::fromWriteHandle(*cache_, std::move(it).toWriteHandle());
       if (map.size() > kMapSizeUpperbound &&
           folly::Random::oneIn(kMapDeletionRate)) {
         cache_->remove(map.viewWriteHandle());

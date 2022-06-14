@@ -47,7 +47,8 @@ template <typename Allocator>
 class Cache {
  public:
   using Item = typename Allocator::Item;
-  using ItemHandle = typename Allocator::ItemHandle;
+  using ReadHandle = typename Allocator::ReadHandle;
+  using WriteHandle = typename Allocator::WriteHandle;
   using Key = typename Item::Key;
   using RemoveRes = typename Allocator::RemoveRes;
   using SyncObj = typename Allocator::SyncObj;
@@ -76,18 +77,18 @@ class Cache {
   // @param key     the key for the item
   // @param size    size of the item
   // @param ttlSecs ttl for the item in seconds (optional)
-  ItemHandle allocate(PoolId pid,
-                      folly::StringPiece key,
-                      size_t size,
-                      uint32_t ttlSecs = 0);
+  WriteHandle allocate(PoolId pid,
+                       folly::StringPiece key,
+                       size_t size,
+                       uint32_t ttlSecs = 0);
 
   // inserts the item into the cache and tracks it.
-  ItemHandle insertOrReplace(ItemHandle& handle);
+  WriteHandle insertOrReplace(WriteHandle& handle);
 
   // inserts the handle into cache and returns true if the insert was
   // successful, false otherwise. Insert operation can not be performed when
   // consistency checking is enabled.
-  bool insert(ItemHandle& handle);
+  bool insert(WriteHandle& handle);
 
   // perform lookup in the cache and if consistency checking is enabled,
   // ensure that the lookup result is consistent with the past actions and
@@ -96,16 +97,26 @@ class Cache {
   // invalid.
   //
   // @param key   the key for lookup
-  // @param mode  the access mode
   //
-  // @return handle for the item if present or null handle.
-  ItemHandle find(Key key, AccessMode mode = AccessMode::kRead);
+  // @return read handle for the item if present or null handle.
+  ReadHandle find(Key key);
+
+  // perform lookup then mutation in the cache and if consistency checking is
+  // enabled, ensure that the lookup result is consistent with the past actions
+  // and concurrent actions. If NVM is enabled, waits for the Item to become
+  // ready before returning. If key is found to be inconsistent, it is marked as
+  // invalid.
+  //
+  // @param key   the key for lookup
+  //
+  // @return write handle for the item if present or null handle.
+  WriteHandle findToWrite(Key key);
 
   // removes the key from the cache and returns corresponding cache result.
   // Tracks the operation for checking consistency if enabled.
   RemoveRes remove(Key key);
   // same as above, but takes an item handle.
-  RemoveRes remove(const ItemHandle& it);
+  RemoveRes remove(const ReadHandle& it);
 
   // allocates a chained item for this parent.
   //
@@ -113,7 +124,7 @@ class Cache {
   // @param size     the size of the allocation
   //
   // @return item handle allocated.
-  ItemHandle allocateChainedItem(const ItemHandle& parent, size_t size);
+  WriteHandle allocateChainedItem(const ReadHandle& parent, size_t size);
 
   // replace the oldItem belonging to the parent with a new one.
   // @param oldItem         the item being replaced
@@ -121,14 +132,14 @@ class Cache {
   // @param parent          the parent item
   //
   // @return handle to the item that was replaced.
-  ItemHandle replaceChainedItem(Item& oldItem,
-                                ItemHandle newItemHandle,
-                                Item& parent);
+  WriteHandle replaceChainedItem(Item& oldItem,
+                                 WriteHandle newItemHandle,
+                                 Item& parent);
 
   // Adds a chained item to the parent.
   // @param  parent   the parent item's handle
   // @param child     handle to the child
-  void addChainedItem(ItemHandle& parent, ItemHandle child);
+  void addChainedItem(WriteHandle& parent, WriteHandle child);
 
   template <typename... Params>
   auto viewAsChainedAllocs(Params&&... args) {
@@ -144,12 +155,12 @@ class Cache {
   // cache adds some overheads on top of Cache::Item.
 
   // Return the readonly memory
-  const void* getMemory(const ItemHandle& handle) const noexcept {
+  const void* getMemory(const ReadHandle& handle) const noexcept {
     return handle == nullptr ? nullptr : getMemory(*handle);
   }
 
   // Return the writable memory
-  void* getMemory(ItemHandle& handle) noexcept {
+  void* getMemory(WriteHandle& handle) noexcept {
     return handle == nullptr ? nullptr : getMemory(*handle);
   }
 
@@ -164,7 +175,7 @@ class Cache {
   }
 
   // return the allocation size for the item.
-  uint32_t getSize(const ItemHandle& item) const noexcept {
+  uint32_t getSize(const ReadHandle& item) const noexcept {
     return getSize(item.get());
   }
 
@@ -173,22 +184,22 @@ class Cache {
   uint32_t getSize(const Item* item) const noexcept;
 
   // set's a random value for the item when consistency check is enabled.
-  void setUint64ToItem(ItemHandle& handle, uint64_t num) const;
+  void setUint64ToItem(WriteHandle& handle, uint64_t num) const;
 
   // For chained items, tracks the state of the chain by using the combination
   // of unique checksum value per item in chain into one value.
-  void trackChainChecksum(const ItemHandle& handle);
+  void trackChainChecksum(const ReadHandle& handle);
 
   // set's the string value to the item, stripping the tail if the input
   // string is longer than the item's storage space.
   //
   // @param handle   the handle for the item
   // @param str      the string value to be set.
-  void setStringItem(ItemHandle& handle, const std::string& str);
+  void setStringItem(WriteHandle& handle, const std::string& str);
 
   // when item records are enabled, updates the version for the item and
   // correspondingly invalidates the nvm cache.
-  void updateItemRecordVersion(ItemHandle& it);
+  void updateItemRecordVersion(WriteHandle& it);
 
   // the following three are helper functions to support the cachelib map
   // integration stress tests. These expose the same interface as
@@ -296,7 +307,7 @@ class Cache {
   //
   // @param opId    the operation id
   // @param it      the item to check
-  bool checkGet(ValueTracker::Index opId, const ItemHandle& it);
+  bool checkGet(ValueTracker::Index opId, const ReadHandle& it);
 
   // fetches the value stored in the item for consistency tracking purposes.
   // Only called if consistency checking is enabled.
@@ -307,7 +318,7 @@ class Cache {
 
   // generates a hash corresponding to the handle and its's chain, based on
   // each item's hash value. Used for consistency tracking purposes.
-  uint64_t genHashForChain(const ItemHandle& handle) const;
+  uint64_t genHashForChain(const ReadHandle& handle) const;
 
   // get the nand writes for the SSD device if enabled.
   uint64_t fetchNandWrites() const;

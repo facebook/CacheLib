@@ -44,7 +44,7 @@ void FastShutdownStressor::start() {
   // time to interrupt slab release at different places.
   uint32_t waitTime = 6;
   for (; waitTime <= numOps_ * 3; waitTime += 3) {
-    std::vector<CacheType::ItemHandle> v;
+    std::vector<CacheType::WriteHandle> v;
     std::cout << "allocating....\n";
     for (uint32_t i = 0; i < nslabs; i++) {
       for (uint32_t j = 0; j < numSmallAllocs; j++) {

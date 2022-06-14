@@ -318,7 +318,7 @@ typename Cache<Allocator>::RemoveRes Cache<Allocator>::remove(Key key) {
 
 template <typename Allocator>
 typename Cache<Allocator>::RemoveRes Cache<Allocator>::remove(
-    const ItemHandle& it) {
+    const ReadHandle& it) {
   if (!consistencyCheckEnabled()) {
     return cache_->remove(it);
   }
@@ -330,8 +330,8 @@ typename Cache<Allocator>::RemoveRes Cache<Allocator>::remove(
 }
 
 template <typename Allocator>
-typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocateChainedItem(
-    const ItemHandle& parent, size_t size) {
+typename Cache<Allocator>::WriteHandle Cache<Allocator>::allocateChainedItem(
+    const ReadHandle& parent, size_t size) {
   auto handle = cache_->allocateChainedItem(parent, CacheValue::getSize(size));
   if (handle) {
     CacheValue::initialize(handle->getMemory());
@@ -340,20 +340,20 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocateChainedItem(
 }
 
 template <typename Allocator>
-void Cache<Allocator>::addChainedItem(ItemHandle& parent, ItemHandle child) {
+void Cache<Allocator>::addChainedItem(WriteHandle& parent, WriteHandle child) {
   itemRecords_.updateItemVersion(*parent);
   cache_->addChainedItem(parent, std::move(child));
 }
 
 template <typename Allocator>
-typename Cache<Allocator>::ItemHandle Cache<Allocator>::replaceChainedItem(
-    Item& oldItem, ItemHandle newItemHandle, Item& parent) {
+typename Cache<Allocator>::WriteHandle Cache<Allocator>::replaceChainedItem(
+    Item& oldItem, WriteHandle newItemHandle, Item& parent) {
   itemRecords_.updateItemVersion(parent);
   return cache_->replaceChainedItem(oldItem, std::move(newItemHandle), parent);
 }
 
 template <typename Allocator>
-bool Cache<Allocator>::insert(ItemHandle& handle) {
+bool Cache<Allocator>::insert(WriteHandle& handle) {
   // Insert is not supported in consistency checking mode because consistency
   // checking assumes a Set always succeeds and overrides existing value.
   XDCHECK(!consistencyCheckEnabled());
@@ -362,9 +362,9 @@ bool Cache<Allocator>::insert(ItemHandle& handle) {
 }
 
 template <typename Allocator>
-typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocate(
+typename Cache<Allocator>::WriteHandle Cache<Allocator>::allocate(
     PoolId pid, folly::StringPiece key, size_t size, uint32_t ttlSecs) {
-  ItemHandle handle;
+  WriteHandle handle;
   try {
     handle = cache_->allocate(pid, key, CacheValue::getSize(size), ttlSecs);
     if (handle) {
@@ -377,8 +377,8 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::allocate(
   return handle;
 }
 template <typename Allocator>
-typename Cache<Allocator>::ItemHandle Cache<Allocator>::insertOrReplace(
-    ItemHandle& handle) {
+typename Cache<Allocator>::WriteHandle Cache<Allocator>::insertOrReplace(
+    WriteHandle& handle) {
   itemRecords_.addItemRecord(handle);
 
   if (!consistencyCheckEnabled()) {
@@ -397,15 +397,14 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::insertOrReplace(
 }
 
 template <typename Allocator>
-typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
-                                                             AccessMode mode) {
+typename Cache<Allocator>::ReadHandle Cache<Allocator>::find(Key key) {
   auto findFn = [&]() {
     util::LatencyTracker tracker;
     if (FLAGS_report_api_latency) {
       tracker = util::LatencyTracker(cacheFindLatency_);
     }
     // find from cache and wait for the result to be ready.
-    auto it = cache_->findImpl(key, mode);
+    auto it = cache_->find(key);
     it.wait();
     return it;
   };
@@ -423,8 +422,33 @@ typename Cache<Allocator>::ItemHandle Cache<Allocator>::find(Key key,
 }
 
 template <typename Allocator>
+typename Cache<Allocator>::WriteHandle Cache<Allocator>::findToWrite(Key key) {
+  auto findToWriteFn = [&]() {
+    util::LatencyTracker tracker;
+    if (FLAGS_report_api_latency) {
+      tracker = util::LatencyTracker(cacheFindLatency_);
+    }
+    // find from cache and wait for the result to be ready.
+    auto it = cache_->findToWrite(key);
+    it.wait();
+    return it;
+  };
+
+  if (!consistencyCheckEnabled()) {
+    return findToWriteFn();
+  }
+
+  auto opId = valueTracker_->beginGet(key);
+  auto it = findToWriteFn();
+  if (checkGet(opId, it)) {
+    invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+  }
+  return it;
+}
+
+template <typename Allocator>
 bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
-                                const ItemHandle& it) {
+                                const ReadHandle& it) {
   LogEventStream es;
   auto found = it != nullptr;
   uint64_t expected = 0;
@@ -594,7 +618,7 @@ uint32_t Cache<Allocator>::getSize(const Item* item) const noexcept {
 }
 
 template <typename Allocator>
-uint64_t Cache<Allocator>::genHashForChain(const ItemHandle& handle) const {
+uint64_t Cache<Allocator>::genHashForChain(const ReadHandle& handle) const {
   auto chainedAllocs = cache_->viewAsChainedAllocs(handle);
   uint64_t hash = getUint64FromItem(*handle);
   for (const auto& item : chainedAllocs.getChain()) {
@@ -604,7 +628,7 @@ uint64_t Cache<Allocator>::genHashForChain(const ItemHandle& handle) const {
 }
 
 template <typename Allocator>
-void Cache<Allocator>::trackChainChecksum(const ItemHandle& handle) {
+void Cache<Allocator>::trackChainChecksum(const ReadHandle& handle) {
   XDCHECK(consistencyCheckEnabled());
   auto checksum = genHashForChain(handle);
   auto opId = valueTracker_->beginSet(handle->getKey(), checksum);
@@ -612,21 +636,22 @@ void Cache<Allocator>::trackChainChecksum(const ItemHandle& handle) {
 }
 
 template <typename Allocator>
-void Cache<Allocator>::setUint64ToItem(ItemHandle& handle, uint64_t num) const {
+void Cache<Allocator>::setUint64ToItem(WriteHandle& handle,
+                                       uint64_t num) const {
   XDCHECK(handle);
   auto ptr = handle->template getMemoryAs<CacheValue>();
   ptr->setConsistencyNum(num);
 }
 
 template <typename Allocator>
-void Cache<Allocator>::setStringItem(ItemHandle& handle,
+void Cache<Allocator>::setStringItem(WriteHandle& handle,
                                      const std::string& str) {
   auto ptr = reinterpret_cast<uint8_t*>(getMemory(handle));
   std::memcpy(ptr, str.data(), std::min<size_t>(str.size(), getSize(handle)));
 }
 
 template <typename Allocator>
-void Cache<Allocator>::updateItemRecordVersion(ItemHandle& it) {
+void Cache<Allocator>::updateItemRecordVersion(WriteHandle& it) {
   itemRecords_.updateItemVersion(*it);
   cache_->invalidateNvm(*it);
 }

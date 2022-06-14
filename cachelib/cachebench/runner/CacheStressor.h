@@ -50,7 +50,7 @@ class CacheStressor : public Stressor {
  public:
   using CacheT = Cache<Allocator>;
   using Key = typename CacheT::Key;
-  using ItemHandle = typename CacheT::ItemHandle;
+  using WriteHandle = typename CacheT::WriteHandle;
 
   // @param cacheConfig   the config to instantiate the cache instance
   // @param config        stress test config
@@ -222,7 +222,7 @@ class CacheStressor : public Stressor {
   }
 
   // populate the input item handle according to the stress setup.
-  void populateItem(ItemHandle& handle) {
+  void populateItem(WriteHandle& handle) {
     if (!config_.populateItem) {
       return;
     }
@@ -318,7 +318,7 @@ class CacheStressor : public Stressor {
           // add a distribution over sequences of requests/access patterns
           // e.g. get-no-set and set-no-get
           cache_->recordAccess(*key);
-          auto it = cache_->find(*key, AccessMode::kRead);
+          auto it = cache_->find(*key);
           if (it == nullptr) {
             ++stats.getMiss;
             result = OpResultType::kGetMiss;
@@ -350,7 +350,7 @@ class CacheStressor : public Stressor {
         case OpType::kAddChained: {
           ++stats.get;
           auto lock = chainedItemAcquireUniqueLock(*key);
-          auto it = cache_->find(*key, AccessMode::kRead);
+          auto it = cache_->findToWrite(*key);
           if (!it) {
             ++stats.getMiss;
 
@@ -390,7 +390,7 @@ class CacheStressor : public Stressor {
           if (ticker_) {
             ticker_->updateTimeStamp(req.timestamp);
           }
-          auto it = cache_->find(*key, AccessMode::kWrite);
+          auto it = cache_->findToWrite(*key);
           if (it == nullptr) {
             ++stats.getMiss;
             ++stats.updateMiss;
