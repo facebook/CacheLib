@@ -44,7 +44,7 @@ struct TestItem {
 struct TestNvmCache;
 
 using TestReadHandle = detail::ReadHandleImpl<TestItem>;
-using TestItemHandle = detail::WriteHandleImpl<TestItem>;
+using TestWriteHandle = detail::WriteHandleImpl<TestItem>;
 
 struct TestAllocator {
   using Item = int;
@@ -59,24 +59,24 @@ struct TestAllocator {
 
   MOCK_METHOD2(release, void(TestItem*, bool));
 
-  TestItemHandle acquire(TestItem* it) {
+  TestWriteHandle acquire(TestItem* it) {
     tlRef_.tlStats() += 1;
-    return TestItemHandle{it, *this};
+    return TestWriteHandle{it, *this};
   }
 
-  TestItemHandle getHandle(TestItem* it = nullptr) {
-    return it != nullptr ? TestItemHandle{it, *this} : TestItemHandle{*this};
+  TestWriteHandle getHandle(TestItem* it = nullptr) {
+    return it != nullptr ? TestWriteHandle{it, *this} : TestWriteHandle{*this};
   }
 
   void setHandle(const TestReadHandle& hdl, TestItem* k) {
     hdl.getItemWaitContext()->set(acquire(k));
   }
 
-  void setHandle(const TestItemHandle& hdl, TestItemHandle h) {
+  void setHandle(const TestWriteHandle& hdl, TestWriteHandle h) {
     hdl.getItemWaitContext()->set(std::move(h));
   }
 
-  void markExpired(TestItemHandle& hdl) { hdl.markExpired(); }
+  void markExpired(TestWriteHandle& hdl) { hdl.markExpired(); }
 
   void adjustHandleCountForThread_private(int i) { tlRef_.tlStats() += i; }
 
@@ -85,8 +85,8 @@ struct TestAllocator {
 } // namespace
 
 namespace detail {
-template <typename ItemHandle2>
-typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl) {
+template <typename HandleT>
+typename HandleT::CacheT& objcacheGetCache(const HandleT& hdl) {
   return hdl.getCache();
 }
 } // namespace detail
@@ -303,7 +303,7 @@ TEST(ItemHandleTest, handleState) {
   testing::NiceMock<TestAllocator> t;
 
   {
-    TestItemHandle hdl{};
+    TestWriteHandle hdl{};
     EXPECT_FALSE(hdl.wentToNvm());
     EXPECT_FALSE(hdl.wasExpired());
 
@@ -315,7 +315,7 @@ TEST(ItemHandleTest, handleState) {
     auto flashHdl = t.getHandle();
     EXPECT_FALSE(flashHdl.isReady());
 
-    TestItemHandle toSetHdl{};
+    TestWriteHandle toSetHdl{};
     t.setHandle(flashHdl, std::move(toSetHdl));
 
     EXPECT_TRUE(flashHdl.isReady());
@@ -326,7 +326,7 @@ TEST(ItemHandleTest, handleState) {
     auto flashHdl = t.getHandle();
     EXPECT_FALSE(flashHdl.isReady());
 
-    TestItemHandle toSetHdl{};
+    TestWriteHandle toSetHdl{};
     t.markExpired(toSetHdl);
     t.setHandle(flashHdl, std::move(toSetHdl));
 

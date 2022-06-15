@@ -55,7 +55,7 @@ class CacheAllocatorTestWrapper {
   }
 
   template <class Allocator>
-  static typename Allocator::ItemHandle createHandle(
+  static typename Allocator::WriteHandle createHandle(
       Allocator* alloc, typename Allocator::Item& item) {
     return alloc->acquire(&item);
   }

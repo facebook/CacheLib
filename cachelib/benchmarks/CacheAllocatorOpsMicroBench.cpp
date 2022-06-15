@@ -262,7 +262,7 @@ void runAllocateMultiThreads(int numThreads,
 
   if (preFillupCache) {
     uint64_t i = keys.size();
-    std::vector<LruAllocator::ItemHandle> handles;
+    std::vector<LruAllocator::WriteHandle> handles;
     while (true) {
       // Length of key should be 10 bytes
       auto key = folly::sformat("k_{: <8}", i);

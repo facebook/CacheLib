@@ -89,7 +89,7 @@ class RebalanceStrategyTest : public testing::Test {
     const auto pid = cache->addPool(
         "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
 
-    std::vector<typename AllocatorT::ItemHandle> handles;
+    std::vector<typename AllocatorT::WriteHandle> handles;
     int handleCount = 0;
     for (;; ++handleCount) {
       auto handle = util::allocateAccessible(
@@ -305,7 +305,7 @@ class RebalanceStrategyTest : public testing::Test {
 
       /* Fill half the slabs with big items */
       const auto kTargetSlabs = kCacheSlabs / 2;
-      std::vector<typename AllocatorT::ItemHandle> handlesBigItems;
+      std::vector<typename AllocatorT::WriteHandle> handlesBigItems;
       for (unsigned i = 0;
            cache->getPoolStats(pid).numSlabsForClass(largeAC) < kTargetSlabs;
            ++i) {
@@ -318,7 +318,7 @@ class RebalanceStrategyTest : public testing::Test {
       }
 
       /* Fill the 2nd half with small items */
-      std::vector<typename AllocatorT::ItemHandle> handlesSmallItems;
+      std::vector<typename AllocatorT::WriteHandle> handlesSmallItems;
       for (unsigned i = 0;
            cache->getPoolStats(pid).numSlabsForClass(smallAC) < kTargetSlabs;
            ++i) {
@@ -459,7 +459,7 @@ class RebalanceStrategyTest : public testing::Test {
         "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
 
     /* Attempt to fill bigger allocation class */
-    std::vector<typename AllocatorT::ItemHandle> handlesBigItems;
+    std::vector<typename AllocatorT::WriteHandle> handlesBigItems;
     for (int handleCount = 0;; ++handleCount) {
       auto handle = util::allocateAccessible(
           *cache, pid, folly::sformat("key_{}", handleCount), 50000);
@@ -470,7 +470,7 @@ class RebalanceStrategyTest : public testing::Test {
     }
 
     /* Attempt to fill smaller allocation class */
-    std::vector<typename AllocatorT::ItemHandle> handlesSmallItems;
+    std::vector<typename AllocatorT::WriteHandle> handlesSmallItems;
     for (int handleCount2 = 0;; ++handleCount2) {
       auto handle2 = util::allocateAccessible(
           *cache, pid, folly::sformat("keySmall_{}", handleCount2), 1);

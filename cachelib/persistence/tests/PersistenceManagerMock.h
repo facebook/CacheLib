@@ -31,7 +31,7 @@ using namespace persistence;
 using Cache = cachelib::LruAllocator; // or Lru2QAllocator, or TinyLFUAllocator
 using CacheConfig = typename Cache::Config;
 using CacheKey = typename Cache::Key;
-using CacheItemHandle = typename Cache::ItemHandle;
+using CacheWriteHandle = typename Cache::WriteHandle;
 
 using ::testing::Action;
 using ::testing::An;

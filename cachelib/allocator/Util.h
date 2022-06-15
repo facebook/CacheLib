@@ -97,21 +97,21 @@ bool insertIOBufInCache(T& cache,
 // @return      the handle for the item or an invalid handle(nullptr) if the
 //              allocation/insertion failed.
 template <typename T>
-typename T::ItemHandle allocateAccessible(T& cache,
-                                          PoolId poolId,
-                                          typename T::Item::Key key,
-                                          uint32_t size,
-                                          uint32_t ttlSecs = 0) {
+typename T::WriteHandle allocateAccessible(T& cache,
+                                           PoolId poolId,
+                                           typename T::Item::Key key,
+                                           uint32_t size,
+                                           uint32_t ttlSecs = 0) {
   auto allocHandle = cache.allocate(poolId, key, size, ttlSecs);
   if (!allocHandle) {
-    return typename T::ItemHandle{};
+    return typename T::WriteHandle{};
   }
 
   const auto inserted = cache.insert(allocHandle);
   if (!inserted) {
     // this will destroy the allocated handle and release it back to the
     // allocator.
-    return typename T::ItemHandle{};
+    return typename T::WriteHandle{};
   }
 
   return allocHandle;

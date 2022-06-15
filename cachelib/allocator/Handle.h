@@ -335,7 +335,7 @@ struct ReadHandleImpl {
           // We will construct another handle that will be transferred to
           // another thread. So we will decrement a count locally to be back
           // to 0 on this thread. In the user thread, they must increment by
-          // 1. It is done automatically if the user converted their ItemHandle
+          // 1. It is done automatically if the user converted their Handle
           // to a SemiFuture via toSemiFuture().
           auto readHandle = hdl.clone();
           if (readHandle) {
@@ -425,7 +425,7 @@ struct ReadHandleImpl {
   //   cache->adjustHandleCountForThread_private(1);
   // This is needed because cachelib had previously moved a handle from an
   // internal thread to this callback, and cachelib internally removed a
-  // 1. It is done automatically if the user converted their ItemHandle
+  // 1. It is done automatically if the user converted their Handle
   // to a SemiFuture via toSemiFuture(). For more details, refer to comments
   // around ItemWaitContext.
   //
@@ -485,7 +485,7 @@ struct ReadHandleImpl {
 
   // handle that has a wait context allocated. Used for async handles
   // In this case, the it_ will be filled in asynchronously and mulitple
-  // ItemHandles can wait on the one underlying handle
+  // Handles can wait on the one underlying handle
   explicit ReadHandleImpl(CacheT& alloc) noexcept
       : alloc_(&alloc),
         it_(nullptr),
@@ -497,10 +497,10 @@ struct ReadHandleImpl {
 
   // Object-cache's c++ allocator will need to create a zero refcount handle in
   // order to access CacheAllocator API. Search for this function for details.
-  template <typename ItemHandle2, typename Item2, typename Cache2>
-  friend ItemHandle2* objcacheInitializeZeroRefcountHandle(void* handleStorage,
-                                                           Item2* it,
-                                                           Cache2& alloc);
+  template <typename HandleT, typename Item2, typename Cache2>
+  friend HandleT* objcacheInitializeZeroRefcountHandle(void* handleStorage,
+                                                       Item2* it,
+                                                       Cache2& alloc);
 
   // A handle is marked as nascent when it was not yet inserted into the cache.
   // However, user can override it by marking an item as "not nascent" even if
@@ -508,13 +508,13 @@ struct ReadHandleImpl {
   // item will still be processed by RemoveCallback if user frees it. Today,
   // the only user who can do this is Cachelib's ObjectCache API to ensure the
   // correct RAII behavior for an object.
-  template <typename ItemHandle2>
-  friend void objcacheUnmarkNascent(const ItemHandle2& hdl);
+  template <typename HandleT>
+  friend void objcacheUnmarkNascent(const HandleT& hdl);
 
   // Object-cache's c++ allocator needs to access CacheAllocator directly from
   // an item handle in order to access CacheAllocator APIs.
-  template <typename ItemHandle2>
-  friend typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl);
+  template <typename HandleT>
+  friend typename HandleT::CacheT& objcacheGetCache(const HandleT& hdl);
 
   // instance of the cache this handle and item belong to.
   CacheT* alloc_ = nullptr;
@@ -534,7 +534,7 @@ struct ReadHandleImpl {
   friend typename CacheT::NvmCacheT;
 
   // Following methods are only used in tests where we need to access private
-  // methods in ItemHandle
+  // methods in ReadHandle
   template <typename T1, typename T2>
   friend T1 createHandleWithWaitContextForTest(T2&);
   template <typename T1>
@@ -586,10 +586,10 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
 
   // Object-cache's c++ allocator will need to create a zero refcount handle in
   // order to access CacheAllocator API. Search for this function for details.
-  template <typename ItemHandle2, typename Item2, typename Cache2>
-  friend ItemHandle2* objcacheInitializeZeroRefcountHandle(void* handleStorage,
-                                                           Item2* it,
-                                                           Cache2& alloc);
+  template <typename HandleT, typename Item2, typename Cache2>
+  friend HandleT* objcacheInitializeZeroRefcountHandle(void* handleStorage,
+                                                       Item2* it,
+                                                       Cache2& alloc);
 
   // A handle is marked as nascent when it was not yet inserted into the cache.
   // However, user can override it by marking an item as "not nascent" even if
@@ -597,16 +597,16 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
   // item will still be processed by RemoveCallback if user frees it. Today,
   // the only user who can do this is Cachelib's ObjectCache API to ensure the
   // correct RAII behavior for an object.
-  template <typename ItemHandle2>
-  friend void objcacheUnmarkNascent(const ItemHandle2& hdl);
+  template <typename HandleT>
+  friend void objcacheUnmarkNascent(const HandleT& hdl);
 
   // Object-cache's c++ allocator needs to access CacheAllocator directly from
   // an item handle in order to access CacheAllocator APIs.
-  template <typename ItemHandle2>
-  friend typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl);
+  template <typename HandleT>
+  friend typename HandleT::CacheT& objcacheGetCache(const HandleT& hdl);
 
   // Following methods are only used in tests where we need to access private
-  // methods in ItemHandle
+  // methods in WriteHandle
   template <typename T1, typename T2>
   friend T1 createHandleWithWaitContextForTest(T2&);
   template <typename T1>

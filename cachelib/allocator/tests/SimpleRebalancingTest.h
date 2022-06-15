@@ -80,7 +80,7 @@ class SimpleRebalanceTest : public testing::Test {
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
     auto poolId = alloc.addPool("foobar", numBytes);
 
-    std::vector<typename AllocatorT::ItemHandle> handles;
+    std::vector<typename AllocatorT::WriteHandle> handles;
     const std::vector<uint32_t> sizes{64,   128,  256,  512,
                                       1024, 2048, 4096, 8192};
 
