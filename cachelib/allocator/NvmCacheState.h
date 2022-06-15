@@ -54,7 +54,8 @@ class NvmCacheState {
   time_t getCreationTime() const;
 
   // returns true if NvmCache should start without any previous state.
-  // This is true if `shouldDropNvmCache()` or `wasCleanShutDown()` is true
+  // This is true if `shouldDropNvmCache()` is true or `wasCleanShutDown()` is
+  // false
   bool shouldStartFresh() const;
 
   // return true if the cache dir indicates that we should drop nvm cache
