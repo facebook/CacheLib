@@ -447,6 +447,7 @@ class NvmCache {
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
   friend class tests::NvmCacheTest;
+  FRIEND_TEST(CachelibAdminTest, WorkingSetAnalysisLoggingTest);
 };
 
 } // namespace cachelib

@@ -2043,6 +2043,7 @@ class CacheAllocator : public CacheBase {
 
   // tests
   friend class facebook::cachelib::tests::NvmCacheTest;
+  FRIEND_TEST(CachelibAdminTest, WorkingSetAnalysisLoggingTest);
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
   template <typename AllocatorT>

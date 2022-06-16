@@ -30,6 +30,7 @@ class CacheAPIWrapperForNvm {
   using Key = typename Item::Key;
   using WriteHandle = typename C::WriteHandle;
   using ReadHandle = typename C::ReadHandle;
+  using EventTracker = typename C::EventTracker;
 
  public:
   // Get chained allocation on the item.
@@ -122,6 +123,10 @@ class CacheAPIWrapperForNvm {
   // @param cache the cache instance using nvmcache
   // @return Stats of the nvmcache
   static detail::Stats& getStats(C& cache) { return cache.stats(); }
+
+  static EventTracker* getEventTracker(C& cache) {
+    return cache.getEventTracker();
+  }
 };
 
 } // namespace cachelib

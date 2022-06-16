@@ -1251,7 +1251,7 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       if (auto eventTracker = getEventTracker()) {
         eventTracker->record(
             AllocatorApiEvent::DRAM_EVICT, toReleaseHandle->getKey(),
-            AllocatorApiResult::DRAM_EVICTED, toReleaseHandle->getSize(),
+            AllocatorApiResult::EVICTED, toReleaseHandle->getSize(),
             toReleaseHandle->getConfiguredTTL().count());
       }
       // Invalidate iterator since later on we may use this mmContainer

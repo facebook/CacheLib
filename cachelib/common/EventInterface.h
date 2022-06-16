@@ -36,6 +36,8 @@ enum class AllocatorApiEvent : uint8_t {
   ADD_CHAINED = 9,
   POP_CHAINED = 10,
   DRAM_EVICT = 11,
+  NVM_REMOVE = 12,
+  NVM_EVICT = 13,
 };
 
 inline const char* toString(AllocatorApiEvent event) {
@@ -64,6 +66,10 @@ inline const char* toString(AllocatorApiEvent event) {
     return "POP_CHAINED";
   case AllocatorApiEvent::DRAM_EVICT:
     return "DRAM_EVICT";
+  case AllocatorApiEvent::NVM_REMOVE:
+    return "NVM_REMOVE";
+  case AllocatorApiEvent::NVM_EVICT:
+    return "NVM_EVICT";
   default:
     XDCHECK(false);
     return "** CORRUPT EVENT **";
@@ -80,7 +86,7 @@ enum class AllocatorApiResult : uint8_t {
   INSERTED = 5,            // Inserted a new item in the map.
   REPLACED = 6,            // Replaced an item in a map.
   REMOVED = 7,             // Removed an item.
-  DRAM_EVICTED = 8,        // Evicted an item.
+  EVICTED = 8,             // Evicted an item.
 };
 
 inline const char* toString(AllocatorApiResult result) {
@@ -101,8 +107,8 @@ inline const char* toString(AllocatorApiResult result) {
     return "REPLACED";
   case AllocatorApiResult::REMOVED:
     return "REMOVED";
-  case AllocatorApiResult::DRAM_EVICTED:
-    return "DRAM_EVICTED";
+  case AllocatorApiResult::EVICTED:
+    return "EVICTED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";
