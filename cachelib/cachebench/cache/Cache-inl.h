@@ -494,15 +494,23 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 template <typename Allocator>
 Stats Cache<Allocator>::getStats() const {
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
+  auto usageFraction =
+      1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
+                aggregate.poolUsableSize;
+  Stats ret;
+  ret.poolUsageFraction.push_back(usageFraction);
   for (size_t pid = 1; pid < pools_.size(); pid++) {
-    aggregate += cache_->getPoolStats(static_cast<PoolId>(pid));
+    auto poolStats = cache_->getPoolStats(static_cast<PoolId>(pid));
+    usageFraction = 1.0 - (static_cast<double>(poolStats.freeMemoryBytes())) /
+                              poolStats.poolUsableSize;
+    ret.poolUsageFraction.push_back(usageFraction);
+    aggregate += poolStats;
   }
 
   const auto cacheStats = cache_->getGlobalCacheStats();
   const auto rebalanceStats = cache_->getSlabReleaseStats();
   const auto navyStats = cache_->getNvmCacheStatsMap();
 
-  Stats ret;
   ret.numEvictions = aggregate.numEvictions();
   ret.numItems = aggregate.numItems();
   ret.allocAttempts = cacheStats.allocAttempts;
