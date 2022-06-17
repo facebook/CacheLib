@@ -488,6 +488,22 @@ class CacheAllocator : public CacheBase {
   //                  key does not exist.
   ReadHandle find(Key key);
 
+  // Warning: this API is synchronous today with HybridCache. This means as
+  //          opposed to find(), we will block on an item being read from
+  //          flash until it is loaded into DRAM-cache. In find(), if an item
+  //          is missing in dram, we will return a "not-ready" handle and
+  //          user can choose to block or convert to folly::SemiFuture and
+  //          process the item only when it becomes ready (loaded into DRAM).
+  //          If blocking behavior is NOT what you want, a workaround is:
+  //            auto readHandle = cache->find("my key");
+  //            if (!readHandle.isReady()) {
+  //              auto sf = std::move(readHandle)
+  //                .toSemiFuture()
+  //                .defer([] (auto readHandle)) {
+  //                  return std::move(readHandle).toWriteHandle();
+  //                }
+  //            }
+  //
   // look up an item by its key across the nvm cache as well if enabled. Users
   // should call this API only when they are going to mutate the item data.
   //
