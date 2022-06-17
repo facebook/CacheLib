@@ -11,15 +11,25 @@ A `ReadHandle` is similar to a `std::shared_ptr<const Item>`. Cachelib APIs like
 
 A `WriteHandle` is similar to a `std::shared_ptr<Item>`. Cachelib APIs like `allocate()`, `findToWrite()`and `insertOrReplace()` return a `WriteHandle`.
 
-`ItemHandle` is the old name of a `WriteHandle`, which will be deprecated in the future.
-
 Because an item may be accessed concurrently, to ensure that the underlying memory backing the item is valid, use its `ReadHandle` to access it for read-only purpose and use `WriteHandle` to access it for read & write purpose. This guarantees that during the lifetime of the `ReadHandle` / `WriteHandle`, its item will never be evicted or reclaimed by any other thread.
 
 However, `ReadHandle` / `WriteHandle` does NOT synchronize between read and write access to the item's memory. They're only used to indicate to CacheLib if an access is intended to be read-only or read/write. To properly synchronize between concurrent reads and writes to `Item::getMemory()`, user must implement their own synchronization on top. (e.g. use a SharedMutex to synchronize reads and writes).
 
 To ensure consistency of data across HybridCache (Ram & NVM), we need to know whether user is performing a read or a write. For example, requesting a `WriteHandle` via `findToWrite()` API is more expensive than requesting a `ReadHandle` via `find()` API in the context of NvmCache as it incurs an invalidation call to this item's copy in NvmCache.
 
-An item's handle also provides future semantics offered in HybridCache. Calling `toSemiFuture()` via a `ReadHandle` or a `WriteHandle` will return `folly::SemiFuture<ReadHandleImpl>`. For more information, see [Hybrid Cache](HybridCache).
+An item's handle also provides future semantics offered in HybridCache. Calling `toSemiFuture()` via a `ReadHandle` or a `WriteHandle` will return `folly::SemiFuture<ReadHandleImpl>`. User who uses SemiFuture will need to convert a handle back to write-handle if needed. For more information, see [Hybrid Cache](HybridCache).
+
+**Warning**: calling `findToWrite()` API is synchronous today with HybridCache. This means as opposed to `find()`, we will block on an item being read from flash until it is loaded into DRAM-cache. In find(), if an item is missing in dram, we will return a "not-ready" handle and user can choose to block or convert to folly::SemiFuture and process the item only when it becomes ready (loaded into DRAM). If blocking behavior is NOT what you want, a workaround is:
+```
+auto readHandle = cache->find("my key");
+if (!readHandle.isReady()) {
+  auto sf = std::move(readHandle)
+    .toSemiFuture()
+    .defer([] (auto readHandle)) {
+      return std::move(readHandle).toWriteHandle();
+    }
+}
+```
 
 For more details about `ReadHandle` and `WriteHandle`, see allocator/Handle.h.
 

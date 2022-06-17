@@ -124,7 +124,7 @@ Refer to [CacheLib Oncall Rulebook](https://fb.quip.com/UaCHAuKT2v7I)
 Some coredump is unloaded to Manifold, so you don’t have to login the host.
 
 ## CacheLib Knowledge
-[Onboarding index](https://fb.quip.com/E1AQACtEeYCG)
+[Overview](https://www.internalfb.com/intern/staticdocs/cachelib/docs/Cache_Library_Architecture_Guide/overview_a_random_walk)
 
 CacheLib tech talk: https://fburl.com/9lrtnmjp
 
