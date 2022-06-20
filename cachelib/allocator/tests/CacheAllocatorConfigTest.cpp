@@ -26,23 +26,13 @@ namespace tests {
 using AllocatorT = LruAllocator;
 using MemoryTierConfigs = CacheAllocatorConfig<AllocatorT>::MemoryTierConfigs;
 
-// TODO: Increase this constant when multi-tier configs are fully enabled
-size_t maxNumTiers = 1;
-size_t defaultTotalSize = 2 * Slab::kSize * maxNumTiers;
+size_t defaultTotalSize = 1 * 1024LL * 1024LL * 1024LL;
 
 class CacheAllocatorConfigTest : public testing::Test {};
 
 MemoryTierConfigs generateTierConfigs(size_t numTiers,
                                       MemoryTierCacheConfig& config) {
   return MemoryTierConfigs(numTiers, config);
-}
-
-size_t sumTierSizes(const MemoryTierConfigs& configs) {
-  size_t sumSizes = 0;
-  for (const auto& config : configs) {
-    sumSizes += config.getSize();
-  }
-  return sumSizes;
 }
 
 TEST_F(CacheAllocatorConfigTest, MultipleTier0Config) {
@@ -53,84 +43,27 @@ TEST_F(CacheAllocatorConfigTest, MultipleTier0Config) {
 }
 
 TEST_F(CacheAllocatorConfigTest, MultipleTier1Config) {
-  AllocatorT::Config config1, config2;
+  AllocatorT::Config config;
   // Accepts single-tier configuration
-  config1.setCacheSize(defaultTotalSize)
-      .configureMemoryTiers(
-          {MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)});
-  config2.setCacheSize(0).configureMemoryTiers(
-      {MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)});
+  config.setCacheSize(defaultTotalSize)
+      .configureMemoryTiers({MemoryTierCacheConfig::fromShm().setRatio(1)});
 }
 
-TEST_F(CacheAllocatorConfigTest, MultipleTier2Config) {
+TEST_F(CacheAllocatorConfigTest, InvalidTierRatios) {
   AllocatorT::Config config;
-  // Throws if vector of tier configs > 1
   EXPECT_THROW(config.configureMemoryTiers(generateTierConfigs(
-                   maxNumTiers + 1,
-                   MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize))),
+                   config.maxCacheMemoryTiers + 1,
+                   MemoryTierCacheConfig::fromShm().setRatio(0))),
                std::invalid_argument);
-}
-
-TEST_F(CacheAllocatorConfigTest, TotalCacheSizeSet0) {
-  AllocatorT::Config config;
-  // If total cache size is set to zero and each individual tier specifies its
-  // size then total cache size is set to the sum of tier sizes
-  MemoryTierConfigs tierConfigs = {
-      MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize)};
-  config.setCacheSize(0).configureMemoryTiers(tierConfigs);
-  ASSERT_EQ(config.getCacheSize(), sumTierSizes(config.getMemoryTierConfigs()));
 }
 
 TEST_F(CacheAllocatorConfigTest, TotalCacheSizeLessThanRatios) {
   AllocatorT::Config config;
   // Throws if total cache size is set to 0
-  EXPECT_THROW(
-      config.setCacheSize(defaultTotalSize)
-          .configureMemoryTiers({MemoryTierCacheConfig::fromShm().setRatio(
-              defaultTotalSize + 1)}),
-      std::invalid_argument);
-}
-
-TEST_F(CacheAllocatorConfigTest, SumTierSizes) {
-  AllocatorT::Config config1, config2;
-  MemoryTierConfigs sizeConfigs = generateTierConfigs(
-      maxNumTiers,
-      MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize / maxNumTiers));
-  MemoryTierConfigs ratioConfigs = generateTierConfigs(
-      maxNumTiers, MemoryTierCacheConfig::fromShm().setRatio(1));
-
-  config1.setCacheSize(defaultTotalSize).configureMemoryTiers(sizeConfigs);
-  ASSERT_EQ(config1.getCacheSize(),
-            sumTierSizes(config1.getMemoryTierConfigs()));
-
-  config2.setCacheSize(defaultTotalSize).configureMemoryTiers(ratioConfigs);
-  ASSERT_EQ(config2.getCacheSize(),
-            sumTierSizes(config2.getMemoryTierConfigs()));
-}
-
-TEST_F(CacheAllocatorConfigTest, TotalCacheSizeReset1Tier) {
-  AllocatorT::Config config1, config2;
-  size_t numTiers = 1;
-  MemoryTierConfigs sizeConfigs = generateTierConfigs(
-      numTiers,
-      MemoryTierCacheConfig::fromShm().setSize(defaultTotalSize / numTiers));
-  MemoryTierConfigs ratioConfigs = generateTierConfigs(
-      numTiers, MemoryTierCacheConfig::fromShm().setRatio(1));
-
-  // Resetting total cache size when there's only one tier
-  // is considered harmless. TODO: when multiple tiers are
-  // enabled this test needs to be expanded to check that
-  // validate() throws if total cache size is reset to
-  // invalid number after configureMemoryTiers is called.
-  config1.setCacheSize(defaultTotalSize)
-      .configureMemoryTiers(sizeConfigs)
-      .setCacheSize(defaultTotalSize - 1);
-  config1.validate();
-
-  config2.setCacheSize(defaultTotalSize)
-      .configureMemoryTiers(ratioConfigs)
-      .setCacheSize(defaultTotalSize - 1);
-  config2.validate();
+  config.setCacheSize(defaultTotalSize)
+      .configureMemoryTiers(
+          {MemoryTierCacheConfig::fromShm().setRatio(defaultTotalSize + 1)});
+  EXPECT_THROW(config.validate(), std::invalid_argument);
 }
 
 } // namespace tests
