@@ -1266,8 +1266,7 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
     // for chained items, the ownership of the parent can change. We try to
     // evict what we think as parent and see if the eviction of parent
     // recycles the child we intend to.
-    auto toReleaseHandle =
-        evictNormalItem(*candidate, true /* skipIfTokenInvalid */);
+    auto toReleaseHandle = evictNormalItem(*candidate);
     auto ref = candidate->unmarkMoving();
 
     if (toReleaseHandle || ref == 0u) {
@@ -2620,8 +2619,7 @@ void CacheAllocator<CacheTrait>::evictForSlabRelease(
 
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
-CacheAllocator<CacheTrait>::evictNormalItem(Item& item,
-                                            bool skipIfTokenInvalid) {
+CacheAllocator<CacheTrait>::evictNormalItem(Item& item) {
   XDCHECK(item.isMoving());
 
   if (item.isOnlyMoving()) {
@@ -2633,11 +2631,6 @@ CacheAllocator<CacheTrait>::evictNormalItem(Item& item,
   const bool evictToNvmCache = shouldWriteToNvmCache(item);
   auto token = evictToNvmCache ? nvmCache_->createPutToken(item.getKey())
                                : typename NvmCacheT::PutToken{};
-
-  if (skipIfTokenInvalid && evictToNvmCache && !token.isValid()) {
-    stats_.evictFailConcurrentFill.inc();
-    return WriteHandle{};
-  }
 
   // We remove the item from both access and mm containers. It doesn't matter
   // if someone else calls remove on the item at this moment, the item cannot
