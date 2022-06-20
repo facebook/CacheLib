@@ -1261,10 +1261,17 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
     // for chained items, the ownership of the parent can change. We try to
     // evict what we think as parent and see if the eviction of parent
     // recycles the child we intend to.
-    auto toReleaseHandle = evictNormalItem(*candidate);
-    auto ref = candidate->unmarkMoving();
+    {
+      auto toReleaseHandle = evictNormalItem(*candidate);
+      // destroy toReleseHandle. The item won't be release to allocator
+      // since we marked it as moving.
+    }
+    const auto ref = candidate->unmarkMoving();
 
-    if (toReleaseHandle || ref == 0u) {
+    if (ref == 0u) {
+      // recycle the item. it's safe to do so, even if toReleaseHandle was
+      // NULL. If `ref` == 0 then it means that we are the last holder of
+      // that item.
       if (candidate->hasChainedItem()) {
         (*stats_.chainedItemEvictions)[pid][cid].inc();
       } else {
@@ -1272,48 +1279,23 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       }
 
       if (auto eventTracker = getEventTracker()) {
-        eventTracker->record(
-            AllocatorApiEvent::DRAM_EVICT, toReleaseHandle->getKey(),
-            AllocatorApiResult::EVICTED, toReleaseHandle->getSize(),
-            toReleaseHandle->getConfiguredTTL().count());
+        eventTracker->record(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                             AllocatorApiResult::EVICTED, candidate->getSize(),
+                             candidate->getConfiguredTTL().count());
+      }
+
+      // check if by releasing the item we intend to, we actually
+      // recycle the candidate.
+      if (ReleaseRes::kRecycled ==
+          releaseBackToAllocator(*candidate, RemoveContext::kEviction,
+                                 /* isNascent */ false, toRecycle)) {
+        return toRecycle;
       }
     } else {
       if (candidate->hasChainedItem()) {
         stats_.evictFailParentAC.inc();
       } else {
         stats_.evictFailAC.inc();
-      }
-    }
-
-    if (toReleaseHandle) {
-      XDCHECK(toReleaseHandle.get() == candidate);
-      XDCHECK(toRecycle == candidate || toRecycle->isChainedItem());
-      XDCHECK_EQ(1u, toReleaseHandle->getRefCount());
-
-      // We manually release the item here because we don't want to
-      // invoke the Item Handle's destructor which will be decrementing
-      // an already zero refcount, which will throw exception
-      auto& itemToRelease = *toReleaseHandle.release();
-
-      // Decrementing the refcount because we want to recycle the item
-      ref = decRef(itemToRelease);
-      XDCHECK_EQ(0u, ref);
-
-      // check if by releasing the item we intend to, we actually
-      // recycle the candidate.
-      if (ReleaseRes::kRecycled ==
-          releaseBackToAllocator(itemToRelease, RemoveContext::kEviction,
-                                 /* isNascent */ false, toRecycle)) {
-        return toRecycle;
-      }
-    } else if (ref == 0u) {
-      // it's safe to recycle the item here as there are no more
-      // references and the item could not been marked as moving
-      // by other thread since it's detached from MMContainer.
-      if (ReleaseRes::kRecycled ==
-          releaseBackToAllocator(*candidate, RemoveContext::kEviction,
-                                 /* isNascent */ false, toRecycle)) {
-        return toRecycle;
       }
     }
   }
