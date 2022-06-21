@@ -30,6 +30,9 @@ class ObjectCacheBase : public CacheBase {
     return l1Cache_->getCacheName();
   }
 
+  // Whether it is object-cache.
+  bool isObjectCache() const override { return true; }
+
   // Get the reference  to a memory pool, for stats purposes
   //
   // @param poolId    The pool id to query

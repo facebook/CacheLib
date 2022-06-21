@@ -1099,6 +1099,9 @@ class CacheAllocator : public CacheBase {
   // get cache name
   const std::string getCacheName() const override final;
 
+  // whether it is object-cache
+  bool isObjectCache() const override final { return false; }
+
   // pool stats by pool id
   PoolStats getPoolStats(PoolId pid) const override final;
 

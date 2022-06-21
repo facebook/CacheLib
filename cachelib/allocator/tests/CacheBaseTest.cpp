@@ -31,6 +31,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
       : slabAllocator_(createSlabAllocator(10)),
         memoryPool_(0, 1024, *slabAllocator_, {64}) {}
   const std::string getCacheName() const override { return cacheName; }
+  bool isObjectCache() const override { return false; }
   const MemoryPool& getPool(PoolId) const override { return memoryPool_; }
   PoolStats getPoolStats(PoolId) const override { return PoolStats(); }
   AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId) const override {

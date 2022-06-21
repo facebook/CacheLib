@@ -86,6 +86,9 @@ class CacheBase {
   // Get a string referring to the cache name for this cache
   virtual const std::string getCacheName() const = 0;
 
+  // Returns true for ObjectCacheBase, false for CacheAllocator.
+  virtual bool isObjectCache() const = 0;
+
   // Get the reference  to a memory pool, for stats purposes
   //
   // @param poolId    The pool id to query
