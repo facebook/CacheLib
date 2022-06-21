@@ -47,6 +47,7 @@ TEST_F(CacheAllocatorConfigTest, MultipleTier1Config) {
   // Accepts single-tier configuration
   config.setCacheSize(defaultTotalSize)
       .configureMemoryTiers({MemoryTierCacheConfig::fromShm().setRatio(1)});
+  config.validateMemoryTiers();
 }
 
 TEST_F(CacheAllocatorConfigTest, InvalidTierRatios) {

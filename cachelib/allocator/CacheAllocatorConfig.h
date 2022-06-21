@@ -202,14 +202,10 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& usePosixForShm();
 
   // Configures cache memory tiers. Each tier represents a cache region inside
-  // byte-addressible memory such as DRAM, Pmem, CXLmem.
+  // byte-addressable memory such as DRAM, Pmem, CXLmem.
   // Accepts vector of MemoryTierCacheConfig. Each vector element describes
-  // configuration for a single memory cache tier. Tiers can be set up as ratios
-  // of total cache size or have their sizes explicitly specified. If ratios are
-  // used, then total cache size must be set before this method is called; if
-  // sizes are explicitly specified, then their sum sizes must match the total
-  // cache size if it's previously set; if the total size has not been set then
-  // this method will set it as a sum of all tier sizes
+  // configuration for a single memory cache tier. Tier sizes are specified as
+  // ratios, the number of parts of total cache size each tier would occupy.
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
   // Return reference to MemoryTierCacheConfigs.
@@ -379,7 +375,7 @@ class CacheAllocatorConfig {
       const std::shared_ptr<PoolOptimizeStrategy>& strategy) const;
 
   // check that memory tier ratios are set properly
-  bool validateMemoryTiers() const;
+  const CacheAllocatorConfig& validateMemoryTiers() const;
 
   // @return a map representation of the configs
   std::map<std::string, std::string> serialize() const;
@@ -1051,9 +1047,7 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
         "It's not allowed to enable both RemoveCB and ItemDestructor.");
   }
 
-  validateMemoryTiers();
-
-  return *this;
+  return validateMemoryTiers();
 }
 
 template <typename T>
@@ -1081,7 +1075,8 @@ bool CacheAllocatorConfig<T>::validateStrategy(
 }
 
 template <typename T>
-bool CacheAllocatorConfig<T>::validateMemoryTiers() const {
+const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validateMemoryTiers()
+    const {
   size_t parts = 0;
   for (const auto& tierConfig : memoryTierConfigs) {
     if (!tierConfig.getRatio()) {
@@ -1094,7 +1089,7 @@ bool CacheAllocatorConfig<T>::validateMemoryTiers() const {
     throw std::invalid_argument(
         "Sum of tier ratios must be less than total cache size.");
   }
-  return true;
+  return *this;
 }
 
 template <typename T>

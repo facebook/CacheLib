@@ -32,10 +32,7 @@ class MemoryTierCacheConfig {
 
   // Specifies ratio of this memory tier to other tiers. Absolute size
   // of each tier can be calculated as:
-  // cacheSize * tierRatio / Sum of ratios for all tiers; the difference
-  // between total cache size and sum of all tier sizes resulted from
-  // round off error is accounted for when calculating the last tier's
-  // size to make the totals equal.
+  // cacheSize * tierRatio / Sum of ratios for all tiers.
   MemoryTierCacheConfig& setRatio(size_t _ratio) {
     if (!_ratio) {
       throw std::invalid_argument("Tier ratio must be an integer number >=1.");
@@ -47,15 +44,17 @@ class MemoryTierCacheConfig {
   size_t getRatio() const noexcept { return ratio; }
 
   size_t calculateTierSize(size_t totalCacheSize, size_t partitionNum) {
+    // TODO: Call this method when tiers are enabled in allocator
+    // to calculate tier sizes in bytes.
+    if (!partitionNum) {
+      throw std::invalid_argument(
+          "The total number of tier ratios must be an integer number >=1.");
+    }
+
     size_t partitionSize = 0;
     if (partitionNum > totalCacheSize) {
       throw std::invalid_argument(
           "Ratio must be less or equal to total cache size.");
-    }
-
-    if (!partitionNum) {
-      throw std::invalid_argument(
-          "The total number of tier ratios must be an integer number >=1.");
     }
 
     return getRatio() * (totalCacheSize / partitionNum);
