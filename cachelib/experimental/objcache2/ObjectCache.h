@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/experimental/objcache2/ObjectCacheBase.h"
 #include "cachelib/experimental/objcache2/ObjectCacheSizeController.h"
@@ -76,6 +77,16 @@ struct ObjectCacheConfig {
 
   // Throttler config of size controller
   util::Throttler::Config sizeControllerThrottlerConfig{};
+
+  // Enable event tracker. This will log all relevant cache events.
+  using Key = KAllocation::Key;
+  using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
+  EventTrackerSharedPtr eventTracker{nullptr};
+
+  ObjectCacheConfig& setEventTracker(EventTrackerSharedPtr&& ptr) {
+    eventTracker = std::move(ptr);
+    return *this;
+  }
 };
 
 template <typename T>

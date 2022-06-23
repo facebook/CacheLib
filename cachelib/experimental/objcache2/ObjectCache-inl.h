@@ -60,6 +60,7 @@ void ObjectCache<AllocatorT>::init(ObjectCacheConfig config) {
       delete itemPtr->objectPtr;
     };
   });
+  l1Config.setEventTracker(std::move(config.eventTracker));
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   size_t perPoolSize =
