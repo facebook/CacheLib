@@ -347,48 +347,7 @@ class MM2Q {
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
-    // context for iterating the MM container. At any given point of time,
-    // there can be only one iterator active since we need to lock the LRU for
-    // iteration. we can support multiple iterators at same time, by using a
-    // shared ptr in the context for the lock holder in the future.
-    class Iterator : public LruList::Iterator {
-     public:
-      // noncopyable but movable.
-      Iterator(const Iterator&) = delete;
-      Iterator& operator=(const Iterator&) = delete;
-
-      Iterator(Iterator&&) noexcept = default;
-
-      // 1. Invalidate this iterator
-      // 2. Unlock
-      void destroy() {
-        LruList::Iterator::reset();
-        if (l_.owns_lock()) {
-          l_.unlock();
-        }
-      }
-
-      // Reset this iterator to the beginning
-      void resetToBegin() {
-        if (!l_.owns_lock()) {
-          l_.lock();
-        }
-        LruList::Iterator::resetToBegin();
-      }
-
-     private:
-      // private because it's easy to misuse and cause deadlock for MM2Q
-      Iterator& operator=(Iterator&&) noexcept = default;
-
-      // create an lru iterator with the lock being held.
-      Iterator(LockHolder l, const typename LruList::Iterator& iter) noexcept;
-
-      // only the container can create iterators
-      friend Container<T, HookPtr>;
-
-      // lock protecting the validity of the iterator
-      LockHolder l_;
-    };
+    using Iterator = typename LruList::Iterator;
 
     // records the information that the node was accessed. This could bump up
     // the node to the head of the lru depending on the time when the node was
@@ -441,11 +400,6 @@ class MM2Q {
     //               destination node did not exist in the container, or if the
     //               source node already existed.
     bool replace(T& oldNode, T& newNode) noexcept;
-
-    // Obtain an iterator that start from the tail and can be used
-    // to search for evictions. This iterator holds a lock to this
-    // container and only one such iterator can exist at a time
-    Iterator getEvictionIterator() const noexcept;
 
     // Execute provided function under container lock. Function gets
     // iterator passed as parameter.

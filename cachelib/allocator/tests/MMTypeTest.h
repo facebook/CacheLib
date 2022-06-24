@@ -182,9 +182,12 @@ void MMTypeTest<MMType>::testAddBasic(
   }
 
   std::set<int> foundNodes;
-  for (auto itr = c.getEvictionIterator(); itr; ++itr) {
-    foundNodes.insert(itr->getId());
-  }
+  c.withEvictionIterator([&foundNodes](auto&& itr) {
+    while (itr) {
+      foundNodes.insert(itr->getId());
+      ++itr;
+    }
+  });
   EXPECT_EQ(foundNodes.size(), c.getStats().size);
   EXPECT_EQ(foundNodes.size(), c.size());
 }
@@ -229,26 +232,31 @@ void MMTypeTest<MMType>::testRemoveBasic(Config config) {
   }
 
   std::set<int> foundNodes;
-  for (auto itr = c.getEvictionIterator(); itr; ++itr) {
-    foundNodes.insert(itr->getId());
-  }
+  c.withEvictionIterator([&foundNodes](auto&& itr) {
+    while (itr) {
+      foundNodes.insert(itr->getId());
+      ++itr;
+    }
+  });
 
   for (const auto& node : removedNodes) {
     ASSERT_EQ(foundNodes.find(node->getId()), foundNodes.end());
   }
   // trying to remove through iterator should work as expected as well.
   // no need of iter++ since remove will do that.
-  for (auto iter = c.getEvictionIterator(); iter;) {
-    auto& node = *iter;
-    ASSERT_TRUE(node.isInMMContainer());
+  c.withEvictionIterator([&foundNodes, &c](auto&& iter) {
+    while (iter) {
+      auto& node = *iter;
+      ASSERT_TRUE(node.isInMMContainer());
 
-    // this will move the iter.
-    c.remove(iter);
-    ASSERT_FALSE(node.isInMMContainer());
-    if (iter) {
-      ASSERT_NE((*iter).getId(), node.getId());
+      // this will move the iter.
+      c.remove(iter);
+      ASSERT_FALSE(node.isInMMContainer());
+      if (iter) {
+        ASSERT_NE((*iter).getId(), node.getId());
+      }
     }
-  }
+  });
 
   EXPECT_EQ(c.getStats().size, 0);
   EXPECT_EQ(c.size(), 0);
@@ -322,12 +330,16 @@ void MMTypeTest<MMType>::testSerializationBasic(Config config) {
 
   for (auto& node : nodes) {
     bool foundNode = false;
-    for (auto it = c2.getEvictionIterator(); it; ++it) {
-      if (&*node == &*it) {
-        foundNode = true;
-        break;
+    c2.withEvictionIterator([&foundNode, &node](auto&& it) {
+      while (it) {
+        if (&*node == &*it) {
+          foundNode = true;
+          break;
+        }
+        ++it;
       }
-    }
+    });
+
     ASSERT_TRUE(foundNode);
     foundNode = false;
   }

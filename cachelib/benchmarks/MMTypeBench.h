@@ -203,10 +203,11 @@ void MMTypeBench<MMType>::benchRemoveIterator(unsigned int numNodes) {
   //
   // no need of iter++ since remove will do that.
   for (unsigned int deleted = 0; deleted < numNodes; deleted++) {
-    auto iter = c->getEvictionIterator();
-    if (iter) {
-      c->remove(iter);
-    }
+    c->withEvictionIterator([this](auto&& iter) {
+      if (iter) {
+        c->remove(iter);
+      }
+    });
   }
 }
 

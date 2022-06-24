@@ -1790,13 +1790,13 @@ std::vector<std::string> CacheAllocator<CacheTrait>::dumpEvictionIterator(
   std::vector<std::string> content;
 
   auto& mm = *mmContainers_[pid][cid];
-  auto evictItr = mm.getEvictionIterator();
-  size_t i = 0;
-  while (evictItr && i < numItems) {
-    content.push_back(evictItr->toString());
-    ++evictItr;
-    ++i;
-  }
+
+  mm.withEvictionIterator([&content, numItems](auto&& itr) {
+    while (itr && content.size() < numItems) {
+      content.push_back(itr->toString());
+      ++itr;
+    }
+  });
 
   return content;
 }

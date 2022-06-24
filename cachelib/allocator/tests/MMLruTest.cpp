@@ -59,9 +59,12 @@ TEST_F(MMLruTest, RecordAccessWrites) {
     }
 
     std::vector<int> nodeOrderPrev;
-    for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
-      nodeOrderPrev.push_back(itr->getId());
-    }
+    c_.withEvictionIterator([&nodeOrderPrev](auto&& itr) {
+      while (itr) {
+        nodeOrderPrev.push_back(itr->getId());
+        ++itr;
+      }
+    });
 
     int nAccess = 1000;
     std::set<int> accessedNodes;
@@ -86,9 +89,12 @@ TEST_F(MMLruTest, RecordAccessWrites) {
     // after a random set of recordAccess, test the order of the nodes in the
     // lru.
     std::vector<int> nodeOrderCurr;
-    for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
-      nodeOrderCurr.push_back(itr->getId());
-    }
+    c_.withEvictionIterator([&nodeOrderCurr](auto&& itr) {
+      while (itr) {
+        nodeOrderCurr.push_back(itr->getId());
+        ++itr;
+      }
+    });
 
     if ((mode == AccessMode::kWrite && updateOnWrites) ||
         (mode == AccessMode::kRead && updateOnReads)) {
@@ -180,14 +186,16 @@ TEST_F(MMLruTest, InsertionPointBasic) {
   }
 
   auto checkLruConfig = [&](Container& container, std::vector<int> order) {
-    auto it = container.getEvictionIterator();
     int i = 0;
-    while (it) {
-      ASSERT_LT(i, order.size());
-      EXPECT_EQ(order[i], it->getId());
-      i++;
-      ++it;
-    }
+    container.withEvictionIterator([&i, &order](auto&& it) {
+      while (it) {
+        ASSERT_LT(i, order.size());
+        EXPECT_EQ(order[i], it->getId());
+        i++;
+        ++it;
+      }
+    });
+
     ASSERT_EQ(i, order.size());
   };
 
@@ -379,13 +387,15 @@ TEST_F(MMLruTest, InsertionPointStress) {
 
     auto getTailCount = [&]() {
       size_t ntail = 0;
-      auto it = c.getEvictionIterator();
-      while (it) {
-        if (it->isTail()) {
-          ntail++;
+      c.withEvictionIterator([&ntail](auto&& it) {
+        while (it) {
+          if (it->isTail()) {
+            ntail++;
+          }
+          ++it;
         }
-        ++it;
-      }
+      });
+
       return ntail;
     };
 

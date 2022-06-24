@@ -356,10 +356,7 @@ class MMTinyLFU {
     //               source node already existed.
     bool replace(T& oldNode, T& newNode) noexcept;
 
-    // context for iterating the MM container. At any given point of time,
-    // there can be only one iterator active since we need to lock the LRU for
-    // iteration. we can support multiple iterators at same time, by using a
-    // shared ptr in the context for the lock holder in the future.
+    // context for iterating the MM container.
     class Iterator {
      public:
       using ListIterator = typename LruList::DListIterator;
@@ -367,6 +364,7 @@ class MMTinyLFU {
       Iterator(const Iterator&) = delete;
       Iterator& operator=(const Iterator&) = delete;
       Iterator(Iterator&&) noexcept = default;
+      Iterator& operator=(Iterator&&) noexcept = default;
 
       Iterator& operator++() noexcept {
         ++getIter();
@@ -405,26 +403,16 @@ class MMTinyLFU {
       // 2. Unlock
       void destroy() {
         reset();
-        if (l_.owns_lock()) {
-          l_.unlock();
-        }
       }
 
       // Reset this iterator to the beginning
       void resetToBegin() {
-        if (!l_.owns_lock()) {
-          l_.lock();
-        }
         tIter_.resetToBegin();
         mIter_.resetToBegin();
       }
 
      private:
-      // private because it's easy to misuse and cause deadlock for MMTinyLFU
-      Iterator& operator=(Iterator&&) noexcept = default;
-
-      // create an lru iterator with the lock being held.
-      explicit Iterator(LockHolder l, const Container<T, HookPtr>& c) noexcept;
+      explicit Iterator(const Container<T, HookPtr>& c) noexcept;
 
       const ListIterator& getIter() const noexcept {
         return evictTiny() ? tIter_ : mIter_;
@@ -456,8 +444,6 @@ class MMTinyLFU {
       // Tiny and main cache iterators
       ListIterator tIter_;
       ListIterator mIter_;
-      // lock protecting the validity of the iterator
-      LockHolder l_;
     };
 
     Config getConfig() const;
@@ -485,11 +471,6 @@ class MMTinyLFU {
 
     // Returns the eviction age stats. See CacheStats.h for details
     EvictionAgeStat getEvictionAgeStat(uint64_t projectedLength) const noexcept;
-
-    // Obtain an iterator that start from the tail and can be used
-    // to search for evictions. This iterator holds a lock to this
-    // container and only one such iterator can exist at a time
-    Iterator getEvictionIterator() const noexcept;
 
     // Execute provided function under container lock. Function gets
     // iterator passed as parameter.

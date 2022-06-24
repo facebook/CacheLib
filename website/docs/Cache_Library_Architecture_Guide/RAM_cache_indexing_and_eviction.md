@@ -109,9 +109,10 @@ It has the following major API functions:
     is removed form the cache (evicted or explicitly removed by the client) (`bool
     CacheAllocator<CacheTrait>::removeFromMMContainer(Item& item)` in
     `cachelib/allocator/CacheAllocator-inl.h`).
-* `getEvictionIterator`: Return an iterator of items to be evicted. This is
-    called when the cache allocator is looking for eviction. Usually the first item
-    that can be evicted (no active handles, not moving, etc) is used (see
+* `withEvictionIterator`: Executes callback with eviction iterator passed as a
+    parameter.This is called when the cache allocator is looking for eviction.
+    Usually the first item that can be evicted (no active handles, not moving,
+    etc) is used (see
     `CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid)` in
     `cachelib/allocator/CacheAllocator-inl.h`).
 

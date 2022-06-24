@@ -59,9 +59,12 @@ TEST_F(MMTinyLFUTest, RecordAccessWrites) {
     }
 
     std::vector<int> nodeOrderPrev;
-    for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
-      nodeOrderPrev.push_back(itr->getId());
-    }
+    c_.withEvictionIterator([&nodeOrderPrev](auto&& itr) {
+      while (itr) {
+        nodeOrderPrev.push_back(itr->getId());
+        ++itr;
+      }
+    });
 
     int nAccess = 1000;
     std::set<int> accessedNodes;
@@ -86,9 +89,12 @@ TEST_F(MMTinyLFUTest, RecordAccessWrites) {
     // after a random set of recordAccess, test the order of the nodes in the
     // lru.
     std::vector<int> nodeOrderCurr;
-    for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
-      nodeOrderCurr.push_back(itr->getId());
-    }
+    c_.withEvictionIterator([&nodeOrderCurr](auto&& itr) {
+      while (itr) {
+        nodeOrderCurr.push_back(itr->getId());
+        ++itr;
+      }
+    });
 
     if ((mode == AccessMode::kWrite && updateOnWrites) ||
         (mode == AccessMode::kRead && updateOnReads)) {
@@ -170,13 +176,14 @@ TEST_F(MMTinyLFUTest, TinyLFUBasic) {
 
   auto checkTlfuConfig = [&](Container& container, std::string expected,
                              std::string context) {
-    auto it = container.getEvictionIterator();
     std::string actual;
-    while (it) {
-      actual += folly::stringPrintf("%s:%s, ", it->getKey().str().c_str(),
-                                    (container.isTiny(*it) ? "T" : "M"));
-      ++it;
-    }
+    container.withEvictionIterator([&container, &actual](auto&& it) {
+      while (it) {
+        actual += folly::stringPrintf("%s:%s, ", it->getKey().str().c_str(),
+                                      (container.isTiny(*it) ? "T" : "M"));
+        ++it;
+      }
+    });
     ASSERT_EQ(expected, actual) << context;
   };
 

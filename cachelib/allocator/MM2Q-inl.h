@@ -241,25 +241,10 @@ bool MM2Q::Container<T, HookPtr>::add(T& node) noexcept {
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
-typename MM2Q::Container<T, HookPtr>::Iterator
-MM2Q::Container<T, HookPtr>::getEvictionIterator() const noexcept {
-  // we cannot use combined critical sections with folly::DistributedMutex here
-  // because the lock is held for the lifetime of the eviction iterator.  In
-  // other words, the abstraction of the iterator just does not lend itself well
-  // to combinable critical sections as the user can hold the lock for an
-  // arbitrary amount of time outside a lambda-friendly piece of code (eg. they
-  // can return the iterator from functions, pass it to functions, etc)
-  //
-  // to get advantage of combining, use withEvictionIterator
-  LockHolder l(*lruMutex_);
-  return Iterator{std::move(l), lru_.rbegin()};
-}
-
-template <typename T, MM2Q::Hook<T> T::*HookPtr>
 template <typename F>
 void MM2Q::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   lruMutex_->lock_combine([this, &fun]() {
-    fun(Iterator{LockHolder{}, lru_.rbegin()});
+    fun(Iterator{lru_.rbegin()});
   });
 }
 
@@ -457,10 +442,5 @@ void MM2Q::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
   lruRefreshTime_.store(lruRefreshTime, std::memory_order_relaxed);
 }
 
-// Iterator Context Implementation
-template <typename T, MM2Q::Hook<T> T::*HookPtr>
-MM2Q::Container<T, HookPtr>::Iterator::Iterator(
-    LockHolder l, const typename LruList::Iterator& iter) noexcept
-    : LruList::Iterator(iter), l_(std::move(l)) {}
 } // namespace cachelib
 } // namespace facebook
