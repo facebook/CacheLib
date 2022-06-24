@@ -1507,7 +1507,7 @@ class CacheAllocator : public CacheBase {
   FOLLY_ALWAYS_INLINE WriteHandle findFastImpl(Key key, AccessMode mode);
 
   // Moves a regular item to a different slab. This should only be used during
-  // slab release after the item's moving bit has been set. The user supplied
+  // slab release after the item's exclusive bit has been set. The user supplied
   // callback is responsible for copying the contents and fixing the semantics
   // of chained item.
   //
@@ -1530,7 +1530,7 @@ class CacheAllocator : public CacheBase {
   folly::IOBuf convertToIOBufT(Handle& handle);
 
   // Moves a chained item to a different slab. This should only be used during
-  // slab release after the item's moving bit has been set. The user supplied
+  // slab release after the item's exclusive bit has been set. The user supplied
   // callback is responsible for copying the contents and fixing the semantics
   // of chained item.
   //
@@ -1736,9 +1736,9 @@ class CacheAllocator : public CacheBase {
 
   // @return  true when successfully marked as moving,
   //          fasle when this item has already been freed
-  bool markMovingForSlabRelease(const SlabReleaseContext& ctx,
-                                void* alloc,
-                                util::Throttler& throttler);
+  bool markExclusiveForSlabRelease(const SlabReleaseContext& ctx,
+                                   void* alloc,
+                                   util::Throttler& throttler);
 
   // "Move" (by copying) the content in this item to another memory
   // location by invoking the move callback.
@@ -1907,7 +1907,7 @@ class CacheAllocator : public CacheBase {
   std::optional<bool> saveNvmCache();
   void saveRamCache();
 
-  static bool itemMovingPredicate(const Item& item) {
+  static bool itemExclusivePredicate(const Item& item) {
     return item.getRefCount() == 0;
   }
 
@@ -1916,7 +1916,7 @@ class CacheAllocator : public CacheBase {
   }
 
   static bool parentEvictForSlabReleasePredicate(const Item& item) {
-    return item.getRefCount() == 1 && !item.isMoving();
+    return item.getRefCount() == 1 && !item.isExclusive();
   }
 
   std::unique_ptr<Deserializer> createDeserializer();

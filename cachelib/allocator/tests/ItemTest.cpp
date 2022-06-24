@@ -83,10 +83,10 @@ TEST(ItemTest, ExpiryTime) {
   EXPECT_EQ(tenMins, item->getConfiguredTTL());
 
   // Test that writes fail while the item is moving
-  item->markMoving();
+  item->markExclusive();
   result = item->updateExpiryTime(0);
   EXPECT_FALSE(result);
-  item->unmarkMoving();
+  item->unmarkExclusive();
 
   // Test that writes fail while the item is not in an MMContainer
   item->unmarkInMMContainer();
