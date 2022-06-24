@@ -243,9 +243,7 @@ bool MM2Q::Container<T, HookPtr>::add(T& node) noexcept {
 template <typename T, MM2Q::Hook<T> T::*HookPtr>
 template <typename F>
 void MM2Q::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
-  lruMutex_->lock_combine([this, &fun]() {
-    fun(Iterator{lru_.rbegin()});
-  });
+  lruMutex_->lock_combine([this, &fun]() { fun(Iterator{lru_.rbegin()}); });
 }
 
 template <typename T, MM2Q::Hook<T> T::*HookPtr>

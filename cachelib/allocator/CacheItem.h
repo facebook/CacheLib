@@ -243,23 +243,23 @@ class CACHELIB_PACKED_ATTR CacheItem {
    *
    * This API will only succeed when an item is a regular item, and user
    * has already inserted it into the cache (via @insert or @insertOrReplace).
-   * In addition, the item cannot be in a "moving" state.
+   * In addition, the item cannot be in a "exclusive" state.
    *
    * @param expiryTime the expiryTime value to update to
    *
    * @return boolean indicating whether expiry time was successfully updated
-   *         false when item is not linked in cache, or in moving state, or a
+   *         false when item is not linked in cache, or in exclusive state, or a
    *         chained item
    */
   bool updateExpiryTime(uint32_t expiryTimeSecs) noexcept;
 
   // Same as @updateExpiryTime, but sets expiry time to @ttl seconds from now.
   // It has the same restrictions as @updateExpiryTime. An item must be a
-  // regular item and is part of the cache and NOT in the moving state.
+  // regular item and is part of the cache and NOT in the exclusive state.
   //
   // @param ttl   TTL (from now)
   // @return boolean indicating whether expiry time was successfully updated
-  //         false when item is not linked in cache, or in moving state, or a
+  //         false when item is not linked in cache, or in exclusive state, or a
   //         chained item
   bool extendTTL(std::chrono::seconds ttl) noexcept;
 
@@ -317,12 +317,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Whether or not an item is completely drained of all references including
   // the internal ones. This means there is no access refcount bits and zero
   // admin bits set. I.e. refcount is 0 and the item is not linked, accessible,
-  // nor moving
+  // nor exclusive
   bool isDrained() const noexcept;
-
-  // Whether or not we hold the last exclusive access to this item
-  // Refcount is 1 and the item is not linked, accessible, nor moving
-  bool isExclusive() const noexcept;
 
   /**
    * The following three functions correspond to the state of the allocation
@@ -346,20 +342,20 @@ class CACHELIB_PACKED_ATTR CacheItem {
   /**
    * The following two functions corresond to whether or not an item is
    * currently in the process of being moved. This happens during a slab
-   * rebalance or resize operation.
+   * rebalance, eviction or resize operation.
    *
-   * An item can only be marked moving when `isInMMContainer` returns true.
+   * An item can only be marked exclusive when `isInMMContainer` returns true.
    * This operation is atomic.
    *
-   * User can also query if an item "isOnlyMoving". This returns true only
-   * if the refcount is 0 and only the moving bit is set.
+   * User can also query if an item "isOnlyExclusive". This returns true only
+   * if the refcount is 0 and only the exclusive bit is set.
    *
-   * Unmarking moving does not depend on `isInMMContainer`
+   * Unmarking exclusive does not depend on `isInMMContainer`
    */
-  bool markMoving() noexcept;
-  RefcountWithFlags::Value unmarkMoving() noexcept;
-  bool isMoving() const noexcept;
-  bool isOnlyMoving() const noexcept;
+  bool markExclusive() noexcept;
+  RefcountWithFlags::Value unmarkExclusive() noexcept;
+  bool isExclusive() const noexcept;
+  bool isOnlyExclusive() const noexcept;
 
   /**
    * Item cannot be marked both chained allocation and

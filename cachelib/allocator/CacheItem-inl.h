@@ -141,12 +141,13 @@ std::string CacheItem<CacheTrait>::toString() const {
     return folly::sformat(
         "item: "
         "memory={}:raw-ref={}:size={}:key={}:hex-key={}:"
-        "isInMMContainer={}:isAccessible={}:isMoving={}:references={}:ctime={}:"
+        "isInMMContainer={}:isAccessible={}:isExclusive={}:references={}:ctime="
+        "{}:"
         "expTime={}:updateTime={}:isNvmClean={}:isNvmEvicted={}:hasChainedItem="
         "{}",
         this, getRefCountAndFlagsRaw(), getSize(),
         folly::humanify(getKey().str()), folly::hexlify(getKey()),
-        isInMMContainer(), isAccessible(), isMoving(), getRefCount(),
+        isInMMContainer(), isAccessible(), isExclusive(), getRefCount(),
         getCreationTime(), getExpiryTime(), getLastAccessTime(), isNvmClean(),
         isNvmEvicted(), hasChainedItem());
   }
@@ -176,11 +177,6 @@ RefcountWithFlags::Value CacheItem<CacheTrait>::getRefCountAndFlagsRaw()
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isDrained() const noexcept {
   return ref_.isDrained();
-}
-
-template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isExclusive() const noexcept {
-  return ref_.isExclusive();
 }
 
 template <typename CacheTrait>
@@ -214,23 +210,23 @@ bool CacheItem<CacheTrait>::isInMMContainer() const noexcept {
 }
 
 template <typename CacheTrait>
-bool CacheItem<CacheTrait>::markMoving() noexcept {
-  return ref_.markMoving();
+bool CacheItem<CacheTrait>::markExclusive() noexcept {
+  return ref_.markExclusive();
 }
 
 template <typename CacheTrait>
-RefcountWithFlags::Value CacheItem<CacheTrait>::unmarkMoving() noexcept {
-  return ref_.unmarkMoving();
+RefcountWithFlags::Value CacheItem<CacheTrait>::unmarkExclusive() noexcept {
+  return ref_.unmarkExclusive();
 }
 
 template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isMoving() const noexcept {
-  return ref_.isMoving();
+bool CacheItem<CacheTrait>::isExclusive() const noexcept {
+  return ref_.isExclusive();
 }
 
 template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isOnlyMoving() const noexcept {
-  return ref_.isOnlyMoving();
+bool CacheItem<CacheTrait>::isOnlyExclusive() const noexcept {
+  return ref_.isOnlyExclusive();
 }
 
 template <typename CacheTrait>
@@ -332,7 +328,7 @@ bool CacheItem<CacheTrait>::updateExpiryTime(uint32_t expiryTimeSecs) noexcept {
   // check for moving to make sure we are not updating the expiry time while at
   // the same time re-allocating the item with the old state of the expiry time
   // in moveRegularItem(). See D6852328
-  if (isMoving() || !isInMMContainer() || isChainedItem()) {
+  if (isExclusive() || !isInMMContainer() || isChainedItem()) {
     return false;
   }
   // attempt to atomically update the value of expiryTime
@@ -448,10 +444,11 @@ std::string CacheChainedItem<CacheTrait>::toString() const {
   return folly::sformat(
       "chained item: "
       "memory={}:raw-ref={}:size={}:parent-compressed-ptr={}:"
-      "isInMMContainer={}:isAccessible={}:isMoving={}:references={}:ctime={}:"
+      "isInMMContainer={}:isAccessible={}:isExclusive={}:references={}:ctime={}"
+      ":"
       "expTime={}:updateTime={}",
       this, Item::getRefCountAndFlagsRaw(), Item::getSize(), cPtr.getRaw(),
-      Item::isInMMContainer(), Item::isAccessible(), Item::isMoving(),
+      Item::isInMMContainer(), Item::isAccessible(), Item::isExclusive(),
       Item::getRefCount(), Item::getCreationTime(), Item::getExpiryTime(),
       Item::getLastAccessTime());
 }

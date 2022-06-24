@@ -353,7 +353,6 @@ MMTinyLFU::Container<T, HookPtr>::Iterator::Iterator(
     const Container<T, HookPtr>& c) noexcept
     : c_(c),
       tIter_(c.lru_.getList(LruType::Tiny).rbegin()),
-      mIter_(c.lru_.getList(LruType::Main).rbegin())
-      {}
+      mIter_(c.lru_.getList(LruType::Main).rbegin()) {}
 } // namespace cachelib
 } // namespace facebook

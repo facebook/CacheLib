@@ -401,9 +401,7 @@ class MMTinyLFU {
 
       // 1. Invalidate this iterator
       // 2. Unlock
-      void destroy() {
-        reset();
-      }
+      void destroy() { reset(); }
 
       // Reset this iterator to the beginning
       void resetToBegin() {

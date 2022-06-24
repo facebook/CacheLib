@@ -214,9 +214,7 @@ bool MMLru::Container<T, HookPtr>::add(T& node) noexcept {
 template <typename T, MMLru::Hook<T> T::*HookPtr>
 template <typename F>
 void MMLru::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
-  lruMutex_->lock_combine([this, &fun]() {
-    fun(Iterator{lru_.rbegin()});
-  });
+  lruMutex_->lock_combine([this, &fun]() { fun(Iterator{lru_.rbegin()}); });
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
