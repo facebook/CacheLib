@@ -22,6 +22,7 @@
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/experimental/objcache/Allocator.h"
+#include "cachelib/experimental/objcache/Persistence.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -250,17 +251,39 @@ class ObjectCacheConfig {
   // TODO: add comments for persistence
   using SerializationCallback = typename ObjectCache::SerializationCallback;
   using DeserializationCallback = typename ObjectCache::DeserializationCallback;
-  ObjectCacheConfig& enablePersistence(SerializationCallback scb,
-                                       DeserializationCallback dcb) {
+  ObjectCacheConfig& enablePersistence(
+      uint32_t persistorRestorerThreadCount,
+      uint32_t restorerTimeOutDurationInSec,
+      std::string persistFullPathFile,
+      SerializationCallback scb,
+      DeserializationCallback dcb,
+      uint32_t persistorQueueBatchSize = 1000) {
     serializationCallback_ = std::move(scb);
     deserializationCallback_ = std::move(dcb);
+    persistorRestorerThreadCount_ = persistorRestorerThreadCount;
+    restorerTimeOutDurationInSec_ = restorerTimeOutDurationInSec;
+    persistFullPathFile_ = std::move(persistFullPathFile);
+    persistorQueueBatchSize_ = persistorQueueBatchSize;
     return *this;
   }
+
   const SerializationCallback& getSerializationCallback() const {
     return serializationCallback_;
   }
   const DeserializationCallback& getDeserializationCallback() const {
     return deserializationCallback_;
+  }
+  [[nodiscard]] uint32_t getPersistorRestorerThreadCount() const {
+    return persistorRestorerThreadCount_;
+  }
+  [[nodiscard]] uint32_t getRestorerTimeOut() const {
+    return restorerTimeOutDurationInSec_;
+  }
+  [[nodiscard]] const std::string& getPersistFullPathFile() const {
+    return persistFullPathFile_;
+  }
+  [[nodiscard]] uint32_t getPersistorQueueBatchSize() const {
+    return persistorQueueBatchSize_;
   }
 
  private:
@@ -275,6 +298,10 @@ class ObjectCacheConfig {
 
   SerializationCallback serializationCallback_;
   DeserializationCallback deserializationCallback_;
+  uint32_t persistorRestorerThreadCount_;
+  uint32_t restorerTimeOutDurationInSec_;
+  std::string persistFullPathFile_;
+  uint32_t persistorQueueBatchSize_;
 };
 
 struct ObjectCacheStats {
@@ -402,6 +429,10 @@ class ObjectCache {
   explicit ObjectCache(Config config) : ObjectCache(createCache(config), true) {
     serializationCallback_ = config.getSerializationCallback();
     deserializationCallback_ = config.getDeserializationCallback();
+    persistorRestorerThreadCount_ = config.getPersistorRestorerThreadCount();
+    restorerTimeOutDurationInSec_ = config.getRestorerTimeOut();
+    persistFullPathFile_ = config.getPersistFullPathFile();
+    persistorQueueBatchSize_ = config.getPersistorQueueBatchSize();
 
     if (config.getCompactionCallback()) {
       compactionWorker_ =
@@ -436,61 +467,20 @@ class ObjectCache {
   // Get the underlying CacheAllocator
   CacheAlloc& getCacheAlloc() { return *cache_; }
 
-  void persist(RecordWriter& rw) {
+  void persist() {
     XDCHECK(serializationCallback_);
-    for (auto it = cache_->begin(); it != cache_->end(); ++it) {
-      auto iobuf = serializationCallback_(it->getKey(), it->getMemory());
-      if (!iobuf) {
-        XLOG(ERR) << "Failed to serialize for key: " << it->getKey();
-        continue;
-      }
-      serialization::Item item;
-      item.poolId().value() = cache_->getAllocInfo(it->getMemory()).poolId;
-      // TODO: we need to actually recover creation and persistence as well
-      //       we need to modify the create allocator resource logic to allow
-      //       us to pass in creation and expiry times.
-      item.creationTime().value() = it->getCreationTime();
-      item.expiryTime().value() = it->getExpiryTime();
-      item.key().value() = it->getKey().str();
-      item.payload().value().resize(iobuf->length());
-      std::memcpy(item.payload().value().data(), iobuf->data(),
-                  iobuf->length());
-      rw.writeRecord(Serializer::serializeToIOBuf(item));
-    }
+    ObjectCachePersistor<ObjectCache> persistor(
+        persistorRestorerThreadCount_, serializationCallback_, *this,
+        persistFullPathFile_, persistorQueueBatchSize_);
+    persistor.run();
   }
 
-  void recover(RecordReader& rr, uint32_t timeOutDurationInSec = 0) {
+  void recover() {
     XDCHECK(deserializationCallback_);
-    auto recoveryStartTime = std::chrono::system_clock::now();
-    uint32_t timeElapsedInSec = 0;
-    while (!rr.isEnd()) {
-      auto iobuf = rr.readRecord();
-      XDCHECK(iobuf);
-      Deserializer deserializer(iobuf->data(), iobuf->data() + iobuf->length());
-      auto item = deserializer.deserialize<serialization::Item>();
-
-      auto hdl = deserializationCallback_(
-          item.poolId().value(), item.key().value(), item.payload().value(),
-          item.creationTime().value(), item.expiryTime().value(), *this);
-      if (!hdl) {
-        XLOG(ERR) << "Failed to deserialize for key: " << item.key().value();
-        continue;
-      }
-      cache_->insertOrReplace(hdl);
-      timeElapsedInSec =
-          timeOutDurationInSec > 0
-              ? std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::system_clock::now() - recoveryStartTime)
-                    .count()
-              : 0;
-      if (timeElapsedInSec > timeOutDurationInSec) {
-        XLOG(INFO) << "Recover timed out and couldn't finish completely, "
-                      "timeOutDurationInSec =  "
-                   << timeOutDurationInSec
-                   << ", timeElapsedInSec = " << timeElapsedInSec;
-        break;
-      }
-    }
+    ObjectCacheRestorer<ObjectCache> restorer(persistorRestorerThreadCount_,
+                                              deserializationCallback_, *this,
+                                              persistFullPathFile_, 0);
+    restorer.run();
   }
 
   // Create a new object backed by cachelib-memory. This behaves similar to
@@ -697,6 +687,10 @@ class ObjectCache {
   std::unique_ptr<CompactionWorker> compactionWorker_;
   SerializationCallback serializationCallback_;
   DeserializationCallback deserializationCallback_;
+  uint32_t persistorRestorerThreadCount_;
+  uint32_t restorerTimeOutDurationInSec_;
+  std::string persistFullPathFile_;
+  uint32_t persistorQueueBatchSize_;
 };
 } // namespace objcache
 } // namespace cachelib

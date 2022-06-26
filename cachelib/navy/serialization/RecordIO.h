@@ -42,6 +42,12 @@ std::unique_ptr<RecordWriter> createFileRecordWriter(int fd);
 
 // @param fd    The file the record reader will deserialize from
 std::unique_ptr<RecordReader> createFileRecordReader(int fd);
+
+// @param fd    The file the record writer will serialize to
+std::unique_ptr<RecordWriter> createFileRecordWriter(folly::File file);
+
+// @param fd    The file the record reader will deserialize from
+std::unique_ptr<RecordReader> createFileRecordReader(folly::File file);
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

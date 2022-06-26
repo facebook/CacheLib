@@ -30,6 +30,7 @@ namespace {
 class FileRecordWriter final : public RecordWriter {
  public:
   explicit FileRecordWriter(int fd) : writer_{folly::File(fd)} {}
+  explicit FileRecordWriter(folly::File file) : writer_(std::move(file)) {}
   ~FileRecordWriter() override = default;
 
   void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
@@ -45,6 +46,8 @@ class FileRecordReader final : public RecordReader {
  public:
   explicit FileRecordReader(int fd)
       : reader_{folly::File(fd)}, curr_{reader_.seek(0)} {}
+  explicit FileRecordReader(folly::File file)
+      : reader_{std::move(file)}, curr_{reader_.seek(0)} {}
   ~FileRecordReader() override = default;
 
   std::unique_ptr<folly::IOBuf> readRecord() override {
@@ -284,6 +287,14 @@ std::unique_ptr<RecordWriter> createFileRecordWriter(int fd) {
 
 std::unique_ptr<RecordReader> createFileRecordReader(int fd) {
   return std::make_unique<FileRecordReader>(fd);
+}
+
+std::unique_ptr<RecordWriter> createFileRecordWriter(folly::File file) {
+  return std::make_unique<FileRecordWriter>(std::move(file));
+}
+
+std::unique_ptr<RecordReader> createFileRecordReader(folly::File file) {
+  return std::make_unique<FileRecordReader>(std::move(file));
 }
 
 } // namespace navy
