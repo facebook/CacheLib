@@ -43,6 +43,13 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       // reaches the old limit
       expandCacheByEntriesNum(newEntriesLimit - currentEntriesLimit_);
     }
+
+    XLOGF_EVERY_MS(INFO, 60'000,
+                   "CacheLib object-cache: total object size = {}, current "
+                   "entries = {}, average object size = "
+                   "{}, new entries limit = {}, current entries limit = {}",
+                   totalObjSize, currentNumEntries, averageObjSize,
+                   newEntriesLimit, currentEntriesLimit_);
   }
 }
 
@@ -62,18 +69,31 @@ void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
     // throttle to slow down the allocation speed
     t.throttle();
   }
+
+  XLOGF_EVERY_MS(
+      INFO, 60'000,
+      "CacheLib object-cache: request to shrink cache by {} entries. "
+      "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
+      entries, size, objCache_.placeholders_.size(), currentEntriesLimit_);
 }
 
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
     int entries) {
   util::Throttler t(throttlerConfig_);
-  for (int i = 0; i < entries; i++) {
+  auto size = objCache_.placeholders_.size();
+  for (int i = 0; i < entries && !objCache_.placeholders_.empty(); i++) {
     objCache_.placeholders_.pop_back();
     currentEntriesLimit_++;
     // throttle to slow down the release speed
     t.throttle();
   }
+
+  XLOGF_EVERY_MS(
+      INFO, 60'000,
+      "CacheLib object-cache: request to expand cache by {} entries. "
+      "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
+      entries, size, objCache_.placeholders_.size(), currentEntriesLimit_);
 }
 
 template <typename AllocatorT>
