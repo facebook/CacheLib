@@ -26,8 +26,10 @@ namespace cachelib {
 
 namespace detail {
 // @param T must be a POD like type
+// Note that packing is not guaranteed with this data structure. User
+// of FixedSizeArray must ensure their type is packed if they need it.
 template <typename T>
-class FOLLY_PACK_ATTR FixedSizeArrayLayout {
+class FixedSizeArrayLayout {
  public:
   // Compute the storage required for the number of elements
   static uint32_t computeStorageSize(uint32_t numElements) {
