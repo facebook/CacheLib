@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <folly/logging/xlog.h>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
@@ -193,7 +195,13 @@ class RestorerWorker : public PeriodicWorker {
         XLOG(ERR) << "Failed to deserialize for key: " << item.key().value();
         continue;
       }
-      objcache_.getCacheAlloc().insertOrReplace(hdl);
+      try {
+        objcache_.getCacheAlloc().insertOrReplace(hdl);
+      } catch (const std::exception& e) {
+        XLOG_EVERY_N(INFO, 1000)
+            << "Failed to insert item, reason = " << folly::exceptionStr(e);
+        continue;
+      }
     }
   }
 
