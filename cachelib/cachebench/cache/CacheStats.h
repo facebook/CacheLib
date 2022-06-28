@@ -293,6 +293,18 @@ struct Stats {
     return numNvmGets > 0 ? numNvmGetMiss : numCacheGetMiss;
   }
 
+  double getOverallHitRatio(const Stats& prevStats) const {
+    auto totalMisses = getTotalMisses();
+    auto prevTotalMisses = prevStats.getTotalMisses();
+    if (numCacheGets <= prevStats.numCacheGets ||
+        totalMisses <= prevTotalMisses) {
+      return 0.0;
+    }
+
+    return invertPctFn(totalMisses - prevTotalMisses,
+                       numCacheGets - prevStats.numCacheGets);
+  }
+
   // Render the stats based on the delta between overall stats and previous
   // stats. It can be used to render the stats in the last time period.
   void render(const Stats& prevStats, std::ostream& out) const {

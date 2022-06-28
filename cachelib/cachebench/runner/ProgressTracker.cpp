@@ -47,7 +47,12 @@ void ProgressTracker::work() {
   auto throughputStats = stressor_.aggregateThroughputStats();
   auto mOpsPerSec = throughputStats.ops / 1e6;
 
-  auto thStr = folly::sformat("{} {:>10.2f}M ops completed", buf, mOpsPerSec);
+  const auto currCacheStats = stressor_.getCacheStats();
+  auto overallHitRatio = currCacheStats.getOverallHitRatio(prevStats_);
+  auto thStr = folly::sformat("{} {:>10.2f}M ops completed. Hit Ratio {:6.2f}%",
+                              buf,
+                              mOpsPerSec,
+                              overallHitRatio);
 
   // log this always to stdout
   std::cout << thStr << std::endl;
@@ -56,12 +61,10 @@ void ProgressTracker::work() {
   if (statsFile_.is_open()) {
     statsFile_ << thStr << std::endl;
     statsFile_ << "== Allocator Stats ==" << std::endl;
-    const auto currCacheStats = stressor_.getCacheStats();
     currCacheStats.render(statsFile_);
 
     statsFile_ << "== Hit Ratio Stats Since Last ==" << std::endl;
     currCacheStats.render(prevStats_, statsFile_);
-    prevStats_ = currCacheStats;
 
     statsFile_ << "== Throughput Stats ==" << std::endl;
     auto elapsedTimeNs = stressor_.getTestDurationNs();
@@ -70,6 +73,8 @@ void ProgressTracker::work() {
     stressor_.renderWorkloadGeneratorStats(elapsedTimeNs, statsFile_);
     statsFile_ << std::endl;
   }
+
+  prevStats_ = currCacheStats;
 }
 } // namespace cachebench
 } // namespace cachelib
