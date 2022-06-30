@@ -240,7 +240,7 @@ TEST(BlockCache, InsertLookupSync) {
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   BufferGen bg;
-  for (size_t i = 0; i < 16; i++) {
+  for (size_t i = 0; i < 17; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
     // Value is immediately available to query
@@ -257,18 +257,6 @@ TEST(BlockCache, InsertLookupSync) {
   EXPECT_EQ(0, hits[1]);
   EXPECT_EQ(0, hits[2]);
   EXPECT_EQ(0, hits[3]);
-
-  // flush the first region
-  driver->flush();
-  {
-    CacheEntry e{bg.gen(8), bg.gen(800)};
-    EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
-    // Value is immediately available to query
-    Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
-    EXPECT_EQ(e.value(), value.view());
-    log.push_back(std::move(e));
-  }
 
   for (size_t i = 0; i < 17; i++) {
     Buffer value;

@@ -52,6 +52,13 @@ RegionManager::RegionManager(uint32_t numRegions,
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
   }
 
+  XDCHECK_LT(0u, numInMemBuffers_);
+
+  for (uint32_t i = 0; i < numInMemBuffers_; i++) {
+    buffers_.push_back(
+        std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
+  }
+
   resetEvictionPolicy();
 }
 
@@ -119,9 +126,7 @@ bool RegionManager::detachBuffer(const RegionId& rid) {
   if (!buf) {
     return false;
   }
-
-  numInMemBufActive_.dec();
-
+  returnBufferToPool(std::move(buf));
   return true;
 }
 
@@ -161,15 +166,27 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
 
 OpenStatus RegionManager::assignBufferToRegion(RegionId rid) {
   XDCHECK(rid.valid());
-
-  // Create an in-memory buffer and assign to the region.
-  auto buf = std::make_unique<Buffer>(device_.makeIOBuffer(regionSize_));
-
+  auto buf = claimBufferFromPool();
+  if (!buf) {
+    return OpenStatus::Retry;
+  }
   auto& region = getRegion(rid);
   region.attachBuffer(std::move(buf));
-
-  numInMemBufActive_.inc();
   return OpenStatus::Ready;
+}
+
+std::unique_ptr<Buffer> RegionManager::claimBufferFromPool() {
+  std::unique_ptr<Buffer> buf;
+  {
+    std::lock_guard<std::mutex> bufLock{bufferMutex_};
+    if (buffers_.empty()) {
+      return nullptr;
+    }
+    buf = std::move(buffers_.back());
+    buffers_.pop_back();
+  }
+  numInMemBufActive_.inc();
+  return buf;
 }
 
 OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
