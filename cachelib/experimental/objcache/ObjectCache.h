@@ -477,9 +477,9 @@ class ObjectCache {
 
   void recover() {
     XDCHECK(deserializationCallback_);
-    ObjectCacheRestorer<ObjectCache> restorer(persistorRestorerThreadCount_,
-                                              deserializationCallback_, *this,
-                                              persistFullPathFile_, 0);
+    ObjectCacheRestorer<ObjectCache> restorer(
+        persistorRestorerThreadCount_, deserializationCallback_, *this,
+        persistFullPathFile_, restorerTimeOutDurationInSec_);
     restorer.run();
   }
 
