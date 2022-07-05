@@ -179,12 +179,12 @@ class ObjectCacheTest : public ::testing::Test {
     auto foo2Size = 128;
 
     // will throw without the object size
-    ASSERT_THROW(objcache->insertOrReplace("Foo", std::make_unique<Foo>()),
+    ASSERT_THROW(objcache->insert("Foo", std::make_unique<Foo>()),
                  std::invalid_argument);
 
     // insert foo1
     {
-      auto res = objcache->insertOrReplace("Foo", std::move(foo1), foo1Size);
+      auto res = objcache->insert("Foo", std::move(foo1), foo1Size);
       ASSERT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
 
       auto found = objcache->template find<Foo>("Foo");

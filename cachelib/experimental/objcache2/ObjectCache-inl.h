@@ -214,7 +214,8 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
     return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
   }
   T* ptr = object.get();
-  *handle->template getMemoryAs<T*>() = ptr;
+  *handle->template getMemoryAs<ObjectCacheItem<T>>() =
+      ObjectCacheItem<T>{ptr, objectSize};
 
   auto success = this->l1Cache_->insert(handle);
   if (success) {
