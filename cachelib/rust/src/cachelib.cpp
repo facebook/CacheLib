@@ -186,7 +186,8 @@ std::unique_ptr<LruItemHandle> find_item(
     const facebook::cachelib::LruAllocator& cache, folly::StringPiece key) {
   auto item = const_cast<facebook::cachelib::LruAllocator&>(cache).find(key);
   if (item) {
-    return std::make_unique<LruItemHandle>(std::move(item));
+    // TODO(jiayueb) remove toWriteHandle() after finishing R/W handle migration
+    return std::make_unique<LruItemHandle>(std::move(item).toWriteHandle());
   } else {
     return std::unique_ptr<LruItemHandle>();
   }

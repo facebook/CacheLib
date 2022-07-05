@@ -2783,7 +2783,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     util::allocateAccessible(alloc, poolId, key, itemSize);
 
     // exhaust the handles.
-    std::vector<typename AllocatorT::WriteHandle> handles;
+    std::vector<typename AllocatorT::ReadHandle> handles;
 
     try {
       while (true) {

@@ -554,12 +554,6 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
   using ReadHandle = ReadHandleImpl<T>;
   using ReadHandle::ReadHandle; // inherit constructors
 
-  // TODO(jiayueb): remove this constructor after we finish R/W handle
-  // migration. In the end, WriteHandle should only be obtained via
-  // CacheAllocator APIs like findToWrite().
-  explicit WriteHandleImpl(ReadHandle&& readHandle)
-      : ReadHandle(std::move(readHandle)) {}
-
   // Accessors always return a non-const item.
   FOLLY_ALWAYS_INLINE Item* operator->() const noexcept {
     return ReadHandle::getInternal();
@@ -580,6 +574,7 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
   bool isWriteHandle() const { return true; }
 
   // Friends
+  friend ReadHandle;
   // Only CacheAllocator and NvmCache can create non-default constructed handles
   friend CacheT;
   friend typename CacheT::NvmCacheT;
@@ -615,6 +610,10 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
   FRIEND_TEST(ItemHandleTest, WaitContext_readycb);
   FRIEND_TEST(ItemHandleTest, WaitContext_ready_immediate);
   FRIEND_TEST(ItemHandleTest, onReadyWithNoWaitContext);
+
+ private:
+  explicit WriteHandleImpl(ReadHandle&& readHandle)
+      : ReadHandle(std::move(readHandle)) {}
 };
 
 template <typename T>
