@@ -34,6 +34,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   bool isObjectCache() const override { return false; }
   const MemoryPool& getPool(PoolId) const override { return memoryPool_; }
   PoolStats getPoolStats(PoolId) const override { return PoolStats(); }
+  ACStats getACStats(PoolId, ClassId) const { return ACStats(); };
   AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId) const override {
     return AllSlabReleaseEvents{};
   }

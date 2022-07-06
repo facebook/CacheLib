@@ -326,6 +326,10 @@ class Cache {
   // return the stats for the pool.
   PoolStats getPoolStats(PoolId pid) const { return cache_->getPoolStats(pid); }
 
+  ACStats getACStats(PoolId pid, ClassId cid) const {
+    return cache_->getACStats(pid, cid);
+  }
+
   // return the total number of inconsistent operations detected since start.
   unsigned int getInconsistencyCount() const {
     return inconsistencyCount_.load(std::memory_order_relaxed);

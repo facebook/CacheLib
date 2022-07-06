@@ -172,7 +172,7 @@ struct Stats {
       foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
         auto [memorySizeSuffix, memorySize] =
-            formatMemory(stats.activeAllocs * stats.allocSize);
+            formatMemory(stats.totalAllocatedSize());
         out << folly::sformat("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
                               pid, cid, allocSize, allocSizeSuffix, memorySize,
                               memorySizeSuffix)
@@ -184,15 +184,9 @@ struct Stats {
 
         // If the pool is not full, extrapolate usageFraction for AC assuming it
         // will grow at the same rate. This value will be the same for all ACs.
-        double acUsageFraction;
-        if (poolUsageFraction[pid] < 1.0) {
-          acUsageFraction = poolUsageFraction[pid];
-        } else if (stats.usedSlabs == 0) {
-          acUsageFraction = 0.0;
-        } else {
-          acUsageFraction =
-              stats.activeAllocs / (stats.usedSlabs * stats.allocsPerSlab);
-        }
+        auto acUsageFraction = (poolUsageFraction[pid] < 1.0)
+                                   ? poolUsageFraction[pid]
+                                   : stats.usageFraction();
 
         out << folly::sformat(
                    "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,

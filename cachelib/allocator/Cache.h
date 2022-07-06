@@ -117,6 +117,12 @@ class CacheBase {
   // @param poolId   the pool id
   virtual PoolStats getPoolStats(PoolId poolId) const = 0;
 
+  // Get Allocation Class specific stats.
+  //
+  // @param poolId   the pool id
+  // @param classId   the class id
+  virtual ACStats getACStats(PoolId poolId, ClassId classId) const = 0;
+
   // @param poolId   the pool id
   virtual AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId poolId) const = 0;
 
