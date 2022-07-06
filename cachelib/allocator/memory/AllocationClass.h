@@ -94,14 +94,6 @@ class AllocationClass {
     return static_cast<unsigned int>(Slab::kSize / allocationSize_);
   }
 
-  // total number of slabs under this AllocationClass.
-  unsigned int getNumSlabs() const {
-    return lock_->lock_combine([this]() {
-      return static_cast<unsigned int>(freeSlabs_.size() +
-                                       allocatedSlabs_.size());
-    });
-  }
-
   // fetch stats about this allocation class.
   ACStats getStats() const;
 
