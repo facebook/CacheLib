@@ -21,6 +21,7 @@
 #include "cachelib/common/PercentileStats.h"
 
 DECLARE_bool(report_api_latency);
+DECLARE_string(report_ac_memory_usage_stats);
 
 namespace facebook {
 namespace cachelib {
@@ -100,6 +101,8 @@ struct Stats {
   uint64_t invalidDestructorCount{0};
   int64_t unDestructedItemCount{0};
 
+  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats;
+
   // populate the counters related to nvm usage. Cache implementation can decide
   // what to populate since not all of those are interesting when running
   // cachebench.
@@ -128,6 +131,61 @@ struct Stats {
       out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
                             poolUsageFraction[pid])
           << std::endl;
+    }
+
+    if (FLAGS_report_ac_memory_usage_stats != "") {
+      auto formatMemory = [&](size_t bytes) -> std::tuple<std::string, double> {
+        if (FLAGS_report_ac_memory_usage_stats == "raw") {
+          return {"B", bytes};
+        }
+
+        constexpr double KB = 1024.0;
+        constexpr double MB = 1024.0 * 1024;
+        constexpr double GB = 1024.0 * 1024 * 1024;
+
+        if (bytes >= GB) {
+          return {"GB", static_cast<double>(bytes) / GB};
+        } else if (bytes >= MB) {
+          return {"MB", static_cast<double>(bytes) / MB};
+        } else if (bytes >= KB) {
+          return {"KB", static_cast<double>(bytes) / KB};
+        } else {
+          return {"B", bytes};
+        }
+      };
+
+      auto foreachAC = [&](auto cb) {
+        for (auto& pidStat : allocationClassStats) {
+          for (auto& cidStat : pidStat.second) {
+            cb(pidStat.first, cidStat.first, cidStat.second);
+          }
+        }
+      };
+
+      foreachAC([&](auto pid, auto cid, auto stats) {
+        auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
+        auto [memorySizeSuffix, memorySize] =
+            formatMemory(stats.totalAllocatedSize());
+        out << folly::sformat("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
+                              pid, cid, allocSize, allocSizeSuffix, memorySize,
+                              memorySizeSuffix)
+            << std::endl;
+      });
+
+      foreachAC([&](auto pid, auto cid, auto stats) {
+        auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
+
+        // If the pool is not full, extrapolate usageFraction for AC assuming it
+        // will grow at the same rate. This value will be the same for all ACs.
+        auto acUsageFraction = (poolUsageFraction[pid] < 1.0)
+                                   ? poolUsageFraction[pid]
+                                   : stats.usageFraction();
+
+        out << folly::sformat(
+                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,
+                   allocSize, allocSizeSuffix, acUsageFraction)
+            << std::endl;
+      });
     }
 
     if (numCacheGets > 0) {
