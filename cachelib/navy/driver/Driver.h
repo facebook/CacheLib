@@ -144,7 +144,6 @@ class Driver final : public AbstractCache {
 
   // Assumes that @config was validated with Config::validate
   Driver(Config&& config, ValidConfigTag);
-  void onEviction(BufferView key, uint32_t valueSize);
 
   // Select engine to insert key/value. Returns a pair:
   //   - first: engine to insert key/value
