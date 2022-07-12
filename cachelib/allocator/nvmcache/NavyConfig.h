@@ -440,19 +440,6 @@ class NavyConfig {
   uint64_t getFileSize() const { return fileSize_; }
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
-  uint32_t getRaidStripeSize() const {
-    return blockCacheConfig_.getRegionSize();
-  }
-
-  // ============ Engine settings =============
-  // Returns the threshold of classifying an item as small item or large item
-  // for Navy engine.
-  uint64_t getSmallItemThreshold() const {
-    if (!isBigHashEnabled()) {
-      return 0;
-    }
-    return bigHashConfig_.getSmallItemMaxSize();
-  }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BigHashConfig& bigHash() const { return bigHashConfig_; }

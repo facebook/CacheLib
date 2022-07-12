@@ -233,7 +233,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
 
   if (config.usesRaidFiles()) {
-    auto stripeSize = config.getRaidStripeSize();
+    auto stripeSize = config.blockCache().getRegionSize();
     return cachelib::navy::createRAIDDevice(
         config.getRaidPaths(),
         alignDown(config.getFileSize(), stripeSize),
