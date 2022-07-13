@@ -312,7 +312,7 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testMultithreadSizeControl() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 20000;
+    config.l1EntriesLimit = 200;
     config.objectSizeTrackingEnabled = true;
     config.cacheSizeLimit = 100000;
     config.sizeControllerIntervalMs = 100;
@@ -322,9 +322,10 @@ class ObjectCacheTest : public ::testing::Test {
       for (int i = 0; i < 2000; i++) {
         auto key = folly::sformat("key_{}_{}", id, i);
         auto foo2 = std::make_unique<Foo>();
-        objcache->insertOrReplace(key, std::move(foo2), 100);
-        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        objcache->insertOrReplace(key, std::move(foo2), 1000);
       }
+      // give enough time for size controller to process
+      std::this_thread::sleep_for(std::chrono::milliseconds{200});
     };
 
     std::vector<std::thread> ts;
@@ -335,7 +336,7 @@ class ObjectCacheTest : public ::testing::Test {
       ts[i].join();
     }
 
-    EXPECT_EQ(objcache->getCurrentEntriesLimit(), 1000);
+    EXPECT_EQ(objcache->getCurrentEntriesLimit(), 100);
   }
 
   void testMultithreadFindAndReplace() {
