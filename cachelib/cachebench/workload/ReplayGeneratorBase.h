@@ -41,33 +41,38 @@ class ReplayGeneratorBase : public GeneratorBase {
   explicit ReplayGeneratorBase(const StressorConfig& config)
       : config_(config), repeatTraceReplay_{config_.repeatTraceReplay} {
     if (config.checkConsistency) {
-      throw std::invalid_argument(folly::sformat(
-          "Cannot replay traces with consistency checking enabled"));
-    }
-    std::string file;
-    if (config.traceFileName[0] == '/') {
-      file = config.traceFileName;
-    } else {
-      file = folly::sformat("{}/{}", config.configPath, config.traceFileName);
-    }
-    infile_.open(file);
-    if (infile_.fail()) {
       throw std::invalid_argument(
-          folly::sformat("could not read file: {}", file));
+          "Cannot replay traces with consistency checking enabled");
     }
-    infile_.rdbuf()->pubsetbuf(infileBuffer_, kIfstreamBufferSize);
-    // header
-    std::string row;
-    std::getline(infile_, row);
+
+    openInFile(infile_, infileBuffer_, kIfstreamBufferSize);
   }
 
-  virtual ~ReplayGeneratorBase() { infile_.close(); }
+  virtual ~ReplayGeneratorBase() override { infile_.close(); }
 
-  const std::vector<std::string>& getAllKeys() const {
+  const std::vector<std::string>& getAllKeys() const override {
     throw std::logic_error("ReplayGenerator has no keys precomputed!");
   }
 
  protected:
+  void openInFile(std::ifstream& ifs, char* buf, size_t bufSize) {
+    std::string file;
+    if (config_.traceFileName[0] == '/') {
+      file = config_.traceFileName;
+    } else {
+      file = folly::sformat("{}/{}", config_.configPath, config_.traceFileName);
+    }
+    ifs.open(file);
+    if (ifs.fail()) {
+      throw std::invalid_argument(
+          folly::sformat("could not read file: {}", file));
+    }
+    ifs.rdbuf()->pubsetbuf(buf, bufSize);
+    // header
+    std::string row;
+    std::getline(ifs, row);
+  }
+
   void resetTraceFileToBeginning() {
     infile_.clear();
     infile_.seekg(0, std::ios::beg);
