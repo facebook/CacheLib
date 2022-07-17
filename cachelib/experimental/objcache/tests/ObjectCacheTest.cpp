@@ -765,7 +765,7 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
   LruObjectCache::Config config;
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
   config.enablePersistence(
-      5 /* persistorRestorerThreadCount */,
+      1 /* persistorRestorerThreadCount */,
       4 /* restorerTimeOutDurationInSec */,
       tmpFilePath /* persistFullPathFile */,
       [](folly::StringPiece key, void* unalignedMem) {
@@ -862,10 +862,11 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
     auto objcache = createCache(config);
     objcache->recover();
 
-    // due to time out we nothing should be restored.
+    // due to time out at least one of the vectors won't be retrieved given
+    // recovery happens through one thread.
     auto vecOne = objcache->find<Vector>("my obj one");
     auto vecTwo = objcache->find<Vector>("my obj two");
-    ASSERT_FALSE(vecOne || vecTwo);
+    ASSERT_FALSE(vecOne && vecTwo);
   }
 }
 
