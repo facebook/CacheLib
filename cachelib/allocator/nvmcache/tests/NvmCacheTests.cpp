@@ -370,22 +370,32 @@ TEST_F(NvmCacheTest, ConcurrentFills) {
   auto doConcurrentFetch = [&](int id) {
     auto key = std::string("blah") + folly::to<std::string>(id);
     std::vector<std::thread> thr;
+    std::atomic<bool> missed = false;
     for (unsigned int j = 0; j < 50; j++) {
       thr.push_back(std::thread([&]() {
         auto hdl = nvm.find(key);
         hdl.wait();
-        ASSERT_NE(hdl, nullptr);
-        ASSERT_EQ(id, *(int*)hdl->getMemory());
+        if (!hdl) {
+          missed = true;
+        } else {
+          ASSERT_EQ(id, *hdl->getMemoryAs<int>());
+        }
       }));
     }
     for (unsigned int j = 0; j < 50; j++) {
       thr[j].join();
     }
+    return missed.load(std::memory_order_relaxed);
   };
-
-  for (unsigned int i = 0; i < 10; i++) {
-    doConcurrentFetch(i);
+  size_t misses{0};
+  for (unsigned int i = 0; i < nKeys; i++) {
+    misses += doConcurrentFetch(i);
   }
+  // The number of misses equals to the number of puts aborted in the process.
+  // Aborts can happen if an item's NvmCache::remove issued by
+  // CacheAllocator::insertOrReplace is still in flight when the item is evicted
+  // from RAM.
+  ASSERT_EQ(nvm.getGlobalCacheStats().numNvmAbortedPutOnTombstone, misses);
 }
 
 TEST_F(NvmCacheTest, NvmClean) {
