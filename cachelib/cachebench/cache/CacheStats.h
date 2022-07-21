@@ -182,8 +182,10 @@ struct Stats {
                                    : stats.usageFraction();
 
         out << folly::sformat(
-                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,
-                   allocSize, allocSizeSuffix, acUsageFraction)
+                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f} "
+                   "rollingAvgAllocLatency: {:8.2f}ns",
+                   pid, cid, allocSize, allocSizeSuffix, acUsageFraction,
+                   stats.allocLatencyNs.estimate())
             << std::endl;
       });
     }

@@ -21,6 +21,7 @@
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/RollingStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -228,6 +229,13 @@ struct Stats {
   std::unique_ptr<PerPoolClassAtomicCounters> fragmentationSize{};
   std::unique_ptr<PerPoolClassAtomicCounters> chainedItemEvictions{};
   std::unique_ptr<PerPoolClassAtomicCounters> regularItemEvictions{};
+
+  using PerPoolClassRollingStats =
+      std::array<std::array<util::RollingStats, MemoryAllocator::kMaxClasses>,
+                 MemoryPoolManager::kMaxPools>;
+
+  // rolling latency tracking for every alloc class in every pool
+  std::unique_ptr<PerPoolClassRollingStats> classAllocLatency{};
 
   // Eviction failures due to parent cannot be removed from access container
   AtomicCounter evictFailParentAC{0};

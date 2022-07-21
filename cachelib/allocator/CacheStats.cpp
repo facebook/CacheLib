@@ -44,6 +44,8 @@ void Stats::init() {
   initToZero(*fragmentationSize);
   initToZero(*chainedItemEvictions);
   initToZero(*regularItemEvictions);
+
+  classAllocLatency = std::make_unique<PerPoolClassRollingStats>();
 }
 
 template <int>
@@ -51,7 +53,7 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<16176>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<16192>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();
