@@ -26,7 +26,7 @@ template <typename ItemHandle, typename Item, typename Cache>
 ItemHandle* objcacheInitializeZeroRefcountHandle(void* handleStorage,
                                                  Item* it,
                                                  Cache& alloc) {
-  return new (handleStorage) typename Cache::ItemHandle{it, alloc};
+  return new (handleStorage) typename Cache::WriteHandle{it, alloc};
 }
 
 // Object-cache's c++ allocator needs to access CacheAllocator directly from
@@ -185,7 +185,7 @@ void* MonotonicBufferResource<CacheDescriptor>::allocateSlow(size_t bytes,
 }
 
 template <typename MonotonicBufferResource, typename Cache>
-std::pair<typename Cache::ItemHandle, MonotonicBufferResource>
+std::pair<typename Cache::WriteHandle, MonotonicBufferResource>
 createMonotonicBufferResource(Cache& cache,
                               PoolId poolId,
                               folly::StringPiece key,
@@ -234,7 +234,7 @@ createMonotonicBufferResource(Cache& cache,
   metadata->buffer = bufferStart;
 
   auto sharedHdl =
-      detail::objcacheInitializeZeroRefcountHandle<typename Cache::ItemHandle>(
+      detail::objcacheInitializeZeroRefcountHandle<typename Cache::WriteHandle>(
           &metadata->itemHandleStorage, hdl.get(), cache);
 
   return {std::move(hdl), MonotonicBufferResource{sharedHdl}};

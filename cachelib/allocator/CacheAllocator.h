@@ -193,7 +193,9 @@ class CacheAllocator : public CacheBase {
   // safely wraps a pointer to the "const Item"/"Item".
   using ReadHandle = typename Item::ReadHandle;
   using WriteHandle = typename Item::WriteHandle;
-  using ItemHandle = WriteHandle;
+  // Following is deprecated as of allocator version 17 and this line will be
+  // removed at a future date
+  // using ItemHandle = WriteHandle;
   template <typename UserType,
             typename Converter =
                 detail::DefaultUserTypeConverter<Item, UserType>>

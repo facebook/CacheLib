@@ -32,7 +32,7 @@ namespace objcache {
 template <typename SerializationCallback>
 class PersistorWorker : public PeriodicWorker {
  public:
-  using ItemHandle = CacheAllocator<LruCacheTrait>::ItemHandle;
+  using ItemHandle = CacheAllocator<LruCacheTrait>::WriteHandle;
   using WorkUnit = std::vector<std::pair<ItemHandle, PoolId>>;
   explicit PersistorWorker(SerializationCallback serializationCallback,
                            folly::MPMCQueue<WorkUnit>& queue,
@@ -79,7 +79,7 @@ template <typename ObjectCache>
 class ObjectCachePersistor {
  public:
   using AccessIterator = CacheAllocator<LruCacheTrait>::AccessIterator;
-  using ItemHandle = CacheAllocator<LruCacheTrait>::ItemHandle;
+  using ItemHandle = CacheAllocator<LruCacheTrait>::WriteHandle;
   using WorkUnit = std::vector<std::pair<ItemHandle, PoolId>>;
   using PersistorWorkerObj =
       PersistorWorker<typename ObjectCache::SerializationCallback>;

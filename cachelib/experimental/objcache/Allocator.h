@@ -180,7 +180,7 @@ class AllocatorResource {
 template <typename CacheT>
 struct CacheDescriptor {
   using Cache = CacheT;
-  using ItemHandle = typename CacheT::ItemHandle;
+  using ItemHandle = typename CacheT::WriteHandle;
   using Item = typename CacheT::Item;
   using ChainedItem = typename CacheT::ChainedItem;
 };

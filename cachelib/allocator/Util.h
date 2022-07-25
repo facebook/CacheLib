@@ -131,14 +131,14 @@ typename T::WriteHandle allocateAccessible(T& cache,
 // @return      the handle for the item or an invalid handle(nullptr) if the
 //              allocation failed.
 template <typename T>
-typename T::ItemHandle allocateAndReplace(T& cache,
-                                          PoolId poolId,
-                                          typename T::Item::Key key,
-                                          uint32_t size,
-                                          uint32_t ttlSecs = 0) {
+typename T::WriteHandle allocateAndReplace(T& cache,
+                                           PoolId poolId,
+                                           typename T::Item::Key key,
+                                           uint32_t size,
+                                           uint32_t ttlSecs = 0) {
   auto allocHandle = cache.allocate(poolId, key, size, ttlSecs);
   if (!allocHandle) {
-    return typename T::ItemHandle{};
+    return typename T::WriteHandle{};
   }
 
   cache.insertOrReplace(allocHandle);

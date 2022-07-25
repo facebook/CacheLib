@@ -27,7 +27,7 @@ namespace facebook {
 namespace rust {
 namespace cachelib {
 using LruAllocatorConfig = facebook::cachelib::LruAllocator::Config;
-using LruItemHandle = facebook::cachelib::LruAllocator::ItemHandle;
+using LruItemHandle = facebook::cachelib::LruAllocator::WriteHandle;
 
 std::unique_ptr<facebook::cachelib::CacheAdmin> make_cacheadmin(
     facebook::cachelib::LruAllocator& cache, const std::string& oncall);
