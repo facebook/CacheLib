@@ -15,10 +15,10 @@
  */
 
 use std::collections::HashMap;
+use std::io;
 use std::io::Cursor;
 use std::io::Read;
 use std::io::Write;
-use std::io::{self};
 use std::marker::PhantomData;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
