@@ -45,12 +45,15 @@ class PersistorWorker : public PeriodicWorker {
   void work() override {
     XDCHECK(serializationCallback_);
     WorkUnit workUnit;
+    uint64_t failedToSerializeKeysCount = 0;
     while (queue_.read(workUnit) && !breakOut_.load()) {
       for (auto& [handle, poolId] : workUnit) {
         auto iobuf =
             serializationCallback_(handle->getKey(), handle->getMemory());
         if (!iobuf) {
-          XLOG(ERR) << "Failed to serialize for key: " << handle->getKey();
+          failedToSerializeKeysCount++;
+          XLOG_EVERY_MS(ERR, 1000)
+              << "Failed to serialize for key: " << handle->getKey();
           continue;
         }
         serialization::Item item;
@@ -64,6 +67,8 @@ class PersistorWorker : public PeriodicWorker {
         recordWriter_->writeRecord(Serializer::serializeToIOBuf(item));
       }
     }
+    XLOG(INFO) << "Failed to Serialize Key Count = "
+               << failedToSerializeKeysCount;
   }
 
   void setBreakOut() { breakOut_ = true; }
@@ -187,12 +192,12 @@ class RestorerWorker : public PeriodicWorker {
       XDCHECK(iobuf);
       Deserializer deserializer(iobuf->data(), iobuf->data() + iobuf->length());
       auto item = deserializer.deserialize<serialization::Item>();
-
       auto hdl = deserializationCallback_(
           item.poolId().value(), item.key().value(), item.payload().value(),
           item.creationTime().value(), item.expiryTime().value(), objcache_);
       if (!hdl) {
-        XLOG(ERR) << "Failed to deserialize for key: " << item.key().value();
+        XLOG_EVERY_MS(ERR, 1000)
+            << "Failed to deserialize for key: " << item.key().value();
         continue;
       }
       try {
