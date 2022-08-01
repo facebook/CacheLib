@@ -47,7 +47,7 @@ class GeneratorBase {
   virtual const std::vector<std::string>& getAllKeys() const = 0;
 
   // Notify the workload generator that the nvm cache has already warmed up.
-  virtual void setNvmCacheWarmedUp() {
+  virtual void setNvmCacheWarmedUp(uint64_t /*timestamp*/) {
     // not implemented by default
   }
 

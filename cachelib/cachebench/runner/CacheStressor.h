@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <thread>
@@ -475,7 +476,7 @@ class CacheStressor : public Stressor {
       // TODO: allow callback on nvm eviction instead of checking it repeatedly.
       if (config_.checkNvmCacheWarmUp &&
           folly::Random::oneIn(kNvmCacheWarmUpCheckRate)) {
-        checkNvmCacheWarmedUp();
+        checkNvmCacheWarmedUp(req.timestamp);
       }
       return req;
     }
@@ -488,7 +489,7 @@ class CacheStressor : public Stressor {
     rateLimiter_->consumeWithBorrowAndWait(1);
   }
 
-  void checkNvmCacheWarmedUp() {
+  void checkNvmCacheWarmedUp(uint64_t requestTimestamp) {
     if (hasNvmCacheWarmedUp_) {
       // already notified, nothing to do
       return;
@@ -497,7 +498,7 @@ class CacheStressor : public Stressor {
       return;
     }
     if (cache_->hasNvmCacheWarmedUp()) {
-      wg_->setNvmCacheWarmedUp();
+      wg_->setNvmCacheWarmedUp(requestTimestamp);
       XLOG(INFO) << "NVM cache has been warmed up";
       hasNvmCacheWarmedUp_ = true;
     }

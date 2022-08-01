@@ -203,7 +203,9 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
   }
 
   if (hasNvmCacheWarmedUp_) {
-    out << "= Overall stats after warmup =" << std::endl;
+    // TODO: convert seconds to human readable timestamp
+    out << "= Overall stats after warmup [" << nvmCacheWarmupTimestamp_
+        << "] =" << std::endl;
     renderStatsInternal(statsAfterWarmUp_, elapsedSecs, out);
   }
 }

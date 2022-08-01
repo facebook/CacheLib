@@ -20,6 +20,7 @@
 #include <folly/Optional.h>
 #include <folly/Range.h>
 
+#include <cstdint>
 #include <mutex>
 
 #include "cachelib/cachebench/util/Request.h"
@@ -156,7 +157,10 @@ class PieceWiseCacheStats {
 
   void renderWindowStats(double elapsedSecs, std::ostream& out) const;
 
-  void setNvmCacheWarmedUp() { hasNvmCacheWarmedUp_ = true; }
+  void setNvmCacheWarmedUp(uint64_t timestamp) {
+    hasNvmCacheWarmedUp_ = true;
+    nvmCacheWarmupTimestamp_ = timestamp;
+  }
 
  private:
   // Overall hit rate stats
@@ -182,6 +186,7 @@ class PieceWiseCacheStats {
   mutable util::PercentileStats reqLatencyStats_;
 
   bool hasNvmCacheWarmedUp_{false};
+  uint64_t nvmCacheWarmupTimestamp_{0};
 
   template <typename F, typename... Args>
   void recordStats(F& func,
@@ -312,7 +317,9 @@ class PieceWiseCacheAdapter {
 
   const PieceWiseCacheStats& getStats() const { return stats_; }
 
-  void setNvmCacheWarmedUp() { stats_.setNvmCacheWarmedUp(); }
+  void setNvmCacheWarmedUp(uint64_t timestamp) {
+    stats_.setNvmCacheWarmedUp(timestamp);
+  }
 
  private:
   // Called when rw is piecewise cached. The method updates rw to the next
