@@ -70,10 +70,22 @@ enum PageSizeT {
   ONE_GB,
 };
 
+enum ShmTypeT {
+  POSIX = 0,
+  SYS_V,
+  FILE,
+};
+
+struct ShmTypeOpts {
+  ShmTypeT type{ShmTypeT::POSIX};
+  std::string id{};
+};
+
 struct ShmSegmentOpts {
   PageSizeT pageSize{PageSizeT::NORMAL};
   bool readOnly{false};
   size_t alignment{1}; // alignment for mapping.
+  ShmTypeOpts typeOpts{}; // opts specific to segment type
 
   explicit ShmSegmentOpts(PageSizeT p) : pageSize(p) {}
   explicit ShmSegmentOpts(PageSizeT p, bool ro) : pageSize(p), readOnly(ro) {}
@@ -94,8 +106,8 @@ struct ShmAddr {
 /* common interface for both posix and sysv shared memory segments */
 class ShmBase {
  public:
-  ShmBase(ShmSegmentOpts opts, std::string name)
-      : opts_(std::move(opts)), name_(std::move(name)) {}
+  ShmBase(ShmSegmentOpts opts)
+      : opts_(std::move(opts)) {}
   ShmBase(const ShmBase&) = delete;
   ShmBase& operator=(const ShmBase&) = delete;
 
@@ -112,7 +124,7 @@ class ShmBase {
   virtual void unMap(void* addr) const = 0;
   virtual void markForRemoval() = 0;
 
-  const std::string& getName() const { return name_; }
+  const std::string& getName() const { return opts_.typeOpts.id; }
 
  protected:
   void markActive() noexcept { state_ = State::NORMAL; }
@@ -128,7 +140,6 @@ class ShmBase {
  private:
   enum class State { NORMAL, MARKED_FOR_REMOVAL };
   State state_{State::NORMAL}; // current state of the segment.
-  std::string name_{};         // name of the segment
 };
 
 namespace detail {

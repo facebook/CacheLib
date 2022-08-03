@@ -50,7 +50,6 @@ class PosixShmSegment : public ShmBase {
   // @param name  Name of the segment
   // @param opts  the options for attaching to the segment.
   PosixShmSegment(ShmAttachT,
-                  const std::string& name,
                   ShmSegmentOpts opts = {});
 
   // create a new segment
@@ -58,7 +57,6 @@ class PosixShmSegment : public ShmBase {
   // @param size  The size of the segment. This will be rounded up to the
   //              nearest page size.
   PosixShmSegment(ShmNewT,
-                  const std::string& name,
                   size_t size,
                   ShmSegmentOpts opts = {});
 
@@ -92,7 +90,7 @@ class PosixShmSegment : public ShmBase {
 
   // useful for removing without attaching
   // @return true if the segment existed. false otherwise
-  static bool removeByName(const std::string& name);
+  static bool removeByName(const ShmTypeOpts& name);
 
  private:
   static int createNewSegment(const std::string& name);
