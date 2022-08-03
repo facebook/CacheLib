@@ -410,6 +410,53 @@ TEST(Driver, InsertFailedRemoveOther) {
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 }
 
+TEST(Driver, InsertRetryRemoveOther) {
+  BufferGen bg;
+  auto smallValue = bg.gen(16);
+  auto largeValue = bg.gen(32);
+
+  // Insert a large item, then insert a small item with the same key.
+  // The small item engine is configured to retry on the first remove.
+
+  auto bc = std::make_unique<MockEngine>();
+  auto si = std::make_unique<MockEngine>();
+  {
+    testing::InSequence inSeq;
+    EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view()));
+    EXPECT_CALL(*si, remove(makeHK("key")));
+
+    EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view()));
+    EXPECT_CALL(*bc, remove(makeHK("key")))
+        .WillOnce(Return(Status::Retry))
+        .WillRepeatedly(testing::DoDefault());
+    ;
+
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+  }
+
+  auto ex = makeJobScheduler();
+  MockJobScheduler* exPtr = static_cast<MockJobScheduler*>(ex.get());
+  auto config = makeDriverConfig(std::move(bc), std::move(si), std::move(ex));
+  auto driver = std::make_unique<Driver>(std::move(config));
+
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+  EXPECT_EQ(exPtr->getRescheduleCount(), 0);
+  EXPECT_EQ(exPtr->getDoneCount(), 1);
+
+  // The returned status code is Ok because it's not rejected by admission test.
+  // Under the hood, the schedule went through one reschedule and one succeed.
+  EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+  EXPECT_EQ(exPtr->getRescheduleCount(), 1);
+  EXPECT_EQ(exPtr->getDoneCount(), 2);
+
+  Buffer valueLookup;
+  // Look up the key, which now only exist in small item engine.
+  // Both engines will be queried.
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_EQ(smallValue.view(), valueLookup.view());
+}
+
 TEST(Driver, Remove) {
   BufferGen bg;
   auto smallValue = bg.gen(16);

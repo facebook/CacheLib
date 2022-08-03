@@ -81,6 +81,7 @@ bool MockJobScheduler::runFirstIfLocked(folly::StringPiece expected,
     doneCount_++;
     return true;
   }
+  rescheduleCount_++;
   q_.push_back(std::move(first));
   return false;
 }

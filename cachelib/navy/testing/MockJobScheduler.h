@@ -83,6 +83,11 @@ class MockJobScheduler : public JobScheduler {
     return doneCount_;
   }
 
+  size_t getRescheduleCount() const {
+    std::lock_guard<std::mutex> lock{m_};
+    return rescheduleCount_;
+  }
+
  protected:
   struct JobName {
     Job job;
@@ -102,6 +107,7 @@ class MockJobScheduler : public JobScheduler {
 
   std::deque<JobName> q_;
   size_t doneCount_{};
+  size_t rescheduleCount_{};
   std::atomic<bool> processing_{false};
   mutable std::mutex m_;
 };

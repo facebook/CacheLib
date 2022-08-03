@@ -168,7 +168,7 @@ Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
         }
         if (status != Status::DeviceError) {
           auto rs = selection.second.remove(hk);
-          if (status == Status::Retry) {
+          if (rs == Status::Retry) {
             return JobExitCode::Reschedule;
           }
           if (rs != Status::Ok && rs != Status::NotFound) {
