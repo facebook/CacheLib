@@ -79,7 +79,6 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                            config_.replayGeneratorConfig.numAggregationFields;
   auto totalFieldCount =
       partialFieldCount + config_.replayGeneratorConfig.numExtraFields;
-
   while (true) {
     if (!std::getline(infile_, line)) {
       if (repeatTraceReplay_) {
@@ -97,7 +96,9 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
     try {
       std::vector<folly::StringPiece> fields;
       folly::split(",", line, fields);
-      if (fields.size() != totalFieldCount) {
+      if (fields.size() != totalFieldCount &&
+          // TODO: remove this after legacy data phased out.
+          fields.size() + 1 != totalFieldCount) {
         invalidSamples_.inc();
         continue;
       }
@@ -194,9 +195,31 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         }
       }
 
+      size_t statsAggFieldStartIndex = SampleFields::TOTAL_DEFINED_FIELDS;
+      size_t statsAggFieldEndIndex = partialFieldCount;
+      // Parse expected cache result.
+      folly::Optional<bool> cacheHit;
+      if (fields.size() == totalFieldCount) {
+        auto cacheHitT = folly::tryTo<int>(fields[SampleFields::CACHE_HIT]);
+        if (cacheHitT.hasValue() &&
+            (cacheHitT.value() == 0 || cacheHitT.value() == 1)) {
+          cacheHit = cacheHitT.value();
+        }
+      } else {
+        // We added cache hit field recently. Some data are still in the old
+        // format.
+        // TODO: remove this after legacy data saved in manifold phased out.
+        XLOG_EVERY_MS(
+            WARN, 100'000,
+            folly::sformat("Expect {} but only have {} fields in trace. "
+                           "Process it as no cache hit info field.",
+                           totalFieldCount, fields.size()));
+        --statsAggFieldStartIndex;
+        --statsAggFieldEndIndex;
+      }
+
       std::vector<std::string> statsAggFields;
-      for (size_t i = SampleFields::TOTAL_DEFINED_FIELDS; i < partialFieldCount;
-           ++i) {
+      for (size_t i = statsAggFieldStartIndex; i < statsAggFieldEndIndex; ++i) {
         statsAggFields.push_back(fields[i].str());
       }
 
@@ -229,7 +252,8 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         rangeEnd,
                                         ttl,
                                         std::move(statsAggFields),
-                                        std::move(admFeatureMap))) {
+                                        std::move(admFeatureMap),
+                                        cacheHit)) {
         if (shouldShutdown()) {
           XLOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;

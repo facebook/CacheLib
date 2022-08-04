@@ -122,7 +122,8 @@ class PieceWiseCacheStats {
                     size_t getBytes,
                     size_t getBodyBytes,
                     size_t bytesEgress,
-                    const std::vector<std::string>& statsAggFields);
+                    const std::vector<std::string>& statsAggFields,
+                    folly::Optional<bool> isHit);
 
   // Record cache hit for objects that are not stored in pieces
   void recordNonPieceHit(size_t hitBytes,
@@ -165,6 +166,10 @@ class PieceWiseCacheStats {
  private:
   // Overall hit rate stats
   InternalStats stats_;
+
+  // Overall hit rate stats for benchmark. It is based on the hit status
+  // provided in the traces.
+  InternalStats statsBenchmark_;
 
   // Stats after cache has been warmed up
   InternalStats statsAfterWarmUp_;
@@ -211,6 +216,11 @@ class PieceWiseCacheStats {
                                    size_t getBytes,
                                    size_t getBodyBytes,
                                    size_t egressBytes);
+  static void recordBenchmark(InternalStats& stats,
+                              size_t getBytes,
+                              size_t getBodyBytes,
+                              size_t egressBytes,
+                              bool isHit);
   static void recordNonPieceHitInternal(InternalStats& stats,
                                         size_t hitBytes,
                                         size_t hitBodyBytes);
@@ -254,6 +264,9 @@ struct PieceWiseReqWrapper {
   // Additional stats aggregation fields for this request sample other
   // than the defined SampleFields
   const std::vector<std::string> statsAggFields;
+  // Whether this trace was a hit. For the cases that we know whether a trace
+  // was a hit, we use this to calculate the hit rate as a benchmark.
+  const folly::Optional<bool> isHit;
 
   // Tracker to record the start/end of request. Initialize it at the
   // start of request processing.
@@ -282,7 +295,8 @@ struct PieceWiseReqWrapper {
       folly::Optional<uint64_t> rangeEnd,
       uint32_t ttl,
       std::vector<std::string>&& statsAggFieldV,
-      std::unordered_map<std::string, std::string>&& admFeatureM);
+      std::unordered_map<std::string, std::string>&& admFeatureM,
+      folly::Optional<bool> isHit);
 
   PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };

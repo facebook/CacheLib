@@ -114,10 +114,14 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   // Line format for the trace file:
   // timestamp, cacheKey, OpType, objectSize, responseSize,
-  // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate.
+  // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate, cacheHit
   // (extra fields might exist defined by
   // config_.replayGeneratorConfig.numAggregationFields and
   // config_.replayGeneratorConfig.numExtraFields)
+  // cacheHit field is for the trace that we know it was a hit or miss. Use
+  // 0 for miss and 1 for hit. Any other values will be ignored. When it is
+  // specified with a valid value, we will calculate the expected hit rate based
+  // on it.
   enum SampleFields {
     TIMESTAMP = 0,
     CACHE_KEY,
@@ -129,7 +133,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     RANGE_END,
     TTL,
     SAMPLING_RATE,
-    TOTAL_DEFINED_FIELDS = 10
+    CACHE_HIT,
+    TOTAL_DEFINED_FIELDS = 11
   };
 
   PieceWiseCacheAdapter pieceCacheAdapter_;

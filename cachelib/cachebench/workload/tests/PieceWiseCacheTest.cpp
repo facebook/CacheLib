@@ -29,9 +29,10 @@ class PieceWiseCacheTest : public ::testing::Test {
  protected:
   void SetUp() override {
     std::string testKey = "test";
-    std::vector<std::string> extraFieldV;
+    std::vector<std::string> extraFieldV1, extraFieldV2, extraFieldV3;
     std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
-    std::unordered_map<std::string, std::string> admFeatureMap;
+    std::unordered_map<std::string, std::string> admFeatureMap1, admFeatureMap2,
+        admFeatureMap3;
 
     piecewiseCache =
         std::make_unique<PieceWiseCacheAdapter>(/*maxCachePiecesv=*/32000,
@@ -51,8 +52,9 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/100000,
         /*ttl=*/3600,
-        std::move(extraFieldV),
-        std::move(admFeatureMap));
+        /*extraField=*/std::move(extraFieldV1),
+        /*admFeatureMap=*/std::move(admFeatureMap1),
+        /*isHit=*/folly::none);
 
     // pieceReq2 is stored as multiple pieces, and the range contains a single
     // piece
@@ -67,8 +69,9 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/65530,
         /*ttl=*/3600,
-        std::move(extraFieldV),
-        std::move(admFeatureMap));
+        /*extraField=*/std::move(extraFieldV2),
+        /*admFeatureMap=*/std::move(admFeatureMap2),
+        /*isHit=*/folly::none);
 
     // nonPieceReq is stored as whole object
     nonPieceReq = std::make_unique<PieceWiseReqWrapper>(
@@ -82,8 +85,9 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/6000,
         /*ttl=*/3600,
-        std::move(extraFieldV),
-        std::move(admFeatureMap));
+        /*extraField=*/std::move(extraFieldV3),
+        /*admFeatureMap=*/std::move(admFeatureMap3),
+        /*isHit=*/folly::none);
   }
 
   std::unique_ptr<PieceWiseCacheAdapter> piecewiseCache;

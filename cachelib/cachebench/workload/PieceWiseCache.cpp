@@ -70,13 +70,18 @@ void PieceWiseCacheStats::recordAccess(
     size_t getBytes,
     size_t getBodyBytes,
     size_t egressBytes,
-    const std::vector<std::string>& statsAggFields) {
+    const std::vector<std::string>& statsAggFields,
+    folly::Optional<bool> isHit) {
   // Adjust the timestamp given current sample.
   stats_.updateTimestamp(timestamp);
   lastWindowStats_.updateTimestamp(timestamp);
 
   recordStats(recordAccessInternal, statsAggFields, getBytes, getBodyBytes,
               egressBytes);
+  if (isHit.hasValue()) {
+    recordBenchmark(statsBenchmark_, getBytes, getBodyBytes, egressBytes,
+                    isHit.value());
+  }
 }
 
 void PieceWiseCacheStats::recordAccessInternal(InternalStats& stats,
@@ -87,6 +92,25 @@ void PieceWiseCacheStats::recordAccessInternal(InternalStats& stats,
   stats.getBodyBytes.add(getBodyBytes);
   stats.objGets.inc();
   stats.totalEgressBytes.add(egressBytes);
+}
+
+void PieceWiseCacheStats::recordBenchmark(InternalStats& stats,
+                                          size_t getBytes,
+                                          size_t getBodyBytes,
+                                          size_t egressBytes,
+                                          bool isHit) {
+  stats.getBytes.add(getBytes);
+  stats.getBodyBytes.add(getBodyBytes);
+  stats.objGets.inc();
+  stats.totalEgressBytes.add(egressBytes);
+  if (isHit) {
+    stats.getHitBytes.add(getBytes);
+    stats.getFullHitBytes.add(getBytes);
+    stats.getHitBodyBytes.add(getBodyBytes);
+    stats.getFullHitBodyBytes.add(getBodyBytes);
+    stats.objGetHits.inc();
+    stats.objGetFullHits.inc();
+  }
 }
 
 void PieceWiseCacheStats::recordNonPieceHit(
@@ -169,6 +193,9 @@ void PieceWiseCacheStats::renderStats(uint64_t elapsedTimeNs,
   // Output the overall stats
   out << "= Overall stats =" << std::endl;
   renderStatsInternal(stats_, elapsedSecs, out);
+
+  out << "= Benchmark stats =" << std::endl;
+  renderStatsInternal(statsBenchmark_, elapsedSecs, out);
 
   // request latency
   out << "= Request Latency =" << std::endl;
@@ -312,7 +339,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
     folly::Optional<uint64_t> rangeEnd,
     uint32_t ttl,
     std::vector<std::string>&& statsAggFieldV,
-    std::unordered_map<std::string, std::string>&& admFeatureM)
+    std::unordered_map<std::string, std::string>&& admFeatureM,
+    folly::Optional<bool> isHit)
     : baseKey(GenericPieces::escapeCacheKey(key.str())),
       pieceKey(baseKey),
       sizes(1),
@@ -326,7 +354,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
       requestRange(rangeStart, rangeEnd),
       headerSize(responseHeaderSize),
       fullObjectSize(fullContentSize),
-      statsAggFields(statsAggFieldV) {
+      statsAggFields(statsAggFieldV),
+      isHit(isHit) {
   req.timestamp = timestamp;
 
   if (fullContentSize < cachePieceSize) {
@@ -365,7 +394,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(const PieceWiseReqWrapper& other)
       isHeaderPiece(other.isHeaderPiece),
       headerSize(other.headerSize),
       fullObjectSize(other.fullObjectSize),
-      statsAggFields(other.statsAggFields) {
+      statsAggFields(other.statsAggFields),
+      isHit(other.isHit) {
   if (other.cachePieces) {
     cachePieces = std::make_unique<GenericPieces>(
         baseKey,
@@ -413,7 +443,7 @@ void PieceWiseCacheAdapter::recordNewReq(PieceWiseReqWrapper& rw) {
     egressBytes = rw.fullObjectSize + rw.headerSize;
   }
   stats_.recordAccess(rw.req.timestamp, getBytes, getBodyBytes, egressBytes,
-                      rw.statsAggFields);
+                      rw.statsAggFields, rw.isHit);
 }
 
 bool PieceWiseCacheAdapter::processReq(PieceWiseReqWrapper& rw,
