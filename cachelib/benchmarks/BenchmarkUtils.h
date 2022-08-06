@@ -21,6 +21,10 @@
 #include <chrono>
 #include <string>
 
+#if !defined(__x86_64__) && !defined(__aarch64__)
+#include <sys/time.h>
+#endif
+
 namespace facebook {
 namespace cachelib {
 class Timer {
@@ -28,11 +32,11 @@ class Timer {
   explicit Timer(std::string name, uint64_t ops)
       : name_{std::move(name)}, ops_{ops} {
     startTime_ = std::chrono::system_clock::now();
-    startCycles_ = __rdtsc();
+    startCycles_ = cycles();
   }
   ~Timer() {
     endTime_ = std::chrono::system_clock::now();
-    endCycles_ = __rdtsc();
+    endCycles_ = cycles();
 
     std::chrono::nanoseconds durationTime = endTime_ - startTime_;
     uint64_t durationCycles = endCycles_ - startCycles_;
@@ -40,6 +44,20 @@ class Timer {
                                 name_, durationTime.count() / ops_,
                                 durationCycles / ops_)
               << std::endl;
+  }
+
+  static uint64_t cycles() {
+#if defined(__x86_64__)
+    return __rdtsc();
+#elif defined(__aarch64__)
+    uint64_t val;
+    asm volatile("mrs %0, cntvct_el0" : "=r"(val));
+    return val;
+#else
+    struct timeval tv;
+    ::gettimeofday(&tv, NULL);
+    return (uint64_t)(tv.tv_sec) * 1000000 + tv.tv_usec;
+#endif
   }
 
  private:

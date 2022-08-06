@@ -97,7 +97,7 @@ void takeCpuCycles() {
   {
     Timer t{"CPU Cycles", kOps};
     for (uint64_t i = 0; i < kOps; i++) {
-      uint64_t tsc = __rdtsc();
+      uint64_t tsc = Timer::cycles();
       folly::doNotOptimizeAway(tsc);
     }
   }
