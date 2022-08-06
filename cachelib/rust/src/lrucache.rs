@@ -36,10 +36,9 @@ use bytes::BufMut;
 use bytes::Bytes;
 use bytes::BytesMut;
 use cxx::let_cxx_string;
+use fbinit::FacebookInit;
 use folly::StringPiece;
 use once_cell::sync::OnceCell;
-
-use fbinit::FacebookInit;
 
 use crate::errors::ErrorKind;
 use crate::ffi;
@@ -1122,9 +1121,9 @@ impl VolatileLruCachePool {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use tempdir::TempDir;
+
+    use super::*;
 
     fn create_cache(fb: FacebookInit) {
         let config = LruCacheConfig::new(128 * 1024 * 1024)

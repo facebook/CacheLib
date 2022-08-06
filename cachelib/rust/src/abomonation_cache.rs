@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+use std::time::Duration;
+
 use anyhow::Error;
 use anyhow::Result;
 use bytes::BufMut;
-use std::time::Duration;
 
 use crate::lrucache::VolatileLruCachePool;
 
@@ -74,9 +75,10 @@ where
 
 #[cfg(test)]
 mod test {
+    use fbinit::FacebookInit;
+
     use super::*;
     use crate::lrucache::*;
-    use fbinit::FacebookInit;
 
     fn create_cache(fb: FacebookInit) {
         let config = LruCacheConfig::new(16 * 1024 * 1024);

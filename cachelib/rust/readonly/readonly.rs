@@ -104,8 +104,6 @@ impl ReadOnlySharedCacheView {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-
     use std::path::PathBuf;
     use std::time::Duration;
 
@@ -114,6 +112,8 @@ mod test {
     use cachelib::*;
     use fbinit::FacebookInit;
     use tempdir::TempDir;
+
+    use super::*;
 
     fn create_temp_dir(dir_prefix: &str) -> TempDir {
         TempDir::new(dir_prefix).expect("failed to create temp dir")
