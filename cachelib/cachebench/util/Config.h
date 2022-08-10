@@ -173,7 +173,8 @@ struct StressorConfig : public JSONConfig {
   // name identifying a custom type of the stress test. When empty, launches a
   // standard stress test using the workload config against an instance of the
   // cache defined by the CacheConfig. Other supported options are
-  // "high_refcount", "cachelib_map", cachelib_range_map", "fast_shutdown"
+  // "high_refcount", "cachelib_map", cachelib_range_map", "fast_shutdown",
+  // "async"
   std::string name;
 
   // follow get misses with a set

@@ -17,6 +17,7 @@
 #include "cachelib/cachebench/runner/Stressor.h"
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/cachebench/runner/AsyncCacheStressor.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
@@ -163,6 +164,25 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
   } else if (stressorConfig.name == "fast_shutdown") {
     return std::make_unique<FastShutdownStressor>(cacheConfig,
                                                   stressorConfig.numOps);
+  } else if (stressorConfig.name == "async") {
+    if (stressorConfig.generator != "workload" &&
+        !stressorConfig.generator.empty()) {
+      // async model has not been tested with other generators
+      throw std::invalid_argument(folly::sformat(
+          "Async cache stressor only works with workload generator currently. "
+          "generator: {}",
+          stressorConfig.generator));
+    }
+
+    auto generator = makeGenerator(stressorConfig);
+    if (cacheConfig.allocator == "LRU") {
+      // default allocator is LRU, other allocator types should be added here
+      return std::make_unique<AsyncCacheStressor<LruAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU2Q") {
+      return std::make_unique<AsyncCacheStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    }
   } else {
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {
