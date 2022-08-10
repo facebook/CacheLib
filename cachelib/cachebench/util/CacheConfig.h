@@ -45,6 +45,10 @@ struct CacheConfig : public JSONConfig {
   // by defaullt, lru allocator. can be set to LRU-2Q.
   std::string allocator{"LRU"};
 
+  // if set, we will persist the cache across cachebench runs. The directory
+  // is used to store some metadata about the cache.
+  std::string cacheDir{""};
+
   uint64_t cacheSizeMB{0};
   uint64_t poolRebalanceIntervalSec{0};
   std::string rebalanceStrategy;
@@ -101,6 +105,9 @@ struct CacheConfig : public JSONConfig {
   // specified, this is the size per device path. When this is non-zero and
   // nvmCachePaths is empty, an in-memory block device is used.
   uint64_t nvmCacheSizeMB{0};
+
+  // if 0, use the default. Note this takes away space from NvmCache
+  uint64_t nvmCacheMetadataSizeMB{0};
 
   // list of device identifiers for the device path that can be used to
   // monitor the physical write amplification. If empty, physical write amp is

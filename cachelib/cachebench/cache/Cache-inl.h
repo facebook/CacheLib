@@ -148,6 +148,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       // use memory to mock NVM.
       nvmConfig.navyConfig.setMemoryFile(config_.nvmCacheSizeMB * MB);
     }
+    nvmConfig.navyConfig.setDeviceMetadataSize(config_.nvmCacheMetadataSizeMB *
+                                               MB);
 
     if (config_.navyReqOrderShardsPower != 0) {
       nvmConfig.navyConfig.setNavyReqOrderingShards(
@@ -231,25 +233,43 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
   allocatorConfig_.cacheName = "cachebench";
 
+  bool isRecovered = false;
   if (!cacheDir.empty()) {
     allocatorConfig_.cacheDir = cacheDir;
-    cache_ =
-        std::make_unique<Allocator>(Allocator::SharedMemNew, allocatorConfig_);
+    try {
+      cache_ = std::make_unique<Allocator>(Allocator::SharedMemAttach,
+                                           allocatorConfig_);
+      XLOG(INFO, folly::sformat(
+                     "Successfully attached to existing cache. Cache dir: {}",
+                     cacheDir));
+      isRecovered = true;
+    } catch (const std::exception& ex) {
+      XLOG(INFO, folly::sformat("Failed to attach for reason: {}", ex.what()));
+      cache_ = std::make_unique<Allocator>(Allocator::SharedMemNew,
+                                           allocatorConfig_);
+    }
   } else {
     cache_ = std::make_unique<Allocator>(allocatorConfig_);
   }
 
-  const size_t numBytes = cache_->getCacheMemoryStats().cacheSize;
-  for (uint64_t i = 0; i < config_.numPools; ++i) {
-    const double& ratio = config_.poolSizes[i];
-    const size_t poolSize = static_cast<size_t>(numBytes * ratio);
-    typename Allocator::MMConfig mmConfig =
-        makeMMConfig<typename Allocator::MMConfig>(config_);
-    const PoolId pid = cache_->addPool(
-        folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
-        nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
-        true /* ensureSufficientMem */);
-    pools_.push_back(pid);
+  if (isRecovered) {
+    auto poolIds = cache_->getPoolIds();
+    for (auto poolId : poolIds) {
+      pools_.push_back(poolId);
+    }
+  } else {
+    const size_t numBytes = cache_->getCacheMemoryStats().cacheSize;
+    for (uint64_t i = 0; i < config_.numPools; ++i) {
+      const double& ratio = config_.poolSizes[i];
+      const size_t poolSize = static_cast<size_t>(numBytes * ratio);
+      typename Allocator::MMConfig mmConfig =
+          makeMMConfig<typename Allocator::MMConfig>(config_);
+      const PoolId pid = cache_->addPool(
+          folly::sformat("pool_{}", i), poolSize, {} /* allocSizes */, mmConfig,
+          nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy */,
+          true /* ensureSufficientMem */);
+      pools_.push_back(pid);
+    }
   }
 
   if (config_.cacheMonitorFactory) {
@@ -263,6 +283,16 @@ template <typename Allocator>
 Cache<Allocator>::~Cache() {
   try {
     monitor_.reset();
+
+    auto res = cache_->shutDown();
+    if (res == Allocator::ShutDownStatus::kSuccess) {
+      XLOG(INFO, folly::sformat("Shut down succeeded. Metadata is at: {}",
+                                allocatorConfig_.cacheDir));
+    } else {
+      XLOG(INFO, folly::sformat(
+                     "Shut down failed. Metadata is at: {}. Return code: {}",
+                     allocatorConfig_.cacheDir, static_cast<int>(res)));
+    }
 
     // Reset cache first which will drain all nvm operations if present
     cache_.reset();

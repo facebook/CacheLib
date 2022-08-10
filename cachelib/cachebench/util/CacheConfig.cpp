@@ -25,6 +25,7 @@ namespace cachelib {
 namespace cachebench {
 CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, allocator);
+  JSONSetVal(configJson, cacheDir);
   JSONSetVal(configJson, cacheSizeMB);
   JSONSetVal(configJson, poolRebalanceIntervalSec);
   JSONSetVal(configJson, moveOnSlabRelease);
@@ -55,6 +56,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, poolSizes);
 
   JSONSetVal(configJson, nvmCacheSizeMB);
+  JSONSetVal(configJson, nvmCacheMetadataSizeMB);
   JSONSetVal(configJson, nvmCachePaths);
   JSONSetVal(configJson, writeAmpDeviceList);
 
@@ -93,7 +95,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 648>();
+  checkCorrectSize<CacheConfig, 688>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(
