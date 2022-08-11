@@ -18,6 +18,9 @@
 
 #include <folly/Random.h>
 #include <folly/TokenBucket.h>
+#include <folly/futures/Future.h>
+#include <folly/io/async/EventBase.h>
+#include <folly/io/async/EventBaseThread.h>
 
 #include <atomic>
 #include <cstddef>
@@ -211,6 +214,163 @@ class AsyncCacheStressor : public Stressor {
     return locks_[bucket];
   }
 
+  // This function handles the async operations for kGet and kLoneGet. It calls
+  // 'asyncFind' and then 'onReadyFn' if the returned handle is ready. If the
+  // returned handle is not ready, it puts a SemiFuture to an event base thread
+  // which later calls 'onReadyFn' when the handle is ready.
+  void asyncGet(PoolId pid,
+                ThroughputStats& stats,
+                const Request* req,
+                folly::EventBase* evb,
+                const std::string* key) {
+    ++stats.get;
+    auto lock = chainedItemAcquireSharedLock(*key);
+
+    if (ticker_) {
+      ticker_->updateTimeStamp(req->timestamp);
+    }
+    // TODO currently pure lookaside, we should
+    // add a distribution over sequences of requests/access patterns
+    // e.g. get-no-set and set-no-get
+
+    auto onReadyFn = [&, req, key = *key,
+                      l = std::move(lock)](auto hdl) mutable {
+      auto result = OpResultType::kGetMiss;
+
+      if (hdl == nullptr) {
+        ++stats.getMiss;
+        result = OpResultType::kGetMiss;
+
+        if (config_.enableLookaside) {
+          // allocate and insert on miss
+          // upgrade access privledges, (lock_upgrade is not
+          // appropriate here)
+          l.unlock();
+          auto xlock = chainedItemAcquireUniqueLock(key);
+          setKey(pid, stats, &key, *(req->sizeBegin), req->ttlSecs,
+                 req->admFeatureMap);
+        }
+      } else {
+        result = OpResultType::kGetHit;
+      }
+
+      if (req->requestId) {
+        // req might be deleted after calling notifyResult()
+        wg_->notifyResult(*req->requestId, result);
+      }
+    };
+
+    cache_->recordAccess(*key);
+    auto sf = cache_->asyncFind(*key);
+    if (sf.isReady()) {
+      // If the handle is ready, call onReadyFn directly to process the handle
+      onReadyFn(std::move(sf).value());
+      return;
+    }
+
+    std::move(sf)
+        .deferValue(std::move(onReadyFn))
+        .via(folly::Executor::getKeepAliveToken(evb));
+
+    return;
+  }
+
+  // This function handles the async operations for kAddChained. It calls
+  // 'asyncFind' and then 'onReadyFn' if the returned handle is ready. If the
+  // returned handle is not ready, it puts a SemiFuture to an event base thread
+  // which later calls 'onReadyFn' when the handle is ready.
+  void asyncAddChained(PoolId pid,
+                       ThroughputStats& stats,
+                       const Request* req,
+                       folly::EventBase* evb,
+                       const std::string* key) {
+    ++stats.get;
+    auto lock = chainedItemAcquireUniqueLock(*key);
+
+    auto onReadyFn = [&, req, key, l = std::move(lock), pid](auto hdl) {
+      WriteHandle wHdl;
+      if (hdl == nullptr) {
+        ++stats.getMiss;
+
+        ++stats.set;
+        wHdl = cache_->allocate(pid, *key, *(req->sizeBegin), req->ttlSecs);
+        if (!wHdl) {
+          ++stats.setFailure;
+          return;
+        }
+        populateItem(wHdl);
+        cache_->insertOrReplace(wHdl);
+      } else {
+        wHdl = std::move(hdl).toWriteHandle();
+      }
+      XDCHECK(req->sizeBegin + 1 != req->sizeEnd);
+      bool chainSuccessful = false;
+      for (auto j = req->sizeBegin + 1; j != req->sizeEnd; j++) {
+        ++stats.addChained;
+
+        const auto size = *j;
+        auto child = cache_->allocateChainedItem(wHdl, size);
+        if (!child) {
+          ++stats.addChainedFailure;
+          continue;
+        }
+        chainSuccessful = true;
+        populateItem(child);
+        cache_->addChainedItem(wHdl, std::move(child));
+      }
+      if (chainSuccessful && cache_->consistencyCheckEnabled()) {
+        cache_->trackChainChecksum(wHdl);
+      }
+    };
+
+    // Always use asyncFind as findToWrite is sync when using HybridCache
+    auto sf = cache_->asyncFind(*key);
+    if (sf.isReady()) {
+      onReadyFn(std::move(sf).value());
+      return;
+    }
+
+    std::move(sf)
+        .deferValue(std::move(onReadyFn))
+        .via(folly::Executor::getKeepAliveToken(evb));
+  }
+
+  // This function handles the async operations for kUpdate. It calls
+  // 'asyncFind' and then 'onReadyFn' if the returned handle is ready. If the
+  // returned handle is not ready, it puts a SemiFuture to an event base thread
+  // which later calls 'onReadyFn' when the handle is ready.
+  void asyncUpdate(ThroughputStats& stats,
+                   const Request* req,
+                   folly::EventBase* evb,
+                   const std::string* key) {
+    ++stats.get;
+    ++stats.update;
+    auto lock = chainedItemAcquireUniqueLock(*key);
+    if (ticker_) {
+      ticker_->updateTimeStamp(req->timestamp);
+    }
+
+    auto onReadyFn = [&, l = std::move(lock)](auto hdl) {
+      if (hdl == nullptr) {
+        ++stats.getMiss;
+        ++stats.updateMiss;
+        return;
+      }
+      auto wHdl = std::move(hdl).toWriteHandle();
+      cache_->updateItemRecordVersion(wHdl);
+    };
+
+    auto sf = cache_->asyncFind(*key);
+    if (sf.isReady()) {
+      onReadyFn(std::move(sf).value());
+      return;
+    }
+
+    std::move(sf)
+        .deferValue(std::move(onReadyFn))
+        .via(folly::Executor::getKeepAliveToken(evb));
+  }
+
   // TODO maintain state on whether key has chained allocs and use it to only
   // lock for keys with chained items.
   auto chainedItemAcquireSharedLock(Key key) {
@@ -262,6 +422,12 @@ class AsyncCacheStressor : public Stressor {
       limitRate();
     };
 
+    // thread local variable for event base executor thread
+    folly::EventBaseThread ebt;
+    folly::EventBase* eb = ebt.getEventBase();
+
+    // lastRequestId is used in piecewise generator, which is not compatible
+    // with current asynchronous design, we remove all the lastRequestId used
     std::optional<uint64_t> lastRequestId = std::nullopt;
     for (uint64_t i = 0;
          i < config_.numOps &&
@@ -307,36 +473,7 @@ class AsyncCacheStressor : public Stressor {
         }
         case OpType::kLoneGet:
         case OpType::kGet: {
-          ++stats.get;
-
-          auto slock = chainedItemAcquireSharedLock(*key);
-          auto xlock = decltype(chainedItemAcquireUniqueLock(*key)){};
-
-          if (ticker_) {
-            ticker_->updateTimeStamp(req.timestamp);
-          }
-          // TODO currently pure lookaside, we should
-          // add a distribution over sequences of requests/access patterns
-          // e.g. get-no-set and set-no-get
-          cache_->recordAccess(*key);
-          auto it = cache_->find(*key);
-          if (it == nullptr) {
-            ++stats.getMiss;
-            result = OpResultType::kGetMiss;
-
-            if (config_.enableLookaside) {
-              // allocate and insert on miss
-              // upgrade access privledges, (lock_upgrade is not
-              // appropriate here)
-              slock = {};
-              xlock = chainedItemAcquireUniqueLock(*key);
-              setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                     req.admFeatureMap);
-            }
-          } else {
-            result = OpResultType::kGetHit;
-          }
-
+          asyncGet(pid, stats, &req, eb, std::move(key));
           break;
         }
         case OpType::kDel: {
@@ -349,55 +486,11 @@ class AsyncCacheStressor : public Stressor {
           break;
         }
         case OpType::kAddChained: {
-          ++stats.get;
-          auto lock = chainedItemAcquireUniqueLock(*key);
-          auto it = cache_->findToWrite(*key);
-          if (!it) {
-            ++stats.getMiss;
-
-            ++stats.set;
-            it = cache_->allocate(pid, *key, *(req.sizeBegin), req.ttlSecs);
-            if (!it) {
-              ++stats.setFailure;
-              break;
-            }
-            populateItem(it);
-            cache_->insertOrReplace(it);
-          }
-          XDCHECK(req.sizeBegin + 1 != req.sizeEnd);
-          bool chainSuccessful = false;
-          for (auto j = req.sizeBegin + 1; j != req.sizeEnd; j++) {
-            ++stats.addChained;
-
-            const auto size = *j;
-            auto child = cache_->allocateChainedItem(it, size);
-            if (!child) {
-              ++stats.addChainedFailure;
-              continue;
-            }
-            chainSuccessful = true;
-            populateItem(child);
-            cache_->addChainedItem(it, std::move(child));
-          }
-          if (chainSuccessful && cache_->consistencyCheckEnabled()) {
-            cache_->trackChainChecksum(it);
-          }
+          asyncAddChained(pid, stats, &req, eb, std::move(key));
           break;
         }
         case OpType::kUpdate: {
-          ++stats.get;
-          ++stats.update;
-          auto lock = chainedItemAcquireUniqueLock(*key);
-          if (ticker_) {
-            ticker_->updateTimeStamp(req.timestamp);
-          }
-          auto it = cache_->findToWrite(*key);
-          if (it == nullptr) {
-            ++stats.getMiss;
-            ++stats.updateMiss;
-            break;
-          }
-          cache_->updateItemRecordVersion(it);
+          asyncUpdate(stats, &req, eb, std::move(key));
           break;
         }
         default:
@@ -406,7 +499,13 @@ class AsyncCacheStressor : public Stressor {
           break;
         }
 
-        lastRequestId = req.requestId;
+        if (op == OpType::kLoneGet || op == OpType::kGet) {
+          // The result will be set in the 'onReadyFn' of 'get'
+          // For kAddChained and kUpdate, the result has never been changed so
+          // we just follow the original path
+          continue;
+        }
+
         if (req.requestId) {
           // req might be deleted after calling notifyResult()
           wg_->notifyResult(*req.requestId, result);
