@@ -15,15 +15,25 @@
  */
 
 #pragma once
+
+#include <folly/DynamicConverter.h>
+#include <folly/Format.h>
 #include <folly/hash/Hash.h>
+#include <folly/json.h>
+#include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <atomic>
+#include <iostream>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/HitsPerSlabStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
 #include "cachelib/allocator/RandomStrategy.h"
+#include "cachelib/allocator/Util.h"
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/cache/CacheValue.h"
 #include "cachelib/cachebench/cache/ItemRecords.h"
@@ -31,12 +41,46 @@
 #include "cachelib/cachebench/consistency/LogEventStream.h"
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
+#include "cachelib/cachebench/util/NandWrites.h"
 
 DECLARE_bool(report_api_latency);
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+// An admission policy that rejects items that was last accessed more than
+// X seconds ago. This is useful to simulate workloads where we provide a
+// retention (soft) guarantee.
+template <typename Cache>
+class RetentionAP final : public NvmAdmissionPolicy<Cache> {
+ public:
+  using Item = typename Cache::Item;
+  using ChainedItemIter = typename Cache::ChainedItemIter;
+
+  // @param retentionThreshold    reject items with eviction age above
+  RetentionAP(uint32_t retentionThreshold)
+      : retentionThreshold_{retentionThreshold} {}
+
+ protected:
+  bool acceptImpl(const Item& it,
+                  folly::Range<ChainedItemIter>) final override {
+    auto lastAccessTime = it.getLastAccessTime();
+    auto evictionAge = util::getCurrentTimeSec() - lastAccessTime;
+    return evictionAge <= retentionThreshold_;
+  }
+
+  bool acceptImpl(typename Item::Key /* key */) final override {
+    // We don't know eviction age so always return true
+    return true;
+  }
+
+  std::unordered_map<std::string, double> getCountersImpl() final override {
+    return {};
+  }
+
+ private:
+  const uint32_t retentionThreshold_{0};
+};
 
 // A specialized Cache for cachebench use, backed by Cachelib.
 // Items value in this cache follows CacheValue schema, which

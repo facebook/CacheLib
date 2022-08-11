@@ -21,6 +21,7 @@
 #include "cachelib/common/ApproxSplitSet.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Time.h"
 
 namespace facebook {
 namespace cachelib {

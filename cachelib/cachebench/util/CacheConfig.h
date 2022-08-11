@@ -225,6 +225,10 @@ struct CacheConfig : public JSONConfig {
   // this verifies whether the feature affects throughputs.
   bool enableItemDestructor{false};
 
+  // If specified, we will not admit any item into NvmCache if their
+  // eviction-age is more than this threshold. 0 means no threshold
+  uint32_t nvmAdmissionRetentionTimeThreshold{0};
+
   //
   // Options below are not to be populated with JSON
   //

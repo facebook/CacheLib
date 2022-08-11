@@ -90,6 +90,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, tickerSynchingSeconds);
   JSONSetVal(configJson, enableItemDestructorCheck);
   JSONSetVal(configJson, enableItemDestructor);
+  JSONSetVal(configJson, nvmAdmissionRetentionTimeThreshold);
 
   JSONSetVal(configJson, customConfigJson);
   // if you added new fields to the configuration, update the JSONSetVal

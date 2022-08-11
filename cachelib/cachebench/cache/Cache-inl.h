@@ -14,25 +14,9 @@
  * limitations under the License.
  */
 
-#include <folly/DynamicConverter.h>
-#include <folly/Format.h>
-#include <folly/json.h>
-#include <folly/logging/xlog.h>
-#include <gflags/gflags.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-
-#include <iostream>
-
-#include "cachelib/allocator/Util.h"
-#include "cachelib/allocator/nvmcache/NavyConfig.h"
-#include "cachelib/cachebench/cache/ItemRecords.h"
-#include "cachelib/cachebench/util/NandWrites.h"
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-
 template <typename Allocator>
 uint64_t Cache<Allocator>::fetchNandWrites() const {
   size_t total = 0;
@@ -226,6 +210,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
         XLOG(ERR) << "CAST ERROR " << e.what();
         throw;
       }
+    } else if (config_.nvmAdmissionRetentionTimeThreshold > 0) {
+      nvmAdmissionPolicy_ = std::make_shared<RetentionAP<Allocator>>(
+          config_.nvmAdmissionRetentionTimeThreshold);
+      allocatorConfig_.setNvmCacheAdmissionPolicy(nvmAdmissionPolicy_);
     }
 
     allocatorConfig_.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
