@@ -103,6 +103,18 @@ class Cache {
   // @return read handle for the item if present or null handle.
   ReadHandle find(Key key);
 
+  // perform lookup in the cache asynchronously. The handle will be returned
+  // directly without waiting. Caller needs to handle the consistency check and
+  // simulate performance impact when the handle is ready. This is also used to
+  // findToWrite asynchronously. The caller can then turn the read handle into a
+  // write handle.
+  //
+  // @param key   the key for lookup
+  //
+  // @return a semifuture of a read handle for the caller to check if it is
+  // ready.
+  folly::SemiFuture<ReadHandle> asyncFind(Key key);
+
   // perform lookup then mutation in the cache and if consistency checking is
   // enabled, ensure that the lookup result is consistent with the past actions
   // and concurrent actions. If NVM is enabled, waits for the Item to become

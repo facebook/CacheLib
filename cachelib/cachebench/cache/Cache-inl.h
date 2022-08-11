@@ -471,6 +471,63 @@ typename Cache<Allocator>::ReadHandle Cache<Allocator>::find(Key key) {
 }
 
 template <typename Allocator>
+folly::SemiFuture<typename Cache<Allocator>::ReadHandle>
+Cache<Allocator>::asyncFind(Key key) {
+  auto findFn = [&]() {
+    util::LatencyTracker tracker;
+    if (FLAGS_report_api_latency) {
+      tracker = util::LatencyTracker(cacheFindLatency_);
+    }
+    // find from cache, don't wait for the result to be ready.
+    auto it = cache_->find(key);
+
+    if (it.isReady()) {
+      if (touchValueEnabled()) {
+        touchValue(it);
+      }
+
+      return std::move(it).toSemiFuture();
+    }
+
+    // if the handle is not ready, return a SemiFuture with deferValue for
+    // touchValue
+    return std::move(it).toSemiFuture().deferValue(
+        [this, t = std::move(tracker)](auto handle) {
+          if (touchValueEnabled()) {
+            touchValue(handle);
+          }
+          return handle;
+        });
+  };
+
+  if (!consistencyCheckEnabled()) {
+    return findFn();
+  }
+
+  auto opId = valueTracker_->beginGet(key);
+  auto sf = findFn();
+
+  if (sf.isReady()) {
+    if (checkGet(opId, sf.value())) {
+      invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+    }
+
+    return sf;
+  }
+
+  // if the handle is not ready, return a SemiFuture with deferValue for
+  // checking consistency
+  return std::move(sf).deferValue(
+      [this, opId = std::move(opId), key = std::move(key)](auto handle) {
+        if (checkGet(opId, handle)) {
+          invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+        }
+
+        return handle;
+      });
+}
+
+template <typename Allocator>
 typename Cache<Allocator>::WriteHandle Cache<Allocator>::findToWrite(Key key) {
   auto findToWriteFn = [&]() {
     util::LatencyTracker tracker;
