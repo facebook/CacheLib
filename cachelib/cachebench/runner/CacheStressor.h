@@ -300,6 +300,12 @@ class CacheStressor : public Stressor {
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
+          if (config_.onlySetIfMiss) {
+            auto it = cache_->find(*key);
+            if (it != nullptr) {
+              continue;
+            }
+          }
           auto lock = chainedItemAcquireUniqueLock(*key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);

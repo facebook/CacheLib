@@ -180,6 +180,11 @@ struct StressorConfig : public JSONConfig {
   // follow get misses with a set
   bool enableLookaside{false};
 
+  // only set a key in the cache if the key already doesn't exist
+  // this is useful for replaying traces with both get and set, and also
+  // for manually configured synthetic workloads.
+  bool onlySetIfMiss{false};
+
   // if enabled, initializes an item with random bytes. For consistency mode,
   // this option is ignored since the consistency check fills in a sequence
   // number into the item.
