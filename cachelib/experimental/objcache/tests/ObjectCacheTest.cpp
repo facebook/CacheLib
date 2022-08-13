@@ -707,8 +707,9 @@ TEST(ObjectCache, PersistenceSimple) {
       2 /* persistorQueueBatchSize */);
 
   // Create few vector in the cache
-  const auto ttl = std::chrono::seconds(5);
-  size_t numOfItemInCache = 10;
+  const auto ttlLong = std::chrono::seconds(100);
+  const auto ttlShort = std::chrono::seconds(1);
+  size_t numOfItemInCache = 2 * 10;
   {
     auto objcache = createCache(config);
     for (size_t j = 0; j < numOfItemInCache; j++) {
@@ -726,9 +727,14 @@ TEST(ObjectCache, PersistenceSimple) {
       // Insert into cache
       objcache->insertOrReplace(vec);
       // extend ttl
-      vec.viewItemHandle()->extendTTL(ttl);
+      if (j % 2 == 0) {
+        vec.viewItemHandle()->extendTTL(ttlLong);
+        EXPECT_EQ(ttlLong, vec.viewItemHandle()->getConfiguredTTL());
+      } else {
+        vec.viewItemHandle()->extendTTL(ttlShort);
+        EXPECT_EQ(ttlShort, vec.viewItemHandle()->getConfiguredTTL());
+      }
       EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
-      EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
     }
 
     // Persist
@@ -737,21 +743,29 @@ TEST(ObjectCache, PersistenceSimple) {
 
   {
     auto objcache = createCache(config);
+
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(2));
     objcache->recover();
 
     for (size_t j = 0; j < numOfItemInCache; j++) {
       auto vec = objcache->find<Vector>("my obj " + folly::to<std::string>(j));
-      ASSERT_TRUE(vec);
-      EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
-      EXPECT_EQ(ttl, vec.viewItemHandle()->getConfiguredTTL());
-      EXPECT_EQ(1001, vec->size());
+      if (j % 2 == 0) {
+        ASSERT_TRUE(vec);
+        EXPECT_NE(0, vec.viewItemHandle()->getExpiryTime());
+        EXPECT_EQ(ttlLong, vec.viewItemHandle()->getConfiguredTTL());
+        EXPECT_EQ(1001, vec->size());
 
-      for (int i = 999; i >= 0; i--) {
-        ASSERT_EQ(i, vec->back());
-        vec->pop_back();
+        for (int i = 999; i >= 0; i--) {
+          ASSERT_EQ(i, vec->back());
+          vec->pop_back();
+        }
+        EXPECT_EQ(1, vec->size());
+        EXPECT_EQ(123, vec->back());
+      } else {
+        // item is expired so we will not recover it
+        ASSERT_FALSE(vec);
       }
-      EXPECT_EQ(1, vec->size());
-      EXPECT_EQ(123, vec->back());
     }
   }
 }
@@ -766,7 +780,7 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
   config.setCacheAllocatorConfig(cacheAllocatorConfig);
   config.enablePersistence(
       1 /* persistorRestorerThreadCount */,
-      4 /* restorerTimeOutDurationInSec */,
+      1 /* restorerTimeOutDurationInSec */,
       tmpFilePath /* persistFullPathFile */,
       [](folly::StringPiece key, void* unalignedMem) {
         if (key == "my obj one" || key == "my obj two") {
@@ -788,7 +802,7 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
         // cache
         // content.
         /* sleep override */
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+        std::this_thread::sleep_for(std::chrono::seconds(10));
 
         if (key == "my obj one" || key == "my obj two") {
           Deserializer deserializer{
@@ -817,7 +831,6 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
       });
 
   // Create two vectors in cache
-  const auto ttl = std::chrono::seconds(5);
   {
     auto objcache = createCache(config);
     auto vecOne = objcache->create<Vector>(0 /* poolId */, "my obj one");
@@ -832,10 +845,6 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
 
     // Insert into cache
     objcache->insertOrReplace(vecOne);
-    // extend ttl
-    vecOne.viewItemHandle()->extendTTL(ttl);
-    EXPECT_NE(0, vecOne.viewItemHandle()->getExpiryTime());
-    EXPECT_EQ(ttl, vecOne.viewItemHandle()->getConfiguredTTL());
 
     auto vecTwo = objcache->create<Vector>(0 /* poolId */, "my obj two");
     ASSERT_TRUE(vecTwo);
@@ -849,10 +858,6 @@ TEST(ObjectCache, PersistenceSimpleWithRecoverTimeOut) {
 
     // Insert into cache
     objcache->insertOrReplace(vecTwo);
-    // extend ttl
-    vecTwo.viewItemHandle()->extendTTL(ttl);
-    EXPECT_NE(0, vecTwo.viewItemHandle()->getExpiryTime());
-    EXPECT_EQ(ttl, vecTwo.viewItemHandle()->getConfiguredTTL());
 
     // Persist
     objcache->persist();

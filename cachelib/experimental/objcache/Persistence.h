@@ -48,6 +48,11 @@ class PersistorWorker : public PeriodicWorker {
     uint64_t failedToSerializeKeysCount = 0;
     while (queue_.read(workUnit) && !breakOut_.load()) {
       for (auto& [handle, poolId] : workUnit) {
+        // no need to persist if item is already expired
+        if (handle->isExpired()) {
+          continue;
+        }
+
         auto iobuf =
             serializationCallback_(handle->getKey(), handle->getMemory());
         if (!iobuf) {
@@ -179,19 +184,26 @@ class RestorerWorker : public PeriodicWorker {
   using DeserializationCallback = typename ObjectCache::DeserializationCallback;
   explicit RestorerWorker(DeserializationCallback deserializationCallback,
                           ObjectCache& objcache,
-                          std::shared_ptr<RecordReader> rr)
+                          std::shared_ptr<RecordReader> rr,
+                          size_t threadNum)
       : deserializationCallback_{std::move(deserializationCallback)},
         objcache_(objcache),
         recordReader_(std::move(rr)),
-        breakOut_(false) {}
+        breakOut_(false),
+        name_{folly::sformat("thread_{}", threadNum)} {}
 
   void work() override {
     XDCHECK(deserializationCallback_);
+    uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
     while (!recordReader_->isEnd() && !breakOut_.load()) {
       auto iobuf = recordReader_->readRecord();
       XDCHECK(iobuf);
       Deserializer deserializer(iobuf->data(), iobuf->data() + iobuf->length());
       auto item = deserializer.deserialize<serialization::Item>();
+      // no need to restore if item is already expired
+      if (isExpired(item.expiryTime().value(), currentTime)) {
+        continue;
+      }
       auto hdl = deserializationCallback_(
           item.poolId().value(), item.key().value(), item.payload().value(),
           item.creationTime().value(), item.expiryTime().value(), objcache_);
@@ -212,11 +224,22 @@ class RestorerWorker : public PeriodicWorker {
 
   void setBreakOut() { breakOut_ = true; }
 
+  bool isExpired(uint32_t expiryTime, uint32_t nowTime) {
+    if (expiryTime != 0 && expiryTime < nowTime) {
+      return true;
+    }
+
+    return false;
+  }
+
+  const std::string& getName() const { return name_; }
+
  private:
   DeserializationCallback deserializationCallback_;
   ObjectCache& objcache_;
   std::shared_ptr<RecordReader> recordReader_;
   std::atomic<bool> breakOut_;
+  std::string name_;
 };
 
 template <typename ObjectCache>
@@ -236,7 +259,7 @@ class ObjectCacheRestorer {
         recordReaders_.emplace_back(
             navy::createFileRecordReader(std::move(file)));
         restorers_.emplace_back(std::make_shared<RestorerWorkerObj>(
-            deserializationCallback, objcache, recordReaders_.at(i)));
+            deserializationCallback, objcache, recordReaders_.at(i), i));
         restorers_.back()->start(std::chrono::milliseconds{1});
       }
     }
@@ -244,7 +267,11 @@ class ObjectCacheRestorer {
 
   ~ObjectCacheRestorer() {
     for (auto& restorer : restorers_) {
-      restorer->stop();
+      if (!restorer->stop()) {
+        XLOG(ERR)
+            << "Destruction: Restorer thread did not stop, thread name =  "
+            << restorer->getName();
+      }
     }
   }
 
@@ -286,7 +313,12 @@ class ObjectCacheRestorer {
       if (forceStopWorker) {
         restorer->setBreakOut();
       }
-      restorer->stop();
+      if (!restorer->stop()) {
+        XLOG(ERR)
+            << "forceStopWorker: Restorer thread did not stop, thread name =  "
+            << restorer->getName();
+        ;
+      }
     }
   }
 
