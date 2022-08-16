@@ -117,7 +117,6 @@ class NvmAdmissionPolicy {
 
   uint64_t getMinTTL() const { return minTTL_; }
 
- protected:
   // Implement this method for the detailed admission decision logic.
   // By default this accepts all items.
   virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) {
