@@ -70,7 +70,7 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
 }
 
 template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
-ChainedHashTable::Impl<T, HookPtr>::~Impl<T, HookPtr>() {
+ChainedHashTable::Impl<T, HookPtr>::~Impl() {
   if (restorable_) {
     hashTable_.release();
   }

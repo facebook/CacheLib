@@ -25,10 +25,10 @@ struct AlwaysPickOneRebalanceStrategy : public RebalanceStrategy {
  public:
   const ClassId victim;
   const ClassId receiver;
-  AlwaysPickOneRebalanceStrategy(ClassId victim, ClassId receiver)
+  AlwaysPickOneRebalanceStrategy(ClassId victim_, ClassId receiver_)
       : RebalanceStrategy(PickNothingOrTest),
-        victim(victim),
-        receiver(receiver) {}
+        victim(victim_),
+        receiver(receiver_) {}
 
  private:
   ClassId pickVictim(const CacheBase&, PoolId) { return victim; }

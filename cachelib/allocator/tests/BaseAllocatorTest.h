@@ -363,7 +363,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       bool operator==(const Key& other) const { return id == other.id; }
       bool isEmpty() const { return id == 0; }
       Key(int i) : id(i) {}
-    };
+    } __attribute__((packed));
 
     typename AllocatorT::Config config;
 
