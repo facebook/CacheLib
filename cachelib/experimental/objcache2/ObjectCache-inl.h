@@ -151,6 +151,12 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
         "Object size tracking is enabled but object size is set to be 0.");
   }
 
+  if (!objectSizeTrackingEnabled_ && objectSize != 0) {
+    throw std::invalid_argument(
+        "Object size tracking is not enabled but object size is set. Are you "
+        "trying to set TTL?");
+  }
+
   inserts_.inc();
 
   auto handle =
@@ -203,6 +209,12 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
   if (objectSizeTrackingEnabled_ && objectSize == 0) {
     throw std::invalid_argument(
         "Object size tracking is enabled but object size is set to be 0.");
+  }
+
+  if (!objectSizeTrackingEnabled_ && objectSize != 0) {
+    throw std::invalid_argument(
+        "Object size tracking is not enabled but object size is set. Are you "
+        "trying to set TTL?");
   }
 
   inserts_.inc();

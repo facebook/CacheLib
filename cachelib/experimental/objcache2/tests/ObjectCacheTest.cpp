@@ -73,8 +73,14 @@ class ObjectCacheTest : public ::testing::Test {
     foo->b = 2;
     foo->c = 3;
 
+    int ttlSecs = 2;
+    // test bad API call
+    ASSERT_THROW(objcache->insertOrReplace(
+                     "Foo", std::move(std::make_unique<Foo>()), ttlSecs),
+                 std::invalid_argument);
+
     objcache->insertOrReplace("Foo", std::move(foo), 0 /*object size*/,
-                              2 /* seconds */);
+                              ttlSecs);
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -130,6 +136,11 @@ class ObjectCacheTest : public ::testing::Test {
     ObjectCacheConfig config;
     config.l1EntriesLimit = 10'000;
     auto objcache = ObjectCache<AllocatorT>::template create<Foo>(config);
+
+    // test bad API call
+    ASSERT_THROW(objcache->insert("Foo", std::move(std::make_unique<Foo>()),
+                                  2 /* TTL seconds */),
+                 std::invalid_argument);
 
     auto foo1 = std::make_unique<Foo>();
     foo1->a = 1;
