@@ -126,7 +126,7 @@ The space managed by BigHash is divided into buckets.
 ## BlockCache: the large item engine
 [BlockCache Page](/docs/Cache_Library_Architecture_Guide/Large_Object_Cache )
 
-The space managed by BlockCache is divided into regions. Each region belongs to one certain "size class", which means all the items in that regions will be of the same size.
+The space managed by BlockCache is divided into regions of the same size (default 16MB, max 256MB).
 
 * Writes: There is an in memory buffer. Once the buffer is full, it gets flushed into a region on the flash storage. If it helps you understand, this is like the LSM tree in storage engine, except there won't be "merging" later.
 * Reads: Each item is stored in a B tree index in memory. When a read is performed, the region that item is in is promoted in the FIFO queue in memory. Unlike DRAM where each allocation class has its own queue, we have one single queue for all the regions across all size classes.
