@@ -21,8 +21,11 @@ namespace cachelib {
 namespace objcache2 {
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::work() {
-  auto totalObjSize = objCache_.getTotalObjectSize();
   auto currentNumEntries = objCache_.getNumEntries();
+  if (currentNumEntries == 0) {
+    return;
+  }
+  auto totalObjSize = objCache_.getTotalObjectSize();
   // Do the calculation only when total object size or total object number
   // achieves the threshold. This is to avoid unreliable calculation of average
   // object size when the cache is new and only has a few objects.
