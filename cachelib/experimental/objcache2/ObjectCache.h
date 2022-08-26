@@ -42,6 +42,28 @@ template <typename AllocatorT>
 class ObjectCacheTest;
 }
 
+struct FOLLY_PACK_ATTR ObjectCacheItem {
+  uintptr_t objectPtr;
+  size_t objectSize;
+};
+
+struct ObjectCacheDestructorData {
+  ObjectCacheDestructorData(uintptr_t ptr, const KAllocation::Key& k)
+      : objectPtr(ptr), key(k) {}
+
+  // release the evicted/removed/expired object memory
+  template <typename T>
+  void deleteObject() {
+    delete reinterpret_cast<T*>(objectPtr);
+  }
+
+  // pointer of the evicted/removed/expired object
+  uintptr_t objectPtr;
+
+  // the key corresponding to the evicted/removed/expired object
+  const KAllocation::Key& key;
+};
+
 struct ObjectCacheConfig {
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
@@ -87,12 +109,36 @@ struct ObjectCacheConfig {
     eventTracker = std::move(ptr);
     return *this;
   }
-};
 
-template <typename T>
-struct FOLLY_PACK_ATTR ObjectCacheItem {
-  T* objectPtr;
-  size_t objectSize;
+  // If you are going to store objects of different types, you MUST set this
+  // callback to release the removed/evicted/expired objects memory; otherwise,
+  // memory leak will happen.
+  //
+  // One way to do that is to encode the type in the key.
+  // Example:
+  // enum class user_defined_ObjectType { Foo1, Foo2, Foo3 };
+  //
+  // config.setItemDestructor([&](ObjectCacheDestructorData ctx) {
+  //     switch (user_defined_getType(ctx.key)) {
+  //       case ObjectType::Foo1:
+  //         ctx.deleteObject<Foo1>();
+  //         break;
+  //       case ObjectType::Foo2:
+  //         ctx.deleteObject<Foo2>();
+  //         break;
+  //       case ObjectType::Foo3:
+  //         ctx.deleteObject<Foo3>();
+  //         break;
+  //       ...
+  //     }
+  // });
+  using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
+  ItemDestructor itemDestructor{};
+
+  ObjectCacheConfig& setItemDestructor(ItemDestructor destructor) {
+    itemDestructor = std::move(destructor);
+    return *this;
+  }
 };
 
 template <typename AllocatorT>
@@ -101,20 +147,26 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
 
-  template <typename T>
-  void init(ObjectCacheConfig config);
-
  public:
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
   explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
-      : l1EntriesLimit_(config.l1EntriesLimit),
-        objectSizeTrackingEnabled_(config.objectSizeTrackingEnabled),
-        sizeControllerIntervalMs_(config.sizeControllerIntervalMs),
-        cacheSizeLimit_{config.cacheSizeLimit},
-        l1NumShards_{config.l1NumShards} {}
+      : config_{config} {}
 
-  template <typename T>
+  struct void_t {};
+
+  // Create an ObjectCache. User can either call:
+  // 1. (recommended) create:
+  //    - can store objects of one or more types
+  //    - must set ItemDestructor from ObjectCacheConfig
+  //    - must call `ctx.deleteObject<T>()` to delete the objects in
+  //      ItemDestructor (also see example in ObjectCacheConfig)
+  // 2. create<T>:
+  //    NOTE: this usage is going to be deprecated
+  //    - can only store objects of type T
+  //    - no need to set ItemDestructor from ObjectCacheConfig as objects
+  //      deletion is handled internally
+  template <typename T = void_t>
   static std::unique_ptr<ObjectCache<AllocatorT>> create(
       ObjectCacheConfig config);
 
@@ -207,7 +259,6 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   AllocatorT& getL1Cache() { return *this->l1Cache_; }
 
   // Get the default l1 allocation size in bytes.
-  template <typename T>
   static uint32_t getL1AllocSize(uint8_t maxKeySizeBytes);
 
   // Get the total size of all cached objects in bytes.
@@ -218,7 +269,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Get the current L1 entries number limit.
   size_t getCurrentEntriesLimit() const {
     return sizeController_ == nullptr
-               ? l1EntriesLimit_
+               ? config_.l1EntriesLimit
                : sizeController_->getCurrentEntriesLimit();
   }
 
@@ -235,9 +286,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return fmt::format("_cl_ph_{}", i);
   }
 
+  template <typename T>
+  void init();
+
   // Allocate an item handle from the interal cache allocator. This item's
   // storage is used to cache pointer to objects in object-cache.
-  template <typename T>
   typename AllocatorT::WriteHandle allocateFromL1(folly::StringPiece key,
                                                   uint32_t ttl,
                                                   uint32_t creationTime);
@@ -245,7 +298,6 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Allocate the placeholder and add it to the placeholder vector.
   //
   // @return true if the allocation is successful
-  template <typename T>
   bool allocatePlaceholder(std::string key);
 
   // Start size controller
@@ -262,22 +314,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   bool stopSizeController(std::chrono::seconds timeout = std::chrono::seconds{
                               0});
 
-  // With size controller disabled, above this many entries, L1 will start
-  // evicting.
-  // With size controller enabled, this is only a hint used for initialization.
-  // The actual object number limit is adjusted based on cacheSizeLimit.
-  const size_t l1EntriesLimit_{};
-
-  // Whether tracking the size of each object inside object-cache
-  const bool objectSizeTrackingEnabled_{};
-
-  // Period to fire size controller in milliseconds. 0 to disable size
-  // controller.
-  const int sizeControllerIntervalMs_{};
-
-  // If both object size tracking and size-controller are enabled, L1 will start
-  // evicting when total object size is above this limit
-  const size_t cacheSizeLimit_{};
+  // Config passed to the cache.
+  ObjectCacheConfig config_{};
 
   // Number of shards (LRUs) to lessen the contention on L1 cache
   size_t l1NumShards_{};
