@@ -9,7 +9,6 @@
     "allocFactor" : 2.0,
     "nvmCacheSizeMB" : 1024,
     "navyBigHashBucketSize": 4096,
-    "navySizeClasses": [],
     "navyBlockSize": 4096,
     "navyEncryption": true
   },

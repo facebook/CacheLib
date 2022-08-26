@@ -15,7 +15,6 @@
     "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": false,
-    "navySizeClasses": [],
     "poolRebalanceIntervalSec": 5
   },
   "test_config": {

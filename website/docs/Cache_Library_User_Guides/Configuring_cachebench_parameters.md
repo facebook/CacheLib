@@ -248,8 +248,6 @@ Use the following options to tune the Large Item engine (BlockCache): Block cach
 
 * `navyBlockSize`
 Underlying device block size for IO alignment.
-* `navySizeClasses`
-By default, cachebench uses a pre-determined array of sizes. Values are stored in slots rounded up to this size.  The default value is overridden by passing an array of sizes explicitly to control size classes. If an empty array is passed, Navy uses stacked mode.
 * `navySegmentedFifoSegmentRatio`
 By default Navy uses coarse grained LRU. To use FIFO, this parameter is set to an array with single value. To use segmented FIFO, this parameter is configured to control the number of segments by  specifying their ratios.
 * `navyHitsReinsertionThreshold`

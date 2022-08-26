@@ -25,7 +25,6 @@
     "rebalanceStrategy": "hits",
     "rebalanceMinRatio": 0.1,
     "rebalanceMinSlabs": 2,
-    "navySizeClasses": [],
     "navyNumInmemBuffers": 30
   },
   "test_config":

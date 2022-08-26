@@ -15,7 +15,6 @@
       "navyReaderThreads": 64,
       "navyWriterThreads": 64,
       "navyBlockSize": 512,
-      "navySizeClasses": [],
 
       "navyCleanRegions": 64,
       "navyNumInmemBuffers": 0,
@@ -28,7 +27,7 @@
         "numOps" : 100000000,
         "numThreads" : 48,
         "numKeys" : 100000,
-        
+
 
         "keySizeRange" : [8, 9],
         "keySizeRangeProbability" : [1.0],
