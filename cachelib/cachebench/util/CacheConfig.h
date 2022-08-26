@@ -126,9 +126,7 @@ struct CacheConfig : public JSONConfig {
   // appropriate ratios.
   std::vector<unsigned int> navySegmentedFifoSegmentRatio{};
 
-  // size classes for large objects in Navy that exceed the
-  // @navySmallItemMaxSize. Must be multiples of @navyBlockSize unless
-  // in-mem buffer is enabled. If empty, navy will use stack allocation mode.
+  // This is deprecated and no longer used.
   std::vector<uint32_t> navySizeClasses{512,      2 * 512,  3 * 512,
                                         4 * 512,  6 * 512,  8 * 512,
                                         12 * 512, 16 * 512, 32 * 512};
