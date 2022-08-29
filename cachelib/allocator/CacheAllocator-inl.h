@@ -16,12 +16,6 @@
 
 #pragma once
 
-#include <cachelib/allocator/CacheStats.h>
-#include <cachelib/common/Time.h>
-
-#include <chrono>
-
-#include "cachelib/common/Hash.h"
 namespace facebook {
 namespace cachelib {
 

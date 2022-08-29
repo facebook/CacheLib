@@ -23,6 +23,7 @@
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -74,6 +75,7 @@
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/common/Throttler.h"
+#include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/shm/ShmManager.h"
 
