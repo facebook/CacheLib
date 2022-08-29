@@ -220,6 +220,7 @@ struct Stats {
   // hit count for every alloc class in every pool
   std::unique_ptr<PerPoolClassTLCounters> cacheHits{};
   std::unique_ptr<PerPoolClassAtomicCounters> allocAttempts{};
+  std::unique_ptr<PerPoolClassAtomicCounters> evictionAttempts{};
   std::unique_ptr<PerPoolClassAtomicCounters> allocFailures{};
   std::unique_ptr<PerPoolClassAtomicCounters> fragmentationSize{};
   std::unique_ptr<PerPoolClassAtomicCounters> chainedItemEvictions{};

@@ -103,6 +103,9 @@ struct CacheStat {
   // number of attempts to allocate memory
   uint64_t allocAttempts{0};
 
+  // number of eviction attempts
+  uint64_t evictionAttempts{0};
+
   // number of failed attempts
   uint64_t allocFailures{0};
 
@@ -176,6 +179,9 @@ struct PoolStats {
 
   // number of attempts to allocate
   uint64_t numAllocAttempts() const;
+
+  // number of attempts to evict
+  uint64_t numEvictionAttempts() const;
 
   // number of attempts that failed
   uint64_t numAllocFailures() const;
@@ -407,6 +413,9 @@ struct GlobalCacheStats {
 
   // number of attempts to allocate an item
   uint64_t allocAttempts{0};
+
+  // number of eviction attempts
+  uint64_t evictionAttempts{0};
 
   // number of failures to allocate an item due to internal error
   uint64_t allocFailures{0};

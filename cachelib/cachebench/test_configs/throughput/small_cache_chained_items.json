@@ -1,0 +1,30 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 5120,
+    "poolRebalanceIntervalSec" : 0
+  },
+  "test_config" :
+    {
+      "numOps" : 10000000,
+      "numThreads" : 72,
+      "numKeys" : 100000,
+
+      "keySizeRange" : [8, 16],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [1, 1000000],
+      "valSizeRangeProbability" : [1.0],
+
+      "chainedItemLengthRange" : [1, 2],
+      "chainedItemLengthRangeProbability" : [1.0],
+
+      "chainedItemValSizeRange" : [1, 1000000],
+      "chainedItemValSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.6,
+      "setRatio" : 0.2,
+      "delRatio" : 0.0,
+      "addChainedRatio" : 0.2
+    }
+
+}
