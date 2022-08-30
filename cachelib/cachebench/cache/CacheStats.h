@@ -117,9 +117,10 @@ struct Stats {
                           allocAttempts,
                           invertPctFn(allocFailures, allocAttempts))
         << std::endl;
-    out << folly::sformat("Evict Attempts: {:,} Success: {:.2f}%",
-                          evictAttempts,
-                          invertPctFn(evictAttempts - numEvictions, evictAttempts))
+    out << folly::sformat(
+               "Evict Attempts: {:,} Success: {:.2f}%",
+               evictAttempts,
+               invertPctFn(evictAttempts - numEvictions, evictAttempts))
         << std::endl;
     out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
 
