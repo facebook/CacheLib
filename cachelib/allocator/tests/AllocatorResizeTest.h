@@ -152,6 +152,13 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds{expectedIters + 1});
 
+    if (alloc.getPool(poolId4).getCurrentAllocSize() < shrinkSize) {
+      // there could be some starvation either for pool resizer or worker,
+      // so allow more time for resizing
+      /* sleep override */
+      std::this_thread::sleep_for(std::chrono::seconds{5});
+    }
+
     w.stop();
 
     // now the pool should have been resized
