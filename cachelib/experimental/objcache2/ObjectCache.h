@@ -110,24 +110,29 @@ struct ObjectCacheConfig {
     return *this;
   }
 
-  // If you are going to store objects of different types, you MUST set this
-  // callback to release the removed/evicted/expired objects memory; otherwise,
-  // memory leak will happen.
+  // You MUST set this callback to release the removed/evicted/expired objects
+  // memory; otherwise, memory leak will happen.
+  // 1) store a single type Foo
+  // config.setItemDestructor([&](ObjectCacheDestructorData data) {
+  //         data.deleteObject<Foo>();
+  //     }
+  // });
   //
-  // One way to do that is to encode the type in the key.
+  // 2) store multiple types
+  // one way to do that is to encode the type in the key.
   // Example:
-  // enum class user_defined_ObjectType { Foo1, Foo2, Foo3 };
+  // enum class user_defined_ObjectType {Foo1, Foo2, Foo3 };
   //
-  // config.setItemDestructor([&](ObjectCacheDestructorData ctx) {
-  //     switch (user_defined_getType(ctx.key)) {
+  // config.setItemDestructor([&](ObjectCacheDestructorData data) {
+  //     switch (user_defined_getType(data.key)) {
   //       case ObjectType::Foo1:
-  //         ctx.deleteObject<Foo1>();
+  //         data.deleteObject<Foo1>();
   //         break;
   //       case ObjectType::Foo2:
-  //         ctx.deleteObject<Foo2>();
+  //         data.deleteObject<Foo2>();
   //         break;
   //       case ObjectType::Foo3:
-  //         ctx.deleteObject<Foo3>();
+  //         data.deleteObject<Foo3>();
   //         break;
   //       ...
   //     }
@@ -153,20 +158,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
       : config_{config} {}
 
-  struct void_t {};
-
-  // Create an ObjectCache. User can either call:
-  // 1. (recommended) create:
-  //    - can store objects of one or more types
-  //    - must set ItemDestructor from ObjectCacheConfig
-  //    - must call `ctx.deleteObject<T>()` to delete the objects in
-  //      ItemDestructor (also see example in ObjectCacheConfig)
-  // 2. create<T>:
-  //    NOTE: this usage is going to be deprecated
-  //    - can only store objects of type T
-  //    - no need to set ItemDestructor from ObjectCacheConfig as objects
-  //      deletion is handled internally
-  template <typename T = void_t>
+  // Create an ObjectCache to store objects of one or more types
+  //    - ItemDestructor must be set from ObjectCacheConfig
+  //    - Inside ItemDestructor, `ctx.deleteObject<T>()` must be called to
+  //      delete the objects (also see example in ObjectCacheConfig)
   static std::unique_ptr<ObjectCache<AllocatorT>> create(
       ObjectCacheConfig config);
 
@@ -286,7 +281,6 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return fmt::format("_cl_ph_{}", i);
   }
 
-  template <typename T>
   void init();
 
   // Allocate an item handle from the interal cache allocator. This item's

@@ -21,7 +21,6 @@ namespace cachelib {
 namespace objcache2 {
 
 template <typename AllocatorT>
-template <typename T>
 void ObjectCache<AllocatorT>::init() {
   // compute the approximate cache size using the l1EntriesLimit and
   // l1AllocSize
@@ -38,6 +37,9 @@ void ObjectCache<AllocatorT>::init() {
       .setCacheSize(cacheSize)
       .setAccessConfig({config_.l1HashTablePower, config_.l1LockPower})
       .setDefaultAllocSizes({l1AllocSize});
+
+  // TODO T121696070: Add validate() API in ObjectCacheConfig
+  XCHECK(config_.itemDestructor);
   l1Config.setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
     if (ctx.context == DestructorContext::kEvictedFromRAM) {
       evictions_.inc();
@@ -53,17 +55,9 @@ void ObjectCache<AllocatorT>::init() {
         totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
                                         std::memory_order_relaxed);
       }
-      if (!std::is_same_v<T, void_t>) {
-        // Explicitly invoke destructor because cachelib does not
-        // free memory and neither does it call destructor by default.
-        delete reinterpret_cast<T*>(itemPtr->objectPtr);
-      } else {
-        // TODO T121696070: Add validate() API in ObjectCacheConfig
-        XCHECK(config_.itemDestructor);
-        // execute user defined item destructor
-        config_.itemDestructor(
-            ObjectCacheDestructorData(itemPtr->objectPtr, item.getKey()));
-      }
+      // execute user defined item destructor
+      config_.itemDestructor(
+          ObjectCacheDestructorData(itemPtr->objectPtr, item.getKey()));
     };
   });
   l1Config.setEventTracker(std::move(config_.eventTracker));
@@ -105,12 +99,11 @@ void ObjectCache<AllocatorT>::init() {
 }
 
 template <typename AllocatorT>
-template <typename T>
 std::unique_ptr<ObjectCache<AllocatorT>> ObjectCache<AllocatorT>::create(
     ObjectCacheConfig config) {
   auto obj =
       std::make_unique<ObjectCache>(InternalConstructor(), std::move(config));
-  obj->template init<T>();
+  obj->init();
   return obj;
 }
 
