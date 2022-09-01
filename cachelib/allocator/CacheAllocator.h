@@ -1340,12 +1340,6 @@ class CacheAllocator : public CacheBase {
 
   MMContainer& getMMContainer(PoolId pid, ClassId cid) const noexcept;
 
-  // acquire the MMContainer for the give pool and class id and creates one
-  // if it does not exist.
-  //
-  // @return pointer to a valid MMContainer that is initialized.
-  MMContainer& getEvictableMMContainer(PoolId pid, ClassId cid) const noexcept;
-
   // create a new cache allocation. The allocation can be initialized
   // appropriately and made accessible through insert or insertOrReplace.
   // If the handle returned from this api is not passed on to
