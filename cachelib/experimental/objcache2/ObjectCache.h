@@ -125,13 +125,13 @@ struct ObjectCacheConfig {
   //
   // config.setItemDestructor([&](ObjectCacheDestructorData data) {
   //     switch (user_defined_getType(data.key)) {
-  //       case ObjectType::Foo1:
+  //       case user_defined_ObjectType::Foo1:
   //         data.deleteObject<Foo1>();
   //         break;
-  //       case ObjectType::Foo2:
+  //       case user_defined_ObjectType::Foo2:
   //         data.deleteObject<Foo2>();
   //         break;
-  //       case ObjectType::Foo3:
+  //       case user_defined_ObjectType::Foo3:
   //         data.deleteObject<Foo3>();
   //         break;
   //       ...
