@@ -195,6 +195,57 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
 }
 
 template <typename C>
+bool NvmCache<C>::couldExistFast(HashedKey hk) {
+  if (!isEnabled()) {
+    return false;
+  }
+
+  auto shard = getShardForKey(hk);
+  // invalidateToken any inflight puts for the same key since we are filling
+  // from nvmcache.
+  inflightPuts_[shard].invalidateToken(hk.key());
+
+  auto lock = getFillLockForShard(shard);
+  // do not use the Cache::find() since that will call back into us.
+  auto hdl = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
+  if (hdl != nullptr) {
+    if (hdl->isExpired()) {
+      return false;
+    }
+    return true;
+  }
+
+  auto& fillMap = getFillMapForShard(shard);
+  auto it = fillMap.find(hk.key());
+  // we use async apis for nvmcache operations into navy. async apis for
+  // lookups incur additional overheads and thread hops. However, navy can
+  // quickly answer negative lookups through a synchronous api. So we try to
+  // quickly validate this, if possible, before doing the heavier async
+  // lookup.
+  //
+  // since this is a synchronous api, navy would not guarantee any
+  // particular ordering semantic with other concurrent requests to same
+  // key. we need to ensure there are no asynchronous api requests for the
+  // same key. First, if there are already concurrent get requests, we
+  // simply add ourselves to the list of waiters for that get. If there are
+  // concurrent put requests already enqueued, executing this synchronous
+  // api can read partial state. Hence the result can not be trusted. If
+  // there are concurrent delete requests enqueued, we might get false
+  // positives that key is present. That is okay since it is a loss of
+  // performance and not correctness.
+  //
+  // For concurrent put, if it is already enqueued, its put context already
+  // exists. If it is not enqueued yet (in-flight) the above invalidateToken
+  // will prevent the put from being enqueued.
+  if (config_.enableFastNegativeLookups && it == fillMap.end() &&
+      !putContexts_[shard].hasContexts() && !navyCache_->couldExist(hk)) {
+    return false;
+  }
+
+  return true;
+}
+
+template <typename C>
 typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
   if (!isEnabled()) {
     return nullptr;

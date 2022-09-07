@@ -1,0 +1,27 @@
+// @nolint instantiates a small cache and tests how couldExist runs on hybridcache
+{
+  "cache_config" : {
+    "cacheSizeMB" : 256,
+    "nvmCacheSizeMB" : 512,
+    "navyBigHashSizePct": 0,
+
+    "poolRebalanceIntervalSec" : 0,
+    "moveOnSlabRelease" : false
+  },
+  "test_config" : {
+      "numOps" : 1000000,
+      "numThreads" : 32,
+      "numKeys" : 1000000,
+
+      "keySizeRange" : [15, 16],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [1, 2000],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.45,
+      "setRatio" : 0.1,
+      "delRatio" : 0.0,
+      "couldExistRatio": 0.45
+    }
+}

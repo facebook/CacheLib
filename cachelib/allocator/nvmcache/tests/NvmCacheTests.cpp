@@ -137,6 +137,28 @@ TEST_F(NvmCacheTest, BasicGet) {
   ASSERT_TRUE(this->checkKeyExists(key, false /* ramOnly */));
 }
 
+TEST_F(NvmCacheTest, CouldExistFast) {
+  // Enable fast negative lookup
+  this->allocConfig_.nvmConfig->enableFastNegativeLookups = true;
+  this->makeCache();
+
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+
+  std::string key = "blah";
+
+  ASSERT_FALSE(this->cache().couldExistFast(key));
+
+  {
+    auto it = nvm.allocate(pid, key, 100);
+    nvm.insertOrReplace(it);
+  }
+
+  ASSERT_TRUE(this->cache().couldExistFast(key));
+  this->pushToNvmCacheFromRamForTesting(key);
+  ASSERT_TRUE(this->cache().couldExistFast(key));
+}
+
 TEST_F(NvmCacheTest, EvictToNvmGet) {
   auto& nvm = this->cache();
   auto pid = this->poolId();

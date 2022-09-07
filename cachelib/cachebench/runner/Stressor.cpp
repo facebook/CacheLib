@@ -42,6 +42,8 @@ ThroughputStats& ThroughputStats::operator+=(const ThroughputStats& other) {
   delNotFound += other.delNotFound;
   addChained += other.addChained;
   addChainedFailure += other.addChainedFailure;
+  couldExistOp += other.couldExistOp;
+  couldExistOpFalse += other.couldExistOpFalse;
   ops += other.ops;
 
   return *this;
@@ -72,6 +74,13 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
       addChained == 0 ? 0.0
                       : 100.0 * (addChained - addChainedFailure) / addChained;
 
+  const uint64_t couldExistPerSec =
+      util::narrow_cast<uint64_t>(couldExistOp / elapsedSecs);
+  const double couldExistSuccessRate =
+      couldExistOp == 0
+          ? 0.0
+          : 100.0 * (couldExistOp - couldExistOpFalse) / couldExistOp;
+
   out << std::fixed;
   out << folly::sformat("{:10}: {:.2f} million", "Total Ops", ops / 1e6)
       << std::endl;
@@ -83,6 +92,7 @@ void ThroughputStats::render(uint64_t elapsedTimeNs, std::ostream& out) const {
         << std::endl;
   };
   outFn("get", getPerSec, "success", getSuccessRate);
+  outFn("couldExist", couldExistPerSec, "success", couldExistSuccessRate);
   outFn("set", setPerSec, "success", setSuccessRate);
   outFn("del", delPerSec, "found", delSuccessRate);
   if (update > 0) {

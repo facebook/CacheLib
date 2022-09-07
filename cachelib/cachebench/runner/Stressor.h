@@ -41,6 +41,8 @@ struct ThroughputStats {
   uint64_t delNotFound{0}; // deletes for non-existent key
   uint64_t addChained{0};
   uint64_t addChainedFailure{0};
+  uint64_t couldExistOp{0};
+  uint64_t couldExistOpFalse{0};
   // current number of ops executed. Read periodically to track progress
   uint64_t ops{0};
 

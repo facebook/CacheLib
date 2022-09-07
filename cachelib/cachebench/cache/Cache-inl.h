@@ -429,6 +429,21 @@ void Cache<Allocator>::touchValue(const ReadHandle& it) const {
 }
 
 template <typename Allocator>
+bool Cache<Allocator>::couldExist(Key key) {
+  if (!consistencyCheckEnabled()) {
+    return cache_->couldExistFast(key);
+  }
+
+  // TODO: implement consistency checking.
+  // For couldExist, we need a weaker version of consistnecy check. The
+  // following are a list of conditions that wouldn't be valid with only
+  // sequence of get operations.
+  //  couldExist == true -> get == miss
+  //  couldExist == false -> couldExist == true
+  return cache_->couldExistFast(key);
+}
+
+template <typename Allocator>
 typename Cache<Allocator>::ReadHandle Cache<Allocator>::find(Key key) {
   auto findFn = [&]() {
     util::LatencyTracker tracker;

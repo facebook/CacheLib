@@ -136,6 +136,11 @@ class Cache {
   // consistency checking is enabled.
   bool insert(WriteHandle& handle);
 
+  // perform a probalistic existence check in cachelib. False means the key
+  // definitely does NOT exist. True means the key likely exists, but a
+  // subsequent lookup could still return empty.
+  bool couldExist(Key key);
+
   // perform lookup in the cache and if consistency checking is enabled,
   // ensure that the lookup result is consistent with the past actions and
   // concurrent actions. If NVM is enabled, waits for the Item to become ready

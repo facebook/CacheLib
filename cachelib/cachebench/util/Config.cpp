@@ -157,6 +157,7 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
   JSONSetVal(jsonConfig, loneGetRatio);
   JSONSetVal(jsonConfig, loneSetRatio);
   JSONSetVal(jsonConfig, updateRatio);
+  JSONSetVal(jsonConfig, couldExistRatio);
 
   auto readFile = [&](const std::string& f) {
     std::string str;
@@ -181,7 +182,7 @@ DistributionConfig::DistributionConfig(const folly::dynamic& jsonConfig,
     JSONSetVal(configJsonPop, popularityWeights);
   }
 
-  checkCorrectSize<DistributionConfig, 360>();
+  checkCorrectSize<DistributionConfig, 368>();
 }
 
 ReplayGeneratorConfig::ReplayGeneratorConfig(const folly::dynamic& configJson) {

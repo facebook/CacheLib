@@ -44,6 +44,8 @@ enum class OpType {
 
   kUpdate, // in-place mutation
 
+  kCouldExist,
+
   kSize
 };
 
@@ -53,7 +55,9 @@ enum class OpResultType {
   kGetHit,
   kSetSuccess,
   kSetFailure,
-  kSetSkip
+  kSetSkip,
+  kCouldExistTrue,
+  kCouldExistFalse
 };
 
 struct Request {

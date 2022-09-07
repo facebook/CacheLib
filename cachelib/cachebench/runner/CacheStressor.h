@@ -407,6 +407,13 @@ class CacheStressor : public Stressor {
           cache_->updateItemRecordVersion(it);
           break;
         }
+        case OpType::kCouldExist: {
+          ++stats.couldExistOp;
+          if (!cache_->couldExist(*key)) {
+            ++stats.couldExistOpFalse;
+          }
+          break;
+        }
         default:
           throw std::runtime_error(
               folly::sformat("invalid operation generated: {}", (int)op));

@@ -136,6 +136,15 @@ class NvmCache {
   // @return            WriteHandle
   WriteHandle find(HashedKey key);
 
+  // Returns true if a key is potentially in cache. There is a non-zero chance
+  // the key does not exist in cache (e.g. hash collision in NvmCache). This
+  // check is meant to be synchronous and fast as we only check DRAM cache and
+  // in-memory index for NvmCache.
+  //
+  // @param key   the key for lookup
+  // @return      true if the key could exist, false otherwise
+  bool couldExistFast(HashedKey key);
+
   // Try to mark the key as in process of being evicted from RAM to NVM.
   // This is used to maintain the consistency between the RAM cache and
   // NvmCache when an item is transitioning from RAM to NvmCache in the

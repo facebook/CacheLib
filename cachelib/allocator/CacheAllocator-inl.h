@@ -1707,6 +1707,26 @@ CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
 }
 
 template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
+  // At this point, a key either definitely exists or does NOT exist in cache
+  auto handle = findFastInternal(key, AccessMode::kRead);
+  if (handle) {
+    if (handle->isExpired()) {
+      return false;
+    }
+    return true;
+  }
+
+  if (!nvmCache_) {
+    return false;
+  }
+
+  // When we have to go to NvmCache, we can only probalistically determine
+  // if a key could possibly exist in cache, or definitely NOT exist.
+  return nvmCache_->couldExistFast(HashedKey{key});
+}
+
+template <typename CacheTrait>
 std::pair<typename CacheAllocator<CacheTrait>::ReadHandle,
           typename CacheAllocator<CacheTrait>::ReadHandle>
 CacheAllocator<CacheTrait>::inspectCache(typename Item::Key key) {

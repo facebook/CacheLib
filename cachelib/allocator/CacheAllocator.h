@@ -550,6 +550,17 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ReadHandle peek(Key key);
 
+  // Returns true if a key is potentially in cache. There is a non-zero chance
+  // the key does not exist in cache (e.g. hash collision in NvmCache). This
+  // check is meant to be synchronous and fast as we only check DRAM cache and
+  // in-memory index for NvmCache. Similar to peek, this does not indicate to
+  // cachelib you have looked up an item (i.e. no stats bump, no eviction queue
+  // promotion, etc.)
+  //
+  // @param key   the key for lookup
+  // @return      true if the key could exist, false otherwise
+  bool couldExistFast(Key key);
+
   // Mark an item that was fetched through peek as useful. This is useful when
   // users want to look into the cache and only mark items as useful when they
   // inspect the contents of it.
