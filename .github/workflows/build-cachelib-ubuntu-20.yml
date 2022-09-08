@@ -1,0 +1,92 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: build-cachelib-ubuntu-20
+on:
+#  push:
+  schedule:
+    - cron:  '0 5 * * 1,3,5'
+jobs:
+  build-cachelib-ubuntu-20:
+    name: "Ubuntu-20 - Build CacheLib with all dependencies"
+    runs-on: ubuntu-20.04
+    steps:
+      - name: "Show Head Commit"
+        env:
+          CONTENT: ${{ toJSON(github.event.head_commit) }}
+        run: echo "$CONTENT"
+      - name: "update packages"
+        run: sudo apt-get update
+      - name: "install sudo,git"
+        run: sudo apt-get install -y git procps
+      - name: "System Information"
+        run: |
+          echo === uname ===
+          uname -a
+          echo === /etc/os-release ===
+          cat /etc/os-release
+          echo === df -hl ===
+          df -hl
+          echo === nproc ===
+          nproc || true
+          echo === free -h ===
+          free -h
+          echo === top ===
+          top -b -n1 -1 -Eg || timeout 1 top -b -n1
+          echo === env ===
+          env
+          echo === cc -v ===
+          cc -v
+          echo === g++ -v ===
+          g++ -v
+      - name: "checkout sources"
+        uses: actions/checkout@v2
+      - name: "Install Prerequisites"
+        run: ./contrib/build.sh -S -B
+      - name: "Test: update-submodules"
+        run: ./contrib/update-submodules.sh
+      - name: "Install dependency: zstd"
+        run: ./contrib/build-package.sh -j -v -i zstd
+      - name: "Install dependency: googleflags"
+        run: ./contrib/build-package.sh -j -v -i googleflags
+      - name: "Install dependency: googlelog"
+        run: ./contrib/build-package.sh -j -v -i googlelog
+      - name: "Install dependency: googletest"
+        run: ./contrib/build-package.sh -j -v -i googletest
+      - name: "Install dependency: sparsemap"
+        run: ./contrib/build-package.sh -j -v -i sparsemap
+      - name: "Install dependency: fmt"
+        run: ./contrib/build-package.sh -j -v -i fmt
+      - name: "Install dependency: folly"
+        run: ./contrib/build-package.sh -j -v -i folly
+      - name: "Install dependency: fizz"
+        run: ./contrib/build-package.sh -j -v -i fizz
+      - name: "Install dependency: wangle"
+        run: ./contrib/build-package.sh -j -v -i wangle
+      - name: "Install dependency: fbthrift"
+        run: ./contrib/build-package.sh -j -v -i fbthrift
+      - name: "build CacheLib"
+        # Build cachelib in debug mode (-d) and with all tests (-t)
+        run: ./contrib/build-package.sh -j -v -i -t cachelib
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: cachelib-cmake-logs
+          path: |
+            build-cachelib/CMakeFiles/*.log
+            build-cachelib/CMakeCache.txt
+            build-cachelib/Makefile
+            build-cachelib/**/Makefile
+          if-no-files-found: warn
+          retention-days: 1
