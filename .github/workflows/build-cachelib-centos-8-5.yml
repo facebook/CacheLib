@@ -1,0 +1,112 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+name: build-cachelib-centos-8.5
+on:
+#   push:
+  schedule:
+     - cron:  '0 9 * * *'
+jobs:
+  build-cachelib-centos8-latest:
+    name: "CentOS/8.5 - Build CacheLib with all dependencies"
+    runs-on: ubuntu-latest
+    # Docker container image name
+    container: "centos:latest"
+    steps:
+      - name: "Show Head Commit"
+        env:
+          CONTENT: ${{ toJSON(github.event.head_commit) }}
+        run: echo "$CONTENT"
+      - name: "patch CentOS Sources location (1st time)"
+        # CentOS 8.2 and later was changed into "CentOS Stream".
+        # Around the same time, CentOS 8.1 became EOL (End-Of-Life),
+        # And the repositories were moved to the legacy "vault.centos.org" URL.
+        # Patch the yum config file to this new location.
+        run: |
+          cd /etc/yum.repos.d/
+          sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+          sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+      - name: "update packages"
+        # stock centos has a problem with CMAKE, fails with:
+        #  "cmake: symbol lookup error: cmake: undefined symbol: archive_write_add_filter_zstd"
+        # updating solves it
+        run: dnf update -y
+      - name: "patch CentOS Sources location (again...)"
+        # The "dnf update -y" above overwrites the yum configuration files,
+        # patch them again to point to the vault URLs.
+        run: |
+          cd /etc/yum.repos.d/
+          sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
+          sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+      - name: "install sudo,git"
+        run: dnf install -y sudo git cmake gcc
+      - name: "System Information"
+        run: |
+          echo === uname ===
+          uname -a
+          echo === /etc/os-release ===
+          cat /etc/os-release
+          echo === /etc/centos-release ===
+          cat /etc/centos-release
+          echo === df -hl ===
+          df -hl
+          echo === nproc ===
+          nproc || true
+          echo === free -h ===
+          free -h
+          echo === top ===
+          top -b -n1 -1 -Eg || timeout 1 top -b -n1
+          echo === env ===
+          env
+          echo === gcc -v ===
+          gcc -v
+      - name: "checkout sources"
+        uses: actions/checkout@v2
+      - name: "Install Prerequisites"
+        run: ./contrib/build.sh -S -B
+      - name: "Test: update-submodules"
+        run: ./contrib/update-submodules.sh
+      - name: "Install dependency: zstd"
+        run: ./contrib/build-package.sh -j -v -i zstd
+      - name: "Install dependency: googleflags"
+        run: ./contrib/build-package.sh -j -v -i googleflags
+      - name: "Install dependency: googlelog"
+        run: ./contrib/build-package.sh -j -v -i googlelog
+      - name: "Install dependency: googletest"
+        run: ./contrib/build-package.sh -j -v -i googletest
+      - name: "Install dependency: sparsemap"
+        run: ./contrib/build-package.sh -j -v -i sparsemap
+      - name: "Install dependency: fmt"
+        run: ./contrib/build-package.sh -j -v -i fmt
+      - name: "Install dependency: folly"
+        run: ./contrib/build-package.sh -j -v -i folly
+      - name: "Install dependency: fizz"
+        run: ./contrib/build-package.sh -j -v -i fizz
+      - name: "Install dependency: wangle"
+        run: ./contrib/build-package.sh -j -v -i wangle
+      - name: "Install dependency: fbthrift"
+        run: ./contrib/build-package.sh -j -v -i fbthrift
+      - name: "build CacheLib"
+        # Build cachelib in debug mode (-d) and with all tests (-t)
+        run: ./contrib/build-package.sh -j -v -i -d -t cachelib
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: cachelib-cmake-logs
+          path: |
+            build-cachelib/CMakeFiles/*.log
+            build-cachelib/CMakeCache.txt
+            build-cachelib/Makefile
+            build-cachelib/**/Makefile
+          if-no-files-found: warn
+          retention-days: 1
