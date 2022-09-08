@@ -1,0 +1,112 @@
+# Copyright (c) Facebook, Inc. and its affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# NOTE:
+# The native Ubuntu-18 github runner is being deprecated
+# (https://github.blog/changelog/2022-08-09-github-actions-the-ubuntu-18-04-actions-runner-image-is-being-deprecated-and-will-be-removed-by-12-1-22/)
+# Instead, use "ubuntu-latest" and run Ubuntu-18.04 inside a docker container.
+name: build-cachelib-ubuntu-18
+on:
+#  push:
+  schedule:
+    - cron:  '0 5 * * 2,4,6'
+jobs:
+  build-cachelib-ubuntu-18:
+    name: "Ubuntu-18 - Build CacheLib with all dependencies"
+    runs-on: ubuntu-latest
+    container: "ubuntu:18.04"
+    steps:
+      - name: "Show Head Commit"
+        env:
+          CONTENT: ${{ toJSON(github.event.head_commit) }}
+        run: echo "$CONTENT"
+      - name: "update packages (1st time)"
+        run: |
+          apt-get update
+          apt-get install -y software-properties-common
+          #apt-add-repository "deb http://security.ubuntu.com/ubuntu bionic-security main universe restricted"
+          apt-get upgrade -y
+          apt-get install -y openssl
+          apt-get install -y sudo git procps wget curl
+          apt-get install -y build-essential
+      - name: "update CMake package"
+        run: |
+          wget https://apt.kitware.com/keys/kitware-archive-latest.asc
+          apt-key add kitware-archive-latest.asc
+          apt-add-repository 'deb https://apt.kitware.com/ubuntu/ bionic main'
+          apt-get update
+          apt-get install -y kitware-archive-keyring
+          apt-get install -y cmake
+      - name: "System Information"
+        run: |
+          echo === uname ===
+          uname -a
+          echo === /etc/os-release ===
+          cat /etc/os-release
+          echo === df -hl ===
+          df -hl
+          echo === nproc ===
+          nproc || true
+          echo === free -h ===
+          free -h
+          echo === top ===
+          top -b -n1 -1 -Eg || timeout 1 top -b -n1
+          echo === env ===
+          env
+          echo === cc -v ===
+          cc -v
+          echo === g++ -v ===
+          g++ -v
+      - name: "git: ignore unsafe-directories"
+        run: git config --global --add safe.directory '*'
+      - name: "checkout sources"
+        uses: actions/checkout@v1
+      - name: "Install Prerequisites"
+        run: ./contrib/build.sh -S -B
+      - name: "Test: update-submodules"
+        run: ./contrib/update-submodules.sh
+      - name: "Install dependency: zstd"
+        run: ./contrib/build-package.sh -j -v -i zstd
+      - name: "Install dependency: googleflags"
+        run: ./contrib/build-package.sh -j -v -i googleflags
+      - name: "Install dependency: googlelog"
+        run: ./contrib/build-package.sh -j -v -i googlelog
+      - name: "Install dependency: googletest"
+        run: ./contrib/build-package.sh -j -v -i googletest
+      - name: "Install dependency: sparsemap"
+        run: ./contrib/build-package.sh -j -v -i sparsemap
+      - name: "Install dependency: fmt"
+        run: ./contrib/build-package.sh -j -v -i fmt
+      - name: "Install dependency: folly"
+        run: ./contrib/build-package.sh -j -v -i folly
+      - name: "Install dependency: fizz"
+        run: ./contrib/build-package.sh -j -v -i fizz
+      - name: "Install dependency: wangle"
+        run: ./contrib/build-package.sh -j -v -i wangle
+      - name: "Install dependency: fbthrift"
+        run: ./contrib/build-package.sh -j -v -i fbthrift
+      - name: "build CacheLib"
+        # Build cachelib in debug mode (-d) and with all tests (-t)
+        run: ./contrib/build-package.sh -j -v -i -t cachelib
+      - uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: cachelib-cmake-logs
+          path: |
+            build-cachelib/CMakeFiles/*.log
+            build-cachelib/CMakeCache.txt
+            build-cachelib/Makefile
+            build-cachelib/**/Makefile
+          if-no-files-found: warn
+          retention-days: 1
