@@ -16,11 +16,15 @@
 
 #include "cachelib/shm/PosixShmSegment.h"
 
+#include <cstring>
+
 #include <fcntl.h>
 #include <folly/logging/xlog.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <numa.h>
+#include <numaif.h>
 
 #include "cachelib/common/Utils.h"
 
@@ -163,6 +167,29 @@ void munmapImpl(void* addr, size_t length) {
   } else {
     XDCHECK(false);
     util::throwSystemError(EINVAL, "Invalid errno");
+  }
+}
+
+void getMempolicyImpl(int &oldMode, NumaBitMask &memBindNumaNodes) {
+  auto nodeMask = memBindNumaNodes.getNativeBitmask();
+
+  long ret = get_mempolicy(&oldMode, nodeMask->maskp, nodeMask->size,
+                           nullptr, 0);
+
+  if (ret != 0) {
+    util::throwSystemError(errno, folly::sformat("get_mempolicy() failed: {}",
+                                                 std::strerror(errno)));
+  }
+}
+
+void setMempolicyImpl(int oldMode, const NumaBitMask &memBindNumaNodes) {
+  auto nodeMask = memBindNumaNodes.getNativeBitmask();
+
+  long ret = set_mempolicy(oldMode, nodeMask->maskp, nodeMask->size);
+
+  if (ret != 0) {
+    util::throwSystemError(errno, folly::sformat("set_mempolicy() failed: {}",
+                                                 std::strerror(errno)));
   }
 }
 
@@ -312,11 +339,48 @@ void* PosixShmSegment::mapAddress(void* addr) const {
     util::throwSystemError(EINVAL, "Address already mapped");
   }
   XDCHECK(retAddr == addr || addr == nullptr);
+  memBind(addr);
   return retAddr;
 }
 
 void PosixShmSegment::unMap(void* addr) const {
   detail::munmapImpl(addr, getSize());
+}
+
+static void forcePageAllocation(void* addr, size_t size, size_t pageSize) {
+  char* startAddr = reinterpret_cast<char*>(addr);
+  char* endAddr = startAddr + size;
+  for (volatile char* curAddr = startAddr; curAddr < endAddr; curAddr += pageSize) {
+    *curAddr = *curAddr;
+  }
+}
+
+void PosixShmSegment::memBind(void* addr) const {
+  if (opts_.memBindNumaNodes.empty()) {
+    return;
+  }
+
+  NumaBitMask oldMemBindNumaNodes;
+  int oldMode = 0;
+
+  // mbind() cannot be used because mmap was called with MAP_SHARED flag
+  // But we can set memory policy for current thread and force page allocation.
+  // The following logic is used:
+  // 1. Remember current memory policy for the current thread
+  // 2. Set new memory policy as specified by config
+  // 3. Force page allocation by touching every page in the segment
+  // 4. Restore memory policy
+
+  // Remember current memory policy
+  detail::getMempolicyImpl(oldMode, oldMemBindNumaNodes);
+
+  // Set memory bindings
+  detail::setMempolicyImpl(MPOL_BIND, opts_.memBindNumaNodes);
+
+  forcePageAllocation(addr, getSize(), detail::getPageSize(opts_.pageSize));
+
+  // Restore memory policy for the thread
+  detail::setMempolicyImpl(oldMode, oldMemBindNumaNodes);
 }
 
 std::string PosixShmSegment::createKeyForName(
