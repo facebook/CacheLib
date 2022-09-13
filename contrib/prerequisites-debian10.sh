@@ -41,4 +41,5 @@ sudo apt-get install -y \
   libdwarf-dev \
   libsodium-dev \
   libgmock-dev \
-  libgtest-dev googletest
+  libgtest-dev googletest \
+  libnuma-dev

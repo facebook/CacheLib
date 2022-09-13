@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include <string>
-
 #include "cachelib/shm/ShmCommon.h"
 
 namespace facebook {
@@ -43,6 +41,16 @@ class MemoryTierCacheConfig {
 
   size_t getRatio() const noexcept { return ratio; }
 
+  // Allocate memory only from specified NUMA nodes
+  MemoryTierCacheConfig& setMemBind(const NumaBitMask& _numaNodes) {
+    numaNodes = _numaNodes;
+    return *this;
+  }
+
+  const NumaBitMask& getMemBind() const noexcept {
+    return numaNodes;
+  }
+
   size_t calculateTierSize(size_t totalCacheSize, size_t partitionNum) {
     // TODO: Call this method when tiers are enabled in allocator
     // to calculate tier sizes in bytes.
@@ -59,6 +67,7 @@ class MemoryTierCacheConfig {
     return getRatio() * (totalCacheSize / partitionNum);
   }
 
+ private:
   // Ratio is a number of parts of the total cache size to be allocated for this
   // tier. E.g. if X is a total cache size, Yi are ratios specified for memory
   // tiers, and Y is the sum of all Yi, then size of the i-th tier
@@ -66,7 +75,9 @@ class MemoryTierCacheConfig {
   // tier is a half of the total cache size, set both tiers' ratios to 1.
   size_t ratio{1};
 
- private:
+  // Numa node(s) to bind the tier
+  NumaBitMask numaNodes;
+
   // TODO: introduce a container for tier settings when adding support for
   // file-mapped memory
   MemoryTierCacheConfig() = default;

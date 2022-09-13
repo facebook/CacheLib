@@ -105,15 +105,25 @@ CacheAllocator<CacheTrait>::~CacheAllocator() {
 }
 
 template <typename CacheTrait>
-std::unique_ptr<MemoryAllocator>
-CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
+ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
   ShmSegmentOpts opts;
   opts.alignment = sizeof(Slab);
+  auto memoryTierConfigs = config_.getMemoryTierConfigs();
+  // TODO: we support single tier so far
+  XDCHECK_EQ(memoryTierConfigs.size(), 1ul);
+  opts.memBindNumaNodes = memoryTierConfigs[0].getMemBind();
+
+  return opts;
+}
+
+template <typename CacheTrait>
+std::unique_ptr<MemoryAllocator>
+CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
   return std::make_unique<MemoryAllocator>(
       getAllocatorConfig(config_),
       shmManager_
           ->createShm(detail::kShmCacheName, config_.size,
-                      config_.slabMemoryBaseAddr, opts)
+                      config_.slabMemoryBaseAddr, createShmCacheOpts())
           .addr,
       config_.size);
 }
@@ -121,12 +131,11 @@ CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
 template <typename CacheTrait>
 std::unique_ptr<MemoryAllocator>
 CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
-  ShmSegmentOpts opts;
-  opts.alignment = sizeof(Slab);
   return std::make_unique<MemoryAllocator>(
       deserializer_->deserialize<MemoryAllocator::SerializationType>(),
       shmManager_
-          ->attachShm(detail::kShmCacheName, config_.slabMemoryBaseAddr, opts)
+          ->attachShm(detail::kShmCacheName, config_.slabMemoryBaseAddr,
+                      createShmCacheOpts())
           .addr,
       config_.size,
       config_.disableFullCoredump);

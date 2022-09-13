@@ -16,10 +16,15 @@
 
 #include "cachelib/shm/SysVShmSegment.h"
 
+#include <cstring>
+
 #include <folly/hash/Hash.h>
 #include <folly/logging/xlog.h>
+#include <folly/ScopeGuard.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
+#include <numa.h>
+#include <numaif.h>
 
 #include "cachelib/common/Utils.h"
 
@@ -184,6 +189,18 @@ void shmCtlImpl(int shmid, int cmd, shmid_ds* buf) {
   }
 }
 
+void mbindImpl(void *addr, unsigned long len, int mode,
+               const NumaBitMask& memBindNumaNodes,
+               unsigned int flags) {
+  auto nodesMask = memBindNumaNodes.getNativeBitmask();
+
+  long ret = mbind(addr, len, mode, nodesMask->maskp, nodesMask->size, flags);
+  if (ret != 0) {
+    util::throwSystemError(errno, folly::sformat("mbind() failed: {}",
+                                                 std::strerror(errno)));
+  }
+}
+
 } // namespace detail
 
 void ensureSizeforHugePage(size_t size) {
@@ -270,10 +287,18 @@ void* SysVShmSegment::mapAddress(void* addr) const {
 
   void* retAddr = detail::shmAttachImpl(shmid_, addr, shmFlags);
   XDCHECK(retAddr == addr || addr == nullptr);
+  memBind(retAddr);
   return retAddr;
 }
 
 void SysVShmSegment::unMap(void* addr) const { detail::shmDtImpl(addr); }
+
+void SysVShmSegment::memBind(void* addr) const {
+  if (opts_.memBindNumaNodes.empty()) {
+    return;
+  }
+  detail::mbindImpl(addr, getSize(), MPOL_BIND, opts_.memBindNumaNodes, 0);
+}
 
 void SysVShmSegment::markForRemoval() {
   if (isMarkedForRemoval()) {

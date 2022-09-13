@@ -57,7 +57,8 @@ sudo dnf --enablerepo="$POWERTOOLS_REPO" install -y \
   libsodium-static \
   libdwarf-static \
   boost-static \
-  double-conversion-static
+  double-conversion-static \
+  numactl-devel
 
 #Do not install these from OS packages - they are typically outdated.
 #gflags-devel \

@@ -210,7 +210,7 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
   // Return reference to MemoryTierCacheConfigs.
-  const MemoryTierConfigs& getMemoryTierConfigs();
+  const MemoryTierConfigs& getMemoryTierConfigs() const noexcept;
 
   // This turns on a background worker that periodically scans through the
   // access container and look for expired items and remove them.
@@ -877,7 +877,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::configureMemoryTiers(
 
 template <typename T>
 const typename CacheAllocatorConfig<T>::MemoryTierConfigs&
-CacheAllocatorConfig<T>::getMemoryTierConfigs() {
+CacheAllocatorConfig<T>::getMemoryTierConfigs() const noexcept {
   return memoryTierConfigs;
 }
 
