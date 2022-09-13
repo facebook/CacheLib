@@ -168,11 +168,12 @@ std::unique_ptr<rocksdb::SecondaryCacheResultHandle>
 RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
                              const rocksdb::Cache::CreateCallback& create_cb,
                              bool wait
-#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 2)
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
                              ,
-                             bool& is_in_sec_cache
+                             bool /*advise_erase*/
 #endif
-) {
+                             ,
+                             bool& is_in_sec_cache) {
   std::unique_lock guard(GetRcuDomain());
   FbCache* cache = cache_.load();
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> hdl;

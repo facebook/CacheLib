@@ -114,11 +114,16 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
       const rocksdb::Slice& key,
       const rocksdb::Cache::CreateCallback& create_cb,
       bool wait
-#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 2)
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
       ,
-      bool& is_in_sec_cache
+      bool /*advise_erase*/
 #endif
-      ) override;
+      ,
+      bool& is_in_sec_cache) override;
+
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+  bool SupportForceErase() const override { return false; }
+#endif
 
   void Erase(const rocksdb::Slice& key) override;
 
