@@ -125,22 +125,32 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
  private:
   struct ValidConfigTag {};
+  // Parameters to perform throttling.
+  // This struct should be kept compact for a fast copy on read.
   struct ThrottleParams {
     double probabilityFactor{1};
+
+    std::chrono::seconds updateTime{0};
+  };
+
+  // Stats about writes in the past update window for updating ThrottleParams
+  struct WriteStats {
     // The rate we can write at, given how much we've written since the host
     // started, from a quota standpoint.
     uint64_t curTargetRate{0};
     // The rate that we observe since the last parameter update.
-    uint64_t observedCurRate_{0};
+    uint64_t observedCurRate{0};
     uint64_t bytesWrittenLastUpdate{0};
-    std::chrono::seconds updateTime{0};
   };
 
   DynamicRandomAP(Config&& config, ValidConfigTag);
 
-  double getBaseProbability(uint64_t size) const;
-  void updateThrottleParams(std::chrono::seconds curTime);
+  // Return a copy of the parameters.
   ThrottleParams getThrottleParams() const;
+  WriteStats getWriteStats() const;
+
+  double getBaseProbability(uint64_t size) const;
+  void updateThrottleParamsLocked(std::chrono::seconds curTime);
   double clampFactorChange(double change) const;
   double clampFactor(double factor) const;
   double genF(const HashedKey& hk) const;
@@ -169,6 +179,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   std::chrono::seconds startupTime_{0};
   mutable folly::SharedMutex mutex_;
   ThrottleParams params_;
+  WriteStats writeStats_;
 
   // baseProbability distribution on the items that are tested on accept.
   mutable util::PercentileStats baseProbStats_;

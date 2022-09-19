@@ -180,14 +180,14 @@ TEST(DynamicRandomAPTest, StayInRange) {
   for (size_t i = 0; i < 50000; i++) {
     bytesWritten += 1 * 1024 * 1024 * config.updateInterval.count();
     time = time + config.updateInterval;
-    ap.updateThrottleParams(time);
+    ap.updateThrottleParamsLocked(time);
     checkInRange(ap);
   }
 
   for (size_t i = 0; i < 50000; i++) {
     bytesWritten += 1000 * 1024 * 1024 * config.updateInterval.count();
     time = time + config.updateInterval;
-    ap.updateThrottleParams(time);
+    ap.updateThrottleParamsLocked(time);
     checkInRange(ap);
   }
 }
@@ -208,15 +208,17 @@ TEST(DynamicRandomAPTest, RespectMaxWriteRate) {
   // Write 36000 byte in 10 hours.
   bytesWritten = 36000;
   time = time + config.updateInterval;
-  ap.updateThrottleParams(time);
+  ap.updateThrottleParamsLocked(time);
   // Observed write rate 1
   // Untrimmed current target write rate should be 98.75MB/s, but the
   // probabilityFactor should adjust towards 80MB/s
   // rawFactor should be 1.14 instead of 1.41
   // Since the factor shouldn't be clamped, we can check the factor is in range.
   auto params = ap.getThrottleParams();
-  ASSERT_LE(params.probabilityFactor * params.observedCurRate_, config.maxRate);
-  ASSERT_EQ(params.curTargetRate, config.maxRate);
+  auto writeStats = ap.getWriteStats();
+  ASSERT_LE(params.probabilityFactor * writeStats.observedCurRate,
+            config.maxRate);
+  ASSERT_EQ(writeStats.curTargetRate, config.maxRate);
 }
 
 } // namespace navy

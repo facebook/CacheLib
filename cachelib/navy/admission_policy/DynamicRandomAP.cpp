@@ -97,19 +97,18 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
 
 bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
   const auto curTime = getSteadyClockSeconds();
-  auto params = getThrottleParams();
-  if (curTime - params.updateTime >= updateInterval_) {
+  if (curTime - params_.updateTime >= updateInterval_) {
     // Lots of threads can get into this section. First to grab the lock will
     // update. Let proceed the rest.
     std::unique_lock<folly::SharedMutex> lock{mutex_, std::try_to_lock};
     if (lock.owns_lock()) {
-      updateThrottleParams(curTime);
+      updateThrottleParamsLocked(curTime);
     }
   }
 
   auto baseProb = getBaseProbability(hk.key().size() + value.size());
   baseProbStats_.trackValue(baseProb * 100);
-  auto probability = baseProb * params.probabilityFactor;
+  auto probability = baseProb * params_.probabilityFactor;
   probability = std::max(0.0, std::min(1.0, probability));
 
   return probability == 1 || genF(hk) < probability;
@@ -135,16 +134,16 @@ void DynamicRandomAP::reset() {
 
   params_.updateTime = startupTime_;
   params_.probabilityFactor = probabilitySeed_;
-  params_.curTargetRate = 0;
-  params_.bytesWrittenLastUpdate = fnBytesWritten_();
+  writeStats_.curTargetRate = 0;
+  writeStats_.bytesWrittenLastUpdate = fnBytesWritten_();
 }
 
 void DynamicRandomAP::update() {
   std::unique_lock<folly::SharedMutex> lock{mutex_};
-  updateThrottleParams(getSteadyClockSeconds());
+  updateThrottleParamsLocked(getSteadyClockSeconds());
 }
 
-void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
+void DynamicRandomAP::updateThrottleParamsLocked(std::chrono::seconds curTime) {
   constexpr uint64_t kSecondsInDay{3600 * 24};
 
   auto updateTimeDelta = (curTime - params_.updateTime).count();
@@ -156,9 +155,9 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
 
   params_.updateTime = curTime;
   auto bytesWritten = fnBytesWritten_();
-  params_.observedCurRate_ =
-      (bytesWritten - params_.bytesWrittenLastUpdate) / updateTimeDelta;
-  if (params_.observedCurRate_ == 0) {
+  writeStats_.observedCurRate =
+      (bytesWritten - writeStats_.bytesWrittenLastUpdate) / updateTimeDelta;
+  if (writeStats_.observedCurRate == 0) {
     return;
   }
 
@@ -178,18 +177,18 @@ void DynamicRandomAP::updateThrottleParams(std::chrono::seconds curTime) {
           maxRate_, curTargetRate);
     curTargetRate = maxRate_;
   }
-  params_.curTargetRate = curTargetRate;
+  writeStats_.curTargetRate = curTargetRate;
 
   auto rawProbFactor = fdiv(static_cast<double>(curTargetRate),
-                            static_cast<double>(params_.observedCurRate_));
+                            static_cast<double>(writeStats_.observedCurRate));
   params_.probabilityFactor =
       clampFactor(params_.probabilityFactor * clampFactorChange(rawProbFactor));
   XLOG_EVERY_MS(INFO, 60000)
-      << "observed current write rate = " << params_.observedCurRate_
+      << "observed current write rate = " << writeStats_.observedCurRate
       << ", target current rate = " << curTargetRate
       << " rawProbFactor = " << rawProbFactor
       << ", probFactor = " << params_.probabilityFactor;
-  params_.bytesWrittenLastUpdate = bytesWritten;
+  writeStats_.bytesWrittenLastUpdate = bytesWritten;
 }
 
 double DynamicRandomAP::clampFactorChange(double change) const {
@@ -208,21 +207,24 @@ double DynamicRandomAP::getBaseProbability(uint64_t size) const {
 }
 
 DynamicRandomAP::ThrottleParams DynamicRandomAP::getThrottleParams() const {
-  std::shared_lock<folly::SharedMutex> lock{mutex_};
   return params_;
 }
 
+DynamicRandomAP::WriteStats DynamicRandomAP::getWriteStats() const {
+  return writeStats_;
+}
+
 void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
-  auto params = getThrottleParams();
+  auto writeStats = getWriteStats();
   visitor("navy_ap_write_rate_target_configured",
           static_cast<double>(targetRate_));
   visitor("navy_ap_write_rate_max_configured", static_cast<double>(maxRate_));
   visitor("navy_ap_write_rate_adjusted_target",
-          static_cast<double>(params.curTargetRate));
+          static_cast<double>(writeStats.curTargetRate));
   visitor("navy_ap_prob_factor_x100", params_.probabilityFactor * 100);
   baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_baseProx_x100");
   visitor("navy_ap_write_rate_observed",
-          static_cast<double>(params_.observedCurRate_));
+          static_cast<double>(writeStats.observedCurRate));
 }
 } // namespace navy
 } // namespace cachelib
