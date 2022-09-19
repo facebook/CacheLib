@@ -164,7 +164,13 @@ TEST_F(CachelibWrapperTest, BasicTest) {
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
-  handle = cache()->Lookup("k2", test_item_creator, true, is_in_sec_cache);
+  handle = cache()->Lookup("k2", test_item_creator, true
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                           ,
+                           /*advise_erase=*/false
+#endif
+                           ,
+                           is_in_sec_cache);
   ASSERT_NE(handle, nullptr);
   TestItem* val = static_cast<TestItem*>(handle->Value());
   ASSERT_NE(val, nullptr);
@@ -172,7 +178,13 @@ TEST_F(CachelibWrapperTest, BasicTest) {
   delete val;
   handle.reset();
 
-  handle = cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache);
+  handle = cache()->Lookup("k1", test_item_creator, true
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                           ,
+                           /*advise_erase=*/false
+#endif
+                           ,
+                           is_in_sec_cache);
   ASSERT_NE(handle, nullptr);
   ASSERT_NE(handle->Value(), nullptr);
   delete static_cast<TestItem*>(handle->Value());
@@ -182,7 +194,13 @@ TEST_F(CachelibWrapperTest, BasicTest) {
 TEST_F(CachelibWrapperTest, BasicFailTest) {
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
-  handle = cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache);
+  handle = cache()->Lookup("k1", test_item_creator, true
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                           ,
+                           /*advise_erase=*/false
+#endif
+                           ,
+                           is_in_sec_cache);
   ASSERT_EQ(handle, nullptr);
 }
 
@@ -214,6 +232,9 @@ TEST_F(CachelibWrapperTest, WaitAllTest) {
     handles.emplace_back(cache()->Lookup("k" + std::to_string(block),
                                          test_item_creator,
                                          false,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                                         /*advise_erase=*/false,
+#endif
                                          is_in_sec_cache));
     if (invalid) {
       // Fast fail
@@ -254,7 +275,13 @@ TEST_F(CachelibWrapperTest, CreateFailTest) {
 
   std::unique_ptr<SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
-  handle = cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache);
+  handle = cache()->Lookup("k1", test_item_creator, true
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                           ,
+                           /*advise_erase=*/false
+#endif
+                           ,
+                           is_in_sec_cache);
   ASSERT_EQ(handle, nullptr);
 }
 
@@ -275,7 +302,13 @@ TEST_F(CachelibWrapperTest, LookupWhileCloseTest) {
 
   auto lookup_fn = [&]() {
     std::unique_ptr<SecondaryCacheResultHandle> hdl =
-        cache()->Lookup("k1", test_item_creator, false, is_in_sec_cache);
+        cache()->Lookup("k1", test_item_creator, false
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                        ,
+                        /*advise_erase=*/false
+#endif
+                        ,
+                        is_in_sec_cache);
     pthread_mutex_lock(&mu);
     pthread_cond_signal(&cv_seq_1);
     pthread_cond_wait(&cv_seq_2, &mu);
@@ -296,8 +329,11 @@ TEST_F(CachelibWrapperTest, LookupWhileCloseTest) {
   pthread_cond_wait(&cv_seq_1, &mu);
   std::thread close_thread(close_fn);
   pthread_mutex_unlock(&mu);
-  while (auto hdl =
-             cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache)) {
+  while (auto hdl = cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                                    /*advise_erase=*/false,
+#endif
+                                    is_in_sec_cache)) {
     TestItem* item = static_cast<TestItem*>(hdl->Value());
     delete item;
     sleep(1);
@@ -310,7 +346,11 @@ TEST_F(CachelibWrapperTest, LookupWhileCloseTest) {
   close_thread.join();
 
   // Verify that lookups fail, since the cache is closed
-  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache),
+  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                            /*advise_erase=*/false,
+#endif
+                            is_in_sec_cache),
             nullptr);
   pthread_cond_destroy(&cv_seq_1);
   pthread_cond_destroy(&cv_seq_2);
@@ -371,8 +411,11 @@ TEST_F(CachelibWrapperTest, InsertWhileCloseTest) {
   std::thread insert_thread(insert_fn);
   std::thread close_thread(close_fn);
   bool is_in_sec_cache{false};
-  while (auto hdl =
-             cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache)) {
+  while (auto hdl = cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                                    /*advise_erase=*/false,
+#endif
+                                    is_in_sec_cache)) {
     TestItem* item = static_cast<TestItem*>(hdl->Value());
     delete item;
     sleep(1);
@@ -385,7 +428,11 @@ TEST_F(CachelibWrapperTest, InsertWhileCloseTest) {
   close_thread.join();
 
   // Verify that lookups fail, since the cache is closed
-  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache),
+  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                            /*advise_erase=*/false,
+#endif
+                            is_in_sec_cache),
             nullptr);
 
   pthread_cond_destroy(&cv_seq_1);
@@ -419,8 +466,12 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
     std::vector<std::unique_ptr<SecondaryCacheResultHandle>> handles;
     std::vector<SecondaryCacheResultHandle*> handle_ptrs;
     for (int i = 0; i < 100; ++i) {
-      handles.emplace_back(cache()->Lookup(
-          "k" + std::to_string(i), test_item_creator, false, is_in_sec_cache));
+      handles.emplace_back(cache()->Lookup("k" + std::to_string(i),
+                                           test_item_creator, false,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                                           /*advise_erase=*/false,
+#endif
+                                           is_in_sec_cache));
       EXPECT_NE(handles.back(), nullptr);
       handle_ptrs.emplace_back(handles.back().get());
     }
@@ -446,8 +497,11 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
   pthread_cond_wait(&cv_seq_1, &mu);
   std::thread close_thread(close_fn);
   pthread_mutex_unlock(&mu);
-  while (auto hdl =
-             cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache)) {
+  while (auto hdl = cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                                    /*advise_erase=*/false,
+#endif
+                                    is_in_sec_cache)) {
     TestItem* item = static_cast<TestItem*>(hdl->Value());
     delete item;
     sleep(1);
@@ -460,7 +514,11 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
   close_thread.join();
 
   // Verify that lookups fail, since the cache is closed
-  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache),
+  ASSERT_EQ(cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                            /*advise_erase=*/false,
+#endif
+                            is_in_sec_cache),
             nullptr);
   pthread_cond_destroy(&cv_seq_1);
   pthread_cond_destroy(&cv_seq_2);
@@ -490,7 +548,11 @@ TEST_F(CachelibWrapperTest, LargeItemTest) {
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
-  handle = cache()->Lookup("k1", test_item_creator, true, is_in_sec_cache);
+  handle = cache()->Lookup("k1", test_item_creator, true,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
+                           /*advise_erase=*/false,
+#endif
+                           is_in_sec_cache);
   ASSERT_EQ(handle, nullptr);
   handle.reset();
 }
