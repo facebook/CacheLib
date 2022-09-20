@@ -546,6 +546,8 @@ class ChainedHashTable {
       // dereference the current element that the iterator is pointing to.
       T& operator*();
       T* operator->() { return &(*(*this)); }
+      const T& operator*() const;
+      const T* operator->() const { return &(*(*this)); }
 
       bool operator==(const Iterator& other) const noexcept {
         return container_ == other.container_ &&
@@ -575,16 +577,16 @@ class ChainedHashTable {
       Iterator(C& ht, EndIterT);
 
       // the container over which we are iterating
-      C* container_;
+      mutable C* container_;
 
       // current bucket that the iterator is pointing to.
-      BucketId currBucket_{0};
+      mutable BucketId currBucket_{0};
 
       // cursor into the current bucket.
-      unsigned int curSor_{0};
+      mutable unsigned int curSor_{0};
 
       // current bucket.
-      std::vector<Handle> bucketElems_;
+      mutable std::vector<Handle> bucketElems_;
 
       // optional throttler
       folly::Optional<util::Throttler> throttler_ = folly::none;
