@@ -53,6 +53,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   std::set<PoolId> getRegularPoolIds() const override { return {}; }
   std::set<PoolId> getCCachePoolIds() const override { return {}; }
   std::set<PoolId> getPoolIds() const override { return {}; }
+  std::string getPoolName(PoolId /* unused */) const override { return ""; }
   bool resizePools(PoolId, PoolId, size_t) override { return false; }
   std::map<std::string, std::string> serializeConfigParams() const override {
     return {};

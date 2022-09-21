@@ -1906,20 +1906,36 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
 }
 
 template <typename CacheTrait>
-typename CacheAllocator<CacheTrait>::ReadHandle
+typename CacheAllocator<CacheTrait>::SampleItem
 CacheAllocator<CacheTrait>::getSampleItem() {
-  const auto* item =
-      reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
+  // Sampling from DRAM cache
+  auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
   if (!item) {
-    return ReadHandle{};
+    return SampleItem{};
   }
 
-  ReadHandle handle = findInternal(item->getKey());
   // Check that item returned is the same that was sampled
-  if (handle.get() == item) {
-    return handle;
+
+  auto sharedHdl = std::make_shared<ReadHandle>(findInternal(item->getKey()));
+  if (sharedHdl->get() != item) {
+    return SampleItem{};
   }
-  return ReadHandle{};
+
+  const auto allocInfo = allocator_->getAllocInfo(item->getMemory());
+
+  // Convert the Item to IOBuf to make SampleItem
+  auto iobuf = folly::IOBuf{
+      folly::IOBuf::TAKE_OWNERSHIP, sharedHdl->getInternal(),
+      item->getOffsetForMemory() + item->getSize(),
+      [](void* /*unused*/, void* userData) {
+        auto* hdl = reinterpret_cast<std::shared_ptr<ReadHandle>*>(userData);
+        delete hdl;
+      } /* freeFunc */,
+      new std::shared_ptr<ReadHandle>{sharedHdl} /* userData for freeFunc */};
+
+  iobuf.markExternallySharedOne();
+
+  return SampleItem(std::move(iobuf), allocInfo);
 }
 
 template <typename CacheTrait>
@@ -1978,7 +1994,7 @@ folly::IOBuf CacheAllocator<CacheTrait>::convertToIOBufT(Handle& handle) {
         // accordingly
         dataOffset + item->getSize(),
 
-        [](void*, void* userData) {
+        [](void* /*unused*/, void* userData) {
           auto* hdl = reinterpret_cast<std::shared_ptr<Handle>*>(userData);
           delete hdl;
         } /* freeFunc */,

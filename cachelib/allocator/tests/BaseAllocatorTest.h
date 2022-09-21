@@ -3355,7 +3355,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     auto poolId = alloc.addPool("foobar", numBytes);
 
     // no valid item in cache yet, so we shouldn't get anything
-    ASSERT_EQ(nullptr, alloc.getSampleItem());
+    ASSERT_FALSE(alloc.getSampleItem().isValid());
 
     // fill up the pool, so any random memory we grab is a valid item
     const unsigned int nSizes = 10;
@@ -3363,8 +3363,14 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     const auto sizes = this->getValidAllocSizes(alloc, poolId, nSizes, keyLen);
     this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
 
-    auto handle = alloc.getSampleItem();
-    ASSERT_NE(nullptr, handle);
+    ReadHandle handle;
+    {
+      auto sampleItem = alloc.getSampleItem();
+      ASSERT_TRUE(sampleItem.isValid());
+      handle = alloc.find(sampleItem->getKey());
+      ASSERT_NE(nullptr, handle);
+      ASSERT_EQ(2, handle->getRefCount());
+    }
     ASSERT_EQ(1, handle->getRefCount());
   }
 

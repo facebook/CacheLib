@@ -52,6 +52,7 @@ enum class AccessMode { kRead, kWrite };
 // used by RemoveCB, indicating if the removal from the MMContainer was an
 // eviction or not.
 enum class RemoveContext { kEviction, kNormal };
+
 // used by ItemDestructor, indicating how the item is destructed
 enum class DestructorContext {
   // item was in dram and evicted from dram. it could have
@@ -176,6 +177,9 @@ class CacheBase {
 
   // return a list of all valid pool ids.
   virtual std::set<PoolId> getPoolIds() const = 0;
+
+  // returns the pool's name by its poolId.
+  virtual std::string getPoolName(PoolId poolId) const = 0;
 
   // returns a list of pools excluding compact cache pools
   virtual std::set<PoolId> getRegularPoolIds() const = 0;

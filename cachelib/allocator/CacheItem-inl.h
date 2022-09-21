@@ -89,6 +89,13 @@ uint32_t CacheItem<CacheTrait>::getSize() const noexcept {
 }
 
 template <typename CacheTrait>
+uint32_t CacheItem<CacheTrait>::getTotalSize() const noexcept {
+  auto headerSize = reinterpret_cast<uintptr_t>(getMemory()) -
+                    reinterpret_cast<uintptr_t>(this);
+  return headerSize + getSize();
+}
+
+template <typename CacheTrait>
 uint32_t CacheItem<CacheTrait>::getExpiryTime() const noexcept {
   return expiryTime_;
 }

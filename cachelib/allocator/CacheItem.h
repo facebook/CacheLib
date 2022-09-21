@@ -187,6 +187,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // The memory range [getMemory(), getMemory() + getSize()) is usable.
   uint32_t getSize() const noexcept;
 
+  // This is the total memory used including header and user data
+  uint32_t getTotalSize() const noexcept;
+
   // Return timestamp of when this item was created
   uint32_t getCreationTime() const noexcept;
 

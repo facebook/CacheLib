@@ -18,6 +18,7 @@
 
 #include <folly/CPortability.h>
 #include <folly/Likely.h>
+#include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
@@ -216,6 +217,39 @@ class CacheAllocator : public CacheBase {
 
   using EventTracker = EventInterface<Key>;
 
+  // SampleItem is a wrapper for the CacheItem which is provided as the sample
+  // for uploading to Scuba (see ItemStatsExporter). It is guaranteed that the
+  // CacheItem is accessible as long as the SampleItem is around since the
+  // internal resource (e.g., ref counts, buffer) will be managed by the iobuf
+  class SampleItem {
+   public:
+    SampleItem() = default;
+
+    SampleItem(folly::IOBuf&& iobuf,
+               const AllocInfo& allocInfo,
+               bool fromNvm = false)
+        : iobuf_(std::move(iobuf)), allocInfo_(allocInfo), fromNvm_(fromNvm) {}
+
+    const Item* operator->() const noexcept { return get(); }
+
+    const Item& operator*() const noexcept { return *get(); }
+
+    [[nodiscard]] const Item* get() const noexcept {
+      return reinterpret_cast<const Item*>(iobuf_.data());
+    }
+
+    [[nodiscard]] bool isValid() const { return !iobuf_.empty(); }
+
+    [[nodiscard]] bool isNvmItem() const { return fromNvm_; }
+
+    [[nodiscard]] const AllocInfo& getAllocInfo() const { return allocInfo_; }
+
+   private:
+    folly::IOBuf iobuf_;
+    AllocInfo allocInfo_{};
+    bool fromNvm_ = false;
+  };
+
   // holds information about removal, used in RemoveCb
   struct RemoveCbData {
     // remove or eviction
@@ -227,6 +261,7 @@ class CacheAllocator : public CacheBase {
     // Iterator range pointing to chained allocs associated with @item
     folly::Range<ChainedItemIter> chainedAllocs;
   };
+
   struct DestructorData {
     DestructorData(DestructorContext ctx,
                    Item& it,
@@ -671,11 +706,11 @@ class CacheAllocator : public CacheBase {
   // Get a random item from memory
   // This is useful for profiling and sampling cachelib managed memory
   //
-  // @return ReadHandle if an valid item is found
-  //
-  //         nullptr if the randomly chosen memory does not belong
-  //                 to an valid item
-  ReadHandle getSampleItem();
+  // @return Valid SampleItem if an valid item is found
+  //         Invalid SampleItem if the randomly chosen memory does not
+  //                 belong to an valid item
+  //         Should be checked with SampleItem.isValid() before use
+  SampleItem getSampleItem();
 
   // Convert a Read Handle to an IOBuf. The returned IOBuf gives a
   // read-only view to the user. The item's ownership is retained by
@@ -1070,7 +1105,7 @@ class CacheAllocator : public CacheBase {
   PoolId getPoolId(folly::StringPiece name) const noexcept;
 
   // returns the pool's name by its poolId.
-  std::string getPoolName(PoolId poolId) const {
+  std::string getPoolName(PoolId poolId) const override {
     return allocator_->getPoolName(poolId);
   }
 

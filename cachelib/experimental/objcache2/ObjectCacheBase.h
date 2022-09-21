@@ -109,6 +109,11 @@ class ObjectCacheBase : public CacheBase {
     return l1Cache_->getPoolIds();
   }
 
+  // returns the pool's name by its poolId.
+  std::string getPoolName(PoolId poolId) const override {
+    return l1Cache_->getPoolName(poolId);
+  }
+
   // returns a list of pools excluding compact cache pools
   std::set<PoolId> getRegularPoolIds() const override {
     return l1Cache_->getRegularPoolIds();
