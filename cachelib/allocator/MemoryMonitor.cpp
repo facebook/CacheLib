@@ -173,8 +173,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
           ++slabsAdvised;
           const auto elapsed_time =
               static_cast<uint64_t>(util::getCurrentTimeMs() - now);
-          stats.numSlabsForClass(classId);
-          stats.evictionAgeForClass(classId);
           // Log the event about the Pool which released the Slab along with
           // the number of slabs.
           stats_.addSlabReleaseEvent(
