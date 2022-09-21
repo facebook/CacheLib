@@ -150,6 +150,9 @@ class GenericPieces {
    */
   uint64_t getFullBodyLength() const { return fullBodyLen_; }
   uint64_t getStartPieceIndex() const { return startPieceIndex_; }
+  [[nodiscard]] uint64_t getStartPieceOffset() const {
+    return startPieceIndex_ * pieceSize_;
+  }
   uint64_t getEndPieceIndex() const { return endPieceIndex_; }
   uint64_t getNumPiecesTotal() const { return numPiecesTotal_; }
   uint64_t getRequestedStartByte() const { return requestedStartByte_; }
