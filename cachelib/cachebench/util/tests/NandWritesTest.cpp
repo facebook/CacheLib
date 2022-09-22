@@ -318,7 +318,7 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesWesternDigitalDevice) {
 })EOF";
 
   constexpr auto& kSmartLogOutput = R"EOF(
-  SMART Cloud Attributes :- 
+  SMART Cloud Attributes :-
   Physical media units written     	      	: 0 609651339018240
   Physical media units read      	      	: 0 567611790770176
   Bad user nand blocks Raw			: 0
@@ -489,6 +489,94 @@ Incomplete shutdowns                          : 0
         kSmartLogOutput}});
   EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_),
             157035510104064);
+}
+
+TEST_F(NandWritesTest, nandWriteBytes_handlesSkhmsDevice) {
+  constexpr auto& kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "41021C20",
+      "Index" : 0,
+      "ModelNumber" : "HFS512GDE9X083N",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "CN08Q749810308S3J",
+      "UsedBytes" : 512110190592,
+      "MaximumLBA" : 500118192,
+      "PhysicalSize" : 512110190592,
+      "SectorSize" : 512
+    },
+    {
+      "DevicePath" : "/dev/nvme1n1",
+      "Firmware" : "41021C20",
+      "Index" : 1,
+      "ModelNumber" : "HFS512GDE9X083N",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "CN08Q749810308S3J",
+      "UsedBytes" : 497998016512,
+      "MaximumLBA" : 500118192,
+      "PhysicalSize" : 512110190592,
+      "SectorSize" : 4096
+    },
+    {
+      "DevicePath" : "/dev/nvme2n1",
+      "Firmware" : "41021C20",
+      "Index" : 2,
+      "ModelNumber" : "HFS512GDE9X083N",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "CN08Q749810308S3J",
+      "UsedBytes" : 498003058688,
+      "MaximumLBA" : 500118192,
+      "PhysicalSize" : 512110190592,
+      "SectorSize" : 4096
+    }
+  ]
+})EOF";
+
+  constexpr auto& kSmartLogOutput = R"EOF(
+Physical Media Units Written - TLC                                          : 484533969
+Physical Media Units Written - SLC                                          : 12271117
+Bad User NAND Block Count (Normalized)                                      : 100
+Bad User NAND Block Count (Raw)                                             : 0
+XOR Recovery Count                                                          : 0
+Uncorrectable Read error count                                              : 0
+SSD End to End correction counts (Corrected Errors)                         : 0
+SSD End to End correction counts (Detected Errors)                          : 0
+SSD End to End correction counts (Uncorrected E2E Errors)                   : 0
+System data %% life-used                                                    : 1%
+User data erase counts (Minimum TLC)                                        : 433
+User data erase counts (Maximum TLC)                                        : 484
+User data erase counts (Minimum SLC)                                        : 68
+User data erase counts (Maximum SLC)                                        : 78
+Program fail count (Normalized)                                             : 100
+Program fail count (Raw)                                                    : 0
+Erase Fail Count (Normalized)                                               : 100
+Erase Fail Count (Raw)                                                      : 0
+PCIe Correctable Error count                                                : 1
+%% Free Blocks (User)                                                       : 68%
+Security Version Number                                                     : 1
+%% Free Blocks (System)                                                     : 53%
+TRIM Completions (Data Set Management Commands count)                       : 19776308
+TRIM Completions (Incomplete TRIM commands (MBs))                           : 0
+TRIM Completions (Completed TRIM (%%))                                      : 100%
+Background Back-Pressure Gauge                                              : 0
+Soft ECC Error Count                                                        : 0
+Refresh count                                                               : 0
+Bad System NAND Block Count (Normalized)                                    : 100
+Bad System NAND Block Count (Raw)                                           : 0
+Endurance Estimate                                                          : 300000
+Thermal Throttling Status & Count (Number of thermal throttling events)     : 0
+Thermal Throttling Status & Count (Current Throttling Status)               : 0x00
+Unaligned I/O                                                               : 0
+Physical Media Units Read                                                   : 518215267
+Log Page Version                                                            : 3
+)EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "skhms", "vs-nand-stats", "/dev/nvme0n1"},
+        kSmartLogOutput}});
+  EXPECT_EQ(nandWriteBytes("nvme0n1", kNvmePath, mockFactory_), 484533969);
 }
 
 TEST_F(NandWritesTest, nandWriteBytes_handlesIntelDevice) {
