@@ -104,7 +104,7 @@ class ObjectCachePersistor {
         queuBatchSize_(queueBatchSize) {
     for (size_t i = 0; i < numOfThreads; i++) {
       auto file = folly::File(fileName + "_" + folly::to<std::string>(i),
-                              O_WRONLY | O_CREAT);
+                              O_WRONLY | O_CREAT | O_TRUNC);
       if (file) {
         auto rw = navy::createFileRecordWriter(std::move(file));
         persistors_.emplace_back(std::make_shared<PersistorWorkerObj>(
