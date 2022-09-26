@@ -89,7 +89,12 @@ class CountMinSketchBase {
   void decayCountsBy(double decay);
 
   // Sets count for all keys to zero
-  void reset() { decayCountsBy(0.0); }
+  void reset() {
+    uint64_t tableSize = width_ * depth_;
+    for (uint64_t i = 0; i < tableSize; i++) {
+      table_[i] = 0;
+    }
+  }
 
   uint32_t width() const { return width_; }
 
