@@ -107,7 +107,6 @@ bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
   }
 
   auto baseProb = getBaseProbability(hk.key().size() + value.size());
-  baseProbStats_.trackValue(baseProb * 100);
   auto probability = baseProb * params_.probabilityFactor;
   probability = std::max(0.0, std::min(1.0, probability));
 
@@ -222,7 +221,6 @@ void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_ap_write_rate_adjusted_target",
           static_cast<double>(writeStats.curTargetRate));
   visitor("navy_ap_prob_factor_x100", params_.probabilityFactor * 100);
-  baseProbStats_.visitQuantileEstimator(visitor, "navy_ap_baseProx_x100");
   visitor("navy_ap_write_rate_observed",
           static_cast<double>(writeStats.observedCurRate));
 }

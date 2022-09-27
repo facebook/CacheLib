@@ -181,9 +181,6 @@ class DynamicRandomAP final : public AdmissionPolicy {
   ThrottleParams params_;
   WriteStats writeStats_;
 
-  // baseProbability distribution on the items that are tested on accept.
-  mutable util::PercentileStats baseProbStats_;
-
   // probabilityFactor would always be in [lowerBound_, upperBound_]
   static constexpr double kLowerBound_{0.001};
   static constexpr double kUpperBound_{10.0};
