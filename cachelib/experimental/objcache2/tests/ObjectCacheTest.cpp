@@ -46,17 +46,19 @@ struct Foo5 : FooBase {
 template <typename AllocatorT>
 class ObjectCacheTest : public ::testing::Test {
  public:
+  using ObjectCache = ObjectCache<AllocatorT>;
+  using ObjectCacheConfig = typename ObjectCache::Config;
   void testGetAllocSize() {
     std::vector<uint8_t> maxKeySizes{};
     std::vector<uint32_t> allocSizes{};
 
     for (uint8_t keySize = 8; keySize < 255; keySize++) {
       maxKeySizes.push_back(keySize);
-      allocSizes.push_back(ObjectCache<AllocatorT>::getL1AllocSize(keySize));
+      allocSizes.push_back(ObjectCache::getL1AllocSize(keySize));
     }
 
     for (size_t i = 0; i < maxKeySizes.size(); i++) {
-      EXPECT_TRUE(allocSizes[i] >= ObjectCache<AllocatorT>::kL1AllocSizeMin);
+      EXPECT_TRUE(allocSizes[i] >= ObjectCache::kL1AllocSizeMin);
       EXPECT_TRUE(maxKeySizes[i] + sizeof(ObjectCacheItem) +
                       sizeof(typename AllocatorT::Item) <=
                   allocSizes[i]);
@@ -69,7 +71,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto found1 = objcache->template find<Foo>("Foo");
     EXPECT_EQ(nullptr, found1);
@@ -79,7 +81,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo->b = 2;
     foo->c = 3;
     auto res = objcache->insertOrReplace("Foo", std::move(foo));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
     ASSERT_NE(nullptr, res.second);
     EXPECT_EQ(1, res.second->a);
     EXPECT_EQ(2, res.second->b);
@@ -103,14 +105,14 @@ class ObjectCacheTest : public ::testing::Test {
       }
     });
 
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto foo = std::make_unique<Foo>();
     foo->a = 1;
     foo->b = 2;
     foo->c = 3;
     auto res1 = objcache->insertOrReplace("Foo", std::move(foo));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res1.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res1.first);
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -123,7 +125,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->e = 5;
     foo2->f = 6;
     auto res2 = objcache->insertOrReplace("Foo2", std::move(foo2));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res2.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res2.first);
 
     auto found2 = objcache->template find<Foo2>("Foo2");
     ASSERT_NE(nullptr, found2);
@@ -138,14 +140,14 @@ class ObjectCacheTest : public ::testing::Test {
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<FooBase>(); });
 
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto foo4 = std::make_unique<Foo4>();
     foo4->a = 1;
     foo4->b = 2;
     foo4->c = 3;
     auto res1 = objcache->insertOrReplace("Foo4", std::move(foo4));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res1.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res1.first);
 
     auto found1 = objcache->template find<Foo4>("Foo4");
     ASSERT_NE(nullptr, found1);
@@ -158,7 +160,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo5->e = 5;
     foo5->f = 6;
     auto res2 = objcache->insertOrReplace("Foo5", std::move(foo5));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res2.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res2.first);
 
     auto found2 = objcache->template find<Foo5>("Foo5");
     ASSERT_NE(nullptr, found2);
@@ -173,7 +175,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo3>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
     for (int i = 0; i < 10; i++) {
       objcache->insertOrReplace(folly::sformat("key_{}", i),
                                 std::make_unique<Foo3>(numDtors));
@@ -189,7 +191,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto foo = std::make_unique<Foo>();
     foo->a = 1;
@@ -221,7 +223,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto foo1 = std::make_unique<Foo>();
     foo1->a = 1;
@@ -230,7 +232,7 @@ class ObjectCacheTest : public ::testing::Test {
     std::shared_ptr<Foo> replaced;
     auto res =
         objcache->insertOrReplace("Foo", std::move(foo1), 0, 0, &replaced);
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
     EXPECT_EQ(nullptr, replaced);
 
     auto found1 = objcache->template find<Foo>("Foo");
@@ -244,7 +246,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->b = 20;
     foo2->c = 30;
     res = objcache->insertOrReplace("Foo", std::move(foo2), 0, 0, &replaced);
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
     ASSERT_NE(nullptr, replaced);
     EXPECT_EQ(1, replaced->a);
     EXPECT_EQ(2, replaced->b);
@@ -262,7 +264,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     // test bad API call
     ASSERT_THROW(objcache->insert("Foo", std::move(std::make_unique<Foo>()),
@@ -274,7 +276,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->b = 2;
     foo1->c = 3;
     auto res = objcache->insert("Foo", std::move(foo1));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -287,8 +289,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->b = 20;
     foo2->c = 30;
     res = objcache->insert("Foo", std::move(foo2));
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kKeyAlreadyExists,
-              res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kKeyAlreadyExists, res.first);
 
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -305,7 +306,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     config.objectSizeTrackingEnabled = true;
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
     EXPECT_EQ(objcache->getTotalObjectSize(), 0);
     auto foo1 = std::make_unique<Foo>();
     foo1->a = 1;
@@ -325,7 +326,7 @@ class ObjectCacheTest : public ::testing::Test {
     // insert foo1
     {
       auto res = objcache->insert("Foo", std::move(foo1), foo1Size);
-      ASSERT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
 
       auto found = objcache->template find<Foo>("Foo");
       ASSERT_NE(nullptr, found);
@@ -339,7 +340,7 @@ class ObjectCacheTest : public ::testing::Test {
     // replace foo1 with foo2
     {
       auto res = objcache->insertOrReplace("Foo", std::move(foo2), foo2Size);
-      ASSERT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
 
       auto found = objcache->template find<Foo>("Foo");
       ASSERT_NE(nullptr, found);
@@ -363,7 +364,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     config.objectSizeTrackingEnabled = true;
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     // will throw without the object size
     ASSERT_THROW(objcache->insert("Foo", std::make_unique<Foo>()),
@@ -375,7 +376,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->c = 3;
     auto foo1Size = 64;
     auto res = objcache->insert("Foo", std::move(foo1), foo1Size);
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kSuccess, res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
     ASSERT_EQ(objcache->getNumEntries(), 1);
     ASSERT_EQ(objcache->getTotalObjectSize(), foo1Size);
 
@@ -391,8 +392,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->c = 30;
     auto foo2Size = 128;
     res = objcache->insert("Foo", std::move(foo2), foo2Size);
-    EXPECT_EQ(ObjectCache<AllocatorT>::AllocStatus::kKeyAlreadyExists,
-              res.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kKeyAlreadyExists, res.first);
     ASSERT_EQ(objcache->getNumEntries(), 1);
     ASSERT_EQ(objcache->getTotalObjectSize(), foo1Size);
 
@@ -410,7 +410,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runReplaceOps = [&] {
       for (int i = 0; i < 2000; i++) {
@@ -437,7 +437,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 1000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runInsertOps = [&](int id) {
       for (int i = 0; i < 2000; i++) {
@@ -464,7 +464,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.objectSizeTrackingEnabled = true;
     config.cacheSizeLimit = 100000;
     config.sizeControllerIntervalMs = 100;
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runInsertOps = [&](int id) {
       for (int i = 0; i < 2000; i++) {
@@ -494,7 +494,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 10'000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runReplaceOps = [&] {
       for (int i = 0; i < 2000; i++) {
@@ -532,7 +532,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1EntriesLimit = 1000;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runInsertOps = [&](int id) {
       for (int i = 0; i < 2000; i++) {
@@ -569,7 +569,7 @@ class ObjectCacheTest : public ::testing::Test {
     config.l1NumShards = 10;
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    auto objcache = ObjectCache<AllocatorT>::create(config);
+    auto objcache = ObjectCache::create(config);
 
     auto runReplaceOps = [&] {
       for (int i = 0; i < 2000; i++) {
@@ -643,12 +643,13 @@ TYPED_TEST(ObjectCacheTest, MultithreadFindAndReplaceWith10Shards) {
   this->testMultithreadFindAndReplaceWith10Shards();
 }
 
+using ObjectCache = ObjectCache<LruAllocator>;
 TEST(ObjectCacheTest, LruEviction) {
-  ObjectCacheConfig config;
+  ObjectCache::Config config;
   config.l1EntriesLimit = 1024;
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-  auto objcache = ObjectCache<LruAllocator>::create(config);
+  auto objcache = ObjectCache::create(config);
 
   for (int i = 0; i < 1025; i++) {
     auto foo = std::make_unique<Foo>();
@@ -664,12 +665,12 @@ TEST(ObjectCacheTest, LruEviction) {
 }
 
 TEST(ObjectCacheTest, LruEvictionWithSizeTracking) {
-  ObjectCacheConfig config;
+  ObjectCache::Config config;
   config.l1EntriesLimit = 1024;
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
   config.objectSizeTrackingEnabled = true;
-  auto objcache = ObjectCache<LruAllocator>::create(config);
+  auto objcache = ObjectCache::create(config);
   int totalObjectSize = 0;
 
   // After the loop, the first item will be evicted and the total object
@@ -696,7 +697,7 @@ TEST(ObjectCacheTest, LruEvictionWithSizeTracking) {
 }
 
 TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
-  ObjectCacheConfig config;
+  ObjectCache::Config config;
   config.l1EntriesLimit = 50;
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
@@ -705,7 +706,7 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
   config.sizeControllerIntervalMs = 100;
   // insert objects with equal size
   {
-    auto objcache = ObjectCache<LruAllocator>::create(config);
+    auto objcache = ObjectCache::create(config);
     for (size_t i = 0; i < 5; i++) {
       auto key = folly::sformat("key_{}", i);
       objcache->insertOrReplace(key, std::make_unique<Foo>(), 25);
@@ -728,7 +729,7 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
 
   // insert and then access objects from the tail
   {
-    auto objcache = ObjectCache<LruAllocator>::create(config);
+    auto objcache = ObjectCache::create(config);
     for (size_t i = 0; i < 10; i++) {
       auto key = folly::sformat("key_{}", i);
       objcache->insertOrReplace(key, std::make_unique<Foo>(), 25);
@@ -761,7 +762,7 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
 
   // insert objects with different sizes
   {
-    auto objcache = ObjectCache<LruAllocator>::create(config);
+    auto objcache = ObjectCache::create(config);
     for (size_t i = 0; i < 10; i++) {
       auto key = folly::sformat("key_{}", i);
       objcache->insertOrReplace(key, std::make_unique<Foo>(), 25 + i);

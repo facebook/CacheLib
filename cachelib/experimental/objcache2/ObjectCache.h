@@ -64,6 +64,7 @@ struct ObjectCacheDestructorData {
   const KAllocation::Key& key;
 };
 
+template <typename ObjectCache>
 struct ObjectCacheConfig {
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
@@ -153,17 +154,17 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   struct InternalConstructor {};
 
  public:
+  using Config = ObjectCacheConfig<ObjectCache<AllocatorT>>;
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
-  explicit ObjectCache(InternalConstructor, const ObjectCacheConfig& config)
+  explicit ObjectCache(InternalConstructor, const Config& config)
       : config_{config} {}
 
   // Create an ObjectCache to store objects of one or more types
   //    - ItemDestructor must be set from ObjectCacheConfig
   //    - Inside ItemDestructor, `ctx.deleteObject<T>()` must be called to
   //      delete the objects (also see example in ObjectCacheConfig)
-  static std::unique_ptr<ObjectCache<AllocatorT>> create(
-      ObjectCacheConfig config);
+  static std::unique_ptr<ObjectCache<AllocatorT>> create(Config config);
 
   ~ObjectCache();
 
@@ -309,7 +310,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
                               0});
 
   // Config passed to the cache.
-  ObjectCacheConfig config_{};
+  Config config_{};
 
   // Number of shards (LRUs) to lessen the contention on L1 cache
   size_t l1NumShards_{};

@@ -100,7 +100,7 @@ void ObjectCache<AllocatorT>::init() {
 
 template <typename AllocatorT>
 std::unique_ptr<ObjectCache<AllocatorT>> ObjectCache<AllocatorT>::create(
-    ObjectCacheConfig config) {
+    Config config) {
   auto obj =
       std::make_unique<ObjectCache>(InternalConstructor(), std::move(config));
   obj->init();
