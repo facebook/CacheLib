@@ -1386,11 +1386,6 @@ class CacheAllocator : public CacheBase {
 
   MMContainer& getMMContainer(PoolId pid, ClassId cid) const noexcept;
 
-  // Get stats of the specified pid and cid.
-  // If such mmcontainer is not valid (pool id or cid out of bound)
-  // or the mmcontainer is not initialized, return an empty stat.
-  MMContainerStat getMMContainerStat(PoolId pid, ClassId cid) const noexcept;
-
   // create a new cache allocation. The allocation can be initialized
   // appropriately and made accessible through insert or insertOrReplace.
   // If the handle returned from this api is not passed on to

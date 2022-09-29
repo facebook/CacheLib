@@ -1688,19 +1688,6 @@ CacheAllocator<CacheTrait>::getMMContainer(PoolId pid,
 }
 
 template <typename CacheTrait>
-MMContainerStat CacheAllocator<CacheTrait>::getMMContainerStat(
-    PoolId pid, ClassId cid) const noexcept {
-  if (static_cast<size_t>(pid) >= mmContainers_.size()) {
-    return MMContainerStat{};
-  }
-  if (static_cast<size_t>(cid) >= mmContainers_[pid].size()) {
-    return MMContainerStat{};
-  }
-  return mmContainers_[pid][cid] ? mmContainers_[pid][cid]->getStats()
-                                 : MMContainerStat{};
-}
-
-template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
   return findInternal(key);
@@ -2309,6 +2296,8 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   if (!isCompactCache) {
     for (const ClassId cid : classIds) {
       uint64_t classHits = (*stats_.cacheHits)[poolId][cid].get();
+      XDCHECK(mmContainers_[poolId][cid],
+              folly::sformat("Pid {}, Cid {} not initialized.", poolId, cid));
       cacheStats.insert(
           {cid,
            {allocSizes[cid], (*stats_.allocAttempts)[poolId][cid].get(),
@@ -2317,7 +2306,9 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
             (*stats_.fragmentationSize)[poolId][cid].get(), classHits,
             (*stats_.chainedItemEvictions)[poolId][cid].get(),
             (*stats_.regularItemEvictions)[poolId][cid].get(),
-            getMMContainerStat(poolId, cid)}});
+            mmContainers_[poolId][cid]->getStats()}
+
+          });
       totalHits += classHits;
     }
   }
