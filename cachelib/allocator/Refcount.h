@@ -256,7 +256,9 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    * User can also query if an item "isOnlyExclusive". This returns true only
    * if the refcount is 0 and only the exclusive bit is set.
    *
-   * Unmarking exclusive does not depend on `isInMMContainer`
+   * Unmarking exclusive does not depend on `isInMMContainer`.
+   * Unmarking exclusive will also return the refcount at the moment of
+   * unmarking.
    */
   bool markExclusive() noexcept {
     Value bitMask = getAdminRef<kExclusive>();
@@ -298,7 +300,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   bool isOnlyExclusive() const noexcept {
     // An item is only exclusive when its refcount is zero and only the
     // exclusive bit among all the control bits is set. This indicates an item
-    // is already on its way out of cache and does not need to be moved.
+    // is exclusive to the current thread. No other thread is allowed to
+    // do anything with it.
     auto ref = getRefWithAccessAndAdmin();
     bool anyOtherBitSet = ref & ~getAdminRef<kExclusive>();
     if (anyOtherBitSet) {

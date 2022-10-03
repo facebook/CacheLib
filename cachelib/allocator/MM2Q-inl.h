@@ -250,7 +250,18 @@ MM2Q::Container<T, HookPtr>::getEvictionIterator() const noexcept {
   // arbitrary amount of time outside a lambda-friendly piece of code (eg. they
   // can return the iterator from functions, pass it to functions, etc)
   //
-  // to get advantage of combining, use withEvictionIterator
+  // it would be theoretically possible to refactor this interface into
+  // something like the following to allow combining
+  //
+  //    mm2q.withEvictionIterator([&](auto iterator) {
+  //      // user code
+  //    });
+  //
+  // at the time of writing it is unclear if the gains from combining are
+  // reasonable justification for the codemod required to achieve combinability
+  // as we don't expect this critical section to be the hotspot in user code.
+  // This is however subject to change at some time in the future as and when
+  // this assertion becomes false.
   LockHolder l(*lruMutex_);
   return Iterator{std::move(l), lru_.rbegin()};
 }

@@ -1661,6 +1661,25 @@ class CacheAllocator : public CacheBase {
 
   using EvictionIterator = typename MMContainer::Iterator;
 
+  // Advance the current iterator and try to evict a regular item
+  //
+  // @param  mmContainer  the container to look for evictions.
+  // @param  itr          iterator holding the item
+  //
+  // @return  valid handle to regular item on success. This will be the last
+  //          handle to the item. On failure an empty handle.
+  WriteHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
+                                                    EvictionIterator& itr);
+
+  // Advance the current iterator and try to evict a chained item
+  // Iterator may also be reset during the course of this function
+  //
+  // @param  itr          iterator holding the item
+  //
+  // @return  valid handle to the parent item on success. This will be the last
+  //          handle to the item
+  WriteHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
+
   // Deserializer CacheAllocatorMetadata and verify the version
   //
   // @param  deserializer   Deserializer object
@@ -1778,7 +1797,7 @@ class CacheAllocator : public CacheBase {
   //
   // @return last handle for corresponding to item on success. empty handle on
   // failure. caller can retry if needed.
-  WriteHandle evictNormalItem(Item& item);
+  WriteHandle evictNormalItemForSlabRelease(Item& item);
 
   // Helper function to evict a child item for slab release
   // As a side effect, the parent item is also evicted

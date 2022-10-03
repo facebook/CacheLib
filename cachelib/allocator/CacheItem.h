@@ -353,7 +353,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * User can also query if an item "isOnlyExclusive". This returns true only
    * if the refcount is 0 and only the exclusive bit is set.
    *
-   * Unmarking exclusive does not depend on `isInMMContainer`
+   * Unmarking exclusive does not depend on `isInMMContainer`.
+   * Unmarking exclusive will also return the refcount at the moment of
+   * unmarking.
    */
   bool markExclusive() noexcept;
   RefcountWithFlags::Value unmarkExclusive() noexcept;
