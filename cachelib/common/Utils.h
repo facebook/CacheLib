@@ -17,12 +17,15 @@
 #pragma once
 
 #include <folly/Format.h>
+#include <folly/Random.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
 #include <folly/FileUtil.h>
 #include <folly/chrono/Hardware.h>
+
+#include <numeric>
 
 namespace facebook {
 namespace cachelib {
@@ -220,6 +223,19 @@ T narrow_cast(double i) {
     return std::numeric_limits<T>::min();
   }
   return static_cast<T>(i);
+}
+
+template <typename T>
+std::pair<double, double> getMeanDeviation(std::vector<T> v) {
+  double sum = std::accumulate(v.begin(), v.end(), 0.0);
+  double mean = sum / v.size();
+
+  double accum = 0.0;
+  std::for_each(v.begin(), v.end(), [&](const T& d) {
+    accum += ((double)d - mean) * ((double)d - mean);
+  });
+
+  return std::make_pair(mean, sqrt(accum / v.size()));
 }
 
 // To force the compiler to NOT optimize away the store/load

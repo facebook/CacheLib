@@ -86,6 +86,9 @@ class FOLLY_PACK_ATTR BucketStorage {
   Allocation getFirst() const;
   Allocation getNext(Allocation alloc) const;
 
+  // offset of the Allocation within the Bucket
+  uint32_t getOffset(Allocation& alloc) { return alloc.view().data() - data_; }
+
  private:
   // Slot represents a physical slot in the storage. User does not use
   // this directly but instead uses Allocation.

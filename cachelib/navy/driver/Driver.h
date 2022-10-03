@@ -129,6 +129,9 @@ class Driver final : public AbstractCache {
   // returns the size of the device
   uint64_t getSize() const override;
 
+  // returns the size of the space used for caching
+  uint64_t getUsableSize() const override;
+
   // returns the navy stats
   void getCounters(const CounterVisitor& visitor) const override;
 
@@ -138,6 +141,10 @@ class Driver final : public AbstractCache {
   // Returns true if update successfully
   //         false if AdissionPolicy is not set or not DynamicRandom.
   bool updateMaxRateForDynamicRandomAP(uint64_t maxRate) override;
+
+  // return a Buffer containing NvmItem randomly sampled in the backing store
+  std::pair<Status, std::string /* key */> getRandomAlloc(
+      Buffer& value) override;
 
  private:
   struct ValidConfigTag {};

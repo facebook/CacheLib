@@ -23,11 +23,13 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Utils.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
+#include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
@@ -1130,7 +1132,7 @@ TEST(BlockCache, Reset) {
   driver->reset();
 
   // Create a new device with same expectations
-  proxyPtr->setRealDevice(setupResetTestDevice(config.cacheSize));
+  proxyPtr->setRealDevice(setupResetTestDevice(kDeviceSize));
   expectRegionsTracked(mp, {0, 1});
   resetTestRun(*driver);
 }
@@ -2212,6 +2214,64 @@ TEST(BlockCache, testItemDestructor) {
   EXPECT_EQ(Status::NotFound, driver->lookup(log[5].key(), value));
 
   exPtr->finish();
+}
+
+TEST(BlockCache, RandomAlloc) {
+  std::unordered_map<std::string, CacheEntry> log;
+  SeqPoints sp;
+
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = std::make_unique<MockJobScheduler>();
+  auto exPtr = ex.get();
+  auto config = makeConfig(*ex, std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  // We expect the first three regions to be filled
+  BufferGen bg;
+  for (size_t j = 0; j < 3; j++) {
+    for (size_t i = 0; i < 4; i++) {
+      auto key = folly::sformat("{}:{}", j, i);
+      CacheEntry e{makeHK(key.c_str()), bg.gen(3800)};
+      driver->insertAsync(e.key(), e.value(),
+                          [](Status status, HashedKey /*key */) {
+                            EXPECT_EQ(Status::Ok, status);
+                          });
+      log.emplace(key, std::move(e));
+      finishAllJobs(*exPtr);
+    }
+  }
+  driver->flush();
+
+  size_t succ_cnt = 0;
+  std::unordered_map<std::string, size_t> getCnts;
+  static constexpr size_t loopCnt = 10000;
+  for (size_t i = 0; i < loopCnt; i++) {
+    Buffer value;
+    auto [status, keyStr] = driver->getRandomAlloc(value);
+    if (status != navy::Status::Ok) {
+      continue;
+    }
+    succ_cnt++;
+    getCnts[keyStr]++;
+    auto it = log.find(keyStr);
+    EXPECT_NE(it, log.end());
+    EXPECT_EQ(it->second.value(), value.view());
+  }
+  std::vector<size_t> cnts;
+  std::transform(
+      getCnts.begin(), getCnts.end(), std::back_inserter(cnts),
+      [](const std::pair<std::string, size_t>& p) { return p.second; });
+  auto [avg, stddev] = util::getMeanDeviation(cnts);
+
+  // Expected success rate is 3 regions / 4 regions
+  // Allow margins of upto 20% for success rate and
+  // 20% for deviation of each item
+  EXPECT_GT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 0.8 / 4.0));
+  EXPECT_LT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 1.2 / 4.0));
+  EXPECT_LT(stddev, avg * 0.2);
 }
 } // namespace tests
 } // namespace navy

@@ -118,8 +118,11 @@ class AbstractCache {
   // every counter with key name and value.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
 
-  // Return how big the cache size is in bytes
+  // Return how big the cache size is in bytes (device size)
   virtual uint64_t getSize() const = 0;
+
+  // Return the size of space used for caching
+  virtual uint64_t getUsableSize() const = 0;
 
   // This is a temporary API to update the maxWriteRate for
   // DynamicRandomAdissionPolicy. The long term plan is to
@@ -127,6 +130,10 @@ class AbstractCache {
   // Returns true if update successfully
   //         false if AdissionPolicy is not set or not DynamicRandom.
   virtual bool updateMaxRateForDynamicRandomAP(uint64_t) = 0;
+
+  // Get key and Buffer for a random sample
+  virtual std::pair<Status, std::string /* key */> getRandomAlloc(
+      Buffer& value) = 0;
 };
 } // namespace navy
 } // namespace cachelib

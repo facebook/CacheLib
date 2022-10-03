@@ -16,6 +16,8 @@
 
 #include "cachelib/navy/bighash/Bucket.h"
 
+#include <folly/Random.h>
+
 #include "cachelib/navy/common/Hash.h"
 
 namespace facebook {
@@ -132,6 +134,23 @@ uint32_t Bucket::remove(HashedKey hk, const DestructorCallback& destructorCb) {
     itr = storage_.getNext(itr);
   }
   return 0;
+}
+
+std::pair<std::string, BufferView> Bucket::getRandomAlloc() {
+  const auto randOffset = folly::Random::rand64(0, storage_.capacity());
+
+  auto itr = storage_.getFirst();
+  while (!itr.done()) {
+    auto offset = storage_.getOffset(itr);
+    auto size = itr.view().size();
+    if (randOffset < offset + size) {
+      auto* entry = getIteratorEntry(itr);
+      return std::make_pair(reinterpret_cast<const char*>(entry->key().data()),
+                            entry->value());
+    }
+    itr = storage_.getNext(itr);
+  }
+  return {};
 }
 
 Bucket::Iterator Bucket::getFirst() const {

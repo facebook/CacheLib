@@ -225,10 +225,17 @@ class CacheAllocator : public CacheBase {
    public:
     SampleItem() = default;
 
-    SampleItem(folly::IOBuf&& iobuf,
-               const AllocInfo& allocInfo,
-               bool fromNvm = false)
+    SampleItem(folly::IOBuf&& iobuf, const AllocInfo& allocInfo, bool fromNvm)
         : iobuf_(std::move(iobuf)), allocInfo_(allocInfo), fromNvm_(fromNvm) {}
+
+    SampleItem(folly::IOBuf&& iobuf,
+               PoolId poolId,
+               ClassId classId,
+               size_t allocSize,
+               bool fromNvm)
+        : SampleItem(std::move(iobuf),
+                     AllocInfo{poolId, classId, allocSize},
+                     fromNvm) {}
 
     const Item* operator->() const noexcept { return get(); }
 

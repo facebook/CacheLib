@@ -17,6 +17,7 @@
 #include "cachelib/navy/bighash/BigHash.h"
 
 #include <folly/Format.h>
+#include <folly/Random.h>
 
 #include <chrono>
 #include <mutex>
@@ -146,7 +147,33 @@ uint64_t BigHash::getMaxItemSize() const {
   return bucketSize_ - sizeof(Bucket) - itemOverhead;
 }
 
+std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
+  BucketId bid(folly::Random::rand64(0, numBuckets_));
+
+  Bucket* bucket{nullptr};
+  Buffer buffer;
+  {
+    std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
+    buffer = readBucket(bid);
+    if (buffer.isNull()) {
+      ioErrorCount_.inc();
+      return std::make_pair(Status::NotFound, "");
+    }
+
+    bucket = reinterpret_cast<Bucket*>(buffer.data());
+  }
+
+  auto [key, valueView] = bucket->getRandomAlloc();
+  if (key.empty() || valueView.isNull()) {
+    return std::make_pair(Status::NotFound, "");
+  }
+
+  value = Buffer{valueView};
+  return std::make_pair(Status::Ok, key);
+}
+
 void BigHash::getCounters(const CounterVisitor& visitor) const {
+  visitor("navy_bh_size", getSize());
   visitor("navy_bh_items", itemCount_.get());
   visitor("navy_bh_inserts", insertCount_.get());
   visitor("navy_bh_succ_inserts", succInsertCount_.get());

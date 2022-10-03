@@ -89,6 +89,8 @@ class MockEngine final : public Engine {
 
   ~MockEngine() override = default;
 
+  uint64_t getSize() const override { return UINT32_MAX; }
+
   MOCK_METHOD2(insert, Status(HashedKey hk, BufferView value));
   MOCK_METHOD2(lookup, Status(HashedKey hk, Buffer& value));
   MOCK_METHOD1(couldExist, bool(HashedKey hk));
@@ -113,6 +115,11 @@ class MockEngine final : public Engine {
 
   void getCounters(const CounterVisitor& /* visitor */) const override {}
   uint64_t getMaxItemSize() const override { return UINT32_MAX; }
+  std::pair<Status, std::string /* key */> getRandomAlloc(
+      Buffer& value) override {
+    (void)value;
+    return std::make_pair(Status::NotFound, "");
+  }
 
   // Returns true if key found and can be actually evicted in the real world
   bool evict(HashedKey key) {

@@ -1895,6 +1895,15 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::SampleItem
 CacheAllocator<CacheTrait>::getSampleItem() {
+  static size_t nvmCacheSize = nvmCache_ ? nvmCache_->getUsableSize() : 0;
+  static size_t ramCacheSize = allocator_->getMemorySizeInclAdvised();
+
+  bool fromNvm =
+      folly::Random::rand64(0, nvmCacheSize + ramCacheSize) >= ramCacheSize;
+  if (fromNvm) {
+    return nvmCache_->getSampleItem();
+  }
+
   // Sampling from DRAM cache
   auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
   if (!item) {
@@ -1922,7 +1931,7 @@ CacheAllocator<CacheTrait>::getSampleItem() {
 
   iobuf.markExternallySharedOne();
 
-  return SampleItem(std::move(iobuf), allocInfo);
+  return SampleItem(std::move(iobuf), allocInfo, false /* fromNvm */);
 }
 
 template <typename CacheTrait>

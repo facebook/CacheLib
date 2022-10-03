@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/driver/Driver.h"
 
+#include <folly/Random.h>
 #include <folly/synchronization/Baton.h>
 
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
@@ -376,7 +377,12 @@ bool Driver::updateMaxRateForDynamicRandomAP(uint64_t maxRate) {
 
 uint64_t Driver::getSize() const { return device_->getSize(); }
 
+uint64_t Driver::getUsableSize() const {
+  return largeItemCache_->getSize() + smallItemCache_->getSize();
+}
+
 void Driver::getCounters(const CounterVisitor& visitor) const {
+  visitor("navy_total_usable_size", getUsableSize());
   visitor("navy_inserts", insertCount_.get());
   visitor("navy_succ_inserts", succInsertCount_.get());
   visitor("navy_lookups", lookupCount_.get());
@@ -393,6 +399,7 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_io_errors", ioErrorCount_.get());
   visitor("navy_parcel_memory", parcelMemory_.get());
   visitor("navy_concurrent_inserts", concurrentInserts_.get());
+
   scheduler_->getCounters(visitor);
   largeItemCache_->getCounters(visitor);
   smallItemCache_->getCounters(visitor);
@@ -403,6 +410,21 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   if (device_) {
     device_->getCounters(visitor);
   }
+}
+
+std::pair<Status, std::string> Driver::getRandomAlloc(Buffer& value) {
+  static uint64_t largeCacheSize = largeItemCache_->getSize();
+  static uint64_t smallCacheSize = smallItemCache_->getSize();
+
+  bool fromLargeItemCache =
+      folly::Random::rand64(0, largeCacheSize + smallCacheSize) >=
+      smallCacheSize;
+
+  if (fromLargeItemCache) {
+    return largeItemCache_->getRandomAlloc(value);
+  }
+
+  return smallItemCache_->getRandomAlloc(value);
 }
 } // namespace navy
 } // namespace cachelib

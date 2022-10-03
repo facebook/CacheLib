@@ -101,6 +101,9 @@ class BlockCache final : public Engine {
   BlockCache& operator=(const BlockCache&) = delete;
   ~BlockCache() override = default;
 
+  // return the size of usable space
+  uint64_t getSize() const override { return regionManager_.getSize(); }
+
   // Checks if the key could exist in block cache. This can be used as a
   // pre-check to optimize cache lookups to avoid calling lookup in an async IO
   // environment.
@@ -171,6 +174,10 @@ class BlockCache final : public Engine {
     XDCHECK(folly::isPowTwo(allocAlignSize_));
     return allocAlignSize_;
   }
+
+  // Return a Buffer containing NvmItem randomly sampled in the backing store
+  std::pair<Status, std::string /* key */> getRandomAlloc(
+      Buffer& value) override;
 
   // The minimum alloc alignment size can be as small as 1. Since the
   // test cases have very small device size, they will end up with alloc

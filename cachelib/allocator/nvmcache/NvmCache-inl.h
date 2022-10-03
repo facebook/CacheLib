@@ -709,8 +709,8 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
 
 template <typename C>
 std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
-    folly::StringPiece key, const NvmItem& nvmItem) {
-  const size_t numBufs = nvmItem.getNumBlobs();
+    folly::StringPiece key, const NvmItem& nvmItem, bool parentOnly) {
+  const size_t numBufs = parentOnly ? 1 : nvmItem.getNumBlobs();
   // parent item
   XDCHECK_GE(numBufs, 1u);
   const auto pBlob = nvmItem.getBlob(0);
@@ -837,6 +837,34 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
   if (status != navy::Status::Ok) {
     delCleanup(status, HashedKey::precomputed("", 0));
   }
+}
+
+template <typename C>
+typename NvmCache<C>::SampleItem NvmCache<C>::getSampleItem() {
+  navy::Buffer value;
+  auto [status, keyStr] = navyCache_->getRandomAlloc(value);
+  if (status != navy::Status::Ok) {
+    return SampleItem{};
+  }
+
+  folly::StringPiece key(keyStr);
+
+  const auto& nvmItem = *reinterpret_cast<const NvmItem*>(value.data());
+  const auto requiredSize =
+      Item::getRequiredSize(key, nvmItem.getBlob(0).origAllocSize);
+
+  const auto poolId = nvmItem.poolId();
+  auto& pool = cache_.getPool(poolId);
+  auto clsId = pool.getAllocationClassId(requiredSize);
+  auto allocSize = pool.getAllocationClass(clsId).getAllocSize();
+
+  auto iobufs = createItemAsIOBuf(key, nvmItem, true /* parentOnly */);
+  if (!iobufs) {
+    return SampleItem{};
+  }
+
+  return SampleItem(std::move(*iobufs.release()), poolId, clsId, allocSize,
+                    true /* fromNvm */);
 }
 
 template <typename C>

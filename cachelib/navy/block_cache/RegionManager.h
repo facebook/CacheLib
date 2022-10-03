@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Random.h>
 #include <folly/container/F14Map.h>
 
 #include <cassert>
@@ -89,6 +90,11 @@ class RegionManager {
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
+  // return the size of usable space
+  uint64_t getSize() const {
+    return static_cast<uint64_t>(numRegions_) * regionSize_;
+  }
+
   // Gets a region from a valid region ID.
   Region& getRegion(RegionId rid) {
     XDCHECK(rid.valid());
@@ -101,6 +107,9 @@ class RegionManager {
     return *regions_[rid.index()];
   }
 
+  const RegionId getRandomRegion() const {
+    return RegionId{folly::Random::rand32(0, numRegions_)};
+  }
   // Flushes the in memory buffer attached to a region in either async or
   // sync mode.
   // In async mode, a flush job will be added to a job scheduler;

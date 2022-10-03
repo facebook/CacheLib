@@ -82,6 +82,9 @@ class BigHash final : public Engine {
   BigHash& operator=(const BigHash&) = delete;
   ~BigHash() override = default;
 
+  // Return the size of usable space
+  uint64_t getSize() const override { return bucketSize_ * numBuckets_; }
+
   // Check if the key could exist in bighash. This can be used as a pre-check
   // to optimize cache lookups to avoid calling lookups in an async IO
   // environment.
@@ -128,6 +131,10 @@ class BigHash final : public Engine {
 
   // return how manu times a lookup is rejected by the bloom filter
   uint64_t bfRejectCount() const { return bfRejectCount_.get(); }
+
+  // return a Buffer containing NvmItem randomly sampled in the backing store
+  std::pair<Status, std::string /* key */> getRandomAlloc(
+      Buffer& value) override;
 
  private:
   class BucketId {

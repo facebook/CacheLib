@@ -143,7 +143,7 @@ class Buffer {
   Buffer(const Buffer&) = delete;
   Buffer& operator=(const Buffer&) = delete;
 
-  Buffer(Buffer&&) noexcept = default;
+  Buffer(Buffer&& other) noexcept = default;
   Buffer& operator=(Buffer&&) noexcept = default;
 
   // Return a read-only view

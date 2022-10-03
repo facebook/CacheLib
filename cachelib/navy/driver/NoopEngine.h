@@ -24,6 +24,7 @@ namespace navy {
 class NoopEngine final : public Engine {
  public:
   ~NoopEngine() override = default;
+  uint64_t getSize() const override { return 0; }
   Status insert(HashedKey /* hk */, BufferView /* value */) override {
     return Status::Rejected;
   }
@@ -38,6 +39,9 @@ class NoopEngine final : public Engine {
   bool recover(RecordReader& /* rr */) override { return true; }
   void getCounters(const CounterVisitor& /* visitor */) const override {}
   uint64_t getMaxItemSize() const override { return UINT32_MAX; }
+  std::pair<Status, std::string> getRandomAlloc(Buffer&) override {
+    return std::make_pair(Status::NotFound, "");
+  }
 };
 } // namespace navy
 } // namespace cachelib

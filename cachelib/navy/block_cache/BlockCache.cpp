@@ -253,6 +253,82 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   }
 }
 
+std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
+  // Get rendom region and offset within the region
+  auto rid = regionManager_.getRandomRegion();
+  auto& region = regionManager_.getRegion(rid);
+  auto randOffset = folly::Random::rand32(0, regionSize_);
+  auto offset = region.getLastEntryEndOffset();
+  if (randOffset >= offset) {
+    return std::make_pair(Status::NotFound, "");
+  }
+
+  const auto seqNumber = regionManager_.getSeqNumber();
+  RegionDescriptor rdesc = regionManager_.openForRead(rid, seqNumber);
+  if (rdesc.status() != OpenStatus::Ready) {
+    return std::make_pair(Status::NotFound, "");
+  }
+
+  auto buffer = regionManager_.read(rdesc, RelAddress{rid, 0}, offset);
+  // The region had been read out to Buffer, so can be closed here
+  regionManager_.close(std::move(rdesc));
+  if (buffer.size() != offset) {
+    return std::make_pair(Status::NotFound, "");
+  }
+
+  // Iterate the entries backward until we find the entry
+  // where the randOffset falls into
+  while (offset > 0) {
+    auto entryEnd = buffer.data() + offset;
+    auto desc =
+        *reinterpret_cast<const EntryDesc*>(entryEnd - sizeof(EntryDesc));
+    if (desc.csSelf != desc.computeChecksum()) {
+      XLOGF(ERR,
+            "Item header checksum mismatch. Region {} is likely corrupted. "
+            "Expected:{}, Actual: {}",
+            rid.index(),
+            desc.csSelf,
+            desc.computeChecksum());
+      break;
+    }
+
+    RelAddress addrEnd{rid, offset};
+    const auto entrySize = serializedSize(desc.keySize, desc.valueSize);
+
+    XDCHECK_GE(offset, entrySize);
+    offset -= entrySize; // start of this entry
+    if (randOffset < offset) {
+      continue;
+    }
+
+    BufferView valueView{desc.valueSize, entryEnd - entrySize};
+    if (checksumData_ && desc.cs != checksum(valueView)) {
+      XLOGF(ERR,
+            "Item value checksum mismatch. Region {} is likely corrupted. "
+            "Expected:{}, Actual: {}.",
+            rid.index(),
+            desc.cs,
+            checksum(valueView));
+      break;
+    }
+
+    // confirm that the chosen NvmItem is still being mapped with the key
+    HashedKey hk =
+        makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
+    const auto lr = index_.lookup(hk.keyHash());
+    if (!lr.found() || addrEnd != decodeRelAddress(lr.address())) {
+      // overwritten
+      break;
+    }
+
+    // The entry is within the region buffer, so copy it out to new Buffer
+    value = Buffer(valueView);
+    return std::make_pair(Status::Ok, hk.key().str());
+  }
+
+  return std::make_pair(Status::NotFound, "");
+}
+
 Status BlockCache::remove(HashedKey hk) {
   removeCount_.inc();
 
@@ -603,6 +679,7 @@ void BlockCache::reset() {
 }
 
 void BlockCache::getCounters(const CounterVisitor& visitor) const {
+  visitor("navy_bc_size", getSize());
   visitor("navy_bc_items", index_.computeSize());
   visitor("navy_bc_inserts", insertCount_.get());
   visitor("navy_bc_insert_hash_collisions", insertHashCollisionCount_.get());

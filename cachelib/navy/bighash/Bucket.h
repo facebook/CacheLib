@@ -72,7 +72,6 @@ class FOLLY_PACK_ATTR Bucket {
 
   // Initialize a brand new Bucket given a piece of memory in the case
   // that the existing bucket is invalid. (I.e. checksum or generation
-  // mismatch). Refer to comments at the top on what do we use checksum
   // and generation time for.
   static Bucket& initNew(MutableBufferView view, uint64_t generationTime);
 
@@ -104,6 +103,9 @@ class FOLLY_PACK_ATTR Bucket {
   // Remove an entry corresponding to the key. If found, invoke @destructorCb
   // before returning true. Return number of entries removed.
   uint32_t remove(HashedKey hk, const DestructorCallback& destructorCb);
+
+  // return a BufferView for the item randomly sampled in the Bucket
+  std::pair<std::string, BufferView> getRandomAlloc();
 
   // return an iterator of items in the bucket
   Iterator getFirst() const;

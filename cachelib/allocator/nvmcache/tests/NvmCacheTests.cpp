@@ -1503,6 +1503,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   };
 
   // navy::Driver
+  EXPECT_TRUE(cs("navy_total_usable_size"));
   EXPECT_TRUE(cs("navy_inserts"));
   EXPECT_TRUE(cs("navy_succ_inserts"));
   EXPECT_TRUE(cs("navy_lookups"));
@@ -1534,6 +1535,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_req_order_curr_spool_size"));
 
   // navy::BlockCache
+  EXPECT_TRUE(cs("navy_bc_size"));
   EXPECT_TRUE(cs("navy_bc_item_removed_with_no_access"));
   EXPECT_TRUE(cs("navy_bc_item_hits_avg"));
   EXPECT_TRUE(cs("navy_bc_item_hits_min"));
@@ -1646,6 +1648,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_lru_region_hits_estimate_max"));
 
   // navy::BigHash
+  EXPECT_TRUE(cs("navy_bh_size"));
   EXPECT_TRUE(cs("navy_bh_items"));
   EXPECT_TRUE(cs("navy_bh_inserts"));
   EXPECT_TRUE(cs("navy_bh_succ_inserts"));
