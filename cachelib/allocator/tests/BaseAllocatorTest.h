@@ -140,14 +140,12 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     mmConfig.lruRefreshTime = 0;
 
     typename AllocatorT::Config configA;
-    configA.disableCacheEviction();
     configA.setCacheSize(numSlabs * Slab::kSize);
     // Disable slab rebalancing
     configA.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
     auto a = std::make_unique<AllocatorT>(configA);
 
     typename AllocatorT::Config configB;
-    configB.disableCacheEviction();
     configB.setCacheSize(numSlabs * Slab::kSize);
     // Disable slab rebalancing
     configB.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
@@ -3667,54 +3665,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     };
 
     testMoveItemHelper(testEviction, std::move(releaseSlabFunc));
-  }
-
-  void testAllocateWithoutEviction() {
-    const int numSlabs = 2;
-
-    // Request numSlabs + 1 slabs so that we get numSlabs usable slabs
-    typename AllocatorT::Config config;
-    config.disableCacheEviction();
-    config.setCacheSize((numSlabs + 1) * Slab::kSize);
-    AllocatorT allocator(config);
-
-    const size_t numBytes = allocator.getCacheMemoryStats().cacheSize;
-    const size_t kAllocSize = 128, kItemSize = 100;
-    auto poolId = allocator.addPool("default", numBytes);
-    const size_t itemsPerSlab = Slab::kSize / kAllocSize;
-    ASSERT_GT(itemsPerSlab, 0);
-
-    // allocate until we're out of memory
-    // and then free some items to make sure we can allocate more
-
-    std::vector<std::string> items;
-    for (unsigned int i = 0;; ++i) {
-      auto handle = util::allocateAccessible(
-          allocator, poolId, folly::to<std::string>(i), kItemSize);
-      if (handle == nullptr) {
-        break;
-      }
-      items.push_back(handle->getKey().str());
-    }
-
-    // Now if we free some items, we'll be able to allocate more
-    for (unsigned int i = 0; i < 10; ++i) {
-      const auto key = items.back();
-      items.pop_back();
-      ASSERT_EQ(AllocatorT::RemoveRes::kSuccess, allocator.remove(key));
-    }
-
-    // We should be able to allocate 10 more items
-    for (unsigned int i = 0; i < 10; ++i) {
-      auto handle = util::allocateAccessible(
-          allocator, poolId, std::string{"new_"} + folly::to<std::string>(i),
-          kItemSize);
-      ASSERT_NE(nullptr, handle);
-    }
-    ASSERT_EQ(nullptr,
-              util::allocateAccessible(allocator, poolId,
-                                       std::string{"this_key_will_fail"},
-                                       kItemSize));
   }
 
   void testAllocateWithTTL() {

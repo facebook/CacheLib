@@ -201,10 +201,6 @@ TYPED_TEST(BaseAllocatorTest, FastShutdownTestWithAbortedPoolRebalancer) {
 // test item sampling by getting a random item from memory
 TYPED_TEST(BaseAllocatorTest, ItemSampling) { this->testItemSampling(); }
 
-TYPED_TEST(BaseAllocatorTest, AllocateWithoutEviction) {
-  this->testAllocateWithoutEviction();
-}
-
 TYPED_TEST(BaseAllocatorTest, AllocateWithTTL) { this->testAllocateWithTTL(); }
 
 TYPED_TEST(BaseAllocatorTest, ExpiredFind) { this->testExpiredFind(); }
