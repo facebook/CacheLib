@@ -112,13 +112,13 @@ TEST_F(PersistenceManagerMockTest, testSaveCache) {
 
   Deserializer deserializer(bufs[1].data(), bufs[1].tail());
   auto header = deserializer.deserialize<PersistenceHeader>();
-  ASSERT_EQ(PersistenceType::Versions, header.get_type());
-  ASSERT_EQ(bufs[2].length(), header.get_length());
+  ASSERT_EQ(PersistenceType::Versions, header.type().value());
+  ASSERT_EQ(bufs[2].length(), header.length().value());
 
   Deserializer deserializerCfg(bufs[4].data(), bufs[4].tail());
   PersistCacheLibConfig cfg =
       deserializerCfg.deserialize<PersistCacheLibConfig>();
-  ASSERT_EQ(config_.getCacheName(), cfg.get_cacheName());
+  ASSERT_EQ(config_.getCacheName(), cfg.cacheName().value());
 }
 
 TEST_F(PersistenceManagerMockTest, testWriteFail) {
