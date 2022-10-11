@@ -66,9 +66,44 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testConfigValidation() {
+    {
+      ObjectCacheConfig config;
+      config.setCacheName("test").setCacheCapacity(10'000);
+      EXPECT_THROW(config.validate(), std::invalid_argument);
+
+      EXPECT_THROW(ObjectCache::create(config), std::invalid_argument);
+
+      config.setItemDestructor(
+          [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+      EXPECT_NO_THROW(ObjectCache::create(config));
+
+      config.setCacheName("");
+      EXPECT_THROW(ObjectCache::create(config), std::invalid_argument);
+    }
+
+    {
+      // test size-aware cache config
+      ObjectCacheConfig config;
+      config.setCacheName("test").setItemDestructor(
+          [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+
+      // missing sizeControllerIntervalMs
+      EXPECT_THROW(config.setCacheCapacity(10'000, 100'000),
+                   std::invalid_argument);
+
+      // missing cacheSizeLimit
+      EXPECT_THROW(config.setCacheCapacity(10'000, 0, 10),
+                   std::invalid_argument);
+
+      config.setCacheCapacity(10'000, 100'000, 10);
+      EXPECT_NO_THROW(config.validate());
+    }
+  }
+
   void testSimple() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
+    config.setCacheName("test").setCacheCapacity(10'000);
     config.setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
@@ -96,14 +131,14 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testMultiType() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor([&](ObjectCacheDestructorData data) {
-      if (data.key == "Foo") {
-        data.deleteObject<Foo>();
-      } else if (data.key == "Foo2") {
-        data.deleteObject<Foo2>();
-      }
-    });
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
+        [&](ObjectCacheDestructorData data) {
+          if (data.key == "Foo") {
+            data.deleteObject<Foo>();
+          } else if (data.key == "Foo2") {
+            data.deleteObject<Foo2>();
+          }
+        });
 
     auto objcache = ObjectCache::create(config);
 
@@ -136,8 +171,7 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testMultiTypePolymorphism() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<FooBase>(); });
 
     auto objcache = ObjectCache::create(config);
@@ -172,8 +206,7 @@ class ObjectCacheTest : public ::testing::Test {
   void testUserItemDestructor() {
     int numDtors = 0;
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo3>(); });
     auto objcache = ObjectCache::create(config);
     for (int i = 0; i < 10; i++) {
@@ -188,8 +221,7 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testExpiration() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -220,8 +252,7 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testReplace() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -261,8 +292,7 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testUniqueInsert() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -302,10 +332,12 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testObjectSizeTrackingBasics() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
-        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    config.objectSizeTrackingEnabled = true;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/,
+                          10'000'000 /* cacheSizeLimit */,
+                          100 /* sizeControllerIntervalMs */)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
     EXPECT_EQ(objcache->getTotalObjectSize(), 0);
     auto foo1 = std::make_unique<Foo>();
@@ -360,10 +392,12 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testObjectSizeTrackingUniqueInsert() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
-        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    config.objectSizeTrackingEnabled = true;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/,
+                          10'000'000 /* cacheSizeLimit */,
+                          100 /* sizeControllerIntervalMs */)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
     // will throw without the object size
@@ -407,8 +441,7 @@ class ObjectCacheTest : public ::testing::Test {
     // Sanity test to see if insertOrReplace across multiple
     // threads are safe.
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -434,8 +467,7 @@ class ObjectCacheTest : public ::testing::Test {
     // Sanity test to see if evictions across multiple
     // threads are safe.
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 1000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(1000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -458,12 +490,12 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testMultithreadSizeControl() {
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 200;
-    config.setItemDestructor(
-        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-    config.objectSizeTrackingEnabled = true;
-    config.cacheSizeLimit = 100000;
-    config.sizeControllerIntervalMs = 100;
+    config.setCacheName("test")
+        .setCacheCapacity(200 /* l1EntriesLimit*/, 100000 /* cacheSizeLimit */,
+                          100 /* sizeControllerIntervalMs */)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+
     auto objcache = ObjectCache::create(config);
 
     auto runInsertOps = [&](int id) {
@@ -491,8 +523,7 @@ class ObjectCacheTest : public ::testing::Test {
     // Sanity test to see if find and insertions at the same time
     // across mutliple threads are safe.
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -529,8 +560,7 @@ class ObjectCacheTest : public ::testing::Test {
     // Sanity test to see if find and evictions across multiple
     // threads are safe.
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 1000;
-    config.setItemDestructor(
+    config.setCacheName("test").setCacheCapacity(1000).setItemDestructor(
         [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
@@ -565,10 +595,11 @@ class ObjectCacheTest : public ::testing::Test {
     // Sanity test to see if find and evictions across multiple
     // threads are safe.
     ObjectCacheConfig config;
-    config.l1EntriesLimit = 100'000;
-    config.l1NumShards = 10;
-    config.setItemDestructor(
-        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    config.setCacheName("test")
+        .setCacheCapacity(100'000)
+        .setNumShards(10)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
     auto objcache = ObjectCache::create(config);
 
     auto runReplaceOps = [&] {
@@ -607,6 +638,7 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
                                         LruAllocatorSpinBuckets>;
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
 TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
+TYPED_TEST(ObjectCacheTest, ConfigValidation) { this->testConfigValidation(); }
 TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, MultiType) { this->testMultiType(); }
 TYPED_TEST(ObjectCacheTest, testMultiTypePolymorphism) {
@@ -646,7 +678,7 @@ TYPED_TEST(ObjectCacheTest, MultithreadFindAndReplaceWith10Shards) {
 using ObjectCache = ObjectCache<LruAllocator>;
 TEST(ObjectCacheTest, LruEviction) {
   ObjectCache::Config config;
-  config.l1EntriesLimit = 1024;
+  config.setCacheName("test").setCacheCapacity(1024);
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
   auto objcache = ObjectCache::create(config);
@@ -664,46 +696,13 @@ TEST(ObjectCacheTest, LruEviction) {
   EXPECT_EQ(nullptr, found);
 }
 
-TEST(ObjectCacheTest, LruEvictionWithSizeTracking) {
-  ObjectCache::Config config;
-  config.l1EntriesLimit = 1024;
-  config.setItemDestructor(
-      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-  config.objectSizeTrackingEnabled = true;
-  auto objcache = ObjectCache::create(config);
-  int totalObjectSize = 0;
-
-  // After the loop, the first item will be evicted and the total object
-  // size will be the sum of remaining items.
-  for (size_t i = 0; i < config.l1EntriesLimit + 1; i++) {
-    auto foo = std::make_unique<Foo>();
-    foo->a = i;
-    auto key = folly::sformat("key_{}", i);
-    auto objectSize = 8 * (i + 1);
-    objcache->insertOrReplace(key, std::move(foo), objectSize);
-    totalObjectSize += objectSize;
-    auto found = objcache->find<Foo>(key);
-    ASSERT_NE(nullptr, found);
-    EXPECT_EQ(i, found->a);
-    if (i < config.l1EntriesLimit) {
-      ASSERT_EQ(objcache->getNumEntries(), i + 1);
-      EXPECT_EQ(totalObjectSize, objcache->getTotalObjectSize());
-    } else {
-      EXPECT_EQ(nullptr, objcache->find<Foo>("key_0"));
-      ASSERT_EQ(objcache->getNumEntries(), i);
-      EXPECT_EQ(totalObjectSize - 8, objcache->getTotalObjectSize());
-    }
-  }
-}
-
 TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
   ObjectCache::Config config;
-  config.l1EntriesLimit = 50;
+  config.setCacheName("test");
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-  config.objectSizeTrackingEnabled = true;
-  config.cacheSizeLimit = 100;
-  config.sizeControllerIntervalMs = 100;
+  config.setCacheCapacity(50 /* l1EntriesLimit*/, 100 /* cacheSizeLimit */,
+                          100 /* sizeControllerIntervalMs */);
   // insert objects with equal size
   {
     auto objcache = ObjectCache::create(config);

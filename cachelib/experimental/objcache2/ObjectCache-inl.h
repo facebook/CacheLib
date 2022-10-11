@@ -24,13 +24,10 @@ template <typename AllocatorT>
 void ObjectCache<AllocatorT>::init() {
   // compute the approximate cache size using the l1EntriesLimit and
   // l1AllocSize
-  XCHECK(config_.l1EntriesLimit);
   auto l1AllocSize = getL1AllocSize(config_.maxKeySizeBytes);
-  const size_t l1SizeRequired = config_.l1EntriesLimit * l1AllocSize;
-  const size_t l1SizeRequiredSlabGranularity =
-      (l1SizeRequired / Slab::kSize + (l1SizeRequired % Slab::kSize != 0)) *
-      Slab::kSize;
-  auto cacheSize = l1SizeRequiredSlabGranularity + Slab::kSize;
+  const size_t l1SizeRequired =
+      util::getAlignedSize(config_.l1EntriesLimit * l1AllocSize, Slab::kSize);
+  auto cacheSize = l1SizeRequired + Slab::kSize;
 
   typename AllocatorT::Config l1Config;
   l1Config.setCacheName(config_.cacheName)
@@ -38,8 +35,6 @@ void ObjectCache<AllocatorT>::init() {
       .setAccessConfig({config_.l1HashTablePower, config_.l1LockPower})
       .setDefaultAllocSizes({l1AllocSize});
 
-  // TODO T121696070: Add validate() API in ObjectCacheConfig
-  XCHECK(config_.itemDestructor);
   l1Config.setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
     if (ctx.context == DestructorContext::kEvictedFromRAM) {
       evictions_.inc();
@@ -287,9 +282,7 @@ uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
 
 template <typename AllocatorT>
 ObjectCache<AllocatorT>::~ObjectCache() {
-  if (config_.objectSizeTrackingEnabled) {
-    stopSizeController();
-  }
+  stopSizeController();
 
   for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
        ++itr) {
