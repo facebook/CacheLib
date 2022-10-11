@@ -115,8 +115,11 @@ class CacheStressor : public Stressor {
       cache_->enableConsistencyCheck(wg_->getAllKeys());
     }
     if (config_.opRatePerSec > 0) {
+      // opRateBurstSize is default to opRatePerSec if not specified
       rateLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
-          config_.opRatePerSec, config_.opRatePerSec);
+          config_.opRatePerSec, config_.opRateBurstSize > 0
+                                    ? config_.opRateBurstSize
+                                    : config_.opRatePerSec);
     }
   }
 
