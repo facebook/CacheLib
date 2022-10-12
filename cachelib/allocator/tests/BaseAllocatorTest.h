@@ -3918,7 +3918,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     typename AllocatorT::Config config;
     // start with no reaper
-    config.reaperInterval = std::chrono::seconds(0);
+    auto reaperInterval = std::chrono::milliseconds(0);
+    config.reaperInterval = reaperInterval;
     config.enableCachePersistence(this->cacheDir_,
                                   ((void*)(uintptr_t)0x7e0000000000));
     config.setCacheSize((numSlabs + 1) * Slab::kSize);
@@ -3964,9 +3965,19 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Sleep for 1 second to ensure large item to have expired
     std::this_thread::sleep_for(std::chrono::seconds{2});
 
+    auto params = allocator.serializeConfigParams();
+    EXPECT_TRUE(
+        !params["reaperInterval"].compare(util::toString(reaperInterval)));
     // Start reaper, we should not crash
-    allocator.startNewReaper(std::chrono::milliseconds{1},
+    reaperInterval = std::chrono::milliseconds{1};
+    allocator.startNewReaper(reaperInterval,
                              util::Throttler::Config::makeNoThrottleConfig());
+
+    params = allocator.serializeConfigParams();
+
+    // Check if relevent configuration is changed
+    EXPECT_TRUE(
+        !params["reaperInterval"].compare(util::toString(reaperInterval)));
 
     // Loop until we have reaped at least one iteration
     while (true) {

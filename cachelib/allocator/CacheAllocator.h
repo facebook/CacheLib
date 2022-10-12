@@ -1988,7 +1988,7 @@ class CacheAllocator : public CacheBase {
   // on heap.
   const bool isOnShm_{false};
 
-  const Config config_{};
+  Config config_{};
 
   // Manages the temporary shared memory segment for memory allocator that
   // is not persisted when cache process exits.

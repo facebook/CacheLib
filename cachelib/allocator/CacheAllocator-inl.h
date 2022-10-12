@@ -3493,8 +3493,16 @@ bool CacheAllocator<CacheTrait>::startNewPoolRebalancer(
     std::chrono::milliseconds interval,
     std::shared_ptr<RebalanceStrategy> strategy,
     unsigned int freeAllocThreshold) {
-  return startNewWorker("PoolRebalancer", poolRebalancer_, interval, strategy,
-                        freeAllocThreshold);
+  if (!startNewWorker("PoolRebalancer", poolRebalancer_, interval, strategy,
+                      freeAllocThreshold)) {
+    return false;
+  }
+
+  config_.poolRebalanceInterval = interval;
+  config_.defaultPoolRebalanceStrategy = strategy;
+  config_.poolRebalancerFreeAllocThreshold = freeAllocThreshold;
+
+  return true;
 }
 
 template <typename CacheTrait>
@@ -3502,9 +3510,17 @@ bool CacheAllocator<CacheTrait>::startNewPoolResizer(
     std::chrono::milliseconds interval,
     unsigned int poolResizeSlabsPerIter,
     std::shared_ptr<RebalanceStrategy> strategy) {
-  return startNewWorker("PoolResizer", poolResizer_, interval,
-                        poolResizeSlabsPerIter, strategy);
+  if (!startNewWorker("PoolResizer", poolResizer_, interval,
+                      poolResizeSlabsPerIter, strategy)) {
+    return false;
+  }
+
+  config_.poolResizeInterval = interval;
+  config_.poolResizeSlabsPerIter = poolResizeSlabsPerIter;
+  config_.poolResizeStrategy = strategy;
+  return true;
 }
+
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewPoolOptimizer(
     std::chrono::seconds regularInterval,
@@ -3515,23 +3531,47 @@ bool CacheAllocator<CacheTrait>::startNewPoolOptimizer(
   // it should do actual size optimization. Probably need to move to using
   // the same interval for both, with confirmation of further experiments.
   const auto workerInterval = std::chrono::seconds(1);
-  return startNewWorker("PoolOptimizer", poolOptimizer_, workerInterval,
-                        strategy, regularInterval.count(),
-                        ccacheInterval.count(), ccacheStepSizePercent);
+  if (!startNewWorker("PoolOptimizer", poolOptimizer_, workerInterval, strategy,
+                      regularInterval.count(), ccacheInterval.count(),
+                      ccacheStepSizePercent)) {
+    return false;
+  }
+
+  config_.regularPoolOptimizeInterval = regularInterval;
+  config_.compactCacheOptimizeInterval = ccacheInterval;
+  config_.poolOptimizeStrategy = strategy;
+  config_.ccacheOptimizeStepSizePercent = ccacheStepSizePercent;
+
+  return true;
 }
+
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     std::chrono::milliseconds interval,
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
-  return startNewWorker("MemoryMonitor", memMonitor_, interval,
-                        std::move(config), strategy);
+  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, std::move(config),
+                      strategy)) {
+    return false;
+  }
+
+  config_.memMonitorInterval = interval;
+  config_.memMonitorConfig = config;
+  config_.poolAdviseStrategy = strategy;
+  return true;
 }
+
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
     std::chrono::milliseconds interval,
     util::Throttler::Config reaperThrottleConfig) {
-  return startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig);
+  if (!startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig)) {
+    return false;
+  }
+
+  config_.reaperInterval = interval;
+  config_.reaperConfig = reaperThrottleConfig;
+  return true;
 }
 
 template <typename CacheTrait>
