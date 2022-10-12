@@ -2,6 +2,8 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/experimental/objcache2/ObjectCache.h"
+#include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
+#include "cachelib/experimental/objcache2/tests/gen-cpp2/test_object_types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -98,6 +100,45 @@ class ObjectCacheTest : public ::testing::Test {
 
       config.setCacheCapacity(10'000, 100'000, 10);
       EXPECT_NO_THROW(config.validate());
+    }
+
+    {
+      ObjectCacheConfig config;
+      // invalid thread count
+      EXPECT_THROW(config.enablePersistence(
+                       0, "persistent_file",
+                       [&](typename ObjectCache::Serializer serializer) {
+                         return serializer.template serialize<ThriftFoo>();
+                       },
+                       [&](typename ObjectCache::Deserializer deserializer) {
+                         return deserializer.template deserialize<ThriftFoo>();
+                       }),
+                   std::invalid_argument);
+      // invalid file path
+      EXPECT_THROW(config.enablePersistence(
+                       1, "",
+                       [&](typename ObjectCache::Serializer serializer) {
+                         return serializer.template serialize<ThriftFoo>();
+                       },
+                       [&](typename ObjectCache::Deserializer deserializer) {
+                         return deserializer.template deserialize<ThriftFoo>();
+                       }),
+                   std::invalid_argument);
+      // missing serialize callback
+      EXPECT_THROW(config.enablePersistence(
+                       1, "persistent_file", nullptr,
+                       [&](typename ObjectCache::Deserializer deserializer) {
+                         return deserializer.template deserialize<ThriftFoo>();
+                       }),
+                   std::invalid_argument);
+      // missing deserialize callback
+      EXPECT_THROW(config.enablePersistence(
+                       1, "persistent_file",
+                       [&](typename ObjectCache::Serializer serializer) {
+                         return serializer.template serialize<ThriftFoo>();
+                       },
+                       nullptr),
+                   std::invalid_argument);
     }
   }
 
@@ -437,6 +478,268 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(3, found2->c);
   }
 
+  void testPersistence() {
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    ThriftFoo foo1;
+    foo1.a().value() = 1;
+    foo1.b().value() = 2;
+    foo1.c().value() = 3;
+
+    ThriftFoo foo2;
+    foo2.a().value() = 4;
+    foo2.b().value() = 5;
+    foo2.c().value() = 6;
+
+    auto objectSize1 = 1000;
+    auto objectSize2 = 500;
+    auto ttlSecs = 10;
+
+    size_t threadsCount = 10;
+
+    ObjectCacheConfig config;
+
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ThriftFoo>();
+        })
+        .enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              return serializer.template serialize<ThriftFoo>();
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              return deserializer.template deserialize<ThriftFoo>();
+            });
+    config.objectSizeTrackingEnabled = true;
+
+    {
+      auto objcache = ObjectCache::create(config);
+
+      auto object1 = std::make_unique<ThriftFoo>(foo1);
+      auto object2 = std::make_unique<ThriftFoo>(foo2);
+      objcache->insertOrReplace("Foo1", std::move(object1), objectSize1,
+                                ttlSecs);
+      objcache->insertOrReplace("Foo2", std::move(object2), objectSize2);
+      ASSERT_EQ(objcache->persist(), true);
+    }
+
+    // No objects should expire
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+
+      auto found1 = objcache->template find<ThriftFoo>("Foo1");
+      ASSERT_NE(nullptr, found1);
+      EXPECT_EQ(1, found1->a_ref());
+      EXPECT_EQ(2, found1->b_ref());
+      EXPECT_EQ(3, found1->c_ref());
+      auto found2 = objcache->template find<ThriftFoo>("Foo2");
+      ASSERT_NE(nullptr, found2);
+      EXPECT_EQ(4, found2->a_ref());
+      EXPECT_EQ(5, found2->b_ref());
+      EXPECT_EQ(6, found2->c_ref());
+
+      EXPECT_EQ(objectSize1 + objectSize2, objcache->getTotalObjectSize());
+    }
+
+    // Let Foo1 expire
+    std::this_thread::sleep_for(std::chrono::seconds{15});
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+
+      auto found1 = objcache->template find<ThriftFoo>("Foo1");
+      ASSERT_EQ(nullptr, found1);
+
+      auto found2 = objcache->template find<ThriftFoo>("Foo2");
+      ASSERT_NE(nullptr, found2);
+      EXPECT_EQ(4, found2->a_ref());
+      EXPECT_EQ(5, found2->b_ref());
+      EXPECT_EQ(6, found2->c_ref());
+      EXPECT_EQ(objectSize2, objcache->getTotalObjectSize());
+    }
+
+    // test recover failure
+    {
+      config.enablePersistence(
+          threadsCount, "random_path",
+          [&](typename ObjectCache::Serializer serializer) {
+            return serializer.template serialize<ThriftFoo>();
+          },
+          [&](typename ObjectCache::Deserializer deserializer) {
+            return deserializer.template deserialize<ThriftFoo>();
+          });
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), false);
+    }
+
+    // test different thread count won't fail recover
+    {
+      config.enablePersistence(
+          threadsCount - 2, persistBaseFilePath,
+          [&](typename ObjectCache::Serializer serializer) {
+            return serializer.template serialize<ThriftFoo>();
+          },
+          [&](typename ObjectCache::Deserializer deserializer) {
+            return deserializer.template deserialize<ThriftFoo>();
+          });
+
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      auto found = objcache->template find<ThriftFoo>("Foo2");
+      ASSERT_NE(nullptr, found);
+      EXPECT_EQ(4, found->a_ref());
+      EXPECT_EQ(5, found->b_ref());
+      EXPECT_EQ(6, found->c_ref());
+      EXPECT_EQ(objectSize2, objcache->getTotalObjectSize());
+    }
+  }
+
+  void testPersistenceMultiType() {
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    ThriftFoo foo1;
+    foo1.a().value() = 1;
+    foo1.b().value() = 2;
+    foo1.c().value() = 3;
+
+    ThriftFoo2 foo2;
+    foo2.d().value() = 4;
+    foo2.e().value() = 5;
+    foo2.f().value() = 6;
+
+    auto objectSize1 = 1000;
+    auto objectSize2 = 500;
+    auto ttlSecs = 10;
+
+    size_t threadsCount = 10;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          if (data.key == "Foo1") {
+            data.deleteObject<ThriftFoo>();
+          } else {
+            data.deleteObject<ThriftFoo2>();
+          }
+        })
+        .enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              if (serializer.key == "Foo1") {
+                return serializer.template serialize<ThriftFoo>();
+              } else {
+                return serializer.template serialize<ThriftFoo2>();
+              }
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              if (deserializer.key == "Foo1") {
+                return deserializer.template deserialize<ThriftFoo>();
+              } else {
+                return deserializer.template deserialize<ThriftFoo2>();
+              }
+            });
+    config.objectSizeTrackingEnabled = true;
+
+    {
+      auto objcache = ObjectCache::create(config);
+
+      auto object1 = std::make_unique<ThriftFoo>(foo1);
+      auto object2 = std::make_unique<ThriftFoo2>(foo2);
+      objcache->insertOrReplace("Foo1", std::move(object1), objectSize1,
+                                ttlSecs);
+      objcache->insertOrReplace("Foo2", std::move(object2), objectSize2);
+      ASSERT_EQ(objcache->persist(), true);
+    }
+
+    // No objects should expire
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+
+      auto found1 = objcache->template find<ThriftFoo>("Foo1");
+      ASSERT_NE(nullptr, found1);
+      EXPECT_EQ(1, found1->a_ref());
+      EXPECT_EQ(2, found1->b_ref());
+      EXPECT_EQ(3, found1->c_ref());
+      auto found2 = objcache->template find<ThriftFoo2>("Foo2");
+      ASSERT_NE(nullptr, found2);
+      EXPECT_EQ(4, found2->d_ref());
+      EXPECT_EQ(5, found2->e_ref());
+      EXPECT_EQ(6, found2->f_ref());
+
+      EXPECT_EQ(objectSize1 + objectSize2, objcache->getTotalObjectSize());
+    }
+
+    // Let Foo1 expire
+    std::this_thread::sleep_for(std::chrono::seconds{15});
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+
+      auto found1 = objcache->template find<ThriftFoo>("Foo1");
+      ASSERT_EQ(nullptr, found1);
+
+      auto found2 = objcache->template find<ThriftFoo2>("Foo2");
+      ASSERT_NE(nullptr, found2);
+      EXPECT_EQ(4, found2->d_ref());
+      EXPECT_EQ(5, found2->e_ref());
+      EXPECT_EQ(6, found2->f_ref());
+      EXPECT_EQ(objectSize2, objcache->getTotalObjectSize());
+    }
+
+    // test recover failure
+    {
+      config.enablePersistence(
+          threadsCount, "random_path",
+          [&](typename ObjectCache::Serializer serializer) {
+            if (serializer.key == "Foo1") {
+              return serializer.template serialize<ThriftFoo>();
+            } else {
+              return serializer.template serialize<ThriftFoo2>();
+            }
+          },
+          [&](typename ObjectCache::Deserializer deserializer) {
+            if (deserializer.key == "Foo1") {
+              return deserializer.template deserialize<ThriftFoo>();
+            } else {
+              return deserializer.template deserialize<ThriftFoo2>();
+            }
+          });
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), false);
+    }
+    // test different thread count won't fail recover
+    {
+      config.enablePersistence(
+          threadsCount - 2, persistBaseFilePath,
+          [&](typename ObjectCache::Serializer serializer) {
+            if (serializer.key == "Foo1") {
+              return serializer.template serialize<ThriftFoo>();
+            } else {
+              return serializer.template serialize<ThriftFoo2>();
+            }
+          },
+          [&](typename ObjectCache::Deserializer deserializer) {
+            if (deserializer.key == "Foo1") {
+              return deserializer.template deserialize<ThriftFoo>();
+            } else {
+              return deserializer.template deserialize<ThriftFoo2>();
+            }
+          });
+
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      auto found = objcache->template find<ThriftFoo2>("Foo2");
+      ASSERT_NE(nullptr, found);
+      EXPECT_EQ(4, found->d_ref());
+      EXPECT_EQ(5, found->e_ref());
+      EXPECT_EQ(6, found->f_ref());
+      EXPECT_EQ(objectSize2, objcache->getTotalObjectSize());
+    }
+  }
+
   void testMultithreadReplace() {
     // Sanity test to see if insertOrReplace across multiple
     // threads are safe.
@@ -656,6 +959,11 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingBasics) {
 TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingUniqueInsert) {
   this->testObjectSizeTrackingUniqueInsert();
 }
+TYPED_TEST(ObjectCacheTest, Persistence) { this->testPersistence(); }
+TYPED_TEST(ObjectCacheTest, PersistenceMultiType) {
+  this->testPersistenceMultiType();
+}
+
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
   this->testMultithreadReplace();
 }

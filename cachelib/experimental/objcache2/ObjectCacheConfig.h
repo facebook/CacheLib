@@ -31,6 +31,8 @@ struct ObjectCacheConfig {
   using Key = KAllocation::Key;
   using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
+  using SerializeCb = typename ObjectCache::SerializeCb;
+  using DeserializeCb = typename ObjectCache::DeserializeCb;
 
   // Set cache name as a string
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
@@ -95,6 +97,18 @@ struct ObjectCacheConfig {
   // });
   ObjectCacheConfig& setItemDestructor(ItemDestructor destructor);
 
+  // @param threadCount          number of threads to work on persistence
+  //                             concurrently
+  // @param baseFilePath         metadata will be saved in "baseFilePath";
+  //                             objects will be saved in "baseFilePath_i", i in
+  //                             [0, threadCount)
+  // @param serializeCallback    callback to serialize an object
+  // @param deserializeCallback  callback to deserialize an object
+  ObjectCacheConfig& enablePersistence(uint32_t threadCount,
+                                       std::string basefilePath,
+                                       SerializeCb serializeCallback,
+                                       DeserializeCb deserializeCallback);
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -136,6 +150,24 @@ struct ObjectCacheConfig {
   // ItemDestructor which is invoked for each item that is evicted
   // or explicitly from cache
   ItemDestructor itemDestructor{};
+
+  // The thread number for cache persistence.
+  // It sets the threads to run a persistor upon shut down and a restorer upon
+  // restart. 0 means cache persistence is not enabled.
+  uint32_t persistThreadCount{0};
+
+  // The base file path to save the persistent data for cache persistence.
+  // - Metadata will be saved in "baseFilePath";
+  // - Objects will be saved in "baseFilePath_i" where i is in
+  //   [0, persistThreadCount)
+  // Empty means cache persistence is not enabled.
+  std::string persistBaseFilePath{};
+
+  // Serialize callback for cache persistence
+  SerializeCb serializeCb{};
+
+  // Deserialize callback for cache persistence
+  DeserializeCb deserializeCb{};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -206,6 +238,34 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemDestructor(
     ItemDestructor destructor) {
   itemDestructor = std::move(destructor);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
+    uint32_t threadCount,
+    std::string basefilePath,
+    SerializeCb serializeCallback,
+    DeserializeCb deserializeCallback) {
+  if (threadCount == 0) {
+    throw std::invalid_argument(
+        "A non-zero thread count must be set to enable cache persistence");
+  }
+
+  if (basefilePath.empty()) {
+    throw std::invalid_argument(
+        "A valid file path must be providede to enable cache persistence");
+  }
+
+  if (!serializeCallback || !deserializeCallback) {
+    throw std::invalid_argument(
+        "Serialize and deserialize callback must be set to enable cache "
+        "persistence");
+  }
+  persistThreadCount = threadCount;
+  persistBaseFilePath = basefilePath;
+  serializeCb = std::move(serializeCallback);
+  deserializeCb = std::move(deserializeCallback);
   return *this;
 }
 

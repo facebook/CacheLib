@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#pragma once
 
-#include <stdexcept>
 namespace facebook {
 namespace cachelib {
 namespace objcache2 {
@@ -360,6 +358,35 @@ bool ObjectCache<AllocatorT>::stopSizeController(std::chrono::seconds timeout) {
   }
   sizeController_.reset();
   return ret;
+}
+
+template <typename AllocatorT>
+bool ObjectCache<AllocatorT>::persist() {
+  if (config_.persistBaseFilePath.empty() || !config_.serializeCb) {
+    return false;
+  }
+
+  // Stop all the other workers before persist
+  if (!stopSizeController()) {
+    return false;
+  }
+
+  if (!this->l1Cache_->stopWorkers()) {
+    return false;
+  }
+
+  Persistor persistor(config_.persistThreadCount, config_.persistBaseFilePath,
+                      config_.serializeCb, *this);
+  return persistor.run();
+}
+
+template <typename AllocatorT>
+bool ObjectCache<AllocatorT>::recover() {
+  if (config_.persistBaseFilePath.empty() || !config_.deserializeCb) {
+    return false;
+  }
+  Restorer restorer(config_.persistBaseFilePath, config_.deserializeCb, *this);
+  return restorer.run();
 }
 
 } // namespace objcache2

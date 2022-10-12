@@ -23,16 +23,20 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/EventInterface.h"
+#include "cachelib/common/Serialization.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/experimental/objcache2/ObjectCacheBase.h"
 #include "cachelib/experimental/objcache2/ObjectCacheConfig.h"
 #include "cachelib/experimental/objcache2/ObjectCacheSizeController.h"
+#include "cachelib/experimental/objcache2/persistence/Persistence.h"
+#include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
 
 namespace facebook {
 namespace cachelib {
@@ -73,7 +77,16 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
  public:
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
+  using Key = KAllocation::Key;
   using Config = ObjectCacheConfig<ObjectCache<AllocatorT>>;
+  using Item = ObjectCacheItem;
+  using Serializer = ObjectSerializer<ObjectCache<AllocatorT>>;
+  using Deserializer = ObjectDeserializer<ObjectCache<AllocatorT>>;
+  using SerializeCb = std::function<std::unique_ptr<folly::IOBuf>(Serializer)>;
+  using DeserializeCb = std::function<bool(Deserializer)>;
+  using Persistor = Persistor<ObjectCache<AllocatorT>>;
+  using Restorer = Restorer<ObjectCache<AllocatorT>>;
+
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
   explicit ObjectCache(InternalConstructor, const Config& config)
@@ -157,6 +170,18 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Remove an object from cache by its key. No-op if object doesn't exist.
   // @param key   the key to the object.
   void remove(folly::StringPiece key);
+
+  // Persist all non-expired objects in the cache if cache persistence is
+  // enabled.
+  // No-op if cache persistence is not enabled.
+  // @return false if no persistence happened
+  bool persist();
+
+  // Recover non-expired objects to the cache if cache persistence is
+  // enabled.
+  // No-op if cache persistence is not enabled.
+  // @return false if no recovery happened
+  bool recover();
 
   // Get all the stats related to object-cache
   // @param visitor   callback that will be invoked with
@@ -256,6 +281,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   template <typename AllocatorT2>
   friend class ObjectCacheSizeController;
+
+  friend Persistor;
 };
 } // namespace objcache2
 } // namespace cachelib

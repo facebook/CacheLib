@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#pragma once
-
 namespace facebook {
 namespace cachelib {
 namespace objcache2 {
