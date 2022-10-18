@@ -21,6 +21,7 @@
 
 namespace {
 constexpr uint32_t kProducerConsumerWaitTimeUs = 5;
+constexpr std::string_view kIsIntern = "is_intern";
 } // namespace
 
 namespace facebook {
@@ -225,6 +226,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
       // Admission policy related fields: feature name --> feature value
       std::unordered_map<std::string, std::string> admFeatureMap;
+      admFeatureMap.emplace(kIsIntern, fields[SampleFields::IS_INTERN].str());
       if (config_.replayGeneratorConfig.mlAdmissionConfig) {
         for (const auto& [featureName, index] :
              config_.replayGeneratorConfig.mlAdmissionConfig->numericFeatures) {

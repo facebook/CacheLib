@@ -134,7 +134,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     TTL,
     SAMPLING_RATE,
     CACHE_HIT,
-    TOTAL_DEFINED_FIELDS = 11
+    IS_INTERN,
+    TOTAL_DEFINED_FIELDS = 12
   };
 
   PieceWiseCacheAdapter pieceCacheAdapter_;
