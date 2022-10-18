@@ -22,6 +22,7 @@
 #include <random>
 #include <stdexcept>
 
+#include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 #include "gtest/gtest_prod.h"
@@ -49,6 +50,7 @@ namespace navy {
 class DynamicRandomAP final : public AdmissionPolicy {
  public:
   using FnBytesWritten = std::function<uint64_t()>;
+  using FnBypass = std::function<bool(folly::StringPiece)>;
 
   struct Config {
     // Target write rate in byte/s
@@ -94,6 +96,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
     double probFactorUpperBound{kUpperBound_};
 
+    FnBypass fnBypass;
+
     // Throws if invalid config
     Config& validate();
   };
@@ -137,10 +141,17 @@ class DynamicRandomAP final : public AdmissionPolicy {
   struct WriteStats {
     // The rate we can write at, given how much we've written since the host
     // started, from a quota standpoint.
+    // This number is the sum of bypassed traffic and throttled regular traffic.
     uint64_t curTargetRate{0};
     // The rate that we observe since the last parameter update.
     uint64_t observedCurRate{0};
     uint64_t bytesWrittenLastUpdate{0};
+
+    // The rate of bypassed and accepted accounted at admission time.
+    uint64_t bypassedRate{0};
+    uint64_t acceptedRate{0};
+    uint64_t bytesBypassedLastUpdate{0};
+    uint64_t bytesAcceptedLastUpdate{0};
   };
 
   DynamicRandomAP(Config&& config, ValidConfigTag);
@@ -172,6 +183,10 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const FnBytesWritten fnBytesWritten_;
   const double lowerBound_{};
   const double upperBound_{};
+  const FnBypass fnBypass_;
+
+  mutable TLCounter acceptedBytes_;
+  mutable TLCounter bypassedBytes_;
 
   mutable std::minstd_rand rg_;
   const size_t deterministicKeyHashSuffixLength_{0};
@@ -188,6 +203,10 @@ class DynamicRandomAP final : public AdmissionPolicy {
   FRIEND_TEST(DynamicRandomAPTest, BelowTarget);
   FRIEND_TEST(DynamicRandomAPTest, StayInRange);
   FRIEND_TEST(DynamicRandomAPTest, RespectMaxWriteRate);
+
+  FRIEND_TEST(DynamicRandomAPTest, AcceptedBytesCount);
+  FRIEND_TEST(DynamicRandomAPTest, ThrottleRegular);
+  FRIEND_TEST(DynamicRandomAPTest, ThrottleAll);
 };
 } // namespace navy
 } // namespace cachelib

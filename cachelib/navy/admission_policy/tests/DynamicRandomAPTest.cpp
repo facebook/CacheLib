@@ -25,6 +25,28 @@
 
 namespace facebook {
 namespace cachelib {
+namespace {
+
+// Create a DynamicRandomAP with given target rate that
+// accepts all items before the first update and treats odd lenth key as
+// bypassed.
+navy::DynamicRandomAP createTestBypassAP(uint64_t& bytesWritten,
+                                         uint64_t targetRate) {
+  navy::DynamicRandomAP::Config config;
+  config.targetRate = targetRate;
+  config.maxRate = 80 * 1024 * 1024;
+  config.updateInterval = std::chrono::seconds{10};
+  config.probabilitySeed = 1.0; // Always accept;
+  // Allow a large change factor so that we can assert probFactor change.
+  config.changeWindow = 0.999;
+  // Even sized keys are primary.
+  config.fnBypass = [](folly::StringPiece key) { return key.size() % 2 == 1; };
+
+  config.fnBytesWritten = [&bytesWritten]() { return bytesWritten; };
+  return facebook::cachelib::navy::DynamicRandomAP(std::move(config));
+}
+} // namespace
+
 namespace navy {
 
 TEST(DynamicRandomAPTest, AboveTarget) {
@@ -219,6 +241,107 @@ TEST(DynamicRandomAPTest, RespectMaxWriteRate) {
   ASSERT_LE(params.probabilityFactor * writeStats.observedCurRate,
             config.maxRate);
   ASSERT_EQ(writeStats.curTargetRate, config.maxRate);
+}
+
+// Being able to count accepted rate and observed rate differently.
+TEST(DynamicRandomAPTest, AcceptedBytesCount) {
+  DynamicRandomAP::Config config;
+  config.targetRate = 70 * 1024 * 1024;
+  config.maxRate = 80 * 1024 * 1024;
+  config.updateInterval = std::chrono::seconds{10};
+  config.probabilitySeed = 1.0; // Always accept;
+  std::chrono::seconds time{getSteadyClockSeconds()};
+  uint64_t acceptedBytes;
+
+  uint64_t bytesWritten{0};
+  config.fnBytesWritten = [&bytesWritten]() { return bytesWritten; };
+  // Simulate 10 seconds later.
+  time = time + config.updateInterval;
+  auto ap = facebook::cachelib::navy::DynamicRandomAP(std::move(config));
+
+  // Observe 36000 byte in 10 seconds.
+  bytesWritten = 36000;
+  auto key = makeHK("key");
+  auto val = makeView("valueXXXXXXXXXXXXXXX");
+  ap.accept(key, val);
+  acceptedBytes = key.key().size() + val.size();
+  ap.updateThrottleParamsLocked(time);
+  auto stats = ap.getWriteStats();
+  // No accepted bytes.
+  ASSERT_EQ(stats.observedCurRate,
+            bytesWritten / config.updateInterval.count());
+  ASSERT_EQ(stats.acceptedRate, acceptedBytes / config.updateInterval.count());
+}
+
+// Only throttle primary.
+TEST(DynamicRandomAPTest, ThrottleRegular) {
+  uint64_t bytesWritten{0};
+  std::chrono::seconds time{getSteadyClockSeconds()};
+  auto ap = createTestBypassAP(bytesWritten, 1000);
+
+  // Observe 36000 byte in 10 seconds. Total observed rate 3600B/s
+  bytesWritten = 36000;
+  time = time + ap.updateInterval_;
+
+  // Setup regular and bypassed items so that they have the same size.
+  // Regular item.
+  auto priKey = makeHK("key0");
+  auto priVal = makeView("valueXXXXXXXXXXXXXXX");
+  // Bypassed item.
+  auto secKey = makeHK("key");
+  auto secVal = makeView("valueXXXXXXXXXXXXXXXX");
+
+  // regular observed rate: 2700B/s
+  // bypassed rate: 900B/s
+  ap.accept(priKey, priVal);
+  ap.accept(priKey, priVal);
+  ap.accept(priKey, priVal);
+  ap.accept(secKey, secVal);
+
+  ap.updateThrottleParamsLocked(time);
+  auto params = ap.getThrottleParams();
+  auto stats = ap.getWriteStats();
+
+  // Throttled towards 99B/s from 2700B/s
+  // (Not 100B/s because we overwritten in the first time)
+  // Target rate is 99 + 900
+  ASSERT_EQ(stats.curTargetRate, 999);
+  ASSERT_EQ(params.probabilityFactor, 99.0 / 2700);
+}
+
+// Throttle both (primary throttled to 0)
+TEST(DynamicRandomAPTest, ThrottleAll) {
+  std::chrono::seconds time{getSteadyClockSeconds()};
+  uint64_t bytesWritten{0};
+  auto ap = createTestBypassAP(bytesWritten, 1000);
+
+  // Observe 36000 byte in 10 seconds. Total observed rate 3600B/s
+  bytesWritten = 36000;
+  time = time + ap.updateInterval_;
+
+  // Setup primary and secondary items so that they have the same size.
+  // Primary item.
+  auto priKey = makeHK("key0");
+  auto priVal = makeView("valueXXXXXXXXXXXXXXX");
+  // Secondary item.
+  auto secKey = makeHK("key");
+  auto secVal = makeView("valueXXXXXXXXXXXXXXXX");
+
+  // primary observed rate: 1800B/s
+  // secondary observed rate: 1800B/s
+  ap.accept(priKey, priVal);
+  ap.accept(priKey, priVal);
+  ap.accept(secKey, secVal);
+  ap.accept(secKey, secVal);
+
+  ap.updateThrottleParamsLocked(time);
+  auto params = ap.getThrottleParams();
+  auto stats = ap.getWriteStats();
+
+  // Regular is throttled towards 0
+  // Overall target rate is 999, all from bypass traffic.
+  ASSERT_EQ(stats.curTargetRate, 999);
+  ASSERT_EQ(params.probabilityFactor, ap.minChange_);
 }
 
 } // namespace navy
