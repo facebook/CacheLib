@@ -31,29 +31,29 @@ void ObjectCache<AllocatorT>::init() {
   l1Config.setCacheName(config_.cacheName)
       .setCacheSize(cacheSize)
       .setAccessConfig({config_.l1HashTablePower, config_.l1LockPower})
-      .setDefaultAllocSizes({l1AllocSize});
+      .setDefaultAllocSizes({l1AllocSize})
+      .enableItemReaperInBackground(config_.reaperInterval)
+      .setEventTracker(std::move(config_.eventTracker))
+      .setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
+        if (ctx.context == DestructorContext::kEvictedFromRAM) {
+          evictions_.inc();
+        }
 
-  l1Config.setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
-    if (ctx.context == DestructorContext::kEvictedFromRAM) {
-      evictions_.inc();
-    }
+        auto& item = ctx.item;
 
-    auto& item = ctx.item;
+        auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
 
-    auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
-
-    SCOPE_EXIT {
-      if (config_.objectSizeTrackingEnabled) {
-        // update total object size
-        totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
-                                        std::memory_order_relaxed);
-      }
-      // execute user defined item destructor
-      config_.itemDestructor(
-          ObjectCacheDestructorData(itemPtr->objectPtr, item.getKey()));
-    };
-  });
-  l1Config.setEventTracker(std::move(config_.eventTracker));
+        SCOPE_EXIT {
+          if (config_.objectSizeTrackingEnabled) {
+            // update total object size
+            totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                            std::memory_order_relaxed);
+          }
+          // execute user defined item destructor
+          config_.itemDestructor(
+              ObjectCacheDestructorData(itemPtr->objectPtr, item.getKey()));
+        };
+      });
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   size_t perPoolSize =
@@ -64,8 +64,19 @@ void ObjectCache<AllocatorT>::init() {
   l1NumShards_ =
       std::min(config_.l1NumShards,
                this->l1Cache_->getCacheMemoryStats().cacheSize / perPoolSize);
-  for (size_t i = 0; i < l1NumShards_; i++) {
-    this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
+  if (!config_.l1ShardName.empty()) {
+    if (l1NumShards_ == 1) {
+      this->l1Cache_->addPool(config_.l1ShardName, perPoolSize);
+    } else {
+      for (size_t i = 0; i < l1NumShards_; i++) {
+        this->l1Cache_->addPool(fmt::format("{}_{}", config_.l1ShardName, i),
+                                perPoolSize);
+      }
+    }
+  } else {
+    for (size_t i = 0; i < l1NumShards_; i++) {
+      this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
+    }
   }
 
   // the placeholder is used to make sure each pool

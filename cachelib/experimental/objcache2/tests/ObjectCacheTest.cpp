@@ -142,6 +142,40 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testSetShardName() {
+    ObjectCacheConfig config;
+    config.setCacheName("test").setCacheCapacity(100'000).setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    {
+      auto objcache = ObjectCache::create(config);
+      auto poolIds = objcache->getL1Cache().getPoolIds();
+      for (size_t i = 0; i < poolIds.size(); i++) {
+        EXPECT_EQ(fmt::format("pool_{}", i), // use default shard names
+                  objcache->getL1Cache().getPoolName(PoolId(i)));
+      }
+    }
+
+    {
+      std::string shardName = "my_shard";
+      config.setNumShards(1).setShardName(shardName);
+      auto objcache = ObjectCache::create(config);
+      auto poolIds = objcache->getL1Cache().getPoolIds();
+      ASSERT_EQ(poolIds.size(), 1);
+      EXPECT_EQ(shardName, objcache->getL1Cache().getPoolName(PoolId(0)));
+    }
+
+    {
+      std::string shardName = "my_shard";
+      config.setNumShards(5).setShardName(shardName);
+      auto objcache = ObjectCache::create(config);
+      auto poolIds = objcache->getL1Cache().getPoolIds();
+      for (size_t i = 0; i < poolIds.size(); i++) {
+        EXPECT_EQ(fmt::format("{}_{}", shardName, i),
+                  objcache->getL1Cache().getPoolName(PoolId(i)));
+      }
+    }
+  }
+
   void testSimple() {
     ObjectCacheConfig config;
     config.setCacheName("test").setCacheCapacity(10'000);
@@ -289,6 +323,37 @@ class ObjectCacheTest : public ::testing::Test {
     std::this_thread::sleep_for(std::chrono::seconds{3});
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_EQ(nullptr, found2);
+  }
+
+  void testExpirationWithCustomizedReaper() {
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); })
+        .setItemReaperInterval(std::chrono::seconds{1});
+    auto objcache = ObjectCache::create(config);
+
+    auto foo = std::make_unique<Foo>();
+    foo->a = 1;
+    foo->b = 2;
+    foo->c = 3;
+
+    objcache->insertOrReplace("Foo", std::move(foo), 0 /*object size*/,
+                              2 /* seconds */);
+
+    auto found1 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found1);
+    EXPECT_EQ(1, found1->a);
+    EXPECT_EQ(2, found1->b);
+    EXPECT_EQ(3, found1->c);
+
+    std::this_thread::sleep_for(std::chrono::seconds{3});
+    auto found2 = objcache->template find<Foo>("Foo");
+    ASSERT_EQ(nullptr, found2);
+
+    auto stats = objcache->getL1Cache().getReaperStats();
+    EXPECT_LE(3, stats.numTraversals);
   }
 
   void testReplace() {
@@ -942,6 +1007,7 @@ using AllocatorTypes = ::testing::Types<LruAllocator,
 TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
 TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
 TYPED_TEST(ObjectCacheTest, ConfigValidation) { this->testConfigValidation(); }
+TYPED_TEST(ObjectCacheTest, SetShardName) { this->testSetShardName(); }
 TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, MultiType) { this->testMultiType(); }
 TYPED_TEST(ObjectCacheTest, testMultiTypePolymorphism) {
@@ -951,6 +1017,9 @@ TYPED_TEST(ObjectCacheTest, UserItemDestructor) {
   this->testUserItemDestructor();
 }
 TYPED_TEST(ObjectCacheTest, Expiration) { this->testExpiration(); }
+TYPED_TEST(ObjectCacheTest, ExpirationWithCustomizedReaper) {
+  this->testExpirationWithCustomizedReaper();
+}
 TYPED_TEST(ObjectCacheTest, Replace) { this->testReplace(); }
 TYPED_TEST(ObjectCacheTest, UniqueInsert) { this->testUniqueInsert(); }
 TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingBasics) {

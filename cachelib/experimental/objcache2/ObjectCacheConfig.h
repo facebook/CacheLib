@@ -55,6 +55,13 @@ struct ObjectCacheConfig {
   // This determines the number of concurrent inserts/removes. Default is 1
   ObjectCacheConfig& setNumShards(size_t _l1NumShards);
 
+  // Set the shard name.
+  // Once set, if l1NumShards == 1, l1ShardName will be the name;
+  //           if l1NumShards > 1, we will use l1ShardName_0, l1ShardName_1,
+  //           etc. as the name.
+  // If not set, we will use pool_0, poo1_1, etc. as the default name.
+  ObjectCacheConfig& setShardName(const std::string& _l1ShardName);
+
   // Set the maximum size of the key. The default is 255
   ObjectCacheConfig& setMaxKeySizeBytes(uint8_t _maxKeySizeBytes);
 
@@ -109,6 +116,8 @@ struct ObjectCacheConfig {
                                        SerializeCb serializeCallback,
                                        DeserializeCb deserializeCallback);
 
+  ObjectCacheConfig& setItemReaperInterval(std::chrono::milliseconds interval);
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -122,6 +131,9 @@ struct ObjectCacheConfig {
 
   // Number of shards to improve insert/remove concurrency
   size_t l1NumShards{1};
+
+  // Name of the shard.
+  std::string l1ShardName;
 
   // The cache name
   std::string cacheName;
@@ -150,6 +162,9 @@ struct ObjectCacheConfig {
   // ItemDestructor which is invoked for each item that is evicted
   // or explicitly from cache
   ItemDestructor itemDestructor{};
+
+  // time to sleep between each reaping period.
+  std::chrono::milliseconds reaperInterval{5000};
 
   // The thread number for cache persistence.
   // It sets the threads to run a persistor upon shut down and a restorer upon
@@ -202,6 +217,13 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setCacheCapacity(
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setNumShards(size_t _l1NumShards) {
   l1NumShards = _l1NumShards;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setShardName(
+    const std::string& _l1ShardName) {
+  l1ShardName = _l1ShardName;
   return *this;
 }
 
@@ -266,6 +288,13 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
   deserializeCb = std::move(deserializeCallback);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemReaperInterval(
+    std::chrono::milliseconds _reaperInterval) {
+  reaperInterval = _reaperInterval;
   return *this;
 }
 
