@@ -236,6 +236,11 @@ class CacheProtoImpl final : public CacheProto {
       apConfig.probFactorLowerBound = probFactorLowerBound;
       apConfig.probFactorUpperBound = probFactorUpperBound;
     }
+    auto fnBypass = config.getFnBypass();
+    if (fnBypass) {
+      apConfig.fnBypass = std::move(fnBypass);
+    }
+
     config_.admissionPolicy =
         std::make_unique<DynamicRandomAP>(std::move(apConfig));
   }

@@ -63,6 +63,7 @@ class RandomAPConfig {
  */
 class DynamicRandomAPConfig {
  public:
+  using FnBypass = std::function<bool(folly::StringPiece)>;
   // Set admission policy's target rate in bytes/s.
   // This target is enforced across a window in average. Default to be 0 if not
   // set, meaning no rate limiting.
@@ -105,6 +106,11 @@ class DynamicRandomAPConfig {
     return *this;
   }
 
+  DynamicRandomAPConfig& setFnBypass(FnBypass fn) {
+    fnBypass_ = std::move(fn);
+    return *this;
+  }
+
   uint64_t getAdmWriteRate() const { return admWriteRate_; }
 
   uint64_t getMaxWriteRate() const { return maxWriteRate_; }
@@ -116,6 +122,8 @@ class DynamicRandomAPConfig {
   double getProbFactorLowerBound() const { return probFactorLowerBound_; }
 
   double getProbFactorUpperBound() const { return probFactorUpperBound_; }
+
+  FnBypass getFnBypass() const { return fnBypass_; }
 
  private:
   // Admission policy target rate, bytes/s.
@@ -134,6 +142,8 @@ class DynamicRandomAPConfig {
   // Upper bound of the probability factor. Non-positive value would be
   // replaced the default value from DynamicRandomAP::Config
   double probFactorUpperBound_{0};
+  // Bypass function to determine keys to bypass in admission policy.
+  FnBypass fnBypass_;
 };
 
 /**
