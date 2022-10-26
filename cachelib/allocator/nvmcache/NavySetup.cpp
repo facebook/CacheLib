@@ -180,16 +180,18 @@ void setupCacheProtos(const navy::NavyConfig& config,
   }
   proto.setMetadataSize(metadataSize);
 
-  uint64_t blockCacheSize = 0;
+  uint64_t blockCacheSize = config.blockCache().getSize();
 
   // Set up BigHash if enabled
   if (config.isBigHashEnabled()) {
     auto bigHashCacheOffset = setupBigHash(config.bigHash(), ioAlignSize,
                                            totalCacheSize, metadataSize, proto);
-    blockCacheSize = bigHashCacheOffset - metadataSize;
+    blockCacheSize = blockCacheSize == 0 ? bigHashCacheOffset - metadataSize
+                                         : blockCacheSize;
   } else {
     XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";
-    blockCacheSize = totalCacheSize - metadataSize;
+    blockCacheSize =
+        blockCacheSize == 0 ? totalCacheSize - metadataSize : blockCacheSize;
   }
 
   // Set up BlockCache if enabled

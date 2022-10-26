@@ -22,6 +22,7 @@
 #include <stdexcept>
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
+#include "cachelib/common/Hash.h"
 
 namespace facebook {
 namespace cachelib {
@@ -304,6 +305,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setSize(uint64_t size) noexcept {
+    size_ = size;
+    return *this;
+  }
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -317,6 +323,8 @@ class BlockCacheConfig {
   uint32_t getRegionSize() const { return regionSize_; }
 
   bool getDataChecksum() const { return dataChecksum_; }
+
+  uint64_t getSize() const { return size_; }
 
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
@@ -344,6 +352,10 @@ class BlockCacheConfig {
   // Whether to remove an item by checking the key (true) or only the hash value
   // (false).
   bool preciseRemove_{false};
+
+  // Intended size of the block cache.
+  // If 0, this block cache takes all the space left on the device.
+  uint64_t size_{0};
 
   friend class NavyConfig;
 };
@@ -408,6 +420,24 @@ class BigHashConfig {
   uint64_t smallItemMaxSize_{};
 };
 
+// Config for a pair of small,large engines.
+class EnginesConfig {
+ public:
+  const BigHashConfig& bigHash() const { return bigHashConfig_; }
+
+  const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
+
+  BigHashConfig& bigHash() { return bigHashConfig_; }
+
+  BlockCacheConfig& blockCache() { return blockCacheConfig_; }
+
+  std::map<std::string, std::string> serialize() const;
+
+ private:
+  BlockCacheConfig blockCacheConfig_;
+  BigHashConfig bigHashConfig_;
+};
+
 /**
  * NavyConfig provides APIs for users to set up Navy related settings for
  * NvmCache.
@@ -421,13 +451,16 @@ class BigHashConfig {
  */
 class NavyConfig {
  public:
+  using EnginesSelector = std::function<size_t(HashedKey)>;
+
   static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
 
- public:
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
-  bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
+  bool isBigHashEnabled() const {
+    return enginesConfigs_[0].bigHash().getSizePct() > 0;
+  }
   std::map<std::string, std::string> serialize() const;
 
   // Getters:
@@ -452,10 +485,16 @@ class NavyConfig {
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
 
   // Return a const BlockCacheConfig to read values of its parameters.
-  const BigHashConfig& bigHash() const { return bigHashConfig_; }
+  const BigHashConfig& bigHash() const {
+    XDCHECK(enginesConfigs_.size() == 1);
+    return enginesConfigs_[0].bigHash();
+  }
 
   // Return a const BlockCacheConfig to read values of its parameters.
-  const BlockCacheConfig& blockCache() const { return blockCacheConfig_; }
+  const BlockCacheConfig& blockCache() const {
+    XDCHECK(enginesConfigs_.size() == 1);
+    return enginesConfigs_[0].blockCache();
+  }
 
   // ============ Job scheduler settings =============
   unsigned int getReaderThreads() const { return readerThreads_; }
@@ -503,11 +542,17 @@ class NavyConfig {
 
   // ============ BlockCache settings =============
   // Return BlockCacheConfig for configuration.
-  BlockCacheConfig& blockCache() noexcept { return blockCacheConfig_; }
+  BlockCacheConfig& blockCache() noexcept {
+    return enginesConfigs_[0].blockCache();
+  }
 
   // ============ BigHash settings =============
   // Return BigHashConfig for configuration.
-  BigHashConfig& bigHash() noexcept { return bigHashConfig_; }
+  BigHashConfig& bigHash() noexcept { return enginesConfigs_[0].bigHash(); }
+
+  void setEnginesSelector(EnginesSelector selector) {
+    selector_ = std::move(selector);
+  }
 
   // ============ Job scheduler settings =============
   void setReaderAndWriterThreads(unsigned int readerThreads,
@@ -526,6 +571,12 @@ class NavyConfig {
   void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) noexcept {
     maxParcelMemoryMB_ = maxParcelMemoryMB;
   }
+
+  const std::vector<EnginesConfig>& enginesConfigs() const {
+    return enginesConfigs_;
+  }
+
+  EnginesSelector getEnginesSelector() const { return selector_; }
 
  private:
   // ============ AP settings =============
@@ -553,11 +604,11 @@ class NavyConfig {
   // This is only used when in-mem buffer is enabled.
   uint32_t deviceMaxWriteSize_{};
 
-  // ============ BlockCache settings =============
-  BlockCacheConfig blockCacheConfig_{};
-
-  // ============ BigHash settings =============
-  BigHashConfig bigHashConfig_{};
+  // ============ Engines settings =============
+  // Currently we support one pair of engines.
+  std::vector<EnginesConfig> enginesConfigs_{1};
+  // Function to map each item to a pair of engine.
+  EnginesSelector selector_{};
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.

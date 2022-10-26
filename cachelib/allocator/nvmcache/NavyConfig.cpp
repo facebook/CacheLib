@@ -145,6 +145,41 @@ void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   navyReqOrderingShards_ = navyReqOrderingShards;
 }
 
+std::map<std::string, std::string> EnginesConfig::serialize() const {
+  auto configMap = std::map<std::string, std::string>();
+
+  // BlockCache settings
+  configMap["navyConfig::blockCacheLru"] =
+      blockCache().isLruEnabled() ? "true" : "false";
+  configMap["navyConfig::blockCacheRegionSize"] =
+      folly::to<std::string>(blockCache().getRegionSize());
+  configMap["navyConfig::blockCacheCleanRegions"] =
+      folly::to<std::string>(blockCache().getCleanRegions());
+  configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =
+      folly::to<std::string>(
+          blockCache().getReinsertionConfig().getHitsThreshold());
+  configMap["navyConfig::blockCacheReinsertionPctThreshold"] =
+      folly::to<std::string>(
+          blockCache().getReinsertionConfig().getPctThreshold());
+  configMap["navyConfig::blockCacheNumInMemBuffers"] =
+      folly::to<std::string>(blockCache().getNumInMemBuffers());
+  configMap["navyConfig::blockCacheDataChecksum"] =
+      blockCache().getDataChecksum() ? "true" : "false";
+  configMap["navyConfig::blockCacheSegmentedFifoSegmentRatio"] =
+      folly::join(",", blockCache().getSFifoSegmentRatio());
+
+  // BigHash settings
+  configMap["navyConfig::bigHashSizePct"] =
+      folly::to<std::string>(bigHash().getSizePct());
+  configMap["navyConfig::bigHashBucketSize"] =
+      folly::to<std::string>(bigHash().getBucketSize());
+  configMap["navyConfig::bigHashBucketBfSize"] =
+      folly::to<std::string>(bigHash().getBucketBfSize());
+  configMap["navyConfig::bigHashSmallItemMaxSize"] =
+      folly::to<std::string>(bigHash().getSmallItemMaxSize());
+  return configMap;
+}
+
 std::map<std::string, std::string> NavyConfig::serialize() const {
   auto configMap = std::map<std::string, std::string>();
 
@@ -176,36 +211,6 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::deviceMaxWriteSize"] =
       folly::to<std::string>(deviceMaxWriteSize_);
 
-  // BlockCache settings
-  configMap["navyConfig::blockCacheLru"] =
-      blockCacheConfig_.isLruEnabled() ? "true" : "false";
-  configMap["navyConfig::blockCacheRegionSize"] =
-      folly::to<std::string>(blockCacheConfig_.getRegionSize());
-  configMap["navyConfig::blockCacheCleanRegions"] =
-      folly::to<std::string>(blockCacheConfig_.getCleanRegions());
-  configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =
-      folly::to<std::string>(
-          blockCacheConfig_.getReinsertionConfig().getHitsThreshold());
-  configMap["navyConfig::blockCacheReinsertionPctThreshold"] =
-      folly::to<std::string>(
-          blockCacheConfig_.getReinsertionConfig().getPctThreshold());
-  configMap["navyConfig::blockCacheNumInMemBuffers"] =
-      folly::to<std::string>(blockCacheConfig_.getNumInMemBuffers());
-  configMap["navyConfig::blockCacheDataChecksum"] =
-      blockCacheConfig_.getDataChecksum() ? "true" : "false";
-  configMap["navyConfig::blockCacheSegmentedFifoSegmentRatio"] =
-      folly::join(",", blockCacheConfig_.getSFifoSegmentRatio());
-
-  // BigHash settings
-  configMap["navyConfig::bigHashSizePct"] =
-      folly::to<std::string>(bigHashConfig_.getSizePct());
-  configMap["navyConfig::bigHashBucketSize"] =
-      folly::to<std::string>(bigHashConfig_.getBucketSize());
-  configMap["navyConfig::bigHashBucketBfSize"] =
-      folly::to<std::string>(bigHashConfig_.getBucketBfSize());
-  configMap["navyConfig::bigHashSmallItemMaxSize"] =
-      folly::to<std::string>(bigHashConfig_.getSmallItemMaxSize());
-
   // Job scheduler settings
   configMap["navyConfig::readerThreads"] =
       folly::to<std::string>(readerThreads_);
@@ -219,6 +224,20 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(maxConcurrentInserts_);
   configMap["navyConfig::maxParcelMemoryMB"] =
       folly::to<std::string>(maxParcelMemoryMB_);
+
+  if (enginesConfigs_.size() > 1) {
+    for (size_t idx = 0; idx < enginesConfigs_.size(); idx++) {
+      const auto& c = enginesConfigs_[idx];
+      auto m = c.serialize();
+      for (const auto& it : m) {
+        configMap[folly::to<std::string>(it.first, "_", idx)] = it.second;
+      }
+    }
+  } else {
+    auto m = enginesConfigs_[0].serialize();
+    configMap.insert(m.begin(), m.end());
+  }
+
   return configMap;
 }
 } // namespace navy
