@@ -4024,8 +4024,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // We should have at least one slab skipped since traverseAndExpireItems
     // call will make the associated allocClass hold a lock for 2 ms. The
     // reaper should be ran at least once within the 2 ms. If it ran more
-    // than once numSkippedSlabReleases could be larger than 1.
-    ASSERT_GE(allocator.getGlobalCacheStats().numSkippedSlabReleases, 1);
+    // than once numReaperSkippedSlabs could be larger than 1.
+    ASSERT_GE(allocator.getGlobalCacheStats().numReaperSkippedSlabs, 1);
   }
 
   void testReaperSkippingSlabTraversalWhileSlabReleasing() {
@@ -4060,7 +4060,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     it.reset();
     t1.join();
     // Verify we have at least skipped one slab
-    ASSERT_GE(allocator.getGlobalCacheStats().numSkippedSlabReleases, 1);
+    ASSERT_GE(allocator.getGlobalCacheStats().numReaperSkippedSlabs, 1);
   }
 
   void testAllocSizes() {

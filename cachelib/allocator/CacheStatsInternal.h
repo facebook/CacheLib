@@ -175,7 +175,7 @@ struct Stats {
   AtomicCounter numReleasedForResize{0};
   AtomicCounter numReleasedForAdvise{0};
   AtomicCounter numAbortedSlabReleases{0};
-  AtomicCounter numSkippedSlabReleases{0};
+  AtomicCounter numReaperSkippedSlabs{0};
 
   // Flag indicating the slab release stuck
   AtomicCounter numSlabReleaseStuck{0};

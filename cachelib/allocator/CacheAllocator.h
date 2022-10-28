@@ -1826,7 +1826,7 @@ class CacheAllocator : public CacheBase {
     // detection.
     folly::annotate_ignore_thread_sanitizer_guard g(__FILE__, __LINE__);
     auto slabsSkipped = allocator_->forEachAllocation(std::forward<Fn>(f));
-    stats().numSkippedSlabReleases.add(slabsSkipped);
+    stats().numReaperSkippedSlabs.add(slabsSkipped);
   }
 
   // returns true if nvmcache is enabled and we should write this item to

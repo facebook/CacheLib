@@ -86,7 +86,7 @@ struct Stats {
 
   uint64_t slabsReleased{0};
   uint64_t numAbortedSlabReleases{0};
-  uint64_t numSkippedSlabReleases{0};
+  uint64_t numReaperSkippedSlabs{0};
   uint64_t moveAttemptsForSlabRelease{0};
   uint64_t moveSuccessesForSlabRelease{0};
   uint64_t evictionAttemptsForSlabRelease{0};

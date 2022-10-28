@@ -137,7 +137,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numEvictionFailureFromMoving = evictFailMove.get();
   ret.numEvictionFailureFromParentMoving = evictFailParentMove.get();
   ret.numAbortedSlabReleases = numAbortedSlabReleases.get();
-  ret.numSkippedSlabReleases = numSkippedSlabReleases.get();
+  ret.numReaperSkippedSlabs = numReaperSkippedSlabs.get();
 }
 
 } // namespace detail
