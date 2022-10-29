@@ -21,19 +21,24 @@
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/Hash.h"
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
+#include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/engine/Engine.h"
+#include "cachelib/navy/engine/EnginePair.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
 // The driver for Navy cache engines.
 // This class provides the synchronous and asynchronous navy APIs to NvmCache.
 class Driver final : public AbstractCache {
  public:
+  using EnginePairSelector = std::function<size_t(HashedKey)>;
   struct Config {
     std::unique_ptr<Device> device;
     std::unique_ptr<JobScheduler> scheduler;
@@ -46,6 +51,8 @@ class Driver final : public AbstractCache {
     uint32_t maxConcurrentInserts{1'000'000};
     uint64_t maxParcelMemory{256 << 20}; // 256MB
     size_t metadataSize{};
+
+    EnginePairSelector selector{};
 
     Config& validate();
   };
@@ -152,32 +159,25 @@ class Driver final : public AbstractCache {
   // Assumes that @config was validated with Config::validate
   Driver(Config&& config, ValidConfigTag);
 
-  // Select engine to insert key/value. Returns a pair:
-  //   - first: engine to insert key/value
-  //   - second: the other engine to remove key
-  std::pair<Engine&, Engine&> select(HashedKey key, BufferView value) const;
   void updateLookupStats(Status status) const;
-  Status removeHashedKey(HashedKey hk, bool& skipSmallItemCache);
   bool admissionTest(HashedKey hk, BufferView value) const;
+  size_t selectEnginePair(HashedKey hk) const;
 
-  const uint32_t smallItemMaxSize_{};
   const uint32_t maxConcurrentInserts_{};
   const uint64_t maxParcelMemory_{};
   const size_t metadataSize_{};
 
   std::unique_ptr<Device> device_;
   std::unique_ptr<JobScheduler> scheduler_;
-  // Large item cache assumed to have fast response in case entry doesn't
-  // exists (check metadata only).
-  std::unique_ptr<Engine> largeItemCache_;
-  // Lookup small item cache only if large item cache has no entry.
-  std::unique_ptr<Engine> smallItemCache_;
+
+  const EnginePairSelector selector_{};
+  std::vector<EnginePair> enginePairs_;
   std::unique_ptr<AdmissionPolicy> admissionPolicy_;
+  mutable std::discrete_distribution<size_t> getRandomAllocDist;
+  std::mt19937 getRandomAllocGen{folly::Random::rand64()};
 
   // thread local counters in synchronized path
-  mutable TLCounter insertCount_;
-  mutable TLCounter lookupCount_;
-  mutable TLCounter removeCount_;
+
   mutable TLCounter rejectedCount_;
   mutable TLCounter rejectedConcurrentInsertsCount_;
   mutable TLCounter rejectedParcelMemoryCount_;
@@ -186,10 +186,7 @@ class Driver final : public AbstractCache {
   mutable TLCounter acceptedBytes_;
 
   // atomic counters in asynchronized path
-  mutable AtomicCounter succInsertCount_;
-  mutable AtomicCounter succLookupCount_;
-  mutable AtomicCounter succRemoveCount_;
-  mutable AtomicCounter ioErrorCount_;
+
   mutable AtomicCounter parcelMemory_; // In bytes
   mutable AtomicCounter concurrentInserts_;
 };

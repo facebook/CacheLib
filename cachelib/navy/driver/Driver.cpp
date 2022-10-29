@@ -16,17 +16,32 @@
 
 #include "cachelib/navy/driver/Driver.h"
 
-#include <folly/Random.h>
+#include <folly/Format.h>
+#include <folly/Range.h>
 #include <folly/synchronization/Baton.h>
 
+#include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/NoopEngine.h"
-#include "folly/Format.h"
+#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
+namespace {
+// get discrete_distribution based on enginePair sizes.
+std::discrete_distribution<size_t> getDist(
+    const std::vector<EnginePair>& enginePairs) {
+  std::vector<size_t> sizes;
+  sizes.reserve(enginePairs.size());
+  for (auto& p : enginePairs) {
+    sizes.push_back(p.getUsableSize());
+  }
+  return std::discrete_distribution<size_t>(sizes.begin(), sizes.end());
+}
+} // namespace
+
 Driver::Config& Driver::Config::validate() {
   if (smallItemCache != nullptr && smallItemMaxSize == 0) {
     throw std::invalid_argument("invalid small item cache params");
@@ -38,6 +53,16 @@ Driver::Config& Driver::Config::validate() {
           smallItemCache->getMaxItemSize(), smallItemMaxSize));
     }
   }
+  if (!largeItemCache) {
+    XLOG(INFO, "Large item cache is noop");
+    largeItemCache = std::make_unique<NoopEngine>();
+  }
+
+  if (!smallItemCache) {
+    XLOG(INFO, "Small item cache is noop");
+    smallItemCache = std::make_unique<NoopEngine>();
+    smallItemMaxSize = 0;
+  }
   return *this;
 }
 
@@ -45,23 +70,17 @@ Driver::Driver(Config&& config)
     : Driver{std::move(config.validate()), ValidConfigTag{}} {}
 
 Driver::Driver(Config&& config, ValidConfigTag)
-    : smallItemMaxSize_{config.smallItemCache ? config.smallItemMaxSize : 0},
-      maxConcurrentInserts_{config.maxConcurrentInserts},
+    : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
-      largeItemCache_{std::move(config.largeItemCache)},
-      smallItemCache_{std::move(config.smallItemCache)},
+      selector_{std::move(config.selector)},
       admissionPolicy_{std::move(config.admissionPolicy)} {
-  if (!largeItemCache_) {
-    XLOG(INFO, "Large item cache is noop");
-    largeItemCache_ = std::make_unique<NoopEngine>();
-  }
-  if (!smallItemCache_) {
-    XLOG(INFO, "Small item cache is noop");
-    smallItemCache_ = std::make_unique<NoopEngine>();
-  }
+  enginePairs_.push_back(EnginePair(std::move(config.smallItemCache),
+                                    std::move(config.largeItemCache),
+                                    config.smallItemMaxSize, scheduler_.get()));
+  getRandomAllocDist = getDist(enginePairs_);
   XLOGF(INFO, "Max concurrent inserts: {}", maxConcurrentInserts_);
   XLOGF(INFO, "Max parcel memory: {}", maxParcelMemory_);
 }
@@ -74,26 +93,20 @@ Driver::~Driver() {
   scheduler_.reset();
 }
 
-std::pair<Engine&, Engine&> Driver::select(HashedKey key,
-                                           BufferView value) const {
-  if (isItemLarge(key, value)) {
-    return {*largeItemCache_, *smallItemCache_};
+size_t Driver::selectEnginePair(HashedKey hk) const {
+  if (selector_) {
+    return selector_(hk);
   } else {
-    return {*smallItemCache_, *largeItemCache_};
+    return 0;
   }
 }
 
 bool Driver::isItemLarge(HashedKey key, BufferView value) const {
-  return key.key().size() + value.size() > smallItemMaxSize_;
+  return enginePairs_[selectEnginePair(key)].isItemLarge(key, value);
 }
 
 bool Driver::couldExist(HashedKey hk) {
-  auto couldExist =
-      smallItemCache_->couldExist(hk) || largeItemCache_->couldExist(hk);
-  if (!couldExist) {
-    lookupCount_.inc();
-  }
-  return couldExist;
+  return enginePairs_[selectEnginePair(hk)].couldExist(hk);
 }
 
 Status Driver::insert(HashedKey key, BufferView value) {
@@ -144,8 +157,6 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
 }
 
 Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
-  insertCount_.inc();
-
   if (hk.key().size() > kMaxKeySize) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
@@ -156,176 +167,51 @@ Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
     return Status::Rejected;
   }
 
-  scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, value, skipInsertion = false]() mutable {
-        auto selection = select(hk, value);
-        Status status = Status::Ok;
-        if (!skipInsertion) {
-          status = selection.first.insert(hk, value);
-          if (status == Status::Retry) {
-            return JobExitCode::Reschedule;
-          }
-          skipInsertion = true;
-        }
-        if (status != Status::DeviceError) {
-          auto rs = selection.second.remove(hk);
-          if (rs == Status::Retry) {
-            return JobExitCode::Reschedule;
-          }
-          if (rs != Status::Ok && rs != Status::NotFound) {
-            XLOGF(ERR, "Insert failed to remove other: {}", toString(rs));
-            status = Status::BadState;
-          }
-        }
-
+  enginePairs_[selectEnginePair(hk)].scheduleInsert(
+      hk, value,
+      [this, totalSize = hk.key().size() + value.size(),
+       cb = std::move(cb)](Status s, HashedKey hashedKey) mutable {
         if (cb) {
-          cb(status, hk);
+          cb(s, hashedKey);
         }
-        parcelMemory_.sub(hk.key().size() + value.size());
+        parcelMemory_.sub(totalSize);
         concurrentInserts_.dec();
-
-        switch (status) {
-        case Status::Ok:
-          succInsertCount_.inc();
-          break;
-        case Status::BadState:
-        case Status::DeviceError:
-          ioErrorCount_.inc();
-          break;
-        default:;
-        }
-        return JobExitCode::Done;
-      },
-      "insert",
-      JobType::Write,
-      hk.keyHash());
+      });
   return Status::Ok;
-}
-
-void Driver::updateLookupStats(Status status) const {
-  switch (status) {
-  case Status::Ok:
-    succLookupCount_.inc();
-    break;
-  case Status::DeviceError:
-    ioErrorCount_.inc();
-    break;
-  default:;
-  }
 }
 
 Status Driver::lookup(HashedKey hk, Buffer& value) {
-  // We do busy wait because we don't expect many retries.
-  lookupCount_.inc();
-  Status status{Status::NotFound};
-  while ((status = largeItemCache_->lookup(hk, value)) == Status::Retry) {
-    std::this_thread::yield();
-  }
-  if (status == Status::NotFound) {
-    while ((status = smallItemCache_->lookup(hk, value)) == Status::Retry) {
-      std::this_thread::yield();
-    }
-  }
-  updateLookupStats(status);
-  return status;
+  return enginePairs_[selectEnginePair(hk)].lookupSync(hk, value);
 }
 
 Status Driver::lookupAsync(HashedKey hk, LookupCallback cb) {
-  lookupCount_.inc();
   XDCHECK(cb);
-
-  scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, skipLargeItemCache = false]() mutable {
-        Buffer value;
-        Status status{Status::NotFound};
-        if (!skipLargeItemCache) {
-          status = largeItemCache_->lookup(hk, value);
-          if (status == Status::Retry) {
-            return JobExitCode::Reschedule;
-          }
-          skipLargeItemCache = true;
-        }
-        if (status == Status::NotFound) {
-          status = smallItemCache_->lookup(hk, value);
-          if (status == Status::Retry) {
-            return JobExitCode::Reschedule;
-          }
-        }
-
-        if (cb) {
-          cb(status, hk, std::move(value));
-        }
-
-        updateLookupStats(status);
-        return JobExitCode::Done;
-      },
-      "lookup",
-      JobType::Read,
-      hk.keyHash());
+  enginePairs_[selectEnginePair(hk)].scheduleLookup(hk, std::move(cb));
   return Status::Ok;
 }
 
-Status Driver::removeHashedKey(HashedKey hk, bool& skipSmallItemCache) {
-  removeCount_.inc();
-  Status status = Status::NotFound;
-  if (!skipSmallItemCache) {
-    status = smallItemCache_->remove(hk);
-  }
-  if (status == Status::NotFound) {
-    status = largeItemCache_->remove(hk);
-    skipSmallItemCache = true;
-  }
-  switch (status) {
-  case Status::Ok:
-    succRemoveCount_.inc();
-    break;
-  case Status::DeviceError:
-    ioErrorCount_.inc();
-    break;
-  default:;
-  }
-  return status;
-}
-
 Status Driver::remove(HashedKey hk) {
-  Status status{Status::Ok};
-  bool skipSmallItemCache = false;
-  while ((status = removeHashedKey(hk, skipSmallItemCache)) == Status::Retry) {
-    std::this_thread::yield();
-  }
-  return status;
+  return enginePairs_[selectEnginePair(hk)].removeSync(hk);
 }
 
 Status Driver::removeAsync(HashedKey hk, RemoveCallback cb) {
-  scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk = hk,
-       skipSmallItemCache = false]() mutable {
-        auto status = removeHashedKey(hk, skipSmallItemCache);
-        if (status == Status::Retry) {
-          return JobExitCode::Reschedule;
-        }
-        if (cb) {
-          cb(status, hk);
-        }
-        return JobExitCode::Done;
-      },
-      "remove",
-      JobType::Write,
-      hk.keyHash());
+  enginePairs_[selectEnginePair(hk)].scheduleRemove(hk, std::move(cb));
   return Status::Ok;
 }
 
 void Driver::flush() {
   scheduler_->finish();
-  smallItemCache_->flush();
-  largeItemCache_->flush();
+  for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+    enginePairs_[idx].flush();
+  }
 }
 
 void Driver::reset() {
   XLOG(INFO, "Reset Navy");
   scheduler_->finish();
-  smallItemCache_->reset();
-  largeItemCache_->reset();
+  for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+    enginePairs_[idx].reset();
+  }
   if (admissionPolicy_) {
     admissionPolicy_->reset();
   }
@@ -334,8 +220,9 @@ void Driver::reset() {
 void Driver::persist() const {
   auto rw = createMetadataRecordWriter(*device_, metadataSize_);
   if (rw) {
-    largeItemCache_->persist(*rw);
-    smallItemCache_->persist(*rw);
+    for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+      enginePairs_[idx].persist(*rw);
+    }
   }
 }
 
@@ -349,8 +236,14 @@ bool Driver::recover() {
   }
   // Because we insert item and remove from the other engine, partial recovery
   // is potentially possible.
-  bool recovered =
-      largeItemCache_->recover(*rr) && smallItemCache_->recover(*rr);
+  bool recovered = true;
+  for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+    recovered &= enginePairs_[idx].recover(*rr);
+    if (!recovered) {
+      break;
+    }
+  }
+
   if (!recovered) {
     reset();
   }
@@ -378,17 +271,14 @@ bool Driver::updateMaxRateForDynamicRandomAP(uint64_t maxRate) {
 uint64_t Driver::getSize() const { return device_->getSize(); }
 
 uint64_t Driver::getUsableSize() const {
-  return largeItemCache_->getSize() + smallItemCache_->getSize();
+  uint64_t size = 0;
+  for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+    size += enginePairs_[idx].getUsableSize();
+  }
+  return size;
 }
 
 void Driver::getCounters(const CounterVisitor& visitor) const {
-  visitor("navy_total_usable_size", getUsableSize());
-  visitor("navy_inserts", insertCount_.get());
-  visitor("navy_succ_inserts", succInsertCount_.get());
-  visitor("navy_lookups", lookupCount_.get());
-  visitor("navy_succ_lookups", succLookupCount_.get());
-  visitor("navy_removes", removeCount_.get());
-  visitor("navy_succ_removes", succRemoveCount_.get());
   visitor("navy_rejected", rejectedCount_.get());
   visitor("navy_rejected_concurrent_inserts",
           rejectedConcurrentInsertsCount_.get());
@@ -396,13 +286,24 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_rejected_bytes", rejectedBytes_.get());
   visitor("navy_accepted_bytes", acceptedBytes_.get());
   visitor("navy_accepted", acceptedCount_.get());
-  visitor("navy_io_errors", ioErrorCount_.get());
+
   visitor("navy_parcel_memory", parcelMemory_.get());
   visitor("navy_concurrent_inserts", concurrentInserts_.get());
 
   scheduler_->getCounters(visitor);
-  largeItemCache_->getCounters(visitor);
-  smallItemCache_->getCounters(visitor);
+  if (enginePairs_.size() > 1) {
+    for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+      const CounterVisitor pv = [&visitor, idx](folly::StringPiece name,
+                                                double count) {
+        visitor(folly::to<std::string>(name, "_", idx), count);
+      };
+      enginePairs_[idx].getCounters(pv);
+    }
+    visitor("navy_total_usable_size", getUsableSize());
+  } else {
+    enginePairs_[0].getCounters(visitor);
+  }
+
   if (admissionPolicy_) {
     admissionPolicy_->getCounters(visitor);
   }
@@ -413,18 +314,8 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
 }
 
 std::pair<Status, std::string> Driver::getRandomAlloc(Buffer& value) {
-  static uint64_t largeCacheSize = largeItemCache_->getSize();
-  static uint64_t smallCacheSize = smallItemCache_->getSize();
-
-  bool fromLargeItemCache =
-      folly::Random::rand64(0, largeCacheSize + smallCacheSize) >=
-      smallCacheSize;
-
-  if (fromLargeItemCache) {
-    return largeItemCache_->getRandomAlloc(value);
-  }
-
-  return smallItemCache_->getRandomAlloc(value);
+  size_t idx = getRandomAllocDist(getRandomAllocGen);
+  return enginePairs_[idx].getRandomAlloc(value);
 }
 } // namespace navy
 } // namespace cachelib
