@@ -223,10 +223,10 @@ class CacheAllocator : public CacheBase {
   // internal resource (e.g., ref counts, buffer) will be managed by the iobuf
   class SampleItem {
    public:
-    SampleItem() = default;
+    explicit SampleItem(bool fromNvm) : fromNvm_{fromNvm} {}
 
     SampleItem(folly::IOBuf&& iobuf, const AllocInfo& allocInfo, bool fromNvm)
-        : iobuf_(std::move(iobuf)), allocInfo_(allocInfo), fromNvm_(fromNvm) {}
+        : iobuf_{std::move(iobuf)}, allocInfo_{allocInfo}, fromNvm_{fromNvm} {}
 
     SampleItem(folly::IOBuf&& iobuf,
                PoolId poolId,

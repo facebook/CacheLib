@@ -848,7 +848,7 @@ typename NvmCache<C>::SampleItem NvmCache<C>::getSampleItem() {
   navy::Buffer value;
   auto [status, keyStr] = navyCache_->getRandomAlloc(value);
   if (status != navy::Status::Ok) {
-    return SampleItem{};
+    return SampleItem{true /* fromNvm */};
   }
 
   folly::StringPiece key(keyStr);
@@ -864,7 +864,7 @@ typename NvmCache<C>::SampleItem NvmCache<C>::getSampleItem() {
 
   auto iobufs = createItemAsIOBuf(key, nvmItem, true /* parentOnly */);
   if (!iobufs) {
-    return SampleItem{};
+    return SampleItem{true /* fromNvm */};
   }
 
   return SampleItem(std::move(*iobufs.release()), poolId, clsId, allocSize,

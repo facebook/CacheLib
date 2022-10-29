@@ -1907,14 +1907,14 @@ CacheAllocator<CacheTrait>::getSampleItem() {
   // Sampling from DRAM cache
   auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
   if (!item) {
-    return SampleItem{};
+    return SampleItem{false /* fromNvm */};
   }
 
   // Check that item returned is the same that was sampled
 
   auto sharedHdl = std::make_shared<ReadHandle>(findInternal(item->getKey()));
   if (sharedHdl->get() != item) {
-    return SampleItem{};
+    return SampleItem{false /* fromNvm */};
   }
 
   const auto allocInfo = allocator_->getAllocInfo(item->getMemory());
