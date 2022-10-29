@@ -2155,7 +2155,7 @@ void NvmCacheTest::verifyItemInIOBuf(const std::string& key,
                                      const ReadHandle& handle,
                                      folly::IOBuf* iobuf) {
   Item& item = *reinterpret_cast<Item*>(iobuf->writableData());
-  ASSERT_EQ(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
+  ASSERT_LE(Item::getRequiredSize(key, handle->getSize()), iobuf->length());
 
   ASSERT_EQ(true, item.isNvmClean());
   ASSERT_EQ(true, item.isNvmEvicted());
