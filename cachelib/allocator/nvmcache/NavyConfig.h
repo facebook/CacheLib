@@ -433,6 +433,8 @@ class EnginesConfig {
 
   std::map<std::string, std::string> serialize() const;
 
+  bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
+
  private:
   BlockCacheConfig blockCacheConfig_;
   BigHashConfig bigHashConfig_;
@@ -550,6 +552,9 @@ class NavyConfig {
   // Return BigHashConfig for configuration.
   BigHashConfig& bigHash() noexcept { return enginesConfigs_[0].bigHash(); }
 
+  void addEnginePair(EnginesConfig config) {
+    enginesConfigs_.push_back(std::move(config));
+  }
   void setEnginesSelector(EnginesSelector selector) {
     selector_ = std::move(selector);
   }

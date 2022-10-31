@@ -17,15 +17,16 @@
 #include <folly/File.h>
 #include <gtest/gtest.h>
 
-#include <stdexcept>
 #include <system_error>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/allocator/nvmcache/NavySetup.h"
+#include "cachelib/allocator/tests/NvmTestUtils.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
+namespace tests {
 
 namespace {
 // chmod on a file.
@@ -40,6 +41,7 @@ void changeMode(const std::string& name, mode_t mode) {
 
   chmod(tmp, mode);
 }
+
 } // namespace
 TEST(NavySetupTest, RAID0DeviceSize) {
   // Verify size is reduced when we pass in a size that's not aligned to
@@ -109,5 +111,81 @@ TEST(NavySetupTest, FileCreationFailure) {
   EXPECT_GT(size * files.size(), device->getSize());
   EXPECT_EQ(files.size() * 8 * 1024 * 1024, device->getSize());
 }
+
+TEST(NavySetupTest, EnginesSetup) {
+  {
+    // Valid NavyConfig setup
+
+    navy::NavyConfig cfg = utils::getNvmTestConfig("/tmp");
+    // cfg.setSimpleFile("test", 1024 * 1024);
+
+    // 20MB block cache 0.
+    cfg.blockCache().setSize(20 * 1024 * 1024);
+    navy::EnginesConfig pair1;
+    // Second bighash: 5 pct, 640 threshold.
+    pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
+    cfg.addEnginePair(std::move(pair1));
+
+    // Send the key by length
+    cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
+
+    EXPECT_NE(nullptr, createNavyCache(cfg, {}, true, nullptr, false));
+  }
+
+  {
+    navy::NavyConfig cfg = utils::getNvmTestConfig("/tmp");
+
+    // Will throw. Small item max size too large.
+    cfg.bigHash().setSizePctAndMaxItemSize(1, 40960);
+
+    // 20MB block cache 0.
+    cfg.blockCache().setSize(20 * 1024 * 1024);
+    navy::EnginesConfig pair1;
+    // Second bighash: 5 pct, 640 threshold.
+    pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
+    cfg.addEnginePair(std::move(pair1));
+
+    // Send the key by length
+    cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
+
+    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+                 std::invalid_argument);
+  }
+
+  {
+    navy::NavyConfig cfg = utils::getNvmTestConfig("/tmp");
+
+    // 20MB block cache 0.
+    cfg.blockCache().setSize(20 * 1024 * 1024);
+    navy::EnginesConfig pair1;
+    // Second bighash: 5 pct, 640 threshold.
+    pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
+    cfg.addEnginePair(std::move(pair1));
+
+    // Exception. No engine selector.
+    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+                 std::invalid_argument);
+  }
+
+  {
+    navy::NavyConfig cfg = utils::getNvmTestConfig("/tmp");
+
+    // 20MB block cache 0.
+    cfg.blockCache().setSize(20 * 1024 * 1024);
+    navy::EnginesConfig pair1;
+    // Second bighash: 5 pct, 640 threshold.
+    pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
+    // Will throw. Set size for the second block cache.
+    pair1.blockCache().setSize(20 * 1024 * 1024);
+    cfg.addEnginePair(std::move(pair1));
+    // Send the key by length
+    cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
+
+    // Exception. The last block cache does not take the full psace.
+    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+                 std::invalid_argument);
+  }
+}
+} // namespace tests
 } // namespace cachelib
 } // namespace facebook

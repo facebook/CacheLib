@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -42,8 +44,7 @@ class Driver final : public AbstractCache {
   struct Config {
     std::unique_ptr<Device> device;
     std::unique_ptr<JobScheduler> scheduler;
-    std::unique_ptr<Engine> largeItemCache;
-    std::unique_ptr<Engine> smallItemCache;
+    std::vector<EnginePair> enginePairs;
     std::unique_ptr<AdmissionPolicy> admissionPolicy;
     uint32_t smallItemMaxSize{};
     // Limited by scheduler parallelism (thread), this is large enough value to
@@ -189,6 +190,8 @@ class Driver final : public AbstractCache {
 
   mutable AtomicCounter parcelMemory_; // In bytes
   mutable AtomicCounter concurrentInserts_;
+
+  FRIEND_TEST(Driver, MultiRecovery);
 };
 } // namespace navy
 } // namespace cachelib

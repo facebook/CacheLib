@@ -21,7 +21,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/driver/Driver.h"
-#include "cachelib/navy/driver/NoopEngine.h"
+#include "cachelib/navy/engine/NoopEngine.h"
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
@@ -35,7 +35,6 @@ using testing::Return;
 namespace facebook {
 namespace cachelib {
 namespace navy {
-namespace tests {
 namespace {
 constexpr uint32_t kSmallItemMaxSize{32};
 
@@ -45,18 +44,23 @@ struct HashedKeyHash {
 
 class MockEngine final : public Engine {
  public:
-  explicit MockEngine(std::string name = "", MockDestructor* cb = nullptr)
+  explicit MockEngine(std::string name = "",
+                      MockDestructor* cb = nullptr,
+                      uint64_t itemMaxSize = UINT32_MAX)
       : name_(name),
         destructorCb_{
             [cb](HashedKey key, BufferView value, DestructorEvent event) {
               if (cb) {
                 cb->call(key, value, event);
               }
-            }} {
+            }},
+        itemMaxSize_(itemMaxSize) {
     ON_CALL(*this, insert(_, _))
         .WillByDefault(Invoke([this](HashedKey hk, BufferView value) {
+          auto keybuffer = Buffer{makeView(hk.key())};
+          auto valbuffer = Buffer{value};
           auto entry =
-              std::make_pair(Buffer{makeView(hk.key())}, Buffer{value});
+              std::make_pair(std::move(keybuffer), std::move(valbuffer));
           auto entryHK = makeHK(entry.first); // Capture before std::move
           cache_[entryHK] = std::move(entry);
           return Status::Ok;
@@ -114,7 +118,7 @@ class MockEngine final : public Engine {
   MOCK_METHOD1(mockRecoverData, bool(const std::string&));
 
   void getCounters(const CounterVisitor& /* visitor */) const override {}
-  uint64_t getMaxItemSize() const override { return UINT32_MAX; }
+  uint64_t getMaxItemSize() const override { return itemMaxSize_; }
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override {
     (void)value;
@@ -141,10 +145,19 @@ class MockEngine final : public Engine {
   std::string name_;
   const DestructorCallback destructorCb_{};
   std::unordered_map<HashedKey, EntryType, HashedKeyHash> cache_;
+  const uint64_t itemMaxSize_;
 };
 
 std::unique_ptr<JobScheduler> makeJobScheduler() {
   return std::make_unique<MockSingleThreadJobScheduler>();
+}
+
+EnginePair makeEnginePair(JobScheduler* scheduler,
+                          std::unique_ptr<Engine> largeItemCache = nullptr,
+                          std::unique_ptr<Engine> smallItemCache = nullptr,
+                          uint32_t smallItemMaxSize = kSmallItemMaxSize) {
+  return EnginePair{std::move(smallItemCache), std::move(largeItemCache),
+                    smallItemMaxSize, scheduler};
 }
 
 Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,
@@ -156,12 +169,14 @@ Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,
   auto deviceSize = metadataSize + kDeviceSize;
   Driver::Config config;
   config.scheduler = std::move(ex);
-  config.largeItemCache = std::move(bc);
+
+  auto p = makeEnginePair(config.scheduler.get(), std::move(bc), std::move(si));
+
   // Create MemoryDevice with ioAlignSize{4096} allows Header to fit in.
   config.device =
       createMemoryDevice(deviceSize, nullptr /* encryption */, ioAlignSize);
   config.smallItemMaxSize = kSmallItemMaxSize;
-  config.smallItemCache = std::move(si);
+  config.enginePairs.push_back(std::move(p));
   config.metadataSize = metadataSize;
   return config;
 }
@@ -748,7 +763,522 @@ TEST(Driver, ParcelMemory) {
   });
   EXPECT_EQ(rejects, statRejected);
 }
-} // namespace tests
+
+TEST(Driver, EnginePairSetupErrors) {
+  {
+    // No engine pairs. Should not happen if created via NavyConfig.
+    auto ex = makeJobScheduler();
+    auto config = makeDriverConfig(nullptr, nullptr, std::move(ex));
+    config.enginePairs.pop_back();
+    EXPECT_THROW(std::make_unique<Driver>(std::move(config)),
+                 std::invalid_argument);
+  }
+
+  {
+    // Two pairs, no engine selector.
+    auto ex = makeJobScheduler();
+    auto config = makeDriverConfig(nullptr, nullptr, std::move(ex));
+    auto p = makeEnginePair(config.scheduler.get());
+    config.enginePairs.push_back(std::move(p));
+    EXPECT_THROW(std::make_unique<Driver>(std::move(config)),
+                 std::invalid_argument);
+  }
+
+  {
+    // Small item cache max size too small.
+    auto ex = makeJobScheduler();
+    auto config = makeDriverConfig(nullptr, nullptr, std::move(ex));
+    auto p = makeEnginePair(config.scheduler.get(), nullptr,
+                            std::make_unique<MockEngine>(
+                                "problematic small item engine", nullptr, 30),
+                            50);
+    config.enginePairs.push_back(std::move(p));
+    config.selector = [](HashedKey) { return 1; };
+    EXPECT_THROW(std::make_unique<Driver>(std::move(config)),
+                 std::invalid_argument);
+  }
+}
+
+// Different comibnations of engine pairs.
+TEST(Driver, EnginePairCombinations) {
+  BufferGen bg;
+
+  {
+    // A key that goes to engine pair 0.
+    const char key0[] = "key0";
+    auto smallValue0 = bg.gen(28);
+    auto largeValue0 = bg.gen(29);
+
+    // A key that goes to engine pair 1.
+    const char key1[] = "key";
+    auto smallValue1 = bg.gen(17);
+    auto largeValue1 = bg.gen(18);
+    auto ex = makeJobScheduler();
+
+    // The first pair by default has a small item threshold of 32.
+    auto bh0 = std::make_unique<MockEngine>("bh 0", nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>("bc 0");
+    auto bh1 = std::make_unique<MockEngine>("bh 1", nullptr, 20);
+    auto bc1 = std::make_unique<MockEngine>("bc 1");
+    {
+      testing::InSequence inSeq;
+      // Insert to small 1, found at bh 1.
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view()));
+      EXPECT_CALL(*bc1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+
+      // Insert large 0, found at bc 0.
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view()));
+      EXPECT_CALL(*bh0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+
+      // Insert small 0, found at bh 0.
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view()));
+      EXPECT_CALL(*bc0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+
+      // Insert to large 1, found at bc 1.
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view()));
+      EXPECT_CALL(*bh1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+    }
+
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    auto p = makeEnginePair(config.scheduler.get(), std::move(bc1),
+                            std::move(bh1), 20);
+    config.enginePairs.push_back(std::move(p));
+    config.selector = [](HashedKey k) { return k.key().size() % 2; };
+
+    auto driver = std::make_unique<Driver>(std::move(config));
+    Buffer valueLookup;
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue1.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue0.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue0.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue1.view());
+  }
+
+  {
+    // 0. BC; 1. BC+BH.
+
+    // A key that goes to engine pair 0.
+    const char key0[] = "key0";
+    auto smallValue0 = bg.gen(28);
+    auto largeValue0 = bg.gen(29);
+
+    // A key that goes to engine pair 1.
+    const char key1[] = "key";
+    auto smallValue1 = bg.gen(17);
+    auto largeValue1 = bg.gen(18);
+    auto ex = makeJobScheduler();
+
+    auto bh0 = nullptr;
+    auto bc0 = std::make_unique<MockEngine>("bc 0");
+
+    auto bh1 = std::make_unique<MockEngine>("bh 1", nullptr, 20);
+    auto bc1 = std::make_unique<MockEngine>("bc 1");
+
+    auto* rawBc0 = bc0.get();
+
+    {
+      testing::InSequence inSeq;
+      // Insert to small 1, found at bh 1.
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view()));
+      EXPECT_CALL(*bc1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+
+      // Insert large 0, found at bc 0.
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view()));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+
+      // Insert small 0, found at bc 0.
+      EXPECT_CALL(*bc0, insert(makeHK(key0), smallValue0.view()));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+
+      // Insert to large 1, found at bc 1.
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view()));
+      EXPECT_CALL(*bh1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+    }
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    auto p = makeEnginePair(config.scheduler.get(), std::move(bc1),
+                            std::move(bh1), 20);
+    config.enginePairs.push_back(std::move(p));
+    config.selector = [](HashedKey k) { return k.key().size() % 2; };
+
+    auto driver = std::make_unique<Driver>(std::move(config));
+    Buffer valueLookup;
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue1.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue0.view());
+
+    // Have to do an evict, because MockEngine does not support replace.
+    rawBc0->evict(makeHK(key0));
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue0.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue1.view());
+  }
+
+  {
+    // 0. BC+BH; 1. BC.
+
+    // A key that goes to engine pair 0.
+    const char key0[] = "key0";
+    auto smallValue0 = bg.gen(28);
+    auto largeValue0 = bg.gen(29);
+
+    // A key that goes to engine pair 1.
+    const char key1[] = "key";
+    auto smallValue1 = bg.gen(17);
+    auto largeValue1 = bg.gen(18);
+    auto ex = makeJobScheduler();
+
+    auto bh0 = std::make_unique<MockEngine>("bh 0", nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>("bc 0");
+
+    auto bh1 = nullptr;
+    auto bc1 = std::make_unique<MockEngine>("bc 1");
+
+    auto* rawBc1 = bc1.get();
+
+    {
+      testing::InSequence inSeq;
+      // Insert to small 1, found at bc 1.
+      EXPECT_CALL(*bc1, insert(makeHK(key1), smallValue1.view()));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+
+      // Insert large 0, found at bc 0.
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view()));
+      EXPECT_CALL(*bh0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+
+      // Insert small 0, found at bh 0.
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view()));
+      EXPECT_CALL(*bc0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+
+      bc1->evict(makeHK(key1));
+      // Insert to large 1, found at bc 1.
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view()));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+    }
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    auto p = makeEnginePair(config.scheduler.get(), std::move(bc1),
+                            std::move(bh1), 20);
+    config.enginePairs.push_back(std::move(p));
+    config.selector = [](HashedKey k) { return k.key().size() % 2; };
+
+    auto driver = std::make_unique<Driver>(std::move(config));
+    Buffer valueLookup;
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue1.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue0.view());
+
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(valueLookup.view(), smallValue0.view());
+
+    // Have to do an evict, because MockEngine does not support replace.
+    rawBc1->evict(makeHK(key1));
+    EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(valueLookup.view(), largeValue1.view());
+  }
+
+  {
+    // Three full pairs.
+    // A key that goes to engine pair 0.
+    const char key0[] = "key";
+    auto smallValue0 = bg.gen(29);
+    auto largeValue0 = bg.gen(30);
+
+    // A key that goes to engine pair 1.
+    const char key1[] = "key1";
+    auto smallValue1 = bg.gen(16);
+    auto largeValue1 = bg.gen(17);
+
+    // A key that goes to engine pair 2.
+    const char key2[] = "keys2";
+    auto smallValue2 = bg.gen(19);
+    auto largeValue2 = bg.gen(20);
+
+    auto ex = makeJobScheduler();
+
+    auto bh0 = std::make_unique<MockEngine>("bh 0", nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>("bc 0");
+
+    auto bh1 = std::make_unique<MockEngine>("bh 1", nullptr, 20);
+    auto bc1 = std::make_unique<MockEngine>("bc 1");
+
+    auto bh2 = std::make_unique<MockEngine>("bh 2", nullptr, 24);
+    auto bc2 = std::make_unique<MockEngine>("bc 2");
+
+    {
+      testing::InSequence inSeq;
+      // Insert to small 1, found at bh 1.
+      EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view()));
+      EXPECT_CALL(*bc1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+
+      // Insert large 0, found at bc 0.
+      EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view()));
+      EXPECT_CALL(*bh0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+
+      // Insert large 2, found at bc 2.
+      EXPECT_CALL(*bc2, insert(makeHK(key2), largeValue2.view()));
+      EXPECT_CALL(*bh2, remove(makeHK(key2)));
+      EXPECT_CALL(*bc2, lookup(makeHK(key2), _));
+
+      // Insert small 0, found at bh 0.
+      EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view()));
+      EXPECT_CALL(*bc0, remove(makeHK(key0)));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+
+      // Insert to large 1, found at bc 1.
+      EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view()));
+      EXPECT_CALL(*bh1, remove(makeHK(key1)));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+
+      // Insert small 2, found at bh 2.
+      EXPECT_CALL(*bh2, insert(makeHK(key2), smallValue2.view()));
+      EXPECT_CALL(*bc2, remove(makeHK(key2)));
+      EXPECT_CALL(*bc2, lookup(makeHK(key2), _));
+      EXPECT_CALL(*bh2, lookup(makeHK(key2), _));
+
+      auto config =
+          makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+      auto p = makeEnginePair(config.scheduler.get(), std::move(bc1),
+                              std::move(bh1), 20);
+      auto p1 = makeEnginePair(config.scheduler.get(), std::move(bc2),
+                               std::move(bh2), 24);
+      config.enginePairs.push_back(std::move(p));
+      config.enginePairs.push_back(std::move(p1));
+      config.selector = [](HashedKey k) { return k.key().size() % 3; };
+
+      auto driver = std::make_unique<Driver>(std::move(config));
+      Buffer valueLookup;
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+      EXPECT_EQ(valueLookup.view(), smallValue1.view());
+
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+      EXPECT_EQ(valueLookup.view(), largeValue0.view());
+
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key2), largeValue2.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup));
+      EXPECT_EQ(valueLookup.view(), largeValue2.view());
+
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+      EXPECT_EQ(valueLookup.view(), smallValue0.view());
+
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+      EXPECT_EQ(valueLookup.view(), largeValue1.view());
+
+      EXPECT_EQ(Status::Ok, driver->insert(makeHK(key2), smallValue2.view()));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup));
+      EXPECT_EQ(valueLookup.view(), smallValue2.view());
+    }
+  }
+}
+
+TEST(Driver, MultiRecovery) {
+  // Recover two pairs of engines into a new instance of two pairs of engines.
+  {
+    const char bhdata0[] = "small cache0";
+    const char bcdata0[] = "large cache0";
+    const char bhdata1[] = "small cache1";
+    const char bcdata1[] = "large cache1";
+
+    // Two pairs to be persisted.
+    auto bh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>(bcdata0);
+    auto bh1 = std::make_unique<MockEngine>(bhdata1, nullptr, 20);
+    auto bc1 = std::make_unique<MockEngine>(bcdata1);
+
+    // Two pairs to be recovered.
+    auto newbh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto newbc0 = std::make_unique<MockEngine>(bcdata0);
+    auto newbh1 = std::make_unique<MockEngine>(bhdata1, nullptr, 20);
+    auto newbc1 = std::make_unique<MockEngine>(bcdata1);
+    {
+      testing::InSequence inSeq;
+      EXPECT_CALL(*bc0, mockPersistData()).WillOnce(Return(bcdata0));
+      EXPECT_CALL(*bh0, mockPersistData()).WillOnce(Return(bhdata0));
+      EXPECT_CALL(*bc1, mockPersistData()).WillOnce(Return(bcdata1));
+      EXPECT_CALL(*bh1, mockPersistData()).WillOnce(Return(bhdata1));
+      EXPECT_CALL(*newbc0, mockRecoverData(bcdata0));
+      EXPECT_CALL(*newbh0, mockRecoverData(bhdata0));
+      EXPECT_CALL(*newbc1, mockRecoverData(bcdata1));
+      EXPECT_CALL(*newbh1, mockRecoverData(bhdata1));
+    }
+
+    auto ex = makeJobScheduler();
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    config.enginePairs.push_back(makeEnginePair(
+        config.scheduler.get(), std::move(bc1), std::move(bh1), 20));
+    config.selector = [](HashedKey) { return 0; };
+    auto driver = std::make_unique<Driver>(std::move(config));
+    driver->persist();
+
+    // Creating new driver instance.
+    auto newEx = makeJobScheduler();
+    auto newConfig = makeDriverConfig(std::move(newbc0), std::move(newbh0),
+                                      std::move(newEx));
+    newConfig.enginePairs.push_back(makeEnginePair(
+        newConfig.scheduler.get(), std::move(newbc1), std::move(newbh1), 20));
+    // The new driver would start on the same device so that the same content
+    // can be restored.
+    newConfig.device = std::move(driver->device_);
+    driver.reset();
+    newConfig.selector = [](HashedKey) { return 0; };
+
+    auto newDriver = std::make_unique<Driver>(std::move(newConfig));
+    EXPECT_TRUE(newDriver->recover());
+  }
+
+  // Increasing number of engine pairs require cold roll.
+  // One pair persisted. Can not be recovered into two pairs.
+  {
+    const char bhdata0[] = "small cache0";
+    const char bcdata0[] = "large cache0";
+    const char bhdata1[] = "small cache1";
+    const char bcdata1[] = "large cache1";
+
+    // Two pairs to be persisted.
+    auto bh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>(bcdata0);
+
+    // Two pairs to be recovered.
+    auto newbh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto newbc0 = std::make_unique<MockEngine>(bcdata0);
+    auto newbh1 = std::make_unique<MockEngine>(bhdata1, nullptr, 20);
+    auto newbc1 = std::make_unique<MockEngine>(bcdata1);
+    {
+      testing::InSequence inSeq;
+      EXPECT_CALL(*bc0, mockPersistData()).WillOnce(Return(bcdata0));
+      EXPECT_CALL(*bh0, mockPersistData()).WillOnce(Return(bhdata0));
+      EXPECT_CALL(*newbc0, mockRecoverData(bcdata0));
+      EXPECT_CALL(*newbh0, mockRecoverData(bhdata0));
+      // Exception will throw after this.
+    }
+
+    auto ex = makeJobScheduler();
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    auto driver = std::make_unique<Driver>(std::move(config));
+    driver->persist();
+
+    // Creating new driver instance.
+    auto newEx = makeJobScheduler();
+    auto newConfig = makeDriverConfig(std::move(newbc0), std::move(newbh0),
+                                      std::move(newEx));
+    newConfig.enginePairs.push_back(makeEnginePair(
+        newConfig.scheduler.get(), std::move(newbc1), std::move(newbh1), 20));
+    // The new driver would start on the same device so that the same content
+    // can be restored.
+    newConfig.device = std::move(driver->device_);
+    driver.reset();
+    newConfig.selector = [](HashedKey) { return 0; };
+
+    auto newDriver = std::make_unique<Driver>(std::move(newConfig));
+    // Throw logic_error because the record reader has ended
+    EXPECT_THROW(newDriver->recover(), std::logic_error);
+  }
+
+  // Same number of engine pairs, different setup.
+  {
+    const char bhdata0[] = "small cache0";
+    const char bcdata0[] = "large cache0";
+    const char bhdata1[] = "small cache1";
+    const char bcdata1[] = "large cache1";
+
+    // Two pairs to be persisted.
+    auto bh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto bc0 = std::make_unique<MockEngine>(bcdata0);
+    auto bh1 = std::make_unique<MockEngine>(bhdata1, nullptr, 20);
+    auto bc1 = std::make_unique<MockEngine>(bcdata1);
+
+    // Two pairs to be recovered. The second pair has a different setup.
+    auto newbh0 = std::make_unique<MockEngine>(bhdata0, nullptr, 32);
+    auto newbc0 = std::make_unique<MockEngine>(bcdata0);
+    auto newbh1 = std::make_unique<MockEngine>(bhdata1, nullptr, 20);
+    auto newbc1 = std::make_unique<MockEngine>("new large cache1");
+    {
+      testing::InSequence inSeq;
+      EXPECT_CALL(*bc0, mockPersistData()).WillOnce(Return(bcdata0));
+      EXPECT_CALL(*bh0, mockPersistData()).WillOnce(Return(bhdata0));
+      EXPECT_CALL(*bc1, mockPersistData()).WillOnce(Return(bcdata1));
+      EXPECT_CALL(*bh1, mockPersistData()).WillOnce(Return(bhdata1));
+      EXPECT_CALL(*newbc0, mockRecoverData(bcdata0));
+      EXPECT_CALL(*newbh0, mockRecoverData(bhdata0));
+      // Trying to restore from the old small cache setup and resulted in false.
+      EXPECT_CALL(*newbc1, mockRecoverData(bcdata1)).WillOnce(Return(false));
+      // The small item cache is not trying to restore because the restore has
+      // failed.
+    }
+
+    auto ex = makeJobScheduler();
+    auto config =
+        makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+    config.enginePairs.push_back(makeEnginePair(
+        config.scheduler.get(), std::move(bc1), std::move(bh1), 20));
+    config.selector = [](HashedKey) { return 0; };
+    auto driver = std::make_unique<Driver>(std::move(config));
+    driver->persist();
+
+    // Creating new driver instance.
+    auto newEx = makeJobScheduler();
+    auto newConfig = makeDriverConfig(std::move(newbc0), std::move(newbh0),
+                                      std::move(newEx));
+    newConfig.enginePairs.push_back(makeEnginePair(
+        newConfig.scheduler.get(), std::move(newbc1), std::move(newbh1), 20));
+    // The new driver would start on the same device so that the same content
+    // can be restored.
+    newConfig.device = std::move(driver->device_);
+    driver.reset();
+    newConfig.selector = [](HashedKey) { return 0; };
+    auto newDriver = std::make_unique<Driver>(std::move(newConfig));
+    // Return false,
+    EXPECT_FALSE(newDriver->recover());
+  }
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

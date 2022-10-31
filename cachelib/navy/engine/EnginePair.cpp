@@ -2,6 +2,8 @@
 
 #include "cachelib/navy/engine/EnginePair.h"
 
+#include "cachelib/navy/engine/NoopEngine.h"
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
@@ -268,6 +270,29 @@ std::pair<Status, std::string> EnginePair::getRandomAlloc(Buffer& value) {
   }
 
   return smallItemCache_->getRandomAlloc(value);
+}
+
+void EnginePair::validate() {
+  if (smallItemCache_ != nullptr) {
+    if (smallItemMaxSize_ == 0) {
+      throw std::invalid_argument("Small item cache is set without a max size");
+    }
+    if (smallItemMaxSize_ > smallItemCache_->getMaxItemSize()) {
+      throw std::invalid_argument(folly::sformat(
+          "small item max size should not exceed {} but is set to be {}.",
+          smallItemCache_->getMaxItemSize(),
+          smallItemMaxSize_));
+    }
+  }
+
+  if (!largeItemCache_) {
+    XLOG(INFO, "Large item cache is noop.");
+    largeItemCache_ = std::make_unique<NoopEngine>();
+  }
+  if (!smallItemCache_) {
+    XLOG(INFO, "Small item cache is noop.");
+    smallItemCache_ = std::make_unique<NoopEngine>();
+  }
 }
 
 } // namespace navy

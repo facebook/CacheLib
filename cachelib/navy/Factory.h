@@ -104,6 +104,22 @@ class BigHashProto {
                               uint32_t hashTableBitSize) = 0;
 };
 
+class EnginePairProto {
+ public:
+  virtual ~EnginePairProto() = default;
+  EnginePairProto() = default;
+  // Delete copy constructor
+  EnginePairProto(const EnginePairProto&) = delete;
+  EnginePairProto(EnginePairProto&) = delete;
+
+  // Set up block cache engine.
+  virtual void setBlockCache(std::unique_ptr<BlockCacheProto> proto) = 0;
+
+  // Set up big hash engine.
+  virtual void setBigHash(std::unique_ptr<BigHashProto> proto,
+                          uint32_t smallItemMaxSize) = 0;
+};
+
 // Cache object prototype. Setup cache desired parameters and pass proto to
 // @createCache function.
 class CacheProto {
@@ -123,15 +139,12 @@ class CacheProto {
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
 
-  // Set up block cache engine.
-  virtual void setBlockCache(std::unique_ptr<BlockCacheProto> proto) = 0;
-
-  // Set up big hash engine.
-  virtual void setBigHash(std::unique_ptr<BigHashProto> proto,
-                          uint32_t smallItemMaxSize) = 0;
-
   // Set JobScheduler for async function calls.
   virtual void setJobScheduler(std::unique_ptr<JobScheduler> ex) = 0;
+
+  virtual void addEnginePair(std::unique_ptr<EnginePairProto> proto) = 0;
+
+  virtual void setEnginesSelector(NavyConfig::EnginesSelector selector) = 0;
 
   // (Optional) Set destructor callback.
   //   - Callback invoked exactly once for every insert, even if it was removed
@@ -165,6 +178,8 @@ std::unique_ptr<BlockCacheProto> createBlockCacheProto();
 
 // Creates BigHash engine prototype.
 std::unique_ptr<BigHashProto> createBigHashProto();
+
+std::unique_ptr<EnginePairProto> createEnginePairProto();
 
 // Creates Cache object prototype.
 std::unique_ptr<CacheProto> createCacheProto();

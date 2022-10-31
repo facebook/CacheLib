@@ -23,7 +23,6 @@
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Hash.h"
-#include "cachelib/navy/driver/NoopEngine.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook {
@@ -43,25 +42,15 @@ std::discrete_distribution<size_t> getDist(
 } // namespace
 
 Driver::Config& Driver::Config::validate() {
-  if (smallItemCache != nullptr && smallItemMaxSize == 0) {
-    throw std::invalid_argument("invalid small item cache params");
-  }
-  if (smallItemCache != nullptr) {
-    if (smallItemMaxSize > smallItemCache->getMaxItemSize()) {
-      throw std::invalid_argument(folly::sformat(
-          "small item max size should not excceed: {}, but is set to be: {}",
-          smallItemCache->getMaxItemSize(), smallItemMaxSize));
-    }
-  }
-  if (!largeItemCache) {
-    XLOG(INFO, "Large item cache is noop");
-    largeItemCache = std::make_unique<NoopEngine>();
+  if (enginePairs.empty()) {
+    throw std::invalid_argument("There should be at least one engine pair.");
   }
 
-  if (!smallItemCache) {
-    XLOG(INFO, "Small item cache is noop");
-    smallItemCache = std::make_unique<NoopEngine>();
-    smallItemMaxSize = 0;
+  for (auto& p : enginePairs) {
+    p.validate();
+  }
+  if (enginePairs.size() > 1 && (!selector)) {
+    throw std::invalid_argument("More than one engine pairs with no selector.");
   }
   return *this;
 }
@@ -76,10 +65,8 @@ Driver::Driver(Config&& config, ValidConfigTag)
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
       selector_{std::move(config.selector)},
+      enginePairs_{std::move(config.enginePairs)},
       admissionPolicy_{std::move(config.admissionPolicy)} {
-  enginePairs_.push_back(EnginePair(std::move(config.smallItemCache),
-                                    std::move(config.largeItemCache),
-                                    config.smallItemMaxSize, scheduler_.get()));
   getRandomAllocDist = getDist(enginePairs_);
   XLOGF(INFO, "Max concurrent inserts: {}", maxConcurrentInserts_);
   XLOGF(INFO, "Max parcel memory: {}", maxParcelMemory_);

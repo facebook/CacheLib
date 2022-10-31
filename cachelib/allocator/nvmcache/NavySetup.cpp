@@ -42,11 +42,37 @@ uint64_t alignUp(uint64_t num, uint64_t alignment) {
   return alignDown(num + alignment - 1, alignment);
 }
 
+uint64_t getRegionSize(const navy::NavyConfig& config) {
+  const auto& configs = config.enginesConfigs();
+  uint64_t regionSize = configs[0].blockCache().getRegionSize();
+  for (size_t idx = 1; idx < configs.size(); idx++) {
+    if (regionSize != configs[idx].blockCache().getRegionSize()) {
+      throw std::invalid_argument(folly::sformat(
+          "Blockcache {} region size: {}, not equal to block cache 0: {}", idx,
+          configs[idx].blockCache().getRegionSize(), regionSize));
+    }
+  }
+  return regionSize;
+}
+
+// Create a bighash that ends at bigHashEndOffset.
+//
+// @param bigHashConfig bighash config
+// @param ioAlignSize alignment size
+// @param bigHashReservedSize Size reserved for bighash. Actual big hash size
+// could be different due to alignment to bucket size.
+// @param bigHashEndOffset The offset where this bighash ends.
+// @param bigHashStartOffsetLimit The start offset of this bighash can not be
+// smaller than or equal to this limit.
+// @param proto The proto of engine pair that this bighash will be set into.
+//
+// @return the starting offset of the setup bighash (inclusive)
 uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
                       uint32_t ioAlignSize,
-                      uint64_t totalCacheSize,
-                      uint64_t metadataSize,
-                      cachelib::navy::CacheProto& proto) {
+                      uint64_t bigHashReservedSize,
+                      uint64_t bigHashEndOffset,
+                      uint64_t bigHashStartOffsetLimit,
+                      cachelib::navy::EnginePairProto& proto) {
   auto bucketSize = bigHashConfig.getBucketSize();
   if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
     throw std::invalid_argument(
@@ -54,14 +80,10 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
                        bucketSize, ioAlignSize));
   }
 
-  // If enabled, BigHash's storage starts after BlockCache's.
-  const auto sizeReservedForBigHash =
-      totalCacheSize * bigHashConfig.getSizePct() / 100ul;
-
   const uint64_t bigHashCacheOffset =
-      alignUp(totalCacheSize - sizeReservedForBigHash, bucketSize);
+      alignUp(bigHashEndOffset - bigHashReservedSize, bucketSize);
   const uint64_t bigHashCacheSize =
-      alignDown(totalCacheSize - bigHashCacheOffset, bucketSize);
+      alignDown(bigHashEndOffset - bigHashCacheOffset, bucketSize);
 
   auto bigHash = cachelib::navy::createBigHashProto();
   bigHash->setLayout(bigHashCacheOffset, bigHashCacheSize, bucketSize);
@@ -83,22 +105,33 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
 
   proto.setBigHash(std::move(bigHash), bigHashConfig.getSmallItemMaxSize());
 
-  if (bigHashCacheOffset <= metadataSize) {
+  if (bigHashCacheOffset <= bigHashStartOffsetLimit) {
     throw std::invalid_argument("NVM cache size is not big enough!");
   }
-  XLOG(INFO) << "metadataSize: " << metadataSize
+  XLOG(INFO) << "bighashStartingLimit: " << bigHashStartOffsetLimit
              << " bigHashCacheOffset: " << bigHashCacheOffset
              << " bigHashCacheSize: " << bigHashCacheSize;
   return bigHashCacheOffset;
 }
 
-void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
-                     uint64_t blockCacheSize,
-                     uint32_t ioAlignSize,
-                     uint64_t metadataSize,
-                     bool usesRaidFiles,
-                     bool itemDestructorEnabled,
-                     cachelib::navy::CacheProto& proto) {
+// Setup a block cache from blockCacheOffset.
+//
+// @param blockCacheConfig
+// @param blockCacheSize size of this block cache.
+// @param ioAlignSize alignment size
+// @param blockCacheOffset this block cache starts from this address (inclusive)
+// @param useRaidFiles if set to true, the device will setup using raid.
+// @param itemDestructorEnabled
+// @param proto
+//
+// @return The end offset (exclusive) of the setup blockcache.
+uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
+                         uint64_t blockCacheSize,
+                         uint32_t ioAlignSize,
+                         uint64_t blockCacheOffset,
+                         bool usesRaidFiles,
+                         bool itemDestructorEnabled,
+                         cachelib::navy::EnginePairProto& proto) {
   auto regionSize = blockCacheConfig.getRegionSize();
   if (regionSize != alignUp(regionSize, ioAlignSize)) {
     throw std::invalid_argument(
@@ -108,7 +141,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 
   // Adjust starting size of block cache to ensure it is aligned to region
   // size which is what we use for the stripe size when using RAID0Device.
-  uint64_t blockCacheOffset = metadataSize;
+
   if (usesRaidFiles) {
     auto adjustedBlockCacheOffset = alignUp(blockCacheOffset, regionSize);
     auto cacheSizeAdjustment = adjustedBlockCacheOffset - blockCacheOffset;
@@ -143,6 +176,7 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
 
   proto.setBlockCache(std::move(blockCache));
+  return blockCacheOffset + blockCacheSize;
 }
 
 // Setup the CacheProto, includes BigHashProto and BlockCacheProto,
@@ -154,10 +188,23 @@ void setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 // @param proto             the output CacheProto
 //
 // @throw std::invalid_argument if input arguments are invalid
+// Below is an illustration on how the cache engines anre metadata are laid out
+// on the device address space.
+// |--------------------------------- Device -------------------------------|
+// |--- Metadata ---|--- BC-0 ---|--- BC-1 ---|...|--- BH-1 ---|--- BH-0 ---|
+
 void setupCacheProtos(const navy::NavyConfig& config,
                       const navy::Device& device,
                       cachelib::navy::CacheProto& proto,
                       const bool itemDestructorEnabled) {
+  if (config.enginesConfigs()[config.enginesConfigs().size() - 1]
+          .blockCache()
+          .getSize() != 0) {
+    throw std::invalid_argument(
+        "Last pair of engines must have its block cache use up all the space "
+        "left on device");
+  }
+
   auto getDefaultMetadataSize = [](size_t size, size_t alignment) {
     XDCHECK(folly::isPowTwo(alignment));
     auto mask = ~(alignment - 1);
@@ -180,26 +227,58 @@ void setupCacheProtos(const navy::NavyConfig& config,
   }
   proto.setMetadataSize(metadataSize);
 
-  uint64_t blockCacheSize = config.blockCache().getSize();
+  // Start offsets are inclusive. End offsets are exclusive.
+  // For each engine pair, bigHashStartOffset will be calculated by setting up
+  // bighash from its end offset. blockCacheEndOffset will be calculated by
+  // setting block cache from its start offset.
+  uint64_t blockCacheStartOffset = metadataSize;
+  uint64_t blockCacheEndOffset = 0;
+  uint64_t bigHashEndOffset = totalCacheSize;
+  uint64_t bigHashStartOffset = 0;
 
-  // Set up BigHash if enabled
-  if (config.isBigHashEnabled()) {
-    auto bigHashCacheOffset = setupBigHash(config.bigHash(), ioAlignSize,
-                                           totalCacheSize, metadataSize, proto);
-    blockCacheSize = blockCacheSize == 0 ? bigHashCacheOffset - metadataSize
-                                         : blockCacheSize;
-  } else {
-    XLOG(INFO) << "metadataSize: " << metadataSize << ". No bighash.";
-    blockCacheSize =
-        blockCacheSize == 0 ? totalCacheSize - metadataSize : blockCacheSize;
-  }
+  XLOG(INFO) << "metadataSize: " << metadataSize;
+  for (size_t idx = 0; idx < config.enginesConfigs().size(); idx++) {
+    XLOG(INFO) << "Setting up engine pair " << idx;
+    const auto& enginesConfig = config.enginesConfigs()[idx];
+    uint64_t blockCacheSize = enginesConfig.blockCache().getSize();
+    auto enginePairProto = cachelib::navy::createEnginePairProto();
 
-  // Set up BlockCache if enabled
-  if (blockCacheSize > 0) {
-    setupBlockCache(config.blockCache(), blockCacheSize, ioAlignSize,
-                    metadataSize, config.usesRaidFiles(), itemDestructorEnabled,
-                    proto);
+    if (enginesConfig.isBigHashEnabled()) {
+      uint64_t bigHashSize =
+          totalCacheSize * enginesConfig.bigHash().getSizePct() / 100ul;
+      bigHashStartOffset = setupBigHash(
+          enginesConfig.bigHash(), ioAlignSize, bigHashSize, bigHashEndOffset,
+          blockCacheStartOffset, *enginePairProto);
+      blockCacheSize = blockCacheSize == 0
+                           ? bigHashStartOffset - blockCacheStartOffset
+                           : blockCacheSize;
+      XLOG(INFO) << "blockCacheSize " << blockCacheSize;
+    } else {
+      bigHashStartOffset = bigHashEndOffset;
+      blockCacheSize = blockCacheSize == 0
+                           ? bigHashStartOffset - blockCacheStartOffset
+                           : blockCacheSize;
+      XLOG(INFO) << "-- No bighash. blockCacheSize " << blockCacheSize;
+    }
+
+    // Set up BlockCache if enabled
+    if (blockCacheSize > 0) {
+      blockCacheEndOffset = setupBlockCache(
+          enginesConfig.blockCache(), blockCacheSize, ioAlignSize,
+          blockCacheStartOffset, config.usesRaidFiles(), itemDestructorEnabled,
+          *enginePairProto);
+    }
+    if (blockCacheEndOffset > bigHashStartOffset) {
+      throw std::invalid_argument(folly::sformat(
+          "Invalid engine size configurations. block cache ends at "
+          "{}, big hash starts at {}.",
+          blockCacheEndOffset, bigHashStartOffset));
+    }
+    proto.addEnginePair(std::move(enginePairProto));
+    bigHashEndOffset = bigHashStartOffset;
+    blockCacheStartOffset = blockCacheEndOffset;
   }
+  proto.setEnginesSelector(config.getEnginesSelector());
 }
 
 void setAdmissionPolicy(const cachelib::navy::NavyConfig& config,
@@ -235,7 +314,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
 
   if (config.usesRaidFiles()) {
-    auto stripeSize = config.blockCache().getRegionSize();
+    auto stripeSize = getRegionSize(config);
     return cachelib::navy::createRAIDDevice(
         config.getRaidPaths(),
         alignDown(config.getFileSize(), stripeSize),

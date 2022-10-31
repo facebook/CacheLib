@@ -82,6 +82,8 @@ class EnginePair {
 
   std::pair<Status, std::string> getRandomAlloc(Buffer& value);
 
+  void validate();
+
  private:
   // Update statistics for lookup
   void updateLookupStats(Status status) const;
