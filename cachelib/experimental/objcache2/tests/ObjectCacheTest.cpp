@@ -297,7 +297,10 @@ class ObjectCacheTest : public ::testing::Test {
   void testExpiration() {
     ObjectCacheConfig config;
     config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
-        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+        [&](ObjectCacheDestructorData data) {
+          EXPECT_EQ(data.context, ObjectCacheDestructorContext::kRemoved);
+          data.deleteObject<Foo>();
+        });
     auto objcache = ObjectCache::create(config);
 
     auto foo = std::make_unique<Foo>();

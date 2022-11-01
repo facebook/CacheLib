@@ -34,12 +34,18 @@ void ObjectCache<AllocatorT>::init() {
       .setDefaultAllocSizes({l1AllocSize})
       .enableItemReaperInBackground(config_.reaperInterval)
       .setEventTracker(std::move(config_.eventTracker))
-      .setItemDestructor([this](typename AllocatorT::DestructorData ctx) {
-        if (ctx.context == DestructorContext::kEvictedFromRAM) {
+      .setItemDestructor([this](typename AllocatorT::DestructorData data) {
+        ObjectCacheDestructorContext ctx;
+        if (data.context == DestructorContext::kEvictedFromRAM) {
           evictions_.inc();
+          ctx = ObjectCacheDestructorContext::kEvicted;
+        } else if (data.context == DestructorContext::kRemovedFromRAM) {
+          ctx = ObjectCacheDestructorContext::kRemoved;
+        } else { // should not enter here
+          ctx = ObjectCacheDestructorContext::kUnknown;
         }
 
-        auto& item = ctx.item;
+        auto& item = data.item;
 
         auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
 
@@ -50,8 +56,8 @@ void ObjectCache<AllocatorT>::init() {
                                             std::memory_order_relaxed);
           }
           // execute user defined item destructor
-          config_.itemDestructor(
-              ObjectCacheDestructorData(itemPtr->objectPtr, item.getKey()));
+          config_.itemDestructor(ObjectCacheDestructorData(
+              ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime()));
         };
       });
 
