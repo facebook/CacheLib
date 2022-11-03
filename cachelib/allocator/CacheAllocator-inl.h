@@ -3550,13 +3550,13 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     std::chrono::milliseconds interval,
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
-  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, std::move(config),
+  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, config,
                       strategy)) {
     return false;
   }
 
   config_.memMonitorInterval = interval;
-  config_.memMonitorConfig = config;
+  config_.memMonitorConfig = std::move(config);
   config_.poolAdviseStrategy = strategy;
   return true;
 }

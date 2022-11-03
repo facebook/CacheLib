@@ -27,7 +27,7 @@ namespace cachelib {
 constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
 MemoryMonitor::MemoryMonitor(CacheBase& cache,
-                             Config config,
+                             const Config& config,
                              std::shared_ptr<RebalanceStrategy> strategy)
     : cache_(cache),
       mode_(config.mode),

@@ -189,7 +189,7 @@ class MemoryMonitor : public PeriodicWorker {
   // @param strategy             Strategy to use to determine the allocation
   //                             class in pool to steal slabs from, for advising
   MemoryMonitor(CacheBase& cache,
-                Config config,
+                const Config& config,
                 std::shared_ptr<RebalanceStrategy> strategy);
 
   ~MemoryMonitor() override;
