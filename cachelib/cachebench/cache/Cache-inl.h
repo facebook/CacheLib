@@ -609,6 +609,7 @@ Stats Cache<Allocator>::getStats() const {
 
   ret.numCacheGets = cacheStats.numCacheGets;
   ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
+  ret.numCacheEvictions = cacheStats.numCacheEvictions;
   ret.numRamDestructorCalls = cacheStats.numRamDestructorCalls;
   ret.numNvmGets = cacheStats.numNvmGets;
   ret.numNvmGetMiss = cacheStats.numNvmGetMiss;

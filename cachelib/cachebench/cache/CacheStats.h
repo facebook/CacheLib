@@ -37,6 +37,7 @@ struct Stats {
 
   uint64_t numCacheGets{0};
   uint64_t numCacheGetMiss{0};
+  uint64_t numCacheEvictions{0};
   uint64_t numRamDestructorCalls{0};
   uint64_t numNvmGets{0};
   uint64_t numNvmGetMiss{0};
@@ -291,6 +292,11 @@ struct Stats {
     if (numRamDestructorCalls > 0 || numNvmDestructorCalls > 0) {
       out << folly::sformat("Destructor executed from RAM {}, from NVM {}",
                             numRamDestructorCalls, numNvmDestructorCalls)
+          << std::endl;
+    }
+
+    if (numCacheEvictions > 0) {
+      out << folly::sformat("Total eviction executed {}", numCacheEvictions)
           << std::endl;
     }
   }

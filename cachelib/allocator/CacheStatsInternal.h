@@ -51,6 +51,9 @@ struct Stats {
   // number of remove calls that resulted in a ram hit
   TLCounter numCacheRemoveRamHits{0};
 
+  // number of evictions where items leave both RAM and NvmCache entirely
+  AtomicCounter numCacheEvictions{0};
+
   // number of item destructor calls from ram
   TLCounter numRamDestructorCalls{0};
 

@@ -761,17 +761,27 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
 
   // only skip destructor for evicted items that are either in the queue to put
   // into nvm or already in nvm
-  if (!nascent && config_.itemDestructor &&
-      (ctx != RemoveContext::kEviction || !it.isNvmClean() ||
-       it.isNvmEvicted())) {
-    try {
-      config_.itemDestructor(DestructorData{
-          ctx, it, viewAsChainedAllocsRange(it), allocInfo.poolId});
-      stats().numRamDestructorCalls.inc();
-    } catch (const std::exception& e) {
-      stats().numDestructorExceptions.inc();
-      XLOG_EVERY_N(INFO, 100)
-          << "Catch exception from user's item destructor: " << e.what();
+  bool skipDestructor =
+      nascent || (ctx == RemoveContext::kEviction &&
+                  // When this item is queued for NvmCache, it will be marked
+                  // as clean and the NvmEvicted bit will also be set to false.
+                  // Refer to NvmCache::put()
+                  it.isNvmClean() && !it.isNvmEvicted());
+  if (!skipDestructor) {
+    if (ctx == RemoveContext::kEviction) {
+      stats().numCacheEvictions.inc();
+    }
+    // execute ItemDestructor
+    if (config_.itemDestructor) {
+      try {
+        config_.itemDestructor(DestructorData{
+            ctx, it, viewAsChainedAllocsRange(it), allocInfo.poolId});
+        stats().numRamDestructorCalls.inc();
+      } catch (const std::exception& e) {
+        stats().numDestructorExceptions.inc();
+        XLOG_EVERY_N(INFO, 100)
+            << "Catch exception from user's item destructor: " << e.what();
+      }
     }
   }
 

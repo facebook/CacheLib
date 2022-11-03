@@ -381,8 +381,15 @@ void NvmCache<C>::evictCB(HashedKey hk,
     }
   }
 
+  if (!needDestructor) {
+    return;
+  }
+
+  if (event != cachelib::navy::DestructorEvent::Removed) {
+    stats().numCacheEvictions.inc();
+  }
   // ItemDestructor
-  if (itemDestructor_ && needDestructor) {
+  if (itemDestructor_) {
     // create the item on heap instead of memory pool to avoid allocation
     // failure and evictions from cache for a temporary item.
     auto iobuf = createItemAsIOBuf(hk.key(), nvmItem);
