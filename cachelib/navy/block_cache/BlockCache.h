@@ -378,8 +378,11 @@ class BlockCache final : public Engine {
   mutable AtomicCounter evictionLookupMissCounter_;
   mutable AtomicCounter allocErrorCount_;
   mutable AtomicCounter logicalWrittenCount_;
+  // TODO: deprecate hole count and hole size when we have
+  //       confirmed usedSizeBytes is working correctly in prod
   mutable AtomicCounter holeCount_;
   mutable AtomicCounter holeSizeTotal_;
+  mutable AtomicCounter usedSizeBytes_;
   mutable AtomicCounter reinsertionErrorCount_;
   mutable AtomicCounter reinsertionCount_;
   mutable AtomicCounter reinsertionBytes_;

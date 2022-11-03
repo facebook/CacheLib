@@ -51,6 +51,14 @@ class PercentileStats {
     uint64_t p100;
   };
 
+  // visit each latency estimate using the visitor.
+  // @param visitor   the stat visitor
+  // @param rst       the estimates to be visited
+  // @param prefix    prefix for the stat name.
+  static void visitQuantileEstimates(const CounterVisitor& visitor,
+                                     const Estimates& rst,
+                                     folly::StringPiece prefix);
+
   PercentileStats() : estimator_{std::chrono::seconds{kDefaultWindowSize}} {}
   PercentileStats(std::chrono::seconds windowSize) : estimator_{windowSize} {}
 
@@ -75,14 +83,6 @@ class PercentileStats {
     auto rst = estimate();
     visitQuantileEstimates(visitor, rst, statPrefix);
   }
-
-  // visit each latency estimate using the visitor.
-  // @param visitor   the stat visitor
-  // @param rst       the estimates to be visited
-  // @param prefix    prefix for the stat name.
-  static void visitQuantileEstimates(const CounterVisitor& visitor,
-                                     const Estimates& rst,
-                                     folly::StringPiece prefix);
 
  private:
   static const std::array<double, 14> kQuantiles;

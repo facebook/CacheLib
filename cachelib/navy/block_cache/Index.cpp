@@ -153,6 +153,7 @@ void Index::reset() {
     auto lock = std::lock_guard{getMutexOfBucket(i)};
     buckets_[i].clear();
   }
+  unAccessedItems_.set(0);
 }
 
 size_t Index::computeSize() const {

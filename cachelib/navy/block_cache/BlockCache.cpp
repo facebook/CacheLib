@@ -187,18 +187,26 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
   const auto status = writeEntry(addr, slotSize, hk, value);
+  auto newObjSizeHint = encodeSizeHint(slotSize);
   if (status == Status::Ok) {
-    const auto lr = index_.insert(hk.keyHash(),
-                                  encodeRelAddress(addr.add(slotSize)),
-                                  encodeSizeHint(slotSize));
+    const auto lr = index_.insert(
+        hk.keyHash(), encodeRelAddress(addr.add(slotSize)), newObjSizeHint);
     // We replaced an existing key in the index
+    uint64_t newObjSize = decodeSizeHint(newObjSizeHint);
+    uint64_t oldObjSize = 0;
     if (lr.found()) {
-      holeSizeTotal_.add(decodeSizeHint(lr.sizeHint()));
+      oldObjSize = decodeSizeHint(lr.sizeHint());
+      holeSizeTotal_.add(oldObjSize);
       holeCount_.inc();
       insertHashCollisionCount_.inc();
     }
     succInsertCount_.inc();
     sizeDist_.addSize(slotSize);
+    if (newObjSize < oldObjSize) {
+      usedSizeBytes_.sub(oldObjSize - newObjSize);
+    } else {
+      usedSizeBytes_.add(newObjSize - oldObjSize);
+    }
   }
   allocator_.close(std::move(desc));
   return status;
@@ -357,8 +365,10 @@ Status BlockCache::remove(HashedKey hk) {
 
   auto lr = index_.remove(hk.keyHash());
   if (lr.found()) {
-    holeSizeTotal_.add(decodeSizeHint(lr.sizeHint()));
+    uint64_t removedObjectSize = decodeSizeHint(lr.sizeHint());
+    holeSizeTotal_.add(removedObjectSize);
     holeCount_.inc();
+    usedSizeBytes_.sub(removedObjectSize);
     succRemoveCount_.inc();
     if (!value.isNull()) {
       destructorCb_(hk, value.view(), DestructorEvent::Removed);
@@ -413,6 +423,7 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     switch (reinsertionRes) {
     case ReinsertionRes::kEvicted:
       evictionCount++;
+      usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
       break;
     case ReinsertionRes::kRemoved:
       holeCount_.sub(1);
@@ -467,6 +478,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
     auto removeRes = removeItem(hk, entrySize, RelAddress{rid, offset});
     if (removeRes) {
       evictionCount++;
+      usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
     } else {
       holeCount_.sub(1);
       holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
@@ -676,6 +688,7 @@ void BlockCache::reset() {
   sizeDist_.reset();
   holeCount_.set(0);
   holeSizeTotal_.set(0);
+  usedSizeBytes_.set(0);
 }
 
 void BlockCache::getCounters(const CounterVisitor& visitor) const {
@@ -706,6 +719,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_logical_written", logicalWrittenCount_.get());
   visitor("navy_bc_hole_count", holeCount_.get());
   visitor("navy_bc_hole_bytes", holeSizeTotal_.get());
+  visitor("navy_bc_used_size_bytes", usedSizeBytes_.get());
   visitor("navy_bc_reinsertions", reinsertionCount_.get());
   visitor("navy_bc_reinsertion_bytes", reinsertionBytes_.get());
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get());
@@ -735,6 +749,7 @@ void BlockCache::persist(RecordWriter& rw) {
   *config.allocAlignSize() = allocAlignSize_;
   config.holeCount() = holeCount_.get();
   config.holeSizeTotal() = holeSizeTotal_.get();
+  *config.usedSizeBytes() = usedSizeBytes_.get();
   *config.reinsertionPolicyEnabled() = (reinsertionPolicy_ != nullptr);
   serializeProto(config, rw);
   regionManager_.persist(rw);
@@ -768,6 +783,7 @@ void BlockCache::tryRecover(RecordReader& rr) {
   sizeDist_ = SizeDistribution{*config.sizeDist()};
   holeCount_.set(*config.holeCount());
   holeSizeTotal_.set(*config.holeSizeTotal());
+  usedSizeBytes_.set(*config.usedSizeBytes());
   regionManager_.recover(rr);
   index_.recover(rr);
 }

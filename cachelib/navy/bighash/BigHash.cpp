@@ -207,6 +207,7 @@ void BigHash::persist(RecordWriter& rw) {
   *pd.cacheBaseOffset() = cacheBaseOffset_;
   *pd.numBuckets() = numBuckets_;
   *pd.sizeDist() = sizeDist_.getSnapshot();
+  *pd.usedSizeBytes() = usedSizeBytes_.get();
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
@@ -241,6 +242,7 @@ bool BigHash::recover(RecordReader& rr) {
     generationTime_ = std::chrono::nanoseconds{*pd.generationTime()};
     itemCount_.set(*pd.itemCount());
     sizeDist_ = SizeDistribution{*pd.sizeDist()};
+    usedSizeBytes_.set(*pd.usedSizeBytes());
     if (bloomFilter_) {
       bloomFilter_->recover<ProtoSerializer>(rr);
       XLOG(INFO, "Recovered bloom filter");
