@@ -182,14 +182,11 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
   XDCHECK(ctx);
   auto guard = folly::makeGuard([hk, this]() { removeFromFillMap(hk); });
 
-  auto status = navyCache_->lookupAsync(
+  navyCache_->lookupAsync(
       HashedKey::precomputed(ctx->getKey(), hk.keyHash()),
       [this, ctx](navy::Status s, HashedKey k, navy::Buffer v) {
         this->onGetComplete(*ctx, s, k, v.view());
       });
-
-  XDCHECK_EQ(status, navy::Status::Ok);
-
   guard.dismiss();
   return hdl;
 }
@@ -257,7 +254,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
 
   // no need for fill lock or inspecting the state of other concurrent
   // operations since we only want to check the state for debugging purposes.
-  auto status = navyCache_->lookupAsync(
+  navyCache_->lookupAsync(
       HashedKey{key}, [&, this](navy::Status st, HashedKey, navy::Buffer v) {
         if (st != navy::Status::NotFound) {
           auto nvmItem = reinterpret_cast<const NvmItem*>(v.data());
@@ -265,9 +262,6 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
         }
         b.post();
       });
-  if (status != navy::Status::Ok) {
-    return hdl;
-  }
   b.wait();
   return hdl;
 }
@@ -843,11 +837,8 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
                                static_cast<int>(status)));
   };
 
-  auto status = navyCache_->removeAsync(
-      HashedKey::precomputed(ctx.key(), hk.keyHash()), delCleanup);
-  if (status != navy::Status::Ok) {
-    delCleanup(status, HashedKey::precomputed("", 0));
-  }
+  navyCache_->removeAsync(HashedKey::precomputed(ctx.key(), hk.keyHash()),
+                          delCleanup);
 }
 
 template <typename C>

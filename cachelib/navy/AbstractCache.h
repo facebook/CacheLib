@@ -85,9 +85,7 @@ class AbstractCache {
   //
   // @key must be valid till delayed async job execution, no copy is made. It
   // is user responsibility to make a copy if needed (capture in callback).
-  //
-  // Returns: Ok, Rejected
-  virtual Status lookupAsync(HashedKey key, LookupCallback cb) = 0;
+  virtual void lookupAsync(HashedKey key, LookupCallback cb) = 0;
 
   // Removes from the index, space reused after reclamation.
   // Returns: Ok, NotFound
@@ -97,9 +95,7 @@ class AbstractCache {
   // Callback is optional.
   //
   // See @lookupAsync about @key lifetime.
-  //
-  // Returns: Ok, Rejected
-  virtual Status removeAsync(HashedKey key, RemoveCallback cb) = 0;
+  virtual void removeAsync(HashedKey key, RemoveCallback cb) = 0;
 
   // Executes all queued operations and makes sure result is reflected on the
   // device.

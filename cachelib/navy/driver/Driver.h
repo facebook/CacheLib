@@ -105,9 +105,7 @@ class Driver final : public AbstractCache {
   // @param key  the item key to lookup
   // @param cb   a callback function be triggered when the lookup complete,
   //             the result will be provided to the function.
-  // @return     a status indicates success or failure enqueued, and the reason
-  //             for failure
-  Status lookupAsync(HashedKey key, LookupCallback cb) override;
+  void lookupAsync(HashedKey key, LookupCallback cb) override;
 
   // remove the key from cache
   // @param key  the item key to be removed
@@ -117,9 +115,7 @@ class Driver final : public AbstractCache {
   // remove the key from cache asynchronously.
   // @param key  the item key to be removed
   // @param cb   a callback function be triggered when the remove complete.
-  // @return     a status indicates success or failure enqueued, and the reason
-  //             for failure
-  Status removeAsync(HashedKey key, RemoveCallback cb) override;
+  void removeAsync(HashedKey key, RemoveCallback cb) override;
 
   // ensure all pending job have been completed and data has been flush to
   // device(s).

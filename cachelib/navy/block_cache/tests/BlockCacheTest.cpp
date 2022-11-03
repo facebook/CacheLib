@@ -314,27 +314,22 @@ TEST(BlockCache, AsyncCallbacks) {
   MockLookupCB cbLookup;
   EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value")));
   EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}));
-  EXPECT_EQ(Status::Ok,
-            driver->lookupAsync(
-                makeHK("key"),
-                [&cbLookup](Status status, HashedKey key, Buffer value) {
-                  cbLookup.call(status, key, value.view());
-                }));
-  EXPECT_EQ(Status::Ok,
-            driver->lookupAsync(
-                makeHK("cat"),
-                [&cbLookup](Status status, HashedKey key, Buffer value) {
-                  cbLookup.call(status, key, value.view());
-                }));
+  driver->lookupAsync(makeHK("key"),
+                      [&cbLookup](Status status, HashedKey key, Buffer value) {
+                        cbLookup.call(status, key, value.view());
+                      });
+
+  driver->lookupAsync(makeHK("cat"),
+                      [&cbLookup](Status status, HashedKey key, Buffer value) {
+                        cbLookup.call(status, key, value.view());
+                      });
   driver->flush();
 
   MockRemoveCB cbRemove;
   EXPECT_CALL(cbRemove, call(Status::Ok, makeHK("key")));
   EXPECT_CALL(cbRemove, call(Status::NotFound, makeHK("cat")));
-  EXPECT_EQ(Status::Ok,
-            driver->removeAsync(makeHK("key"), toCallback(cbRemove)));
-  EXPECT_EQ(Status::Ok,
-            driver->removeAsync(makeHK("cat"), toCallback(cbRemove)));
+  driver->removeAsync(makeHK("key"), toCallback(cbRemove));
+  driver->removeAsync(makeHK("cat"), toCallback(cbRemove));
   driver->flush();
 }
 

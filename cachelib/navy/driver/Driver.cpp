@@ -171,19 +171,17 @@ Status Driver::lookup(HashedKey hk, Buffer& value) {
   return enginePairs_[selectEnginePair(hk)].lookupSync(hk, value);
 }
 
-Status Driver::lookupAsync(HashedKey hk, LookupCallback cb) {
+void Driver::lookupAsync(HashedKey hk, LookupCallback cb) {
   XDCHECK(cb);
   enginePairs_[selectEnginePair(hk)].scheduleLookup(hk, std::move(cb));
-  return Status::Ok;
 }
 
 Status Driver::remove(HashedKey hk) {
   return enginePairs_[selectEnginePair(hk)].removeSync(hk);
 }
 
-Status Driver::removeAsync(HashedKey hk, RemoveCallback cb) {
+void Driver::removeAsync(HashedKey hk, RemoveCallback cb) {
   enginePairs_[selectEnginePair(hk)].scheduleRemove(hk, std::move(cb));
-  return Status::Ok;
 }
 
 void Driver::flush() {
