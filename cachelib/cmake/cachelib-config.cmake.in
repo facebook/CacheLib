@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,9 +31,9 @@ set_and_check(CACHELIB_CMAKE_DIR "@PACKAGE_CMAKE_INSTALL_DIR@")
 
 find_dependency(Gflags)
 find_dependency(folly )
-find_dependency(fizz ) 
-find_dependency(wangle) 
-find_dependency(FBThrift) 
+find_dependency(fizz )
+find_dependency(wangle)
+find_dependency(FBThrift)
 
 if (NOT TARGET cachelib)
 	include("${CACHELIB_CMAKE_DIR}/cachelib-targets.cmake")

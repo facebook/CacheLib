@@ -1,4 +1,4 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 set terminal png size 4000, 2000
 
 # out_file is provided as input
-set output out_file 
+set output out_file
 
 # chart_title is provided as input
 set multiplot layout 4,2 title chart_title font ",20

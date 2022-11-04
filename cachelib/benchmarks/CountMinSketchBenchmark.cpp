@@ -1,4 +1,19 @@
-// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 // This benchmark was introduced when evaluating different implementations of
 // cachelib's CountMinSketch.reset(). The data stored in CMS is in an array of
 // unsigned integers. Three implementations were considered:
@@ -23,6 +38,7 @@
 // In production, we are only using uint32_t and using "2. set" has the best
 // performance. The code of memset (implementation and benchmark) is provided in
 // comments below.
+
 /*
 Implementation of resetmemset:
 
