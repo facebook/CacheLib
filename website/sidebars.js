@@ -16,7 +16,10 @@
  * @format
  */
 
-const {fbInternalOnly, fbContent} = require('docusaurus-plugin-internaldocs-fb/internal');
+const {
+  fbInternalOnly,
+  fbContent,
+} = require('docusaurus-plugin-internaldocs-fb/internal');
 
 module.exports = {
   installationSidebar: [
@@ -95,6 +98,17 @@ module.exports = {
             'Cache_Library_User_Guides/Configure_HybridCache',
           ],
         },
+        ...fbInternalOnly([
+          {
+            type: 'category',
+            label: 'Object Cache',
+            collapsed: true,
+            items: [
+              'facebook/Object_Cache/Object_Cache_Decision_Guide',
+              'facebook/Object_Cache/Object_Cache_User_Guide',
+            ],
+          },
+        ]),
         {
           type: 'category',
           label: 'Advanced Features',
@@ -203,15 +217,6 @@ module.exports = {
           'facebook/Working_Set_Analysis/WSA_analysis_and_optimizations',
           'facebook/Working_Set_Analysis/Enabling_WSA',
           'facebook/Working_Set_Analysis/WSA_logging_library',
-        ],
-      },
-      {
-        type: 'category',
-        label: 'Object Cache',
-        collapsed: true,
-        items: [
-          'facebook/Object_Cache/Object_Cache_Decision_Guide',
-          'facebook/Object_Cache/Object_Cache_User_Guide',
         ],
       },
       {
