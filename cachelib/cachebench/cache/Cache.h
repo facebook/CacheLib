@@ -74,9 +74,7 @@ class RetentionAP final : public NvmAdmissionPolicy<Cache> {
     return true;
   }
 
-  std::unordered_map<std::string, double> getCountersImpl() final override {
-    return {};
-  }
+  virtual void getCountersImpl(const util::CounterVisitor&) final override {}
 
  private:
   const uint32_t retentionThreshold_{0};

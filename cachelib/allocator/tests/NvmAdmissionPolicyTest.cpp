@@ -26,7 +26,6 @@
 namespace facebook {
 namespace cachelib {
 namespace tests {
-
 class NvmAdmissionPolicyTest : public testing::Test {
  public:
   // Expose the admission policy for testing.
@@ -50,11 +49,10 @@ class MockFailedNvmAdmissionPolicy : public NvmAdmissionPolicy<Cache> {
   MockFailedNvmAdmissionPolicy() = default;
 
  protected:
-  virtual std::unordered_map<std::string, double> getCountersImpl() override {
-    std::unordered_map<std::string, double> ret;
-    ret["nvm_mock_failed_policy"] = 1;
-    return ret;
+  virtual void getCountersImpl(const util::CounterVisitor& v) override {
+    v("nvm_mock_failed_policy", 1);
   }
+
   virtual bool acceptImpl(const Item& it,
                           folly::Range<ChainedItemIter>) override {
     switch (it.getKey().size() % 3) {

@@ -76,10 +76,8 @@ struct MockNvmAdmissionPolicy : public NvmAdmissionPolicy<T> {
   virtual bool acceptImpl(const Item&, folly::Range<ChainedItemIter>) override {
     return true;
   }
-  virtual std::unordered_map<std::string, double> getCountersImpl() override {
-    std::unordered_map<std::string, double> ret;
-    ret["nvm_mock_policy"] = 1;
-    return ret;
+  virtual void getCountersImpl(const util::CounterVisitor& visitor) override {
+    visitor("nvm_mock_policy", 1);
   }
 };
 } // namespace

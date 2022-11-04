@@ -3660,11 +3660,11 @@ std::unordered_map<std::string, double>
 CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
   auto ret = nvmCache_ ? nvmCache_->getStatsMap()
                        : std::unordered_map<std::string, double>{};
+  util::CounterVisitor visitor = [&ret](folly::StringPiece k, double v) {
+    ret[k.str()] = v;
+  };
   if (nvmAdmissionPolicy_) {
-    auto policyStats = nvmAdmissionPolicy_->getCounters();
-    for (const auto& kv : policyStats) {
-      ret[kv.first] = kv.second;
-    }
+    nvmAdmissionPolicy_->getCounters(visitor);
   }
   return ret;
 }
