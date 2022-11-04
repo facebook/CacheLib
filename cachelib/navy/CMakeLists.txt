@@ -35,6 +35,7 @@ add_library (cachelib_navy
   common/SizeDistribution.cpp
   common/Types.cpp
   driver/Driver.cpp
+  engine/EnginePair.cpp
   Factory.cpp
   scheduler/ThreadPoolJobScheduler.cpp
   scheduler/ThreadPoolJobQueue.cpp
