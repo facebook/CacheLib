@@ -22,6 +22,7 @@
 #include <functional>
 #include <ostream>
 
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
 
@@ -61,9 +62,8 @@ enum class DestructorEvent {
 using DestructorCallback =
     std::function<void(HashedKey hk, BufferView value, DestructorEvent event)>;
 
-// Export counters by visiting them in the object hierarchy
-using CounterVisitor =
-    std::function<void(folly::StringPiece name, double count)>;
+// Get CounterVisitor into navy namespace.
+using CounterVisitor = util::CounterVisitor;
 
 constexpr uint32_t kMaxKeySize{255};
 
