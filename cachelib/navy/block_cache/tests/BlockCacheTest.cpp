@@ -972,7 +972,6 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   // Insert finds region is full and  puts region for tracking, resets allocator
   // and retries.
   EXPECT_TRUE(exPtr->runFirstIf("insert"));
-  EXPECT_TRUE(exPtr->runFirstIf("reclaim"));
 
   Buffer value;
 
@@ -981,7 +980,7 @@ TEST(BlockCache, ReadRegionDuringEviction) {
 
   // Eviction blocks access but reclaim will fail as there is still a reader
   // outstanding
-  EXPECT_FALSE(exPtr->runFirstIf("reclaim.evict"));
+  EXPECT_FALSE(exPtr->runFirstIf("reclaim"));
 
   std::thread lookupThread2([&driver, &log] {
     Buffer value2;
@@ -994,7 +993,7 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
 
   // Reclaim still fails as the last reader is still outstanding
-  EXPECT_FALSE(exPtr->runFirstIf("reclaim.evict"));
+  EXPECT_FALSE(exPtr->runFirstIf("reclaim"));
 
   // Finish read and let evict region 0 entries
   sp.reached(1);

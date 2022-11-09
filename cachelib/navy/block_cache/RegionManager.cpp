@@ -208,9 +208,9 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
     }
   }
   for (uint32_t i = 0; i < newSched; i++) {
-    scheduler_.enqueue(
-        [this] { return startReclaim(); }, "reclaim", JobType::Reclaim);
+    startReclaim();
   }
+
   if (status == OpenStatus::Ready) {
     status = assignBufferToRegion(rid);
     if (status != OpenStatus::Ready) {
@@ -277,13 +277,17 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   }
 }
 
-JobExitCode RegionManager::startReclaim() {
-  auto rid = evict();
-  if (!rid.valid()) {
-    return JobExitCode::Reschedule;
-  }
+void RegionManager::startReclaim() {
   scheduler_.enqueue(
-      [this, rid] {
+      [this, rid = RegionId()]() mutable {
+        if (!rid.valid()) {
+          rid = evict();
+          // evict() can fail to find a victim, where it needs to be retried
+          if (!rid.valid()) {
+            return JobExitCode::Reschedule;
+          }
+        }
+
         const auto startTime = getSteadyClock();
         auto& region = getRegion(rid);
         if (!region.readyForReclaim()) {
@@ -316,9 +320,8 @@ JobExitCode RegionManager::startReclaim() {
         releaseEvictedRegion(rid, startTime);
         return JobExitCode::Done;
       },
-      "reclaim.evict",
+      "reclaim",
       JobType::Reclaim);
-  return JobExitCode::Done;
 }
 
 RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {

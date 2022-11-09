@@ -61,7 +61,6 @@ TEST(Allocator, RegionSyncInMemBuffers) {
       std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
       EXPECT_EQ(OpenStatus::Retry, desc.status());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
-      EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
     }
     // First allocation take a clean region and schedules a reclaim job and
     // tracks the current region that is full region if present.
@@ -72,7 +71,6 @@ TEST(Allocator, RegionSyncInMemBuffers) {
       EXPECT_TRUE(desc.isReady());
       if (i > 0) {
         EXPECT_TRUE(ex.runFirstIf("reclaim"));
-        EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
         EXPECT_TRUE(ex.runFirstIf("flush"));
       }
       EXPECT_EQ(RegionId{i}, addr.rid());
@@ -100,7 +98,6 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     }
     if (i == 0) {
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
-      EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
     }
     EXPECT_EQ(0, ex.getQueueSize());
   }
@@ -125,7 +122,6 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     EXPECT_EQ(0, addr.offset());
     EXPECT_EQ(2, ex.getQueueSize());
     EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
     EXPECT_TRUE(ex.runFirstIf("flush"));
     EXPECT_EQ(0, ex.getQueueSize());
     rm->close(std::move(desc));
@@ -162,7 +158,6 @@ TEST(Allocator, TestInMemBufferStates) {
     EXPECT_EQ(OpenStatus::Retry, desc.status());
   }
   EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
   {
     RegionDescriptor rdesc{OpenStatus::Error};
@@ -172,7 +167,6 @@ TEST(Allocator, TestInMemBufferStates) {
       EXPECT_TRUE(wdesc.isReady());
       EXPECT_EQ(0, wdesc.id().index());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
-      EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
       rdesc = rm->openForRead(RegionId{0}, 2 /* seqNumber_ */);
       EXPECT_TRUE(rdesc.isReady());
@@ -196,7 +190,6 @@ TEST(Allocator, TestInMemBufferStates) {
     }
     EXPECT_EQ(2, ex.getQueueSize());
     EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
     // we still have one flush job remaining
     EXPECT_EQ(1, ex.getQueueSize());
@@ -236,7 +229,6 @@ TEST(Allocator, UsePriorities) {
     auto [desc, slotSize, addr] = allocator.allocate(1024, pri);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
     EXPECT_TRUE(ex.runFirstIf("reclaim"));
-    EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 
     std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri);
     EXPECT_TRUE(desc.isReady());
@@ -247,7 +239,6 @@ TEST(Allocator, UsePriorities) {
 
   // Reclaim the very last region in the eviction policy
   EXPECT_TRUE(ex.runFirstIf("reclaim"));
-  EXPECT_TRUE(ex.runFirstIf("reclaim.evict"));
 }
 
 } // namespace tests
