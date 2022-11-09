@@ -860,12 +860,13 @@ typename NvmCache<C>::SampleItem NvmCache<C>::getSampleItem() {
   auto clsId = pool.getAllocationClassId(requiredSize);
   auto allocSize = pool.getAllocationClass(clsId).getAllocSize();
 
-  auto iobufs = createItemAsIOBuf(key, nvmItem, true /* parentOnly */);
+  std::shared_ptr<folly::IOBuf> iobufs =
+      createItemAsIOBuf(key, nvmItem, true /* parentOnly */);
   if (!iobufs) {
     return SampleItem{true /* fromNvm */};
   }
 
-  return SampleItem(std::move(*iobufs.release()), poolId, clsId, allocSize,
+  return SampleItem(std::move(*iobufs), poolId, clsId, allocSize,
                     true /* fromNvm */);
 }
 

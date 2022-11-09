@@ -1002,8 +1002,8 @@ TEST_F(NvmCacheTest, ChainedItems) {
       size_t fullSize = cache.getUsableSize(item);
       const auto text = genRandomStr(fullSize);
       vals.push_back(text);
-      std::memcpy(
-          reinterpret_cast<char*>(item.getMemory()), text.data(), text.size());
+      std::memcpy(reinterpret_cast<char*>(item.getMemory()), text.data(),
+                  text.size());
     };
 
     fillItem(*it);
@@ -1066,8 +1066,8 @@ TEST_F(NvmCacheTest, ChainedItemsModifyAccessible) {
       size_t fullSize = cache.getUsableSize(item);
       const auto text = genRandomStr(fullSize);
       vals.push_back(text);
-      std::memcpy(
-          reinterpret_cast<char*>(item.getMemory()), text.data(), text.size());
+      std::memcpy(reinterpret_cast<char*>(item.getMemory()), text.data(),
+                  text.size());
     };
 
     fillItem(*it);
@@ -2236,6 +2236,93 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBufChained) {
 
     verifyItemInIOBuf(key, handle, iobuf.get());
   }
+}
+
+TEST_F(NvmCacheTest, testSampleItem) {
+  auto& config = getConfig();
+  auto& navyConfig = config.nvmConfig->navyConfig;
+  navyConfig.setMemoryFile(config.getCacheSize());
+  navyConfig.setDeviceMetadataSize(0);
+  // Use only BlockCache for simplicity
+  navyConfig.bigHash().setSizePctAndMaxItemSize(0, 0);
+  navyConfig.blockCache().setRegionSize(32 * 1024);
+
+  // This test is dependent on poolAllocsizes_
+  ASSERT_EQ(20 * 1024, *poolAllocsizes_.begin());
+  size_t numMax = config.getCacheSize() / *poolAllocsizes_.begin();
+
+  std::mutex mtx;
+  std::atomic<int> numEvicted = 0;
+  std::unordered_set<std::string> cachedKeys;
+
+  config.setRemoveCallback({});
+  config.setItemDestructor([&](const DestructedData& data) {
+    std::unique_lock<std::mutex> l(mtx);
+    if (data.context == DestructorContext::kEvictedFromNVM ||
+        data.context == DestructorContext::kEvictedFromRAM) {
+      ++numEvicted;
+    }
+    cachedKeys.erase(data.item.getKey().toString());
+  });
+
+  auto& cache = makeCache();
+  auto pid = this->poolId();
+
+  size_t nKeys = 0;
+  // Insert items until either RAM or NVM cache is full
+  for (; numEvicted == 0 && nKeys < numMax; nKeys++) {
+    auto key = folly::sformat("key{}", nKeys);
+    // the pool's allocsize is
+    auto it = cache.allocate(pid, key, 16 * 1024);
+    ASSERT_NE(nullptr, it);
+    cache.insertOrReplace(it);
+
+    {
+      std::unique_lock<std::mutex> l(mtx);
+      cachedKeys.insert(key);
+    }
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+  }
+
+  // remove even numbered keys to make holes
+  for (size_t i = 0; i < nKeys; i += 2) {
+    auto key = folly::sformat("key{}", i);
+    cache.remove(key);
+  }
+  // wait for async remove finish
+  cache.flushNvmCache();
+
+  {
+    std::unique_lock<std::mutex> l(mtx);
+    nKeys = cachedKeys.size();
+  }
+
+  size_t numRam = 0;
+  size_t numNvm = 0;
+  for (size_t i = 0; i < nKeys * 10; i++) {
+    auto sample = cache.getSampleItem();
+    if (sample.isValid()) {
+      {
+        std::unique_lock<std::mutex> l(mtx);
+        ASSERT_EQ(1, cachedKeys.count(sample->getKey().toString()));
+      }
+      if (sample.isNvmItem()) {
+        numNvm++;
+      } else {
+        numRam++;
+      }
+    }
+  }
+
+  // internal fragmentation for RAM and NVM are around
+  // 20% (16K / 20K) and 37.5% (20K / 32K), respectively
+  // 15% is arbitrary and pessimistic target
+  size_t targetCnt = (size_t)((double)nKeys * 10.0 * 0.5 * 0.15);
+  ASSERT_GE(numNvm, targetCnt);
+  ASSERT_GE(numRam, targetCnt);
+  // Should reset the cache since the destructor callback
+  // could use local variables
+  cache_.reset();
 }
 
 TEST_F(NvmCacheTest, testItemDestructor) {
