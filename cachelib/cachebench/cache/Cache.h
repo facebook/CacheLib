@@ -318,6 +318,9 @@ class Cache {
   // Get overall stats on the whole cache allocator
   Stats getStats() const;
 
+  // Get number of bytes written to NVM.
+  double getNvmBytesWritten() const;
+
   // return the stats for the pool.
   PoolStats getPoolStats(PoolId pid) const { return cache_->getPoolStats(pid); }
 

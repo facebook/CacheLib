@@ -582,6 +582,16 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 }
 
 template <typename Allocator>
+double Cache<Allocator>::getNvmBytesWritten() const {
+  const auto& statsMap = cache_->getNvmCacheStatsMap();
+  if (const auto& it = statsMap.find("navy_device_bytes_written");
+      it != statsMap.end()) {
+    return it->second;
+  }
+  return 0;
+}
+
+template <typename Allocator>
 Stats Cache<Allocator>::getStats() const {
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
   auto usageFraction =

@@ -95,7 +95,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 664>();
+  checkCorrectSize<CacheConfig, 696>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

@@ -244,6 +244,10 @@ struct CacheConfig : public JSONConfig {
   // simulation. Stressor uses this to pass the ticker into the cache.
   std::shared_ptr<cachelib::Ticker> ticker;
 
+  // A callback function to get the number of NVM write bytes. Stressor uses
+  // this to pass it into the cache.
+  std::function<double()> nvmWriteBytesCallback;
+
   // A nested dynamic for custom config. Customized configs can be put under
   // this field and be consumed during the initialization of the cache.
   folly::dynamic customConfigJson;
