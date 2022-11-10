@@ -704,8 +704,10 @@ TEST(Driver, ConcurrentInserts) {
   sp.reached(2);
 
   uint32_t statRejected = 0;
-  driver->getCounters({[&statRejected](folly::StringPiece name, double value) {
-    if (name == "navy_rejected_concurrent_inserts") {
+  driver->getCounters({[&statRejected](folly::StringPiece name, double value,
+                                       CounterVisitor::CounterType type) {
+    if (name == "navy_rejected_concurrent_inserts" &&
+        type == CounterVisitor::CounterType::RATE) {
       statRejected = static_cast<uint32_t>(value);
     }
   }});
@@ -759,8 +761,10 @@ TEST(Driver, ParcelMemory) {
   sp.reached(3);
 
   uint32_t statRejected = 0;
-  driver->getCounters({[&statRejected](folly::StringPiece name, double value) {
-    if (name == "navy_rejected_parcel_memory") {
+  driver->getCounters({[&statRejected](folly::StringPiece name, double value,
+                                       CounterVisitor::CounterType type) {
+    if (name == "navy_rejected_parcel_memory" &&
+        type == CounterVisitor::CounterType::RATE) {
       statRejected = static_cast<uint32_t>(value);
     }
   }});

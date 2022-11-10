@@ -264,11 +264,15 @@ uint64_t Driver::getUsableSize() const {
 }
 
 void Driver::getCounters(const CounterVisitor& visitor) const {
-  visitor("navy_rejected", rejectedCount_.get());
+  visitor("navy_rejected", rejectedCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_rejected_concurrent_inserts",
-          rejectedConcurrentInsertsCount_.get());
-  visitor("navy_rejected_parcel_memory", rejectedParcelMemoryCount_.get());
-  visitor("navy_rejected_bytes", rejectedBytes_.get());
+          rejectedConcurrentInsertsCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_rejected_parcel_memory", rejectedParcelMemoryCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_rejected_bytes", rejectedBytes_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_accepted_bytes", acceptedBytes_.get());
   visitor("navy_accepted", acceptedCount_.get());
 
