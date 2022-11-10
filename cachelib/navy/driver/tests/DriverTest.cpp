@@ -238,11 +238,14 @@ void testCouldExistWithOneEngine(bool small) {
 
   uint32_t numLookups{std::numeric_limits<uint32_t>::max()};
   uint32_t numLookupSuccess{std::numeric_limits<uint32_t>::max()};
-  driver->getCounters({[&](folly::StringPiece name, double value) {
-    if (name == "navy_lookups") {
+  driver->getCounters({[&](folly::StringPiece name, double value,
+                           util::CounterVisitor::CounterType type) {
+    if (name == "navy_lookups" &&
+        type == util::CounterVisitor::CounterType::RATE) {
       numLookups = static_cast<uint32_t>(value);
 
-    } else if (name == "navy_succ_lookups") {
+    } else if (name == "navy_succ_lookups" &&
+               type == util::CounterVisitor::CounterType::RATE) {
       numLookupSuccess = static_cast<uint32_t>(value);
     }
   }});
