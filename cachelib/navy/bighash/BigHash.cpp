@@ -177,21 +177,46 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
 void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_size", getSize());
   visitor("navy_bh_items", itemCount_.get());
-  visitor("navy_bh_inserts", insertCount_.get());
-  visitor("navy_bh_succ_inserts", succInsertCount_.get());
-  visitor("navy_bh_lookups", lookupCount_.get());
-  visitor("navy_bh_succ_lookups", succLookupCount_.get());
-  visitor("navy_bh_removes", removeCount_.get());
-  visitor("navy_bh_succ_removes", succRemoveCount_.get());
-  visitor("navy_bh_evictions", evictionCount_.get());
-  visitor("navy_bh_evictions_expired", evictionExpiredCount_.get());
-  visitor("navy_bh_logical_written", logicalWrittenCount_.get());
-  visitor("navy_bh_physical_written", physicalWrittenCount_.get());
-  visitor("navy_bh_io_errors", ioErrorCount_.get());
+  visitor(
+      "navy_bh_inserts", insertCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_succ_inserts",
+          succInsertCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor(
+      "navy_bh_lookups", lookupCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_succ_lookups",
+          succLookupCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor(
+      "navy_bh_removes", removeCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_succ_removes",
+          succRemoveCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_evictions",
+          evictionCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_evictions_expired", 
+	  evictionExpiredCount_.get(), 
+	  CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_logical_written",
+          logicalWrittenCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_physical_written",
+          physicalWrittenCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_io_errors",
+          ioErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_bf_false_positive_pct", bfFalsePositivePct());
-  visitor("navy_bh_bf_lookups", bfProbeCount_.get());
-  visitor("navy_bh_bf_rebuilds", bfRebuildCount_.get());
-  visitor("navy_bh_checksum_errors", checksumErrorCount_.get());
+  visitor("navy_bh_bf_lookups",
+          bfProbeCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_bf_rebuilds",
+          bfRebuildCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_checksum_errors",
+          checksumErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_used_size_bytes", usedSizeBytes_.get());
   auto snapshot = sizeDist_.getSnapshot();
   for (auto& kv : snapshot) {

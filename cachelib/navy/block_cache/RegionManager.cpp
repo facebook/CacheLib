@@ -539,7 +539,8 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_num_regions", numRegions_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
   visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
-  visitor("navy_bc_physical_written", physicalWrittenCount_.get());
+  visitor("navy_bc_physical_written", physicalWrittenCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_inmem_active", numInMemBufActive_.get());
   visitor("navy_bc_inmem_waiting_flush", numInMemBufWaitingFlush_.get());
   visitor("navy_bc_inmem_flush_retries", numInMemBufFlushRetries_.get(),
