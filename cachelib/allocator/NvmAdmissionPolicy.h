@@ -95,9 +95,13 @@ class NvmAdmissionPolicy {
   // The method that exposes stats.
   virtual void getCounters(const util::CounterVisitor& visitor) final {
     getCountersImpl(visitor);
-    visitor("ap.called", overallCount_.get());
-    visitor("ap.accepted", accepted_.get());
-    visitor("ap.rejected", rejected_.get());
+    visitor("ap.called",
+            overallCount_.get(),
+            util::CounterVisitor::CounterType::RATE);
+    visitor("ap.accepted", accepted_.get(),
+            util::CounterVisitor::CounterType::RATE);
+    visitor("ap.rejected", rejected_.get(),
+            util::CounterVisitor::CounterType::RATE);
 
     overallLatency_.visitQuantileEstimator(
         [&visitor](folly::StringPiece name, double count) {
@@ -197,7 +201,8 @@ class RejectFirstAP final : public NvmAdmissionPolicy<Cache> {
     visitor("ap.reject_first_keys_tracked", tracker_.numKeysTracked());
     visitor("ap.reject_first_tracking_window_secs",
             tracker_.trackingWindowDurationSecs());
-    visitor("ap.reject_first_admits_by_dram_hit", admitsByDramHits_.get());
+    visitor("ap.reject_first_admits_by_dram_hit", admitsByDramHits_.get(),
+            util::CounterVisitor::CounterType::RATE);
   }
 
  private:
