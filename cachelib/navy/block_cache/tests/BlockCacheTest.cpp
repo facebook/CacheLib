@@ -201,8 +201,10 @@ TEST(BlockCache, InsertLookup) {
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
 
-    driver->getCounters({[](folly::StringPiece name, double count) {
-      if (name == "navy_bc_lookups") {
+    driver->getCounters({[](folly::StringPiece name, double count,
+                            CounterVisitor::CounterType type) {
+      if (name == "navy_bc_lookups" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(1, count);
       }
     }});
@@ -382,10 +384,12 @@ TEST(BlockCache, PreciseRemove) {
     Buffer value;
     // Behavior: old "key" can remove the entry "key"+"abc": "value".
     EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters({[](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count,
+                                      CounterVisitor::CounterType type) {
       // The counter is not populated because preciseRemove_ and item
       // destructors are not triggered.
-      if (name == "navy_bc_remove_attempt_collisions") {
+      if (name == "navy_bc_remove_attempt_collisions" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(0, count);
       }
     }});
@@ -399,9 +403,11 @@ TEST(BlockCache, PreciseRemove) {
     Buffer value;
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
     EXPECT_EQ(Status::NotFound, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters({[](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count,
+                                      CounterVisitor::CounterType type) {
       // The counter is populated
-      if (name == "navy_bc_remove_attempt_collisions") {
+      if (name == "navy_bc_remove_attempt_collisions" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(1, count);
       }
     }});
@@ -421,9 +427,11 @@ TEST(BlockCache, PreciseRemove) {
 
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
     EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters({[](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count,
+                                      CounterVisitor::CounterType type) {
       // The counter is populated.
-      if (name == "navy_bc_remove_attempt_collisions") {
+      if (name == "navy_bc_remove_attempt_collisions" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(1, count);
       }
     }});
@@ -545,8 +553,10 @@ TEST(BlockCache, HoleStats) {
 
   // Reclaiming region 0 should have bumped down the hole count to
   // 2 remaining (from region 2)
-  driver->getCounters({[](folly::StringPiece name, double count) {
-    if (name == "navy_bc_reinsertions") {
+  driver->getCounters({[](folly::StringPiece name, double count,
+                          CounterVisitor::CounterType type) {
+    if (name == "navy_bc_reinsertions" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(1, count);
     }
     if (name == "navy_bc_hole_count") {
@@ -614,8 +624,10 @@ TEST(BlockCache, ReclaimCorruption) {
     driver->flush();
   }
   // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters({[](folly::StringPiece name, double count) {
-    if (name == "navy_bc_reclaim") {
+  driver->getCounters({[](folly::StringPiece name, double count,
+                          CounterVisitor::CounterType type) {
+    if (name == "navy_bc_reclaim" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(4, count);
     }
   }});
@@ -630,14 +642,18 @@ TEST(BlockCache, ReclaimCorruption) {
   driver->flush();
 
   // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters({[](folly::StringPiece name, double count) {
-    if (name == "navy_bc_reclaim") {
+  driver->getCounters({[](folly::StringPiece name, double count,
+                          CounterVisitor::CounterType type) {
+    if (name == "navy_bc_reclaim" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(5, count);
     }
-    if (name == "navy_bc_reclaim_entry_header_checksum_errors") {
+    if (name == "navy_bc_reclaim_entry_header_checksum_errors" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(1, count);
     }
-    if (name == "navy_bc_reclaim_value_checksum_errors") {
+    if (name == "navy_bc_reclaim_value_checksum_errors" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(2, count);
     }
   }});
@@ -2084,11 +2100,14 @@ TEST(BlockCache, DeviceFlushFailureSync) {
   EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
   driver->flush();
 
-  driver->getCounters({[](folly::StringPiece name, double count) {
-    if (name == "navy_bc_inmem_flush_retries") {
+  driver->getCounters({[](folly::StringPiece name, double count,
+                          CounterVisitor::CounterType type) {
+    if (name == "navy_bc_inmem_flush_retries" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(kFlushRetryLimit, count);
     }
-    if (name == "navy_bc_inmem_flush_failures") {
+    if (name == "navy_bc_inmem_flush_failures" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(1, count);
     }
   }});
@@ -2115,11 +2134,14 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
   EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
   driver->flush();
 
-  driver->getCounters({[](folly::StringPiece name, double count) {
-    if (name == "navy_bc_inmem_flush_retries") {
+  driver->getCounters({[](folly::StringPiece name, double count,
+                          CounterVisitor::CounterType type) {
+    if (name == "navy_bc_inmem_flush_retries" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(kFlushRetryLimit * 2, count);
     }
-    if (name == "navy_bc_inmem_flush_failures") {
+    if (name == "navy_bc_inmem_flush_failures" &&
+        type == CounterVisitor::CounterType::RATE) {
       EXPECT_EQ(2, count);
     }
   }});

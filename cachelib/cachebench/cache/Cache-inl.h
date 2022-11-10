@@ -718,7 +718,7 @@ Stats Cache<Allocator>::getStats() const {
 
 template <typename Allocator>
 bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
-  const auto& nvmStats = cache_->getNvmCacheStatsMap().getCounts();
+  const auto& nvmStats = cache_->getNvmCacheStatsMap().getRates();
   const auto it = nvmStats.find("navy_bc_evictions");
   if (it == nvmStats.end()) {
     return false;

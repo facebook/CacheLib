@@ -404,8 +404,10 @@ TEST(RegionManager, cleanupRegionFailureSync) {
     bool retried = false;
     // Wait for a cleanup retry
     for (int i = 0; i < 20; i++) {
-      rm->getCounters({[&retried](folly::StringPiece name, double count) {
-        if (name == "navy_bc_inmem_cleanup_retries") {
+      rm->getCounters({[&retried](folly::StringPiece name, double count,
+                                  CounterVisitor::CounterType type) {
+        if (name == "navy_bc_inmem_cleanup_retries" &&
+            type == CounterVisitor::CounterType::RATE) {
           if (count > 0) {
             retried = true;
           }
@@ -420,11 +422,14 @@ TEST(RegionManager, cleanupRegionFailureSync) {
     EXPECT_TRUE(retried);
 
     // Verify other counters
-    rm->getCounters({[](folly::StringPiece name, double count) {
-      if (name == "navy_bc_inmem_flush_retries") {
+    rm->getCounters({[](folly::StringPiece name, double count,
+                        CounterVisitor::CounterType type) {
+      if (name == "navy_bc_inmem_flush_retries" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(kFlushRetryLimit, count);
       }
-      if (name == "navy_bc_inmem_cleanup_failures") {
+      if (name == "navy_bc_inmem_cleanup_failures" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(1, count);
       }
       if (name == "navy_bc_inmem_waiting_flush") {
@@ -500,8 +505,10 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
     bool retried = false;
     // Wait for a cleanup retry
     for (int i = 0; i < 20; i++) {
-      rm->getCounters({[&retried](folly::StringPiece name, double count) {
-        if (name == "navy_bc_inmem_cleanup_retries") {
+      rm->getCounters({[&retried](folly::StringPiece name, double count,
+                                  CounterVisitor::CounterType type) {
+        if (name == "navy_bc_inmem_cleanup_retries" &&
+            type == CounterVisitor::CounterType::RATE) {
           if (count > 0) {
             retried = true;
           }
@@ -516,11 +523,14 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
     EXPECT_TRUE(retried);
 
     // Verify other counters
-    rm->getCounters({[](folly::StringPiece name, double count) {
-      if (name == "navy_bc_inmem_flush_retries") {
+    rm->getCounters({[](folly::StringPiece name, double count,
+                        CounterVisitor::CounterType type) {
+      if (name == "navy_bc_inmem_flush_retries" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(kFlushRetryLimit, count);
       }
-      if (name == "navy_bc_inmem_cleanup_failures") {
+      if (name == "navy_bc_inmem_cleanup_failures" &&
+          type == CounterVisitor::CounterType::RATE) {
         EXPECT_EQ(1, count);
       }
       if (name == "navy_bc_inmem_waiting_flush") {
