@@ -129,7 +129,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // Send the key by length
     cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
 
-    EXPECT_NE(nullptr, createNavyCache(cfg, {}, true, nullptr, false));
+    EXPECT_NE(nullptr, createNavyCache(cfg, {}, {}, true, nullptr, false));
   }
 
   {
@@ -148,7 +148,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // Send the key by length
     cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
 
-    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+    EXPECT_THROW({ createNavyCache(cfg, {}, {}, true, nullptr, false); },
                  std::invalid_argument);
   }
 
@@ -163,7 +163,7 @@ TEST(NavySetupTest, EnginesSetup) {
     cfg.addEnginePair(std::move(pair1));
 
     // Exception. No engine selector.
-    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+    EXPECT_THROW({ createNavyCache(cfg, {}, {}, true, nullptr, false); },
                  std::invalid_argument);
   }
 
@@ -182,7 +182,7 @@ TEST(NavySetupTest, EnginesSetup) {
     cfg.setEnginesSelector([](HashedKey hk) { return hk.key().size() % 2; });
 
     // Exception. The last block cache does not take the full psace.
-    EXPECT_THROW({ createNavyCache(cfg, {}, true, nullptr, false); },
+    EXPECT_THROW({ createNavyCache(cfg, {}, {}, true, nullptr, false); },
                  std::invalid_argument);
   }
 }

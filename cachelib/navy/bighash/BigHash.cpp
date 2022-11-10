@@ -85,7 +85,8 @@ BigHash::BigHash(Config&& config)
     : BigHash{std::move(config.validate()), ValidConfigTag{}} {}
 
 BigHash::BigHash(Config&& config, ValidConfigTag)
-    : destructorCb_{[this, cb = std::move(config.destructorCb)](
+    : checkExpired_(std::move(config.checkExpired)),
+      destructorCb_{[this, cb = std::move(config.destructorCb)](
                         HashedKey hk, BufferView value, DestructorEvent event) {
         sizeDist_.removeSize(hk.key().size() + value.size());
         if (cb) {
@@ -123,6 +124,7 @@ void BigHash::reset() {
   removeCount_.set(0);
   succRemoveCount_.set(0);
   evictionCount_.set(0);
+  evictionExpiredCount_.set(0);
   logicalWrittenCount_.set(0);
   physicalWrittenCount_.set(0);
   ioErrorCount_.set(0);
@@ -182,6 +184,7 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_removes", removeCount_.get());
   visitor("navy_bh_succ_removes", succRemoveCount_.get());
   visitor("navy_bh_evictions", evictionCount_.get());
+  visitor("navy_bh_evictions_expired", evictionExpiredCount_.get());
   visitor("navy_bh_logical_written", logicalWrittenCount_.get());
   visitor("navy_bh_physical_written", physicalWrittenCount_.get());
   visitor("navy_bh_io_errors", ioErrorCount_.get());
@@ -195,6 +198,8 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
     auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
     visitor(statName.c_str(), kv.second);
   }
+  bucketExpirationsDist_x100_.visitQuantileEstimator(
+      visitor, "navy_bh_expired_loop_x100");
 }
 
 void BigHash::persist(RecordWriter& rw) {
@@ -264,6 +269,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
 
   uint32_t removed{0};
   uint32_t evicted{0};
+  uint32_t evictExpired{0};
 
   uint32_t oldRemainingBytes = 0;
   uint32_t newRemainingBytes = 0;
@@ -288,7 +294,8 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
     auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
     oldRemainingBytes = bucket->remainingBytes();
     removed = bucket->remove(hk, cb);
-    evicted = bucket->insert(hk, value, cb);
+    std::tie(evicted, evictExpired) =
+        bucket->insert(hk, value, checkExpired_, cb);
     newRemainingBytes = bucket->remainingBytes();
 
     // rebuild / fix the bloom filter before we move the buffer to do the
@@ -327,6 +334,10 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   itemCount_.add(1);
   itemCount_.sub(evicted + removed);
   evictionCount_.add(evicted);
+  evictionExpiredCount_.add(evictExpired);
+  if (evictExpired > 0) {
+    bucketExpirationsDist_x100_.trackValue(evictExpired * 100);
+  }
   logicalWrittenCount_.add(hk.key().size() + value.size());
   physicalWrittenCount_.add(bucketSize_);
   succInsertCount_.inc();

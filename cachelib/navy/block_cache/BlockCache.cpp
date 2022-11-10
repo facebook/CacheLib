@@ -113,6 +113,7 @@ BlockCache::BlockCache(Config&& config)
 BlockCache::BlockCache(Config&& config, ValidConfigTag)
     : config_{serializeConfig(config)},
       numPriorities_{config.numPriorities},
+      checkExpired_{std::move(config.checkExpired)},
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
       device_{*config.device},
@@ -370,7 +371,7 @@ Status BlockCache::remove(HashedKey hk) {
     holeCount_.inc();
     usedSizeBytes_.sub(removedObjectSize);
     succRemoveCount_.inc();
-    if (!value.isNull()) {
+    if (!value.isNull() && destructorCb_) {
       destructorCb_(hk, value.view(), DestructorEvent::Removed);
     }
     return Status::Ok;
@@ -506,9 +507,12 @@ bool BlockCache::removeItem(HashedKey hk,
 
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
-  auto removeItem = [this, hk, entrySize, currAddr] {
+  auto removeItem = [this, hk, entrySize, currAddr](bool expired) {
     sizeDist_.removeSize(entrySize);
     if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
+      if (expired) {
+        evictionExpiredCount_.inc();
+      }
       return ReinsertionRes::kEvicted;
     }
     return ReinsertionRes::kRemoved;
@@ -521,8 +525,12 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   }
 
+  if (checkExpired_ && checkExpired_(value)) {
+    return removeItem(true);
+  }
+
   if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk.key())) {
-    return removeItem();
+    return removeItem(false);
   }
 
   // Priority of an re-inserted item is determined by its past accesses
@@ -546,7 +554,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     break;
   case OpenStatus::Retry:
     reinsertionErrorCount_.inc();
-    return removeItem();
+    return removeItem(false);
   }
   auto closeRegionGuard =
       folly::makeGuard([this, desc = std::move(desc)]() mutable {
@@ -558,7 +566,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   const auto status = writeEntry(addr, slotSize, hk, value);
   if (status != Status::Ok) {
     reinsertionErrorCount_.inc();
-    return removeItem();
+    return removeItem(false);
   }
 
   const auto replaced =
@@ -567,7 +575,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
                             encodeRelAddress(currAddr));
   if (!replaced) {
     reinsertionErrorCount_.inc();
-    return removeItem();
+    return removeItem(false);
   }
   reinsertionCount_.inc();
   reinsertionBytes_.add(entrySize);
@@ -715,6 +723,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_removes", removeCount_.get());
   visitor("navy_bc_succ_removes", succRemoveCount_.get());
   visitor("navy_bc_eviction_lookup_misses", evictionLookupMissCounter_.get());
+  visitor("navy_bc_evictions_expired", evictionExpiredCount_.get());
   visitor("navy_bc_alloc_errors", allocErrorCount_.get());
   visitor("navy_bc_logical_written", logicalWrittenCount_.get());
   visitor("navy_bc_hole_count", holeCount_.get());

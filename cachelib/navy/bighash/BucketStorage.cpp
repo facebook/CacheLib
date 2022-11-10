@@ -39,25 +39,48 @@ BucketStorage::Allocation BucketStorage::allocate(uint32_t size) {
 }
 
 void BucketStorage::remove(Allocation alloc) {
+  remove(std::vector<Allocation>({alloc}));
+}
+
+void BucketStorage::remove(const std::vector<Allocation>& allocs) {
   // Remove triggers a compaction.
   //
   //                         tail
-  //  |--------|REMOVED|-----|~~~~|
+  //  |---|REMOVED|-----|REMOVED|-----|~~~~|
   //
   // after compaction
   //                  tail
   //  |---------------|~~~~~~~~~~~|
-  if (alloc.done()) {
+  if (!allocs.size()) {
     return;
   }
 
-  const uint32_t removedSize = slotSize(alloc.view().size());
-  uint8_t* removed = alloc.view().data() - kAllocationOverhead;
-  std::memmove(removed,
-               removed + removedSize,
-               (data_ + endOffset_) - removed - removedSize);
-  endOffset_ -= removedSize;
-  numAllocations_--;
+  uint32_t srcOffset = 0;
+  uint32_t dstOffset = 0;
+  for (auto& alloc : allocs) {
+    uint32_t allocOffset = alloc.view().data() - data_;
+    uint32_t removedOffset = allocOffset - kAllocationOverhead;
+    // We have valid data from [srcOffset, removedOffset)
+    if (srcOffset != removedOffset) {
+      uint32_t len = removedOffset - srcOffset;
+      if (dstOffset != srcOffset) {
+        std::memmove(data_ + dstOffset, data_ + srcOffset, len);
+      }
+      dstOffset += len;
+    }
+    // update the offset which (could) contain next valid data
+    srcOffset = allocOffset + alloc.view().size();
+    numAllocations_--;
+  }
+
+  // copy the rest of data after the last removed alloc if any
+  if (srcOffset != endOffset_) {
+    uint32_t len = endOffset_ - srcOffset;
+    std::memmove(data_ + dstOffset, data_ + srcOffset, len);
+    dstOffset += len;
+  }
+  // update end offset to point the right next byte of the data copied
+  endOffset_ = dstOffset;
 }
 
 void BucketStorage::removeUntil(Allocation alloc) {

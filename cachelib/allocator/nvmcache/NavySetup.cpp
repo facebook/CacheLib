@@ -339,7 +339,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
 
 std::unique_ptr<navy::AbstractCache> createNavyCache(
     const navy::NavyConfig& config,
-    navy::DestructorCallback cb,
+    navy::ExpiredCheck checkExpired,
+    navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
     bool itemDestructorEnabled) {
@@ -352,7 +353,8 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   proto->setMaxConcurrentInserts(config.getMaxConcurrentInserts());
   proto->setMaxParcelMemory(megabytesToBytes(config.getMaxParcelMemoryMB()));
   setAdmissionPolicy(config, *proto);
-  proto->setDestructorCallback(cb);
+  proto->setExpiredCheck(checkExpired);
+  proto->setDestructorCallback(destructorCb);
 
   setupCacheProtos(config, *devicePtr, *proto, itemDestructorEnabled);
 

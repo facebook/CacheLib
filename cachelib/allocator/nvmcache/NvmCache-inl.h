@@ -266,6 +266,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
   return hdl;
 }
 
+// invalidate any inflight lookup that is on flight since we are evicting it.
 template <typename C>
 void NvmCache<C>::evictCB(HashedKey hk,
                           navy::BufferView value,
@@ -429,6 +430,10 @@ NvmCache<C>::NvmCache(C& c,
       itemDestructor_(itemDestructor) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
+      [](navy::BufferView v) -> bool {
+        const auto& nvmItem = *reinterpret_cast<const NvmItem*>(v.data());
+        return nvmItem.isExpired();
+      },
       [this](HashedKey hk, navy::BufferView v, navy::DestructorEvent e) {
         this->evictCB(hk, v, e);
       },

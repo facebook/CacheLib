@@ -146,6 +146,9 @@ class CacheProto {
 
   virtual void setEnginesSelector(NavyConfig::EnginesSelector selector) = 0;
 
+  // Set callback used to if the passed NvmItem is expired
+  virtual void setExpiredCheck(ExpiredCheck checkExpired) = 0;
+
   // (Optional) Set destructor callback.
   //   - Callback invoked exactly once for every insert, even if it was removed
   //     manually from the cache with @AbstractCache::remove.

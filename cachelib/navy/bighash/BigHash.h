@@ -23,6 +23,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/BloomFilter.h"
+#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
@@ -62,6 +63,7 @@ class BigHash final : public Engine {
     uint64_t cacheSize{};
     Device* device{nullptr};
 
+    ExpiredCheck checkExpired;
     DestructorCallback destructorCb;
 
     // Optional bloom filter to reduce IO
@@ -191,6 +193,7 @@ class BigHash final : public Engine {
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
   static constexpr uint32_t kFormatVersion = 10;
 
+  const ExpiredCheck checkExpired_{};
   const DestructorCallback destructorCb_{};
   const uint64_t bucketSize_{};
   const uint64_t cacheBaseOffset_{};
@@ -214,6 +217,7 @@ class BigHash final : public Engine {
   mutable AtomicCounter removeCount_;
   mutable AtomicCounter succRemoveCount_;
   mutable AtomicCounter evictionCount_;
+  mutable AtomicCounter evictionExpiredCount_;
   mutable AtomicCounter logicalWrittenCount_;
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter ioErrorCount_;
@@ -222,6 +226,9 @@ class BigHash final : public Engine {
   mutable AtomicCounter checksumErrorCount_;
   mutable SizeDistribution sizeDist_;
   mutable AtomicCounter usedSizeBytes_;
+  // counters to quantify the expired eviction overhead (temporary)
+  // PercentileStats generates outputs in integers, so amplify by 100x
+  mutable util::PercentileStats bucketExpirationsDist_x100_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");

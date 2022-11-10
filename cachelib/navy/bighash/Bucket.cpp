@@ -72,40 +72,51 @@ BufferView Bucket::find(HashedKey hk) const {
   return {};
 }
 
-uint32_t Bucket::insert(HashedKey hk,
-                        BufferView value,
-                        const DestructorCallback& destructorCb) {
+std::pair<uint32_t, uint32_t> Bucket::insert(
+    HashedKey hk,
+    BufferView value,
+    const ExpiredCheck& checkExpired,
+    const DestructorCallback& destructorCb) {
   const auto size =
       details::BucketEntry::computeSize(hk.key().size(), value.size());
   XDCHECK_LE(size, storage_.capacity());
 
-  const auto evictions = makeSpace(size, destructorCb);
+  auto ret = makeSpace(size, checkExpired, destructorCb);
   auto alloc = storage_.allocate(size);
   XDCHECK(!alloc.done());
   details::BucketEntry::create(alloc.view(), hk, value);
 
-  return evictions;
+  return ret;
 }
 
-uint32_t Bucket::makeSpace(uint32_t size,
-                           const DestructorCallback& destructorCb) {
+std::pair<uint32_t, uint32_t> Bucket::makeSpace(
+    uint32_t size,
+    const ExpiredCheck& checkExpired,
+    const DestructorCallback& destructorCb) {
   const auto requiredSize = BucketStorage::slotSize(size);
   XDCHECK_LE(requiredSize, storage_.capacity());
 
-  auto curFreeSpace = storage_.remainingCapacity();
-  if (curFreeSpace >= requiredSize) {
-    return 0;
+  if (storage_.remainingCapacity() >= requiredSize) {
+    return {};
   }
 
-  uint32_t evictions = 0;
+  uint32_t evictionExpired =
+      removeExpired(storage_.getFirst(), checkExpired, destructorCb);
+  uint32_t evictions = evictionExpired;
+  // Check available space again after evictions
+  auto curFreeSpace = storage_.remainingCapacity();
+  if (evictionExpired > 0 && curFreeSpace >= requiredSize) {
+    return std::make_pair(evictions, evictionExpired);
+  }
+
   auto itr = storage_.getFirst();
   while (true) {
     evictions++;
 
     if (destructorCb) {
       auto* entry = getIteratorEntry(itr);
-      destructorCb(
-          entry->hashedKey(), entry->value(), DestructorEvent::Recycled);
+      destructorCb(entry->hashedKey(), entry->value(),
+                   DestructorEvent::Recycled);
     }
 
     curFreeSpace += BucketStorage::slotSize(itr.view().size());
@@ -116,6 +127,35 @@ uint32_t Bucket::makeSpace(uint32_t size,
     itr = storage_.getNext(itr);
     XDCHECK(!itr.done());
   }
+  return std::make_pair(evictions, evictionExpired);
+}
+
+uint32_t Bucket::removeExpired(BucketStorage::Allocation itr,
+                               const ExpiredCheck& checkExpired,
+                               const DestructorCallback& destructorCb) {
+  if (!checkExpired) {
+    return 0;
+  }
+
+  uint32_t evictions = 0;
+  std::vector<BucketStorage::Allocation> removed;
+  while (!itr.done()) {
+    auto* entry = getIteratorEntry(itr);
+    if (!checkExpired(entry->value())) {
+      itr = storage_.getNext(itr);
+      continue;
+    }
+
+    // Remove expired entry
+    if (destructorCb) {
+      destructorCb(entry->hashedKey(), entry->value(),
+                   DestructorEvent::Recycled);
+    }
+    removed.emplace_back(itr);
+    itr = storage_.getNext(itr);
+    evictions++;
+  }
+  storage_.remove(removed);
   return evictions;
 }
 
@@ -125,8 +165,8 @@ uint32_t Bucket::remove(HashedKey hk, const DestructorCallback& destructorCb) {
     auto* entry = getIteratorEntry(itr);
     if (entry->keyEqualsTo(hk)) {
       if (destructorCb) {
-        destructorCb(
-            entry->hashedKey(), entry->value(), DestructorEvent::Removed);
+        destructorCb(entry->hashedKey(), entry->value(),
+                     DestructorEvent::Removed);
       }
       storage_.remove(itr);
       return 1;

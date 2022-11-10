@@ -1591,6 +1591,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reclaim_time"));
   EXPECT_TRUE(cs("navy_bc_region_reclaim_errors"));
   EXPECT_TRUE(cs("navy_bc_evictions"));
+  EXPECT_TRUE(cs("navy_bc_evictions_expired"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
   EXPECT_TRUE(cs("navy_bc_external_fragmentation"));
   EXPECT_TRUE(cs("navy_bc_inmem_waiting_flush"));
@@ -1656,6 +1657,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bh_removes"));
   EXPECT_TRUE(cs("navy_bh_succ_removes"));
   EXPECT_TRUE(cs("navy_bh_evictions"));
+  EXPECT_TRUE(cs("navy_bh_evictions_expired"));
   EXPECT_TRUE(cs("navy_bh_logical_written"));
   EXPECT_TRUE(cs("navy_bh_physical_written"));
   EXPECT_TRUE(cs("navy_bh_io_errors"));
@@ -1705,6 +1707,22 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_write_latency_us_p9999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_avg"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_min"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_max"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p5"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p10"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p25"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p50"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p75"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p90"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p95"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p99"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p999"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p9999"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p99999"));
+  EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p999999"));
+
   EXPECT_TRUE(cs("navy_device_encryption_errors"));
   EXPECT_TRUE(cs("navy_device_decryption_errors"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_max"));

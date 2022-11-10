@@ -114,8 +114,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
   }
 
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
+                                 ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {
     config_.scheduler = &scheduler;
+    config_.checkExpired = std::move(checkExpired);
     config_.destructorCb = std::move(cb);
     config_.validate();
     return std::make_unique<BlockCache>(std::move(config_));
@@ -154,7 +156,8 @@ class BigHashProtoImpl final : public BigHashProto {
     config_.destructorCb = std::move(cb);
   }
 
-  std::unique_ptr<Engine> create() && {
+  std::unique_ptr<Engine> create(ExpiredCheck checkExpired) && {
+    config_.checkExpired = std::move(checkExpired);
     if (bloomFilterEnabled_) {
       if (config_.bucketSize == 0) {
         throw std::invalid_argument{"invalid bucket size"};
@@ -193,7 +196,8 @@ class EnginePairProtoImpl final : public EnginePairProto {
   }
 
   EnginePair create(Device* device,
-                    DestructorCallback cb,
+                    ExpiredCheck checkExpired,
+                    DestructorCallback destructorCb,
                     JobScheduler& scheduler) {
     std::unique_ptr<Engine> bh;
 
@@ -201,8 +205,8 @@ class EnginePairProtoImpl final : public EnginePairProto {
       auto bhProto = dynamic_cast<BigHashProtoImpl*>(bigHashProto_.get());
       if (bhProto != nullptr) {
         bhProto->setDevice(device);
-        bhProto->setDestructorCb(cb);
-        bh = std::move(*bhProto).create();
+        bhProto->setDestructorCb(destructorCb);
+        bh = std::move(*bhProto).create(checkExpired);
       }
     }
 
@@ -211,7 +215,7 @@ class EnginePairProtoImpl final : public EnginePairProto {
       auto bcProto = dynamic_cast<BlockCacheProtoImpl*>(blockCacheProto_.get());
       if (bcProto != nullptr) {
         bcProto->setDevice(device);
-        bc = std::move(*bcProto).create(scheduler, cb);
+        bc = std::move(*bcProto).create(scheduler, checkExpired, destructorCb);
       }
     }
 
@@ -243,6 +247,10 @@ class CacheProtoImpl final : public CacheProto {
   }
 
   void setMetadataSize(size_t size) override { config_.metadataSize = size; }
+
+  void setExpiredCheck(ExpiredCheck checkExpired) override {
+    checkExpired_ = std::move(checkExpired);
+  }
 
   void setDestructorCallback(DestructorCallback cb) override {
     destructorCb_ = std::move(cb);
@@ -308,13 +316,15 @@ class CacheProtoImpl final : public CacheProto {
     for (auto& p : enginePairsProto_) {
       config_.enginePairs.push_back(
           dynamic_cast<EnginePairProtoImpl*>(p.get())->create(
-              config_.device.get(), destructorCb_, *config_.scheduler));
+              config_.device.get(), checkExpired_, destructorCb_,
+              *config_.scheduler));
     }
 
     return std::make_unique<Driver>(std::move(config_));
   }
 
  private:
+  ExpiredCheck checkExpired_;
   DestructorCallback destructorCb_;
   std::vector<std::unique_ptr<EnginePairProto>> enginePairsProto_;
   Driver::Config config_;

@@ -25,7 +25,8 @@ namespace cachelib {
 // NavyConfig.
 std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
     const navy::NavyConfig& config,
-    facebook::cachelib::navy::DestructorCallback cb,
+    facebook::cachelib::navy::ExpiredCheck checkExpired,
+    facebook::cachelib::navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
     bool itemDestructorEnabled);

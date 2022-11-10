@@ -62,6 +62,9 @@ enum class DestructorEvent {
 using DestructorCallback =
     std::function<void(HashedKey hk, BufferView value, DestructorEvent event)>;
 
+// Checking NvmItem expired
+using ExpiredCheck = std::function<bool(BufferView value)>;
+
 // Get CounterVisitor into navy namespace.
 using CounterVisitor = util::CounterVisitor;
 
