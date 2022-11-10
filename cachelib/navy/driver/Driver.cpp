@@ -278,10 +278,10 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   scheduler_->getCounters(visitor);
   if (enginePairs_.size() > 1) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
-      const CounterVisitor pv = [&visitor, idx](folly::StringPiece name,
-                                                double count) {
-        visitor(folly::to<std::string>(name, "_", idx), count);
-      };
+      const CounterVisitor pv{
+          [&visitor, idx](folly::StringPiece name, double count) {
+            visitor(folly::to<std::string>(name, "_", idx), count);
+          }};
       enginePairs_[idx].getCounters(pv);
     }
     visitor("navy_total_usable_size", getUsableSize());

@@ -248,12 +248,12 @@ TEST(ThreadPoolJobScheduler, MaxQueueLen) {
   // we have enqueued 1000 jobs across 4 queues. One job could be executed per
   // thread. So the max queue len would be 249 or 250 per queue.
   bool checked = false;
-  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+  scheduler.getCounters({[&](folly::StringPiece name, double stat) {
     if (name == "navy_reader_pool_max_queue_len") {
       EXPECT_LE(numToQueue / numQueues - stat, 1);
       checked = true;
     }
-  });
+  }});
   EXPECT_TRUE(checked);
   sp.reached(0);
   scheduler.finish();

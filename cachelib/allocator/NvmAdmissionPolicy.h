@@ -84,10 +84,10 @@ class NvmAdmissionPolicy {
   // Deprecated. Please use getCounters(visitor)
   virtual std::unordered_map<std::string, double> getCounters() final {
     std::unordered_map<std::string, double> ctrs;
-    util::CounterVisitor visitor = [&ctrs](folly::StringPiece k, double v) {
+    util::CounterVisitor visitor{[&ctrs](folly::StringPiece k, double v) {
       auto keyStr = k.str();
       ctrs.insert({std::move(keyStr), v});
-    };
+    }};
     getCounters(visitor);
     return ctrs;
   }
@@ -99,10 +99,11 @@ class NvmAdmissionPolicy {
     visitor("ap.accepted", accepted_.get());
     visitor("ap.rejected", rejected_.get());
 
-    auto visitorUs = [&visitor](folly::StringPiece name, double count) {
-      visitor(name.toString(), count / 1000);
-    };
-    overallLatency_.visitQuantileEstimator(visitorUs, "ap.latency_us");
+    overallLatency_.visitQuantileEstimator(
+        [&visitor](folly::StringPiece name, double count) {
+          visitor(name.toString(), count / 1000);
+        },
+        "ap.latency_us");
     visitor("ap.ttlRejected", ttlRejected_.get());
   }
 

@@ -238,14 +238,14 @@ void testCouldExistWithOneEngine(bool small) {
 
   uint32_t numLookups{std::numeric_limits<uint32_t>::max()};
   uint32_t numLookupSuccess{std::numeric_limits<uint32_t>::max()};
-  driver->getCounters([&](folly::StringPiece name, double value) {
+  driver->getCounters({[&](folly::StringPiece name, double value) {
     if (name == "navy_lookups") {
       numLookups = static_cast<uint32_t>(value);
 
     } else if (name == "navy_succ_lookups") {
       numLookupSuccess = static_cast<uint32_t>(value);
     }
-  });
+  }});
   EXPECT_EQ(3, numLookups);
   EXPECT_EQ(1, numLookupSuccess);
 }
@@ -701,11 +701,11 @@ TEST(Driver, ConcurrentInserts) {
   sp.reached(2);
 
   uint32_t statRejected = 0;
-  driver->getCounters([&statRejected](folly::StringPiece name, double value) {
+  driver->getCounters({[&statRejected](folly::StringPiece name, double value) {
     if (name == "navy_rejected_concurrent_inserts") {
       statRejected = static_cast<uint32_t>(value);
     }
-  });
+  }});
   EXPECT_EQ(1, statRejected);
 }
 
@@ -756,11 +756,11 @@ TEST(Driver, ParcelMemory) {
   sp.reached(3);
 
   uint32_t statRejected = 0;
-  driver->getCounters([&statRejected](folly::StringPiece name, double value) {
+  driver->getCounters({[&statRejected](folly::StringPiece name, double value) {
     if (name == "navy_rejected_parcel_memory") {
       statRejected = static_cast<uint32_t>(value);
     }
-  });
+  }});
   EXPECT_EQ(rejects, statRejected);
 }
 

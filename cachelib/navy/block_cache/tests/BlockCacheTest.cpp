@@ -200,11 +200,12 @@ TEST(BlockCache, InsertLookup) {
     driver->flush();
     Buffer value;
     EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
-    driver->getCounters([](folly::StringPiece name, double count) {
+
+    driver->getCounters({[](folly::StringPiece name, double count) {
       if (name == "navy_bc_lookups") {
         EXPECT_EQ(1, count);
       }
-    });
+    }});
 
     EXPECT_EQ(e.value(), value.view());
     log.push_back(std::move(e));
@@ -381,13 +382,13 @@ TEST(BlockCache, PreciseRemove) {
     Buffer value;
     // Behavior: old "key" can remove the entry "key"+"abc": "value".
     EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters([](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count) {
       // The counter is not populated because preciseRemove_ and item
       // destructors are not triggered.
       if (name == "navy_bc_remove_attempt_collisions") {
         EXPECT_EQ(0, count);
       }
-    });
+    }});
   }
 
   {
@@ -398,12 +399,12 @@ TEST(BlockCache, PreciseRemove) {
     Buffer value;
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
     EXPECT_EQ(Status::NotFound, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters([](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count) {
       // The counter is populated
       if (name == "navy_bc_remove_attempt_collisions") {
         EXPECT_EQ(1, count);
       }
-    });
+    }});
   }
 
   {
@@ -420,12 +421,12 @@ TEST(BlockCache, PreciseRemove) {
 
     // Behavior: old "key" can not remove the entry "key"+"abc": "value"
     EXPECT_EQ(Status::Ok, collision.driver->remove(makeHK("key")));
-    collision.driver->getCounters([](folly::StringPiece name, double count) {
+    collision.driver->getCounters({[](folly::StringPiece name, double count) {
       // The counter is populated.
       if (name == "navy_bc_remove_attempt_collisions") {
         EXPECT_EQ(1, count);
       }
-    });
+    }});
   }
 }
 
@@ -501,14 +502,14 @@ TEST(BlockCache, HoleStats) {
     driver->flush();
   }
 
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_hole_count") {
       EXPECT_EQ(0, count);
     }
     if (name == "navy_bc_hole_bytes") {
       EXPECT_EQ(0, count);
     }
-  });
+  }});
 
   // Remove 3 entries from region 0
   EXPECT_EQ(Status::Ok, driver->remove(log[0].key()));
@@ -519,14 +520,14 @@ TEST(BlockCache, HoleStats) {
   EXPECT_EQ(Status::Ok, driver->remove(log[33].key()));
   EXPECT_EQ(Status::Ok, driver->remove(log[34].key()));
 
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_hole_count") {
       EXPECT_EQ(5, count);
     }
     if (name == "navy_bc_hole_bytes") {
       EXPECT_EQ(5 * 1024, count);
     }
-  });
+  }});
 
   // lookup this entry from region 0 that will be soon reclaimed
   Buffer val;
@@ -544,7 +545,7 @@ TEST(BlockCache, HoleStats) {
 
   // Reclaiming region 0 should have bumped down the hole count to
   // 2 remaining (from region 2)
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_reinsertions") {
       EXPECT_EQ(1, count);
     }
@@ -554,7 +555,7 @@ TEST(BlockCache, HoleStats) {
     if (name == "navy_bc_hole_bytes") {
       EXPECT_EQ(2 * 1024, count);
     }
-  });
+  }});
 }
 
 TEST(BlockCache, ReclaimCorruption) {
@@ -613,11 +614,11 @@ TEST(BlockCache, ReclaimCorruption) {
     driver->flush();
   }
   // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_reclaim") {
       EXPECT_EQ(4, count);
     }
-  });
+  }});
 
   // Force reclamation on region 0 by allocating region 3. There are 4 regions
   // and the device was configured to require 1 clean region at all times
@@ -629,7 +630,7 @@ TEST(BlockCache, ReclaimCorruption) {
   driver->flush();
 
   // Verify we have one header checksum error and two value checksum errors
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_reclaim") {
       EXPECT_EQ(5, count);
     }
@@ -639,7 +640,7 @@ TEST(BlockCache, ReclaimCorruption) {
     if (name == "navy_bc_reclaim_value_checksum_errors") {
       EXPECT_EQ(2, count);
     }
-  });
+  }});
 }
 
 TEST(BlockCache, StackAlloc) {
@@ -1640,26 +1641,26 @@ TEST(BlockCache, HoleStatsRecovery) {
   EXPECT_EQ(Status::Ok, driver->remove(log[5].key()));
   EXPECT_EQ(Status::Ok, driver->remove(log[8].key()));
 
-  CounterVisitor validationFunctor = [](folly::StringPiece name, double count) {
+  CounterVisitor validationFunctor{[](folly::StringPiece name, double count) {
     if (name == "navy_bc_hole_count") {
       EXPECT_EQ(4, count);
     }
     if (name == "navy_bc_hole_bytes") {
       EXPECT_EQ(4 * 4096, count);
     }
-  };
+  }};
 
   driver->getCounters(validationFunctor);
   driver->persist();
   driver->reset();
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_hole_count") {
       EXPECT_EQ(0, count);
     }
     if (name == "navy_bc_hole_bytes") {
       EXPECT_EQ(0, count);
     }
-  });
+  }});
   EXPECT_TRUE(driver->recover());
   driver->getCounters(validationFunctor);
 }
@@ -2083,14 +2084,14 @@ TEST(BlockCache, DeviceFlushFailureSync) {
   EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
   driver->flush();
 
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_inmem_flush_retries") {
       EXPECT_EQ(kFlushRetryLimit, count);
     }
     if (name == "navy_bc_inmem_flush_failures") {
       EXPECT_EQ(1, count);
     }
-  });
+  }});
 }
 
 TEST(BlockCache, DeviceFlushFailureAsync) {
@@ -2114,14 +2115,14 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
   EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), {}));
   driver->flush();
 
-  driver->getCounters([](folly::StringPiece name, double count) {
+  driver->getCounters({[](folly::StringPiece name, double count) {
     if (name == "navy_bc_inmem_flush_retries") {
       EXPECT_EQ(kFlushRetryLimit * 2, count);
     }
     if (name == "navy_bc_inmem_flush_failures") {
       EXPECT_EQ(2, count);
     }
-  });
+  }});
 }
 
 TEST(BlockCache, testItemDestructor) {

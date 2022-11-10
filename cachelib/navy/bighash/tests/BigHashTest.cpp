@@ -153,7 +153,7 @@ TEST(BigHash, SimpleStats) {
     EXPECT_CALL(helper, call(strPiece("navy_bh_bf_false_positive_pct"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_checksum_errors"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_used_size_bytes"), 28));
-    bh.getCounters(toCallback(helper));
+    bh.getCounters({toCallback(helper)});
   }
 
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
@@ -175,7 +175,7 @@ TEST(BigHash, SimpleStats) {
     EXPECT_CALL(helper, call(strPiece("navy_bh_bf_false_positive_pct"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_checksum_errors"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_used_size_bytes"), 0));
-    bh.getCounters(toCallback(helper));
+    bh.getCounters({toCallback(helper)});
   }
 }
 
@@ -206,7 +206,7 @@ TEST(BigHash, EvictionStats) {
     EXPECT_CALL(helper, call(strPiece("navy_bh_io_errors"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_bf_false_positive_pct"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_checksum_errors"), 0));
-    bh.getCounters(toCallback(helper));
+    bh.getCounters({toCallback(helper)});
   }
 }
 
@@ -237,7 +237,7 @@ TEST(BigHash, DeviceErrorStats) {
     EXPECT_CALL(helper, call(strPiece("navy_bh_io_errors"), 1));
     EXPECT_CALL(helper, call(strPiece("navy_bh_bf_false_positive_pct"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_checksum_errors"), 0));
-    bh.getCounters(toCallback(helper));
+    bh.getCounters({toCallback(helper)});
   }
 }
 

@@ -272,7 +272,7 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
   uint64_t numSpooled = 0;
   uint64_t maxQueueLen = 0;
   uint64_t pendingJobs = 0;
-  scheduler.getCounters([&](folly::StringPiece name, double stat) {
+  scheduler.getCounters({[&](folly::StringPiece name, double stat) {
     if (name == "navy_reader_max_queue_len") {
       maxQueueLen = static_cast<uint64_t>(stat);
     } else if (name == "navy_req_order_curr_spool_size") {
@@ -280,7 +280,7 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
     } else if (name == "navy_max_reader_pool_pending_jobs") {
       pendingJobs = static_cast<uint64_t>(stat);
     }
-  });
+  }});
 
   EXPECT_GE(numSpooled, 0);
   uint64_t numQueued = numKeys - numSpooled;

@@ -24,12 +24,93 @@
 #pragma GCC diagnostic pop
 #include <folly/FileUtil.h>
 #include <folly/chrono/Hardware.h>
+#include <folly/logging/xlog.h>
 
 #include <numeric>
 
 namespace facebook {
 namespace cachelib {
 namespace util {
+
+// A wrapper class for functions to collect counters.
+// It can be initialized by either
+// 1. folly::StringPiece, double -> void, or
+// 2. folly::StringPiece, double, CounterType.
+// This allows counters to be collected and aggregated differently.
+class CounterVisitor {
+ public:
+  enum CounterType {
+    COUNT /* couters whose value can be exported directly */,
+    RATE /* counters whose value should be exported by delta */
+  };
+
+  CounterVisitor() { init(); }
+
+  /* implicit */ CounterVisitor(
+      std::function<void(folly::StringPiece, double)> biFn)
+      : biFn_(std::move(biFn)) {
+    init();
+  }
+
+  /* implicit */ CounterVisitor(
+      std::function<void(folly::StringPiece, double, CounterType)> triFn)
+      : triFn_(std::move(triFn)) {
+    init();
+  }
+
+  void operator()(folly::StringPiece name,
+                  double count,
+                  CounterType type) const {
+    XDCHECK_NE(nullptr, triFn_);
+    triFn_(name, count, type);
+  }
+
+  void operator()(folly::StringPiece name, double count) const {
+    XDCHECK_NE(nullptr, biFn_);
+    biFn_(name, count);
+  }
+
+  void operator=(std::function<void(folly::StringPiece, double)> biFn) {
+    biFn_ = biFn;
+    triFn_ = nullptr;
+    init();
+  }
+
+  void operator=(
+      std::function<void(folly::StringPiece, double, CounterType)> triFn) {
+    triFn_ = triFn;
+    biFn_ = nullptr;
+    init();
+  }
+
+ private:
+  // Initialize so that at most one of the functions is initialized.
+  void init() {
+    if (biFn_ && triFn_) {
+      throw std::invalid_argument(
+          "CounterVisitor can have at most one single function initialized.");
+    }
+    if (biFn_) {
+      triFn_ = [this](folly::StringPiece name, double count, CounterType) {
+        biFn_(name, count);
+      };
+    } else if (triFn_) {
+      biFn_ = [this](folly::StringPiece name, double count) {
+        triFn_(name, count, CounterType::COUNT);
+      };
+    } else {
+      // Create noop functions.
+      triFn_ = [](folly::StringPiece, double, CounterType) {};
+      biFn_ = [](folly::StringPiece, double) {};
+    }
+  }
+
+  // Function to collect all counters by value (COUNT).
+  std::function<void(folly::StringPiece name, double count)> biFn_;
+  // Function to collect counters by type.
+  std::function<void(folly::StringPiece name, double count, CounterType type)>
+      triFn_;
+};
 
 // Provides an RAII wrapper around sysctl settings
 class SysctlSetting {

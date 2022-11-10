@@ -17,6 +17,9 @@
 #pragma once
 
 #include <folly/Range.h>
+
+#include <stdexcept>
+#include <utility>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/stats/QuantileEstimator.h>
@@ -28,8 +31,6 @@
 namespace facebook {
 namespace cachelib {
 namespace util {
-using CounterVisitor =
-    std::function<void(folly::StringPiece name, double count)>;
 
 class PercentileStats {
  public:
@@ -59,6 +60,13 @@ class PercentileStats {
                                      const Estimates& rst,
                                      folly::StringPiece prefix);
 
+  static void visitQuantileEstimates(
+      const std::function<void(folly::StringPiece, double)>& visitor,
+      const Estimates& rst,
+      folly::StringPiece prefix) {
+    visitQuantileEstimates(CounterVisitor(visitor), rst, prefix);
+  }
+
   PercentileStats() : estimator_{std::chrono::seconds{kDefaultWindowSize}} {}
   PercentileStats(std::chrono::seconds windowSize) : estimator_{windowSize} {}
 
@@ -73,6 +81,12 @@ class PercentileStats {
   // call frequently. The cost is roughly number of quantiles we
   // pass in multiplied by cost of estimating an individual quantile
   Estimates estimate();
+
+  void visitQuantileEstimator(
+      const std::function<void(folly::StringPiece, double)>& visitor,
+      folly::StringPiece statPrefix) {
+    visitQuantileEstimator(CounterVisitor{visitor}, statPrefix);
+  }
 
   // visit each latency estimate using the visitor.
   // @param visitor   the stat visitor

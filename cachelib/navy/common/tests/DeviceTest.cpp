@@ -78,7 +78,7 @@ TEST(Device, Encryptor) {
               call(strPiece("navy_device_encryption_errors"), testing::Eq(1)));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_decryption_errors"), testing::Eq(1)));
-  device.getRealDeviceRef().getCounters(toCallback(visitor));
+  device.getRealDeviceRef().getCounters({toCallback(visitor)});
 }
 
 TEST(Device, EncryptorFail) {
@@ -151,7 +151,7 @@ TEST(Device, IOError) {
               call(strPiece("navy_device_read_errors"), testing::Eq(1)));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_write_errors"), testing::Eq(1)));
-  device.getCounters(toCallback(visitor));
+  device.getCounters({toCallback(visitor)});
 }
 
 TEST(Device, Stats) {
@@ -196,7 +196,7 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_encryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
-  device.getCounters(toCallback(visitor));
+  device.getCounters({toCallback(visitor)});
 }
 
 TEST(Device, MaxWriteSize) {
@@ -228,7 +228,7 @@ TEST(Device, MaxWriteSize) {
   EXPECT_CALL(visitor, call(_, _)).WillRepeatedly(testing::Return());
   EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_written"), 4096));
   EXPECT_CALL(visitor, call(strPiece("navy_device_bytes_read"), 4096));
-  device->getCounters(toCallback(visitor));
+  device->getCounters({toCallback(visitor)});
 }
 
 TEST(Device, RAID0IO) {
