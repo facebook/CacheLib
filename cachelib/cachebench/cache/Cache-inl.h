@@ -583,7 +583,7 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 
 template <typename Allocator>
 double Cache<Allocator>::getNvmBytesWritten() const {
-  const auto& statsMap = cache_->getNvmCacheStatsMap().getCounts();
+  const auto& statsMap = cache_->getNvmCacheStatsMap().getRates();
   if (const auto& it = statsMap.find("navy_device_bytes_written");
       it != statsMap.end()) {
     return it->second;

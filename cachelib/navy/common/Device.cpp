@@ -320,16 +320,22 @@ bool Device::read(uint64_t offset, uint32_t size, void* value) {
 }
 
 void Device::getCounters(const CounterVisitor& visitor) const {
-  visitor("navy_device_bytes_written", getBytesWritten());
-  visitor("navy_device_bytes_read", getBytesRead());
+  visitor("navy_device_bytes_written", getBytesWritten(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_device_bytes_read", getBytesRead(),
+          CounterVisitor::CounterType::RATE);
   readLatencyEstimator_.visitQuantileEstimator(visitor,
                                                "navy_device_read_latency_us");
   writeLatencyEstimator_.visitQuantileEstimator(visitor,
                                                 "navy_device_write_latency_us");
-  visitor("navy_device_read_errors", readIOErrors_.get());
-  visitor("navy_device_write_errors", writeIOErrors_.get());
-  visitor("navy_device_encryption_errors", encryptionErrors_.get());
-  visitor("navy_device_decryption_errors", decryptionErrors_.get());
+  visitor("navy_device_read_errors", readIOErrors_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_device_write_errors", writeIOErrors_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_device_encryption_errors", encryptionErrors_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_device_decryption_errors", decryptionErrors_.get(),
+          CounterVisitor::CounterType::RATE);
 }
 
 std::unique_ptr<Device> createFileDevice(
