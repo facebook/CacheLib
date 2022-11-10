@@ -583,7 +583,7 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 
 template <typename Allocator>
 double Cache<Allocator>::getNvmBytesWritten() const {
-  const auto& statsMap = cache_->getNvmCacheStatsMap();
+  const auto& statsMap = cache_->getNvmCacheStatsMap().getCounts();
   if (const auto& it = statsMap.find("navy_device_bytes_written");
       it != statsMap.end()) {
     return it->second;
@@ -609,7 +609,7 @@ Stats Cache<Allocator>::getStats() const {
 
   const auto cacheStats = cache_->getGlobalCacheStats();
   const auto rebalanceStats = cache_->getSlabReleaseStats();
-  const auto navyStats = cache_->getNvmCacheStatsMap();
+  const auto navyStats = cache_->getNvmCacheStatsMap().toMap();
 
   ret.numEvictions = aggregate.numEvictions();
   ret.numItems = aggregate.numItems();
@@ -661,7 +661,7 @@ Stats Cache<Allocator>::getStats() const {
   // Populate counters.
   // TODO: Populate more counters that are interesting to cachebench.
   if (config_.printNvmCounters) {
-    ret.nvmCounters = cache_->getNvmCacheStatsMap();
+    ret.nvmCounters = cache_->getNvmCacheStatsMap().toMap();
   }
 
   // nvm stats from navy
@@ -718,7 +718,7 @@ Stats Cache<Allocator>::getStats() const {
 
 template <typename Allocator>
 bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
-  const auto& nvmStats = cache_->getNvmCacheStatsMap();
+  const auto& nvmStats = cache_->getNvmCacheStatsMap().getCounts();
   const auto it = nvmStats.find("navy_bc_evictions");
   if (it == nvmStats.end()) {
     return false;

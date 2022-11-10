@@ -69,9 +69,7 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
     throw std::invalid_argument("");
   }
 
-  std::unordered_map<std::string, double> getNvmCacheStatsMap() const override {
-    return {};
-  }
+  util::StatsMap getNvmCacheStatsMap() const override { return {}; }
   void updateNumSlabsToAdvise(int32_t /* unused */) override final {}
 
   PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override final {

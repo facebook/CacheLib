@@ -210,7 +210,7 @@ class NvmCache {
   void flushPendingOps();
 
   // Obtain stats in a <string -> double> representation.
-  std::unordered_map<std::string, double> getStatsMap() const;
+  util::StatsMap getStatsMap() const;
 
   // returns the size of the NVM device
   size_t getSize() const noexcept { return navyCache_->getSize(); }

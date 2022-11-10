@@ -895,15 +895,10 @@ void NvmCache<C>::flushPendingOps() {
 }
 
 template <typename C>
-std::unordered_map<std::string, double> NvmCache<C>::getStatsMap() const {
-  std::unordered_map<std::string, double> statsMap;
-  navyCache_->getCounters(
-      {util::CounterVisitor{[&statsMap](folly::StringPiece key, double value) {
-        auto keyStr = key.str();
-        DCHECK_EQ(0, statsMap.count(keyStr));
-        statsMap.insert({std::move(keyStr), value});
-      }}});
-  statsMap["items_tracked_for_destructor"] = getNvmItemRemovedSize();
+util::StatsMap NvmCache<C>::getStatsMap() const {
+  util::StatsMap statsMap;
+  navyCache_->getCounters(statsMap.createCountVisitor());
+  statsMap.insertCount("items_tracked_for_destructor", getNvmItemRemovedSize());
   return statsMap;
 }
 

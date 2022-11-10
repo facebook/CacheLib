@@ -18,6 +18,9 @@
 
 #include <folly/Format.h>
 #include <folly/Random.h>
+
+#include <unordered_map>
+
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Range.h>
@@ -110,6 +113,62 @@ class CounterVisitor {
   // Function to collect counters by type.
   std::function<void(folly::StringPiece name, double count, CounterType type)>
       triFn_;
+};
+
+// A class to collect stats into, consisting of a map for counts and a map for
+// rates. Together with CounterVisitor, counters can be collected into the two
+// maps according to their types.
+class StatsMap {
+ public:
+  StatsMap() {}
+  StatsMap(const StatsMap&) = delete;
+  StatsMap(StatsMap&& o) noexcept {
+    countMap = std::move(o.countMap);
+    rateMap = std::move(o.rateMap);
+  }
+
+  void operator=(StatsMap&& o) noexcept {
+    countMap = std::move(o.countMap);
+    rateMap = std::move(o.rateMap);
+  }
+
+  // Insert a count stat
+  void insertCount(std::string key, double val) { countMap[key] = val; }
+
+  // Insert a rate stat
+  void insertRate(std::string key, double val) { rateMap[key] = val; }
+
+  const std::unordered_map<std::string, double>& getCounts() const {
+    return countMap;
+  }
+
+  const std::unordered_map<std::string, double>& getRates() const {
+    return rateMap;
+  }
+
+  // Return an unordered map.
+  std::unordered_map<std::string, double> toMap() const {
+    std::unordered_map<std::string, double> ret;
+    ret.insert(countMap.begin(), countMap.end());
+    ret.insert(rateMap.begin(), rateMap.end());
+    return ret;
+  }
+
+  CounterVisitor createCountVisitor() {
+    return {[this](folly::StringPiece key,
+                   double val,
+                   CounterVisitor::CounterType type) {
+      if (type == CounterVisitor::CounterType::COUNT) {
+        insertCount(key.str(), val);
+      } else {
+        insertRate(key.str(), val);
+      }
+    }};
+  }
+
+ private:
+  std::unordered_map<std::string, double> countMap;
+  std::unordered_map<std::string, double> rateMap;
 };
 
 // Provides an RAII wrapper around sysctl settings

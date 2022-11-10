@@ -3646,14 +3646,10 @@ uint64_t CacheAllocator<CacheTrait>::getItemPtrAsOffset(const void* ptr) {
 }
 
 template <typename CacheTrait>
-std::unordered_map<std::string, double>
-CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
-  auto ret = nvmCache_ ? nvmCache_->getStatsMap()
-                       : std::unordered_map<std::string, double>{};
-  util::CounterVisitor visitor{
-      [&ret](folly::StringPiece k, double v) { ret[k.str()] = v; }};
+util::StatsMap CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
+  auto ret = nvmCache_ ? nvmCache_->getStatsMap() : util::StatsMap{};
   if (nvmAdmissionPolicy_) {
-    nvmAdmissionPolicy_->getCounters(visitor);
+    nvmAdmissionPolicy_->getCounters(ret.createCountVisitor());
   }
   return ret;
 }

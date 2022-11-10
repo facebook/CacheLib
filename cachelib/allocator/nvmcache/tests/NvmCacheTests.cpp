@@ -88,7 +88,7 @@ TEST_F(NvmCacheTest, APConfig) {
     auto& config = getConfig();
     config.enableRejectFirstAPForNvm(10, 10, 1, true);
     auto& nvm = makeCache();
-    auto ctrs = nvm.getNvmCacheStatsMap();
+    auto ctrs = nvm.getNvmCacheStatsMap().getCounts();
     EXPECT_NE(ctrs.find("ap.reject_first_keys_tracked"), ctrs.end());
   }
 
@@ -97,7 +97,7 @@ TEST_F(NvmCacheTest, APConfig) {
     config.setNvmCacheAdmissionPolicy(policy);
     ASSERT_NO_THROW(config.validate());
     auto& nvm = makeCache();
-    auto ctrs = nvm.getNvmCacheStatsMap();
+    auto ctrs = nvm.getNvmCacheStatsMap().getCounts();
     EXPECT_NE(ctrs.find("nvm_mock_policy"), ctrs.end());
   }
 
@@ -107,7 +107,7 @@ TEST_F(NvmCacheTest, APConfig) {
     auto& config = getConfig();
     config.enableRejectFirstAPForNvm(10, 10, 1, true);
     auto& nvm = makeCache();
-    auto ctrs = nvm.getNvmCacheStatsMap();
+    auto ctrs = nvm.getNvmCacheStatsMap().getCounts();
     EXPECT_NE(ctrs.find("nvm_mock_policy"), ctrs.end());
   }
 
@@ -1490,7 +1490,7 @@ TEST_F(NvmCacheTest, TruncatedAllocSize) {
 TEST_F(NvmCacheTest, NavyStats) {
   // Ensure we export all the stats we expect
   // Everytime we add a new stat, make sure to update this test accordingly
-  auto nvmStats = this->cache().getNvmCacheStatsMap();
+  auto nvmStats = this->cache().getNvmCacheStatsMap().toMap();
 
   auto cs = [&nvmStats](const std::string& name) mutable {
     if (nvmStats.end() != nvmStats.find(name)) {

@@ -1176,8 +1176,7 @@ class CacheAllocator : public CacheBase {
   CacheMemoryStats getCacheMemoryStats() const override final;
 
   // return the nvm cache stats map
-  std::unordered_map<std::string, double> getNvmCacheStatsMap()
-      const override final;
+  util::StatsMap getNvmCacheStatsMap() const override final;
 
   // return the event tracker stats map
   std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()

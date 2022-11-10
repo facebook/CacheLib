@@ -69,7 +69,7 @@ class ObjectCacheBase : public CacheBase {
 
   // @return a map of <stat name -> stat value> representation for all the nvm
   // cache stats. This is useful for our monitoring to directly upload them.
-  std::unordered_map<std::string, double> getNvmCacheStatsMap() const override {
+  util::StatsMap getNvmCacheStatsMap() const override {
     return l1Cache_->getNvmCacheStatsMap();
   }
 
