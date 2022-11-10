@@ -187,9 +187,9 @@ void ThreadPoolJobScheduler::getCounters(const CounterVisitor& visitor) const {
     const std::string maxPendingJobs =
         folly::sformat("navy_max_{}_pending_jobs", name);
     visitor(maxQueueLen, stats.maxQueueLen);
-    visitor(reschedules, stats.reschedules);
+    visitor(reschedules, stats.reschedules, CounterVisitor::CounterType::RATE);
     visitor(highReschedules, stats.jobsHighReschedule);
-    visitor(jobsDone, stats.jobsDone);
+    visitor(jobsDone, stats.jobsDone, CounterVisitor::CounterType::RATE);
     visitor(maxPendingJobs, stats.maxPendingJobs);
   };
   getStats(reader_.getStats(), reader_.getName());
@@ -268,7 +268,8 @@ void OrderedThreadPoolJobScheduler::finish() {
 
 void OrderedThreadPoolJobScheduler::getCounters(const CounterVisitor& v) const {
   scheduler_.getCounters(v);
-  v("navy_req_order_spooled", numSpooled_.get());
+  v("navy_req_order_spooled", numSpooled_.get(),
+    CounterVisitor::CounterType::RATE);
   v("navy_req_order_curr_spool_size", currSpooled_.get());
 }
 
