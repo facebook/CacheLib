@@ -737,7 +737,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_eviction_lookup_misses", evictionLookupMissCounter_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_evictions_expired", evictionExpiredCount_.get(),
-	  CounterVisitor::CounterType::RATE);
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_alloc_errors", allocErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_logical_written", logicalWrittenCount_.get(),

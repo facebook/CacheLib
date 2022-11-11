@@ -195,9 +195,9 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_evictions",
           evictionCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor("navy_bh_evictions_expired", 
-	  evictionExpiredCount_.get(), 
-	  CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_evictions_expired",
+          evictionExpiredCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_logical_written",
           logicalWrittenCount_.get(),
           CounterVisitor::CounterType::RATE);
