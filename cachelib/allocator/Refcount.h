@@ -82,7 +82,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
 
     // this flag indicates the allocation is being moved elsewhere
     // (can be triggered by a resize or reblanace operation)
-    kExclusive,
+    kMoving,
   };
 
   /**
@@ -119,8 +119,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // Unused. This is just to indciate the maximum number of flags
     kFlagMax,
   };
-  static_assert(static_cast<uint8_t>(kMMFlag0) >
-                    static_cast<uint8_t>(kExclusive),
+  static_assert(static_cast<uint8_t>(kMMFlag0) > static_cast<uint8_t>(kMoving),
                 "Flags and control bits cannot overlap in bit range.");
   static_assert(kFlagMax <= NumBits<Value>::value, "Too many flags.");
 
@@ -248,20 +247,18 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   /**
    * The following four functions are used to track whether or not
    * an item is currently in the process of being moved. This happens during a
-   * slab rebalance or resize operation or during eviction.
+   * slab rebalance or resize operation.
    *
-   * An item can only be marked exclusive when `isInMMContainer` returns true
-   * and the item is not yet marked as exclusive. This operation is atomic.
+   * An item can only be marked moving when `isInMMContainer` returns true.
+   * This operation is atomic.
    *
-   * User can also query if an item "isOnlyExclusive". This returns true only
-   * if the refcount is 0 and only the exclusive bit is set.
+   * User can also query if an item "isOnlyMoving". This returns true only
+   * if the refcount is 0 and only the moving bit is set.
    *
-   * Unmarking exclusive does not depend on `isInMMContainer`.
-   * Unmarking exclusive will also return the refcount at the moment of
-   * unmarking.
+   * Unmarking moving does not depend on `isInMMContainer`
    */
-  bool markExclusive() noexcept {
-    Value bitMask = getAdminRef<kExclusive>();
+  bool markMoving() noexcept {
+    Value bitMask = getAdminRef<kMoving>();
     Value conditionBitMask = getAdminRef<kLinked>();
 
     Value* const refPtr = &refCount_;
@@ -270,8 +267,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
     while (true) {
       const bool flagSet = curValue & conditionBitMask;
-      const bool alreadyExclusive = curValue & bitMask;
-      if (!flagSet || alreadyExclusive) {
+      if (!flagSet) {
         return false;
       }
 
@@ -290,24 +286,21 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
       }
     }
   }
-  Value unmarkExclusive() noexcept {
-    Value bitMask = ~getAdminRef<kExclusive>();
-    return __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL) & kRefMask;
+  void unmarkMoving() noexcept {
+    Value bitMask = ~getAdminRef<kMoving>();
+    __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL);
   }
-  bool isExclusive() const noexcept {
-    return getRaw() & getAdminRef<kExclusive>();
-  }
-  bool isOnlyExclusive() const noexcept {
-    // An item is only exclusive when its refcount is zero and only the
-    // exclusive bit among all the control bits is set. This indicates an item
-    // is exclusive to the current thread. No other thread is allowed to
-    // do anything with it.
+  bool isMoving() const noexcept { return getRaw() & getAdminRef<kMoving>(); }
+  bool isOnlyMoving() const noexcept {
+    // An item is only moving when its refcount is zero and only the moving bit
+    // among all the control bits is set. This indicates an item is already on
+    // its way out of cache and does not need to be moved.
     auto ref = getRefWithAccessAndAdmin();
-    bool anyOtherBitSet = ref & ~getAdminRef<kExclusive>();
+    bool anyOtherBitSet = ref & ~getAdminRef<kMoving>();
     if (anyOtherBitSet) {
       return false;
     }
-    return ref & getAdminRef<kExclusive>();
+    return ref & getAdminRef<kMoving>();
   }
 
   /**
@@ -337,8 +330,12 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   bool isNvmEvicted() const noexcept { return isFlagSet<kNvmEvicted>(); }
 
   // Whether or not an item is completely drained of access
-  // Refcount is 0 and the item is not linked, accessible, nor exclusive
+  // Refcount is 0 and the item is not linked, accessible, nor moving
   bool isDrained() const noexcept { return getRefWithAccessAndAdmin() == 0; }
+
+  // Whether or not we hold the last exclusive access to this item
+  // Refcount is 1 and the item is not linked, accessible, nor moving
+  bool isExclusive() const noexcept { return getRefWithAccessAndAdmin() == 1; }
 
   /**
    * Functions to set, unset and check flag presence. This is exposed
