@@ -16,10 +16,13 @@
 
 #pragma once
 #include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/facebook/admin/CacheAdmin.h"
 #include "rocksdb/secondary_cache.h"
 #include "rocksdb/types.h"
 #include "rocksdb/version.h"
+
+namespace ROCKSDB_NAMESPACE {
+class ObjectLibrary;
+} // namespace ROCKSDB_NAMESPACE
 
 namespace facebook {
 namespace rocks_secondary_cache {
@@ -82,37 +85,34 @@ using FbCacheReadHandle = typename FbCache::ReadHandle;
 using FbCacheItem = typename FbCache::Item;
 
 // The RocksCachelibWrapper is a concrete implementation of
-// rocksdb::SecondaryCache. It can be allocated using
+// ROCKSDB_NAMESPACE::SecondaryCache. It can be allocated using
 // NewRocksCachelibWrapper() and the resulting pointer
-// can be passed in rocksdb::LRUCacheOptions to
-// rocksdb::NewLRUCache().
+// can be passed in ROCKSDB_NAMESPACE::LRUCacheOptions to
+// ROCKSDB_NAMESPACE::NewLRUCache().
 //
 // Users can also cast a pointer to it and call methods on
 // it directly, especially custom methods that may be added
 // in the future.  For example -
-// std::unique_ptr<rocksdb::SecondaryCache> cache =
+// std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCache> cache =
 //      NewRocksCachelibWrapper(opts);
 // static_cast<RocksCachelibWrapper*>(cache.get())->Erase(key);
-class RocksCachelibWrapper : public rocksdb::SecondaryCache {
+class RocksCachelibWrapper : public ROCKSDB_NAMESPACE::SecondaryCache {
  public:
-  RocksCachelibWrapper(std::unique_ptr<FbCache>&& cache,
-                       std::unique_ptr<cachelib::CacheAdmin>&& admin,
-                       cachelib::PoolId pool)
-      : cache_(std::move(cache).release()),
-        admin_(std::move(admin)),
-        pool_(pool) {}
+  RocksCachelibWrapper(const RocksCachelibOptions& options) :
+    options_(options) { }
   ~RocksCachelibWrapper() override;
 
-  const char* Name() const override { return "RocksCachelibWrapper"; }
+  static const char* kClassName() const { return "RocksCachelibWrapper"; }
+  const char* Name() const override { return kClassName(); }
 
-  rocksdb::Status Insert(
-      const rocksdb::Slice& key,
+  ROCKSDB_NAMESPACE::Status Insert(
+      const ROCKSDB_NAMESPACE::Slice& key,
       void* value,
-      const rocksdb::Cache::CacheItemHelper* helper) override;
+      const ROCKSDB_NAMESPACE::Cache::CacheItemHelper* helper) override;
 
-  std::unique_ptr<rocksdb::SecondaryCacheResultHandle> Lookup(
-      const rocksdb::Slice& key,
-      const rocksdb::Cache::CreateCallback& create_cb,
+  std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCacheResultHandle> Lookup(
+      const ROCKSDB_NAMESPACE::Slice& key,
+      const ROCKSDB_NAMESPACE::Cache::CreateCallback& create_cb,
       bool wait
 #if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
       ,
@@ -125,10 +125,10 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
   bool SupportForceErase() const override { return false; }
 #endif
 
-  void Erase(const rocksdb::Slice& key) override;
+  void Erase(const ROCKSDB_NAMESPACE::Slice& key) override;
 
   void WaitAll(
-      std::vector<rocksdb::SecondaryCacheResultHandle*> handles) override;
+      std::vector<ROCKSDB_NAMESPACE::SecondaryCacheResultHandle*> handles) override;
 
   // TODO
   std::string GetPrintableOptions() const override { return ""; }
@@ -140,19 +140,22 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
   // ongoing lookups and inserts by other threads to be quiesced.
   void Close();
 
-  // If the admPolicy in RocksCachelibOptions was set to "dynamic_random",
-  // then this function can be called to update the max write rate for that
-  // policy.
-  bool UpdateMaxWriteRateForDynamicRandom(uint64_t maxRate);
-
+  ROCKSDB_NAMESPACE::Status PrepareOptions(const ConfigOptions& /*options*/) override;
+  
  private:
+  RocksCachelibOptions options_;
   std::atomic<FbCache*> cache_;
-  std::unique_ptr<cachelib::CacheAdmin> admin_;
   cachelib::PoolId pool_;
 };
 
-// Allocate a new Cache instance with a rocksdb::TieredCache wrapper around it
-extern std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
+// Allocate a new Cache instance with a ROCKSDB_NAMESPACE::TieredCache wrapper around it
+extern std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCache> NewRocksCachelibWrapper(
     const RocksCachelibOptions& opts);
+#ifndef ROCKSDB_LITE
+extern "C" {
+int register_CachelibObjects(ROCKSDB_NAMESPACE::ObjectLibrary& library, const std::string&);
+} // extern "C"
+
+#endif // ROCKSDB_LITE
 } // namespace rocks_secondary_cache
 } // namespace facebook

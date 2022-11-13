@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-#include "cachelib/adaptor/rocks_secondary_cache/CachelibWrapper.h"
+#include "CachelibWrapper.h"
 
-#include "cachelib/facebook/utils/FbInternalRuntimeUpdateWrapper.h"
 #include "folly/init/Init.h"
 #include "folly/synchronization/Rcu.h"
 #include "rocksdb/version.h"
+#include "rocksdb/utilities/object_registry.h"
 
 namespace facebook {
 namespace rocks_secondary_cache {
 
 #define FB_CACHE_MAX_ITEM_SIZE 4 << 20
-using ApiWrapper = cachelib::FbInternalRuntimeUpdateWrapper<FbCache>;
 
 namespace {
 // We use a separate RCU domain since read side critical sections can block
@@ -131,6 +130,41 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
 };
 } // namespace
 
+RockeCachelibWrapper::PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& opts) {
+  if (!cache_) {
+    std::unique_ptr<FbCache> cache;
+    cachelib::PoolId defaultPool;
+    FbCacheConfig config;
+    NvmCacheConfig nvmConfig;
+    
+    nvmConfig.navyConfig.setBlockSize(options_.blockSize);
+    nvmConfig.navyConfig.setSimpleFile(options_.fileName,
+				       options_.size,
+				       /*truncateFile=*/true);
+    nvmConfig.navyConfig.blockCache().setRegionSize(options_.regionSize);
+    if (options_.admPolicy == "random") {
+      nvmConfig.navyConfig.enableRandomAdmPolicy().setAdmProbability(
+       options_.admProbability);
+    } else {
+      nvmConfig.navyConfig.enableDynamicRandomAdmPolicy()
+          .setMaxWriteRate(options_.maxWriteRate)
+          .setAdmWriteRate(options_.admissionWriteRate);
+    }
+    nvmConfig.enableFastNegativeLookups = true;
+
+    config.setCacheSize(options_.volatileSize)
+      .setCacheName(options_.cacheName)
+      .setAccessConfig(
+          {options_.bktPower /* bucket power */, options_.lockPower /* lock power */})
+      .enableNvmCache(nvmConfig)
+      .validate(); // will throw if bad config
+    cache_ = std::make_unique<FbCache>(config);
+    pool_ =
+      cache->addPool("default", cache_->getCacheMemoryStats().cacheSize);
+  }
+  return SecondaryCache::PreareOptions(opts);
+}
+  
 RocksCachelibWrapper::~RocksCachelibWrapper() { Close(); }
 
 rocksdb::Status RocksCachelibWrapper::Insert(
@@ -225,26 +259,14 @@ void RocksCachelibWrapper::Close() {
     // sections already started to finish, and then delete the cache
     cache_.store(nullptr);
     GetRcuDomain().synchronize();
-    admin_.reset();
     delete cache;
   }
-}
-
-bool RocksCachelibWrapper::UpdateMaxWriteRateForDynamicRandom(
-    uint64_t maxRate) {
-  FbCache* cache = cache_.load();
-  bool ret = false;
-  if (cache) {
-    ret = ApiWrapper::updateMaxRateForDynamicRandomAP(*cache, maxRate);
-  }
-  return ret;
 }
 
 // Global cache object and a default cache pool
 std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
     const RocksCachelibOptions& opts) {
   std::unique_ptr<FbCache> cache;
-  std::unique_ptr<cachelib::CacheAdmin> admin;
   cachelib::PoolId defaultPool;
   FbCacheConfig config;
   NvmCacheConfig nvmConfig;
@@ -274,15 +296,23 @@ std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
   defaultPool =
       cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
 
-  if (opts.fb303Stats) {
-    cachelib::CacheAdmin::Config adminConfig;
-    adminConfig.oncall = opts.oncallName;
-    admin = std::make_unique<cachelib::CacheAdmin>(*cache, adminConfig);
-  }
-
   return std::unique_ptr<rocksdb::SecondaryCache>(new RocksCachelibWrapper(
-      std::move(cache), std::move(admin), std::move(defaultPool)));
+      std::move(cache), std::move(defaultPool)));
 }
 
+#ifndef ROCKSDB_LITE
+int register_CachelibObjects(ROCKSDB_NAMESPACE::ObjectLibrary& library, const std::string&) {
+  library.AddFactory<ROCKSDB_NAMESPACE::SecondaryCache>(CachelibWrapper::kClassName(), 
+      [](const std::string& uri, std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCache>* guard,
+         std::string* /*errmsg*/) {
+	RocksCachelibOptions options;
+	guard->reset(new CacheLibWrapper(options));
+        return guard->get();
+      });
+  return 1;
+}
+#endif // ROCKSDB_LITE
 } // namespace rocks_secondary_cache
 } // namespace facebook
+
+
