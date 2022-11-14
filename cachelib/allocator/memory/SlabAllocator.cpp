@@ -48,7 +48,6 @@ using PtrType = CompressedPtr::PtrType;
 constexpr uint64_t SlabAllocator::kAddressMask;
 constexpr PtrType CompressedPtr::kAllocIdxMask;
 constexpr unsigned int CompressedPtr::kNumAllocIdxBits;
-constexpr unsigned int CompressedPtr::kNumSlabIdxBits;
 
 constexpr unsigned int SlabAllocator::kLockSleepMS;
 constexpr size_t SlabAllocator::kPagesPerStep;

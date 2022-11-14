@@ -50,6 +50,8 @@ namespace cachelib {
  * independantly by the SlabAllocator.
  */
 
+// identifier for the memory tier
+using TierId = int8_t;
 // identifier for the memory pool
 using PoolId = int8_t;
 // identifier for the allocation class

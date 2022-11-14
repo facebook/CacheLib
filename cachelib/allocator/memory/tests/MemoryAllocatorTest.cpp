@@ -401,13 +401,28 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
   for (const auto& pool : poolAllocs) {
     const auto& allocs = pool.second;
     for (const auto* alloc : allocs) {
-      CompressedPtr ptr = m.compress(alloc);
+      CompressedPtr ptr = m.compress(alloc, false /* isMultiTiered */);
       ASSERT_FALSE(ptr.isNull());
-      ASSERT_EQ(alloc, m.unCompress(ptr));
+      ASSERT_EQ(alloc, m.unCompress(ptr, false /* isMultiTiered */));
     }
   }
 
-  ASSERT_EQ(nullptr, m.unCompress(m.compress(nullptr)));
+  ASSERT_EQ(nullptr,
+            m.unCompress(m.compress(nullptr, false /* isMultiTiered */),
+                         false /* isMultiTiered */));
+
+  // test pointer compression with multi-tier
+  for (const auto& pool : poolAllocs) {
+    const auto& allocs = pool.second;
+    for (const auto* alloc : allocs) {
+      CompressedPtr ptr = m.compress(alloc, true /* isMultiTiered */);
+      ASSERT_FALSE(ptr.isNull());
+      ASSERT_EQ(alloc, m.unCompress(ptr, true /* isMultiTiered */));
+    }
+  }
+
+  ASSERT_EQ(nullptr, m.unCompress(m.compress(nullptr, true /* isMultiTiered */),
+                                  true /* isMultiTiered */));
 }
 
 TEST_F(MemoryAllocatorTest, Restorable) {

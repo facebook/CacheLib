@@ -534,8 +534,9 @@ class MemoryAllocator {
   //                as the original pointer is valid.
   //
   // @throw  std::invalid_argument if the ptr is invalid.
-  CompressedPtr CACHELIB_INLINE compress(const void* ptr) const {
-    return slabAllocator_.compress(ptr);
+  CompressedPtr CACHELIB_INLINE compress(const void* ptr,
+                                         bool isMultiTiered) const {
+    return slabAllocator_.compress(ptr, isMultiTiered);
   }
 
   // retrieve the raw pointer corresponding to the compressed pointer. This is
@@ -546,8 +547,9 @@ class MemoryAllocator {
   // @return        the raw pointer corresponding to this compressed pointer.
   //
   // @throw   std::invalid_argument if the compressed pointer is invalid.
-  void* CACHELIB_INLINE unCompress(const CompressedPtr cPtr) const {
-    return slabAllocator_.unCompress(cPtr);
+  void* CACHELIB_INLINE unCompress(const CompressedPtr cPtr,
+                                   bool isMultiTiered) const {
+    return slabAllocator_.unCompress(cPtr, isMultiTiered);
   }
 
   // a special implementation of pointer compression for benchmarking purposes.
