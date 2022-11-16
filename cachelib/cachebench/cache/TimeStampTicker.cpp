@@ -66,8 +66,10 @@ bool TimeStampTicker::advanceTimeStamp(uint32_t currTimeStamp) {
   while (oldBucket < currentBucket) {
     latch = getLatch(oldBucket);
     auto lastThread = latch->count_down();
-    if (lastThread && onCrossTimeWindow_) {
-      onCrossTimeWindow_(static_cast<double>(bucketTicks_));
+    if (lastThread && !onCrossTimeWindows_.empty()) {
+      for (auto& fn : onCrossTimeWindows_) {
+        fn(static_cast<double>(bucketTicks_));
+      }
     }
     oldBucket++;
   }

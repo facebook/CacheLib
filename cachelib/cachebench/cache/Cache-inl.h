@@ -589,6 +589,7 @@ double Cache<Allocator>::getNvmBytesWritten() const {
       it != ratesMap.end()) {
     return it->second;
   }
+  XLOG(INFO) << "Bytes written not found";
   return 0;
 }
 
