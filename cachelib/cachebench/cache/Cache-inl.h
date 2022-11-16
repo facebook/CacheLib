@@ -583,9 +583,10 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 
 template <typename Allocator>
 double Cache<Allocator>::getNvmBytesWritten() const {
-  const auto& statsMap = cache_->getNvmCacheStatsMap().getRates();
-  if (const auto& it = statsMap.find("navy_device_bytes_written");
-      it != statsMap.end()) {
+  const auto statsMap = cache_->getNvmCacheStatsMap();
+  const auto& ratesMap = statsMap.getRates();
+  if (const auto& it = ratesMap.find("navy_device_bytes_written");
+      it != ratesMap.end()) {
     return it->second;
   }
   return 0;
@@ -718,9 +719,10 @@ Stats Cache<Allocator>::getStats() const {
 
 template <typename Allocator>
 bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
-  const auto& nvmStats = cache_->getNvmCacheStatsMap().getRates();
-  const auto it = nvmStats.find("navy_bc_evictions");
-  if (it == nvmStats.end()) {
+  const auto nvmStats = cache_->getNvmCacheStatsMap();
+  const auto& ratesMap = nvmStats.getRates();
+  const auto it = ratesMap.find("navy_bc_evictions");
+  if (it == ratesMap.end()) {
     return false;
   }
   return it->second > 0;
