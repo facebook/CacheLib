@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "cachelib/CachelibWrapper.h"
+#include "plugin/cachelib/CachelibWrapper.h"
 #include "cachelib/common/Utils.h"
 #include <folly/Random.h>
 #include <gmock/gmock.h>
@@ -525,6 +525,7 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
   pthread_mutex_destroy(&mu);
 }
 
+#if 0
 TEST_F(CachelibWrapperTest, UpdateMaxRateTest) {
   RocksCachelibOptions opts;
   opts.volatileSize = kVolatileSize;
@@ -539,7 +540,8 @@ TEST_F(CachelibWrapperTest, UpdateMaxRateTest) {
   ASSERT_TRUE(static_cast<RocksCachelibWrapper*>(sec_cache.get())
                   ->UpdateMaxWriteRateForDynamicRandom(32 << 20));
 }
-
+#endif
+  
 TEST_F(CachelibWrapperTest, LargeItemTest) {
   std::string str1 = RandomString(8 << 20);
   TestItem item1(str1.data(), str1.length());
