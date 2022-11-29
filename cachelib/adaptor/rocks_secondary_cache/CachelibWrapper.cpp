@@ -131,33 +131,33 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
   }
 };
 
-static std::unordered_map<std::string, OptionTypeInfo>
+static std::unordered_map<std::string, ROCKSDB_NAMESPACE::OptionTypeInfo>
 rocks_cachelib_type_info = {
 #ifndef ROCKSDB_LITE
   {"cachename",
-   {offsetof(struct RocksCachelibOptions, cacheName), OptionType::kString}},
+   {offsetof(struct RocksCachelibOptions, cacheName), ROCKSDB_NAMESPACE::OptionType::kString}},
   {"filename",
-   {offsetof(struct RocksCachelibOptions, fileName), OptionType::kString}},
+   {offsetof(struct RocksCachelibOptions, fileName), ROCKSDB_NAMESPACE::OptionType::kString}},
   {"size",
-   {offsetof(struct RocksCachelibOptions, size), OptionType::kSizeT}},
+   {offsetof(struct RocksCachelibOptions, size), ROCKSDB_NAMESPACE::OptionType::kSizeT}},
   {"block_size",
-   {offsetof(struct RocksCachelibOptions, blockSize), OptionType::kSizeT}},
+   {offsetof(struct RocksCachelibOptions, blockSize), ROCKSDB_NAMESPACE::OptionType::kSizeT}},
   {"region_size",
-   {offsetof(struct RocksCachelibOptions, regionSize), OptionType::kSizeT}},
+   {offsetof(struct RocksCachelibOptions, regionSize), ROCKSDB_NAMESPACE::OptionType::kSizeT}},
   {"policy",
-   {offsetof(struct RocksCachelibOptions, admPolicy), OptionType::kString}},
+   {offsetof(struct RocksCachelibOptions, admPolicy), ROCKSDB_NAMESPACE::OptionType::kString}},
   {"probability",
-   {offsetof(struct RocksCachelibOptions, admProbability), OptionType::kDouble}},
+   {offsetof(struct RocksCachelibOptions, admProbability), ROCKSDB_NAMESPACE::OptionType::kDouble}},
   {"max_write_rate",
-   {offsetof(struct RocksCachelibOptions, maxWriteRate), OptionType::kUInt64T}},
+   {offsetof(struct RocksCachelibOptions, maxWriteRate), ROCKSDB_NAMESPACE::OptionType::kUInt64T}},
   {"admission_write_rate",
-   {offsetof(struct RocksCachelibOptions, admissionWriteRate), OptionType::kUInt64T}},
+   {offsetof(struct RocksCachelibOptions, admissionWriteRate), ROCKSDB_NAMESPACE::OptionType::kUInt64T}},
   {"volatile_size",
-   {offsetof(struct RocksCachelibOptions, volatileSize), OptionType::kSizeT}},
+   {offsetof(struct RocksCachelibOptions, volatileSize), ROCKSDB_NAMESPACE::OptionType::kSizeT}},
   {"bucket_power",
-   {offsetof(struct RocksCachelibOptions, bktPower), OptionType::kUInt32T}},
+   {offsetof(struct RocksCachelibOptions, bktPower), ROCKSDB_NAMESPACE::OptionType::kUInt32T}},
   {"lock_power",
-   {offsetof(struct RocksCachelibOptions, lockPower), OptionType::kUInt32T}},
+   {offsetof(struct RocksCachelibOptions, lockPower), ROCKSDB_NAMESPACE::OptionType::kUInt32T}},
 #endif // ROCKSDB_LITE
 };
 } // namespace
