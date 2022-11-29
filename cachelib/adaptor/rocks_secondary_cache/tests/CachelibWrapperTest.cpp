@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#include <cachelib/adaptor/rocks_secondary_cache/CachelibWrapper.h>
-#include <common/files/FileUtil.h>
+#include "cachelib/CachelibWrapper.h"
+#include "cachelib/common/Utils.h"
 #include <folly/Random.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -60,7 +60,7 @@ class CachelibWrapperTest : public ::testing::Test {
   CachelibWrapperTest() : fail_create_(false) {
     RocksCachelibOptions opts;
 
-    path_ = files::FileUtil::recreateRandomTempDir("CachelibWrapperTest");
+    path_ = util::getUniqueTempDir("CachelibWrapperTest");
     opts.volatileSize = kVolatileSize;
     opts.cacheName = "CachelibWrapperTest";
     opts.fileName = path_ + "/cachelib_wrapper_test_file";
