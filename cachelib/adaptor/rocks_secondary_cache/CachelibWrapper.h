@@ -98,11 +98,10 @@ using FbCacheItem = typename FbCache::Item;
 // static_cast<RocksCachelibWrapper*>(cache.get())->Erase(key);
 class RocksCachelibWrapper : public ROCKSDB_NAMESPACE::SecondaryCache {
  public:
-  RocksCachelibWrapper(const RocksCachelibOptions& options) :
-    options_(options) { }
+  RocksCachelibWrapper(const RocksCachelibOptions& options);
   ~RocksCachelibWrapper() override;
 
-  static const char* kClassName() const { return "RocksCachelibWrapper"; }
+  static const char* kClassName() { return "RocksCachelibWrapper"; }
   const char* Name() const override { return kClassName(); }
 
   ROCKSDB_NAMESPACE::Status Insert(
@@ -132,7 +131,8 @@ class RocksCachelibWrapper : public ROCKSDB_NAMESPACE::SecondaryCache {
 
   // TODO
   std::string GetPrintableOptions() const override { return ""; }
-
+  ROCKSDB_NAMESPACE::Status PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& /*options*/) override;
+  
   // Calling Close() persists the cachelib state to the file and frees the
   // cachelib object. After calling Close(), subsequent lookups will fail,
   // and subsequent inserts will be silently ignored. Close() is not thread
@@ -140,8 +140,6 @@ class RocksCachelibWrapper : public ROCKSDB_NAMESPACE::SecondaryCache {
   // ongoing lookups and inserts by other threads to be quiesced.
   void Close();
 
-  ROCKSDB_NAMESPACE::Status PrepareOptions(const ConfigOptions& /*options*/) override;
-  
  private:
   RocksCachelibOptions options_;
   std::atomic<FbCache*> cache_;

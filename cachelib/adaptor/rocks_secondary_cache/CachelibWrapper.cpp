@@ -18,8 +18,10 @@
 
 #include "folly/init/Init.h"
 #include "folly/synchronization/Rcu.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/version.h"
 #include "rocksdb/utilities/object_registry.h"
+#include "rocksdb/utilities/options_type.h"
 
 namespace facebook {
 namespace rocks_secondary_cache {
@@ -128,11 +130,46 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
     }
   }
 };
+
+static std::unordered_map<std::string, OptionTypeInfo>
+rocks_cachelib_type_info = {
+#ifndef ROCKSDB_LITE
+  {"cachename",
+   {offsetof(struct RocksCachelibOptions, cacheName), OptionType::kString}},
+  {"filename",
+   {offsetof(struct RocksCachelibOptions, fileName), OptionType::kString}},
+  {"size",
+   {offsetof(struct RocksCachelibOptions, size), OptionType::kSizeT}},
+  {"block_size",
+   {offsetof(struct RocksCachelibOptions, blockSize), OptionType::kSizeT}},
+  {"region_size",
+   {offsetof(struct RocksCachelibOptions, regionSize), OptionType::kSizeT}},
+  {"policy",
+   {offsetof(struct RocksCachelibOptions, admPolicy), OptionType::kString}},
+  {"probability",
+   {offsetof(struct RocksCachelibOptions, admProbability), OptionType::kDouble}},
+  {"max_write_rate",
+   {offsetof(struct RocksCachelibOptions, maxWriteRate), OptionType::kUInt64T}},
+  {"admission_write_rate",
+   {offsetof(struct RocksCachelibOptions, admissionWriteRate), OptionType::kUInt64T}},
+  {"volatile_size",
+   {offsetof(struct RocksCachelibOptions, volatileSize), OptionType::kSizeT}},
+  {"bucket_power",
+   {offsetof(struct RocksCachelibOptions, bktPower), OptionType::kUInt32T}},
+  {"lock_power",
+   {offsetof(struct RocksCachelibOptions, lockPower), OptionType::kUInt32T}},
+#endif // ROCKSDB_LITE
+};
 } // namespace
 
-RockeCachelibWrapper::PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& opts) {
-  if (!cache_) {
-    std::unique_ptr<FbCache> cache;
+RocksCachelibWrapper::RocksCachelibWrapper(const RocksCachelibOptions& options)
+  : options_(options) {
+}
+  
+ROCKSDB_NAMESPACE::Status RocksCachelibWrapper::PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& opts) {
+  FbCache* cache = cache_.load();
+
+  if (!cache) {
     cachelib::PoolId defaultPool;
     FbCacheConfig config;
     NvmCacheConfig nvmConfig;
@@ -158,11 +195,12 @@ RockeCachelibWrapper::PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& opt
           {options_.bktPower /* bucket power */, options_.lockPower /* lock power */})
       .enableNvmCache(nvmConfig)
       .validate(); // will throw if bad config
-    cache_ = std::make_unique<FbCache>(config);
+    auto new_cache = std::make_unique<FbCache>(config);
     pool_ =
-      cache->addPool("default", cache_->getCacheMemoryStats().cacheSize);
+      new_cache->addPool("default", new_cache->getCacheMemoryStats().cacheSize);
+    cache_.store(new_cache.release());
   }
-  return SecondaryCache::PreareOptions(opts);
+  return SecondaryCache::PrepareOptions(opts);
 }
   
 RocksCachelibWrapper::~RocksCachelibWrapper() { Close(); }
@@ -266,47 +304,18 @@ void RocksCachelibWrapper::Close() {
 // Global cache object and a default cache pool
 std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
     const RocksCachelibOptions& opts) {
-  std::unique_ptr<FbCache> cache;
-  cachelib::PoolId defaultPool;
-  FbCacheConfig config;
-  NvmCacheConfig nvmConfig;
-
-  nvmConfig.navyConfig.setBlockSize(opts.blockSize);
-  nvmConfig.navyConfig.setSimpleFile(opts.fileName,
-                                     opts.size,
-                                     /*truncateFile=*/true);
-  nvmConfig.navyConfig.blockCache().setRegionSize(opts.regionSize);
-  if (opts.admPolicy == "random") {
-    nvmConfig.navyConfig.enableRandomAdmPolicy().setAdmProbability(
-        opts.admProbability);
-  } else {
-    nvmConfig.navyConfig.enableDynamicRandomAdmPolicy()
-        .setMaxWriteRate(opts.maxWriteRate)
-        .setAdmWriteRate(opts.admissionWriteRate);
-  }
-  nvmConfig.enableFastNegativeLookups = true;
-
-  config.setCacheSize(opts.volatileSize)
-      .setCacheName(opts.cacheName)
-      .setAccessConfig(
-          {opts.bktPower /* bucket power */, opts.lockPower /* lock power */})
-      .enableNvmCache(nvmConfig)
-      .validate(); // will throw if bad config
-  cache = std::make_unique<FbCache>(config);
-  defaultPool =
-      cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
-
-  return std::unique_ptr<rocksdb::SecondaryCache>(new RocksCachelibWrapper(
-      std::move(cache), std::move(defaultPool)));
+  std::unique_ptr<rocksdb::SecondaryCache> secondary = std::make_unique<RocksCachelibWrapper>(opts);
+  assert(secondary->PrepareOptions(ROCKSDB_NAMESPACE::ConfigOptions()).ok());
+  return secondary;
 }
 
 #ifndef ROCKSDB_LITE
 int register_CachelibObjects(ROCKSDB_NAMESPACE::ObjectLibrary& library, const std::string&) {
-  library.AddFactory<ROCKSDB_NAMESPACE::SecondaryCache>(CachelibWrapper::kClassName(), 
+  library.AddFactory<ROCKSDB_NAMESPACE::SecondaryCache>(RocksCachelibWrapper::kClassName(), 
       [](const std::string& uri, std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCache>* guard,
          std::string* /*errmsg*/) {
 	RocksCachelibOptions options;
-	guard->reset(new CacheLibWrapper(options));
+	guard->reset(new RocksCachelibWrapper(options));
         return guard->get();
       });
   return 1;

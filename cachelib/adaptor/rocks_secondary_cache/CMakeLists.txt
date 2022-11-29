@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.4)
 
 find_package(cachelib REQUIRED)
-add_library(rocksdb_cachelib STATIC CachelibWrapper.cpp)
-target_link_libraries(rocksdb_cachelib PRIVATE cachelib)
-target_include_directories(rocksdb_cachelib PRIVATE ${CACHELIB_INCLUDE_DIR})
 
 # Suppresses errors from folly exceptions
-target_compile_options(rocksdb_cachelib PRIVATE -Wno-error=class-memaccess)
-set(cachelib_LIBS rocksdb_cachelib PARENT_SCOPE)
-set(cachelib_TARGETS rocksdb_cachelib PARENT_SCOPE)
+set(cachelib_SOURCES CachelibWrapper.cpp PARENT_SCOPE)
+set(cachelib_INCLUDE_PATHS ${CACHELIB_INCLUDE_DIR}/.. PARENT_SCOPE)
+set(cachelib_COMPILE_FLAGS -Wno-error=class-memaccess -Wno-error=sign-compare -Wno-error=deprecated-declarationsPARENT_SCOPE)
+set(cachelib_LIBS "cachelib_allocator" "cachelib_shm" "cachelib_navy" "cachelib_common" "thriftcpp2" "thriftfrozen2" "thriftmetadata" "thriftanyrep" "thrifttype" "thrifttyperep" "thriftannotation" "thriftprotocol" "async" "wangle" "fizz" "sodium" "rt" PARENT_SCOPE)
 set(cachelib_FUNC register_CachelibObjects PARENT_SCOPE)
+set(cachelib_LINK_PATHS ${CMAKE_PREFIX_PATH}/lib PARENT_SCOPE)
+set(cachelib_TESTS tests/CachelibWrapperTest.cpp PARENT_SCOPE)
