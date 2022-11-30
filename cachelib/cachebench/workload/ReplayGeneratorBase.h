@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "cachelib/cachebench/util/Config.h"
+#include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
 
 namespace facebook {

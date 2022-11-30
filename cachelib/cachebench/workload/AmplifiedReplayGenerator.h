@@ -16,17 +16,20 @@
 
 #pragma once
 
+#include <folly/Conv.h>
 #include <folly/logging/xlog.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/cachebench/util/Parallel.h"
 #include "cachelib/cachebench/util/Request.h"
-#include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
+#include "cachelib/cachebench/workload/ReplayGenerator.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+class AmplifiedReplayGenerator;
 
 struct RequestStream {
   static constexpr uint32_t INVALID_THREAD_ID = static_cast<uint32_t>(-1);
@@ -51,54 +54,50 @@ struct RequestStream {
   const Request& getReq(uint8_t,
                         std::mt19937_64&,
                         std::optional<uint64_t> lastRequestId = std::nullopt);
+
+  AmplifiedReplayGenerator* parent = nullptr;
+
   // ifstream pointing to the trace file
   std::ifstream infile_;
   char infileBuffer_[kIfstreamBufferSize];
   uint32_t threadIdx_{INVALID_THREAD_ID};
 
-  // current outstanding key
-  std::string key_;
-  std::vector<size_t> sizes_{1};
-  // current outstanding req object
-  Request req_{key_, sizes_.begin(), sizes_.end(), OpType::kGet};
-
-  // number of times to issue the current req object
-  // before fetching a new line from the trace
-  uint32_t repeats_{1};
+  ReqWrapper replayReq_;
 };
 
-class AmplifiedReplayGenerator : public ReplayGeneratorBase {
+class AmplifiedReplayGenerator : public ReplayGenerator {
  public:
   explicit AmplifiedReplayGenerator(const StressorConfig& config)
-      : ReplayGeneratorBase(config) {}
+      : ReplayGenerator(config) {}
 
   const Request& getReq(
       uint8_t poolId,
       std::mt19937_64& gen,
       std::optional<uint64_t> lastRequestId = std::nullopt) override {
-    if (!tlRequest->isInitialized()) {
-      tlRequest->threadIdx_ = incrementalIdx_++;
+    if (!tlReqStream->isInitialized()) {
+      tlReqStream->parent = this;
+      tlReqStream->threadIdx_ = incrementalIdx_++;
 
       XLOGF(INFO,
             "[{}] opening trace file {}",
-            tlRequest->threadIdx_,
+            tlReqStream->threadIdx_,
             config_.traceFileName);
 
-      openInFile(tlRequest->infile_,
-                 tlRequest->infileBuffer_,
-                 sizeof(tlRequest->infileBuffer_));
+      openInFile(tlReqStream->infile_,
+                 tlReqStream->infileBuffer_,
+                 sizeof(tlReqStream->infileBuffer_));
     }
 
     const Request* req = nullptr;
     try {
-      req = &tlRequest->getReq(poolId, gen, lastRequestId);
+      req = &tlReqStream->getReq(poolId, gen, lastRequestId);
     } catch (const cachelib::cachebench::EndOfTrace& e) {
       if (!repeatTraceReplay_) {
         throw;
       }
 
-      tlRequest->resetTraceFileToBeginning();
-      req = &tlRequest->getReq(poolId, gen, lastRequestId);
+      tlReqStream->resetTraceFileToBeginning();
+      req = &tlReqStream->getReq(poolId, gen, lastRequestId);
     }
 
     return *req;
@@ -109,65 +108,22 @@ class AmplifiedReplayGenerator : public ReplayGeneratorBase {
   std::atomic<uint32_t> incrementalIdx_{0};
 
   class dummyRequestStreamTag {};
-  folly::ThreadLocal<RequestStream, dummyRequestStreamTag> tlRequest;
+  folly::ThreadLocal<RequestStream, dummyRequestStreamTag> tlReqStream;
 };
 
 inline const Request& RequestStream::getReq(uint8_t,
                                             std::mt19937_64&,
                                             std::optional<uint64_t>) {
-  if (--repeats_ > 0) {
-    return req_;
-  }
-  while (repeats_ == 0) {
-    // input format is: key,op,size,op_count,key_size
-    std::string token;
-    // Get key
-    if (!std::getline(infile_, key_, ',')) {
-      repeats_ = 1;
-      throw cachelib::cachebench::EndOfTrace("");
-    }
-
-    // Get op
-    std::getline(infile_, token, ',');
-    // TODO only memcache optypes are supported
-    if (!token.compare("GET")) {
-      req_.setOp(OpType::kGet);
-    } else if (!token.compare("SET")) {
-      req_.setOp(OpType::kSet);
-    } else if (!token.compare("DELETE")) {
-      req_.setOp(OpType::kDel);
-    } else {
-      continue;
-    }
-
-    // Get size
-    std::getline(infile_, token, ',');
-    sizes_[0] = std::stoi(token);
-    // Get op_count
-    std::getline(infile_, token, ',');
-    repeats_ = std::stoi(token);
-    // Get key_size; allow to have dummy ','
-    std::getline(infile_, token);
-    auto tokenSize = token.find(',');
-    if (tokenSize != std::string::npos) {
-      token.resize(tokenSize);
-    }
-
-    // Generate key whose size matches with that of the original one.
-    // To do so, the encoded key will be expanded with the thread ID
-    // of 4 characters at the suffix and the remaining intermediate space
-    // will be padded with '0'. The size of encoded key is 10 digits,
-    // so the minimum key size will be 14 including the thread ID
-    size_t keySize = std::max<size_t>(std::stoi(token), key_.size() + 4);
-    // The key size should not exceed 256
-    keySize = std::min<size_t>(keySize, 256);
-
-    key_.resize(keySize - 4, '0');
-    // Append thread Id of 4 decimal chars
-    key_.append(folly::sformat("{:04d}", threadIdx_));
+  if (!replayReq_.repeats_) {
+    parent->getReqInternal(infile_, replayReq_);
+    // Replace the last 4 bytes with thread Id of 4 decimal chars
+    XDCHECK_GT(replayReq_.key_.size(), 4u);
+    replayReq_.key_.resize(replayReq_.key_.size() - 4, '0');
+    replayReq_.key_.append(folly::sformat("{:04d}", threadIdx_));
   }
 
-  return req_;
+  replayReq_.repeats_--;
+  return replayReq_.req_;
 }
 
 } // namespace cachebench

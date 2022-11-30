@@ -111,7 +111,7 @@ struct Request {
   std::vector<size_t>::iterator sizeEnd;
 
   // TTL in seconds.
-  const uint32_t ttlSecs{0};
+  uint32_t ttlSecs{0};
 
   const std::optional<uint64_t> requestId;
 
