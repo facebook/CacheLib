@@ -168,6 +168,7 @@ module.exports = {
           label: 'RAM Cache',
           collapsed: true,
           items: [
+            'Cache_Library_Architecture_Guide/ram_cache_design',
             'Cache_Library_Architecture_Guide/ram_cache_indexing_and_eviction',
             'Cache_Library_Architecture_Guide/slab_rebalancing',
             'Cache_Library_Architecture_Guide/compact_cache_design',
