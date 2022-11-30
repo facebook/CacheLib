@@ -83,6 +83,9 @@ module.exports = {
             'Cache_Library_User_Guides/Remove_callback',
             'Cache_Library_User_Guides/Cache_persistence',
             'Cache_Library_User_Guides/Cross_Host_Cache_Persistence',
+            ...fbInternalOnly([
+              'facebook/Cache_Persistence/Cross_Host_Persistence_APIs_Internal',
+            ]),
             'Cache_Library_User_Guides/ttl_reaper',
             'Cache_Library_User_Guides/oom_protection',
             'Cache_Library_User_Guides/pool_rebalance_strategy',
@@ -126,6 +129,7 @@ module.exports = {
           items: [
             'Cache_Library_User_Guides/Tuning_DRAM_cache_efficiency',
             'Cache_Library_User_Guides/CacheLib_configs',
+            ...fbInternalOnly(['facebook/Cache_Persistence/TW_shm_persistence_setup']),
           ],
         },
       ],
@@ -196,15 +200,7 @@ module.exports = {
         items: [
           'facebook/Cache_Monitoring/Cache_Admin_Overview',
           'facebook/Cache_Monitoring/monitoring',
-        ],
-      },
-      {
-        type: 'category',
-        label: 'Cache Persistence',
-        collapsed: true,
-        items: [
-          'facebook/Cache_Persistence/Cross_Host_Persistence_APIs_Internal',
-          'facebook/Cache_Persistence/TW_shm_persistence_setup',
+          'facebook/Cache_Monitoring/understanding_nvm_latency',
         ],
       },
       {
