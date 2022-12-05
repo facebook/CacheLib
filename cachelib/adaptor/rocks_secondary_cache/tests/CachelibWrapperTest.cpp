@@ -15,6 +15,7 @@
  */
 
 #include "plugin/cachelib/CachelibWrapper.h"
+#include "rocksdb/convenience.h"
 #include "cachelib/common/Utils.h"
 #include "test_util/testharness.h"
 
@@ -563,38 +564,38 @@ TEST_F(CachelibWrapperTest, LargeItemTest) {
 
 #ifndef ROCKSDB_LITE
 TEST_F(CachelibWrapperTest, CreateFromString) {
-  ROCKSDB::NAMESPACE::ConfigOptions opts;
-  opts.invoke_prepare_options = true;
+  ROCKSDB_NAMESPACE::ConfigOptions opts;
+  opts.invoke_prepare_options = false;
   std::shared_ptr<ROCKSDB_NAMESPACE::SecondaryCache> scache;
   std::string props = "cachename=foo;"
 		      "filename=bar;"
-		      "size=1000000;" 
+		      "size=1048576;" 
  		      "block_size=8192;" 
 		      "region_size=4096;"
 			"policy=unknown;" 
 			"probablity=0.50;"
 			"max_write_rate=1024;"
 			"admission_write_rate=2048;"
-			"volatile_size=2000000;"
+			"volatile_size=524288;"
 			"bucket_power=48;"
     "lock_power=24;";
     
   ASSERT_EQ(ROCKSDB_NAMESPACE::SecondaryCache::CreateFromString(opts,
-	 props + "id=" + RocksCachelibWrapper::kClassName() +
+		props + "id=" + RocksCachelibWrapper::kClassName(),
 								&scache),
 	    ROCKSDB_NAMESPACE::Status::OK());
   auto rco =  scache->GetOptions<RocksCachelibOptions>();
   ASSERT_NE(rco, nullptr);
-  ASSERT_STREQ(rco->cacheName, "foo");
-  ASSERT_STREQ(rco->fileName, "bar");
-  ASSERT_EQ(rco->size, 1000000);
+  ASSERT_EQ(rco->cacheName, "foo");
+  ASSERT_EQ(rco->fileName, "bar");
+  ASSERT_EQ(rco->size, 1048576);
   ASSERT_EQ(rco->blockSize, 8192);
   ASSERT_EQ(rco->regionSize, 4096);
   ASSERT_EQ(rco->admProbability, 0.5);
   ASSERT_EQ(rco->admPolicy, "unknown");
   ASSERT_EQ(rco->maxWriteRate, 1024);
   ASSERT_EQ(rco->admissionWriteRate, 2048);
-  ASSERT_EQ(rco->volatileSize, 2000000);
+  ASSERT_EQ(rco->volatileSize, 524288;
   ASSERT_EQ(rco->bktPower, 48);
   ASSERT_EQ(rco->lockPower, 24);
   
