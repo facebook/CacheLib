@@ -585,18 +585,18 @@ TEST_F(CachelibWrapperTest, CreateFromString) {
 	    ROCKSDB_NAMESPACE::Status::OK());
   auto rco =  scache->GetOptions<RocksCachelibOptions>();
   ASSERT_NE(rco, nullptr);
-  ASSERT_STREQ(rco->cachename, "foo");
-  ASSERT_STREQ(rco->filename, "bar");
+  ASSERT_STREQ(rco->cacheName, "foo");
+  ASSERT_STREQ(rco->fileName, "bar");
   ASSERT_EQ(rco->size, 1000000);
-  ASSERT_EQ(rco->block_size, 8192);
-  ASSERT_EQ(rco->region_size, 4096);
-  ASSERT_EQ(rco->probability, 0.5);
+  ASSERT_EQ(rco->blockSize, 8192);
+  ASSERT_EQ(rco->regionSize, 4096);
+  ASSERT_EQ(rco->admProbability, 0.5);
   ASSERT_EQ(rco->admPolicy, "unknown");
-  ASSERT_EQ(rco->max_write_rate, 1024);
-  ASSERT_EQ(rco->admission_write_rate, 2048);
-  ASSERT_EQ(rco->volatile_size, 2000000);
-  ASSERT_EQ(rco->bucket_power, 48);
-  ASSERT_EQ(rco->lock_power, 24);
+  ASSERT_EQ(rco->maxWriteRate, 1024);
+  ASSERT_EQ(rco->admissionWriteRate, 2048);
+  ASSERT_EQ(rco->volatileSize, 2000000);
+  ASSERT_EQ(rco->bktPower, 48);
+  ASSERT_EQ(rco->lockPower, 24);
   
 }
 #endif // ROCKSDB_LITE

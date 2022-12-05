@@ -164,7 +164,7 @@ rocks_cachelib_type_info = {
 
 RocksCachelibWrapper::RocksCachelibWrapper(const RocksCachelibOptions& options)
   : options_(options), cache_(nullptr) {
-  RegisterOptions(options_, rocks_cachelib_type_info);
+  RegisterOptions(&options_, &rocks_cachelib_type_info);
 }
   
 ROCKSDB_NAMESPACE::Status RocksCachelibWrapper::PrepareOptions(const ROCKSDB_NAMESPACE::ConfigOptions& opts) {
