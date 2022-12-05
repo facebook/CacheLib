@@ -569,14 +569,14 @@ TEST_F(CachelibWrapperTest, CreateFromString) {
   std::shared_ptr<ROCKSDB_NAMESPACE::SecondaryCache> scache;
   std::string props = "cachename=foo;"
 		      "filename=bar;"
-		      "size=1048576;" 
- 		      "block_size=8192;" 
+		      "size=10000;" 
+ 		      "block_size=512;" 
 		      "region_size=4096;"
+ 		      "volatile_size=1024;"
 			"policy=unknown;" 
-			"probablity=0.50;"
-			"max_write_rate=1024;"
-			"admission_write_rate=2048;"
-			"volatile_size=524288;"
+			"probablity=0.42;"
+			"max_write_rate=11;"
+			"admission_write_rate=22;"
 			"bucket_power=48;"
     "lock_power=24;";
     
@@ -588,14 +588,14 @@ TEST_F(CachelibWrapperTest, CreateFromString) {
   ASSERT_NE(rco, nullptr);
   ASSERT_EQ(rco->cacheName, "foo");
   ASSERT_EQ(rco->fileName, "bar");
-  ASSERT_EQ(rco->size, 1048576);
-  ASSERT_EQ(rco->blockSize, 8192);
+  ASSERT_EQ(rco->size, 10000);
+  ASSERT_EQ(rco->blockSize, 512);
   ASSERT_EQ(rco->regionSize, 4096);
-  ASSERT_EQ(rco->admProbability, 0.5);
+  ASSERT_EQ(rco->admProbability, 0.42);
   ASSERT_EQ(rco->admPolicy, "unknown");
-  ASSERT_EQ(rco->maxWriteRate, 1024);
-  ASSERT_EQ(rco->admissionWriteRate, 2048);
-  ASSERT_EQ(rco->volatileSize, 524288;
+  ASSERT_EQ(rco->maxWriteRate, 11);
+  ASSERT_EQ(rco->admissionWriteRate, 22);
+  ASSERT_EQ(rco->volatileSize, 1024);
   ASSERT_EQ(rco->bktPower, 48);
   ASSERT_EQ(rco->lockPower, 24);
   
