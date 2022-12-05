@@ -28,6 +28,8 @@ namespace facebook {
 namespace rocks_secondary_cache {
 // Options structure for configuring a Cachelib SecondaryCache instance
 struct RocksCachelibOptions {
+  static const char *kName() { return "RocksCachelibOptions"; }
+  
   // A name for the use case
   std::string cacheName;
 
