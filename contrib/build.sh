@@ -81,6 +81,12 @@ build_fedora_34()
     || die "failed to install packages for Fedora"
 }
 
+build_arch()
+{
+  ./contrib//prerequisites-arch.sh \
+    || die "failed to install packages for ArchLinux"
+}
+
 build_dependencies()
 {
   for pkg in zstd googleflags googlelog googletest sparsemap fmt folly fizz wangle fbthrift ;
@@ -155,6 +161,7 @@ if test -z "$skip_os_pkgs" ; then
     centos8|rocky8.?) build_centos_8 ;;
     rocky9.?) build_rocky_9 ;;
     fedora3[456]) build_fedora_34 ;;
+    arch*|manjaro*) build_arch ;;
     *) die "No build recipe for detected operating system '$DETECTED'" ;;
   esac
 fi
