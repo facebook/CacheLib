@@ -32,6 +32,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  public:
   explicit PieceWiseReplayGenerator(const StressorConfig& config)
       : ReplayGeneratorBase(config),
+        traceStream_(config, 0),
         pieceCacheAdapter_(config.maxCachePieces,
                            config.replayGeneratorConfig.numAggregationFields,
                            config.replayGeneratorConfig.statsPerAggField),
@@ -136,6 +137,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     CACHE_HIT,
     TOTAL_DEFINED_FIELDS = 11
   };
+
+  TraceFileStream traceStream_;
 
   PieceWiseCacheAdapter pieceCacheAdapter_;
 

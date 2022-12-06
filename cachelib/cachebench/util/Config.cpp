@@ -31,6 +31,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
 
   JSONSetVal(configJson, enableLookaside);
   JSONSetVal(configJson, onlySetIfMiss);
+  JSONSetVal(configJson, ignoreOpCount);
   JSONSetVal(configJson, populateItem);
   JSONSetVal(configJson, samplingIntervalMs);
 
@@ -53,6 +54,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, maxInconsistencyCount);
 
   JSONSetVal(configJson, traceFileName);
+  JSONSetVal(configJson, traceFileNames);
   JSONSetVal(configJson, configPath);
 
   JSONSetVal(configJson, cachePieceSize);
@@ -78,10 +80,15 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
         ReplayGeneratorConfig{configJson["replayGeneratorConfig"]};
   }
 
+  if (!traceFileName.empty() && !traceFileNames.empty()) {
+    throw std::invalid_argument(
+        folly::sformat("set only one of traceFileName or traceFileNames"));
+  }
+
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 464>();
+  checkCorrectSize<StressorConfig, 488>();
 }
 
 bool StressorConfig::usesChainedItems() const {

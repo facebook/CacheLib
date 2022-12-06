@@ -80,14 +80,9 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
   auto totalFieldCount =
       partialFieldCount + config_.replayGeneratorConfig.numExtraFields;
   while (true) {
-    if (!std::getline(infile_, line)) {
-      if (repeatTraceReplay_) {
-        XLOG_EVERY_MS(
-            INFO, 100'000,
-            "Reached the end of trace file. Restarting from beginning.");
-        resetTraceFileToBeginning();
-        continue;
-      }
+    try {
+      traceStream_.getline(line);
+    } catch (const cachelib::cachebench::EndOfTrace& e) {
       isEndOfFile_.store(true, std::memory_order_relaxed);
       break;
     }
