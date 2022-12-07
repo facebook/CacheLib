@@ -668,6 +668,10 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   value = std::move(buffer);
   value.shrink(desc.valueSize);
   if (checksumData_ && desc.cs != checksum(value.view())) {
+    XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
+        "Item value checksum mismatch when looking up key {}. "
+        "Expected:{}, Actual: {}.",
+        key, desc.cs, checksum(value.view()));
     value.reset();
     lookupValueChecksumErrorCount_.inc();
     return Status::DeviceError;
