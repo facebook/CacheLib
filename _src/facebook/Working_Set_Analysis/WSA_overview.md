@@ -4,13 +4,13 @@ title: Working Set Analysis Overview
 ---
 
 ### POCs
-- Nick Stanisha (Infrastructure Data Science)
 - Pietari Pulkkinen (Infrastructure Data Science)
+- Hengli Liang (Infrastructure Data Science)
 - Sathya Gunasekar (Cachelib)
 - Jimmy Lu (Cachelib)
+- Hao Wu (Cachelib)
 - Eden Zik (Memcache)
 - Zifan Yang (Memcache)
-- Marc Light (Manager, Infrastructure Data Science)
 
 ### Links
 - [Working Set Analysis UI](https://www.internalfb.com/cachelib/wsa/)

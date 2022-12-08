@@ -5,7 +5,9 @@ title: Enabling WSA
 
 ### Enabling Working Set Analysis logging in Cache Library
 
-To enable Working Set Analysis, add the appropriate options to the config before instantiating the cache:
+> :exclamation:**Note: only use cachelib's built-in WSA if your use-case uses cachelib as a typical lookaside KV cache. If you have complex business logic (e.g. reading part of objects, mutating parts of objects, double read on misses, read cache before write, etc.), you should consider building your own WSA logger and log directly from within your application code**
+
+To enable CacheLib's built-in Working Set Analysis, add the appropriate options to the config before instantiating the cache:
 
 ```cpp
 // Use cacheConfig to instantiate the cache.
@@ -103,6 +105,23 @@ For more information on sampling configuration, see [Working Set Sampler Configu
 ### What do we log?
 
 For each cachelib operation, we log the following:
+
+### CacheLib Operation Results
+Refer to `AllocatorApiResult` in `cachelib/common/EventInterface.h`.
+```cpp
+// Enum to describe possible outcomes of Allocator API calls.
+enum class AllocatorApiResult : uint8_t {
+  FAILED = 0,              // Hard failure.
+  FOUND = 1,               // Found an item in a 'find' call.
+  NOT_FOUND = 2,           // Item was not found in a 'find' call.
+  NOT_FOUND_IN_MEMORY = 3, // Item was not found in memory with NVM enabled.
+  ALLOCATED = 4,           // Successfully allocated a new item.
+  INSERTED = 5,            // Inserted a new item in the map.
+  REPLACED = 6,            // Replaced an item in a map.
+  REMOVED = 7,             // Removed an item.
+  EVICTED = 8,             // Evicted an item.
+};
+```
 
 * The key (e.g., `cdn:v/t31.0-8/fr/cp0/e15/...`)
 * The operation (e.g., `FIND`, `REMOVE`, `INSERT_FROM_NVM`, etc.)

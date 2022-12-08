@@ -10,13 +10,47 @@ Not sure whether you should use object-cache? Check the [object-cache decision g
 ## Set up object-cache
 
 ### Create a simple object-cache
-You can set up object-cache by configuring the following settings in `ObjectCacheConfig`:
-- (**Required**) `l1EntriesLimit`: Above this many entries, object-cache will start evicting. The object-cache size is also estimated based on this number.
+The simplest object-cache is limited by the **number of objects**, i.e. an eviction will be triggered when the total object number reaches certain limit; the limit needs to be configured by the user as `l1EntriesLimit`.
+
+If your system is able to track the number of objects and provide that limit, you are good to use this option. If not, you may need to [create a "size-aware" object-cache](#create-a-size-aware-object-cache).
+
+#### Configuration
+You can set up a simple object-cache by configuring the following settings in `ObjectCacheConfig`:
+- (**Required**) `l1EntriesLimit`: The object number limit for object-cache to hold. Above this many entries, object-cache will start evicting.
 - (**Required**) `cacheName`: The name of the cache.
-- (**Required**) `maxKeySizeBytes`: The maximum sizeof key to be inserted. It cannot exceed 255 bytes.
-- `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`.
+- (**Required**) `itemDestructor`: The callback that will be triggered when the object leaves the cache. Users must set this to explicitly delete the objects; otherwise, there will be memory leak.
+```cpp
+// store a single type of objects
+config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) {
+        data.deleteObject<Foo>();
+});
+```
+``` cpp
+// store multiple types of objects
+// One way is to encode the type in the key.
+enum class user_defined_ObjectType { Foo1, Foo2, Foo3 };
+
+config.setItemDestructor([&](ObjectCacheDestructorData data) {
+     switch (user_defined_getType(data.key)) {
+       case user_defined_ObjectType::Foo1:
+         data.deleteObject<Foo1>();
+         break;
+       case user_defined_ObjectType::Foo2:
+         data.deleteObject<Foo2>();
+         break;
+       case user_defined_ObjectType::Foo3:
+         data.deleteObject<Foo3>();
+         break;
+       ...
+     }
+ });
+```
+- (**Suggested**) `maxKeySizeBytes`: The maximum size of the key to be inserted. It cannot exceed 255 bytes. Default to `255`. Since we also use this size to decide the size of object-cache, we suggest you set a reasonble value to avoid wasting space.
+- `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`. Check out [hashtable bucket configuration](../../Cache_Library_User_Guides/Configure_HashTable) to select a good value.
 - `l1LockPower`: This controls how many locks are present in object-cache's hashtable. Default to `10`.
 - `l1NumShards`: Number of shards to improve insert/remove concurrency. Default to `1`.
+- `l1ShardName`: Name of the shards. If not set, we will use the default name `pool`.
 
 ```cpp
 #include "cachelib/experimental/objcache2/ObjectCache.h"
@@ -29,15 +63,122 @@ struct Foo {
 };
 
 void init() {
-    cachelib::objcache2::ObjectCacheConfig config;
-    config.l1EntriesLimit = 10'000;
-    config.maxKeySizeBytes = 8;
-    config.cacheName = "MyObjectCache";
+    ObjectCache::Config config;
+    config.setCacheName("SimpleObjectCache")
+        .setCacheCapacity(10'000 /* l1EntriesLimit */)
+        .setItemDestructor(
+            [&](cachelib::objcache2::ObjectCacheDestructorData data) {
+              data.deleteObject<Foo>();
+            })
+        .setMaxKeySizeBytes(8)
+        .setAccessConfig(15 /* l1hashTablePower */, 10 /* l1locksPower */)
+        .setNumShards(2) /* optional */
+        .setShardName("my_shard") /* optional */;
 
-    objCache = ObjectCache::create<Foo>(std::move(config));
+    objCache = ObjectCache::create(std::move(config));
 }
 
 ```
+### Create a "size-aware" object-cache
+If your system needs to cap the cache size by bytes where the simple version mentioned above is not good enough, you can enable the "size-awareness" feature.
+
+A "size-aware" object-cache tracks the object size internally and is limited by the **total size of objects**, i.e. an eviction will be triggered when the total size of objects reaches certain limit; the limit needs to be configured by the user as `cacheSizeLimit`.
+
+:exclamation: **IMPORTANT:**
+A few notes before you try to create a "size-aware" object-cache:
+- This feature currently only works for **immutable** access.
+    - Immutable access means no "in-place modification" of the object once inserted to the cache.
+    - In the future, we might be able to support **mutable** access.
+- Objects number is still bounded by `l1EntriesLimit`.
+    - Above this many entries, object-cache will start evicting even if `cacheSizeLimit` has not been reached.
+    - Make sure you set a reasonably large `l1EntriesLimit` to avoid objects early eviction when it's far from reaching `cacheSizeLimit`.
+- Users are responsible to calculate the size of each object and pass the value to object-cache:
+    - We provide a util class to help calculate the object size. Check out ["how to calculate object size"](#how-to-calculate-object-size).
+    - Object-cache maintains the total object size internally based on the object size provided by users. See more in ["how is object size tracked"](#how-is-object-size-tracked).
+
+#### Configuration
+To set up a **size-aware** object-cache, besides the [settings](#configuration) mentioned above, also configure the following settings:
+- (**Required**) `sizeControllerIntervalMs`: Set a non-zero period (in milliseconds) to enable the ["size-controller"](#what-is-size-controller). `0` means "size-controller" is disabled.
+- (**Required**) `cacheSizeLimit`: The limit of cache size in bytes. If total object size is above this limit, object-cache will start evicting.
+
+```cpp
+#include "cachelib/experimental/objcache2/ObjectCache.h"
+
+using ObjectCache = cachelib::objcache2::ObjectCache<cachelib::LruAllocator>;
+std::unique_ptr<ObjectCache> objCacheSizeAware;
+
+struct Foo {
+ ...
+};
+
+void init() {
+    ObjectCache::Config config;
+    config.setCacheName("SizeAwareObjectCache")
+          .setCacheCapacity(10'000 /* l1EntriesLimit*/,
+                            30 * 1024 * 1024 * 1024 /* 30GB, cacheSizeLimit */,
+                            100 /* sizeControllerIntervalMs */)
+          .setItemDestructor(
+            [&](cachelib::objcache2::ObjectCacheDestructorData data) {
+              data.deleteObject<Foo>();
+            })
+          .setMaxKeySizeBytes(8)
+          .setAccessConfig(15 /* l1hashTablePower */, 10 /* l1locksPower */)
+          .setNumShards(2) /* optional */
+          .setShardName("my_shard") /* optional */;
+
+    objCacheSizeAware = ObjectCache::create(std::move(config));
+}
+
+```
+#### How to calculate object size
+It is users' responsibility to calculate each object size (i.e. how many bytes are occupied by the object). We provide a util class `ThreadMemoryTracker` that users can leverage to do the calculation.
+
+The basic idea is:
+1. Use Jemalloc util function (`thread.allocated` and `thread.deallocated`) to calculate allocated memory and deallocated memory in the current thread:
+```
+  memory usage = allocate memory - deallocated memory
+```
+2. Get the currently used memory before and after the object construction, the difference is the object memory:
+```
+   get before memory usage
+   ...construct object
+   get after memory usage
+   object size = after memory usage - before memory usage
+```
+Example:
+```cpp
+// initialize memory tracker only at the beginning
+ThreadMemoryTracke tMemTracker;
+...
+
+auto beforeMemUsage = tMemTracker.getMemUsageBytes();
+...construct the object
+auto afterMemUsage = tMemTracker.getMemUsageBytes();
+// afterMemUsage < beforeMemUsage occurs very rarely when the current thread
+// spawns children threads and the main thread deallocate memory allocated by
+// the children thread.
+auto objectSize = LIKELY(afterMemUsage > beforeMemUsage)
+                        ? (afterMemUsage - beforeMemUsage)
+                        : 0;
+```
+
+#### How is object size tracked
+When an object is inserted to the cache via `insertOrReplace` / `insert` API, users must pass "object size" to the API.
+
+After that, object-cache knows the size for each cached object and maintains the total object size internally.
+
+
+#### What is size controller
+Size-controller is the key component to achieve a "size-aware" object-cache. It is a periodic background worker that dynamically adjusts the **entries limit** by monitoring the current **total object size** and **total object number**:
+
+```
+averageObjectSize = totalObjectSize / totalObjectNum
+
+newEntriesLimit = config.cacheSizeLimit / averageObjectSize
+```
+
+In this case, we can guarantee cache size does not exceed `cacheSizeLimit` from long-term perspective. However, as it is not a precise control, we cannot prevent a sudden increase in object sizes.
+
 
 ### Add monitoring
 After the initialization, you should also add [cacheAdmin](../Cache_Monitoring/Cache_Admin_Overview) to enable [monitoring](../Cache_Monitoring/monitoring) for object-cache.
@@ -59,75 +200,121 @@ void init() {
 ### Add objects
 To add objects to object-cache, call `insertOrReplace` or `insert` API:
 ```cpp
-// Insert the object into the cache with given key. If the key exists in the
-// cache, it will be replaced with new obejct.
-//
-// Returns a pair of allocation status and shared_ptr of newly inserted object.
 template <typename T>
 std::pair<bool, std::shared_ptr<T>> insertOrReplace(
     folly::StringPiece key,
-    std::unique_ptr<T> object, /* object to be inserted */
-    uint32_t ttlSecs = 0, /* object expiring seconds */
-    std::shared_ptr<T>* replacedPtr = nullptr /* object to be replaced if not nullptr */ );
+    std::unique_ptr<T> object,
+    size_t objectSize = 0,
+    uint32_t ttlSecs = 0,
+    std::shared_ptr<T>* replacedPtr = nullptr);
 
-// Insert the object into the cache with given key. If the key exists in the
-// cache, the new object won't be inserted.
-//
-// Returns a pair of allocation status and shared_ptr of newly inserted object.
-// Even if object is not inserted, it will still be converted to a shared_ptr and returned.
 template <typename T>
 std::pair<AllocStatus, std::shared_ptr<T>> insert(folly::StringPiece key,
                                                   std::unique_ptr<T> object,
+                                                  size_t objectSize = 0,
                                                   uint32_t ttlSecs = 0);
-
 ```
-Example:
-```cpp
-std::shared_ptr<Foo> cacheFoo(folly::StringPiece key, std::unique_ptr<Foo> foo) {
-    ...
-    auto [allocStatus, ptr] = objcache->insertOrReplace(key, std::move(foo));
-    if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-         ...
-         return ptr;
-    } else { // ObjectCache::AllocStatus::kAllocError
-        ...
-    }
-    ...
-}
+- `insertOrReplace`:
+  - Insert an object into the cache with a given key.
+  - If the key exists in the cache, it will be replaced with new object.
+  - Return a pair of allocation status (`kSuccess` or `kAllocError`) and `shared_ptr` of newly inserted object. Note that even if the object is not successfully inserted, it will still be converted to a `shared_ptr` and returned.
+- `insert`:
+  - Unique insert an object into the cache with a given key.
+  - If the key exists in the cache, the new object will NOT be inserted.
+  - Return a pair of allocation status (`kSuccess`, `kKeyAlreadyExists` or `kAllocError`) and `shared_ptr` of newly inserted object. Note that even if the object is not successfully inserted, it will still be converted to a `shared_ptr` and returned.
 
-std::shared_ptr<Foo> cacheFooUnique(folly::StringPiece key, std::unique_ptr<Foo> foo) {
-    ...
-    auto [allocStatus, ptr] = objcache->insert(key, std::move(foo));
-    if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-         ...
-         return ptr;
-    } else if (allocStatus == ObjectCache::AllocStatus::kKeyAlreadyExists) {
+Parameters:
+  - (**required**) `key`: object key
+  - (**required**) `object`: `unique_ptr` of the object to be inserted
+  - `objectSize`: size of the object to be inserted
+    - default to `0`
+    - for non-size-aware ones, always leave the value as `0`
+    - for size-aware ones, **MUST provide a non-zero value** (check out ["how to calculate object size"](#how-to-calculate-object-size))
+  - `ttlSecs`: Time To Live(seconds) for the object
+    - default to `0` means object has no expiring time.
+  - `replacedPtr`: pointer to receive the replaced object
+    - `insertOrReplace` API only
+    - default to `nullptr`
+    - set a non-nullptr value if you want to get the replaced object
+
+Example(non-size-aware):
+```cpp
+...
+auto [allocStatus, ptr] = objcache->insertOrReplace(
+    key, std::move(foo), 0 /*objectSize tracking is not enabled*/, ttlSecs /*optional*/);
+if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
         ...
-    } else { // ObjectCache::AllocStatus::kAllocError
-        ...
-    }
+        return ptr;
+} else { // ObjectCache::AllocStatus::kAllocError
     ...
 }
+```
+
+```cpp
+...
+auto [allocStatus, ptr] = objcache->insert(
+    key, std::move(foo), 0 /*objectSize tracking is not enabled*/, ttlSecs /*optional*/);
+if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
+        ...
+        return ptr;
+} else if (allocStatus == ObjectCache::AllocStatus::kKeyAlreadyExists) {
+    ...
+} else { // ObjectCache::AllocStatus::kAllocError
+    ...
+}
+```
+
+Example(size-aware):
+```cpp
+...
+auto [allocStatus, ptr] = objcacheSizeAware->insertOrReplace(key, std::move(foo), objectSize /* must be non-zero */, ttlSecs /*optional*/);
+if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
+        ...
+        return ptr;
+} else { // ObjectCache::AllocStatus::kAllocError
+    ...
+}
+...
+```
+
+```cpp
+...
+auto [allocStatus, ptr] = objcacheSizeAware->insert(key, std::move(foo), objectSize /* must be non-zero*/, ttlSecs /*optional*/);
+if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
+    ...
+    return ptr;
+} else if (allocStatus == ObjectCache::AllocStatus::kKeyAlreadyExists) {
+    ...
+} else { // ObjectCache::AllocStatus::kAllocError
+    ...
+}
+...
 ```
 
 ### Get objects
 To get objects from object-cache, call `find` or `findToWrite` API:
 ```cpp
-// Look up an object in read-only access.
 template <typename T>
 std::shared_ptr<const T> find(folly::StringPiece key);
 
-// Look up an object in mutable access
 template <typename T>
 std::shared_ptr<T> findToWrite(folly::StringPiece key);
 ```
+- `find`:
+  - Look up an object in **read-only** access.
+  - Return a `shared_ptr` to a const version of the object if found; `nullptr` if not found.
+- `findToWrite`:
+  - Look up an object in **mutable** access.
+  - Return a `shared_ptr` to a mutable version of the object if found; `nullptr` if not found.
+
 Example:
 ```cpp
 std::shared_ptr<const Foo> foo = objcache->find<Foo>("foo");
 if (foo !== nullptr) {
     ... some read operation
 }
-
+```
+```cpp
 std::shared_ptr<Foo> mutableFoo = objcache->findToWrite<Foo>("foo");
 if (mutableFoo !== nullptr) {
     ... some write operation
@@ -138,9 +325,10 @@ if (mutableFoo !== nullptr) {
 ### Remove objects
 To remove objects from object-cache, call `remove` API:
 ```cpp
-// Remove an object from cache by its key. No-op if object doesn't exist.
 void remove(folly::StringPiece key);
 ```
+- `remove`: Remove an object from cache by its key. No-op if the key not found.
+
 Example:
 ```cpp
 // objcache is empty
@@ -150,4 +338,105 @@ objcache->insertOrReplace<Foo>("foo", std::move(foo));
 ...
 
 objcache->remove<Foo>("foo"); // foo will be removed
+```
+
+## Cache Persistence
+Cache persistence is an opt-in feature in object-cache to persist objects across process restarts. It is useful when you want to restart your binary without losing previously cached objects. Currently we support cache persistence in a multi-thread mode where user can configure the parallelism degree to adjust the persistence/recovery speed.
+
+Before enabling cache persistence, please be aware of the following limitations:
+- Only works when you restart the process in the same machine. Across machines persistence is not supported.
+- Only Thrift objects can be persisted.
+
+To enable cache persistence, you need to configure the following parameters:
+- `threadCount`: number of threads to work on persistence/recovery concurrently
+- `persistBasefilePath`: file path to save the persistent data
+  - cache metadata will be saved in "persistBasefilePath";
+  - objects will be saved in "persistBasefilePath_i", i in [0, threadCount)
+- `serializeCallback`: callback to serialize an object, used for object persisting
+- `deserializeCallback`: callback to deserialize an object, used for object recovery
+
+### Configure cache persistence
+Example (single-type):
+```cpp
+ObjectCache::Config config;
+...
+config.enablePersistence(threadCount,
+                         persistBaseFilePath,
+                           [&](ObjectCache::Serializer serializer) {
+                             return serializer.serialize<ThriftType>();
+                           },
+                          [&](ObjectCache::Deserializer deserializer) {
+                             deserializer.deserialize<ThriftType>();
+                           });
+
+
+```
+Example (multi-type):
+```cpp
+ObjectCache::Config config;
+...
+config.enablePersistence(threadCount,
+                         persistBaseFilePath,
+                           [&](ObjectCache::Serializer serializer) {
+                   switch (user_defined_getType(serializer.key)) {
+                         case user_defined_Type::ThriftType1:
+                              return serializer.serialize<ThriftType1>();
+                         case user_defined_Type::ThriftType2:
+                              return serializer.serialize<ThriftType2>();
+                         case user_defined_Type::ThriftType3:
+                              return serializer.serialize<ThriftType3>();
+                         default:
+                              …
+                           },
+                          [&](ObjectCache::Deserializer deserializer) {
+                     switch (user_defined_getType(serializer.key)) {
+                         case user_defined_Type::ThriftType1:
+                              deserializer.deserialize<ThriftType1>();
+                              break;
+                         case user_defined_Type::ThriftType2:
+                              deserializer.deserialize<ThriftType2>();
+                              break;
+                         case user_defined_Type::ThriftType3:
+                              deserializer.deserialize<ThriftType3>();
+                              break;
+                         default:
+                              …
+                           });
+
+```
+
+### Use cache persistence
+Once cache persistence is enabled, to persist or recover objects, it is as simple as an API call.
+
+To persist, user should call `persist()` API upon cache shutdown:
+```cpp
+objCache->persist(); // all non-expired objects will be saved to files
+```
+
+
+To recover, user should call `recover()` API upon cache restart:
+```cpp
+objCache->recover(); // all saved non-expired objects will be recovered
+```
+
+Notes:
+- Expired objects won't be persisted or recovered.
+- To correctly recover objects, user must put the same `persistBaseFilePath` as the previous persistent cache instance.
+- `threadCount` is for persisting parallelism of the current cache instance. Recovery will always use the same `threadCount` as the previous persistent cache instance. For example:
+```cpp
+config1.enablePersistence(5 /*threadCount*/, "baseFile_1", ..., ...);
+auto objCache1 = ObjectCache::create(config1);
+...
+// ... shutting down cache
+objCache1.persist(); // threadCount = 5
+
+...
+config2.enablePersistence(10 /*threadCount*/, "baseFile_1", ..., ...);
+auto objCache2 = ObjectCache::create(config2);
+//... restarting cache
+objCache2.recover(); // threadCount = 5
+...
+//... shutting down cache
+objCache2.persist(); // threadCount = 10
+
 ```

@@ -42,7 +42,7 @@ For example:
 ```cpp
 auto handle = cache->find("key1");
 if (handle) {
-  auto data = reinterpret_cast<const char*>(handle->getMemory());
+  auto data = folly::StringPiece{reinterpret_cast<const char*>(handle->getMemory()), handle->getSize()};
   std::cout << data << '\n';
 }
 ```
@@ -56,7 +56,7 @@ To read data from chained items, start from the parent item handle, for example:
 ```cpp
 auto chainedAllocs = cache->viewAsChainedAllocs(parentItemHandle);
 for (auto& c : chainedAllocs.getChain()) {
-  auto data = reinterpret_cast<const char*>(c.getMemory());
+  auto data = folly::StringPiece{reinterpret_cast<const char*>(handle->getMemory()), handle->getSize()};
   std::cout << data << '\n';
 }
 ```
@@ -71,7 +71,7 @@ To get the *n*th item in the chain, call the `getNthInChain()` method via `Cache
 auto chainedAllocs = cache->viewAsChainedAllocs(parentItemHandle);
 auto item = chainedAllocs.getNthInChain(1);
 if (item) {
-  std::cout << reinterpret_cast<const char*>(item->getMemory()) << '\n';
+  std::cout << folly::StringPiece{reinterpret_cast<const char*>(item->getMemory()), item->getSize()}; << '\n';
 }
 ```
 

@@ -240,7 +240,6 @@ using namespace facebook::cachelib;
 using Cache = cachelib::LruAllocator;
 using CacheConfig = typename Cache::Config;
 using CacheKey = typename Cache::Key;
-using CacheItemHandle = typename Cache::ItemHandle;
 
 // cache config
 CacheConfig config;
@@ -283,7 +282,6 @@ using namespace facebook::cachelib;
 using Cache = cachelib::LruAllocator;
 using CacheConfig = typename Cache::Config;
 using CacheKey = typename Cache::Key;
-using CacheItemHandle = typename Cache::ItemHandle;
 
 // cache config
 CacheConfig config;

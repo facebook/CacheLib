@@ -65,4 +65,13 @@ There're several ways. You can examine access container or mm container, and nav
 <cache ptr>->allocator_._M_t._M_t._M_head_impl->slabAllocator_.slabMemoryStart_
 ```
 
-tbd
+**Examine MMContainers**
+
+```cpp
+// Look at cacheAllocator_->mmContainers_[0][64]
+p this->mmContainers_._M_elems[0]._M_elems[64]._M_t._M_t._M_head_imp
+// Look at the tail of LRU.
+p (this->mmContainers_._M_elems[0]._M_elems[64]._M_t._M_t._M_head_imp->lru_.lists_.M_impl._M_start+2->_M_t._M_t._M_head_impl.tail_
+```
+
+
