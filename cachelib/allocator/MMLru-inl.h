@@ -212,10 +212,21 @@ bool MMLru::Container<T, HookPtr>::add(T& node) noexcept {
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
-typename MMLru::Container<T, HookPtr>::Iterator
+typename MMLru::Container<T, HookPtr>::LockedIterator
 MMLru::Container<T, HookPtr>::getEvictionIterator() const noexcept {
   LockHolder l(*lruMutex_);
-  return Iterator{std::move(l), lru_.rbegin()};
+  return LockedIterator{std::move(l), lru_.rbegin()};
+}
+
+template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename F>
+void MMLru::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
+  if (config_.useCombinedLockForIterators) {
+    lruMutex_->lock_combine([this, &fun]() { fun(Iterator{lru_.rbegin()}); });
+  } else {
+    LockHolder lck{*lruMutex_};
+    fun(Iterator{lru_.rbegin()});
+  }
 }
 
 template <typename T, MMLru::Hook<T> T::*HookPtr>
@@ -360,8 +371,9 @@ void MMLru::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
 
 // Iterator Context Implementation
 template <typename T, MMLru::Hook<T> T::*HookPtr>
-MMLru::Container<T, HookPtr>::Iterator::Iterator(
-    LockHolder l, const typename LruList::Iterator& iter) noexcept
-    : LruList::Iterator(iter), l_(std::move(l)) {}
+MMLru::Container<T, HookPtr>::LockedIterator::LockedIterator(
+    LockHolder l, const Iterator& iter) noexcept
+    : Iterator(iter), l_(std::move(l)) {}
+
 } // namespace cachelib
 } // namespace facebook

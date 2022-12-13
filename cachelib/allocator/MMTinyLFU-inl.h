@@ -214,10 +214,17 @@ bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
-typename MMTinyLFU::Container<T, HookPtr>::Iterator
+typename MMTinyLFU::Container<T, HookPtr>::LockedIterator
 MMTinyLFU::Container<T, HookPtr>::getEvictionIterator() const noexcept {
   LockHolder l(lruMutex_);
-  return Iterator{std::move(l), *this};
+  return LockedIterator{std::move(l), *this};
+}
+
+template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename F>
+void MMTinyLFU::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
+  // TinyLFU uses spin lock which does not support combined locking
+  fun(getEvictionIterator());
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
@@ -245,7 +252,7 @@ bool MMTinyLFU::Container<T, HookPtr>::remove(T& node) noexcept {
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
-void MMTinyLFU::Container<T, HookPtr>::remove(Iterator& it) noexcept {
+void MMTinyLFU::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
   T& node = *it;
   XDCHECK(node.isInMMContainer());
   ++it;
@@ -347,9 +354,9 @@ void MMTinyLFU::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
   lruRefreshTime_.store(lruRefreshTime, std::memory_order_relaxed);
 }
 
-// Iterator Context Implementation
+// Locked Iterator Context Implementation
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
-MMTinyLFU::Container<T, HookPtr>::Iterator::Iterator(
+MMTinyLFU::Container<T, HookPtr>::LockedIterator::LockedIterator(
     LockHolder l, const Container<T, HookPtr>& c) noexcept
     : c_(c),
       tIter_(c.lru_.getList(LruType::Tiny).rbegin()),
