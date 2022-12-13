@@ -214,6 +214,50 @@ class MM2Q {
            size_t hotPercent,
            size_t coldPercent,
            uint32_t mmReconfigureInterval)
+        : Config(time,
+                 ratio,
+                 updateOnW,
+                 updateOnR,
+                 tryLockU,
+                 rebalanceOnRecordAccs,
+                 hotPercent,
+                 coldPercent,
+                 mmReconfigureInterval,
+                 false) {}
+
+    // @param time                    the LRU refresh time.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the
+    //                                number of accesses it gets.
+    // @param ratio                   the LRU refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    // update.
+    // @param rebalanceOnRecordAccs   whether to do rebalance on access. If set
+    //                                to false, rebalance only happens when
+    //                                items are added or removed to the queue.
+    // @param hotPercent              percentage number for the size of the hot
+    //                                queue in the overall size.
+    // @param coldPercent             percentage number for the size of the cold
+    //                                queue in the overall size.
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
+    // useCombinedLockForIterators    Whether to use combined locking for
+    //                                withEvictionIterator
+    Config(uint32_t time,
+           double ratio,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           bool rebalanceOnRecordAccs,
+           size_t hotPercent,
+           size_t coldPercent,
+           uint32_t mmReconfigureInterval,
+           bool useCombinedLockForIterators)
         : defaultLruRefreshTime(time),
           lruRefreshRatio(ratio),
           updateOnWrite(updateOnW),
@@ -223,7 +267,8 @@ class MM2Q {
           hotSizePercent(hotPercent),
           coldSizePercent(coldPercent),
           mmReconfigureIntervalSecs(
-              std::chrono::seconds(mmReconfigureInterval)) {
+              std::chrono::seconds(mmReconfigureInterval)),
+          useCombinedLockForIterators(useCombinedLockForIterators) {
       checkLruSizes();
     }
 
@@ -306,6 +351,9 @@ class MM2Q {
     // Minimum interval between reconfigurations. If 0, reconfigure is never
     // called.
     std::chrono::seconds mmReconfigureIntervalSecs{};
+
+    // Whether to use combined locking for withEvictionIterator.
+    bool useCombinedLockForIterators{false};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -347,22 +395,24 @@ class MM2Q {
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
+    using Iterator = typename LruList::Iterator;
+
     // context for iterating the MM container. At any given point of time,
     // there can be only one iterator active since we need to lock the LRU for
     // iteration. we can support multiple iterators at same time, by using a
     // shared ptr in the context for the lock holder in the future.
-    class Iterator : public LruList::Iterator {
+    class LockedIterator : public Iterator {
      public:
       // noncopyable but movable.
-      Iterator(const Iterator&) = delete;
-      Iterator& operator=(const Iterator&) = delete;
+      LockedIterator(const LockedIterator&) = delete;
+      LockedIterator& operator=(const LockedIterator&) = delete;
 
-      Iterator(Iterator&&) noexcept = default;
+      LockedIterator(LockedIterator&&) noexcept = default;
 
       // 1. Invalidate this iterator
       // 2. Unlock
       void destroy() {
-        LruList::Iterator::reset();
+        Iterator::reset();
         if (l_.owns_lock()) {
           l_.unlock();
         }
@@ -373,15 +423,15 @@ class MM2Q {
         if (!l_.owns_lock()) {
           l_.lock();
         }
-        LruList::Iterator::resetToBegin();
+        Iterator::resetToBegin();
       }
 
      private:
       // private because it's easy to misuse and cause deadlock for MM2Q
-      Iterator& operator=(Iterator&&) noexcept = default;
+      LockedIterator& operator=(LockedIterator&&) noexcept = default;
 
       // create an lru iterator with the lock being held.
-      Iterator(LockHolder l, const typename LruList::Iterator& iter) noexcept;
+      LockedIterator(LockHolder l, const Iterator& iter) noexcept;
 
       // only the container can create iterators
       friend Container<T, HookPtr>;
@@ -422,7 +472,7 @@ class MM2Q {
 
     // same as the above but uses an iterator context. The iterator is updated
     // on removal of the corresponding node to point to the next node. The
-    // iterator context holds the lock on the lru.
+    // iterator context is responsible for locking.
     //
     // iterator will be advanced to the next node after removing the node
     //
@@ -445,7 +495,12 @@ class MM2Q {
     // Obtain an iterator that start from the tail and can be used
     // to search for evictions. This iterator holds a lock to this
     // container and only one such iterator can exist at a time
-    Iterator getEvictionIterator() const noexcept;
+    LockedIterator getEvictionIterator() const noexcept;
+
+    // Execute provided function under container lock. Function gets
+    // Iterator passed as parameter.
+    template <typename F>
+    void withEvictionIterator(F&& f);
 
     // get the current config as a copy
     Config getConfig() const;
