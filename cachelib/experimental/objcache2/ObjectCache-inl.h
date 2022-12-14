@@ -313,7 +313,7 @@ void ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
 
 template <typename AllocatorT>
 void ObjectCache<AllocatorT>::getObjectCacheCounters(
-    std::function<void(folly::StringPiece, uint64_t)> visitor) const {
+    const util::CounterVisitor& visitor) const {
   visitor("objcache.lookups", lookups_.get());
   visitor("objcache.lookups.l1_hits", succL1Lookups_.get());
   visitor("objcache.inserts", inserts_.get());

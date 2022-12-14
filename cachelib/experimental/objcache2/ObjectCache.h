@@ -206,7 +206,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @param visitor   callback that will be invoked with
   //                  {stat-name, value} for each stat
   void getObjectCacheCounters(
-      std::function<void(folly::StringPiece, uint64_t)> visitor) const override;
+      const util::CounterVisitor& visitor) const override;
 
   // Return the number of objects in cache
   uint64_t getNumEntries() const {
