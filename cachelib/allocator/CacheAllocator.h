@@ -1308,7 +1308,7 @@ class CacheAllocator : public CacheBase {
 
  private:
   // wrapper around Item's refcount and active handle tracking
-  FOLLY_ALWAYS_INLINE void incRef(Item& it);
+  FOLLY_ALWAYS_INLINE bool incRef(Item& it);
   FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef(Item& it);
 
   // drops the refcount and if needed, frees the allocation back to the memory
@@ -1756,9 +1756,9 @@ class CacheAllocator : public CacheBase {
 
   // @return  true when successfully marked as moving,
   //          fasle when this item has already been freed
-  bool markExclusiveForSlabRelease(const SlabReleaseContext& ctx,
-                                   void* alloc,
-                                   util::Throttler& throttler);
+  bool markMovingForSlabRelease(const SlabReleaseContext& ctx,
+                                void* alloc,
+                                util::Throttler& throttler);
 
   // "Move" (by copying) the content in this item to another memory
   // location by invoking the move callback.
@@ -1936,7 +1936,7 @@ class CacheAllocator : public CacheBase {
   }
 
   static bool parentEvictForSlabReleasePredicate(const Item& item) {
-    return item.getRefCount() == 1 && !item.isExclusive();
+    return item.getRefCount() == 1 && !item.isMoving();
   }
 
   std::unique_ptr<Deserializer> createDeserializer();

@@ -305,12 +305,17 @@ class CACHELIB_PACKED_ATTR CacheItem {
    */
   RefcountWithFlags::Value getRefCountAndFlagsRaw() const noexcept;
 
-  FOLLY_ALWAYS_INLINE void incRef() {
-    if (LIKELY(ref_.incRef())) {
-      return;
+  // Increments item's ref count
+  //
+  // @return true on success, failure if item is marked as exclusive
+  // @throw exception::RefcountOverflow on ref count overflow
+  FOLLY_ALWAYS_INLINE bool incRef() {
+    try {
+      return ref_.incRef();
+    } catch (exception::RefcountOverflow& e) {
+      throw exception::RefcountOverflow(
+          folly::sformat("{} item: {}", e.what(), toString()));
     }
-    throw exception::RefcountOverflow(
-        folly::sformat("Refcount maxed out. item: {}", toString()));
   }
 
   FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef() {
@@ -344,23 +349,43 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   /**
    * The following two functions corresond to whether or not an item is
-   * currently in the process of being moved. This happens during a slab
-   * rebalance, eviction or resize operation.
+   * currently in the process of being evicted.
    *
-   * An item can only be marked exclusive when `isInMMContainer` returns true.
+   * An item can only be marked exclusive when `isInMMContainer` returns true
+   * and item is not already exclusive nor moving and the ref count is 0.
    * This operation is atomic.
    *
-   * User can also query if an item "isOnlyExclusive". This returns true only
-   * if the refcount is 0 and only the exclusive bit is set.
-   *
-   * Unmarking exclusive does not depend on `isInMMContainer`.
+   * Unmarking exclusive does not depend on `isInMMContainer`
    * Unmarking exclusive will also return the refcount at the moment of
    * unmarking.
    */
-  bool markExclusive() noexcept;
-  RefcountWithFlags::Value unmarkExclusive() noexcept;
-  bool isExclusive() const noexcept;
-  bool isOnlyExclusive() const noexcept;
+  bool markForEviction() noexcept;
+  RefcountWithFlags::Value unmarkForEviction() noexcept;
+  bool isMarkedForEviction() const noexcept;
+
+  /**
+   * The following functions correspond to whether or not an item is
+   * currently in the processed of being moved. When moving, ref count
+   * is always >= 1.
+   *
+   * An item can only be marked moving when `isInMMContainer` returns true
+   * and item is not already exclusive nor moving.
+   *
+   * User can also query if an item "isOnlyMoving". This returns true only
+   * if the refcount is one and only the exclusive bit is set.
+   *
+   * Unmarking moving does not depend on `isInMMContainer`
+   * Unmarking moving will also return the refcount at the moment of
+   * unmarking.
+   */
+  bool markMoving();
+  RefcountWithFlags::Value unmarkMoving() noexcept;
+  bool isMoving() const noexcept;
+  bool isOnlyMoving() const noexcept;
+
+  /** This function attempts to mark item as exclusive.
+   * Can only be called on the item that is moving.*/
+  bool markForEvictionWhenMoving();
 
   /**
    * Item cannot be marked both chained allocation and
