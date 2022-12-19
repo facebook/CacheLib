@@ -81,6 +81,27 @@ uint8_t HotHashDetector::bumpHash(uint64_t hash) {
   return result;
 }
 
+bool HotHashDetector::isHotHash(uint64_t hash) const {
+  auto idx = l1HashFunction(hash);
+  auto l1count = l1Vector_[idx];
+  // Checking against threshold/2 since hot index should pass after one decay
+  if (LIKELY(l1count < (l1Threshold_ / 2))) {
+    return false;
+  }
+  auto idx2 = l2HashFunction(hash);
+  uint32_t l2count = l2Vector_[idx2].count;
+  if (l2count == 0) {
+    return false;
+  }
+  for (unsigned i = 0; i < kScanLen; ++i) {
+    auto& cell = l2Vector_[(idx2 + i) & bucketsMask_];
+    if (cell.hash == hash) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void HotHashDetector::doMaintenance() {
   bumpsSinceMaintenance_ = 0;
 

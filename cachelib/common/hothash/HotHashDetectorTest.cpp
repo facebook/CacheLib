@@ -58,7 +58,11 @@ static void testHotHashes(uint32_t seed,
       }
       hotCount = 0;
       for (size_t i = 0; i < numHashes; ++i) {
-        hotCount += detector.bumpHash(hashes[i]) ? 1 : 0;
+        bool isHot = detector.bumpHash(hashes[i]) > 0;
+        hotCount += isHot ? 1 : 0;
+        if (isHot) {
+          EXPECT_TRUE(detector.isHotHash(hashes[i]));
+        }
       }
       ++iteration;
     }
