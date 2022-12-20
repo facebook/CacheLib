@@ -80,8 +80,8 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
     // exists in hash table
     kAccessible,
 
-    // this flag indicates the allocation is being moved elsewhere
-    // (can be triggered by a resize or reblanace operation)
+    // this flag indicates the allocation is being evicted or moved elsewhere
+    // (can be triggered by a resize, rebalance or normal eviction operation)
     kExclusive,
   };
 
