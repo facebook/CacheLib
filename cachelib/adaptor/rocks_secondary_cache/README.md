@@ -10,13 +10,13 @@ First, build cachelib through the normal build procedure.
 
 To build under RocksDB, link this directory adaptor/rocksdb_secondary_cache) to the plugins/cachelib directory under RocksDB:
 ```
-$ln -s .../secondary_cache .../plugins/cachelib).
+$ln -s .../secondary_cache .../plugins/cachelib
 ```
 This will allow RocksDB to find and build the CacheLib plugin code.
 
 Next, under the RocksDB build directory, instruct RocksDB to build and include the cachelib plugin:
 ```
-$cmake -DROCKSDB_PLUGINS=cachelib -DCMAKE_PREFIX_PATH=<Path to CacheLib> -DCMAKE_MODULE_PATH="<Path to CacheLib>" -DWITH_GFLAGS=OFF ..
+$cmake -DROCKSDB_PLUGINS=cachelib -DCMAKE_PREFIX_PATH=<Path to CacheLib> -DCMAKE_MODULE_PATH="<Path to CacheLib>"  ..
 ```
 where  the prefix path points to the opt/cachelib directory and module path points to the cachelib/cmake directory.
 
