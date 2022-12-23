@@ -574,7 +574,7 @@ TEST_F(CachelibWrapperTest, CreateFromString) {
 		      "region_size=4096;"
  		      "volatile_size=1024;"
 			"policy=unknown;" 
-			"probablity=0.42;"
+			"probability=0.42;"
 			"max_write_rate=11;"
 			"admission_write_rate=22;"
 			"bucket_power=48;"
