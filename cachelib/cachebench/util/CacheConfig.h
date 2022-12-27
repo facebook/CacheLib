@@ -41,6 +41,26 @@ class CacheMonitorFactory {
   virtual std::unique_ptr<CacheMonitor> create(Lru2QAllocator& cache) = 0;
 };
 
+// Parse memory tiers configuration from JSON config
+struct MemoryTierConfig : public JSONConfig {
+  MemoryTierConfig() {}
+
+  explicit MemoryTierConfig(const folly::dynamic& configJson);
+
+  // Returns MemoryTierCacheConfig parsed from JSON config
+  MemoryTierCacheConfig getMemoryTierCacheConfig() {
+    MemoryTierCacheConfig config = MemoryTierCacheConfig::fromShm();
+    config.setRatio(ratio);
+    config.setMemBind(NumaBitMask(memBindNodes));
+    return config;
+  }
+
+  // Specifies ratio of this memory tier to other tiers
+  size_t ratio{0};
+  // Allocate memory only from specified NUMA nodes
+  std::string memBindNodes{""};
+};
+
 struct CacheConfig : public JSONConfig {
   // by defaullt, lru allocator. can be set to LRU-2Q.
   std::string allocator{"LRU"};
@@ -193,6 +213,12 @@ struct CacheConfig : public JSONConfig {
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};
+
+  // Use Posix Shm instead of SysVShm
+  bool usePosixShm{false};
+
+  // Memory tiers configs
+  std::vector<MemoryTierCacheConfig> memoryTierConfigs{};
 
   // If enabled, we will use the timestamps from the trace file in the ticker
   // so that the cachebench will observe time based on timestamps from the trace
