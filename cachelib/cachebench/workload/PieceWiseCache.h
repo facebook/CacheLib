@@ -282,6 +282,7 @@ struct PieceWiseReqWrapper {
   // @param ttl: ttl of the content for caching
   // @param statsAggFieldV: extra fields used for stats aggregation
   // @param admFeatureM: features map for admission policy
+  // @param itemValue: client-specific data for the item
 
   explicit PieceWiseReqWrapper(
       uint64_t cachePieceSize,
@@ -296,7 +297,8 @@ struct PieceWiseReqWrapper {
       uint32_t ttl,
       std::vector<std::string>&& statsAggFieldV,
       std::unordered_map<std::string, std::string>&& admFeatureM,
-      folly::Optional<bool> isHit);
+      folly::Optional<bool> isHit,
+      const std::string& itemValue);
 
   PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };

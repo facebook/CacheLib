@@ -91,9 +91,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
     try {
       std::vector<folly::StringPiece> fields;
       folly::split(",", line, fields);
-      if (fields.size() != totalFieldCount &&
-          // TODO: remove this after legacy data phased out.
-          fields.size() + 1 != totalFieldCount) {
+
+      // TODO: remove this after legacy data phased out.
+      if (fields.size() > totalFieldCount ||
+          fields.size() < totalFieldCount - 2) {
         invalidSamples_.inc();
         continue;
       }
@@ -234,6 +235,11 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         }
       }
 
+      const std::string itemValue =
+          fields.size() == totalFieldCount
+              ? folly::to<std::string>(fields[SampleFields::ITEM_VALUE])
+              : "";
+
       // Spin until the queue has room
       while (!activeReqQ_[shard]->write(config_.cachePieceSize,
                                         timestampSeconds,
@@ -248,7 +254,8 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         ttl,
                                         std::move(statsAggFields),
                                         std::move(admFeatureMap),
-                                        cacheHit)) {
+                                        cacheHit,
+                                        itemValue)) {
         if (shouldShutdown()) {
           XLOG(INFO) << "Forced to stop, terminate reading trace file!";
           return;

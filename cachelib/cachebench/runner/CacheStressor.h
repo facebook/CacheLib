@@ -239,7 +239,7 @@ class CacheStressor : public Stressor {
   }
 
   // populate the input item handle according to the stress setup.
-  void populateItem(WriteHandle& handle) {
+  void populateItem(WriteHandle& handle, const std::string& itemValue = "") {
     if (!config_.populateItem) {
       return;
     }
@@ -247,6 +247,12 @@ class CacheStressor : public Stressor {
     XDCHECK_LE(cache_->getSize(handle), 4ULL * 1024 * 1024);
     if (cache_->consistencyCheckEnabled()) {
       cache_->setUint64ToItem(handle, folly::Random::rand64(rng));
+    }
+
+    if (!itemValue.empty()) {
+      // Add the null character to ensure this is a proper c string.
+      // TODO(T141356292): Clean this up to avoid allocating a new string
+      cache_->setStringItem(handle, itemValue + "\0");
     } else {
       cache_->setStringItem(handle, hardcodedString_);
     }
@@ -323,7 +329,7 @@ class CacheStressor : public Stressor {
           }
           auto lock = chainedItemAcquireUniqueLock(*key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                          req.admFeatureMap);
+                          req.admFeatureMap, req.itemValue);
 
           break;
         }
@@ -353,7 +359,7 @@ class CacheStressor : public Stressor {
               slock = {};
               xlock = chainedItemAcquireUniqueLock(*key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
-                     req.admFeatureMap);
+                     req.admFeatureMap, req.itemValue);
             }
           } else {
             result = OpResultType::kGetHit;
@@ -462,7 +468,8 @@ class CacheStressor : public Stressor {
       const std::string* key,
       size_t size,
       uint32_t ttlSecs,
-      const std::unordered_map<std::string, std::string>& featureMap) {
+      const std::unordered_map<std::string, std::string>& featureMap,
+      const std::string& itemValue) {
     // check the admission policy first, and skip the set operation
     // if the policy returns false
     if (config_.admPolicy && !config_.admPolicy->accept(featureMap)) {
@@ -475,7 +482,7 @@ class CacheStressor : public Stressor {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
-      populateItem(it);
+      populateItem(it, itemValue);
       cache_->insertOrReplace(it);
       return OpResultType::kSetSuccess;
     }
@@ -501,7 +508,8 @@ class CacheStressor : public Stressor {
       if (config_.checkConsistency && cache_->isInvalidKey(req.key)) {
         continue;
       }
-      // TODO: allow callback on nvm eviction instead of checking it repeatedly.
+      // TODO: allow callback on nvm eviction instead of checking it
+      // repeatedly.
       if (config_.checkNvmCacheWarmUp &&
           folly::Random::oneIn(kNvmCacheWarmUpCheckRate)) {
         checkNvmCacheWarmedUp(req.timestamp);

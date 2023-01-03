@@ -135,7 +135,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     TTL,
     SAMPLING_RATE,
     CACHE_HIT,
-    TOTAL_DEFINED_FIELDS = 11
+    ITEM_VALUE,
+    TOTAL_DEFINED_FIELDS = 12
   };
 
   TraceFileStream traceStream_;
