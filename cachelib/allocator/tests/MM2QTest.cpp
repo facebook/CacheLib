@@ -221,11 +221,9 @@ void MMTypeTest<MMType>::testIterate(std::vector<std::unique_ptr<Node>>& nodes,
 template <typename MMType>
 void MMTypeTest<MMType>::testMatch(std::string expected,
                                    MMTypeTest<MMType>::Container& c) {
-  int index = -1;
   std::string actual;
   auto it2q = c.getEvictionIterator();
   while (it2q) {
-    ++index;
     actual += folly::stringPrintf(
         "%d:%s, ", it2q->getId(),
         (c.isHot(*it2q) ? "H" : (c.isCold(*it2q) ? "C" : "W")));
