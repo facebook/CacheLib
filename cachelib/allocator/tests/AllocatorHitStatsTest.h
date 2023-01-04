@@ -246,12 +246,10 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     // allocations across a set of sizes.
     std::vector<std::string> keys;
     const unsigned int nKeys = 1000;
-    unsigned int initialAllocs = 0;
     while (keys.size() != nKeys) {
       const auto keyLen = folly::Random::rand32(10, 100);
       const auto allocSize = folly::Random::rand32(100, 1024 * 1024 - 1000);
       auto str = cachelib::test_util::getRandomAsciiStr(keyLen);
-      ++initialAllocs;
       auto handle = util::allocateAccessible(alloc, poolId, str, allocSize);
       if (handle) {
         keys.push_back(str);
