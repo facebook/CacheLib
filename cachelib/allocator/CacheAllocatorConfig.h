@@ -1092,7 +1092,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
 
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
-  configMap["posixShm"] = usePosixShm ? "set" : "empty";
+  configMap["posixShm"] = isUsingPosixShm() ? "set" : "empty";
 
   configMap["defaultAllocSizes"] = "";
   // Stringify std::set

@@ -40,7 +40,9 @@
 using namespace facebook::cachelib;
 
 namespace {
-size_t roundDownToSlabSize(size_t size) { return size - (size % sizeof(Slab)); }
+static inline size_t roundDownToSlabSize(size_t size) {
+  return size - (size % sizeof(Slab));
+}
 } // namespace
 
 // definitions to avoid ODR violation.
