@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "cachelib/allocator/MemoryTierCacheConfig.h"
 #include "cachelib/allocator/tests/BaseAllocatorTest.h"
 #include "cachelib/allocator/tests/TestBase.h"
 
@@ -226,6 +227,11 @@ TYPED_TEST(BaseAllocatorTest, ReaperSkippingSlabTraversalWhileSlabReleasing) {
 }
 
 TYPED_TEST(BaseAllocatorTest, ReaperShutDown) { this->testReaperShutDown(); }
+TYPED_TEST(BaseAllocatorTest, ReaperShutDownFile) {
+  this->testReaperShutDown(
+      {MemoryTierCacheConfig::fromShm().setRatio(1).setMemBind(
+          std::string("0"))});
+}
 
 TYPED_TEST(BaseAllocatorTest, ShutDownWithActiveHandles) {
   this->testShutDownWithActiveHandles();

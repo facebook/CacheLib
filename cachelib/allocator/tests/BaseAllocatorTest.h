@@ -1253,7 +1253,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     this->testLruLength(alloc, poolId, sizes, keyLen, evictedKeys);
   }
 
-  void testReaperShutDown() {
+  void testReaperShutDown(
+      typename AllocatorT::Config::MemoryTierConfigs cfgs = {}) {
     const size_t nSlabs = 20;
     const size_t size = nSlabs * Slab::kSize;
 
@@ -1263,6 +1264,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     config.setAccessConfig({8, 8});
     config.enableCachePersistence(this->cacheDir_);
     config.enableItemReaperInBackground(std::chrono::seconds(1), {});
+    if (cfgs.size())
+      config.configureMemoryTiers(cfgs);
     std::vector<typename AllocatorT::Key> keys;
     {
       AllocatorT alloc(AllocatorT::SharedMemNew, config);

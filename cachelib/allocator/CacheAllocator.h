@@ -1166,6 +1166,9 @@ class CacheAllocator : public CacheBase {
   // whether it is object-cache
   bool isObjectCache() const override final { return false; }
 
+  // combined pool size for all memory tiers
+  size_t getPoolSize(PoolId pid) const;
+
   // pool stats by pool id
   PoolStats getPoolStats(PoolId pid) const override final;
 
@@ -1992,6 +1995,8 @@ class CacheAllocator : public CacheBase {
   const bool isOnShm_{false};
 
   Config config_{};
+
+  const typename Config::MemoryTierConfigs memoryTierConfigs;
 
   // Manages the temporary shared memory segment for memory allocator that
   // is not persisted when cache process exits.
