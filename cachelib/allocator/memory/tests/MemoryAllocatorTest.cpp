@@ -652,7 +652,7 @@ TEST_F(MemoryAllocatorTest, ReleaseSlabToReceiver) {
   ASSERT_NE(nullptr, m.allocate(pid, size2));
 
   // allocate until it's filled up again
-  for (int i = 0;; ++i) {
+  while (true) {
     void* alloc = m.allocate(pid, size2);
     if (alloc) {
       allocations2.push_back(alloc);
