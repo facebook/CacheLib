@@ -181,6 +181,9 @@ struct StressorConfig : public JSONConfig {
   // follow get misses with a set
   bool enableLookaside{false};
 
+  // ignore opCount and does not repeat operations
+  bool ignoreOpCount{false};
+
   // only set a key in the cache if the key already doesn't exist
   // this is useful for replaying traces with both get and set, and also
   // for manually configured synthetic workloads.
@@ -233,6 +236,7 @@ struct StressorConfig : public JSONConfig {
   // Supported formats include specifying an absolute filename and filename
   // relative to the configPath
   std::string traceFileName{};
+  std::vector<std::string> traceFileNames{};
 
   // location of the path for the files referenced inside the json. If not
   // specified, it defaults to the path of the json file being parsed.

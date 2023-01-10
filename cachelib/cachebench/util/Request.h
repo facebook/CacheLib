@@ -78,13 +78,15 @@ struct Request {
           OpType o,
           uint32_t ttl,
           uint64_t reqId,
-          const std::unordered_map<std::string, std::string>& admFeatureM)
+          const std::unordered_map<std::string, std::string>& admFeatureM,
+          const std::string& value)
       : key(k),
         sizeBegin(b),
         sizeEnd(e),
         ttlSecs(ttl),
         requestId(reqId),
         admFeatureMap(admFeatureM),
+        itemValue(value),
         op(o) {}
 
   static std::string getUniqueKey() {
@@ -111,7 +113,7 @@ struct Request {
   std::vector<size_t>::iterator sizeEnd;
 
   // TTL in seconds.
-  const uint32_t ttlSecs{0};
+  uint32_t ttlSecs{0};
 
   const std::optional<uint64_t> requestId;
 
@@ -122,6 +124,10 @@ struct Request {
   // Custom timestamp in second associated with the request
   // May not have to be the same as wall clock
   uint64_t timestamp{0};
+
+  // Use case specific data that will be included in the request. This can be
+  // used to track metadata that is specific to a particular application.
+  std::string itemValue;
 
  private:
   std::atomic<OpType> op{OpType::kGet};

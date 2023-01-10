@@ -72,8 +72,8 @@ class PersistorWorker : public PeriodicWorker {
         recordWriter_->writeRecord(Serializer::serializeToIOBuf(item));
       }
     }
-    XLOG(INFO) << "Failed to Serialize Key Count = "
-               << failedToSerializeKeysCount;
+    XLOG_EVERY_MS(INFO, 10000)
+        << "Failed to Serialize Key Count = " << failedToSerializeKeysCount;
   }
 
   void setBreakOut() { breakOut_ = true; }

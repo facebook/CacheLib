@@ -125,7 +125,7 @@ skip_os_pkgs=
 skip_build=
 show_help=
 build_cachelib_tests=
-while getopts BdhjOStvT param
+while getopts BdhjOStvTp: param
 do
   case $param in
   h)  show_help=yes ;;
@@ -133,6 +133,7 @@ do
   B)  skip_build=yes ;;
   d|j|S|t|v) pass_params="$pass_params -$param" ;;
   T)  build_cachelib_tests=yes ;;
+  p)  pass_params="$pass_params -$param $OPTARG" ;;
   ?)      die "unknown option. See -h for help."
   esac
 done

@@ -110,6 +110,8 @@ class PosixShmSegment : public ShmBase {
   void createReferenceMapping();
   void deleteReferenceMapping() const;
 
+  void memBind(void* addr) const;
+
   // file descriptor associated with the shm. This has FD_CLOEXEC set
   // and once opened, we close this only on destruction of this object
   int fd_{kInvalidFD};

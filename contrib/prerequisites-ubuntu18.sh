@@ -39,7 +39,8 @@ sudo apt-get install -y \
   libunwind-dev \
   libelf-dev \
   libdwarf-dev \
-  libsodium-dev
+  libsodium-dev \
+  libnuma-dev
 
 # NOTE:
 # GoogleTest/GoogleMock libraries are available in Ubuntu as

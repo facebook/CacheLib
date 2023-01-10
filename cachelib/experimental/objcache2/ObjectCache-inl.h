@@ -313,14 +313,21 @@ void ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
 
 template <typename AllocatorT>
 void ObjectCache<AllocatorT>::getObjectCacheCounters(
-    std::function<void(folly::StringPiece, uint64_t)> visitor) const {
-  visitor("objcache.lookups", lookups_.get());
-  visitor("objcache.lookups.l1_hits", succL1Lookups_.get());
-  visitor("objcache.inserts", inserts_.get());
-  visitor("objcache.inserts.errors", insertErrors_.get());
-  visitor("objcache.replaces", replaces_.get());
-  visitor("objcache.removes", removes_.get());
-  visitor("objcache.evictions", evictions_.get());
+    const util::CounterVisitor& visitor) const {
+  visitor("objcache.lookups", lookups_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.lookups.l1_hits", succL1Lookups_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.inserts", inserts_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.inserts.errors", insertErrors_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.replaces", replaces_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.removes", removes_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.evictions", evictions_.get(),
+          util::CounterVisitor::CounterType::RATE);
   visitor("objcache.object_size_bytes", getTotalObjectSize());
 }
 

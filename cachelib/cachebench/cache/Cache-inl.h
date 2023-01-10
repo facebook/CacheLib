@@ -80,6 +80,18 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
   allocatorConfig_.setCacheSize(config_.cacheSizeMB * (MB));
 
+  if (!cacheDir.empty()) {
+    allocatorConfig_.cacheDir = cacheDir;
+  }
+
+  if (config_.usePosixShm) {
+    allocatorConfig_.usePosixForShm();
+  }
+
+  if (!config_.memoryTierConfigs.empty()) {
+    allocatorConfig_.configureMemoryTiers(config_.memoryTierConfigs);
+  }
+
   auto cleanupGuard = folly::makeGuard([&] {
     if (!nvmCacheFilePath_.empty()) {
       util::removePath(nvmCacheFilePath_);
@@ -222,8 +234,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   allocatorConfig_.cacheName = "cachebench";
 
   bool isRecovered = false;
-  if (!cacheDir.empty()) {
-    allocatorConfig_.cacheDir = cacheDir;
+  if (!allocatorConfig_.cacheDir.empty()) {
     try {
       cache_ = std::make_unique<Allocator>(Allocator::SharedMemAttach,
                                            allocatorConfig_);
@@ -583,11 +594,13 @@ bool Cache<Allocator>::checkGet(ValueTracker::Index opId,
 
 template <typename Allocator>
 double Cache<Allocator>::getNvmBytesWritten() const {
-  const auto& statsMap = cache_->getNvmCacheStatsMap().getRates();
-  if (const auto& it = statsMap.find("navy_device_bytes_written");
-      it != statsMap.end()) {
+  const auto statsMap = cache_->getNvmCacheStatsMap();
+  const auto& ratesMap = statsMap.getRates();
+  if (const auto& it = ratesMap.find("navy_device_bytes_written");
+      it != ratesMap.end()) {
     return it->second;
   }
+  XLOG(INFO) << "Bytes written not found";
   return 0;
 }
 
@@ -718,9 +731,10 @@ Stats Cache<Allocator>::getStats() const {
 
 template <typename Allocator>
 bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
-  const auto& nvmStats = cache_->getNvmCacheStatsMap().getRates();
-  const auto it = nvmStats.find("navy_bc_evictions");
-  if (it == nvmStats.end()) {
+  const auto nvmStats = cache_->getNvmCacheStatsMap();
+  const auto& ratesMap = nvmStats.getRates();
+  const auto it = ratesMap.find("navy_bc_evictions");
+  if (it == ratesMap.end()) {
     return false;
   }
   return it->second > 0;

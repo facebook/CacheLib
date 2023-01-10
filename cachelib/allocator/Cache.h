@@ -26,6 +26,7 @@
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
@@ -194,8 +195,7 @@ class CacheBase {
   virtual const ICompactCache& getCompactCache(PoolId pid) const = 0;
 
   // return object cache stats
-  virtual void getObjectCacheCounters(
-      std::function<void(folly::StringPiece, uint64_t)>) const {}
+  virtual void getObjectCacheCounters(const util::CounterVisitor&) const {}
 
  protected:
   // move bytes from one pool to another. The source pool should be at least

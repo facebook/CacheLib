@@ -47,9 +47,11 @@ class TimeStampTicker : public cachelib::Ticker {
       uint32_t numThreads,
       uint32_t bucketTicks = 3600,
       std::function<void(double elapsedSecs)> onCrossTimeWindow = nullptr)
-      : numThreads_{numThreads},
-        bucketTicks_{bucketTicks},
-        onCrossTimeWindow_{onCrossTimeWindow} {}
+      : numThreads_{numThreads}, bucketTicks_{bucketTicks} {
+    if (onCrossTimeWindow) {
+      onCrossTimeWindows_.push_back(std::move(onCrossTimeWindow));
+    }
+  }
 
   // Return the current tick.
   uint32_t getCurrentTick() override {
@@ -62,6 +64,12 @@ class TimeStampTicker : public cachelib::Ticker {
   void updateTimeStamp(uint32_t timeStampSecond) {
     advanceTimeStamp(timeStampSecond);
     currTimeStamp_.store(timeStampSecond, std::memory_order_relaxed);
+  }
+
+  // Add a callback to be called when the last thread crosses bucket boundary.
+  void addCrossTimeWindowCb(
+      std::function<void(double elapsedSecs)> onCrossTimeWindow) {
+    onCrossTimeWindows_.push_back(std::move(onCrossTimeWindow));
   }
 
  private:
@@ -100,10 +108,10 @@ class TimeStampTicker : public cachelib::Ticker {
   const uint32_t numThreads_;
   const uint32_t bucketTicks_;
 
-  // The callback to run when the last thread cross a window.
+  // The callbacks to run when the last thread cross a window.
   // The param elapsedSecs is how long in seconds a time window is. It have the
   // same value as bucketTicks_.
-  std::function<void(double elapsedSecs)> onCrossTimeWindow_;
+  std::vector<std::function<void(double elapsedSecs)>> onCrossTimeWindows_;
 };
 } // namespace cachebench
 } // namespace cachelib

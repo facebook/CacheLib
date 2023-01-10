@@ -1,4 +1,3 @@
-#!/bin/sh
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,33 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential \
-  git \
-  g++ \
-  cmake \
-  bison flex \
-  libboost-all-dev \
-  libevent-dev \
-  libdouble-conversion-dev \
-  libgoogle-glog-dev \
-  libgflags-dev \
-  libiberty-dev \
-  liblz4-dev \
-  liblzma-dev \
-  libbz2-dev \
-  libsnappy-dev \
-  make \
-  zlib1g-dev \
-  binutils-dev \
-  libjemalloc-dev \
-  libssl-dev \
-  pkg-config \
-  libunwind-dev \
-  libelf-dev \
-  libdwarf-dev \
-  libsodium-dev \
-  libgmock-dev \
-  libgtest-dev googletest \
-  libnuma-dev
+cmake_minimum_required (VERSION 3.12)
+
+project (cachelib-cmake-test-project VERSION 0.1)
+
+find_package(cachelib CONFIG REQUIRED)
+
+add_executable(single-tier-cache-example main.cpp)
+
+target_link_libraries(single-tier-cache-example cachelib)
