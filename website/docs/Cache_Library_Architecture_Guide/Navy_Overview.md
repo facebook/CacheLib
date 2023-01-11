@@ -1,22 +1,41 @@
 ---
-id: navy_architecture_overview
-title: "Navy Architecture Overview"
+id: navy_overview
+title: "Navy Overview"
 ---
 
 
-Navy is the SSD optimized cache engine leveraged for Hybrid Cache. There are three over-arching goals in the design  of Navy
-1. efficient caching for billions of  small (<1KB) and millions of large objects (1KB - 16MB)  on SSDs.
+Navy is the SSD optimized cache engine leveraged for Hybrid Cache. Navy is plugged into cachelib via the `nvmcache` interface and turned on by [NavyConfig](/docs/Cache_Library_User_Guides/Configure_HybridCache/).
+
+## Features
+- Manages terabytes of data
+- Efficiently supports both small (~100 bytes) and large (~10KBs to ~1 MBs) objects
+- Sync and async API (supports custom executors for async ops)
+- Cache persistence on safe shutdown
+- Comprehensive cache stats
+- Different admission policies to optimize write endurance, hit ratio, IOPS
+- Supports Direct IO and raw devices
+
+## Design overview
+There are three over-arching goals in the design of Navy
+1. efficient caching for billions of small (<1KB) and millions of large objects (1KB - 16MB)  on SSDs.
 2. read optimized point lookups
-3. Low DRAM overhead
+3. low DRAM overhead
 
-Since Navy is designed for a cache, it chooses to sacrifice the durability of data when it enables the accomplishment  of the goals above. Caches are effective by constantly churning through the items based on popularity, making them write intensive.  Since write-endurance is a constraint for NVM, the design of Navy optimizes for write-endurance as well.
+Since Navy is designed for a cache, it chooses to sacrifice the durability of data when it enables the accomplishment of the goals above. Caches are effective by constantly churning through the items based on popularity, making them write intensive. Since **write-endurance** is a constraint for NVM, the design of Navy optimizes for write-endurance as well.
 
+## Architecture overview
+Because Navy supports wide range of item sizes, we use different ways to store small and large items. We call them "engines". **BigHash** is an engine to store small items (less than device block size). **Block Cache** (BC) is an engine to store large items (about or greater than device block size). Navy can be configured to use one or **both** engines at the same time. **Driver** is a component that manages and synchronizes engines. Engines operate independently. See the picture below.
+
+![](navy_arch_overview.png)
+
+- **BigHash** is effectively a giant fixed-bucket hash map on the device. To read or write, the entire bucket is read (in case of write, updated and written back). Bloom filter used to reduce number of IO. When bucket is full, items evicted in FIFO manner. You don't pay any RAM price here (except Bloom filter, which is 2GB for 1TB BigHash, tunable). Read more in [Small Object Cache](small_object_cache)
+- **Block Cache**, on the other hand, divides device into equally sized regions (16MB, tunable) and fills a region with items of same size class, or, in case of log-mode fills regions sequentially with items of different size. Sometimes we call log-mode “stack alloc”. BC stores compact index in memory: key hash to offset. We do not store full key in memory and if collision happens (super rare), old item will look like evicted. In your calculations, use 12 bytes overhead per item to estimate RAM usage. For example, if your average item size is 4KB and cache size is 500GB you'll need around 1.4GB of memory. Read more in [Large Object Cache](large_object_cache)
 
 ## Implementation overview
 
 Navy's implementation is broken down into the following hierarchy.
 
-![](Navy_Architecture_overview.png)
+![](navy_impl_overview.png)
 
 Navy offers an asynchronous API to it's callers.  Navy optimizes for small objects using the Small Item Engine and optimizes for large objects using the Large Item Engine.  Each engine is designed taking into account the DRAM overhead required without compromising read efficiency. Underneath, both the engines operate on top of a block device abstraction.
 
@@ -40,12 +59,17 @@ Items can be cached in either the small or the large item engine depending on th
 
 For example, when a lookup job is enqueued, driver performs the lookup in the Large Item engine first and upon a miss, enqueues another job to perform the lookup to the small item engine. When either results in a final result, the loookup callback is executed inline.
 
-The driver is also responsible for doing admission policy that are internal to Navy. Currently, Navy implements the following admission policy mechanisms that can be enabled.
+The `Driver` is also responsible for checking **admission policy (AP)** that are internal to Navy to reject items. This can help optimize write endurance, hit ratio and IOPS.
+
+Currently, Navy implements the following admission policy mechanisms that can be enabled:
 1. `RejectRandomAP`: Writes are probabilistically rejected based on a configured probabilty.
-1. `DynamicRandomAP`: Tracks the bytes written at device level and ensures the daily budget is under a specified write rate. This is done by doing probabilistic rejection where the rejection probability is updated every X seconds based on the bytes written so far and the budget available into the future.  To support this, the bytes written from `Device` is plumbed into the admission policy.
-2. `RejectFirstAP`: writes to key is rejected upon the first occurence within a configured window. Subsequent write is accepted.
-3. MaxConcurrentInserts: writes are rejected once sufficient number of them have been queued up.
-4. MaxParcelMemory: Each insert job has a memory footprint associated. Writes are rejected once sufficient number have been queued up exceeding a certain configured memory footprint.
+   - This policy just rejects P% of inserts, picking victims randomly. This policy lets user to reduce IOPS (and so, increase flash life time).
+2. `DynamicRandomAP`: Tracks the bytes written at device level and ensures the daily budget is under a specified write rate. This is done by doing probabilistic rejection where the rejection probability is updated every X seconds based on the bytes written so far and the budget available into the future.  To support this, the bytes written from `Device` is plumbed into the admission policy.
+    - This is smart `RejectRandomAP`. User specifies maximum size of data can be written to the device per day. Policy monitors write traffic and as it grows beyond target (how much can be written up to this time of the day) it starts randomly reject inserts. It prefers to reject larger items to make hit ratio better. This behavior is tunable. It allows user ultimately control flash wear out.
+
+There are also several parameters that can affect whether the item will be rejected:
+- `MaxConcurrentInserts`: writes are rejected once sufficient number of them have been queued up.
+- `MaxParcelMemory`: Each insert job has a memory footprint associated. Writes are rejected once sufficient number have been queued up exceeding a certain configured memory footprint.
 
 
 ### Job Scheduler

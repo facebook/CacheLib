@@ -180,7 +180,7 @@ module.exports = {
           collapsed: true,
           items: [
             'Cache_Library_Architecture_Guide/hybrid_cache',
-            'Cache_Library_Architecture_Guide/navy_architecture_overview',
+            'Cache_Library_Architecture_Guide/navy_overview',
             'Cache_Library_Architecture_Guide/small_object_cache',
             'Cache_Library_Architecture_Guide/large_object_cache',
           ],
