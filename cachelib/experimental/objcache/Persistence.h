@@ -46,7 +46,7 @@ class PersistorWorker : public PeriodicWorker {
     XDCHECK(serializationCallback_);
     WorkUnit workUnit;
     uint64_t failedToSerializeKeysCount = 0;
-    while (queue_.read(workUnit) && !breakOut_.load()) {
+    while (!breakOut_.load() && queue_.read(workUnit)) {
       for (auto& [handle, poolId] : workUnit) {
         // no need to persist if item is already expired
         if (handle->isExpired()) {
@@ -153,6 +153,7 @@ class ObjectCachePersistor {
           break;
         }
       }
+      workUnit.clear();
     }
 
     // Wait until all items in MPMC are consumed and persisted
@@ -195,7 +196,7 @@ class RestorerWorker : public PeriodicWorker {
   void work() override {
     XDCHECK(deserializationCallback_);
     uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
-    while (!recordReader_->isEnd() && !breakOut_.load()) {
+    while (!breakOut_.load() && !recordReader_->isEnd()) {
       auto iobuf = recordReader_->readRecord();
       XDCHECK(iobuf);
       Deserializer deserializer(iobuf->data(), iobuf->data() + iobuf->length());
