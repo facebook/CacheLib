@@ -258,7 +258,7 @@ class RegionManager {
     return baseOffset_ + toAbsolute(addr).offset();
   }
 
-  bool deviceWrite(RelAddress addr, Buffer buf);
+  bool deviceWrite(RelAddress addr, BufferView buf);
 
   bool isValidIORange(uint32_t offset, uint32_t size) const;
   OpenStatus assignBufferToRegion(RegionId rid);

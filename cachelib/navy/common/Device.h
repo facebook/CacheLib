@@ -116,6 +116,10 @@ class Device {
   // @param offset    Must be ioAlignmentSize_ aligned
   bool write(uint64_t offset, Buffer buffer);
 
+  // Write buffer view to the device. This call makes a copy of the buffer if
+  // entryptor is present.
+  bool write(uint64_t offset, BufferView bufferView);
+
   // Reads @size bytes from device at @deviceOffset and copys to @value
   // There must be sufficient space allocated already in the mutableView.
   // @offset and @size must be ioAligmentSize_ aligned
@@ -165,6 +169,8 @@ class Device {
   mutable util::PercentileStats writeLatencyEstimator_;
 
   bool readInternal(uint64_t offset, uint32_t size, void* value);
+
+  bool writeInternal(uint64_t offset, const uint8_t* data, size_t size);
 
   // size of the device. All offsets for write/read should be contained
   // below this.

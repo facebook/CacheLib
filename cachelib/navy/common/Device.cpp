@@ -212,6 +212,19 @@ class MemoryDevice final : public Device {
 };
 } // namespace
 
+bool Device::write(uint64_t offset, BufferView view) {
+  if (encryptor_) {
+    auto writeBuffer = makeIOBuffer(view.size());
+    writeBuffer.copyFrom(0, view);
+    return write(offset, std::move(writeBuffer));
+  }
+
+  const auto size = view.size();
+  XDCHECK_LE(offset + size, size_);
+  const uint8_t* data = reinterpret_cast<const uint8_t*>(view.data());
+  return writeInternal(offset, data, size);
+}
+
 bool Device::write(uint64_t offset, Buffer buffer) {
   const auto size = buffer.size();
   XDCHECK_LE(offset + buffer.size(), size_);
@@ -225,7 +238,10 @@ bool Device::write(uint64_t offset, Buffer buffer) {
       return false;
     }
   }
+  return writeInternal(offset, data, size);
+}
 
+bool Device::writeInternal(uint64_t offset, const uint8_t* data, size_t size) {
   auto remainingSize = size;
   auto maxWriteSize = (maxWriteSize_ == 0) ? remainingSize : maxWriteSize_;
   bool result = true;

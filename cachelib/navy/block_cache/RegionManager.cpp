@@ -106,9 +106,7 @@ void RegionManager::reset() {
 Region::FlushRes RegionManager::flushBuffer(const RegionId& rid) {
   auto& region = getRegion(rid);
   auto callBack = [this](RelAddress addr, BufferView view) {
-    auto writeBuffer = device_.makeIOBuffer(view.size());
-    writeBuffer.copyFrom(0, view);
-    if (!deviceWrite(addr, std::move(writeBuffer))) {
+    if (!deviceWrite(addr, view)) {
       return false;
     }
     numInMemBufWaitingFlush_.dec();
@@ -488,11 +486,11 @@ bool RegionManager::isValidIORange(uint32_t offset, uint32_t size) const {
   return static_cast<uint64_t>(offset) + size <= regionSize_;
 }
 
-bool RegionManager::deviceWrite(RelAddress addr, Buffer buf) {
-  const auto bufSize = buf.size();
+bool RegionManager::deviceWrite(RelAddress addr, BufferView view) {
+  const auto bufSize = view.size();
   XDCHECK(isValidIORange(addr.offset(), bufSize));
   auto physOffset = physicalOffset(addr);
-  if (!device_.write(physOffset, std::move(buf))) {
+  if (!device_.write(physOffset, view)) {
     return false;
   }
   physicalWrittenCount_.add(bufSize);
