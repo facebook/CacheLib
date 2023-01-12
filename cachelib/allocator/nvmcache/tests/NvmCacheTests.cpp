@@ -158,6 +158,13 @@ TEST_F(NvmCacheTest, CouldExistFast) {
 }
 
 TEST_F(NvmCacheTest, EvictToNvmGet) {
+  // Disable bighash since we're only testing large items here
+  this->config_.bigHash().setSizePctAndMaxItemSize(0, 100);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = config_;
+  this->allocConfig_.enableNvmCache(nvmConfig);
+  this->makeCache();
+
   auto& nvm = this->cache();
   auto pid = this->poolId();
 
@@ -169,6 +176,17 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
     nvm.insertOrReplace(it);
+
+    // Ensure nvm-cache is flushed every 100 items. The reason is to
+    // make sure we don't have any race between a "remove" operation
+    // queued by an item's initial insertion with this item's eventual
+    // eviction. We only flush every 100 items to avoid pushing too
+    // many regions to flash that only has one item per region. If we
+    // flushed per insertion, we would fill up BlockCache prematurely
+    // and trigger evictions which are not desirable in this test.
+    if (i % 100 == 0) {
+      nvm.flushNvmCache();
+    }
   }
   nvm.flushNvmCache();
 
@@ -184,7 +202,7 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
     auto hdl = this->fetch(key, false /* ramOnly */);
     hdl.wait();
     if (index < nKeys) {
-      ASSERT_NE(nullptr, hdl);
+      ASSERT_NE(nullptr, hdl) << fmt::format("key: {}", key);
       // First nEvictions keys should have nvm clean bit set since
       // we load it from nvm
       const auto isClean = hdl->isNvmClean();
