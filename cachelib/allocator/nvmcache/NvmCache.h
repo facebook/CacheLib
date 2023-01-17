@@ -368,8 +368,17 @@ class NvmCache {
   // Erase entry for the ctx from the fill map
   // @param     ctx   ctx to erase
   void removeFromFillMap(HashedKey hk) {
-    auto lock = getFillLock(hk);
-    getFillMap(hk).erase(hk.key());
+    std::unique_ptr<GetCtx> to_delete;
+    {
+      auto lock = getFillLock(hk);
+      auto& map = getFillMap(hk);
+      auto it = map.find(hk.key());
+      if (it == map.end()) {
+        return;
+      }
+      to_delete = std::move(it->second);
+      map.erase(it);
+    }
   }
 
   // Erase entry for the ctx from the fill map
