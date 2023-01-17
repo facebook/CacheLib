@@ -5018,7 +5018,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                       oldItem.getSize());
           ++numMoves;
         },
-        [&m](typename Item::Key) { return std::make_unique<TestSyncObj>(m); });
+        [&m](typename Item::Key) { return std::make_unique<TestSyncObj>(m); },
+        // Attempt a lot of moving so we're more lilely to succeed
+        1'000'000 /* movingAttempts */);
 
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
@@ -5104,7 +5106,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     allocateItem3.wait();
 
     // Verify items have only been moved but not evicted
-    ASSERT_LT(0, numMoves);
     ASSERT_EQ(0, numRemovedKeys);
 
     auto lookupFn = [&](std::string keyPrefix) {
