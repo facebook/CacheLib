@@ -25,6 +25,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cachelib/cachebench/util/Config.h"
@@ -61,6 +62,36 @@ class TraceFileStream {
   }
 
   std::string getHeaderLine() { return headerLine_; }
+
+  std::vector<std::string> parseRow(const std::string& line) {
+    // Parses a line from the trace file into a vector.
+    // Returns an empty vector
+    std::vector<std::string> splitRow;
+    folly::split(",", line, splitRow);
+    if (splitRow.size() != columnKeyMap_.size()) {
+      XLOG_EVERY_MS(WARNING, 1000)
+          << "Expected row with " << columnKeyMap_.size()
+          << " elements, but found " << splitRow.size() << "\nRow: " << line;
+      return std::vector<std::string>({});
+    } else {
+      return splitRow;
+    }
+  }
+
+  const std::unordered_map<std::string, size_t>& getColumnKeyMap() {
+    return columnKeyMap_;
+  }
+
+  bool validateRequiredFields(const std::vector<std::string>& requiredFields) {
+    bool valid = true;
+    for (const auto& fieldName : requiredFields) {
+      if (!traceHasField(fieldName)) {
+        XLOG(WARNING) << "Trace is missing required field " << fieldName;
+        valid = false;
+      }
+    }
+    return valid;
+  }
 
  private:
   void openNextInfile() {
@@ -100,12 +131,40 @@ class TraceFileStream {
     infile_.rdbuf()->pubsetbuf(infileBuffer_, sizeof(infileBuffer_));
     // header
     std::getline(infile_, headerLine_);
+
+    parseHeaderRow(headerLine_);
+  }
+
+  void parseHeaderRow(const std::string& header) {
+    folly::split(",", header, keys_);
+    for (size_t i = 0; i < keys_.size(); i++) {
+      columnKeyMap_.emplace(folly::to<std::string>(keys_[i]), i);
+    }
+    std::string headerString;
+    for (const auto& kv : columnKeyMap_) {
+      headerString +=
+          "(" + kv.first + ", " + folly::to<std::string>(kv.second) + ")  ";
+    }
+    XLOG_EVERY_MS(INFO, 1000) << "Parsed header row: " << headerString;
+  }
+
+  const std::vector<std::string>& getAllKeys() { return keys_; }
+
+  bool traceHasField(const std::string& field) {
+    for (const auto& k : columnKeyMap_) {
+      if (k.first == field) {
+        return true;
+      }
+    }
+    return false;
   }
 
   std::string idStr_;
 
+  const StressorConfig config_;
+
   std::string configPath_;
-  bool repeatTraceReplay_{false};
+  const bool repeatTraceReplay_;
 
   std::string headerLine_;
 
@@ -113,6 +172,9 @@ class TraceFileStream {
   size_t nextInfileIdx_ = 0;
   std::ifstream infile_;
   char infileBuffer_[kIfstreamBufferSize];
+
+  std::vector<std::string> keys_;
+  std::unordered_map<std::string, size_t> columnKeyMap_;
 };
 
 class ReplayGeneratorBase : public GeneratorBase {
