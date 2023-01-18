@@ -147,7 +147,6 @@ class TraceFileStream {
     }
     XLOG_EVERY_MS(INFO, 1000) << "Parsed header row: " << headerString;
   }
-
   const std::vector<std::string>& getAllKeys() { return keys_; }
 
   bool traceHasField(const std::string& field) {
