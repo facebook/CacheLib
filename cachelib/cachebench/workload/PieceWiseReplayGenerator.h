@@ -113,8 +113,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
     return *activeReqQ_[*tlStickyIdx_];
   }
 
-  TraceFileStream traceStream_;
-
   // Line format for the trace file:
   // timestamp, cacheKey, OpType, objectSize, responseSize,
   // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate, cacheHit
@@ -125,34 +123,23 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // 0 for miss and 1 for hit. Any other values will be ignored. When it is
   // specified with a valid value, we will calculate the expected hit rate based
   // on it.
+  enum SampleFields {
+    TIMESTAMP = 0,
+    CACHE_KEY,
+    OP_TYPE,
+    OBJECT_SIZE,
+    RESPONSE_SIZE,
+    RESPONSE_HEADER_SIZE,
+    RANGE_START,
+    RANGE_END,
+    TTL,
+    SAMPLING_RATE,
+    CACHE_HIT,
+    ITEM_VALUE,
+    TOTAL_DEFINED_FIELDS = 12
+  };
 
-  // From actual trace file: timestamp, cacheKey, OpType, objectSize,
-  // responseSize, responseHeaderSize, rangeStart, rangeEnd, TTL, SamplingRate,
-  // cache_hit, item_value, RequestHandler, cdn_content_type_id, vip_type,
-  const std::string kTimestamp = "timestamp";
-  const std::string kCacheKey = "cacheKey";
-  const std::string kOpType = "OpType";
-  const std::string kObjectSize = "objectSize";
-  const std::string kResponseSize = "responseSize";
-  const std::string kResponseHeaderSize = "responseHeaderSize";
-  const std::string kRangeStart = "rangeStart";
-  const std::string kRangeEnd = "rangeEnd";
-  const std::string kTtl = "TTL";
-  const std::string kSamplingRate = "SamplingRate";
-  const std::string kCacheHit = "cache_hit";
-  const std::string kItemValue = "item_value";
-  const std::string kRequestHandler = "RequestHandler";
-  const std::string kCdnContentType = "cdn_content_type_id";
-  const std::string kVipType = "vip_type";
-
-  const std::vector<std::string> kRequiredFields = {
-      kTimestamp,      kCacheKey,     kOpType,
-      kObjectSize,     kResponseSize, kResponseHeaderSize,
-      kRangeStart,     kRangeEnd,     kTtl,
-      kSamplingRate,   kCacheHit,     kRequestHandler,
-      kCdnContentType, kVipType};
-  const std::vector<std::string> kStatsAggFields = {kRequestHandler,
-                                                    kCdnContentType, kVipType};
+  TraceFileStream traceStream_;
 
   PieceWiseCacheAdapter pieceCacheAdapter_;
 

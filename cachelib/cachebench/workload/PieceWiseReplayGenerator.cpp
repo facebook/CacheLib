@@ -75,13 +75,10 @@ void PieceWiseReplayGenerator::notifyResult(uint64_t requestId,
 
 void PieceWiseReplayGenerator::getReqFromTrace() {
   std::string line;
-  if (!traceStream_.validateRequiredFields(kRequiredFields)) {
-    // FIXME: we need to validateRequiredFields every time we open a new trace
-    // file. This means the TraceFileStream should save a copy of the required
-    // fields and call validate each time.
-    XLOG(WARNING) << "validateRequiredFields failed!";
-    exit(1); // Returning here causes the whold program to hang :`(
-  }
+  auto partialFieldCount = SampleFields::TOTAL_DEFINED_FIELDS +
+                           config_.replayGeneratorConfig.numAggregationFields;
+  auto totalFieldCount =
+      partialFieldCount + config_.replayGeneratorConfig.numExtraFields;
   while (true) {
     try {
       traceStream_.getline(line);
@@ -89,19 +86,20 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       isEndOfFile_.store(true, std::memory_order_relaxed);
       break;
     }
-    const auto& columnKeyMap = traceStream_.getColumnKeyMap();
-
     samples_.inc();
 
     try {
-      std::vector<std::string> parsedLine = traceStream_.parseRow(line);
-      if (parsedLine.size() == 0) {
-        // when the number of fields is invalid, parseRow returns an empty map
+      std::vector<folly::StringPiece> fields;
+      folly::split(",", line, fields);
+
+      // TODO: remove this after legacy data phased out.
+      if (fields.size() > totalFieldCount ||
+          fields.size() < totalFieldCount - 2) {
         invalidSamples_.inc();
         continue;
       }
 
-      auto shard = getShard(parsedLine[columnKeyMap.at(kCacheKey)]);
+      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
       if (threadFinished_[shard].load(std::memory_order_relaxed)) {
         if (shouldShutdown()) {
           XLOG(INFO) << "Forced to stop, terminate reading trace file!";
@@ -114,18 +112,17 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       }
 
       auto fullContentSizeT =
-          folly::tryTo<size_t>(parsedLine[columnKeyMap.at(kObjectSize)]);
+          folly::tryTo<size_t>(fields[SampleFields::OBJECT_SIZE]);
       auto responseSizeT =
-          folly::tryTo<size_t>(parsedLine[columnKeyMap.at(kResponseSize)]);
-      auto responseHeaderSizeT = folly::tryTo<size_t>(
-          parsedLine[columnKeyMap.at(kResponseHeaderSize)]);
-      auto ttlT = folly::tryTo<uint32_t>(parsedLine[columnKeyMap.at(kTtl)]);
+          folly::tryTo<size_t>(fields[SampleFields::RESPONSE_SIZE]);
+      auto responseHeaderSizeT =
+          folly::tryTo<size_t>(fields[SampleFields::RESPONSE_HEADER_SIZE]);
+      auto ttlT = folly::tryTo<uint32_t>(fields[SampleFields::TTL]);
       // Invalid sample: cacheKey is empty, responseSize is not positive,
       // responseHeaderSize is not positive, or ttl is not positive.
       // objectSize can be zero for request handler like
       // interncache_everstore_metadata. Hence it is valid.
-      if (!parsedLine[columnKeyMap.at(kCacheKey)].compare("-") ||
-          !parsedLine[columnKeyMap.at(kCacheKey)].compare("") ||
+      if (!fields[1].compare("-") || !fields[1].compare("") ||
           !fullContentSizeT.hasValue() || !responseSizeT.hasValue() ||
           responseSizeT.value() == 0 || !responseHeaderSizeT.hasValue() ||
           responseHeaderSizeT.value() == 0 || !ttlT.hasValue() ||
@@ -136,7 +133,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
       // Convert timestamp to seconds.
       uint64_t timestampRaw =
-          folly::tryTo<size_t>(parsedLine[columnKeyMap.at(kTimestamp)]).value();
+          folly::tryTo<size_t>(fields[SampleFields::TIMESTAMP]).value();
       uint64_t timestampSeconds = timestampRaw / timestampFactor_;
       auto fullContentSize = fullContentSizeT.value();
       auto responseSize = responseSizeT.value();
@@ -161,10 +158,10 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
         return result;
       };
-      auto rangeStart = parseRangeField(
-          parsedLine[columnKeyMap.at(kRangeStart)], fullContentSize);
-      auto rangeEnd = parseRangeField(parsedLine[columnKeyMap.at(kRangeEnd)],
-                                      fullContentSize);
+      auto rangeStart =
+          parseRangeField(fields[SampleFields::RANGE_START], fullContentSize);
+      auto rangeEnd =
+          parseRangeField(fields[SampleFields::RANGE_END], fullContentSize);
 
       // Perform range size check, and rectify the range when responseBodySize
       // is obviously too small.
@@ -194,11 +191,12 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         }
       }
 
+      size_t statsAggFieldStartIndex = SampleFields::TOTAL_DEFINED_FIELDS;
+      size_t statsAggFieldEndIndex = partialFieldCount;
       // Parse expected cache result.
       folly::Optional<bool> cacheHit;
-      if (columnKeyMap.contains(kCacheHit)) {
-        auto cacheHitT =
-            folly::tryTo<int>(parsedLine[columnKeyMap.at(kCacheHit)]);
+      if (fields.size() == totalFieldCount) {
+        auto cacheHitT = folly::tryTo<int>(fields[SampleFields::CACHE_HIT]);
         if (cacheHitT.hasValue() &&
             (cacheHitT.value() == 0 || cacheHitT.value() == 1)) {
           cacheHit = cacheHitT.value();
@@ -207,15 +205,18 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         // We added cache hit field recently. Some data are still in the old
         // format.
         // TODO: remove this after legacy data saved in manifold phased out.
-        XLOG_EVERY_MS(WARN, 100'000,
-                      folly::sformat("Expected column {} is missing"
-                                     "Process it as no cache hit info field.",
-                                     kCacheHit));
+        XLOG_EVERY_MS(
+            WARN, 100'000,
+            folly::sformat("Expect {} but only have {} fields in trace. "
+                           "Process it as no cache hit info field.",
+                           totalFieldCount, fields.size()));
+        --statsAggFieldStartIndex;
+        --statsAggFieldEndIndex;
       }
 
       std::vector<std::string> statsAggFields;
-      for (const std::string& field : kStatsAggFields) {
-        statsAggFields.push_back(parsedLine[columnKeyMap.at(field)]);
+      for (size_t i = statsAggFieldStartIndex; i < statsAggFieldEndIndex; ++i) {
+        statsAggFields.push_back(fields[i].str());
       }
 
       // Admission policy related fields: feature name --> feature value
@@ -223,28 +224,20 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
       if (config_.replayGeneratorConfig.mlAdmissionConfig) {
         for (const auto& [featureName, index] :
              config_.replayGeneratorConfig.mlAdmissionConfig->numericFeatures) {
-          if (columnKeyMap.contains(featureName)) {
-            admFeatureMap.emplace(featureName,
-                                  parsedLine[columnKeyMap.at(featureName)]);
-          } else {
-            XLOG_EVERY_MS(WARNING, 1000) << "Missing field " << featureName;
-          }
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
         }
         for (const auto& [featureName, index] :
              config_.replayGeneratorConfig.mlAdmissionConfig
                  ->categoricalFeatures) {
-          if (columnKeyMap.contains(featureName)) {
-            admFeatureMap.emplace(featureName,
-                                  parsedLine[columnKeyMap.at(featureName)]);
-          } else {
-            XLOG_EVERY_MS(WARNING, 1000) << "Missing field " << featureName;
-          }
+          XCHECK_LT(index, totalFieldCount);
+          admFeatureMap.emplace(featureName, fields[index].str());
         }
       }
 
       const std::string itemValue =
-          columnKeyMap.contains(kItemValue)
-              ? folly::to<std::string>(parsedLine[columnKeyMap.at(kItemValue)])
+          fields.size() == totalFieldCount
+              ? folly::to<std::string>(fields[SampleFields::ITEM_VALUE])
               : "";
 
       // Spin until the queue has room
@@ -253,7 +246,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
                                         nextReqId_,
                                         OpType::kGet, // Only support get from
                                                       // trace for now
-                                        parsedLine[columnKeyMap.at(kCacheKey)],
+                                        fields[SampleFields::CACHE_KEY],
                                         fullContentSize,
                                         responseHeaderSize,
                                         rangeStart,
