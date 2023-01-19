@@ -824,6 +824,61 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testPersistenceHighLoad() {
+    ObjectCacheConfig config;
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    size_t threadsCount = 10;
+    int objectNum = 1000;
+    size_t totalObjectSize = 0;
+
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ThriftFoo>();
+        })
+        .enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              return serializer.template serialize<ThriftFoo>();
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              return deserializer.template deserialize<ThriftFoo>();
+            });
+    config.objectSizeTrackingEnabled = true;
+
+    {
+      auto objcache = ObjectCache::create(config);
+      for (int i = 0; i < objectNum; i++) {
+        int objectSize = i + 10;
+        auto object = std::make_unique<ThriftFoo>();
+        object->a().value() = i;
+        object->b().value() = i + 1;
+        object->c().value() = i + 2;
+        objcache->insertOrReplace(folly::sformat("key_{}", i),
+                                  std::move(object), objectSize);
+        totalObjectSize += objectSize;
+      }
+      ASSERT_EQ(objcache->getNumEntries(), objectNum);
+      ASSERT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+      ASSERT_EQ(objcache->persist(), true);
+    }
+
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      for (int i = 0; i < objectNum; i++) {
+        auto found =
+            objcache->template find<ThriftFoo>(folly::sformat("key_{}", i));
+        EXPECT_NE(nullptr, found);
+        EXPECT_EQ(i, found->a_ref());
+        EXPECT_EQ(i + 1, found->b_ref());
+        EXPECT_EQ(i + 2, found->c_ref());
+      }
+      EXPECT_EQ(objcache->getNumEntries(), objectNum);
+      EXPECT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+    }
+  }
+
   void testMultithreadReplace() {
     // Sanity test to see if insertOrReplace across multiple
     // threads are safe.
@@ -1050,6 +1105,9 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingUniqueInsert) {
 TYPED_TEST(ObjectCacheTest, Persistence) { this->testPersistence(); }
 TYPED_TEST(ObjectCacheTest, PersistenceMultiType) {
   this->testPersistenceMultiType();
+}
+TYPED_TEST(ObjectCacheTest, PersistenceHighLoad) {
+  this->testPersistenceHighLoad();
 }
 
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
