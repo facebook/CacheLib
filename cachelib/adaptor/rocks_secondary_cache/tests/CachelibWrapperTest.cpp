@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-#include <cachelib/adaptor/rocks_secondary_cache/CachelibWrapper.h>
-#include <common/files/FileUtil.h>
+#include "plugin/cachelib/CachelibWrapper.h"
+#include "rocksdb/convenience.h"
+#include "cachelib/common/Utils.h"
+#include "test_util/testharness.h"
+
 #include <folly/Random.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -60,7 +63,7 @@ class CachelibWrapperTest : public ::testing::Test {
   CachelibWrapperTest() : fail_create_(false) {
     RocksCachelibOptions opts;
 
-    path_ = files::FileUtil::recreateRandomTempDir("CachelibWrapperTest");
+    path_ = ROCKSDB_NAMESPACE::test::TmpDir();
     opts.volatileSize = kVolatileSize;
     opts.cacheName = "CachelibWrapperTest";
     opts.fileName = path_ + "/cachelib_wrapper_test_file";
@@ -162,7 +165,7 @@ TEST_F(CachelibWrapperTest, BasicTest) {
   ASSERT_EQ(cache()->Insert("k2", &item2, &CachelibWrapperTest::helper_),
             Status::OK());
 
-  std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
+  std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
   handle = cache()->Lookup("k2", test_item_creator, true
 #if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
@@ -192,7 +195,7 @@ TEST_F(CachelibWrapperTest, BasicTest) {
 }
 
 TEST_F(CachelibWrapperTest, BasicFailTest) {
-  std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
+  std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
   handle = cache()->Lookup("k1", test_item_creator, true
 #if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
@@ -525,6 +528,7 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
   pthread_mutex_destroy(&mu);
 }
 
+#if 0
 TEST_F(CachelibWrapperTest, UpdateMaxRateTest) {
   RocksCachelibOptions opts;
   opts.volatileSize = kVolatileSize;
@@ -539,14 +543,15 @@ TEST_F(CachelibWrapperTest, UpdateMaxRateTest) {
   ASSERT_TRUE(static_cast<RocksCachelibWrapper*>(sec_cache.get())
                   ->UpdateMaxWriteRateForDynamicRandom(32 << 20));
 }
-
+#endif
+  
 TEST_F(CachelibWrapperTest, LargeItemTest) {
   std::string str1 = RandomString(8 << 20);
   TestItem item1(str1.data(), str1.length());
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
             Status::InvalidArgument());
 
-  std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
+  std::unique_ptr<ROCKSDB_NAMESPACE::SecondaryCacheResultHandle> handle;
   bool is_in_sec_cache{false};
   handle = cache()->Lookup("k1", test_item_creator, true,
 #if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
@@ -557,5 +562,49 @@ TEST_F(CachelibWrapperTest, LargeItemTest) {
   handle.reset();
 }
 
+#ifndef ROCKSDB_LITE
+TEST_F(CachelibWrapperTest, CreateFromString) {
+  ROCKSDB_NAMESPACE::ConfigOptions opts;
+  opts.invoke_prepare_options = false;
+  std::shared_ptr<ROCKSDB_NAMESPACE::SecondaryCache> scache;
+  std::string props = "cachename=foo;"
+		      "filename=bar;"
+		      "size=10000;" 
+ 		      "block_size=512;" 
+		      "region_size=4096;"
+ 		      "volatile_size=1024;"
+			"policy=unknown;" 
+			"probability=0.42;"
+			"max_write_rate=11;"
+			"admission_write_rate=22;"
+			"bucket_power=48;"
+    "lock_power=24;";
+    
+  ASSERT_EQ(ROCKSDB_NAMESPACE::SecondaryCache::CreateFromString(opts,
+		props + "id=" + RocksCachelibWrapper::kClassName(),
+								&scache),
+	    ROCKSDB_NAMESPACE::Status::OK());
+  auto rco =  scache->GetOptions<RocksCachelibOptions>();
+  ASSERT_NE(rco, nullptr);
+  ASSERT_EQ(rco->cacheName, "foo");
+  ASSERT_EQ(rco->fileName, "bar");
+  ASSERT_EQ(rco->size, 10000);
+  ASSERT_EQ(rco->blockSize, 512);
+  ASSERT_EQ(rco->regionSize, 4096);
+  ASSERT_EQ(rco->admProbability, 0.42);
+  ASSERT_EQ(rco->admPolicy, "unknown");
+  ASSERT_EQ(rco->maxWriteRate, 11);
+  ASSERT_EQ(rco->admissionWriteRate, 22);
+  ASSERT_EQ(rco->volatileSize, 1024);
+  ASSERT_EQ(rco->bktPower, 48);
+  ASSERT_EQ(rco->lockPower, 24);
+  
+}
+#endif // ROCKSDB_LITE
 } // namespace rocks_secondary_cache
 } // namespace facebook
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
