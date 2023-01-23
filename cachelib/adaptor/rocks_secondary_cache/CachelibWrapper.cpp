@@ -39,14 +39,25 @@ folly::rcu_domain& GetRcuDomain() {
 class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
  public:
   RocksCachelibWrapperHandle(folly::SemiFuture<FbCacheReadHandle>&& future,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+                             const rocksdb::Cache::CacheItemHelper* helper,
+                             rocksdb::Cache::CreateContext* create_context,
+#else
                              const rocksdb::Cache::CreateCallback& create_cb,
+#endif
                              std::unique_lock<folly::rcu_domain>&& guard)
       : future_(std::move(future)),
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+        helper_(helper),
+        create_context_(create_context),
+#else
         create_cb_(create_cb),
+#endif
         val_(nullptr),
         charge_(0),
         is_value_ready_(false),
-        guard_(std::move(guard)) {}
+        guard_(std::move(guard)) {
+  }
   ~RocksCachelibWrapperHandle() override {}
 
   RocksCachelibWrapperHandle(const RocksCachelibWrapperHandle&) = delete;
@@ -107,7 +118,12 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
  private:
   FbCacheReadHandle handle_;
   folly::SemiFuture<FbCacheReadHandle> future_;
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+  const rocksdb::Cache::CacheItemHelper* const helper_;
+  rocksdb::Cache::CreateContext* const create_context_;
+#else
   const rocksdb::Cache::CreateCallback create_cb_;
+#endif
   void* val_;
   size_t charge_;
   bool is_value_ready_;
@@ -118,10 +134,19 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
 
     if (handle_) {
       uint32_t size = handle_->getSize();
-      const void* item = handle_->getMemory();
       rocksdb::Status s;
 
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+      const char* item = static_cast<const char*>(handle_->getMemory());
+      s = helper_->create_cb(rocksdb::Slice(item, size),
+                             create_context_,
+                             /*allocator*/ nullptr,
+                             &val_,
+                             &charge_);
+#else
+      const void* item = handle_->getMemory();
       s = create_cb_(item, size, &val_, &charge_);
+#endif
       if (!s.ok()) {
         val_ = nullptr;
       }
@@ -139,7 +164,6 @@ rocksdb::Status RocksCachelibWrapper::Insert(
     const rocksdb::Cache::CacheItemHelper* helper) {
   FbCacheKey k(key.data(), key.size());
   size_t size;
-  void* buf;
   rocksdb::Status s;
   std::scoped_lock guard(GetRcuDomain());
   FbCache* cache = cache_.load();
@@ -149,7 +173,11 @@ rocksdb::Status RocksCachelibWrapper::Insert(
     if (FbCacheItem::getRequiredSize(k, size) <= FB_CACHE_MAX_ITEM_SIZE) {
       auto handle = cache->allocate(pool_, k, size);
       if (handle) {
-        buf = handle->getMemory();
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+        char* buf = static_cast<char*>(handle->getMemory());
+#else
+        void* buf = handle->getMemory();
+#endif
         s = (*helper->saveto_cb)(value, /*offset=*/0, size, buf);
         try {
           cache->insertOrReplace(handle);
@@ -167,13 +195,14 @@ rocksdb::Status RocksCachelibWrapper::Insert(
 
 std::unique_ptr<rocksdb::SecondaryCacheResultHandle>
 RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+                             const rocksdb::Cache::CacheItemHelper* helper,
+                             rocksdb::Cache::CreateContext* create_context,
+#else
                              const rocksdb::Cache::CreateCallback& create_cb,
-                             bool wait
-#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 7)
-                             ,
-                             bool /*advise_erase*/
 #endif
-                             ,
+                             bool wait,
+                             bool /*advise_erase*/,
                              bool& is_in_sec_cache) {
   std::unique_lock guard(GetRcuDomain());
   FbCache* cache = cache_.load();
@@ -187,9 +216,16 @@ RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
     // RocksCachelibWrapperHandle, and will be released when the handle is
     // destroyed.
     hdl = std::make_unique<RocksCachelibWrapperHandle>(
+#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
+        std::move(handle).toSemiFuture(),
+        helper,
+        create_context,
+        std::move(guard));
+#else
         std::move(handle).toSemiFuture(), create_cb, std::move(guard));
+#endif
     if (hdl->IsReady() || wait) {
-      if (!hdl->IsReady()) {
+      if (!hdl->IsReady()) { // WART: double-call IsReady()
         hdl->Wait();
       }
       if (hdl->Value() == nullptr) {
@@ -198,9 +234,7 @@ RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
     }
   }
 
-#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 2)
   is_in_sec_cache = hdl != nullptr;
-#endif
   return hdl;
 }
 
