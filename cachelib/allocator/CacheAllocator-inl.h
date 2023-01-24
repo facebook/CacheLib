@@ -1788,8 +1788,8 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::SampleItem
 CacheAllocator<CacheTrait>::getSampleItem() {
-  static size_t nvmCacheSize = nvmCache_ ? nvmCache_->getUsableSize() : 0;
-  static size_t ramCacheSize = allocator_->getMemorySizeInclAdvised();
+  size_t nvmCacheSize = nvmCache_ ? nvmCache_->getUsableSize() : 0;
+  size_t ramCacheSize = allocator_->getMemorySizeInclAdvised();
 
   bool fromNvm =
       folly::Random::rand64(0, nvmCacheSize + ramCacheSize) >= ramCacheSize;

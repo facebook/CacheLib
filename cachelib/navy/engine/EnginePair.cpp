@@ -282,8 +282,8 @@ uint64_t EnginePair::getUsableSize() const {
 }
 
 std::pair<Status, std::string> EnginePair::getRandomAlloc(Buffer& value) {
-  static uint64_t largeCacheSize = largeItemCache_->getSize();
-  static uint64_t smallCacheSize = smallItemCache_->getSize();
+  uint64_t largeCacheSize = largeItemCache_->getSize();
+  uint64_t smallCacheSize = smallItemCache_->getSize();
 
   bool fromLargeItemCache =
       folly::Random::rand64(0, largeCacheSize + smallCacheSize) >=
