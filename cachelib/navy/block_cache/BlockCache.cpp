@@ -31,10 +31,6 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-namespace {
-constexpr uint64_t kMinSizeDistribution = 64;
-constexpr double kSizeDistributionGranularityFactor = 1.25;
-} // namespace
 
 constexpr uint32_t BlockCache::kMinAllocAlignSize;
 constexpr uint32_t BlockCache::kMaxItemSize;
@@ -137,9 +133,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.numPriorities,
                      config.inMemBufFlushRetryLimit},
       allocator_{regionManager_, config.numPriorities},
-      reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)},
-      sizeDist_{kMinSizeDistribution, config.regionSize,
-                kSizeDistributionGranularityFactor} {
+      reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
@@ -202,7 +196,6 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
       insertHashCollisionCount_.inc();
     }
     succInsertCount_.inc();
-    sizeDist_.addSize(slotSize);
     if (newObjSize < oldObjSize) {
       usedSizeBytes_.sub(oldObjSize - newObjSize);
     } else {
@@ -476,7 +469,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
     }
 
     // remove the item
-    auto removeRes = removeItem(hk, entrySize, RelAddress{rid, offset});
+    auto removeRes = removeItem(hk, RelAddress{rid, offset});
     if (removeRes) {
       evictionCount++;
       usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
@@ -494,10 +487,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
   XDCHECK_GE(region.getNumItems(), evictionCount);
 }
 
-bool BlockCache::removeItem(HashedKey hk,
-                            uint32_t entrySize,
-                            RelAddress currAddr) {
-  sizeDist_.removeSize(entrySize);
+bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
   if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
     return true;
   }
@@ -507,8 +497,7 @@ bool BlockCache::removeItem(HashedKey hk,
 
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
-  auto removeItem = [this, hk, entrySize, currAddr](bool expired) {
-    sizeDist_.removeSize(entrySize);
+  auto removeItem = [this, hk, currAddr](bool expired) {
     if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       if (expired) {
         evictionExpiredCount_.inc();
@@ -521,7 +510,6 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   const auto lr = index_.peek(hk.keyHash());
   if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
-    sizeDist_.removeSize(entrySize);
     return ReinsertionRes::kRemoved;
   }
 
@@ -697,7 +685,6 @@ void BlockCache::reset() {
   removeCount_.set(0);
   allocErrorCount_.set(0);
   logicalWrittenCount_.set(0);
-  sizeDist_.reset();
   holeCount_.set(0);
   holeSizeTotal_.set(0);
   usedSizeBytes_.set(0);
@@ -759,13 +746,6 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           lookupForItemDestructorErrorCount_.get());
   visitor("navy_bc_remove_attempt_collisions", removeAttemptCollisions_.get(),
           CounterVisitor::CounterType::RATE);
-
-  auto snapshot = sizeDist_.getSnapshot();
-  for (auto& kv : snapshot) {
-    auto statName = folly::sformat("navy_bc_approx_bytes_in_size_{}", kv.first);
-    visitor(statName.c_str(), kv.second);
-  }
-
   // Allocator visits region manager
   allocator_.getCounters(visitor);
   index_.getCounters(visitor);
@@ -778,7 +758,6 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
 void BlockCache::persist(RecordWriter& rw) {
   XLOG(INFO, "Starting block cache persist");
   auto config = config_;
-  *config.sizeDist() = sizeDist_.getSnapshot();
   *config.allocAlignSize() = allocAlignSize_;
   config.holeCount() = holeCount_.get();
   config.holeSizeTotal() = holeSizeTotal_.get();
@@ -813,7 +792,6 @@ void BlockCache::tryRecover(RecordReader& rr) {
     XLOGF(ERR, "Recovery config: {}", configStr.c_str());
     throw std::invalid_argument("Recovery config does not match cache config");
   }
-  sizeDist_ = SizeDistribution{*config.sizeDist()};
   holeCount_.set(*config.holeCount());
   holeSizeTotal_.set(*config.holeSizeTotal());
   usedSizeBytes_.set(*config.usedSizeBytes());

@@ -138,7 +138,6 @@ TEST(BigHash, SimpleStats) {
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
-    EXPECT_CALL(helper, call(strPiece("navy_bh_approx_bytes_in_size_64"), 8));
     EXPECT_CALL(helper, call(strPiece("navy_bh_items"), 1));
     EXPECT_CALL(helper, call(strPiece("navy_bh_inserts"), 1));
     EXPECT_CALL(helper, call(strPiece("navy_bh_succ_inserts"), 1));
@@ -160,7 +159,6 @@ TEST(BigHash, SimpleStats) {
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
-    EXPECT_CALL(helper, call(strPiece("navy_bh_approx_bytes_in_size_64"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_items"), 0));
     EXPECT_CALL(helper, call(strPiece("navy_bh_inserts"), 1));
     EXPECT_CALL(helper, call(strPiece("navy_bh_succ_inserts"), 1));
@@ -192,7 +190,6 @@ TEST(BigHash, EvictionStats) {
   {
     MockCounterVisitor helper;
     EXPECT_CALL(helper, call(_, _)).Times(AtLeast(0));
-    EXPECT_CALL(helper, call(strPiece("navy_bh_approx_bytes_in_size_64"), 13));
     EXPECT_CALL(helper, call(strPiece("navy_bh_items"), 1));
     EXPECT_CALL(helper, call(strPiece("navy_bh_inserts"), 2));
     EXPECT_CALL(helper, call(strPiece("navy_bh_succ_inserts"), 2));

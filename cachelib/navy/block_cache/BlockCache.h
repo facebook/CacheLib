@@ -314,11 +314,10 @@ class BlockCache final : public Engine {
                                       uint32_t entrySize,
                                       RelAddress currAddr);
 
-  // Removes an entry key from the index and the item size from size
-  // distribution.
+  // Removes an entry key from the index.
   // @return true if the item is successfully removed; false if the item cannot
   //         be found or was removed earlier.
-  bool removeItem(HashedKey hk, uint32_t entrySize, RelAddress currAddr);
+  bool removeItem(HashedKey hk, RelAddress currAddr);
 
   void validate(Config& config) const;
 
@@ -394,7 +393,6 @@ class BlockCache final : public Engine {
   mutable AtomicCounter removeAttemptCollisions_;
   mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
-  mutable SizeDistribution sizeDist_;
   mutable AtomicCounter lookupForItemDestructorErrorCount_;
 };
 } // namespace navy

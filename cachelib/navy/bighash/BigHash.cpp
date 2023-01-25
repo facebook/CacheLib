@@ -32,10 +32,6 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-namespace {
-constexpr uint64_t kMinSizeDistribution = 64;
-constexpr double kSizeDistributionGranularityFactor = 1.25;
-} // namespace
 
 constexpr uint32_t BigHash::kFormatVersion;
 
@@ -86,9 +82,8 @@ BigHash::BigHash(Config&& config)
 
 BigHash::BigHash(Config&& config, ValidConfigTag)
     : checkExpired_(std::move(config.checkExpired)),
-      destructorCb_{[this, cb = std::move(config.destructorCb)](
+      destructorCb_{[cb = std::move(config.destructorCb)](
                         HashedKey hk, BufferView value, DestructorEvent event) {
-        sizeDist_.removeSize(hk.key().size() + value.size());
         if (cb) {
           cb(hk, value, event);
         }
@@ -97,9 +92,7 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       cacheBaseOffset_{config.cacheBaseOffset},
       numBuckets_{config.numBuckets()},
       bloomFilter_{std::move(config.bloomFilter)},
-      device_{*config.device},
-      sizeDist_{kMinSizeDistribution, bucketSize_,
-                kSizeDistributionGranularityFactor} {
+      device_{*config.device} {
   XLOGF(INFO,
         "BigHash created: buckets: {}, bucket size: {}, base offset: {}",
         numBuckets_,
@@ -131,7 +124,6 @@ void BigHash::reset() {
   bfFalsePositiveCount_.set(0);
   bfProbeCount_.set(0);
   checksumErrorCount_.set(0);
-  sizeDist_.reset();
   usedSizeBytes_.set(0);
 }
 
@@ -218,11 +210,6 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
           checksumErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bh_used_size_bytes", usedSizeBytes_.get());
-  auto snapshot = sizeDist_.getSnapshot();
-  for (auto& kv : snapshot) {
-    auto statName = folly::sformat("navy_bh_approx_bytes_in_size_{}", kv.first);
-    visitor(statName.c_str(), kv.second);
-  }
   bucketExpirationsDist_x100_.visitQuantileEstimator(
       visitor, "navy_bh_expired_loop_x100");
 }
@@ -236,7 +223,6 @@ void BigHash::persist(RecordWriter& rw) {
   *pd.bucketSize() = bucketSize_;
   *pd.cacheBaseOffset() = cacheBaseOffset_;
   *pd.numBuckets() = numBuckets_;
-  *pd.sizeDist() = sizeDist_.getSnapshot();
   *pd.usedSizeBytes() = usedSizeBytes_.get();
   serializeProto(pd, rw);
 
@@ -271,7 +257,6 @@ bool BigHash::recover(RecordReader& rr) {
 
     generationTime_ = std::chrono::nanoseconds{*pd.generationTime()};
     itemCount_.set(*pd.itemCount());
-    sizeDist_ = SizeDistribution{*pd.sizeDist()};
     usedSizeBytes_.set(*pd.usedSizeBytes());
     if (bloomFilter_) {
       bloomFilter_->recover<ProtoSerializer>(rr);
@@ -355,7 +340,6 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   } else {
     usedSizeBytes_.add(oldRemainingBytes - newRemainingBytes);
   }
-  sizeDist_.addSize(hk.key().size() + value.size());
   itemCount_.add(1);
   itemCount_.sub(evicted + removed);
   evictionCount_.add(evicted);

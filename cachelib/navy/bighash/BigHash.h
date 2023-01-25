@@ -224,7 +224,6 @@ class BigHash final : public Engine {
   mutable AtomicCounter bfFalsePositiveCount_;
   mutable AtomicCounter bfRebuildCount_;
   mutable AtomicCounter checksumErrorCount_;
-  mutable SizeDistribution sizeDist_;
   mutable AtomicCounter usedSizeBytes_;
   // counters to quantify the expired eviction overhead (temporary)
   // PercentileStats generates outputs in integers, so amplify by 100x
