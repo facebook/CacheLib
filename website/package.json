@@ -40,7 +40,8 @@
     "stylelint": "^13.2.1"
   },
   "resolutions": {
-    "ansi-html": "0.0.8"
+    "ansi-html": "0.0.8",
+    "ua-parser-js": "^1.0.33"
   },
   "browserslist": {
     "production": [
