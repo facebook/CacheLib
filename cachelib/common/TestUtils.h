@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <set>
 #include <string>
