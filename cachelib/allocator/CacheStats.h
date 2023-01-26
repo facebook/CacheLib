@@ -516,8 +516,11 @@ struct GlobalCacheStats {
 
 struct CacheMemoryStats {
   // current memory used for cache in bytes. This excludes the memory used for
-  // headers. This can change as memory is advised and reclaimed.
+  // slab headers and the memory returned temporarily to system (i.e., advised).
   size_t cacheSize{0};
+
+  // configured total ram cache size, excluding memory used for slab headers.
+  size_t configuredRamCacheSize{0};
 
   // regular pool memory size in bytes
   size_t regularCacheSize{0};

@@ -3415,20 +3415,22 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
 template <typename CacheTrait>
 CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
   const auto totalCacheSize = allocator_->getMemorySize();
+  const auto configuredTotalCacheSize = allocator_->getMemorySizeInclAdvised();
 
   auto addSize = [this](size_t a, PoolId pid) {
     return a + allocator_->getPool(pid).getPoolSize();
   };
   const auto regularPoolIds = getRegularPoolIds();
   const auto ccCachePoolIds = getCCachePoolIds();
-  size_t regularCacheSize = std::accumulate(
+  size_t configuredRegularCacheSize = std::accumulate(
       regularPoolIds.begin(), regularPoolIds.end(), 0ULL, addSize);
-  size_t compactCacheSize = std::accumulate(
+  size_t configuredCompactCacheSize = std::accumulate(
       ccCachePoolIds.begin(), ccCachePoolIds.end(), 0ULL, addSize);
 
   return CacheMemoryStats{totalCacheSize,
-                          regularCacheSize,
-                          compactCacheSize,
+                          configuredTotalCacheSize,
+                          configuredRegularCacheSize,
+                          configuredCompactCacheSize,
                           allocator_->getAdvisedMemorySize(),
                           memMonitor_ ? memMonitor_->getMaxAdvisePct() : 0,
                           allocator_->getUnreservedMemorySize(),
