@@ -17,6 +17,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
