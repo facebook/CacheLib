@@ -106,7 +106,7 @@ void setup() {
   config.configureChainedItems(accessConfig);
 
   cache = std::make_unique<LruAllocator>(config);
-  poolId = cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  poolId = cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 
   setupUnorderedStdMap();
   setupClMap();

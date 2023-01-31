@@ -48,7 +48,7 @@ class MultiAllocatorTest : public AllocatorTest<AllocatorA> {
       config.setCacheSize(nSlabs * Slab::kSize);
       config.enableCachePersistence(this->cacheDir_);
       AllocatorA alloc(AllocatorA::SharedMemNew, config);
-      const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
       const auto poolId = alloc.addPool("foobar", numBytes);
       auto sizes = this->getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
       this->fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);

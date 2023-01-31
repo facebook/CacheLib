@@ -50,7 +50,7 @@ class BaseAllocatorTestDeathStyle : public AllocatorTest<AllocatorT> {
 
     size_t allocSize = 1024;
     AllocatorT alloc(AllocatorT::SharedMemNew, config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     poolId = alloc.addPool("foobar", numBytes);
     auto hdl = util::allocateAccessible(alloc, poolId, "mykey", allocSize);
     ASSERT_NE(hdl, nullptr);

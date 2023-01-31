@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
   assert(lruConfig.itemsReaperEnabled());
   LruAllocator cache(lruConfig);
   const auto poolId =
-      cache.addPool("default", cache.getCacheMemoryStats().cacheSize);
+      cache.addPool("default", cache.getCacheMemoryStats().ramCacheSize);
 
   XLOG(INFO) << "allocating items";
   std::mt19937 gen(folly::Random::rand32());

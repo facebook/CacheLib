@@ -66,10 +66,12 @@ TEST_F(PoolOptimizeStrategy2QTest, MarginalHitsRegularPoolOptimize) {
 
   // always promote
   mmConfig.lruRefreshTime = 0;
-  auto p0 = cache->addPool("Pool0", cache->getCacheMemoryStats().cacheSize / 2,
-                           allocSizes, mmConfig);
-  auto p1 = cache->addPool("Pool1", cache->getCacheMemoryStats().cacheSize / 2,
-                           allocSizes, mmConfig);
+  auto p0 =
+      cache->addPool("Pool0", cache->getCacheMemoryStats().ramCacheSize / 2,
+                     allocSizes, mmConfig);
+  auto p1 =
+      cache->addPool("Pool1", cache->getCacheMemoryStats().ramCacheSize / 2,
+                     allocSizes, mmConfig);
   ASSERT_NE(Slab::kInvalidPoolId, p0);
   ASSERT_NE(Slab::kInvalidPoolId, p1);
 

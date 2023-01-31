@@ -66,7 +66,7 @@ struct CacheTestImpl {
     cache_ = std::make_unique<LruAllocator>(config);
 
     // 50% goes to item pool and 50% goes to compact cache
-    const auto usableMemory = cache_->getCacheMemoryStats().cacheSize;
+    const auto usableMemory = cache_->getCacheMemoryStats().ramCacheSize;
     itemPool = cache_->addPool("item_cache", usableMemory / 2);
 
     ccache_ = cache_->template addCompactCache<CCacheType>("compact_cache",

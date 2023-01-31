@@ -185,7 +185,7 @@ TEST_F(PersistenceManagerTest, testCompactCache) {
     Cache cache(Cache::SharedMemNew, cache_.config_);
 
     auto* cc = cache.template addCompactCache<IntValueCCache>(
-        ccacheName, cache.getCacheMemoryStats().cacheSize);
+        ccacheName, cache.getCacheMemoryStats().ramCacheSize);
     ASSERT_EQ(CCacheReturn::NOTFOUND, cc->set(Key(k1), &k2));
     ASSERT_EQ(CCacheReturn::NOTFOUND, cc->set(Key(k2), &k3));
     ASSERT_EQ(CCacheReturn::NOTFOUND, cc->set(Key(k3), &k1));

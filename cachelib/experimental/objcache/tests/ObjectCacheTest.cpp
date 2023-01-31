@@ -39,7 +39,7 @@ using LruObjectCache =
 std::unique_ptr<LruObjectCache> createCache(LruObjectCache::Config config) {
   auto objcache = std::make_unique<LruObjectCache>(config);
   objcache->getCacheAlloc().addPool(
-      "default", objcache->getCacheAlloc().getCacheMemoryStats().cacheSize);
+      "default", objcache->getCacheAlloc().getCacheMemoryStats().ramCacheSize);
   return objcache;
 }
 } // namespace

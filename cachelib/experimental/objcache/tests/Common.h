@@ -126,7 +126,7 @@ inline std::unique_ptr<LruAllocator> createCache() {
   LruAllocator::Config config;
   config.setCacheSize(100 * 1024 * 1024);
   auto cache = std::make_unique<LruAllocator>(config);
-  cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
   return cache;
 }
 } // namespace test

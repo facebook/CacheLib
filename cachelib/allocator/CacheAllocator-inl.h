@@ -3428,6 +3428,7 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
       ccCachePoolIds.begin(), ccCachePoolIds.end(), 0ULL, addSize);
 
   return CacheMemoryStats{totalCacheSize,
+                          totalCacheSize,
                           configuredTotalCacheSize,
                           configuredRegularCacheSize,
                           configuredCompactCacheSize,

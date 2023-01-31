@@ -71,7 +71,7 @@ void initializeCache() {
       .validate();
   cache = std::make_unique<Cache>(config);
   default_pool =
-      cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+      cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 }
 
 ```
@@ -131,7 +131,7 @@ int main(int argc, char** argv) {
 
     // Add the following code to compare the default pool size with the cache size.
     auto cache_size = 1024 * 1024 * 1024; // 1 GB
-    auto default_pool_size = gCache_->getCacheMemoryStats().cacheSize;
+    auto default_pool_size = gCache_->getCacheMemoryStats().ramCacheSize;
     std::cout << "cache size = " << cache_size << '\n';
     std::cout << "default pool size = " << default_pool_size << '\n';
   }

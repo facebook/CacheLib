@@ -50,8 +50,8 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
     AllocatorT alloc(config);
     const std::set<uint32_t>& allocSizes = {1024,      4 * 1024,   16 * 1024,
                                             64 * 1024, 256 * 1024, 1024 * 1024};
-    const auto poolId =
-        alloc.addPool("1", alloc.getCacheMemoryStats().cacheSize, allocSizes);
+    const auto poolId = alloc.addPool(
+        "1", alloc.getCacheMemoryStats().ramCacheSize, allocSizes);
 
     const int numItems = 10000;
 
@@ -212,7 +212,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
 
     // create an allocator worth 100 slabs.
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     const auto poolSize = numBytes / 2;
     auto poolId = alloc.addPool("one", poolSize);
     auto poolId2 = alloc.addPool("two", poolSize);

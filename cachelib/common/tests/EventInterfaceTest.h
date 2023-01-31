@@ -114,8 +114,8 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     auto eventTrackerPtr = eventTracker.get();
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
-    auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
-                             allocSizes);
+    auto pid = alloc.addPool(
+        "default", alloc.getCacheMemoryStats().ramCacheSize, allocSizes);
 
     const unsigned int keyLen = 100;
     const uint32_t valueSize = 1024;
@@ -213,8 +213,8 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     AllocatorT alloc(config);
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
-    auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
-                             allocSizes);
+    auto pid = alloc.addPool(
+        "default", alloc.getCacheMemoryStats().ramCacheSize, allocSizes);
 
     const unsigned int keyLen = 100;
     const uint32_t valueSize = 1024;
@@ -258,8 +258,8 @@ class EventInterfaceTest : public AllocatorTest<AllocatorT> {
     AllocatorT alloc(config);
 
     std::set<uint32_t> allocSizes{100, 1000, 2000, 5000};
-    auto pid = alloc.addPool("default", alloc.getCacheMemoryStats().cacheSize,
-                             allocSizes);
+    auto pid = alloc.addPool(
+        "default", alloc.getCacheMemoryStats().ramCacheSize, allocSizes);
 
     const unsigned int keyLen = 100;
     const uint32_t valueSize = 1024;

@@ -517,16 +517,23 @@ struct GlobalCacheStats {
 struct CacheMemoryStats {
   // current memory used for cache in bytes. This excludes the memory used for
   // slab headers and the memory returned temporarily to system (i.e., advised).
+  size_t ramCacheSize{0};
+
+  // TODO: this means the same as ramCacheSize. Deprecate as soon as we land
+  //       the change to migrate iOS code to use ramCacheSize instead.
+  //       DO NOT USE THIS IN NEW CODE.
   size_t cacheSize{0};
 
   // configured total ram cache size, excluding memory used for slab headers.
   size_t configuredRamCacheSize{0};
 
-  // regular pool memory size in bytes
-  size_t regularCacheSize{0};
+  // configured regular pool memory size in bytes.
+  // the actually used size may be less than this
+  size_t configuredRamCacheRegularSize{0};
 
-  // compact cache pool memory size in bytes
-  size_t compactCacheSize{0};
+  // configured compact cache pool memory size in bytes
+  // the actually used size may be less than this
+  size_t configuredRamCacheCompactSize{0};
 
   // current advised away memory size in bytes.
   size_t advisedSize{0};
@@ -540,17 +547,17 @@ struct CacheMemoryStats {
   // size of the nvm cache in addition to the ram cache.
   size_t nvmCacheSize{0};
 
-  // returns the advised memory in the unit of slabs.
-  size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
-
-  // returne usable portion of the cache size
-  size_t usableCacheSize() const { return cacheSize - advisedSize; }
-
   // amount of memory available on the host
   size_t memAvailableSize{0};
 
   // rss size of the process
   size_t memRssSize{0};
+
+  // returns the advised memory in the unit of slabs.
+  size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
+
+  // returne usable portion of the cache size
+  size_t usableRamCacheSize() const { return ramCacheSize; }
 };
 
 // Stats for compact cache

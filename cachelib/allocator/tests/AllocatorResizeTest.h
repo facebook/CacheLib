@@ -78,14 +78,14 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                         Slab::kSize);
     AllocatorT alloc(config);
 
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
     const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
-    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
     auto poolId1 = alloc.addPool("default", numBytes, acSizes);
     ASSERT_NE(Slab::kInvalidPoolId, poolId1);
 
@@ -184,14 +184,14 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                         Slab::kSize);
     AllocatorT alloc(config);
 
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
     const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
-    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
     auto poolId1 = alloc.addPool("default", numBytes, acSizes);
     ASSERT_NE(Slab::kInvalidPoolId, poolId1);
 
@@ -273,7 +273,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                               std::chrono::seconds{1}, poolResizeSlabsPerIter);
 
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     auto poolId = alloc.addPool("foobar", numBytes);
 
     // fill up the pool with items of the same size
@@ -320,14 +320,14 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
     AllocatorT alloc(config);
 
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
     // use power 2 allocation sizes. this is important to ensure that the pool's
     // limit and allocated size match up when the pool is exhausted.
     const auto acSizes = tests::getRandomPow2AllocSizes(numSizes);
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
-    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
     auto poolId1 = alloc.addPool("default", numBytes, acSizes);
     ASSERT_NE(Slab::kInvalidPoolId, poolId1);
 
@@ -412,10 +412,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                           Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
 
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       poolId1 = alloc.addPool("default", numBytes, acSizes);
       ASSERT_NE(Slab::kInvalidPoolId, poolId1);
 
@@ -510,10 +510,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     {
       config.setCacheSize((numPools * 50 + 1) * Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       poolId1 = alloc.addPool("pool1", numBytes, acSizes);
       ASSERT_NE(Slab::kInvalidPoolId, poolId1);
       poolId2 = alloc.addPool("pool2", numBytes, acSizes);
@@ -597,10 +597,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     PoolId poolId1, poolId2;
     {
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       poolId1 = alloc.addPool("pool1", numBytes, acSizes);
       ASSERT_NE(Slab::kInvalidPoolId, poolId1);
       poolId2 = alloc.addPool("pool2", numBytes, acSizes);
@@ -706,10 +706,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     {
       config.setCacheSize((4 * 5 + 1) * Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / 4;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / 4;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * 4, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * 4, alloc.getCacheMemoryStats().ramCacheSize);
       poolId1 = alloc.addPool("pool1", numBytes, acSizes);
       ASSERT_NE(Slab::kInvalidPoolId, poolId1);
       poolId2 = alloc.addPool("pool2", numBytes, acSizes);
@@ -820,10 +820,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     {
       config.setCacheSize((numPools * 50 + 1) * Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       poolId1 = alloc.addPool("pool1", numBytes, acSizes);
       ASSERT_NE(Slab::kInvalidPoolId, poolId1);
       poolId2 = alloc.addPool("pool2", numBytes, acSizes);
@@ -924,10 +924,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     {
       config.setCacheSize((numPools * slabsPerPool + 1) * Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       for (int i = 0; i < 5; i++) {
         std::string s = "pool" + std::to_string(i);
         auto poolId = alloc.addPool(folly::StringPiece(s.data(), s.size()),
@@ -1024,10 +1024,10 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     {
       config.setCacheSize((numPools * slabsPerPool + 1) * Slab::kSize);
       AllocatorT alloc(AllocatorT::SharedMemNew, config);
-      numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+      numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
       ASSERT_EQ(0, numBytes % Slab::kSize);
-      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+      ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
       for (int i = 0; i < numPools; i++) {
         std::string s = "pool" + std::to_string(i);
         auto poolId = alloc.addPool(folly::StringPiece(s.data(), s.size()),
@@ -1088,12 +1088,12 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
                         Slab::kSize);
     AllocatorT alloc(AllocatorT::SharedMemNew, config);
 
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize / numPools;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize / numPools;
 
     const std::set<uint32_t> acSizes{16384, 32768, 65536, 131072, 262144};
 
     ASSERT_EQ(0, numBytes % Slab::kSize);
-    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().cacheSize);
+    ASSERT_EQ(numBytes * numPools, alloc.getCacheMemoryStats().ramCacheSize);
     std::vector<PoolId> poolIds;
     const unsigned int keyLen = 10;
     for (unsigned int i = 0; i < numPools; i++) {

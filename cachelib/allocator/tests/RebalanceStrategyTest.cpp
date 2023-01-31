@@ -87,7 +87,7 @@ class RebalanceStrategyTest : public testing::Test {
     auto cache = std::make_unique<AllocatorT>(config);
     const std::set<uint32_t> allocSizes{16 * 1024, 128 * 1024};
     const auto pid = cache->addPool(
-        "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+        "default", cache->getCacheMemoryStats().ramCacheSize, allocSizes);
 
     std::vector<typename AllocatorT::WriteHandle> handles;
     int handleCount = 0;
@@ -162,7 +162,7 @@ class RebalanceStrategyTest : public testing::Test {
 
     /* Make a pool with a size of ~4mb per slab */
     const auto pid = cache->addPool(
-        "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+        "default", cache->getCacheMemoryStats().ramCacheSize, allocSizes);
 
     /* Initially we should no free or allocated slabs */
     ASSERT_EQ(cache->getPoolStats(pid).mpStats.freeSlabs, 0);
@@ -301,7 +301,7 @@ class RebalanceStrategyTest : public testing::Test {
       auto cache = std::make_unique<AllocatorT>(allocatorConfig);
       const std::set<uint32_t> allocSizes{kSmallItemSz + 128, kBigItemSz + 128};
       const auto pid = cache->addPool(
-          "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+          "default", cache->getCacheMemoryStats().ramCacheSize, allocSizes);
 
       /* Fill half the slabs with big items */
       const auto kTargetSlabs = kCacheSlabs / 2;
@@ -456,7 +456,7 @@ class RebalanceStrategyTest : public testing::Test {
     const std::set<uint32_t> allocSizes{10000, 100000};
 
     const auto pid = cache->addPool(
-        "default", cache->getCacheMemoryStats().cacheSize, allocSizes);
+        "default", cache->getCacheMemoryStats().ramCacheSize, allocSizes);
 
     /* Attempt to fill bigger allocation class */
     std::vector<typename AllocatorT::WriteHandle> handlesBigItems;
@@ -557,7 +557,7 @@ TEST_F(RebalanceStrategy2QTest, MarginalHitsSlabRebalance) {
   // always promote
   mmConfig.lruRefreshTime = 0;
 
-  auto pid = cache->addPool("Pool", cache->getCacheMemoryStats().cacheSize,
+  auto pid = cache->addPool("Pool", cache->getCacheMemoryStats().ramCacheSize,
                             allocSizes, mmConfig);
   ASSERT_NE(Slab::kInvalidPoolId, pid);
   ClassId cid0{Slab::kInvalidClassId}, cid1{Slab::kInvalidClassId};

@@ -85,15 +85,21 @@ When using memory monitor, call the `getCacheMemoryStats()` method to get the cu
 
 ```cpp
 struct CacheMemoryStats {
-  // current memory used for cache in bytes. This excludes the memory used for
-  // headers. This can change as memory is advised and reclaimed.
-  size_t cacheSize{0};
+  // current memory used for dram cache in bytes. This excludes the memory used
+  // for headers. This can change as memory is advised and reclaimed.
+  size_t totalCacheSize{0};
 
-  // regular pool memory size in bytes
-  size_t regularCacheSize{0};
+  // configured total dram cache size. the actual used size
+  // may be less than this.
+  size_t configuredTotalCacheSize{0};
 
-  // compact cache pool memory size in bytes
-  size_t compactCacheSize{0};
+  // configured regular pool memory size in bytes.
+  // the actually used size may be less than this
+  size_t configuredRegularCacheSize{0};
+
+  // configured compact cache pool memory size in bytes
+  // the actually used size may be less than this
+  size_t configuredCompactCacheSize{0};
 
   // current advised away memory size in bytes.
   size_t advisedSize{0};
@@ -107,7 +113,16 @@ struct CacheMemoryStats {
   // size of the nvm cache in addition to the ram cache.
   size_t nvmCacheSize{0};
 
+  // amount of memory available on the host
+  size_t memAvailableSize{0};
+
+  // rss size of the process
+  size_t memRssSize{0};
+
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
+
+  // returne usable portion of the cache size
+  size_t usableCacheSize() const { return totalCacheSize; }
 };
 ```

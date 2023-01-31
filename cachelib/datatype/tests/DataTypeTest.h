@@ -34,7 +34,7 @@ struct DataTypeTest {
     config.configureChainedItems();
     config.setCacheSize(100 * Slab::kSize);
     auto cache = std::make_unique<AllocatorT>(config);
-    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache->getCacheMemoryStats().ramCacheSize;
     cache->addPool(kDefaultPool, numBytes);
     return cache;
   }

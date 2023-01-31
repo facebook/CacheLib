@@ -77,7 +77,7 @@ class SimpleRebalanceTest : public testing::Test {
     config.setCacheSize(10 * Slab::kSize);
 
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     auto poolId = alloc.addPool("foobar", numBytes);
 
     std::vector<typename AllocatorT::WriteHandle> handles;
@@ -130,7 +130,7 @@ class SimpleRebalanceTest : public testing::Test {
     config.setCacheSize(20 * Slab::kSize);
 
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     const unsigned int numPools = 5;
     std::vector<PoolId> pidList;
     for (unsigned int i = 0; i < numPools; ++i) {

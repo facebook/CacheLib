@@ -245,7 +245,7 @@ void AllocatorTest<AllocatorT>::runSerializationTest(
   std::vector<std::string> keys;
   {
     AllocatorT alloc(AllocatorT::SharedMemNew, config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     poolId = alloc.addPool("foobar", numBytes);
     sizes = getValidAllocSizes(alloc, poolId, nSlabs, keyLen);
     fillUpPoolUntilEvictions(alloc, poolId, sizes, keyLen);
@@ -275,7 +275,7 @@ void AllocatorTest<AllocatorT>::runSerializationTest(
   // Original lru allocator
   {
     AllocatorT alloc(AllocatorT::SharedMemNew, config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     poolId = alloc.addPool("foobar", numBytes);
 
     sizes = getValidAllocSizes(alloc, poolId, nSizes, keyLen);

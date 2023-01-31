@@ -69,7 +69,7 @@ std::unique_ptr<LruAllocator> getCache(unsigned int htPower = 20) {
   config.enableItemReaperInBackground(std::chrono::seconds{0});
 
   auto cache = std::make_unique<LruAllocator>(config);
-  cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
   return cache;
 }
 } // namespace

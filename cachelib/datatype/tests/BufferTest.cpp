@@ -253,7 +253,7 @@ class BufferManagerTest : public ::testing::Test {
     config.configureChainedItems();
     config.setCacheSize(400 * Slab::kSize);
     auto cache = std::make_unique<AllocatorT>(config);
-    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache->getCacheMemoryStats().ramCacheSize;
     const auto pid = cache->addPool("default", numBytes);
 
     auto parent = cache->allocate(pid, "my_parent", 0);
@@ -287,7 +287,7 @@ class BufferManagerTest : public ::testing::Test {
     config.setCacheSize(400 * Slab::kSize);
     config.setDefaultAllocSizes(util::generateAllocSizes(2, 1024 * 1024));
     auto cache = std::make_unique<AllocatorT>(config);
-    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache->getCacheMemoryStats().ramCacheSize;
     const auto pid = cache->addPool("default", numBytes);
     auto parent = cache->allocate(pid, "my_parent", 0);
 
@@ -305,7 +305,7 @@ class BufferManagerTest : public ::testing::Test {
     typename AllocatorT::Config config;
     config.configureChainedItems();
     auto cache = std::make_unique<AllocatorT>(config);
-    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache->getCacheMemoryStats().ramCacheSize;
     const auto pid = cache->addPool("default", numBytes);
     const std::string data = "abcdefghijklmnopqrstuvwxyz";
 
@@ -351,7 +351,7 @@ class BufferManagerTest : public ::testing::Test {
     config.setCacheSize(10 * Slab::kSize);
     config.setDefaultAllocSizes(util::generateAllocSizes(2, 1024 * 1024));
     auto cache = std::make_unique<AllocatorT>(config);
-    const size_t numBytes = cache->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache->getCacheMemoryStats().ramCacheSize;
     const auto pid = cache->addPool("default", numBytes);
 
     using BufferManager = detail::BufferManager<AllocatorT>;

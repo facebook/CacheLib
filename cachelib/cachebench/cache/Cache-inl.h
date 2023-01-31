@@ -257,7 +257,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       pools_.push_back(poolId);
     }
   } else {
-    const size_t numBytes = cache_->getCacheMemoryStats().cacheSize;
+    const size_t numBytes = cache_->getCacheMemoryStats().ramCacheSize;
     for (uint64_t i = 0; i < config_.numPools; ++i) {
       const double& ratio = config_.poolSizes[i];
       const size_t poolSize = static_cast<size_t>(numBytes * ratio);

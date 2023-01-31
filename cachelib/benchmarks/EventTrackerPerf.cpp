@@ -67,7 +67,7 @@ void runFindOps(std::shared_ptr<FakeWsaTracker> tracker) {
     }
 
     cache = std::make_unique<LruAllocator>(config);
-    cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+    cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 
     auto hdl = cache->allocate(0, "my key", 100);
     for (int i = 0; i < 10; i++) {
@@ -105,7 +105,7 @@ void runAllocateOps(std::shared_ptr<FakeWsaTracker> tracker) {
     }
 
     cache = std::make_unique<LruAllocator>(config);
-    cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+    cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
   }
 
   for (int i = 0; i < 100'000; i++) {

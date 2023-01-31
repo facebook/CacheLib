@@ -98,7 +98,7 @@ class SimplePoolOptimizationTest : public testing::Test {
     const auto numItems = 100;
 
     AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().cacheSize;
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     const size_t initialPoolSize = numBytes / 5;
     auto pid0 = alloc.addPool("pool-0", initialPoolSize);
     auto pid1 = alloc.addPool("pool-1", initialPoolSize);

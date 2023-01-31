@@ -306,7 +306,7 @@ std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
       .validate(); // will throw if bad config
   cache = std::make_unique<FbCache>(config);
   defaultPool =
-      cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+      cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 
   if (opts.fb303Stats) {
     cachelib::CacheAdmin::Config adminConfig;

@@ -80,7 +80,7 @@ void setup() {
 
   cache = std::make_unique<LruAllocator>(config);
 
-  poolId = cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  poolId = cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 
   // insert CachelibMap into cache
   {

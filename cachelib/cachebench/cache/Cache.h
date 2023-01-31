@@ -351,7 +351,7 @@ class Cache {
   // returns the initialized size of the cache.
   // TODO (sathya) deprecate this after cleaning up FastShutdownStressor
   size_t getCacheSize() const {
-    return cache_->getCacheMemoryStats().cacheSize;
+    return cache_->getCacheMemoryStats().ramCacheSize;
   }
 
   // empties the cache entries by removing the keys, this will schedule the

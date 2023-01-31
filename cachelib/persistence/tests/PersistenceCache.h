@@ -76,7 +76,7 @@ class PersistenceCache {
     for (uint32_t i = 0; i < numPools; ++i) {
       pools.push_back(
           cache.addPool(folly::sformat("pool_{}", i),
-                        cache.getCacheMemoryStats().cacheSize / numPools));
+                        cache.getCacheMemoryStats().ramCacheSize / numPools));
     }
 
     for (uint32_t i = 0; i < items.size(); ++i) {
