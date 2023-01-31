@@ -86,7 +86,10 @@ class BlockCache final : public Engine {
     bool preciseRemove{false};
 
     // Calculates the total region number.
-    uint32_t getNumRegions() const { return cacheSize / regionSize; }
+    uint32_t getNumRegions() const {
+      XDCHECK_EQ(0ul, cacheSize % regionSize);
+      return cacheSize / regionSize;
+    }
 
     // Checks invariants. Throws exception if failed.
     Config& validate();

@@ -51,6 +51,13 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (cacheSize <= 0) {
     throw std::invalid_argument("invalid size");
   }
+  if (cacheSize % regionSize != 0) {
+    throw std::invalid_argument(
+        folly::sformat("Cache size is not aligned to region size! cache size: "
+                       "{}, region size: {}",
+                       cacheSize,
+                       regionSize));
+  }
   if (getNumRegions() < cleanRegionsPool) {
     throw std::invalid_argument("not enough space on device");
   }
@@ -801,39 +808,13 @@ void BlockCache::tryRecover(RecordReader& rr) {
 
 bool BlockCache::isValidRecoveryData(
     const serialization::BlockCacheConfig& recoveredConfig) const {
-  if (!(*config_.cacheBaseOffset() == *recoveredConfig.cacheBaseOffset() &&
-        static_cast<int32_t>(allocAlignSize_) ==
-            *recoveredConfig.allocAlignSize() &&
-        *config_.checksum() == *recoveredConfig.checksum())) {
-    return false;
-  }
-  // TOOD: this is to handle alignment change on cache size from v11 to v12 and
-  // beyond. Clean this up after BlockCache everywhere is on v12, and restore
-  // the above block in the comments.
-  // Forward warm-roll for v11 going forward to v12+
-  if (*config_.version() > *recoveredConfig.version() &&
-      *config_.version() >= 12 && *recoveredConfig.version() == 11) {
-    XLOGF(INFO,
-          "Handling warm roll upgrade from Navy v11 to v12+. Old cache size: "
-          "{}, New cache size: {}",
-          *recoveredConfig.cacheSize(),
-          *config_.cacheSize());
-    return *config_.cacheSize() / regionSize_ ==
-           *recoveredConfig.cacheSize() / regionSize_;
-  }
-  // Backward warm-roll. This is for v12+ rolling back to v11
-  if (*config_.version() < *recoveredConfig.version() &&
-      *config_.version() == 11 && *recoveredConfig.version() >= 12) {
-    XLOGF(INFO,
-          "Handling warm roll downgrade from Navy v12+ to v11. Old cache size: "
-          "{}, New cache size: {}",
-          *recoveredConfig.cacheSize(),
-          *config_.cacheSize());
-    return *config_.cacheSize() / regionSize_ ==
-           *recoveredConfig.cacheSize() / regionSize_;
-  }
-  return *config_.cacheSize() == *recoveredConfig.cacheSize() &&
-         *config_.version() == *recoveredConfig.version();
+  return *config_.cacheBaseOffset_ref() ==
+             *recoveredConfig.cacheBaseOffset_ref() &&
+         *config_.cacheSize_ref() == *recoveredConfig.cacheSize_ref() &&
+         static_cast<int32_t>(allocAlignSize_) ==
+             *recoveredConfig.allocAlignSize_ref() &&
+         *config_.checksum_ref() == *recoveredConfig.checksum_ref() &&
+         *config_.version_ref() == *recoveredConfig.version_ref();
 }
 
 serialization::BlockCacheConfig BlockCache::serializeConfig(
