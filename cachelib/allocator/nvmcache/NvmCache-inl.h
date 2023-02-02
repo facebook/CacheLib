@@ -460,19 +460,18 @@ uint32_t NvmCache<C>::getStorageSizeInNvm(const Item& it) {
 }
 
 template <typename C>
-std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const WriteHandle& hdl) {
-  const auto& item = *hdl;
+std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item) {
   auto poolId = cache_.getAllocInfo((void*)(&item)).poolId;
 
   if (item.isChainedItem()) {
     throw std::invalid_argument(folly::sformat(
-        "Chained item can not be flushed separately {}", hdl->toString()));
+        "Chained item can not be flushed separately {}", item.toString()));
   }
 
   auto chainedItemRange =
-      CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, *hdl);
+      CacheAPIWrapperForNvm<C>::viewAsChainedAllocsRange(cache_, item);
   if (config_.encodeCb && !config_.encodeCb(EncodeDecodeContext{
-                              *(hdl.getInternal()), chainedItemRange})) {
+                              const_cast<Item&>(item), chainedItemRange})) {
     return nullptr;
   }
 
@@ -496,12 +495,10 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const WriteHandle& hdl) {
 }
 
 template <typename C>
-void NvmCache<C>::put(WriteHandle& hdl, PutToken token) {
+void NvmCache<C>::put(Item& item, PutToken token) {
   util::LatencyTracker tracker(stats().nvmInsertLatency_);
-  HashedKey hk{hdl->getKey()};
+  HashedKey hk{item.getKey()};
 
-  XDCHECK(hdl);
-  auto& item = *hdl;
   // for regular items that can only write to nvmcache upon eviction, we
   // should not be recording a write for an nvmclean item unless it is marked
   // as evicted from nvmcache.
@@ -526,7 +523,7 @@ void NvmCache<C>::put(WriteHandle& hdl, PutToken token) {
     return;
   }
 
-  auto nvmItem = makeNvmItem(hdl);
+  auto nvmItem = makeNvmItem(item);
   if (!nvmItem) {
     stats().numNvmPutEncodeFailure.inc();
     return;

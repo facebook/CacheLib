@@ -339,7 +339,7 @@ class MMTinyLFU {
     class Iterator;
     // same as the above but uses an iterator context. The iterator is updated
     // on removal of the corresponding node to point to the next node. The
-    // iterator context holds the lock on the lru.
+    // iterator context is responsible for locking.
     //
     // iterator will be advanced to the next node after removing the node
     //
@@ -356,10 +356,7 @@ class MMTinyLFU {
     //               source node already existed.
     bool replace(T& oldNode, T& newNode) noexcept;
 
-    // context for iterating the MM container. At any given point of time,
-    // there can be only one iterator active since we need to lock the LRU for
-    // iteration. we can support multiple iterators at same time, by using a
-    // shared ptr in the context for the lock holder in the future.
+    // context for iterating the MM container.
     class Iterator {
      public:
       using ListIterator = typename LruList::DListIterator;
@@ -367,6 +364,7 @@ class MMTinyLFU {
       Iterator(const Iterator&) = delete;
       Iterator& operator=(const Iterator&) = delete;
       Iterator(Iterator&&) noexcept = default;
+      Iterator& operator=(Iterator&&) noexcept = default;
 
       Iterator& operator++() noexcept {
         ++getIter();
@@ -401,30 +399,17 @@ class MMTinyLFU {
         mIter_.reset();
       }
 
-      // 1. Invalidate this iterator
-      // 2. Unlock
-      void destroy() {
-        reset();
-        if (l_.owns_lock()) {
-          l_.unlock();
-        }
-      }
+      // Invalidate this iterator
+      void destroy() { reset(); }
 
       // Reset this iterator to the beginning
       void resetToBegin() {
-        if (!l_.owns_lock()) {
-          l_.lock();
-        }
         tIter_.resetToBegin();
         mIter_.resetToBegin();
       }
 
      private:
-      // private because it's easy to misuse and cause deadlock for MMTinyLFU
-      Iterator& operator=(Iterator&&) noexcept = default;
-
-      // create an lru iterator with the lock being held.
-      explicit Iterator(LockHolder l, const Container<T, HookPtr>& c) noexcept;
+      explicit Iterator(const Container<T, HookPtr>& c) noexcept;
 
       const ListIterator& getIter() const noexcept {
         return evictTiny() ? tIter_ : mIter_;
@@ -456,6 +441,40 @@ class MMTinyLFU {
       // Tiny and main cache iterators
       ListIterator tIter_;
       ListIterator mIter_;
+    };
+
+    class LockedIterator : public Iterator {
+     public:
+      // noncopyable but movable.
+      LockedIterator(const LockedIterator&) = delete;
+      LockedIterator& operator=(const LockedIterator&) = delete;
+      LockedIterator(LockedIterator&&) noexcept = default;
+
+      // 1. Invalidate this iterator
+      // 2. Unlock
+      void destroy() {
+        Iterator::reset();
+        if (l_.owns_lock()) {
+          l_.unlock();
+        }
+      }
+
+      // Reset this iterator to the beginning
+      void resetToBegin() {
+        if (!l_.owns_lock()) {
+          l_.lock();
+        }
+        Iterator::resetToBegin();
+      }
+
+     private:
+      // only the container can create iterators
+      friend Container<T, HookPtr>;
+
+      // create an lru iterator with the lock being held.
+      explicit LockedIterator(LockHolder l,
+                              const Container<T, HookPtr>& c) noexcept;
+
       // lock protecting the validity of the iterator
       LockHolder l_;
     };
@@ -489,7 +508,12 @@ class MMTinyLFU {
     // Obtain an iterator that start from the tail and can be used
     // to search for evictions. This iterator holds a lock to this
     // container and only one such iterator can exist at a time
-    Iterator getEvictionIterator() const noexcept;
+    LockedIterator getEvictionIterator() const noexcept;
+
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withEvictionIterator(F&& f);
 
     // for saving the state of the lru
     //

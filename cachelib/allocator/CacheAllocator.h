@@ -1308,7 +1308,7 @@ class CacheAllocator : public CacheBase {
 
  private:
   // wrapper around Item's refcount and active handle tracking
-  FOLLY_ALWAYS_INLINE void incRef(Item& it);
+  FOLLY_ALWAYS_INLINE bool incRef(Item& it);
   FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef(Item& it);
 
   // drops the refcount and if needed, frees the allocation back to the memory
@@ -1358,6 +1358,12 @@ class CacheAllocator : public CacheBase {
                                     RemoveContext ctx,
                                     bool nascent = false,
                                     const Item* toRecycle = nullptr);
+
+  // Must be called by the thread which called markForEviction and
+  // succeeded. After this call, the item is unlinked from Access and
+  // MM Containers. The item is no longer marked as exclusive and it's
+  // ref count is 0 - it's available for recycling.
+  void unlinkItemForEviction(Item& it);
 
   // acquires an handle on the item. returns an empty handle if it is null.
   // @param it    pointer to an item
@@ -1448,17 +1454,17 @@ class CacheAllocator : public CacheBase {
   // @return  handle to the parent item if the validations pass
   //          otherwise, an empty Handle is returned.
   //
-  ReadHandle validateAndGetParentHandleForChainedMoveLocked(
+  WriteHandle validateAndGetParentHandleForChainedMoveLocked(
       const ChainedItem& item, const Key& parentKey);
 
   // Given an existing item, allocate a new one for the
   // existing one to later be moved into.
   //
-  // @param oldItem    the item we want to allocate a new item for
+  // @param item   reference to the item we want to allocate a new item for
   //
   // @return  handle to the newly allocated item
   //
-  WriteHandle allocateNewItemForOldItem(const Item& oldItem);
+  WriteHandle allocateNewItemForOldItem(const Item& item);
 
   // internal helper that grabs a refcounted handle to the item. This does
   // not record the access to reflect in the mmContainer.
@@ -1512,7 +1518,7 @@ class CacheAllocator : public CacheBase {
   // callback is responsible for copying the contents and fixing the semantics
   // of chained item.
   //
-  // @param oldItem     Reference to the item being moved
+  // @param oldItem     item being moved
   // @param newItemHdl  Reference to the handle of the new item being moved into
   //
   // @return true  If the move was completed, and the containers were updated
@@ -1660,26 +1666,7 @@ class CacheAllocator : public CacheBase {
   // @return An evicted item or nullptr  if there is no suitable candidate.
   Item* findEviction(PoolId pid, ClassId cid);
 
-  using EvictionIterator = typename MMContainer::Iterator;
-
-  // Advance the current iterator and try to evict a regular item
-  //
-  // @param  mmContainer  the container to look for evictions.
-  // @param  itr          iterator holding the item
-  //
-  // @return  valid handle to regular item on success. This will be the last
-  //          handle to the item. On failure an empty handle.
-  WriteHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
-                                                    EvictionIterator& itr);
-
-  // Advance the current iterator and try to evict a chained item
-  // Iterator may also be reset during the course of this function
-  //
-  // @param  itr          iterator holding the item
-  //
-  // @return  valid handle to the parent item on success. This will be the last
-  //          handle to the item
-  WriteHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
+  using EvictionIterator = typename MMContainer::LockedIterator;
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
@@ -1756,22 +1743,23 @@ class CacheAllocator : public CacheBase {
 
   // @return  true when successfully marked as moving,
   //          fasle when this item has already been freed
-  bool markExclusiveForSlabRelease(const SlabReleaseContext& ctx,
-                                   void* alloc,
-                                   util::Throttler& throttler);
+  bool markMovingForSlabRelease(const SlabReleaseContext& ctx,
+                                void* alloc,
+                                util::Throttler& throttler);
 
   // "Move" (by copying) the content in this item to another memory
   // location by invoking the move callback.
   //
   //
   // @param ctx         slab release context
-  // @param item        old item to be moved elsewhere
+  // @param oldItem     old item to be moved elsewhere
+  // @param handle      handle to the item or to it's parent (if chained)
   // @param throttler   slow this function down as not to take too much cpu
   //
   // @return    true  if the item has been moved
   //            false if we have exhausted moving attempts
   bool moveForSlabRelease(const SlabReleaseContext& ctx,
-                          Item& item,
+                          Item& oldItem,
                           util::Throttler& throttler);
 
   // "Move" (by copying) the content in this item to another memory
@@ -1794,18 +1782,7 @@ class CacheAllocator : public CacheBase {
                            Item& item,
                            util::Throttler& throttler);
 
-  // Helper function to evict a normal item for slab release
-  //
-  // @return last handle for corresponding to item on success. empty handle on
-  // failure. caller can retry if needed.
-  WriteHandle evictNormalItemForSlabRelease(Item& item);
-
-  // Helper function to evict a child item for slab release
-  // As a side effect, the parent item is also evicted
-  //
-  // @return  last handle to the parent item of the child on success. empty
-  // handle on failure. caller can retry.
-  WriteHandle evictChainedItemForSlabRelease(ChainedItem& item);
+  typename NvmCacheT::PutToken createPutToken(Item& item);
 
   // Helper function to remove a item if expired.
   //
@@ -1928,16 +1905,12 @@ class CacheAllocator : public CacheBase {
   std::optional<bool> saveNvmCache();
   void saveRamCache();
 
-  static bool itemExclusivePredicate(const Item& item) {
-    return item.getRefCount() == 0;
+  static bool itemSlabMovePredicate(const Item& item) {
+    return item.isMoving() && item.getRefCount() == 0;
   }
 
   static bool itemExpiryPredicate(const Item& item) {
     return item.getRefCount() == 1 && item.isExpired();
-  }
-
-  static bool parentEvictForSlabReleasePredicate(const Item& item) {
-    return item.getRefCount() == 1 && !item.isExclusive();
   }
 
   std::unique_ptr<Deserializer> createDeserializer();

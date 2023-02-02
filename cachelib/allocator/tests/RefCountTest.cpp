@@ -30,6 +30,7 @@ class RefCountTest : public AllocTestBase {
  public:
   static void testMultiThreaded();
   static void testBasic();
+  static void testMarkForEvictionAndMoving();
 };
 
 void RefCountTest::testMultiThreaded() {
@@ -81,7 +82,7 @@ void RefCountTest::testBasic() {
   ASSERT_EQ(0, ref.getRaw());
   ASSERT_FALSE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
 
@@ -89,7 +90,7 @@ void RefCountTest::testBasic() {
   ref.markInMMContainer();
   ASSERT_TRUE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_EQ(0, ref.getAccessRef());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
@@ -105,13 +106,13 @@ void RefCountTest::testBasic() {
 
   // Incrementing past the max will fail
   auto rawRef = ref.getRaw();
-  ASSERT_FALSE(ref.incRef());
+  ASSERT_THROW(ref.incRef(), std::overflow_error);
   ASSERT_EQ(rawRef, ref.getRaw());
 
   // Bumping up access ref shouldn't affect admin ref and flags
   ASSERT_TRUE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_EQ(RefcountWithFlags::kAccessRefMask, ref.getAccessRef());
   ASSERT_TRUE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
@@ -128,7 +129,7 @@ void RefCountTest::testBasic() {
   // Bumping down access ref shouldn't affect admin ref and flags
   ASSERT_TRUE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_EQ(0, ref.getAccessRef());
   ASSERT_TRUE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
@@ -136,7 +137,7 @@ void RefCountTest::testBasic() {
   ref.template unSetFlag<RefcountWithFlags::Flags::kMMFlag0>();
   ASSERT_TRUE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_EQ(0, ref.getAccessRef());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
@@ -145,33 +146,119 @@ void RefCountTest::testBasic() {
   ASSERT_EQ(0, ref.getRaw());
   ASSERT_FALSE(ref.isInMMContainer());
   ASSERT_FALSE(ref.isAccessible());
-  ASSERT_FALSE(ref.isExclusive());
+  ASSERT_FALSE(ref.isMoving());
   ASSERT_EQ(0, ref.getAccessRef());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag0>());
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
 
   // conditionally set flags
-  ASSERT_FALSE((ref.markExclusive()));
+  ASSERT_FALSE((ref.markMoving()));
   ref.markInMMContainer();
-  ASSERT_TRUE((ref.markExclusive()));
-  ASSERT_FALSE((ref.isOnlyExclusive()));
+  // only first one succeeds
+  ASSERT_TRUE((ref.markMoving()));
+  ASSERT_FALSE((ref.markMoving()));
   ref.unmarkInMMContainer();
-  ref.template setFlag<RefcountWithFlags::Flags::kMMFlag0>();
-  // Have no other admin refcount but with a flag still means "isOnlyExclusive"
-  ASSERT_TRUE((ref.isOnlyExclusive()));
 
-  // Set some flags and verify that "isOnlyExclusive" does not care about flags
+  ref.template setFlag<RefcountWithFlags::Flags::kMMFlag0>();
+  // Have no other admin refcount but with a flag still means "isOnlyMoving"
+  ASSERT_TRUE((ref.isOnlyMoving()));
+
+  // Set some flags and verify that "isOnlyMoving" does not care about flags
   ref.markIsChainedItem();
   ASSERT_TRUE(ref.isChainedItem());
-  ASSERT_TRUE((ref.isOnlyExclusive()));
+  ASSERT_TRUE((ref.isOnlyMoving()));
   ref.unmarkIsChainedItem();
   ASSERT_FALSE(ref.isChainedItem());
-  ASSERT_TRUE((ref.isOnlyExclusive()));
+  ASSERT_TRUE((ref.isOnlyMoving()));
+}
+
+void RefCountTest::testMarkForEvictionAndMoving() {
+  {
+    // cannot mark for eviction when not accessible or not in MMContainer
+    RefcountWithFlags ref;
+    ASSERT_FALSE(ref.markForEviction());
+
+    ref.markInMMContainer();
+    ASSERT_FALSE(ref.markForEviction());
+    ref.unmarkInMMContainer();
+
+    ref.markAccessible();
+    ASSERT_FALSE(ref.markForEviction());
+  }
+
+  {
+    // can mark for eviction when accessible and in MMContainer
+    // and unmarkForEviction return value contains admin bits
+    RefcountWithFlags ref;
+    ref.markInMMContainer();
+    ref.markAccessible();
+    ASSERT_TRUE(ref.markForEviction());
+    ASSERT_TRUE(ref.unmarkForEviction() > 0);
+  }
+
+  {
+    // cannot mark for eviction when moving
+    RefcountWithFlags ref;
+    ref.markInMMContainer();
+    ref.markAccessible();
+
+    ASSERT_TRUE(ref.markMoving());
+    ASSERT_FALSE(ref.markForEviction());
+
+    ref.unmarkInMMContainer();
+    ref.unmarkAccessible();
+    auto ret = ref.unmarkMoving();
+    ASSERT_EQ(ret, 0);
+  }
+
+  {
+    // cannot mark moving when marked for eviction
+    RefcountWithFlags ref;
+    ref.markInMMContainer();
+    ref.markAccessible();
+
+    ASSERT_TRUE(ref.markForEviction());
+    ASSERT_FALSE(ref.markMoving());
+
+    ref.unmarkInMMContainer();
+    ref.unmarkAccessible();
+    auto ret = ref.unmarkForEviction();
+    ASSERT_EQ(ret, 0);
+  }
+
+  {
+    // can mark moving when ref count > 0
+    RefcountWithFlags ref;
+    ref.markInMMContainer();
+    ref.markAccessible();
+
+    ref.incRef();
+
+    ASSERT_TRUE(ref.markMoving());
+
+    ref.unmarkInMMContainer();
+    ref.unmarkAccessible();
+    auto ret = ref.unmarkMoving();
+    ASSERT_EQ(ret, 1);
+  }
+
+  {
+    // cannot mark for eviction when ref count > 0
+    RefcountWithFlags ref;
+    ref.markInMMContainer();
+    ref.markAccessible();
+
+    ref.incRef();
+    ASSERT_FALSE(ref.markForEviction());
+  }
 }
 } // namespace
 
 TEST_F(RefCountTest, MutliThreaded) { testMultiThreaded(); }
 TEST_F(RefCountTest, Basic) { testBasic(); }
+TEST_F(RefCountTest, MarkForEvictionAndMoving) {
+  testMarkForEvictionAndMoving();
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
