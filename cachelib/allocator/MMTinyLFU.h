@@ -427,7 +427,6 @@ class MMTinyLFU {
       explicit LockedIterator(LockHolder l,
                               const Container<T, HookPtr>& c) noexcept;
 
-
       const ListIterator& getIter() const noexcept {
         return evictTiny() ? tIter_ : mIter_;
       }
