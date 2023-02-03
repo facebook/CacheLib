@@ -42,9 +42,9 @@ TEST_F(MMLruTest, RecordAccessWrites) {
   // ensure that nodes are updated in lru with access mode write (read) only
   // when updateOnWrite (updateOnRead) is enabled.
 
-  auto testWithAccessMode = [](Container& c_, const Nodes& nodes_,
-                               AccessMode mode, bool updateOnWrites,
-                               bool updateOnReads) {
+  auto testWithAccessMode = [this](Container& c_, const Nodes& nodes_,
+                                   AccessMode mode, bool updateOnWrites,
+                                   bool updateOnReads) {
     // accessing must at least update the update time. to do so, first set the
     // updateTime of the node to be in the past.
     const uint32_t timeInPastStart = 100;
@@ -62,6 +62,7 @@ TEST_F(MMLruTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderPrev.push_back(itr->getId());
     }
+    verifyIterationVariants(c_);
 
     int nAccess = 1000;
     std::set<int> accessedNodes;
@@ -89,6 +90,7 @@ TEST_F(MMLruTest, RecordAccessWrites) {
     for (auto itr = c_.getEvictionIterator(); itr; ++itr) {
       nodeOrderCurr.push_back(itr->getId());
     }
+    verifyIterationVariants(c_);
 
     if ((mode == AccessMode::kWrite && updateOnWrites) ||
         (mode == AccessMode::kRead && updateOnReads)) {
@@ -180,6 +182,7 @@ TEST_F(MMLruTest, InsertionPointBasic) {
   }
 
   auto checkLruConfig = [&](Container& container, std::vector<int> order) {
+    verifyIterationVariants(container);
     auto it = container.getEvictionIterator();
     int i = 0;
     while (it) {
@@ -379,6 +382,7 @@ TEST_F(MMLruTest, InsertionPointStress) {
 
     auto getTailCount = [&]() {
       size_t ntail = 0;
+      verifyIterationVariants(c);
       auto it = c.getEvictionIterator();
       while (it) {
         if (it->isTail()) {
@@ -540,6 +544,41 @@ TEST_F(MMLruTest, Reconfigure) {
 
   // node 0 (age 2) does not get promoted
   EXPECT_FALSE(container.recordAccess(*nodes[0], AccessMode::kRead));
+}
+
+TEST_F(MMLruTest, CombinedLockingIteration) {
+  MMLruTest::Config config{};
+  config.useCombinedLockForIterators = true;
+  config.lruRefreshTime = 0;
+  Container c(config, {});
+  std::vector<std::unique_ptr<Node>> nodes;
+  createSimpleContainer(c, nodes);
+
+  // access to move items from cold to warm
+  for (auto& node : nodes) {
+    ASSERT_TRUE(c.recordAccess(*node, AccessMode::kRead));
+  }
+
+  // trying to remove through iterator should work as expected.
+  // no need of iter++ since remove will do that.
+  verifyIterationVariants(c);
+  for (auto iter = c.getEvictionIterator(); iter;) {
+    auto& node = *iter;
+    ASSERT_TRUE(node.isInMMContainer());
+
+    // this will move the iter.
+    c.remove(iter);
+    ASSERT_FALSE(node.isInMMContainer());
+    if (iter) {
+      ASSERT_NE((*iter).getId(), node.getId());
+    }
+  }
+  verifyIterationVariants(c);
+
+  ASSERT_EQ(c.getStats().size, 0);
+  for (const auto& node : nodes) {
+    ASSERT_FALSE(node->isInMMContainer());
+  }
 }
 } // namespace cachelib
 } // namespace facebook

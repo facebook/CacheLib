@@ -1660,7 +1660,7 @@ class CacheAllocator : public CacheBase {
   // @return An evicted item or nullptr  if there is no suitable candidate.
   Item* findEviction(PoolId pid, ClassId cid);
 
-  using EvictionIterator = typename MMContainer::Iterator;
+  using EvictionIterator = typename MMContainer::LockedIterator;
 
   // Advance the current iterator and try to evict a regular item
   //

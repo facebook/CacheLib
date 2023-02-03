@@ -114,6 +114,10 @@ It has the following major API functions:
     that can be evicted (no active handles, not moving, etc) is used (see
     `CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid)` in
     `cachelib/allocator/CacheAllocator-inl.h`).
+* `withEvictionIterator`: Executes callback with eviction iterator passed as a
+    parameter. This is alternative for `getEvictionIterator` that offers possibility
+    to use combined locking. Combined locking can be turned on by setting:
+    `useCombinedLockForIterators` config option.
 
 The full API can be found in `struct Container` in
 `cachelib/allocator/MMLru.h`.  This links to MMLru, which is one of the
