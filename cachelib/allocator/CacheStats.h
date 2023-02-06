@@ -519,11 +519,6 @@ struct CacheMemoryStats {
   // slab headers and the memory returned temporarily to system (i.e., advised).
   size_t ramCacheSize{0};
 
-  // TODO: this means the same as ramCacheSize. Deprecate as soon as we land
-  //       the change to migrate iOS code to use ramCacheSize instead.
-  //       DO NOT USE THIS IN NEW CODE.
-  size_t cacheSize{0};
-
   // configured total ram cache size, excluding memory used for slab headers.
   size_t configuredRamCacheSize{0};
 

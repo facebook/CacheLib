@@ -47,7 +47,7 @@ void initializeCache() {
 
   gCache_ = std::make_unique<Cache>(Cache::SharedMemNew, config);
   defaultPool_ =
-      gCache_->addPool("default", gCache_->getCacheMemoryStats().cacheSize);
+      gCache_->addPool("default", gCache_->getCacheMemoryStats().ramCacheSize);
 }
 
 void destroyCache() { gCache_.reset(); }

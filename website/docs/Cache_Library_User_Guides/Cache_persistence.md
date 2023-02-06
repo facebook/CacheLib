@@ -80,7 +80,7 @@ try {
 
 if (!attached) {
   // Add pool only if the cache is not restored above
-  cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+  cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 }
 ```
 
