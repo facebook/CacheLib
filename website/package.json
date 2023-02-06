@@ -41,7 +41,9 @@
   },
   "resolutions": {
     "ansi-html": "0.0.8",
-    "ua-parser-js": "^1.0.33"
+    "ua-parser-js": "^1.0.33",
+    "eta": "^2.0.0",
+    "http-cache-semantics": "^4.1.1"
   },
   "browserslist": {
     "production": [
