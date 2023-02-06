@@ -496,8 +496,8 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_NE(handle, nullptr);
 
       ASSERT_EQ(alloc.find(key), nullptr);
-      ASSERT_TRUE(alloc.insert(std::move(handle)));
       memset(handle->getMemory(), magicVal2, handle->getSize());
+      ASSERT_TRUE(alloc.insert(handle));
     }
 
     evictedKeys.clear();
@@ -2111,7 +2111,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       const std::string key = keyPrefix + folly::to<std::string>(i);
       auto itemHandle = alloc.find(key);
       auto itemIOBuf = alloc.convertToIOBuf(std::move(itemHandle));
-      ASSERT_EQ(nullptr, itemHandle);
       ASSERT_EQ(i, itemIOBuf.data()[0]);
 
       const unsigned int nSizes = 2;
@@ -2125,10 +2124,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       // This one key should still be here
       auto itemHandle2 = alloc.find(key);
       auto itemIOBuf2 = alloc.convertToIOBuf(std::move(itemHandle2));
-      ASSERT_EQ(nullptr, itemHandle2);
 
       ASSERT_EQ(i, itemIOBuf.data()[0]);
-      ASSERT_EQ(itemIOBuf.data()[0], itemIOBuf2.data()[0]);
+      ASSERT_EQ(itemIOBuf.data(), itemIOBuf2.data());
     }
   }
 
@@ -4420,10 +4418,10 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     auto itemHandle = util::allocateAccessible(alloc, pid, "hello1", size);
     while (true) {
       auto chainedItemHandle = alloc.allocateChainedItem(itemHandle, size);
-      alloc.addChainedItem(itemHandle, std::move(chainedItemHandle));
       if (chainedItemHandle == nullptr) {
         break;
       }
+      alloc.addChainedItem(itemHandle, std::move(chainedItemHandle));
     }
 
     // Dropping the item handle. The item is still in cache since it's
