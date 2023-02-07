@@ -137,6 +137,19 @@ class CacheBase {
   // @return the slab release stats.
   virtual SlabReleaseStats getSlabReleaseStats() const = 0;
 
+  // export stats via callback. This function is not thread safe
+  //
+  // @param statPrefix prefix to be added for stat names
+  // @param aggregationInterval interval for delta stats; stat name will be
+  //                            suffixed with ".<aggregationInterval>".
+  // @param cb callback used to provide the stat
+
+  // Update stats via callback.
+  // Each stat name will be suffixed
+  void exportStats(const std::string& statPrefix,
+                   std::chrono::seconds aggregationInterval,
+                   std::function<void(folly::StringPiece, uint64_t)> cb) const;
+
   // Set rebalancing strategy
   //
   // @param pid Pool id of the pool to set this strategy on.
@@ -196,6 +209,9 @@ class CacheBase {
 
   // return object cache stats
   virtual void getObjectCacheCounters(const util::CounterVisitor&) const {}
+
+  // <Stat -> Count/Delta> maps
+  mutable RateMap counters_;
 
  protected:
   // move bytes from one pool to another. The source pool should be at least
@@ -280,6 +296,39 @@ class CacheBase {
   // @param numSlabs   The number of slabs to reclaim for the pool
   // @return The number of slabs that were actually reclaimed (<= numSlabs)
   virtual unsigned int reclaimSlabs(PoolId id, size_t numSlabs) = 0;
+
+  // Update pool stats
+  //   @param pid    the poolId that needs updating
+  void updatePoolStats(const std::string& statPrefix, PoolId pid) const;
+
+  // Update stats specific to compact caches
+  void updateCompactCacheStats(const std::string& statPrefix,
+                               const ICompactCache& c) const;
+
+  // Update stats specific to the event tracker
+  void updateEventTrackerStats(const std::string& statPrefix) const;
+
+  // Update stats specific to NvmCache
+  void updateNvmCacheStats(const std::string& statPrefix) const;
+
+  // Update global stats
+  void updateGlobalCacheStats(const std::string& statPrefix) const;
+
+  // Update object cache stats
+  void updateObjectCacheStats(const std::string& statPrefix) const;
+
+  // Util method to visit estimates
+  static void visitEstimates(const util::CounterVisitor& v,
+                             const util::PercentileStats::Estimates& est,
+                             folly::StringPiece name);
+
+  // return hit rate based on diff between current cache and snapshot values
+  struct CacheHitRate {
+    double overall;
+    double ram;
+    double nvm;
+  };
+  CacheHitRate calculateCacheHitRate(const std::string& statPrefix) const;
 
   // Protect 'poolRebalanceStragtegies_' and `poolResizeStrategies_`
   // and `poolOptimizeStrategy_`

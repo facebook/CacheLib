@@ -608,6 +608,32 @@ struct CCacheStats {
   }
 };
 
+class RateMap {
+ public:
+  static constexpr std::chrono::seconds kRateInterval{60};
+
+  // Update stat with the newest count and compute the latest delta.
+  void updateDelta(const std::string& name, uint64_t value);
+
+  // Only update stat with the newest count. Do not compute delta.
+  void updateCount(const std::string& name, uint64_t value);
+
+  // Return latest delta associated with the stat.
+  uint64_t getDelta(const std::string& name) const;
+
+  // Update stats via callback.
+  // Each stat name will be suffixed with ".<aggregationInterval>".
+  void exportStats(std::chrono::seconds aggregationInterval,
+                   std::function<void(folly::StringPiece, uint64_t)> cb);
+
+ private:
+  folly::F14FastMap<std::string, uint64_t> count_;
+  folly::F14FastMap<std::string, uint64_t> delta_;
+
+  // Internal count map for generating deltas
+  folly::F14FastMap<std::string, uint64_t> internalCount_;
+};
+
 // Types of background workers
 enum PoolWorkerType {
   POOL_REBALANCER = 0,

@@ -1241,6 +1241,40 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
     EXPECT_NE(nullptr, objcache->find<Foo>("key_9"));
   }
 }
+
+TEST(ObjectCacheTest, ExportStats) {
+  std::string cacheName = "service_data_exporter_test";
+  ObjectCache::Config config;
+  config.l1EntriesLimit = 10;
+  config.cacheName = cacheName;
+  config.setItemDestructor([&](objcache2::ObjectCacheDestructorData data) {
+    data.deleteObject<int>();
+  });
+  auto cache = ObjectCache::create(std::move(config));
+
+  std::string prefix = "cachelib" + cacheName + ".";
+
+  int intervalNameExists = 0;
+  cache->exportStats(prefix, std::chrono::seconds{60},
+                     [&intervalNameExists, &prefix](auto name, auto value) {
+                       if (name == prefix + "objcache.lookups.60" &&
+                           value == 0) {
+                         intervalNameExists++;
+                       }
+                     });
+  cache->find<int>("some non-existent key");
+  cache->exportStats(
+      prefix,
+      // We will convert a custom interval to 60 seconds interval. So the
+      // one "FIND" will become two operations when averaged out to 60 seocnds.
+      std::chrono::seconds{30},
+      [&intervalNameExists, &prefix](auto name, auto value) {
+        if (name == prefix + "objcache.lookups.60" && value == 2) {
+          intervalNameExists++;
+        }
+      });
+  EXPECT_EQ(intervalNameExists, 2);
+}
 } // namespace test
 } // namespace objcache2
 } // namespace cachelib
