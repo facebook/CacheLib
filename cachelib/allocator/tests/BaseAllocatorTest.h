@@ -6621,6 +6621,86 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_EQ(4, poolStats.numSlabsForClass(2));
     }
   }
+
+  void testSingleTierMemoryAllocatorSize() {
+    typename AllocatorT::Config config;
+    static constexpr size_t cacheSize = 100 * 1024 * 1024; /* 100 MB */
+    config.setCacheSize(cacheSize);
+    config.enableCachePersistence(folly::sformat("/tmp/single-tier-test/{}", ::getpid()));
+
+    AllocatorT alloc(AllocatorT::SharedMemNew, config);
+
+    EXPECT_LE(alloc.allocator_[0]->getMemorySize(), cacheSize);
+  }
+
+  void testSingleTierMemoryAllocatorSizeAnonymous() {
+    typename AllocatorT::Config config;
+    static constexpr size_t cacheSize = 100 * 1024 * 1024; /* 100 MB */
+    config.setCacheSize(cacheSize);
+
+    AllocatorT alloc(config);
+
+    EXPECT_LE(alloc.allocator_[0]->getMemorySize(), cacheSize);
+  }
+
+  void testBasicMultiTier() {
+    using Item = typename AllocatorT::Item;
+    const static std::string data = "data";
+
+    std::set<std::string> movedKeys;
+    auto moveCb = [&](const Item& oldItem, Item& newItem, Item* /* parentPtr */) {
+      std::memcpy(newItem.getMemory(), oldItem.getMemory(), oldItem.getSize());
+      movedKeys.insert(oldItem.getKey().str());
+    };
+
+    typename AllocatorT::Config config;
+    static constexpr size_t cacheSize = 100 * 1024 * 1024; /* 100 MB */
+    config.setCacheSize(100 * 1024 * 1024); /* 100 MB */
+    config.enableCachePersistence(folly::sformat("/tmp/multi-tier-test/{}", ::getpid()));
+    config.configureMemoryTiers({
+      MemoryTierCacheConfig::fromShm().setRatio(1)
+        .setMemBind(std::string("0")),
+      MemoryTierCacheConfig::fromShm().setRatio(1)
+        .setMemBind(std::string("0")),
+    });
+    config.enableMovingOnSlabRelease(moveCb);
+
+    AllocatorT alloc(AllocatorT::SharedMemNew, config);
+
+    EXPECT_EQ(alloc.allocator_.size(), 2);
+    EXPECT_LE(alloc.allocator_[0]->getMemorySize(), cacheSize / 2);
+    EXPECT_LE(alloc.allocator_[1]->getMemorySize(), cacheSize / 2);
+
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto pid = alloc.addPool("default", numBytes);
+
+    static constexpr size_t numOps = cacheSize / 1024;
+    for (int i = 0; i < numOps; i++) {
+      std::string key = std::to_string(i);
+      auto h = alloc.allocate(pid, key, 1024);
+      EXPECT_TRUE(h);
+
+      std::memcpy(h->getMemory(), data.data(), data.size());
+
+      alloc.insertOrReplace(h);
+    }
+
+    EXPECT_TRUE(movedKeys.size() > 0);
+
+    size_t movedButStillInMemory = 0;
+    for (const auto &k : movedKeys) {
+      auto h = alloc.find(k);
+
+      if (h) {
+        movedButStillInMemory++;
+        /* All moved elements should be in the second tier. */
+        EXPECT_TRUE(alloc.allocator_[1]->isMemoryInAllocator(h->getMemory()));
+        EXPECT_EQ(data, std::string((char*)h->getMemory(), data.size()));
+      }
+    }
+
+    EXPECT_TRUE(movedButStillInMemory > 0);
+  }
 };
 } // namespace tests
 } // namespace cachelib

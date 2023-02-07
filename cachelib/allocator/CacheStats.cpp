@@ -22,18 +22,21 @@ namespace facebook::cachelib {
 namespace detail {
 
 void Stats::init() {
-  cacheHits = std::make_unique<PerPoolClassTLCounters>();
-  allocAttempts = std::make_unique<PerPoolClassAtomicCounters>();
-  evictionAttempts = std::make_unique<PerPoolClassAtomicCounters>();
-  fragmentationSize = std::make_unique<PerPoolClassAtomicCounters>();
-  allocFailures = std::make_unique<PerPoolClassAtomicCounters>();
-  chainedItemEvictions = std::make_unique<PerPoolClassAtomicCounters>();
-  regularItemEvictions = std::make_unique<PerPoolClassAtomicCounters>();
+  cacheHits = std::make_unique<PerTierPerPoolClassTLCounters>();
+  allocAttempts = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  evictionAttempts = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  fragmentationSize = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  allocFailures = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  chainedItemEvictions = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  regularItemEvictions = std::make_unique<PerTierPerPoolClassAtomicCounters>();
+  numWritebacks = std::make_unique<PerTierPerPoolClassAtomicCounters>();
   auto initToZero = [](auto& a) {
-    for (auto& s : a) {
-      for (auto& c : s) {
+    for (auto& t : a) {
+     for (auto& p : t) {
+      for (auto& c : p) {
         c.set(0);
       }
+     }
     }
   };
 
@@ -43,6 +46,7 @@ void Stats::init() {
   initToZero(*fragmentationSize);
   initToZero(*chainedItemEvictions);
   initToZero(*regularItemEvictions);
+  initToZero(*numWritebacks);
 }
 
 template <int>
@@ -50,7 +54,7 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<16368>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<16384>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();
@@ -113,20 +117,43 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.nvmEvictionSecondsToExpiry = this->nvmEvictionSecondsToExpiry_.estimate();
   ret.nvmPutSize = this->nvmPutSize_.estimate();
 
-  auto accum = [](const PerPoolClassAtomicCounters& c) {
-    uint64_t sum = 0;
-    for (const auto& x : c) {
-      for (const auto& v : x) {
-        sum += v.get();
-      }
+  auto accum = [](const PerTierPerPoolClassAtomicCounters& t) {
+    std::vector<uint64_t> stat;
+    for (const auto& c : t) {
+     uint64_t sum = 0;
+     for (const auto& x : c) {
+       for (const auto& v : x) {
+         sum += v.get();
+       }
+     }
+     stat.push_back(sum);
     }
-    return sum;
+    return stat;
+  };
+
+  auto accumTL = [](const PerTierPerPoolClassTLCounters& t) {
+    std::vector<uint64_t> stat;
+    for (const auto& c : t) {
+     uint64_t sum = 0;
+     for (const auto& x : c) {
+       for (const auto& v : x) {
+         sum += v.get();
+       }
+     }
+     stat.push_back(sum);
+    }
+    return stat;
   };
   ret.allocAttempts = accum(*allocAttempts);
   ret.evictionAttempts = accum(*evictionAttempts);
   ret.allocFailures = accum(*allocFailures);
-  ret.numEvictions = accum(*chainedItemEvictions);
-  ret.numEvictions += accum(*regularItemEvictions);
+  auto chainedEvictions = accum(*chainedItemEvictions);
+  auto regularEvictions = accum(*regularItemEvictions);
+  for (TierId tid = 0; tid < chainedEvictions.size(); tid++) {
+    ret.numEvictions.push_back(chainedEvictions[tid] + regularEvictions[tid]);
+  }
+  ret.numWritebacks = accum(*numWritebacks);
+  ret.numCacheHits = accumTL(*cacheHits);
 
   ret.invalidAllocs = invalidAllocs.get();
   ret.numRefcountOverflow = numRefcountOverflow.get();
@@ -146,6 +173,18 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 }
 
 } // namespace detail
+
+MMContainerStat& MMContainerStat::operator+=(const MMContainerStat& other) {
+
+  size += other.size;
+  oldestTimeSec = std::min(oldestTimeSec,other.oldestTimeSec);
+  lruRefreshTime = std::max(lruRefreshTime,other.lruRefreshTime);
+  numHotAccesses += other.numHotAccesses;
+  numColdAccesses += other.numColdAccesses;
+  numWarmAccesses += other.numWarmAccesses;
+  numTailAccesses += other.numTailAccesses;
+  return *this;
+}
 
 PoolStats& PoolStats::operator+=(const PoolStats& other) {
   auto verify = [](bool isCompatible) {
@@ -184,6 +223,7 @@ PoolStats& PoolStats::operator+=(const PoolStats& other) {
       d.allocFailures += s.allocFailures;
       d.fragmentationSize += s.fragmentationSize;
       d.numHits += s.numHits;
+      d.numWritebacks += s.numWritebacks;
       d.chainedItemEvictions += s.chainedItemEvictions;
       d.regularItemEvictions += s.regularItemEvictions;
     }
@@ -239,10 +279,26 @@ uint64_t PoolStats::numEvictions() const noexcept {
   return n;
 }
 
+uint64_t PoolStats::numWritebacks() const noexcept {
+  uint64_t n = 0;
+  for (const auto& s : cacheStats) {
+    n += s.second.numWritebacks;
+  }
+  return n;
+}
+
 uint64_t PoolStats::numItems() const noexcept {
   uint64_t n = 0;
   for (const auto& s : cacheStats) {
     n += s.second.numItems();
+  }
+  return n;
+}
+
+uint64_t PoolStats::numHits() const noexcept {
+  uint64_t n = 0;
+  for (const auto& s : cacheStats) {
+    n += s.second.numHits;
   }
   return n;
 }

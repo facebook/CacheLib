@@ -418,6 +418,7 @@ TYPED_TEST(BaseAllocatorTest, RateMap) { this->testRateMap(); }
 TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {
   this->testStatSnapshotTest();
 }
+TYPED_TEST(BaseAllocatorTest, BasicMultiTier) {this->testBasicMultiTier(); }
 
 TYPED_TEST(BaseAllocatorTest, ProvisionPool) { this->testProvisionPool(); }
 

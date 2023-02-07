@@ -30,14 +30,16 @@ namespace cachebench {
 struct Stats {
   std::vector<BackgroundMoverStats> backgroundMoverStats;
 
-  uint64_t numEvictions{0};
-  uint64_t numItems{0};
+  std::vector<uint64_t> numEvictions;
+  std::vector<uint64_t> numWritebacks;
+  std::vector<uint64_t> numCacheHits;
+  std::vector<uint64_t> numItems;
 
-  uint64_t evictAttempts{0};
-  uint64_t allocAttempts{0};
-  uint64_t allocFailures{0};
+  std::vector<uint64_t> evictAttempts{0};
+  std::vector<uint64_t> allocAttempts{0};
+  std::vector<uint64_t> allocFailures{0};
 
-  std::vector<double> poolUsageFraction;
+  std::map<TierId,std::vector<double>> poolUsageFraction;
 
   uint64_t numCacheGets{0};
   uint64_t numCacheGetMiss{0};
@@ -122,18 +124,31 @@ struct Stats {
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
-    out << folly::sformat("Items in RAM  : {:,}", numItems) << std::endl;
-    out << folly::sformat("Items in NVM  : {:,}", numNvmItems) << std::endl;
-
-    out << folly::sformat("Alloc Attempts: {:,} Success: {:.2f}%",
-                          allocAttempts,
-                          invertPctFn(allocFailures, allocAttempts))
-        << std::endl;
-    out << folly::sformat("Evict Attempts: {:,} Success: {:.2f}%",
-                          evictAttempts,
-                          pctFn(numEvictions, evictAttempts))
-        << std::endl;
-    out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
+    const auto nTiers = numItems.size();
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Items in Tier {}  : {:,}", tid, numItems[tid]) << std::endl;
+    }
+    out << folly::sformat("Items in NVM    : {:,}", numNvmItems) << std::endl;
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Tier {} Alloc Attempts: {:,} Success: {:.2f}%",
+                              tid,
+                              allocAttempts[tid],
+                              invertPctFn(allocFailures[tid], allocAttempts[tid]))
+            << std::endl;
+    }
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat(
+                   "Tier {} Evict Attempts: {:,} Success: {:.2f}%",
+                   tid,
+                   evictAttempts[tid],
+                   pctFn(numEvictions[tid], evictAttempts[tid]))
+            << std::endl;
+    }
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Tier {} Evictions : {:,} Writebacks: {:,} Success: {:.2f}%",
+                tid, numEvictions[tid], numWritebacks[tid],
+                invertPctFn(numEvictions[tid] - numWritebacks[tid], numEvictions[tid])) << std::endl;
+    }
 
     auto foreachAC = [](const auto& map, auto cb) {
       for (const auto& [key, value] : map) {
@@ -142,10 +157,16 @@ struct Stats {
       }
     };
 
-    for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
-      out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
-                            poolUsageFraction[pid])
-          << std::endl;
+    for (auto entry : poolUsageFraction) {
+        auto tid = entry.first;
+        auto usageFraction = entry.second;
+        for (auto pid = 0U; pid < usageFraction.size(); pid++) {
+          out << folly::sformat("Tier {} fraction of pool {:,} used : {:.2f}",
+                                tid,
+                                pid,
+                                usageFraction[pid])
+              << std::endl;
+        }
     }
 
     if (FLAGS_report_ac_memory_usage_stats != "") {
@@ -184,8 +205,8 @@ struct Stats {
 
         // If the pool is not full, extrapolate usageFraction for AC assuming it
         // will grow at the same rate. This value will be the same for all ACs.
-        auto acUsageFraction = (poolUsageFraction[pid] < 1.0)
-                                   ? poolUsageFraction[pid]
+        const auto acUsageFraction = (poolUsageFraction.at(tid)[pid] < 1.0)
+                                   ? poolUsageFraction.at(tid)[pid]
                                    : stats.usageFraction();
 
         out << folly::sformat(
@@ -199,7 +220,11 @@ struct Stats {
       out << folly::sformat("Cache Gets    : {:,}", numCacheGets) << std::endl;
       out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
-
+      for (TierId tid = 0; tid < numCacheHits.size(); tid++) {
+        double tierHitRatio = pctFn(numCacheHits[tid],numCacheGets);
+        out << folly::sformat("Tier {} Hit Ratio     : {:6.2f}%", tid, tierHitRatio)
+            << std::endl;
+      }
       if (FLAGS_report_api_latency) {
         auto printLatencies =
             [&out](folly::StringPiece cat,
@@ -470,7 +495,8 @@ struct Stats {
     };
 
     auto totalMisses = getTotalMisses();
-    counters["num_items"] = numItems;
+    //TODO: per tier
+    counters["num_items"] = std::accumulate(numItems.begin(),numItems.end(),0);
     counters["num_nvm_items"] = numNvmItems;
     counters["hit_rate"] = calcInvertPctFn(totalMisses, numCacheGets);
 

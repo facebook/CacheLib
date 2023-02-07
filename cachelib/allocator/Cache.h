@@ -244,6 +244,9 @@ class CacheBase {
   // <Stat -> Count/Delta> maps
   mutable RateMap counters_;
 
+  // max number of tiers
+  static const size_t kMaxTiers = 2;
+
  protected:
   // move bytes from one pool to another. The source pool should be at least
   // _bytes_ in size.

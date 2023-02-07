@@ -233,7 +233,7 @@ class MMLru {
     std::chrono::seconds mmReconfigureIntervalSecs{};
 
     // Whether to use combined locking for withEvictionIterator.
-    bool useCombinedLockForIterators{false};
+    bool useCombinedLockForIterators{true};
   };
 
   // The container object which can be used to keep track of objects of type
