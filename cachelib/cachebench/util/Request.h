@@ -76,6 +76,13 @@ struct Request {
           std::vector<size_t>::iterator b,
           std::vector<size_t>::iterator e,
           OpType o,
+          uint64_t reqId)
+      : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId), op(o) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          OpType o,
           uint32_t ttl,
           uint64_t reqId,
           const std::unordered_map<std::string, std::string>& admFeatureM,
@@ -88,6 +95,21 @@ struct Request {
         admFeatureMap(admFeatureM),
         itemValue(value),
         op(o) {}
+
+  Request(std::string& k,
+          std::vector<size_t>::iterator b,
+          std::vector<size_t>::iterator e,
+          uint64_t reqId,
+          const Request& other)
+      : key(k),
+        sizeBegin(b),
+        sizeEnd(e),
+        ttlSecs(other.ttlSecs),
+        requestId(reqId),
+        admFeatureMap(other.admFeatureMap),
+        timestamp(other.timestamp),
+        itemValue(other.itemValue),
+        op(other.getOp()) {}
 
   static std::string getUniqueKey() {
     return std::string(folly::to<std::string>(

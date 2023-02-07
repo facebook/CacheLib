@@ -49,12 +49,10 @@ class TraceFileStream {
     } else {
       infileNames_ = config.traceFileNames;
     }
-
-    openNextInfile();
   }
 
   std::istream& getline(std::string& str) {
-    while (!std::getline(infile_, str)) {
+    while (!infile_.is_open() || !std::getline(infile_, str)) {
       openNextInfile();
     }
 
@@ -180,7 +178,10 @@ class TraceFileStream {
 class ReplayGeneratorBase : public GeneratorBase {
  public:
   explicit ReplayGeneratorBase(const StressorConfig& config)
-      : config_(config), repeatTraceReplay_{config_.repeatTraceReplay} {
+      : config_(config),
+        repeatTraceReplay_{config_.repeatTraceReplay},
+        numShards_(config.numThreads),
+        mode_(config_.replayGeneratorConfig.getSerializationMode()) {
     if (config.checkConsistency) {
       throw std::invalid_argument(
           "Cannot replay traces with consistency checking enabled");
@@ -195,7 +196,23 @@ class ReplayGeneratorBase : public GeneratorBase {
   const StressorConfig config_;
   const bool repeatTraceReplay_;
 
+  // # of shards is equal to the # of stressor threads
+  const uint32_t numShards_;
+  const ReplayGeneratorConfig::SerializeMode mode_{
+      ReplayGeneratorConfig::SerializeMode::strict};
+
   std::vector<std::string> keys_;
+
+  // Return the shard for the key.
+  uint32_t getShard(folly::StringPiece key) {
+    if (mode_ == ReplayGeneratorConfig::SerializeMode::strict) {
+      return folly::hash::SpookyHashV2::Hash32(key.begin(), key.size(), 0) %
+             numShards_;
+    } else {
+      // TODO: implement the relaxed mode
+      return folly::Random::rand32(numShards_);
+    }
+  }
 };
 
 } // namespace cachebench

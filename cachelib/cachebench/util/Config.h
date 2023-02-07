@@ -124,6 +124,8 @@ struct ReplayGeneratorConfig : public JSONConfig {
   };
   std::string replaySerializationMode{"strict"};
 
+  uint32_t ampFactor{1};
+
   // The time interval threshold when replaySerializationMode is relaxed.
   uint64_t relaxedSerialIntervalMs{500};
 

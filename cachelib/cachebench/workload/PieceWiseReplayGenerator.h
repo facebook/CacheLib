@@ -36,8 +36,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         pieceCacheAdapter_(config.maxCachePieces,
                            config.replayGeneratorConfig.numAggregationFields,
                            config.replayGeneratorConfig.statsPerAggField),
-        mode_(config_.replayGeneratorConfig.getSerializationMode()),
-        numShards_(config.numThreads),
         activeReqQ_(config.numThreads),
         threadFinished_(config.numThreads),
         timestampFactor_(config.timestampFactor) {
@@ -101,9 +99,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  private:
   void getReqFromTrace();
 
-  // Return the shard for the key.
-  uint32_t getShard(folly::StringPiece key);
-
   folly::ProducerConsumerQueue<PieceWiseReqWrapper>& getTLReqQueue() {
     if (!tlStickyIdx_.get()) {
       tlStickyIdx_.reset(new uint32_t(incrementalIdx_++));
@@ -143,13 +138,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
 
   PieceWiseCacheAdapter pieceCacheAdapter_;
 
-  const ReplayGeneratorConfig::SerializeMode mode_{
-      ReplayGeneratorConfig::SerializeMode::strict};
-
   uint64_t nextReqId_{1};
-
-  // # of shards is equal to the # of stressor threads
-  const uint32_t numShards_;
 
   // Used to assign tlStickyIdx_
   std::atomic<uint32_t> incrementalIdx_{0};

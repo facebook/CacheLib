@@ -280,16 +280,6 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
   }
 }
 
-uint32_t PieceWiseReplayGenerator::getShard(folly::StringPiece key) {
-  if (mode_ == ReplayGeneratorConfig::SerializeMode::strict) {
-    return folly::hash::SpookyHashV2::Hash32(key.begin(), key.size(), 0) %
-           numShards_;
-  } else {
-    // TODO: implement the relaxed mode
-    return folly::Random::rand32(numShards_);
-  }
-}
-
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook
