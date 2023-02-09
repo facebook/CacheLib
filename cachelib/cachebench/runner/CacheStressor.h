@@ -18,6 +18,7 @@
 
 #include <folly/Random.h>
 #include <folly/TokenBucket.h>
+#include <folly/system/ThreadName.h>
 
 #include <atomic>
 #include <cstddef>
@@ -139,9 +140,12 @@ class CacheStressor : public Stressor {
 
     stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
+
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
         workers.push_back(
-            std::thread([this, throughputStats = &throughputStats_.at(i)]() {
+            std::thread([this, throughputStats = &throughputStats_.at(i),
+                         threadName = folly::sformat("cb_stressor_{}", i)]() {
+              folly::setThreadName(threadName);
               stressByDiscreteDistribution(*throughputStats);
             }));
       }

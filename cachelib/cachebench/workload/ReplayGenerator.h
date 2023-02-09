@@ -19,7 +19,9 @@
 #include <folly/Conv.h>
 #include <folly/ProducerConsumerQueue.h>
 #include <folly/ThreadLocal.h>
+#include <folly/lang/Aligned.h>
 #include <folly/logging/xlog.h>
+#include <folly/system/ThreadName.h>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/util/Exceptions.h"
@@ -78,7 +80,10 @@ class ReplayGenerator : public ReplayGeneratorBase {
       stressorCtxs_.emplace_back(std::make_unique<StressorCtx>(i));
     }
 
-    genWorker_ = std::thread([this] { genRequests(); });
+    genWorker_ = std::thread([this] {
+      folly::setThreadName("cb_replay_gen");
+      genRequests();
+    });
 
     XLOGF(INFO,
           "Started ReplayGenerator (amp factor {}, # of stressor threads {})",
@@ -109,6 +114,8 @@ class ReplayGenerator : public ReplayGeneratorBase {
 
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
+  void markFinish() override { getStressorCtx().markFinish(); }
+
   // Parse the request from the trace line and set the ReqWrapper
   bool parseRequest(const std::string& line, std::unique_ptr<ReqWrapper>& req);
 
@@ -131,11 +138,18 @@ class ReplayGenerator : public ReplayGeneratorBase {
   // be more than one requests outstanding for async stressor while only one
   // can be outstanding for sync stressor
   struct StressorCtx {
-    explicit StressorCtx(uint32_t id) : id_(id), reqQueue_(kMaxRequests) {}
+    explicit StressorCtx(uint32_t id)
+        : id_(id), reqQueue_(std::in_place_t{}, kMaxRequests) {}
+
+    bool isFinished() { return finished_.load(std::memory_order_relaxed); }
+    void markFinish() { finished_.store(true, std::memory_order_relaxed); }
 
     uint32_t id_{0};
-    ReqQueue reqQueue_;
     std::queue<std::unique_ptr<ReqWrapper>> resubmitQueue_;
+    folly::cacheline_aligned<ReqQueue> reqQueue_;
+    // Thread that finish its operations mark it here, so we will skip
+    // further request on its shard
+    std::atomic<bool> finished_{false};
   };
 
   // Read next trace line from TraceFileStream and fill ReqWrapper
@@ -298,9 +312,10 @@ inline void ReplayGenerator::genRequests() {
 
       auto shardId = getShard(req->req_.key);
       auto& stressorCtx = getStressorCtx(shardId);
-      auto& reqQ = stressorCtx.reqQueue_;
+      auto& reqQ = *stressorCtx.reqQueue_;
 
-      while (!reqQ.write(std::move(req)) && !shouldShutdown()) {
+      while (!reqQ.write(std::move(req)) && !stressorCtx.isFinished() &&
+             !shouldShutdown()) {
         // ProducerConsumerQueue does not support blocking, so use sleep
         std::this_thread::sleep_for(
             std::chrono::microseconds{checkIntervalUs_});
@@ -317,7 +332,7 @@ const Request& ReplayGenerator::getReq(uint8_t,
   std::unique_ptr<ReqWrapper> reqWrapper;
 
   auto& stressorCtx = getStressorCtx();
-  auto& reqQ = stressorCtx.reqQueue_;
+  auto& reqQ = *stressorCtx.reqQueue_;
   auto& resubmitQueue = stressorCtx.resubmitQueue_;
 
   while (resubmitQueue.empty() && !reqQ.read(reqWrapper)) {
