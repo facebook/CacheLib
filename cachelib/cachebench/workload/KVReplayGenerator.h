@@ -60,19 +60,19 @@ struct ReqWrapper {
   uint32_t repeats_{0};
 };
 
-// ReplayGenerator generates the cachelib requests based the trace data
+// KVReplayGenerator generates the cachelib requests based the trace data
 // read from the given trace file(s).
-// ReplayGenerator supports amplifying the key population by appending
+// KVReplayGenerator supports amplifying the key population by appending
 // suffixes (i.e., stream ID) to each key read from the trace file.
 // In order to minimize the contentions for the request submission queues
 // which might need to be dispatched by multiple stressor threads,
 // the requests are sharded to each stressor by doing hashing over the key.
-class ReplayGenerator : public ReplayGeneratorBase {
+class KVReplayGenerator : public ReplayGeneratorBase {
  public:
   // input format is: key,op,size,op_count,key_size,ttl
   enum SampleFields { KEY = 0, OP, SIZE, OP_COUNT, KEY_SIZE, TTL, END };
 
-  explicit ReplayGenerator(const StressorConfig& config)
+  explicit KVReplayGenerator(const StressorConfig& config)
       : ReplayGeneratorBase(config),
         ampFactor_(config.replayGeneratorConfig.ampFactor),
         traceStream_(config, 0) {
@@ -86,11 +86,11 @@ class ReplayGenerator : public ReplayGeneratorBase {
     });
 
     XLOGF(INFO,
-          "Started ReplayGenerator (amp factor {}, # of stressor threads {})",
+          "Started KVReplayGenerator (amp factor {}, # of stressor threads {})",
           ampFactor_, numShards_);
   }
 
-  virtual ~ReplayGenerator() {
+  virtual ~KVReplayGenerator() {
     XCHECK(shouldShutdown());
     if (genWorker_.joinable()) {
       genWorker_.join();
@@ -104,7 +104,7 @@ class ReplayGenerator : public ReplayGeneratorBase {
       std::optional<uint64_t> lastRequestId = std::nullopt) override;
 
   void renderStats(uint64_t, std::ostream& out) const override {
-    out << std::endl << "== ReplayGenerator Stats ==" << std::endl;
+    out << std::endl << "== KVReplayGenerator Stats ==" << std::endl;
 
     out << folly::sformat("{}: {:.2f} million (parse error: {})",
                           "Total Processed Samples",
@@ -200,8 +200,8 @@ class ReplayGenerator : public ReplayGeneratorBase {
   }
 };
 
-inline bool ReplayGenerator::parseRequest(const std::string& line,
-                                          std::unique_ptr<ReqWrapper>& req) {
+inline bool KVReplayGenerator::parseRequest(const std::string& line,
+                                            std::unique_ptr<ReqWrapper>& req) {
   // input format is: key,op,size,op_count,key_size,ttl
   std::vector<folly::StringPiece> fields;
   folly::split(",", line, fields);
@@ -264,7 +264,7 @@ inline bool ReplayGenerator::parseRequest(const std::string& line,
   return true;
 }
 
-inline std::unique_ptr<ReqWrapper> ReplayGenerator::getReqInternal() {
+inline std::unique_ptr<ReqWrapper> KVReplayGenerator::getReqInternal() {
   auto reqWrapper = std::make_unique<ReqWrapper>();
   do {
     std::string line;
@@ -280,7 +280,7 @@ inline std::unique_ptr<ReqWrapper> ReplayGenerator::getReqInternal() {
   return reqWrapper;
 }
 
-inline void ReplayGenerator::genRequests() {
+inline void KVReplayGenerator::genRequests() {
   while (!shouldShutdown()) {
     std::unique_ptr<ReqWrapper> reqWrapper;
     try {
@@ -326,9 +326,9 @@ inline void ReplayGenerator::genRequests() {
   setEOF();
 }
 
-const Request& ReplayGenerator::getReq(uint8_t,
-                                       std::mt19937_64&,
-                                       std::optional<uint64_t>) {
+const Request& KVReplayGenerator::getReq(uint8_t,
+                                         std::mt19937_64&,
+                                         std::optional<uint64_t>) {
   std::unique_ptr<ReqWrapper> reqWrapper;
 
   auto& stressorCtx = getStressorCtx();
@@ -353,7 +353,7 @@ const Request& ReplayGenerator::getReq(uint8_t,
   return reqPtr->req_;
 }
 
-void ReplayGenerator::notifyResult(uint64_t requestId, OpResultType) {
+void KVReplayGenerator::notifyResult(uint64_t requestId, OpResultType) {
   // requestId should point to the ReqWrapper object. The ownership is taken
   // here to do the clean-up properly if not resubmitted
   std::unique_ptr<ReqWrapper> reqWrapper(

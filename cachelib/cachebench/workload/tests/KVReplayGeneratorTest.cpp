@@ -17,7 +17,7 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
-#include "cachelib/cachebench/workload/ReplayGenerator.h"
+#include "cachelib/cachebench/workload/KVReplayGenerator.h"
 
 namespace facebook {
 namespace cachelib {
@@ -69,9 +69,9 @@ struct TraceEntry {
   bool valid_;
 };
 
-TEST(ReplayGeneratorTest, BasicFormat) {
+TEST(KVReplayGeneratorTest, BasicFormat) {
   StressorConfig config;
-  ReplayGenerator replayer{config};
+  KVReplayGenerator replayer{config};
   std::mt19937_64 gen;
 
   auto req = std::make_unique<ReqWrapper>();

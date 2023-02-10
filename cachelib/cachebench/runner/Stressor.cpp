@@ -21,9 +21,9 @@
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
+#include "cachelib/cachebench/workload/KVReplayGenerator.h"
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
-#include "cachelib/cachebench/workload/ReplayGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
@@ -141,7 +141,7 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   if (config.generator == "piecewise-replay") {
     return std::make_unique<PieceWiseReplayGenerator>(config);
   } else if (config.generator == "replay") {
-    return std::make_unique<ReplayGenerator>(config);
+    return std::make_unique<KVReplayGenerator>(config);
   } else if (config.generator.empty() || config.generator == "workload") {
     // TODO: Remove the empty() check once we label workload-based configs
     // properly

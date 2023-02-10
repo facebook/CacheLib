@@ -189,7 +189,7 @@ class ReplayGeneratorBase : public GeneratorBase {
   }
 
   const std::vector<std::string>& getAllKeys() const override {
-    throw std::logic_error("ReplayGenerator has no keys precomputed!");
+    throw std::logic_error("no keys precomputed!");
   }
 
  protected:
