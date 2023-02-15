@@ -16,6 +16,7 @@
 
 #include <dirent.h>
 #include <folly/experimental/exception_tracer/ExceptionTracer.h>
+#include <numaif.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/shm.h>
@@ -179,6 +180,22 @@ void* mmapAlignedZeroedMemory(size_t alignment,
     return alignedMemory;
   }
   throw std::system_error(errno, std::system_category(), "Cannot mmap");
+}
+
+void munmapMemory(void* addr, size_t size) { munmap(addr, size); }
+
+void mbindMemory(void* addr,
+                 unsigned long len,
+                 int mode,
+                 const NumaBitMask& mask,
+                 unsigned int flags) {
+  auto nodesMask = mask.getNativeBitmask();
+
+  long ret = mbind(addr, len, mode, nodesMask->maskp, nodesMask->size, flags);
+  if (ret != 0) {
+    util::throwSystemError(
+        errno, folly::sformat("mbind() failed: {}", std::strerror(errno)));
+  }
 }
 
 void setMaxLockMemory(uint64_t bytes) {

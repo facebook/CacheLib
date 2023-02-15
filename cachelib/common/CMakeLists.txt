@@ -39,6 +39,7 @@ target_link_libraries(cachelib_common PUBLIC
   Folly::folly_exception_tracer
   Folly::folly_exception_tracer_base
   Folly::folly_exception_counter
+  numa
 )
 
 install(TARGETS cachelib_common

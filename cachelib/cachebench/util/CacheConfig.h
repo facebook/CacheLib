@@ -51,7 +51,7 @@ struct MemoryTierConfig : public JSONConfig {
   MemoryTierCacheConfig getMemoryTierCacheConfig() {
     MemoryTierCacheConfig config = MemoryTierCacheConfig::fromShm();
     config.setRatio(ratio);
-    config.setMemBind(NumaBitMask(memBindNodes));
+    config.setMemBind(util::NumaBitMask(memBindNodes));
     return config;
   }
 

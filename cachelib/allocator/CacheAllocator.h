@@ -57,6 +57,7 @@
 #include "cachelib/allocator/PoolOptimizer.h"
 #include "cachelib/allocator/PoolRebalancer.h"
 #include "cachelib/allocator/PoolResizer.h"
+#include "cachelib/allocator/PrivateMemoryManager.h"
 #include "cachelib/allocator/ReadOnlySharedCacheView.h"
 #include "cachelib/allocator/Reaper.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -1876,6 +1877,7 @@ class CacheAllocator : public CacheBase {
                   std::chrono::seconds timeout = std::chrono::seconds{0});
 
   ShmSegmentOpts createShmCacheOpts();
+  PrivateSegmentOpts createPrivateSegmentOpts();
   std::unique_ptr<MemoryAllocator> createNewMemoryAllocator();
   std::unique_ptr<MemoryAllocator> restoreMemoryAllocator();
   std::unique_ptr<CCacheManager> restoreCCacheManager();
@@ -1996,6 +1998,8 @@ class CacheAllocator : public CacheBase {
   // Manages the temporary shared memory segment for memory allocator that
   // is not persisted when cache process exits.
   std::unique_ptr<TempShmMapping> tempShm_;
+
+  std::unique_ptr<PrivateMemoryManager> privMemManager_;
 
   std::unique_ptr<ShmManager> shmManager_;
 

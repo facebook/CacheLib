@@ -189,21 +189,6 @@ void shmCtlImpl(int shmid, int cmd, shmid_ds* buf) {
   }
 }
 
-void mbindImpl(void* addr,
-               unsigned long len,
-               int mode,
-
-               const NumaBitMask& memBindNumaNodes,
-               unsigned int flags) {
-  auto nodesMask = memBindNumaNodes.getNativeBitmask();
-
-  long ret = mbind(addr, len, mode, nodesMask->maskp, nodesMask->size, flags);
-  if (ret != 0) {
-    util::throwSystemError(
-        errno, folly::sformat("mbind() failed: {}", std::strerror(errno)));
-  }
-}
-
 } // namespace detail
 
 void ensureSizeforHugePage(size_t size) {
@@ -300,7 +285,7 @@ void SysVShmSegment::memBind(void* addr) const {
   if (opts_.memBindNumaNodes.empty()) {
     return;
   }
-  detail::mbindImpl(addr, getSize(), MPOL_BIND, opts_.memBindNumaNodes, 0);
+  util::mbindMemory(addr, getSize(), MPOL_BIND, opts_.memBindNumaNodes, 0);
 }
 
 void SysVShmSegment::markForRemoval() {
