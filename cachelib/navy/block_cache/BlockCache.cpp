@@ -723,9 +723,11 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           reclaimValueChecksumErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_cleanup_entry_header_checksum_errors",
-          cleanupEntryHeaderChecksumErrorCount_.get());
+          cleanupEntryHeaderChecksumErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_cleanup_value_checksum_errors",
-          cleanupValueChecksumErrorCount_.get());
+          cleanupValueChecksumErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_succ_lookups", succLookupCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_removes", removeCount_.get(),
@@ -750,7 +752,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_lookup_for_item_destructor_errors",
-          lookupForItemDestructorErrorCount_.get());
+          lookupForItemDestructorErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_remove_attempt_collisions", removeAttemptCollisions_.get(),
           CounterVisitor::CounterType::RATE);
   // Allocator visits region manager

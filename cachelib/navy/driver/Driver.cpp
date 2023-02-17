@@ -273,8 +273,10 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_rejected_bytes", rejectedBytes_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor("navy_accepted_bytes", acceptedBytes_.get());
-  visitor("navy_accepted", acceptedCount_.get());
+  visitor("navy_accepted_bytes", acceptedBytes_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_accepted", acceptedCount_.get(),
+          CounterVisitor::CounterType::RATE);
 
   visitor("navy_parcel_memory", parcelMemory_.get());
   visitor("navy_concurrent_inserts", concurrentInserts_.get());
