@@ -259,7 +259,7 @@ test "$debug_build" \
 MAKE_PARAMS=
 test "$verbose" && MAKE_PARAMS="$MAKE_PARAMS VERBOSE=YES"
 
-JOBS=$(nproc --ignore 1)
+JOBS=$(nproc --all --ignore 1)
 test "$many_jobs" && MAKE_PARAMS="$MAKE_PARAMS -j$JOBS"
 
 
