@@ -18,7 +18,6 @@ sudo apt-get install -y \
   build-essential \
   git \
   g++ \
-  cmake \
   bison flex \
   libboost-all-dev \
   libevent-dev \
