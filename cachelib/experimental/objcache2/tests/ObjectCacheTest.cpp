@@ -206,12 +206,12 @@ class ObjectCacheTest : public ::testing::Test {
     foo->a = 1;
     foo->b = 2;
     foo->c = 3;
-    auto res = objcache->insertOrReplace("Foo", std::move(foo));
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
-    ASSERT_NE(nullptr, res.second);
-    EXPECT_EQ(1, res.second->a);
-    EXPECT_EQ(2, res.second->b);
-    EXPECT_EQ(3, res.second->c);
+    auto [allocRes, ptr, _] = objcache->insertOrReplace("Foo", std::move(foo));
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, allocRes);
+    ASSERT_NE(nullptr, ptr);
+    EXPECT_EQ(1, ptr->a);
+    EXPECT_EQ(2, ptr->b);
+    EXPECT_EQ(3, ptr->c);
 
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found2);
@@ -238,7 +238,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo->b = 2;
     foo->c = 3;
     auto res1 = objcache->insertOrReplace("Foo", std::move(foo));
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res1.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res1));
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -251,7 +251,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->e = 5;
     foo2->f = 6;
     auto res2 = objcache->insertOrReplace("Foo2", std::move(foo2));
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res2.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res2));
 
     auto found2 = objcache->template find<Foo2>("Foo2");
     ASSERT_NE(nullptr, found2);
@@ -272,7 +272,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo4->b = 2;
     foo4->c = 3;
     auto res1 = objcache->insertOrReplace("Foo4", std::move(foo4));
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res1.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res1));
 
     auto found1 = objcache->template find<Foo4>("Foo4");
     ASSERT_NE(nullptr, found1);
@@ -285,7 +285,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo5->e = 5;
     foo5->f = 6;
     auto res2 = objcache->insertOrReplace("Foo5", std::move(foo5));
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res2.first);
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res2));
 
     auto found2 = objcache->template find<Foo5>("Foo5");
     ASSERT_NE(nullptr, found2);
@@ -385,11 +385,14 @@ class ObjectCacheTest : public ::testing::Test {
     foo1->a = 1;
     foo1->b = 2;
     foo1->c = 3;
-    std::shared_ptr<Foo> replaced;
-    auto res =
-        objcache->insertOrReplace("Foo", std::move(foo1), 0, 0, &replaced);
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
-    EXPECT_EQ(nullptr, replaced);
+
+    auto [res1, ptr1, replaced1] =
+        objcache->insertOrReplace("Foo", std::move(foo1));
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res1);
+    EXPECT_EQ(1, ptr1->a);
+    EXPECT_EQ(2, ptr1->b);
+    EXPECT_EQ(3, ptr1->c);
+    EXPECT_EQ(nullptr, replaced1);
 
     auto found1 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
@@ -401,12 +404,16 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->a = 10;
     foo2->b = 20;
     foo2->c = 30;
-    res = objcache->insertOrReplace("Foo", std::move(foo2), 0, 0, &replaced);
-    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
-    ASSERT_NE(nullptr, replaced);
-    EXPECT_EQ(1, replaced->a);
-    EXPECT_EQ(2, replaced->b);
-    EXPECT_EQ(3, replaced->c);
+    auto [res2, ptr2, replaced2] =
+        objcache->insertOrReplace("Foo", std::move(foo2));
+    EXPECT_EQ(ObjectCache::AllocStatus::kSuccess, res2);
+    EXPECT_EQ(10, ptr2->a);
+    EXPECT_EQ(20, ptr2->b);
+    EXPECT_EQ(30, ptr2->c);
+    ASSERT_NE(nullptr, replaced2);
+    EXPECT_EQ(1, replaced2->a);
+    EXPECT_EQ(2, replaced2->b);
+    EXPECT_EQ(3, replaced2->c);
 
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found2);
@@ -497,7 +504,7 @@ class ObjectCacheTest : public ::testing::Test {
     // replace foo1 with foo2
     {
       auto res = objcache->insertOrReplace("Foo", std::move(foo2), foo2Size);
-      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, res.first);
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res));
 
       auto found = objcache->template find<Foo>("Foo");
       ASSERT_NE(nullptr, found);

@@ -68,9 +68,9 @@ struct ObjectDeserializer {
     Deserializer deserializer{reinterpret_cast<const uint8_t*>(payload.begin()),
                               reinterpret_cast<const uint8_t*>(payload.end())};
     auto ptr = std::make_unique<T>(deserializer.deserialize<T>());
-    auto [allocStatus, _] =
+    auto res =
         objCache_.insertOrReplace(key, std::move(ptr), objectSize, ttlSecs);
-    return allocStatus == ObjectCache::AllocStatus::kSuccess;
+    return std::get<0>(res) == ObjectCache::AllocStatus::kSuccess;
   }
 
   // cache key of the object to be deserialized

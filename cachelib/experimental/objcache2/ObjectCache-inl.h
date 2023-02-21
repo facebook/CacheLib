@@ -153,12 +153,13 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
 
 template <typename AllocatorT>
 template <typename T>
-std::pair<typename ObjectCache<AllocatorT>::AllocStatus, std::shared_ptr<T>>
+std::tuple<typename ObjectCache<AllocatorT>::AllocStatus,
+           std::shared_ptr<T>,
+           std::shared_ptr<T>>
 ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
                                          std::unique_ptr<T> object,
                                          size_t objectSize,
-                                         uint32_t ttlSecs,
-                                         std::shared_ptr<T>* replacedPtr) {
+                                         uint32_t ttlSecs) {
   if (config_.objectSizeTrackingEnabled && objectSize == 0) {
     throw std::invalid_argument(
         "Object size tracking is enabled but object size is set to be 0.");
@@ -176,7 +177,8 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
       allocateFromL1(key, ttlSecs, 0 /* use current time as creationTime */);
   if (!handle) {
     insertErrors_.inc();
-    return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
+    return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object)),
+            nullptr};
   }
   // We don't release the object here because insertOrReplace could throw when
   // the replaced item is out of refcount; in this case, the object isn't
@@ -187,16 +189,15 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
 
   auto replaced = this->l1Cache_->insertOrReplace(handle);
 
+  std::shared_ptr<T> replacedPtr = nullptr;
   if (replaced) {
     replaces_.inc();
-    if (replacedPtr) {
-      auto itemPtr = reinterpret_cast<ObjectCacheItem*>(replaced->getMemory());
-      // Just release the handle. Cache destorys object when all handles
-      // released.
-      auto deleter = [h = std::move(replaced)](T*) {};
-      *replacedPtr = std::shared_ptr<T>(
-          reinterpret_cast<T*>(itemPtr->objectPtr), std::move(deleter));
-    }
+    auto itemPtr = reinterpret_cast<ObjectCacheItem*>(replaced->getMemory());
+    // Just release the handle. Cache destorys object when all handles
+    // released.
+    auto deleter = [h = std::move(replaced)](T*) {};
+    replacedPtr = std::shared_ptr<T>(reinterpret_cast<T*>(itemPtr->objectPtr),
+                                     std::move(deleter));
   }
 
   // Just release the handle. Cache destorys object when all handles released.
@@ -209,7 +210,8 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
 
   // Release the object as it has been successfully inserted to the cache.
   object.release();
-  return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter))};
+  return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter)),
+          replacedPtr};
 }
 
 template <typename AllocatorT>

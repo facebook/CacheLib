@@ -146,22 +146,20 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   //                     if objectSizeTracking is enabled, a non-zero value must
   //                     be passed.
   // @param ttlSecs      object expiring seconds.
-  // @param replacedPtr  a pointer to a shared_ptr, if it is not nullptr it will
-  //                     be assigned to the replaced object.
   //
   // @throw cachelib::exception::RefcountOverflow if the item we are replacing
   //        is already out of refcounts.
   // @throw std::invalid_argument if objectSizeTracking is enabled but
   //        objectSize is 0.
-  // @return a pair of allocation status and shared_ptr of newly inserted
-  //         object.
+  // @return a tuple of allocation status, shared_ptr of newly inserted
+  //         object and shared_ptr of old object that has been replaced (nullptr
+  //         if no replacement happened)
   template <typename T>
-  std::pair<AllocStatus, std::shared_ptr<T>> insertOrReplace(
-      folly::StringPiece key,
-      std::unique_ptr<T> object,
-      size_t objectSize = 0,
-      uint32_t ttlSecs = 0,
-      std::shared_ptr<T>* replacedPtr = nullptr);
+  std::tuple<AllocStatus, std::shared_ptr<T>, std::shared_ptr<T>>
+  insertOrReplace(folly::StringPiece key,
+                  std::unique_ptr<T> object,
+                  size_t objectSize = 0,
+                  uint32_t ttlSecs = 0);
 
   // Insert the object into the cache with given key. If the key exists in the
   // cache, the new object won't be inserted.
