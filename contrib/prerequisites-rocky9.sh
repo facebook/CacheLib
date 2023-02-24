@@ -38,7 +38,8 @@ sudo dnf install -y \
   jemalloc-devel \
   libsodium-devel \
   libaio-devel \
-  binutils-devel
+  binutils-devel \
+  numactl-devel
 
 
 sudo dnf install -y \

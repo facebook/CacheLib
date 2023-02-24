@@ -21,6 +21,7 @@ sudo dnf -y install bison flex patch bzip2 cmake \
   zlib-devel lz4-devel xz-devel bzip2-devel \
   jemalloc-devel snappy-devel libsodium-devel libdwarf-devel libaio-devel \
   gmock-devel gflags-devel gtest gtest-devel \
+  numactl-devel \
   fmt fmt-devel
 
 # DO NOT INSTALL glog-devel - need to build from source for the glog-*.cmake files
