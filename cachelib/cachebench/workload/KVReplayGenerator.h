@@ -230,10 +230,10 @@ inline bool KVReplayGenerator::parseRequest(const std::string& line,
 
   // Set op
   const auto& op = fields[SampleFields::OP];
-  // TODO only memcache optypes are supported
-  if (!op.compare("GET")) {
+  // TODO implement GET_LEASE and SET_LEASE emulations
+  if (!op.compare("GET") || !op.compare("GET_LEASE")) {
     req->req_.setOp(OpType::kGet);
-  } else if (!op.compare("SET")) {
+  } else if (!op.compare("SET") || !op.compare("SET_LEASE")) {
     req->req_.setOp(OpType::kSet);
   } else if (!op.compare("DELETE")) {
     req->req_.setOp(OpType::kDel);

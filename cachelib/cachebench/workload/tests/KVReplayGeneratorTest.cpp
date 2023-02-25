@@ -56,6 +56,18 @@ struct TraceEntry {
     size_t expKeySize = std::max<size_t>(keySize_, reqKey.size());
     expKeySize = std::min<size_t>(expKeySize, 256);
     ASSERT_EQ(reqKey.size(), expKeySize);
+    ASSERT_EQ(req.req_.getOp(), getOpType());
+  }
+
+  OpType getOpType() {
+    if (!op_.compare("GET") || !op_.compare("GET_LEASE")) {
+      return OpType::kGet;
+    } else if (!op_.compare("SET") || !op_.compare("SET_LEASE")) {
+      return OpType::kSet;
+    } else if (!op_.compare("DELETE")) {
+      return OpType::kDel;
+    }
+    return OpType::kSize;
   }
 
   std::string key_;
@@ -86,8 +98,11 @@ TEST(KVReplayGeneratorTest, BasicFormat) {
       // <key_size>,<op>,<size>,<op_count>,<ttl>,<valid>
       {7, "GET", 0, 2, std::nullopt, true},
       {7, "GET", 0, 2, 50, true},
+      {7, "GET_LEASE", 0, 2, 50, true},
       {20, "SET", 100, 35, std::nullopt, true},
       {20, "SET", 100, 35, 3600, true},
+      {20, "SAT", 100, 35, 3600, false}, // invalid op name
+      {20, "SET_LEASE", 100, 35, 3600, true},
       {7, "GET", 0, 0, std::nullopt, false},      // invalid op count
       {7, "GET", 0, 0, 600, false},               // invalid op count
       {1024, "SET", 100, 35, 300, true},          // key truncated
