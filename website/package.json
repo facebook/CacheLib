@@ -43,7 +43,8 @@
     "ansi-html": "0.0.8",
     "ua-parser-js": "^1.0.33",
     "eta": "^2.0.0",
-    "http-cache-semantics": "^4.1.1"
+    "http-cache-semantics": "^4.1.1",
+    "@braintree/sanitize-url": "^6.0.1"
   },
   "browserslist": {
     "production": [
