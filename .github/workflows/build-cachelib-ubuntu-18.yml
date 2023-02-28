@@ -19,6 +19,7 @@
 name: build-cachelib-ubuntu-18
 on:
 #  push:
+  pull_request:
   schedule:
     - cron:  '0 5 * * 2,4,6'
 jobs:

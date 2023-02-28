@@ -15,6 +15,7 @@
 name: build-cachelib-ubuntu-22
 on:
 #  push:
+  pull_request:
   schedule:
     - cron:  '0 7 * * *'
 jobs:
