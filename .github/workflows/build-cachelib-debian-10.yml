@@ -52,6 +52,9 @@ jobs:
           g++ - || true
       - name: "checkout sources"
         uses: actions/checkout@v2
+      - name: "Add Git safe directory"
+        # Workaround for Docker image bug (GitHub issue #199).
+        run: git config --system --add safe.directory /__w/CacheLib/CacheLib
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
