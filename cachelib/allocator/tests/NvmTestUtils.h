@@ -27,7 +27,7 @@ namespace utils {
 using NavyConfig = navy::NavyConfig;
 inline NavyConfig getNvmTestConfig(const std::string& cacheDir) {
   NavyConfig config{};
-  config.setSimpleFile(cacheDir + "/navy", 100 * 1024ULL * 1024ULL);
+  config.setSimpleFile(cacheDir + "/navy", 200 * 1024ULL * 1024ULL);
   config.setDeviceMetadataSize(4 * 1024 * 1024);
   config.setBlockSize(1024);
   config.setNavyReqOrderingShards(10);

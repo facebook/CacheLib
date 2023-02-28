@@ -245,7 +245,13 @@ TEST_F(NvmCacheTest, EvictToNvmGetCheckCtime) {
     ASSERT_NE(nullptr, it);
     cache_->insertOrReplace(it);
     keyToCtime.insert({key, it->getCreationTime()});
+    // Avoid any nvm eviction being dropped due to the race with still
+    // outstanding remove operation for insertion
+    if (i % 100 == 0) {
+      nvm.flushNvmCache();
+    }
   }
+  nvm.flushNvmCache();
 
   const auto nEvictions = this->evictionCount() - evictBefore;
   ASSERT_LT(0, nEvictions);
@@ -331,6 +337,11 @@ TEST_F(NvmCacheTest, Delete) {
     auto it = nvm.allocate(pid, key, 15 * 1024);
     ASSERT_NE(nullptr, it);
     nvm.insertOrReplace(it);
+    // Avoid any nvm eviction being dropped due to the race with still
+    // outstanding remove operation for insertion
+    if (i % 100 == 0) {
+      nvm.flushNvmCache();
+    }
   }
   nvm.flushNvmCache();
 
@@ -533,6 +544,11 @@ TEST_F(NvmCacheTest, NvmEvicted) {
     auto it = nvm.allocate(pid, key, allocSize);
     ASSERT_NE(nullptr, it);
     nvm.insertOrReplace(it);
+    // Avoid any nvm eviction being dropped due to the race with still
+    // outstanding remove operation for insertion
+    if (i % 100 == 0) {
+      nvm.flushNvmCache();
+    }
   }
   nvm.flushNvmCache();
 

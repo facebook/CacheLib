@@ -213,7 +213,7 @@ class PersistenceCache {
  public:
   const uint32_t kNumKeys = 1024 * 1024;    // 1 million
   const size_t kCacheSize = 100 * kNumKeys; // 100MB
-  const size_t kCapacity = 4 * kCacheSize;  // 400MB
+  const size_t kCapacity = 5 * kCacheSize;  // 500MB
 
   std::unique_ptr<folly::IOBuf> buffer_;
   std::string cacheDir_;
