@@ -128,8 +128,8 @@ std::shared_ptr<const T> ObjectCache<AllocatorT>::find(folly::StringPiece key) {
   succL1Lookups_.inc();
 
   auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
-  // Just release the handle. Cache destorys object when all handles released.
-  auto deleter = [h = std::move(found)](const T*) {};
+  // Use custom deleter
+  auto deleter = Deleter<const T>(std::move(found));
   return std::shared_ptr<const T>(reinterpret_cast<const T*>(ptr),
                                   std::move(deleter));
 }
@@ -146,8 +146,8 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
   succL1Lookups_.inc();
 
   auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
-  // Just release the handle. Cache destorys object when all handles released.
-  auto deleter = [h = std::move(found)](T*) {};
+  // Use custom deleter
+  auto deleter = Deleter<T>(std::move(found));
   return std::shared_ptr<T>(reinterpret_cast<T*>(ptr), std::move(deleter));
 }
 
@@ -200,9 +200,6 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
                                      std::move(deleter));
   }
 
-  // Just release the handle. Cache destorys object when all handles released.
-  auto deleter = [h = std::move(handle)](T*) {};
-
   // update total object size
   if (config_.objectSizeTrackingEnabled) {
     totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
@@ -210,6 +207,9 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
 
   // Release the object as it has been successfully inserted to the cache.
   object.release();
+
+  // Use custom deleter
+  auto deleter = Deleter<T>(std::move(handle));
   return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter)),
           replacedPtr};
 }
@@ -256,8 +256,8 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
     object.release();
   }
 
-  // Just release the handle. Cache destorys object when all handles released.
-  auto deleter = [h = std::move(handle)](T*) {};
+  // Use custom deleter
+  auto deleter = Deleter<T>(std::move(handle));
   return {success ? AllocStatus::kSuccess : AllocStatus::kKeyAlreadyExists,
           std::shared_ptr<T>(ptr, std::move(deleter))};
 }

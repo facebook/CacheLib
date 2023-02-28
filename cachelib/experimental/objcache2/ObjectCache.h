@@ -94,6 +94,43 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // make constructor private, but constructable by std::make_unique
   struct InternalConstructor {};
 
+  template <typename T>
+  class Deleter {
+   public:
+    using ReadHandle = typename AllocatorT::ReadHandle;
+    using WriteHandle = typename AllocatorT::WriteHandle;
+    using Handle = std::variant<ReadHandle, WriteHandle>;
+
+    explicit Deleter(typename AllocatorT::ReadHandle&& hdl)
+        : hdl_(std::move(hdl)) {}
+    explicit Deleter(typename AllocatorT::WriteHandle&& hdl)
+        : hdl_(std::move(hdl)) {}
+
+    void operator()(T*) {
+      // Just release the handle.
+      // Cache destorys object when all handles released.
+      std::holds_alternative<ReadHandle>(hdl_)
+          ? std::get<ReadHandle>(hdl_).reset()
+          : std::get<WriteHandle>(hdl_).reset();
+    }
+
+    WriteHandle& getWriteHandleRef() {
+      if (std::holds_alternative<ReadHandle>(hdl_)) {
+        hdl_ = std::move(std::get<ReadHandle>(hdl_)).toWriteHandle();
+      }
+      return std::get<WriteHandle>(hdl_);
+    }
+
+    ReadHandle& getReadHandleRef() {
+      return std::holds_alternative<ReadHandle>(hdl_)
+                 ? std::get<ReadHandle>(hdl_)
+                 : std::get<WriteHandle>(hdl_);
+    }
+
+   private:
+    Handle hdl_;
+  };
+
  public:
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
   using Key = KAllocation::Key;
