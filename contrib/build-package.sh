@@ -108,6 +108,7 @@ test "$#" -eq 0 \
 external_git_clone=
 external_git_branch=
 external_git_tag=
+external_git_commit=
 update_submodules=
 cmake_custom_params=
 
@@ -175,7 +176,7 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR/build/cmake
     external_git_clone=yes
-    external_git_branch=release
+    external_git_commit=8420502e
     if test "$build_tests" = "yes" ; then
         cmake_custom_params="-DZSTD_BUILD_TESTS=ON"
     else
@@ -307,8 +308,12 @@ if test "$source" ; then
     fi
 
 
-    # switch to specific branch/tag if needed
-    if test "$external_git_branch" ; then
+    # switch to specific branch/tag/commit if needed
+    if test "$external_git_commit" ; then
+        ( cd "$REPODIR" \
+           && git checkout --force "$external_git_commit" ) \
+           || die "failed to checkout commit $external_git_commit in $REPODIR"
+    elif test "$external_git_branch" ; then
         ( cd "$REPODIR" \
            && git checkout --force "origin/$external_git_branch" ) \
            || die "failed to checkout branch $external_git_branch in $REPODIR"
