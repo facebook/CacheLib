@@ -287,6 +287,10 @@ class AsyncCacheStressor : public Stressor {
     ++stats.get;
     auto lock = chainedItemAcquireUniqueLock(*key);
 
+    // This was moved outside the lambda, as otherwise gcc-8.x crashes with an
+    // internal compiler error here (suspected regression in folly).
+    XDCHECK(req->sizeBegin + 1 != req->sizeEnd);
+
     auto onReadyFn = [&, req, key, l = std::move(lock), pid](auto hdl) {
       WriteHandle wHdl;
       if (hdl == nullptr) {
@@ -303,7 +307,6 @@ class AsyncCacheStressor : public Stressor {
       } else {
         wHdl = std::move(hdl).toWriteHandle();
       }
-      XDCHECK(req->sizeBegin + 1 != req->sizeEnd);
       bool chainSuccessful = false;
       for (auto j = req->sizeBegin + 1; j != req->sizeEnd; j++) {
         ++stats.addChained;
