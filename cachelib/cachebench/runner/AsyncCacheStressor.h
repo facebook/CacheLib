@@ -23,7 +23,6 @@
 #include <folly/io/async/EventBaseThread.h>
 
 #include <atomic>
-#include <cassert>
 #include <cstddef>
 #include <iostream>
 #include <memory>
@@ -288,6 +287,10 @@ class AsyncCacheStressor : public Stressor {
     ++stats.get;
     auto lock = chainedItemAcquireUniqueLock(*key);
 
+    // This was moved outside the lambda, as otherwise gcc-8.x crashes with an
+    // internal compiler error here (suspected regression in folly).
+    XDCHECK(req->sizeBegin + 1 != req->sizeEnd);
+
     auto onReadyFn = [&, req, key, l = std::move(lock), pid](auto hdl) {
       WriteHandle wHdl;
       if (hdl == nullptr) {
@@ -304,14 +307,6 @@ class AsyncCacheStressor : public Stressor {
       } else {
         wHdl = std::move(hdl).toWriteHandle();
       }
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 8
-      assert(req->sizeBegin + 1 != req->sizeEnd);
-#else
-      // gcc-8.5 crashes with an internal compiler error at typeck.c:5965
-      // here. Suspected regression in folly as this line compiled fine
-      // with 8.5 previously.
-      XDCHECK(req->sizeBegin + 1 != req->sizeEnd);
-#endif
       bool chainSuccessful = false;
       for (auto j = req->sizeBegin + 1; j != req->sizeEnd; j++) {
         ++stats.addChained;
