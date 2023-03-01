@@ -886,6 +886,69 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testGetTtl() {
+    const uint32_t ttlSecs = 600;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    auto objcache = ObjectCache::create(config);
+
+    auto before = util::getCurrentTimeSec();
+    std::this_thread::sleep_for(std::chrono::seconds{3});
+    objcache->insertOrReplace("Foo", std::make_unique<Foo>(), 0 /*object size*/,
+                              ttlSecs);
+
+    // lookup via find API
+    auto found1 = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found1);
+
+    // get TTL info
+    EXPECT_EQ(ttlSecs, objcache->getConfiguredTtl(found1).count());
+    EXPECT_LE(before + ttlSecs, objcache->getExpiryTimeSec(found1));
+
+    // lookup via findToWrite API
+    auto found2 = objcache->template findToWrite<Foo>("Foo");
+    ASSERT_NE(nullptr, found2);
+
+    // get TTL info
+    EXPECT_EQ(ttlSecs, objcache->getConfiguredTtl(found2).count());
+    EXPECT_LE(before + ttlSecs, objcache->getExpiryTimeSec(found2));
+  }
+
+  void testUpdateTtl() {
+    const uint32_t ttlSecs = 600;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    auto objcache = ObjectCache::create(config);
+
+    auto insertionTime = util::getCurrentTimeSec();
+    objcache->insertOrReplace("Foo", std::make_unique<Foo>(), 0 /*object size*/,
+                              ttlSecs);
+
+    auto found = objcache->template find<Foo>("Foo");
+    ASSERT_NE(nullptr, found);
+
+    // get TTL info
+    EXPECT_EQ(ttlSecs, objcache->getConfiguredTtl(found).count());
+    EXPECT_LE(insertionTime + ttlSecs, objcache->getExpiryTimeSec(found));
+
+    // update expiry time
+    auto currExpTime = objcache->getExpiryTimeSec(found);
+    EXPECT_TRUE(objcache->updateExpiryTimeSec(found, currExpTime + ttlSecs));
+    EXPECT_EQ(2 * ttlSecs, objcache->getConfiguredTtl(found).count());
+    EXPECT_EQ(currExpTime + ttlSecs, objcache->getExpiryTimeSec(found));
+
+    // extend TTL
+    auto now = util::getCurrentTimeSec();
+    std::this_thread::sleep_for(std::chrono::seconds{3});
+    EXPECT_TRUE(objcache->extendTtl(found, std::chrono::seconds(3 * ttlSecs)));
+    EXPECT_LE(now + ttlSecs, objcache->getExpiryTimeSec(found));
+    EXPECT_LE(3 * ttlSecs, objcache->getConfiguredTtl(found).count());
+  }
+
   void testMultithreadReplace() {
     // Sanity test to see if insertOrReplace across multiple
     // threads are safe.
@@ -1079,6 +1142,32 @@ class ObjectCacheTest : public ::testing::Test {
       fs[i].join();
     }
   }
+
+  void testMultithreadUpdateTtl() {
+    // Sanity test to see if update TTL across multiple
+    // threads is safe.
+    ObjectCacheConfig config;
+    config.setCacheName("test").setCacheCapacity(10'000).setItemDestructor(
+        [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+    auto objcache = ObjectCache::create(config);
+    objcache->insertOrReplace("key", std::make_unique<Foo>(), 0, 60);
+
+    auto runUpdateTtlOps = [&] {
+      for (int i = 0; i < 2000; i++) {
+        auto found = objcache->template find<Foo>("key");
+        auto configuredTtlSecs = objcache->getConfiguredTtl(found).count();
+        objcache->extendTtl(found, std::chrono::seconds{configuredTtlSecs});
+      }
+    };
+
+    std::vector<std::thread> ts;
+    for (int i = 0; i < 10; i++) {
+      ts.push_back(std::thread{runUpdateTtlOps});
+    }
+    for (int i = 0; i < 10; i++) {
+      ts[i].join();
+    }
+  }
 };
 
 using AllocatorTypes = ::testing::Types<LruAllocator,
@@ -1117,6 +1206,9 @@ TYPED_TEST(ObjectCacheTest, PersistenceHighLoad) {
   this->testPersistenceHighLoad();
 }
 
+TYPED_TEST(ObjectCacheTest, GetTtl) { this->testGetTtl(); }
+TYPED_TEST(ObjectCacheTest, UpdateTtl) { this->testUpdateTtl(); }
+
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
   this->testMultithreadReplace();
 }
@@ -1134,6 +1226,9 @@ TYPED_TEST(ObjectCacheTest, MultithreadFindAndEviction) {
 }
 TYPED_TEST(ObjectCacheTest, MultithreadFindAndReplaceWith10Shards) {
   this->testMultithreadFindAndReplaceWith10Shards();
+}
+TYPED_TEST(ObjectCacheTest, MultithreadUpdateTtl) {
+  this->testMultithreadUpdateTtl();
 }
 
 using ObjectCache = ObjectCache<LruAllocator>;
