@@ -107,6 +107,7 @@ test "$#" -eq 0 \
 
 external_git_clone=
 external_git_branch=
+# external_git_tag can also be used for commit hashes
 external_git_tag=
 update_submodules=
 cmake_custom_params=
@@ -311,7 +312,6 @@ if test "$source" ; then
 
 
     # switch to specific branch/tag if needed
-    # external_git_tag can also be used for commits
     if test "$external_git_branch" ; then
         ( cd "$REPODIR" \
            && git checkout --force "origin/$external_git_branch" ) \
