@@ -240,6 +240,96 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungPM983aDevice) {
   EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_), 35061362294784);
 }
 
+TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungPM9A3Device) {
+  constexpr auto& kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "P1FB007",
+      "Index" : 0,
+      "NameSpace" : 1,
+      "ModelNumber" : "MTFDHBA512TCK",
+      "ProductName" : "Non-Volatile memory controller: Micron Technology Inc Device 0x5410",
+      "SerialNumber" : "        21062E6B8061",
+      "UsedBytes" : 512110190592,
+      "MaximumLBA" : 1000215216,
+      "PhysicalSize" : 512110190592,
+      "SectorSize" : 512
+    },
+    {
+      "DevicePath" : "/dev/nvme1n1",
+      "Firmware" : "GDA82F2Q",
+      "Index" : 1,
+      "NameSpace" : 1,
+      "ModelNumber" : "MZOL23T8HCLS-00AFB",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "S5X9NG0T116005",
+      "UsedBytes" : 104910848,
+      "MaximumLBA" : 918149526,
+      "PhysicalSize" : 3760740458496,
+      "SectorSize" : 4096
+    },
+    {
+      "DevicePath" : "/dev/nvme2n1",
+      "Firmware" : "GDA82F2Q",
+      "Index" : 2,
+      "NameSpace" : 1,
+      "ModelNumber" : "MZOL23T8HCLS-00AFB",
+      "ProductName" : "Unknown device",
+      "SerialNumber" : "S5X9NG0T116027",
+      "UsedBytes" : 0,
+      "MaximumLBA" : 918149526,
+      "PhysicalSize" : 3760740458496,
+      "SectorSize" : 4096
+    }
+  ]
+})EOF";
+
+  constexpr auto& kSmartLogOutput = R"EOF(
+[015:000] PhysicallyWrittenBytes                            : 241393664
+[031:016] Physically Read Bytes                             : 106217472
+[037:032] Bad NAND Block Count (Raw Value)                  : 0
+[039:038] Bad NAND Block Count (Normalized Value)           : 100
+[047:040] Uncorrectable Read Error Count                    : 0
+[055:048] Soft ECC Error Count                              : 0
+[059:056] SSD End to end Correction Count (Detected Errors) : 0
+[063:060] SSD End to end Correction Count (Corrected Errors): 0
+[064:064] System Data Percentage Used                       : 0
+[068:065] User Data Erase Count (Min)                       : 0
+[072:069] User Data Erase Count (Max)                       : 1
+[080:073] Refresh Count                                     : 0
+[086:081] Program Fail Count (Raw Value)                    : 0
+[088:087] Program Fail Count (Normalized Value)             : 100
+[094:089] User Data Erase Fail Count (Raw Value)            : 0
+[096:095] User Data Erase Fail Count (Normalized Value)     : 100
+[102:097] System Area Erase Fail Count (Raw Value)          : 0
+[104:103] System Area Erase Fail Count (Normalized value)   : 100
+[105:105] Thermal Throttling Status                         : 0
+[106:106] Thermal Throttling Count                          : 0
+[108:107] PHY Error Count                                   : 0
+[110:109] Bad DLLP Count                                    : 0
+[112:111] Bad TLP Count                                     : 0
+[114:113] Reserved                                          : 0
+[118:115] Incomplete Shutdowns                              : 0
+[119:119] % Free Blocks                                     : 96
+[121:120] PCIe Correctable Error Count (RTS)                : 0
+[123:122] PCIe Correctable Error Count (RRS)                : 0
+[131:124] XOR Recovery Count                                : 0
+[137:132] Bad System NAND block count (Raw Value)           : 0
+[139:138] Bad System NAND block count (Normalized Value)    : 100
+[141:140] Capacitor Health                                  : 163
+[157:142] Endurance Estimate                                : 28862181
+[165:158] Security Version Number                           : 4294967296
+[167:166] Log Page Version                                  : 1
+)EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "samsung", "vs-smart-add-log", "/dev/nvme1n1"},
+        kSmartLogOutput}});
+  EXPECT_EQ(nandWriteBytes("nvme1n1", kNvmePath, mockFactory_), 241393664);
+}
+
 TEST_F(NandWritesTest, nandWriteBytes_handlesSeagateDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
