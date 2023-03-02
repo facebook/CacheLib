@@ -17,10 +17,11 @@ sufficient free memory (50+GB) and SSD capacity (1TB).
 * SSD Capacity: 100GB or more available capacity
 * Internet connection capable of accessing github.com and installing packages
 
-## Set up the SSD devices using mdraid
+## Set up the SSD devices
 
-To gather SSD performance metrics, the SSD must be setup first. An example
-below sets up a raid device to handle two ssds being used by CacheBench.
+To gather SSD performance metrics, the SSD must be setup first. Cachebench (and CacheLib) supports using various types of devices for NVM cache including a raw block device or a regular file. When one wants to use multiple SSDs as NVM cache, the CacheLib also provides a native support for RAID0 (i.e., striping). 
+
+Optionally, as an example, an user can setup and use md devices as follows. In this example, the md device is created from two ssd devices to be used as a raw block device in CacheBench.
 
 ```sh
 mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme1n1 /dev/nvme2n1
