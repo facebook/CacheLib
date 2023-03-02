@@ -102,11 +102,12 @@ test "$#" -eq 0 \
     && die "missing dependancy name to build. See -h for help"
 
 ######################################
-## Check which dependecy was requested
+## Check which dependency was requested
 ######################################
 
 external_git_clone=
 external_git_branch=
+# external_git_tag can also be used for commit hashes
 external_git_tag=
 update_submodules=
 cmake_custom_params=
@@ -175,7 +176,10 @@ case "$1" in
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR/build/cmake
     external_git_clone=yes
-    external_git_branch=release
+    # Previously, we pinned to release branch. v1.5.4 needed
+    # CMake >= 3.18, later reverted. While waiting for v1.5.5,
+    # pin to the fix: https://github.com/facebook/zstd/pull/3510
+    external_git_tag=8420502e
     if test "$build_tests" = "yes" ; then
         cmake_custom_params="-DZSTD_BUILD_TESTS=ON"
     else
