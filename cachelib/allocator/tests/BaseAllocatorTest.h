@@ -713,35 +713,29 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       auto handle = alloc.find("key");
       ASSERT_NE(handle, nullptr);
       ASSERT_TRUE(isConst(handle->getMemory()));
-      ASSERT_EQ(handle.isWriteHandle(), false);
 
       // read handle clone
       auto handle2 = handle.clone();
       ASSERT_TRUE(isConst(handle2->getMemory()));
-      ASSERT_EQ(handle2.isWriteHandle(), false);
 
       // upgrade a read handle to a write handle
       auto handle3 = std::move(handle).toWriteHandle();
       ASSERT_FALSE(isConst(handle3->getMemory()));
-      ASSERT_EQ(handle3.isWriteHandle(), true);
     }
 
     {
       auto handle = alloc.findToWrite("key");
       ASSERT_NE(handle, nullptr);
       ASSERT_FALSE(isConst(handle->getMemory()));
-      ASSERT_EQ(handle.isWriteHandle(), true);
 
       // write handle clone
       auto handle2 = handle.clone();
       ASSERT_FALSE(isConst(handle2->getMemory()));
-      ASSERT_EQ(handle2.isWriteHandle(), true);
 
       // downgrade a write handle to a read handle
       ReadHandle handle3 = handle.clone();
       ASSERT_NE(handle3, nullptr);
       ASSERT_TRUE(isConst(handle3->getMemory()));
-      ASSERT_EQ(handle3.isWriteHandle(), false);
     }
 
     {
@@ -752,7 +746,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       // This is like doing a "clone" and setting it into wait context
       waitContext->set(alloc.find("key"));
       auto handle2 = std::move(handle).toWriteHandle();
-      ASSERT_EQ(handle2.isWriteHandle(), true);
+      ASSERT_FALSE(isConst(handle2->getMemory()));
     }
   }
 

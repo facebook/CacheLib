@@ -242,8 +242,6 @@ struct ReadHandleImpl {
     return hdl;
   }
 
-  bool isWriteHandle() const { return false; }
-
  protected:
   // accessor. Calling getInternal() on handle with isReady() == false blocks
   // the thread until the handle is ready.
@@ -570,8 +568,6 @@ struct WriteHandleImpl : public ReadHandleImpl<T> {
   // @throw std::overflow_error is the maximum item refcount is execeeded by
   //        creating this item handle.
   WriteHandleImpl clone() const { return WriteHandleImpl{ReadHandle::clone()}; }
-
-  bool isWriteHandle() const { return true; }
 
   // Friends
   friend ReadHandle;
