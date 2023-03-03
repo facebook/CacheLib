@@ -50,7 +50,7 @@ cd CacheLib
 Re-running `./contrib/build.sh` will update CacheLib and its dependencies
 to their latest versions and rebuild them.
 
-See [build](https://cachelib.org/docs/installation/installation) for more details about
+See [build](https://cachelib.org/docs/installation/) for more details about
 the building and installation process.
 
 

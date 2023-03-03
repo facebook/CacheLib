@@ -53,6 +53,6 @@ developer's need. The following are few examples.
 
 ## Building  cachebench
 
-Follow instructions in [Installation](/docs/installation/installation) to build
+Follow instructions in [Installation](/docs/installation) to build
 cachebench. This should install cachebench in your local machine under
 ```opt/cachelib/bin/cachebench```

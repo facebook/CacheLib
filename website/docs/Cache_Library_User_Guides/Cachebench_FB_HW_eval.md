@@ -19,7 +19,7 @@ sufficient free memory (50+GB) and SSD capacity (1TB).
 
 ## Set up the SSD devices
 
-To gather SSD performance metrics, the SSD must be setup first. Cachebench (and CacheLib) supports using various types of devices for NVM cache including a raw block device or a regular file. When one wants to use multiple SSDs as NVM cache, the CacheLib also provides a native support for RAID0 (i.e., striping). 
+To gather SSD performance metrics, the SSD must be setup first. Cachebench (and CacheLib) supports using various types of devices for NVM cache including a raw block device or a regular file. When one wants to use multiple SSDs as NVM cache, the CacheLib also provides a native support for RAID0 (i.e., striping).
 
 Optionally, as an example, an user can setup and use md devices as follows. In this example, the md device is created from two ssd devices to be used as a raw block device in CacheBench.
 
@@ -143,7 +143,7 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     make install
     ```
 
-See [build and installation](/docs/installation/installation) for further details.
+See [build and installation](/docs/installation) for further details.
 
 ## Running the benchmark for SSD perf testing
 
@@ -197,7 +197,6 @@ For a full list of options that can be configured, see [configuring cachebench](
    using the `--progress` and specifying a duration in seconds.
    If `--progress-stats-file` is also specified, on every progress
    interval, `cachebench` would log the internal stats to the specified file.
-   
 ## Running cachebench with the trace workload
 
 Meta is sharing anonymized traces captured from large scale production cache services. These traces are licensed under the same license as CacheLib. They are meant to help academic and industry researchers to optimize for our caching workloads. One can freely download it from our AWS S3 bucket and run the CacheBench to replay the trace with varying configuration as follows.
