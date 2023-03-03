@@ -28,20 +28,20 @@ config.enableMemoryMonitor(
 This specifies the frequency at which cachelib monitors the system free memory and decides to shrink or grow the cache.
 
 * **memoryMonitoringConfig**:
-Specifies the memory monitoring configuration settings in MemoryMonitor::Config below:
+Specifies the memory monitoring configuration settings in `MemoryMonitor::Config` below:
 
-  * `mode` Specifies free memory monitoring mode. MemoryMonitor::FreeMemory
-  * `maxShrinkPerIterationPercent` Specifies the maximum amount of memory that can be shrunk in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`maxFreeMem - minFreeMem`).
-  * `maxGrowPerIterationPercent` Specifies the maximum amount of memory that can be grown in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`maxFreeMem - minFreeMem`). Setting this too high is not recommended.
-  * `maxRemovedPercent` Specifies the maximum percentage of the overall cache size that can be shrunk.
-  * `minFreeMem` Free memory value at which the cache will start shrinking to increase the system free memory.
-  * `maxFreeMem` Free memory value at which the shrunken cache will grow back to its previous size.
-  * `reclaimRateLimitWindow` Growing cache while free memory is falling can cause OOMs. This configuration specifies a window of time over which rate of decrease in free memory is monitored to throttle growing cache.
+  * `mode` Specifies free memory monitoring mode: `MemoryMonitor::FreeMemory`
+  * `maxAdvisePercentPerIter` Specifies the maximum amount of memory that can be advised away in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`upperLimitGB - lowerLimitGB`). Default value is `5`.
+  * `maxReclaimPercentPerIter` Specifies the maximum amount of memory that can be reclaimed in *each iteration* (configured by the interval above). This is specified as a percentage of the difference (`upperLimitGB - lowerLimitGB`). Setting this too high is not recommended. Default value is `5`.
+  * `maxAdvisePercent` Specifies the maximum percentage of the overall cache size that can be advised away. Default value is `20`.
+  * `lowerLimitGB` Free memory value at which the cache will start advising away memory to increase the system free memory. Default value is `10`.
+  * `upperLimitGB` Free memory value at which the shrunken cache will start reclaiming previously advised away memory. Default value is `15`.
+  * `reclaimRateLimitWindowSecs` Growing cache while free memory is falling can cause OOMs. This configuration specifies a window of time over which rate of decrease in free memory is monitored to throttle growing cache. Default value is `0`.
 
 * **strategy**:
 Strategy to use for freeing up the memory. For more information, see [Pool rebalance strategy](pool_rebalance_strategy).
 
-For example, if your `config.size` was 100 GB and you are running on a system with 144 GB, with intent to have free memory around 10 GB. Setting `minFreeMem=10GB`, `maxFreeMem=15GB`, `maxResizePerIterationPercent=10`, `maxRemovedPercent=5` would make cachelib give away cache memory when free memory is below 10 GB and grow back the cache when free memory jumps above 15 GB. While shrinking, it will give away 10% of 5GB = 500MB in each iteration and only give up a maximum of 8% of the cache, which is 8 GB at the maximum. Note that if your heap usage regresses by more than 8 GB, this means that cachelib can no longer shrink itself to save you from dipping below your expected 10 GB head room.
+For example, if your `config.size` was 100 GB and you are running on a system with 144 GB, with intent to have free memory around 10 GB. Setting `lowerLimit=10GB`, `upperLimit=15GB`, `maxAdvisePercentPerIter=10`, `maxAdvisePercent=8` would make cachelib give away cache memory when free memory is below 10 GB and grow back the cache when free memory jumps above 15 GB. While shrinking, it will give away 10% * (15GB - 10GB) = 500MB in each iteration and only give up a maximum of 8% of the cache, which is 8 GB at the maximum. Note that if your heap usage regresses by more than 8 GB, this means that cachelib can no longer shrink itself to save you from dipping below your expected 10 GB head room.
 
 ### Resident memory mode
 
@@ -52,23 +52,22 @@ Your process may be running inside a container where a OOM is a result of your p
 config.enableMemoryMonitor(
     std::chrono::seconds(interval),
     memoryMonitoringConfig,
-    maxResizePerIterationPercent,
     std::shared_ptr<facebook::cachelib::LruTailAgeStrategy>());
 ```
 
 
-The semantics of `interval`, `memoryMonitoringConfig`, and `strategy` remains the same as those defined in free memory monitor mode. The following `memoryMonitoringConfig` parameters are different to reflect the process RSS:
+The semantics of `interval`, `memoryMonitoringConfig`, and `strategy` remains the same as those defined in free memory monitor mode. The following `memoryMonitoringConfig` parameters are different to reflect the process RSS (used in exactly opposite ways to `FreeMemory` mode):
 
 * `mode`
-Specifies resident memory monitoring mode. MemoryMonitor::FreeMemory
-* `minProcessSize`
+Specifies resident memory monitoring mode: `MemoryMonitor::ResidentMemory`
+* `lowerLimitGB`
 Process RSS size at which the cachelib can grow back the shrunken cache.
-* `maxProcessSize`
+* `upperLimitGB`
 Process RSS size at which cachelib shrinks the cache to keep the process RSS below the configured limit.
-* `reclaimRateLimitWindow`
+* `reclaimRateLimitWindowSecs`
 Growing cache while process RSS size is increasing can cause OOMs. This configuration specifies a window of time over which rate of increase in process RSS size is monitored to throttle growing cache.
 
-For example, if you have configured 100 GB cache on a 144 GB container. Setting `maxProcessSize=120GB` and `minProcessSize=110GB` tells cachelib to start shrinking the cache when the process RSS grows beyond 120 GB. When the regression goes away and the process RSS is below 110 GB, cachelib slowly grows back the cache memory until the process RSS reaches 120 GB.
+For example, if you have configured 100 GB cache on a 144 GB container. Setting `upperLimit=120GB` and `lowerLimit=110GB` tells cachelib to start shrinking the cache when the process RSS grows beyond 120 GB. When the regression goes away and the process RSS is below 110 GB, cachelib slowly grows back the cache memory until the process RSS reaches 120 GB.
 
 Below is a diagram for how Memory Monitor works in RSS mode. For free-memory mode, the upper and lower bounds are reversed.
 
@@ -86,14 +85,19 @@ When using memory monitor, call the `getCacheMemoryStats()` method to get the cu
 ```cpp
 struct CacheMemoryStats {
   // current memory used for cache in bytes. This excludes the memory used for
-  // headers. This can change as memory is advised and reclaimed.
-  size_t cacheSize{0};
+  // slab headers and the memory returned temporarily to system (i.e., advised).
+  size_t ramCacheSize{0};
 
-  // regular pool memory size in bytes
-  size_t regularCacheSize{0};
+  // configured total ram cache size, excluding memory used for slab headers.
+  size_t configuredRamCacheSize{0};
 
-  // compact cache pool memory size in bytes
-  size_t compactCacheSize{0};
+  // configured regular pool memory size in bytes.
+  // the actually used size may be less than this
+  size_t configuredRamCacheRegularSize{0};
+
+  // configured compact cache pool memory size in bytes
+  // the actually used size may be less than this
+  size_t configuredRamCacheCompactSize{0};
 
   // current advised away memory size in bytes.
   size_t advisedSize{0};
@@ -107,7 +111,16 @@ struct CacheMemoryStats {
   // size of the nvm cache in addition to the ram cache.
   size_t nvmCacheSize{0};
 
+  // amount of memory available on the host
+  size_t memAvailableSize{0};
+
+  // rss size of the process
+  size_t memRssSize{0};
+
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
+
+  // returne usable portion of the cache size
+  size_t usableRamCacheSize() const { return ramCacheSize; }
 };
 ```

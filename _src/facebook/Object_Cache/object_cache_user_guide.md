@@ -147,8 +147,10 @@ The basic idea is:
 ```
 Example:
 ```cpp
+#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
+
 // initialize memory tracker only at the beginning
-ThreadMemoryTracke tMemTracker;
+cachelib::objcache2::ThreadMemoryTracker tMemTracker;
 ...
 
 auto beforeMemUsage = tMemTracker.getMemUsageBytes();
@@ -201,12 +203,11 @@ void init() {
 To add objects to object-cache, call `insertOrReplace` or `insert` API:
 ```cpp
 template <typename T>
-std::pair<bool, std::shared_ptr<T>> insertOrReplace(
+std::tuple<bool, std::shared_ptr<T>, std::shared_ptr<T>> insertOrReplace(
     folly::StringPiece key,
     std::unique_ptr<T> object,
     size_t objectSize = 0,
-    uint32_t ttlSecs = 0,
-    std::shared_ptr<T>* replacedPtr = nullptr);
+    uint32_t ttlSecs = 0);
 
 template <typename T>
 std::pair<AllocStatus, std::shared_ptr<T>> insert(folly::StringPiece key,
@@ -217,7 +218,7 @@ std::pair<AllocStatus, std::shared_ptr<T>> insert(folly::StringPiece key,
 - `insertOrReplace`:
   - Insert an object into the cache with a given key.
   - If the key exists in the cache, it will be replaced with new object.
-  - Return a pair of allocation status (`kSuccess` or `kAllocError`) and `shared_ptr` of newly inserted object. Note that even if the object is not successfully inserted, it will still be converted to a `shared_ptr` and returned.
+  - Return a tuple of allocation status (`kSuccess` or `kAllocError`) , `shared_ptr` of newly inserted object (even if the object is not successfully inserted, it will still be converted to a `shared_ptr` and returned), and `shared_ptr` of the old object that has been replaced (if no replacement happened, `nullptr` will be returned).
 - `insert`:
   - Unique insert an object into the cache with a given key.
   - If the key exists in the cache, the new object will NOT be inserted.
@@ -232,61 +233,71 @@ Parameters:
     - for size-aware ones, **MUST provide a non-zero value** (check out ["how to calculate object size"](#how-to-calculate-object-size))
   - `ttlSecs`: Time To Live(seconds) for the object
     - default to `0` means object has no expiring time.
-  - `replacedPtr`: pointer to receive the replaced object
-    - `insertOrReplace` API only
-    - default to `nullptr`
-    - set a non-nullptr value if you want to get the replaced object
 
 Example(non-size-aware):
 ```cpp
 ...
-auto [allocStatus, ptr] = objcache->insertOrReplace(
-    key, std::move(foo), 0 /*objectSize tracking is not enabled*/, ttlSecs /*optional*/);
+auto [allocStatus, ptr, oldPtr] =
+    objcache->insertOrReplace(key,
+                              std::move(foo),
+                              0 /*objectSize tracking is not enabled*/,
+                              ttlSecs /*optional*/);
 if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-        ...
-        return ptr;
+  ...
+  return ptr;
 } else { // ObjectCache::AllocStatus::kAllocError
-    ...
+  ...
 }
 ```
 
 ```cpp
 ...
-auto [allocStatus, ptr] = objcache->insert(
-    key, std::move(foo), 0 /*objectSize tracking is not enabled*/, ttlSecs /*optional*/);
+auto [allocStatus, ptr] =
+    objcache->insert(key,
+                     std::move(foo),
+                     0 /*objectSize tracking is not enabled*/,
+                     ttlSecs /*optional*/);
 if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-        ...
-        return ptr;
+  ...
+  return ptr;
 } else if (allocStatus == ObjectCache::AllocStatus::kKeyAlreadyExists) {
-    ...
+  ...
 } else { // ObjectCache::AllocStatus::kAllocError
-    ...
+  ...
 }
 ```
 
 Example(size-aware):
 ```cpp
 ...
-auto [allocStatus, ptr] = objcacheSizeAware->insertOrReplace(key, std::move(foo), objectSize /* must be non-zero */, ttlSecs /*optional*/);
+auto [allocStatus, ptr, oldPtr] =
+    objcacheSizeAware->insertOrReplace(key,
+                                       std::move(foo),
+                                       objectSize /* must be non-zero */,
+                                       ttlSecs /*optional*/);
 if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-        ...
-        return ptr;
+  ...
+  return ptr;
 } else { // ObjectCache::AllocStatus::kAllocError
-    ...
+  ...
 }
 ...
 ```
 
 ```cpp
 ...
-auto [allocStatus, ptr] = objcacheSizeAware->insert(key, std::move(foo), objectSize /* must be non-zero*/, ttlSecs /*optional*/);
+auto [allocStatus, ptr] =
+    objcacheSizeAware->insert(key,
+                              std::move(foo),
+                              objectSize /* must be non-zero*/,
+                              ttlSecs /*optional*/);
 if (allocStatus == ObjectCache::AllocStatus::kSuccess) {
-    ...
-    return ptr;
+  ...
+  return ptr;
 } else if (allocStatus == ObjectCache::AllocStatus::kKeyAlreadyExists) {
-    ...
+  ...
 } else { // ObjectCache::AllocStatus::kAllocError
-    ...
+  ...
 }
 ...
 ```
@@ -353,7 +364,10 @@ To enable cache persistence, you need to configure the following parameters:
   - cache metadata will be saved in "persistBasefilePath";
   - objects will be saved in "persistBasefilePath_i", i in [0, threadCount)
 - `serializeCallback`: callback to serialize an object, used for object persisting
+  - it takes `ObjectCache::Serializer` which has a `serialize<T>()` API that serializes the object of type `T` and returns a `folly::IOBuf`.
 - `deserializeCallback`: callback to deserialize an object, used for object recovery
+  - it takes `ObjectCache::Deserializer` which has a `deserialize<T>()` API that deserializes the object of type `T` and inserts it to the cache; returns `true` when the insertion is successful.
+
 
 ### Configure cache persistence
 Example (single-type):
@@ -366,7 +380,7 @@ config.enablePersistence(threadCount,
                              return serializer.serialize<ThriftType>();
                            },
                           [&](ObjectCache::Deserializer deserializer) {
-                             deserializer.deserialize<ThriftType>();
+                             return deserializer.deserialize<ThriftType>();
                            });
 
 
@@ -391,14 +405,11 @@ config.enablePersistence(threadCount,
                           [&](ObjectCache::Deserializer deserializer) {
                      switch (user_defined_getType(serializer.key)) {
                          case user_defined_Type::ThriftType1:
-                              deserializer.deserialize<ThriftType1>();
-                              break;
+                              return deserializer.deserialize<ThriftType1>();
                          case user_defined_Type::ThriftType2:
-                              deserializer.deserialize<ThriftType2>();
-                              break;
+                              return deserializer.deserialize<ThriftType2>();
                          case user_defined_Type::ThriftType3:
-                              deserializer.deserialize<ThriftType3>();
-                              break;
+                              return deserializer.deserialize<ThriftType3>();
                          default:
                               …
                            });

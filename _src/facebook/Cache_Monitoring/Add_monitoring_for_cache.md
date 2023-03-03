@@ -25,7 +25,7 @@ void initializeCache() {
       .validate();
   cache = std::make_unique<Cache>(config);
   default_pool =
-      cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
+      cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 }
 ```
 

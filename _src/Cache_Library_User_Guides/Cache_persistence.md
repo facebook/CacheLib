@@ -53,7 +53,7 @@ enum class ShutDownRes { kSuccess = 0, kFileDeleted, kFailedWrite }
 
 ## Restore a persistent cache
 
-On start up, try to use the following constructor to attach to your previous instance of cache. Upon failure, you can create a new one like before. A common pattern that many cachelib users do is to try to always attach on startup; if attach fails, which will throw an exception, catch the exception and then try to create a new cache.
+On start up, try to use the following constructor to attach to your previous instance of cache. Upon failure, you can create a new one like before. A common pattern that many cachelib users do is to try to always attach on startup; if attach fails, which will throw an exception, catch the exception and then try to create a new cache. Also, please note that the pools should not be added again if the attach has been succeeded.
 
 
 ```cpp
@@ -62,10 +62,12 @@ config.setCacheSize(/* this must be the same size you specified before */);
 config.enableCachePersistence(
     /* this must be the same cache directory you specified before */);
 
+bool attached = false;
 std::unique_ptr<Cache> cache;
 try {
   cache = std::make_unique<Cache>(Cache::SharedMemAttach, config);
   // Cache is now restored
+  attached = true;
 } catch (const std::exception& ex) {
   // Attaching failed. Create a new one but make sure that
   // the old cache is destroyed before creating a new one.
@@ -74,6 +76,11 @@ try {
   cache.reset();
   std::cerr << "Couldn't attach to cache: " << ex.what() << std::endl;
   cache = std::make_unique<Cache>(Cache::SharedMemNew, config);
+}
+
+if (!attached) {
+  // Add pool only if the cache is not restored above
+  cache->addPool("default", cache->getCacheMemoryStats().ramCacheSize);
 }
 ```
 

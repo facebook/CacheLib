@@ -41,7 +41,7 @@ For example:
 ```cpp
 auto poolId = cache->addPool(
   "default_pool",
-  cache->getCacheMemoryStats().cacheSize
+  cache->getCacheMemoryStats().ramCacheSize
 );
 WriteHandle handle = cache->allocate(poolId, "key1", 1024);
 ```

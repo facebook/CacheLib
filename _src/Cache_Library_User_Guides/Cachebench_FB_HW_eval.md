@@ -17,10 +17,11 @@ sufficient free memory (50+GB) and SSD capacity (1TB).
 * SSD Capacity: 100GB or more available capacity
 * Internet connection capable of accessing github.com and installing packages
 
-## Set up the SSD devices using mdraid
+## Set up the SSD devices
 
-To gather SSD performance metrics, the SSD must be setup first. An example
-below sets up a raid device to handle two ssds being used by CacheBench.
+To gather SSD performance metrics, the SSD must be setup first. Cachebench (and CacheLib) supports using various types of devices for NVM cache including a raw block device or a regular file. When one wants to use multiple SSDs as NVM cache, the CacheLib also provides a native support for RAID0 (i.e., striping).
+
+Optionally, as an example, an user can setup and use md devices as follows. In this example, the md device is created from two ssd devices to be used as a raw block device in CacheBench.
 
 ```sh
 mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme1n1 /dev/nvme2n1
@@ -142,7 +143,7 @@ mdadm --create /dev/md0 --force --raid-devices=2 --level=0 --chunk=256 /dev/nvme
     make install
     ```
 
-See [build and installation](/docs/installation/installation) for further details.
+See [build and installation](/docs/installation) for further details.
 
 ## Running the benchmark for SSD perf testing
 
@@ -177,22 +178,72 @@ Cachebench has three configs packaged for SSD validation. These are under `test_
     ./cachebench -json_test_config test_configs/ssd_perf/kvcache_l2_wc/config.json —progress_stats_file=/tmp/mc-l2-wc.log
     ```
 
-## Tuning the workload and cache parameters
+### Tuning the workload and cache parameters
 
 For a full list of options that can be configured, see [configuring cachebench](Configuring_cachebench_parameters)
 
-1. **Duration of Replay** - To run cachebench operation for longer,
+1. **Target QPS** - The target QPS (Query/Transactions Per Second) can be configured
+   using `opRatePerSec` and `opRateBurstSize` which controls the parameter of
+   token-bucket
+2. **Duration of Replay** - To run cachebench operation for longer,
    increase the `numOps` appropriately in the config file.
-2. **Device Info** - Device info is configured in the config file
+3. **Device Info** - Device info is configured in the config file
    using the `nvmCachePaths` option.  If you would rather use a
    filesystem based cache, pass the appropriate path through
    `nvmCachePaths`.  The benchmark will create a single file
    under that path corresponding to the configured `nvmCacheSizeMB`
-3. **Watching Progress** -  While the benchmark runs, you can monitor the
+4. **Watching Progress** -  While the benchmark runs, you can monitor the
    progress so far. The interval for progress update can be configured
    using the `--progress` and specifying a duration in seconds.
    If `--progress-stats-file` is also specified, on every progress
    interval, `cachebench` would log the internal stats to the specified file.
+## Running cachebench with the trace workload
+
+Meta is sharing anonymized traces captured from large scale production cache services. These traces are licensed under the same license as CacheLib. They are meant to help academic and industry researchers to optimize for our caching workloads. One can freely download it from our AWS S3 bucket and run the CacheBench to replay the trace with varying configuration as follows.
+
+1. Install and setup the AWS CLI
+2. Download the tracedata
+   ```sh
+   $ aws s3 ls s3://cachelib-workload-sharing/pub/kvcache/202206/
+   2023-02-09 13:37:50       1374 config_kvcache.json
+   2023-02-09 13:38:58 4892102575 kvcache_traces_1.csv
+   2023-02-09 13:38:58 4814294537 kvcache_traces_2.csv
+   2023-02-09 13:38:58 4678364393 kvcache_traces_3.csv
+   2023-02-09 13:38:58 4734675702 kvcache_traces_4.csv
+   2023-02-09 13:38:58 4810857756 kvcache_traces_5.csv
+   $ aws s3 cp s3://cachelib-workload-sharing/pub/kvcache/202206/ ./ --recursive --no-sign-request
+   ```
+3. Modify the test config as needed (see following section)
+   ```sh
+   $ vi ./config_kvcache.json
+   ```
+
+4. Execute the trace workload
+    ```sh
+    ./cachebench -json_test_config ./config_kvcache.json —progress_stats_file=/tmp/kvcache-trace.log
+    ```
+
+### List of traces
+The list of traces uploaded are as follows
+
+* `kvcache/202206`
+   * Those are traces captured for 5 consecutive days from a Meta's key-value cache cluster consisting of 500 hosts
+   * Each host uses (roughly) 42 GB of DRAM and 930 GB of SSD for caching
+   * The sampling ratio was 1/50'000
+
+### Resource Scaling or Trace Amplifcation
+
+The trace is captured at a certain sampling ratio. For example, the `kvcache/202206` is sampled at the ratio of 1/50'000 from 500 hosts. This means that the trace data contains the samples amount to 1/100 of those handled by each host on average. So, in order to get the similar results from the cachebench simulation, either the cache resource or the trace data needs to be scaled accordingly.
+
+The resource scaling is useful when the required resources (e.g., NVM cache 1TB) are not available in the simulation system or when one is interested in iterating fast with sacrificing accuracy of some metrics. The resource scaling can be done by modifying the `cache_config` in the cachebench test config.
+
+1. **cacheSizeMB** - This controls the DRAM cache size
+2. **nvmCacheSizeMB** - This controls the size of NVM cache
+
+Amplifying the trace data is useful to achieve the highest accuracy of the simulation. The cachebench supports amplifying the trace data by amplifying the key population; specifically, when cachebench replays the trace entry, it duplicates each trace entry by specified number of times (i.e., amplification factor) by appending suffixes ranging from `0` to `k - 1` to the key for the amplification factor of `k`. The trace amplifcation factor can be specified in `test_config` section as part of `replayGeneratorConfig`.
+
+1. **ampFactor** - specifies the amplification factor for replay generator
+
 
 ## Getting the Results
 
