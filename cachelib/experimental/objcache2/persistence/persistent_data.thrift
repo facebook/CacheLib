@@ -17,12 +17,12 @@
 namespace cpp2 facebook.cachelib.objcache2.persistence
 
 struct Item {
-  1: string key,
-  2: string payload,
-  3: i32 objectSize,
-  4: i32 expiryTime,
+  1: string key;
+  2: string payload;
+  3: i32 objectSize;
+  4: i32 expiryTime;
 }
 
 struct Metadata {
-  1: i32 threadCount,
+  1: i32 threadCount;
 }
