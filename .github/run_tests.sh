@@ -61,6 +61,10 @@ if [[ "$MD_OUT" != "$GITHUB_STEP_SUMMARY" ]]; then
   echo "Time started: $(date)" > $MD_OUT
 fi
 
+echo "See Summary page of job for a table of test results and log excerpts"
+echo 
+
+
 dir=$(dirname "$0")
 cd "$dir/.." || die "failed to change-dir into $dir/.."
 test -d cachelib || die "failed to change-dir to expected root directory"
