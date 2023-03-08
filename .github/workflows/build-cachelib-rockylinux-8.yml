@@ -19,7 +19,7 @@ on:
      - cron:  '0 15 * * 2,4,6'
 jobs:
   build-cachelib-centos8-latest:
-    name: "RockyLinux-8.6 - Build CacheLib with all dependencies"
+    name: "RockyLinux-8.6 Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "rockylinux:8.6"

@@ -19,7 +19,7 @@ on:
      - cron:  '0 9 * * *'
 jobs:
   build-cachelib-centos8-latest:
-    name: "CentOS/8.5 - Build CacheLib with all dependencies"
+    name: "CentOS/8.5 Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "centos:latest"

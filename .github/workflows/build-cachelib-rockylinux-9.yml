@@ -19,7 +19,7 @@ on:
      - cron:  '0 17 * * *'
 jobs:
   build-cachelib-rockylinux-9:
-    name: "RockyLinux-9.0 - Build CacheLib with all dependencies"
+    name: "RockyLinux-9.0 Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "rockylinux:9.0"

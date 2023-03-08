@@ -19,7 +19,7 @@ on:
      - cron:  '0 19 * * *'
 jobs:
   build-cachelib-fedora-36:
-    name: "Fedora 36 - Build CacheLib with all dependencies"
+    name: "Fedora 36 Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "fedora:36"

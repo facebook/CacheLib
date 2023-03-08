@@ -24,7 +24,7 @@ on:
     - cron:  '0 5 * * 2,4,6'
 jobs:
   build-cachelib-ubuntu-18:
-    name: "Ubuntu-18 - Build CacheLib with all dependencies"
+    name: "Ubuntu-18 Build & Test"
     runs-on: ubuntu-latest
     container: "ubuntu:18.04"
     steps:

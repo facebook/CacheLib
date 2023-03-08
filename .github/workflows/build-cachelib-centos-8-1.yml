@@ -20,7 +20,7 @@ on:
 jobs:
   build-cachelib-centos8-1-1911:
     #if: "!contains(github.event.head_commit.author.name, 'svcscm')"
-    name: "CentOS/8.1.1911 - Build CacheLib with all dependencies"
+    name: "CentOS/8.1.1911 Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "centos:8.1.1911"

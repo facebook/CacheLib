@@ -20,7 +20,7 @@ on:
     - cron:  '0 5 * * 1,3,5'
 jobs:
   build-cachelib-ubuntu-20:
-    name: "Ubuntu-20 - Build CacheLib with all dependencies"
+    name: "Ubuntu-20 Build & Test"
     runs-on: ubuntu-20.04
     steps:
       - name: "Show Head Commit"

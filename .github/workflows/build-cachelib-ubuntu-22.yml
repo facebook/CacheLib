@@ -20,7 +20,7 @@ on:
     - cron:  '0 7 * * *'
 jobs:
   build-cachelib-ubuntu-22:
-    name: "Ubuntu-22 - Build CacheLib with all dependencies"
+    name: "Ubuntu-22 Build & Test"
     runs-on: ubuntu-22.04
     steps:
       - name: "Show Head Commit"
