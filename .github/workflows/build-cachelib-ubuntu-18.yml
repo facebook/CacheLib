@@ -72,6 +72,7 @@ jobs:
       - name: "git: ignore unsafe-directories"
         run: git config --global --add safe.directory '*'
       - name: "checkout sources"
+        # v1 needed for Ubuntu 18 due to old Git version
         uses: actions/checkout@v1
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
@@ -100,7 +101,7 @@ jobs:
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -t cachelib
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cachelib-cmake-logs

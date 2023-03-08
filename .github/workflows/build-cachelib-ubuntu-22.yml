@@ -52,7 +52,7 @@ jobs:
           echo === g++ -v ===
           g++ -v
       - name: "checkout sources"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
@@ -80,7 +80,7 @@ jobs:
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -d -t cachelib
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cachelib-cmake-logs
