@@ -794,8 +794,17 @@ void Cache<Allocator>::setUint64ToItem(WriteHandle& handle,
 template <typename Allocator>
 void Cache<Allocator>::setStringItem(WriteHandle& handle,
                                      const std::string& str) {
-  auto ptr = reinterpret_cast<uint8_t*>(getMemory(handle));
-  std::memcpy(ptr, str.data(), std::min<size_t>(str.size(), getSize(handle)));
+  auto dataSize = getSize(handle);
+  if (dataSize < 1)
+    return;
+
+  auto ptr = reinterpret_cast<char*>(getMemory(handle));
+  std::strncpy(ptr, str.c_str(), dataSize);
+
+  // Make sure the copied string ends with null char
+  if (str.size() + 1 > dataSize) {
+    ptr[dataSize - 1] = '\0';
+  }
 }
 
 template <typename Allocator>

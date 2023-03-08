@@ -254,9 +254,7 @@ class CacheStressor : public Stressor {
     }
 
     if (!itemValue.empty()) {
-      // Add the null character to ensure this is a proper c string.
-      // TODO(T141356292): Clean this up to avoid allocating a new string
-      cache_->setStringItem(handle, itemValue + "\0");
+      cache_->setStringItem(handle, itemValue);
     } else {
       cache_->setStringItem(handle, hardcodedString_);
     }
