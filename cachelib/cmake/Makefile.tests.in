@@ -20,6 +20,8 @@ MARKERS_FAIL=$(LOGS:%=%.fail)
 OUTPUT=cachelib-test-summary.log
 
 .PHONY: all clean
+# Avoid deleting test logs if interrupted (e.g., timeout)
+.PRECIOUS: ($LOGS) $(OUTPUT)
 
 all: $(OUTPUT)
 
@@ -86,6 +88,7 @@ $(LOGS): %.log: %
 	else \
 		touch "$@.fail" ; \
 	fi
+	@echo Completed $^
 
 clean:
 	@rm -f $(LOGS) $(MARKERS_OK) $(MARKERS_FAIL) $(OUTPUT)

@@ -114,6 +114,8 @@ jobs:
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -d -t cachelib
+      - name: "Run tests"
+        run: ./.github/run_tests.sh
       - uses: actions/upload-artifact@v3
         if: failure()
         with:
@@ -125,3 +127,9 @@ jobs:
             build-cachelib/**/Makefile
           if-no-files-found: warn
           retention-days: 1
+      - uses: actions/upload-artifact@v3
+        with:
+          name: cachelib-test-logs
+          path: opt/cachelib/tests/*.log
+          if-no-files-found: warn
+          retention-days: 7
