@@ -59,6 +59,16 @@ jobs:
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
         run: ./contrib/update-submodules.sh
+      - name: "Use cache for built libraries of submodules"
+        uses: actions/cache@v3
+        id: cache-submodules
+        with:
+          key: ${{ github.job }}-${{ hashFiles('.git/modules/*/HEAD') }}
+          path: |
+            opt/cachelib/lib
+            opt/cachelib/include
+            opt/cachelib/bin/thrift1
+            opt/cachelib/bin/fizz*
       - name: "Install dependency: zstd"
         run: ./contrib/build-package.sh -j -v -i zstd
       - name: "Install dependency: googleflags"
@@ -76,12 +86,16 @@ jobs:
           # see: https://aur.archlinux.org/packages/folly#comment-862543
           sed -i '$aset(LIBDWARF_INCLUDE_DIRS "/usr/include/libdwarf-0")' cachelib/external/folly/CMake/FindLibDwarf.cmake
           ./contrib/build-package.sh -S -j -v -i folly
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fizz"
         run: ./contrib/build-package.sh -j -v -i fizz
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: wangle"
         run: ./contrib/build-package.sh -j -v -i wangle
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fbthrift"
         run: ./contrib/build-package.sh -j -v -i fbthrift
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -d -t cachelib
