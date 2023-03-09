@@ -132,32 +132,28 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   RefcountWithFlags& operator=(RefcountWithFlags&&) = delete;
 
   // Bumps up the reference count only if the new count will be strictly less
-  // than or equal to the maxCount.
-  // @return true if refcount is bumped. false otherwise.
-  FOLLY_ALWAYS_INLINE bool incRef() noexcept {
-    Value* const refPtr = &refCount_;
-    unsigned int nCASFailures = 0;
-    constexpr bool isWeak = false;
-    Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
+  // than or equal to the maxCount and the item is not exclusive
+  // @return true if refcount is bumped. false otherwise (if item is exclusive)
+  // @throw  exception::RefcountOverflow if new count would be greater than
+  // maxCount
+  FOLLY_ALWAYS_INLINE bool incRef() {
+    auto predicate = [](const Value curValue) {
+      Value bitMask = getAdminRef<kExclusive>();
 
-    while (true) {
-      const Value newCount = oldVal + static_cast<Value>(1);
-      if (UNLIKELY((oldVal & kAccessRefMask) == (kAccessRefMask))) {
-        return false;
+      const bool exlusiveBitIsSet = curValue & bitMask;
+      if (UNLIKELY((curValue & kAccessRefMask) == (kAccessRefMask))) {
+        throw exception::RefcountOverflow("Refcount maxed out.");
       }
 
-      if (__atomic_compare_exchange_n(refPtr, &oldVal, newCount, isWeak,
-                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
-        return true;
-      }
+      // Check if the item is not marked for eviction
+      return !exlusiveBitIsSet || ((curValue & kAccessRefMask) != 0);
+    };
 
-      if ((++nCASFailures % 4) == 0) {
-        // this pause takes up to 40 clock cycles on intel and the lock cmpxchgl
-        // above should take about 100 clock cycles. we pause once every 400
-        // cycles or so if we are extremely unlucky.
-        folly::asm_volatile_pause();
-      }
-    }
+    auto newValue = [](const Value curValue) {
+      return (curValue + static_cast<Value>(1));
+    };
+
+    return atomicUpdateValue(predicate, newValue);
   }
 
   // Bumps down the reference count
@@ -167,33 +163,38 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   // @throw  RefcountUnderflow when we are trying to decremenet from 0
   //         refcount and have a refcount leak.
   FOLLY_ALWAYS_INLINE Value decRef() {
-    Value* const refPtr = &refCount_;
-    unsigned int nCASFailures = 0;
-    constexpr bool isWeak = false;
-
-    Value oldVal = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
-    while (true) {
-      const Value newCount = oldVal - static_cast<Value>(1);
-      if ((oldVal & kAccessRefMask) == 0) {
+    auto predicate = [](const Value curValue) {
+      if ((curValue & kAccessRefMask) == 0) {
         throw exception::RefcountUnderflow(
             "Trying to decRef with no refcount. RefCount Leak!");
       }
+      return true;
+    };
 
-      if (__atomic_compare_exchange_n(refPtr, &oldVal, newCount, isWeak,
-                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
-        return newCount & kRefMask;
-      }
-      if ((++nCASFailures % 4) == 0) {
-        // this pause takes up to 40 clock cycles on intel and the lock cmpxchgl
-        // above should take about 100 clock cycles. we pause once every 400
-        // cycles or so if we are extremely unlucky
-        folly::asm_volatile_pause();
-      }
-    }
+    Value retValue;
+    auto newValue = [&retValue](const Value curValue) {
+      retValue = (curValue - static_cast<Value>(1));
+      return retValue;
+    };
+
+    auto updated = atomicUpdateValue(predicate, newValue);
+    XDCHECK(updated);
+
+    return retValue & kRefMask;
   }
 
-  // Return refcount excluding control bits and flags
-  Value getAccessRef() const noexcept { return getRaw() & kAccessRefMask; }
+  // Return refcount excluding moving refcount, control bits and flags.
+  Value getAccessRef() const noexcept {
+    auto raw = getRaw();
+    auto accessRef = raw & kAccessRefMask;
+
+    if ((raw & getAdminRef<kExclusive>()) && accessRef >= 1) {
+      // if item is moving, ignore the extra ref
+      return accessRef - static_cast<Value>(1);
+    } else {
+      return accessRef;
+    }
+  }
 
   // Return access ref and the admin ref bits
   Value getRefWithAccessAndAdmin() const noexcept {
@@ -246,65 +247,160 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   }
 
   /**
-   * The following four functions are used to track whether or not
-   * an item is currently in the process of being moved. This happens during a
-   * slab rebalance or resize operation or during eviction.
+   * The following two functions correspond to whether or not an item is
+   * currently in the process of being evicted.
    *
-   * An item can only be marked exclusive when `isInMMContainer` returns true
-   * and the item is not yet marked as exclusive. This operation is atomic.
+   * An item that is marked for eviction prevents from obtaining a handle to
+   * the item (incRef() will return false). This guarantees that eviction of
+   * marked item will always suceed.
    *
-   * User can also query if an item "isOnlyExclusive". This returns true only
-   * if the refcount is 0 and only the exclusive bit is set.
+   * An item can only be marked for eviction when `isInMMContainer` returns true
+   * and item does not have `kExclusive` bit set and access ref count is 0.
+   * This operation is atomic.
    *
-   * Unmarking exclusive does not depend on `isInMMContainer`.
-   * Unmarking exclusive will also return the refcount at the moment of
-   * unmarking.
+   * When item is marked for  eviction, `kExclusive` bit is set and ref count is
+   * zero.
+   *
+   * Unmarking for eviction clears the `kExclusive` bit. `unamrkForEviction`
+   * does not depend on `isInMMContainer` nor `isAccessible`
    */
-  bool markExclusive() noexcept {
-    Value bitMask = getAdminRef<kExclusive>();
-    Value conditionBitMask = getAdminRef<kLinked>();
+  bool markForEviction() noexcept {
+    Value linkedBitMask = getAdminRef<kLinked>();
+    Value exclusiveBitMask = getAdminRef<kExclusive>();
 
-    Value* const refPtr = &refCount_;
-    unsigned int nCASFailures = 0;
-    constexpr bool isWeak = false;
-    Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
-    while (true) {
-      const bool flagSet = curValue & conditionBitMask;
-      const bool alreadyExclusive = curValue & bitMask;
-      if (!flagSet || alreadyExclusive) {
+    auto predicate = [linkedBitMask, exclusiveBitMask](const Value curValue) {
+      const bool unlinked = !(curValue & linkedBitMask);
+      const bool alreadyExclusive = curValue & exclusiveBitMask;
+
+      if (unlinked || alreadyExclusive) {
+        return false;
+      }
+      if ((curValue & kAccessRefMask) != 0) {
         return false;
       }
 
-      const Value newValue = curValue | bitMask;
-      if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
-                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
-        XDCHECK(newValue & conditionBitMask);
-        return true;
-      }
+      return true;
+    };
 
-      if ((++nCASFailures % 4) == 0) {
-        // this pause takes up to 40 clock cycles on intel and the lock cmpxchgl
-        // above should take about 100 clock cycles. we pause once every 400
-        // cycles or so if we are extremely unlucky.
-        folly::asm_volatile_pause();
-      }
-    }
+    auto newValue = [exclusiveBitMask](const Value curValue) {
+      return curValue | exclusiveBitMask;
+    };
+
+    return atomicUpdateValue(predicate, newValue);
   }
-  Value unmarkExclusive() noexcept {
+
+  Value unmarkForEviction() noexcept {
+    XDCHECK(isMarkedForEviction());
     Value bitMask = ~getAdminRef<kExclusive>();
     return __atomic_and_fetch(&refCount_, bitMask, __ATOMIC_ACQ_REL) & kRefMask;
   }
-  bool isExclusive() const noexcept {
-    return getRaw() & getAdminRef<kExclusive>();
+
+  bool isMarkedForEviction() const noexcept {
+    auto raw = getRaw();
+    return (raw & getAdminRef<kExclusive>()) && ((raw & kAccessRefMask) == 0);
   }
-  bool isOnlyExclusive() const noexcept {
-    // An item is only exclusive when its refcount is zero and only the
-    // exclusive bit among all the control bits is set. This indicates an item
-    // is exclusive to the current thread. No other thread is allowed to
-    // do anything with it.
+
+  /**
+   * The following functions correspond to whether or not an item is
+   * currently in the processed of being moved.
+   *
+   * A `moving` item cannot be recycled nor freed to the allocator. It has
+   * to be unmarked first.
+   *
+   * When moving, internal ref count is always >= 1 and `kExclusive` bit is set
+   * getRefCount does not return the extra ref (it may return 0).
+   *
+   * An item can only be marked moving when `isInMMContainer` returns true
+   * and does not have `kExclusive` bit set.
+   *
+   * User can also query if an item "isOnlyMoving". This returns true only
+   * if the refcount is one and only the exlusive bit is set.
+   *
+   * Unmarking clears `kExclusive` bit and decreses the interanl refCount by 1.
+   * `unmarkMoving` does does not depend on `isInMMContainer`
+   */
+  bool markMoving() {
+    Value linkedBitMask = getAdminRef<kLinked>();
+    Value exclusiveBitMask = getAdminRef<kExclusive>();
+
+    auto predicate = [linkedBitMask, exclusiveBitMask](const Value curValue) {
+      const bool unlinked = !(curValue & linkedBitMask);
+      const bool alreadyExclusive = curValue & exclusiveBitMask;
+
+      if (unlinked || alreadyExclusive) {
+        return false;
+      }
+      if (UNLIKELY((curValue & kAccessRefMask) == (kAccessRefMask))) {
+        throw exception::RefcountOverflow("Refcount maxed out.");
+      }
+
+      return true;
+    };
+
+    auto newValue = [exclusiveBitMask](const Value curValue) {
+      // Set exclusive flag and make the ref count non-zero (to distinguish
+      // from exclusive case). This extra ref will not be reported to the
+      // user
+      return (curValue + static_cast<Value>(1)) | exclusiveBitMask;
+    };
+
+    return atomicUpdateValue(predicate, newValue);
+  }
+
+  Value unmarkMoving() noexcept {
+    XDCHECK(isMoving());
+    auto predicate = [](const Value curValue) {
+      XDCHECK((curValue & kAccessRefMask) != 0);
+      return true;
+    };
+
+    Value retValue;
+    auto newValue = [&retValue](const Value curValue) {
+      retValue =
+          (curValue - static_cast<Value>(1)) & ~getAdminRef<kExclusive>();
+      return retValue;
+    };
+
+    auto updated = atomicUpdateValue(predicate, newValue);
+    XDCHECK(updated);
+
+    return retValue & kRefMask;
+  }
+
+  bool isMoving() const noexcept {
+    auto raw = getRaw();
+    return (raw & getAdminRef<kExclusive>()) && ((raw & kAccessRefMask) != 0);
+  }
+
+  /**
+   * This function attempts to mark item for eviction.
+   * Can only be called on the item that is moving.
+   *
+   * Returns true and marks the item for eviction only if item isOnlyMoving.
+   * Leaves the item marked as moving and returns false otherwise.
+   */
+  bool markForEvictionWhenMoving() {
+    XDCHECK(isMoving());
+
+    auto predicate = [](const Value curValue) {
+      return (curValue & kAccessRefMask) == 1;
+    };
+
+    auto newValue = [](const Value curValue) {
+      XDCHECK((curValue & kAccessRefMask) == 1);
+      return (curValue - static_cast<Value>(1));
+    };
+
+    return atomicUpdateValue(predicate, newValue);
+  }
+
+  bool isOnlyMoving() const noexcept {
+    // An item is only moving when its refcount is one and only the exclusive
+    // bit among all the control bits is set. This indicates an item is already
+    // on its way out of cache.
     auto ref = getRefWithAccessAndAdmin();
-    bool anyOtherBitSet = ref & ~getAdminRef<kExclusive>();
-    if (anyOtherBitSet) {
+    Value valueWithoutExclusiveBit = ref & ~getAdminRef<kExclusive>();
+    if (valueWithoutExclusiveBit != 1) {
       return false;
     }
     return ref & getAdminRef<kExclusive>();
@@ -370,6 +466,39 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   }
 
  private:
+  /**
+   * Helper function to modify refCount_ atomically.
+   *
+   * If predicate(currentValue) is true, then it atomically assigns result
+   * of newValueF(currentValue) to refCount_ and returns true. Otherwise
+   * returns false and leaves refCount_ unmodified.
+   */
+  template <typename P, typename F>
+  bool atomicUpdateValue(P&& predicate, F&& newValueF) {
+    Value* const refPtr = &refCount_;
+    unsigned int nCASFailures = 0;
+    constexpr bool isWeak = false;
+    Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
+    while (true) {
+      if (!predicate(curValue)) {
+        return false;
+      }
+
+      const Value newValue = newValueF(curValue);
+      if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
+                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+        return true;
+      }
+
+      if ((++nCASFailures % 4) == 0) {
+        // this pause takes up to 40 clock cycles on intel and the lock cmpxchgl
+        // above should take about 100 clock cycles. we pause once every 400
+        // cycles or so if we are extremely unlucky.
+        folly::asm_volatile_pause();
+      }
+    }
+  }
+
   template <Flags flagBit>
   static Value getFlag() noexcept {
     static_assert(flagBit >= kNumAccessRefBits + kNumAdminRefBits,
