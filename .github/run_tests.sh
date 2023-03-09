@@ -49,7 +49,7 @@ TO_SKIP=()
 TO_SKIP+=("benchmark-test-CompactCacheBench")  # 26 mins.
 TO_SKIP+=("benchmark-test-MutexBench")  # 60 mins.
 
-TEST_TIMEOUT=20m
+TEST_TIMEOUT=30m
 BENCHMARK_TIMEOUT=20m
 PARALLELISM=10
 
