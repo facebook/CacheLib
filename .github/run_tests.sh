@@ -24,13 +24,15 @@ OPTIONAL=()
 OPTIONAL+=("allocator-test-AllocationClassTest")  # Ubuntu 18 (segfault)
 OPTIONAL+=("allocator-test-AllocatorResizeTypeTest")  # Rocky 8.6
 OPTIONAL+=("allocator-test-AllocatorTypeTest")  # CentOS 8.5, Rocky 8.6
+OPTIONAL+=("allocator-test-BlockCacheTest")  # Rocky 8.6
 OPTIONAL+=("allocator-test-MemoryAllocatorTest")  # Ubuntu 18 (segfault)
 OPTIONAL+=("allocator-test-MM2QTest")  # Ubuntu 18 (segfault)
-OPTIONAL+=("allocator-test-BlockCacheTest")  # Rocky 8.6
 # CentOS 8.1, CentOS 8.5, Debian, Fedora 36, Rocky 9, Rocky 8.6, Ubuntu 18
 OPTIONAL+=("allocator-test-NavySetupTest")
+OPTIONAL+=("allocator-test-SlabAllocatorTest")  # Ubuntu 18
 # CentOS 8.1, CentOS 8.5, Debian, Fedora 36, Rocky 9, Rocky 8.6, Ubuntu 18
 OPTIONAL+=("common-test-UtilTests")
+OPTIONAL+=("datatype-test-MapTest")  # Ubuntu 20
 # CentOS 8.1, Rocky 9, Ubuntu 18
 OPTIONAL+=("navy-test-BlockCacheTest")
 # CentOS 8.1, CentOS 8.5, Debian, Fedora 36, Rocky 9, Ubuntu 18, Ubuntu 20, Ubuntu 22
