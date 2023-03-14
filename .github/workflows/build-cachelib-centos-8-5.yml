@@ -133,3 +133,4 @@ jobs:
           path: opt/cachelib/tests/*.log
           if-no-files-found: warn
           retention-days: 7
+        if: success() || failure()
