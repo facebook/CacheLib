@@ -57,18 +57,24 @@ PARALLELISM=10
 
 print_test_log() {
   logfile=$1
+  # Print last failed test
+  EXP_LOG=$(grep -Pazo \
+      "(?s)\[ RUN[^\[]+\[  FAILED[^\n]+ms\)\n" $logfile \
+    | sed 's/\x0/---------------\n/g')
+  # And contents of last test before core dumps
+  if grep -q -R "core dumped" $logfile; then
+    EXP_LOG+=$'\n'
+    EXP_LOG+=$(tac $logfile | sed '/\[ RUN      \]/q' | tac)
+  fi
   echo "::group::Logs:$logfile"
-  grep -Pazo "(?s)\[ RUN[^\[]+\[  FAILED[^\n]+ms\)\n" $logfile
-  grep "Segmentation fault" -B 3 $logfile
+  echo "$EXP_LOG"
   echo
   echo "::endgroup::"
   echo
 
   echo "#### $logfile" >> $MD_OUT
   echo "\`\`\`" >> $MD_OUT
-  grep -Pazo "(?s)\[ RUN[^\[]+\[  FAILED[^\n]+ms\)\n" $logfile \
-    | sed 's/\x0/---------------\n/g' >> $MD_OUT
-  grep "Segmentation fault" -B 3 $logfile >> $MD_OUT
+  echo "$EXP_LOG" >> $MD_OUT
   echo "\`\`\`" >> $MD_OUT
   echo >> $MD_OUT
 }
@@ -156,14 +162,14 @@ if [[ $N_FAILED -ne 0 ]]; then
 
   echo
   echo "::group::Failures at a glance"
-  grep "Segmentation fault" *.log || true
+  grep "core dumped" *.log || true
   grep "FAILED.*ms" *.log || true
   echo "::endgroup::"
 
   echo >> $MD_OUT
   echo "## Failures at a glance" >> $MD_OUT
   echo "\`\`\`" >> $MD_OUT
-  grep "Segmentation fault" *.log >> $MD_OUT || true
+  grep "core dumped" *.log >> $MD_OUT || true
   grep "FAILED.*ms" *.log >> $MD_OUT || true
   echo "\`\`\`" >> $MD_OUT
 
