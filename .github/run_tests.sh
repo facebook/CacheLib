@@ -30,7 +30,7 @@ OPTIONAL+=("allocator-test-MM2QTest")  # Ubuntu 18 (segfault)
 # CentOS 8.1, CentOS 8.5, Debian, Fedora 36, Rocky 9, Rocky 8.6, Ubuntu 18
 OPTIONAL+=("allocator-test-NavySetupTest")
 OPTIONAL+=("allocator-test-NvmCacheTests")  # Rocky 8.6
-OPTIONAL+=("allocator-test-RefCountTest")  # Rocky 8.6
+OPTIONAL+=("allocator-test-RefCountTest")  # Ubuntu 18
 OPTIONAL+=("allocator-test-SlabAllocatorTest")  # Ubuntu 18
 # CentOS 8.1, CentOS 8.5, Debian, Fedora 36, Rocky 9, Rocky 8.6, Ubuntu 18
 OPTIONAL+=("common-test-UtilTests")
