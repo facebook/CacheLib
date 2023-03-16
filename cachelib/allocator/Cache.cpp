@@ -284,6 +284,25 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   counters_.updateDelta(statPrefix + "reaper.skipped_slabs",
                         stats.numReaperSkippedSlabs);
 
+  counters_.updateDelta(statPrefix + "rebalancer.runs",
+                        stats.rebalancerStats.numRuns);
+  counters_.updateDelta(statPrefix + "rebalancer.rebalanced_slabs",
+                        stats.rebalancerStats.numRebalancedSlabs);
+  counters_.updateCount(statPrefix + "rebalancer.latency.loop_last_ms",
+                        stats.rebalancerStats.lastRebalanceTimeMs);
+  counters_.updateCount(statPrefix + "rebalancer.latency.loop_avg_ms",
+                        stats.rebalancerStats.avgRebalanceTimeMs);
+
+  counters_.updateCount(statPrefix + "rebalancer.latency.release_last_ms",
+                        stats.rebalancerStats.lastReleaseTimeMs);
+  counters_.updateCount(statPrefix + "rebalancer.latency.release_avg_ms",
+                        stats.rebalancerStats.avgReleaseTimeMs);
+
+  counters_.updateCount(statPrefix + "rebalancer.latency.pick_last_ms",
+                        stats.rebalancerStats.lastPickTimeMs);
+  counters_.updateCount(statPrefix + "rebalancer.latency.pick_avg_ms",
+                        stats.rebalancerStats.avgPickTimeMs);
+
   const auto slabReleaseStats = getSlabReleaseStats();
   counters_.updateDelta(statPrefix + "slabs.rebalancer_runs",
                         slabReleaseStats.numSlabReleaseForRebalanceAttempts);

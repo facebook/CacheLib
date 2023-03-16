@@ -103,6 +103,8 @@ RebalanceContext PoolRebalancer::pickVictimByFreeAlloc(PoolId pid) const {
 }
 
 bool PoolRebalancer::tryRebalancing(PoolId pid, RebalanceStrategy& strategy) {
+  const auto begin = util::getCurrentTimeMs();
+
   if (freeAllocThreshold_ > 0) {
     auto ctx = pickVictimByFreeAlloc(pid);
     if (ctx.victimClassId != Slab::kInvalidClassId) {
@@ -114,15 +116,40 @@ bool PoolRebalancer::tryRebalancing(PoolId pid, RebalanceStrategy& strategy) {
     return false;
   }
 
+  auto currentTimeSec = util::getCurrentTimeMs();
   const auto context = strategy.pickVictimAndReceiver(cache_, pid);
+  auto end = util::getCurrentTimeMs();
+  pickVictimStats_.recordLoopTime(end > currentTimeSec ? end - currentTimeSec
+                                                       : 0);
+
   if (context.victimClassId == Slab::kInvalidClassId) {
     XLOGF(DBG,
           "Pool Id: {} rebalancing strategy didn't find an victim",
           static_cast<int>(pid));
     return false;
   }
+  currentTimeSec = util::getCurrentTimeMs();
   releaseSlab(pid, context.victimClassId, context.receiverClassId);
+  end = util::getCurrentTimeMs();
+  releaseStats_.recordLoopTime(end > currentTimeSec ? end - currentTimeSec : 0);
+  rebalanceStats_.recordLoopTime(end > begin ? end - begin : 0);
+
   return true;
+}
+
+RebalancerStats PoolRebalancer::getStats() const noexcept {
+  RebalancerStats stats;
+  stats.numRuns = getRunCount();
+  stats.numRebalancedSlabs = rebalanceStats_.getNumLoops();
+  stats.lastRebalanceTimeMs = rebalanceStats_.getLastLoopTimeMs();
+  stats.avgRebalanceTimeMs = rebalanceStats_.getAvgLoopTimeMs();
+
+  stats.lastReleaseTimeMs = releaseStats_.getLastLoopTimeMs();
+  stats.avgReleaseTimeMs = releaseStats_.getAvgLoopTimeMs();
+
+  stats.lastPickTimeMs = pickVictimStats_.getLastLoopTimeMs();
+  stats.avgPickTimeMs = pickVictimStats_.getAvgLoopTimeMs();
+  return stats;
 }
 
 } // namespace cachelib

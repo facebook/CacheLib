@@ -1146,6 +1146,13 @@ class CacheAllocator : public CacheBase {
     return stats;
   }
 
+  // returns the pool rebalancer stats
+  RebalancerStats getRebalancerStats() const {
+    auto stats =
+        poolRebalancer_ ? poolRebalancer_->getStats() : RebalancerStats{};
+    return stats;
+  }
+
   // return the LruType of an item
   typename MMType::LruType getItemLruType(const Item& item) const;
 

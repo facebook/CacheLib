@@ -289,6 +289,22 @@ struct ReaperStats {
   uint64_t avgTraversalTimeMs{0};
 };
 
+// Stats for reaper
+struct RebalancerStats {
+  uint64_t numRuns{0};
+
+  uint64_t numRebalancedSlabs{0};
+
+  uint64_t lastRebalanceTimeMs{0};
+  uint64_t avgRebalanceTimeMs{0};
+
+  uint64_t lastReleaseTimeMs{0};
+  uint64_t avgReleaseTimeMs{0};
+
+  uint64_t lastPickTimeMs{0};
+  uint64_t avgPickTimeMs{0};
+};
+
 // CacheMetadata type to export
 struct CacheMetadata {
   // allocator_version
@@ -493,6 +509,9 @@ struct GlobalCacheStats {
 
   // stats related to the reaper
   ReaperStats reaperStats;
+
+  // stats related to the pool rebalancer
+  RebalancerStats rebalancerStats;
 
   uint64_t numNvmRejectsByExpiry{};
   uint64_t numNvmRejectsByClean{};

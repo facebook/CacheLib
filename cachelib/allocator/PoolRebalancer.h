@@ -53,7 +53,30 @@ class PoolRebalancer : public PeriodicWorker {
     return stats_.getSlabReleaseEvents(pid);
   }
 
+  RebalancerStats getStats() const noexcept;
+
  private:
+  struct LoopStats {
+    // record the count and the time taken
+    void recordLoopTime(uint64_t msTaken) {
+      numLoops_.fetch_add(1, std::memory_order_relaxed);
+      lastLoopTimeMs_.store(msTaken, std::memory_order_relaxed);
+      totalLoopTimeMs_.fetch_add(msTaken, std::memory_order_relaxed);
+    }
+
+    uint64_t getAvgLoopTimeMs() const {
+      return numLoops_ ? totalLoopTimeMs_ / numLoops_ : 0;
+    }
+    uint64_t getLastLoopTimeMs() const { return lastLoopTimeMs_; }
+    uint64_t getNumLoops() const { return numLoops_; }
+
+   private:
+    // time it took us the last time and the average
+    std::atomic<uint64_t> lastLoopTimeMs_{0};
+    std::atomic<uint64_t> totalLoopTimeMs_{0};
+    std::atomic<uint64_t> numLoops_{0};
+  };
+
   // This will attempt to rebalance by
   //  1. reading the stats from the cache allocator
   //  2. analyzing the stats by using the rebalance strategy
@@ -85,6 +108,11 @@ class PoolRebalancer : public PeriodicWorker {
 
   // slab release stats for this rebalancer.
   ReleaseStats stats_;
+
+  // loop timing stats
+  LoopStats rebalanceStats_;
+  LoopStats releaseStats_;
+  LoopStats pickVictimStats_;
 
   // implements the actual logic of running tryRebalancing and
   // updating the stats
