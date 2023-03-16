@@ -107,9 +107,12 @@ class FastDiscreteDistribution final : public Distribution {
         sizes[i] -=
             facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
         probs[i] -= bucketPct * probs[i];
-        buckets.push_back(static_cast<uint64_t>(objectsSeen * scalingFactor_));
+
+        auto scaledObjects =
+            static_cast<uint64_t>(objectsSeen * scalingFactor_);
+        buckets.push_back(scaledObjects);
         if (bucketOffsets_.size() > 0) {
-          bucketOffsets_.push_back(bucketOffsets_.back() + objectsSeen);
+          bucketOffsets_.push_back(bucketOffsets_.back() + scaledObjects);
         }
         weightSeen = 0.0;
         objectsSeen = 0;
