@@ -58,8 +58,7 @@ class RebalanceStrategy {
 
   struct BaseConfig {};
 
-  explicit RebalanceStrategy(Type strategyType = PickNothingOrTest)
-      : type_(strategyType) {}
+  RebalanceStrategy() = default;
 
   virtual ~RebalanceStrategy() = default;
 
@@ -82,6 +81,8 @@ class RebalanceStrategy {
  protected:
   using PoolState = std::array<detail::Info, MemoryAllocator::kMaxClasses>;
   static const RebalanceContext kNoOpContext;
+
+  explicit RebalanceStrategy(Type strategyType) : type_(strategyType) {}
 
   virtual RebalanceContext pickVictimAndReceiverImpl(const CacheBase&, PoolId) {
     return {};
@@ -174,7 +175,7 @@ class RebalanceStrategy {
                                  const std::function<T()>& impl,
                                  T noOp);
 
-  Type type_{NumTypes};
+  Type type_ = PickNothingOrTest;
 
   // maintain the state of the previous snapshot of pool for every pool.  We
   // ll use this for processing and getting the deltas for some of these.
