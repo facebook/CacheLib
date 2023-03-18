@@ -37,14 +37,12 @@ FreeMemStrategy::FreeMemStrategy(Config config)
 //
 // 2. Pick the first class we find with free memory past the threshold
 RebalanceContext FreeMemStrategy::pickVictimAndReceiverImpl(
-    const CacheBase& cache, PoolId pid) {
+    const CacheBase& cache, PoolId pid, const PoolStats& poolStats) {
   const auto& pool = cache.getPool(pid);
   if (pool.getUnAllocatedSlabMemory() >
       config_.maxUnAllocatedSlabs * Slab::kSize) {
     return kNoOpContext;
   }
-
-  const auto poolStats = cache.getPoolStats(pid);
 
   // ignore allocation classes that have fewer than the threshold of slabs.
   const auto victims = filterByNumEvictableSlabs(

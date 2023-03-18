@@ -34,12 +34,12 @@ struct SimpleRebalanceStrategy : public RebalanceStrategy {
   SimpleRebalanceStrategy() : RebalanceStrategy(PickNothingOrTest) {}
 
  private:
-  ClassId pickVictim(const CacheBase& allocator, PoolId pid) {
-    auto poolStats = allocator.getPoolStats(pid);
+  ClassId pickVictim(const CacheBase&, PoolId, const PoolStats& poolStats) {
     ClassId cid = Slab::kInvalidClassId;
     uint64_t maxActiveAllocs = 0;
     for (size_t i = 0; i < poolStats.mpStats.acStats.size(); ++i) {
-      const auto& acStats = poolStats.mpStats.acStats[static_cast<ClassId>(i)];
+      const auto& acStats =
+          poolStats.mpStats.acStats.at(static_cast<ClassId>(i));
       if (maxActiveAllocs < acStats.activeAllocs) {
         maxActiveAllocs = acStats.activeAllocs;
         cid = static_cast<ClassId>(i);
@@ -48,13 +48,16 @@ struct SimpleRebalanceStrategy : public RebalanceStrategy {
     return cid;
   }
 
-  ClassId pickVictimImpl(const CacheBase& allocator, PoolId pid) override {
-    return pickVictim(allocator, pid);
+  ClassId pickVictimImpl(const CacheBase& allocator,
+                         PoolId pid,
+                         const PoolStats& stats) override {
+    return pickVictim(allocator, pid, stats);
   }
 
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase& allocator,
-                                             PoolId pid) override {
-    return {pickVictim(allocator, pid), Slab::kInvalidClassId};
+                                             PoolId pid,
+                                             const PoolStats& stats) override {
+    return {pickVictim(allocator, pid, stats), Slab::kInvalidClassId};
   }
 };
 

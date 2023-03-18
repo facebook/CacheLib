@@ -84,11 +84,13 @@ class RebalanceStrategy {
 
   explicit RebalanceStrategy(Type strategyType) : type_(strategyType) {}
 
-  virtual RebalanceContext pickVictimAndReceiverImpl(const CacheBase&, PoolId) {
+  virtual RebalanceContext pickVictimAndReceiverImpl(const CacheBase&,
+                                                     PoolId,
+                                                     const PoolStats&) {
     return {};
   }
 
-  virtual ClassId pickVictimImpl(const CacheBase&, PoolId) {
+  virtual ClassId pickVictimImpl(const CacheBase&, PoolId, const PoolStats&) {
     return Slab::kInvalidClassId;
   }
 
@@ -149,7 +151,9 @@ class RebalanceStrategy {
 
  private:
   // picks any of the class id ordered by the total slabs.
-  ClassId pickAnyClassIdForResizing(const CacheBase& cache, PoolId pid);
+  ClassId pickAnyClassIdForResizing(const CacheBase& cache,
+                                    PoolId pid,
+                                    const PoolStats& poolStats);
 
   // initialize the pool's state to the current stats.
   void initPoolState(PoolId pid, const PoolStats& stats);
@@ -160,7 +164,9 @@ class RebalanceStrategy {
 
   // Pick a receiver with max alloc failures. If no alloc failures, return
   // invalid classid.
-  ClassId pickReceiverWithAllocFailures(const CacheBase& cache, PoolId pid);
+  ClassId pickReceiverWithAllocFailures(const CacheBase& cache,
+                                        PoolId pid,
+                                        const PoolStats& stat);
 
   // Ensure pool state is initialized before calling impl, and update pool
   // state after calling impl.
@@ -172,7 +178,7 @@ class RebalanceStrategy {
   template <typename T>
   T executeAndRecordCurrentState(const CacheBase& cache,
                                  PoolId pid,
-                                 const std::function<T()>& impl,
+                                 const std::function<T(const PoolStats&)>& impl,
                                  T noOp);
 
   Type type_ = PickNothingOrTest;

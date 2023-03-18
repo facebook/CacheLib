@@ -33,9 +33,9 @@ void RebalanceStrategy::recordCurrentState(PoolId pid, const PoolStats& stats) {
   }
 }
 
-ClassId RebalanceStrategy::pickAnyClassIdForResizing(const CacheBase& cache,
-                                                     PoolId pid) {
-  const auto stats = cache.getPoolStats(pid);
+ClassId RebalanceStrategy::pickAnyClassIdForResizing(const CacheBase&,
+                                                     PoolId,
+                                                     const PoolStats& stats) {
   const auto& candidates = stats.mpStats.classIds;
   // pick victim by maximum number of slabs.
   const auto ret = *std::max_element(
@@ -200,15 +200,15 @@ RebalanceContext RebalanceStrategy::pickVictimAndReceiver(
   return executeAndRecordCurrentState<RebalanceContext>(
       cache,
       pid,
-      [&]() {
+      [&](const PoolStats& stats) {
         // Pick receiver based on allocation failures. If nothing found,
         // fall back to strategy specific Impl
         RebalanceContext ctx;
-        ctx.receiverClassId = pickReceiverWithAllocFailures(cache, pid);
+        ctx.receiverClassId = pickReceiverWithAllocFailures(cache, pid, stats);
         if (ctx.receiverClassId != Slab::kInvalidClassId) {
-          ctx.victimClassId = pickVictimImpl(cache, pid);
+          ctx.victimClassId = pickVictimImpl(cache, pid, stats);
           if (ctx.victimClassId == cachelib::Slab::kInvalidClassId) {
-            ctx.victimClassId = pickAnyClassIdForResizing(cache, pid);
+            ctx.victimClassId = pickAnyClassIdForResizing(cache, pid, stats);
           }
           if (ctx.victimClassId != Slab::kInvalidClassId &&
               ctx.victimClassId != ctx.receiverClassId &&
@@ -219,7 +219,7 @@ RebalanceContext RebalanceStrategy::pickVictimAndReceiver(
             return ctx;
           }
         }
-        return pickVictimAndReceiverImpl(cache, pid);
+        return pickVictimAndReceiverImpl(cache, pid, stats);
       },
       kNoOpContext);
 }
@@ -231,19 +231,19 @@ ClassId RebalanceStrategy::pickVictimForResizing(const CacheBase& cache,
   auto victimClassId = executeAndRecordCurrentState<ClassId>(
       cache,
       pid,
-      [&]() { return pickVictimImpl(cache, pid); },
+      [&](const PoolStats& stats) { return pickVictimImpl(cache, pid, stats); },
       Slab::kInvalidClassId);
 
   if (victimClassId == cachelib::Slab::kInvalidClassId) {
-    victimClassId = pickAnyClassIdForResizing(cache, pid);
+    const auto poolStats = cache.getPoolStats(pid);
+    victimClassId = pickAnyClassIdForResizing(cache, pid, poolStats);
   }
 
   return victimClassId;
 }
 
-ClassId RebalanceStrategy::pickReceiverWithAllocFailures(const CacheBase& cache,
-                                                         PoolId pid) {
-  const auto stats = cache.getPoolStats(pid);
+ClassId RebalanceStrategy::pickReceiverWithAllocFailures(
+    const CacheBase&, PoolId pid, const PoolStats& stats) {
   auto receivers = stats.getClassIds();
 
   const auto receiverWithAllocFailures =
@@ -266,7 +266,7 @@ template <typename T>
 T RebalanceStrategy::executeAndRecordCurrentState(
     const CacheBase& cache,
     PoolId pid,
-    const std::function<T()>& impl,
+    const std::function<T(const PoolStats&)>& impl,
     T noOp) {
   const auto poolStats = cache.getPoolStats(pid);
 
@@ -277,7 +277,7 @@ T RebalanceStrategy::executeAndRecordCurrentState(
     return noOp;
   }
 
-  auto rv = impl();
+  auto rv = impl(poolStats);
 
   recordCurrentState(pid, poolStats);
 

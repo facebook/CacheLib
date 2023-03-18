@@ -53,7 +53,8 @@ class FreeMemStrategy : public RebalanceStrategy {
   explicit FreeMemStrategy(Config config = {});
 
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase& cache,
-                                             PoolId pid) final;
+                                             PoolId pid,
+                                             const PoolStats& poolStats) final;
 
  private:
   const Config config_;

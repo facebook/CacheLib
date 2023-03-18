@@ -138,7 +138,7 @@ ClassId LruTailAgeStrategy::pickReceiver(
 }
 
 RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
-    const CacheBase& cache, PoolId pid) {
+    const CacheBase& cache, PoolId pid, const PoolStats& poolStats) {
   if (!cache.getPool(pid).allSlabsAllocated()) {
     XLOGF(DBG,
           "Pool Id: {}"
@@ -151,7 +151,6 @@ RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
 
   const auto config = getConfigCopy();
 
-  const auto poolStats = cache.getPoolStats(pid);
   const auto poolEvictionAgeStats =
       cache.getPoolEvictionAgeStats(pid, config.slabProjectionLength);
 
@@ -190,11 +189,13 @@ RebalanceContext LruTailAgeStrategy::pickVictimAndReceiverImpl(
   return ctx;
 }
 
-ClassId LruTailAgeStrategy::pickVictimImpl(const CacheBase& cache, PoolId pid) {
+ClassId LruTailAgeStrategy::pickVictimImpl(const CacheBase& cache,
+                                           PoolId pid,
+                                           const PoolStats& poolStats) {
   const auto config = getConfigCopy();
   const auto poolEvictionAgeStats =
       cache.getPoolEvictionAgeStats(pid, config.slabProjectionLength);
-  return pickVictim(config, pid, cache.getPoolStats(pid), poolEvictionAgeStats);
+  return pickVictim(config, pid, poolStats, poolEvictionAgeStats);
 }
 } // namespace cachelib
 } // namespace facebook

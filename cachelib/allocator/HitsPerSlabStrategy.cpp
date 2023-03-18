@@ -121,7 +121,7 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
 }
 
 RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
-    const CacheBase& cache, PoolId pid) {
+    const CacheBase& cache, PoolId pid, const PoolStats& poolStats) {
   if (!cache.getPool(pid).allSlabsAllocated()) {
     XLOGF(DBG,
           "Pool Id: {}"
@@ -130,8 +130,6 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
           static_cast<int>(pid));
     return kNoOpContext;
   }
-
-  const auto poolStats = cache.getPoolStats(pid);
 
   const auto config = getConfigCopy();
 
@@ -189,8 +187,8 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
 }
 
 ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& cache,
-                                            PoolId pid) {
-  const auto poolStats = cache.getPoolStats(pid);
+                                            PoolId pid,
+                                            const PoolStats& poolStats) {
   const auto config = getConfigCopy();
   auto victimClassId = pickVictim(config, cache, pid, poolStats);
 

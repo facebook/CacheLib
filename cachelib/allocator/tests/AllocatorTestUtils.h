@@ -33,12 +33,15 @@ struct AlwaysPickOneRebalanceStrategy : public RebalanceStrategy {
  private:
   ClassId pickVictim(const CacheBase&, PoolId) { return victim; }
 
-  ClassId pickVictimImpl(const CacheBase& allocator, PoolId pid) override {
+  ClassId pickVictimImpl(const CacheBase& allocator,
+                         PoolId pid,
+                         const PoolStats&) override {
     return pickVictim(allocator, pid);
   }
 
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase& allocator,
-                                             PoolId pid) override {
+                                             PoolId pid,
+                                             const PoolStats&) override {
     return {pickVictim(allocator, pid), receiver};
   }
 };
