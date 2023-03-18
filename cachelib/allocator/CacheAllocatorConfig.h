@@ -241,10 +241,12 @@ class CacheAllocatorConfig {
   // slab memory distributed across different allocation classes. For example,
   // if the 64 bytes allocation classes are receiving for allocation requests,
   // eventually CacheAllocator will move more memory to it from other allocation
-  // classes. For more details, see our user guide.
+  // classes. The rebalancing is triggered every specified interval and
+  // optionally on allocation failures. For more details, see our user guide.
   CacheAllocatorConfig& enablePoolRebalancing(
       std::shared_ptr<RebalanceStrategy> defaultRebalanceStrategy,
-      std::chrono::milliseconds interval);
+      std::chrono::milliseconds interval,
+      bool disableForcedWakeup = false);
 
   // This lets you change pool size during runtime, and the pool resizer
   // will slowly adjust each pool's memory size to the newly configured sizes.
@@ -433,6 +435,9 @@ class CacheAllocatorConfig {
 
   // time interval to sleep between iterators of rebalancing the pools.
   std::chrono::milliseconds poolRebalanceInterval{std::chrono::seconds{1}};
+
+  // disable waking up the PoolRebalancer on alloc failures
+  bool poolRebalancerDisableForcedWakeUp{false};
 
   // Free slabs pro-actively if the ratio of number of freeallocs to
   // the number of allocs per slab in a slab class is above this
@@ -913,10 +918,12 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolOptimizer(
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolRebalancing(
     std::shared_ptr<RebalanceStrategy> defaultRebalanceStrategy,
-    std::chrono::milliseconds interval) {
+    std::chrono::milliseconds interval,
+    bool disableForcedWakeup) {
   if (validateStrategy(defaultRebalanceStrategy)) {
     defaultPoolRebalanceStrategy = defaultRebalanceStrategy;
     poolRebalanceInterval = interval;
+    poolRebalancerDisableForcedWakeUp = disableForcedWakeup;
   } else {
     throw std::invalid_argument(
         "Invalid rebalance strategy for the cache allocator.");
