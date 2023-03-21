@@ -29,20 +29,20 @@ namespace facebook {
 namespace rust {
 namespace cachelib {
 std::unique_ptr<facebook::cachelib::CacheAdmin> make_cacheadmin(
-    facebook::cachelib::LruAllocator& cache, const std::string& oncall) {
+    LruAllocator& cache, const std::string& oncall) {
   facebook::cachelib::CacheAdmin::Config adminConfig;
   adminConfig.oncall = oncall;
   return std::make_unique<facebook::cachelib::CacheAdmin>(cache, adminConfig);
 }
 
-std::unique_ptr<facebook::cachelib::LruAllocator> make_lru_allocator(
+std::unique_ptr<LruAllocator> make_lru_allocator(
     std::unique_ptr<LruAllocatorConfig> config) {
-  return std::make_unique<facebook::cachelib::LruAllocator>(*config);
+  return std::make_unique<LruAllocator>(*config);
 }
-std::unique_ptr<facebook::cachelib::LruAllocator> make_shm_lru_allocator(
+std::unique_ptr<LruAllocator> make_shm_lru_allocator(
     std::unique_ptr<LruAllocatorConfig> config) {
-  return std::make_unique<facebook::cachelib::LruAllocator>(
-      facebook::cachelib::LruAllocator::SharedMemNewT::SharedMemNew, *config);
+  return std::make_unique<LruAllocator>(
+      LruAllocator::SharedMemNewT::SharedMemNew, *config);
 }
 std::unique_ptr<LruAllocatorConfig> make_lru_allocator_config() {
   return std::make_unique<LruAllocatorConfig>();
@@ -130,14 +130,13 @@ void set_base_address(LruAllocatorConfig& config, size_t addr) {
   config.slabMemoryBaseAddr = (void*)addr;
 }
 
-int8_t add_pool(const facebook::cachelib::LruAllocator& cache,
+int8_t add_pool(const LruAllocator& cache,
                 folly::StringPiece name,
                 size_t size) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache).addPool(name,
-                                                                      size);
+  return const_cast<LruAllocator&>(cache).addPool(name, size);
 }
 
-size_t get_unreserved_size(const facebook::cachelib::LruAllocator& cache) {
+size_t get_unreserved_size(const LruAllocator& cache) {
   return cache.getCacheMemoryStats().unReservedSize;
 }
 
@@ -148,20 +147,16 @@ const uint8_t* get_memory(const LruItemHandle& handle) {
 uint8_t* get_writable_memory(LruItemHandle& handle) {
   return static_cast<uint8_t*>(handle->getMemory());
 }
-size_t get_item_ptr_as_offset(const facebook::cachelib::LruAllocator& cache,
-                              const uint8_t* ptr) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache)
-      .getItemPtrAsOffset(ptr);
+size_t get_item_ptr_as_offset(const LruAllocator& cache, const uint8_t* ptr) {
+  return const_cast<LruAllocator&>(cache).getItemPtrAsOffset(ptr);
 }
 
-std::unique_ptr<LruItemHandle> allocate_item(
-    const facebook::cachelib::LruAllocator& cache,
-    facebook::cachelib::PoolId id,
-    folly::StringPiece key,
-    uint32_t size,
-    uint32_t ttlSecs) {
-  auto item = const_cast<facebook::cachelib::LruAllocator&>(cache).allocate(
-      id, key, size, ttlSecs);
+std::unique_ptr<LruItemHandle> allocate_item(const LruAllocator& cache,
+                                             facebook::cachelib::PoolId id,
+                                             folly::StringPiece key,
+                                             uint32_t size,
+                                             uint32_t ttlSecs) {
+  auto item = const_cast<LruAllocator&>(cache).allocate(id, key, size, ttlSecs);
   if (item) {
     return std::make_unique<LruItemHandle>(std::move(item));
   } else {
@@ -169,22 +164,20 @@ std::unique_ptr<LruItemHandle> allocate_item(
   }
 }
 
-bool insert_handle(const facebook::cachelib::LruAllocator& cache,
-                   LruItemHandle& handle) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache).insert(handle);
+bool insert_handle(const LruAllocator& cache, LruItemHandle& handle) {
+  return const_cast<LruAllocator&>(cache).insert(handle);
 }
-void insert_or_replace_handle(const facebook::cachelib::LruAllocator& cache,
+void insert_or_replace_handle(const LruAllocator& cache,
                               LruItemHandle& handle) {
-  const_cast<facebook::cachelib::LruAllocator&>(cache).insertOrReplace(handle);
+  const_cast<LruAllocator&>(cache).insertOrReplace(handle);
 }
 
-void remove_item(const facebook::cachelib::LruAllocator& cache,
-                 folly::StringPiece key) {
-  const_cast<facebook::cachelib::LruAllocator&>(cache).remove(key);
+void remove_item(const LruAllocator& cache, folly::StringPiece key) {
+  const_cast<LruAllocator&>(cache).remove(key);
 }
-std::unique_ptr<LruItemHandle> find_item(
-    const facebook::cachelib::LruAllocator& cache, folly::StringPiece key) {
-  auto item = const_cast<facebook::cachelib::LruAllocator&>(cache).find(key);
+std::unique_ptr<LruItemHandle> find_item(const LruAllocator& cache,
+                                         folly::StringPiece key) {
+  auto item = const_cast<LruAllocator&>(cache).find(key);
   if (item) {
     // TODO(jiayueb) remove toWriteHandle() after finishing R/W handle migration
     return std::make_unique<LruItemHandle>(std::move(item).toWriteHandle());
@@ -192,28 +185,24 @@ std::unique_ptr<LruItemHandle> find_item(
     return std::unique_ptr<LruItemHandle>();
   }
 }
-size_t get_pool_size(const facebook::cachelib::LruAllocator& cache,
-                     facebook::cachelib::PoolId id) {
+size_t get_pool_size(const LruAllocator& cache, facebook::cachelib::PoolId id) {
   return cache.getPool(id).getPoolSize();
 }
-bool grow_pool(const facebook::cachelib::LruAllocator& cache,
+bool grow_pool(const LruAllocator& cache,
                facebook::cachelib::PoolId id,
                size_t size) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache).growPool(id,
-                                                                       size);
+  return const_cast<LruAllocator&>(cache).growPool(id, size);
 }
-bool shrink_pool(const facebook::cachelib::LruAllocator& cache,
+bool shrink_pool(const LruAllocator& cache,
                  facebook::cachelib::PoolId id,
                  size_t size) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache).shrinkPool(id,
-                                                                         size);
+  return const_cast<LruAllocator&>(cache).shrinkPool(id, size);
 }
-bool resize_pools(const facebook::cachelib::LruAllocator& cache,
+bool resize_pools(const LruAllocator& cache,
                   facebook::cachelib::PoolId src,
                   facebook::cachelib::PoolId dst,
                   size_t size) {
-  return const_cast<facebook::cachelib::LruAllocator&>(cache).resizePools(
-      src, dst, size);
+  return const_cast<LruAllocator&>(cache).resizePools(src, dst, size);
 }
 } // namespace cachelib
 } // namespace rust

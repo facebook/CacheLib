@@ -26,14 +26,15 @@
 namespace facebook {
 namespace rust {
 namespace cachelib {
-using LruAllocatorConfig = facebook::cachelib::LruAllocator::Config;
-using LruItemHandle = facebook::cachelib::LruAllocator::WriteHandle;
+using LruAllocator = facebook::cachelib::LruAllocator;
+using LruAllocatorConfig = LruAllocator::Config;
+using LruItemHandle = LruAllocator::WriteHandle;
 
 std::unique_ptr<facebook::cachelib::CacheAdmin> make_cacheadmin(
-    facebook::cachelib::LruAllocator& cache, const std::string& oncall);
-std::unique_ptr<facebook::cachelib::LruAllocator> make_lru_allocator(
+    LruAllocator& cache, const std::string& oncall);
+std::unique_ptr<LruAllocator> make_lru_allocator(
     std::unique_ptr<LruAllocatorConfig> config);
-std::unique_ptr<facebook::cachelib::LruAllocator> make_shm_lru_allocator(
+std::unique_ptr<LruAllocator> make_shm_lru_allocator(
     std::unique_ptr<LruAllocatorConfig> config);
 std::unique_ptr<LruAllocatorConfig> make_lru_allocator_config();
 
@@ -83,42 +84,36 @@ void enable_cache_persistence(LruAllocatorConfig& config,
 
 void set_base_address(LruAllocatorConfig& config, size_t addr);
 
-int8_t add_pool(const facebook::cachelib::LruAllocator& cache,
+int8_t add_pool(const LruAllocator& cache,
                 folly::StringPiece name,
                 size_t size);
-size_t get_unreserved_size(const facebook::cachelib::LruAllocator& cache);
+size_t get_unreserved_size(const LruAllocator& cache);
 
 size_t get_size(const LruItemHandle& handle);
 const uint8_t* get_memory(const LruItemHandle& handle);
 uint8_t* get_writable_memory(LruItemHandle& handle);
-size_t get_item_ptr_as_offset(const facebook::cachelib::LruAllocator& cache,
-                              const uint8_t* ptr);
+size_t get_item_ptr_as_offset(const LruAllocator& cache, const uint8_t* ptr);
 
-std::unique_ptr<LruItemHandle> allocate_item(
-    const facebook::cachelib::LruAllocator& cache,
-    facebook::cachelib::PoolId id,
-    folly::StringPiece key,
-    uint32_t size,
-    uint32_t ttlSecs);
+std::unique_ptr<LruItemHandle> allocate_item(const LruAllocator& cache,
+                                             facebook::cachelib::PoolId id,
+                                             folly::StringPiece key,
+                                             uint32_t size,
+                                             uint32_t ttlSecs);
 
-bool insert_handle(const facebook::cachelib::LruAllocator& cache,
-                   LruItemHandle& handle);
-void insert_or_replace_handle(const facebook::cachelib::LruAllocator& cache,
-                              LruItemHandle& handle);
+bool insert_handle(const LruAllocator& cache, LruItemHandle& handle);
+void insert_or_replace_handle(const LruAllocator& cache, LruItemHandle& handle);
 
-void remove_item(const facebook::cachelib::LruAllocator& cache,
-                 folly::StringPiece key);
-std::unique_ptr<LruItemHandle> find_item(
-    const facebook::cachelib::LruAllocator& cache, folly::StringPiece key);
-size_t get_pool_size(const facebook::cachelib::LruAllocator& cache,
-                     facebook::cachelib::PoolId id);
-bool grow_pool(const facebook::cachelib::LruAllocator& cache,
+void remove_item(const LruAllocator& cache, folly::StringPiece key);
+std::unique_ptr<LruItemHandle> find_item(const LruAllocator& cache,
+                                         folly::StringPiece key);
+size_t get_pool_size(const LruAllocator& cache, facebook::cachelib::PoolId id);
+bool grow_pool(const LruAllocator& cache,
                facebook::cachelib::PoolId id,
                size_t size);
-bool shrink_pool(const facebook::cachelib::LruAllocator& cache,
+bool shrink_pool(const LruAllocator& cache,
                  facebook::cachelib::PoolId id,
                  size_t size);
-bool resize_pools(const facebook::cachelib::LruAllocator& cache,
+bool resize_pools(const LruAllocator& cache,
                   facebook::cachelib::PoolId src,
                   facebook::cachelib::PoolId dst,
                   size_t size);
