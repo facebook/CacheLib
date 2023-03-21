@@ -137,7 +137,7 @@ mod ffi {
             cache: &LruAllocator,
             id: i8,
             key: StringPiece<'_>,
-            size: usize,
+            size: u32,
             ttl_secs: u32,
         ) -> Result<UniquePtr<LruItemHandle>>;
 

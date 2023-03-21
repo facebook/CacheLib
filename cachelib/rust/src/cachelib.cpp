@@ -158,7 +158,7 @@ std::unique_ptr<LruItemHandle> allocate_item(
     const facebook::cachelib::LruAllocator& cache,
     facebook::cachelib::PoolId id,
     folly::StringPiece key,
-    size_t size,
+    uint32_t size,
     uint32_t ttlSecs) {
   auto item = const_cast<facebook::cachelib::LruAllocator&>(cache).allocate(
       id, key, size, ttlSecs);

@@ -28,6 +28,7 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::Duration;
 
+use anyhow::Context;
 use anyhow::Error;
 use anyhow::Result;
 use bytes::buf::UninitSlice;
@@ -720,6 +721,7 @@ impl LruCachePool {
             .map_or(0, |d| std::cmp::min(d.as_secs(), 1))
             .try_into()
             .unwrap_or(u32::MAX);
+        let size = size.try_into().context("Cache allocation too large")?;
         let handle = ffi::allocate_item(cache, self.pool, key, size, ttl_secs)?;
         if handle.is_null() {
             Ok(None)
