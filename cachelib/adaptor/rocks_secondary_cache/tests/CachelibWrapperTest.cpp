@@ -116,6 +116,10 @@ class CachelibWrapperTest : public ::testing::Test {
   }
 #endif
 
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 1)
+  static Cache::CacheItemHelper helper_no_secondary_;
+#endif
+
   static Cache::CacheItemHelper helper_;
 
   static Status SaveToCallbackFail(void* /*obj*/,
@@ -191,13 +195,23 @@ class CachelibWrapperTest : public ::testing::Test {
   std::string path_;
 };
 
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 1)
+Cache::CacheItemHelper CachelibWrapperTest::helper_no_secondary_(
+    CacheEntryRole::kMisc, CachelibWrapperTest::DeletionCallback);
+#endif
+
 Cache::CacheItemHelper CachelibWrapperTest::helper_(
 #if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
     CacheEntryRole::kMisc,
     CachelibWrapperTest::DeletionCallback,
     CachelibWrapperTest::SizeCallback,
     CachelibWrapperTest::SaveToCallback,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 1)
+    CachelibWrapperTest::CreateCallback,
+    &CachelibWrapperTest::helper_no_secondary_);
+#else
     CachelibWrapperTest::CreateCallback);
+#endif
 #else
     CachelibWrapperTest::SizeCallback,
     CachelibWrapperTest::SaveToCallback,
@@ -210,7 +224,12 @@ Cache::CacheItemHelper CachelibWrapperTest::helper_fail_(
     CachelibWrapperTest::DeletionCallback,
     CachelibWrapperTest::SizeCallback,
     CachelibWrapperTest::SaveToCallbackFail,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 1)
+    CachelibWrapperTest::CreateCallback,
+    &CachelibWrapperTest::helper_no_secondary_);
+#else
     CachelibWrapperTest::CreateCallback);
+#endif
 #else
     CachelibWrapperTest::SizeCallback,
     CachelibWrapperTest::SaveToCallbackFail,
