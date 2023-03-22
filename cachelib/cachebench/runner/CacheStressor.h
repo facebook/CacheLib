@@ -98,8 +98,14 @@ class CacheStressor : public Stressor {
     }
     cacheConfig.nvmWriteBytesCallback =
         std::bind(&CacheStressor<Allocator>::getNvmBytesWritten, this);
-    cache_ = std::make_unique<CacheT>(cacheConfig, movingSync,
-                                      cacheConfig.cacheDir, config_.touchValue);
+    try {
+      cache_ = std::make_unique<CacheT>(
+          cacheConfig, movingSync, cacheConfig.cacheDir, config_.touchValue);
+    } catch (const std::exception& e) {
+      XLOG(INFO) << "Exception while creating cache: " << e.what();
+      throw;
+    }
+
     if (config_.opPoolDistribution.size() > cache_->numPools()) {
       throw std::invalid_argument(folly::sformat(
           "more pools specified in the test than in the cache. "
