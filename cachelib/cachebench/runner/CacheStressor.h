@@ -299,8 +299,11 @@ class CacheStressor : public Stressor {
         SCOPE_EXIT { throttleFn(); };
           // detect refcount leaks when run in  debug mode.
 #ifndef NDEBUG
-        auto checkCnt = [](int cnt) {
-          if (cnt != 0) {
+        auto checkCnt = [useCombinedLockForIterators =
+                             config_.useCombinedLockForIterators](int cnt) {
+          // if useCombinedLockForIterators is set handle count can be modified
+          // by a different thread
+          if (!useCombinedLockForIterators && cnt != 0) {
             throw std::runtime_error(folly::sformat("Refcount leak {}", cnt));
           }
         };

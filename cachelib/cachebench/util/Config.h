@@ -267,6 +267,8 @@ struct StressorConfig : public JSONConfig {
   // By default, timestamps are in milliseconds.
   uint64_t timestampFactor{1000};
 
+  bool useCombinedLockForIterators{false};
+
   // admission policy for cache.
   std::shared_ptr<StressorAdmPolicy> admPolicy{};
 
