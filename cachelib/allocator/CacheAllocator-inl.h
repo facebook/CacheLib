@@ -1461,7 +1461,7 @@ bool CacheAllocator<CacheTrait>::pushToNvmCacheFromRamForTesting(
 
   if (handle && nvmCache_ && shouldWriteToNvmCache(*handle) &&
       shouldWriteToNvmCacheExclusive(*handle)) {
-    nvmCache_->put(handle, nvmCache_->createPutToken(handle->getKey()));
+    nvmCache_->put(*handle, nvmCache_->createPutToken(handle->getKey()));
     return true;
   }
   return false;
@@ -2712,7 +2712,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictRegularItem(
 
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(item)) {
     XDCHECK(token.isValid());
-    nvmCache_->put(evictHandle, std::move(token));
+    nvmCache_->put(*evictHandle, std::move(token));
   }
   return evictHandle;
 }
@@ -2774,7 +2774,7 @@ CacheAllocator<CacheTrait>::advanceIteratorAndTryEvictChainedItem(
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(*parentHandle)) {
     XDCHECK(token.isValid());
     XDCHECK(parentHandle->hasChainedItem());
-    nvmCache_->put(parentHandle, std::move(token));
+    nvmCache_->put(*parentHandle, std::move(token));
   }
 
   return parentHandle;
@@ -2812,7 +2812,7 @@ CacheAllocator<CacheTrait>::evictNormalItemForSlabRelease(Item& item) {
   // now that we are the only handle and we actually removed something from
   // the RAM cache, we enqueue it to nvmcache.
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(item)) {
-    nvmCache_->put(handle, std::move(token));
+    nvmCache_->put(*handle, std::move(token));
   }
 
   return handle;
@@ -2913,7 +2913,7 @@ CacheAllocator<CacheTrait>::evictChainedItemForSlabRelease(ChainedItem& child) {
   // the RAM cache, we enqueue it to nvmcache.
   if (evictToNvmCache && shouldWriteToNvmCacheExclusive(*parentHandle)) {
     DCHECK(parentHandle->hasChainedItem());
-    nvmCache_->put(parentHandle, std::move(token));
+    nvmCache_->put(*parentHandle, std::move(token));
   }
 
   return parentHandle;
