@@ -90,7 +90,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
 
     try {
       std::vector<folly::StringPiece> fields;
-      folly::split(",", line, fields);
+      folly::split(',', line, fields);
 
       // TODO: remove this after legacy data phased out.
       if (fields.size() > totalFieldCount ||

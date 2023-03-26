@@ -65,7 +65,7 @@ class TraceFileStream {
     // Parses a line from the trace file into a vector.
     // Returns an empty vector
     std::vector<std::string> splitRow;
-    folly::split(",", line, splitRow);
+    folly::split(',', line, splitRow);
     if (splitRow.size() != columnKeyMap_.size()) {
       XLOG_EVERY_MS(WARNING, 1000)
           << "Expected row with " << columnKeyMap_.size()
@@ -134,7 +134,7 @@ class TraceFileStream {
   }
 
   void parseHeaderRow(const std::string& header) {
-    folly::split(",", header, keys_);
+    folly::split(',', header, keys_);
     for (size_t i = 0; i < keys_.size(); i++) {
       columnKeyMap_.emplace(folly::to<std::string>(keys_[i]), i);
     }

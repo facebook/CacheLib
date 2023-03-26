@@ -121,11 +121,11 @@ std::vector<std::string> getBytesWrittenLine(
   // /ritten/, so that's what we do here. We just use the first matching
   // line.
   std::vector<folly::StringPiece> lines;
-  folly::split("\n", out, lines, true /* ignoreEmpty */);
+  folly::split('\n', out, lines, true /* ignoreEmpty */);
   for (const auto& line : lines) {
     if (line.find("ritten") != std::string::npos) {
       std::vector<std::string> fields;
-      folly::split(" ", line, fields, true /* ignoreEmpty */);
+      folly::split(' ', line, fields, true /* ignoreEmpty */);
       return fields;
     }
   }

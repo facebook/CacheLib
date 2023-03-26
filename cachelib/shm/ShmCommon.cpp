@@ -63,7 +63,7 @@ size_t pageAligned(size_t size, PageSizeT p) {
 namespace {
 std::vector<folly::StringPiece> getSmapLines(const std::string& smapContent) {
   std::vector<folly::StringPiece> lines;
-  folly::split("\n", smapContent, lines, true);
+  folly::split('\n', smapContent, lines, true);
   XDCHECK(!lines.empty());
   return lines;
 }
@@ -81,14 +81,14 @@ bool lineAddressMatches(folly::StringPiece line, uintptr_t addr) {
 
   std::vector<folly::StringPiece> tokens;
   // split into tokens by space
-  folly::split(" ", line, tokens, /* ignore empty */ true);
+  folly::split(' ', line, tokens, /* ignore empty */ true);
 
   XDCHECK(!tokens.empty());
   folly::StringPiece startAddr;
   folly::StringPiece endAddr;
 
   // split the first token using the '-' separator
-  if (!folly::split("-", tokens[0], startAddr, endAddr)) {
+  if (!folly::split('-', tokens[0], startAddr, endAddr)) {
     throw std::invalid_argument(
         folly::sformat("Invalid address field {}", tokens[0]));
   }
@@ -103,7 +103,7 @@ bool isAddressLine(folly::StringPiece line) {
   // address lines contain lots of fields before the first :
   // 006de000-01397000 rw-p 00000000 00:00 0                          [heap]
   folly::StringPiece first, second;
-  folly::split(":", line, first, second);
+  folly::split(':', line, first, second);
   return first.find(' ') != std::string::npos;
 }
 
@@ -133,7 +133,7 @@ PageSizeT getPageSizeInSMap(void* addr) {
     // Format is the following
     // KernelPageSize:        4 kB
     folly::StringPiece fieldName, value;
-    folly::split(":", line, fieldName, value);
+    folly::split(':', line, fieldName, value);
     if (fieldName != "MMUPageSize") {
       continue;
     }
@@ -142,7 +142,7 @@ PageSizeT getPageSizeInSMap(void* addr) {
 
     folly::StringPiece sizeVal;
     folly::StringPiece unitVal;
-    folly::split(" ", value, sizeVal, unitVal);
+    folly::split(' ', value, sizeVal, unitVal);
     XDCHECK_EQ(unitVal, "kB");
     size_t size = folly::to<size_t>(sizeVal) * 1024;
     if (size == getPageSize(PageSizeT::TWO_MB)) {
