@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
+#include <memory>
+
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/experimental/objcache2/ObjectCache.h"
 #include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
@@ -567,6 +570,235 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(1, found2->a);
     EXPECT_EQ(2, found2->b);
     EXPECT_EQ(3, found2->c);
+  }
+
+  template <typename T>
+  void checkObjectSizeTracking(ObjectCache& objcache,
+                               const std::shared_ptr<T>& object,
+                               std::function<void()> mutateCb) {
+    objcache.mutateObject(object, std::move(mutateCb));
+
+    ThreadMemoryTracker tMemTracker;
+    auto memUsage1 = tMemTracker.getMemUsageBytes();
+    auto objectCopy = std::make_unique<T>(*object);
+    auto memUsage2 = tMemTracker.getMemUsageBytes();
+
+    EXPECT_EQ(memUsage2 - memUsage1, objcache.template getObjectSize(object));
+  }
+
+  void checkTotalObjectSize(ObjectCache& objcache) {
+    size_t totalObjectSize = 0;
+    for (auto itr = objcache.getL1Cache().begin();
+         itr != objcache.getL1Cache().end();
+         ++itr) {
+      totalObjectSize +=
+          reinterpret_cast<const ObjectCacheItem*>(itr.asHandle()->getMemory())
+              ->objectSize;
+    }
+    EXPECT_EQ(totalObjectSize, objcache.getTotalObjectSize());
+  }
+
+  void checkObjectSizeTrackingUnorderedMap() {
+    using ObjectType = std::unordered_map<std::string, std::string>;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ObjectType>();
+        });
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache::create(config);
+
+    // create an empty map
+    ThreadMemoryTracker tMemTracker;
+    auto memUsage1 = tMemTracker.getMemUsageBytes();
+    auto map = std::make_unique<ObjectType>();
+    auto memUsage2 = tMemTracker.getMemUsageBytes();
+
+    auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(map),
+                                                  memUsage2 - memUsage1);
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
+
+    auto found = objcache->template findToWrite<ObjectType>("cacheKey");
+    ASSERT_NE(nullptr, found);
+
+    // add an entry
+    auto cb1 = [&found]() { (*found)["key"] = "tiny"; };
+    // replace the entry with a longer string
+    auto cb2 = [&found]() {
+      (*found)["key"] = "longgggggggggggggggggggggggggggstringgggggggggggg";
+    };
+    // replace the entry with a shorter string
+    auto cb3 = [&found]() {
+      auto tmp = std::make_unique<std::string>("short");
+      using std::swap;
+      swap((*found)["key"], *tmp);
+    };
+    // remove the entry
+    auto cb4 = [&found]() { found->erase("key"); };
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb1));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb2));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb3));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb4));
+    checkTotalObjectSize(*objcache);
+  }
+
+  void checkObjectSizeTrackingVector() {
+    using ObjectType = std::vector<Foo>;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ObjectType>();
+        });
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache::create(config);
+
+    // create an empty vector
+    ThreadMemoryTracker tMemTracker;
+    auto memUsage1 = tMemTracker.getMemUsageBytes();
+    auto vec = std::make_unique<ObjectType>();
+    auto memUsage2 = tMemTracker.getMemUsageBytes();
+
+    auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(vec),
+                                                  memUsage2 - memUsage1);
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
+
+    auto found = objcache->template findToWrite<ObjectType>("cacheKey");
+    ASSERT_NE(nullptr, found);
+
+    // add an entry using emplace_back
+    auto cb1 = [&found]() { found->emplace_back(Foo{1, 2, 3}); };
+
+    // add another entry using push_back
+    auto cb2 = [&found]() { found->push_back(Foo{4, 5, 6}); };
+
+    // remove the entry from the end using pop_back
+    auto cb3 = [&found]() {
+      found->pop_back();
+      found->shrink_to_fit();
+    };
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb1));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb2));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb3));
+    checkTotalObjectSize(*objcache);
+  }
+
+  void checkObjectSizeTrackingString() {
+    using ObjectType = std::string;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ObjectType>();
+        });
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache::create(config);
+
+    // create an empty string
+    ThreadMemoryTracker tMemTracker;
+    auto memUsage1 = tMemTracker.getMemUsageBytes();
+    auto str = std::make_unique<ObjectType>();
+    auto memUsage2 = tMemTracker.getMemUsageBytes();
+
+    auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(str),
+                                                  memUsage2 - memUsage1);
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
+
+    auto found = objcache->template findToWrite<ObjectType>("cacheKey");
+    ASSERT_NE(nullptr, found);
+
+    // set a value
+    auto cb1 = [&found]() { *found = "tiny"; };
+    // replace the value with a longer string
+    auto cb2 = [&found]() {
+      *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
+    };
+    // replace the value with a shorter string
+    auto cb3 = [&found]() {
+      *found = "short";
+      (*found).shrink_to_fit();
+    };
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb1));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb2));
+    checkTotalObjectSize(*objcache);
+
+    checkObjectSizeTracking<ObjectType>(*objcache, found, std::move(cb3));
+    checkTotalObjectSize(*objcache);
+  }
+
+  void testObjectSizeTrackingWithMutation() {
+    if (!folly::usingJEMalloc()) {
+      return;
+    }
+
+    checkObjectSizeTrackingUnorderedMap();
+    checkObjectSizeTrackingVector();
+    checkObjectSizeTrackingString();
+  }
+
+  void testMultithreadObjectSizeTrackingWithMutation() {
+    if (!folly::usingJEMalloc()) {
+      return;
+    }
+
+    using ObjectType = std::unordered_map<std::string, std::string>;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ObjectType>();
+        });
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache::create(config);
+
+    // create an empty map
+    ThreadMemoryTracker tMemTracker;
+    auto memUsage1 = tMemTracker.getMemUsageBytes();
+    auto map = std::make_unique<ObjectType>();
+    auto memUsage2 = tMemTracker.getMemUsageBytes();
+
+    objcache->insertOrReplace("cacheKey", std::move(map),
+                              memUsage2 - memUsage1);
+
+    auto runMutateObjectOps = [&](int i) {
+      auto found = objcache->template findToWrite<ObjectType>("cacheKey");
+      ASSERT_NE(nullptr, found);
+      objcache->mutateObject(found, [&found, i]() {
+        (*found)[folly::sformat("key_{}", i)] = folly::sformat("value_{}", i);
+      });
+    };
+
+    std::vector<std::thread> rs;
+    for (int i = 0; i < 10; i++) {
+      rs.push_back(std::thread{runMutateObjectOps, i + 1});
+    }
+    for (int i = 0; i < 10; i++) {
+      rs[i].join();
+    }
+
+    auto found = objcache->template find<ObjectType>("cacheKey");
+    EXPECT_EQ(objcache->template getObjectSize(found),
+              objcache->getTotalObjectSize());
   }
 
   void testPersistence() {
@@ -1198,6 +1430,13 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingBasics) {
 TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingUniqueInsert) {
   this->testObjectSizeTrackingUniqueInsert();
 }
+TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithMutation) {
+  this->testObjectSizeTrackingWithMutation();
+}
+TYPED_TEST(ObjectCacheTest, MultithreadObjectSizeTrackingWithMutation) {
+  this->testMultithreadObjectSizeTrackingWithMutation();
+}
+
 TYPED_TEST(ObjectCacheTest, Persistence) { this->testPersistence(); }
 TYPED_TEST(ObjectCacheTest, PersistenceMultiType) {
   this->testPersistenceMultiType();

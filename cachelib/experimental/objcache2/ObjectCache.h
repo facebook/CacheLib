@@ -27,6 +27,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <typeinfo>
 #include <vector>
 
 #include "cachelib/allocator/CacheAllocator.h"
@@ -38,6 +39,7 @@
 #include "cachelib/experimental/objcache2/ObjectCacheSizeController.h"
 #include "cachelib/experimental/objcache2/persistence/Persistence.h"
 #include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
+#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
 
 namespace facebook {
 namespace cachelib {
@@ -324,6 +326,36 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return getWriteHandleRefInternal<T>(object)->extendTTL(ttl);
   }
 
+  // Mutate object and update the object size
+  // When size-awareness is enabled, users must call this API to mutate the
+  // object. Otherwise, we won't be able to track the updated object size
+  //
+  // @param  object       shared pointer of the object to be mutated (must be
+  //                      fetched from ObjectCache APIs)
+  // @param  mutateCb     callback containing the mutation logic
+  // @param  mutateCtx    context string of this mutation operation, for
+  //                      logging purpose
+  template <typename T>
+  void mutateObject(const std::shared_ptr<T>& object,
+                    std::function<void()> mutateCb,
+                    const std::string& mutateCtx = "");
+
+  // Get the size of the object
+  //
+  // @param  object       object shared pointer returned from ObjectCache APIs
+  //
+  // @return the object size if size-awareness is enabled
+  //         0 otherwise
+  template <typename T>
+  size_t getObjectSize(const std::shared_ptr<T>& object) const {
+    if (!object) {
+      return 0;
+    }
+    return reinterpret_cast<const ObjectCacheItem*>(
+               getReadHandleRefInternal<T>(object)->getMemory())
+        ->objectSize;
+  }
+
  protected:
   // Serialize cache allocator config for exporting to Scuba
   std::map<std::string, std::string> serializeConfigParams() const override;
@@ -378,7 +410,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Get a WriteHandle reference from the object shared_ptr
   template <typename T>
   typename AllocatorT::WriteHandle& getWriteHandleRefInternal(
-      std::shared_ptr<T>& object) {
+      const std::shared_ptr<T>& object) {
     auto* deleter = std::get_deleter<Deleter<T>>(object);
     XDCHECK(deleter != nullptr);
     auto& hdl = deleter->getWriteHandleRef();
