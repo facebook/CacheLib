@@ -125,8 +125,12 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       // after the tests.
       auto path = config_.nvmCachePaths[0];
       bool isDir;
+      bool isBlk = false;
       try {
         isDir = cachelib::util::isDir(path);
+        if (!isDir) {
+          isBlk = cachelib::util::isBlk(path);
+        }
       } catch (const std::system_error& e) {
         XLOGF(INFO, "nvmCachePath {} does not exist", path);
         isDir = false;
@@ -147,7 +151,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
         XLOGF(INFO, "Configuring NVM cache: simple file {} size {} MB", path,
               config_.nvmCacheSizeMB);
         nvmConfig.navyConfig.setSimpleFile(path, config_.nvmCacheSizeMB * MB,
-                                           true /* truncateFile */);
+                                           !isBlk /* truncateFile */);
       }
     } else if (config_.nvmCachePaths.size() > 1) {
       XLOGF(INFO, "Configuring NVM cache: RAID-0 ({} devices) size {} MB",
