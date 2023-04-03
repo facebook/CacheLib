@@ -107,7 +107,7 @@ There will be a section discussing each of the bullets below.
    * For regular cache: Find the item in the chained hash map. From the item, get the slab it lives on and form the slab, identify the allocation class and promote the item on that particular LRU queue. Increment the refcount and return the item handle.
 ## Flash overview
 
-Flash is organized in a similar way: there is a cache for smaller items (BigHash) and for larger item (Block Cache). Unlike DRAM, the client does not get to choose where the item goes. It's done automatically thresholding the size. Together, this constitutes [Navy](/docs/Cache_Library_Architecture_Guide/Navy_Architecture_Overview ) -- the flash cache engine of CacheLib.
+Flash is organized in a similar way: there is a cache for smaller items (BigHash) and for larger item (Block Cache). Unlike DRAM, the client does not get to choose where the item goes. It's done automatically thresholding the size. Together, this constitutes [Navy](/docs/Cache_Library_Architecture_Guide/Navy_Overview ) -- the flash cache engine of CacheLib.
 
 * "block device" refers to devices that's read/write happen with a fixed size block (if it helps, substitute the word "page" here). It means you can't write with precision of bytes but have to incur overhead if you don't write an entire block.
 

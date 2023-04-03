@@ -23,7 +23,7 @@ The second modification is promotion delay. Normally every access item is moved 
 How often does cachelib refresh a previously accessed item. By default this is 60 seconds.
 
 * `updateOnWrite`/`updateOnRead`
-Specifies if a LRU promotion happens on read or write or both. As a rule of thumb, for most services that care primarily about read performance, turn on `updateOnRead`. However, if your service cares a lot about retention time of items that are recently written, then turn on `updateOnWrite` as well.
+Specifies if a LRU promotion happens on read or write or both. As a rule of thumb, for most services that care primarily about read performance, turn on `updateOnRead`. However, if your service cares a lot about retention time of items that are recently written, then turn on `updateOnWrite` as well. By default, `updateOnRead = true` and `updateOnWrite = false`.
 
 * `ipSpec`
 This essentially turns the LRU into a two-segmented LRU. Setting this to `1` means every new insertion will be inserted 1/2 from the end of the LRU, `2` means 1/4 from the end of the LRU, and so on.
