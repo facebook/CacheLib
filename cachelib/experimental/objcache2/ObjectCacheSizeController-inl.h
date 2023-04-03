@@ -33,6 +33,9 @@ void ObjectCacheSizeController<AllocatorT>::work() {
                               objCache_.config_.l1EntriesLimit / 100) {
     auto averageObjSize = totalObjSize / currentNumEntries;
     auto newEntriesLimit = objCache_.config_.cacheSizeLimit / averageObjSize;
+    // entriesLimit should never exceed the configured entries limit
+    newEntriesLimit =
+        std::min(newEntriesLimit, objCache_.config_.l1EntriesLimit);
     if (newEntriesLimit < currentEntriesLimit_ &&
         currentNumEntries >= newEntriesLimit) {
       // shrink cache when getting a lower new limit and current entries num
@@ -46,7 +49,7 @@ void ObjectCacheSizeController<AllocatorT>::work() {
     }
 
     XLOGF_EVERY_MS(INFO, 60'000,
-                   "CacheLib object-cache: total object size = {}, current "
+                   "CacheLib size-controller: total object size = {}, current "
                    "entries = {}, average object size = "
                    "{}, new entries limit = {}, current entries limit = {}",
                    totalObjSize, currentNumEntries, averageObjSize,
@@ -73,7 +76,7 @@ void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
-      "CacheLib object-cache: request to shrink cache by {} entries. "
+      "CacheLib size-controller: request to shrink cache by {} entries. "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, size, objCache_.placeholders_.size(), currentEntriesLimit_);
 }
@@ -92,7 +95,7 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
-      "CacheLib object-cache: request to expand cache by {} entries. "
+      "CacheLib size-controller: request to expand cache by {} entries. "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, size, objCache_.placeholders_.size(), currentEntriesLimit_);
 }
