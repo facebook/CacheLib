@@ -229,11 +229,21 @@ The list of traces uploaded are as follows
 * `kvcache/202206`
    * Those are traces captured for 5 consecutive days from a Meta's key-value cache cluster consisting of 500 hosts
    * Each host uses (roughly) 42 GB of DRAM and 930 GB of SSD for caching
-   * The sampling ratio was 1/50'000
+   * The traffic factor is 1/100
+   
+* `cdn/202303/`
+   * Those are traces captured from Meta's 3 selected CDN cache clusters (named nha, prn, eag) respectively for 7 days on Mar 2023
+   * Each cluster consists of 1000's of hosts
+   * Each host uses (roughly) 40 GB of DRAM and 1.8TB of SSD for caching
+   * Traffic factor and scaled cache sizes are:
+      * nha: 1/6.37, DRAM 6006 MB, NVM 272314 MB 
+      * prn: 1/4.58, DRAM 8357 MB, NVM 375956 MB
+      * eag: 1/13.4, DRAM 2857 MB, NVM 129619 MB
+
 
 ### Resource Scaling or Trace Amplifcation
 
-The trace is captured at a certain sampling ratio. For example, the `kvcache/202206` is sampled at the ratio of 1/50'000 from 500 hosts. This means that the trace data contains the samples amount to 1/100 of those handled by each host on average. So, in order to get the similar results from the cachebench simulation, either the cache resource or the trace data needs to be scaled accordingly.
+The trace is captured at a certain sampling ratio and the traffic factor is defined as the ratio of the captured traffic normalized to those received from a single host in the production. For example, the `kvcache/202206` is sampled at the ratio of 1/50'000 from 500 hosts, meaning the traffic factor is 1/100. This means that the trace data contains the samples amount to 1/100 of those handled by each host on average. So, in order to get the similar results from the cachebench simulation, either the cache resource or the trace data needs to be scaled accordingly.
 
 The resource scaling is useful when the required resources (e.g., NVM cache 1TB) are not available in the simulation system or when one is interested in iterating fast with sacrificing accuracy of some metrics. The resource scaling can be done by modifying the `cache_config` in the cachebench test config.
 
