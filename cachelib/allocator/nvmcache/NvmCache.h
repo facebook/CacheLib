@@ -111,7 +111,7 @@ class NvmCache {
 
     // when enabled, nvmcache will attempt to resolve misses without incurring
     // thread hops by using synchronous methods.
-    bool enableFastNegativeLookups{false};
+    bool enableFastNegativeLookups{true};
 
     // serialize the config for debugging purposes
     std::map<std::string, std::string> serialize() const;
