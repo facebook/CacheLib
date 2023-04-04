@@ -105,6 +105,7 @@ struct ObjectCacheConfig {
   // });
   ObjectCacheConfig& setItemDestructor(ItemDestructor destructor);
 
+  // Run in a multi-thread mode, eviction order is not guaranteed to persist.
   // @param threadCount          number of threads to work on persistence
   //                             concurrently
   // @param baseFilePath         metadata will be saved in "baseFilePath";
@@ -116,6 +117,17 @@ struct ObjectCacheConfig {
                                        std::string basefilePath,
                                        SerializeCb serializeCallback,
                                        DeserializeCb deserializeCallback);
+
+  // Run in a single-thread mode to persist the eviction order.
+  // Please note: TinyLFU eviction policy is not supported.
+  // @param baseFilePath         metadata will be saved in "baseFilePath";
+  //                             objects will be saved in "baseFilePath_0"
+  // @param serializeCallback    callback to serialize an object
+  // @param deserializeCallback  callback to deserialize an object
+  ObjectCacheConfig& enablePersistenceWithEvictionOrder(
+      std::string basefilePath,
+      SerializeCb serializeCallback,
+      DeserializeCb deserializeCallback);
 
   ObjectCacheConfig& setItemReaperInterval(std::chrono::milliseconds interval);
 
@@ -166,6 +178,9 @@ struct ObjectCacheConfig {
 
   // time to sleep between each reaping period.
   std::chrono::milliseconds reaperInterval{5000};
+
+  // The flag indicating whether cache persistence is enabled
+  bool persistenceEnabled{false};
 
   // The thread number for cache persistence.
   // It sets the threads to run a persistor upon shut down and a restorer upon
@@ -270,6 +285,10 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
     std::string basefilePath,
     SerializeCb serializeCallback,
     DeserializeCb deserializeCallback) {
+  if (persistenceEnabled) {
+    throw std::invalid_argument("cache persistence is already enabled");
+  }
+
   if (threadCount == 0) {
     throw std::invalid_argument(
         "A non-zero thread count must be set to enable cache persistence");
@@ -286,6 +305,32 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
         "persistence");
   }
   persistThreadCount = threadCount;
+  persistBaseFilePath = basefilePath;
+  serializeCb = std::move(serializeCallback);
+  deserializeCb = std::move(deserializeCallback);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistenceWithEvictionOrder(
+    std::string basefilePath,
+    SerializeCb serializeCallback,
+    DeserializeCb deserializeCallback) {
+  if (persistenceEnabled) {
+    throw std::invalid_argument("cache persistence is already enabled");
+  }
+
+  if (basefilePath.empty()) {
+    throw std::invalid_argument(
+        "A valid file path must be providede to enable cache persistence");
+  }
+
+  if (!serializeCallback || !deserializeCallback) {
+    throw std::invalid_argument(
+        "Serialize and deserialize callback must be set to enable cache "
+        "persistence");
+  }
+  persistThreadCount = 1;
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
   deserializeCb = std::move(deserializeCallback);

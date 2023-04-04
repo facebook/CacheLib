@@ -54,20 +54,35 @@ bool Persistor<ObjectCache>::run() {
     worker->start(kWorkerInterval_, worker->getName());
   }
 
-  // add objects to the queue
-  for (auto itr = objCache_.l1Cache_->begin(); itr != objCache_.l1Cache_->end();
-       ++itr) {
-    // no need to persist if item is already expired
-    if (itr->isExpired()) {
-      numExpired_++;
-      continue;
-    }
-    auto itemPtr =
-        reinterpret_cast<typename ObjectCache::Item*>(itr->getMemory());
-    WorkUnit unit{itr->getKey(), itemPtr->objectPtr, itemPtr->objectSize,
-                  itr->getExpiryTime()};
-    queue_.write(std::move(unit));
+  std::vector<typename ObjectCache::EvictionIterator> evictionItrs;
+  auto poolIds = objCache_.l1Cache_->getRegularPoolIds();
+  for (auto poolId : poolIds) {
+    evictionItrs.emplace_back(objCache_.getEvictionIterator(poolId));
   }
+
+  size_t finished = 0;
+  // round-robin each eviction iterator until all iterators are finished
+  while (finished < evictionItrs.size()) {
+    finished = 0; // reset flag
+    for (auto& itr : evictionItrs) {
+      if (!itr) { // finished
+        finished++;
+        continue;
+      }
+      // no need to persist if item is already expired
+      if (itr->isExpired()) {
+        numExpired_++;
+      } else { // write the object to queue
+        auto itemPtr =
+            reinterpret_cast<typename ObjectCache::Item*>(itr->getMemory());
+        WorkUnit unit{itr->getKey(), itemPtr->objectPtr, itemPtr->objectSize,
+                      itr->getExpiryTime()};
+        queue_.write(std::move(unit));
+      }
+      ++itr;
+    }
+  }
+
   XLOGF(INFO, "Persistor found {} expired objects", numExpired_);
 
   // Wait until all items in the queue are consumed and persisted

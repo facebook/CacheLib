@@ -144,6 +144,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using DeserializeCb = std::function<bool(Deserializer)>;
   using Persistor = Persistor<ObjectCache<AllocatorT>>;
   using Restorer = Restorer<ObjectCache<AllocatorT>>;
+  using EvictionIterator = typename AllocatorT::EvictionIterator;
 
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
@@ -416,6 +417,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     auto& hdl = deleter->getWriteHandleRef();
     XDCHECK(hdl != nullptr);
     return hdl;
+  }
+
+  EvictionIterator getEvictionIterator(PoolId pid) const noexcept {
+    auto& mmContainer = this->l1Cache_->getMMContainer(pid, 0 /* classId */);
+    return mmContainer.getEvictionIterator();
   }
 
   // Config passed to the cache.
