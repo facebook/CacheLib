@@ -305,39 +305,42 @@ struct Stats {
     return numNvmGets > 0 ? numNvmGetMiss : numCacheGetMiss;
   }
 
-  double getOverallHitRatio(const Stats& prevStats) const {
-    auto totalMisses = getTotalMisses();
-    auto prevTotalMisses = prevStats.getTotalMisses();
-    if (numCacheGets <= prevStats.numCacheGets ||
-        totalMisses <= prevTotalMisses) {
-      return 0.0;
+  std::tuple<double, double, double> getHitRatios(
+      const Stats& prevStats) const {
+    double overallHitRatio = 0.0;
+    double ramHitRatio = 0.0;
+    double nvmHitRatio = 0.0;
+
+    if (numCacheGets > prevStats.numCacheGets) {
+      auto totalMisses = getTotalMisses();
+      auto prevTotalMisses = prevStats.getTotalMisses();
+
+      overallHitRatio = invertPctFn(totalMisses - prevTotalMisses,
+                                    numCacheGets - prevStats.numCacheGets);
+
+      ramHitRatio = invertPctFn(numCacheGetMiss - prevStats.numCacheGetMiss,
+                                numCacheGets - prevStats.numCacheGets);
     }
 
-    return invertPctFn(totalMisses - prevTotalMisses,
-                       numCacheGets - prevStats.numCacheGets);
+    if (numNvmGets > prevStats.numNvmGets) {
+      nvmHitRatio = invertPctFn(numNvmGetMiss - prevStats.numNvmGetMiss,
+                                numNvmGets - prevStats.numNvmGets);
+    }
+
+    return std::make_tuple(overallHitRatio, ramHitRatio, nvmHitRatio);
   }
 
   // Render the stats based on the delta between overall stats and previous
   // stats. It can be used to render the stats in the last time period.
   void render(const Stats& prevStats, std::ostream& out) const {
-    auto totalMisses = getTotalMisses();
-    auto prevTotalMisses = prevStats.getTotalMisses();
-    if (numCacheGets > prevStats.numCacheGets &&
-        totalMisses >= prevTotalMisses) {
-      const double overallHitRatio = invertPctFn(
-          totalMisses - prevTotalMisses, numCacheGets - prevStats.numCacheGets);
+    if (numCacheGets > prevStats.numCacheGets) {
+      auto [overallHitRatio, ramHitRatio, nvmHitRatio] =
+          getHitRatios(prevStats);
       out << folly::sformat("Cache Gets    : {:,}",
                             numCacheGets - prevStats.numCacheGets)
           << std::endl;
       out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
-
-      const double ramHitRatio =
-          invertPctFn(numCacheGetMiss - prevStats.numCacheGetMiss,
-                      numCacheGets - prevStats.numCacheGets);
-      const double nvmHitRatio =
-          invertPctFn(numNvmGetMiss - prevStats.numNvmGetMiss,
-                      numNvmGets - prevStats.numNvmGets);
 
       out << folly::sformat(
           "RAM Hit Ratio : {:6.2f}%\n"
@@ -426,7 +429,7 @@ struct Stats {
  private:
   static double pctFn(uint64_t ops, uint64_t total) {
     return total == 0
-               ? 100.0
+               ? 0
                : 100.0 * static_cast<double>(ops) / static_cast<double>(total);
   }
 
