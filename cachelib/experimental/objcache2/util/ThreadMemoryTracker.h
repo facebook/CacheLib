@@ -43,11 +43,8 @@ class ThreadMemoryTracker {
     }
   }
 
-  size_t getMemUsageBytes() {
+  int64_t getMemUsageBytes() {
     if (!allocPtr_ || !deallocPtr_) {
-      return 0;
-    }
-    if (*allocPtr_ < *deallocPtr_) {
       return 0;
     }
     return *allocPtr_ - *deallocPtr_;
