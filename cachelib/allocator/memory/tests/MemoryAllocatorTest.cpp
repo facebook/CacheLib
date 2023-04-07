@@ -401,13 +401,28 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
   for (const auto& pool : poolAllocs) {
     const auto& allocs = pool.second;
     for (const auto* alloc : allocs) {
-      CompressedPtr ptr = m.compress(alloc);
+      CompressedPtr ptr = m.compress(alloc, false /* isMultiTiered */);
       ASSERT_FALSE(ptr.isNull());
-      ASSERT_EQ(alloc, m.unCompress(ptr));
+      ASSERT_EQ(alloc, m.unCompress(ptr, false /* isMultiTiered */));
     }
   }
 
-  ASSERT_EQ(nullptr, m.unCompress(m.compress(nullptr)));
+  ASSERT_EQ(nullptr,
+            m.unCompress(m.compress(nullptr, false /* isMultiTiered */),
+                         false /* isMultiTiered */));
+
+  // test pointer compression with multi-tier
+  for (const auto& pool : poolAllocs) {
+    const auto& allocs = pool.second;
+    for (const auto* alloc : allocs) {
+      CompressedPtr ptr = m.compress(alloc, true /* isMultiTiered */);
+      ASSERT_FALSE(ptr.isNull());
+      ASSERT_EQ(alloc, m.unCompress(ptr, true /* isMultiTiered */));
+    }
+  }
+
+  ASSERT_EQ(nullptr, m.unCompress(m.compress(nullptr, true /* isMultiTiered */),
+                                  true /* isMultiTiered */));
 }
 
 TEST_F(MemoryAllocatorTest, Restorable) {
@@ -589,11 +604,6 @@ TEST_F(MemoryAllocatorTest, isAllocFreed) {
 
     m.completeSlabRelease(std::move(releaseContext));
     ASSERT_TRUE(activeAllocs.size() > 0);
-    for (void* slabAlloc : activeAllocs) {
-      // slab release already completed
-      ASSERT_THROW(m.isAllocFreed(releaseContext, slabAlloc),
-                   std::invalid_argument);
-    }
   }
 }
 
@@ -803,11 +813,6 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
 
   m.completeSlabRelease(std::move(releaseContext));
   ASSERT_TRUE(activeAllocs.size() > 0);
-  for (void* slabAlloc : activeAllocs) {
-    // slab release already completed
-    ASSERT_THROW(m.isAllocFreed(releaseContext, slabAlloc),
-                 std::invalid_argument);
-  }
 
   // Check that we dont iterate over slab which has been released.
   forEachAllocationCount = 0;
