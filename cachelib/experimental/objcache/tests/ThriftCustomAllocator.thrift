@@ -24,15 +24,8 @@ struct UseSimpleCustomAllocator {
 
   // A template type like map needs to use "cpp.template" to specify a replacement template
   1: map<
-    // A concrete type like string needs to use "cpp.type" to specify a replacement type
-    string (
-      cpp.use_allocator,
-      cpp.type = "facebook::cachelib::objcache::test::TestString",
-    ),
-    string (
-      cpp.use_allocator,
-      cpp.type = "facebook::cachelib::objcache::test::TestString",
-    )
+    string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607,
+    string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
   > (
     cpp.use_allocator,
     cpp.template = "facebook::cachelib::objcache::test::TestMap",
@@ -55,10 +48,7 @@ struct UseSimpleCustomAllocator {
 union UnionWithCustomAllocator {
   1: map<
     i32,
-    string (
-      cpp.use_allocator,
-      cpp.type = "facebook::cachelib::objcache::test::TestString",
-    )
+    string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
   > (
     cpp.use_allocator,
     cpp.template = "facebook::cachelib::objcache::test::TestMap",
@@ -108,3 +98,9 @@ struct UseTwoF14Maps {
 } (
   cpp.allocator = "facebook::cachelib::objcache::test::TestF14TemplateAllocator<std::pair<const int32_t, int32_t>>",
 )
+
+// The following were automatically generated and may benefit from renaming.
+typedef string (
+  cpp.type = 'facebook::cachelib::objcache::test::TestString',
+  cpp.use_allocator = '1',
+) string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
