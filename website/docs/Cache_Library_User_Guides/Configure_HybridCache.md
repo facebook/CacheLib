@@ -122,10 +122,10 @@ There are 2 types of admission policy: **"random"** and **"dynamic_random"**. Us
 * "dynamic_random" policy
  ```cpp
  navyConfig.enableDynamicRandomAdmPolicy()
-           .setAdmissionWriteRate(admissionWriteRate)
+           .setAdmWriteRate(admissionWriteRate)
            .setMaxWriteRate(maxWriteRate)
-           .setAdmissionSuffixLength(admissionSuffixLen)
-           .setAdmissionProbBaseSize(admissionProbBaseSize);
+           .setAdmSuffixLength(admissionSuffixLen)
+           .setAdmProbBaseSize(admissionProbBaseSize);
  ```
   *  (**Required**) `admission write rate` (bytes/s)
 
