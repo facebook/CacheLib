@@ -137,6 +137,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
   using Key = KAllocation::Key;
   using Config = ObjectCacheConfig<ObjectCache<AllocatorT>>;
+  using EvictionPolicyConfig = typename AllocatorT::MMType::Config;
   using Item = ObjectCacheItem;
   using Serializer = ObjectSerializer<ObjectCache<AllocatorT>>;
   using Deserializer = ObjectDeserializer<ObjectCache<AllocatorT>>;

@@ -196,6 +196,62 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testSetEvictionPolicyConfig() {
+    typename ObjectCache::EvictionPolicyConfig evictionPolicyConfig;
+    evictionPolicyConfig.updateOnRead = false;
+    evictionPolicyConfig.updateOnWrite = true;
+    size_t numEntriesLimit = 10;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(numEntriesLimit)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); })
+        .setEvictionPolicyConfig(std::move(evictionPolicyConfig));
+
+    auto objcache = ObjectCache::create(config);
+    // add #numEntriesLimit objects
+    for (size_t i = 1; i <= numEntriesLimit; i++) {
+      auto [allocRes, _, __] = objcache->insertOrReplace(
+          folly::sformat("Foo_{}", i), std::make_unique<Foo>());
+      ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, allocRes);
+    }
+
+    {
+      // read-only access won't promote the object
+      auto found = objcache->template find<Foo>("Foo_1");
+      EXPECT_NE(nullptr, found);
+    }
+
+    // add one more object to trigger eviction
+    auto res = objcache->insertOrReplace(
+        folly::sformat("Foo_{}", numEntriesLimit + 1), std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res));
+
+    {
+      // Foo_1 should be evicted
+      auto found = objcache->template find<Foo>("Foo_1");
+      EXPECT_EQ(nullptr, found);
+    }
+
+    {
+      // write access will promote the object
+      auto found = objcache->template findToWrite<Foo>("Foo_2");
+      EXPECT_NE(nullptr, found);
+    }
+
+    // add one more object to trigger eviction
+    res = objcache->insertOrReplace(
+        folly::sformat("Foo_{}", numEntriesLimit + 2), std::make_unique<Foo>());
+    ASSERT_EQ(ObjectCache::AllocStatus::kSuccess, std::get<0>(res));
+
+    {
+      // Foo_2 should not be evicted
+      auto found = objcache->template find<Foo>("Foo_2");
+      EXPECT_NE(nullptr, found);
+    }
+  }
+
   void testSimple() {
     ObjectCacheConfig config;
     config.setCacheName("test").setCacheCapacity(10'000);
@@ -1504,6 +1560,11 @@ TYPED_TEST_CASE(ObjectCacheTest, AllocatorTypes);
 TYPED_TEST(ObjectCacheTest, GetAllocSize) { this->testGetAllocSize(); }
 TYPED_TEST(ObjectCacheTest, ConfigValidation) { this->testConfigValidation(); }
 TYPED_TEST(ObjectCacheTest, SetShardName) { this->testSetShardName(); }
+TYPED_TEST(ObjectCacheTest, SetEvictionPolicyConfig) {
+  if (std::is_same_v<TypeParam, LruAllocator>) {
+    this->testSetEvictionPolicyConfig();
+  }
+}
 TYPED_TEST(ObjectCacheTest, Simple) { this->testSimple(); }
 TYPED_TEST(ObjectCacheTest, MultiType) { this->testMultiType(); }
 TYPED_TEST(ObjectCacheTest, testMultiTypePolymorphism) {

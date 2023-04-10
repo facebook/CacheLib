@@ -34,6 +34,7 @@ struct ObjectCacheConfig {
   using ItemDestructor = typename ObjectCache::ItemDestructor;
   using SerializeCb = typename ObjectCache::SerializeCb;
   using DeserializeCb = typename ObjectCache::DeserializeCb;
+  using EvictionPolicyConfig = typename ObjectCache::EvictionPolicyConfig;
 
   // Set cache name as a string
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
@@ -131,6 +132,9 @@ struct ObjectCacheConfig {
 
   ObjectCacheConfig& setItemReaperInterval(std::chrono::milliseconds interval);
 
+  ObjectCacheConfig& setEvictionPolicyConfig(
+      EvictionPolicyConfig _evictionPolicyConfig);
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -199,6 +203,9 @@ struct ObjectCacheConfig {
 
   // Deserialize callback for cache persistence
   DeserializeCb deserializeCb{};
+
+  // Config of the eviction policy
+  EvictionPolicyConfig evictionPolicyConfig{};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -341,6 +348,13 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemReaperInterval(
     std::chrono::milliseconds _reaperInterval) {
   reaperInterval = _reaperInterval;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEvictionPolicyConfig(
+    EvictionPolicyConfig _evictionPolicyConfig) {
+  evictionPolicyConfig = _evictionPolicyConfig;
   return *this;
 }
 

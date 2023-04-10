@@ -72,16 +72,21 @@ void ObjectCache<AllocatorT>::init() {
       this->l1Cache_->getCacheMemoryStats().ramCacheSize / perPoolSize);
   if (!config_.l1ShardName.empty()) {
     if (l1NumShards_ == 1) {
-      this->l1Cache_->addPool(config_.l1ShardName, perPoolSize);
+      this->l1Cache_->addPool(config_.l1ShardName, perPoolSize,
+                              {} /* allocSizes */,
+                              config_.evictionPolicyConfig);
     } else {
       for (size_t i = 0; i < l1NumShards_; i++) {
         this->l1Cache_->addPool(fmt::format("{}_{}", config_.l1ShardName, i),
-                                perPoolSize);
+                                perPoolSize, {} /* allocSizes */,
+                                config_.evictionPolicyConfig);
       }
     }
   } else {
     for (size_t i = 0; i < l1NumShards_; i++) {
-      this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize);
+      this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize,
+                              {} /* allocSizes */,
+                              config_.evictionPolicyConfig);
     }
   }
 
