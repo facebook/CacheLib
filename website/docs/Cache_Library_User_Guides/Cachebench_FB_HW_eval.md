@@ -204,14 +204,14 @@ Meta is sharing anonymized traces captured from large scale production cache ser
 1. Install and setup the AWS CLI
 2. Download the tracedata
    ```sh
-   $ aws s3 ls s3://cachelib-workload-sharing/pub/kvcache/202206/
+   $ aws s3 ls --no-sign-request s3://cachelib-workload-sharing/pub/kvcache/202206/
    2023-02-09 13:37:50       1374 config_kvcache.json
    2023-02-09 13:38:58 4892102575 kvcache_traces_1.csv
    2023-02-09 13:38:58 4814294537 kvcache_traces_2.csv
    2023-02-09 13:38:58 4678364393 kvcache_traces_3.csv
    2023-02-09 13:38:58 4734675702 kvcache_traces_4.csv
    2023-02-09 13:38:58 4810857756 kvcache_traces_5.csv
-   $ aws s3 cp s3://cachelib-workload-sharing/pub/kvcache/202206/ ./ --recursive --no-sign-request
+   $ aws s3 cp --no-sign-request --recursive s3://cachelib-workload-sharing/pub/kvcache/202206/ ./ 
    ```
 3. Modify the test config as needed (see following section)
    ```sh
