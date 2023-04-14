@@ -34,10 +34,11 @@ The sections below list out the `config setters` in the order of the config they
 
 Configs to initialize NVM cache lives in `CacheAllocatorConfig::nvmConfig` and a majority of them are still set via CacheAllocatorConfig's setter functions. Below is the list of setters in CacheAllocatorConfig that sets nvmConfig:
 
-* `enableCachePersistence`: cache directory is used to initialize NVM cache as well.*
+* `enableCachePersistence`: cache directory is used to initialize NVM cache as well.
 * `setDropNvmCacheOnShmNew`: This flag is used to determine whether the NVM cache would start truncated.
 * `enableNvmCacheEncryption`: This sets CacheAllocatorConfig::nvmConfig::deviceEncryptor.
 * `enableNvmCacheTruncateAllocSize`: This sets CacheAllocatorConfig::nvmConfig::truncateItemToOriginalAllocSizeInNvm.
+* `enableFastNegativeLookups`: This enables/disables the feature to resolve NVM cache misses quickly in the sync path of `find(...)` call without kicking the lookup for NVM cache. This is essential to reduce the overall end-to-end latency, but comes with the penalty of small overhead added in the hit cases for additional accesses to index tables or bloom filters. The default is enabled.
 * `setNvmCacheAdmissionPolicy`/`enableRejectFirstAPForNvm`: Sets the NvmAdmissionPolicy. Notice that the field lives with CacheAllocatorConfig.
 * `setNvmAdmissionMinTTL`: Sets the NVM admission min TTL. Similarly this lives directly with CacheAllocatorConfig.
 * `enableNvmCache`: Sets `CacheAllocatorConfig::nvmConfig` directly. This function should be called first if you intend to turn on NVM cache. And the other functions above would correctly modify the nvmConfig.
