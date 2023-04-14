@@ -359,14 +359,49 @@ folly::File openCacheFile(const std::string& fileName,
   }
   XDCHECK_GE(f.fd(), 0);
 
-#ifndef MISSING_FALLOCATE
-  // TODO: T95780876 detect if file exists and is of expected size. If not,
-  // automatically fallocate the file or ftruncate the file.
-  if (truncate && ::fallocate(f.fd(), 0, 0, size) < 0) {
+  // get current file size
+  struct stat fileStat;
+  if (fstat(f.fd(), &fileStat) < 0) {
     throw std::system_error(
         errno,
         std::system_category(),
-        folly::sformat("failed fallocate with size {}", size));
+        folly::sformat("failed to get the file stat for file {}", fileName));
+  }
+
+  uint64_t curfileSize = fileStat.st_size;
+
+  // ftruncate the file if requesting a smaller file size and truncate flag is
+  // set
+  if (truncate && size < curfileSize) {
+    if (::ftruncate(f.fd(), size /*length*/) < 0) {
+      throw std::system_error(
+          errno,
+          std::system_category(),
+          folly::sformat(
+              "ftruncate failed with requested size {}, current size {}", size,
+              curfileSize));
+    }
+    XLOGF(INFO, "Cache file {} is ftruncated from {} bytes to {} bytes",
+          fileName, curfileSize, size);
+  }
+
+#ifndef MISSING_FALLOCATE
+  // TODO(jiayueb): make allocate flag user configurable and migrate the
+  // existing use cases
+  // fallocate the file if requesting a larger file size and allocate flag is
+  // set
+  if (truncate && size > curfileSize) {
+    if (::fallocate(f.fd(), 0 /*mode*/, curfileSize /*offset*/,
+                    size - curfileSize /*len*/) < 0) {
+      throw std::system_error(
+          errno,
+          std::system_category(),
+          folly::sformat(
+              "fallocate failed with requested size {}, current size {}", size,
+              curfileSize));
+    }
+    XLOGF(INFO, "Cache file {} is fallocated from {} bytes to {} bytes",
+          fileName, curfileSize, size);
   }
 #endif
 
