@@ -68,8 +68,15 @@ struct ObjectCacheDestructorData {
   ObjectCacheDestructorData(ObjectCacheDestructorContext ctx,
                             uintptr_t ptr,
                             const KAllocation::Key& k,
-                            uint32_t expiryTime)
-      : context(ctx), objectPtr(ptr), key(k), expiryTime(expiryTime) {}
+                            uint32_t expiryTime,
+                            uint32_t creationTime,
+                            uint32_t lastAccessTime)
+      : context(ctx),
+        objectPtr(ptr),
+        key(k),
+        expiryTime(expiryTime),
+        creationTime(creationTime),
+        lastAccessTime(lastAccessTime) {}
 
   // release the evicted/removed/expired object memory
   template <typename T>
@@ -88,6 +95,12 @@ struct ObjectCacheDestructorData {
 
   // the expiry time of the object
   uint32_t expiryTime;
+
+  // the creation time of the object
+  uint32_t creationTime;
+
+  // the last time this object was accessed
+  uint32_t lastAccessTime;
 };
 
 template <typename AllocatorT>
@@ -296,6 +309,19 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
       return std::chrono::seconds{0};
     }
     return getReadHandleRefInternal<T>(object)->getConfiguredTTL();
+  }
+
+  // Get the last access timestamp of the object
+  // @param  object   object shared pointer returned from ObjectCache APIs
+  //
+  // @return the last accessed timestamp in seconds of the object
+  //         0 if object is nullptr
+  template <typename T>
+  uint32_t getLastAccessTimeSec(std::shared_ptr<T>& object) {
+    if (object == nullptr) {
+      return 0;
+    }
+    return getReadHandleRefInternal<T>(object)->getLastAccessTime();
   }
 
   // Update the expiry timestamp of an object

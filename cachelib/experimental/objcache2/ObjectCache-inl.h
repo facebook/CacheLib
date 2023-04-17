@@ -57,7 +57,8 @@ void ObjectCache<AllocatorT>::init() {
           }
           // execute user defined item destructor
           config_.itemDestructor(ObjectCacheDestructorData(
-              ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime()));
+              ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+              item.getCreationTime(), item.getLastAccessTime()));
         };
       });
 
