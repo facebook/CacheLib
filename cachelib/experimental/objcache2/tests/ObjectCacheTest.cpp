@@ -365,7 +365,7 @@ class ObjectCacheTest : public ::testing::Test {
                                 std::make_unique<Foo3>(numDtors));
     }
     for (int i = 0; i < 10; i++) {
-      objcache->remove(folly::sformat("key_{}", i));
+      ASSERT_TRUE(objcache->remove(folly::sformat("key_{}", i)));
     }
     ASSERT_EQ(10, numDtors);
   }
@@ -519,7 +519,8 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(2, found2->b);
     EXPECT_EQ(3, found2->c);
 
-    objcache->remove("Foo");
+    EXPECT_TRUE(objcache->remove("Foo"));
+    EXPECT_FALSE(objcache->remove("Foo"));
   }
 
   void testObjectSizeTrackingBasics() {
@@ -576,7 +577,7 @@ class ObjectCacheTest : public ::testing::Test {
     ASSERT_EQ(objcache->getTotalObjectSize(), foo2Size);
 
     // remove foo2
-    objcache->remove("Foo");
+    ASSERT_TRUE(objcache->remove("Foo"));
     ASSERT_EQ(nullptr, objcache->template find<Foo>("Foo"));
     ASSERT_EQ(objcache->getNumEntries(), 0);
     ASSERT_EQ(objcache->getTotalObjectSize(), 0);

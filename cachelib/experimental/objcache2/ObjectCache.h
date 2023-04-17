@@ -240,7 +240,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Remove an object from cache by its key. No-op if object doesn't exist.
   // @param key   the key to the object.
-  void remove(folly::StringPiece key);
+  //
+  // @return false if the key is not found in object-cache
+  bool remove(folly::StringPiece key);
 
   // Persist all non-expired objects in the cache if cache persistence is
   // enabled.

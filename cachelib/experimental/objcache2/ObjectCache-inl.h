@@ -314,9 +314,9 @@ ObjectCache<AllocatorT>::~ObjectCache() {
 }
 
 template <typename AllocatorT>
-void ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
+bool ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
   removes_.inc();
-  this->l1Cache_->remove(key);
+  return this->l1Cache_->remove(key) == AllocatorT::RemoveRes::kSuccess;
 }
 
 template <typename AllocatorT>
