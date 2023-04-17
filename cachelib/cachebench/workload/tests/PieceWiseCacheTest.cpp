@@ -53,8 +53,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/100000,
         /*ttl=*/3600,
-        /*extraField=*/std::move(extraFieldV1),
-        /*admFeatureMap=*/std::move(admFeatureMap1),
+        /*extraField=*/extraFieldV1,
+        /*admFeatureMap=*/admFeatureMap1,
         /*isHit=*/folly::none,
         /*itemValue=*/itemValue);
 
@@ -71,8 +71,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/65530,
         /*ttl=*/3600,
-        /*extraField=*/std::move(extraFieldV2),
-        /*admFeatureMap=*/std::move(admFeatureMap2),
+        /*extraField=*/extraFieldV2,
+        /*admFeatureMap=*/admFeatureMap2,
         /*isHit=*/folly::none,
         /*itemValue=*/itemValue);
 
@@ -88,8 +88,8 @@ class PieceWiseCacheTest : public ::testing::Test {
         /*rangeStart=*/100,
         /*rangeEnd=*/6000,
         /*ttl=*/3600,
-        /*extraField=*/std::move(extraFieldV3),
-        /*admFeatureMap=*/std::move(admFeatureMap3),
+        /*extraField=*/extraFieldV3,
+        /*admFeatureMap=*/admFeatureMap3,
         /*isHit=*/folly::none,
         /*itemValue=*/itemValue);
   }

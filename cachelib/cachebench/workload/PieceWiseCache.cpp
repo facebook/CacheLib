@@ -338,8 +338,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
     folly::Optional<uint64_t> rangeStart,
     folly::Optional<uint64_t> rangeEnd,
     uint32_t ttl,
-    std::vector<std::string>&& statsAggFieldV,
-    std::unordered_map<std::string, std::string>&& admFeatureM,
+    std::vector<std::string>& statsAggFieldV,
+    std::unordered_map<std::string, std::string>& admFeatureM,
     folly::Optional<bool> isHit,
     const std::string& itemValue = "")
     : baseKey(GenericPieces::escapeCacheKey(key.str())),

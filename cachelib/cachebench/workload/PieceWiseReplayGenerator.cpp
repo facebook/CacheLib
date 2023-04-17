@@ -99,18 +99,6 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
         continue;
       }
 
-      auto shard = getShard(fields[SampleFields::CACHE_KEY]);
-      if (threadFinished_[shard].load(std::memory_order_relaxed)) {
-        if (shouldShutdown()) {
-          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
-          return;
-        }
-
-        XLOG_EVERY_MS(INFO, 100'000,
-                      folly::sformat("Thread {} finish, skip", shard));
-        continue;
-      }
-
       auto fullContentSizeT =
           folly::tryTo<size_t>(fields[SampleFields::OBJECT_SIZE]);
       auto responseSizeT =
@@ -240,35 +228,76 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
               ? folly::to<std::string>(fields[SampleFields::ITEM_VALUE])
               : "";
 
-      // Spin until the queue has room
-      while (!activeReqQ_[shard]->write(config_.cachePieceSize,
-                                        timestampSeconds,
-                                        nextReqId_,
-                                        OpType::kGet, // Only support get from
-                                                      // trace for now
-                                        fields[SampleFields::CACHE_KEY],
-                                        fullContentSize,
-                                        responseHeaderSize,
-                                        rangeStart,
-                                        rangeEnd,
-                                        ttl,
-                                        std::move(statsAggFields),
-                                        std::move(admFeatureMap),
-                                        cacheHit,
-                                        itemValue)) {
-        if (shouldShutdown()) {
-          XLOG(INFO) << "Forced to stop, terminate reading trace file!";
-          return;
+      // If ampFactor_ is used, the last 4 bytes of the key will be replaced
+      // with stream Id of 4 decimal chars if the key is in encoded format;
+      // i.e., padded with '0's. Also, at least 11B (the number of decimal used
+      // to encode the key) of the encoded key will be kept for uniqueness.
+      // If not in encoded format, the key size could be increased by 4B
+      auto keyPrefix = fields[SampleFields::CACHE_KEY].str();
+      if (ampFactor_ > 1 && keyPrefix.size() > 11) {
+        // truncate the key by removing up to 4 '0's which were used to
+        // pad the key to match the original key size
+        size_t keySize = keyPrefix.size();
+        size_t newSize = std::max<size_t>(keySize - 4, 11u);
+        for (; keySize > newSize; keySize--) {
+          if (keyPrefix.back() != '0') {
+            XLOG_EVERY_MS(INFO, 10'000,
+                          folly::sformat("Size of key {} will be increased "
+                                         "for ampFactor {}",
+                                         keyPrefix, ampFactor_));
+            break;
+          }
         }
 
-        queueProducerWaitCounts_.inc();
-        std::this_thread::sleep_for(
-            std::chrono::microseconds(kProducerConsumerWaitTimeUs));
+        keyPrefix.resize(keySize);
+      }
 
-        if (threadFinished_[shard].load(std::memory_order_relaxed)) {
-          XLOG_EVERY_MS(INFO, 100'000,
-                        folly::sformat("Thread {} finish, skip", shard));
-          break;
+      for (size_t keySuffix = 0; keySuffix < ampFactor_; keySuffix++) {
+        std::string key = keyPrefix;
+        if (ampFactor_ > 1) {
+          key.append(folly::sformat("{:04d}", keySuffix));
+        }
+
+        auto shard = getShard(key);
+
+        while (true) {
+          if (shouldShutdown()) {
+            XLOG(INFO) << "Forced to stop, terminate reading trace file!";
+            return;
+          }
+
+          // Skip the shard if the stressor thread wants to leave
+          if (threadFinished_[shard].load(std::memory_order_relaxed)) {
+            XLOG_EVERY_MS(INFO, 100'000,
+                          folly::sformat("Thread {} finish, skip", shard));
+            break;
+          }
+
+          if (!activeReqQ_[shard]->isFull()) {
+            auto status =
+                activeReqQ_[shard]->write(config_.cachePieceSize,
+                                          timestampSeconds,
+                                          nextReqId_,
+                                          OpType::kGet, // Only support get from
+                                                        // trace for now
+                                          key,
+                                          fullContentSize,
+                                          responseHeaderSize,
+                                          rangeStart,
+                                          rangeEnd,
+                                          ttl,
+                                          statsAggFields,
+                                          admFeatureMap,
+                                          cacheHit,
+                                          itemValue);
+            XCHECK(status);
+            break;
+          }
+
+          // Spin until the queue has room
+          queueProducerWaitCounts_.inc();
+          std::this_thread::sleep_for(
+              std::chrono::microseconds(kProducerConsumerWaitTimeUs));
         }
       }
 

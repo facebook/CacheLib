@@ -180,6 +180,7 @@ class ReplayGeneratorBase : public GeneratorBase {
   explicit ReplayGeneratorBase(const StressorConfig& config)
       : config_(config),
         repeatTraceReplay_{config_.repeatTraceReplay},
+        ampFactor_(config.replayGeneratorConfig.ampFactor),
         numShards_(config.numThreads),
         mode_(config_.replayGeneratorConfig.getSerializationMode()) {
     if (config.checkConsistency) {
@@ -195,6 +196,7 @@ class ReplayGeneratorBase : public GeneratorBase {
  protected:
   const StressorConfig config_;
   const bool repeatTraceReplay_;
+  const size_t ampFactor_;
 
   // # of shards is equal to the # of stressor threads
   const uint32_t numShards_;

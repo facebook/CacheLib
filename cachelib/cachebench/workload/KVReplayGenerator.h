@@ -73,9 +73,7 @@ class KVReplayGenerator : public ReplayGeneratorBase {
   enum SampleFields { KEY = 0, OP, SIZE, OP_COUNT, KEY_SIZE, TTL, END };
 
   explicit KVReplayGenerator(const StressorConfig& config)
-      : ReplayGeneratorBase(config),
-        ampFactor_(config.replayGeneratorConfig.ampFactor),
-        traceStream_(config, 0) {
+      : ReplayGeneratorBase(config), traceStream_(config, 0) {
     for (uint32_t i = 0; i < numShards_; ++i) {
       stressorCtxs_.emplace_back(std::make_unique<StressorCtx>(i));
     }
@@ -166,10 +164,6 @@ class KVReplayGenerator : public ReplayGeneratorBase {
   // stressorIdx_ is used to index.
   std::vector<std::unique_ptr<StressorCtx>> stressorCtxs_;
 
-  // used to select stream in round-robin
-  const size_t ampFactor_;
-
-  std::atomic<size_t> nextStream_{0};
   TraceFileStream traceStream_;
 
   std::thread genWorker_;
