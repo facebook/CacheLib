@@ -1195,9 +1195,6 @@ class ObjectCacheTest : public ::testing::Test {
               return deserializer.template deserialize<ThriftFoo>();
             });
 
-    std::vector<std::vector<std::string>> evictionItrDumpBefore(numShards);
-    std::vector<std::vector<std::string>> evictionItrDumpAfter(numShards);
-
     auto dumpEvictionItr = [](PoolId poolId, ObjectCache& objcache) {
       auto evictItr = objcache.getEvictionIterator(poolId);
       std::vector<std::string> content;
@@ -1205,50 +1202,35 @@ class ObjectCacheTest : public ::testing::Test {
         auto* itemPtr = reinterpret_cast<typename ObjectCache::Item*>(
             evictItr->getMemory());
         auto* objectPtr = reinterpret_cast<ThriftFoo*>(itemPtr->objectPtr);
-        content.push_back(folly::sformat("a: {}, b: {}, c: {}",
-                                         objectPtr->get_a(), objectPtr->get_b(),
-                                         objectPtr->get_c()));
+        content.push_back(folly::sformat(
+            "{}: a {} b {} c {}", evictItr->getKey(), objectPtr->get_a(),
+            objectPtr->get_b(), objectPtr->get_c()));
         ++evictItr;
       }
       return content;
     };
 
-    auto insertWithPoolId = [](PoolId poolId, std::string key,
-                               ObjectCache& objcache,
-                               std::unique_ptr<ThriftFoo> object) {
-      auto handle =
-          objcache.l1Cache_->allocate(poolId, key, sizeof(ObjectCacheItem));
-      ThriftFoo* ptr = object.get();
-      *handle->template getMemoryAs<ObjectCacheItem>() =
-          ObjectCacheItem{reinterpret_cast<uintptr_t>(ptr), 0};
-      objcache.l1Cache_->insert(handle);
-
-      object.release();
-      auto deleter = [h = std::move(handle)](ThriftFoo*) {};
-      return std::shared_ptr<ThriftFoo>(ptr, std::move(deleter));
-    };
-
+    std::vector<std::vector<std::string>> evictionItrDumpBefore;
     {
       auto objcache = ObjectCache::create(config);
       auto poolIds = objcache->l1Cache_->getRegularPoolIds();
-      std::vector<int> numPerShard{800, 150, 50};
+      size_t numItems = 2000;
       // Create an unevenly distributed shards
-      for (auto poolId : poolIds) {
-        for (auto i = 0; i < numPerShard[poolId]; i++) {
-          auto object = std::make_unique<ThriftFoo>();
-          object->a().value() = i;
-          object->b().value() = i + 1;
-          object->c().value() = i + 2;
-          insertWithPoolId(poolId, folly::sformat("key_{}_{}", poolId, i),
-                           *objcache, std::move(object));
-        }
+      for (size_t i = 0; i < numItems; i++) {
+        auto object = std::make_unique<ThriftFoo>();
+        object->a().value() = i;
+        object->b().value() = i + 1;
+        object->c().value() = i + 2;
+        auto key = folly::sformat("key_{}", i);
+        objcache->insertOrReplace(key, std::move(object));
       }
 
-      // random access
+      // random access to shuffle the items' order
       int objectNum = objcache->getNumEntries();
       for (int i = 0; i < objectNum / 2; i++) {
-        objcache->template find<ThriftFoo>(
+        auto found = objcache->template find<ThriftFoo>(
             folly::sformat("key_{}", folly::Random::rand32(0, objectNum)));
+        ASSERT_NE(nullptr, found);
       }
 
       for (auto poolId : poolIds) {
@@ -1258,6 +1240,7 @@ class ObjectCacheTest : public ::testing::Test {
       ASSERT_EQ(objcache->persist(), true);
     }
 
+    std::vector<std::vector<std::string>> evictionItrDumpAfter;
     {
       auto objcache = ObjectCache::create(config);
       ASSERT_EQ(objcache->recover(), true);
@@ -1265,8 +1248,9 @@ class ObjectCacheTest : public ::testing::Test {
       for (auto poolId : poolIds) {
         evictionItrDumpAfter.emplace_back(dumpEvictionItr(poolId, *objcache));
       }
-      EXPECT_EQ(evictionItrDumpAfter, evictionItrDumpBefore);
     }
+
+    EXPECT_EQ(evictionItrDumpAfter, evictionItrDumpBefore);
   }
 
   void testGetTtl() {

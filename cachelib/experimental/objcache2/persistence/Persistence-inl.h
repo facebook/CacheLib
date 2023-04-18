@@ -77,7 +77,7 @@ bool Persistor<ObjectCache>::run() {
             reinterpret_cast<typename ObjectCache::Item*>(itr->getMemory());
         WorkUnit unit{itr->getKey(), itemPtr->objectPtr, itemPtr->objectSize,
                       itr->getExpiryTime()};
-        queue_.write(std::move(unit));
+        queue_.blockingWrite(std::move(unit));
       }
       ++itr;
     }
