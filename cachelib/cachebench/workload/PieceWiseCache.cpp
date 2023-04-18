@@ -132,6 +132,17 @@ void PieceWiseCacheStats::recordNonPieceHitInternal(InternalStats& stats,
   stats.objGetFullHits.inc();
 }
 
+void PieceWiseCacheStats::recordPieceMetadataHit(
+    size_t pieceBytes, const std::vector<std::string>& statsAggFields) {
+  recordStats(recordPieceMetadataHitInternal, statsAggFields, pieceBytes);
+}
+
+void PieceWiseCacheStats::recordPieceMetadataHitInternal(InternalStats& stats,
+                                                         size_t pieceBytes) {
+  stats.getHitBytes.add(pieceBytes);
+  stats.objGetHits.inc();
+}
+
 void PieceWiseCacheStats::recordPieceHeaderHit(
     size_t pieceBytes, const std::vector<std::string>& statsAggFields) {
   recordStats(recordPieceHeaderHitInternal, statsAggFields, pieceBytes);
@@ -140,7 +151,6 @@ void PieceWiseCacheStats::recordPieceHeaderHit(
 void PieceWiseCacheStats::recordPieceHeaderHitInternal(InternalStats& stats,
                                                        size_t pieceBytes) {
   stats.getHitBytes.add(pieceBytes);
-  stats.objGetHits.inc();
 }
 
 void PieceWiseCacheStats::recordPieceBodyHit(
@@ -341,7 +351,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
     std::vector<std::string>& statsAggFieldV,
     std::unordered_map<std::string, std::string>& admFeatureM,
     folly::Optional<bool> isHit,
-    const std::string& itemValue = "")
+    const std::string& itemValue,
+    size_t metadataSize)
     : baseKey(GenericPieces::escapeCacheKey(key.str())),
       pieceKey(baseKey),
       sizes(1),
@@ -354,6 +365,7 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
           admFeatureM,
           itemValue),
       requestRange(rangeStart, rangeEnd),
+      metadataSize(metadataSize),
       headerSize(responseHeaderSize),
       fullObjectSize(fullContentSize),
       statsAggFields(statsAggFieldV),
@@ -374,10 +386,10 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
                                         fullContentSize,
                                         &requestRange);
 
-    // Header piece is the first piece
-    pieceKey = GenericPieces::createPieceHeaderKey(baseKey);
-    sizes[0] = responseHeaderSize;
-    isHeaderPiece = true;
+    // Metadata piece is the first piece
+    pieceKey = baseKey;
+    pieceType = PieceType::Metadata;
+    sizes[0] = metadataSize;
   }
 }
 
@@ -394,7 +406,8 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(const PieceWiseReqWrapper& other)
           other.req.admFeatureMap,
           other.req.itemValue),
       requestRange(other.requestRange),
-      isHeaderPiece(other.isHeaderPiece),
+      pieceType(other.pieceType),
+      metadataSize(other.metadataSize),
       headerSize(other.headerSize),
       fullObjectSize(other.fullObjectSize),
       statsAggFields(other.statsAggFields),
@@ -451,16 +464,58 @@ void PieceWiseCacheAdapter::recordNewReq(PieceWiseReqWrapper& rw) {
 
 bool PieceWiseCacheAdapter::processReq(PieceWiseReqWrapper& rw,
                                        OpResultType result) {
-  if (rw.cachePieces) {
-    // Object is stored in pieces
-    return updatePieceProcessing(rw, result);
-  } else {
+  if (!rw.cachePieces) {
     // Object is not stored in pieces, and it should be stored along
     // with the response header
     return updateNonPieceProcessing(rw, result);
   }
+
+  if (rw.pieceType == PieceType::Metadata) {
+    // Object is stored in pieces and this is a metadata piece
+    return updatePieceProcessingMetadataPiece(rw, result);
+  }
+
+  // Object is stored in pieces and this is a header or body piece
+  return updatePieceProcessing(rw, result);
 }
 
+bool PieceWiseCacheAdapter::updatePieceProcessingMetadataPiece(
+    PieceWiseReqWrapper& rw, OpResultType result) {
+  if (result == OpResultType::kSetSkip) {
+    // No need to set subsequent pieces, we're done
+    return true;
+  }
+
+  if (result == OpResultType::kGetMiss) {
+    // Fetch from upstream, record ingress bytes, all subsequent piece
+    // operations will be set instead of get
+    size_t ingressBytes =
+        rw.metadataSize + rw.headerSize + rw.cachePieces->getRemainingBytes();
+    stats_.recordIngressBytes(ingressBytes, rw.statsAggFields);
+    rw.req.setOp(OpType::kSet);
+    return false;
+  }
+
+  if (result == OpResultType::kGetHit) {
+    // Record partial hit and fetch next piece
+    stats_.recordPieceMetadataHit(rw.sizes[0], rw.statsAggFields);
+    rw.req.setOp(OpType::kGet);
+  } else if (result == OpResultType::kSetSuccess ||
+             result == OpResultType::kSetFailure) {
+    // Fetch next piece
+    rw.req.setOp(OpType::kSet);
+  } else {
+    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+  }
+
+  // Next piece is a header piece
+  rw.pieceKey = GenericPieces::createPieceHeaderKey(rw.baseKey);
+  rw.sizes[0] = rw.headerSize;
+  rw.pieceType = PieceType::Header;
+
+  // Metadata piece is never the last piece, continue
+  return false;
+}
 bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
                                                   OpResultType result) {
   // we are only done if we have got everything.
@@ -472,7 +527,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
 
     // Record the cache hit stats
     if (result == OpResultType::kGetHit) {
-      if (rw.isHeaderPiece) {
+      if (rw.pieceType == PieceType::Header) {
         stats_.recordPieceHeaderHit(rw.sizes[0], rw.statsAggFields);
       } else {
         auto resultPieceIndex = nextPieceIndex - 1;
@@ -503,7 +558,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
       }
 
       // Update the piece fetch index
-      rw.isHeaderPiece = false;
+      rw.pieceType = PieceType::Body;
       rw.cachePieces->updateFetchIndex();
     } else {
       if (result == OpResultType::kGetHit) {
@@ -530,7 +585,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
   } else if (result == OpResultType::kGetMiss) {
     // Record ingress bytes since we will fetch the bytes from upstream.
     size_t ingressBytes;
-    if (rw.isHeaderPiece) {
+    if (rw.pieceType == PieceType::Header) {
       ingressBytes = rw.headerSize + rw.cachePieces->getRemainingBytes();
     } else {
       // Note we advance the piece index ahead of time, so

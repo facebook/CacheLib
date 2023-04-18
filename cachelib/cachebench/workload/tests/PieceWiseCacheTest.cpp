@@ -104,12 +104,12 @@ TEST_F(PieceWiseCacheTest, PieceWiseReqWrapperTest) {
   EXPECT_NE(&pieceReq1->baseKey, &pieceReqCopy.baseKey);
   EXPECT_NE(&pieceReq1->pieceKey, &pieceReqCopy.pieceKey);
   EXPECT_NE(&pieceReq1->req.key, &pieceReqCopy.req.key);
-  EXPECT_EQ(pieceReq1->req.key, "test|#|header-0");
-  EXPECT_EQ(pieceReqCopy.req.key, "test|#|header-0");
-  EXPECT_EQ(*(pieceReq1->req.sizeBegin), 1000);
-  EXPECT_EQ(*(pieceReqCopy.req.sizeBegin), 1000);
-  EXPECT_TRUE(pieceReq1->isHeaderPiece);
-  EXPECT_TRUE(pieceReqCopy.isHeaderPiece);
+  EXPECT_EQ(pieceReq1->req.key, "test");
+  EXPECT_EQ(pieceReqCopy.req.key, "test");
+  EXPECT_EQ(*(pieceReq1->req.sizeBegin), 0);
+  EXPECT_EQ(*(pieceReqCopy.req.sizeBegin), 0);
+  EXPECT_EQ(pieceReq1->pieceType, PieceType::Metadata);
+  EXPECT_EQ(pieceReqCopy.pieceType, PieceType::Metadata);
   EXPECT_EQ(pieceReqCopy.requestRange.getRequestRange()->first, 100);
   EXPECT_EQ(pieceReqCopy.requestRange.getRequestRange()->second.value(),
             100000);
@@ -123,19 +123,19 @@ TEST_F(PieceWiseCacheTest, PieceWiseReqWrapperTest) {
       pieceReqCopy.cachePieces->getPiecesPerGroup());
   pieceReqCopy.sizes[0] =
       pieceReqCopy.cachePieces->getSizeOfAPiece(nextPieceIndex);
-  pieceReqCopy.isHeaderPiece = false;
+  pieceReqCopy.pieceType = PieceType::Body;
   pieceReqCopy.cachePieces->updateFetchIndex();
-  EXPECT_EQ(pieceReq1->req.key, "test|#|header-0");
+  EXPECT_EQ(pieceReq1->req.key, "test");
   EXPECT_EQ(pieceReqCopy.req.key, "test|#|body-0-0");
-  EXPECT_EQ(*(pieceReq1->req.sizeBegin), 1000);
+  EXPECT_EQ(*(pieceReq1->req.sizeBegin), 0);
   EXPECT_EQ(*(pieceReqCopy.req.sizeBegin), 65536);
-  EXPECT_TRUE(pieceReq1->isHeaderPiece);
-  EXPECT_FALSE(pieceReqCopy.isHeaderPiece);
+  EXPECT_EQ(pieceReq1->pieceType, PieceType::Metadata);
+  EXPECT_EQ(pieceReqCopy.pieceType, PieceType::Body);
   EXPECT_EQ(pieceReqCopy.cachePieces->getCurFetchingPieceIndex(), 1);
 
   // check piece index is correct in the copy
   PieceWiseReqWrapper pieceReqCopy1(pieceReqCopy);
-  EXPECT_FALSE(pieceReqCopy1.isHeaderPiece);
+  EXPECT_EQ(pieceReqCopy1.pieceType, PieceType::Body);
   EXPECT_EQ(pieceReqCopy1.cachePieces->getCurFetchingPieceIndex(), 1);
 
   // non-piece cache request
@@ -147,8 +147,8 @@ TEST_F(PieceWiseCacheTest, PieceWiseReqWrapperTest) {
   EXPECT_EQ(nonPieceReqCopy.req.key, "test");
   EXPECT_EQ(*(nonPieceReq->req.sizeBegin), 11000);
   EXPECT_EQ(*(nonPieceReqCopy.req.sizeBegin), 11000);
-  EXPECT_FALSE(nonPieceReq->isHeaderPiece);
-  EXPECT_FALSE(nonPieceReqCopy.isHeaderPiece);
+  EXPECT_EQ(nonPieceReq->pieceType, PieceType::Metadata);
+  EXPECT_EQ(nonPieceReqCopy.pieceType, PieceType::Metadata);
   EXPECT_EQ(nonPieceReqCopy.requestRange.getRequestRange()->first, 100);
   EXPECT_EQ(nonPieceReqCopy.requestRange.getRequestRange()->second.value(),
             6000);
@@ -164,6 +164,8 @@ TEST_F(PieceWiseCacheTest, CacheHitTest) {
 
   // process pieceReq1
   piecewiseCache->recordNewReq(*pieceReq1);
+  // metadata piece hits
+  EXPECT_FALSE(piecewiseCache->processReq(*pieceReq1, OpResultType::kGetHit));
   // header piece hits
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq1, OpResultType::kGetHit));
   // first body piece hits, more body pieces are left
@@ -183,8 +185,10 @@ TEST_F(PieceWiseCacheTest, CacheHitTest) {
   EXPECT_EQ(stat.objGetFullHits.get(), 1);
 
   // process pieceReq2
-  // header piece hits
   piecewiseCache->recordNewReq(*pieceReq2);
+  // metadata piece hits
+  EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetHit));
+  // header piece hits
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetHit));
   // first body piece hits: done
   EXPECT_TRUE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetHit));
@@ -222,9 +226,12 @@ TEST_F(PieceWiseCacheTest, CacheMissTest) {
 
   // process pieceReq1
   piecewiseCache->recordNewReq(*pieceReq1);
-  // header piece misses
+  // metadata piece misses
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq1, OpResultType::kGetMiss));
   EXPECT_EQ(pieceReq1->req.getOp(), OpType::kSet);
+  // set metadata piece, more pieces needed
+  EXPECT_FALSE(
+      piecewiseCache->processReq(*pieceReq1, OpResultType::kSetSuccess));
   // set header piece, more pieces needed
   EXPECT_FALSE(
       piecewiseCache->processReq(*pieceReq1, OpResultType::kSetSuccess));
@@ -250,6 +257,9 @@ TEST_F(PieceWiseCacheTest, CacheMissTest) {
   piecewiseCache->recordNewReq(*pieceReq2);
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetMiss));
   EXPECT_EQ(pieceReq2->req.getOp(), OpType::kSet);
+  // set metadata piece, more pieces needed
+  EXPECT_FALSE(
+      piecewiseCache->processReq(*pieceReq2, OpResultType::kSetSuccess));
   // set header piece, more pieces needed
   EXPECT_FALSE(
       piecewiseCache->processReq(*pieceReq2, OpResultType::kSetSuccess));
@@ -294,6 +304,8 @@ TEST_F(PieceWiseCacheTest, CacheHitMissTest) {
 
   // process pieceReq1
   piecewiseCache->recordNewReq(*pieceReq1);
+  // metadata piece hits
+  EXPECT_FALSE(piecewiseCache->processReq(*pieceReq1, OpResultType::kGetHit));
   // header piece hits
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq1, OpResultType::kGetHit));
   // first body piece hits, more body pieces are left
@@ -317,8 +329,10 @@ TEST_F(PieceWiseCacheTest, CacheHitMissTest) {
   EXPECT_EQ(stat.objGetFullHits.get(), 0);
 
   // process pieceReq2
-  // header piece hits
   piecewiseCache->recordNewReq(*pieceReq2);
+  // metadata piece hits
+  EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetHit));
+  // header piece hits
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetHit));
   // first body piece misses
   EXPECT_FALSE(piecewiseCache->processReq(*pieceReq2, OpResultType::kGetMiss));

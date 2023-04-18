@@ -130,6 +130,10 @@ class PieceWiseCacheStats {
                          size_t hitBodyBytes,
                          const std::vector<std::string>& statsAggFields);
 
+  // Record cache hit for a metadata piece
+  void recordPieceMetadataHit(size_t pieceBytes,
+                              const std::vector<std::string>& statsAggFields);
+
   // Record cache hit for a header piece
   void recordPieceHeaderHit(size_t pieceBytes,
                             const std::vector<std::string>& statsAggFields);
@@ -224,6 +228,8 @@ class PieceWiseCacheStats {
   static void recordNonPieceHitInternal(InternalStats& stats,
                                         size_t hitBytes,
                                         size_t hitBodyBytes);
+  static void recordPieceMetadataHitInternal(InternalStats& stats,
+                                             size_t pieceBytes);
   static void recordPieceHeaderHitInternal(InternalStats& stats,
                                            size_t pieceBytes);
   static void recordPieceBodyHitInternal(InternalStats& stats,
@@ -238,12 +244,17 @@ class PieceWiseCacheStats {
                                   std::ostream& out);
 };
 
-// For piecewise caching, an object is stored as multiple pieces (one header
-// piece + several body pieces) if its size is larger than cachePieceSize;
-// otherwise, it's stored as a single piece.
-// Therefore, a raw request spawns into one or multiple piece requests against
-// the cache.
-// The class wraps the struct Request (which represents a single request against
+enum class PieceType : int {
+  Metadata,
+  Header,
+  Body,
+};
+
+// For piecewise caching, an object is stored as multiple pieces (one metadata
+// piece + one header piece + several body pieces) if its size is larger
+// than cachePieceSize; otherwise, it's stored as a single piece. Therefore, a
+// raw request spawns into one or multiple piece requests against the cache. The
+// class wraps the struct Request (which represents a single request against
 // cache), and maintains the raw request (identified by baseKey) with its piece
 // request (identified by pieceKey).
 struct PieceWiseReqWrapper {
@@ -255,8 +266,10 @@ struct PieceWiseReqWrapper {
   Request req;
   std::unique_ptr<GenericPieces> cachePieces;
   const RequestRange requestRange;
-  // whether current pieceKey is header piece or body piece, mutable
-  bool isHeaderPiece{false};
+  // whether current pieceKey is metadata, header, or body piece, mutable
+  PieceType pieceType = PieceType::Metadata;
+  // Metadata piece size
+  const size_t metadataSize = 0;
   // response header size
   const size_t headerSize;
   // The size of the complete object, excluding response header.
@@ -283,6 +296,7 @@ struct PieceWiseReqWrapper {
   // @param statsAggFieldV: extra fields used for stats aggregation
   // @param admFeatureM: features map for admission policy
   // @param itemValue: client-specific data for the item
+  // @param metadataSize: size of the metadata piece for the request
 
   explicit PieceWiseReqWrapper(
       uint64_t cachePieceSize,
@@ -298,7 +312,8 @@ struct PieceWiseReqWrapper {
       std::vector<std::string>& statsAggFieldV,
       std::unordered_map<std::string, std::string>& admFeatureM,
       folly::Optional<bool> isHit,
-      const std::string& itemValue);
+      const std::string& itemValue = "",
+      size_t metadataSize = 0);
 
   PieceWiseReqWrapper(const PieceWiseReqWrapper& other);
 };
@@ -342,6 +357,10 @@ class PieceWiseCacheAdapter {
   // operation and/or next piece based on piece logic, and record stats.
   // @return true if all the ops for all pieces behind the request are done.
   bool updatePieceProcessing(PieceWiseReqWrapper& rw, OpResultType result);
+
+  // Called on the metadata piece when rw is piecewise cached.
+  bool updatePieceProcessingMetadataPiece(PieceWiseReqWrapper& rw,
+                                          OpResultType result);
 
   // Called when rw is not piecewise cached. The method updates rw to the
   // next operation, and record the stats.
