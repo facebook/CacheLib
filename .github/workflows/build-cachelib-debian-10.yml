@@ -19,7 +19,7 @@ on:
      - cron:  '0 13 * * *'
 jobs:
   build-cachelib-debian-10:
-    name: "Debian-10 (Buster) - Build CacheLib with all dependencies"
+    name: "Debian-10 (Buster) Build & Test"
     runs-on: ubuntu-latest
     # Docker container image name
     container: "debian:buster-slim"
@@ -51,7 +51,7 @@ jobs:
           echo === g++ -v ===
           g++ - || true
       - name: "checkout sources"
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
       - name: "Add Git safe directory"
         # Workaround for Docker image bug (GitHub issue #199).
         run: git config --system --add safe.directory $GITHUB_WORKSPACE
@@ -59,6 +59,16 @@ jobs:
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
         run: ./contrib/update-submodules.sh
+      - name: "Use cache for built libraries of submodules"
+        uses: actions/cache@v3
+        id: cache-submodules
+        with:
+          key: ${{ github.job }}-${{ hashFiles('.git/modules/*/HEAD') }}
+          path: |
+            opt/cachelib/lib
+            opt/cachelib/include
+            opt/cachelib/bin/thrift1
+            opt/cachelib/bin/fizz*
       - name: "Install dependency: zstd"
         run: ./contrib/build-package.sh -j -v -i zstd
       - name: "Install dependency: googleflags"
@@ -73,16 +83,22 @@ jobs:
         run: ./contrib/build-package.sh -j -v -i fmt
       - name: "Install dependency: folly"
         run: ./contrib/build-package.sh -j -v -i folly
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fizz"
         run: ./contrib/build-package.sh -j -v -i fizz
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: wangle"
         run: ./contrib/build-package.sh -j -v -i wangle
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fbthrift"
         run: ./contrib/build-package.sh -j -v -i fbthrift
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -d -t cachelib
-      - uses: actions/upload-artifact@v2
+      - name: "Run tests"
+        run: ./.github/run_tests.sh
+      - uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cachelib-cmake-logs
@@ -93,3 +109,10 @@ jobs:
             build-cachelib/**/Makefile
           if-no-files-found: warn
           retention-days: 1
+      - uses: actions/upload-artifact@v3
+        with:
+          name: cachelib-test-logs
+          path: opt/cachelib/tests/*.log
+          if-no-files-found: warn
+          retention-days: 7
+        if: success() || failure()

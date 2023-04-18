@@ -24,7 +24,7 @@ on:
     - cron:  '0 5 * * 2,4,6'
 jobs:
   build-cachelib-ubuntu-18:
-    name: "Ubuntu-18 - Build CacheLib with all dependencies"
+    name: "Ubuntu-18 Build & Test"
     runs-on: ubuntu-latest
     container: "ubuntu:18.04"
     steps:
@@ -72,11 +72,22 @@ jobs:
       - name: "git: ignore unsafe-directories"
         run: git config --global --add safe.directory '*'
       - name: "checkout sources"
+        # v1 needed for Ubuntu 18 due to old Git version
         uses: actions/checkout@v1
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
         run: ./contrib/update-submodules.sh
+      - name: "Use cache for built libraries of submodules"
+        uses: actions/cache@v3
+        id: cache-submodules
+        with:
+          key: ${{ github.job }}-${{ hashFiles('.git/modules/*/HEAD') }}
+          path: |
+            opt/cachelib/lib
+            opt/cachelib/include
+            opt/cachelib/bin/thrift1
+            opt/cachelib/bin/fizz*
       - name: "Install dependency: zstd"
         run: ./contrib/build-package.sh -j -v -i zstd
       - name: "Install dependency: googleflags"
@@ -91,16 +102,22 @@ jobs:
         run: ./contrib/build-package.sh -j -v -i fmt
       - name: "Install dependency: folly"
         run: ./contrib/build-package.sh -j -v -i folly
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fizz"
         run: ./contrib/build-package.sh -j -v -i fizz
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: wangle"
         run: ./contrib/build-package.sh -j -v -i wangle
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "Install dependency: fbthrift"
         run: ./contrib/build-package.sh -j -v -i fbthrift
+        if: steps.cache-submodules.outputs.cache-hit != 'true'
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
         run: ./contrib/build-package.sh -j -v -i -t cachelib
-      - uses: actions/upload-artifact@v2
+      - name: "Run tests"
+        run: ./.github/run_tests.sh
+      - uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: cachelib-cmake-logs
@@ -111,3 +128,10 @@ jobs:
             build-cachelib/**/Makefile
           if-no-files-found: warn
           retention-days: 1
+      - uses: actions/upload-artifact@v3
+        with:
+          name: cachelib-test-logs
+          path: opt/cachelib/tests/*.log
+          if-no-files-found: warn
+          retention-days: 7
+        if: success() || failure()
