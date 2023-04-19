@@ -35,7 +35,7 @@ FreeMemStrategy::FreeMemStrategy(Config config)
 //
 // 1. Filter out classes that have just gained a slab recently
 //
-// 2. Pick the first class we find with free memory past the threshold
+// 2. Pick the class we find with the most free memory past the threshold
 RebalanceContext FreeMemStrategy::pickVictimAndReceiverImpl(
     const CacheBase& cache, PoolId pid, const PoolStats& poolStats) {
   const auto& pool = cache.getPool(pid);

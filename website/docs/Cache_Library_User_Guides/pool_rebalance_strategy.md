@@ -112,6 +112,22 @@ When using hit based rebalancing, if you want to ensure some level of fairness b
 
 This strategy ensures that the marginal hits (estimated by the hits in the tail part of LRU) across different object sizes are similar. Unlike hit based strategy which counts for historical count of hits across the entire cache, this tracks which objects could marginally benefit from getting more memory. To enable this,  you need to use the MM2Q eviction policy and enable tail hits tracking (`Allocator::Config::enableTailHitsTracking()`).
 
+#### Free memory
+
+This strategy frees a slab from an allocation class that satisfies all of the following requirements:
+- this allocation class has total slabs above `minSlabs`
+- this allocation class has free slabs above `numFreeSlabs`
+- this allocation class has the most total free memory among all non-evicting (i.e. no eviction is currently happening) allocation classes in the pool
+
+Note: this strategy does not specify a target allocation class to receive the freed slab.
+Here are the parameters to configure this strategy:
+* `minSlabs`
+The minimum number of slabs to retain in every allocation class. Default is 1.
+* `numFreeSlabs`
+The threshold of required free slabs. Default is 3.
+* `maxUnAllocatedSlabs`
+FreeMem strategy will not rebalance anything if the number of free slabs in this pool is more than this number. Default is 1000.
+
 ### Writing your own strategy
 
 In addition, if you have some application specific context on how you can improve your cache, you can implement your own strategy and pass it to cachelib for rebalancing. Your rebalancing strategy will have to extend the type `RebalanceStrategy` and implement the following two methods that define where to take memory from and where to give more memory to:
