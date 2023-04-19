@@ -275,6 +275,13 @@ std::enable_if_t<std::is_arithmetic<T>::value, T> getAlignedSize(
   const T rem = size % alignment;
   return rem == 0 ? size : size + alignment - rem;
 }
+
+// @return ceiling of the quotient
+template <typename T>
+std::enable_if_t<std::is_arithmetic<T>::value, T> getDivCeiling(
+    T dividend, uint32_t divisor) {
+  return (dividend + divisor - 1) / divisor;
+}
 // creates a new mapping in the virtual address space of the calling process
 // aligned by the size of Slab.
 //

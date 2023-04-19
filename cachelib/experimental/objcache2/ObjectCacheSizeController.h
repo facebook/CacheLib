@@ -38,8 +38,8 @@ class ObjectCacheSizeController : public PeriodicWorker {
  private:
   void work() override final;
 
-  void shrinkCacheByEntriesNum(int entries);
-  void expandCacheByEntriesNum(int entries);
+  void shrinkCacheByEntriesNum(size_t entries);
+  void expandCacheByEntriesNum(size_t entries);
 
   // threshold in percentage to determine whether the size-controller should do
   // the calculation

@@ -20,11 +20,16 @@ namespace objcache2 {
 
 template <typename AllocatorT>
 void ObjectCache<AllocatorT>::init() {
-  // compute the approximate cache size using the l1EntriesLimit and
-  // l1AllocSize
+  // Compute variables required to size the cache and placeholders
+  DCHECK_GE(config_.l1EntriesLimit, config_.l1NumShards);
   auto l1AllocSize = getL1AllocSize(config_.maxKeySizeBytes);
-  const size_t l1SizeRequired =
-      util::getAlignedSize(config_.l1EntriesLimit * l1AllocSize, Slab::kSize);
+  const size_t allocsPerSlab = Slab::kSize / l1AllocSize;
+  const size_t allocsPerShard =
+      util::getDivCeiling(config_.l1EntriesLimit, config_.l1NumShards);
+  const size_t slabsPerShard =
+      util::getDivCeiling(allocsPerShard, allocsPerSlab);
+  const size_t perPoolSize = slabsPerShard * Slab::kSize;
+  const size_t l1SizeRequired = perPoolSize * config_.l1NumShards;
   auto cacheSize = l1SizeRequired + Slab::kSize;
 
   typename AllocatorT::Config l1Config;
@@ -63,46 +68,37 @@ void ObjectCache<AllocatorT>::init() {
       });
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
-  size_t perPoolSize =
-      this->l1Cache_->getCacheMemoryStats().ramCacheSize / config_.l1NumShards;
-  // pool size can't be smaller than slab size
-  perPoolSize = std::max(perPoolSize, Slab::kSize);
-  // num of pool need to be modified properly as well
-  l1NumShards_ = std::min(
-      config_.l1NumShards,
-      this->l1Cache_->getCacheMemoryStats().ramCacheSize / perPoolSize);
-  if (!config_.l1ShardName.empty()) {
-    if (l1NumShards_ == 1) {
-      this->l1Cache_->addPool(config_.l1ShardName, perPoolSize,
-                              {} /* allocSizes */,
-                              config_.evictionPolicyConfig);
-    } else {
-      for (size_t i = 0; i < l1NumShards_; i++) {
-        this->l1Cache_->addPool(fmt::format("{}_{}", config_.l1ShardName, i),
-                                perPoolSize, {} /* allocSizes */,
-                                config_.evictionPolicyConfig);
-      }
+  // add a pool per shard
+  for (size_t i = 0; i < config_.l1NumShards; i++) {
+    std::string shardName =
+        config_.l1ShardName.empty() ? "pool" : config_.l1ShardName;
+    // Add the shard index as the suffix of pool name if needed
+    if (config_.l1NumShards > 1) {
+      shardName += folly::sformat("_{}", i);
     }
-  } else {
-    for (size_t i = 0; i < l1NumShards_; i++) {
-      this->l1Cache_->addPool(fmt::format("pool_{}", i), perPoolSize,
-                              {} /* allocSizes */,
-                              config_.evictionPolicyConfig);
-    }
+    this->l1Cache_->addPool(shardName, perPoolSize, {} /* allocSizes */,
+                            config_.evictionPolicyConfig);
   }
 
-  // the placeholder is used to make sure each pool
-  // won't store objects more than l1EntriesLimit / l1NumShards
+  // Allocate placeholder items such that the cache will fit no more than
+  // "l1EntriesLimit" objects. In doing so, placeholders are distributed
+  // evenly to each shard/pool, i.e., l1EntriesLimit / l1NumShards
+  const size_t l1PlaceHoldersPerShard =
+      slabsPerShard * allocsPerSlab - allocsPerShard;
+  XDCHECK_GE(slabsPerShard * allocsPerSlab, allocsPerShard);
+  XDCHECK_LT(l1PlaceHoldersPerShard, allocsPerSlab);
+
+  // allocsPerShard is celing of the division by numShards, meaning
+  // additional number (i.e., extraLimit) of placesholders need to be created
+  const size_t extraLimit =
+      allocsPerShard * config_.l1NumShards - config_.l1EntriesLimit;
+  XDCHECK_GE(allocsPerShard * config_.l1NumShards, config_.l1EntriesLimit);
   const size_t l1PlaceHolders =
-      ((perPoolSize / l1AllocSize) - (config_.l1EntriesLimit / l1NumShards_)) *
-      l1NumShards_;
+      l1PlaceHoldersPerShard * config_.l1NumShards + extraLimit;
   for (size_t i = 0; i < l1PlaceHolders; i++) {
-    // Allocate placeholder items such that the cache will fit exactly
-    // "l1EntriesLimit" objects
-    auto key = getPlaceHolderKey(i);
-    bool success = allocatePlaceholder(key);
-    if (!success) {
-      throw std::runtime_error(fmt::format("Couldn't allocate {}", key));
+    if (!allocatePlaceholder()) {
+      throw std::runtime_error(
+          fmt::format("Couldn't allocate placeholder {}", i));
     }
   }
 
@@ -272,19 +268,21 @@ template <typename AllocatorT>
 typename AllocatorT::WriteHandle ObjectCache<AllocatorT>::allocateFromL1(
     folly::StringPiece key, uint32_t ttl, uint32_t creationTime) {
   PoolId poolId = 0;
-  if (l1NumShards_ > 1) {
+  if (config_.l1NumShards > 1) {
     auto hash = cachelib::MurmurHash2{}(key.data(), key.size());
-    poolId = static_cast<PoolId>(hash % l1NumShards_);
+    poolId = static_cast<PoolId>(hash % config_.l1NumShards);
   }
   return this->l1Cache_->allocate(poolId, key, sizeof(ObjectCacheItem), ttl,
                                   creationTime);
 }
 
 template <typename AllocatorT>
-bool ObjectCache<AllocatorT>::allocatePlaceholder(std::string key) {
-  auto hdl = allocateFromL1(key, 0 /* no ttl */,
-                                     0 /* use current time as creationTime
-                                     */);
+bool ObjectCache<AllocatorT>::allocatePlaceholder() {
+  // rotate pools so that the number of placeholders for each pool is balanced
+  auto poolId = static_cast<PoolId>(getNumPlaceholders() % config_.l1NumShards);
+  auto hdl = this->l1Cache_->allocate(poolId, kPlaceholderKey,
+                                      sizeof(ObjectCacheItem), 0 /* no ttl */,
+                                      0 /* use current time as creationTime */);
   if (!hdl) {
     return false;
   }
@@ -344,6 +342,7 @@ std::map<std::string, std::string>
 ObjectCache<AllocatorT>::serializeConfigParams() const {
   auto config = this->l1Cache_->serializeConfigParams();
   config["l1EntriesLimit"] = std::to_string(config_.l1EntriesLimit);
+  config["l1NumShards"] = std::to_string(config_.l1NumShards);
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {
     config["l1CacheSizeLimit"] = std::to_string(config_.cacheSizeLimit);

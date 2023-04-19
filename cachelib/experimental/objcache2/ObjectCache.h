@@ -393,11 +393,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
  private:
   // Minimum alloc size in bytes for l1 cache.
   static constexpr uint32_t kL1AllocSizeMin = 64;
-
-  // Generate the key for the ith placeholder.
-  static std::string getPlaceHolderKey(size_t i) {
-    return fmt::format("_cl_ph_{}", i);
-  }
+  static constexpr const char* kPlaceholderKey = "_cl_ph";
 
   void init();
 
@@ -410,7 +406,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // Allocate the placeholder and add it to the placeholder vector.
   //
   // @return true if the allocation is successful
-  bool allocatePlaceholder(std::string key);
+  bool allocatePlaceholder();
+
+  // Returns the total number of placeholders
+  size_t getNumPlaceholders() { return placeholders_.size(); }
 
   // Start size controller
   //
@@ -455,9 +454,6 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Config passed to the cache.
   Config config_{};
-
-  // Number of shards (LRUs) to lessen the contention on L1 cache
-  size_t l1NumShards_{};
 
   // They take up space so we can control exact number of items in cache
   std::vector<typename AllocatorT::WriteHandle> placeholders_;

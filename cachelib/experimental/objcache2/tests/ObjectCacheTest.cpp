@@ -169,10 +169,9 @@ class ObjectCacheTest : public ::testing::Test {
     {
       auto objcache = ObjectCache::create(config);
       auto poolIds = objcache->getL1Cache().getPoolIds();
-      for (size_t i = 0; i < poolIds.size(); i++) {
-        EXPECT_EQ(fmt::format("pool_{}", i), // use default shard names
-                  objcache->getL1Cache().getPoolName(PoolId(i)));
-      }
+      EXPECT_EQ(1, poolIds.size());
+      EXPECT_EQ("pool", // use default shard names
+                objcache->getL1Cache().getPoolName(PoolId(0)));
     }
 
     {
@@ -1214,6 +1213,7 @@ class ObjectCacheTest : public ::testing::Test {
     {
       auto objcache = ObjectCache::create(config);
       auto poolIds = objcache->l1Cache_->getRegularPoolIds();
+      ASSERT_EQ(poolIds.size(), numShards);
       size_t numItems = 2000;
       // Create an unevenly distributed shards
       for (size_t i = 0; i < numItems; i++) {
@@ -1245,6 +1245,7 @@ class ObjectCacheTest : public ::testing::Test {
       auto objcache = ObjectCache::create(config);
       ASSERT_EQ(objcache->recover(), true);
       auto poolIds = objcache->l1Cache_->getRegularPoolIds();
+      ASSERT_EQ(poolIds.size(), numShards);
       for (auto poolId : poolIds) {
         evictionItrDumpAfter.emplace_back(dumpEvictionItr(poolId, *objcache));
       }
