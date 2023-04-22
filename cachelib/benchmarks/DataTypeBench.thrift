@@ -16,13 +16,10 @@
 
 namespace cpp2 facebook.cachelib.datatypebench
 
-include "thrift/annotation/cpp.thrift"
-
 struct StdMap {
   1: required map<i32, string> m;
 }
 
 struct StdUnorderedMap {
-  @cpp.Type{template = "std::unordered_map"}
-  1: required map<i32, string> m;
+  1: required map<i32, string> (cpp.template = "std::unordered_map") m;
 }
