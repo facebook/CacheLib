@@ -135,6 +135,8 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setEvictionPolicyConfig(
       EvictionPolicyConfig _evictionPolicyConfig);
 
+  ObjectCacheConfig& setEvictionSearchLimit(uint32_t _evictionSearchLimit);
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -206,6 +208,10 @@ struct ObjectCacheConfig {
 
   // Config of the eviction policy
   EvictionPolicyConfig evictionPolicyConfig{};
+
+  // The maximum number of tries to search for an object to evict
+  // 0 means it's infinite
+  uint32_t evictionSearchLimit{50};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -355,6 +361,13 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEvictionPolicyConfig(
     EvictionPolicyConfig _evictionPolicyConfig) {
   evictionPolicyConfig = _evictionPolicyConfig;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEvictionSearchLimit(
+    uint32_t _evictionSearchLimit) {
+  evictionSearchLimit = _evictionSearchLimit;
   return *this;
 }
 

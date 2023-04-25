@@ -39,6 +39,7 @@ void ObjectCache<AllocatorT>::init() {
       .setDefaultAllocSizes({l1AllocSize})
       .enableItemReaperInBackground(config_.reaperInterval)
       .setEventTracker(std::move(config_.eventTracker))
+      .setEvictionSearchLimit(config_.evictionSearchLimit)
       .setItemDestructor([this](typename AllocatorT::DestructorData data) {
         ObjectCacheDestructorContext ctx;
         if (data.context == DestructorContext::kEvictedFromRAM) {
