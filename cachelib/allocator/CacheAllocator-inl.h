@@ -1243,14 +1243,14 @@ bool CacheAllocator<CacheTrait>::moveChainedItem(ChainedItem& oldItem,
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::unlinkItemForEviction(Item& it) {
   XDCHECK(it.isMarkedForEviction());
-  XDCHECK(it.getRefCount() == 0);
+  XDCHECK_EQ(0, it.getRefCount());
   accessContainer_->remove(it);
   removeFromMMContainer(it);
 
   // Since we managed to mark the item for eviction we must be the only
   // owner of the item.
   const auto ref = it.unmarkForEviction();
-  XDCHECK(ref == 0u);
+  XDCHECK_EQ(0, ref);
 }
 
 template <typename CacheTrait>
@@ -1289,43 +1289,50 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
                 : toRecycle_;
 
         const bool evictToNvmCache = shouldWriteToNvmCache(*candidate_);
-        if (evictToNvmCache)
-          token = nvmCache_->createPutToken(candidate_->getKey());
+        auto token_ = evictToNvmCache
+                          ? nvmCache_->createPutToken(candidate_->getKey())
+                          : typename NvmCacheT::PutToken{};
 
-        if (evictToNvmCache && !token.isValid()) {
+        if (evictToNvmCache && !token_.isValid()) {
           stats_.evictFailConcurrentFill.inc();
-        } else if (candidate_->markForEviction()) {
-          XDCHECK(candidate_->isMarkedForEviction());
-          // markForEviction to make sure no other thead is evicting the item
-          // nor holding a handle to that item
-          toRecycle = toRecycle_;
-          candidate = candidate_;
+          ++itr;
+          continue;
+        }
 
-          // Check if parent changed for chained items - if yes, we cannot
-          // remove the child from the mmContainer as we will not be evicting
-          // it. We could abort right here, but we need to cleanup in case
-          // unmarkForEviction() returns 0 - so just go through normal path.
-          if (!toRecycle_->isChainedItem() ||
-              &toRecycle->asChainedItem().getParentItem(compressor_) ==
-                  candidate)
-            mmContainer.remove(itr);
-          return;
-        } else {
+        auto markedForEviction = candidate_->markForEviction();
+        if (!markedForEviction) {
           if (candidate_->hasChainedItem()) {
             stats_.evictFailParentAC.inc();
           } else {
             stats_.evictFailAC.inc();
           }
+          ++itr;
+          continue;
         }
 
-        ++itr;
-        XDCHECK(toRecycle == nullptr);
-        XDCHECK(candidate == nullptr);
+        XDCHECK(candidate_->isMarkedForEviction());
+        // markForEviction to make sure no other thead is evicting the item
+        // nor holding a handle to that item
+        toRecycle = toRecycle_;
+        candidate = candidate_;
+        token = std::move(token_);
+
+        // Check if parent changed for chained items - if yes, we cannot
+        // remove the child from the mmContainer as we will not be evicting
+        // it. We could abort right here, but we need to cleanup in case
+        // unmarkForEviction() returns 0 - so just go through normal path.
+        if (!toRecycle_->isChainedItem() ||
+            &toRecycle->asChainedItem().getParentItem(compressor_) ==
+                candidate) {
+          mmContainer.remove(itr);
+        }
+        return;
       }
     });
 
-    if (!toRecycle)
+    if (!toRecycle) {
       continue;
+    }
 
     XDCHECK(toRecycle);
     XDCHECK(candidate);
