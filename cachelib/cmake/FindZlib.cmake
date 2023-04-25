@@ -21,26 +21,53 @@
 #
 
 find_path(
-  ZLIB_INCLUDE_DIRS zlib.h
+  ZLIB_INCLUDE_DIR zlib.h
   HINTS
       $ENV{ZLIB_ROOT}/include
       ${ZLIB_ROOT}/include
 )
 
 find_library(
-    ZLIB_LIBRARIES z zlib
+    ZLIB_LIBRARY z zlib
     HINTS
         $ENV{ZLIB_ROOT}/lib
         ${ZLIB_ROOT}/lib
 )
 
-# For some reason ZLIB_FOUND is never marked as TRUE
-set(ZLIB_FOUND TRUE)
-mark_as_advanced(ZLIB_INCLUDE_DIRS ZLIB_LIBRARIES)
+mark_as_advanced(ZLIB_INCLUDE_DIR ZLIB_LIBRARY)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(Zstd ZLIB_INCLUDE_DIRS ZLIB_LIBRARIES)
+find_package_handle_standard_args(Zlib ZLIB_INCLUDE_DIR ZLIB_LIBRARY)
 
-if(ZLIB_FOUND AND NOT ZLIB_FIND_QUIETLY)
-    message(STATUS "ZLIB: ${ZLIB_INCLUDE_DIRS}")
+if(ZLIB_FOUND)
+    set(ZLIB_INCLUDE_DIRS ${ZLIB_INCLUDE_DIR})
+
+    if(NOT ZLIB_LIBRARIES)
+      set(ZLIB_LIBRARIES ${ZLIB_LIBRARY})
+    endif()
+
+    if(NOT TARGET ZLIB::ZLIB)
+      add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
+      set_target_properties(ZLIB::ZLIB PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIRS}")
+
+      if(ZLIB_LIBRARY_RELEASE)
+        set_property(TARGET ZLIB::ZLIB APPEND PROPERTY
+          IMPORTED_CONFIGURATIONS RELEASE)
+        set_target_properties(ZLIB::ZLIB PROPERTIES
+          IMPORTED_LOCATION_RELEASE "${ZLIB_LIBRARY_RELEASE}")
+      endif()
+
+      if(ZLIB_LIBRARY_DEBUG)
+        set_property(TARGET ZLIB::ZLIB APPEND PROPERTY
+          IMPORTED_CONFIGURATIONS DEBUG)
+        set_target_properties(ZLIB::ZLIB PROPERTIES
+          IMPORTED_LOCATION_DEBUG "${ZLIB_LIBRARY_DEBUG}")
+      endif()
+
+      if(NOT ZLIB_LIBRARY_RELEASE AND NOT ZLIB_LIBRARY_DEBUG)
+        set_property(TARGET ZLIB::ZLIB APPEND PROPERTY
+          IMPORTED_LOCATION "${ZLIB_LIBRARY}")
+      endif()
+    endif()
 endif()
