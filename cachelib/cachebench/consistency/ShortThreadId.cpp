@@ -19,6 +19,7 @@
 #include <limits>
 #include <mutex>
 #include <shared_mutex>
+#include <stdexcept>
 
 namespace facebook {
 namespace cachelib {
