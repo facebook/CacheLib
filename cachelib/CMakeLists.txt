@@ -259,7 +259,8 @@ function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
        ${${PREFIX}_THRIFT_FILES}
     COMMAND
        ${FBTHRIFT1} -o ${FOOM} --gen mstch_cpp2:${CPP_OPTION}
-                    -I ${CACHELIB_HOME}/.. ${THRIFT_BASENAME}
+                    -I "${FBTHRIFT_INCLUDE_DIR}" -I ${CACHELIB_HOME}/..
+                    ${THRIFT_BASENAME}
     DEPENDS
        ${THRIFT_RELATIVE_PATH}
    WORKING_DIRECTORY
