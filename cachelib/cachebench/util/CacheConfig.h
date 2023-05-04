@@ -218,6 +218,9 @@ struct CacheConfig : public JSONConfig {
   // Use Posix Shm instead of SysVShm
   bool usePosixShm{false};
 
+  // Lock memory in the RAM
+  bool lockMemory{false};
+
   // Memory tiers configs
   std::vector<MemoryTierCacheConfig> memoryTierConfigs{};
 
