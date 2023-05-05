@@ -26,7 +26,7 @@ template <>
 struct fmt::formatter<DestructorContext> : formatter<string_view> {
   // parse is inherited from formatter<string_view>.
   template <typename FormatContext>
-  auto format(DestructorContext c, FormatContext& ctx) {
+  auto format(DestructorContext c, FormatContext& ctx) const {
     string_view name = "unknown";
     switch (c) {
     case DestructorContext::kEvictedFromRAM:
