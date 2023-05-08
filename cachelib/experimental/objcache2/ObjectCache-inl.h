@@ -336,6 +336,9 @@ void ObjectCache<AllocatorT>::getObjectCacheCounters(
   visitor("objcache.evictions", evictions_.get(),
           util::CounterVisitor::CounterType::RATE);
   visitor("objcache.object_size_bytes", getTotalObjectSize());
+  if (sizeController_) {
+    sizeController_->getCounters(visitor);
+  }
 }
 
 template <typename AllocatorT>

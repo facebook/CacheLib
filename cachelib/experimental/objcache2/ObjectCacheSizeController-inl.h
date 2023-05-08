@@ -24,6 +24,16 @@ void ObjectCacheSizeController<AllocatorT>::work() {
     return;
   }
   auto totalObjSize = objCache_.getTotalObjectSize();
+  if (objCache_.config_.fragmentationTrackingEnabled &&
+      folly::usingJEMalloc()) {
+    auto [jemallocAllocatedBytes, jemallocActiveBytes] =
+        trackJemallocMemStats();
+    // proportionally add Jemalloc external fragmentation bytes (i.e.
+    // jemallocActiveBytes - jemallocAllocatedBytes)
+    totalObjSize = static_cast<size_t>(
+        1.0 * totalObjSize / jemallocAllocatedBytes * jemallocActiveBytes);
+  }
+
   // Do the calculation only when total object size or total object number
   // achieves the threshold. This is to avoid unreliable calculation of average
   // object size when the cache is new and only has a few objects.
@@ -105,6 +115,17 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
       "CacheLib size-controller: request to expand cache by {} entries. "
       "Placeholders num before: {}, after: {}. currentEntriesLimit: {}",
       entries, before, objCache_.getNumPlaceholders(), currentEntriesLimit_);
+}
+
+template <typename AllocatorT>
+void ObjectCacheSizeController<AllocatorT>::getCounters(
+    const util::CounterVisitor& visitor) const {
+  if (folly::usingJEMalloc()) {
+    auto [jemallocAllocatedBytes, jemallocActiveBytes] =
+        trackJemallocMemStats();
+    visitor("objcache.jemalloc_active_bytes", jemallocActiveBytes);
+    visitor("objcache.jemalloc_allocated_bytes", jemallocAllocatedBytes);
+  }
 }
 
 template <typename AllocatorT>

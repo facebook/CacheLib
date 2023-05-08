@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <folly/memory/Malloc.h>
+
 #include "cachelib/common/PeriodicWorker.h"
 
 namespace facebook {
@@ -35,11 +37,25 @@ class ObjectCacheSizeController : public PeriodicWorker {
     return currentEntriesLimit_.load(std::memory_order_relaxed);
   }
 
+  void getCounters(const util::CounterVisitor& visitor) const;
+
  private:
   void work() override final;
 
   void shrinkCacheByEntriesNum(size_t entries);
   void expandCacheByEntriesNum(size_t entries);
+
+  std::pair<size_t, size_t> trackJemallocMemStats() const {
+    size_t jemallocAllocatedBytes;
+    size_t jemallocActiveBytes;
+    size_t epoch = 1;
+    size_t sz;
+    sz = sizeof(size_t);
+    mallctl("epoch", nullptr, nullptr, &epoch, sizeof(epoch));
+    mallctl("stats.allocated", &jemallocAllocatedBytes, &sz, nullptr, 0);
+    mallctl("stats.active", &jemallocActiveBytes, &sz, nullptr, 0);
+    return {jemallocAllocatedBytes, jemallocActiveBytes};
+  }
 
   // threshold in percentage to determine whether the size-controller should do
   // the calculation
