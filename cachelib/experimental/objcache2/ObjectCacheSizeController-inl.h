@@ -120,6 +120,7 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::getCounters(
     const util::CounterVisitor& visitor) const {
+  visitor("objcache.num_placeholders", objCache_.getNumPlaceholders());
   if (folly::usingJEMalloc()) {
     auto [jemallocAllocatedBytes, jemallocActiveBytes] =
         trackJemallocMemStats();

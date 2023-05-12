@@ -409,7 +409,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   bool allocatePlaceholder();
 
   // Returns the total number of placeholders
-  size_t getNumPlaceholders() { return placeholders_.size(); }
+  size_t getNumPlaceholders() const { return placeholders_.size(); }
 
   // Start size controller
   //
