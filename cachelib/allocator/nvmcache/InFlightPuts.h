@@ -18,11 +18,11 @@
 
 #include <folly/Hash.h>
 #include <folly/Range.h>
+#include <folly/container/F14Map.h>
 #include <folly/lang/Align.h>
 #include <folly/logging/xlog.h>
 
 #include <mutex>
-#include <unordered_map>
 #include <utility>
 
 namespace facebook {
@@ -159,7 +159,7 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
   }
 
   // map storing the presence of a token  and its validity
-  std::unordered_map<folly::StringPiece, bool, folly::Hash> keys_;
+  folly::F14FastMap<folly::StringPiece, bool, folly::Hash> keys_;
 
   // mutex protecting the map.
   std::mutex mutex_;
