@@ -171,6 +171,10 @@ struct ObjectCacheConfig {
   // the fragmentation bytes on top of total object size to bound the cache
   bool fragmentationTrackingEnabled{false};
 
+  // If this is enabled, we will track the object size distribution and export
+  // the stats to ods.
+  bool objectSizeDistributionTrackingEnabled{false};
+
   // Period to fire size controller in milliseconds. 0 means size controller is
   // disabled.
   int sizeControllerIntervalMs{0};
@@ -412,6 +416,12 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
     throw std::invalid_argument(
         "Object size tracking has to be enabled to have fragmentation "
         "tracking");
+  }
+
+  if (objectSizeDistributionTrackingEnabled && !objectSizeTrackingEnabled) {
+    throw std::invalid_argument(
+        "Object size tracking has to be enabled to track object size "
+        "distribution");
   }
   return *this;
 }
