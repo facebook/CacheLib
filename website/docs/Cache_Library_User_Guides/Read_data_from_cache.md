@@ -56,7 +56,7 @@ To read data from chained items, start from the parent item handle, for example:
 ```cpp
 auto chainedAllocs = cache->viewAsChainedAllocs(parentItemHandle);
 for (auto& c : chainedAllocs.getChain()) {
-  auto data = folly::StringPiece{reinterpret_cast<const char*>(handle->getMemory()), handle->getSize()};
+  auto data = folly::StringPiece{reinterpret_cast<const char*>(c.getMemory()), c.getSize()};
   std::cout << data << '\n';
 }
 ```
