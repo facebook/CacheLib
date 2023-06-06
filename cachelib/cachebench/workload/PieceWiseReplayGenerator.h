@@ -32,13 +32,12 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  public:
   explicit PieceWiseReplayGenerator(const StressorConfig& config)
       : ReplayGeneratorBase(config),
-        traceStream_(config, 0),
+        traceStream_(config, 0, {}),
         pieceCacheAdapter_(config.maxCachePieces,
                            config.replayGeneratorConfig.numAggregationFields,
                            config.replayGeneratorConfig.statsPerAggField),
         activeReqQ_(config.numThreads),
-        threadFinished_(config.numThreads),
-        timestampFactor_(config.timestampFactor) {
+        threadFinished_(config.numThreads) {
     for (uint32_t i = 0; i < numShards_; ++i) {
       activeReqQ_[i] =
           std::make_unique<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>(
@@ -163,10 +162,6 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // activeReqQ_ queue.
   std::thread traceGenThread_;
   std::atomic<bool> isEndOfFile_{false};
-
-  // The constant to be divided from the timestamp value
-  // to turn the timestamp into seconds.
-  const uint64_t timestampFactor_{1};
 
   AtomicCounter queueProducerWaitCounts_{0};
   AtomicCounter queueConsumerWaitCounts_{0};

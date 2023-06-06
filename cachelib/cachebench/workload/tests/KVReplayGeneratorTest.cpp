@@ -24,27 +24,26 @@ namespace cachelib {
 namespace cachebench {
 namespace tests {
 
+enum class HeaderFormat { v1, v2 };
+
 struct TraceEntry {
-  TraceEntry(size_t keySize,
+  TraceEntry(uint64_t opTime,
+             size_t keySize,
              const char* op,
              size_t size,
              size_t opCnt,
+             size_t cacheHits,
              std::optional<size_t> ttl,
              bool valid)
-      : keySize_(keySize),
+      : opTime_(opTime),
+        keySize_(keySize),
         op_(op),
         size_(size),
         opCnt_(opCnt),
+        cacheHits_(cacheHits),
         ttl_(ttl),
         valid_(valid) {
     key_ = folly::sformat("{}", folly::Random::rand32());
-    // supported input formats are:
-    //      <key>,<op>,<size>,<op_count>,<key_size>[,[<ttl>[,.*]]]
-    line_ =
-        folly::sformat("{},{},{},{},{}", key_, op_, size_, opCnt_, keySize_);
-    if (ttl_) {
-      line_ += folly::sformat(",{}", *ttl_);
-    }
   }
 
   void validate(const ReqWrapper& req) {
@@ -70,15 +69,59 @@ struct TraceEntry {
     return OpType::kSize;
   }
 
-  std::string key_;
-  std::string line_;
+  std::string getline(HeaderFormat format) {
+    std::string line;
+    if (format == HeaderFormat::v1) {
+      // v1: <key>,<op>,<size>,<op_count>,<key_size>[,[<ttl>[,.*]]]
+      line =
+          folly::sformat("{},{},{},{},{}", key_, op_, size_, opCnt_, keySize_);
+      if (ttl_) {
+        line += folly::sformat(",{}", *ttl_);
+      }
+    } else if (format == HeaderFormat::v2) {
+      // v2: op_time,key,key_size,op,op_count,size,cache_hits,ttl
+      line = folly::sformat("{},{},{},{},{},{},{}",
+                            opTime_,
+                            key_,
+                            keySize_,
+                            op_,
+                            opCnt_,
+                            size_,
+                            cacheHits_);
+      if (ttl_) {
+        line += folly::sformat(",{}", *ttl_);
+      }
+    }
 
+    return line;
+  }
+
+  std::string key_;
+
+  size_t opTime_;
   size_t keySize_;
   std::string op_;
   size_t size_;
   size_t opCnt_;
+  size_t cacheHits_;
   std::optional<size_t> ttl_;
   bool valid_;
+};
+
+// test set
+std::vector<TraceEntry> kTraces = {
+    // <op_time>,<key_size>,<op>,<size>,<op_count>,<cache_hits>,<ttl>,<valid>
+    {564726470, 7, "GET", 0, 2, 1, std::nullopt, true},
+    {564726470, 7, "GET", 0, 2, 2, 50, true},
+    {564726471, 7, "GET_LEASE", 0, 2, 2, 50, true},
+    {564726471, 20, "SET", 100, 35, 0, std::nullopt, true},
+    {564726490, 20, "SET", 100, 35, 0, 3600, true},
+    {564726493, 20, "SAT", 100, 35, 0, 3600, false}, // invalid op name
+    {564726495, 20, "SET_LEASE", 100, 35, 0, 3600, true},
+    {564726496, 7, "GET", 0, 0, 1, std::nullopt, false}, // invalid op count
+    {564726497, 7, "GET", 0, 0, 1, 600, false},          // invalid op count
+    {564726498, 1024, "SET", 100, 35, 0, 300, true},     // key truncated
+    {564726498, 1024, "SET", 100, 35, 0, std::nullopt, true}, // key truncated
 };
 
 TEST(KVReplayGeneratorTest, BasicFormat) {
@@ -93,32 +136,51 @@ TEST(KVReplayGeneratorTest, BasicFormat) {
   ASSERT_FALSE(replayer.parseRequest("key,op,size,op_count,key_size", req));
   ASSERT_FALSE(replayer.parseRequest("key,op,size,op_count,key_size,ttl", req));
 
-  // test set
-  std::vector<TraceEntry> traces = {
-      // <key_size>,<op>,<size>,<op_count>,<ttl>,<valid>
-      {7, "GET", 0, 2, std::nullopt, true},
-      {7, "GET", 0, 2, 50, true},
-      {7, "GET_LEASE", 0, 2, 50, true},
-      {20, "SET", 100, 35, std::nullopt, true},
-      {20, "SET", 100, 35, 3600, true},
-      {20, "SAT", 100, 35, 3600, false}, // invalid op name
-      {20, "SET_LEASE", 100, 35, 3600, true},
-      {7, "GET", 0, 0, std::nullopt, false},      // invalid op count
-      {7, "GET", 0, 0, 600, false},               // invalid op count
-      {1024, "SET", 100, 35, 300, true},          // key truncated
-      {1024, "SET", 100, 35, std::nullopt, true}, // key truncated
-  };
-
-  for (auto& trace : traces) {
-    ASSERT_EQ(replayer.parseRequest(trace.line_, req), trace.valid_);
+  for (auto& trace : kTraces) {
+    ASSERT_EQ(replayer.parseRequest(trace.getline(HeaderFormat::v1), req),
+              trace.valid_);
     trace.validate(*req);
   }
 
   // trailing comma
-  for (auto& trace : traces) {
-    trace.line_.append(",");
+  for (auto& trace : kTraces) {
+    trace.getline(HeaderFormat::v1).append(",");
 
-    ASSERT_EQ(replayer.parseRequest(trace.line_, req), trace.valid_);
+    ASSERT_EQ(replayer.parseRequest(trace.getline(HeaderFormat::v1), req),
+              trace.valid_);
+    trace.validate(*req);
+  }
+
+  replayer.markShutdown();
+}
+
+TEST(KVReplayGeneratorTest, DynamicHeader) {
+  StressorConfig config;
+  KVReplayGenerator replayer{config};
+  std::mt19937_64 gen;
+
+  auto req = std::make_unique<ReqWrapper>();
+
+  // v1 header
+  ASSERT_TRUE(replayer.setHeaderRow("key,op,size,op_count,key_size,ttl"));
+  for (auto& trace : kTraces) {
+    ASSERT_EQ(replayer.parseRequest(trace.getline(HeaderFormat::v1), req),
+              trace.valid_);
+    trace.validate(*req);
+  }
+
+  // missing required field
+  ASSERT_FALSE(replayer.setHeaderRow("key,_op,size,op_count,key_size,ttl"));
+
+  // v2 header
+  ASSERT_TRUE(replayer.setHeaderRow(
+      "op_time,key,key_size,op,op_count,size,cache_hits,ttl"));
+  for (auto& trace : kTraces) {
+    // v1 trace is not compatible to v2 header
+    ASSERT_FALSE(replayer.parseRequest(trace.getline(HeaderFormat::v1), req));
+    // get line compatible to the header
+    ASSERT_EQ(replayer.parseRequest(trace.getline(HeaderFormat::v2), req),
+              trace.valid_);
     trace.validate(*req);
   }
 

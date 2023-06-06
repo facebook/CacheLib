@@ -38,9 +38,24 @@ namespace cachebench {
 
 constexpr size_t kIfstreamBufferSize = 1L << 14;
 
+// ColumnInfo is to pass the information required to parse the trace
+// to map the column to the replayer-specific field ID.
+struct ColumnInfo {
+  // replayer specific field ID
+  uint8_t fieldId;
+  // the field is mandatory or not
+  bool required;
+  // For the same field ID, the replayer can support multiple column names
+  std::vector<std::string> columnNames;
+};
+
+using ColumnTable = std::vector<ColumnInfo>;
+
 class TraceFileStream {
  public:
-  TraceFileStream(const StressorConfig& config, int64_t id)
+  TraceFileStream(const StressorConfig& config,
+                  int64_t id,
+                  const ColumnTable& columnTable)
       : configPath_(config.configPath),
         repeatTraceReplay_(config.repeatTraceReplay) {
     idStr_ = folly::sformat("[{}]", id);
@@ -48,6 +63,17 @@ class TraceFileStream {
       infileNames_.push_back(config.traceFileName);
     } else {
       infileNames_ = config.traceFileNames;
+    }
+
+    // construct columnMap_ and requireFields_ table
+    for (auto& info : columnTable) {
+      for (auto& name : info.columnNames) {
+        columnMap_[name] = info.fieldId;
+      }
+      if (requiredFields_.size() < info.fieldId + 1) {
+        requiredFields_.resize(info.fieldId + 1, false);
+      }
+      requiredFields_[info.fieldId] = info.required;
     }
   }
 
@@ -59,40 +85,104 @@ class TraceFileStream {
     return infile_;
   }
 
-  std::string getHeaderLine() { return headerLine_; }
-
-  std::vector<std::string> parseRow(const std::string& line) {
-    // Parses a line from the trace file into a vector.
-    // Returns an empty vector
-    std::vector<std::string> splitRow;
-    folly::split(',', line, splitRow);
-    if (splitRow.size() != columnKeyMap_.size()) {
-      XLOG_EVERY_MS(WARNING, 1000)
-          << "Expected row with " << columnKeyMap_.size()
-          << " elements, but found " << splitRow.size() << "\nRow: " << line;
-      return std::vector<std::string>({});
-    } else {
-      return splitRow;
+  bool setNextLine(const std::string& line) {
+    nextLineFields_.clear();
+    folly::split(",", line, nextLineFields_);
+    if (nextLineFields_.size() < minNumFields_) {
+      XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+          "Error parsing next line \"{}\": shorter than min required fields {}",
+          line, minNumFields_);
+      return false;
     }
+    return true;
   }
 
-  const std::unordered_map<std::string, size_t>& getColumnKeyMap() {
-    return columnKeyMap_;
+  template <typename T = folly::StringPiece>
+  folly::Optional<T> getField(uint8_t fieldId) {
+    int columnIdx = fieldId;
+    if (fieldMap_.size() > fieldId) {
+      columnIdx = fieldMap_[fieldId];
+    }
+
+    if (columnIdx < 0 ||
+        nextLineFields_.size() <= static_cast<size_t>(columnIdx)) {
+      return folly::none;
+    }
+
+    auto field = folly::tryTo<T>(nextLineFields_[columnIdx]);
+    if (!field.hasValue()) {
+      return folly::none;
+    }
+
+    return field.value();
   }
 
-  bool validateRequiredFields(const std::vector<std::string>& requiredFields) {
-    bool valid = true;
-    for (const auto& fieldName : requiredFields) {
-      if (!traceHasField(fieldName)) {
-        XLOG(WARNING) << "Trace is missing required field " << fieldName;
-        valid = false;
+  bool setHeaderRow(const std::string& header) {
+    if (!columnMap_.size()) {
+      return true;
+    }
+
+    // reset fieldMap_
+    fieldMap_.clear();
+    fieldMap_.resize(requiredFields_.size(), -1);
+
+    bool valid = false;
+    keys_.clear();
+    folly::split(',', header, keys_);
+    for (size_t i = 0; i < keys_.size(); i++) {
+      if (columnMap_.find(keys_[i]) == columnMap_.end()) {
+        continue;
       }
+
+      size_t fieldNum = columnMap_[keys_[i]];
+      XCHECK_GE(fieldMap_.size(), fieldNum + 1);
+      if (fieldMap_[fieldNum] != -1) {
+        XLOGF(INFO,
+              "Error parsing header \"{}\": "
+              "duplicated field {} in columns {} {}",
+              header, keys_[i], fieldMap_[fieldNum], i);
+      } else {
+        fieldMap_[fieldNum] = i;
+      }
+
+      valid = true;
     }
-    return valid;
+
+    if (!valid) {
+      XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+          "Error parsing header \"{}\": no field recognized", header);
+      return false;
+    }
+
+    std::string fieldMapStr;
+    minNumFields_ = 0;
+    for (size_t i = 0; i < fieldMap_.size(); i++) {
+      if (fieldMap_[i] == -1) {
+        if (requiredFields_[i]) {
+          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+              "Error parsing header \"{}\": required field {} is missing",
+              header, i);
+          return false;
+        }
+        continue;
+      }
+
+      if (requiredFields_[i]) {
+        minNumFields_ = std::max<size_t>(minNumFields_, fieldMap_[i] + 1);
+      }
+
+      fieldMapStr +=
+          folly::sformat("{}{} -> {}", fieldMapStr.size() ? ", " : "",
+                         keys_[fieldMap_[i]], fieldMap_[i]);
+    }
+
+    XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+        "New header detected: header \"{}\" field map {}", header, fieldMapStr);
+    return true;
   }
 
  private:
-  void openNextInfile() {
+  bool openNextInfile() {
     if (nextInfileIdx_ >= infileNames_.size()) {
       if (!repeatTraceReplay_) {
         throw cachelib::cachebench::EndOfTrace("");
@@ -122,40 +212,22 @@ class TraceFileStream {
     infile_.open(filePath);
     if (infile_.fail()) {
       XLOGF(ERR, "{} Failed to open trace file {}", idStr_, traceFileName);
-      return;
+      return false;
     }
 
     XLOGF(INFO, "{} Opened trace file {}", idStr_, traceFileName);
     infile_.rdbuf()->pubsetbuf(infileBuffer_, sizeof(infileBuffer_));
     // header
-    std::getline(infile_, headerLine_);
+    std::string headerLine;
+    std::getline(infile_, headerLine);
 
-    parseHeaderRow(headerLine_);
-  }
-
-  void parseHeaderRow(const std::string& header) {
-    folly::split(',', header, keys_);
-    for (size_t i = 0; i < keys_.size(); i++) {
-      columnKeyMap_.emplace(folly::to<std::string>(keys_[i]), i);
+    if (!setHeaderRow(headerLine)) {
+      fieldMap_.clear();
     }
-    std::string headerString;
-    for (const auto& kv : columnKeyMap_) {
-      headerString +=
-          "(" + kv.first + ", " + folly::to<std::string>(kv.second) + ")  ";
-    }
-    XLOG_EVERY_MS(INFO, 1000) << "Parsed header row: " << headerString;
+    return true;
   }
 
   const std::vector<std::string>& getAllKeys() { return keys_; }
-
-  bool traceHasField(const std::string& field) {
-    for (const auto& k : columnKeyMap_) {
-      if (k.first == field) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   std::string idStr_;
 
@@ -164,15 +236,25 @@ class TraceFileStream {
   std::string configPath_;
   const bool repeatTraceReplay_;
 
-  std::string headerLine_;
+  // column map is map of <column name> -> <field id> and used to
+  // create filed map of <field id> -> <column idx>
+  std::unordered_map<std::string, uint8_t> columnMap_;
+  std::vector<int> fieldMap_;
+
+  // keep track of required fields for each field id
+  std::vector<bool> requiredFields_;
+
+  // minNumFields_ is the minimum number of fields required
+  size_t minNumFields_ = 0;
 
   std::vector<std::string> infileNames_;
   size_t nextInfileIdx_ = 0;
   std::ifstream infile_;
   char infileBuffer_[kIfstreamBufferSize];
 
+  std::vector<folly::StringPiece> nextLineFields_;
+
   std::vector<std::string> keys_;
-  std::unordered_map<std::string, size_t> columnKeyMap_;
 };
 
 class ReplayGeneratorBase : public GeneratorBase {
@@ -181,6 +263,7 @@ class ReplayGeneratorBase : public GeneratorBase {
       : config_(config),
         repeatTraceReplay_{config_.repeatTraceReplay},
         ampFactor_(config.replayGeneratorConfig.ampFactor),
+        timestampFactor_(config.timestampFactor),
         numShards_(config.numThreads),
         mode_(config_.replayGeneratorConfig.getSerializationMode()) {
     if (config.checkConsistency) {
@@ -197,6 +280,10 @@ class ReplayGeneratorBase : public GeneratorBase {
   const StressorConfig config_;
   const bool repeatTraceReplay_;
   const size_t ampFactor_;
+
+  // The constant to be divided from the timestamp value
+  // to turn the timestamp into seconds.
+  const uint64_t timestampFactor_{1};
 
   // # of shards is equal to the # of stressor threads
   const uint32_t numShards_;
