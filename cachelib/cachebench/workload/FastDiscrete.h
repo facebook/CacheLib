@@ -93,6 +93,7 @@ class FastDiscreteDistribution final : public Distribution {
     bucketOffsets_.push_back(0);
     size_t i = 0;
     std::vector<uint64_t> buckets;
+    size_t sumObjects = 0;
     // Divide the input distribution into numBuckets of equal weight.
     // The approximation is that objects in a bucket have equal weight.
     // Since we have equal weight buckets and (roughly) equal weight objects
@@ -101,19 +102,26 @@ class FastDiscreteDistribution final : public Distribution {
       if (weightSeen + probs[i] >= bucketWeight_) {
         // interpolate, update bucket, reset
         double bucketPct = (bucketWeight_ - weightSeen) / probs[i];
-        objectsSeen +=
+        size_t numObjects =
             facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
-        objectsSeen = std::max(1UL, objectsSeen);
-        sizes[i] -=
-            facebook::cachelib::util::narrow_cast<size_t>(bucketPct * sizes[i]);
+        sizes[i] -= numObjects;
         probs[i] -= bucketPct * probs[i];
 
+        objectsSeen += numObjects;
+        sumObjects += objectsSeen;
+
+        // Determine bucket size. In doing so, take max against 1
+        // before and after scaling to account for scaling factors
+        objectsSeen = std::max(1UL, objectsSeen);
         auto scaledObjects =
             static_cast<uint64_t>(objectsSeen * scalingFactor_);
-        buckets.push_back(scaledObjects);
-        if (bucketOffsets_.size() > 0) {
-          bucketOffsets_.push_back(bucketOffsets_.back() + scaledObjects);
-        }
+        buckets.push_back(std::max(1UL, scaledObjects));
+        DCHECK_LE(bucketOffsets_.back() + buckets.back(), rightOffset_);
+
+        // determine the offset for next bucket
+        auto nextOffset = static_cast<uint64_t>(sumObjects * scalingFactor_);
+        bucketOffsets_.push_back(nextOffset);
+        DCHECK_LE(nextOffset, rightOffset_);
         weightSeen = 0.0;
         objectsSeen = 0;
       } else {
