@@ -193,7 +193,7 @@ std::vector<std::string> chainedItems = { "item 1", "item 2", "item 3" };
 
 for (auto itr = chainedItems.begin(); itr != chainedItems.end(); ++itr) {
   // Allocate memory for the chained item.
-  auto chainedItemHandle = cache->allocateChainedItem(parentHandle, size);
+  auto chainedItemHandle = cache->allocateChainedItem(parentItemHandle, size);
 
   if (!chainedItemHandle) {
     // failed to allocate for the chained item.

@@ -379,21 +379,23 @@ if (mutableFoo !== nullptr) {
 To remove objects from object-cache, call `remove` API:
 
 ```cpp
-void remove(folly::StringPiece key);
+bool remove(folly::StringPiece key);
 ```
 
-- `remove`: Remove an object from cache by its key. No-op if the key not found.
+- `remove`:
+  - Remove an object from cache by its key. No-op if the key not found.
+  - Return `false` if the key is not found in object-cache.
 
 Example:
 
 ```cpp
 // objcache is empty
-objcache->remove<Foo>("foo"); // no-op
+objcache->remove<Foo>("foo"); // no-op, return `false`
 
 objcache->insertOrReplace<Foo>("foo", std::move(foo));
 ...
 
-objcache->remove<Foo>("foo"); // foo will be removed
+objcache->remove<Foo>("foo"); // foo will be removed, return `true`
 ```
 
 ## TTL (Time To Live)

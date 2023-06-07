@@ -60,21 +60,17 @@ This indicates that the handle is still waiting for the item to be pulled into D
 
 To check whether a Handle is ready, call the `isReady()` method via the Handle.
 
-If the application can tolerate the latency of accessing NVM for some of your accesses from cache, there is not a lot of change that is needed on how you use cachelib today. However, if you are impacted by latency, you can do the following:
+If the application can tolerate the latency of accessing NVM for some of your accesses from cache, there is not a lot of change that is needed on how you use cachelib today.
 
-1. By default, if you don't change your existing cachelib code, dereferencing a handle that is not ready or doing any check on the result of the handle will **block** until it becomes ready. When it is blocking, if you are in a fiber context, it puts the fiber to sleep.
-2. Set a callback to be executed `onReady()`. The callback will be executed when the handle is ready or immediately if the handle is already ready.
-3. Get a `folly::SemiFuture` on the handle by calling the `toSemiFuture()` method.
-4. Pass the handle in its current state to another execution context that can then execute your code when the handle becomes ready.
+However, if you are impacted by latency, you can do the following:
+1. Get a `folly::SemiFuture` on the handle by calling the `toSemiFuture()` method.
+2. You may attach any additional logic to be executed on the item via SemiFuture's `defer()` callback.
+3. Pass the SemiFuture to an execution context (e.g. folly's EventBase) that can then execute your code when the handle becomes ready.
 
-The following code snipper highlights the various techniques.
+The following code snippet highlights the various techniques.
 
 
 ```cpp
-auto processItem  = [](Handle h) {
-  // my processing logic.
-};
-
 /* Accessing item on a fiber or in blocking way with NvmCache */
 auto handle = cache.find("foobar");
 
@@ -87,9 +83,15 @@ if (handle) {
 auto handle = cache.find("foobar");
 auto semiFuture = handle.toSemiFuture();
 
-/* Accessing an item and setting a onReady callback */
-auto handle = cache.find("foobar");
-handle.onReady(processItem); // process the item when the handle becomes ready
+/* Attach (optional) callback that is invoked when semifuture is executed */
+auto sf = std::move(semiFuture).deferValue([] (const auto itemHandle) {
+  /* Do something with the item */
+});
+
+/* Schedule semi future to be executed async, when the item is ready */
+std::move(semiFuture).via(
+  folly::Executor::getKeepAliveToken(
+    folly::EventBaseManager::get()->getExistingEventBase()));
 ```
 
 
