@@ -95,7 +95,7 @@ void Reaper<CacheT>::reapSlabWalkMode() {
         try {
           // obtain a valid handle without disturbing the state of the item in
           // cache.
-          auto handle = cache_.peek(key);
+          auto handle = ReaperAPIWrapper<CacheT>::findInternal(cache_, key);
           auto reaped =
               ReaperAPIWrapper<CacheT>::removeIfExpired(cache_, handle);
           if (reaped) {

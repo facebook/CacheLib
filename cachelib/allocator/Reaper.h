@@ -28,17 +28,26 @@ namespace cachelib {
 // needed for the Reaper.
 template <typename C>
 struct ReaperAPIWrapper {
+  using Item = typename C::Item;
+  using Key = typename Item::Key;
+  using WriteHandle = typename C::WriteHandle;
+  using ReadHandle = typename C::ReadHandle;
+
   static std::set<PoolId> getRegularPoolIds(C& cache) {
     return cache.getRegularPoolIds();
   }
 
-  static bool removeIfExpired(C& cache, const typename C::ReadHandle& handle) {
+  static bool removeIfExpired(C& cache, const ReadHandle& handle) {
     return cache.removeIfExpired(handle);
   }
 
   template <typename Fn>
   static void traverseAndExpireItems(C& cache, Fn&& f) {
     cache.traverseAndExpireItems(std::forward<Fn>(f));
+  }
+
+  static WriteHandle findInternal(C& cache, Key key) {
+    return cache.findInternal(key);
   }
 };
 

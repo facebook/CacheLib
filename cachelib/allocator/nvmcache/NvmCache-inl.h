@@ -314,7 +314,10 @@ void NvmCache<C>::evictCB(HashedKey hk,
     auto lock = getItemDestructorLock(hk);
     WriteHandle hdl;
     try {
-      hdl = WriteHandle{cache_.peek(hk.key())};
+      // FindInternal returns us the item in DRAM cache as long as this
+      // item can be found via DRAM cache's Access Container.
+      hdl =
+          WriteHandle{CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key())};
     } catch (const exception::RefcountOverflow& ex) {
       // TODO(zixuan) item exists in DRAM, but we can't obtain the handle
       // and mark it as NvmEvicted. In this scenario, there are two

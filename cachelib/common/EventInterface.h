@@ -38,6 +38,7 @@ enum class AllocatorApiEvent : uint8_t {
   DRAM_EVICT = 11,
   NVM_REMOVE = 12,
   NVM_EVICT = 13,
+  PEEK = 14,
 };
 
 inline const char* toString(AllocatorApiEvent event) {
@@ -70,6 +71,8 @@ inline const char* toString(AllocatorApiEvent event) {
     return "NVM_REMOVE";
   case AllocatorApiEvent::NVM_EVICT:
     return "NVM_EVICT";
+  case AllocatorApiEvent::PEEK:
+    return "PEEK";
   default:
     XDCHECK(false);
     return "** CORRUPT EVENT **";
@@ -87,6 +90,7 @@ enum class AllocatorApiResult : uint8_t {
   REPLACED = 6,            // Replaced an item in a map.
   REMOVED = 7,             // Removed an item.
   EVICTED = 8,             // Evicted an item.
+  EXPIRED = 9,             // An item has expired.
 };
 
 inline const char* toString(AllocatorApiResult result) {
@@ -109,6 +113,8 @@ inline const char* toString(AllocatorApiResult result) {
     return "REMOVED";
   case AllocatorApiResult::EVICTED:
     return "EVICTED";
+  case AllocatorApiResult::EXPIRED:
+    return "EXPIRED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";

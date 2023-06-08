@@ -1637,17 +1637,17 @@ CacheAllocator<CacheTrait>::getMMContainer(PoolId pid,
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::ReadHandle
 CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
-  return findInternal(key);
+  return findInternalWithExpiration(key, AllocatorApiEvent::PEEK);
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
   // At this point, a key either definitely exists or does NOT exist in cache
-  auto handle = findFastInternal(key, AccessMode::kRead);
+
+  // We treat this as a peek, since couldExist() shouldn't actually promote
+  // an item as we expect the caller to issue a regular find soon afterwards.
+  auto handle = findInternalWithExpiration(key, AllocatorApiEvent::PEEK);
   if (handle) {
-    if (handle->isExpired()) {
-      return false;
-    }
     return true;
   }
 
@@ -1670,22 +1670,61 @@ CacheAllocator<CacheTrait>::inspectCache(typename Item::Key key) {
   return res;
 }
 
-// findFast and find() are the most performance critical parts of
-// CacheAllocator. Hence the sprinkling of UNLIKELY/LIKELY to tell the
-// compiler which executions we don't want to optimize on.
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
-CacheAllocator<CacheTrait>::findFastInternal(typename Item::Key key,
-                                             AccessMode mode) {
-  auto handle = findInternal(key);
+CacheAllocator<CacheTrait>::findInternalWithExpiration(
+    Key key, AllocatorApiEvent event) {
+  bool needToBumpStats =
+      event == AllocatorApiEvent::FIND || event == AllocatorApiEvent::FIND_FAST;
+  if (needToBumpStats) {
+    stats_.numCacheGets.inc();
+  }
 
-  stats_.numCacheGets.inc();
+  auto eventTracker = getEventTracker();
+  XDCHECK(event == AllocatorApiEvent::FIND ||
+          event == AllocatorApiEvent::FIND_FAST ||
+          event == AllocatorApiEvent::PEEK)
+      << toString(event);
+
+  auto handle = findInternal(key);
   if (UNLIKELY(!handle)) {
-    stats_.numCacheGetMiss.inc();
+    if (needToBumpStats) {
+      stats_.numCacheGetMiss.inc();
+    }
+    if (eventTracker) {
+      // If caller issued a regular find and we have nvm-cache enabled,
+      // it is expected a nvm-cache lookup will follow. We don't know
+      // for sure if the lookup will be a hit or miss, so we only record
+      // a NOT_FOUND_IN_MEMORY result for now.
+      if (event == AllocatorApiEvent::FIND && nvmCache_ != nullptr) {
+        eventTracker->record(event, key,
+                             AllocatorApiResult::NOT_FOUND_IN_MEMORY);
+      } else {
+        eventTracker->record(event, key, AllocatorApiResult::NOT_FOUND);
+      }
+    }
     return handle;
   }
 
-  markUseful(handle, mode);
+  if (UNLIKELY(handle->isExpired())) {
+    // update cache miss stats if the item has already been expired.
+    if (needToBumpStats) {
+      stats_.numCacheGetMiss.inc();
+      stats_.numCacheGetExpiries.inc();
+    }
+    if (eventTracker) {
+      eventTracker->record(event, key, AllocatorApiResult::EXPIRED);
+    }
+    WriteHandle ret;
+    ret.markExpired();
+    return ret;
+  }
+
+  if (eventTracker) {
+    eventTracker->record(event, key, AllocatorApiResult::FOUND,
+                         folly::Optional<uint32_t>(handle->getSize()),
+                         handle->getConfiguredTTL().count());
+  }
   return handle;
 }
 
@@ -1693,19 +1732,12 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findFastImpl(typename Item::Key key,
                                          AccessMode mode) {
-  auto handle = findFastInternal(key, mode);
-  auto eventTracker = getEventTracker();
-  if (UNLIKELY(eventTracker != nullptr)) {
-    if (handle) {
-      eventTracker->record(AllocatorApiEvent::FIND_FAST, key,
-                           AllocatorApiResult::FOUND,
-                           folly::Optional<uint32_t>(handle->getSize()),
-                           handle->getConfiguredTTL().count());
-    } else {
-      eventTracker->record(AllocatorApiEvent::FIND_FAST, key,
-                           AllocatorApiResult::NOT_FOUND);
-    }
+  auto handle = findInternalWithExpiration(key, AllocatorApiEvent::FIND_FAST);
+  if (!handle) {
+    return handle;
   }
+
+  markUseful(handle, mode);
   return handle;
 }
 
@@ -1732,45 +1764,21 @@ CacheAllocator<CacheTrait>::findFastToWrite(typename Item::Key key,
 template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::findImpl(typename Item::Key key, AccessMode mode) {
-  auto handle = findFastInternal(key, mode);
-
+  auto handle = findInternalWithExpiration(key, AllocatorApiEvent::FIND);
   if (handle) {
-    if (UNLIKELY(handle->isExpired())) {
-      // update cache miss stats if the item has already been expired.
-      stats_.numCacheGetMiss.inc();
-      stats_.numCacheGetExpiries.inc();
-      auto eventTracker = getEventTracker();
-      if (UNLIKELY(eventTracker != nullptr)) {
-        eventTracker->record(AllocatorApiEvent::FIND, key,
-                             AllocatorApiResult::NOT_FOUND);
-      }
-      WriteHandle ret;
-      ret.markExpired();
-      return ret;
-    }
-
-    auto eventTracker = getEventTracker();
-    if (UNLIKELY(eventTracker != nullptr)) {
-      eventTracker->record(AllocatorApiEvent::FIND, key,
-                           AllocatorApiResult::FOUND, handle->getSize(),
-                           handle->getConfiguredTTL().count());
-    }
+    markUseful(handle, mode);
     return handle;
   }
 
-  auto eventResult = AllocatorApiResult::NOT_FOUND;
-
-  if (nvmCache_) {
-    handle = nvmCache_->find(HashedKey{key});
-    eventResult = AllocatorApiResult::NOT_FOUND_IN_MEMORY;
+  if (!nvmCache_) {
+    return handle;
   }
 
-  auto eventTracker = getEventTracker();
-  if (UNLIKELY(eventTracker != nullptr)) {
-    eventTracker->record(AllocatorApiEvent::FIND, key, eventResult);
-  }
-
-  return handle;
+  // Hybrid-cache's dram miss-path. Handle becomes async once we look up from
+  // nvm-cache. Naively accessing the memory directly after this can be slow.
+  // We also don't need to call `markUseful()` as if we have a hit, we will
+  // have promoted this item into DRAM cache at the front of eviction queue.
+  return nvmCache_->find(HashedKey{key});
 }
 
 template <typename CacheTrait>

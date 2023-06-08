@@ -1482,16 +1482,21 @@ class CacheAllocator : public CacheBase {
     return accessContainer_->find(key);
   }
 
-  // look up an item by its key. This ignores the nvm cache and only does RAM
-  // lookup.
+  // TODO: do another round of audit to refactor our lookup paths. This is
+  //       still convoluted.
   //
-  // @param key         the key for lookup
-  // @param mode        the mode of access for the lookup.
-  //                    AccessMode::kRead or AccessMode::kWrite
+  // internal helper that grabs a refcounted handle to the item. This does
+  // not record the access to reflect in the mmContainer. This also checks
+  // expiration and also bumps stats if caller is a regular find or findFast.
   //
-  // @return      the handle for the item or a handle to nullptr if the key does
-  //              not exist.
-  FOLLY_ALWAYS_INLINE WriteHandle findFastInternal(Key key, AccessMode mode);
+  // @param key     key to look up in the access container
+  // @param event   cachelib lookup operation
+  //
+  // @return handle if item is found and not expired, nullptr otherwise
+  //
+  // @throw std::overflow_error is the maximum item refcount is execeeded by
+  //        creating this item handle.
+  WriteHandle findInternalWithExpiration(Key key, AllocatorApiEvent event);
 
   // look up an item by its key across the nvm cache as well if enabled.
   //

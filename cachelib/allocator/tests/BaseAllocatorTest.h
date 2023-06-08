@@ -3750,24 +3750,45 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     unsigned long totalCacheMissCount = 0;
     const uint32_t startTime = static_cast<uint32_t>(util::getCurrentTimeSec());
+
+    auto checkExistenceCb = [&itemsExpiryTime](const auto& handle,
+                                               uint32_t currentTime,
+                                               unsigned int i) {
+      if (currentTime < itemsExpiryTime[i] - 1) {
+        EXPECT_NE(nullptr, handle);
+      } else if (currentTime > itemsExpiryTime[i] + 1) {
+        EXPECT_EQ(nullptr, handle);
+        EXPECT_EQ(true, handle.wasExpired());
+      }
+    };
+
     // start to check TTL
     while (static_cast<uint32_t>(util::getCurrentTimeSec()) <=
            startTime + maxTTL) {
       for (unsigned int i = 0; i < numItems; i++) {
         uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
-        const auto handle = allocator.find(folly::to<std::string>(i));
-        if (currentTime < itemsExpiryTime[i] - 1) {
-          ASSERT_NE(nullptr, handle);
-        } else if (currentTime > itemsExpiryTime[i] + 1) {
-          ASSERT_EQ(nullptr, handle);
-          ASSERT_EQ(true, handle.wasExpired());
-        }
+        const auto k = folly::to<std::string>(i);
+        const auto h1 = allocator.find(k);
+        checkExistenceCb(h1, currentTime, i);
+
+        const auto h2 = allocator.findFast(k);
+        checkExistenceCb(h1, currentTime, i);
+
+        const auto h3 = allocator.peek(k);
+        checkExistenceCb(h1, currentTime, i);
 
         // if handle is null, it must have been the result of cache item being
         // expired hence the cache miss.
-        if (handle == nullptr) {
+        if (h1 == nullptr) {
           totalCacheMissCount++;
         }
+
+        if (h2 == nullptr) {
+          totalCacheMissCount++;
+        }
+
+        // We don't need to bump totalCacheMissCount for h3, because
+        // peek() API does not bump cache miss stats.
       }
     }
 
@@ -6100,15 +6121,15 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       alloc.insertOrReplace(handle);
     }
 
-    EXPECT_NE(nullptr, alloc.peek("test"));
+    EXPECT_NE(nullptr, alloc.inspectCache("test").first);
     std::this_thread::sleep_for(std::chrono::seconds{3});
     // Still here because we haven't started the workers
-    EXPECT_NE(nullptr, alloc.peek("test"));
+    EXPECT_NE(nullptr, alloc.inspectCache("test").first);
 
     alloc.startCacheWorkers();
     std::this_thread::sleep_for(std::chrono::seconds{1});
     // Once reaper starts it will have expired this item quickly
-    EXPECT_EQ(nullptr, alloc.peek("test"));
+    EXPECT_EQ(nullptr, alloc.inspectCache("test").first);
   }
 
   // Test to validate the logic to detect/export the slab release stuck.
