@@ -2072,7 +2072,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
@@ -2093,7 +2093,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
@@ -2112,7 +2112,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     handle->markNvmClean();
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Recycled);
@@ -2128,7 +2128,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     auto handle = cache.allocate(pid, key, 100);
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
@@ -2147,7 +2147,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
@@ -2166,7 +2166,7 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     handle->markNvmClean();
-    auto buf = toIOBuf(makeNvmItem(handle));
+    auto buf = toIOBuf(makeNvmItem(*handle));
     evictCB(HashedKey{key.data()},
             navy::BufferView(buf.length(), buf.data()),
             navy::DestructorEvent::Removed);
@@ -2228,7 +2228,7 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
 
-    auto dipper = makeNvmItem(handle);
+    auto dipper = makeNvmItem(*handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
 
     verifyItemInIOBuf(key, handle, iobuf.get());
@@ -2240,7 +2240,7 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBuf) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
 
-    auto dipper = makeNvmItem(handle);
+    auto dipper = makeNvmItem(*handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
 
     verifyItemInIOBuf(key, handle, iobuf.get());
@@ -2269,7 +2269,7 @@ TEST_F(NvmCacheTest, testCreateItemAsIOBufChained) {
       cache.addChainedItem(handle, std::move(chainedIt));
     }
 
-    auto dipper = makeNvmItem(handle);
+    auto dipper = makeNvmItem(*handle);
     auto iobuf = createItemAsIOBuf(key, *dipper);
 
     verifyItemInIOBuf(key, handle, iobuf.get());

@@ -1664,34 +1664,36 @@ class CacheAllocator : public CacheBase {
                        bool removeFromNvm = true,
                        bool recordApiEvent = true);
 
+  // Must be called by the thread which called markForEviction and
+  // succeeded. After this call, the item is unlinked from Access and
+  // MM Containers. The item is no longer marked as exclusive and it's
+  // ref count is 0 - it's available for recycling.
+  void unlinkItemForEviction(Item& it);
+
   // Implementation to find a suitable eviction from the container. The
   // two parameters together identify a single container.
   //
   // @param  pid  the id of the pool to look for evictions inside
   // @param  cid  the id of the class to look for evictions inside
-  // @return An evicted item or nullptr  if there is no suitable candidate.
+  // @return An evicted item or nullptr  if there is no suitable candidate found
+  // within the configured number of attempts.
   Item* findEviction(PoolId pid, ClassId cid);
 
+  // Get next eviction candidate from MMContainer, remove from AccessContainer,
+  // MMContainer and insert into NVMCache if enabled.
+  //
+  // @param pid  the id of the pool to look for evictions inside
+  // @param cid  the id of the class to look for evictions inside
+  // @param searchTries number of search attempts so far.
+  //
+  // @return pair of [candidate, toRecycle]. Pair of null if reached the end of
+  // the eviction queue or no suitable candidate found
+  // within the configured number of attempts
+  std::pair<Item*, Item*> getNextCandidate(PoolId pid,
+                                           ClassId cid,
+                                           unsigned int& searchTries);
+
   using EvictionIterator = typename MMContainer::LockedIterator;
-
-  // Advance the current iterator and try to evict a regular item
-  //
-  // @param  mmContainer  the container to look for evictions.
-  // @param  itr          iterator holding the item
-  //
-  // @return  valid handle to regular item on success. This will be the last
-  //          handle to the item. On failure an empty handle.
-  WriteHandle advanceIteratorAndTryEvictRegularItem(MMContainer& mmContainer,
-                                                    EvictionIterator& itr);
-
-  // Advance the current iterator and try to evict a chained item
-  // Iterator may also be reset during the course of this function
-  //
-  // @param  itr          iterator holding the item
-  //
-  // @return  valid handle to the parent item on success. This will be the last
-  //          handle to the item
-  WriteHandle advanceIteratorAndTryEvictChainedItem(EvictionIterator& itr);
 
   // Deserializer CacheAllocatorMetadata and verify the version
   //
