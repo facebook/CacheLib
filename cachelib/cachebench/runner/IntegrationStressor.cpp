@@ -192,7 +192,7 @@ void CachelibMapStressor::pokeHoles(TestMap& map) {
   std::vector<uint64_t> keys;
   for (const auto& kv : map) {
     if (folly::Random::oneIn(rate)) {
-      keys.push_back(kv.key);
+      keys.push_back(kv.first);
     }
   }
   for (auto k : keys) {
@@ -208,7 +208,7 @@ void CachelibMapStressor::readEntries(TestMap& map) {
   // Scan through all the entries in the map and look up them by key
   std::vector<uint64_t> keys;
   for (const auto& kv : map) {
-    keys.push_back(kv.key);
+    keys.push_back(kv.first);
   }
   for (auto k : keys) {
     if (map.find(k) == nullptr) {

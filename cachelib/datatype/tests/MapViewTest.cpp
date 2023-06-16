@@ -113,8 +113,8 @@ class MapViewTest : public ::testing::Test {
     BasicMapView mapView{*parent, allocs.getChain()};
     unsigned int i = 0;
     for (auto& kv : mapView) {
-      ASSERT_EQ(kv.key, keys.at(i));
-      ASSERT_EQ(kv.value, values.at(i));
+      ASSERT_EQ(kv.first, keys.at(i));
+      ASSERT_EQ(kv.second, values.at(i));
       i++;
     }
     ASSERT_EQ(i, mapView.size());
@@ -150,8 +150,8 @@ class MapViewTest : public ::testing::Test {
 
       unsigned int i = 0;
       for (auto& kv : readOnlyMap) {
-        ASSERT_EQ(kv.key, keys.at(i));
-        ASSERT_EQ(kv.value, values.at(i));
+        ASSERT_EQ(kv.first, keys.at(i));
+        ASSERT_EQ(kv.second, values.at(i));
         i++;
       }
       ASSERT_EQ(i, readOnlyMap.size());
@@ -161,11 +161,11 @@ class MapViewTest : public ::testing::Test {
 
       i = 0;
       for (auto& kv : readOnlyMap2) {
-        ASSERT_EQ(kv.key, keys.at(i));
-        ASSERT_EQ(kv.value, values.at(i));
+        ASSERT_EQ(kv.first, keys.at(i));
+        ASSERT_EQ(kv.second, values.at(i));
         i++;
       }
-      ASSERT_EQ(i, readOnlyMap.size());
+      ASSERT_EQ(i, readOnlyMap2.size());
     }
   }
 };

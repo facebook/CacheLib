@@ -126,8 +126,8 @@ class Map {
   using WriteHandle = typename Item::WriteHandle;
 
   struct FOLLY_PACK_ATTR EntryKeyValue {
-    EntryKey key;
-    EntryValue value;
+    EntryKey first;
+    EntryValue second;
   };
 
   // Create a new cachelib::Map

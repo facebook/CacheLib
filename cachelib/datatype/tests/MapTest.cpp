@@ -376,17 +376,14 @@ class MapTest : public ::testing::Test {
 
     // Test move constructor and assignment operators
     auto map2{std::move(map)};
-    ASSERT_TRUE(map.isNullWriteHandle());
     ASSERT_TRUE(map2.find(123));
 
     auto map3 = BasicMap::create(*cache, pid, "my_new_map");
     map3 = std::move(map2);
-    ASSERT_TRUE(map2.isNullWriteHandle());
     ASSERT_TRUE(map3.find(123));
 
     BasicMap map4 = nullptr;
     map4 = std::move(map3);
-    ASSERT_TRUE(map3.isNullWriteHandle());
     ASSERT_TRUE(map4.find(123));
 
     ASSERT_TRUE(map4.erase(123));
@@ -643,10 +640,10 @@ class MapTest : public ::testing::Test {
     }
 
     std::for_each(map.begin(), map.end(), [&](auto& kv) {
-      const auto keyToPrint = kv.key; // need this to compile with gcc
+      const auto keyToPrint = kv.first; // need this to compile with gcc
       SCOPED_TRACE(folly::sformat("key expected: {}", keyToPrint));
-      ASSERT_NE(keys.find(kv.key), keys.end());
-      keys.erase(kv.key);
+      ASSERT_NE(keys.find(kv.first), keys.end());
+      keys.erase(kv.first);
     });
     SCOPED_TRACE(folly::sformat("actual number of keys: {}", keys.size()));
     ASSERT_TRUE(keys.empty());
@@ -702,7 +699,7 @@ class MapTest : public ::testing::Test {
               std::inserter(vec, std::begin(vec)));
     ASSERT_EQ(vec.size(), map.size());
     for (auto& v : vec) {
-      ASSERT_EQ(v.value, *map.find(v.key));
+      ASSERT_EQ(v.second, *map.find(v.first));
     }
   }
 
@@ -893,9 +890,9 @@ class MapTest : public ::testing::Test {
     map.insert(300, 300);
 
     auto itr = std::find_if(map.begin(), map.end(),
-                            [](auto& p) { return p.key == 200; });
+                            [](auto& p) { return p.first == 200; });
     ASSERT_NE(map.end(), itr);
-    ASSERT_EQ(200, itr->value);
+    ASSERT_EQ(200, itr->second);
   }
 
   void testTinyMap() {

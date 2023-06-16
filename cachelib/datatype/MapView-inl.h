@@ -64,7 +64,7 @@ const typename MapView<K, V, C>::EntryValue* MapView<K, V, C>::find(
   if (!entry) {
     return nullptr;
   }
-  return &get(entry->addr)->value;
+  return &get(entry->addr)->second;
 }
 
 template <typename K, typename V, typename C>
