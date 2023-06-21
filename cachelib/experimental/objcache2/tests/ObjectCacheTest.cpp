@@ -1254,6 +1254,69 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_EQ(evictionItrDumpAfter, evictionItrDumpBefore);
   }
 
+  void testPersistenceNonThrift() {
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    size_t threadsCount = 10;
+    int objectNum = 1000;
+    size_t totalObjectSize = 0;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); })
+        .enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              return serializer.template serialize<Foo, ThriftFoo>(
+                  [](Foo* foo) -> ThriftFoo {
+                    ThriftFoo obj;
+                    obj.a() = foo->a;
+                    obj.b() = foo->b;
+                    obj.c() = foo->c;
+                    return obj;
+                  });
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              return deserializer.template deserialize<Foo, ThriftFoo>(
+                  [](ThriftFoo thriftObj) -> Foo {
+                    return Foo{*thriftObj.a(), *thriftObj.b(), *thriftObj.c()};
+                  });
+            });
+    config.objectSizeTrackingEnabled = true;
+
+    {
+      auto objcache = ObjectCache::create(config);
+      for (int i = 0; i < objectNum; i++) {
+        int objectSize = i + 10;
+        auto object = std::make_unique<Foo>();
+        object->a = i;
+        object->b = i + 1;
+        object->c = i + 2;
+        objcache->insertOrReplace(folly::sformat("key_{}", i),
+                                  std::move(object), objectSize);
+        totalObjectSize += objectSize;
+      }
+      ASSERT_EQ(objcache->getNumEntries(), objectNum);
+      ASSERT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+      ASSERT_EQ(objcache->persist(), true);
+    }
+
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      for (int i = 0; i < objectNum; i++) {
+        auto found = objcache->template find<Foo>(folly::sformat("key_{}", i));
+        EXPECT_NE(nullptr, found);
+        EXPECT_EQ(i, found->a);
+        EXPECT_EQ(i + 1, found->b);
+        EXPECT_EQ(i + 2, found->c);
+      }
+      EXPECT_EQ(objcache->getNumEntries(), objectNum);
+      EXPECT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+    }
+  }
+
   void testGetTtl() {
     const uint32_t ttlSecs = 600;
 
@@ -1619,6 +1682,9 @@ TYPED_TEST(ObjectCacheTest, PersistenceWithEvictionOrder) {
   if (!std::is_same_v<TypeParam, TinyLFUAllocator>) {
     this->testPersistenceWithEvictionOrder();
   }
+}
+TYPED_TEST(ObjectCacheTest, PersistenceNonThrift) {
+  this->testPersistenceNonThrift();
 }
 TYPED_TEST(ObjectCacheTest, GetTtl) { this->testGetTtl(); }
 TYPED_TEST(ObjectCacheTest, UpdateTtl) { this->testUpdateTtl(); }

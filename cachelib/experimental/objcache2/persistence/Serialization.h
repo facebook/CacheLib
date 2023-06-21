@@ -37,6 +37,18 @@ struct ObjectSerializer {
     return Serializer::serializeToIOBuf(*reinterpret_cast<T*>(objectPtr));
   }
 
+  // Serialize the object of type T into an IOBuf.
+  // T is a non-Thrift object.
+  //
+  // @param toThriftCb  callback converting a non-Thrift object to a Thrift
+  // object
+  template <typename T, typename ThriftT>
+  std::unique_ptr<folly::IOBuf> serialize(
+      std::function<ThriftT(T*)> toThriftCb) {
+    auto thriftObj = toThriftCb(reinterpret_cast<T*>(objectPtr));
+    return Serializer::serializeToIOBuf(thriftObj);
+  }
+
   // cache key of the object to be serialized
   Key key;
 
@@ -68,6 +80,24 @@ struct ObjectDeserializer {
     Deserializer deserializer{reinterpret_cast<const uint8_t*>(payload.begin()),
                               reinterpret_cast<const uint8_t*>(payload.end())};
     auto ptr = std::make_unique<T>(deserializer.deserialize<T>());
+    auto res =
+        objCache_.insertOrReplace(key, std::move(ptr), objectSize, ttlSecs);
+    return std::get<0>(res) == ObjectCache::AllocStatus::kSuccess;
+  }
+
+  // Deserialize the payload into an object of type T; and insert the object
+  // into the cache.
+  // Return true if successfully inserted to the cache; false otherwise.
+  // T is a non-Thrift object.
+  //
+  // @param fromThriftCb  callback converting a Thrift object to a non-Thrift
+  //                      object
+  template <typename T, typename ThriftT>
+  bool deserialize(std::function<T(ThriftT)> fromThriftCb) {
+    Deserializer deserializer{reinterpret_cast<const uint8_t*>(payload.begin()),
+                              reinterpret_cast<const uint8_t*>(payload.end())};
+    auto thriftObj = deserializer.deserialize<ThriftT>();
+    auto ptr = std::make_unique<T>(fromThriftCb(thriftObj));
     auto res =
         objCache_.insertOrReplace(key, std::move(ptr), objectSize, ttlSecs);
     return std::get<0>(res) == ObjectCache::AllocStatus::kSuccess;
