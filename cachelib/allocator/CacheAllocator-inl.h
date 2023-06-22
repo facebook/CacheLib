@@ -1307,7 +1307,6 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
         continue;
       }
 
-      XDCHECK(candidate_->isMarkedForEviction());
       // markForEviction to make sure no other thead is evicting the item
       // nor holding a handle to that item
       toRecycle = toRecycle_;
@@ -1332,6 +1331,7 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
 
   XDCHECK(toRecycle);
   XDCHECK(candidate);
+  XDCHECK(candidate->isMarkedForEviction());
 
   unlinkItemForEviction(*candidate);
 
