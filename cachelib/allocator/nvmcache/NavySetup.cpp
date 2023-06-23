@@ -64,6 +64,7 @@ uint64_t getRegionSize(const navy::NavyConfig& config) {
 // @param bigHashEndOffset The offset where this bighash ends.
 // @param bigHashStartOffsetLimit The start offset of this bighash can not be
 // smaller than or equal to this limit.
+// @param placementHandle Data placement handle for capable devices
 // @param proto The proto of engine pair that this bighash will be set into.
 //
 // @return the starting offset of the setup bighash (inclusive)
@@ -72,6 +73,7 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
                       uint64_t bigHashReservedSize,
                       uint64_t bigHashEndOffset,
                       uint64_t bigHashStartOffsetLimit,
+                      uint16_t placementHandle,
                       cachelib::navy::EnginePairProto& proto) {
   auto bucketSize = bigHashConfig.getBucketSize();
   if (bucketSize != alignUp(bucketSize, ioAlignSize)) {
@@ -102,6 +104,7 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
         bigHashConfig.getBucketBfSize() * 8 / kNumHashes;
     bigHash->setBloomFilter(kNumHashes, bitsPerHash);
   }
+  bigHash->setPlacementHandle(placementHandle);
 
   proto.setBigHash(std::move(bigHash), bigHashConfig.getSmallItemMaxSize());
 
@@ -110,7 +113,8 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
   }
   XLOG(INFO) << "bighashStartingLimit: " << bigHashStartOffsetLimit
              << " bigHashCacheOffset: " << bigHashCacheOffset
-             << " bigHashCacheSize: " << bigHashCacheSize;
+             << " bigHashCacheSize: " << bigHashCacheSize
+             << " placementHandle: " << placementHandle;
   return bigHashCacheOffset;
 }
 
@@ -122,6 +126,7 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
 // @param blockCacheOffset this block cache starts from this address (inclusive)
 // @param useRaidFiles if set to true, the device will setup using raid.
 // @param itemDestructorEnabled
+// @param placementHandle Data placement handle for capable devices
 // @param proto
 //
 // @return The end offset (exclusive) of the setup blockcache.
@@ -131,6 +136,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                          uint64_t blockCacheOffset,
                          bool usesRaidFiles,
                          bool itemDestructorEnabled,
+                         uint16_t placementHandle,
                          cachelib::navy::EnginePairProto& proto) {
   auto regionSize = blockCacheConfig.getRegionSize();
   if (regionSize != alignUp(regionSize, ioAlignSize)) {
@@ -152,7 +158,8 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCacheSize = alignDown(blockCacheSize, regionSize);
 
   XLOG(INFO) << "blockcache: starting offset: " << blockCacheOffset
-             << ", block cache size: " << blockCacheSize;
+             << ", block cache size: " << blockCacheSize
+             << ", placementHandle: " << placementHandle;
 
   auto blockCache = cachelib::navy::createBlockCacheProto();
   blockCache->setLayout(blockCacheOffset, blockCacheSize, regionSize);
@@ -174,6 +181,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
   blockCache->setItemDestructorEnabled(itemDestructorEnabled);
   blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
+  blockCache->setPlacementHandle(placementHandle);
 
   proto.setBlockCache(std::move(blockCache));
   return blockCacheOffset + blockCacheSize;
@@ -194,7 +202,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 // |--- Metadata ---|--- BC-0 ---|--- BC-1 ---|...|--- BH-1 ---|--- BH-0 ---|
 
 void setupCacheProtos(const navy::NavyConfig& config,
-                      const navy::Device& device,
+                      navy::Device& device,
                       cachelib::navy::CacheProto& proto,
                       const bool itemDestructorEnabled) {
   if (config.enginesConfigs()[config.enginesConfigs().size() - 1]
@@ -246,9 +254,10 @@ void setupCacheProtos(const navy::NavyConfig& config,
     if (enginesConfig.isBigHashEnabled()) {
       uint64_t bigHashSize =
           totalCacheSize * enginesConfig.bigHash().getSizePct() / 100ul;
+      uint16_t bigHashPlacementHandle = device.allocatePlacementHandle();
       bigHashStartOffset = setupBigHash(
           enginesConfig.bigHash(), ioAlignSize, bigHashSize, bigHashEndOffset,
-          blockCacheStartOffset, *enginePairProto);
+          blockCacheStartOffset, bigHashPlacementHandle, *enginePairProto);
       blockCacheSize = blockCacheSize == 0
                            ? bigHashStartOffset - blockCacheStartOffset
                            : blockCacheSize;
@@ -263,10 +272,11 @@ void setupCacheProtos(const navy::NavyConfig& config,
 
     // Set up BlockCache if enabled
     if (blockCacheSize > 0) {
+      uint16_t blockCachePlacementHandle = device.allocatePlacementHandle();
       blockCacheEndOffset = setupBlockCache(
           enginesConfig.blockCache(), blockCacheSize, ioAlignSize,
           blockCacheStartOffset, config.usesRaidFiles(), itemDestructorEnabled,
-          *enginePairProto);
+          blockCachePlacementHandle, *enginePairProto);
     }
     if (blockCacheEndOffset > bigHashStartOffset) {
       throw std::invalid_argument(folly::sformat(
@@ -313,7 +323,14 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
   auto blockSize = config.getBlockSize();
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
 
-  if (config.usesRaidFiles()) {
+  if (config.usesFDPDevice()) {
+    return cachelib::navy::createNvmeFdpDevice(
+        config.getFileName(),
+        config.getFileSize(),
+        blockSize,
+        std::move(encryptor),
+        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
+  } else if (config.usesRaidFiles()) {
     auto stripeSize = getRegionSize(config);
     return cachelib::navy::createRAIDDevice(
         config.getRaidPaths(),

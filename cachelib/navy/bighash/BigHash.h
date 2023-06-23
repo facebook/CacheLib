@@ -62,6 +62,8 @@ class BigHash final : public Engine {
     uint64_t cacheBaseOffset{};
     uint64_t cacheSize{};
     Device* device{nullptr};
+    // placement info if device placement(FDP) is enabled
+    uint16_t placementHandle{};
 
     ExpiredCheck checkExpired;
     DestructorCallback destructorCb;
@@ -203,6 +205,7 @@ class BigHash final : public Engine {
   Device& device_;
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[kNumMutexes]};
+  const uint16_t placementHandle_{};
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;

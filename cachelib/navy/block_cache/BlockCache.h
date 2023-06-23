@@ -62,6 +62,8 @@ class BlockCache final : public Engine {
     uint64_t regionSize{16 * 1024 * 1024};
     // See AbstractCacheProto::setReadBufferSize
     uint32_t readBufferSize{};
+    // data placement handle used if device is capable (Ex: FDP)
+    uint16_t placementHandle{};
     // Job scheduler for background tasks
     JobScheduler* scheduler{};
     // Clean region pool size

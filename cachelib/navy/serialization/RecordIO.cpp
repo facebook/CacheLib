@@ -80,7 +80,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
         Buffer buffer = dev_.makeIOBuffer(blockSize_);
         memcpy(buffer.data(), bufferData, bufIndex_);
         memset(buffer.data() + bufIndex_, 0, blockSize_ - bufIndex_);
-        dev_.write(offset_, std::move(buffer));
+        dev_.write(0, offset_, std::move(buffer));
         offset_ += blockSize_;
       }
     }
@@ -89,7 +89,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
       // of metadata clear
       Buffer buffer = dev_.makeIOBuffer(blockSize_);
       memset(buffer.data(), 0, blockSize_);
-      dev_.write(offset_, std::move(buffer));
+      dev_.write(0, offset_, std::move(buffer));
     }
   }
 
@@ -113,7 +113,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
       Buffer buffer = dev_.makeIOBuffer(blockSize_);
       memcpy(buffer.data(), bufferData, blockSize_);
 
-      if (!dev_.write(offset_, std::move(buffer))) {
+      if (!dev_.write(0, offset_, std::move(buffer))) {
         throw std::invalid_argument(
             folly::sformat("write failed: offset = {}", offset_));
       }
@@ -150,7 +150,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
   bool invalidate() override {
     Buffer invalidateBuffer{blockSize_, blockSize_};
     memset(invalidateBuffer.data(), 0, blockSize_);
-    return dev_.write(0, std::move(invalidateBuffer));
+    return dev_.write(0, 0, std::move(invalidateBuffer));
   }
 
  private:

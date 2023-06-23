@@ -460,6 +460,9 @@ class NavyConfig {
 
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
+  bool usesNvmeCharDevice() const { return (fileName_.find
+                (std::string("/dev/ng")) != std::string::npos); }
+  bool usesFDPDevice() const { return usesNvmeCharDevice(); }
   bool isBigHashEnabled() const {
     return enginesConfigs_[0].bigHash().getSizePct() > 0;
   }

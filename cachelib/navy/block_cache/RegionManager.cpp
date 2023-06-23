@@ -33,8 +33,10 @@ RegionManager::RegionManager(uint32_t numRegions,
                              std::unique_ptr<EvictionPolicy> policy,
                              uint32_t numInMemBuffers,
                              uint16_t numPriorities,
+                             uint16_t placementHandle,
                              uint16_t inMemBufFlushRetryLimit)
     : numPriorities_{numPriorities},
+      placementHandle_{placementHandle},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
       regionSize_{regionSize},
@@ -490,7 +492,7 @@ bool RegionManager::deviceWrite(RelAddress addr, BufferView view) {
   const auto bufSize = view.size();
   XDCHECK(isValidIORange(addr.offset(), bufSize));
   auto physOffset = physicalOffset(addr);
-  if (!device_.write(physOffset, view)) {
+  if (!device_.write(placementHandle_, physOffset, view)) {
     return false;
   }
   physicalWrittenCount_.add(bufSize);

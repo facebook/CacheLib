@@ -66,6 +66,9 @@ class BlockCacheProto {
   // read buffer. Must be multiple of block size.
   virtual void setReadBufferSize(uint32_t size) = 0;
 
+  // Set the placement Handle for capable devices (Ex: FDP)
+  virtual void setPlacementHandle(uint16_t placementHandle) = 0;
+
   // (Optional) How many clean regions GC should (try to) maintain in the pool.
   // Default: 1
   virtual void setCleanRegionsPool(uint32_t n) = 0;
@@ -102,6 +105,9 @@ class BigHashProto {
   // bit array of @hashTableBitSize bits.
   virtual void setBloomFilter(uint32_t numHashes,
                               uint32_t hashTableBitSize) = 0;
+
+  // Set the placement Handle for capable devices (Ex: FDP) for BigHash
+  virtual void setPlacementHandle(uint16_t placementHandle) = 0;
 };
 
 class EnginePairProto {
@@ -223,6 +229,21 @@ std::unique_ptr<Device> createFileDevice(
     bool truncateFile,
     uint32_t blockSize,
     std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
+
+// Creates a single NVMe Char device which supports FDP Mode.
+//
+// @param fileName              name of the file
+// @param singleFileSize        size of the file
+// @param blockSize             device block size
+// @param encryptor             encryption object
+// @param maxDeviceWriteSize    device maximum granularity of writes
+
+std::unique_ptr<Device> createNvmeFdpDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    uint32_t blockSize,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
 
 } // namespace navy

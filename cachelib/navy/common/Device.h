@@ -111,14 +111,23 @@ class Device {
 
   // Write buffer to the device. This call takes ownership of the buffer
   // and de-allocates it by end of the call.
+  // @param placementHandle    Data placement identifier
   // @param buffer    Data to write to the device. It must be aligned the same
   //                  way as `makeIOBuffer` would return.
   // @param offset    Must be ioAlignmentSize_ aligned
-  bool write(uint64_t offset, Buffer buffer);
+  bool write(uint16_t placementHandle, uint64_t offset, Buffer buffer);
 
   // Write buffer view to the device. This call makes a copy of the buffer if
   // entryptor is present.
-  bool write(uint64_t offset, BufferView bufferView);
+  bool write(uint16_t placementHandle, uint64_t offset, BufferView bufferView);
+
+  // Some devices are Placement capable, Ex: FDP, Stream enabled ones;
+  // so those devices returns true here
+  virtual bool isPlacementCapable() const { return false; }
+
+  // Allocate handle for a specific data stream for Placement capable devices.
+  // If the device not capable, default to zero.
+  virtual uint16_t allocatePlacementHandle() { return 0; }
 
   // Reads @size bytes from device at @deviceOffset and copys to @value
   // There must be sufficient space allocated already in the mutableView.
@@ -154,6 +163,11 @@ class Device {
 
  protected:
   virtual bool writeImpl(uint64_t offset, uint32_t size, const void* value) = 0;
+  virtual bool writeImpl(uint16_t placementHandle, uint64_t offset,
+                            uint32_t size, const void* value) {
+    // Some devices implement the placementHandle enabled version
+    return false;
+  }
   virtual bool readImpl(uint64_t offset, uint32_t size, void* value) = 0;
   virtual void flushImpl() = 0;
 
@@ -170,7 +184,8 @@ class Device {
 
   bool readInternal(uint64_t offset, uint32_t size, void* value);
 
-  bool writeInternal(uint64_t offset, const uint8_t* data, size_t size);
+  bool writeInternal(uint16_t placementHandle, uint64_t offset,
+                        const uint8_t* data, size_t size);
 
   // size of the device. All offsets for write/read should be contained
   // below this.
@@ -211,6 +226,12 @@ std::unique_ptr<Device> createMemoryDevice(
     uint64_t size,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t ioAlignSize = 1);
+std::unique_ptr<Device> createFdpDevice(
+    folly::File file,
+    uint64_t size,
+    uint32_t ioAlignSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

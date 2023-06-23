@@ -90,6 +90,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.readBufferSize = size;
   }
 
+  void setPlacementHandle(uint16_t placementHandle) override {
+    config_.placementHandle = placementHandle;
+  }
+
   void setCleanRegionsPool(uint32_t n) override {
     config_.cleanRegionsPool = n;
   }
@@ -148,6 +152,10 @@ class BigHashProtoImpl final : public BigHashProto {
     bloomFilterEnabled_ = true;
     numHashes_ = numHashes;
     hashTableBitSize_ = hashTableBitSize;
+  }
+
+  void setPlacementHandle(uint16_t placementHandle) override {
+    config_.placementHandle = placementHandle;
   }
 
   void setDevice(Device* device) { config_.device = device; }
@@ -414,6 +422,27 @@ folly::File openCacheFile(const std::string& fileName,
 
   return f;
 }
+
+// Open char device @fileName.
+// Throws std::system_error if failed.
+folly::File openCharFile(const std::string& fileName) {
+  XLOG(INFO) << "Opening Char file: " << fileName;
+  if (fileName.empty()) {
+    throw std::invalid_argument("File name is empty");
+  }
+
+  int flags{O_RDONLY};
+  folly::File f;
+
+  try {
+    f = folly::File(fileName.c_str(), flags);
+  } catch (const std::system_error& e) {
+    throw;
+  }
+  XDCHECK_GE(f.fd(), 0);
+
+  return f;
+}
 } // namespace
 
 std::unique_ptr<BlockCacheProto> createBlockCacheProto() {
@@ -487,6 +516,24 @@ std::unique_ptr<Device> createFileDevice(
     throw;
   }
   return createDirectIoFileDevice(std::move(f), singleFileSize, blockSize,
+                                  std::move(encryptor), maxDeviceWriteSize);
+}
+
+std::unique_ptr<Device> createNvmeFdpDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    uint32_t blockSize,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  folly::File f;
+  try {
+    f = openCharFile(fileName);
+  } catch (const std::exception& e) {
+    XLOG(ERR) << "Exception in openCharFile: " << e.what();
+    throw;
+  }
+  XLOG(INFO) << "Factory: Creating NvmeFdpDevice " << fileName<<" fd: "<<f.fd();
+  return createFdpDevice(std::move(f), singleFileSize, blockSize,
                                   std::move(encryptor), maxDeviceWriteSize);
 }
 

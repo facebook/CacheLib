@@ -15,6 +15,7 @@
  */
 
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/NvmeInterface.h"
 
 #include <folly/File.h>
 #include <folly/Format.h>
@@ -29,6 +30,93 @@ namespace {
 
 using IOOperation =
     std::function<ssize_t(int fd, void* buf, size_t count, off_t offset)>;
+
+// Nvme FDP Device implementation which supports
+// the write ops with placement handle
+class NvmeFdpDevice final : public Device {
+ public:
+  NvmeFdpDevice(folly::File file,
+             uint64_t size,
+             uint32_t ioAlignSize,
+             std::shared_ptr<DeviceEncryptor> encryptor,
+             uint32_t maxDeviceWriteSize)
+      : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
+        file_{std::move(file)} {
+    XLOG(INFO)<< "Creating NvmeFdpDevice, fd :"<< file_.fd();
+    nvmeInterface_ = std::make_unique<NvmeInterface>(file_.fd());
+    initializeFDP();
+  }
+
+  NvmeFdpDevice(const NvmeFdpDevice&) = delete;
+  NvmeFdpDevice& operator=(const NvmeFdpDevice&) = delete;
+
+  ~NvmeFdpDevice() override {}
+
+  // This Device implementation is placement capable.
+  bool isPlacementCapable() const override { return true; }
+
+  uint16_t allocatePlacementHandle() override {
+    if(curPID_ <= maxPID_) {
+      return (curPID_++);
+    } else {
+      return kDefaultPID;
+    }
+  }
+
+ private:
+  void initializeFDP() {
+    maxPID_ = kMaxPID;
+    for(uint16_t pid = 0; pid <= maxPID_; ++pid) {
+      // use placementHandle as same as placementID for now
+      placementIDs_[pid] = pid;
+    }
+    curPID_ = 1;
+  }
+
+  uint16_t getPlacementID(uint16_t placementHandle) {
+    return placementIDs_[placementHandle];
+  }
+
+  bool writeImpl(uint64_t offset, uint32_t size, const void* value) override {
+    return nvmeInterface_->writeNvme(file_.fd(), offset, size, value);
+  }
+
+  bool writeImpl(uint16_t placementHandle, uint64_t offset, uint32_t size,
+      const void* value) override {
+    uint16_t placementID = getPlacementID(placementHandle);
+    return nvmeInterface_->writeNvmeDirective(file_.fd(), offset, size, value,
+                                                            placementID);
+  }
+
+  // There is no separate directive read; only regular reads
+  bool readImpl(uint64_t offset, uint32_t size, void* value) override {
+    return nvmeInterface_->readNvme(file_.fd(), offset, size, value);
+  }
+
+  void flushImpl() override { ::fsync(file_.fd()); }
+
+
+  void reportIOError(const char* opName,
+                     uint64_t offset,
+                     uint32_t size,
+                     ssize_t ioRet) {
+    XLOG_EVERY_N_THREAD(
+        ERR, 1000,
+        folly::sformat("IO error: {} offset={} size={} ret={} errno={} ({})",
+                       opName, offset, size, ioRet, errno,
+                       std::strerror(errno)));
+  }
+
+  const folly::File file_{};
+  std::unique_ptr<NvmeInterface> nvmeInterface_;
+
+  static constexpr uint16_t kMaxPID = 7u;
+  static constexpr uint16_t kDefaultPID = 0u;
+
+  std::map<uint16_t, uint16_t> placementIDs_{};
+  uint16_t maxPID_{0};
+  uint16_t curPID_{0};
+};
 
 // Device on Unix file descriptor
 class FileDevice final : public Device {
@@ -212,20 +300,20 @@ class MemoryDevice final : public Device {
 };
 } // namespace
 
-bool Device::write(uint64_t offset, BufferView view) {
+bool Device::write(uint16_t placementHandle, uint64_t offset, BufferView view) {
   if (encryptor_) {
     auto writeBuffer = makeIOBuffer(view.size());
     writeBuffer.copyFrom(0, view);
-    return write(offset, std::move(writeBuffer));
+    return write(placementHandle, offset, std::move(writeBuffer));
   }
 
   const auto size = view.size();
   XDCHECK_LE(offset + size, size_);
   const uint8_t* data = reinterpret_cast<const uint8_t*>(view.data());
-  return writeInternal(offset, data, size);
+  return writeInternal(placementHandle, offset, data, size);
 }
 
-bool Device::write(uint64_t offset, Buffer buffer) {
+bool Device::write(uint16_t placementHandle, uint64_t offset, Buffer buffer) {
   const auto size = buffer.size();
   XDCHECK_LE(offset + buffer.size(), size_);
   uint8_t* data = reinterpret_cast<uint8_t*>(buffer.data());
@@ -238,10 +326,11 @@ bool Device::write(uint64_t offset, Buffer buffer) {
       return false;
     }
   }
-  return writeInternal(offset, data, size);
+  return writeInternal(placementHandle, offset, data, size);
 }
 
-bool Device::writeInternal(uint64_t offset, const uint8_t* data, size_t size) {
+bool Device::writeInternal(uint16_t placementHandle, uint64_t offset,
+              const uint8_t* data, size_t size) {
   auto remainingSize = size;
   auto maxWriteSize = (maxWriteSize_ == 0) ? remainingSize : maxWriteSize_;
   bool result = true;
@@ -251,7 +340,11 @@ bool Device::writeInternal(uint64_t offset, const uint8_t* data, size_t size) {
     XDCHECK_EQ(writeSize % ioAlignmentSize_, 0ul);
 
     auto timeBegin = getSteadyClock();
-    result = writeImpl(offset, writeSize, data);
+    if (isPlacementCapable()) {
+      result = writeImpl(placementHandle, offset, writeSize, data);
+    } else {
+      result = writeImpl(offset, writeSize, data);
+    }
     writeLatencyEstimator_.trackValue(
         toMicros((getSteadyClock() - timeBegin)).count());
 
@@ -393,6 +486,17 @@ std::unique_ptr<Device> createMemoryDevice(
     uint32_t ioAlignSize) {
   return std::make_unique<MemoryDevice>(size, std::move(encryptor),
                                         ioAlignSize);
+}
+
+std::unique_ptr<Device> createFdpDevice(
+    folly::File file,
+    uint64_t size,
+    uint32_t ioAlignSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  XDCHECK(folly::isPowTwo(ioAlignSize));
+  return std::make_unique<NvmeFdpDevice>(std::move(file), size, ioAlignSize,
+                                      std::move(encryptor), maxDeviceWriteSize);
 }
 } // namespace navy
 } // namespace cachelib

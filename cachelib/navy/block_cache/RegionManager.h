@@ -73,6 +73,8 @@ class RegionManager {
   // @param numInMemBuffers           number of in memory buffers
   // @param numPriorities             max number of priorities allowed for
   //                                  regions
+  // @param placementHandle           data placement handle ID used for any
+  //                                  placement enabled devices
   // @param inMemBufFlushRetryLimit   max number of flushing retry times for
   //                                  in-mem buffer
   RegionManager(uint32_t numRegions,
@@ -86,6 +88,7 @@ class RegionManager {
                 std::unique_ptr<EvictionPolicy> policy,
                 uint32_t numInMemBuffers,
                 uint16_t numPriorities,
+                uint16_t placementHandle,
                 uint16_t inMemBufFlushRetryLimit);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
@@ -286,6 +289,8 @@ class RegionManager {
   const uint32_t numCleanRegions_{};
 
   std::atomic<uint64_t> seqNumber_{0};
+
+  const uint16_t placementHandle_{};
 
   uint32_t reclaimsScheduled_{0};
   JobScheduler& scheduler_;

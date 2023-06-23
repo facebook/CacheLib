@@ -91,6 +91,7 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       bucketSize_{config.bucketSize},
       cacheBaseOffset_{config.cacheBaseOffset},
       numBuckets_{config.numBuckets()},
+      placementHandle_{config.placementHandle},
       bloomFilter_{std::move(config.bloomFilter)},
       device_{*config.device} {
   XLOGF(INFO,
@@ -535,7 +536,8 @@ Buffer BigHash::readBucket(BucketId bid) {
 bool BigHash::writeBucket(BucketId bid, Buffer buffer) {
   auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
   bucket->setChecksum(Bucket::computeChecksum(buffer.view()));
-  return device_.write(getBucketOffset(bid), std::move(buffer));
+  return device_.write(placementHandle_, getBucketOffset(bid),
+              std::move(buffer));
 }
 } // namespace navy
 } // namespace cachelib

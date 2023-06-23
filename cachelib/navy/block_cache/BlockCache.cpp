@@ -138,6 +138,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      std::move(config.evictionPolicy),
                      config.numInMemBuffers,
                      config.numPriorities,
+                     config.placementHandle,
                      config.inMemBufFlushRetryLimit},
       allocator_{regionManager_, config.numPriorities},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
