@@ -35,51 +35,48 @@ template <typename ItemHandle2>
 typename ItemHandle2::CacheT& objcacheGetCache(const ItemHandle2& hdl) {
   return hdl.getCache();
 }
+
+template <typename T>
+constexpr size_t toMultipleOfAlignment(size_t bytes) {
+  constexpr size_t alignment = alignof(T);
+  return (bytes % alignment == 0u) ? bytes
+                                   : (bytes / alignment + 1) * alignment;
+}
 } // namespace detail
 
 namespace objcache {
+
 template <typename Impl, typename CacheDescriptor>
 void* AllocatorResource<Impl, CacheDescriptor>::allocateFallback(
     size_t bytes, size_t alignment) {
   switch (alignment) {
   default:
-    return std::allocator<uint8_t>{}.allocate(bytes);
-  case std::alignment_of<uint16_t>():
-    return std::allocator<uint16_t>{}.allocate(bytes);
-  case std::alignment_of<uint32_t>():
-    return std::allocator<uint32_t>{}.allocate(bytes);
-  case std::alignment_of<uint64_t>():
-    return std::allocator<uint64_t>{}.allocate(bytes);
-  case std::alignment_of<std::max_align_t>():
-    return std::allocator<std::max_align_t>{}.allocate(bytes);
+    return std::aligned_alloc(alignof(uint8_t),
+                              detail::toMultipleOfAlignment<uint8_t>(bytes));
+
+  case alignof(uint16_t):
+    return std::aligned_alloc(alignof(uint16_t),
+                              detail::toMultipleOfAlignment<uint16_t>(bytes));
+
+  case alignof(uint32_t):
+    return std::aligned_alloc(alignof(uint32_t),
+                              detail::toMultipleOfAlignment<uint32_t>(bytes));
+
+  case alignof(uint64_t):
+    return std::aligned_alloc(alignof(uint64_t),
+                              detail::toMultipleOfAlignment<uint64_t>(bytes));
+
+  case alignof(std::max_align_t):
+    return std::aligned_alloc(
+        alignof(std::max_align_t),
+        detail::toMultipleOfAlignment<std::max_align_t>(bytes));
   }
 }
 
 template <typename Impl, typename CacheDescriptor>
 void AllocatorResource<Impl, CacheDescriptor>::deallocateFallback(
-    void* alloc, size_t bytes, size_t alignment) {
-  switch (alignment) {
-  default:
-    std::allocator<uint8_t>{}.deallocate(reinterpret_cast<uint8_t*>(alloc),
-                                         bytes);
-    break;
-  case std::alignment_of<uint16_t>():
-    std::allocator<uint16_t>{}.deallocate(reinterpret_cast<uint16_t*>(alloc),
-                                          bytes);
-    break;
-  case std::alignment_of<uint32_t>():
-    std::allocator<uint32_t>{}.deallocate(reinterpret_cast<uint32_t*>(alloc),
-                                          bytes);
-    break;
-  case std::alignment_of<uint64_t>():
-    std::allocator<uint64_t>{}.deallocate(reinterpret_cast<uint64_t*>(alloc),
-                                          bytes);
-    break;
-  case std::alignment_of<std::max_align_t>():
-    std::allocator<std::max_align_t>{}.deallocate(
-        reinterpret_cast<std::max_align_t*>(alloc), bytes);
-    break;
-  }
+    void* alloc, size_t /* bytes */, size_t /* alignment */) {
+  return std::free(alloc);
 }
 
 template <typename CacheDescriptor>

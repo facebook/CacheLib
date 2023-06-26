@@ -14,12 +14,14 @@
  * limitations under the License.
  */
 
+#include <folly/Benchmark.h>
 #include <gtest/gtest.h>
 
 #include <vector>
 
 #include "cachelib/experimental/objcache/Allocator.h"
 #include "cachelib/experimental/objcache/tests/Common.h"
+#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
 
 namespace facebook {
 namespace cachelib {
@@ -319,6 +321,39 @@ TEST(MonotonicBufferResource, SimpleAllocation) {
   EXPECT_EQ(2, cache->viewAsChainedAllocs(hdl).computeChainLength());
   EXPECT_TRUE(mbr.isEqual(mbr2));
   EXPECT_FALSE(mbr.isEqual(fallbackMbr));
+}
+
+TEST(MonotonicBufferResource, FallbackAllocation) {
+  if (!folly::usingJEMalloc()) {
+    GTEST_SKIP();
+  }
+
+  // for small allocations there can be optimizations at play such as allocating
+  // 8 bytes when requesting 1 byte from the std::malloc.
+  constexpr size_t kMinBytesToAllocate = sizeof(uint64_t) + 1;
+  constexpr size_t kMaxBytesToAllocate = (2 << 15) + 1;
+  const auto kAlignments = {alignof(uint8_t), alignof(uint16_t),
+                            alignof(uint32_t), alignof(uint64_t),
+                            alignof(std::max_align_t)};
+
+  Mbr fallbackMbr;
+  objcache2::ThreadMemoryTracker memoryTracker;
+  const int64_t initialMemUsage = memoryTracker.getMemUsageBytes();
+
+  for (size_t alignment : kAlignments) {
+    for (size_t bytes = kMinBytesToAllocate; bytes <= kMaxBytesToAllocate;
+         ++bytes) {
+      void* alloc = fallbackMbr.allocate(bytes, alignment);
+      folly::doNotOptimizeAway(alloc);
+      int64_t memUsage = memoryTracker.getMemUsageBytes() - initialMemUsage;
+      EXPECT_NE(memUsage, 0);
+      // do not consume more than twice the requested memory.
+      EXPECT_LE(memUsage, 2 * bytes);
+      fallbackMbr.deallocate(alloc, bytes, alignment);
+      memUsage = memoryTracker.getMemUsageBytes() - initialMemUsage;
+      EXPECT_EQ(memUsage, 0);
+    }
+  }
 }
 
 TEST(MonotonicBufferResource, Alignment) {
