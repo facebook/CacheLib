@@ -54,11 +54,11 @@ CacheAllocator<CacheTrait>::CacheAllocator(
                                           : config.memMonitoringEnabled()},
       config_(config.validate()),
       tempShm_(type == InitMemType::kNone && isOnShm_
-                   ? std::make_unique<TempShmMapping>(config_.size)
+                   ? std::make_unique<TempShmMapping>(config_.getCacheSize())
                    : nullptr),
       shmManager_(type != InitMemType::kNone
                       ? std::make_unique<ShmManager>(config_.cacheDir,
-                                                     config_.usePosixShm)
+                                                     config_.isUsingPosixShm())
                       : nullptr),
       deserializer_(type == InitMemType::kMemAttach ? createDeserializer()
                                                     : nullptr),
@@ -122,10 +122,10 @@ CacheAllocator<CacheTrait>::createNewMemoryAllocator() {
   return std::make_unique<MemoryAllocator>(
       getAllocatorConfig(config_),
       shmManager_
-          ->createShm(detail::kShmCacheName, config_.size,
+          ->createShm(detail::kShmCacheName, config_.getCacheSize(),
                       config_.slabMemoryBaseAddr, createShmCacheOpts())
           .addr,
-      config_.size);
+      config_.getCacheSize());
 }
 
 template <typename CacheTrait>
@@ -137,7 +137,7 @@ CacheAllocator<CacheTrait>::restoreMemoryAllocator() {
           ->attachShm(detail::kShmCacheName, config_.slabMemoryBaseAddr,
                       createShmCacheOpts())
           .addr,
-      config_.size,
+      config_.getCacheSize(),
       config_.disableFullCoredump);
 }
 
@@ -242,11 +242,12 @@ std::unique_ptr<MemoryAllocator> CacheAllocator<CacheTrait>::initAllocator(
     InitMemType type) {
   if (type == InitMemType::kNone) {
     if (isOnShm_ == true) {
-      return std::make_unique<MemoryAllocator>(
-          getAllocatorConfig(config_), tempShm_->getAddr(), config_.size);
+      return std::make_unique<MemoryAllocator>(getAllocatorConfig(config_),
+                                               tempShm_->getAddr(),
+                                               config_.getCacheSize());
     } else {
       return std::make_unique<MemoryAllocator>(getAllocatorConfig(config_),
-                                               config_.size);
+                                               config_.getCacheSize());
     }
   } else if (type == InitMemType::kMemNew) {
     return createNewMemoryAllocator();
@@ -2326,7 +2327,7 @@ PoolEvictionAgeStats CacheAllocator<CacheTrait>::getPoolEvictionAgeStats(
 template <typename CacheTrait>
 CacheMetadata CacheAllocator<CacheTrait>::getCacheMetadata() const noexcept {
   return CacheMetadata{kCachelibVersion, kCacheRamFormatVersion,
-                       kCacheNvmFormatVersion, config_.size};
+                       kCacheNvmFormatVersion, config_.getCacheSize()};
 }
 
 template <typename CacheTrait>
