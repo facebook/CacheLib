@@ -18,6 +18,8 @@
 
 #include <folly/Format.h>
 #include <folly/Random.h>
+#include <numa.h>
+#include <numaif.h>
 
 #include <unordered_map>
 
@@ -34,6 +36,57 @@
 namespace facebook {
 namespace cachelib {
 namespace util {
+
+class NumaBitMask {
+ public:
+  using native_bitmask_type = struct bitmask*;
+
+  NumaBitMask() { nodesMask = numa_allocate_nodemask(); }
+
+  NumaBitMask(const NumaBitMask& other) {
+    nodesMask = numa_allocate_nodemask();
+    copy_bitmask_to_bitmask(other.nodesMask, nodesMask);
+  }
+
+  NumaBitMask(NumaBitMask&& other) {
+    nodesMask = other.nodesMask;
+    other.nodesMask = nullptr;
+  }
+
+  NumaBitMask(const std::string& str) {
+    nodesMask = numa_parse_nodestring_all(str.c_str());
+  }
+
+  ~NumaBitMask() {
+    if (nodesMask) {
+      numa_bitmask_free(nodesMask);
+    }
+  }
+
+  constexpr NumaBitMask& operator=(const NumaBitMask& other) {
+    if (this != &other) {
+      if (!nodesMask) {
+        nodesMask = numa_allocate_nodemask();
+      }
+      copy_bitmask_to_bitmask(other.nodesMask, nodesMask);
+    }
+    return *this;
+  }
+
+  native_bitmask_type getNativeBitmask() const noexcept { return nodesMask; }
+
+  NumaBitMask& setBit(unsigned int n) {
+    numa_bitmask_setbit(nodesMask, n);
+    return *this;
+  }
+
+  bool empty() const noexcept {
+    return numa_bitmask_equal(numa_no_nodes_ptr, nodesMask) == 1;
+  }
+
+ protected:
+  native_bitmask_type nodesMask = nullptr;
+};
 
 // A wrapper class for functions to collect counters.
 // It can be initialized by either
@@ -294,6 +347,25 @@ std::enable_if_t<std::is_arithmetic<T>::value, T> getDivCeiling(
 void* mmapAlignedZeroedMemory(size_t alignment,
                               size_t numBytes,
                               bool noAccess = false);
+
+// destroy the mapping created by mmapAlignedZeroedMemory
+//
+// @param addr  the pointer to the memory to unmap
+// @param size  size of the memory region
+void munmapMemory(void* addr, size_t size);
+
+// binds memory to the NUMA nodes specified by nmask.
+//
+// @param addr  the pointer to the memory to bind.
+// @param len   length of the memory.
+// @param mode  mode supported by mmap call
+// @param mask  mask specifies node ids
+// @param flags flags supported by mmap call
+void mbindMemory(void* addr,
+                 unsigned long len,
+                 int mode,
+                 const NumaBitMask& mask,
+                 unsigned int flags);
 
 // get the number of pages in the range which are resident in the process.
 //

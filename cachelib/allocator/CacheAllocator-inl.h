@@ -56,6 +56,9 @@ CacheAllocator<CacheTrait>::CacheAllocator(
       tempShm_(type == InitMemType::kNone && isOnShm_
                    ? std::make_unique<TempShmMapping>(config_.size)
                    : nullptr),
+      privMemManager_(type == InitMemType::kNone && !isOnShm_
+                          ? std::make_unique<PrivateMemoryManager>()
+                          : nullptr),
       shmManager_(type != InitMemType::kNone
                       ? std::make_unique<ShmManager>(config_.cacheDir,
                                                      config_.usePosixShm)
@@ -107,6 +110,18 @@ CacheAllocator<CacheTrait>::~CacheAllocator() {
 template <typename CacheTrait>
 ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
   ShmSegmentOpts opts;
+  opts.alignment = sizeof(Slab);
+  auto memoryTierConfigs = config_.getMemoryTierConfigs();
+  // TODO: we support single tier so far
+  XDCHECK_EQ(memoryTierConfigs.size(), 1ul);
+  opts.memBindNumaNodes = memoryTierConfigs[0].getMemBind();
+
+  return opts;
+}
+
+template <typename CacheTrait>
+PrivateSegmentOpts CacheAllocator<CacheTrait>::createPrivateSegmentOpts() {
+  PrivateSegmentOpts opts;
   opts.alignment = sizeof(Slab);
   auto memoryTierConfigs = config_.getMemoryTierConfigs();
   // TODO: we support single tier so far
@@ -245,8 +260,11 @@ std::unique_ptr<MemoryAllocator> CacheAllocator<CacheTrait>::initAllocator(
       return std::make_unique<MemoryAllocator>(
           getAllocatorConfig(config_), tempShm_->getAddr(), config_.size);
     } else {
-      return std::make_unique<MemoryAllocator>(getAllocatorConfig(config_),
-                                               config_.size);
+      return std::make_unique<MemoryAllocator>(
+          getAllocatorConfig(config_),
+          privMemManager_->createMapping(config_.size,
+                                         createPrivateSegmentOpts()),
+          config_.size);
     }
   } else if (type == InitMemType::kMemNew) {
     return createNewMemoryAllocator();

@@ -15,8 +15,6 @@
  */
 
 #pragma once
-#include <numa.h>
-#include <numaif.h>
 #include <sys/ipc.h>
 #include <sys/mman.h>
 #include <sys/shm.h>
@@ -29,6 +27,8 @@
 #include <folly/Format.h>
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
+
+#include "cachelib/common/Utils.h"
 
 /* On Mac OS / FreeBSD, mmap(2) syscall does not support these flags */
 #ifndef MAP_LOCKED
@@ -72,62 +72,11 @@ enum PageSizeT {
   ONE_GB,
 };
 
-class NumaBitMask {
- public:
-  using native_bitmask_type = struct bitmask*;
-
-  NumaBitMask() { nodesMask = numa_allocate_nodemask(); }
-
-  NumaBitMask(const NumaBitMask& other) {
-    nodesMask = numa_allocate_nodemask();
-    copy_bitmask_to_bitmask(other.nodesMask, nodesMask);
-  }
-
-  NumaBitMask(NumaBitMask&& other) {
-    nodesMask = other.nodesMask;
-    other.nodesMask = nullptr;
-  }
-
-  NumaBitMask(const std::string& str) {
-    nodesMask = numa_parse_nodestring_all(str.c_str());
-  }
-
-  ~NumaBitMask() {
-    if (nodesMask) {
-      numa_bitmask_free(nodesMask);
-    }
-  }
-
-  constexpr NumaBitMask& operator=(const NumaBitMask& other) {
-    if (this != &other) {
-      if (!nodesMask) {
-        nodesMask = numa_allocate_nodemask();
-      }
-      copy_bitmask_to_bitmask(other.nodesMask, nodesMask);
-    }
-    return *this;
-  }
-
-  native_bitmask_type getNativeBitmask() const noexcept { return nodesMask; }
-
-  NumaBitMask& setBit(unsigned int n) {
-    numa_bitmask_setbit(nodesMask, n);
-    return *this;
-  }
-
-  bool empty() const noexcept {
-    return numa_bitmask_equal(numa_no_nodes_ptr, nodesMask) == 1;
-  }
-
- protected:
-  native_bitmask_type nodesMask = nullptr;
-};
-
 struct ShmSegmentOpts {
   PageSizeT pageSize{PageSizeT::NORMAL};
   bool readOnly{false};
   size_t alignment{1}; // alignment for mapping.
-  NumaBitMask memBindNumaNodes;
+  util::NumaBitMask memBindNumaNodes;
 
   explicit ShmSegmentOpts(PageSizeT p) : pageSize(p) {}
   explicit ShmSegmentOpts(PageSizeT p, bool ro) : pageSize(p), readOnly(ro) {}

@@ -25,7 +25,7 @@ using CacheConfig = typename Cache::Config;
 using CacheKey = typename Cache::Key;
 using CacheReadHandle = typename Cache::ReadHandle;
 using MemoryTierCacheConfig = typename cachelib::MemoryTierCacheConfig;
-using NumaBitMask = typename cachelib::NumaBitMask;
+using NumaBitMask = typename cachelib::util::NumaBitMask;
 
 // Global cache object and a default cache pool
 std::unique_ptr<Cache> gCache_;

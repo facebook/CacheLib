@@ -16,11 +16,14 @@
 
 #pragma once
 
+#include "cachelib/common/Utils.h"
 #include "cachelib/shm/ShmCommon.h"
 
 namespace facebook {
 namespace cachelib {
 class MemoryTierCacheConfig {
+  using bitmask_type = util::NumaBitMask;
+
  public:
   // Creates instance of MemoryTierCacheConfig for Posix/SysV Shared memory.
   static MemoryTierCacheConfig fromShm() {
@@ -42,12 +45,12 @@ class MemoryTierCacheConfig {
   size_t getRatio() const noexcept { return ratio; }
 
   // Allocate memory only from specified NUMA nodes
-  MemoryTierCacheConfig& setMemBind(const NumaBitMask& _numaNodes) {
+  MemoryTierCacheConfig& setMemBind(const bitmask_type& _numaNodes) {
     numaNodes = _numaNodes;
     return *this;
   }
 
-  const NumaBitMask& getMemBind() const noexcept { return numaNodes; }
+  const bitmask_type& getMemBind() const noexcept { return numaNodes; }
 
   size_t calculateTierSize(size_t totalCacheSize, size_t partitionNum) {
     // TODO: Call this method when tiers are enabled in allocator
@@ -74,7 +77,7 @@ class MemoryTierCacheConfig {
   size_t ratio{1};
 
   // Numa node(s) to bind the tier
-  NumaBitMask numaNodes;
+  bitmask_type numaNodes;
 
   // TODO: introduce a container for tier settings when adding support for
   // file-mapped memory
