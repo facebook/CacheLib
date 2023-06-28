@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/common/RollingStats.h"
 
 namespace facebook {
 namespace cachelib {
@@ -47,12 +48,26 @@ struct ACStats {
   // true if the allocation class is full.
   bool full;
 
+  // Rolling allocation latency (in ns)
+  util::RollingStats allocLatencyNs;
+
   constexpr unsigned long long totalSlabs() const noexcept {
     return freeSlabs + usedSlabs;
   }
 
   constexpr size_t getTotalFreeMemory() const noexcept {
     return Slab::kSize * freeSlabs + freeAllocs * allocSize;
+  }
+
+  constexpr double usageFraction() const noexcept {
+    if (usedSlabs == 0)
+      return 0.0;
+
+    return activeAllocs / (usedSlabs * allocsPerSlab);
+  }
+
+  constexpr size_t totalAllocatedSize() const noexcept {
+    return activeAllocs * allocSize;
   }
 };
 

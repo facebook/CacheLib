@@ -335,6 +335,8 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
 
   // the allocation class in our memory allocator.
   const auto cid = allocator_->getAllocationClassId(pid, requiredSize);
+  util::RollingLatencyTracker rollTracker{
+      (*stats_.classAllocLatency)[pid][cid]};
 
   (*stats_.allocAttempts)[pid][cid].inc();
 
@@ -411,6 +413,9 @@ CacheAllocator<CacheTrait>::allocateChainedItemInternal(
 
   const auto pid = allocator_->getAllocInfo(parent->getMemory()).poolId;
   const auto cid = allocator_->getAllocationClassId(pid, requiredSize);
+
+  util::RollingLatencyTracker rollTracker{
+      (*stats_.classAllocLatency)[pid][cid]};
 
   (*stats_.allocAttempts)[pid][cid].inc();
 
