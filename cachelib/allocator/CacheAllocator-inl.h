@@ -3546,28 +3546,49 @@ bool CacheAllocator<CacheTrait>::startNewReaper(
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopPoolRebalancer(
     std::chrono::seconds timeout) {
-  return stopWorker("PoolRebalancer", poolRebalancer_, timeout);
+  auto res = stopWorker("PoolRebalancer", poolRebalancer_, timeout);
+  if (res) {
+    config_.poolRebalanceInterval = std::chrono::seconds{0};
+  }
+  return res;
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopPoolResizer(std::chrono::seconds timeout) {
-  return stopWorker("PoolResizer", poolResizer_, timeout);
+  auto res = stopWorker("PoolResizer", poolResizer_, timeout);
+  if (res) {
+    config_.poolResizeInterval = std::chrono::seconds{0};
+  }
+  return res;
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopPoolOptimizer(
     std::chrono::seconds timeout) {
-  return stopWorker("PoolOptimizer", poolOptimizer_, timeout);
+  auto res = stopWorker("PoolOptimizer", poolOptimizer_, timeout);
+  if (res) {
+    config_.regularPoolOptimizeInterval = std::chrono::seconds{0};
+    config_.compactCacheOptimizeInterval = std::chrono::seconds{0};
+  }
+  return res;
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopMemMonitor(std::chrono::seconds timeout) {
-  return stopWorker("MemoryMonitor", memMonitor_, timeout);
+  auto res = stopWorker("MemoryMonitor", memMonitor_, timeout);
+  if (res) {
+    config_.memMonitorInterval = std::chrono::seconds{0};
+  }
+  return res;
 }
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::stopReaper(std::chrono::seconds timeout) {
-  return stopWorker("Reaper", reaper_, timeout);
+  auto res = stopWorker("Reaper", reaper_, timeout);
+  if (res) {
+    config_.reaperInterval = std::chrono::seconds{0};
+  }
+  return res;
 }
 
 template <typename CacheTrait>
