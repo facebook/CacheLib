@@ -124,10 +124,8 @@ struct CacheStat {
   // the stats from the mm container
   MMContainerStat containerStat;
 
-  uint64_t numItems() const noexcept { return numEvictableItems(); }
-
   // number of elements in this MMContainer
-  size_t numEvictableItems() const noexcept { return containerStat.size; }
+  uint64_t numItems() const noexcept { return containerStat.size; }
 
   // total number of evictions.
   uint64_t numEvictions() const noexcept {
@@ -200,9 +198,6 @@ struct PoolStats {
 
   // number of all items in this pool
   uint64_t numItems() const noexcept;
-
-  // number of evictable items
-  uint64_t numEvictableItems() const noexcept;
 
   // total number of allocations currently in this pool
   uint64_t numActiveAllocs() const noexcept;

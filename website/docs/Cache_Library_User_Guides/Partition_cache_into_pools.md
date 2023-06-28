@@ -230,14 +230,8 @@ struct PoolStats {
   // Number of evictions for this pool.
   uint64_t numEvictions() const noexcept;
 
-  // Number of all items in this pool.
+  // Number of items in this pool.
   uint64_t numItems() const noexcept;
-
-  // Number of evictable items.
-  uint64_t numEvictableItems() const noexcept;
-
-  // Number of unevictable items.
-  uint64_t numUnevictableItems() const noexcept;
 
   // Total number of allocations currently in this pool.
   uint64_t numActiveAllocs() const noexcept;

@@ -86,7 +86,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       }
 
       auto stats = allocator->getPoolStats(poolId);
-      ASSERT_EQ(nItems, stats.numEvictableItems());
       ASSERT_EQ(nItems, stats.numItems());
       ASSERT_EQ(0, stats.numEvictions());
 

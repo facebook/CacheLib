@@ -105,8 +105,6 @@ void CacheBase::updatePoolStats(const std::string& statPrefix,
   uint64_t evictionDelta = counters_.getDelta(evictionKey);
 
   counters_.updateCount(prefix + "items", stats.numItems());
-  counters_.updateCount(prefix + "items.evictable", stats.numEvictableItems());
-
   counters_.updateDelta(prefix + "hits", stats.numPoolGetHits);
   counters_.updateCount(prefix + "free_memory_bytes", stats.freeMemoryBytes());
   counters_.updateCount(prefix + "slabs.free", stats.mpStats.freeSlabs);

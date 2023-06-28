@@ -317,14 +317,6 @@ uint64_t PoolStats::maxEvictionAge() const {
       ->second.getEvictionAge();
 }
 
-uint64_t PoolStats::numEvictableItems() const noexcept {
-  uint64_t n = 0;
-  for (const auto& s : cacheStats) {
-    n += s.second.numEvictableItems();
-  }
-  return n;
-}
-
 double CCacheStats::hitRatio() const {
   return util::hitRatioCalc(get, getMiss);
 }
