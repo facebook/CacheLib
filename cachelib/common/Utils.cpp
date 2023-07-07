@@ -319,7 +319,7 @@ void removePath(const std::string& name) {
     if (!dir) {
       throwSystemError(errno, folly::sformat("Err removing path={}", name));
     }
-    SCOPE_EXIT { free(dir); };
+    SCOPE_EXIT { closedir(dir); };
     struct dirent* entry;
     while ((entry = readdir(dir))) {
       if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
