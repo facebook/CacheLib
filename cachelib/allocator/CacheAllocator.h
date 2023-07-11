@@ -1166,6 +1166,9 @@ class CacheAllocator : public CacheBase {
   // whether it is object-cache
   bool isObjectCache() const override final { return false; }
 
+  // combined pool size for all memory tiers
+  size_t getPoolSize(PoolId pid) const;
+
   // pool stats by pool id
   PoolStats getPoolStats(PoolId pid) const override final;
 

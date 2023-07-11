@@ -108,11 +108,11 @@ template <typename CacheTrait>
 ShmSegmentOpts CacheAllocator<CacheTrait>::createShmCacheOpts() {
   ShmSegmentOpts opts;
   opts.alignment = sizeof(Slab);
-  auto memoryTierConfigs = config_.getMemoryTierConfigs();
   // TODO: we support single tier so far
-  XDCHECK_EQ(memoryTierConfigs.size(), 1ul);
-  opts.memBindNumaNodes = memoryTierConfigs[0].getMemBind();
-
+  if (config_.memoryTierConfigs.size() > 1) {
+    throw std::invalid_argument("CacheLib only supports a single memory tier");
+  }
+  opts.memBindNumaNodes = config_.memoryTierConfigs[0].getMemBind();
   return opts;
 }
 

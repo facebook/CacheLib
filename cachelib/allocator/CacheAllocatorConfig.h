@@ -207,6 +207,9 @@ class CacheAllocatorConfig {
   // Accepts vector of MemoryTierCacheConfig. Each vector element describes
   // configuration for a single memory cache tier. Tier sizes are specified as
   // ratios, the number of parts of total cache size each tier would occupy.
+  // @throw std::invalid_argument if:
+  // - the size of configs is 0
+  // - the size of configs is greater than kMaxCacheMemoryTiers
   CacheAllocatorConfig& configureMemoryTiers(const MemoryTierConfigs& configs);
 
   // Return reference to MemoryTierCacheConfigs.
@@ -376,8 +379,7 @@ class CacheAllocatorConfig {
   std::map<std::string, std::string> serialize() const;
 
   // The max number of memory cache tiers
-  // TODO: increase this number when multi-tier configs are enabled
-  inline static const size_t kMaxCacheMemoryTiers = 1;
+  inline static const size_t kMaxCacheMemoryTiers = 2;
 
   // Cache name for users to indentify their own cache.
   std::string cacheName{""};

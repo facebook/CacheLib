@@ -23,10 +23,7 @@ namespace cachelib {
 class MemoryTierCacheConfig {
  public:
   // Creates instance of MemoryTierCacheConfig for Posix/SysV Shared memory.
-  static MemoryTierCacheConfig fromShm() {
-    // TODO: expand this method when adding support for file-mapped memory
-    return MemoryTierCacheConfig();
-  }
+  static MemoryTierCacheConfig fromShm() { return MemoryTierCacheConfig(); }
 
   // Specifies ratio of this memory tier to other tiers. Absolute size
   // of each tier can be calculated as:
@@ -49,7 +46,7 @@ class MemoryTierCacheConfig {
 
   const NumaBitMask& getMemBind() const noexcept { return numaNodes; }
 
-  size_t calculateTierSize(size_t totalCacheSize, size_t partitionNum) {
+  size_t calculateTierSize(size_t totalCacheSize, size_t partitionNum) const {
     // TODO: Call this method when tiers are enabled in allocator
     // to calculate tier sizes in bytes.
     if (!partitionNum) {
