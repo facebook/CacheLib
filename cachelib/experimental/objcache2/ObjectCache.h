@@ -406,8 +406,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @return true if all workers have been successfully stopped
   bool stopAllWorkers(std::chrono::seconds timeout = std::chrono::seconds{0}) {
     bool success = true;
-    success &= stopWorker(kSizeControllerName, sizeController_, timeout);
-    success &= stopWorker(kSizeDistTrackerName, sizeDistTracker_, timeout);
+    success &=
+        util::stopPeriodicWorker(kSizeControllerName, sizeController_, timeout);
+    success &= util::stopPeriodicWorker(
+        kSizeDistTrackerName, sizeDistTracker_, timeout);
     success &= this->l1Cache_->stopWorkers(timeout);
     return success;
   }
@@ -442,30 +444,6 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Returns the total number of placeholders
   size_t getNumPlaceholders() const { return placeholders_.size(); }
-
-  // Start a periodic worker
-  //
-  // @param name       name of the worker
-  // @param worker     unique pointer of the worker to start
-  // @param interval   the period this worker fires
-  // @param args...    the rest of the arguments to initialize the worker
-  // @return true if the worker has been successfully started
-  template <typename WorkerT, typename... Args>
-  bool startWorker(folly::StringPiece name,
-                   std::unique_ptr<WorkerT>& worker,
-                   std::chrono::milliseconds interval,
-                   Args&&... args);
-
-  // Stop a periodic worker
-  //
-  // @param name       name of the worker
-  // @param worker     unique pointer of the worker to stop
-  // @param timeout    timeout for the worker stopping
-  // @return true if size controller has been successfully stopped
-  template <typename WorkerT>
-  bool stopWorker(folly::StringPiece name,
-                  std::unique_ptr<WorkerT>& worker,
-                  std::chrono::seconds timeout = std::chrono::seconds{0});
 
   // Get a ReadHandle reference from the object shared_ptr
   template <typename T>
