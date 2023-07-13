@@ -103,11 +103,22 @@ void ObjectCache<AllocatorT>::init() {
     }
   }
 
+  initWorkers();
+}
+
+template <typename AllocatorT>
+void ObjectCache<AllocatorT>::initWorkers() {
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs != 0) {
-    startSizeController(
-        std::chrono::milliseconds{config_.sizeControllerIntervalMs},
-        config_.sizeControllerThrottlerConfig);
+    startWorker(kSizeControllerName, sizeController_,
+                std::chrono::milliseconds{config_.sizeControllerIntervalMs},
+                config_.sizeControllerThrottlerConfig);
+  }
+
+  if (config_.objectSizeTrackingEnabled &&
+      config_.objectSizeDistributionTrackingEnabled) {
+    startWorker(kSizeDistTrackerName, sizeDistTracker_,
+                std::chrono::seconds{60} /*default interval to be 60s*/);
   }
 }
 
@@ -304,7 +315,7 @@ uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
 
 template <typename AllocatorT>
 ObjectCache<AllocatorT>::~ObjectCache() {
-  stopSizeController();
+  stopAllWorkers();
 
   for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
        ++itr) {
@@ -339,6 +350,10 @@ void ObjectCache<AllocatorT>::getObjectCacheCounters(
   if (sizeController_) {
     sizeController_->getCounters(visitor);
   }
+
+  if (sizeDistTracker_) {
+    sizeDistTracker_->getCounters(visitor);
+  }
 }
 
 template <typename AllocatorT>
@@ -357,41 +372,44 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
 }
 
 template <typename AllocatorT>
-bool ObjectCache<AllocatorT>::startSizeController(
-    std::chrono::milliseconds interval, const util::Throttler::Config& config) {
-  if (!stopSizeController()) {
-    XLOG(ERR) << "Size controller is already running. Cannot start it again.";
+template <typename WorkerT, typename... Args>
+bool ObjectCache<AllocatorT>::startWorker(folly::StringPiece name,
+                                          std::unique_ptr<WorkerT>& worker,
+                                          std::chrono::milliseconds interval,
+                                          Args&&... args) {
+  if (!stopWorker(name, worker)) {
+    XLOGF(ERR, "Worker '{}' is already running. Cannot start it again.", name);
     return false;
   }
 
-  sizeController_ =
-      std::make_unique<ObjectCacheSizeController<AllocatorT>>(*this, config);
-  bool ret = sizeController_->start(interval, "ObjectCache-SizeController");
+  worker = std::make_unique<WorkerT>(*this, std::forward<Args>(args)...);
+  bool ret = worker->start(interval, name);
   if (ret) {
-    XLOG(DBG) << "Started ObjectCache SizeController";
+    XLOGF(INFO, "Started worker '{}'", name);
   } else {
-    XLOGF(
-        ERR,
-        "Couldn't start ObjectCache SizeController, interval: {} milliseconds",
-        interval.count());
+    XLOGF(ERR, "Couldn't start worker '{}', interval: {} milliseconds", name,
+          interval.count());
   }
   return ret;
 }
 
 template <typename AllocatorT>
-bool ObjectCache<AllocatorT>::stopSizeController(std::chrono::seconds timeout) {
-  if (!sizeController_) {
+template <typename WorkerT>
+bool ObjectCache<AllocatorT>::stopWorker(folly::StringPiece name,
+                                         std::unique_ptr<WorkerT>& worker,
+                                         std::chrono::seconds timeout) {
+  if (!worker) {
+    XLOGF(INFO, "Worker '{}' has not been started. No need to stop.", name);
     return true;
   }
 
-  bool ret = sizeController_->stop(timeout);
+  bool ret = worker->stop(timeout);
   if (ret) {
-    XLOG(DBG) << "Stopped ObjectCache SizeController";
+    XLOGF(INFO, "Stopped worker '{}'", name);
   } else {
-    XLOGF(ERR, "Couldn't stop ObjectCache SizeController, timeout: {} seconds",
+    XLOGF(ERR, "Couldn't stop worker '{}', timeout: {} seconds", name,
           timeout.count());
   }
-  sizeController_.reset();
   return ret;
 }
 
@@ -402,11 +420,7 @@ bool ObjectCache<AllocatorT>::persist() {
   }
 
   // Stop all the other workers before persist
-  if (!stopSizeController()) {
-    return false;
-  }
-
-  if (!this->l1Cache_->stopWorkers()) {
+  if (!stopAllWorkers()) {
     return false;
   }
 

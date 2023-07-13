@@ -72,10 +72,6 @@ void ObjectCacheSizeController<AllocatorT>::work() {
                    totalObjSize, currentNumEntries, averageObjSize,
                    newEntriesLimit, currentEntriesLimit_);
   }
-
-  if (objCache_.config_.objectSizeDistributionTrackingEnabled) {
-    trackObjectSizeDistributionStats();
-  }
 }
 
 template <typename AllocatorT>
@@ -130,17 +126,6 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
         trackJemallocMemStats();
     visitor("objcache.jemalloc_active_bytes", jemallocActiveBytes);
     visitor("objcache.jemalloc_allocated_bytes", jemallocAllocatedBytes);
-  }
-  if (objCache_.config_.objectSizeDistributionTrackingEnabled) {
-    constexpr folly::StringPiece fmt = "{}_p{}";
-    constexpr folly::StringPiece prefix =
-        "objcache.size_distribution.object_size_bytes";
-
-    for (auto quantile : objectSizeBytesHist_.quantiles()) {
-      visitor(
-          folly::sformat(fmt, prefix, static_cast<uint32_t>(quantile * 100)),
-          objectSizeBytesHist_.estimateQuantile(quantile));
-    }
   }
 }
 

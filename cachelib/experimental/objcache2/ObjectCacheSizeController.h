@@ -17,7 +17,6 @@
 #pragma once
 
 #include <folly/memory/Malloc.h>
-#include <folly/stats/QuantileHistogram.h>
 
 #include "cachelib/common/PeriodicWorker.h"
 
@@ -58,18 +57,6 @@ class ObjectCacheSizeController : public PeriodicWorker {
     return {jemallocAllocatedBytes, jemallocActiveBytes};
   }
 
-  void trackObjectSizeDistributionStats() {
-    // scan the cache to get the object size
-    for (auto itr = objCache_.l1Cache_->begin();
-         itr != objCache_.l1Cache_->end();
-         ++itr) {
-      size_t objectSize = reinterpret_cast<const typename ObjectCache::Item*>(
-                              itr.asHandle()->getMemory())
-                              ->objectSize;
-      objectSizeBytesHist_.addValue(objectSize);
-    }
-  }
-
   // threshold in percentage to determine whether the size-controller should do
   // the calculation
   const size_t kSizeControllerThresholdPct = 50;
@@ -81,8 +68,6 @@ class ObjectCacheSizeController : public PeriodicWorker {
 
   // will be adjusted to control the cache size limit
   std::atomic<size_t> currentEntriesLimit_;
-
-  folly::QuantileHistogram<> objectSizeBytesHist_{};
 };
 
 } // namespace objcache2
