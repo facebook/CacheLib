@@ -26,13 +26,9 @@ namespace cachelib {
 namespace navy {
 
 NvmeInterface::NvmeInterface(int fd) {
-  // Many NVMe controllers has the tfr size limit. Now use a default value.
-  static constexpr uint32_t kMaxTfrSize = 262144u;
-
   XLOG(INFO)<< "Creating NvmeInterface, fd :" << fd;
   interface_ = createIOUringNvmeInterface();
   nvmeData_ = readNvmeInfo(fd);
-  maxTfrSize_ = kMaxTfrSize;
 }
 
 int NvmeInterface::nvmeIOMgmtRecv(int fd, uint32_t nsid, void *data,
@@ -92,10 +88,11 @@ bool NvmeInterface::doIO(int fd, uint64_t offset, uint32_t size,
                           const void* buf, InterfaceDDir dir) {
   uint32_t remainingSize = size;
   uint8_t* bufp = (uint8_t*)buf;
+  uint32_t maxTfrSize = nvmeData_.maxTransferSize();
   bool ret;
 
   while (remainingSize) {
-    auto ioSize = std::min<size_t>(maxTfrSize_, remainingSize);
+    auto ioSize = std::min<size_t>(maxTfrSize, remainingSize);
     IOData ioData = prepIO(fd, offset, ioSize, bufp);
 
     ret = interface_->nvmeIO(ioData, nvmeData_, dir);
@@ -125,11 +122,12 @@ bool NvmeInterface::writeNvmeDirective(int fd, uint64_t offset, uint32_t size,
   // And placementID is used as RG_RUH combination
   static constexpr uint8_t kPlacementMode = 2;
   uint32_t remainingSize = size;
+  uint32_t maxTfrSize = nvmeData_.maxTransferSize();
   uint8_t* bufp = (uint8_t*)buf;
   bool ret;
 
   while (remainingSize) {
-    auto ioSize = std::min<size_t>(maxTfrSize_, remainingSize);
+    auto ioSize = std::min<size_t>(maxTfrSize, remainingSize);
     IOData ioData = prepIO(fd, offset, ioSize, bufp);
     ioData.setDirectiveData(kPlacementMode, placementID);
 
@@ -151,8 +149,29 @@ NvmeData NvmeInterface::readNvmeInfo(int fd) {
     return NvmeData{};
   }
 
+  char ctrl[NVME_IDENTIFY_DATA_SIZE]; // Identify ctrl data
+  struct nvme_passthru_cmd cmd_ctrl = {
+    .opcode         = nvme_admin_identify,
+    .nsid           = 0,
+    .addr           = (uint64_t)(uintptr_t)ctrl,
+    .data_len       = NVME_IDENTIFY_DATA_SIZE,
+    .cdw10          = NVME_IDENTIFY_CNS_CTRL,
+    .cdw11          = NVME_CSI_NVM << NVME_IDENTIFY_CSI_SHIFT,
+    .timeout_ms     = NVME_DEFAULT_IOCTL_TIMEOUT,
+  };
+
+  int err = ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd_ctrl);
+  if(err) {
+    XLOG(ERR)<< "failed to fetch identify ctrl";
+    return NvmeData{};
+  }
+
+  static constexpr uint16_t kMDTSOffset = 77u;
+  uint8_t mdts = (uint8_t)ctrl[kMDTSOffset];
+  uint32_t maxTranferSize = (1 << mdts) * getpagesize();
+
   struct nvme_id_ns ns;
-  struct nvme_passthru_cmd cmd = {
+  struct nvme_passthru_cmd cmd_ns = {
     .opcode         = nvme_admin_identify,
     .nsid           = (uint32_t)namespace_id,
     .addr           = (uint64_t)(uintptr_t)&ns,
@@ -162,17 +181,17 @@ NvmeData NvmeInterface::readNvmeInfo(int fd) {
     .timeout_ms     = NVME_DEFAULT_IOCTL_TIMEOUT,
   };
 
-  int err = ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd);
+  err = ioctl(fd, NVME_IOCTL_ADMIN_CMD, &cmd_ns);
   if(err) {
     XLOG(ERR)<< "failed to fetch identify namespace";
     return NvmeData{};
   }
 
   auto lbaShift = (uint32_t)ilog2(1 << ns.lbaf[(ns.flbas & 0x0f)].ds);
-  XLOG(INFO) <<"Nvme Device Info :" <<namespace_id<<"lbashift: "
-                      <<lbaShift<<"size: "<<ns.nsze;
+  XLOG(INFO) <<"Nvme Device Info :" <<namespace_id<<" lbashift: "
+             <<lbaShift<<" size: "<<ns.nsze<<" max tfr size: "<<maxTranferSize;
 
-  return NvmeData{namespace_id, lbaShift, ns.nsze};
+  return NvmeData{namespace_id, lbaShift, ns.nsze, maxTranferSize};
 }
 } // namespace navy
 } // namespace cachelib

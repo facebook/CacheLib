@@ -58,9 +58,10 @@ struct nvme_uring_cmd {
 #define NVME_IDENTIFY_CSI_SHIFT 24
 
 enum nvme_identify_cns {
-  NVME_IDENTIFY_CNS_NS    = 0x00,
-  NVME_IDENTIFY_CNS_CSI_NS  = 0x05,
-  NVME_IDENTIFY_CNS_CSI_CTRL  = 0x06,
+  NVME_IDENTIFY_CNS_NS          = 0x00,
+  NVME_IDENTIFY_CNS_CTRL        = 0x01,
+  NVME_IDENTIFY_CNS_CSI_NS      = 0x05,
+  NVME_IDENTIFY_CNS_CSI_CTRL    = 0x06,
 };
 
 enum nvme_csi {
@@ -175,17 +176,20 @@ class NvmeData {
   NvmeData() = default;
   NvmeData& operator=(const NvmeData&) = default;
 
-  explicit NvmeData(int nsId, uint32_t lbaShift, uint64_t nLba)
-    : nsId_{nsId}, lbaShift_{lbaShift}, nLba_{nLba} {}
+  explicit NvmeData(int nsId, uint32_t lbaShift, uint64_t nLba,
+      uint32_t maxTransferSize) : nsId_{nsId}, lbaShift_{lbaShift}, nLba_{nLba},
+                                 maxTransferSize_{maxTransferSize} {}
 
   int nsId() const { return nsId_;}
   uint32_t lbaShift() const { return lbaShift_;}
   uint64_t nLba() const { return nLba_;}
+  uint32_t maxTransferSize() const { return maxTransferSize_;}
 
  private:
   int nsId_;
   uint32_t lbaShift_;
   uint64_t nLba_;
+  uint32_t maxTransferSize_;
 };
 
 class NvmeInterface {
@@ -209,7 +213,6 @@ class NvmeInterface {
 
   std::unique_ptr<IOInterface> interface_{};
   NvmeData nvmeData_{};
-  uint32_t maxTfrSize_{};
 };
 } // namespace navy
 } // namespace cachelib
