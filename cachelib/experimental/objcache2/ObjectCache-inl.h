@@ -110,17 +110,15 @@ template <typename AllocatorT>
 void ObjectCache<AllocatorT>::initWorkers() {
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs != 0) {
-    util::startPeriodicWorker(
-        kSizeControllerName, sizeController_,
-        std::chrono::milliseconds{config_.sizeControllerIntervalMs}, *this,
-        config_.sizeControllerThrottlerConfig);
+    startWorker(kSizeControllerName, sizeController_,
+                std::chrono::milliseconds{config_.sizeControllerIntervalMs},
+                config_.sizeControllerThrottlerConfig);
   }
 
   if (config_.objectSizeTrackingEnabled &&
       config_.objectSizeDistributionTrackingEnabled) {
-    util::startPeriodicWorker(
-        kSizeDistTrackerName, sizeDistTracker_,
-        std::chrono::seconds{60} /*default interval to be 60s*/, *this);
+    startWorker(kSizeDistTrackerName, sizeDistTracker_,
+                std::chrono::seconds{60} /*default interval to be 60s*/);
   }
 }
 
@@ -371,6 +369,48 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
         std::to_string(config_.sizeControllerIntervalMs);
   }
   return config;
+}
+
+template <typename AllocatorT>
+template <typename WorkerT, typename... Args>
+bool ObjectCache<AllocatorT>::startWorker(folly::StringPiece name,
+                                          std::unique_ptr<WorkerT>& worker,
+                                          std::chrono::milliseconds interval,
+                                          Args&&... args) {
+  if (!stopWorker(name, worker)) {
+    XLOGF(ERR, "Worker '{}' is already running. Cannot start it again.", name);
+    return false;
+  }
+
+  worker = std::make_unique<WorkerT>(*this, std::forward<Args>(args)...);
+  bool ret = worker->start(interval, name);
+  if (ret) {
+    XLOGF(INFO, "Started worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't start worker '{}', interval: {} milliseconds", name,
+          interval.count());
+  }
+  return ret;
+}
+
+template <typename AllocatorT>
+template <typename WorkerT>
+bool ObjectCache<AllocatorT>::stopWorker(folly::StringPiece name,
+                                         std::unique_ptr<WorkerT>& worker,
+                                         std::chrono::seconds timeout) {
+  if (!worker) {
+    XLOGF(INFO, "Worker '{}' has not been started. No need to stop.", name);
+    return true;
+  }
+
+  bool ret = worker->stop(timeout);
+  if (ret) {
+    XLOGF(INFO, "Stopped worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't stop worker '{}', timeout: {} seconds", name,
+          timeout.count());
+  }
+  return ret;
 }
 
 template <typename AllocatorT>

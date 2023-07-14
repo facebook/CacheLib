@@ -3419,7 +3419,17 @@ bool CacheAllocator<CacheTrait>::stopWorker(folly::StringPiece name,
                                             std::unique_ptr<T>& worker,
                                             std::chrono::seconds timeout) {
   std::lock_guard<std::mutex> l(workersMutex_);
-  auto ret = util::stopPeriodicWorker(name, worker, timeout);
+  if (!worker) {
+    return true;
+  }
+
+  bool ret = worker->stop(timeout);
+  if (ret) {
+    XLOGF(DBG1, "Stopped worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't stop worker '{}', timeout: {} seconds", name,
+          timeout.count());
+  }
   worker.reset();
   return ret;
 }
@@ -3431,13 +3441,20 @@ bool CacheAllocator<CacheTrait>::startNewWorker(
     std::unique_ptr<T>& worker,
     std::chrono::milliseconds interval,
     Args&&... args) {
-  if (worker && !stopWorker(name, worker)) {
+  if (!stopWorker(name, worker)) {
     return false;
   }
 
   std::lock_guard<std::mutex> l(workersMutex_);
-  return util::startPeriodicWorker(name, worker, interval,
-                                   std::forward<Args>(args)...);
+  worker = std::make_unique<T>(*this, std::forward<Args>(args)...);
+  bool ret = worker->start(interval, name);
+  if (ret) {
+    XLOGF(DBG1, "Started worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't start worker '{}', interval: {} milliseconds", name,
+          interval.count());
+  }
+  return ret;
 }
 
 template <typename CacheTrait>
@@ -3445,8 +3462,8 @@ bool CacheAllocator<CacheTrait>::startNewPoolRebalancer(
     std::chrono::milliseconds interval,
     std::shared_ptr<RebalanceStrategy> strategy,
     unsigned int freeAllocThreshold) {
-  if (!startNewWorker("PoolRebalancer", poolRebalancer_, interval, *this,
-                      strategy, freeAllocThreshold)) {
+  if (!startNewWorker("PoolRebalancer", poolRebalancer_, interval, strategy,
+                      freeAllocThreshold)) {
     return false;
   }
 
@@ -3462,7 +3479,7 @@ bool CacheAllocator<CacheTrait>::startNewPoolResizer(
     std::chrono::milliseconds interval,
     unsigned int poolResizeSlabsPerIter,
     std::shared_ptr<RebalanceStrategy> strategy) {
-  if (!startNewWorker("PoolResizer", poolResizer_, interval, *this,
+  if (!startNewWorker("PoolResizer", poolResizer_, interval,
                       poolResizeSlabsPerIter, strategy)) {
     return false;
   }
@@ -3483,8 +3500,8 @@ bool CacheAllocator<CacheTrait>::startNewPoolOptimizer(
   // it should do actual size optimization. Probably need to move to using
   // the same interval for both, with confirmation of further experiments.
   const auto workerInterval = std::chrono::seconds(1);
-  if (!startNewWorker("PoolOptimizer", poolOptimizer_, workerInterval, *this,
-                      strategy, regularInterval.count(), ccacheInterval.count(),
+  if (!startNewWorker("PoolOptimizer", poolOptimizer_, workerInterval, strategy,
+                      regularInterval.count(), ccacheInterval.count(),
                       ccacheStepSizePercent)) {
     return false;
   }
@@ -3502,7 +3519,7 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     std::chrono::milliseconds interval,
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
-  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
+  if (!startNewWorker("MemoryMonitor", memMonitor_, interval, config,
                       strategy)) {
     return false;
   }
@@ -3517,8 +3534,7 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::startNewReaper(
     std::chrono::milliseconds interval,
     util::Throttler::Config reaperThrottleConfig) {
-  if (!startNewWorker("Reaper", reaper_, interval, *this,
-                      reaperThrottleConfig)) {
+  if (!startNewWorker("Reaper", reaper_, interval, reaperThrottleConfig)) {
     return false;
   }
 
