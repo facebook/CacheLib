@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/IOInterface.h"
 #include "cachelib/navy/common/Device.h"
 #include <liburing.h>
@@ -55,6 +56,7 @@ struct nvme_uring_cmd {
 #define NVME_DEFAULT_IOCTL_TIMEOUT 0
 #define NVME_IDENTIFY_DATA_SIZE 4096
 #define NVME_IDENTIFY_CSI_SHIFT 24
+
 enum nvme_identify_cns {
   NVME_IDENTIFY_CNS_NS    = 0x00,
   NVME_IDENTIFY_CNS_CSI_NS  = 0x05,
@@ -71,6 +73,18 @@ enum nvme_admin_opcode {
   nvme_admin_get_log_page         = 0x02,
   nvme_admin_identify             = 0x06,
   nvme_admin_get_features         = 0x0a,
+};
+
+enum nvme_features_id {
+  NVME_FEAT_FID_FDP               = 0x1d,
+};
+
+enum nvme_cmd_get_log_lid {
+  NVME_LOG_LID_FDP_CONFIGS        = 0x20,
+};
+
+enum nvme_io_mgmt_recv_mo {
+  NVME_IO_MGMT_RECV_RUH_STATUS = 0x1,
 };
 
 enum nvme_io_opcode {
@@ -132,6 +146,20 @@ struct nvme_id_ns {
   __u8   vs[3712];
 };
 
+struct nvme_fdp_ruh_status_desc {
+  uint16_t pid;
+  uint16_t ruhid;
+  uint32_t earutr;
+  uint64_t ruamw;
+  uint8_t  rsvd16[16];
+};
+
+struct nvme_fdp_ruh_status {
+  uint8_t  rsvd0[14];
+  uint16_t nruhsd;
+  struct nvme_fdp_ruh_status_desc ruhss[];
+};
+
 static inline int ilog2(uint32_t i) {
   int log = -1;
 
@@ -168,6 +196,7 @@ class NvmeInterface {
   bool readNvme(int fd, uint64_t offset, uint32_t size, void* buf);
   bool writeNvmeDirective(int fd, uint64_t offset, uint32_t size,
       const void* buf, uint16_t placementID);
+  Buffer nvmeFdpStatus(int fd);
 
  private:
   IOData prepIO(int fd, uint64_t offset, uint32_t size,
@@ -175,6 +204,8 @@ class NvmeInterface {
   bool doIO(int fd, uint64_t offset, uint32_t size,
                             const void* buf, InterfaceDDir dir);
   NvmeData readNvmeInfo(int fd);
+  int nvmeIOMgmtRecv(int fd, uint32_t nsid, void *data, uint32_t data_len,
+      uint16_t mos, uint8_t mo);
 
   std::unique_ptr<IOInterface> interface_{};
   NvmeData nvmeData_{};

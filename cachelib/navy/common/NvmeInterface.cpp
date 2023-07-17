@@ -35,6 +35,52 @@ NvmeInterface::NvmeInterface(int fd) {
   maxTfrSize_ = kMaxTfrSize;
 }
 
+int NvmeInterface::nvmeIOMgmtRecv(int fd, uint32_t nsid, void *data,
+                  uint32_t data_len, uint16_t mos, uint8_t mo) {
+  uint32_t cdw10 = (mo & 0xf) | (mos & 0xff << 16);
+  uint32_t cdw11 = (data_len >> 2) - 1;
+
+  struct nvme_passthru_cmd cmd = {
+    .opcode             = nvme_cmd_io_mgmt_recv,
+    .nsid               = nsid,
+    .addr               = (uint64_t)(uintptr_t)data,
+    .data_len           = data_len,
+    .cdw10              = cdw10,
+    .cdw11              = cdw11,
+    .timeout_ms         = NVME_DEFAULT_IOCTL_TIMEOUT,
+  };
+
+  return ioctl(fd, NVME_IOCTL_IO_CMD, &cmd);
+}
+
+// struct nvme_fdp_ruh_status is a variable sized object; so using Buffer.
+Buffer NvmeInterface::nvmeFdpStatus(int fd) {
+  struct nvme_fdp_ruh_status hdr;
+  int err;
+
+  // Read FDP ruh status header to get Num_RUH Status Descriptors
+  err = nvmeIOMgmtRecv(fd, nvmeData_.nsId(), &hdr, sizeof(hdr), 0,
+      NVME_IO_MGMT_RECV_RUH_STATUS);
+  if (err) {
+    XLOG(ERR)<< "failed to get reclaim unit handle status header";
+    return Buffer{};
+  }
+
+  auto size = sizeof(struct nvme_fdp_ruh_status) +
+            (hdr.nruhsd * sizeof(struct nvme_fdp_ruh_status_desc));
+  auto buffer = Buffer(size);
+
+  // Read FDP RUH Status
+  err = nvmeIOMgmtRecv(fd, nvmeData_.nsId(), buffer.data(), size, 0,
+      NVME_IO_MGMT_RECV_RUH_STATUS);
+  if (err) {
+    XLOG(ERR)<< "failed to get reclaim unit handle status";
+    return Buffer{};
+  }
+
+  return buffer;
+}
+
 IOData NvmeInterface::prepIO(int fd, uint64_t offset, uint32_t size,
                           const void* buf) {
   const uint8_t* bufp = reinterpret_cast<const uint8_t*>(buf);
