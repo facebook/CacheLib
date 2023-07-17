@@ -370,12 +370,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @param  object       shared pointer of the object to be mutated (must be
   //                      fetched from ObjectCache APIs)
   // @param  mutateCb     callback containing the mutation logic
-  // @param  mutateCtx    context string of this mutation operation, for
-  //                      logging purpose
   template <typename T>
   void mutateObject(const std::shared_ptr<T>& object,
-                    std::function<void()> mutateCb,
-                    const std::string& mutateCtx = "");
+                    std::function<void()> mutateCb);
 
   // Get the size of the object
   //

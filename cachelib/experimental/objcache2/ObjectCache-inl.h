@@ -441,8 +441,7 @@ bool ObjectCache<AllocatorT>::recover() {
 template <typename AllocatorT>
 template <typename T>
 void ObjectCache<AllocatorT>::mutateObject(const std::shared_ptr<T>& object,
-                                           std::function<void()> mutateCb,
-                                           const std::string& mutateCtx) {
+                                           std::function<void()> mutateCb) {
   if (!object) {
     return;
   }
@@ -454,31 +453,21 @@ void ObjectCache<AllocatorT>::mutateObject(const std::shared_ptr<T>& object,
 
   auto& hdl = getWriteHandleRefInternal<T>(object);
   size_t memUsageDiff = 0;
-  size_t oldObjectSize = 0;
   if (memUsageAfter > memUsageBefore) { // updated to a larger value
     memUsageDiff = memUsageAfter - memUsageBefore;
     // do atomic update on objectSize
-    oldObjectSize = __sync_fetch_and_add(
+    __sync_fetch_and_add(
         &(reinterpret_cast<ObjectCacheItem*>(hdl->getMemory())->objectSize),
         memUsageDiff);
     totalObjectSizeBytes_.fetch_add(memUsageDiff, std::memory_order_relaxed);
   } else if (memUsageAfter < memUsageBefore) { // updated to a smaller value
     memUsageDiff = memUsageBefore - memUsageAfter;
     // do atomic update on objectSize
-    oldObjectSize = __sync_fetch_and_sub(
+    __sync_fetch_and_sub(
         &(reinterpret_cast<ObjectCacheItem*>(hdl->getMemory())->objectSize),
         memUsageDiff);
     totalObjectSizeBytes_.fetch_sub(memUsageDiff, std::memory_order_relaxed);
   }
-
-  // TODO T149177357: for debugging purpose, remove the log later
-  XLOGF_EVERY_MS(
-      INFO, 60'000,
-      "[Object-Cache mutate][{}] type: {}, memUsageBefore: {}, memUsageAfter: "
-      "{}, memUsageDiff:{}, oldObjectSize: {}, curObjectSize: {}, "
-      "curTotalObjectSize: {}",
-      mutateCtx, typeid(T).name(), memUsageBefore, memUsageAfter, memUsageDiff,
-      oldObjectSize, getObjectSize(object), getTotalObjectSize());
 }
 
 } // namespace objcache2
