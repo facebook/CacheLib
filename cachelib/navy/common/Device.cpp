@@ -42,7 +42,6 @@ class NvmeFdpDevice final : public Device {
              uint32_t maxDeviceWriteSize)
       : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
         file_{std::move(file)} {
-    XLOG(INFO)<< "Creating NvmeFdpDevice, fd :"<< file_.fd();
     nvmeInterface_ = std::make_unique<NvmeInterface>(file_.fd());
     initializeFDP();
   }
@@ -56,22 +55,36 @@ class NvmeFdpDevice final : public Device {
   bool isPlacementCapable() const override { return true; }
 
   uint16_t allocatePlacementHandle() override {
-    if(curPID_ <= maxPID_) {
-      return (curPID_++);
+    if ((curPIDIdx_ + 1) <= maxPIDIdx_) {
+      return (++curPIDIdx_);
     } else {
-      return kDefaultPID;
+      return kDefaultPIDIdx;
     }
   }
 
  private:
   void initializeFDP() {
-    maxPID_ = kMaxPID;
-    for(uint16_t pid = 0; pid <= maxPID_; ++pid) {
-      // use placementHandle as same as placementID for now
-      placementIDs_[pid] = pid;
+    Buffer buffer = nvmeInterface_->nvmeFdpStatus(file_.fd());
+    maxPIDIdx_ = 0;
+    curPIDIdx_ = 0;
+    placementIDs_[0] = kDefaultPID;
+
+    if (!buffer.isNull()) {
+      struct nvme_fdp_ruh_status *ruh_status =
+              reinterpret_cast<struct nvme_fdp_ruh_status*>(buffer.data());
+
+      if (ruh_status->nruhsd) {
+        maxPIDIdx_ = ruh_status->nruhsd - 1;
+        for (uint16_t i = 0; i <= maxPIDIdx_; ++i) {
+          placementIDs_[i] = ruh_status->ruhss[i].pid;
+        }
+      }
     }
-    curPID_ = 1;
-  }
+
+    XLOG(INFO)<< "Creating NvmeFdpDevice, fd :"<< file_.fd()<<" Num of PID: "
+            <<maxPIDIdx_ + 1<<" First PID: "<<placementIDs_[0]
+            <<" Last PID: "<<placementIDs_[maxPIDIdx_];
+    }
 
   uint16_t getPlacementID(uint16_t placementHandle) {
     return placementIDs_[placementHandle];
@@ -110,12 +123,12 @@ class NvmeFdpDevice final : public Device {
   const folly::File file_{};
   std::unique_ptr<NvmeInterface> nvmeInterface_;
 
-  static constexpr uint16_t kMaxPID = 7u;
   static constexpr uint16_t kDefaultPID = 0u;
+  static constexpr uint16_t kDefaultPIDIdx = 0u;
 
   std::map<uint16_t, uint16_t> placementIDs_{};
-  uint16_t maxPID_{0};
-  uint16_t curPID_{0};
+  uint16_t maxPIDIdx_{0};
+  uint16_t curPIDIdx_{0};
 };
 
 // Device on Unix file descriptor
