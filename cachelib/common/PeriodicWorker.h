@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/Range.h>
+#include <folly/logging/xlog.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -140,5 +141,62 @@ class PeriodicWorker {
   /* The main worker loop that handles the work periodically */
   void loop(void);
 };
+
+namespace util {
+// Stop a periodic worker
+//
+// @param name       name of the worker
+// @param worker     unique pointer of the worker to stop
+// @param timeout    timeout for the worker stopping
+// @return true if size controller has been successfully stopped
+template <typename WorkerT>
+bool stopPeriodicWorker(folly::StringPiece name,
+                        std::unique_ptr<WorkerT>& worker,
+                        std::chrono::seconds timeout = std::chrono::seconds{
+                            0}) {
+  if (!worker) {
+    XLOGF(DBG1, "Worker '{}' has not been started. No need to stop.", name);
+    return true;
+  }
+
+  bool ret = worker->stop(timeout);
+  if (ret) {
+    XLOGF(DBG1, "Stopped worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't stop worker '{}', timeout: {} seconds", name,
+          timeout.count());
+  }
+  return ret;
+}
+
+// Start a periodic worker
+//
+// @param name       name of the worker
+// @param worker     unique pointer of the worker to start
+// @param interval   the period this worker fires
+// @param args...    the rest of the arguments to initialize the worker
+// @return true if the worker has been successfully started
+template <typename WorkerT, typename... Args>
+bool startPeriodicWorker(folly::StringPiece name,
+                         std::unique_ptr<WorkerT>& worker,
+                         std::chrono::milliseconds interval,
+                         Args&&... args) {
+  if (worker && !stopPeriodicWorker(name, worker)) {
+    XLOGF(ERR, "Couldn't restart worker '{}' because it couldn't be stopped",
+          name);
+    return false;
+  }
+  worker = std::make_unique<WorkerT>(std::forward<Args>(args)...);
+  bool ret = worker->start(interval, name);
+  if (ret) {
+    XLOGF(DBG1, "Started worker '{}'", name);
+  } else {
+    XLOGF(ERR, "Couldn't start worker '{}', interval: {} milliseconds", name,
+          interval.count());
+  }
+  return ret;
+}
+
+} // namespace util
 } // namespace cachelib
 } // namespace facebook
