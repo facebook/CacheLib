@@ -26,7 +26,7 @@ void PersistWorker<ObjectCache>::work() {
     auto payloadIobuf = serializeCb_(
         typename ObjectCache::Serializer(workUnit.key, workUnit.objectPtr));
     if (!payloadIobuf) {
-      XLOG_EVERY_N(INFO, 1000) << folly::sformat(
+      XLOG_EVERY_N(ERR, 1000) << folly::sformat(
           "Failed to serialize object for key = {}", workUnit.key);
       continue;
     }
@@ -163,12 +163,12 @@ void RestoreWorker<ObjectCache>::work() {
           persistentItem.key().value(), persistentItem.payload().value(),
           persistentItem.objectSize().value(), ttlSecs, objCache_));
       if (!success) {
-        XLOG_EVERY_N(INFO, 1000)
+        XLOG_EVERY_N(ERR, 1000)
             << folly::sformat("{} failed to deserialize object for key = {}",
                               getName(), persistentItem.key().value());
       }
     } catch (const std::exception& e) {
-      XLOG_EVERY_N(INFO, 1000) << folly::sformat(
+      XLOG_EVERY_N(ERR, 1000) << folly::sformat(
           "{} failed to deserialize object for key = {}, exception "
           "= {}",
           getName(),

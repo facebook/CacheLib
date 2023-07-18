@@ -41,12 +41,24 @@ struct ObjectSerializer {
   // T is a non-Thrift object.
   //
   // @param toThriftCb  callback converting a non-Thrift object to a Thrift
-  // object
+  //                    object
   template <typename T, typename ThriftT>
   std::unique_ptr<folly::IOBuf> serialize(
       std::function<ThriftT(T*)> toThriftCb) {
     auto thriftObj = toThriftCb(reinterpret_cast<T*>(objectPtr));
     return Serializer::serializeToIOBuf(thriftObj);
+  }
+
+  // Serialize the object of type T into an IOBuf.
+  //
+  // @param customSerializeCb  user-defined serialization callback that takes
+  //                           T* and returns a unique pointer of IOBuf.
+  //                           If nullptr is returned, it will be handled as a
+  //                           serialization failure.
+  template <typename T>
+  std::unique_ptr<folly::IOBuf> serialize(
+      std::function<std::unique_ptr<folly::IOBuf>(T*)> customSerializeCb) {
+    return customSerializeCb(reinterpret_cast<T*>(objectPtr));
   }
 
   // cache key of the object to be serialized
@@ -100,6 +112,23 @@ struct ObjectDeserializer {
     auto ptr = std::make_unique<T>(fromThriftCb(thriftObj));
     auto res =
         objCache_.insertOrReplace(key, std::move(ptr), objectSize, ttlSecs);
+    return std::get<0>(res) == ObjectCache::AllocStatus::kSuccess;
+  }
+
+  // Deserialize the payload into an object of type T; and insert the object
+  // into the cache.
+  // Return true if successfully inserted to the cache; false otherwise.
+  // T is a non-Thrift object.
+  //
+  // @param customDeserializeCb  user-defined deserialization callback that
+  //                             takes the serialized value of T and returns a
+  //                             unique pointer of T. User needs to ensure
+  //                             returned std::unique_ptr<T> is not nullptr.
+  template <typename T>
+  bool deserialize(std::function<std::unique_ptr<T>(folly::StringPiece payload)>
+                       customDeserializeCb) {
+    auto res = objCache_.insertOrReplace(
+        key, std::move(customDeserializeCb(payload)), objectSize, ttlSecs);
     return std::get<0>(res) == ObjectCache::AllocStatus::kSuccess;
   }
 

@@ -1317,6 +1317,128 @@ class ObjectCacheTest : public ::testing::Test {
     }
   }
 
+  void testPersistenceUserDefinedCb() {
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    size_t threadsCount = 10;
+    int objectNum = 1000;
+    size_t totalObjectSize = 0;
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<std::string>();
+        })
+        .enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              return serializer.template serialize<std::string>(
+                  [](std::string* val) -> std::unique_ptr<folly::IOBuf> {
+                    return folly::IOBuf::copyBuffer(val->c_str(), val->size());
+                  });
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              return deserializer.template deserialize<std::string>(
+                  [](folly::StringPiece payload)
+                      -> std::unique_ptr<std::string> {
+                    return std::make_unique<std::string>(payload.str());
+                  });
+            });
+    config.objectSizeTrackingEnabled = true;
+
+    {
+      auto objcache = ObjectCache::create(config);
+      for (int i = 0; i < objectNum; i++) {
+        int objectSize = i + 10;
+        auto object =
+            std::make_unique<std::string>(folly::sformat("value_{}", i));
+        objcache->insertOrReplace(folly::sformat("key_{}", i),
+                                  std::move(object), objectSize);
+        totalObjectSize += objectSize;
+      }
+      ASSERT_EQ(objcache->getNumEntries(), objectNum);
+      ASSERT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+      ASSERT_EQ(objcache->persist(), true);
+    }
+
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      for (int i = 0; i < objectNum; i++) {
+        auto found =
+            objcache->template find<std::string>(folly::sformat("key_{}", i));
+        EXPECT_NE(nullptr, found);
+        EXPECT_EQ(folly::sformat("value_{}", i), *found);
+      }
+      EXPECT_EQ(objcache->getNumEntries(), objectNum);
+      EXPECT_EQ(objcache->getTotalObjectSize(), totalObjectSize);
+    }
+  }
+
+  void testPersistenceDesrFailure() {
+    auto persistBaseFilePath = std::tmpnam(nullptr);
+    std::string thriftSerErrKey = "key_ThriftSerErr";
+    std::string throwExceptionKey = "key_throwException";
+    std::string normalKey = "key_normal";
+
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<std::string>();
+        })
+        .enablePersistence(
+            1, persistBaseFilePath,
+            [&](typename ObjectCache::Serializer serializer) {
+              return serializer.template serialize<std::string>(
+                  [](std::string* val) -> std::unique_ptr<folly::IOBuf> {
+                    return folly::IOBuf::copyBuffer(val->c_str(), val->size());
+                  });
+            },
+            [&](typename ObjectCache::Deserializer deserializer) {
+              return deserializer.template deserialize<std::string>(
+                  [&](folly::StringPiece payload)
+                      -> std::unique_ptr<std::string> {
+                    if (deserializer.key == thriftSerErrKey) {
+                      Deserializer deserializer{
+                          reinterpret_cast<const uint8_t*>(payload.begin()),
+                          reinterpret_cast<const uint8_t*>(payload.end())};
+                      return std::make_unique<std::string>(
+                          deserializer.deserialize<std::string>());
+                    } else if (deserializer.key == throwExceptionKey) {
+                      throw std::runtime_error("test exception");
+                    } else {
+                      return std::make_unique<std::string>(payload.str());
+                    }
+                  });
+            });
+
+    {
+      auto objcache = ObjectCache::create(config);
+      objcache->insertOrReplace(thriftSerErrKey,
+                                std::make_unique<std::string>("value_1"));
+      objcache->insertOrReplace(throwExceptionKey,
+                                std::make_unique<std::string>("value_2"));
+      objcache->insertOrReplace(normalKey,
+                                std::make_unique<std::string>("value_3"));
+      ASSERT_EQ(objcache->persist(), true);
+      EXPECT_EQ(objcache->getNumEntries(), 3);
+    }
+
+    {
+      auto objcache = ObjectCache::create(config);
+      ASSERT_EQ(objcache->recover(), true);
+      auto found = objcache->template find<std::string>(thriftSerErrKey);
+      EXPECT_EQ(nullptr, found);
+      found = objcache->template find<std::string>(throwExceptionKey);
+      EXPECT_EQ(nullptr, found);
+      found = objcache->template find<std::string>(normalKey);
+      ASSERT_NE(nullptr, found);
+      EXPECT_EQ(*found, "value_3");
+      EXPECT_EQ(objcache->getNumEntries(), 1);
+    }
+  }
+
   void testGetTtl() {
     const uint32_t ttlSecs = 600;
 
@@ -1685,6 +1807,12 @@ TYPED_TEST(ObjectCacheTest, PersistenceWithEvictionOrder) {
 }
 TYPED_TEST(ObjectCacheTest, PersistenceNonThrift) {
   this->testPersistenceNonThrift();
+}
+TYPED_TEST(ObjectCacheTest, PersistenceUserDefinedCb) {
+  this->testPersistenceUserDefinedCb();
+}
+TYPED_TEST(ObjectCacheTest, PersistenceDesrFailure) {
+  this->testPersistenceDesrFailure();
 }
 TYPED_TEST(ObjectCacheTest, GetTtl) { this->testGetTtl(); }
 TYPED_TEST(ObjectCacheTest, UpdateTtl) { this->testUpdateTtl(); }
