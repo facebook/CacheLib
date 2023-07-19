@@ -19,6 +19,7 @@
 #include <folly/stats/QuantileHistogram.h>
 
 #include "cachelib/common/PeriodicWorker.h"
+#include "cachelib/common/Time.h"
 
 namespace facebook {
 namespace cachelib {
@@ -44,23 +45,33 @@ class ObjectCacheSizeDistTracker : public PeriodicWorker {
                           static_cast<uint32_t>(quantile * 100)),
               curHist->estimateQuantile(quantile));
     }
+    visitor("objcache.size_distribution.traverse_time_ms",
+            traverseTimeMs_.load());
   }
 
  private:
   void work() override final {
+    auto beginTime = util::getCurrentTimeMs();
     auto newHist = std::make_shared<folly::QuantileHistogram<>>();
     // scan the cache to get the object size
     for (auto itr = objCache_.begin(); itr != objCache_.end(); ++itr) {
       newHist->addValue(objCache_.getObjectSize(itr));
     }
-    // lock the mutex before updating objectSizeBytesHist_
-    std::lock_guard<std::mutex> l(mutex_);
-    objectSizeBytesHist_ = newHist;
+    {
+      // lock the mutex before updating objectSizeBytesHist_
+      std::lock_guard<std::mutex> l(mutex_);
+      objectSizeBytesHist_ = newHist;
+    }
+
+    traverseTimeMs_.store(util::getCurrentTimeMs() - beginTime,
+                          std::memory_order_relaxed);
   }
 
   ObjectCache& objCache_;
   mutable std::mutex mutex_;
   std::shared_ptr<folly::QuantileHistogram<>> objectSizeBytesHist_{};
+  //  time taken to scan the cache and build a new histogram
+  std::atomic<uint64_t> traverseTimeMs_{0};
 };
 
 } // namespace objcache2
