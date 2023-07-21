@@ -147,7 +147,9 @@ class MMTypeTest : public testing::Test {
   void testRecordAccessBasic(Config c);
   void testSerializationBasic(Config c);
   void testIterate(std::vector<std::unique_ptr<Node>>& nodes, Container& c);
+  void testIterateHot(std::vector<std::unique_ptr<Node>>& nodes, Container& c);
   void testMatch(std::string expected, Container& c);
+  void testMatchHot(std::string expected, Container& c);
   size_t getListSize(const Container& c, typename MMType::LruType list);
   void verifyIterationVariants(Container& c);
 };

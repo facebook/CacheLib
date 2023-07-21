@@ -300,6 +300,26 @@ struct RebalancerStats {
   uint64_t avgPickTimeMs{0};
 };
 
+// Mover Stats
+struct BackgroundMoverStats {
+  // the number of items this worker moved by looking at pools/classes stats
+  uint64_t numMovedItems{0};
+  // number of times we went executed the thread //TODO: is this def correct?
+  uint64_t runCount{0};
+  // total number of classes
+  uint64_t totalClasses{0};
+  // eviction size
+  uint64_t totalBytesMoved{0};
+
+  BackgroundMoverStats& operator+=(const BackgroundMoverStats& rhs) {
+    numMovedItems += rhs.numMovedItems;
+    runCount += rhs.runCount;
+    totalClasses += rhs.totalClasses;
+    totalBytesMoved += rhs.totalBytesMoved;
+    return *this;
+  }
+};
+
 // CacheMetadata type to export
 struct CacheMetadata {
   // allocator_version
@@ -320,6 +340,11 @@ struct Stats;
 // Stats that apply globally in cache and
 // the ones that are aggregated over all pools
 struct GlobalCacheStats {
+  // background eviction stats
+  BackgroundMoverStats evictionStats;
+
+  BackgroundMoverStats promotionStats;
+
   // number of calls to CacheAllocator::find
   uint64_t numCacheGets{0};
 

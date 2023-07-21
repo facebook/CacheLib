@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "cachelib/allocator/BackgroundMoverStrategy.h"
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MemoryMonitor.h"
@@ -268,6 +269,18 @@ class CacheAllocatorConfig {
       std::chrono::seconds ccacheInterval,
       uint32_t ccacheStepSizePercent);
 
+  // Enable the background evictor - scans a tier to look for objects
+  // to evict to the next tier
+  CacheAllocatorConfig& enableBackgroundEvictor(
+      std::shared_ptr<BackgroundMoverStrategy> backgroundMoverStrategy,
+      std::chrono::milliseconds regularInterval,
+      size_t threads);
+
+  CacheAllocatorConfig& enableBackgroundPromoter(
+      std::shared_ptr<BackgroundMoverStrategy> backgroundMoverStrategy,
+      std::chrono::milliseconds regularInterval,
+      size_t threads);
+
   // This enables an optimization for Pool rebalancing and resizing.
   // The rough idea is to ensure only the least useful items are evicted when
   // we move slab memory around. Come talk to Cache Library team if you think
@@ -340,6 +353,17 @@ class CacheAllocatorConfig {
     return (regularPoolOptimizeInterval.count() > 0 ||
             compactCacheOptimizeInterval.count() > 0) &&
            poolOptimizeStrategy != nullptr;
+  }
+
+  // @return whether background evictor thread is enabled
+  bool backgroundEvictorEnabled() const noexcept {
+    return backgroundEvictorInterval.count() > 0 &&
+           backgroundEvictorStrategy != nullptr;
+  }
+
+  bool backgroundPromoterEnabled() const noexcept {
+    return backgroundPromoterInterval.count() > 0 &&
+           backgroundPromoterStrategy != nullptr;
   }
 
   // @return whether memory monitor is enabled
@@ -455,6 +479,26 @@ class CacheAllocatorConfig {
   // The slab release process is considered as being stuck if it does not
   // make any progress for the below threshold
   std::chrono::milliseconds slabReleaseStuckThreshold{std::chrono::seconds(60)};
+
+  // the background eviction strategy to be used
+  std::shared_ptr<BackgroundMoverStrategy> backgroundEvictorStrategy{nullptr};
+
+  // the background promotion strategy to be used
+  std::shared_ptr<BackgroundMoverStrategy> backgroundPromoterStrategy{nullptr};
+
+  // time interval to sleep between runs of the background evictor
+  std::chrono::milliseconds backgroundEvictorInterval{
+      std::chrono::milliseconds{1000}};
+
+  // time interval to sleep between runs of the background promoter
+  std::chrono::milliseconds backgroundPromoterInterval{
+      std::chrono::milliseconds{1000}};
+
+  // number of thread used by background evictor
+  size_t backgroundEvictorThreads{1};
+
+  // number of thread used by background promoter
+  size_t backgroundPromoterThreads{1};
 
   // time interval to sleep between iterations of pool size optimization,
   // for regular pools and compact caches
@@ -594,6 +638,9 @@ class CacheAllocatorConfig {
   // If true, we will delay worker start until user explicitly calls
   // CacheAllocator::startCacheWorkers()
   bool delayCacheWorkersStart{false};
+
+  uint64_t evictorThreads{1};
+  uint64_t promoterThreads{1};
 
   friend CacheT;
 
@@ -930,6 +977,28 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolRebalancing(
     throw std::invalid_argument(
         "Invalid rebalance strategy for the cache allocator.");
   }
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableBackgroundEvictor(
+    std::shared_ptr<BackgroundMoverStrategy> strategy,
+    std::chrono::milliseconds interval,
+    size_t evictorThreads) {
+  backgroundEvictorStrategy = strategy;
+  backgroundEvictorInterval = interval;
+  backgroundEvictorThreads = evictorThreads;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableBackgroundPromoter(
+    std::shared_ptr<BackgroundMoverStrategy> strategy,
+    std::chrono::milliseconds interval,
+    size_t promoterThreads) {
+  backgroundPromoterStrategy = strategy;
+  backgroundPromoterInterval = interval;
+  backgroundPromoterThreads = promoterThreads;
   return *this;
 }
 
