@@ -466,12 +466,18 @@ TEST(Driver, InsertRetryRemoveOther) {
   auto driver = std::make_unique<Driver>(std::move(config));
 
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
+
+  // Flush the scheduler first
+  exPtr->finish();
   EXPECT_EQ(exPtr->getRescheduleCount(), 0);
   EXPECT_EQ(exPtr->getDoneCount(), 1);
 
   // The returned status code is Ok because it's not rejected by admission test.
   // Under the hood, the schedule went through one reschedule and one succeed.
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
+
+  // Flush the scheduler first
+  exPtr->finish();
   EXPECT_EQ(exPtr->getRescheduleCount(), 1);
   EXPECT_EQ(exPtr->getDoneCount(), 2);
 
