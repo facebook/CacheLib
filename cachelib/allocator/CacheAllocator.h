@@ -38,6 +38,7 @@
 #include <folly/Range.h>
 #pragma GCC diagnostic pop
 
+#include "cachelib/allocator/BackgroundMover.h"
 #include "cachelib/allocator/CCacheManager.h"
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/CacheAllocatorConfig.h"
@@ -710,6 +711,12 @@ class CacheAllocator : public CacheBase {
   // @return    the full usable size for this item
   uint32_t getUsableSize(const Item& item) const;
 
+  // create memory assignment to bg workers
+  auto createBgWorkerMemoryAssignments(size_t numWorkers);
+
+  // whether bg worker should be woken
+  bool shouldWakeupBgEvictor(PoolId pid, ClassId cid);
+
   // Get a random item from memory
   // This is useful for profiling and sampling cachelib managed memory
   //
@@ -1054,6 +1061,26 @@ class CacheAllocator : public CacheBase {
   bool startNewReaper(std::chrono::milliseconds interval,
                       util::Throttler::Config reaperThrottleConfig);
 
+  // start background promoter, starting/stopping of this worker
+  // should not be done concurrently with addPool
+  // @param interval                the period this worker fires
+  // @param strategy                strategy to promote items
+  // @param threads                 number of threads used by the worker
+  bool startNewBackgroundPromoter(
+      std::chrono::milliseconds interval,
+      std::shared_ptr<BackgroundMoverStrategy> strategy,
+      size_t threads);
+
+  // start background evictor, starting/stopping of this worker
+  // should not be done concurrently with addPool
+  // @param interval                the period this worker fires
+  // @param strategy                strategy to evict items
+  // @param threads                 number of threads used by the worker
+  bool startNewBackgroundEvictor(
+      std::chrono::milliseconds interval,
+      std::shared_ptr<BackgroundMoverStrategy> strategy,
+      size_t threads);
+
   // Stop existing workers with a timeout
   bool stopPoolRebalancer(std::chrono::seconds timeout = std::chrono::seconds{
                               0});
@@ -1062,6 +1089,10 @@ class CacheAllocator : public CacheBase {
                              0});
   bool stopMemMonitor(std::chrono::seconds timeout = std::chrono::seconds{0});
   bool stopReaper(std::chrono::seconds timeout = std::chrono::seconds{0});
+  bool stopBackgroundEvictor(
+      std::chrono::seconds timeout = std::chrono::seconds{0});
+  bool stopBackgroundPromoter(
+      std::chrono::seconds timeout = std::chrono::seconds{0});
 
   // Set pool optimization to either true or false
   //
@@ -1417,6 +1448,7 @@ class CacheAllocator : public CacheBase {
   // @param creationTime    Timestamp when this item was created
   // @param expiryTime      set an expiry timestamp for the item (0 means no
   //                        expiration time).
+  // @param fromBgThread    whether this is called from BG thread
   //
   // @return      the handle for the item or an invalid handle(nullptr) if the
   //              allocation failed. Allocation can fail if one such
@@ -1430,7 +1462,8 @@ class CacheAllocator : public CacheBase {
                                Key key,
                                uint32_t size,
                                uint32_t creationTime,
-                               uint32_t expiryTime);
+                               uint32_t expiryTime,
+                               bool fromBgThread = false);
 
   // Allocate a chained item
   //
@@ -1845,6 +1878,22 @@ class CacheAllocator : public CacheBase {
     stats().numReaperSkippedSlabs.add(slabsSkipped);
   }
 
+  // exposed for the background evictor to iterate through the memory and evict
+  // in batch. This should improve insertion path for tiered memory config
+  size_t traverseAndEvictItems(unsigned int /* pid */,
+                               unsigned int /* cid */,
+                               size_t /* batch */) {
+    throw std::runtime_error("Not supported yet!");
+  }
+
+  // exposed for the background promoter to iterate through the memory and
+  // promote in batch. This should improve find latency
+  size_t traverseAndPromoteItems(unsigned int /* pid */,
+                                 unsigned int /* cid */,
+                                 size_t /* batch */) {
+    throw std::runtime_error("Not supported yet!");
+  }
+
   // returns true if nvmcache is enabled and we should write this item to
   // nvmcache.
   bool shouldWriteToNvmCache(const Item& item);
@@ -1993,6 +2042,44 @@ class CacheAllocator : public CacheBase {
                      : false;
   }
 
+  // returns the background mover stats
+  BackgroundMoverStats getBackgroundMoverStats(MoverDir direction) const {
+    auto stats = BackgroundMoverStats{};
+    if (direction == MoverDir::Evict) {
+      for (auto& bg : backgroundEvictor_)
+        stats += bg->getStats();
+    } else if (direction == MoverDir::Promote) {
+      for (auto& bg : backgroundPromoter_)
+        stats += bg->getStats();
+    }
+    return stats;
+  }
+
+  std::map<PoolId, std::map<ClassId, uint64_t>> getBackgroundMoverClassStats(
+      MoverDir direction) const {
+    std::map<PoolId, std::map<ClassId, uint64_t>> stats;
+
+    if (direction == MoverDir::Evict) {
+      for (auto& bg : backgroundEvictor_) {
+        for (auto& pid : bg->getClassStats()) {
+          for (auto& cid : pid.second) {
+            stats[pid.first][cid.first] += cid.second;
+          }
+        }
+      }
+    } else if (direction == MoverDir::Promote) {
+      for (auto& bg : backgroundPromoter_) {
+        for (auto& pid : bg->getClassStats()) {
+          for (auto& cid : pid.second) {
+            stats[pid.first][cid.first] += cid.second;
+          }
+        }
+      }
+    }
+
+    return stats;
+  }
+
   // BEGIN private members
 
   // Whether the memory allocator for this cache allocator was created on shared
@@ -2073,6 +2160,10 @@ class CacheAllocator : public CacheBase {
   // free memory monitor
   std::unique_ptr<MemoryMonitor> memMonitor_;
 
+  // background evictor
+  std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundEvictor_;
+  std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundPromoter_;
+
   // check whether a pool is a slabs pool
   std::array<bool, MemoryPoolManager::kMaxPools> isCompactCachePool_{};
 
@@ -2117,6 +2208,7 @@ class CacheAllocator : public CacheBase {
   // Make this friend to give access to acquire and release
   friend ReadHandle;
   friend ReaperAPIWrapper<CacheT>;
+  friend BackgroundMoverAPIWrapper<CacheT>;
   friend class CacheAPIWrapperForNvm<CacheT>;
   friend class FbInternalRuntimeUpdateWrapper<CacheT>;
   friend class objcache2::ObjectCache<CacheT>;

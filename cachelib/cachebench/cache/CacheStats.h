@@ -26,7 +26,33 @@ DECLARE_string(report_ac_memory_usage_stats);
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+
+struct BackgroundEvictionStats {
+  // the number of items this worker evicted by looking at pools/classes stats
+  uint64_t nEvictedItems{0};
+
+  // number of times we went executed the thread //TODO: is this def correct?
+  uint64_t nTraversals{0};
+
+  // number of classes
+  uint64_t nClasses{0};
+
+  // size of evicted items
+  uint64_t evictionSize{0};
+};
+
+struct BackgroundPromotionStats {
+  // the number of items this worker evicted by looking at pools/classes stats
+  uint64_t nPromotedItems{0};
+
+  // number of times we went executed the thread //TODO: is this def correct?
+  uint64_t nTraversals{0};
+};
+
 struct Stats {
+  BackgroundEvictionStats backgndEvicStats;
+  BackgroundPromotionStats backgndPromoStats;
+
   uint64_t numEvictions{0};
   uint64_t numItems{0};
 
@@ -108,6 +134,9 @@ struct Stats {
   // cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
+  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundEvictionClasses;
+  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundPromotionClasses;
+
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
 
@@ -126,6 +155,14 @@ struct Stats {
                           pctFn(numEvictions, evictAttempts))
         << std::endl;
     out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
+
+    auto foreachAC = [](const auto& map, auto cb) {
+      for (auto& pidStat : map) {
+        for (auto& cidStat : pidStat.second) {
+          cb(pidStat.first, cidStat.first, cidStat.second);
+        }
+      }
+    };
 
     for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
       out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
@@ -154,15 +191,7 @@ struct Stats {
         }
       };
 
-      auto foreachAC = [&](auto cb) {
-        for (auto& pidStat : allocationClassStats) {
-          for (auto& cidStat : pidStat.second) {
-            cb(pidStat.first, cidStat.first, cidStat.second);
-          }
-        }
-      };
-
-      foreachAC([&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
         auto [memorySizeSuffix, memorySize] =
             formatMemory(stats.activeAllocs * stats.allocSize);
@@ -172,7 +201,7 @@ struct Stats {
             << std::endl;
       });
 
-      foreachAC([&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
 
         // If the pool is not full, extrapolate usageFraction for AC assuming it
@@ -222,6 +251,42 @@ struct Stats {
         printLatencies("Cache Find API latency", cacheFindLatencyNs);
         printLatencies("Cache Allocate API latency", cacheAllocateLatencyNs);
       }
+    }
+
+    if (!backgroundEvictionClasses.empty() &&
+        backgndEvicStats.nEvictedItems > 0) {
+      out << "== Class Background Eviction Counters Map ==" << std::endl;
+      foreachAC(backgroundEvictionClasses,
+                [&](auto pid, auto cid, auto evicted) {
+                  out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
+                                        cid, evicted)
+                      << std::endl;
+                });
+
+      out << folly::sformat("Background Evicted Items : {:,}",
+                            backgndEvicStats.nEvictedItems)
+          << std::endl;
+      out << folly::sformat("Background Evictor Traversals : {:,}",
+                            backgndEvicStats.nTraversals)
+          << std::endl;
+    }
+
+    if (!backgroundPromotionClasses.empty() &&
+        backgndPromoStats.nPromotedItems > 0) {
+      out << "== Class Background Promotion Counters Map ==" << std::endl;
+      foreachAC(backgroundPromotionClasses,
+                [&](auto pid, auto cid, auto promoted) {
+                  out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
+                                        cid, promoted)
+                      << std::endl;
+                });
+
+      out << folly::sformat("Background Promoted Items : {:,}",
+                            backgndPromoStats.nPromotedItems)
+          << std::endl;
+      out << folly::sformat("Background Promoter Traversals : {:,}",
+                            backgndPromoStats.nTraversals)
+          << std::endl;
     }
 
     if (numNvmGets > 0 || numNvmDeletes > 0 || numNvmPuts > 0) {
