@@ -140,6 +140,10 @@ struct ObjectCacheConfig {
 
   ObjectCacheConfig& setEvictionSearchLimit(uint32_t _evictionSearchLimit);
 
+  // We will delay worker start until user explicitly calls
+  // ObjectCache::startCacheWorkers()
+  ObjectCacheConfig& setDelayCacheWorkersStart();
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -223,6 +227,10 @@ struct ObjectCacheConfig {
   // The maximum number of tries to search for an object to evict
   // 0 means it's infinite
   uint32_t evictionSearchLimit{50};
+
+  // If true, we will delay worker start until user explicitly calls
+  // ObjectCache::startCacheWorkers()
+  bool delayCacheWorkersStart{false};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -385,6 +393,12 @@ template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEvictionSearchLimit(
     uint32_t _evictionSearchLimit) {
   evictionSearchLimit = _evictionSearchLimit;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setDelayCacheWorkersStart() {
+  delayCacheWorkersStart = true;
   return *this;
 }
 

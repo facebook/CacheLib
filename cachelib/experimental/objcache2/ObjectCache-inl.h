@@ -67,6 +67,9 @@ void ObjectCache<AllocatorT>::init() {
               item.getCreationTime(), item.getLastAccessTime()));
         };
       });
+  if (config_.delayCacheWorkersStart) {
+    l1Config.setDelayCacheWorkersStart();
+  }
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   // add a pool per shard
@@ -103,7 +106,17 @@ void ObjectCache<AllocatorT>::init() {
     }
   }
 
-  initWorkers();
+  if (!config_.delayCacheWorkersStart) {
+    initWorkers();
+  }
+}
+
+template <typename AllocatorT>
+void ObjectCache<AllocatorT>::startCacheWorkers() {
+  if (config_.delayCacheWorkersStart) {
+    this->l1Cache_->startCacheWorkers();
+    initWorkers();
+  }
 }
 
 template <typename AllocatorT>

@@ -411,6 +411,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return success;
   }
 
+  // No-op for workers that are already running. Typically user uses this in
+  // conjunction with `config.setDelayCacheWorkersStart()` to avoid
+  // initialization ordering issues with user callback for cachelib's workers.
+  void startCacheWorkers();
+
  protected:
   // Serialize cache allocator config for exporting to Scuba
   std::map<std::string, std::string> serializeConfigParams() const override;
