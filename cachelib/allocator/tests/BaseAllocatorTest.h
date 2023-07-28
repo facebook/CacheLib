@@ -3655,6 +3655,16 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                             sourceAlloc);
       otherThread.join();
 
+      // in our new version with marking item as moving, move attempts
+      // will only fail if there is a concurrent set to that item, in
+      // this case if the handle to an item is held, the slab release
+      // will keep trying to mark the item as moving - we currently
+      // don't have a counter for that (but this test assumes that
+      // if handle is held then moveForSlabRelease will retry,
+      // that is where the move attempts counter is incremented)
+      //
+      // as a fix, we increment the move attempts counter during
+      // markMovingForSlabRelase too
       XLOG(INFO, "Number of move retry attempts: ",
            allocator.getSlabReleaseStats().numMoveAttempts);
       ASSERT_GT(allocator.getSlabReleaseStats().numMoveAttempts, 1);
@@ -4940,65 +4950,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     lookupFn("yolo");
   }
 
-  // Allocate 3 items, which require
-  //  1. no sync
-  //  2. sync
-  //  3. sync but our sync function will fail
-  // What this test should see is that:
-  //  1. is moved
-  //  2. is moved
-  //  3. is evicted
-  void testMovingSyncCorrectness() {
-    // create an allocator worth 10 slabs.
-    typename AllocatorT::Config config;
-
-    // allocate enough size to make sure evictions never occur
-    config.setCacheSize(200 * Slab::kSize);
-
-    using Item = typename AllocatorT::Item;
-    struct TestSyncObj : public AllocatorT::SyncObj {
-      bool isValid_;
-      bool isValid() const override { return isValid_; }
-
-      static std::unique_ptr<typename AllocatorT::SyncObj> genSync(
-          folly::StringPiece key) {
-        std::unique_ptr<TestSyncObj> sync(new TestSyncObj());
-        if (key == "one") {
-          return nullptr;
-        } else if (key == "two") {
-          sync->isValid_ = true;
-        } else if (key == "three") {
-          sync->isValid_ = false;
-        } else {
-          XDCHECK(false);
-        }
-        return sync;
-      }
-    };
-    config.enableMovingOnSlabRelease(
-        [](Item&, Item&, Item*) {},
-        [](typename Item::Key key) { return TestSyncObj::genSync(key); });
-
-    AllocatorT alloc(config);
-    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
-    const auto poolSize = numBytes;
-    const auto pid = alloc.addPool("one", poolSize);
-
-    // Asking for value size of 0 so we can the smallest allocation class
-    ASSERT_NE(nullptr, util::allocateAccessible(alloc, pid, "one", 0));
-    ASSERT_NE(nullptr, util::allocateAccessible(alloc, pid, "two", 0));
-    ASSERT_NE(nullptr, util::allocateAccessible(alloc, pid, "three", 0));
-
-    // Fisrt allocation class is the smallest allocation class
-    alloc.releaseSlab(pid, 0, SlabReleaseMode::kRebalance);
-
-    // Now we should still see one and two, but three should be evicted
-    // already
-    ASSERT_NE(nullptr, alloc.find("one"));
-    ASSERT_NE(nullptr, alloc.find("two"));
-    ASSERT_EQ(nullptr, alloc.find("three"));
-  }
-
   // This test first writes 50 bytes into each chained item
   // Then it saves a pointer to each chained item's memory into a vector
   //
@@ -5052,6 +5003,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     auto allocFn = [&](std::string keyPrefix, std::vector<uint32_t> sizes) {
       for (unsigned int loop = 0; loop < 10; ++loop) {
         std::vector<uint8_t*> bufList;
+        std::vector<typename AllocatorT::WriteHandle> parentHandles;
         std::unique_lock<std::mutex> l(m);
         for (unsigned int i = 0; i < 1000; ++i) {
           const auto key = keyPrefix + folly::to<std::string>(loop) + "_" +
@@ -5073,6 +5025,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
             alloc.addChainedItem(itemHandle, std::move(childItem));
           }
+          parentHandles.push_back(std::move(itemHandle));
         }
 
         // Without sync object, we could be writing to already freed
@@ -5156,9 +5109,10 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     lookupFn("yolo");
   }
 
-  // while a chained item could be moved, try to transfer its parent and
-  // validate that move succeeds correctly.
-  void testTransferChainWhileMoving() {
+  // while a chained item could be moved - it is sync on parent moving bit.
+  // try to transfer its parent after we moved and
+  // validate that transfer succeeds correctly.
+  void testTransferChainAfterMoving() {
     // create an allocator worth 10 slabs.
     typename AllocatorT::Config config;
     config.configureChainedItems();
@@ -5173,36 +5127,6 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         [&](const typename AllocatorT::RemoveCbData&) { ++numRemovedKeys; });
 
     std::string movingKey = "helloworldmoving";
-    // we will use the acquisition of mutex as an indicator of whether item is
-    // close to being moved and use it to swap the parent.
-    std::mutex m;
-    struct TestSyncObj : public AllocatorT::SyncObj {
-      TestSyncObj(std::mutex& m,
-                  std::atomic<bool>& firstTime,
-                  folly::Baton<>& startedMoving,
-                  folly::Baton<>& changedParent)
-          : l(m) {
-        if (!firstTime) {
-          return;
-        }
-        firstTime = false;
-        startedMoving.post();
-        changedParent.wait();
-      }
-
-      std::lock_guard<std::mutex> l;
-    };
-
-    // used to track if the moving sync is executed upon the first time after
-    // allocation so that the baton logic is executed only once.
-    std::atomic<bool> firstTimeMovingSync{true};
-
-    // baton to indicate that the move process has started so that we can
-    // switch the parent
-    folly::Baton<> startedMoving;
-    // baton to indicate that the parent has been switched so that the move
-    // process can proceed
-    folly::Baton<> changedParent;
 
     const size_t numMovingAttempts = 100;
     std::atomic<uint64_t> numMoves{0};
@@ -5214,12 +5138,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
                       oldItem.getSize());
           ++numMoves;
         },
-        [&m, &startedMoving, &changedParent,
-         &firstTimeMovingSync](typename Item::Key key) {
-          XLOG(ERR) << "Moving" << key;
-          return std::make_unique<TestSyncObj>(m, firstTimeMovingSync,
-                                               startedMoving, changedParent);
-        },
+        {},
         numMovingAttempts);
 
     AllocatorT alloc(config);
@@ -5247,25 +5166,20 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
 
     auto slabRelease = std::async(releaseFn);
 
-    startedMoving.wait();
+    // wait for slab release to complete.
+    slabRelease.wait();
 
     // we know moving sync is held now.
     {
       auto newParent = alloc.allocate(pid, movingKey, 600);
+      // parent is marked moving during moved, once finished we will get handle
       auto parent = alloc.findToWrite(movingKey);
       alloc.transferChainAndReplace(parent, newParent);
     }
 
-    // indicate that we changed the parent. This should abort the current
-    // moving attempt, re-allocate the item and eventually succeed in moving.
-    changedParent.post();
-
-    // wait for slab release to complete.
-    slabRelease.wait();
-
     EXPECT_EQ(numMoves, 1);
     auto slabReleaseStats = alloc.getSlabReleaseStats();
-    EXPECT_EQ(slabReleaseStats.numMoveAttempts, 2);
+    EXPECT_EQ(slabReleaseStats.numMoveAttempts, 1);
     EXPECT_EQ(slabReleaseStats.numMoveSuccesses, 1);
 
     auto handle = alloc.find(movingKey);

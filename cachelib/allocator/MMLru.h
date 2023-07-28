@@ -376,6 +376,10 @@ class MMLru {
     template <typename F>
     void withEvictionIterator(F&& f);
 
+    // Execute provided function under container lock.
+    template <typename F>
+    void withContainerLock(F&& f);
+
     // get copy of current config
     Config getConfig() const;
 

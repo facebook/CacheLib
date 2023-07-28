@@ -130,30 +130,40 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   RefcountWithFlags& operator=(const RefcountWithFlags&) = delete;
   RefcountWithFlags(RefcountWithFlags&&) = delete;
   RefcountWithFlags& operator=(RefcountWithFlags&&) = delete;
-
+  enum incResult { incOk, incFailedMoving, incFailedEviction };
   // Bumps up the reference count only if the new count will be strictly less
   // than or equal to the maxCount and the item is not exclusive
-  // @return true if refcount is bumped. false otherwise (if item is exclusive)
+  // @return incResult::incOk if refcount is bumped. The refcount is not bumped
+  //         if Exclusive bit is set and appropriate error code is returned.
+  //         incResult::incFailedMoving if item is moving (exclusive bit is set
+  //         and refcount > 0).
+  //         incResult::incFailedEviction if Item is evicted
+  //         (only exclusive bit is set).
   // @throw  exception::RefcountOverflow if new count would be greater than
   // maxCount
-  FOLLY_ALWAYS_INLINE bool incRef() {
-    auto predicate = [](const Value curValue) {
+  FOLLY_ALWAYS_INLINE incResult incRef() {
+    incResult res = incOk;
+    auto predicate = [&res](const Value curValue) {
       Value bitMask = getAdminRef<kExclusive>();
 
       const bool exlusiveBitIsSet = curValue & bitMask;
       if (UNLIKELY((curValue & kAccessRefMask) == (kAccessRefMask))) {
         throw exception::RefcountOverflow("Refcount maxed out.");
+      } else if (exlusiveBitIsSet) {
+        res = (curValue & kAccessRefMask) == 0 ? incFailedEviction
+                                               : incFailedMoving;
+        return false;
       }
-
-      // Check if the item is not marked for eviction
-      return !exlusiveBitIsSet || ((curValue & kAccessRefMask) != 0);
+      res = incOk;
+      return true;
     };
 
     auto newValue = [](const Value curValue) {
       return (curValue + static_cast<Value>(1));
     };
 
-    return atomicUpdateValue(predicate, newValue);
+    atomicUpdateValue(predicate, newValue);
+    return res;
   }
 
   // Bumps down the reference count
@@ -322,11 +332,19 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   bool markMoving() {
     Value linkedBitMask = getAdminRef<kLinked>();
     Value exclusiveBitMask = getAdminRef<kExclusive>();
+    Value isChainedItemFlag = getFlag<kIsChainedItem>();
 
-    auto predicate = [linkedBitMask, exclusiveBitMask](const Value curValue) {
+    auto predicate = [linkedBitMask, exclusiveBitMask,
+                      isChainedItemFlag](const Value curValue) {
       const bool unlinked = !(curValue & linkedBitMask);
       const bool alreadyExclusive = curValue & exclusiveBitMask;
+      const bool isChained = curValue & isChainedItemFlag;
 
+      // chained item can have ref count == 1, this just means it's linked in
+      // the chain
+      if ((curValue & kAccessRefMask) > isChained ? 1 : 0) {
+        return false;
+      }
       if (unlinked || alreadyExclusive) {
         return false;
       }

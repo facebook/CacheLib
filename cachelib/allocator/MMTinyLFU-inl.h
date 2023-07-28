@@ -228,6 +228,13 @@ void MMTinyLFU::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename F>
+void MMTinyLFU::Container<T, HookPtr>::withContainerLock(F&& fun) {
+  LockHolder l(lruMutex_);
+  fun();
+}
+
+template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   if (isTiny(node)) {
     lru_.getList(LruType::Tiny).remove(node);

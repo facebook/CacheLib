@@ -1349,7 +1349,7 @@ class CacheAllocator : public CacheBase {
 
  private:
   // wrapper around Item's refcount and active handle tracking
-  FOLLY_ALWAYS_INLINE bool incRef(Item& it);
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::incResult incRef(Item& it);
   FOLLY_ALWAYS_INLINE RefcountWithFlags::Value decRef(Item& it);
 
   // drops the refcount and if needed, frees the allocation back to the memory
@@ -1473,26 +1473,13 @@ class CacheAllocator : public CacheBase {
   // The parent handle parameter here is mainly used to find the
   // correct pool to allocate memory for this chained item
   //
-  // @param parent    handle to the cache item
+  // @param parent    the parent item
   // @param size      the size for the chained allocation
   //
   // @return    handle to the chained allocation
   // @throw     std::invalid_argument if the size requested is invalid or
   //            if the item is invalid
-  WriteHandle allocateChainedItemInternal(const ReadHandle& parent,
-                                          uint32_t size);
-
-  // Given an item and its parentKey, validate that the parentKey
-  // corresponds to an item that's the parent of the supplied item.
-  //
-  // @param item       item that we want to get the parent handle for
-  // @param parentKey  key of the item's parent
-  //
-  // @return  handle to the parent item if the validations pass
-  //          otherwise, an empty Handle is returned.
-  //
-  ReadHandle validateAndGetParentHandleForChainedMoveLocked(
-      const ChainedItem& item, const Key& parentKey);
+  WriteHandle allocateChainedItemInternal(const Item& parent, uint32_t size);
 
   // Given an existing item, allocate a new one for the
   // existing one to later be moved into.
@@ -1609,7 +1596,7 @@ class CacheAllocator : public CacheBase {
   // @param newParent the new parent for the chain
   //
   // @throw if any of the conditions for parent or newParent are not met.
-  void transferChainLocked(WriteHandle& parent, WriteHandle& newParent);
+  void transferChainLocked(Item& parent, WriteHandle& newParent);
 
   // replace a chained item in the existing chain. This needs to be called
   // with the chained item lock held exclusive
@@ -1622,6 +1609,24 @@ class CacheAllocator : public CacheBase {
   WriteHandle replaceChainedItemLocked(Item& oldItem,
                                        WriteHandle newItemHdl,
                                        const Item& parent);
+
+  //
+  // Performs the actual inplace replace - it is called from
+  // moveChainedItem and replaceChainedItemLocked
+  // must hold chainedItemLock
+  //
+  // @param oldItem  the item we are replacing in the chain
+  // @param newItem  the item we are replacing it with
+  // @param parent   the parent for the chain
+  // @param fromMove used to determine if the replaced was called from
+  //                 moveChainedItem - we avoid the handle destructor
+  //                 in this case.
+  //
+  // @return handle to the oldItem
+  void replaceInChainLocked(Item& oldItem,
+                            WriteHandle& newItemHdl,
+                            const Item& parent,
+                            bool fromMove);
 
   // Insert an item into MM container. The caller must hold a valid handle for
   // the item.
@@ -1731,6 +1736,19 @@ class CacheAllocator : public CacheBase {
 
   using EvictionIterator = typename MMContainer::LockedIterator;
 
+  // Wakes up waiters if there are any
+  //
+  // @param item    wakes waiters that are waiting on that item
+  // @param handle  handle to pass to the waiters
+  void wakeUpWaiters(Item& item, WriteHandle handle);
+
+  // Unmarks item as moving and wakes up any waiters waiting on that item
+  //
+  // @param item    wakes waiters that are waiting on that item
+  // @param handle  handle to pass to the waiters
+  typename RefcountWithFlags::Value unmarkMovingAndWakeUpWaiters(
+      Item& item, WriteHandle handle);
+
   // Deserializer CacheAllocatorMetadata and verify the version
   //
   // @param  deserializer   Deserializer object
@@ -1824,16 +1842,6 @@ class CacheAllocator : public CacheBase {
                           Item& item,
                           util::Throttler& throttler);
 
-  // "Move" (by copying) the content in this item to another memory
-  // location by invoking the move callback.
-  //
-  // @param item         old item to be moved elsewhere
-  // @param newItemHdl   handle of new item to be moved into
-  //
-  // @return    true  if the item has been moved
-  //            false if we have exhausted moving attempts
-  bool tryMovingForSlabRelease(Item& item, WriteHandle& newItemHdl);
-
   // Evict an item from access and mm containers and
   // ensure it is safe for freeing.
   //
@@ -1843,6 +1851,11 @@ class CacheAllocator : public CacheBase {
   void evictForSlabRelease(const SlabReleaseContext& ctx,
                            Item& item,
                            util::Throttler& throttler);
+
+  // Helper function to create PutToken
+  //
+  // @return valid token if the item should be written to NVM cache.
+  typename NvmCacheT::PutToken createPutToken(Item& item);
 
   // Helper function to evict a normal item for slab release
   //
@@ -2082,6 +2095,88 @@ class CacheAllocator : public CacheBase {
 
   // BEGIN private members
 
+  bool tryGetHandleWithWaitContextForMovingItem(Item& item,
+                                                WriteHandle& handle);
+
+  size_t wakeUpWaitersLocked(folly::StringPiece key, WriteHandle&& handle);
+
+  class MoveCtx {
+   public:
+    MoveCtx() {}
+
+    ~MoveCtx() {
+      // prevent any further enqueue to waiters
+      // Note: we don't need to hold locks since no one can enqueue
+      // after this point.
+      wakeUpWaiters();
+    }
+
+    // record the item handle. Upon destruction we will wake up the waiters
+    // and pass a clone of the handle to the callBack. By default we pass
+    // a null handle
+    void setItemHandle(WriteHandle _it) { it = std::move(_it); }
+
+    // enqueue a waiter into the waiter list
+    // @param  waiter       WaitContext
+    void addWaiter(std::shared_ptr<WaitContext<ReadHandle>> waiter) {
+      XDCHECK(waiter);
+      waiters.push_back(std::move(waiter));
+    }
+
+    size_t numWaiters() const { return waiters.size(); }
+
+   private:
+    // notify all pending waiters that are waiting for the fetch.
+    void wakeUpWaiters() {
+      bool refcountOverflowed = false;
+      for (auto& w : waiters) {
+        // If refcount overflowed earlier, then we will return miss to
+        // all subsequent waiters.
+        if (refcountOverflowed) {
+          w->set(WriteHandle{});
+          continue;
+        }
+
+        try {
+          w->set(it.clone());
+        } catch (const exception::RefcountOverflow&) {
+          // We'll return a miss to the user's pending read,
+          // so we should enqueue a delete via NvmCache.
+          // TODO: cache.remove(it);
+          refcountOverflowed = true;
+        }
+      }
+    }
+
+    WriteHandle it; // will be set when Context is being filled
+    std::vector<std::shared_ptr<WaitContext<ReadHandle>>> waiters; // list of
+                                                                   // waiters
+  };
+  using MoveMap =
+      folly::F14ValueMap<folly::StringPiece,
+                         std::unique_ptr<MoveCtx>,
+                         folly::HeterogeneousAccessHash<folly::StringPiece>>;
+
+  static size_t getShardForKey(folly::StringPiece key) {
+    return folly::Hash()(key) % kShards;
+  }
+
+  MoveMap& getMoveMapForShard(size_t shard) {
+    return movesMap_[shard].movesMap_;
+  }
+
+  MoveMap& getMoveMap(folly::StringPiece key) {
+    return getMoveMapForShard(getShardForKey(key));
+  }
+
+  std::unique_lock<std::mutex> getMoveLockForShard(size_t shard) {
+    return std::unique_lock<std::mutex>(moveLock_[shard].moveLock_);
+  }
+
+  std::unique_lock<std::mutex> getMoveLock(folly::StringPiece key) {
+    return getMoveLockForShard(getShardForKey(key));
+  }
+
   // Whether the memory allocator for this cache allocator was created on shared
   // memory. The hash table, chained item hash table etc is also created on
   // shared memory except for temporary shared memory mode when they're created
@@ -2174,6 +2269,22 @@ class CacheAllocator : public CacheBase {
   // mutex protecting the creation and destruction of workers poolRebalancer_,
   // poolResizer_, poolOptimizer_, memMonitor_, reaper_
   mutable std::mutex workersMutex_;
+
+  static constexpr size_t kShards = 8192; // TODO: need to define right value
+
+  struct MovesMapShard {
+    alignas(folly::hardware_destructive_interference_size) MoveMap movesMap_;
+  };
+
+  struct MoveLock {
+    alignas(folly::hardware_destructive_interference_size) std::mutex moveLock_;
+  };
+
+  // a map of all pending moves
+  std::vector<MovesMapShard> movesMap_;
+
+  // a map of move locks for each shard
+  std::vector<MoveLock> moveLock_;
 
   // time when the ram cache was first created
   const uint32_t cacheCreationTime_{0};

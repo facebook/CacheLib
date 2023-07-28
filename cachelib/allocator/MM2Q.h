@@ -502,6 +502,10 @@ class MM2Q {
     template <typename F>
     void withEvictionIterator(F&& f);
 
+    // Execute provided function under container lock.
+    template <typename F>
+    void withContainerLock(F&& f);
+
     // get the current config as a copy
     Config getConfig() const;
 

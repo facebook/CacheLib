@@ -309,7 +309,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   //
   // @return true on success, failure if item is marked as exclusive
   // @throw exception::RefcountOverflow on ref count overflow
-  FOLLY_ALWAYS_INLINE bool incRef() {
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::incResult incRef() {
     try {
       return ref_.incRef();
     } catch (exception::RefcountOverflow& e) {
