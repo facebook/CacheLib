@@ -36,13 +36,14 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 namespace {
+// The default threshold of small/large item is 32 bytes in thes test class.
 constexpr uint32_t kSmallItemMaxSize{32};
 
 struct HashedKeyHash {
   uint64_t operator()(HashedKey hk) const { return hk.keyHash(); }
 };
 
-class MockEngine final : public Engine {
+class MockEngine : public Engine {
  public:
   explicit MockEngine(std::string name = "",
                       MockDestructor* cb = nullptr,
@@ -125,6 +126,15 @@ class MockEngine final : public Engine {
     return std::make_pair(Status::NotFound, "");
   }
 
+  uint64_t estimateWriteSize(HashedKey hk, BufferView value) const override {
+    return defaultWriteSize_ == 0 ? hk.key().size() + value.size()
+                                  : defaultWriteSize_;
+  }
+
+  void setDefaultWriteSize(uint64_t defaultWriteSize) {
+    defaultWriteSize_ = defaultWriteSize;
+  }
+
   // Returns true if key found and can be actually evicted in the real world
   bool evict(HashedKey key) {
     auto itr = cache_.find(key);
@@ -146,6 +156,7 @@ class MockEngine final : public Engine {
   const DestructorCallback destructorCb_{};
   std::unordered_map<HashedKey, EntryType, HashedKeyHash> cache_;
   const uint64_t itemMaxSize_;
+  uint64_t defaultWriteSize_{0};
 };
 
 std::unique_ptr<JobScheduler> makeJobScheduler() {
@@ -810,6 +821,47 @@ TEST(Driver, EnginePairSetupErrors) {
     EXPECT_THROW(std::make_unique<Driver>(std::move(config)),
                  std::invalid_argument);
   }
+}
+
+// Test the functionality of estimate write size:
+// - Write size should be sent to different engine pairs accordingly to the
+// selection function.
+// - Write size should be estimated based on the size of the item in that
+// particular engine pair.
+TEST(Driver, EstimateWriteSize) {
+  BufferGen bg;
+  // A key that goes to engine pair 0.
+  const char key0[] = "key0";
+  auto smallValue0 = bg.gen(28);
+  auto largeValue0 = bg.gen(29);
+
+  // A key that goes to engine pair 1.
+  const char key1[] = "key";
+  auto smallValue1 = bg.gen(17);
+  auto largeValue1 = bg.gen(18);
+  auto ex = makeJobScheduler();
+
+  auto bh0 = std::make_unique<MockEngine>("bh 0", nullptr, 32);
+  bh0->setDefaultWriteSize(1);
+  auto bc0 = std::make_unique<MockEngine>("bc 0");
+  bc0->setDefaultWriteSize(2);
+  auto bh1 = std::make_unique<MockEngine>("bh 1", nullptr, 20);
+  bh1->setDefaultWriteSize(3);
+  auto bc1 = std::make_unique<MockEngine>("bc 1");
+  bc1->setDefaultWriteSize(4);
+
+  auto config = makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
+  auto p = makeEnginePair(config.scheduler.get(), std::move(bc1),
+                          std::move(bh1), 20);
+  config.enginePairs.push_back(std::move(p));
+  config.selector = [](HashedKey k) { return k.key().size() % 2; };
+
+  auto driver = std::make_unique<Driver>(std::move(config));
+
+  EXPECT_EQ(driver->estimateWriteSize(makeHK(key0), smallValue0.view()), 1);
+  EXPECT_EQ(driver->estimateWriteSize(makeHK(key0), largeValue0.view()), 2);
+  EXPECT_EQ(driver->estimateWriteSize(makeHK(key1), smallValue1.view()), 3);
+  EXPECT_EQ(driver->estimateWriteSize(makeHK(key1), largeValue1.view()), 4);
 }
 
 // Different comibnations of engine pairs.

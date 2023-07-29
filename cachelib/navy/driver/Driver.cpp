@@ -96,6 +96,10 @@ bool Driver::couldExist(HashedKey hk) {
   return enginePairs_[selectEnginePair(hk)].couldExist(hk);
 }
 
+uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
+  return enginePairs_[selectEnginePair(hk)].estimateWriteSize(hk, value);
+}
+
 Status Driver::insert(HashedKey key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};

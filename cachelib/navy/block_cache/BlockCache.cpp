@@ -159,7 +159,8 @@ std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
   return reinsertionConfig.getCustomPolicy();
 }
 
-uint32_t BlockCache::serializedSize(uint32_t keySize, uint32_t valueSize) {
+uint32_t BlockCache::serializedSize(uint32_t keySize,
+                                    uint32_t valueSize) const {
   uint32_t size = sizeof(EntryDesc) + keySize + valueSize;
   return powTwoAlign(size, allocAlignSize_);
 }
@@ -220,6 +221,10 @@ bool BlockCache::couldExist(HashedKey hk) {
     return false;
   }
   return true;
+}
+
+uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
+  return serializedSize(hk.key().size(), value.size());
 }
 
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {

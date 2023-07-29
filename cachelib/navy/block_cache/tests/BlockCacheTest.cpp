@@ -2216,6 +2216,39 @@ TEST(BlockCache, RandomAlloc) {
   EXPECT_LT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 1.2 / 4.0));
   EXPECT_LT(stddev, avg * 0.2);
 }
+
+// Test size alignment calculations on an alignment other than the default (512
+// on less than 2TB device size)
+TEST(BlockCache, SizeAndAlignment) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  // Make the device of 2TB so that we need 1024 bytes alignmetn on block cache.
+  const uint32_t alignSize = 1024;
+  auto device = std::make_unique<SizeMockDevice>(
+      alignSize * (static_cast<uint64_t>(1) << 32));
+  auto ex = makeJobScheduler();
+  // auto* exPtr = ex.get();
+  auto config = makeConfig(*ex, std::move(policy), *device);
+  config.numInMemBuffers = 9;
+
+  config.itemDestructorEnabled = true;
+  auto engine = makeEngine(std::move(config));
+  BufferGen bg;
+  auto smallValue = bg.gen(16);
+  EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, smallValue.view()),
+            alignSize);
+
+  // assumption: the item descriptor size is 24.
+  // Make an item at the size of 1024.
+  auto largeValue = bg.gen(alignSize - 24 - 3);
+  EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, largeValue.view()),
+            alignSize);
+
+  // Add one more byte and need 2*alignSize
+  auto hugeValue = bg.gen(alignSize - 24 - 3 + 1);
+  EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, hugeValue.view()),
+            alignSize * 2);
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

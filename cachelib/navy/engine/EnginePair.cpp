@@ -53,6 +53,10 @@ bool EnginePair::couldExist(HashedKey key) const {
   return couldExist;
 }
 
+uint64_t EnginePair::estimateWriteSize(HashedKey hk, BufferView value) const {
+  return select(hk, value).first.estimateWriteSize(hk, value);
+}
+
 Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
   lookupCount_.inc();
   Status status{Status::NotFound};

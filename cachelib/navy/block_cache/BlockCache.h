@@ -117,6 +117,9 @@ class BlockCache final : public Engine {
   // @return  false if the key definitely does not exist and true if it could.
   bool couldExist(HashedKey hk) override;
 
+  // Estimate the device write size if the item is written to BlockCache.
+  uint64_t estimateWriteSize(HashedKey hk, BufferView value) const override;
+
   // Inserts a key-value pair into BlockCache.
   //
   // @param hk      key to be inserted
@@ -233,7 +236,7 @@ class BlockCache final : public Engine {
   BlockCache(Config&& config, ValidConfigTag);
 
   // Entry disk size (with aux data and aligned)
-  uint32_t serializedSize(uint32_t keySize, uint32_t valueSize);
+  uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
 
   // Read and write are time consuming. It doesn't worth inlining them from
   // the performance point of view, but makes sense to track them for perf:

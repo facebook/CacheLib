@@ -62,6 +62,19 @@ class MockDevice : public Device {
  private:
   std::unique_ptr<Device> device_;
 };
+
+// a device that only provides getSize() for unit test to manipulate with device
+// sizes too large to be created from memory in size alignment calculation
+// tests.
+// If you need actual behavior, please use the above MockDevice class.
+class SizeMockDevice : public Device {
+ public:
+  explicit SizeMockDevice(uint64_t deviceSize) : Device(deviceSize) {}
+
+  bool writeImpl(uint64_t, uint32_t, const void*) override { return false; }
+  bool readImpl(uint64_t, uint32_t, void*) override { return false; }
+  void flushImpl() override {}
+};
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

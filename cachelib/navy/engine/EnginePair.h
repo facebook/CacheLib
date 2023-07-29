@@ -60,6 +60,10 @@ class EnginePair {
   // to skip the heavy lookup operation when key doesn't exist in the cache.
   bool couldExist(HashedKey key) const;
 
+  // (synchronous) Estimate the write size of the given parcel.
+  // This number can be useful for write rate throttling purpose.
+  uint64_t estimateWriteSize(HashedKey hk, BufferView value) const;
+
   // Schedule an insert.
   void scheduleInsert(HashedKey hk, BufferView value, InsertCallback cb);
 

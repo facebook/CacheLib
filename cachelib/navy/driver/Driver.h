@@ -158,6 +158,8 @@ class Driver final : public AbstractCache {
 
   void updateLookupStats(Status status) const;
   bool admissionTest(HashedKey hk, BufferView value) const;
+  // estimate the size written to device if the parcel is written.
+  uint64_t estimateWriteSize(HashedKey hk, BufferView value) const;
   size_t selectEnginePair(HashedKey hk) const;
 
   const uint32_t maxConcurrentInserts_{};
@@ -188,6 +190,7 @@ class Driver final : public AbstractCache {
   mutable AtomicCounter concurrentInserts_;
 
   FRIEND_TEST(Driver, MultiRecovery);
+  FRIEND_TEST(Driver, EstimateWriteSize);
 };
 } // namespace navy
 } // namespace cachelib

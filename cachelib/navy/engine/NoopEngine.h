@@ -29,6 +29,7 @@ class NoopEngine final : public Engine {
     return Status::Rejected;
   }
   bool couldExist(HashedKey) override { return false; }
+  uint64_t estimateWriteSize(HashedKey, BufferView) const override { return 0; }
   Status lookup(HashedKey /* hk */, Buffer& /* value */) override {
     return Status::NotFound;
   }

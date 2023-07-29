@@ -762,6 +762,35 @@ TEST(BigHash, RandomAlloc) {
   EXPECT_GT(succ_cnt, (size_t)((double)loopCnt * 0.8));
   EXPECT_LT(stddev, avg * 0.2);
 }
+
+// Make sure estimate write size always returns the bucket size.
+// Modify this test if we change the implementation.
+TEST(BigHash, EstimateWriteSize) {
+  {
+    uint32_t bucketSize = 2048;
+    BigHash::Config config;
+    setLayout(config, bucketSize, 4);
+    auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+    config.device = device.get();
+
+    BigHash bh(std::move(config));
+    EXPECT_EQ(bh.estimateWriteSize(makeHK("key"), makeView("12345")),
+              bucketSize);
+    EXPECT_EQ(bh.estimateWriteSize(makeHK("key2"), makeView("1")), bucketSize);
+  }
+  {
+    uint32_t bucketSize = 8192;
+    BigHash::Config config;
+    setLayout(config, bucketSize, 4);
+    auto device = std::make_unique<NiceMock<MockDevice>>(config.cacheSize, 128);
+    config.device = device.get();
+
+    BigHash bh(std::move(config));
+    EXPECT_EQ(bh.estimateWriteSize(makeHK("key3"), makeView("12345")),
+              bucketSize);
+    EXPECT_EQ(bh.estimateWriteSize(makeHK("key4"), makeView("1")), bucketSize);
+  }
+}
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

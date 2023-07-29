@@ -34,6 +34,10 @@ class Engine {
   // not exist.
   virtual bool couldExist(HashedKey hk) = 0;
 
+  // Returns the estimated write size for the given parcel if written to this
+  // engine.
+  virtual uint64_t estimateWriteSize(HashedKey hk, BufferView value) const = 0;
+
   // If insert is failed, previous item (if existed) is not affected and
   // remains available via lookup.
   virtual Status insert(HashedKey hk, BufferView value) = 0;

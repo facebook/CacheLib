@@ -370,6 +370,10 @@ bool BigHash::couldExist(HashedKey hk) {
   return canExist;
 }
 
+uint64_t BigHash::estimateWriteSize(HashedKey, BufferView) const {
+  return bucketSize_;
+}
+
 Status BigHash::lookup(HashedKey hk, Buffer& value) {
   const auto bid = getBucketId(hk);
   lookupCount_.inc();

@@ -96,6 +96,8 @@ class BigHash final : public Engine {
   // @return  false if the key definitely does not exist and true if it could.
   bool couldExist(HashedKey hk) override;
 
+  uint64_t estimateWriteSize(HashedKey, BufferView) const override;
+
   // Look up a key in BigHash. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
   // Buffer as "value" as any existing storage will be freed. If not found,
