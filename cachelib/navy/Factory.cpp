@@ -242,6 +242,10 @@ class CacheProtoImpl final : public CacheProto {
     config_.maxParcelMemory = limit;
   }
 
+  void setUseEstimatedWriteSize(bool useEstimatedWriteSize) override {
+    config_.useEstimatedWriteSize = useEstimatedWriteSize;
+  }
+
   void setDevice(std::unique_ptr<Device> device) override {
     config_.device = std::move(device);
   }

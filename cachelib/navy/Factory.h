@@ -133,6 +133,9 @@ class CacheProto {
   // key and value.
   virtual void setMaxParcelMemory(uint64_t limit) = 0;
 
+  // Set whether to use write size (instead of ) for admission policy.
+  virtual void setUseEstimatedWriteSize(bool useEstimatedWriteSize) = 0;
+
   // Sets device that engine will use.
   virtual void setDevice(std::unique_ptr<Device> device) = 0;
 

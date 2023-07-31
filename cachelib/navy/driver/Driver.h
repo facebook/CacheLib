@@ -53,6 +53,8 @@ class Driver final : public AbstractCache {
     uint64_t maxParcelMemory{256 << 20}; // 256MB
     size_t metadataSize{};
 
+    bool useEstimatedWriteSize{false};
+
     EnginePairSelector selector{};
 
     Config& validate();
@@ -165,6 +167,7 @@ class Driver final : public AbstractCache {
   const uint32_t maxConcurrentInserts_{};
   const uint64_t maxParcelMemory_{};
   const size_t metadataSize_{};
+  const bool useEstimatedWriteSize_;
 
   std::unique_ptr<Device> device_;
   std::unique_ptr<JobScheduler> scheduler_;

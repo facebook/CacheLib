@@ -506,6 +506,7 @@ class NavyConfig {
   // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
+  bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -576,6 +577,9 @@ class NavyConfig {
   void setMaxParcelMemoryMB(uint64_t maxParcelMemoryMB) noexcept {
     maxParcelMemoryMB_ = maxParcelMemoryMB;
   }
+  void setUseEstimatedWriteSize(bool useEstimatedWriteSize) noexcept {
+    useEstimatedWriteSize_ = useEstimatedWriteSize;
+  }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -633,6 +637,9 @@ class NavyConfig {
   // Once this is reached, requests will be rejected until the parcel
   // memory usage gets under the limit.
   uint64_t maxParcelMemoryMB_{256};
+  // Whether to use write size (instead of parcel size) for Navy admission
+  // policy.
+  bool useEstimatedWriteSize_{false};
 };
 } // namespace navy
 } // namespace cachelib

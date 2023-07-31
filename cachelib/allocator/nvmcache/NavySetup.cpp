@@ -352,6 +352,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   proto->setJobScheduler(createJobScheduler(config));
   proto->setMaxConcurrentInserts(config.getMaxConcurrentInserts());
   proto->setMaxParcelMemory(megabytesToBytes(config.getMaxParcelMemoryMB()));
+  proto->setUseEstimatedWriteSize(config.getUseEstimatedWriteSize());
   setAdmissionPolicy(config, *proto);
   proto->setExpiredCheck(checkExpired);
   proto->setDestructorCallback(destructorCb);

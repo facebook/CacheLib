@@ -855,6 +855,7 @@ TEST(Driver, EstimateWriteSize) {
                           std::move(bh1), 20);
   config.enginePairs.push_back(std::move(p));
   config.selector = [](HashedKey k) { return k.key().size() % 2; };
+  config.useEstimatedWriteSize = true;
 
   auto driver = std::make_unique<Driver>(std::move(config));
 

@@ -62,6 +62,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
     : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
+      useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
       selector_{std::move(config.selector)},
@@ -70,6 +71,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
   getRandomAllocDist = getDist(enginePairs_);
   XLOGF(INFO, "Max concurrent inserts: {}", maxConcurrentInserts_);
   XLOGF(INFO, "Max parcel memory: {}", maxParcelMemory_);
+  XLOGF(INFO, "Use Write Estimated Size: {}", useEstimatedWriteSize_);
 }
 
 Driver::~Driver() {
@@ -97,7 +99,9 @@ bool Driver::couldExist(HashedKey hk) {
 }
 
 uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
-  return enginePairs_[selectEnginePair(hk)].estimateWriteSize(hk, value);
+  return useEstimatedWriteSize_
+             ? enginePairs_[selectEnginePair(hk)].estimateWriteSize(hk, value)
+             : hk.key().size() + value.size();
 }
 
 Status Driver::insert(HashedKey key, BufferView value) {
@@ -124,7 +128,8 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   auto currParcelMemory = parcelMemory_.add_fetch(parcelSize);
   auto currConcurrentInserts = concurrentInserts_.add_fetch(1);
 
-  if (!admissionPolicy_ || admissionPolicy_->accept(hk, value)) {
+  if (!admissionPolicy_ ||
+      admissionPolicy_->accept(hk, value, estimateWriteSize(hk, value))) {
     if (currConcurrentInserts <= maxConcurrentInserts_) {
       if (currParcelMemory <= maxParcelMemory_) {
         acceptedCount_.inc();
