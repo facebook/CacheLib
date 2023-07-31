@@ -99,7 +99,9 @@ DynamicRandomAP::DynamicRandomAP(Config&& config, ValidConfigTag)
         kUpperBound_, kLowerBound_);
 }
 
-bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
+bool DynamicRandomAP::accept(HashedKey hk,
+                             BufferView value,
+                             uint64_t estimatedWriteSize) {
   const auto curTime = getSteadyClockSeconds();
   if (curTime - params_.updateTime >= updateInterval_) {
     // Lots of threads can get into this section. First to grab the lock will
@@ -109,7 +111,9 @@ bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
       updateThrottleParamsLocked(curTime);
     }
   }
-  uint64_t size = hk.key().size() + value.size();
+
+  uint64_t parcelSize = hk.key().size() + value.size();
+  uint64_t size = estimatedWriteSize == 0 ? parcelSize : estimatedWriteSize;
   if (fnBypass_ && fnBypass_(hk.key())) {
     bypassedBytes_.add(size);
     return true;
@@ -122,6 +126,7 @@ bool DynamicRandomAP::accept(HashedKey hk, BufferView value) {
   bool accepted = probability == 1 || genF(hk) < probability;
   if (accepted) {
     acceptedBytes_.add(size);
+    acceptedParcelBytes_.add(parcelSize);
   }
   return accepted;
 }
@@ -283,6 +288,10 @@ void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
           static_cast<double>(writeStats.acceptedRate));
   visitor("navy_ap_bypassed_rate",
           static_cast<double>(writeStats.bypassedRate));
+
+  visitor("navy_ap_accepted_parcel_bytes",
+          static_cast<double>(acceptedParcelBytes_.get()),
+          CounterVisitor::RATE);
 }
 } // namespace navy
 } // namespace cachelib

@@ -41,7 +41,9 @@ RejectRandomAP::RejectRandomAP(Config&& config, ValidConfigTag)
   XLOGF(INFO, "RejectRandomAP: probability {}", probability_);
 }
 
-bool RejectRandomAP::accept(HashedKey /* hk */, BufferView /* value */) {
+bool RejectRandomAP::accept(HashedKey /* hk */,
+                            BufferView /* value */,
+                            uint64_t /* writeSize */) {
   if (probability_ == 1) {
     // Code in the "else" block doesn't produce correct results for
     // probability 1. Return true explicitly.

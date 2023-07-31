@@ -49,7 +49,9 @@ class RejectRandomAP final : public AdmissionPolicy {
   ~RejectRandomAP() override = default;
 
   // See AdmissionPolicy
-  bool accept(HashedKey hk, BufferView value) override;
+  bool accept(HashedKey hk,
+              BufferView value,
+              uint64_t estimatedWriteSize = 0) override;
 
   // See AdmissionPolicy
   void reset() override {}

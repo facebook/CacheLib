@@ -27,8 +27,13 @@ class AdmissionPolicy {
  public:
   virtual ~AdmissionPolicy() = default;
 
-  // Returns false if insert should be ignored
-  virtual bool accept(HashedKey hk, BufferView value) = 0;
+  // Returns false if insert should be ignored.
+  // @param hk   HashedKey to be tested
+  // @param value  value to be tested.
+  // @param writeSize  estimated write size for device endurance purpose.
+  virtual bool accept(HashedKey hk,
+                      BufferView value,
+                      uint64_t estimatedWriteSize = 0) = 0;
 
   // Reset policy to the initial state
   virtual void reset() = 0;
