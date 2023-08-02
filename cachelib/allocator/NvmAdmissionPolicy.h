@@ -86,7 +86,7 @@ class NvmAdmissionPolicy {
     std::unordered_map<std::string, double> ctrs;
     util::CounterVisitor visitor{[&ctrs](folly::StringPiece k, double v) {
       auto keyStr = k.str();
-      ctrs.insert({std::move(keyStr), v});
+      ctrs.try_emplace(std::move(keyStr), v);
     }};
     getCounters(visitor);
     return ctrs;
