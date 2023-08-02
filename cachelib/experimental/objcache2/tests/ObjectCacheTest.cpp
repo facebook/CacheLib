@@ -384,10 +384,6 @@ class ObjectCacheTest : public ::testing::Test {
     foo->c = 3;
 
     int ttlSecs = 2;
-    // test bad API call
-    ASSERT_THROW(objcache->insertOrReplace(
-                     "Foo", std::move(std::make_unique<Foo>()), ttlSecs),
-                 std::invalid_argument);
 
     objcache->insertOrReplace("Foo", std::move(foo), 0 /*object size*/,
                               ttlSecs);

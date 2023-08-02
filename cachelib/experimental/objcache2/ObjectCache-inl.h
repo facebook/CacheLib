@@ -195,9 +195,10 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   }
 
   if (!config_.objectSizeTrackingEnabled && objectSize != 0) {
-    throw std::invalid_argument(
-        "Object size tracking is not enabled but object size is set. Are you "
-        "trying to set TTL?");
+    XLOGF_EVERY_MS(
+        WARN, 60'000,
+        "Object size tracking is not enabled but object size is set to be {}.",
+        objectSize);
   }
 
   inserts_.inc();
