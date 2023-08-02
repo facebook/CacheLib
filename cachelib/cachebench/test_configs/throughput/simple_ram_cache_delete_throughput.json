@@ -1,0 +1,35 @@
+// Ran this setup on devbig
+// == Throughput for  ==
+// Total Ops : 480.00 million
+// Total sets: 0
+// get       :         0/s, success   :   0.00%
+// couldExist:         0/s, success   :   0.00%
+// set       :         0/s, success   :   0.00%
+// del       : 12,457,759/s, found     :   0.00%
+
+{
+  "cache_config" : {
+    "cacheSizeMB" : 5120,
+    "poolRebalanceIntervalSec" : 0
+  },
+  "test_config" :
+    {
+
+      "numOps" : 10000000,
+      "numThreads" : 48,
+      "numKeys" : 1,
+
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "valSizeRange" : [1, 102400],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.0,
+      "setRatio" : 0.0,
+      "delRatio" : 1.0,
+      "addChainedRatio" : 0.0
+    }
+
+}
