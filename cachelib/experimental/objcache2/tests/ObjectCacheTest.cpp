@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <folly/Benchmark.h>
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
@@ -634,6 +635,7 @@ class ObjectCacheTest : public ::testing::Test {
     ThreadMemoryTracker tMemTracker;
     auto memUsage1 = tMemTracker.getMemUsageBytes();
     auto objectCopy = std::make_unique<T>(*object);
+    folly::doNotOptimizeAway(objectCopy);
     auto memUsage2 = tMemTracker.getMemUsageBytes();
 
     EXPECT_EQ(memUsage2 - memUsage1, objcache.template getObjectSize(object));
