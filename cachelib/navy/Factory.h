@@ -228,6 +228,27 @@ std::unique_ptr<Device> createFileDevice(
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize);
 
+// Creates a direct IO single file device.
+//
+// @param fileName              name of the file
+// @param singleFileSize        size of the file
+// @param truncateFile          whether to truncate the file
+// @param blockSize             device block size
+// @param numIoThreads          the number of IO threads. If 0 and EventBase is
+//                              not available, IOs will be fall back to sync IO
+// @param qDeptherThread        queue depth per each IO thread
+// @param encryptor             encryption object
+// @param maxDeviceWriteSize    device maximum granularity of writes
+std::unique_ptr<Device> createAsyncFileDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    bool truncateFile,
+    uint32_t blockSize,
+    uint32_t numIoThreads,
+    uint32_t qDepthPerThread,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

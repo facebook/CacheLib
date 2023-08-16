@@ -42,6 +42,11 @@ inline std::chrono::microseconds toMicros(std::chrono::nanoseconds t) {
   return std::chrono::duration_cast<std::chrono::microseconds>(t);
 }
 
+template <typename T>
+inline std::chrono::milliseconds toMillis(T t) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(t);
+}
+
 inline size_t powTwoAlign(size_t size, size_t boundary) {
   XDCHECK(folly::isPowTwo(boundary)) << boundary;
   return (size + (boundary - 1)) & ~(boundary - 1);

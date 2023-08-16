@@ -28,6 +28,12 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+void reportIOError(const char* opName,
+                   uint64_t offset,
+                   uint32_t size,
+                   ssize_t ioRet);
+
 class DeviceEncryptor {
  public:
   virtual ~DeviceEncryptor() = default;
@@ -144,7 +150,7 @@ class Device {
   uint64_t getBytesRead() const { return bytesRead_.get(); }
 
   // Export device stats via CounterVisitor
-  void getCounters(const CounterVisitor& visitor) const;
+  virtual void getCounters(const CounterVisitor& visitor) const;
 
   // Returns the size of the device. All IO operations must be from [0, size)
   uint64_t getSize() const { return size_; }

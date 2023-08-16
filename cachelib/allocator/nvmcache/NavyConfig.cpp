@@ -63,7 +63,17 @@ RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
   return *this;
 }
 
-// file settings
+// device settings
+void NavyConfig::setIoThreads(unsigned int numIoThreads,
+                              unsigned int qDepthPerThread) {
+  if (usesRaidFiles()) {
+    throw std::invalid_argument(
+        "AsyncDevice is not yet supported for RAID files");
+  }
+  numIoThreads_ = numIoThreads;
+  qDepthPerThread_ = qDepthPerThread;
+}
+
 void NavyConfig::setSimpleFile(const std::string& fileName,
                                uint64_t fileSize,
                                bool truncateFile) {
@@ -219,6 +229,9 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::navyReqOrderingShards"] =
       folly::to<std::string>(navyReqOrderingShards_);
 
+  configMap["navyConfig::numIoThreads"] = folly::to<std::string>(numIoThreads_);
+  configMap["navyConfig::QDepthPerThread"] =
+      folly::to<std::string>(qDepthPerThread_);
   // Other settings
   configMap["navyConfig::maxConcurrentInserts"] =
       folly::to<std::string>(maxConcurrentInserts_);

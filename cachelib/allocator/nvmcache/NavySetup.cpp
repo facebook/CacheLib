@@ -324,6 +324,18 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         std::move(encryptor),
         maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
   } else if (config.usesSimpleFile()) {
+    if (config.getNumIoThreads() > 0) {
+      return cachelib::navy::createAsyncFileDevice(
+          config.getFileName(),
+          config.getFileSize(),
+          config.getTruncateFile(),
+          blockSize,
+          config.getNumIoThreads(),
+          config.getQDepthPerThread(),
+          std::move(encryptor),
+          maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize)
+                                 : 0);
+    }
     return cachelib::navy::createFileDevice(
         config.getFileName(),
         config.getFileSize(),

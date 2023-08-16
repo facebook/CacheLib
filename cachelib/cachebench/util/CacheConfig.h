@@ -184,6 +184,10 @@ struct CacheConfig : public JSONConfig {
   // number of asynchronous worker thread for navy write operation,
   uint32_t navyWriterThreads{32};
 
+  uint32_t navyNumIoThreads{0};
+
+  uint32_t navyQDepthPerThread{1024};
+
   // buffer of clean regions to be maintained free to ensure writes
   // into navy don't queue behind a reclaim of region.
   uint32_t navyCleanRegions{1};

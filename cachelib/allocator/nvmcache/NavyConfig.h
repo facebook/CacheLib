@@ -478,6 +478,8 @@ class NavyConfig {
   const RandomAPConfig& randomAdmPolicy() const { return randomAPConfig_; }
 
   // ============ Device settings =============
+  unsigned int getNumIoThreads() const { return numIoThreads_; }
+  unsigned int getQDepthPerThread() const { return qDepthPerThread_; }
   uint64_t getBlockSize() const { return blockSize_; }
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
@@ -520,6 +522,12 @@ class NavyConfig {
   RandomAPConfig& enableRandomAdmPolicy();
 
   // ============ Device settings =============
+  // Set the number of IO threads and queue depth per thread.
+  // If set, AsyncDevice instead of Device will be created with given
+  // configurations. For now, AsyncDevice is not supported for RAID.
+  void setIoThreads(unsigned int numIoThreads, unsigned int qDepthPerThread);
+
+  // Set the device block size, i.e., minimum unit of IO
   void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
   // Set the parameters for a simple file.
   // @throw std::invalid_argument if RAID files have been already set.
@@ -629,6 +637,10 @@ class NavyConfig {
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
+  // Number of IO threads for AsyncDevice.
+  unsigned int numIoThreads_{0};
+  // Number of queue depth per thread for AsyncDevice.
+  unsigned int qDepthPerThread_{64};
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
   // 0 means unlimited.

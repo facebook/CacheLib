@@ -25,8 +25,18 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-namespace {
 
+void reportIOError(const char* opName,
+                   uint64_t offset,
+                   uint32_t size,
+                   ssize_t ioRet) {
+  XLOG_EVERY_N_THREAD(
+      ERR, 1000,
+      folly::sformat("IO error: {} offset={} size={} ret={} errno={} ({})",
+                     opName, offset, size, ioRet, errno, std::strerror(errno)));
+}
+
+namespace {
 using IOOperation =
     std::function<ssize_t(int fd, void* buf, size_t count, off_t offset)>;
 
@@ -63,17 +73,6 @@ class FileDevice final : public Device {
   }
 
   void flushImpl() override { ::fsync(file_.fd()); }
-
-  void reportIOError(const char* opName,
-                     uint64_t offset,
-                     uint32_t size,
-                     ssize_t ioRet) {
-    XLOG_EVERY_N_THREAD(
-        ERR, 1000,
-        folly::sformat("IO error: {} offset={} size={} ret={} errno={} ({})",
-                       opName, offset, size, ioRet, errno,
-                       std::strerror(errno)));
-  }
 
   const folly::File file_{};
 };

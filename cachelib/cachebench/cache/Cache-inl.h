@@ -212,6 +212,10 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
 
+    if (config_.navyNumIoThreads > 0) {
+      nvmConfig.navyConfig.setIoThreads(config_.navyNumIoThreads,
+                                        config_.navyQDepthPerThread);
+    }
     nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
                                                    config_.navyWriterThreads);
 

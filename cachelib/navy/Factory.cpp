@@ -27,6 +27,7 @@
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/LruPolicy.h"
+#include "cachelib/navy/common/AsyncDevice.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -492,6 +493,27 @@ std::unique_ptr<Device> createFileDevice(
   }
   return createDirectIoFileDevice(std::move(f), singleFileSize, blockSize,
                                   std::move(encryptor), maxDeviceWriteSize);
+}
+
+std::unique_ptr<Device> createAsyncFileDevice(
+    std::string fileName,
+    uint64_t singleFileSize,
+    bool truncateFile,
+    uint32_t blockSize,
+    uint32_t numIoThreads,
+    uint32_t qDepthPerThread,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  folly::File f;
+  try {
+    f = openCacheFile(fileName, singleFileSize, truncateFile);
+  } catch (const std::exception& e) {
+    XLOG(ERR) << "Exception in openCacheFile: " << e.what();
+    throw;
+  }
+  return createAsyncIoFileDevice(std::move(f), singleFileSize, blockSize,
+                                 numIoThreads, qDepthPerThread,
+                                 std::move(encryptor), maxDeviceWriteSize);
 }
 
 } // namespace navy
