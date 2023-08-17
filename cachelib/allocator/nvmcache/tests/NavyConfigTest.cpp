@@ -185,6 +185,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
   expectedConfigMap["navyConfig::numIoThreads"] = "0";
   expectedConfigMap["navyConfig::QDepthPerThread"] = "64";
+  expectedConfigMap["navyConfig::enableIoUring"] = "true";
 
   expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";

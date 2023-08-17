@@ -503,7 +503,8 @@ std::unique_ptr<Device> createAsyncFileDevice(
     uint32_t numIoThreads,
     uint32_t qDepthPerThread,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize) {
+    uint32_t maxDeviceWriteSize,
+    bool enableIoUring) {
   folly::File f;
   try {
     f = openCacheFile(fileName, singleFileSize, truncateFile);
@@ -511,9 +512,9 @@ std::unique_ptr<Device> createAsyncFileDevice(
     XLOG(ERR) << "Exception in openCacheFile: " << e.what();
     throw;
   }
-  return createAsyncIoFileDevice(std::move(f), singleFileSize, blockSize,
-                                 numIoThreads, qDepthPerThread,
-                                 std::move(encryptor), maxDeviceWriteSize);
+  return createAsyncIoFileDevice(
+      std::move(f), singleFileSize, blockSize, numIoThreads, qDepthPerThread,
+      std::move(encryptor), maxDeviceWriteSize, enableIoUring);
 }
 
 } // namespace navy

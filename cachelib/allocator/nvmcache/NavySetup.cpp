@@ -333,8 +333,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
           config.getNumIoThreads(),
           config.getQDepthPerThread(),
           std::move(encryptor),
-          maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize)
-                                 : 0);
+          maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0,
+          config.getEnableIoUring());
     }
     return cachelib::navy::createFileDevice(
         config.getFileName(),

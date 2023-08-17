@@ -478,6 +478,7 @@ class NavyConfig {
   const RandomAPConfig& randomAdmPolicy() const { return randomAPConfig_; }
 
   // ============ Device settings =============
+  bool getEnableIoUring() const { return enableIoUring_; }
   unsigned int getNumIoThreads() const { return numIoThreads_; }
   unsigned int getQDepthPerThread() const { return qDepthPerThread_; }
   uint64_t getBlockSize() const { return blockSize_; }
@@ -526,6 +527,11 @@ class NavyConfig {
   // If set, AsyncDevice instead of Device will be created with given
   // configurations. For now, AsyncDevice is not supported for RAID.
   void setIoThreads(unsigned int numIoThreads, unsigned int qDepthPerThread);
+
+  // Enable io_uring engine; applicable for AsyncDevice only
+  void setEnableIoUring(bool enableIoUring) noexcept {
+    enableIoUring_ = enableIoUring;
+  }
 
   // Set the device block size, i.e., minimum unit of IO
   void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
@@ -621,6 +627,13 @@ class NavyConfig {
   // This is only used when in-mem buffer is enabled.
   uint32_t deviceMaxWriteSize_{};
 
+  // Number of IO threads for AsyncDevice.
+  unsigned int numIoThreads_{0};
+  // Number of queue depth per thread for AsyncDevice.
+  unsigned int qDepthPerThread_{64};
+  // Enable io_uring
+  bool enableIoUring_{true};
+
   // ============ Engines settings =============
   // Currently we support one pair of engines.
   std::vector<EnginesConfig> enginesConfigs_{1};
@@ -637,10 +650,6 @@ class NavyConfig {
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
-  // Number of IO threads for AsyncDevice.
-  unsigned int numIoThreads_{0};
-  // Number of queue depth per thread for AsyncDevice.
-  unsigned int qDepthPerThread_{64};
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
   // 0 means unlimited.

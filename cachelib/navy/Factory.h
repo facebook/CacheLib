@@ -247,7 +247,8 @@ std::unique_ptr<Device> createAsyncFileDevice(
     uint32_t numIoThreads,
     uint32_t qDepthPerThread,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize);
+    uint32_t maxDeviceWriteSize,
+    bool enableIoUring);
 
 } // namespace navy
 } // namespace cachelib

@@ -46,14 +46,16 @@ namespace navy {
 using folly::fibers::TimedMutex;
 
 // Forward declarations
-struct UringIoContext;
+struct IoContext;
 
 // IO timeout in milliseconds (1s)
 static constexpr size_t kIOTimeoutMs = 1000;
 
 // Data structure to hold the info about an IO operation.
-struct UringOp {
+struct AsyncRequest {
   enum { INVALID = 0, READ, WRITE };
+
+  explicit AsyncRequest(folly::AsyncBaseOp* op) : op_(op) {}
 
   const char* getOpName() {
     switch (opType_) {
@@ -67,23 +69,9 @@ struct UringOp {
     return "unknown";
   }
 
-  void waitCompletion() {
-    baton_.wait();
+  void waitCompletion();
 
-    auto curTime = getSteadyClock();
-    auto delayMs = toMillis(curTime - startTime_).count();
-    if (delayMs > static_cast<int64_t>(kIOTimeoutMs)) {
-      XLOG_N_PER_MS(ERR, 10, 1000) << fmt::format(
-          "IO {} timeout {}ms (comp +{}ms notify +{}ms)", toString(), delayMs,
-          toMillis(compTime_ - startTime_).count(),
-          toMillis(curTime - compTime_).count());
-    }
-  }
-
-  void notifyResult(bool result) {
-    result_ = result;
-    baton_.post();
-  }
+  void notifyResult(bool result);
 
   std::string toString() {
     return fmt::format("{} offset {} size {} resubmitted {} result {}",
@@ -102,45 +90,53 @@ struct UringOp {
   };
   bool result_ = false;
 
+  IoContext* context_ = nullptr;
   folly::fibers::Baton baton_;
-  folly::IoUringOp uringOp_;
+  std::unique_ptr<folly::AsyncBaseOp> op_;
+
   std::chrono::nanoseconds startTime_;
+  std::chrono::nanoseconds submitTime_;
   std::chrono::nanoseconds compTime_;
 };
 
 // Async IO handler to handle the events happened on IO_Uring.
 class CompletionHandler : public folly::EventHandler {
  public:
-  CompletionHandler(UringIoContext& ioContext,
-                    folly::EventBase* evb,
-                    int pollFd)
+  CompletionHandler(IoContext& ioContext, folly::EventBase* evb, int pollFd)
       : folly::EventHandler(evb, folly::NetworkSocket::fromFd(pollFd)),
         ioContext_(ioContext) {
     registerHandler(EventHandler::READ | EventHandler::PERSIST);
   }
 
+  ~CompletionHandler() override { unregisterHandler(); }
+
   void handlerReady(uint16_t /*events*/) noexcept override;
 
  private:
-  UringIoContext& ioContext_;
+  IoContext& ioContext_;
 };
 
 // A single block device can be accessed from multiple threads, so we keep a
 // per-thread context.
-struct UringIoContext {
+struct IoContext {
  public:
-  UringIoContext(size_t id, int fd, folly::EventBase* evb, size_t capacity)
-      : id_(id),
+  IoContext(std::unique_ptr<folly::AsyncBase>&& asyncBase,
+            size_t id,
+            int fd,
+            folly::EventBase* evb,
+            size_t capacity)
+      : asyncBase_(std::move(asyncBase)),
+        id_(id),
         fd_(fd),
         qDepth_(capacity),
-        ioUring_(capacity, folly::IoUring::PollMode::POLLABLE, capacity),
-        compHandler_(*this, evb, ioUring_.pollFd()) {}
+        compHandler_(*this, evb, asyncBase_->pollFd()) {}
+  virtual ~IoContext() {}
 
   std::string getName() { return fmt::format("ctx {}", id_); }
   // Invoked by event loop handler whenever AIO signals that one or more
   // operation have finished.
   void pollCompletion();
-  void submitUringReq(UringOp* req);
+  void submitReq(AsyncRequest* req);
 
  private:
   static constexpr size_t kQueueTimeOutMs = 2000;
@@ -154,10 +150,10 @@ struct UringIoContext {
 
   using WaiterList = folly::SafeIntrusiveList<Waiter, &Waiter::hook_>;
 
+  std::unique_ptr<folly::AsyncBase> asyncBase_;
   const size_t id_;
   const int fd_;
   const size_t qDepth_;
-  folly::IoUring ioUring_;
   CompletionHandler compHandler_;
 
   // The IO operations that have been submit but not completed yet.
@@ -177,14 +173,17 @@ class AsyncDevice : public Device {
               uint32_t numThreads,
               uint32_t qDepthPerThread,
               std::shared_ptr<DeviceEncryptor> encryptor,
-              uint32_t maxDeviceWriteSize);
+              uint32_t maxDeviceWriteSize,
+              bool useIoUring);
   AsyncDevice(const AsyncDevice&) = delete;
   AsyncDevice& operator=(const AsyncDevice&) = delete;
 
   void getCounters(const CounterVisitor& visitor) const override;
 
+  std::shared_ptr<AsyncRequest> getRequest();
+
  private:
-  UringIoContext* getTLContext();
+  IoContext* getTLContext();
 
   NavyThread& getNextWorker() { return *workers_[(numOps_++) % numThreads_]; }
 
@@ -215,7 +214,7 @@ class AsyncDevice : public Device {
   }
 
   // return completed sync or not
-  bool submitUringReq(std::shared_ptr<UringOp> req);
+  bool submitReq(std::shared_ptr<AsyncRequest> req);
 
   const folly::File file_{};
   uint32_t numThreads_;
@@ -225,13 +224,15 @@ class AsyncDevice : public Device {
   // create the queue depth of an IO_Uring.
   const uint32_t qDepthPerThread_;
 
+  const bool useIoUring_;
+
   // Atomic index used to assign unique context ID
   std::atomic<uint32_t> incrementalIdx_{0};
   // Thread-local context, created on demand
-  folly::ThreadLocalPtr<UringIoContext> tlContext_;
+  folly::ThreadLocalPtr<IoContext> tlContext_;
   // Keep list of contexts pointer for debugging
   TimedMutex mutex_;
-  std::vector<UringIoContext*> uringContexts_;
+  std::vector<IoContext*> uringContexts_;
   // NavyThread pool used for submitting IO requests and handling IO
   // completion events.
   std::vector<std::unique_ptr<NavyThread>> workers_;
@@ -244,17 +245,37 @@ class AsyncDevice : public Device {
 };
 
 /*
- * UringOp
+ * AsyncRequest
  */
 
-void UringOp::done() {
-  XDCHECK_EQ(uringOp_.state(), folly::AsyncIOOp::State::COMPLETED);
+void AsyncRequest::waitCompletion() {
+  baton_.wait();
+
+  auto curTime = getSteadyClock();
+  auto delayMs = toMillis(curTime - startTime_).count();
+  if (delayMs > static_cast<int64_t>(kIOTimeoutMs)) {
+    XLOG_N_PER_MS(ERR, 10, 1000) << fmt::format(
+        "[{}] IO {} timeout {}ms (submit +{}ms comp +{}ms notify +{}ms)",
+        context_ ? context_->getName() : "NA", toString(), delayMs,
+        toMillis(submitTime_ - startTime_).count(),
+        toMillis(compTime_ - submitTime_).count(),
+        toMillis(curTime - compTime_).count());
+  }
+}
+
+void AsyncRequest::notifyResult(bool result) {
+  result_ = result;
+  baton_.post();
+}
+
+void AsyncRequest::done() {
+  XDCHECK_EQ(op_->state(), folly::AsyncIOOp::State::COMPLETED);
   XDCHECK(opType_ == READ || opType_ == WRITE);
 
-  if (uringOp_.result() == size_) {
+  if (op_->result() == size_) {
     notifyResult(true);
   } else {
-    reportIOError(getOpName(), offset_, size_, uringOp_.result());
+    reportIOError(getOpName(), offset_, size_, op_->result());
     notifyResult(false);
   }
 }
@@ -267,31 +288,34 @@ void CompletionHandler::handlerReady(uint16_t /*events*/) noexcept {
 }
 
 /*
- * UringIoContext
+ * IoContext
  */
 
-void UringIoContext::pollCompletion() {
-  auto completed = ioUring_.pollCompleted();
+void IoContext::pollCompletion() {
+  auto completed = asyncBase_->pollCompleted();
   for (auto& op : completed) {
-    auto uringOp = reinterpret_cast<UringOp*>(op->getUserData());
-    XDCHECK(uringOp);
+    auto ioReq = reinterpret_cast<AsyncRequest*>(op->getUserData());
+    XDCHECK(ioReq);
 
     XDCHECK_GE(numOutstanding_, 0u);
     numOutstanding_--;
     numCompleted_++;
 
     // handle retry
-    if (uringOp->uringOp_.result() == -EAGAIN &&
-        uringOp->resubmitted_ < kRetryLimit) {
-      uringOp->resubmitted_++;
-      XLOG_EVERY_N_THREAD(ERR, 1000)
-          << fmt::format("[{}] resubmitting IO ({}) {}", getName(),
-                         uringOp->resubmitted_, uringOp->toString());
-      uringOp->uringOp_.reset();
-      submitUringReq(uringOp);
+    if (ioReq->op_->result() == -EAGAIN && ioReq->resubmitted_ < kRetryLimit) {
+      ioReq->resubmitted_++;
+      XLOG_EVERY_N_THREAD(ERR, 1000) << fmt::format(
+          "[{}] resubmitting IO {}", getName(), ioReq->toString());
+      ioReq->op_->reset();
+      submitReq(ioReq);
     } else {
-      uringOp->compTime_ = getSteadyClock();
-      uringOp->done();
+      if (ioReq->resubmitted_ > 0) {
+        XLOG_EVERY_N_THREAD(ERR, 1000)
+            << fmt::format("[{}] resubmitted IO completed ({}) {}", getName(),
+                           ioReq->op_->result(), ioReq->toString());
+      }
+      ioReq->compTime_ = getSteadyClock();
+      ioReq->done();
     }
 
     if (!waitList_.empty()) {
@@ -302,7 +326,9 @@ void UringIoContext::pollCompletion() {
   }
 }
 
-void UringIoContext::submitUringReq(UringOp* req) {
+void IoContext::submitReq(AsyncRequest* req) {
+  req->context_ = this;
+
   while (numOutstanding_ >= qDepth_) {
     XLOG_EVERY_MS(ERR, 1000) << fmt::format(
         "[{}] the number of outstanding requests {} exceeds the limit {}",
@@ -314,17 +340,17 @@ void UringIoContext::submitUringReq(UringOp* req) {
 
   req->startTime_ = getSteadyClock();
 
-  if (req->opType_ == UringOp::READ) {
-    req->uringOp_.setUserData(req);
-    req->uringOp_.pread(fd_, req->readData_, req->size_, req->offset_);
+  if (req->opType_ == AsyncRequest::READ) {
+    req->op_->setUserData(req);
+    req->op_->pread(fd_, req->readData_, req->size_, req->offset_);
   } else {
-    XDCHECK_EQ(req->opType_, UringOp::WRITE);
-    req->uringOp_.setUserData(req);
-    req->uringOp_.pwrite(fd_, req->writeData_, req->size_, req->offset_);
+    XDCHECK_EQ(req->opType_, AsyncRequest::WRITE);
+    req->op_->setUserData(req);
+    req->op_->pwrite(fd_, req->writeData_, req->size_, req->offset_);
   }
-  auto op = &req->uringOp_;
 
-  ioUring_.submit(op);
+  asyncBase_->submit(req->op_.get());
+  req->submitTime_ = getSteadyClock();
   numOutstanding_++;
   numSubmitted_++;
 }
@@ -338,16 +364,19 @@ AsyncDevice::AsyncDevice(folly::File file,
                          uint32_t numThreads,
                          uint32_t qDepthPerThread,
                          std::shared_ptr<DeviceEncryptor> encryptor,
-                         uint32_t maxDeviceWriteSize)
-    : Device{size, std::move(encryptor), blockSize, maxDeviceWriteSize},
-      file_{std::move(file)},
-      numThreads_{numThreads},
-      blockSize_{blockSize},
-      qDepthPerThread_{qDepthPerThread} {
+                         uint32_t maxDeviceWriteSize,
+                         bool useIoUring)
+    : Device(size, std::move(encryptor), blockSize, maxDeviceWriteSize),
+      file_(std::move(file)),
+      numThreads_(numThreads),
+      blockSize_(blockSize),
+      qDepthPerThread_(qDepthPerThread),
+      useIoUring_(useIoUring) {
   XLOGF(INFO,
         "Creating async device with block size {} "
-        "max outstanding requests {} number of threads {}",
-        blockSize_, qDepthPerThread_, numThreads);
+        "max outstanding requests {} number of threads {} io engine {}",
+        blockSize_, qDepthPerThread_, numThreads,
+        useIoUring_ ? "io_uring" : "libaio");
   XDCHECK_GT(blockSize_, 0u);
   XDCHECK_GT(qDepthPerThread_, 0u);
 
@@ -366,63 +395,72 @@ void AsyncDevice::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::COUNT);
 }
 
+std::shared_ptr<AsyncRequest> AsyncDevice::getRequest() {
+  if (useIoUring_) {
+    return std::make_shared<AsyncRequest>(new folly::IoUringOp());
+  }
+
+  return std::make_shared<AsyncRequest>(new folly::AsyncIOOp());
+}
+
 bool AsyncDevice::readImpl(uint64_t offset, uint32_t length, void* value) {
-  auto req = std::make_shared<UringOp>();
-  req->opType_ = UringOp::READ;
+  auto req = getRequest();
+
+  req->opType_ = AsyncRequest::READ;
   req->offset_ = offset;
   req->size_ = length;
   req->readData_ = value;
 
-  if (!submitUringReq(req)) {
+  if (!submitReq(req)) {
     req->waitCompletion();
   }
   return req->result_;
 }
 
 bool AsyncDevice::writeImpl(uint64_t offset, uint32_t size, const void* value) {
-  auto req = std::make_shared<UringOp>();
-  req->opType_ = UringOp::WRITE;
+  auto req = getRequest();
+  req->opType_ = AsyncRequest::WRITE;
   req->offset_ = offset;
   req->size_ = size;
   req->writeData_ = value;
 
-  if (!submitUringReq(req)) {
+  if (!submitReq(req)) {
     req->waitCompletion();
   }
   return req->result_;
 }
 
-bool AsyncDevice::submitUringReq(std::shared_ptr<UringOp> req) {
+bool AsyncDevice::submitReq(std::shared_ptr<AsyncRequest> req) {
   if (numThreads_ > 0) {
     // delegate to the IO thread pool
     getNextWorker().addTaskRemote([this, req]() mutable {
       auto ctx = getTLContext();
       XDCHECK(ctx);
-      ctx->submitUringReq(req.get());
+      ctx->submitReq(req.get());
     });
     return false;
   }
 
-  // Try to get the UringIoContext if we are on the event base thread
+  // Try to get the IoContext if we are on the event base thread
   // (e.g., NavyThread)
   auto ctx = getTLContext();
   if (ctx) {
-    ctx->submitUringReq(req.get());
+    ctx->submitReq(req.get());
     return false;
   }
 
   // Fallback to sync for legacy path (e.g., IOs for persistence/recovery
   // from the main thread)
-  if (req->opType_ == UringOp::READ) {
+  if (req->opType_ == AsyncRequest::READ) {
     req->result_ = readSync(req->offset_, req->size_, req->readData_);
   } else {
-    XDCHECK_EQ(req->opType_, UringOp::WRITE);
+    XDCHECK_EQ(req->opType_, AsyncRequest::WRITE);
     req->result_ = writeSync(req->offset_, req->size_, req->writeData_);
   }
   return true;
 }
 
-UringIoContext* AsyncDevice::getTLContext() {
+IoContext* AsyncDevice::getTLContext() {
   if (!tlContext_) {
     // Create new context if on event base thread
     auto evb = EventBaseManager::get()->getExistingEventBase();
@@ -430,8 +468,19 @@ UringIoContext* AsyncDevice::getTLContext() {
       return nullptr;
     }
     auto idx = incrementalIdx_++;
-    tlContext_.reset(
-        new UringIoContext(idx, file_.fd(), evb, qDepthPerThread_));
+
+    std::unique_ptr<folly::AsyncBase> asyncBase;
+    if (useIoUring_) {
+      asyncBase = make_unique<folly::IoUring>(
+          qDepthPerThread_, folly::IoUring::PollMode::POLLABLE,
+          qDepthPerThread_);
+    } else {
+      asyncBase = std::make_unique<folly::AsyncIO>(
+          qDepthPerThread_, folly::IoUring::PollMode::POLLABLE);
+    }
+
+    tlContext_.reset(new IoContext(std::move(asyncBase), idx, file_.fd(), evb,
+                                   qDepthPerThread_));
 
     {
       std::lock_guard<TimedMutex> lock{mutex_};
@@ -450,7 +499,8 @@ std::unique_ptr<Device> createAsyncIoFileDevice(
     uint32_t numIoThreads,
     uint32_t qDepthPerThread,
     std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize) {
+    uint32_t maxDeviceWriteSize,
+    bool enableIoUring) {
   XDCHECK(folly::isPowTwo(blockSize));
   return std::make_unique<AsyncDevice>(std::move(f),
                                        size,
@@ -458,7 +508,8 @@ std::unique_ptr<Device> createAsyncIoFileDevice(
                                        numIoThreads,
                                        qDepthPerThread,
                                        encryptor,
-                                       maxDeviceWriteSize);
+                                       maxDeviceWriteSize,
+                                       enableIoUring);
 }
 
 } // namespace navy

@@ -232,6 +232,7 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::numIoThreads"] = folly::to<std::string>(numIoThreads_);
   configMap["navyConfig::QDepthPerThread"] =
       folly::to<std::string>(qDepthPerThread_);
+  configMap["navyConfig::enableIoUring"] = enableIoUring_ ? "true" : "false";
   // Other settings
   configMap["navyConfig::maxConcurrentInserts"] =
       folly::to<std::string>(maxConcurrentInserts_);
