@@ -28,7 +28,7 @@
 #ifdef CACHEBENCH_FB_ENV
 #include "cachelib/cachebench/facebook/FbDep.h"
 #include "cachelib/cachebench/facebook/fb303/FB303ThriftServer.h"
-#include "cachelib/cachebench/facebook/odsl_exporter/OdslExporter.h"
+#include "cachelib/facebook/odsl_exporter/OdslExporter.h"
 #include "common/init/Init.h"
 #else
 #include <folly/init/Init.h>
@@ -113,6 +113,7 @@ bool checkArgsValidity() {
 }
 
 int main(int argc, char** argv) {
+  using namespace facebook::cachelib;
   using namespace facebook::cachelib::cachebench;
 
 #ifdef CACHEBENCH_FB_ENV
@@ -124,10 +125,10 @@ int main(int argc, char** argv) {
   CacheBenchConfig config(FLAGS_json_test_config,
                           customizeCacheConfigForFacebook,
                           customizeStressorConfigForFacebook);
-  std::unique_ptr<OdslExporter> odslExporter_;
+  std::unique_ptr<util::OdslExporter> odslExporter_;
   std::unique_ptr<FB303ThriftService> fb303_;
   if (FLAGS_fb303_port == 0 && FLAGS_export_to_ods) {
-    odslExporter_ = std::make_unique<OdslExporter>();
+    odslExporter_ = std::make_unique<util::OdslExporter>(kCachebenchCacheName);
   } else if (FLAGS_fb303_port > 0) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }

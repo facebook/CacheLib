@@ -49,6 +49,8 @@ DECLARE_string(report_ac_memory_usage_stats);
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
+constexpr folly::StringPiece kCachebenchCacheName = "cachebench";
+
 // An admission policy that rejects items that was last accessed more than
 // X seconds ago. This is useful to simulate workloads where we provide a
 // retention (soft) guarantee.

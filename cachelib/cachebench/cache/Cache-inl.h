@@ -258,7 +258,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     allocatorConfig_.setNvmAdmissionMinTTL(config_.memoryOnlyTTL);
   }
 
-  allocatorConfig_.cacheName = "cachebench";
+  allocatorConfig_.cacheName = kCachebenchCacheName;
 
   bool isRecovered = false;
   if (!allocatorConfig_.cacheDir.empty()) {
