@@ -27,7 +27,7 @@
 #include "cachelib/navy/block_cache/BlockCache.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/LruPolicy.h"
-#include "cachelib/navy/common/AsyncDevice.h"
+#include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/driver/Driver.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -441,23 +441,25 @@ std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto) {
   return std::move(dynamic_cast<CacheProtoImpl&>(*proto)).create();
 }
 
-std::unique_ptr<Device> createRAIDDevice(
-    std::vector<std::string> raidPaths,
+std::unique_ptr<Device> createFileDevice(
+    std::vector<std::string> filePaths,
     uint64_t fdSize,
     bool truncateFile,
     uint32_t blockSize,
     uint32_t stripeSize,
-    std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize) {
+    uint32_t maxDeviceWriteSize,
+    IoEngine ioEngine,
+    uint32_t qDepth,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   // File paths are opened in the increasing order of the
   // path string. This ensures that RAID0 stripes aren't
   // out of order even if the caller changes the order of
   // the file paths. We can recover the cache as long as all
   // the paths are specified, regardless of the order.
 
-  std::sort(raidPaths.begin(), raidPaths.end());
+  std::sort(filePaths.begin(), filePaths.end());
   std::vector<folly::File> fileVec;
-  for (const auto& path : raidPaths) {
+  for (const auto& path : filePaths) {
     folly::File f;
     try {
       f = openCacheFile(path, fdSize, truncateFile);
@@ -469,52 +471,14 @@ std::unique_ptr<Device> createRAIDDevice(
     fileVec.push_back(std::move(f));
   }
 
-  return createDirectIoRAID0Device(std::move(fileVec),
-                                   fdSize,
-                                   blockSize,
-                                   stripeSize,
-                                   std::move(encryptor),
-                                   maxDeviceWriteSize);
-}
-
-std::unique_ptr<Device> createFileDevice(
-    std::string fileName,
-    uint64_t singleFileSize,
-    bool truncateFile,
-    uint32_t blockSize,
-    std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize) {
-  folly::File f;
-  try {
-    f = openCacheFile(fileName, singleFileSize, truncateFile);
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in openCacheFile: " << e.what();
-    throw;
-  }
-  return createDirectIoFileDevice(std::move(f), singleFileSize, blockSize,
-                                  std::move(encryptor), maxDeviceWriteSize);
-}
-
-std::unique_ptr<Device> createAsyncFileDevice(
-    std::string fileName,
-    uint64_t singleFileSize,
-    bool truncateFile,
-    uint32_t blockSize,
-    uint32_t numIoThreads,
-    uint32_t qDepthPerThread,
-    std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize,
-    bool enableIoUring) {
-  folly::File f;
-  try {
-    f = openCacheFile(fileName, singleFileSize, truncateFile);
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in openCacheFile: " << e.what();
-    throw;
-  }
-  return createAsyncIoFileDevice(
-      std::move(f), singleFileSize, blockSize, numIoThreads, qDepthPerThread,
-      std::move(encryptor), maxDeviceWriteSize, enableIoUring);
+  return createDirectIoFileDevice(std::move(fileVec),
+                                  fdSize,
+                                  blockSize,
+                                  stripeSize,
+                                  maxDeviceWriteSize,
+                                  ioEngine,
+                                  qDepth,
+                                  std::move(encryptor));
 }
 
 } // namespace navy

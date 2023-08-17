@@ -212,10 +212,12 @@ Cache<Allocator>::Cache(const CacheConfig& config,
 
     nvmConfig.navyConfig.setMaxParcelMemoryMB(config_.navyParcelMemoryMB);
 
-    if (config_.navyNumIoThreads > 0) {
-      nvmConfig.navyConfig.setIoThreads(config_.navyNumIoThreads,
-                                        config_.navyQDepthPerThread);
+    // Enable async IO if qdepth is greater than 0
+    if (config_.navyQDepth > 0) {
+      nvmConfig.navyConfig.enableAsyncIo(config_.navyQDepth,
+                                         config_.navyEnableIoUring);
     }
+
     nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
                                                    config_.navyWriterThreads);
 

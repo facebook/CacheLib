@@ -312,37 +312,28 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   auto blockSize = config.getBlockSize();
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
+  if (config.usesRaidFiles() || config.usesSimpleFile()) {
+    auto stripeSize = 0;
+    auto fileSize = config.getFileSize();
+    std::vector<std::string> filePaths;
+    if (config.usesSimpleFile()) {
+      filePaths.emplace_back(config.getFileName());
+    } else {
+      stripeSize = getRegionSize(config);
+      filePaths = config.getRaidPaths();
+      fileSize = alignDown(fileSize, stripeSize);
+    }
 
-  if (config.usesRaidFiles()) {
-    auto stripeSize = getRegionSize(config);
-    return cachelib::navy::createRAIDDevice(
-        config.getRaidPaths(),
-        alignDown(config.getFileSize(), stripeSize),
+    return cachelib::navy::createFileDevice(
+        filePaths,
+        fileSize,
         config.getTruncateFile(),
         blockSize,
         stripeSize,
-        std::move(encryptor),
-        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
-  } else if (config.usesSimpleFile()) {
-    if (config.getNumIoThreads() > 0) {
-      return cachelib::navy::createAsyncFileDevice(
-          config.getFileName(),
-          config.getFileSize(),
-          config.getTruncateFile(),
-          blockSize,
-          config.getNumIoThreads(),
-          config.getQDepthPerThread(),
-          std::move(encryptor),
-          maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0,
-          config.getEnableIoUring());
-    }
-    return cachelib::navy::createFileDevice(
-        config.getFileName(),
-        config.getFileSize(),
-        config.getTruncateFile(),
-        blockSize,
-        std::move(encryptor),
-        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
+        maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0,
+        config.getIoEngine(),
+        config.getQDepth(),
+        std::move(encryptor));
   } else {
     return cachelib::navy::createMemoryDevice(config.getFileSize(),
                                               std::move(encryptor), blockSize);

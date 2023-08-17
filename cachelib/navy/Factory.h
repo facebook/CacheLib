@@ -194,61 +194,28 @@ std::unique_ptr<CacheProto> createCacheProto();
 // @param proto   cache object prototype
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
 
-// Creates a direct IO RAID0 Device.
+// Creates a direct IO file device.
+// RAID0 with given stripe size is applied if multiple files are provided
 //
-// @param raidPaths             paths of RAID files
-// @param fdsize                size of each device in the RAID
+// @param filePaths             name(s) of the file(s)
+// @param fileSize              size of the file(s)
 // @param truncateFile          whether to truncate the file
 // @param blockSize             device block size
-// @param stripeSize            RAID stripe size
-// @param encryptor             encryption object
+// @param stripeSize            RAID stripe size if applicable
 // @param maxDeviceWriteSize    device maximum granularity of writes
-std::unique_ptr<Device> createRAIDDevice(
-    std::vector<std::string> raidPaths,
-    uint64_t fdsize,
+// @param ioEngine              IoEngine to be used for IO
+// @param qDepth                queue depth for async IO; 0 for sync IO
+// @param encryptor             encryption object
+std::unique_ptr<Device> createFileDevice(
+    std::vector<std::string> filePaths,
+    uint64_t fileSize,
     bool truncateFile,
     uint32_t blockSize,
     uint32_t stripeSize,
-    std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize);
-
-// Creates a direct IO single file device.
-//
-// @param fileName              name of the file
-// @param singleFileSize        size of the file
-// @param truncateFile          whether to truncate the file
-// @param blockSize             device block size
-// @param encryptor             encryption object
-// @param maxDeviceWriteSize    device maximum granularity of writes
-std::unique_ptr<Device> createFileDevice(
-    std::string fileName,
-    uint64_t singleFileSize,
-    bool truncateFile,
-    uint32_t blockSize,
-    std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize);
-
-// Creates a direct IO single file device.
-//
-// @param fileName              name of the file
-// @param singleFileSize        size of the file
-// @param truncateFile          whether to truncate the file
-// @param blockSize             device block size
-// @param numIoThreads          the number of IO threads. If 0 and EventBase is
-//                              not available, IOs will be fall back to sync IO
-// @param qDeptherThread        queue depth per each IO thread
-// @param encryptor             encryption object
-// @param maxDeviceWriteSize    device maximum granularity of writes
-std::unique_ptr<Device> createAsyncFileDevice(
-    std::string fileName,
-    uint64_t singleFileSize,
-    bool truncateFile,
-    uint32_t blockSize,
-    uint32_t numIoThreads,
-    uint32_t qDepthPerThread,
-    std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t maxDeviceWriteSize,
-    bool enableIoUring);
+    IoEngine ioEngine,
+    uint32_t qDepth,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor);
 
 } // namespace navy
 } // namespace cachelib

@@ -233,6 +233,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // 20MB block cache 0.
     cfg.blockCache().setSize(20 * 1024 * 1024);
     navy::EnginesConfig pair1;
+    pair1.blockCache().setRegionSize(4 * 1024 * 1024);
     // Second bighash: 5 pct, 640 threshold.
     pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
     cfg.addEnginePair(std::move(pair1));
@@ -252,6 +253,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // 20MB block cache 0.
     cfg.blockCache().setSize(20 * 1024 * 1024);
     navy::EnginesConfig pair1;
+    pair1.blockCache().setRegionSize(4 * 1024 * 1024);
     // Second bighash: 5 pct, 640 threshold.
     pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
     cfg.addEnginePair(std::move(pair1));
@@ -269,6 +271,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // 20MB block cache 0.
     cfg.blockCache().setSize(20 * 1024 * 1024);
     navy::EnginesConfig pair1;
+    pair1.blockCache().setRegionSize(4 * 1024 * 1024);
     // Second bighash: 5 pct, 640 threshold.
     pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
     cfg.addEnginePair(std::move(pair1));
@@ -284,6 +287,7 @@ TEST(NavySetupTest, EnginesSetup) {
     // 20MB block cache 0.
     cfg.blockCache().setSize(20 * 1024 * 1024);
     navy::EnginesConfig pair1;
+    pair1.blockCache().setRegionSize(4 * 1024 * 1024);
     // Second bighash: 5 pct, 640 threshold.
     pair1.bigHash().setSizePctAndMaxItemSize(5, 640);
     // Will throw. Set size for the second block cache.

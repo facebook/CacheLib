@@ -199,14 +199,50 @@ TEST(Device, Stats) {
   device.getCounters({toCallback(visitor)});
 }
 
-TEST(Device, MaxWriteSize) {
+struct DeviceParamTest
+    : public testing::TestWithParam<std::tuple<IoEngine, int>> {
+  DeviceParamTest()
+      : ioEngine_(std::get<0>(GetParam())), qDepth_(std::get<1>(GetParam())) {
+    XLOGF(INFO, "DeviceParamTest: ioEngine={}, qDepth={}",
+          getIoEngineName(ioEngine_), qDepth_);
+  }
+
+ protected:
+  std::shared_ptr<Device> createFileDevice(
+      std::vector<folly::File> fVec,
+      uint64_t fileSize,
+      uint32_t blockSize,
+      uint32_t stripeSize,
+      uint32_t maxDeviceWriteSize,
+      std::shared_ptr<DeviceEncryptor> encryptor) {
+    device_ = createDirectIoFileDevice(std::move(fVec),
+                                       fileSize,
+                                       blockSize,
+                                       stripeSize,
+                                       maxDeviceWriteSize,
+                                       ioEngine_,
+                                       qDepth_,
+                                       std::move(encryptor));
+    return device_;
+  }
+
+  std::shared_ptr<Device> getDevice() const { return device_; }
+
+  IoEngine ioEngine_;
+  uint32_t qDepth_;
+  std::shared_ptr<Device> device_;
+};
+
+TEST_P(DeviceParamTest, MaxWriteSize) {
   auto filePath = folly::sformat("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());
 
   int deviceSize = 16 * 1024;
   int ioAlignSize = 1024;
-  folly::File f = folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU);
-  auto device = createDirectIoFileDevice(
-      std::move(f), deviceSize, ioAlignSize, nullptr, 1024);
+  std::vector<folly::File> fVec;
+  fVec.emplace_back(folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU));
+
+  auto device = createFileDevice(std::move(fVec), deviceSize, ioAlignSize,
+                                 ioAlignSize, 1024, nullptr);
   uint32_t bufSize = 4 * 1024;
   Buffer wbuf = device->makeIOBuffer(bufSize);
   Buffer rbuf = device->makeIOBuffer(bufSize);
@@ -231,7 +267,7 @@ TEST(Device, MaxWriteSize) {
   device->getCounters({toCallback(visitor)});
 }
 
-TEST(Device, RAID0IO) {
+TEST_P(DeviceParamTest, RAID0IO) {
   auto filePath = folly::sformat("/tmp/DEVICE_RAID0IO_TEST-{}", ::getpid());
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
@@ -251,12 +287,12 @@ TEST(Device, RAID0IO) {
     fvec.push_back(std::move(f));
   }
   auto vecSize = fvec.size();
-  auto device = createDirectIoRAID0Device(std::move(fvec),
-                                          size,
-                                          ioAlignSize,
-                                          stripeSize,
-                                          nullptr /* encryption */,
-                                          0 /* max device write size */);
+  auto device = createFileDevice(std::move(fvec),
+                                 size,
+                                 ioAlignSize,
+                                 stripeSize,
+                                 0 /* max device write size */,
+                                 nullptr /* encryption */);
 
   EXPECT_EQ(vecSize * size, device->getSize());
 
@@ -314,7 +350,7 @@ TEST(Device, RAID0IO) {
   }
 }
 
-TEST(Device, RAID0IOAlignment) {
+TEST_P(DeviceParamTest, RAID0IOAlignment) {
   // The goal of this test is to ensure we cannot create a RAID0 device
   // if each individual device is not aligned to stripe size. This is to
   // test against a bug that was uncovered in T68874972.
@@ -340,14 +376,22 @@ TEST(Device, RAID0IOAlignment) {
   // Update individual device size to something smaller but the overall size
   // of all the devices is still aligned on stripe size.
   size = 2 * 1024 * 1024 + stripeSize / fvec.size();
-  ASSERT_THROW(createDirectIoRAID0Device(std::move(fvec),
-                                         size,
-                                         ioAlignSize,
-                                         stripeSize,
-                                         nullptr /* encryption */,
-                                         0 /* max device write size */),
+  ASSERT_THROW(createFileDevice(std::move(fvec),
+                                size,
+                                ioAlignSize,
+                                stripeSize,
+                                0 /* max device write size */,
+                                nullptr /* encryption */),
                std::invalid_argument);
 }
+
+INSTANTIATE_TEST_SUITE_P(DeviceParamTestSuite,
+                         DeviceParamTest,
+                         testing::Values(std::make_tuple(IoEngine::Sync, 0),
+                                         std::make_tuple(IoEngine::LibAio, 1),
+                                         std::make_tuple(IoEngine::IoUring,
+                                                         1)));
+
 } // namespace tests
 } // namespace navy
 } // namespace cachelib

@@ -43,6 +43,8 @@ const uint64_t deviceMetadataSize = 1024 * 1024 * 1024;
 const uint64_t fileSize = 10 * 1024 * 1024;
 const bool truncateFile = false;
 const uint32_t deviceMaxWriteSize = 4 * 1024 * 1024;
+const navy::IoEngine ioEngine = navy::IoEngine::IoUring;
+const unsigned int qDepth = 64;
 
 // BlockCache settings
 const uint32_t blockCacheRegionSize = 16 * 1024 * 1024;
@@ -87,6 +89,7 @@ void setDeviceTestSettings(NavyConfig& config) {
   config.setRaidFiles(raidPaths, fileSize, truncateFile);
   config.setDeviceMetadataSize(deviceMetadataSize);
   config.setDeviceMaxWriteSize(deviceMaxWriteSize);
+  config.enableAsyncIo(qDepth, ioEngine == navy::IoEngine::IoUring);
 }
 
 void setBlockCacheTestSettings(NavyConfig& config) {
@@ -183,9 +186,8 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::fileSize"] = "10485760";
   expectedConfigMap["navyConfig::truncateFile"] = "false";
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
-  expectedConfigMap["navyConfig::numIoThreads"] = "0";
-  expectedConfigMap["navyConfig::QDepthPerThread"] = "64";
-  expectedConfigMap["navyConfig::enableIoUring"] = "true";
+  expectedConfigMap["navyConfig::ioEngine"] = "io_uring";
+  expectedConfigMap["navyConfig::QDepth"] = "64";
 
   expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";
@@ -245,30 +247,47 @@ TEST(NavyConfigTest, AdmissionPolicy) {
 }
 
 TEST(NavyConfigTest, Device) {
-  NavyConfig config1{};
-  config1.setBlockSize(blockSize);
-  config1.setDeviceMetadataSize(deviceMetadataSize);
-  EXPECT_EQ(config1.getBlockSize(), blockSize);
-  EXPECT_EQ(config1.getDeviceMetadataSize(), deviceMetadataSize);
+  {
+    NavyConfig config{};
+    config.setBlockSize(blockSize);
+    config.setDeviceMetadataSize(deviceMetadataSize);
+    EXPECT_EQ(config.getBlockSize(), blockSize);
+    EXPECT_EQ(config.getDeviceMetadataSize(), deviceMetadataSize);
 
-  // set simple file
-  config1.setSimpleFile(fileName, fileSize, truncateFile);
-  EXPECT_EQ(config1.getFileName(), fileName);
-  EXPECT_EQ(config1.getFileSize(), fileSize);
-  EXPECT_EQ(config1.getTruncateFile(), truncateFile);
-  EXPECT_THROW(config1.setRaidFiles(raidPaths, fileSize, truncateFile),
-               std::invalid_argument);
+    // set simple file
+    config.setSimpleFile(fileName, fileSize, truncateFile);
+    EXPECT_EQ(config.getFileName(), fileName);
+    EXPECT_EQ(config.getFileSize(), fileSize);
+    EXPECT_EQ(config.getTruncateFile(), truncateFile);
+    EXPECT_THROW(config.setRaidFiles(raidPaths, fileSize, truncateFile),
+                 std::invalid_argument);
+  }
 
-  // set RAID files
-  NavyConfig config2{};
-  EXPECT_THROW(config2.setRaidFiles(raidPathsInvalid, fileSize, truncateFile),
-               std::invalid_argument);
-  config2.setRaidFiles(raidPaths, fileSize, truncateFile);
-  EXPECT_EQ(config2.getRaidPaths(), raidPaths);
-  EXPECT_EQ(config2.getFileSize(), fileSize);
-  EXPECT_EQ(config1.getTruncateFile(), truncateFile);
-  EXPECT_THROW(config2.setSimpleFile(fileName, fileSize, truncateFile),
-               std::invalid_argument);
+  {
+    // set RAID files
+    NavyConfig config{};
+    EXPECT_THROW(config.setRaidFiles(raidPathsInvalid, fileSize, truncateFile),
+                 std::invalid_argument);
+    config.setRaidFiles(raidPaths, fileSize, truncateFile);
+    EXPECT_EQ(config.getRaidPaths(), raidPaths);
+    EXPECT_EQ(config.getFileSize(), fileSize);
+    EXPECT_EQ(config.getTruncateFile(), truncateFile);
+    EXPECT_THROW(config.setSimpleFile(fileName, fileSize, truncateFile),
+                 std::invalid_argument);
+  }
+  {
+    // set io engines
+    NavyConfig config{};
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::Sync);
+    EXPECT_EQ(config.getQDepth(), 0);
+    EXPECT_THROW(config.enableAsyncIo(0, false), std::invalid_argument);
+    EXPECT_THROW(config.enableAsyncIo(0, true), std::invalid_argument);
+    config.enableAsyncIo(1, false);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::LibAio);
+    config.enableAsyncIo(64, true);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::IoUring);
+    EXPECT_EQ(config.getQDepth(), 64);
+  }
 }
 
 TEST(NavyConfigTest, BlockCache) {

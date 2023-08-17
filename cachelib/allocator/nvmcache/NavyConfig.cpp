@@ -64,14 +64,13 @@ RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
 }
 
 // device settings
-void NavyConfig::setIoThreads(unsigned int numIoThreads,
-                              unsigned int qDepthPerThread) {
-  if (usesRaidFiles()) {
+void NavyConfig::enableAsyncIo(unsigned int qDepth, bool enableIoUring) {
+  if (qDepth == 0) {
     throw std::invalid_argument(
-        "AsyncDevice is not yet supported for RAID files");
+        folly::sformat("qdepth {} should be >=1 to use async IO", qDepth));
   }
-  numIoThreads_ = numIoThreads;
-  qDepthPerThread_ = qDepthPerThread;
+  ioEngine_ = enableIoUring ? IoEngine::IoUring : IoEngine::LibAio;
+  qDepth_ = qDepth;
 }
 
 void NavyConfig::setSimpleFile(const std::string& fileName,
@@ -220,6 +219,8 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::truncateFile"] = truncateFile_ ? "true" : "false";
   configMap["navyConfig::deviceMaxWriteSize"] =
       folly::to<std::string>(deviceMaxWriteSize_);
+  configMap["navyConfig::ioEngine"] = getIoEngineName(ioEngine_).str();
+  configMap["navyConfig::QDepth"] = folly::to<std::string>(qDepth_);
 
   // Job scheduler settings
   configMap["navyConfig::readerThreads"] =
@@ -229,10 +230,6 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::navyReqOrderingShards"] =
       folly::to<std::string>(navyReqOrderingShards_);
 
-  configMap["navyConfig::numIoThreads"] = folly::to<std::string>(numIoThreads_);
-  configMap["navyConfig::QDepthPerThread"] =
-      folly::to<std::string>(qDepthPerThread_);
-  configMap["navyConfig::enableIoUring"] = enableIoUring_ ? "true" : "false";
   // Other settings
   configMap["navyConfig::maxConcurrentInserts"] =
       folly::to<std::string>(maxConcurrentInserts_);

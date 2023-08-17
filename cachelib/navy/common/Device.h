@@ -19,6 +19,7 @@
 #include <folly/File.h>
 #include <folly/io/IOBuf.h>
 
+#include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/common/Buffer.h"
@@ -28,11 +29,6 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
-
-void reportIOError(const char* opName,
-                   uint64_t offset,
-                   uint32_t size,
-                   ssize_t ioRet);
 
 class DeviceEncryptor {
  public:
@@ -150,7 +146,7 @@ class Device {
   uint64_t getBytesRead() const { return bytesRead_.get(); }
 
   // Export device stats via CounterVisitor
-  virtual void getCounters(const CounterVisitor& visitor) const;
+  void getCounters(const CounterVisitor& visitor) const;
 
   // Returns the size of the device. All IO operations must be from [0, size)
   uint64_t getSize() const { return size_; }
@@ -197,19 +193,6 @@ class Device {
   static constexpr uint32_t kDefaultAlignmentSize{1};
 };
 
-std::unique_ptr<Device> createDirectIoFileDevice(
-    folly::File f,
-    uint64_t size,
-    uint32_t ioAlignSize,
-    std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize);
-std::unique_ptr<Device> createDirectIoRAID0Device(
-    std::vector<folly::File> fVec,
-    uint64_t size, // size of each device in the RAID
-    uint32_t ioAlignSize,
-    uint32_t stripeSize,
-    std::shared_ptr<DeviceEncryptor> encryptor,
-    uint32_t maxDeviceWriteSize);
 // Default ioAlignSize size for Memory Device is 1. In our tests, we create
 // Devices with different ioAlignSize sizes using memory device. So we need
 // a way to set a different ioAlignSize size for memory devices.
@@ -217,6 +200,47 @@ std::unique_ptr<Device> createMemoryDevice(
     uint64_t size,
     std::shared_ptr<DeviceEncryptor> encryptor,
     uint32_t ioAlignSize = 1);
+
+// Creates a direct IO file device supporting RAID if multiple files are
+// provided. If qDepth = 0, sync IO will be used all the time
+//
+// @param fVec                  vector of file descriptor(s)
+// @param fileSize              size of the file(s)
+// @param blockSize             device block size
+// @param stripeSize            RAID stripe size if applicable
+// @param maxDeviceWriteSize    device maximum granularity of writes
+// @param numIoThreads          the number of IO threads. If 0 and EventBase is
+//                              not available, IOs will be fall back to sync IO
+// @param ioEngine              IO engine to be used
+// @param qDepth                queue depth per each IO thread.
+//                              If 0, sync IO will be used
+// @param encryptor             encryption object
+std::unique_ptr<Device> createDirectIoFileDevice(
+    std::vector<folly::File> fVec,
+    uint64_t fileSize,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    uint32_t maxDeviceWriteSize,
+    IoEngine ioEngine,
+    uint32_t qDepth,
+    std::shared_ptr<DeviceEncryptor> encryptor);
+
+// A convenient wrapper for creating Device with a sync IO
+//
+// @param fVec                  vector of file descriptor(s)
+// @param fileSize              size of the file(s)
+// @param blockSize             device block size
+// @param stripeSize            RAID stripe size if applicable
+// @param maxDeviceWriteSize    device maximum granularity of writes
+// @param encryptor             encryption object
+std::unique_ptr<Device> createDirectIoFileDevice(
+    std::vector<folly::File> fVec,
+    uint64_t fileSize,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    uint32_t maxDeviceWriteSize,
+    std::shared_ptr<DeviceEncryptor> encryptor);
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

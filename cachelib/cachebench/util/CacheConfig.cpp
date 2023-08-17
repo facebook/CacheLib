@@ -74,8 +74,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyProbabilityReinsertionThreshold);
   JSONSetVal(configJson, navyReaderThreads);
   JSONSetVal(configJson, navyWriterThreads);
-  JSONSetVal(configJson, navyNumIoThreads);
-  JSONSetVal(configJson, navyQDepthPerThread);
+  JSONSetVal(configJson, navyQDepth);
+  JSONSetVal(configJson, navyEnableIoUring);
   JSONSetVal(configJson, navyCleanRegions);
   JSONSetVal(configJson, navyAdmissionWriteRateMB);
   JSONSetVal(configJson, navyMaxConcurrentInserts);
