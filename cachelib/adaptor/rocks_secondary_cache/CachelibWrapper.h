@@ -105,19 +105,19 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
 
   const char* Name() const override { return "RocksCachelibWrapper"; }
 
-  rocksdb::Status Insert(
-      const rocksdb::Slice& key,
-      void* value,
-      const rocksdb::Cache::CacheItemHelper* helper) override;
+  rocksdb::Status Insert(const rocksdb::Slice& key,
+                         void* value,
+                         const rocksdb::Cache::CacheItemHelper* helper
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
+                         ,
+                         bool force_erase
+#endif
+                         ) override;
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> Lookup(
       const rocksdb::Slice& key,
-#if ROCKSDB_MAJOR > 7 || (ROCKSDB_MAJOR == 7 && ROCKSDB_MINOR >= 10)
       const rocksdb::Cache::CacheItemHelper* helper,
       rocksdb::Cache::CreateContext* create_context,
-#else
-      const rocksdb::Cache::CreateCallback& create_cb,
-#endif
       bool wait,
       bool advise_erase,
       bool& is_in_sec_cache) override;
