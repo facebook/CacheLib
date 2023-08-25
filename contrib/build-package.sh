@@ -60,7 +60,7 @@ NAME: the dependency to build supported values are:
   zstd
   googlelog, googleflags, googletest,
   fmt, sparsemap,
-  folly, fizz, wangle, fbthrift,
+  folly, fizz, wangle, mvfst, fbthrift,
   cachelib
 
   "
@@ -229,6 +229,15 @@ case "$1" in
     else
         cmake_custom_params="$cmake_custom_params -DBUILD_TESTS=OFF"
     fi
+    ;;
+
+  mvfst)
+    NAME=mvfst
+    REPO=https://github.com/facebook/mvfst
+    REPODIR=cachelib/external/$NAME
+    SRCDIR=$REPODIR
+    external_git_clone=yes
+    cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     ;;
 
   fbthrift)

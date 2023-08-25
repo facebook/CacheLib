@@ -75,6 +75,8 @@ jobs:
         run: ./contrib/build-package.sh -j -v -i fizz
       - name: "Install dependency: wangle"
         run: ./contrib/build-package.sh -j -v -i wangle
+      - name: "Install dependency: mvfst"
+        run: ./contrib/build-package.sh -j -v -i mvfst
       - name: "Install dependency: fbthrift"
         run: ./contrib/build-package.sh -j -v -i fbthrift
       - name: "build CacheLib"
