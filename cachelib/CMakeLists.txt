@@ -106,6 +106,10 @@ find_package(Zlib REQUIRED)
 find_package(Zstd REQUIRED)
 find_package(FBThrift REQUIRED) # must come after wangle
 
+find_package(uring)
+if (NOT uring_FOUND)
+  add_definitions(-DCACHELIB_IOURING_DISABLE)
+endif()
 
 # FBThrift - generates h/cpp files from .*thrift files
 find_program(FBTHRIFT1 thrift1

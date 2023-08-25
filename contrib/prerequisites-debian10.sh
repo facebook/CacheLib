@@ -42,4 +42,5 @@ sudo apt-get install -y \
   libsodium-dev \
   libgmock-dev \
   libgtest-dev googletest \
+  libaio-dev \
   libnuma-dev

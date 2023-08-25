@@ -707,6 +707,11 @@ AsyncIoContext::AsyncIoContext(std::unique_ptr<folly::AsyncBase>&& asyncBase,
       id_(id),
       qDepth_(capacity),
       useIoUring_(useIoUring) {
+#ifdef CACHELIB_IOURING_DISABLE
+  // io_uring is not available on the system
+  XDCHECK(!useIoUring_);
+  useIoUring_ = false;
+#endif
   if (evb) {
     compHandler_ =
         std::make_unique<CompletionHandler>(*this, evb, asyncBase_->pollFd());
@@ -734,7 +739,7 @@ void AsyncIoContext::handleCompletion(
   for (auto op : completed) {
     // AsyncBaseOp should be freed after completion
     std::unique_ptr<folly::AsyncBaseOp> aop(op);
-    XDCHECK_EQ(aop->state(), folly::AsyncIOOp::State::COMPLETED);
+    XDCHECK_EQ(aop->state(), folly::AsyncBaseOp::State::COMPLETED);
 
     auto iop = reinterpret_cast<IOOp*>(aop->getUserData());
     XDCHECK(iop);
@@ -784,7 +789,9 @@ bool AsyncIoContext::submitIo(IOOp& op) {
 
   std::unique_ptr<folly::AsyncBaseOp> asyncOp;
   if (useIoUring_) {
+#ifndef CACHELIB_IOURING_DISABLE
     asyncOp = std::make_unique<folly::IoUringOp>();
+#endif
   } else {
     asyncOp = std::make_unique<folly::AsyncIOOp>();
   }
@@ -900,8 +907,10 @@ IoContext* FileDevice::getIoContext() {
     }
 
     if (useIoUring) {
-      asyncBase = make_unique<folly::IoUring>(qDepthPerContext_, pollMode,
-                                              qDepthPerContext_);
+#ifndef CACHELIB_IOURING_DISABLE
+      asyncBase = std::make_unique<folly::IoUring>(qDepthPerContext_, pollMode,
+                                                   qDepthPerContext_);
+#endif
     } else {
       XDCHECK_EQ(ioEngine_, IoEngine::LibAio);
       asyncBase = std::make_unique<folly::AsyncIO>(qDepthPerContext_, pollMode);

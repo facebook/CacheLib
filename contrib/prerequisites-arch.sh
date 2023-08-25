@@ -19,5 +19,6 @@ sudo pacman -S --needed --noconfirm cmake \
   boost \
   double-conversion \
   libdwarf \
+  libaio \
   numactl \
   libsodium

@@ -40,6 +40,7 @@ sudo apt-get install -y \
   libelf-dev \
   libdwarf-dev \
   libsodium-dev \
+  libaio-dev \
   libnuma-dev
 
 # NOTE:
