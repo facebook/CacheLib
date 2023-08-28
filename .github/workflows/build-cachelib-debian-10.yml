@@ -52,8 +52,7 @@ jobs:
           g++ - || true
       - name: "checkout sources"
         uses: actions/checkout@v3
-      - name: "Add Git safe directory"
-        # Workaround for Docker image bug (GitHub issue #199).
+      - name: "Add workspace as a safe directory"
         run: git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B

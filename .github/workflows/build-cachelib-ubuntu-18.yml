@@ -70,10 +70,10 @@ jobs:
           cc -v
           echo === g++ -v ===
           g++ -v
-      - name: "git: ignore unsafe-directories"
-        run: git config --global --add safe.directory '*'
       - name: "checkout sources"
         uses: actions/checkout@v3
+      - name: "Add workspace as a safe directory"
+        run: git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: "Install Prerequisites"
         run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
