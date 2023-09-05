@@ -22,6 +22,7 @@ struct IndexEntry {
   3: i16 sizeHint = 0;
   4: byte totalHits = 0;
   5: byte currentHits = 0;
+  6: i32 lastAccessTime = 0;
 }
 
 struct IndexBucket {
@@ -91,4 +92,5 @@ struct BigHashPersistentData {
   6: required i64 numBuckets = 0;
   7: map<i64, i64> deprecated_sizeDist;
   8: i64 usedSizeBytes = 0;
+  9: list<i32> accessTimes;
 }
