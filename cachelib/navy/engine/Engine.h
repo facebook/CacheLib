@@ -38,6 +38,9 @@ class Engine {
   // engine.
   virtual uint64_t estimateWriteSize(HashedKey hk, BufferView value) const = 0;
 
+  // Returns true if the entry exists and access time updated.
+  virtual bool updateAccessTime(HashedKey hk, uint32_t lastAccessTime) = 0;
+
   // If insert is failed, previous item (if existed) is not affected and
   // remains available via lookup.
   virtual Status insert(HashedKey hk, BufferView value) = 0;

@@ -104,6 +104,8 @@ class MockEngine : public Engine {
   MOCK_METHOD0(flush, void());
   MOCK_METHOD0(reset, void());
 
+  bool updateAccessTime(HashedKey, uint32_t) override { return false; }
+
   void persist(RecordWriter& rw) override {
     mockPersistData();
     rw.writeRecord(folly::IOBuf::copyBuffer(name_));

@@ -227,6 +227,10 @@ uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
   return serializedSize(hk.key().size(), value.size());
 }
 
+bool BlockCache::updateAccessTime(HashedKey hk, uint32_t lastAccessTime) {
+  return index_.updateAccessTime(hk.keyHash(), lastAccessTime);
+}
+
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   const auto seqNumber = regionManager_.getSeqNumber();
   const auto lr = index_.lookup(hk.keyHash());

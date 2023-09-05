@@ -57,6 +57,11 @@ uint64_t EnginePair::estimateWriteSize(HashedKey hk, BufferView value) const {
   return select(hk, value).first.estimateWriteSize(hk, value);
 }
 
+bool EnginePair::updateAccessTime(HashedKey key, uint32_t lastAccessTime) {
+  return largeItemCache_->updateAccessTime(key, lastAccessTime) ||
+         smallItemCache_->updateAccessTime(key, lastAccessTime);
+}
+
 Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
   lookupCount_.inc();
   Status status{Status::NotFound};

@@ -120,6 +120,8 @@ class BlockCache final : public Engine {
   // Estimate the device write size if the item is written to BlockCache.
   uint64_t estimateWriteSize(HashedKey hk, BufferView value) const override;
 
+  bool updateAccessTime(HashedKey hk, uint32_t lastAccessTime) override;
+
   // Inserts a key-value pair into BlockCache.
   //
   // @param hk      key to be inserted
