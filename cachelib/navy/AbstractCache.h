@@ -61,6 +61,9 @@ class AbstractCache {
   // Returns: false if the key definitely does not exist and true if it could.
   virtual bool couldExist(HashedKey key) = 0;
 
+  // Update the last access time synchronously.
+  virtual bool updateAccessTime(HashedKey key, uint32_t lastAccessTime) = 0;
+
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
   virtual Status insert(HashedKey key, BufferView value) = 0;

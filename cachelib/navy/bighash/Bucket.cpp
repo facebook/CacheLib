@@ -116,7 +116,7 @@ std::pair<uint32_t, uint32_t> Bucket::makeSpace(
     if (destructorCb) {
       auto* entry = getIteratorEntry(itr);
       destructorCb(entry->hashedKey(), entry->value(),
-                   DestructorEvent::Recycled);
+                   DestructorEvent::Recycled, 0);
     }
 
     curFreeSpace += BucketStorage::slotSize(itr.view().size());
@@ -149,7 +149,7 @@ uint32_t Bucket::removeExpired(BucketStorage::Allocation itr,
     // Remove expired entry
     if (destructorCb) {
       destructorCb(entry->hashedKey(), entry->value(),
-                   DestructorEvent::Recycled);
+                   DestructorEvent::Recycled, 0);
     }
     removed.emplace_back(itr);
     itr = storage_.getNext(itr);
@@ -166,7 +166,7 @@ uint32_t Bucket::remove(HashedKey hk, const DestructorCallback& destructorCb) {
     if (entry->keyEqualsTo(hk)) {
       if (destructorCb) {
         destructorCb(entry->hashedKey(), entry->value(),
-                     DestructorEvent::Removed);
+                     DestructorEvent::Removed, 0);
       }
       storage_.remove(itr);
       return 1;

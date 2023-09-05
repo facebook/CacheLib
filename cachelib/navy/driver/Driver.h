@@ -80,6 +80,9 @@ class Driver final : public AbstractCache {
   // to skip the heavy lookup operation when key doesn't exist in the cache.
   bool couldExist(HashedKey key) override;
 
+  // Update the last access time synchronously.
+  bool updateAccessTime(HashedKey key, uint32_t lastAccessTime) override;
+
   // insert a key and value into the cache
   // @param key    the item key
   // @param value  the item value

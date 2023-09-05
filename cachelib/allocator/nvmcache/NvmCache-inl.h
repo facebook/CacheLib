@@ -270,7 +270,8 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
 template <typename C>
 void NvmCache<C>::evictCB(HashedKey hk,
                           navy::BufferView value,
-                          navy::DestructorEvent event) {
+                          navy::DestructorEvent event,
+                          uint32_t lastAccessTime) {
   // invalidate any inflight lookup that is on flight since we are evicting it.
   invalidateFill(hk);
 
@@ -400,6 +401,16 @@ void NvmCache<C>::evictCB(HashedKey hk,
                          : DestructorContext::kEvictedFromNVM;
 
       try {
+        if (lastAccessTime < item.getCreationTime()) {
+          if (lastAccessTime == 0) {
+            retentionMissing_.inc();
+          } else {
+            retentionError_.inc();
+            lastAccessTime = 0;
+          }
+        }
+
+        item.mmHook_.setUpdateTime(lastAccessTime);
         itemDestructor_(DestructorData{context, item, std::move(chained),
                                        nvmItem.poolId()});
         stats().numNvmDestructorCalls.inc();
@@ -437,8 +448,9 @@ NvmCache<C>::NvmCache(C& c,
         const auto& nvmItem = *reinterpret_cast<const NvmItem*>(v.data());
         return nvmItem.isExpired();
       },
-      [this](HashedKey hk, navy::BufferView v, navy::DestructorEvent e) {
-        this->evictCB(hk, v, e);
+      [this](HashedKey hk, navy::BufferView v, navy::DestructorEvent e,
+             uint32_t lastAccessTime) {
+        this->evictCB(hk, v, e, lastAccessTime);
       },
       truncate,
       std::move(config.deviceEncryptor),
@@ -548,6 +560,8 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   auto putCleanup = [&putContexts, &ctx]() { putContexts.destroyContext(ctx); };
   auto guard = folly::makeGuard([putCleanup]() { putCleanup(); });
 
+  uint32_t lastAccessTime = item.getLastAccessTime();
+
   // On a concurrent get, we remove the key from inflight evictions and hence
   // key not being present means a concurrent get happened with an inflight
   // eviction, and we should abandon this write to navy since we already
@@ -555,16 +569,21 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   const bool executed = token.executeIfValid([&]() {
     auto status = navyCache_->insertAsync(
         HashedKey::precomputed(ctx.key(), hk.keyHash()), makeBufferView(val),
-        [this, putCleanup, valSize, val](navy::Status st, HashedKey key) {
+        [this, putCleanup, valSize, val, lastAccessTime](navy::Status st,
+                                                         HashedKey key) {
           if (st == navy::Status::Ok) {
             stats().nvmPutSize_.trackValue(valSize);
+            // Update the access time if the put is sucessful since now the item
+            // lives in NVM.
+            updateAccessTime(key, lastAccessTime);
           } else if (st == navy::Status::BadState) {
             // we set disable navy since we got a BadState from navy
             disableNavy("Delete Failure. BadState");
           } else {
             // put failed, DRAM eviction happened and destructor was not
             // executed. we unconditionally trigger destructor here for cleanup.
-            evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed);
+            evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed,
+                    lastAccessTime);
           }
           putCleanup();
         });
@@ -899,6 +918,8 @@ util::StatsMap NvmCache<C>::getStatsMap() const {
   util::StatsMap statsMap;
   navyCache_->getCounters(statsMap.createCountVisitor());
   statsMap.insertCount("items_tracked_for_destructor", getNvmItemRemovedSize());
+  statsMap.insertRate("retention_missing", retentionMissing_.get());
+  statsMap.insertRate("retention_error", retentionError_.get());
   return statsMap;
 }
 

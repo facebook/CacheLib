@@ -1750,6 +1750,9 @@ TEST_F(NvmCacheTest, NavyStats) {
   // item destructor
   EXPECT_TRUE(cs("items_tracked_for_destructor"));
 
+  EXPECT_TRUE(cs("retention_missing"));
+  EXPECT_TRUE(cs("retention_error"));
+
   // there should be no additional stats
   if (nvmStats.size()) {
     for (auto kv : nvmStats) {
@@ -2073,9 +2076,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Recycled);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled, handle->getLastAccessTime());
     ASSERT_TRUE(destructorCalled);
     ASSERT_EQ(DestructorContext::kEvictedFromNVM, context);
     ASSERT_EQ(poolid, pid);
@@ -2094,9 +2096,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Recycled);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled, handle->getLastAccessTime());
     ASSERT_TRUE(destructorCalled);
     ASSERT_FALSE(handle->isNvmEvicted());
     ASSERT_EQ(DestructorContext::kEvictedFromNVM, context);
@@ -2113,9 +2114,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Recycled);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Recycled, handle->getLastAccessTime());
     // Recycled event, in RAM and clean
     ASSERT_FALSE(destructorCalled);
     ASSERT_TRUE(handle->isNvmEvicted());
@@ -2129,9 +2129,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     ASSERT_NE(nullptr, handle.get());
     std::memcpy(handle->getMemory(), val.data(), val.size());
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Removed);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Removed, handle->getLastAccessTime());
     // Removed event, not in RAM
     ASSERT_TRUE(destructorCalled);
     ASSERT_EQ(DestructorContext::kRemovedFromNVM, context);
@@ -2148,9 +2147,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     std::memcpy(handle->getMemory(), val.data(), val.size());
     cache.insertOrReplace(handle);
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Removed);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Removed, handle->getLastAccessTime());
     // Removed event, in RAM but unclean
     ASSERT_TRUE(destructorCalled);
     ASSERT_EQ(DestructorContext::kRemovedFromNVM, context);
@@ -2167,9 +2165,8 @@ TEST_F(NvmCacheTest, testEvictCB) {
     cache.insertOrReplace(handle);
     handle->markNvmClean();
     auto buf = toIOBuf(makeNvmItem(*handle));
-    evictCB(HashedKey{key.data()},
-            navy::BufferView(buf.length(), buf.data()),
-            navy::DestructorEvent::Removed);
+    evictCB(HashedKey{key.data()}, navy::BufferView(buf.length(), buf.data()),
+            navy::DestructorEvent::Removed, handle->getLastAccessTime());
     // Removed event, in RAM and clean
     ASSERT_FALSE(destructorCalled);
     ASSERT_TRUE(handle->isNvmEvicted());

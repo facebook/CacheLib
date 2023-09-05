@@ -381,7 +381,8 @@ Status BlockCache::remove(HashedKey hk) {
     usedSizeBytes_.sub(removedObjectSize);
     succRemoveCount_.inc();
     if (!value.isNull() && destructorCb_) {
-      destructorCb_(hk, value.view(), DestructorEvent::Removed);
+      destructorCb_(hk, value.view(), DestructorEvent::Removed,
+                    lr.lastAccessTime());
     }
     return Status::Ok;
   }
@@ -430,21 +431,23 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
 
     const auto reinsertionRes =
         reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
-    switch (reinsertionRes) {
-    case ReinsertionRes::kEvicted:
+    switch (reinsertionRes.decision) {
+    case ReinsertionDecision::kEvicted:
       evictionCount++;
       usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
       break;
-    case ReinsertionRes::kRemoved:
+    case ReinsertionDecision::kRemoved:
       holeCount_.sub(1);
       holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
       break;
-    case ReinsertionRes::kReinserted:
+    case ReinsertionDecision::kReinserted:
       break;
     }
 
-    if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
-      destructorCb_(hk, value, DestructorEvent::Recycled);
+    if (destructorCb_ &&
+        reinsertionRes.decision == ReinsertionDecision::kEvicted) {
+      destructorCb_(hk, value, DestructorEvent::Recycled,
+                    reinsertionRes.lastAccessTime);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -486,15 +489,16 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
 
     // remove the item
     auto removeRes = removeItem(hk, RelAddress{rid, offset});
-    if (removeRes) {
+    if (removeRes.found()) {
       evictionCount++;
       usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
     } else {
       holeCount_.sub(1);
       holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
     }
-    if (destructorCb_ && removeRes) {
-      destructorCb_(hk, value, DestructorEvent::Recycled);
+    if (destructorCb_ && removeRes.found()) {
+      destructorCb_(hk, value, DestructorEvent::Recycled,
+                    removeRes.lastAccessTime());
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -503,30 +507,32 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
   XDCHECK_GE(region.getNumItems(), evictionCount);
 }
 
-bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
-  if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
-    return true;
+Index::LookupResult BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
+  Index::LookupResult lr =
+      index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr));
+  if (!lr.found()) {
+    evictionLookupMissCounter_.inc();
   }
-  evictionLookupMissCounter_.inc();
-  return false;
+  return lr;
 }
 
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
-  auto removeItem = [this, hk, currAddr](bool expired) {
-    if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
+  auto removeItem = [this, hk, currAddr](bool expired) -> ReinsertionRes {
+    auto lr = index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr));
+    if (lr.found()) {
       if (expired) {
         evictionExpiredCount_.inc();
       }
-      return ReinsertionRes::kEvicted;
+      return {ReinsertionDecision::kEvicted, lr.lastAccessTime()};
     }
-    return ReinsertionRes::kRemoved;
+    return {ReinsertionDecision::kRemoved};
   };
 
   const auto lr = index_.peek(hk.keyHash());
   if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
-    return ReinsertionRes::kRemoved;
+    return {ReinsertionDecision::kRemoved};
   }
 
   if (checkExpired_ && checkExpired_(value)) {
@@ -583,7 +589,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   }
   reinsertionCount_.inc();
   reinsertionBytes_.add(entrySize);
-  return ReinsertionRes::kReinserted;
+  return {ReinsertionDecision::kReinserted};
 }
 
 Status BlockCache::writeEntry(RelAddress addr,
