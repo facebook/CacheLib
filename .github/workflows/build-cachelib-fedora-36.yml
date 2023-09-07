@@ -15,6 +15,7 @@ name: build-cachelib-fedora-36
 on:
 #  push:
   pull_request:
+  workflow_dispatch:
   schedule:
      - cron:  '0 19 * * *'
 jobs:

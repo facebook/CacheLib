@@ -15,6 +15,7 @@ name: build-cachelib-centos-8.5
 on:
 #   push:
   pull_request:
+  workflow_dispatch:
   schedule:
      - cron:  '0 9 * * *'
 jobs:
