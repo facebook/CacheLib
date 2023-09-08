@@ -102,6 +102,8 @@ class BigHashProto {
   // bit array of @hashTableBitSize bits.
   virtual void setBloomFilter(uint32_t numHashes,
                               uint32_t hashTableBitSize) = 0;
+
+  virtual void setEnableLastAccessTracking(bool enable) = 0;
 };
 
 class EnginePairProto {

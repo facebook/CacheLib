@@ -71,6 +71,8 @@ class BigHash final : public Engine {
 
     uint64_t numBuckets() const { return cacheSize / bucketSize; }
 
+    bool trackAccessTime{};
+
     Config& validate();
   };
 
@@ -100,9 +102,12 @@ class BigHash final : public Engine {
 
   // Update the access time for the bucket
   bool updateAccessTime(HashedKey hk, uint32_t accessTime) override {
-    auto idx = getBucketId(hk).index();
-    if (bucketLastAccessTimes_[idx].get() < accessTime) {
-      bucketLastAccessTimes_[idx].set(accessTime);
+    if (trackAccessTime_) {
+      auto idx = getBucketId(hk).index();
+      if (bucketLastAccessTimes_[idx].get() < accessTime) {
+        bucketLastAccessTimes_[idx].set(accessTime);
+        return true;
+      }
     }
     return false;
   }
@@ -197,6 +202,12 @@ class BigHash final : public Engine {
   void bfRebuild(BucketId bid, const Bucket* bucket);
   bool bfReject(BucketId bid, uint64_t keyHash) const;
 
+  // Return the last access time of a certain bucket.
+  // If not tracked, return 0.
+  uint32_t getLastAccessTime(BucketId bid) const {
+    return trackAccessTime_ ? bucketLastAccessTimes_[bid.index()].get() : 0;
+  }
+
   // Use birthday paradox to estimate number of mutexes given number of parallel
   // queries and desired probability of lock collision.
   static constexpr size_t kNumMutexes = 16 * 1024;
@@ -216,6 +227,7 @@ class BigHash final : public Engine {
       new folly::SharedMutex[kNumMutexes]};
   // Last access time for each bucket.
   // Not using locks on purpose.
+  const bool trackAccessTime_{};
   std::vector<AtomicCounter32> bucketLastAccessTimes_;
 
   // thread local counters in synchronized path

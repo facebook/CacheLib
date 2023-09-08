@@ -87,7 +87,7 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
 
   auto bigHash = cachelib::navy::createBigHashProto();
   bigHash->setLayout(bigHashCacheOffset, bigHashCacheSize, bucketSize);
-
+  bigHash->setEnableLastAccessTracking(bigHashConfig.getAccessTimeTracking());
   // Bucket Bloom filter size, bytes
   //
   // Experiments showed that if we have 16 bytes for BF with 25 entries,

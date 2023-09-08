@@ -157,6 +157,10 @@ class BigHashProtoImpl final : public BigHashProto {
     config_.destructorCb = std::move(cb);
   }
 
+  void setEnableLastAccessTracking(bool trackAccessTime) override {
+    config_.trackAccessTime = trackAccessTime;
+  }
+
   std::unique_ptr<Engine> create(ExpiredCheck checkExpired) && {
     config_.checkExpired = std::move(checkExpired);
     if (bloomFilterEnabled_) {

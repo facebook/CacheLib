@@ -95,7 +95,8 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       cacheBaseOffset_{config.cacheBaseOffset},
       numBuckets_{config.numBuckets()},
       bloomFilter_{std::move(config.bloomFilter)},
-      device_{*config.device} {
+      device_{*config.device},
+      trackAccessTime_{config.trackAccessTime} {
   XLOGF(INFO,
         "BigHash created: buckets: {}, bucket size: {}, base offset: {}",
         numBuckets_,
@@ -129,7 +130,9 @@ void BigHash::reset() {
   checksumErrorCount_.set(0);
   usedSizeBytes_.set(0);
   bucketLastAccessTimes_.clear();
-  bucketLastAccessTimes_.resize(numBuckets_, AtomicCounter32{0});
+  if (trackAccessTime_) {
+    bucketLastAccessTimes_.resize(numBuckets_, AtomicCounter32{0});
+  }
 }
 
 double BigHash::bfFalsePositivePct() const {
@@ -229,11 +232,13 @@ void BigHash::persist(RecordWriter& rw) {
   *pd.cacheBaseOffset() = cacheBaseOffset_;
   *pd.numBuckets() = numBuckets_;
   *pd.usedSizeBytes() = usedSizeBytes_.get();
-  pd.accessTimes()->reserve(numBuckets_);
-  for (auto& it : bucketLastAccessTimes_) {
-    pd.accessTimes()->push_back(it.get());
+  if (trackAccessTime_) {
+    pd.accessTimes()->reserve(numBuckets_);
+    for (auto& it : bucketLastAccessTimes_) {
+      pd.accessTimes()->push_back(it.get());
+    }
+    XLOG(INFO, "saved access time for {} buckets", pd.accessTimes()->size());
   }
-  XLOG(INFO, "saved access time for {} buckets", pd.accessTimes()->size());
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
@@ -267,14 +272,17 @@ bool BigHash::recover(RecordReader& rr) {
 
     if (pd.accessTimes().is_set()) {
       if (pd.accessTimes()->size() != numBuckets_) {
-        throw std::logic_error{folly::sformat(
-            "access time count doesn't match bucket count {} vs. {}",
-            pd.accessTimes()->size(),
-            numBuckets_)};
-      }
-      for (size_t idx = 0; idx < numBuckets_; idx++) {
-        bucketLastAccessTimes_[idx] =
-            AtomicCounter32(static_cast<uint32_t>(pd.accessTimes()->at(idx)));
+        XLOGF(ERR,
+              "access time count doesn't match bucket count {} vs. {}. "
+              "Continue with empty access times",
+              pd.accessTimes()->size(), numBuckets_);
+      } else {
+        if (trackAccessTime_) {
+          for (size_t idx = 0; idx < numBuckets_; idx++) {
+            bucketLastAccessTimes_[idx] = AtomicCounter32(
+                static_cast<uint32_t>(pd.accessTimes()->at(idx)));
+          }
+        }
       }
     }
 
@@ -353,11 +361,10 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   }
 
   for (const auto& item : removedItems) {
-    destructorCb_(
-        makeHK(std::get<0>(item)) /* key */,
-        std::get<1>(item).view() /* value */,
-        std::get<2>(item) /* event */,
-        bucketLastAccessTimes_[bid.index()].get() /* lastAccessTime */);
+    destructorCb_(makeHK(std::get<0>(item)) /* key */,
+                  std::get<1>(item).view() /* value */,
+                  std::get<2>(item) /* event */,
+                  getLastAccessTime(bid) /* lastAccessTime */);
   }
 
   if (oldRemainingBytes < newRemainingBytes) {
@@ -486,7 +493,7 @@ Status BigHash::remove(HashedKey hk) {
 
   if (!valueCopy.isNull()) {
     destructorCb_(hk, valueCopy.view(), DestructorEvent::Removed,
-                  bucketLastAccessTimes_[bid.index()].get());
+                  getLastAccessTime(bid));
   }
 
   XDCHECK_LE(oldRemainingBytes, newRemainingBytes);
