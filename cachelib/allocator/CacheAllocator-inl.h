@@ -2319,7 +2319,7 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
     isCompactCache = isCompactCachePool_[poolId];
   }
 
-  std::unordered_map<ClassId, CacheStat> cacheStats;
+  folly::F14FastMap<ClassId, CacheStat> cacheStats;
   uint64_t totalHits = 0;
   // cacheStats is only menaningful for pools that are not compact caches.
   // TODO export evictions, numItems etc from compact cache directly.

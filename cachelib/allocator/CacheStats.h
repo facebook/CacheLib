@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
+
 #include <algorithm>
 #include <numeric>
 
@@ -159,7 +161,7 @@ struct PoolStats {
   uint64_t poolAdvisedSize;
 
   // container stats that provide evictions etc.
-  std::unordered_map<ClassId, CacheStat> cacheStats;
+  folly::F14FastMap<ClassId, CacheStat> cacheStats;
 
   // stats from the memory allocator perspective. this is a map of MPStat
   // for each allocation class that this pool has.
