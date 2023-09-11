@@ -51,13 +51,13 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
   // before we consider  them again.
   victims = filterVictimsByHoldOff(pid, stats, std::move(victims));
 
+  // we are only concerned about the eviction age and not the projected age.
+  const auto poolEvictionAgeStats =
+      cache.getPoolEvictionAgeStats(pid, /* projectionLength */ 0);
   // filter out alloc classes with less than the minimum tail age
   if (config.minLruTailAge != 0) {
-    // we are only concerned about the eviction age and not the projected age.
-    const auto poolEvictionAgeStats =
-        cache.getPoolEvictionAgeStats(pid, /* projectionLength */ 0);
-    victims = filterByMinTailAge(poolEvictionAgeStats, std::move(victims),
-                                 config.minLruTailAge);
+    victims =
+        filterByMinTailAge(stats, std::move(victims), config.minLruTailAge);
   }
 
   if (victims.empty()) {
@@ -70,6 +70,20 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
 
   if (victimClassId != Slab::kInvalidClassId) {
     return victimClassId;
+  }
+
+  // prioritize victims with max LRU tail age
+  if (config.maxLruTailAge != 0) {
+    auto maxAgeVictims = filter(
+        victims,
+        [&](ClassId cid) {
+          return stats.evictionAgeForClass(cid) < config.maxLruTailAge;
+        },
+        folly::sformat(" candidates with less than {} seconds for tail age",
+                       config.maxLruTailAge));
+    if (!maxAgeVictims.empty()) {
+      victims = std::move(maxAgeVictims);
+    }
   }
 
   return *std::min_element(
@@ -104,6 +118,17 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
   // filter out receivers who currently dont have any slabs. Their delta hits
   // do not make much sense.
   receivers = filterByNumEvictableSlabs(stats, std::move(receivers), 0);
+
+  // filter out alloc classes with more than the maximum tail age
+  if (config.maxLruTailAge != 0) {
+    auto candidates =
+        filterByMaxTailAge(stats, receivers, config.maxLruTailAge);
+    // if all the candidates exceed the max eviction age then fallback to the
+    // hits-based mechanism
+    if (!candidates.empty()) {
+      receivers = std::move(candidates);
+    }
+  }
 
   if (receivers.empty()) {
     return Slab::kInvalidClassId;

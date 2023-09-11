@@ -138,6 +138,16 @@ class RebalanceStrategy {
       std::set<ClassId> candidates,
       unsigned int minTailAge);
 
+  static std::set<ClassId> filterByMinTailAge(const PoolStats& stats,
+                                              std::set<ClassId> candidates,
+                                              unsigned int minTailAge);
+
+  // filter the candidates based on whether they have at most this much tail
+  // age
+  static std::set<ClassId> filterByMaxTailAge(const PoolStats& stats,
+                                              std::set<ClassId> candidates,
+                                              unsigned int maxTailAge);
+
   // filter the candidates based on whether they recently gained a slab and
   // are in hold off period.
   std::set<ClassId> filterVictimsByHoldOff(PoolId pid,

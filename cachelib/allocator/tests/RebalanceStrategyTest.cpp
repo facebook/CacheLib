@@ -618,6 +618,131 @@ TEST_F(RebalanceStrategy2QTest, MarginalHitsSlabRebalance) {
     EXPECT_EQ(cid0, ctx.victimClassId);
   }
 }
+
+using RebalanceStrategyMaxAgeEvictionTest = RebalanceStrategyTest<LruAllocator>;
+
+TEST_F(RebalanceStrategyMaxAgeEvictionTest, HitsSlabRebalanceMaxAge) {
+  using MMConfig = LruAllocator::MMConfig;
+  const auto smallItemSize = Slab::kSize / 5;      // 0.2: (small)
+  const auto mediumItemSize = Slab::kSize * 2 / 5; // 0.4: (medium)
+  const auto largeItemSize = Slab::kSize * 2 / 3;  // 0.66:(large)
+  const auto smallAllocSize = Slab::kSize / 3;     // 0.33
+  const auto mediumAllocSize = Slab::kSize / 2;    // 0.5
+  const auto largeAllocSize = Slab::kSize;         // 1.0
+
+  LruAllocator::Config config;
+  HitsPerSlabStrategy::Config hpsConfig;
+  // enable max ev based exclusion while picking a victim and receiver
+  hpsConfig.maxLruTailAge = 1;
+  // disable to exclude heuristics to skip based on diff ratio
+  hpsConfig.minDiff = 0;
+  hpsConfig.diffRatio = 0;
+  auto strategy = std::make_shared<HitsPerSlabStrategy>(hpsConfig);
+
+  // disable background pool resizer & slab rebalancer
+  config.setCacheSize(20 * Slab::kSize);
+  auto cache = std::make_unique<LruAllocator>(config);
+  MMConfig mmConfig;
+  const std::set<uint32_t> allocSizes{static_cast<uint32_t>(smallAllocSize),
+                                      static_cast<uint32_t>(mediumAllocSize),
+                                      static_cast<uint32_t>(largeAllocSize)};
+
+  // always promote
+  mmConfig.lruRefreshTime = 0;
+
+  auto pid = cache->addPool("Pool", cache->getCacheMemoryStats().ramCacheSize,
+                            allocSizes, mmConfig);
+  ASSERT_NE(Slab::kInvalidPoolId, pid);
+  ClassId cid0{Slab::kInvalidClassId}, cid1{Slab::kInvalidClassId},
+      cid2{Slab::kInvalidClassId};
+  {
+    auto cacheStats = cache->getPoolStats(pid).cacheStats;
+    for (auto&& it : cacheStats) {
+      if (it.second.allocSize == smallAllocSize) {
+        cid0 = it.first;
+      }
+      if (it.second.allocSize == mediumAllocSize) {
+        cid1 = it.first;
+      }
+      if (it.second.allocSize == largeAllocSize) {
+        cid2 = it.first;
+      }
+    }
+  }
+  ASSERT_NE(Slab::kInvalidClassId, cid0);
+  ASSERT_NE(Slab::kInvalidClassId, cid1);
+  ASSERT_NE(Slab::kInvalidClassId, cid2);
+
+  // populate 10 items in large and medium ACs and fill the rest with 'small'
+  uint32_t maxLargeCount = 10;
+  uint32_t maxMediumCount = 10;
+
+  uint32_t largeCount;
+  for (largeCount = 0; largeCount < maxLargeCount; largeCount++) {
+    auto handle = util::allocateAccessible(
+        *cache, pid, "large-" + std::to_string(largeCount), largeItemSize);
+    ASSERT_NE(nullptr, handle);
+  }
+  ASSERT_GE(largeCount, maxLargeCount);
+
+  uint32_t mediumCount;
+  for (mediumCount = 0; mediumCount < maxMediumCount; mediumCount++) {
+    auto handle = util::allocateAccessible(
+        *cache, pid, "medium-" + std::to_string(mediumCount), mediumItemSize);
+    ASSERT_NE(nullptr, handle);
+  }
+  ASSERT_GE(mediumCount, maxMediumCount);
+
+  uint32_t smallCount;
+  for (smallCount = 0; !cache->getPoolStats(pid).numEvictions(); smallCount++) {
+    auto handle = util::allocateAccessible(
+        *cache, pid, "small-" + std::to_string(smallCount), smallItemSize);
+    ASSERT_NE(nullptr, handle);
+  }
+
+  // initialize states
+  {
+    auto init = strategy->pickVictimAndReceiver(*cache, pid);
+    EXPECT_EQ(init.victimClassId, Slab::kInvalidClassId);
+    EXPECT_EQ(init.receiverClassId, Slab::kInvalidClassId);
+  }
+
+  // access class 1 (medium) to increase hits on this class
+  for (uint32_t i = 1; i < mediumCount; i++) {
+    ASSERT_NE(nullptr, cache->find("medium-" + std::to_string(i)));
+  }
+  for (uint32_t i = 1; i < mediumCount; i++) {
+    auto handle = util::allocateAccessible(
+        *cache, pid, "medium-" + std::to_string(i), mediumItemSize);
+  }
+
+  // sleep for 'maxLruTailAge' + 1 seconds to trigger fallback to
+  // hits based strategy
+  std::this_thread::sleep_for(
+      std::chrono::seconds(hpsConfig.maxLruTailAge + 1));
+
+  {
+    auto ctx = strategy->pickVictimAndReceiver(*cache, pid);
+    // all ACs have same ev-age. So "medium" should receive based on the
+    // hits-based strategy
+    EXPECT_EQ(cid1, ctx.receiverClassId);
+    EXPECT_EQ(cid0, ctx.victimClassId);
+  }
+
+  // reset the ev-age on large by inserting new items
+  for (uint32_t i = 0; i < largeCount; i++) {
+    auto handle = util::allocateAccessible(
+        *cache, pid, "large-" + std::to_string(i * 10), largeItemSize);
+    ASSERT_NE(nullptr, handle);
+  }
+
+  {
+    auto ctx = strategy->pickVictimAndReceiver(*cache, pid);
+    // cid2 (for large AC) should be the receiver
+    EXPECT_EQ(cid2, ctx.receiverClassId);
+    EXPECT_EQ(cid0, ctx.victimClassId);
+  }
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook

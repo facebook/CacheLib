@@ -147,6 +147,28 @@ std::set<ClassId> RebalanceStrategy::filterByMinTailAge(
                      minTailAge));
 }
 
+std::set<ClassId> RebalanceStrategy::filterByMinTailAge(
+    const PoolStats& stats,
+    std::set<ClassId> candidates,
+    unsigned int minTailAge) {
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) { return stats.evictionAgeForClass(cid) < minTailAge; },
+      folly::sformat(" candidates with less than {} seconds for tail age",
+                     minTailAge));
+}
+
+std::set<ClassId> RebalanceStrategy::filterByMaxTailAge(
+    const PoolStats& stats,
+    std::set<ClassId> candidates,
+    unsigned int maxTailAge) {
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) { return stats.evictionAgeForClass(cid) > maxTailAge; },
+      folly::sformat(" candidates with more than {} seconds for tail age",
+                     maxTailAge));
+}
+
 std::set<ClassId> RebalanceStrategy::filter(
     std::set<ClassId> input,
     std::function<bool(const ClassId& id)> pred,
