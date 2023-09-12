@@ -17,7 +17,7 @@ on:
   pull_request:
   workflow_dispatch:
   schedule:
-     - cron:  '0 9 * * *'
+     - cron:  '0 10 * * *'
 jobs:
   build-cachelib-centos8-latest:
     name: "CentOS/9 - Build CacheLib with all dependencies"
@@ -61,34 +61,34 @@ jobs:
       - name: "Add workspace as a safe directory"
         run: git config --system --add safe.directory $GITHUB_WORKSPACE
       - name: "Install Prerequisites"
-        run: ./public_tld/contrib/build.sh -S -B
+        run: ./contrib/build.sh -S -B
       - name: "Test: update-submodules"
-        run: ./public_tld/contrib/update-submodules.sh
+        run: ./contrib/update-submodules.sh
       - name: "Install dependency: zstd"
-        run: ./public_tld/contrib/build-package.sh -j -v -i zstd
+        run: ./contrib/build-package.sh -j -v -i zstd
       - name: "Install dependency: googleflags"
-        run: ./public_tld/contrib/build-package.sh -j -v -i googleflags
+        run: ./contrib/build-package.sh -j -v -i googleflags
       - name: "Install dependency: googlelog"
-        run: ./public_tld/contrib/build-package.sh -j -v -i googlelog
+        run: ./contrib/build-package.sh -j -v -i googlelog
       - name: "Install dependency: googletest"
-        run: ./public_tld/contrib/build-package.sh -j -v -i googletest
+        run: ./contrib/build-package.sh -j -v -i googletest
       - name: "Install dependency: sparsemap"
-        run: ./public_tld/contrib/build-package.sh -j -v -i sparsemap
+        run: ./contrib/build-package.sh -j -v -i sparsemap
       - name: "Install dependency: fmt"
-        run: ./public_tld/contrib/build-package.sh -j -v -i fmt
+        run: ./contrib/build-package.sh -j -v -i fmt
       - name: "Install dependency: folly"
-        run: ./public_tld/contrib/build-package.sh -j -v -i folly
+        run: ./contrib/build-package.sh -j -v -i folly
       - name: "Install dependency: fizz"
-        run: ./public_tld/contrib/build-package.sh -j -v -i fizz
+        run: ./contrib/build-package.sh -j -v -i fizz
       - name: "Install dependency: wangle"
-        run: ./public_tld/contrib/build-package.sh -j -v -i wangle
+        run: ./contrib/build-package.sh -j -v -i wangle
       - name: "Install dependency: mvfst"
-        run: ./public_tld/contrib/build-package.sh -j -v -i mvfst
+        run: ./contrib/build-package.sh -j -v -i mvfst
       - name: "Install dependency: fbthrift"
-        run: ./public_tld/contrib/build-package.sh -j -v -i fbthrift
+        run: ./contrib/build-package.sh -j -v -i fbthrift
       - name: "build CacheLib"
         # Build cachelib in debug mode (-d) and with all tests (-t)
-        run: ./public_tld/contrib/build-package.sh -j -v -i -d -t cachelib
+        run: ./contrib/build-package.sh -j -v -i -d -t cachelib
       - uses: actions/upload-artifact@v3
         if: failure()
         with:

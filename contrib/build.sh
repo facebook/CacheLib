@@ -65,7 +65,7 @@ build_centos_8()
 
 build_centos_9()
 {
-  ./public_tld/contrib/prerequisites-centos9.sh \
+  ./contrib/prerequisites-centos9.sh \
     || die "failed to install packages for CentOS"
 }
 
