@@ -508,7 +508,7 @@ void MemoryPool::completeSlabRelease(const SlabReleaseContext& context) {
 
 MPStats MemoryPool::getStats() const {
   LockHolder l(lock_);
-  std::unordered_map<ClassId, ACStats> acStats;
+  folly::F14FastMap<ClassId, ACStats> acStats;
   std::set<ClassId> classIds;
   for (const auto& ac : ac_) {
     acStats.insert({ac->getId(), ac->getStats()});

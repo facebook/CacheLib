@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
+
 #include <set>
 #include <unordered_map>
 
@@ -62,7 +64,7 @@ struct MPStats {
   std::set<ClassId> classIds;
 
   // stats for all the allocation classes belonging to this pool
-  std::unordered_map<ClassId, ACStats> acStats;
+  folly::F14FastMap<ClassId, ACStats> acStats;
 
   // total number of free slabs in this memory pool that are not allocated to
   // any allocation class, but have been acquired from the slab allocator.
