@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/File.h>
+#include <folly/container/F14Map.h>
 
 #include <fstream>
 #include <memory>
@@ -220,11 +221,11 @@ class ShmManager {
   std::string dirHash_{};
 
   // current segment being managed by this instance
-  std::unordered_map<std::string, std::unique_ptr<ShmSegment>> segments_{};
+  folly::F14FastMap<std::string, std::unique_ptr<ShmSegment>> segments_{};
 
   // name to key mapping used for reattaching. This is persisted to a
   // file and used for attaching to the segment.
-  std::unordered_map<std::string, std::string> nameToKey_{};
+  folly::F14FastMap<std::string, std::string> nameToKey_{};
 
   // file handle for the metadata file. It remains open throughout the lifetime
   // of the object.
