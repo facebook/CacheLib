@@ -302,7 +302,7 @@ TEST_F(MemoryAllocatorTest, Serialization) {
       ASSERT_EQ(allocInfo.poolId, pid);
       prev = s + 1;
     }
-    allocatedPools.push_back(std::make_pair(pid, allocSizes));
+    allocatedPools.emplace_back(pid, allocSizes);
   }
 
   uint8_t buffer[SerializationBufferSize];

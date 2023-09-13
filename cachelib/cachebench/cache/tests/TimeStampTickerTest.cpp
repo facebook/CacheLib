@@ -38,7 +38,7 @@ TEST(TimeStampTickerTest, callbackTest) {
   };
   std::vector<std::thread> threads;
   for (size_t i = 0; i < numThreads; i++) {
-    threads.push_back(std::thread{threadFunc});
+    threads.emplace_back(threadFunc);
   }
   for (size_t i = 0; i < numThreads; i++) {
     threads[i].join();

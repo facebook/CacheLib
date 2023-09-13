@@ -61,9 +61,9 @@ void buildAllocs(size_t poolSize) {
         void* alloc = ma->allocate(pid, size);
         XDCHECK_GE(size, CompressedPtr::getMinAllocSize());
         if (alloc != nullptr) {
-          validAllocs.push_back(
-              {alloc, ma->compress(alloc, false /* isMultiTiered */)});
-          validAllocsAlt.push_back({alloc, ma->compressAlt(alloc)});
+          validAllocs.emplace_back(
+              alloc, ma->compress(alloc, false /* isMultiTiered */));
+          validAllocsAlt.emplace_back(alloc, ma->compressAlt(alloc));
           numAllocations++;
         }
       }

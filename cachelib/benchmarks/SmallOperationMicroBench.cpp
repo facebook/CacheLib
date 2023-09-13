@@ -130,7 +130,7 @@ void atomicCounterAdd() {
 
   std::vector<std::thread> ts;
   for (uint64_t i = 0; i < kThreads; i++) {
-    ts.push_back(std::thread{addStats});
+    ts.emplace_back(addStats);
   }
 
   {
@@ -156,7 +156,7 @@ void tlCounterAdd() {
 
   std::vector<std::thread> ts;
   for (uint64_t i = 0; i < kThreads; i++) {
-    ts.push_back(std::thread{addStats});
+    ts.emplace_back(addStats);
   }
 
   {

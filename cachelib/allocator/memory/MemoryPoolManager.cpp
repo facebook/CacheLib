@@ -19,6 +19,8 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
+
+#include <memory>
 #pragma GCC diagnostic pop
 
 using namespace facebook::cachelib;
@@ -53,7 +55,7 @@ MemoryPoolManager::MemoryPoolManager(
   }
   size_t slabsAdvised = 0;
   for (size_t i = 0; i < object.pools()->size(); ++i) {
-    pools_[i].reset(new MemoryPool(object.pools()[i], slabAlloc_));
+    pools_[i] = std::make_unique<MemoryPool>(object.pools()[i], slabAlloc_);
     slabsAdvised += pools_[i]->getNumSlabsAdvised();
   }
   for (const auto& kv : *object.poolsByName()) {
@@ -110,7 +112,8 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
   }
 
   const PoolId id = nextPoolId_;
-  pools_[id].reset(new MemoryPool(id, poolSize, slabAlloc_, allocSizes));
+  pools_[id] =
+      std::make_unique<MemoryPool>(id, poolSize, slabAlloc_, allocSizes);
   poolsByName_.insert({name.str(), id});
   nextPoolId_++;
   return id;

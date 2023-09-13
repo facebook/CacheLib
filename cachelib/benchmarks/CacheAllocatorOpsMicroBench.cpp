@@ -105,7 +105,7 @@ void runDifferentHTSizes(int htPower, uint64_t numObjects) {
   // Create readers
   std::vector<std::thread> rs;
   for (int i = 0; i < kNumThreads; i++) {
-    rs.push_back(std::thread{readOps});
+    rs.emplace_back(readOps);
   }
 
   {
@@ -171,13 +171,13 @@ void runFindMultiThreads(int numThreads,
   // Create readers
   std::vector<std::thread> rs;
   for (int i = 0; i < numThreads; i++) {
-    rs.push_back(std::thread{readOps});
+    rs.emplace_back(readOps);
   }
 
   // Create writers
   std::vector<std::thread> ws;
   for (int i = 0; i < 4; i++) {
-    ws.push_back(std::thread{writeOps});
+    ws.emplace_back(writeOps);
   }
 
   {
@@ -232,7 +232,7 @@ void runFindMissMultiThreads(int numThreads, bool isPeek) {
   };
   std::vector<std::thread> rs;
   for (int i = 0; i < numThreads; i++) {
-    rs.push_back(std::thread{readOps});
+    rs.emplace_back(readOps);
   }
 
   {
@@ -298,7 +298,7 @@ void runAllocateMultiThreads(int numThreads,
   uint64_t chunkSize = kObjects / numThreads;
   uint64_t totalItemsPerThread = chunkSize * kLoops;
   for (int i = 0; i < numThreads; i++) {
-    ws.push_back(std::thread{writeOps, startIndex, startIndex + chunkSize});
+    ws.emplace_back(writeOps, startIndex, startIndex + chunkSize);
     startIndex += chunkSize;
   }
 

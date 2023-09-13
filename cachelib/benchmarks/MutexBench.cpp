@@ -66,7 +66,7 @@ struct LoadInfo {
   double totalWeight{};
 
  public:
-  LoadInfo() {}
+  LoadInfo() = default;
   LoadInfo(double update, double evict, double dels)
       : totalWeight(update + evict + dels),
         updateRatio(update / totalWeight),
@@ -182,7 +182,7 @@ class Lru {
   explicit Lru(unsigned int numNodes)
       : numNodes_(numNodes), lru_{Node::PtrCompressor{}} {
     for (size_t i = 0; i < numNodes_; i++) {
-      nodes_.emplace_back(Node{});
+      nodes_.emplace_back();
     }
 
     // add all the nodes once the vector is sized appropriately.

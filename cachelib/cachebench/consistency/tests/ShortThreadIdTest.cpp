@@ -37,11 +37,11 @@ TEST(ShortThreadId, Basic) {
   // Spawn several threads at the same time to check synchronization: each
   // thread must get its own unique, sequential id.
   for (auto& sid : shortIds) {
-    threads.emplace_back(std::thread{[&smap, &sid] {
+    threads.emplace_back([&smap, &sid] {
       const auto tid = std::this_thread::get_id();
       sid = smap.getShort(tid);
       ASSERT_EQ(sid, smap.getShort(tid));
-    }});
+    });
   }
   for (auto& t : threads) {
     t.join();

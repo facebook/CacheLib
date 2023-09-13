@@ -71,10 +71,10 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
 
   if (configJson.count("poolDistributions")) {
     for (auto& it : configJson["poolDistributions"]) {
-      poolDistributions.push_back(DistributionConfig(it, configPath));
+      poolDistributions.emplace_back(it, configPath);
     }
   } else {
-    poolDistributions.push_back(DistributionConfig(configJson, configPath));
+    poolDistributions.emplace_back(configJson, configPath);
   }
 
   if (configJson.count("replayGeneratorConfig")) {

@@ -100,8 +100,7 @@ void bsRead() {
   BENCHMARK_SUSPEND {
     input.resize(size);
     for (size_t i = 0; i < size; i++) {
-      input.push_back(
-          std::make_pair(i, detail::BufferAddr{0, static_cast<uint32_t>(i)}));
+      input.emplace_back(i, detail::BufferAddr{0, static_cast<uint32_t>(i)});
     }
     for (size_t curIter = 0; curIter < iterations; curIter++) {
       searchKeys.push_back(folly::Random::rand32(size));

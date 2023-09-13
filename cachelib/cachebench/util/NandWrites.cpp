@@ -38,7 +38,7 @@ class SubprocessWrapper : public Process {
                     const std::vector<std::string>* env = nullptr)
       : subprocess_(argv, options, executable, env) {}
 
-  virtual ~SubprocessWrapper() {}
+  virtual ~SubprocessWrapper() = default;
 
   virtual std::pair<std::string, std::string> communicate() {
     return subprocess_.communicate();
@@ -154,7 +154,7 @@ std::optional<uint64_t> getBytesWritten(
   fields[fieldNum].erase(
       std::remove(fields[fieldNum].begin(), fields[fieldNum].end(), ','),
       fields[fieldNum].end());
-  return std::stoll(fields[fieldNum], 0 /* pos */, 0 /* base */) * factor;
+  return std::stoll(fields[fieldNum], nullptr /* pos */, 0 /* base */) * factor;
 }
 
 // The output for a Samsung device looks like:

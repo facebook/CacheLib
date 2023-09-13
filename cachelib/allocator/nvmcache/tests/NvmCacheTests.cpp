@@ -421,7 +421,7 @@ TEST_F(NvmCacheTest, ConcurrentFills) {
     std::vector<std::thread> thr;
     std::atomic<bool> missed = false;
     for (unsigned int j = 0; j < 50; j++) {
-      thr.push_back(std::thread([&]() {
+      thr.emplace_back([&]() {
         auto hdl = nvm.find(key);
         hdl.wait();
         if (!hdl) {
@@ -429,7 +429,7 @@ TEST_F(NvmCacheTest, ConcurrentFills) {
         } else {
           ASSERT_EQ(id, *hdl->getMemoryAs<int>());
         }
-      }));
+      });
     }
     for (unsigned int j = 0; j < 50; j++) {
       thr[j].join();

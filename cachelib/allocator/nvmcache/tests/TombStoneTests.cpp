@@ -32,7 +32,7 @@ void runInThreads(const std::function<void(int index)>& f,
                   unsigned int nThreads) {
   std::vector<std::thread> threads;
   for (unsigned int i = 0; i < nThreads; i++) {
-    threads.push_back(std::thread{f, i});
+    threads.emplace_back(f, i);
   }
 
   for (auto& t : threads) {
@@ -53,7 +53,7 @@ TEST(TombStoneTest, ConcurrentAddRemove) {
 
   std::vector<std::vector<std::unique_ptr<TombStones::Guard>>> guards;
   for (unsigned int i = 0; i < nThreads; i++) {
-    guards.push_back({});
+    guards.emplace_back();
   }
 
   auto addFunc = [&t, hashes, &guards](int index) mutable {

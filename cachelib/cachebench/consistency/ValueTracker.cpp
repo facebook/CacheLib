@@ -28,7 +28,7 @@ std::vector<folly::StringPiece> ValueTracker::wrapStrings(
   std::vector<folly::StringPiece> rv;
   rv.reserve(v.size());
   for (const auto& s : v) {
-    rv.push_back(folly::StringPiece{s.data(), s.size()});
+    rv.emplace_back(s.data(), s.size());
   }
   return rv;
 }

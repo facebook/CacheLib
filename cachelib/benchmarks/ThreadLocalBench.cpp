@@ -50,11 +50,11 @@ BENCHMARK(VanillaAtomicStats) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
-    threads.push_back(std::thread([&]() {
+    threads.emplace_back([&]() {
       for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
         val.fetch_add(1, std::memory_order_relaxed);
       }
-    }));
+    });
   }
 
   for (auto& thread : threads) {
@@ -68,11 +68,11 @@ BENCHMARK_RELATIVE(TestAtomicCounter) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
-    threads.push_back(std::thread([&]() {
+    threads.emplace_back([&]() {
       for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
         atomicCounter.inc();
       }
-    }));
+    });
   }
 
   for (auto& thread : threads) {
@@ -86,11 +86,11 @@ BENCHMARK_RELATIVE(VanillaThreadLocalStats) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
-    threads.push_back(std::thread([&]() {
+    threads.emplace_back([&]() {
       for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
         ++(*tlVal);
       }
-    }));
+    });
   }
 
   for (auto& thread : threads) {
@@ -104,11 +104,11 @@ BENCHMARK_RELATIVE(TestTLCounter) {
   std::vector<std::thread> threads;
   for (uint64_t i = 0; i < FLAGS_num_threads; i++) {
     // bind captures the variable by copy.
-    threads.push_back(std::thread([&]() {
+    threads.emplace_back([&]() {
       for (uint64_t j = 0; j < FLAGS_num_ops; j++) {
         tlCounter.inc();
       }
-    }));
+    });
   }
 
   for (auto& thread : threads) {

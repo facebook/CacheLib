@@ -34,7 +34,7 @@ class DListNode {
   DListNode(DListNode&&) = default;
   DListNode& operator=(DListNode&&) = default;
 
-  explicit DListNode() noexcept {}
+  explicit DListNode() noexcept = default;
 
   using CompressedPtr = DListNode*;
 

@@ -78,7 +78,7 @@ struct LoadInfo {
   double totalWeight{};
 
  public:
-  LoadInfo() {}
+  LoadInfo() = default;
   LoadInfo(double read, double write)
       : totalWeight(read + write),
         readRatio(read / totalWeight),

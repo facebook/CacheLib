@@ -47,7 +47,7 @@ using facebook::cachelib::util::FastStats;
 void runInThreads(size_t numThreads, const std::function<void()>& f) {
   std::vector<std::thread> threads;
   for (size_t i = 0; i < numThreads; i++) {
-    threads.push_back(std::thread(f));
+    threads.emplace_back(f);
   }
 
   for (auto& t : threads) {

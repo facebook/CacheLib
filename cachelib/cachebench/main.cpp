@@ -85,7 +85,7 @@ void setupSignalHandler() {
 
 void setupTimeoutHandler() {
   if (FLAGS_timeout_seconds > 0) {
-    stopperThread.reset(new std::thread([] {
+    stopperThread = std::make_unique<std::thread>([] {
       folly::EventBase eb;
       eb.runAfterDelay(
           []() {
@@ -95,7 +95,7 @@ void setupTimeoutHandler() {
           },
           FLAGS_timeout_seconds * 1000);
       eb.loopForever();
-    }));
+    });
     stopperThread->detach();
   }
 }
