@@ -40,7 +40,7 @@ class CachelibWrapperTest : public ::testing::Test,
       size_ = other.size_;
       other.size_ = 0;
     }
-    ~TestItem() {}
+    ~TestItem() = default;
 
     TestItem& operator=(TestItem&& other) {
       buf_.reset();

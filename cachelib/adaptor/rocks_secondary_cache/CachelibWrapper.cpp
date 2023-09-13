@@ -49,7 +49,7 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
         charge_(0),
         is_value_ready_(false),
         guard_(std::move(guard)) {}
-  ~RocksCachelibWrapperHandle() override {}
+  ~RocksCachelibWrapperHandle() override = default;
 
   RocksCachelibWrapperHandle(const RocksCachelibWrapperHandle&) = delete;
   RocksCachelibWrapperHandle& operator=(const RocksCachelibWrapperHandle&) =
