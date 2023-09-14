@@ -140,6 +140,7 @@ void* mmapImpl(
       util::throwSystemError(ENOMEM);
       break;
     }
+    [[fallthrough]];
   case EBADF:
   case EINVAL:
   case ENFILE:
