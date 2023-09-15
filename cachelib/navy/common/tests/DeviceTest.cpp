@@ -239,7 +239,7 @@ TEST_P(DeviceParamTest, MaxWriteSize) {
   int deviceSize = 16 * 1024;
   int ioAlignSize = 1024;
   std::vector<folly::File> fVec;
-  fVec.emplace_back(folly::File(filePath, O_RDWR | O_CREAT, S_IRWXU));
+  fVec.emplace_back(filePath, O_RDWR | O_CREAT, S_IRWXU);
 
   auto device = createFileDevice(std::move(fVec), deviceSize, ioAlignSize,
                                  ioAlignSize, 1024, nullptr);

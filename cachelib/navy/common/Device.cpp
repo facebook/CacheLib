@@ -151,7 +151,7 @@ struct IOReq {
 class IoContext {
  public:
   IoContext() = default;
-  virtual ~IoContext() {}
+  virtual ~IoContext() = default;
 
   virtual std::string getName() = 0;
   // Return true if IO submitted via submitIo can complete async
@@ -221,7 +221,7 @@ class AsyncIoContext : public IoContext {
                  size_t capacity,
                  bool useIoUring);
 
-  ~AsyncIoContext() override {}
+  ~AsyncIoContext() override = default;
 
   std::string getName() override { return fmt::format("ctx_{}", id_); }
   // IO is completed sync if compHandler_ is not available

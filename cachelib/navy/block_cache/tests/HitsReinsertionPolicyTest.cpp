@@ -107,7 +107,7 @@ TEST(HitsReinsertionPolicy, ThreadSafe) {
 
   std::vector<std::thread> threads;
   for (int i = 0; i < 159; i++) {
-    threads.emplace_back(std::thread(lookup));
+    threads.emplace_back(lookup);
   }
 
   for (auto& t : threads) {
