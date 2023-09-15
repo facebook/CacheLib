@@ -170,6 +170,8 @@ class RegionManager {
   // @buf may be mutated and will be de-allocated at the end of this
   void write(RelAddress addr, Buffer buf);
 
+  bool deviceWrite(RelAddress addr, Buffer buf);
+
   // Returns a buffer with data read from the device the @addr of size bytes
   // @addr must be the address returned by Region::open(OpenMode::Read).
   //
