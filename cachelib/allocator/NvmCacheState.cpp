@@ -30,8 +30,7 @@
 #include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 namespace {
 const folly::StringPiece kNvmCacheState = "NvmCacheState";
@@ -188,6 +187,4 @@ void NvmCacheState::markTruncated() {
   creationTime_ = util::getCurrentTimeSec();
 }
 
-} // namespace cachelib
-
-} // namespace facebook
+} // namespace facebook::cachelib

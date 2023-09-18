@@ -20,9 +20,7 @@
 
 #include "cachelib/allocator/datastruct/DList.h"
 
-namespace facebook {
-namespace cachelib {
-namespace tests {
+namespace facebook::cachelib::tests {
 
 class DListTest : public ::testing::Test {};
 
@@ -50,9 +48,7 @@ class DListNode {
 
   DListHook<DListNode> hook_{};
 };
-} // namespace tests
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::tests
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

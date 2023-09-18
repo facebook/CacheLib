@@ -20,8 +20,7 @@
 
 #include "cachelib/allocator/PoolResizeStrategy.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 PoolOptimizer::~PoolOptimizer() { stop(std::chrono::seconds(0)); }
 
@@ -86,5 +85,4 @@ void PoolOptimizer::work() {
   }
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

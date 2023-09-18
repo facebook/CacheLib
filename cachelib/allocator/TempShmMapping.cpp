@@ -22,8 +22,7 @@
 #include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 TempShmMapping::TempShmMapping(size_t size)
     : size_(size),
@@ -86,5 +85,4 @@ void* TempShmMapping::createShmMapping(ShmManager& shmManager,
   }
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

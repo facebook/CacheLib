@@ -22,8 +22,7 @@
 #include <pthread.h>
 #include <unistd.h>
 
-namespace facebook {
-namespace rocks_secondary_cache {
+namespace facebook::rocks_secondary_cache {
 using namespace rocksdb;
 
 class CachelibWrapperTest : public ::testing::Test,
@@ -578,5 +577,4 @@ TEST_F(CachelibWrapperTest, LargeItemTest) {
   handle.reset();
 }
 
-} // namespace rocks_secondary_cache
-} // namespace facebook
+} // namespace facebook::rocks_secondary_cache

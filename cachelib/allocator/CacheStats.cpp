@@ -18,8 +18,7 @@
 
 #include "cachelib/allocator/CacheStatsInternal.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 namespace detail {
 
 void Stats::init() {
@@ -356,5 +355,4 @@ void RateMap::exportStats(
   }
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

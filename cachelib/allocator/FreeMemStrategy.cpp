@@ -23,8 +23,7 @@
 
 #include "cachelib/allocator/Util.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 FreeMemStrategy::FreeMemStrategy(Config config)
     : RebalanceStrategy(FreeMem), config_(std::move(config)) {}
@@ -64,5 +63,4 @@ RebalanceContext FreeMemStrategy::pickVictimAndReceiverImpl(
   XLOGF(DBG, "Rebalancing: victimAC = {}", static_cast<int>(ctx.victimClassId));
   return ctx;
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

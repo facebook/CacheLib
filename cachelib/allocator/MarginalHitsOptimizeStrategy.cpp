@@ -23,8 +23,7 @@
 
 #include "cachelib/allocator/Util.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 PoolOptimizeContext
 MarginalHitsOptimizeStrategy::pickVictimAndReceiverFromRankings(
@@ -149,5 +148,4 @@ MarginalHitsOptimizeStrategy::pickVictimAndReceiverCompactCachesImpl(
       compactCacheState_, validVictim, validReceiver);
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

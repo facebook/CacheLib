@@ -21,8 +21,7 @@
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/common/Exceptions.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
@@ -316,5 +315,4 @@ size_t RateLimiter::throttle(int64_t delta) {
   return delta - rateOfChange_;
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

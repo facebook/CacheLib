@@ -23,8 +23,7 @@
 
 #include "cachelib/allocator/Util.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 HitsPerSlabStrategy::HitsPerSlabStrategy(Config config)
     : RebalanceStrategy(HitsPerSlab), config_(std::move(config)) {}
@@ -226,5 +225,4 @@ ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& cache,
 
   return victimClassId;
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

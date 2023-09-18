@@ -18,9 +18,7 @@
 
 #include "cachelib/allocator/datastruct/MultiDList.h"
 
-namespace facebook {
-namespace cachelib {
-namespace tests {
+namespace facebook::cachelib::tests {
 
 class MultiDListTest : public ::testing::Test {};
 
@@ -48,9 +46,7 @@ class DListNode {
 
   DListHook<DListNode> hook_{};
 };
-} // namespace tests
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::tests
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

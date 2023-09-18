@@ -18,8 +18,7 @@
 
 #include <folly/logging/xlog.h>
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 CCacheAllocator::CCacheAllocator(MemoryAllocator& allocator, PoolId poolId)
     : allocator_(allocator), poolId_(poolId), currentChunksIndex_(0) {
@@ -121,5 +120,4 @@ void CCacheAllocator::release(void* chunk) {
   allocator_.completeSlabRelease(context);
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

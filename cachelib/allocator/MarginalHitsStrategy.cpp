@@ -23,8 +23,7 @@
 
 #include "cachelib/allocator/Util.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 MarginalHitsStrategy::MarginalHitsStrategy(Config config)
     : RebalanceStrategy(MarginalHits), config_(std::move(config)) {}
@@ -105,5 +104,4 @@ RebalanceContext MarginalHitsStrategy::pickVictimAndReceiverFromRankings(
         classStates_[pid].smoothedRanks[ctx.victimClassId]);
   return ctx;
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

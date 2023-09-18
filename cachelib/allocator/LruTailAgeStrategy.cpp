@@ -23,8 +23,7 @@
 
 #include "cachelib/allocator/Util.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 LruTailAgeStrategy::LruTailAgeStrategy(Config config)
     : RebalanceStrategy(LruTailAge), config_(std::move(config)) {}
@@ -197,5 +196,4 @@ ClassId LruTailAgeStrategy::pickVictimImpl(const CacheBase& cache,
       cache.getPoolEvictionAgeStats(pid, config.slabProjectionLength);
   return pickVictim(config, pid, poolStats, poolEvictionAgeStats);
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

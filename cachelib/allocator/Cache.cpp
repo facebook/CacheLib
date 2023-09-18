@@ -21,8 +21,7 @@
 #include "cachelib/allocator/RebalanceStrategy.h"
 #include "cachelib/common/PercentileStats.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 void CacheBase::setRebalanceStrategy(
     PoolId pid, std::shared_ptr<RebalanceStrategy> strategy) {
@@ -547,5 +546,4 @@ void CacheBase::exportStats(
 
   return counters_.exportStats(aggregationInterval, cb);
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

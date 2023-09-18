@@ -102,7 +102,7 @@ void MemoryPool::checkState() const {
                        currSlabAlloc));
   }
 
-  if (acSizes_.size() == 0 || ac_.size() == 0) {
+  if (acSizes_.empty() || ac_.empty()) {
     throw std::invalid_argument("Empty alloc sizes");
   }
 

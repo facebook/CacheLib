@@ -18,8 +18,7 @@
 
 #include <folly/logging/xlog.h>
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 using detail::Info;
 
@@ -306,5 +305,4 @@ T RebalanceStrategy::executeAndRecordCurrentState(
   return rv;
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

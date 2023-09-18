@@ -21,8 +21,7 @@
 #include <stdexcept>
 #include <thread>
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 void ReleaseStats::addSlabReleaseEvent(const ClassId from,
                                        const ClassId to,
@@ -68,5 +67,4 @@ SlabReleaseEvents ReleaseStats::getSlabReleaseEvents(const PoolId pid) const {
   return res;
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

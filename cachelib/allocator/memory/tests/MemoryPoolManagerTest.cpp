@@ -134,7 +134,7 @@ TEST_F(MemoryPoolManagerTest, GetPoolBy) {
 
   ASSERT_EQ(nPools, m.getPoolIds().size());
 
-  for (auto kv : pools) {
+  for (const auto& kv : pools) {
     auto name = kv.first;
     auto& pool = kv.second;
     ASSERT_EQ(&m.getPoolByName(name), &pool);
@@ -170,7 +170,7 @@ TEST_F(MemoryPoolManagerTest, Serialization) {
 
   ASSERT_EQ(nPools, m.getPoolIds().size());
 
-  for (auto kv : pools) {
+  for (const auto& kv : pools) {
     auto name = kv.first;
     auto& pool = kv.second;
     ASSERT_EQ(&m.getPoolByName(name), &pool);
@@ -194,7 +194,7 @@ TEST_F(MemoryPoolManagerTest, Serialization) {
       *slabAlloc);
   ASSERT_TRUE(isSameMemoryPoolManager(m, m2));
 
-  for (auto kv : pools) {
+  for (const auto& kv : pools) {
     auto name = kv.first;
     auto& pool = kv.second;
 

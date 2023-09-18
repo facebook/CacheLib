@@ -18,8 +18,7 @@
 
 #include <folly/logging/xlog.h>
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 FreeThresholdStrategy::FreeThresholdStrategy(double lowEvictionAcWatermark,
                                              double highEvictionAcWatermark,
@@ -36,5 +35,4 @@ std::vector<size_t> FreeThresholdStrategy::calculateBatchSizes(
   throw std::runtime_error("Not supported yet!");
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

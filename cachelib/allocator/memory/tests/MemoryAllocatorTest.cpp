@@ -45,8 +45,7 @@ bool test_callback(void* /* unused */, AllocInfo /* unused */) {
 }
 } // namespace
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 TEST_F(MemoryAllocatorTest, Create) {
   size_t size = 100 * Slab::kSize;
@@ -324,7 +323,7 @@ TEST_F(MemoryAllocatorTest, Serialization) {
       true /* disableCoredump*/);
   ASSERT_TRUE(isSameMemoryAllocator(m, m2));
 
-  for (auto itr : allocatedPools) {
+  for (const auto& itr : allocatedPools) {
     const auto pid = itr.first;
     const auto& allocSizes = itr.second;
     size_t prev = 1;
@@ -392,7 +391,7 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
     poolAllocs[pid] = allocs;
   };
 
-  for (auto pool : pools) {
+  for (const auto& pool : pools) {
     makeAllocsOutOfPool(pool.first);
   }
 
@@ -603,7 +602,7 @@ TEST_F(MemoryAllocatorTest, isAllocFreed) {
     }
 
     m.completeSlabRelease(releaseContext);
-    ASSERT_TRUE(activeAllocs.size() > 0);
+    ASSERT_TRUE(!activeAllocs.empty());
     for (void* slabAlloc : activeAllocs) {
       // slab release already completed
       ASSERT_THROW(m.isAllocFreed(releaseContext, slabAlloc),
@@ -817,7 +816,7 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   }
 
   m.completeSlabRelease(releaseContext);
-  ASSERT_TRUE(activeAllocs.size() > 0);
+  ASSERT_TRUE(!activeAllocs.empty());
   for (void* slabAlloc : activeAllocs) {
     // slab release already completed
     ASSERT_THROW(m.isAllocFreed(releaseContext, slabAlloc),
@@ -829,5 +828,4 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   m.forEachAllocation(test_callback);
   ASSERT_EQ(forEachAllocationCount, 0);
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

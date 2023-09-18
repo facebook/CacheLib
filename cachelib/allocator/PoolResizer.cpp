@@ -21,8 +21,7 @@
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/common/Exceptions.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 PoolResizer::PoolResizer(CacheBase& cache,
                          unsigned int numSlabsPerIteration,
@@ -96,5 +95,4 @@ void PoolResizer::work() {
     cache_.resizeCompactCaches();
   }
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

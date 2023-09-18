@@ -20,9 +20,7 @@
 #include "cachelib/allocator/datastruct/tests/gen-cpp2/test_objects_types.h"
 #include "cachelib/common/Serialization.h"
 
-namespace facebook {
-namespace cachelib {
-namespace tests {
+namespace facebook::cachelib::tests {
 
 const int kAllocSize = 32;
 
@@ -83,9 +81,7 @@ class CACHELIB_PACKED_ATTR SListNode {
  private:
   void* content_;
 };
-} // namespace tests
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::tests
 
 using namespace facebook::cachelib;
 using namespace facebook::cachelib::tests;

@@ -16,8 +16,7 @@
 
 #include "cachelib/allocator/CCacheManager.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 CCacheManager::CCacheManager(const SerializationType& object,
                              MemoryAllocator& memoryAllocator)
@@ -86,5 +85,4 @@ CCacheManager::SerializationType CCacheManager::saveState() {
   return object;
 }
 
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

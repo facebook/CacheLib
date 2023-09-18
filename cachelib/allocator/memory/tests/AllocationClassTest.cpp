@@ -43,8 +43,7 @@ bool test_callback(void* /* unused */, AllocInfo /* unused */) {
 }
 } // namespace
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 
 TEST_F(AllocationClassTest, Basic) {
   // create a dummy allocator to instantiate the AllocationClass.
@@ -731,7 +730,7 @@ TEST_F(AllocationClassTest, ReleaseSlabMultithread) {
   releaseThread.join();
 
   ASSERT_FALSE(firstSlabReleaseContext.isReleased());
-  const auto firstSlabActiveAllocs =
+  const auto& firstSlabActiveAllocs =
       firstSlabReleaseContext.getActiveAllocations();
   ASSERT_LE(
       ac.getAllocsPerSlab() - 2 * AllocationClass::kFreeAllocsPruneLimit - 500,
@@ -1363,5 +1362,4 @@ TEST_F(AllocationClassTest, forEachAllocationSlabRelease) {
   forEachAllocationCount = 0;
   ASSERT_EQ(forEachAllocationCount, 0);
 }
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

@@ -21,8 +21,7 @@
 #include "folly/synchronization/Rcu.h"
 #include "rocksdb/version.h"
 
-namespace facebook {
-namespace rocks_secondary_cache {
+namespace facebook::rocks_secondary_cache {
 
 #define FB_CACHE_MAX_ITEM_SIZE 4 << 20
 using ApiWrapper = cachelib::FbInternalRuntimeUpdateWrapper<FbCache>;
@@ -293,5 +292,4 @@ std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
       std::move(cache), std::move(admin), std::move(defaultPool)));
 }
 
-} // namespace rocks_secondary_cache
-} // namespace facebook
+} // namespace facebook::rocks_secondary_cache
