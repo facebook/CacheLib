@@ -66,21 +66,17 @@ class Index {
     uint8_t totalHits{0};
     // hits during the current window for this item (e.g. before re-admission)
     uint8_t currentHits{0};
-    // last access time seconds.
-    uint32_t lastAccessTime{0};
 
     ItemRecord(uint32_t _address = 0,
                uint16_t _sizeHint = 0,
                uint8_t _totalHits = 0,
-               uint8_t _currentHits = 0,
-               uint32_t _lastAccessTime = 0)
+               uint8_t _currentHits = 0)
         : address(_address),
           sizeHint(_sizeHint),
           totalHits(_totalHits),
-          currentHits(_currentHits),
-          lastAccessTime(_lastAccessTime) {}
+          currentHits(_currentHits) {}
   };
-  static_assert(12 == sizeof(ItemRecord), "ItemRecord size is 12 bytes");
+  static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
 
   struct LookupResult {
     friend class Index;
@@ -112,11 +108,6 @@ class Index {
       return record_.totalHits;
     }
 
-    uint32_t lastAccessTime() const {
-      XDCHECK(found_);
-      return record_.lastAccessTime;
-    }
-
    private:
     ItemRecord record_;
     bool found_{false};
@@ -132,7 +123,6 @@ class Index {
   // will reset hits counting. If the entry was successfully overwritten,
   // LookupResult.found() returns true and LookupResult.record() returns the old
   // record.
-  // The lookup result will not have lastAccessTime updated.
   LookupResult insert(uint64_t key, uint32_t address, uint16_t sizeHint);
 
   // Replaces old address with new address if there exists the key with the
@@ -141,10 +131,6 @@ class Index {
   //
   // @return true if replaced.
   bool replaceIfMatch(uint64_t key, uint32_t newAddress, uint32_t oldAddress);
-
-  // update the access time of the given key.
-  // @return true if found and updated
-  bool updateAccessTime(uint64_t key, uint32_t lastAccessTime);
 
   // If the entry was successfully removed, LookupResult.found() returns true
   // and LookupResult.record() returns the record that was just found.

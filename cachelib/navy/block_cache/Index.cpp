@@ -18,7 +18,6 @@
 
 #include <folly/Format.h>
 
-#include "cachelib/common/Time.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
@@ -58,8 +57,6 @@ Index::LookupResult Index::lookup(uint64_t key) {
     lr.record_ = it->second;
     it.value().totalHits = safeInc(lr.record_.totalHits);
     it.value().currentHits = safeInc(lr.record_.currentHits);
-    // We don't have to update the last access time here as the item is fetched
-    // into DRAM and the last access time in DRAM will be used.
   }
   return lr;
 }
@@ -97,17 +94,6 @@ Index::LookupResult Index::insert(uint64_t key,
     map.try_emplace(key, address, sizeHint);
   }
   return lr;
-}
-
-bool Index::updateAccessTime(uint64_t key, uint32_t lastAccessTime) {
-  auto& map = getMap(key);
-  auto lock = std::lock_guard{getMutex(key)};
-  auto it = map.find(subkey(key));
-  if (it != map.end()) {
-    it.value().lastAccessTime = lastAccessTime;
-    return true;
-  }
-  return false;
 }
 
 bool Index::replaceIfMatch(uint64_t key,
@@ -191,7 +177,6 @@ void Index::persist(RecordWriter& rw) const {
       entry.sizeHint() = record.sizeHint;
       entry.totalHits() = record.totalHits;
       entry.currentHits() = record.currentHits;
-      entry.lastAccessTime() = record.lastAccessTime;
       bucket.entries()->push_back(entry);
     }
     // Serialize bucket then clear contents to reuse memory.
@@ -215,8 +200,7 @@ void Index::recover(RecordReader& rr) {
                                *entry.address(),
                                *entry.sizeHint(),
                                *entry.totalHits(),
-                               *entry.currentHits(),
-                               *entry.lastAccessTime());
+                               *entry.currentHits());
     }
   }
 }

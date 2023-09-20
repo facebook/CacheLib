@@ -98,15 +98,6 @@ class BigHash final : public Engine {
 
   uint64_t estimateWriteSize(HashedKey, BufferView) const override;
 
-  // Update the access time for the bucket
-  bool updateAccessTime(HashedKey hk, uint32_t accessTime) override {
-    auto idx = getBucketId(hk).index();
-    if (bucketLastAccessTimes_[idx].get() < accessTime) {
-      bucketLastAccessTimes_[idx].set(accessTime);
-    }
-    return false;
-  }
-
   // Look up a key in BigHash. On success, it will return Status::Ok and
   // populate "value" with the value found. User should pass in a null
   // Buffer as "value" as any existing storage will be freed. If not found,
@@ -214,9 +205,6 @@ class BigHash final : public Engine {
   Device& device_;
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[kNumMutexes]};
-  // Last access time for each bucket.
-  // Not using locks on purpose.
-  std::vector<AtomicCounter32> bucketLastAccessTimes_;
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;

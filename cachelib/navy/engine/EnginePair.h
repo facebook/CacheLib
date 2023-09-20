@@ -64,11 +64,6 @@ class EnginePair {
   // This number can be useful for write rate throttling purpose.
   uint64_t estimateWriteSize(HashedKey hk, BufferView value) const;
 
-  // Synchronous update access time of a key if exists.
-  // This is called after a flash insertion success and when an
-  // item is evicted from DRAM with a copy in flash.
-  bool updateAccessTime(HashedKey key, uint32_t lastAccessTime);
-
   // Schedule an insert.
   void scheduleInsert(HashedKey hk, BufferView value, InsertCallback cb);
 

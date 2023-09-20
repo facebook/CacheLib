@@ -30,7 +30,6 @@ class NoopEngine final : public Engine {
   }
   bool couldExist(HashedKey) override { return false; }
   uint64_t estimateWriteSize(HashedKey, BufferView) const override { return 0; }
-  bool updateAccessTime(HashedKey, uint32_t) override { return false; }
   Status lookup(HashedKey /* hk */, Buffer& /* value */) override {
     return Status::NotFound;
   }

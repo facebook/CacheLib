@@ -125,8 +125,6 @@ void BigHash::reset() {
   bfProbeCount_.set(0);
   checksumErrorCount_.set(0);
   usedSizeBytes_.set(0);
-  bucketLastAccessTimes_.clear();
-  bucketLastAccessTimes_.resize(numBuckets_, AtomicCounter32{0});
 }
 
 double BigHash::bfFalsePositivePct() const {
@@ -226,11 +224,6 @@ void BigHash::persist(RecordWriter& rw) {
   *pd.cacheBaseOffset() = cacheBaseOffset_;
   *pd.numBuckets() = numBuckets_;
   *pd.usedSizeBytes() = usedSizeBytes_.get();
-  pd.accessTimes()->reserve(numBuckets_);
-  for (auto& it : bucketLastAccessTimes_) {
-    pd.accessTimes()->push_back(it.get());
-  }
-  XLOG(INFO, "saved access time for {} buckets", pd.accessTimes()->size());
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
@@ -260,19 +253,6 @@ bool BigHash::recover(RecordReader& rr) {
       auto configStr = serializeToJson(pd);
       XLOGF(ERR, "Recovery config: {}", configStr.c_str());
       throw std::logic_error{"config mismatch"};
-    }
-
-    if (pd.accessTimes().is_set()) {
-      if (pd.accessTimes()->size() != numBuckets_) {
-        throw std::logic_error{folly::sformat(
-            "access time count doesn't match bucket count {} vs. {}",
-            pd.accessTimes()->size(),
-            numBuckets_)};
-      }
-      for (size_t idx = 0; idx < numBuckets_; idx++) {
-        bucketLastAccessTimes_[idx] =
-            AtomicCounter32(static_cast<uint32_t>(pd.accessTimes()->at(idx)));
-      }
     }
 
     generationTime_ = std::chrono::nanoseconds{*pd.generationTime()};
