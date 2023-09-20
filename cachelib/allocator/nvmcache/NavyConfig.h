@@ -395,11 +395,6 @@ class BigHashConfig {
     return *this;
   }
 
-  BigHashConfig& setAccessTimeTracking(bool trackAccessTime) noexcept {
-    trackLastAccessTime_ = trackAccessTime;
-    return *this;
-  }
-
   bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
 
   unsigned int getSizePct() const { return sizePct_; }
@@ -409,8 +404,6 @@ class BigHashConfig {
   uint64_t getBucketBfSize() const { return bucketBfSize_; }
 
   uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
-
-  bool getAccessTimeTracking() const { return trackLastAccessTime_; }
 
  private:
   // Percentage of how much of the device out of all is given to BigHash
@@ -425,8 +418,6 @@ class BigHashConfig {
   uint64_t bucketBfSize_{8};
   // The maximum item size to put into Navy BigHash engine.
   uint64_t smallItemMaxSize_{};
-  // Whether to track the last access time of a bucket
-  bool trackLastAccessTime_{true};
 };
 
 // Config for a pair of small,large engines.
