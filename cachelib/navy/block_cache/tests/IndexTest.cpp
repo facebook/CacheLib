@@ -84,17 +84,17 @@ TEST(Index, ReplaceExact) {
 TEST(Index, RemoveExact) {
   Index index;
   // Empty value should fail in replace
-  EXPECT_FALSE(index.removeIfMatch(111, 4444).found());
+  EXPECT_FALSE(index.removeIfMatch(111, 4444));
 
   index.insert(111, 4444, 0);
   EXPECT_TRUE(index.lookup(111).found());
   EXPECT_EQ(4444, index.lookup(111).address());
 
   // Old value mismatch should fail in replace
-  EXPECT_FALSE(index.removeIfMatch(111, 2222).found());
+  EXPECT_FALSE(index.removeIfMatch(111, 2222));
   EXPECT_EQ(4444, index.lookup(111).address());
 
-  EXPECT_TRUE(index.removeIfMatch(111, 4444).found());
+  EXPECT_TRUE(index.removeIfMatch(111, 4444));
   EXPECT_FALSE(index.lookup(111).found());
 }
 

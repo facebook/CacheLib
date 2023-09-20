@@ -149,19 +149,17 @@ Index::LookupResult Index::remove(uint64_t key) {
   return lr;
 }
 
-Index::LookupResult Index::removeIfMatch(uint64_t key, uint32_t address) {
-  LookupResult lr;
+bool Index::removeIfMatch(uint64_t key, uint32_t address) {
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
   auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == address) {
-    lr.found_ = true;
-    lr.record_ = it->second;
     trackRemove(it->second.totalHits);
     map.erase(it);
+    return true;
   }
-  return lr;
+  return false;
 }
 
 void Index::reset() {

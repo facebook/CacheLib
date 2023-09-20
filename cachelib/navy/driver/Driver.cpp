@@ -104,11 +104,6 @@ uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
              : hk.key().size() + value.size();
 }
 
-bool Driver::updateAccessTime(HashedKey hk, uint32_t lastAccessTime) {
-  return enginePairs_[selectEnginePair(hk)].updateAccessTime(hk,
-                                                             lastAccessTime);
-}
-
 Status Driver::insert(HashedKey key, BufferView value) {
   folly::Baton<> done;
   Status cbStatus{Status::Ok};

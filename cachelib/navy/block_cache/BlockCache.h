@@ -309,7 +309,7 @@ class BlockCache final : public Engine {
     return regionManager_.toRelative(decodeAbsAddress(code).sub(1)).add(1);
   }
 
-  enum class ReinsertionDecision {
+  enum class ReinsertionRes {
     // Item was reinserted back into the cache
     kReinserted,
     // Item was removed by user earlier
@@ -317,20 +317,6 @@ class BlockCache final : public Engine {
     // Item wasn't eligible for re-insertion and was evicted
     kEvicted,
   };
-
-  // Result from reinsertion. If the item was evicted, the lastAccessTime stored
-  // in the index will be returned.
-  struct ReinsertionRes {
-    ReinsertionDecision decision;
-    uint32_t lastAccessTime;
-
-    /* implicit */ ReinsertionRes(ReinsertionDecision _decision)
-        : decision(_decision), lastAccessTime(0) {}
-
-    ReinsertionRes(ReinsertionDecision _decision, uint32_t _lastAccessTime)
-        : decision(_decision), lastAccessTime(_lastAccessTime) {}
-  };
-
   ReinsertionRes reinsertOrRemoveItem(HashedKey hk,
                                       BufferView value,
                                       uint32_t entrySize,
@@ -339,7 +325,7 @@ class BlockCache final : public Engine {
   // Removes an entry key from the index.
   // @return true if the item is successfully removed; false if the item cannot
   //         be found or was removed earlier.
-  Index::LookupResult removeItem(HashedKey hk, RelAddress currAddr);
+  bool removeItem(HashedKey hk, RelAddress currAddr);
 
   void validate(Config& config) const;
 

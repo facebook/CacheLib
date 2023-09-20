@@ -82,15 +82,12 @@ BigHash::BigHash(Config&& config)
 
 BigHash::BigHash(Config&& config, ValidConfigTag)
     : checkExpired_(std::move(config.checkExpired)),
-      destructorCb_{
-          [cb = std::move(config.destructorCb)](HashedKey hk,
-                                                BufferView value,
-                                                DestructorEvent event,
-                                                uint32_t lastAccessTime) {
-            if (cb) {
-              cb(hk, value, event, lastAccessTime);
-            }
-          }},
+      destructorCb_{[cb = std::move(config.destructorCb)](
+                        HashedKey hk, BufferView value, DestructorEvent event) {
+        if (cb) {
+          cb(hk, value, event);
+        }
+      }},
       bucketSize_{config.bucketSize},
       cacheBaseOffset_{config.cacheBaseOffset},
       numBuckets_{config.numBuckets()},
@@ -174,18 +171,18 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
 void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_size", getSize());
   visitor("navy_bh_items", itemCount_.get());
-  visitor("navy_bh_inserts", insertCount_.get(),
-          CounterVisitor::CounterType::RATE);
+  visitor(
+      "navy_bh_inserts", insertCount_.get(), CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_inserts",
           succInsertCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor("navy_bh_lookups", lookupCount_.get(),
-          CounterVisitor::CounterType::RATE);
+  visitor(
+      "navy_bh_lookups", lookupCount_.get(), CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_lookups",
           succLookupCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor("navy_bh_removes", removeCount_.get(),
-          CounterVisitor::CounterType::RATE);
+  visitor(
+      "navy_bh_removes", removeCount_.get(), CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_removes",
           succRemoveCount_.get(),
           CounterVisitor::CounterType::RATE);
@@ -310,11 +307,11 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   // we copy the items and trigger the destructorCb after bucket lock is
   // released to avoid possible heavy operations or locks in the destrcutor.
   std::vector<std::tuple<Buffer, Buffer, DestructorEvent>> removedItems;
-  DestructorCallback cb = [&removedItems](HashedKey key, BufferView val,
-                                          DestructorEvent event, uint32_t) {
-    // must make a copy for the key, o/w data might be deleted
-    removedItems.emplace_back(Buffer{makeView(key.key())}, val, event);
-  };
+  DestructorCallback cb =
+      [&removedItems](HashedKey key, BufferView val, DestructorEvent event) {
+        // must make a copy for the key, o/w data might be deleted
+        removedItems.emplace_back(Buffer{makeView(key.key())}, val, event);
+      };
 
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
@@ -353,11 +350,9 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   }
 
   for (const auto& item : removedItems) {
-    destructorCb_(
-        makeHK(std::get<0>(item)) /* key */,
-        std::get<1>(item).view() /* value */,
-        std::get<2>(item) /* event */,
-        bucketLastAccessTimes_[bid.index()].get() /* lastAccessTime */);
+    destructorCb_(makeHK(std::get<0>(item)) /* key */,
+                  std::get<1>(item).view() /* value */,
+                  std::get<2>(item) /* event */);
   }
 
   if (oldRemainingBytes < newRemainingBytes) {
@@ -444,9 +439,10 @@ Status BigHash::remove(HashedKey hk) {
   // we copy the items and trigger the destructorCb after bucket lock is
   // released to avoid possible heavy operations or locks in the destrcutor.
   Buffer valueCopy;
-  DestructorCallback cb = [&valueCopy](HashedKey, BufferView value,
-                                       DestructorEvent,
-                                       uint32_t) { valueCopy = Buffer{value}; };
+  DestructorCallback cb = [&valueCopy](
+                              HashedKey, BufferView value, DestructorEvent) {
+    valueCopy = Buffer{value};
+  };
 
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
@@ -485,8 +481,7 @@ Status BigHash::remove(HashedKey hk) {
   }
 
   if (!valueCopy.isNull()) {
-    destructorCb_(hk, valueCopy.view(), DestructorEvent::Removed,
-                  bucketLastAccessTimes_[bid.index()].get());
+    destructorCb_(hk, valueCopy.view(), DestructorEvent::Removed);
   }
 
   XDCHECK_LE(oldRemainingBytes, newRemainingBytes);

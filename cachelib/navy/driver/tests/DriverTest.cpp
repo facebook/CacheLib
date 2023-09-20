@@ -49,14 +49,12 @@ class MockEngine : public Engine {
                       MockDestructor* cb = nullptr,
                       uint64_t itemMaxSize = UINT32_MAX)
       : name_(name),
-        destructorCb_{[cb](HashedKey key,
-                           BufferView value,
-                           DestructorEvent event,
-                           uint32_t lastAccessTime) {
-          if (cb) {
-            cb->call(key, value, event, lastAccessTime);
-          }
-        }},
+        destructorCb_{
+            [cb](HashedKey key, BufferView value, DestructorEvent event) {
+              if (cb) {
+                cb->call(key, value, event);
+              }
+            }},
         itemMaxSize_(itemMaxSize) {
     ON_CALL(*this, insert(_, _))
         .WillByDefault(Invoke([this](HashedKey hk, BufferView value) {
@@ -148,7 +146,7 @@ class MockEngine : public Engine {
     auto value = std::move(itr->second.second);
     cache_.erase(itr);
     if (destructorCb_) {
-      destructorCb_(key, value.view(), DestructorEvent::Removed, 0);
+      destructorCb_(key, value.view(), DestructorEvent::Removed);
     }
     return true;
   }
@@ -563,9 +561,8 @@ TEST(Driver, EvictBlockCache) {
   auto largeValue = bg.gen(32);
 
   MockDestructor ecbBC;
-  EXPECT_CALL(
-      ecbBC,
-      call(makeHK("key"), largeValue.view(), DestructorEvent::Removed, _));
+  EXPECT_CALL(ecbBC,
+              call(makeHK("key"), largeValue.view(), DestructorEvent::Removed));
   auto bc = std::make_unique<MockEngine>("", &ecbBC);
   auto bcPtr = bc.get();
 
@@ -616,9 +613,8 @@ TEST(Driver, EvictSmallItemCache) {
   auto bcPtr = bc.get();
 
   MockDestructor ecbSI;
-  EXPECT_CALL(
-      ecbSI,
-      call(makeHK("key"), smallValue.view(), DestructorEvent::Removed, _));
+  EXPECT_CALL(ecbSI,
+              call(makeHK("key"), smallValue.view(), DestructorEvent::Removed));
   auto si = std::make_unique<MockEngine>("", &ecbSI);
   auto siPtr = si.get();
 

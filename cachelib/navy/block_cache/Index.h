@@ -153,8 +153,8 @@ class Index {
 
   // Removes only if both key and address match.
   //
-  // @return removed result if matched.
-  Index::LookupResult removeIfMatch(uint64_t key, uint32_t address);
+  // @return true if removed successfully, false otherwise.
+  bool removeIfMatch(uint64_t key, uint32_t address);
 
   // Updates hits information of a key.
   void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits);

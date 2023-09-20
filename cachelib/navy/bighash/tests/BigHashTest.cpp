@@ -255,9 +255,8 @@ TEST(BigHash, DoubleInsert) {
   EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
   EXPECT_EQ(makeView("12345"), value.view());
 
-  EXPECT_CALL(
-      helper,
-      call(makeHK("key"), makeView("12345"), DestructorEvent::Removed, _));
+  EXPECT_CALL(helper,
+              call(makeHK("key"), makeView("12345"), DestructorEvent::Removed));
 
   // Insert the same key a second time will overwrite the previous value.
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678")));
@@ -274,10 +273,10 @@ TEST(BigHash, DestructorCallback) {
   MockDestructor helper;
   EXPECT_CALL(
       helper,
-      call(makeHK("key 1"), makeView("value 1"), DestructorEvent::Recycled, _));
+      call(makeHK("key 1"), makeView("value 1"), DestructorEvent::Recycled));
   EXPECT_CALL(
       helper,
-      call(makeHK("key 2"), makeView("value 2"), DestructorEvent::Removed, _));
+      call(makeHK("key 2"), makeView("value 2"), DestructorEvent::Removed));
   config.destructorCb = toCallback(helper);
 
   BigHash bh(std::move(config));
@@ -576,8 +575,8 @@ TEST(BigHash, BloomFilter) {
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
   MockDestructor helper;
-  EXPECT_CALL(helper, call(makeHK("100"), _, DestructorEvent::Recycled, _));
-  EXPECT_CALL(helper, call(makeHK("101"), _, DestructorEvent::Removed, _));
+  EXPECT_CALL(helper, call(makeHK("100"), _, DestructorEvent::Recycled));
+  EXPECT_CALL(helper, call(makeHK("101"), _, DestructorEvent::Removed));
   config.destructorCb = toCallback(helper);
 
   BigHash bh(std::move(config));
@@ -696,8 +695,7 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
   config.device = device.get();
 
   std::atomic<bool> done = false, started = false;
-  config.destructorCb = [&](HashedKey, BufferView, DestructorEvent event,
-                            uint32_t) {
+  config.destructorCb = [&](HashedKey, BufferView, DestructorEvent event) {
     started = true;
     // only hangs the insertion not removal
     while (!done && event == DestructorEvent::Recycled)

@@ -1366,14 +1366,6 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*candidate)) {
     nvmCache_->put(*candidate, std::move(token));
   }
-
-  // The item has a copy in NVM and is leaving DARM, update the access time
-  // stored in NVM cache.
-  if (candidate->isNvmClean()) {
-    nvmCache_->updateAccessTime(HashedKey{candidate->getKey()},
-                                candidate->getLastAccessTime());
-  }
-
   return {candidate, toRecycle};
 }
 

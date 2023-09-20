@@ -146,13 +146,6 @@ class NvmCache {
   // @return      true if the key could exist, false otherwise
   bool couldExistFast(HashedKey key);
 
-  // Synchronously update the last access time of the given key.
-  // Allows CacheAllocator to synchronously update the last access time when an
-  // item is leaving DRAM with a copy in NVM cache.
-  bool updateAccessTime(HashedKey key, uint32_t lastAccessTime) {
-    return navyCache_->updateAccessTime(key, lastAccessTime);
-  }
-
   // Try to mark the key as in process of being evicted from RAM to NVM.
   // This is used to maintain the consistency between the RAM cache and
   // NvmCache when an item is transitioning from RAM to NvmCache in the
@@ -434,10 +427,7 @@ class NvmCache {
                      HashedKey key,
                      navy::BufferView value);
 
-  void evictCB(HashedKey hk,
-               navy::BufferView val,
-               navy::DestructorEvent e,
-               uint32_t lastAccessTime);
+  void evictCB(HashedKey hk, navy::BufferView val, navy::DestructorEvent e);
 
   static navy::BufferView makeBufferView(folly::ByteRange b) {
     return navy::BufferView{b.size(), b.data()};
@@ -471,9 +461,6 @@ class NvmCache {
   std::array<TombStones, kShards> tombstones_;
 
   const ItemDestructor itemDestructor_;
-
-  AtomicCounter retentionMissing_;
-  AtomicCounter retentionError_;
 
   mutable std::array<std::mutex, kShards> itemDestructorMutex_;
   // Used to track the keys of items present in NVM that should be excluded for

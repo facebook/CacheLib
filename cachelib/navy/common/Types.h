@@ -59,10 +59,8 @@ enum class DestructorEvent {
 };
 
 // @key and @value are valid only during this callback invocation
-using DestructorCallback = std::function<void(HashedKey hk,
-                                              BufferView value,
-                                              DestructorEvent event,
-                                              uint32_t lastAccessTime)>;
+using DestructorCallback =
+    std::function<void(HashedKey hk, BufferView value, DestructorEvent event)>;
 
 // Checking NvmItem expired
 using ExpiredCheck = std::function<bool(BufferView value)>;
