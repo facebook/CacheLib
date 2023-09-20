@@ -92,7 +92,7 @@ accessed, it is recorded (e.g. promoted in LRU). When the cache allocator asks
 for an item to evict, it returns an iterator for the next item to be evicted.
 When the item is finally removed form the queue, it removes the item form the
 queue. There is one MMContainer **per allocation class in each
-pool** (see `evictableMMContainers_` in `cachelib/allocator/CacheAllocator.h`).
+pool** (see `mmContainers_` in `cachelib/allocator/CacheAllocator.h`).
 
 It has the following major API functions:
 

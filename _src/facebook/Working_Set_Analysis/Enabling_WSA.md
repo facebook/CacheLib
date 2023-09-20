@@ -90,7 +90,7 @@ CachelibSamplingConfig(
     selector=GeographySelector(type=GeographySelectorType.GLOBAL),
     samplingRate=5000,
     cacheNameFilter=CachelibCacheNameFilter(
-        cacheNames={"&lt;your cache name&gt;"}
+        cacheNames={"<your cache name>"}
     ),
 ),
 // ...

@@ -9,7 +9,7 @@ Cachebench takes command line parameters to control its behavior. The following 
 
 ### JSON test configuration
 
-`--json_test_config` is the most important command line parameter that is needed for  specifying the workoad and cache configuration for cachebench.  See the section below on JSON config for more details.
+`--json_test_config` is the most important command line parameter that is needed for specifying the workload and cache configuration for cachebench.  See the section below on JSON config for more details.
 
 ### Watching progress
 

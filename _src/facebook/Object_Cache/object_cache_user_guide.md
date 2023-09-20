@@ -13,7 +13,11 @@ Not sure whether you should use object-cache? Check the [object-cache decision g
 
 The simplest object-cache is limited by the **number of objects**, i.e. an eviction will be triggered when the total object number reaches certain limit; the limit needs to be configured by the user as `l1EntriesLimit`.
 
-If your system is able to track the number of objects and provide that limit, you are good to use this option. If not, you may need to [create a "size-aware" object-cache](#create-a-size-aware-object-cache).
+You are good to use this option if
+- your system is able to track the number of objects and provide that limit, and
+- there is no memory risk (e.g. memory regression/OOM caused by variations or gradual increase in object size)
+
+Otherwise, you may need to [create a "size-aware" object-cache](#create-a-size-aware-object-cache).
 
 #### Configuration
 
@@ -93,16 +97,13 @@ If your system needs to cap the cache size by bytes where the simple version men
 A "size-aware" object-cache tracks the object size internally and is limited by the **total size of objects**, i.e. an eviction will be triggered when the total size of objects reaches certain limit; the limit needs to be configured by the user as `cacheSizeLimit`.
 
 :exclamation: **IMPORTANT:** A few notes before you try to create a "size-aware" object-cache:
-
-- This feature currently only works for **immutable** access.
-  - Immutable access means no "in-place modification" of the object once inserted to the cache.
-  - In the future, we might be able to support **mutable** access.
 - Objects number is still bounded by `l1EntriesLimit`.
   - Above this many entries, object-cache will start evicting even if `cacheSizeLimit` has not been reached.
   - Make sure you set a reasonably large `l1EntriesLimit` to avoid objects early eviction when it's far from reaching `cacheSizeLimit`.
-- Users are responsible to calculate the size of each object and pass the value to object-cache:
+- When inserting a new object into object-cache, you are responsible for calculating the size of that new object and passing the value to object-cache:
   - We provide a util class to help calculate the object size. Check out ["how to calculate object size"](#how-to-calculate-object-size).
   - Object-cache maintains the total object size internally based on the object size provided by users. See more in ["how is object size tracked"](#how-is-object-size-tracked).
+- When mutating an existing object in object-cache, you MUST call `mutateObject` API with a mutation callback (see ["Mutate Objects"](#mutate-objects)). By calling `mutateObject` API, object-cache will update the object size internally and there is no calculation needs to be done on your end.
 
 #### Configuration
 
@@ -143,7 +144,7 @@ void init() {
 
 #### How to calculate object size
 
-It is users' responsibility to calculate each object size (i.e. how many bytes are occupied by the object). We provide a util class `ThreadMemoryTracker` that users can leverage to do the calculation.
+When inserting a new object, it is users' responsibility to calculate each object size (i.e. how many bytes are occupied by the object). We provide a util class `ThreadMemoryTracker` that users can leverage to do the calculation.
 
 The basic idea is:
 
@@ -350,10 +351,7 @@ std::shared_ptr<T> findToWrite(folly::StringPiece key);
 
 :exclamation: **IMPORTANT:**
 
-Separating write and read traffic is quite important here. A misuse of these two APIs can lead to unreasonable eviction result because we only promotes read traffic by default. For more details, check out ["Eviction policy"](../../Cache_Library_User_Guides/eviction_policy.md#configuration)
-
-The guidance here is:
-
+Separating write and read traffic is quite important here. A misuse of these two APIs can lead to unreasonable eviction result because we only promotes read traffic by default. For more details, check out ["Eviction policy"](../../Cache_Library_User_Guides/eviction_policy.md#configuration). The guidance here is:
 - Always consider `find` API first;
 - Choose `findToWrite` API only when an in-place modification needs to happen.
 
@@ -372,6 +370,108 @@ if (mutableFoo !== nullptr) {
     ... some write operation
 }
 
+```
+
+### Mutate objects
+If size-awareness is enabled, to do in-place modification on an object, you must call `mutateObject` API:
+```cpp
+template <typename T>
+void mutateObject(const std::shared_ptr<T>& object,
+                  std::function<void()> mutateCb);
+```
+- there are two parameters:
+  - `object`: a shared pointer of the object to be mutated. This shared pointer must be fetched from object-cache APIs `findToWrite`, `insertOrReplace` or `insert`.
+  - `mutateCb`: a callback containing mutation logic.
+
+What should happen inside `mutateCb` is:
+  - allocation of the new value
+  - deallocation of the old value to be replaced
+
+A common incorrect usage is:
+```cpp
+auto ptr = objCache->findToWrite<ObjectType>(...);
+auto newPtr = std::make_unique<ObjectType>(...);
+auto mutateCb = [&ptr, &newPtr]() { ptr = std::move(newPtr); };
+```
+
+To correct this, you should move the construction of `newPtr` into `mutateCb`:
+```cpp
+auto ptr = objCache->findToWrite<ObjectType>(...);
+auto mutateCb = [&ptr]() {
+    auto newPtr = std::make_unique<ObjectType>(...);
+    ptr = std::move(newPtr);
+};
+```
+
+Example (`std::string`):
+```cpp
+auto stringPtr = objcache->findToWrite<std::string>("cacheKey");
+
+// set a value
+auto mutateCb1 = [&stringPtr]() { *stringPtr = "tiny"; };
+
+// replace the value with a longer string
+auto mutateCb2 = [&stringPtr]() {
+    *stringPtr = "longgggggggggggggggggggggggggggstringgggggggggggg";
+};
+
+// replace the value with a shorter string
+auto mutateCb3 = [&stringPtr]() {
+    *stringPtr = "short";
+    // optional: we can call “shrink_to_fit” to deallocate the memory when the new string is shorter
+    // (*found).shrink_to_fit();
+};
+
+objcache->mutateObject(stringPtr, std::move(mutateCb1));
+objcache->mutateObject(stringPtr, std::move(mutateCb2));
+objcache->mutateObject(stringPtr, std::move(mutateCb3));
+
+```
+
+Example (`std::vector`):
+```cpp
+using ObjectType = std::vector<Foo>;
+
+auto vectorPtr = objcache->findToWrite<ObjectType>("cacheKey");
+
+// add an entry using emplace_back
+auto mutateCb1 = [&vectorPtr]() { vectorPtr->emplace_back(Foo{1, 2, 3}); };
+
+// add another entry using push_back
+auto mutateCb2 = [&vectorPtr]() { vectorPtr->push_back(Foo{4, 5, 6}); };
+
+// remove the entry from the end using pop_back
+auto mutateCb3 = [&vectorPtr]() {
+    vectorPtr->pop_back();
+    // optional: we can call “shrink_to_fit” to deallocate unnecessary memory
+    // vectorPtr->shrink_to_fit();
+};
+
+objcache->mutateObject(vectorPtr, std::move(mutateCb1));
+objcache->mutateObject(vectorPtr, std::move(mutateCb2));
+objcache->mutateObject(vectorPtr, std::move(mutateCb3));
+```
+
+Example (`std::unordere_map`):
+```cpp
+using ObjectType = std::unordered_map<std::string, std::string>;
+
+auto mapPtr = objcache->findToWrite<ObjectType>("cacheKey");
+
+// add an entry
+auto mutateCb1 = [&mapPtr]() { (*mapPtr)["key"] = "tiny"; };
+
+// replace the entry with a longer string
+auto mutateCb2 = [&mapPtr]() {
+    (*mapPtr)["key"] = "longgggggggggggggggggggggggggggstringgggggggggggg";
+};
+
+// remove the entry
+auto mutateCb3 = [&mapPtr]() { mapPtr->erase("key"); };
+
+objcache->mutateObject(mapPtr, std::move(mutateCb1));
+objcache->mutateObject(mapPtr, std::move(mutateCb2));
+objcache->mutateObject(mapPtr, std::move(mutateCb3));
 ```
 
 ### Remove objects
@@ -532,25 +632,24 @@ objcache->extendTtl(obj, std::chrono::seconds(300) /* 5 mins*/); // expiryTime b
 
 ## Cache Persistence
 
-Cache persistence is an opt-in feature in object-cache to persist objects across process restarts. It is useful when you want to restart your binary without losing previously cached objects. Currently we support cache persistence in a multi-thread mode where user can configure the parallelism degree to adjust the persistence/recovery speed.
+Cache persistence is an opt-in feature in object-cache to persist objects across process restarts. It is useful when you want to restart your binary without losing previously cached objects. Currently we support cache persistence in a multi-thread mode where user can configure the parallelism degree to adjust the persistence/recovery speed. This feature only works when you restart the process in the same machine. Across machines persistence is not supported.
 
-Before enabling cache persistence, please be aware of the following limitations:
-
-- Only works when you restart the process in the same machine. Across machines persistence is not supported.
-- Only Thrift objects can be persisted.
-
+### Configure cache persistence
 To enable cache persistence, you need to configure the following parameters:
-
 - `threadCount`: number of threads to work on persistence/recovery concurrently
 - `persistBasefilePath`: file path to save the persistent data
   - cache metadata will be saved in "persistBasefilePath";
   - objects will be saved in "persistBasefilePath_i", i in [0, threadCount)
 - `serializeCallback`: callback to serialize an object, used for object persisting
-  - it takes `ObjectCache::Serializer` which has a `serialize<T>()` API that serializes the object of type `T` and returns a `folly::IOBuf`.
+  - it takes `ObjectCache::Serializer` which has
+    - `serialize<ThriftT>()` API that serializes the object of type `ThriftT` and returns a `folly::IOBuf`;
+    - `serialize<T, ThriftT>(toThriftCb)` API that requires a callback `std::function<ThriftT(T*)>` to convert non-Thrift type to Thrift type, then do the same thing as the above.
 - `deserializeCallback`: callback to deserialize an object, used for object recovery
-  - it takes `ObjectCache::Deserializer` which has a `deserialize<T>()` API that deserializes the object of type `T` and inserts it to the cache; returns `true` when the insertion is successful.
+  - it takes `ObjectCache::Deserializer` which has
+    - `deserialize<ThriftT>()` API that deserializes the object of type `ThriftT` and inserts it to the cache; returns `true` when the insertion is successful;
+    - `deserialize<T, ThriftT>(fromThriftCb)` API that requires a callback `std::function<T(ThriftT)>` to convert Thrift type to non-Thrift type, then do the same thing as the above.
 
-### Configure cache persistence
+#1. If you store Thrift objects in object-cache, follow the following examples:
 
 Example (single-type):
 
@@ -600,6 +699,55 @@ config.enablePersistence(threadCount,
                            });
 
 ```
+
+#2. If you store non-Thrift objects in object-cache, you need to create a Thrift counterpart.
+
+Example (single-type):
+
+Assuming you store C++ objects of type `Foo` in object-cache and build a Thrift type `ThriftFoo` for cache persistence.
+```cpp
+// object.h
+class Foo {
+    int a;
+    int b;
+    int c;
+}
+```
+
+```cpp
+// object.thrift
+struct ThriftFoo {
+  1: i32 a;
+  2: i32 b;
+  3: i32 c;
+}
+
+```
+
+```cpp
+ObjectCache::Config config;
+...
+config..enablePersistence(
+            threadsCount, persistBaseFilePath,
+            [&](ObjectCache::Serializer serializer) {
+              return serializer.serialize<Foo, ThriftFoo>(
+                  [](Foo* foo) -> ThriftFoo {
+                    ThriftFoo obj;
+                    obj.a() = foo->a;
+                    obj.b() = foo->b;
+                    obj.c() = foo->c;
+                    return obj;
+                  });
+            },
+            [&](ObjectCache::Deserializer deserializer) {
+              return deserializer.deserialize<Foo, ThriftFoo>(
+                  [](ThriftFoo thriftObj) -> Foo {
+                    return Foo{*thriftObj.a(), *thriftObj.b(), *thriftObj.c()};
+                  });
+            });
+```
+
+Same rule applies to multi-type use cases.
 
 ### Use cache persistence
 

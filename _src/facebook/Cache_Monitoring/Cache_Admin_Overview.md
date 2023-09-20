@@ -36,7 +36,7 @@ Enable custom item stats
 enableItemStatsSampling(
     const AllocatorT& allocator /* unused */,
     const std::string& scubaTable,
-    const std::function<rfe::ScubaData::Sample(typename AllocatorT::Item&)>& cb);
+    const std::function<rfe::ScubaDataSample(typename AllocatorT::Item&)>& cb);
 ```
 
 ## ODS Stats Exporter
