@@ -111,6 +111,10 @@ class CachelibWrapperTest : public ::testing::Test,
   static Cache::CacheItemHelper helper_fail_;
 
   static Status CreateCallback(const Slice& data,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
+                               rocksdb::CompressionType /*type*/,
+                               rocksdb::CacheTier /*source*/,
+#endif
                                Cache::CreateContext* context,
                                MemoryAllocator* /*allocator*/,
                                void** out_obj,
@@ -173,21 +177,13 @@ Cache::CacheItemHelper CachelibWrapperTest::helper_fail_(
 TEST_F(CachelibWrapperTest, BasicTest) {
   std::string str1 = RandomString(1020);
   TestItem item1(str1.data(), str1.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
-#endif
             Status::OK());
   std::string str2 = RandomString(1020);
   TestItem item2(str2.data(), str2.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k2", &item2, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k2", &item2, &CachelibWrapperTest::helper_),
-#endif
             Status::OK());
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;
@@ -225,16 +221,10 @@ TEST_F(CachelibWrapperTest, WaitAllTest) {
   for (int i = 0; i < num_blocks; ++i) {
     std::string str = RandomString(1020);
     items.emplace_back(str.data(), str.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
     ASSERT_EQ(cache()->Insert("k" + std::to_string(i),
                               &items.back(),
                               &CachelibWrapperTest::helper_,
                               /*force_insert=*/false),
-#else
-    ASSERT_EQ(cache()->Insert("k" + std::to_string(i),
-                              &items.back(),
-                              &CachelibWrapperTest::helper_),
-#endif
               Status::OK());
   }
 
@@ -284,19 +274,11 @@ TEST_F(CachelibWrapperTest, CreateFailTest) {
   std::string str1 = RandomString(1020);
   TestItem item1(str1.data(), str1.length());
   SetFailCreate(true);
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_fail_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_fail_),
-#endif
             Status::NotSupported());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
-#endif
             Status::OK());
 
   std::unique_ptr<SecondaryCacheResultHandle> handle;
@@ -309,12 +291,8 @@ TEST_F(CachelibWrapperTest, CreateFailTest) {
 TEST_F(CachelibWrapperTest, LookupWhileCloseTest) {
   std::string str1 = RandomString(1020);
   TestItem item1(str1.data(), str1.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
-#endif
             Status::OK());
 
   pthread_mutex_t mu;
@@ -401,12 +379,8 @@ Status InsertWhileCloseTestCb(void* obj,
 TEST_F(CachelibWrapperTest, InsertWhileCloseTest) {
   std::string str1 = RandomString(1020);
   TestItem item1(str1.data(), str1.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
-#endif
             Status::OK());
 
   pthread_mutex_t mu;
@@ -420,12 +394,8 @@ TEST_F(CachelibWrapperTest, InsertWhileCloseTest) {
     Cache::CacheItemHelper helper = CachelibWrapperTest::helper_;
     helper.saveto_cb = InsertWhileCloseTestCb;
     InsertWhileCloseTestItem item(str.data(), str.length(), &mu, &cv_seq_1);
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
     EXPECT_EQ(cache()->Insert("k2", &item, &helper, /*force_insert=*/false),
               Status::OK());
-#else
-    EXPECT_EQ(cache()->Insert("k2", &item, &helper), Status::OK());
-#endif
   };
   auto close_fn = [&]() {
     RocksCachelibWrapper* wrap_cache =
@@ -466,16 +436,10 @@ TEST_F(CachelibWrapperTest, WaitAllWhileCloseTest) {
   for (int i = 0; i < num_blocks; ++i) {
     std::string str = RandomString(1020);
     items.emplace_back(str.data(), str.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
     ASSERT_EQ(cache()->Insert("k" + std::to_string(i),
                               &items.back(),
                               &CachelibWrapperTest::helper_,
                               /*force_insert=*/false),
-#else
-    ASSERT_EQ(cache()->Insert("k" + std::to_string(i),
-                              &items.back(),
-                              &CachelibWrapperTest::helper_),
-#endif
               Status::OK());
   }
 
@@ -561,12 +525,8 @@ TEST_F(CachelibWrapperTest, UpdateMaxRateTest) {
 TEST_F(CachelibWrapperTest, LargeItemTest) {
   std::string str1 = RandomString(8 << 20);
   TestItem item1(str1.data(), str1.length());
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
   ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_,
                             /*force_insert=*/false),
-#else
-  ASSERT_EQ(cache()->Insert("k1", &item1, &CachelibWrapperTest::helper_),
-#endif
             Status::InvalidArgument());
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> handle;

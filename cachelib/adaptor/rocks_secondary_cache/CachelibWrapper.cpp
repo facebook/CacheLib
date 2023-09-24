@@ -124,6 +124,10 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
 
       const char* item = static_cast<const char*>(handle_->getMemory());
       s = helper_->create_cb(rocksdb::Slice(item, size),
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
+                             rocksdb::CompressionType::kNoCompression,
+                             rocksdb::CacheTier::kVolatileTier,
+#endif
                              create_context_,
                              /*allocator*/ nullptr,
                              &val_,
@@ -142,12 +146,8 @@ RocksCachelibWrapper::~RocksCachelibWrapper() { Close(); }
 rocksdb::Status RocksCachelibWrapper::Insert(
     const rocksdb::Slice& key,
     void* value,
-    const rocksdb::Cache::CacheItemHelper* helper
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
-    ,
-    bool /* force_erase */
-#endif
-) {
+    const rocksdb::Cache::CacheItemHelper* helper,
+    bool /* force_erase */) {
   FbCacheKey k(key.data(), key.size());
   size_t size;
   rocksdb::Status s;

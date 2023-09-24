@@ -107,12 +107,17 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
 
   rocksdb::Status Insert(const rocksdb::Slice& key,
                          void* value,
-                         const rocksdb::Cache::CacheItemHelper* helper
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 6)
-                         ,
-                         bool force_erase
+                         const rocksdb::Cache::CacheItemHelper* helper,
+                         bool force_erase) override;
+
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
+  rocksdb::Status InsertSaved(const rocksdb::Slice& /*key*/,
+                              const rocksdb::Slice& /*saved*/,
+                              rocksdb::CompressionType /*type*/,
+                              rocksdb::CacheTier /*source*/) override {
+    return rocksdb::Status::NotSupported();
+  }
 #endif
-                         ) override;
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> Lookup(
       const rocksdb::Slice& key,
