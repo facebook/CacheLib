@@ -39,7 +39,8 @@ TEST(NvmItemTest, SingleBlob) {
   uint32_t origSize = 5;
   Blob blob{origSize, data};
   size_t bufSize = NvmItem::estimateVariableSize(blob);
-  auto nvmItem = std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blob));
+  auto nvmItem = std::unique_ptr<NvmItem>(new (bufSize + sizeof(NvmItem))
+                                              NvmItem(1, 1, 1, blob));
   ASSERT_EQ(1, nvmItem->getNumBlobs());
   ASSERT_EQ(data, nvmItem->getBlob(0).data);
   ASSERT_EQ(origSize, nvmItem->getBlob(0).origAllocSize);
@@ -48,7 +49,7 @@ TEST(NvmItemTest, SingleBlob) {
 }
 
 TEST(NvmItemTest, MultipleBlobs) {
-  int nBlobs = folly::Random::rand32(0, 100);
+  int nBlobs = folly::Random::rand32(1, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
   const uint32_t extra = 10;
@@ -60,8 +61,8 @@ TEST(NvmItemTest, MultipleBlobs) {
   }
 
   size_t bufSize = NvmItem::estimateVariableSize(blobs);
-  auto nvmItem =
-      std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs));
+  auto nvmItem = std::unique_ptr<NvmItem>(new (bufSize + sizeof(NvmItem))
+                                              NvmItem(1, 1, 1, blobs));
 
   ASSERT_EQ(nBlobs, nvmItem->getNumBlobs());
   for (int i = 0; i < nBlobs; i++) {
@@ -73,7 +74,8 @@ TEST(NvmItemTest, MultipleBlobs) {
 }
 
 TEST(NvmItemTest, TotalSize) {
-  int nBlobs = folly::Random::rand32(0, 100);
+  // nBlobs should be greater than 0
+  int nBlobs = folly::Random::rand32(1, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
   for (int i = 0; i < nBlobs; i++) {
@@ -85,14 +87,14 @@ TEST(NvmItemTest, TotalSize) {
   }
 
   size_t bufSize = NvmItem::estimateVariableSize(blobs);
-  auto nvmItem =
-      std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs));
+  auto nvmItem = std::unique_ptr<NvmItem>(new (bufSize + sizeof(NvmItem))
+                                              NvmItem(1, 1, 1, blobs));
 
   ASSERT_EQ(bufSize + sizeof(NvmItem), nvmItem->totalSize());
 }
 
 TEST(NvmItemTest, MultipleBlobsOverFlow) {
-  int nBlobs = folly::Random::rand32(0, 100);
+  int nBlobs = folly::Random::rand32(1, 100);
   std::vector<Blob> blobs;
   std::vector<std::string> strings;
   const uint32_t extra = 10;
@@ -110,7 +112,8 @@ TEST(NvmItemTest, MultipleBlobsOverFlow) {
                        folly::StringPiece{buf.get(), maxLen}});
 
   size_t bufSize = NvmItem::estimateVariableSize(blobs);
-  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blobs)),
+  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize + sizeof(NvmItem))
+                                            NvmItem(1, 1, 1, blobs)),
                std::out_of_range);
 }
 
@@ -121,7 +124,8 @@ TEST(NvmItemTest, SingleBlobOverflow) {
             folly::StringPiece{buf.get(), maxLen}};
 
   size_t bufSize = NvmItem::estimateVariableSize(blob);
-  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize) NvmItem(1, 1, 1, blob)),
+  ASSERT_THROW(std::unique_ptr<NvmItem>(new (bufSize + sizeof(NvmItem))
+                                            NvmItem(1, 1, 1, blob)),
                std::out_of_range)
       << maxLen;
 }
