@@ -144,6 +144,7 @@ TEST(MockSingleThreadJobScheduler, Run) {
   sp.wait(0);
   sp.wait(1);
   sp.wait(2);
+  ex.finish();
   EXPECT_EQ(3, ex.getDoneCount());
 }
 } // namespace tests
