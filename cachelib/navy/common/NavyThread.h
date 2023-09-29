@@ -41,10 +41,12 @@ class NavyThread {
   /**
    * Initializes with current EventBaseManager and passed-in thread name.
    */
-  explicit NavyThread(folly::StringPiece name)
-      : th_(name), fm_(&folly::fibers::getFiberManager(*th_.getEventBase())) {}
+  explicit NavyThread(folly::StringPiece name) {
+    th_ = std::make_unique<folly::ScopedEventBaseThread>(name.str());
+    fm_ = &folly::fibers::getFiberManager(*th_->getEventBase());
+  }
 
-  ~NavyThread() = default;
+  ~NavyThread() { th_.reset(); }
 
   /**
    * Add the passed-in task to the FiberManager.
@@ -71,7 +73,7 @@ class NavyThread {
   NavyThread& operator=(const NavyThread& other) = delete;
 
   // Actual worker thread running EventBase and FiberManager loop
-  folly::ScopedEventBaseThread th_;
+  std::unique_ptr<folly::ScopedEventBaseThread> th_;
 
   // FiberManager which are driven by the thread
   folly::fibers::FiberManager* fm_;
