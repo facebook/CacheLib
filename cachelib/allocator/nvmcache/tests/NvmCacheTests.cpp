@@ -269,7 +269,10 @@ TEST_F(NvmCacheTest, EvictToNvmGetCheckCtime) {
 }
 
 TEST_F(NvmCacheTest, EvictToNvmExpired) {
-  auto& nvm = this->cache();
+  // Test with TTL, so the reaper should be disabled
+  auto& config = this->getConfig();
+  config.reaperInterval = std::chrono::milliseconds(0);
+  auto& nvm = this->makeCache();
   auto pid = this->poolId();
 
   const uint32_t ttl = 5; // 5 second ttl
@@ -294,7 +297,10 @@ TEST_F(NvmCacheTest, EvictToNvmExpired) {
 }
 
 TEST_F(NvmCacheTest, ReadFromNvmExpired) {
-  auto& nvm = this->cache();
+  // Test with TTL, so the reaper should be disabled
+  auto& config = this->getConfig();
+  config.reaperInterval = std::chrono::milliseconds(0);
+  auto& nvm = this->makeCache();
   auto pid = this->poolId();
 
   const uint32_t ttl = 5; // 5 second ttl
