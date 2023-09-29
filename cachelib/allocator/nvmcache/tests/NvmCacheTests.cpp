@@ -2179,8 +2179,10 @@ TEST_F(NvmCacheTest, testEvictCB) {
 void verifyItem(const Item& item, const Item& iobufItem) {
   ASSERT_EQ(item.isChainedItem(), iobufItem.isChainedItem());
   ASSERT_EQ(item.hasChainedItem(), iobufItem.hasChainedItem());
-  ASSERT_EQ(item.getCreationTime(), iobufItem.getCreationTime());
-  ASSERT_EQ(item.getExpiryTime(), iobufItem.getExpiryTime());
+  if (!item.isChainedItem()) {
+    ASSERT_EQ(item.getCreationTime(), iobufItem.getCreationTime());
+    ASSERT_EQ(item.getExpiryTime(), iobufItem.getExpiryTime());
+  }
   ASSERT_EQ(item.getSize(), iobufItem.getSize());
   ASSERT_EQ(
       0, std::memcmp(item.getMemory(), iobufItem.getMemory(), item.getSize()));

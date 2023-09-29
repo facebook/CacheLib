@@ -3412,8 +3412,10 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.numActiveHandles = getNumActiveHandles();
 
   ret.isNewRamCache = cacheCreationTime_ == cacheInstanceCreationTime_;
+  // NVM cache is new either if newly created or started fresh with truncate
   ret.isNewNvmCache =
-      nvmCacheState_.getCreationTime() == cacheInstanceCreationTime_;
+      (nvmCacheState_.getCreationTime() == cacheInstanceCreationTime_) ||
+      nvmCacheState_.shouldStartFresh();
 
   return ret;
 }
