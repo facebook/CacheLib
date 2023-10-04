@@ -29,10 +29,7 @@
 #include "cachelib/navy/testing/MockJobScheduler.h"
 #include "cachelib/navy/testing/SeqPoints.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 const Region kRegion0{RegionId{0}, 100};
 const Region kRegion1{RegionId{1}, 100};
@@ -546,7 +543,4 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
   flushThread.join();
   countThread.join();
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

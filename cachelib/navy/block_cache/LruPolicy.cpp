@@ -23,9 +23,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 constexpr std::chrono::seconds LruPolicy::kEstimatorWindow;
 
@@ -201,6 +199,4 @@ void LruPolicy::recover(RecordReader& rr) {
   throw std::runtime_error("Not Implemented.");
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

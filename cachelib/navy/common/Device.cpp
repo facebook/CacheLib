@@ -33,9 +33,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 namespace {
 using IOOperation =
@@ -981,6 +979,4 @@ std::unique_ptr<Device> createDirectIoFileDevice(
                                   encryptor);
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

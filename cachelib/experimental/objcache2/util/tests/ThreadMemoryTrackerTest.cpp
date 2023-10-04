@@ -19,10 +19,7 @@
 
 #include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
 
-namespace facebook {
-namespace cachelib {
-namespace objcache2 {
-namespace test {
+namespace facebook::cachelib::objcache2::test {
 using Object = std::array<char, 16>;
 
 static const size_t expected =
@@ -54,7 +51,4 @@ TEST(ThreadMemoryTrackerTest, Iteration) {
   }
 }
 
-} // namespace test
-} // namespace objcache2
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::objcache2::test

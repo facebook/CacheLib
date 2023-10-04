@@ -32,9 +32,7 @@ using testing::_;
 using testing::Invoke;
 using testing::Return;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace {
 // The default threshold of small/large item is 32 bytes in thes test class.
 constexpr uint32_t kSmallItemMaxSize{32};
@@ -1345,6 +1343,4 @@ TEST(Driver, MultiRecovery) {
   }
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

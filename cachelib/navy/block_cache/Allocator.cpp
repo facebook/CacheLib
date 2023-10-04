@@ -24,9 +24,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 void RegionAllocator::setAllocationRegion(RegionId rid) {
   XDCHECK(!rid_.valid());
@@ -133,6 +131,4 @@ void Allocator::getCounters(const CounterVisitor& visitor) const {
   regionManager_.getCounters(visitor);
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

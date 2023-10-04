@@ -23,8 +23,7 @@
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/common/Buffer.h"
 
-namespace facebook {
-namespace cachelib {
+namespace facebook::cachelib {
 namespace {
 
 // Create a DynamicRandomAP with given target rate that
@@ -345,5 +344,4 @@ TEST(DynamicRandomAPTest, ThrottleAll) {
 }
 
 } // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib

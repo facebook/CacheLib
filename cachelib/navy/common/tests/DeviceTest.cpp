@@ -30,10 +30,7 @@
 
 using testing::_;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Device, BytesWritten) {
   MockDevice device{100, 1};
   EXPECT_CALL(device, writeImpl(_, _, _))
@@ -392,7 +389,4 @@ INSTANTIATE_TEST_SUITE_P(DeviceParamTestSuite,
                                          std::make_tuple(IoEngine::IoUring,
                                                          1)));
 
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

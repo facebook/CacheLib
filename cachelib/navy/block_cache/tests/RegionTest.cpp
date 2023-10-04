@@ -18,10 +18,7 @@
 
 #include "cachelib/navy/block_cache/Region.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Region, ReadAndBlock) {
   Region r{RegionId(0), 1024};
 
@@ -89,7 +86,4 @@ TEST(Region, BufferFlush) {
   EXPECT_EQ(Region::FlushRes::kSuccess,
             r.flushBuffer([](auto, auto) { return true; }));
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

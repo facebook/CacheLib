@@ -36,9 +36,7 @@
 #define O_DIRECT 0
 #endif
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace {
 class BlockCacheProtoImpl final : public BlockCacheProto {
  public:
@@ -481,6 +479,4 @@ std::unique_ptr<Device> createFileDevice(
                                   std::move(encryptor));
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

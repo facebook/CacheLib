@@ -20,9 +20,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 static_assert(sizeof(Bucket) == 24,
               "Bucket overhead. If this changes, you may have to adjust the "
               "sizes used in unit tests.");
@@ -200,6 +198,4 @@ Bucket::Iterator Bucket::getFirst() const {
 Bucket::Iterator Bucket::getNext(Iterator itr) const {
   return Iterator{storage_.getNext(itr.itr_)};
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

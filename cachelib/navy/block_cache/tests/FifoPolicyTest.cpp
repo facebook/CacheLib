@@ -20,10 +20,7 @@
 #include "cachelib/navy/block_cache/FifoPolicy.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 const Region kRegion0{RegionId{0}, 100};
 const Region kRegion1{RegionId{1}, 100};
@@ -148,7 +145,4 @@ TEST(EvictionPolicy, SegmentedFifoRebalance) {
   EXPECT_EQ(region1.id(), policy.evict());
   EXPECT_EQ(region2.id(), policy.evict());
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

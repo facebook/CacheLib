@@ -24,9 +24,7 @@
 
 #include "cachelib/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
     unsigned int readerThreads,
@@ -273,6 +271,4 @@ void OrderedThreadPoolJobScheduler::getCounters(const CounterVisitor& v) const {
   v("navy_req_order_curr_spool_size", currSpooled_.get());
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

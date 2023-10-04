@@ -25,9 +25,7 @@
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace {
 // get discrete_distribution based on enginePair sizes.
 std::discrete_distribution<size_t> getDist(
@@ -317,6 +315,4 @@ std::pair<Status, std::string> Driver::getRandomAlloc(Buffer& value) {
   size_t idx = getRandomAllocDist(getRandomAllocGen);
   return enginePairs_[idx].getRandomAlloc(value);
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

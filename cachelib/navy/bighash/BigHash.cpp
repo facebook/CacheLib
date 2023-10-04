@@ -29,9 +29,7 @@
 #include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 constexpr uint32_t BigHash::kFormatVersion;
 
@@ -541,6 +539,4 @@ bool BigHash::writeBucket(BucketId bid, Buffer buffer) {
   bucket->setChecksum(Bucket::computeChecksum(buffer.view()));
   return device_.write(getBucketOffset(bid), std::move(buffer));
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

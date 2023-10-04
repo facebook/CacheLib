@@ -22,9 +22,7 @@
 
 using namespace folly::recordio_helpers;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 constexpr uint32_t kMetadataHeaderFileId = 1;
 namespace {
 class FileRecordWriter final : public RecordWriter {
@@ -297,6 +295,4 @@ std::unique_ptr<RecordReader> createFileRecordReader(folly::File file) {
   return std::make_unique<FileRecordReader>(std::move(file));
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

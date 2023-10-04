@@ -19,9 +19,7 @@
 #include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 RegionManager::RegionManager(uint32_t numRegions,
                              uint64_t regionSize,
                              uint64_t baseOffset,
@@ -562,6 +560,4 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   policy_->getCounters(visitor);
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

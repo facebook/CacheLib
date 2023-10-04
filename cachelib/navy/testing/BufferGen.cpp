@@ -16,9 +16,7 @@
 
 #include "cachelib/navy/testing/BufferGen.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 const char BufferGen::kAlphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     "abcdefghijklmnopqrstuvwxyz"
@@ -40,6 +38,4 @@ Buffer BufferGen::gen(uint32_t sizeMin, uint32_t sizeMax) {
     return gen(sizeMin + static_cast<uint32_t>(rg_() % (sizeMax - sizeMin)));
   }
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

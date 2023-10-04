@@ -22,9 +22,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 RejectRandomAP::Config& RejectRandomAP::Config::validate() {
   if (!between(probability, 0, 1)) {
     throw std::invalid_argument{
@@ -52,6 +50,4 @@ bool RejectRandomAP::accept(HashedKey /* hk */,
     return fdiv(rg_(), rg_.max()) < probability_;
   }
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

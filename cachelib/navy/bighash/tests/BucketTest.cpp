@@ -23,10 +23,7 @@
 
 using testing::_;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Bucket, SingleKey) {
   Buffer buf(96 + sizeof(Bucket));
   auto& bucket = Bucket::initNew(buf.mutableView(), 0);
@@ -389,7 +386,4 @@ TEST(Bucket, EvictionExpired) {
     }
   }
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

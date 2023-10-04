@@ -21,10 +21,7 @@
 
 #include "cachelib/navy/common/Buffer.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 std::string replicate(const std::string& s, size_t times) {
   std::string rv;
@@ -172,7 +169,4 @@ TEST(Buffer, CopyTo) {
   view.copyTo(dst + 6);
   EXPECT_STREQ("hello 12345.", dst);
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

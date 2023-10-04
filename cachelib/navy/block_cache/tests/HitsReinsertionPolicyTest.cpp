@@ -22,10 +22,7 @@
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 
 TEST(HitsReinsertionPolicy, Simple) {
   Index index;
@@ -153,7 +150,4 @@ TEST(HitsReinsertionPolicy, Recovery) {
   }
 }
 
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

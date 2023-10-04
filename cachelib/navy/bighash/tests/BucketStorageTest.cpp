@@ -20,10 +20,7 @@
 
 #include "cachelib/navy/bighash/BucketStorage.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 size_t getEndOffset() { return sizeof(BucketStorage); }
 
@@ -199,7 +196,4 @@ TEST(BucketStorage, RemoveUntil) {
   EXPECT_TRUE(checkContent(itr1.view(), '4'));
   EXPECT_TRUE(itr2.done());
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

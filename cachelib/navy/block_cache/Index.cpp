@@ -20,9 +20,7 @@
 
 #include "cachelib/navy/serialization/Serialization.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 constexpr uint32_t Index::kNumBuckets; // Link error otherwise
 
 namespace {
@@ -209,6 +207,4 @@ void Index::getCounters(const CounterVisitor& visitor) const {
   hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_hits");
   visitor("navy_bc_item_removed_with_no_access", unAccessedItems_.get());
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

@@ -28,9 +28,7 @@
 #include "cachelib/navy/common/Types.h"
 #include "folly/Range.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 constexpr uint32_t BlockCache::kMinAllocAlignSize;
 constexpr uint32_t BlockCache::kMaxItemSize;
@@ -834,6 +832,4 @@ serialization::BlockCacheConfig BlockCache::serializeConfig(
   *serializedConfig.version() = kFormatVersion;
   return serializedConfig;
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

@@ -21,9 +21,7 @@
 
 #include "cachelib/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace {
 std::vector<uint64_t> generateSizes(uint64_t min, uint64_t max, double factor) {
   XDCHECK_GT(factor, 1.0);
@@ -95,6 +93,4 @@ void SizeDistribution::reset() {
     d.second.set(0);
   }
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

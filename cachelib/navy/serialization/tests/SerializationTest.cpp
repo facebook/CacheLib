@@ -19,10 +19,7 @@
 #include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Serialization, Serialize) {
   serialization::IndexBucket bucket;
   *bucket.bucketId() = 0;
@@ -71,7 +68,4 @@ TEST(Serialization, Serialize) {
   EXPECT_EQ(3, *deserializedRegion.lastEntryEndOffset());
   EXPECT_TRUE(rr->isEnd());
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

@@ -18,9 +18,7 @@
 
 #include "cachelib/navy/engine/NoopEngine.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 EnginePair::EnginePair(std::unique_ptr<Engine> smallItemCache,
                        std::unique_ptr<Engine> largeItemCache,
@@ -323,7 +321,4 @@ void EnginePair::validate() {
   }
 }
 
-} // namespace navy
-} // namespace cachelib
-
-} // namespace facebook
+} // namespace facebook::cachelib::navy

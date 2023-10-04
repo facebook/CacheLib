@@ -19,10 +19,7 @@
 
 #include "cachelib/navy/admission_policy/RejectRandomAP.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(RejectRandomAP, Basic) {
   RejectRandomAP::Config config;
   config.probability = 0.9;
@@ -48,7 +45,4 @@ TEST(RejectRandomAP, Prob1) {
     EXPECT_TRUE(ap.accept(makeHK("key"), makeView("value")));
   }
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

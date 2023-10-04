@@ -20,9 +20,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 HitsReinsertionPolicy::HitsReinsertionPolicy(uint8_t hitsThreshold,
                                              const Index& index)
     : hitsThreshold_{hitsThreshold}, index_(index) {}
@@ -46,6 +44,4 @@ void HitsReinsertionPolicy::getCounters(
       visitor, "navy_bc_item_reinsertion_hits");
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

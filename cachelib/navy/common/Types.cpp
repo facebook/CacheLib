@@ -16,9 +16,7 @@
 
 #include "cachelib/navy/common/Types.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 const char* toString(Status status) {
   switch (status) {
   case Status::Ok:
@@ -48,6 +46,4 @@ const char* toString(DestructorEvent e) {
   }
   return "Unknown";
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

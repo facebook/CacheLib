@@ -16,9 +16,7 @@
 
 #include "cachelib/navy/bighash/BucketStorage.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 static_assert(sizeof(BucketStorage) == 12,
               "BucketStorage overhead. Changing this may require changing "
               "the sizes used in unit tests as well");
@@ -51,7 +49,7 @@ void BucketStorage::remove(const std::vector<Allocation>& allocs) {
   // after compaction
   //                  tail
   //  |---------------|~~~~~~~~~~~|
-  if (!allocs.size()) {
+  if (allocs.empty()) {
     return;
   }
 
@@ -129,6 +127,4 @@ BucketStorage::Allocation BucketStorage::getNext(
   }
   return {MutableBufferView{next->size, next->data}, alloc.position() + 1};
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

@@ -20,10 +20,7 @@
 
 #include "cachelib/navy/block_cache/LruPolicy.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 const RegionId kNone{};
 const RegionId kR0{0};
@@ -108,7 +105,4 @@ TEST(EvictionPolicy, LruReset) {
   policy.reset();
   EXPECT_EQ(kNone, policy.evict());
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

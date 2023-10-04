@@ -20,9 +20,7 @@
 #include <cstdio>
 #include <cstring>
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace {
 bool isLikeText(BufferView view) {
   for (size_t i = 0; i < view.size(); i++) {
@@ -57,6 +55,4 @@ std::string toString(BufferView view, bool compact) {
   }
   return rv;
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

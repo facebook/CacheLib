@@ -42,10 +42,7 @@ using testing::Invoke;
 using testing::NiceMock;
 using testing::Return;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 constexpr uint64_t kDeviceSize{64 * 1024};
 constexpr uint64_t kRegionSize{16 * 1024};
@@ -2249,7 +2246,4 @@ TEST(BlockCache, SizeAndAlignment) {
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, hugeValue.view()),
             alignSize * 2);
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

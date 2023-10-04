@@ -17,9 +17,7 @@
 #include "cachelib/navy/scheduler/ThreadPoolJobQueue.h"
 
 #include "cachelib/common/Utils.h"
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 namespace {
 constexpr uint64_t kHighRescheduleCount = 250;
@@ -169,6 +167,4 @@ JobQueue::Stats JobQueue::getStats() const {
   return stats;
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

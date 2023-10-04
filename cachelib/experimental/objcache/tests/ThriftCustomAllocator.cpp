@@ -27,10 +27,7 @@
 #include "cachelib/experimental/objcache/tests/gen-cpp2/ThriftCustomAllocator_types.h"
 #pragma GCC diagnostic pop
 
-namespace facebook {
-namespace cachelib {
-namespace objcache {
-namespace test {
+namespace facebook::cachelib::objcache::test {
 TEST(ThriftCustomAllocator, Simple) {
   {
     UseSimpleCustomAllocator useSimple1{TestAllocatorResource{"custom_alloc"}};
@@ -123,7 +120,7 @@ TEST(ThriftCustomAllocator, Propagation) {
   EXPECT_EQ(12, alloc1.getNumAllocs());
   EXPECT_EQ(3, alloc2.getNumAllocs());
 
-  for (auto itr : useSimple1.m().value()) {
+  for (const auto& itr : useSimple1.m().value()) {
     EXPECT_TRUE(
         itr.first.get_allocator().getAllocatorResource().isEqual(alloc1));
     EXPECT_TRUE(
@@ -268,7 +265,4 @@ TEST(ThriftCustomAllocator, TwoF14Maps) {
     EXPECT_LT(allocs, myAlloc.getNumAllocs());
   }
 }
-} // namespace test
-} // namespace objcache
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::objcache::test

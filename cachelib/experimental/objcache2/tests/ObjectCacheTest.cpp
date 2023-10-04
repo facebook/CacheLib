@@ -26,10 +26,7 @@
 #include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
 #include "cachelib/experimental/objcache2/tests/gen-cpp2/test_object_types.h"
 
-namespace facebook {
-namespace cachelib {
-namespace objcache2 {
-namespace test {
+namespace facebook::cachelib::objcache2::test {
 namespace {
 struct Foo {
   int a{};
@@ -50,7 +47,7 @@ struct Foo3 {
 };
 
 struct FooBase {
-  virtual ~FooBase() {}
+  virtual ~FooBase() = default;
 };
 
 struct Foo4 : FooBase {
@@ -1986,7 +1983,4 @@ TEST(ObjectCacheTest, ExportStats) {
       });
   EXPECT_EQ(intervalNameExists, 2);
 }
-} // namespace test
-} // namespace objcache2
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::objcache2::test

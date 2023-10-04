@@ -18,10 +18,7 @@
 
 #include "cachelib/navy/common/Hash.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Hash, HashedKeyCollision) {
   HashedKey hk1{"key 1"};
   HashedKey hk2{"key 2"};
@@ -33,7 +30,4 @@ TEST(Hash, HashedKeyCollision) {
   EXPECT_NE(hk1, hk3);
   EXPECT_NE(hk2, hk3);
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

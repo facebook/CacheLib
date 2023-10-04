@@ -20,9 +20,7 @@
 
 #include <numeric>
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 namespace detail {
 unsigned int accumulate(const std::vector<unsigned int> nums) {
   return std::accumulate(
@@ -193,6 +191,4 @@ void SegmentedFifoPolicy::recover(RecordReader& rr) {
   throw std::runtime_error("Not Implemented");
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

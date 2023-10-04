@@ -26,10 +26,7 @@
 #include "cachelib/navy/testing/MockDevice.h"
 #include "cachelib/navy/testing/MockJobScheduler.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 constexpr uint16_t kNoPriority = 0;
 constexpr uint16_t kNumPriorities = 1;
@@ -241,7 +238,4 @@ TEST(Allocator, UsePriorities) {
   EXPECT_TRUE(ex.runFirstIf("reclaim"));
 }
 
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

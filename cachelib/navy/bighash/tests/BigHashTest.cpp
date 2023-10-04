@@ -36,10 +36,7 @@ using testing::NiceMock;
 using testing::Return;
 using testing::StrictMock;
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 namespace {
 void setLayout(BigHash::Config& config, uint32_t bs, uint32_t numBuckets) {
   config.bucketSize = bs;
@@ -698,8 +695,9 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
   config.destructorCb = [&](HashedKey, BufferView, DestructorEvent event) {
     started = true;
     // only hangs the insertion not removal
-    while (!done && event == DestructorEvent::Recycled)
+    while (!done && event == DestructorEvent::Recycled) {
       ;
+    }
   };
 
   BigHash bh(std::move(config));
@@ -712,8 +710,9 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
   });
 
   // wait until destrcutor started, which means bucket lock is released
-  while (!started)
+  while (!started) {
     ;
+  }
   // remove should not be blocked since bucket lock has been released
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key 1")));
 
@@ -791,7 +790,4 @@ TEST(BigHash, EstimateWriteSize) {
     EXPECT_EQ(bh.estimateWriteSize(makeHK("key4"), makeView("1")), bucketSize);
   }
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

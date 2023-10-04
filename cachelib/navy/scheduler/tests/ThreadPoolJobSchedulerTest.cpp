@@ -22,10 +22,7 @@
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 #include "cachelib/navy/testing/SeqPoints.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 void spinWait(std::atomic<int>& ai, int target) {
   while (ai.load(std::memory_order_acquire) != target) {
     std::this_thread::yield();
@@ -260,7 +257,4 @@ TEST(ThreadPoolJobScheduler, MaxQueueLen) {
   EXPECT_EQ(jobsDone, numToQueue);
 }
 
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

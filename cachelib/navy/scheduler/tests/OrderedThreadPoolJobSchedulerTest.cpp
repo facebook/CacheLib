@@ -23,10 +23,7 @@
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
 #include "cachelib/navy/testing/SeqPoints.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 
 // order jobs with same type and ensure that they are executed in the
 // enqueued order.
@@ -295,7 +292,4 @@ TEST(OrderedThreadPoolJobScheduler, OrderedEnqueueMaxLen) {
   EXPECT_EQ(numCompleted, numKeys);
 }
 
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

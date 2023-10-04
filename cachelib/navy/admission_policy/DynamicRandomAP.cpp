@@ -26,9 +26,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 
 namespace {
 // Clamp the input into range [lower, upper]
@@ -293,6 +291,4 @@ void DynamicRandomAP::getCounters(const CounterVisitor& visitor) const {
           static_cast<double>(acceptedParcelBytes_.get()),
           CounterVisitor::RATE);
 }
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy

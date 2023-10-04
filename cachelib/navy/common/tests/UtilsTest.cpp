@@ -18,10 +18,7 @@
 
 #include "cachelib/navy/common/Utils.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
-namespace tests {
+namespace facebook::cachelib::navy::tests {
 TEST(Utils, PowTwoAlign) {
   EXPECT_EQ(0, powTwoAlign(0, 16));
   EXPECT_EQ(16, powTwoAlign(1, 16));
@@ -39,7 +36,4 @@ TEST(Utils, Between) {
   EXPECT_FALSE(betweenStrict(1.0, 0, 1));
   EXPECT_FALSE(betweenStrict(0.0, 0, 1));
 }
-} // namespace tests
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy::tests

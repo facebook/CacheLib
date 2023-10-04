@@ -16,9 +16,7 @@
 
 #include "cachelib/navy/block_cache/Region.h"
 
-namespace facebook {
-namespace cachelib {
-namespace navy {
+namespace facebook::cachelib::navy {
 bool Region::readyForReclaim() {
   std::lock_guard<std::mutex> l{lock_};
   flags_ |= kBlockAccess;
@@ -149,6 +147,4 @@ void Region::readFromBuffer(uint32_t fromOffset,
   memcpy(outBuf.data(), buffer_->data() + fromOffset, outBuf.size());
 }
 
-} // namespace navy
-} // namespace cachelib
-} // namespace facebook
+} // namespace facebook::cachelib::navy
