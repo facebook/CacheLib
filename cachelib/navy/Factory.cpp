@@ -462,7 +462,7 @@ std::unique_ptr<Device> createFileDevice(
     try {
       f = openCacheFile(path, fdSize, truncateFile);
     } catch (const std::exception& e) {
-      XLOG(ERR) << "Exception in openCacheFile: " << path << e.what()
+      XLOG(ERR) << "Exception in openCacheFile(" << path << "): " << e.what()
                 << ". Errno: " << errno;
       throw;
     }
