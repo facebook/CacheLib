@@ -217,6 +217,12 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   *handle->template getMemoryAs<ObjectCacheItem>() =
       ObjectCacheItem{reinterpret_cast<uintptr_t>(ptr), objectSize};
 
+  // Update total object size. This should be done before inserting into L1
+  // to avoid any race condition with the size controller at start up
+  if (config_.objectSizeTrackingEnabled) {
+    totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+  }
+
   auto replaced = this->l1Cache_->insertOrReplace(handle);
 
   std::shared_ptr<T> replacedPtr = nullptr;
@@ -228,11 +234,6 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
     auto deleter = [h = std::move(replaced)](T*) {};
     replacedPtr = std::shared_ptr<T>(reinterpret_cast<T*>(itemPtr->objectPtr),
                                      std::move(deleter));
-  }
-
-  // update total object size
-  if (config_.objectSizeTrackingEnabled) {
-    totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
   }
 
   // Release the object as it has been successfully inserted to the cache.

@@ -42,6 +42,7 @@ void ObjectCacheSizeController<AllocatorT>::work() {
       currentNumEntries > kSizeControllerThresholdPct *
                               objCache_.config_.l1EntriesLimit / 100) {
     auto averageObjSize = totalObjSize / currentNumEntries;
+    XDCHECK_NE(0u, averageObjSize);
     auto newEntriesLimit = objCache_.config_.cacheSizeLimit / averageObjSize;
     if (newEntriesLimit > objCache_.config_.l1EntriesLimit) {
       XLOGF_EVERY_MS(INFO, 60'000,
