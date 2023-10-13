@@ -233,10 +233,8 @@ case "$1" in
 
   mvfst)
     NAME=mvfst
-    REPO=https://github.com/facebook/mvfst
-    REPODIR=cachelib/external/$NAME
-    SRCDIR=$REPODIR
-    external_git_clone=yes
+    SRCDIR=cachelib/external/$NAME
+    update_submodules=yes
     cmake_custom_params="-DBUILD_SHARED_LIBS=ON"
     ;;
 
