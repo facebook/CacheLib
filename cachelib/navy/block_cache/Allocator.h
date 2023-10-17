@@ -16,10 +16,11 @@
 
 #pragma once
 
+#include <folly/fibers/TimedMutex.h>
+
 #include <atomic>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <stdexcept>
 #include <vector>
 
@@ -31,6 +32,8 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+using folly::fibers::TimedMutex;
+
 // Class to allocate a particular size from a region. Not thread safe, caller
 // has to sync access.
 class RegionAllocator {
@@ -58,7 +61,7 @@ class RegionAllocator {
   uint16_t priority() const { return priority_; }
 
   // Returns the mutex lock.
-  std::mutex& getLock() const { return mutex_; }
+  TimedMutex& getLock() const { return mutex_; }
 
  private:
   const uint16_t priority_{};
@@ -66,7 +69,7 @@ class RegionAllocator {
   // The current region id from which we are allocating
   RegionId rid_;
 
-  mutable std::mutex mutex_;
+  mutable TimedMutex mutex_;
 };
 
 // Size class or stack allocator. Thread safe. Syncs access
@@ -112,7 +115,7 @@ class Allocator {
   void getCounters(const CounterVisitor& visitor) const;
 
  private:
-  using LockGuard = std::lock_guard<std::mutex>;
+  using LockGuard = std::lock_guard<TimedMutex>;
   Allocator(const Allocator&) = delete;
   Allocator& operator=(const Allocator&) = delete;
 

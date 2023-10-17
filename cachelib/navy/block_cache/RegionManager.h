@@ -18,10 +18,10 @@
 
 #include <folly/Random.h>
 #include <folly/container/F14Map.h>
+#include <folly/fibers/TimedMutex.h>
 
 #include <cassert>
 #include <memory>
-#include <mutex>
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"
@@ -38,6 +38,7 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+using folly::fibers::TimedMutex;
 
 // Callback that is used to clear index.
 //   @rid       Region ID
@@ -159,7 +160,7 @@ class RegionManager {
   // Returns the buffer to the pool.
   void returnBufferToPool(std::unique_ptr<Buffer> buf) {
     {
-      std::lock_guard<std::mutex> bufLock{bufferMutex_};
+      std::lock_guard<TimedMutex> bufLock{bufferMutex_};
       buffers_.push_back(std::move(buf));
     }
     numInMemBufActive_.dec();
@@ -255,7 +256,7 @@ class RegionManager {
   void doEviction(RegionId rid, BufferView buffer) const;
 
  private:
-  using LockGuard = std::lock_guard<std::mutex>;
+  using LockGuard = std::lock_guard<TimedMutex>;
   uint64_t physicalOffset(RelAddress addr) const {
     return baseOffset_ + toAbsolute(addr).offset();
   }
@@ -283,7 +284,7 @@ class RegionManager {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 
-  mutable std::mutex cleanRegionsMutex_;
+  mutable TimedMutex cleanRegionsMutex_;
   std::vector<RegionId> cleanRegions_;
   const uint32_t numCleanRegions_{};
 
@@ -313,7 +314,7 @@ class RegionManager {
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;
-  mutable std::mutex bufferMutex_;
+  mutable TimedMutex bufferMutex_;
   std::vector<std::unique_ptr<Buffer>> buffers_;
 };
 } // namespace navy

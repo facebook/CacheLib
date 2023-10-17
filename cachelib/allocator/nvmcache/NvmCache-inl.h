@@ -924,7 +924,7 @@ template <typename C>
 uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
   uint64_t size = 0;
   for (size_t i = 0; i < kShards; ++i) {
-    auto lock = std::unique_lock<std::mutex>{itemDestructorMutex_[i]};
+    auto lock = std::unique_lock<TimedMutex>{itemDestructorMutex_[i]};
     size += itemRemoved_[i].size();
   }
   return size;

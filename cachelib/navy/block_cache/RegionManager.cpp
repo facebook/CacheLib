@@ -89,7 +89,7 @@ void RegionManager::reset() {
     regions_[i]->reset();
   }
   {
-    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     // Reset is inherently single threaded. All pending jobs, including
     // reclaims, have to be finished first.
     XDCHECK_EQ(reclaimsScheduled_, 0u);
@@ -157,7 +157,7 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
   }
 }
@@ -176,7 +176,7 @@ OpenStatus RegionManager::assignBufferToRegion(RegionId rid) {
 std::unique_ptr<Buffer> RegionManager::claimBufferFromPool() {
   std::unique_ptr<Buffer> buf;
   {
-    std::lock_guard<std::mutex> bufLock{bufferMutex_};
+    std::lock_guard<TimedMutex> bufLock{bufferMutex_};
     if (buffers_.empty()) {
       return nullptr;
     }
@@ -191,7 +191,7 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
   auto status = OpenStatus::Retry;
   uint32_t newSched = 0;
   {
-    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     if (!cleanRegions_.empty()) {
       rid = cleanRegions_.back();
       cleanRegions_.pop_back();
@@ -212,7 +212,7 @@ OpenStatus RegionManager::getCleanRegion(RegionId& rid) {
   if (status == OpenStatus::Ready) {
     status = assignBufferToRegion(rid);
     if (status != OpenStatus::Ready) {
-      std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+      std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
       cleanRegions_.push_back(rid);
     }
   }
@@ -391,7 +391,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<std::mutex> lock{cleanRegionsMutex_};
+    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     reclaimsScheduled_--;
     cleanRegions_.push_back(rid);
   }

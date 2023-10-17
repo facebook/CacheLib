@@ -37,12 +37,12 @@ unsigned int accumulate(const std::vector<unsigned int> nums) {
 FifoPolicy::FifoPolicy() { XLOG(INFO, "FIFO policy"); }
 
 void FifoPolicy::track(const Region& region) {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   queue_.push_back(detail::Node{region.id(), getSteadyClockSeconds()});
 }
 
 RegionId FifoPolicy::evict() {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   if (queue_.empty()) {
     return RegionId{};
   }
@@ -52,7 +52,7 @@ RegionId FifoPolicy::evict() {
 }
 
 void FifoPolicy::reset() {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   queue_.clear();
 }
 
@@ -81,7 +81,7 @@ void FifoPolicy::recover(RecordReader& rr) {
 }
 
 void FifoPolicy::getCounters(const CounterVisitor& v) const {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   v(folly::sformat("navy_bc_fifo_size"), queue_.size());
   v(folly::sformat("navy_bc_fifo_age"),
     queue_.empty() ? 0 : queue_.front().secondsSinceTracking().count());
@@ -100,14 +100,14 @@ SegmentedFifoPolicy::SegmentedFifoPolicy(std::vector<unsigned int> segmentRatio)
 void SegmentedFifoPolicy::track(const Region& region) {
   auto priority = region.getPriority();
   XDCHECK_LT(priority, segments_.size());
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   segments_[priority].push_back(
       detail::Node{region.id(), getSteadyClockSeconds()});
   rebalanceLocked();
 }
 
 RegionId SegmentedFifoPolicy::evict() {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   auto& lowestPri = segments_.front();
   if (lowestPri.empty()) {
     XDCHECK_EQ(0ul, numElementsLocked());
@@ -154,7 +154,7 @@ size_t SegmentedFifoPolicy::numElementsLocked() {
 }
 
 void SegmentedFifoPolicy::reset() {
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   for (auto& segment : segments_) {
     segment.clear();
   }
@@ -162,7 +162,7 @@ void SegmentedFifoPolicy::reset() {
 
 size_t SegmentedFifoPolicy::memorySize() const {
   size_t memSize = sizeof(*this);
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   for (const auto& segment : segments_) {
     memSize += sizeof(std::deque<detail::Node>) +
                sizeof(detail::Node) * segment.size();
@@ -172,7 +172,7 @@ size_t SegmentedFifoPolicy::memorySize() const {
 
 void SegmentedFifoPolicy::getCounters(const CounterVisitor& v) const {
   int idx = 0;
-  std::lock_guard<std::mutex> lock{mutex_};
+  std::lock_guard<TimedMutex> lock{mutex_};
   for (auto& segment : segments_) {
     v(folly::sformat("navy_bc_sfifo_segment_{}_size", idx), segment.size());
     v(folly::sformat("navy_bc_sfifo_segment_{}_age", idx),

@@ -114,7 +114,7 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
 
 void Allocator::flush() {
   for (auto& ra : allocators_) {
-    std::lock_guard<std::mutex> lock{ra.getLock()};
+    std::lock_guard<TimedMutex> lock{ra.getLock()};
     flushAndReleaseRegionFromRALocked(ra, false /* async */);
   }
 }
@@ -122,7 +122,7 @@ void Allocator::flush() {
 void Allocator::reset() {
   regionManager_.reset();
   for (auto& ra : allocators_) {
-    std::lock_guard<std::mutex> lock{ra.getLock()};
+    std::lock_guard<TimedMutex> lock{ra.getLock()};
     ra.reset();
   }
 }

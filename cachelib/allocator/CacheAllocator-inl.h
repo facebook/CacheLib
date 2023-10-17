@@ -1078,7 +1078,7 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
   WriteHandle replaced;
   try {
     auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<std::mutex>();
+                          : std::unique_lock<TimedMutex>();
 
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
 
@@ -1599,7 +1599,7 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
   bool success = false;
   {
     auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<std::mutex>();
+                          : std::unique_lock<TimedMutex>();
 
     success = accessContainer_->remove(item);
 

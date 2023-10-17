@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <mutex>
+#include <folly/fibers/TimedMutex.h>
 
 #include "cachelib/navy/block_cache/Types.h"
 #include "cachelib/navy/common/Types.h"
@@ -25,6 +25,8 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+using folly::fibers::TimedMutex;
+
 enum class OpenMode {
   // Not opened
   None,
@@ -97,32 +99,32 @@ class Region {
   // Assigns this region a priority. The meaning of priority
   // is dependent on the eviction policy we choose.
   void setPriority(uint16_t priority) {
-    std::lock_guard<std::mutex> l{lock_};
+    std::lock_guard<TimedMutex> l{lock_};
     priority_ = priority;
   }
 
   // Gets the priority this region is assigned.
   uint16_t getPriority() const {
-    std::lock_guard<std::mutex> l{lock_};
+    std::lock_guard<TimedMutex> l{lock_};
     return priority_;
   }
 
   // Gets the end offset of last slot added to this region.
   uint32_t getLastEntryEndOffset() const {
-    std::lock_guard<std::mutex> l{lock_};
+    std::lock_guard<TimedMutex> l{lock_};
     return lastEntryEndOffset_;
   }
 
   // Gets the number of items in this region.
   uint32_t getNumItems() const {
-    std::lock_guard<std::mutex> l{lock_};
+    std::lock_guard<TimedMutex> l{lock_};
     return numItems_;
   }
 
   // If this region is actively used, then the fragmentation
   // is the bytes at the end of the region that's not used.
   uint32_t getFragmentationSize() const {
-    std::lock_guard<std::mutex> l{lock_};
+    std::lock_guard<TimedMutex> l{lock_};
     if (numItems_) {
       return regionSize_ - lastEntryEndOffset_;
     }
@@ -238,7 +240,7 @@ class Region {
   uint32_t numItems_{0};
   std::unique_ptr<Buffer> buffer_{nullptr};
 
-  mutable std::mutex lock_;
+  mutable TimedMutex lock_;
 };
 
 // RegionDescriptor. Contains status of the open, region id and the open mode.

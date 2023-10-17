@@ -20,8 +20,6 @@
 #include <folly/Random.h>
 
 #include <chrono>
-#include <mutex>
-#include <shared_mutex>
 
 #include "cachelib/common/Hash.h"
 #include "cachelib/navy/bighash/Bucket.h"
@@ -145,7 +143,7 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
   Bucket* bucket{nullptr};
   Buffer buffer;
   {
-    std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
+    std::unique_lock<SharedMutex> lock{getMutex(bid)};
     buffer = readBucket(bid);
     if (buffer.isNull()) {
       ioErrorCount_.inc();
@@ -292,7 +290,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
       };
 
   {
-    std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
+    std::unique_lock<SharedMutex> lock{getMutex(bid)};
     auto buffer = readBucket(bid);
     if (buffer.isNull()) {
       ioErrorCount_.inc();
@@ -375,7 +373,7 @@ Status BigHash::lookup(HashedKey hk, Buffer& value) {
   // bucket. Once the bucket is read, the buffer is local and we can find
   // without holding the lock.
   {
-    std::shared_lock<folly::SharedMutex> lock{getMutex(bid)};
+    std::shared_lock<SharedMutex> lock{getMutex(bid)};
     if (bfReject(bid, hk.keyHash())) {
       return Status::NotFound;
     }
@@ -419,7 +417,7 @@ Status BigHash::remove(HashedKey hk) {
   }
 
   {
-    std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
+    std::unique_lock<SharedMutex> lock{getMutex(bid)};
 
     auto buffer = readBucket(bid);
     if (buffer.isNull()) {

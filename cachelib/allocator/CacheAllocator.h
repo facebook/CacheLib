@@ -20,6 +20,7 @@
 #include <folly/Likely.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
@@ -83,6 +84,8 @@
 
 namespace facebook {
 namespace cachelib {
+
+using folly::fibers::TimedMutex;
 
 template <typename AllocatorT>
 class FbInternalRuntimeUpdateWrapper;

@@ -16,8 +16,9 @@
 
 #pragma once
 
+#include <folly/fibers/TimedMutex.h>
+
 #include <deque>
-#include <mutex>
 #include <set>
 
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
@@ -25,6 +26,8 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+using folly::fibers::TimedMutex;
+
 namespace detail {
 struct Node {
   const RegionId rid{};
@@ -58,7 +61,7 @@ class FifoPolicy final : public EvictionPolicy {
 
   // Gets memory used by FIFO policy.
   size_t memorySize() const override {
-    std::lock_guard<std::mutex> lock{mutex_};
+    std::lock_guard<TimedMutex> lock{mutex_};
     return sizeof(*this) + sizeof(detail::Node) * queue_.size();
   }
 
@@ -73,7 +76,7 @@ class FifoPolicy final : public EvictionPolicy {
 
  private:
   std::deque<detail::Node> queue_;
-  mutable std::mutex mutex_;
+  mutable TimedMutex mutex_;
 };
 
 // Segmented FIFO policy
@@ -152,7 +155,7 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   const unsigned int totalRatioWeight_;
 
   std::vector<std::deque<detail::Node>> segments_;
-  mutable std::mutex mutex_;
+  mutable TimedMutex mutex_;
 };
 } // namespace navy
 } // namespace cachelib

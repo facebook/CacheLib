@@ -17,7 +17,7 @@
 #pragma once
 
 #include <folly/Portability.h>
-#include <folly/SharedMutex.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/stats/QuantileEstimator.h>
 #include <tsl/sparse_map.h>
 
@@ -25,7 +25,6 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <shared_mutex>
 #include <utility>
 
 #include "cachelib/common/AtomicCounter.h"
@@ -35,6 +34,10 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// folly::SharedMutex is write priority by default
+using SharedMutex =
+    folly::fibers::TimedRWMutexWritePriority<folly::fibers::Baton>;
+
 // NVM index: map from key to value. Under the hood, stores key hash to value
 // map. If collision happened, returns undefined value (last inserted actually,
 // but we do not want people to rely on that).
@@ -166,12 +169,12 @@ class Index {
 
   static uint32_t subkey(uint64_t hash) { return hash & 0xffffffffu; }
 
-  folly::SharedMutex& getMutexOfBucket(uint32_t bucket) const {
+  SharedMutex& getMutexOfBucket(uint32_t bucket) const {
     XDCHECK(folly::isPowTwo(kNumMutexes));
     return mutex_[bucket & (kNumMutexes - 1)];
   }
 
-  folly::SharedMutex& getMutex(uint64_t hash) const {
+  SharedMutex& getMutex(uint64_t hash) const {
     auto b = bucket(hash);
     return getMutexOfBucket(b);
   }
@@ -185,8 +188,7 @@ class Index {
 
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
-  std::unique_ptr<folly::SharedMutex[]> mutex_{
-      new folly::SharedMutex[kNumMutexes]};
+  std::unique_ptr<SharedMutex[]> mutex_{new SharedMutex[kNumMutexes]};
   std::unique_ptr<Map[]> buckets_{new Map[kNumBuckets]};
 
   mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};

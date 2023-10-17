@@ -20,7 +20,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <mutex>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"

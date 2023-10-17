@@ -19,22 +19,24 @@
 #include <folly/Hash.h>
 #include <folly/Range.h>
 #include <folly/container/F14Map.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/lang/Align.h>
 #include <folly/logging/xlog.h>
 
-#include <mutex>
 #include <utility>
 
 namespace facebook {
 namespace cachelib {
+
+using folly::fibers::TimedMutex;
 
 // Utility to track inflight puts in nvmcache through a token. Tokens can be
 // invalidated and can be used to execute some function if not invalidated. The
 // user guarantees that the lifetime of the token is within the lifetime of the
 // string piece with which they obtain the token.
 class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
-  using LockGuard = std::lock_guard<std::mutex>;
-  using UniqueLock = std::unique_lock<std::mutex>;
+  using LockGuard = std::lock_guard<TimedMutex>;
+  using UniqueLock = std::unique_lock<TimedMutex>;
 
  public:
   class PutToken;
@@ -162,7 +164,7 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
   folly::F14FastMap<folly::StringPiece, bool, folly::Hash> keys_;
 
   // mutex protecting the map.
-  std::mutex mutex_;
+  TimedMutex mutex_;
 };
 
 } // namespace cachelib

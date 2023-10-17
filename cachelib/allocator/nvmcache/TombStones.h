@@ -16,16 +16,18 @@
 
 #pragma once
 #include <folly/container/F14Map.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/lang/Align.h>
 #include <glog/logging.h>
 
-#include <mutex>
 #include <utility>
 
 #include "folly/Range.h"
 
 namespace facebook {
 namespace cachelib {
+
+using folly::fibers::TimedMutex;
 
 // Utility that helps us track in flight deletes. We maintain a count per key
 // and check for presence against the count to resolve multiple concurrent
@@ -38,7 +40,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   // @param key  key for the record
   // @return a valid Guard representing the tombstone
   Guard add(folly::StringPiece key) {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::lock_guard<TimedMutex> l(mutex_);
     auto it = keys_.find(key);
 
     if (it == keys_.end()) {
@@ -51,7 +53,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
 
   // checks if there is a key present and returns true if so.
   bool isPresent(folly::StringPiece key) {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::lock_guard<TimedMutex> l(mutex_);
     return keys_.count(key) != 0;
   }
 
@@ -105,7 +107,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
  private:
   // removes an instance of key. if the count drops to 0, we remove the key
   void remove(folly::StringPiece key) {
-    std::lock_guard<std::mutex> l(mutex_);
+    std::lock_guard<TimedMutex> l(mutex_);
     auto it = keys_.find(key);
     if (it == keys_.end() || it->second == 0) {
       // this is not supposed to happen if guards are destroyed appropriately
@@ -120,7 +122,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   }
 
   // mutex protecting the map below
-  std::mutex mutex_;
+  TimedMutex mutex_;
   folly::F14NodeMap<std::string, uint64_t> keys_;
 };
 

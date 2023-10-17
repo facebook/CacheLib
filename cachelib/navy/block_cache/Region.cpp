@@ -18,7 +18,7 @@
 
 namespace facebook::cachelib::navy {
 bool Region::readyForReclaim() {
-  std::lock_guard<std::mutex> l{lock_};
+  std::lock_guard<TimedMutex> l{lock_};
   flags_ |= kBlockAccess;
   return activeOpenLocked() == 0;
 }
@@ -29,7 +29,7 @@ uint32_t Region::activeOpenLocked() {
 
 std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
     uint32_t size) {
-  std::lock_guard<std::mutex> l{lock_};
+  std::lock_guard<TimedMutex> l{lock_};
   XDCHECK(!(flags_ & kBlockAccess));
   if (!canAllocateLocked(size)) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{});
@@ -41,7 +41,7 @@ std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
 }
 
 RegionDescriptor Region::openForRead() {
-  std::lock_guard<std::mutex> l{lock_};
+  std::lock_guard<TimedMutex> l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
     return RegionDescriptor{OpenStatus::Retry};
@@ -63,7 +63,7 @@ RegionDescriptor Region::openForRead() {
 // to call this function again.
 Region::FlushRes Region::flushBuffer(
     std::function<bool(RelAddress, BufferView)> callBack) {
-  std::unique_lock<std::mutex> lock{lock_};
+  std::unique_lock<TimedMutex> lock{lock_};
   if (activeWriters_ != 0) {
     return FlushRes::kRetryPendingWrites;
   }
@@ -80,7 +80,7 @@ Region::FlushRes Region::flushBuffer(
 }
 
 bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
-  std::unique_lock<std::mutex> lock{lock_};
+  std::unique_lock<TimedMutex> lock{lock_};
   if (activeWriters_ != 0) {
     return false;
   }
@@ -94,7 +94,7 @@ bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
 }
 
 void Region::reset() {
-  std::lock_guard<std::mutex> l{lock_};
+  std::lock_guard<TimedMutex> l{lock_};
   XDCHECK_EQ(activeOpenLocked(), 0U);
   priority_ = 0;
   flags_ = 0;
@@ -106,7 +106,7 @@ void Region::reset() {
 }
 
 void Region::close(RegionDescriptor&& desc) {
-  std::lock_guard<std::mutex> l{lock_};
+  std::lock_guard<TimedMutex> l{lock_};
   switch (desc.mode()) {
   case OpenMode::Write:
     activeWriters_--;

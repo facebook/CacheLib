@@ -21,7 +21,6 @@
 #include <folly/lang/Bits.h>
 
 #include <algorithm>
-#include <shared_mutex>
 #include <utility>
 
 #include "cachelib/navy/common/Utils.h"
@@ -104,7 +103,7 @@ bool DynamicRandomAP::accept(HashedKey hk,
   if (curTime - params_.updateTime >= updateInterval_) {
     // Lots of threads can get into this section. First to grab the lock will
     // update. Let proceed the rest.
-    std::unique_lock<folly::SharedMutex> lock{mutex_, std::try_to_lock};
+    std::unique_lock<SharedMutex> lock{mutex_, std::try_to_lock};
     if (lock.owns_lock()) {
       updateThrottleParamsLocked(curTime);
     }
@@ -156,7 +155,7 @@ void DynamicRandomAP::reset() {
 }
 
 void DynamicRandomAP::update() {
-  std::unique_lock<folly::SharedMutex> lock{mutex_};
+  std::unique_lock<SharedMutex> lock{mutex_};
   updateThrottleParamsLocked(getSteadyClockSeconds());
 }
 

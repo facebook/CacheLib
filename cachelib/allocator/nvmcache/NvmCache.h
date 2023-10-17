@@ -19,12 +19,12 @@
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/dynamic.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/hash/Hash.h>
 #include <folly/json.h>
 #include <folly/synchronization/Baton.h>
 
 #include <array>
-#include <mutex>
 #include <stdexcept>
 #include <vector>
 
@@ -49,6 +49,8 @@ namespace cachelib {
 namespace tests {
 class NvmCacheTest;
 }
+
+using folly::fibers::TimedMutex;
 
 // NvmCache is a key-value cache on flash. It is intended to be used
 // along with a CacheAllocator to provide a uniform API to the application
@@ -232,8 +234,8 @@ class NvmCache {
   // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
   // eviction must erase item from itemRemoved_, so there won't memory leak or
   // influence to future item with same key.
-  std::unique_lock<std::mutex> getItemDestructorLock(HashedKey hk) const {
-    using LockType = std::unique_lock<std::mutex>;
+  std::unique_lock<TimedMutex> getItemDestructorLock(HashedKey hk) const {
+    using LockType = std::unique_lock<TimedMutex>;
     return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(hk)]}
                            : LockType{};
   }
@@ -414,11 +416,11 @@ class NvmCache {
     return getFillMapForShard(getShardForKey(hk));
   }
 
-  std::unique_lock<std::mutex> getFillLockForShard(size_t shard) {
-    return std::unique_lock<std::mutex>(fillLock_[shard].fillLock_);
+  std::unique_lock<TimedMutex> getFillLockForShard(size_t shard) {
+    return std::unique_lock<TimedMutex>(fillLock_[shard].fillLock_);
   }
 
-  std::unique_lock<std::mutex> getFillLock(HashedKey hk) {
+  std::unique_lock<TimedMutex> getFillLock(HashedKey hk) {
     return getFillLockForShard(getShardForKey(hk));
   }
 
@@ -446,7 +448,7 @@ class NvmCache {
 
   // a map of fill locks for each shard
   struct {
-    alignas(folly::hardware_destructive_interference_size) std::mutex fillLock_;
+    alignas(folly::hardware_destructive_interference_size) TimedMutex fillLock_;
   } fillLock_[kShards];
 
   // currently queued put operations to navy.
@@ -462,7 +464,7 @@ class NvmCache {
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::array<std::mutex, kShards> itemDestructorMutex_;
+  mutable std::array<TimedMutex, kShards> itemDestructorMutex_{TimedMutex()};
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
   // DRAM. The ownership of item destructor is already managed elsewhere for

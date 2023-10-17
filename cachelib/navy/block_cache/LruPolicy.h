@@ -16,10 +16,9 @@
 
 #pragma once
 
+#include <folly/fibers/TimedMutex.h>
+
 #include <chrono>
-#include <condition_variable>
-#include <mutex>
-#include <thread>
 #include <vector>
 
 #include "cachelib/common/PercentileStats.h"
@@ -29,6 +28,8 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+using folly::fibers::TimedMutex;
+
 // LRU policy with optional deferred LRU insert
 class LruPolicy final : public EvictionPolicy {
  public:
@@ -104,7 +105,7 @@ class LruPolicy final : public EvictionPolicy {
   std::vector<ListNode> array_;
   uint32_t head_{kInvalidIndex};
   uint32_t tail_{kInvalidIndex};
-  mutable std::mutex mutex_;
+  mutable TimedMutex mutex_;
 
   // various counters that are populated when we evict a region.
   mutable util::PercentileStats secSinceInsertionEstimator_;
