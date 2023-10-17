@@ -176,6 +176,10 @@ class BigHash final : public Engine {
     return mutex_[bid.index() & (kNumMutexes - 1)];
   }
 
+  folly::SpinLock& getBfLock(BucketId bid) const {
+    return bfLock_[bid.index() & (kNumMutexes - 1)];
+  }
+
   BucketId getBucketId(HashedKey hk) const {
     return BucketId{static_cast<uint32_t>(hk.keyHash() % numBuckets_)};
   }
@@ -185,6 +189,8 @@ class BigHash final : public Engine {
   }
 
   double bfFalsePositivePct() const;
+  void bfSet(BucketId bid, uint64_t bucket);
+  void bfClear(BucketId bid);
   void bfRebuild(BucketId bid, const Bucket* bucket);
   bool bfReject(BucketId bid, uint64_t keyHash) const;
 
@@ -205,6 +211,14 @@ class BigHash final : public Engine {
   Device& device_;
   std::unique_ptr<folly::SharedMutex[]> mutex_{
       new folly::SharedMutex[kNumMutexes]};
+  // Spinlocks for bloom filter operations
+  // We use spinlock in addition to the mutex to avoid contentions of
+  // couldExist which needs to be fast against other long running or
+  // even blocking operations including insert/remove. When the race
+  // happens against the remove or evict of the given item, there could
+  // be a false positive which is ok.
+  // Nested lock orders are always mutex-then-spinlock
+  std::unique_ptr<folly::SpinLock[]> bfLock_{new folly::SpinLock[kNumMutexes]};
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;

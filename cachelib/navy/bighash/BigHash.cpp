@@ -308,20 +308,16 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
 
     // rebuild / fix the bloom filter before we move the buffer to do the
     // actual write
-    if (bloomFilter_) {
-      if (removed + evicted == 0) {
-        // In case nothing was removed or evicted, we can just add
-        bloomFilter_->set(bid.index(), hk.keyHash());
-      } else {
-        bfRebuild(bid, bucket);
-      }
+    if (removed + evicted == 0) {
+      // In case nothing was removed or evicted, we can just add
+      bfSet(bid, hk.keyHash());
+    } else {
+      bfRebuild(bid, bucket);
     }
 
     const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
-      if (bloomFilter_) {
-        bloomFilter_->clear(bid.index());
-      }
+      bfClear(bid);
       ioErrorCount_.inc();
       return Status::DeviceError;
     }
@@ -353,11 +349,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
 
 bool BigHash::couldExist(HashedKey hk) {
   const auto bid = getBucketId(hk);
-  bool canExist;
-  {
-    std::shared_lock<folly::SharedMutex> lock{getMutex(bid)};
-    canExist = !bfReject(bid, hk.keyHash());
-  }
+  bool canExist = !bfReject(bid, hk.keyHash());
 
   // the caller is not likely to issue a subsequent lookup when we return
   // false. hence tag this as a lookup. If we return the key can exist, the
@@ -378,12 +370,12 @@ Status BigHash::lookup(HashedKey hk, Buffer& value) {
 
   Bucket* bucket{nullptr};
   Buffer buffer;
+
   // scope of the lock is only needed until we read and mutate state for the
   // bucket. Once the bucket is read, the buffer is local and we can find
   // without holding the lock.
   {
     std::shared_lock<folly::SharedMutex> lock{getMutex(bid)};
-
     if (bfReject(bid, hk.keyHash())) {
       return Status::NotFound;
     }
@@ -422,11 +414,12 @@ Status BigHash::remove(HashedKey hk) {
     valueCopy = Buffer{value};
   };
 
+  if (bfReject(bid, hk.keyHash())) {
+    return Status::NotFound;
+  }
+
   {
     std::unique_lock<folly::SharedMutex> lock{getMutex(bid)};
-    if (bfReject(bid, hk.keyHash())) {
-      return Status::NotFound;
-    }
 
     auto buffer = readBucket(bid);
     if (buffer.isNull()) {
@@ -444,15 +437,11 @@ Status BigHash::remove(HashedKey hk) {
 
     // We compute bloom filter before writing the bucket because when encryption
     // is enabled, we will "move" the bucket content into writeBucket().
-    if (bloomFilter_) {
-      bfRebuild(bid, bucket);
-    }
+    bfRebuild(bid, bucket);
 
     const auto res = writeBucket(bid, std::move(buffer));
     if (!res) {
-      if (bloomFilter_) {
-        bloomFilter_->clear(bid.index());
-      }
+      bfClear(bid);
       ioErrorCount_.inc();
       return Status::DeviceError;
     }
@@ -474,18 +463,44 @@ Status BigHash::remove(HashedKey hk) {
   return Status::Ok;
 }
 
+inline void BigHash::bfSet(BucketId bid, uint64_t keyHash) {
+  if (!bloomFilter_) {
+    return;
+  }
+
+  std::lock_guard<folly::SpinLock> lg{getBfLock(bid)};
+  bloomFilter_->set(bid.index(), keyHash);
+}
+
+inline void BigHash::bfClear(BucketId bid) {
+  if (!bloomFilter_) {
+    return;
+  }
+
+  std::lock_guard<folly::SpinLock> lg{getBfLock(bid)};
+  bloomFilter_->clear(bid.index());
+}
+
 bool BigHash::bfReject(BucketId bid, uint64_t keyHash) const {
-  if (bloomFilter_) {
-    bfProbeCount_.inc();
-    if (!bloomFilter_->couldExist(bid.index(), keyHash)) {
-      bfRejectCount_.inc();
-      return true;
-    }
+  if (!bloomFilter_) {
+    return false;
+  }
+
+  std::lock_guard<folly::SpinLock> lg{getBfLock(bid)};
+  bfProbeCount_.inc();
+  if (!bloomFilter_->couldExist(bid.index(), keyHash)) {
+    bfRejectCount_.inc();
+    return true;
   }
   return false;
 }
 
 void BigHash::bfRebuild(BucketId bid, const Bucket* bucket) {
+  if (!bloomFilter_) {
+    return;
+  }
+
+  std::lock_guard<folly::SpinLock> lg{getBfLock(bid)};
   bfRebuildCount_.inc();
   XDCHECK(bloomFilter_);
   bloomFilter_->clear(bid.index());
