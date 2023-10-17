@@ -172,7 +172,8 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto [desc, slotSize, addr] = allocator_.allocate(size, kDefaultItemPriority);
+  auto [desc, slotSize, addr] =
+      allocator_.allocate(size, kDefaultItemPriority, true /* canWait */);
 
   switch (desc.status()) {
   case OpenStatus::Error:
@@ -541,7 +542,8 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
           : std::min<uint16_t>(lr.currentHits(), numPriorities_ - 1);
 
   uint32_t size = serializedSize(hk.key().size(), value.size());
-  auto [desc, slotSize, addr] = allocator_.allocate(size, priority);
+  auto [desc, slotSize, addr] =
+      allocator_.allocate(size, priority, false /* canWait */);
 
   switch (desc.status()) {
   case OpenStatus::Ready:

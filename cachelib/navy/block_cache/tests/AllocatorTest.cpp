@@ -55,7 +55,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   for (uint32_t i = 0; i < 3; i++) {
     if (i == 0) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+      std::tie(desc, slotSize, addr) =
+          allocator.allocate(1024, kNoPriority, false);
       EXPECT_EQ(OpenStatus::Retry, desc.status());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
     }
@@ -64,7 +65,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     EXPECT_EQ(0, ex.getQueueSize());
     {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+      std::tie(desc, slotSize, addr) =
+          allocator.allocate(1024, kNoPriority, false);
       EXPECT_TRUE(desc.isReady());
       if (i > 0) {
         EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -82,7 +84,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     // 15 allocs exhaust region's space. No reclaims scheduled.
     for (uint32_t j = 0; j < 15; j++) {
       RegionDescriptor desc{OpenStatus::Retry};
-      std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+      std::tie(desc, slotSize, addr) =
+          allocator.allocate(1024, kNoPriority, false);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
       EXPECT_EQ(1024 * (j + 1), addr.offset());
@@ -113,7 +116,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   EXPECT_EQ(0, ex.getQueueSize());
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+    std::tie(desc, slotSize, addr) =
+        allocator.allocate(1024, kNoPriority, false);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
     EXPECT_EQ(0, addr.offset());
@@ -151,7 +155,8 @@ TEST(Allocator, TestInMemBufferStates) {
   uint32_t slotSize = 0;
   {
     RegionDescriptor desc{OpenStatus::Retry};
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+    std::tie(desc, slotSize, addr) =
+        allocator.allocate(1024, kNoPriority, false);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
   }
   EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -160,7 +165,8 @@ TEST(Allocator, TestInMemBufferStates) {
     RegionDescriptor rdesc{OpenStatus::Error};
     {
       RegionDescriptor wdesc{OpenStatus::Retry};
-      std::tie(wdesc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+      std::tie(wdesc, slotSize, addr) =
+          allocator.allocate(1024, kNoPriority, false);
       EXPECT_TRUE(wdesc.isReady());
       EXPECT_EQ(0, wdesc.id().index());
       EXPECT_TRUE(ex.runFirstIf("reclaim"));
@@ -169,7 +175,8 @@ TEST(Allocator, TestInMemBufferStates) {
       EXPECT_TRUE(rdesc.isReady());
       for (uint32_t j = 0; j < 15; j++) {
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+        std::tie(desc, slotSize, addr) =
+            allocator.allocate(1024, kNoPriority, false);
         EXPECT_TRUE(desc.isReady());
         EXPECT_EQ(0, desc.id().index());
         rm->close(std::move(desc));
@@ -177,7 +184,8 @@ TEST(Allocator, TestInMemBufferStates) {
       EXPECT_EQ(0, ex.getQueueSize());
       {
         RegionDescriptor desc{OpenStatus::Retry};
-        std::tie(desc, slotSize, addr) = allocator.allocate(1024, kNoPriority);
+        std::tie(desc, slotSize, addr) =
+            allocator.allocate(1024, kNoPriority, false);
         EXPECT_EQ(OpenStatus::Ready, desc.status());
         EXPECT_EQ(1, desc.id().index());
         rm->close(std::move(desc));
@@ -223,11 +231,11 @@ TEST(Allocator, UsePriorities) {
   // Allocate one item from each priortiy, we should see each allocation
   // results in a new region being allocated for its priority
   for (uint16_t pri = 0; pri < 3; pri++) {
-    auto [desc, slotSize, addr] = allocator.allocate(1024, pri);
+    auto [desc, slotSize, addr] = allocator.allocate(1024, pri, false);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
     EXPECT_TRUE(ex.runFirstIf("reclaim"));
 
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri);
+    std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri, false);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{pri}, addr.rid());
     EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());

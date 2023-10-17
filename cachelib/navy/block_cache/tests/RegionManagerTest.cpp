@@ -191,11 +191,11 @@ TEST(RegionManager, ReadWrite) {
   // do reclaim couple of times to get RegionId of 1
   rm->startReclaim();
   ASSERT_TRUE(ex.runFirst());
-  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
   rm->startReclaim();
   ASSERT_TRUE(ex.runFirst());
-  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(1, rid.index());
 
   auto& region = rm->getRegion(rid);
@@ -368,7 +368,7 @@ TEST(RegionManager, cleanupRegionFailureSync) {
   // Reclaim to get Region 0
   rm->startReclaim();
   ASSERT_TRUE(ex.runFirst());
-  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
 
   // Write to Region 0
@@ -463,7 +463,7 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
   rm->startReclaim();
 
   ASSERT_TRUE(ex.runFirst());
-  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid));
+  ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
 
   // Write to Region 0
