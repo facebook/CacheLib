@@ -853,13 +853,16 @@ FileDevice::FileDevice(std::vector<folly::File>&& fvec,
     }
   }
 
-  if (ioEngine_ == IoEngine::Sync) {
-    XDCHECK_EQ(qDepthPerContext_, 0u);
-    // Use SyncIoContext
-    syncIoContext_ = std::make_unique<SyncIoContext>();
-  } else {
-    XDCHECK_GT(qDepthPerContext_, 0u);
-  }
+  // Check qdepth configuration
+  // 1. if io engine is Sync, then qdepth per context must be 0
+  XDCHECK(ioEngine_ != IoEngine::Sync || qDepthPerContext_ == 0u);
+  // 2. if io engine is Async, then qdepth per context must be greater than 0
+  XDCHECK(ioEngine_ == IoEngine::Sync || qDepthPerContext_ > 0u);
+
+  // Create sync io context. It will be also used for async io as well
+  // for the path where device IO is called from non-fiber thread
+  // (e.g., recovery path, read random alloc path)
+  syncIoContext_ = std::make_unique<SyncIoContext>();
 
   XLOGF(INFO,
         "Created device with num_devices {} size {} block_size {},"
@@ -892,18 +895,30 @@ IoContext* FileDevice::getIoContext() {
   }
 
   if (!tlContext_) {
-    bool useIoUring = ioEngine_ == IoEngine::IoUring;
-    // Create new context if on event base thread or useIoUring_ is enabled
-    auto evb = folly::EventBaseManager::get()->getExistingEventBase();
+    bool onFiber = folly::fibers::onFiber();
+    if (!onFiber && qDepthPerContext_ != 1) {
+      // This is the case when IO is submitted from non-fiber thread
+      // directly. E.g., recovery path at init, get sample item from
+      // function scheduler. So, fallback to sync IO context instead
+      return syncIoContext_.get();
+    }
 
-    std::unique_ptr<folly::AsyncBase> asyncBase;
+    // Create new context if on event base thread or useIoUring_ is enabled
+    bool useIoUring = ioEngine_ == IoEngine::IoUring;
+
+    folly::EventBase* evb = nullptr;
     auto pollMode = folly::AsyncBase::POLLABLE;
-    if (!evb) {
-      // If evb is not available, we run in no-epoll mode
+    if (onFiber) {
+      evb = folly::EventBaseManager::get()->getExistingEventBase();
+      XDCHECK(evb);
+    } else {
+      // If we are not on fiber and eventbase, we run in no-epoll mode with
+      // qdepth of 1, i.e., async submission and sync wait
       XDCHECK_EQ(qDepthPerContext_, 1u);
       pollMode = folly::AsyncBase::NOT_POLLABLE;
     }
 
+    std::unique_ptr<folly::AsyncBase> asyncBase;
     if (useIoUring) {
 #ifndef CACHELIB_IOURING_DISABLE
       asyncBase = std::make_unique<folly::IoUring>(qDepthPerContext_, pollMode,
