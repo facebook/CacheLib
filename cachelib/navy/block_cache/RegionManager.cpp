@@ -233,11 +233,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     startReclaim();
   }
 
-  if (status == OpenStatus::Retry) {
-    XLOG_EVERY_MS(ERR, 10'000) << fmt::format(
-        "Failed to allocate clean region; reclaims ({}) could be running slow",
-        reclaimsScheduled_);
-  } else if (status == OpenStatus::Ready) {
+  if (status == OpenStatus::Ready) {
     XDCHECK(!waiter);
     std::tie(status, waiter) = assignBufferToRegion(rid, addWaiter);
     if (status != OpenStatus::Ready) {
@@ -247,7 +243,10 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
         cleanRegionsCond_.notifyAll();
       }
     }
+  } else if (status == OpenStatus::Retry && newSched > 0) {
+    cleanRegionRetries_.inc();
   }
+
   return {status, std::move(waiter)};
 }
 
@@ -582,6 +581,7 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_num_regions", numRegions_);
   visitor("navy_bc_num_clean_regions", cleanRegions_.size());
+  visitor("navy_bc_num_clean_region_retries", cleanRegionRetries_.get());
   visitor("navy_bc_external_fragmentation", externalFragmentation_.get());
   visitor("navy_bc_physical_written", physicalWrittenCount_.get(),
           CounterVisitor::CounterType::RATE);

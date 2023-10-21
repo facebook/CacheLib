@@ -296,6 +296,7 @@ class RegionManager {
   mutable util::ConditionVariable cleanRegionsCond_;
   std::vector<RegionId> cleanRegions_;
   const uint32_t numCleanRegions_{};
+  mutable AtomicCounter cleanRegionRetries_;
 
   std::atomic<uint64_t> seqNumber_{0};
 
