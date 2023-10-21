@@ -1123,7 +1123,7 @@ impl VolatileLruCachePool {
 
 #[cfg(test)]
 mod test {
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     use super::*;
 
@@ -1164,7 +1164,7 @@ mod test {
     }
 
     fn create_temp_dir(dir_prefix: &str) -> TempDir {
-        TempDir::new(dir_prefix).expect("failed to create temp dir")
+        TempDir::with_prefix(dir_prefix).expect("failed to create temp dir")
     }
 
     fn create_shared_cache(fb: FacebookInit, cache_directory: PathBuf) {
