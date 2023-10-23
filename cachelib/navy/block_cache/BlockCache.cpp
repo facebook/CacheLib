@@ -24,6 +24,7 @@
 #include <numeric>
 #include <utility>
 
+#include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
 #include "folly/Range.h"
@@ -163,6 +164,8 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
 }
 
 Status BlockCache::insert(HashedKey hk, BufferView value) {
+  INJECT_PAUSE(pause_blockcache_insert_entry);
+
   uint32_t size = serializedSize(hk.key().size(), value.size());
   if (size > kMaxItemSize) {
     allocErrorCount_.inc();
@@ -186,6 +189,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
     allocRetryCount_.inc();
     return Status::Retry;
   }
+
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
   const auto status = writeEntry(addr, slotSize, hk, value);
@@ -210,6 +214,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
     }
   }
   allocator_.close(std::move(desc));
+  INJECT_PAUSE(pause_blockcache_insert_done);
   return status;
 }
 

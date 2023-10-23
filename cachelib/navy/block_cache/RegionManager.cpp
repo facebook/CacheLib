@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/block_cache/RegionManager.h"
 
+#include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/common/Utils.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
@@ -155,6 +156,7 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
+    INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
     }
@@ -207,6 +209,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     if (!cleanRegions_.empty()) {
       rid = cleanRegions_.back();
       cleanRegions_.pop_back();
+      INJECT_PAUSE(pause_blockcache_clean_alloc_locked);
       status = OpenStatus::Ready;
     } else {
       if (addWaiter) {
@@ -232,6 +235,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     if (status != OpenStatus::Ready) {
       std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
       cleanRegions_.push_back(rid);
+      INJECT_PAUSE(pause_blockcache_clean_free_locked);
       if (cleanRegionsCond_.numWaiters() > 0) {
         cleanRegionsCond_.notifyAll();
       }
@@ -258,8 +262,9 @@ void RegionManager::doFlush(RegionId rid, bool async) {
 }
 
 void RegionManager::doFlushInternal(RegionId rid) {
+  INJECT_PAUSE(pause_flush_begin);
   int retryAttempts = 0;
-  while (retryAttempts <= inMemBufFlushRetryLimit_) {
+  while (retryAttempts < inMemBufFlushRetryLimit_) {
     auto res = flushBuffer(rid);
     if (res == Region::FlushRes::kSuccess) {
       break;
@@ -279,13 +284,16 @@ void RegionManager::doFlushInternal(RegionId rid) {
     // clean up the buffer.
     cleanupBufferOnFlushFailure(rid);
     releaseCleanedupRegion(rid);
+    INJECT_PAUSE(pause_flush_failure);
     return;
   }
 
+  INJECT_PAUSE(pause_flush_detach_buffer);
   detachBuffer(rid);
 
   // Flush completed, track the region
   track(rid);
+  INJECT_PAUSE(pause_flush_done);
   return;
 }
 
@@ -295,6 +303,7 @@ void RegionManager::startReclaim() {
 
 void RegionManager::doReclaim() {
   RegionId rid;
+  INJECT_PAUSE(pause_reclaim_begin);
   while (true) {
     rid = evict();
     // evict() can fail to find a victim, where it needs to be retried
@@ -332,6 +341,7 @@ void RegionManager::doReclaim() {
     }
   }
   releaseEvictedRegion(rid, startTime);
+  INJECT_PAUSE(pause_reclaim_done);
 }
 
 RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
@@ -406,6 +416,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     reclaimsScheduled_--;
     cleanRegions_.push_back(rid);
+    INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
     }
@@ -415,6 +426,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
 }
 
 void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
+  INJECT_PAUSE(pause_do_eviction_start);
   if (buffer.isNull()) {
     XLOGF(ERR, "Error reading region {} on reclamation", rid.index());
   } else {
@@ -427,6 +439,7 @@ void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
           toMicros(getSteadyClock() - evictStartTime).count());
     evictedCount_.add(numEvicted);
   }
+  INJECT_PAUSE(pause_do_eviction_done);
 }
 
 void RegionManager::persist(RecordWriter& rw) const {

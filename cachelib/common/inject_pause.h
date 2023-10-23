@@ -105,6 +105,16 @@ void injectPause(folly::StringPiece name);
  */
 #define INJECT_PAUSE(name) facebook::cachelib::detail::injectPause(#name)
 
+/**
+ * Test helper which enables INJECT_PAUSE and asserts
+ * for no pending inject points at scope exit
+ *
+ * @def ENABLE_INJECT_PAUSE_IN_SCOPE
+ */
+#define ENABLE_INJECT_PAUSE_IN_SCOPE() \
+  injectPauseEnabled() = true;         \
+  SCOPE_EXIT { EXPECT_EQ(injectPauseClear(), 0); }
+
 // Callback that can be executed optionally for INJECT_PAUSE point
 using PauseCallback = folly::Function<void()>;
 
