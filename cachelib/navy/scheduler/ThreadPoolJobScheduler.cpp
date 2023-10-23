@@ -50,13 +50,6 @@ ThreadPoolExecutor::ThreadPoolExecutor(uint32_t numThreads,
   }
 }
 
-void ThreadPoolExecutor::enqueue(Job job,
-                                 folly::StringPiece name,
-                                 JobQueue::QueuePos pos) {
-  auto index = nextQueue_.fetch_add(1, std::memory_order_relaxed);
-  queues_[index % queues_.size()]->enqueue(std::move(job), name, pos);
-}
-
 void ThreadPoolExecutor::enqueueWithKey(Job job,
                                         folly::StringPiece name,
                                         JobQueue::QueuePos pos,
@@ -101,30 +94,6 @@ ThreadPoolJobScheduler::ThreadPoolJobScheduler(uint32_t readerThreads,
                                                uint32_t writerThreads)
     : reader_(readerThreads, "reader_pool"),
       writer_(writerThreads, "writer_pool") {}
-
-void ThreadPoolJobScheduler::enqueue(Job job,
-                                     folly::StringPiece name,
-                                     JobType type) {
-  switch (type) {
-  case JobType::Read:
-    reader_.enqueue(std::move(job), name, JobQueue::QueuePos::Back);
-    break;
-  case JobType::Write:
-    writer_.enqueue(std::move(job), name, JobQueue::QueuePos::Back);
-    break;
-  case JobType::Reclaim:
-    writer_.enqueue(std::move(job), name, JobQueue::QueuePos::Front);
-    break;
-  case JobType::Flush:
-    writer_.enqueue(std::move(job), name, JobQueue::QueuePos::Front);
-    break;
-  default:
-    XLOGF(ERR,
-          "JobScheduler: unrecognized job type: {}",
-          static_cast<uint32_t>(type));
-    XDCHECK(false);
-  }
-}
 
 void ThreadPoolJobScheduler::enqueueWithKey(Job job,
                                             folly::StringPiece name,
@@ -251,12 +220,6 @@ void OrderedThreadPoolJobScheduler::scheduleNextJob(uint64_t shard) {
   currSpooled_.dec();
   scheduleJobLocked(std::move(pendingJobs_[shard].front()), shard);
   pendingJobs_[shard].pop_front();
-}
-
-void OrderedThreadPoolJobScheduler::enqueue(Job job,
-                                            folly::StringPiece name,
-                                            JobType type) {
-  scheduler_.enqueue(std::move(job), name, type);
 }
 
 void OrderedThreadPoolJobScheduler::finish() {

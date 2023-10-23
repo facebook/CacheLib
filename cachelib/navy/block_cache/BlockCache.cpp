@@ -130,7 +130,6 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.cacheBaseOffset,
                      *config.device,
                      config.cleanRegionsPool,
-                     *config.scheduler,
                      bindThis(&BlockCache::onRegionReclaim, *this),
                      bindThis(&BlockCache::onRegionCleanup, *this),
                      std::move(config.evictionPolicy),
@@ -184,6 +183,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
     insertCount_.inc();
     break;
   case OpenStatus::Retry:
+    allocRetryCount_.inc();
     return Status::Retry;
   }
   // After allocation a region is opened for writing. Until we close it, the
@@ -679,6 +679,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   return Status::Ok;
 }
 
+void BlockCache::drain() { regionManager_.drain(); }
+
 void BlockCache::flush() {
   XLOG(INFO, "Flush block cache");
   allocator_.flush();
@@ -696,6 +698,7 @@ void BlockCache::reset() {
   lookupCount_.set(0);
   removeCount_.set(0);
   allocErrorCount_.set(0);
+  allocRetryCount_.set(0);
   logicalWrittenCount_.set(0);
   holeCount_.set(0);
   holeSizeTotal_.set(0);
@@ -744,6 +747,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_evictions_expired", evictionExpiredCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_alloc_errors", allocErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_alloc_retries", allocRetryCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_logical_written", logicalWrittenCount_.get(),
           CounterVisitor::CounterType::RATE);

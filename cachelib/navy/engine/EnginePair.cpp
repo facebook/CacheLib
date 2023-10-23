@@ -235,6 +235,11 @@ void EnginePair::scheduleRemove(HashedKey hk, RemoveCallback cb) {
       hk.keyHash());
 }
 
+void EnginePair::drain() {
+  smallItemCache_->drain();
+  largeItemCache_->drain();
+}
+
 void EnginePair::flush() {
   smallItemCache_->flush();
   largeItemCache_->flush();

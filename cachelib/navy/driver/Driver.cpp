@@ -74,7 +74,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
 
 Driver::~Driver() {
   XLOG(INFO, "Driver: finish scheduler");
-  scheduler_->finish();
+  drain();
   XLOG(INFO, "Driver: finish scheduler successful");
   // Destroy this for safety first
   scheduler_.reset();
@@ -191,8 +191,15 @@ void Driver::removeAsync(HashedKey hk, RemoveCallback cb) {
   enginePairs_[selectEnginePair(hk)].scheduleRemove(hk, std::move(cb));
 }
 
-void Driver::flush() {
+void Driver::drain() {
   scheduler_->finish();
+  for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+    enginePairs_[idx].drain();
+  }
+}
+
+void Driver::flush() {
+  drain(); // Flush all pending jobs
   for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
     enginePairs_[idx].flush();
   }
@@ -200,7 +207,7 @@ void Driver::flush() {
 
 void Driver::reset() {
   XLOG(INFO, "Reset Navy");
-  scheduler_->finish();
+  drain();
   for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
     enginePairs_[idx].reset();
   }

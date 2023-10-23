@@ -41,21 +41,12 @@ class MockJobScheduler : public JobScheduler {
   // @param name  Name associated with the job
   // @param type  Job type. This indicates if this is a read, write, or
   //              Navy internal jobs such as reclaim or flush.
-  void enqueue(Job job, folly::StringPiece name, JobType type) override;
-
-  // @param job   The job enqueued on the scheduler
-  // @param name  Name associated with the job
-  // @param type  Job type. This indicates if this is a read, write, or
-  //              Navy internal jobs such as reclaim or flush.
   // @param key   Key is ignored in the mock scheduler since we do NOT
   //              shard the jobs internally.
   void enqueueWithKey(Job job,
                       folly::StringPiece name,
                       JobType type,
-                      uint64_t /* key */) override {
-    // Ignore @key because mock scheduler models one thread job scheduler
-    enqueue(std::move(job), name, type);
-  }
+                      uint64_t /* key */) override;
 
   // This will block until the scheduler has finished all its jobs
   void finish() override;

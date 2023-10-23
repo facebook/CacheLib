@@ -30,7 +30,6 @@
 //   - Reschedule     Re-queue and retry again
 //
 // JobScheduler has the following members:
-//   - enqueue(Job)               Enqueues a job
 //   - enqueueWithKey(Job, key)   Enqueues a job with a key. Can be used to hash
 //                                jobs.
 //   - finish()                   Waits for all the scheduled jobs to finish
@@ -59,10 +58,6 @@ class JobScheduler {
                               folly::StringPiece name,
                               JobType type,
                               uint64_t key) = 0;
-
-  // enqueue a job for execution. No ordering guarantees are made for these
-  // jobs.
-  virtual void enqueue(Job job, folly::StringPiece name, JobType type) = 0;
 
   // guarantees that all enqueued jobs are finished and blocks until then.
   virtual void finish() = 0;

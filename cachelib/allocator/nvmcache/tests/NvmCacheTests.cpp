@@ -1606,6 +1606,8 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_succ_removes"));
   EXPECT_TRUE(cs("navy_bc_eviction_lookup_misses"));
   EXPECT_TRUE(cs("navy_bc_alloc_errors"));
+  EXPECT_TRUE(cs("navy_bc_alloc_retries"));
+  EXPECT_TRUE(cs("navy_bc_alloc_retries_waits"));
   EXPECT_TRUE(cs("navy_bc_logical_written"));
   EXPECT_TRUE(cs("navy_bc_hole_count"));
   EXPECT_TRUE(cs("navy_bc_hole_bytes"));
@@ -1632,7 +1634,6 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_inmem_active"));
   EXPECT_TRUE(cs("navy_bc_inmem_flush_retries"));
   EXPECT_TRUE(cs("navy_bc_inmem_flush_failures"));
-  EXPECT_TRUE(cs("navy_bc_inmem_cleanup_retries"));
 
   // navy::LruPolicy
   EXPECT_TRUE(cs("navy_bc_lru_secs_since_insertion_avg"));

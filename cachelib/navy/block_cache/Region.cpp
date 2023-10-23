@@ -17,10 +17,16 @@
 #include "cachelib/navy/block_cache/Region.h"
 
 namespace facebook::cachelib::navy {
-bool Region::readyForReclaim() {
-  std::lock_guard<TimedMutex> l{lock_};
+
+bool Region::readyForReclaim(bool wait) {
+  std::unique_lock<TimedMutex> l{lock_};
   flags_ |= kBlockAccess;
-  return activeOpenLocked() == 0;
+  bool ready = false;
+  while (!(ready = (activeOpenLocked() == 0UL)) && wait) {
+    cond_.wait(l);
+  }
+
+  return ready;
 }
 
 uint32_t Region::activeOpenLocked() {
@@ -41,9 +47,13 @@ std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
 }
 
 RegionDescriptor Region::openForRead() {
-  std::lock_guard<TimedMutex> l{lock_};
+  std::unique_lock<TimedMutex> l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
+    if (folly::fibers::onFiber()) {
+      // If we are on fiber, we can just sleep here
+      cond_.wait(l);
+    }
     return RegionDescriptor{OpenStatus::Retry};
   }
   bool physReadMode = false;
@@ -55,6 +65,19 @@ RegionDescriptor Region::openForRead() {
   }
   return RegionDescriptor::makeReadDescriptor(
       OpenStatus::Ready, regionId_, physReadMode);
+}
+
+std::unique_ptr<Buffer> Region::detachBuffer() {
+  std::unique_lock<TimedMutex> l{lock_};
+  XDCHECK_NE(buffer_, nullptr);
+  while (activeInMemReaders_ != 0) {
+    cond_.wait(l);
+  }
+
+  XDCHECK_EQ(activeWriters_, 0UL);
+  auto retBuf = std::move(buffer_);
+  buffer_ = nullptr;
+  return retBuf;
 }
 
 // This function flushes the attached buffer if there are no active writers
@@ -79,10 +102,10 @@ Region::FlushRes Region::flushBuffer(
   return FlushRes::kSuccess;
 }
 
-bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
+void Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
   std::unique_lock<TimedMutex> lock{lock_};
-  if (activeWriters_ != 0) {
-    return false;
+  while (activeWriters_ != 0) {
+    cond_.wait(lock);
   }
   if (!isCleanedupLocked()) {
     lock.unlock();
@@ -90,7 +113,6 @@ bool Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
     lock.lock();
     flags_ |= kCleanedup;
   }
-  return true;
 }
 
 void Region::reset() {
@@ -103,19 +125,29 @@ void Region::reset() {
   activeInMemReaders_ = 0;
   lastEntryEndOffset_ = 0;
   numItems_ = 0;
+  cond_.notifyAll();
 }
 
 void Region::close(RegionDescriptor&& desc) {
   std::lock_guard<TimedMutex> l{lock_};
   switch (desc.mode()) {
   case OpenMode::Write:
-    activeWriters_--;
+    XDCHECK_GT(activeWriters_, 0u);
+    if (--activeWriters_ == 0) {
+      cond_.notifyAll();
+    }
     break;
   case OpenMode::Read:
     if (desc.isPhysReadMode()) {
-      activePhysReaders_--;
+      XDCHECK_GT(activePhysReaders_, 0u);
+      if (--activePhysReaders_ == 0) {
+        cond_.notifyAll();
+      }
     } else {
-      activeInMemReaders_--;
+      XDCHECK_GT(activeInMemReaders_, 0u);
+      if (--activeInMemReaders_ == 0) {
+        cond_.notifyAll();
+      }
     }
     break;
   default:

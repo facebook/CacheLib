@@ -20,13 +20,18 @@
 #include <glog/logging.h>
 
 #include <cassert>
+#include <cstdint>
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
 MockJobScheduler::~MockJobScheduler() { XDCHECK(q_.empty()); }
 
-void MockJobScheduler::enqueue(Job job, folly::StringPiece name, JobType type) {
+// Ignore key because mock scheduler models one thread job scheduler
+void MockJobScheduler::enqueueWithKey(Job job,
+                                      folly::StringPiece name,
+                                      JobType type,
+                                      uint64_t) {
   std::lock_guard<std::mutex> lock{m_};
   switch (type) {
   case JobType::Reclaim:

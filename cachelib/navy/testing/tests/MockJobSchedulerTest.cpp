@@ -39,7 +39,7 @@ TEST(MockJobScheduler, Basic) {
       .WillOnce(testing::Return(JobExitCode::Reschedule))
       .WillOnce(testing::Return(JobExitCode::Reschedule))
       .WillOnce(testing::Return(JobExitCode::Done));
-  ex.enqueue([&job] { return job.run(); }, "test", JobType::Read);
+  ex.enqueueWithKey([&job] { return job.run(); }, "test", JobType::Read, 0);
 
   EXPECT_EQ(1, ex.getQueueSize());
   EXPECT_EQ(0, ex.getDoneCount());
@@ -56,18 +56,21 @@ TEST(MockJobScheduler, Basic) {
 
 TEST(MockJobScheduler, BasicTwoJobs) {
   MockJobScheduler ex;
+  uint64_t key = 0;
 
   MockJob job1;
   EXPECT_CALL(job1, run())
       .WillOnce(testing::Return(JobExitCode::Reschedule))
       .WillOnce(testing::Return(JobExitCode::Done));
-  ex.enqueue([&job1] { return job1.run(); }, "job1", JobType::Read);
+  ex.enqueueWithKey(
+      [&job1] { return job1.run(); }, "job1", JobType::Read, key++);
   MockJob job2;
   EXPECT_CALL(job2, run())
       .WillOnce(testing::Return(JobExitCode::Reschedule))
       .WillOnce(testing::Return(JobExitCode::Reschedule))
       .WillOnce(testing::Return(JobExitCode::Done));
-  ex.enqueue([&job2] { return job2.run(); }, "job2", JobType::Read);
+  ex.enqueueWithKey(
+      [&job2] { return job2.run(); }, "job2", JobType::Read, key++);
 
   EXPECT_FALSE(ex.runFirstIf("job1"));
   EXPECT_FALSE(ex.runFirstIf("job2"));
@@ -81,7 +84,7 @@ TEST(MockJobScheduler, RunIf) {
 
   MockJob job;
   EXPECT_CALL(job, run()).WillOnce(testing::Return(JobExitCode::Done));
-  ex.enqueue([&job] { return job.run(); }, "test", JobType::Read);
+  ex.enqueueWithKey([&job] { return job.run(); }, "test", JobType::Read, 0);
 
   EXPECT_THROW(ex.runFirstIf("invalid"), std::logic_error);
   EXPECT_TRUE(ex.runFirstIf("test"));
@@ -90,13 +93,15 @@ TEST(MockJobScheduler, RunIf) {
 TEST(MockJobScheduler, JobSchedulesFirst) {
   MockJobScheduler ex;
 
-  ex.enqueue(
+  ex.enqueueWithKey(
       [&ex] {
-        ex.enqueue([] { return JobExitCode::Done; }, "child", JobType::Reclaim);
+        ex.enqueueWithKey(
+            [] { return JobExitCode::Done; }, "child", JobType::Reclaim, 1000);
         return JobExitCode::Done;
       },
       "first",
-      JobType::Read);
+      JobType::Read,
+      0);
 
   EXPECT_TRUE(ex.runFirstIf("first"));
   EXPECT_TRUE(ex.runFirstIf("child"));
@@ -106,10 +111,11 @@ TEST(MockJobScheduler, JobSchedulesFirst) {
 
 TEST(MockSingleThreadJobScheduler, Run) {
   MockSingleThreadJobScheduler ex;
+  size_t key = 0;
 
   SeqPoints sp;
   std::atomic<bool> retry{true};
-  ex.enqueue(
+  ex.enqueueWithKey(
       [&retry, &sp] {
         if (retry) {
           return JobExitCode::Reschedule;
@@ -118,8 +124,9 @@ TEST(MockSingleThreadJobScheduler, Run) {
         return JobExitCode::Done;
       },
       "job1",
-      JobType::Read);
-  ex.enqueue(
+      JobType::Read,
+      key++);
+  ex.enqueueWithKey(
       [&retry, &sp] {
         if (retry) {
           return JobExitCode::Reschedule;
@@ -128,8 +135,9 @@ TEST(MockSingleThreadJobScheduler, Run) {
         return JobExitCode::Done;
       },
       "job2",
-      JobType::Read);
-  ex.enqueue(
+      JobType::Read,
+      key++);
+  ex.enqueueWithKey(
       [&retry, &sp] {
         if (retry) {
           return JobExitCode::Reschedule;
@@ -138,7 +146,8 @@ TEST(MockSingleThreadJobScheduler, Run) {
         return JobExitCode::Done;
       },
       "job3",
-      JobType::Read);
+      JobType::Read,
+      key++);
   EXPECT_EQ(0, ex.getDoneCount());
   retry = false;
   sp.wait(0);

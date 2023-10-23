@@ -97,8 +97,11 @@ class AbstractCache {
   // See @lookupAsync about @key lifetime.
   virtual void removeAsync(HashedKey key, RemoveCallback cb) = 0;
 
-  // Executes all queued operations and makes sure result is reflected on the
-  // device.
+  // Ensure all pending job have been completed
+  virtual void drain() = 0;
+
+  // ensure all pending job have been completed and data has been flush to
+  // device(s).
   virtual void flush() = 0;
 
   // Reset cache to the initial state.

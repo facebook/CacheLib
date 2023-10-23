@@ -133,6 +133,8 @@ class Allocator {
   RegionManager& regionManager_;
   // Multiple allocators when we use priority-based allocation
   std::vector<RegionAllocator> allocators_;
+
+  mutable AtomicCounter allocRetryWaits_;
 };
 } // namespace navy
 } // namespace cachelib

@@ -148,6 +148,9 @@ class BlockCache final : public Engine {
   // @return Status::Ok if the key is found and Status::NotFound otherwise.
   Status remove(HashedKey hk) override;
 
+  // Finish all pending jobs
+  void drain() override;
+
   // Flushes all buffered (in flight) operations in BlockCache.
   void flush() override;
 
@@ -385,6 +388,7 @@ class BlockCache final : public Engine {
   mutable AtomicCounter evictionLookupMissCounter_;
   mutable AtomicCounter evictionExpiredCount_;
   mutable AtomicCounter allocErrorCount_;
+  mutable AtomicCounter allocRetryCount_;
   mutable AtomicCounter logicalWrittenCount_;
   // TODO: deprecate hole count and hole size when we have
   //       confirmed usedSizeBytes is working correctly in prod

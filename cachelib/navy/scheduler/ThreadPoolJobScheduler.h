@@ -44,12 +44,6 @@ class ThreadPoolExecutor {
   // @param name        name for debugging
   ThreadPoolExecutor(uint32_t numThreads, folly::StringPiece name);
 
-  // put a job into the next queue in pool
-  // @param job   the job to be executed
-  // @param name  name of the job, for logging/debugging purposes
-  // @param pos   front/back of the queue to push in
-  void enqueue(Job job, folly::StringPiece name, JobQueue::QueuePos pos);
-
   // put a job into the a specific queue in pool based on the key hash
   // @param job   the job to be executed
   // @param name  name of the job, for logging/debugging purposes
@@ -74,7 +68,6 @@ class ThreadPoolExecutor {
 
  private:
   const folly::StringPiece name_{};
-  std::atomic<uint32_t> nextQueue_{0};
   std::vector<std::unique_ptr<JobQueue>> queues_;
   std::vector<std::thread> workers_;
 };
@@ -89,10 +82,6 @@ class ThreadPoolJobScheduler final : public JobScheduler {
   ThreadPoolJobScheduler(const ThreadPoolJobScheduler&) = delete;
   ThreadPoolJobScheduler& operator=(const ThreadPoolJobScheduler&) = delete;
   ~ThreadPoolJobScheduler() override { join(); }
-
-  // Enqueue a job for processing. @name for logging/debugging purposes.
-  // Only support Reclaim job type.
-  void enqueue(Job job, folly::StringPiece name, JobType type) override;
 
   // Enqueue a job for processing. @name for logging/debugging purposes.
   // Supports Read and Write job types.
@@ -129,12 +118,6 @@ class OrderedThreadPoolJobScheduler final : public JobScheduler {
   OrderedThreadPoolJobScheduler& operator=(
       const OrderedThreadPoolJobScheduler&) = delete;
   ~OrderedThreadPoolJobScheduler() override {}
-
-  // put a job into the queue
-  // @param job   the job to be executed
-  // @param name  name of the job, for logging/debugging purposes
-  // @param type  the type of job: Read/Write/Reclaim/Flush
-  void enqueue(Job job, folly::StringPiece name, JobType type) override;
 
   // put a job into the queue based on the key hash
   // execution ordering of the key is guaranteed

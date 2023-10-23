@@ -93,6 +93,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   if (status == OpenStatus::Retry) {
     lock.unlock();
     if (waiter) {
+      allocRetryWaits_.inc();
       waiter->baton_.wait();
     }
     return std::make_tuple(RegionDescriptor{status}, size, RelAddress{});
@@ -132,6 +133,7 @@ void Allocator::flush() {
 }
 
 void Allocator::reset() {
+  allocRetryWaits_.set(0);
   regionManager_.reset();
   for (auto& ra : allocators_) {
     std::lock_guard<TimedMutex> lock{ra.getLock()};
@@ -140,6 +142,8 @@ void Allocator::reset() {
 }
 
 void Allocator::getCounters(const CounterVisitor& visitor) const {
+  visitor("navy_bc_alloc_retries_waits", allocRetryWaits_.get(),
+          CounterVisitor::CounterType::RATE);
   regionManager_.getCounters(visitor);
 }
 

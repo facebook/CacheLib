@@ -48,6 +48,9 @@ class Engine {
   // Remove must not return Status::Retry.
   virtual Status remove(HashedKey hk) = 0;
 
+  // Finish any pending jobs
+  virtual void drain() {}
+
   // Flushes all buffered (in flight) operations
   virtual void flush() = 0;
 

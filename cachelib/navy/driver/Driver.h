@@ -119,6 +119,9 @@ class Driver final : public AbstractCache {
   // @param cb   a callback function be triggered when the remove complete.
   void removeAsync(HashedKey key, RemoveCallback cb) override;
 
+  // ensure all pending job have been completed
+  void drain() override;
+
   // ensure all pending job have been completed and data has been flush to
   // device(s).
   void flush() override;

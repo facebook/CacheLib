@@ -81,6 +81,9 @@ class EnginePair {
   // Schedule a remove.
   void scheduleRemove(HashedKey hk, RemoveCallback cb);
 
+  // Drain any pending jobs for both engines
+  void drain();
+
   // flush both engines.
   void flush();
 

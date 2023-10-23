@@ -31,8 +31,8 @@
 #include "cachelib/navy/block_cache/Types.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/scheduler/JobScheduler.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 #include "cachelib/navy/serialization/Serialization.h"
 
@@ -83,7 +83,6 @@ class RegionManager {
                 uint64_t baseOffset,
                 Device& device,
                 uint32_t numCleanRegions,
-                JobScheduler& scheduler,
                 RegionEvictCallback evictCb,
                 RegionCleanupCallback cleanupCb,
                 std::unique_ptr<EvictionPolicy> policy,
@@ -92,6 +91,9 @@ class RegionManager {
                 uint16_t inMemBufFlushRetryLimit);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
+
+  // Destroy the worker thread for safety first
+  ~RegionManager() { worker_.reset(); }
 
   // return the size of usable space
   uint64_t getSize() const {
@@ -200,20 +202,12 @@ class RegionManager {
   Region::FlushRes flushBuffer(const RegionId& rid);
 
   // Detaches the buffer from the region and returns the buffer to pool.
-  // Caller is expected to call this until it returns true.
-  //
-  // @returns false if there are active readers when detaching the buffer;
-  //          true otherwise.
-  bool detachBuffer(const RegionId& rid);
+  // This could block if there are active readers
+  void detachBuffer(const RegionId& rid);
 
   // Cleans up the in memory buffer when flushing failure reach the retry limit.
-  // Returns true if the cleanup succeeds and the buffer is detached from the
-  // region; false otherwise.
-  //
-  // Caller is expected to call cleanupBufferOnFlushFailure until true is
-  // returned. This routine is idempotent and is safe to call multiple times
-  // until detachBuffer is done.
-  bool cleanupBufferOnFlushFailure(const RegionId& rid);
+  // This could block if there are active readers or writers
+  void cleanupBufferOnFlushFailure(const RegionId& rid);
 
   // Releases a region that was cleaned up due to in-mem buffer flushing
   // failure.
@@ -248,8 +242,10 @@ class RegionManager {
   std::pair<OpenStatus, std::unique_ptr<CondWaiter>> getCleanRegion(
       RegionId& rid, bool addWaiter);
 
-  // Tries to get a free region first, otherwise evicts one and schedules region
-  // cleanup job (which will add the region to the clean list).
+  // Finish all pending jobs
+  void drain();
+
+  // Schedules region reclaim job to create a clean region
   void startReclaim();
 
   // Releases a region that was evicted during region reclamation.
@@ -267,6 +263,9 @@ class RegionManager {
   uint64_t physicalOffset(RelAddress addr) const {
     return baseOffset_ + toAbsolute(addr).offset();
   }
+
+  void doReclaim();
+  void doFlushInternal(RegionId rid);
 
   bool deviceWrite(RelAddress addr, BufferView buf);
 
@@ -286,6 +285,7 @@ class RegionManager {
   const uint64_t baseOffset_{};
   Device& device_;
   const std::unique_ptr<EvictionPolicy> policy_;
+  mutable util::ConditionVariable evictCond_;
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;
   mutable AtomicCounter externalFragmentation_;
 
@@ -301,7 +301,12 @@ class RegionManager {
   std::atomic<uint64_t> seqNumber_{0};
 
   uint32_t reclaimsScheduled_{0};
-  JobScheduler& scheduler_;
+
+  // The thread that runs the flush and reclaim.
+  // We expect one thread is enough to handle the reclaim and flush load;
+  // e.g., BlockCache write rate of 150MBps which corresponds less than
+  // 10 region (150MBps / 16MB) reclaims per second
+  std::unique_ptr<NavyThread> worker_;
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;
@@ -320,7 +325,6 @@ class RegionManager {
   mutable AtomicCounter numInMemBufWaitingFlush_;
   mutable AtomicCounter numInMemBufFlushRetries_;
   mutable AtomicCounter numInMemBufFlushFailures_;
-  mutable AtomicCounter numInMemBufCleanupRetries_;
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;
