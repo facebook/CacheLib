@@ -21,6 +21,7 @@ add_library (cachelib_common
   CountDownLatch.cpp
   ${BLOOM_THRIFT_FILES}
   hothash/HotHashDetector.cpp
+  inject_pause.cpp
   PercentileStats.cpp
   PeriodicWorker.cpp
   piecewise/GenericPieces.cpp
