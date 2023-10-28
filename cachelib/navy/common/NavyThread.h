@@ -43,12 +43,26 @@ namespace navy {
  */
 class NavyThread {
  public:
+  struct Options {
+    static constexpr size_t kDefaultStackSize{64 * 1024};
+    constexpr Options() {}
+
+    /**
+     * Maximum stack size for fibers which will be used for executing all the
+     * tasks.
+     */
+    size_t stackSize{kDefaultStackSize};
+  };
+
   /**
    * Initializes with current EventBaseManager and passed-in thread name.
    */
-  explicit NavyThread(folly::StringPiece name) {
+  explicit NavyThread(folly::StringPiece name, Options options = Options()) {
     th_ = std::make_unique<folly::ScopedEventBaseThread>(name.str());
-    fm_ = &folly::fibers::getFiberManager(*th_->getEventBase());
+
+    folly::fibers::FiberManager::Options opts;
+    opts.stackSize = options.stackSize;
+    fm_ = &folly::fibers::getFiberManager(*th_->getEventBase(), opts);
   }
 
   ~NavyThread() { th_.reset(); }
