@@ -90,6 +90,8 @@ struct Stats {
   util::PercentileStats::Estimates cacheAllocateLatencyNs;
   util::PercentileStats::Estimates cacheFindLatencyNs;
 
+  util::PercentileStats::Estimates nvmInsertLatencyNs;
+
   double nvmReadLatencyMicrosP50{0};
   double nvmReadLatencyMicrosP90{0};
   double nvmReadLatencyMicrosP99{0};
@@ -305,6 +307,7 @@ struct Stats {
 
       folly::StringPiece readCat = "NVM Read  Latency";
       folly::StringPiece writeCat = "NVM Write Latency";
+      folly::StringPiece nvmInsertCat = "NVM Insert Latency";
       auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
                             double val) {
         out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
@@ -327,6 +330,15 @@ struct Stats {
       fmtLatency(writeCat, "p99999", nvmWriteLatencyMicrosP99999);
       fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
       fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
+
+      fmtLatency(nvmInsertCat, "p50", nvmInsertLatencyNs.p50 / 1000.0);
+      fmtLatency(nvmInsertCat, "p90", nvmInsertLatencyNs.p90 / 1000.0);
+      fmtLatency(nvmInsertCat, "p99", nvmInsertLatencyNs.p99 / 1000.0);
+      fmtLatency(nvmInsertCat, "p999", nvmInsertLatencyNs.p999 / 1000.0);
+      fmtLatency(nvmInsertCat, "p9999", nvmInsertLatencyNs.p9999 / 1000.0);
+      fmtLatency(nvmInsertCat, "p99999", nvmInsertLatencyNs.p99999 / 1000.0);
+      fmtLatency(nvmInsertCat, "p999999", nvmInsertLatencyNs.p999999 / 1000.0);
+      fmtLatency(nvmInsertCat, "p100", nvmInsertLatencyNs.p100 / 1000.0);
 
       constexpr double GB = 1024.0 * 1024 * 1024;
       double appWriteAmp =
