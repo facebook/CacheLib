@@ -37,6 +37,8 @@ add_library (cachelib_navy
   driver/Driver.cpp
   engine/EnginePair.cpp
   Factory.cpp
+  scheduler/NavyRequestDispatcher.cpp
+  scheduler/NavyRequestScheduler.cpp
   scheduler/ThreadPoolJobScheduler.cpp
   scheduler/ThreadPoolJobQueue.cpp
   serialization/RecordIO.cpp

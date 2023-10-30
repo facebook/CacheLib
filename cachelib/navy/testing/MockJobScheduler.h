@@ -48,6 +48,11 @@ class MockJobScheduler : public JobScheduler {
                       JobType type,
                       uint64_t /* key */) override;
 
+  // Notify the completion of request
+  void notifyCompletion(uint64_t) override {
+    throw std::runtime_error("notifyCompletion is not used in v1");
+  }
+
   // This will block until the scheduler has finished all its jobs
   void finish() override;
 

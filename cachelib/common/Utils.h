@@ -388,6 +388,37 @@ std::pair<double, double> getMeanDeviation(std::vector<T> v) {
   return std::make_pair(mean, sqrt(accum / v.size()));
 }
 
+template <typename Value, typename P, typename F>
+bool atomicUpdateValue(Value* refPtr,
+                       Value* oldValue,
+                       P&& predicate,
+                       F&& newValueF) {
+  unsigned int nCASFailures = 0;
+  constexpr bool isWeak = false;
+  Value curValue = __atomic_load_n(refPtr, __ATOMIC_RELAXED);
+  while (true) {
+    if (!predicate(curValue)) {
+      return false;
+    }
+
+    const Value newValue = newValueF(curValue);
+    if (__atomic_compare_exchange_n(refPtr, &curValue, newValue, isWeak,
+                                    __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+      if (oldValue) {
+        *oldValue = curValue;
+      }
+      return true;
+    }
+
+    if ((++nCASFailures % 4) == 0) {
+      // this pause takes up to 40 clock cycles on intel and the lock cmpxchgl
+      // above should take about 100 clock cycles. we pause once every 400
+      // cycles or so if we are extremely unlucky.
+      folly::asm_volatile_pause();
+    }
+  }
+}
+
 // To force the compiler to NOT optimize away the store/load
 // when user supplies void* and we need to read it in 32bit chunks.
 // The compiler should be able to optimize this into just a single load.

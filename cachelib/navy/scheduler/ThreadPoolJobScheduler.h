@@ -90,6 +90,11 @@ class ThreadPoolJobScheduler final : public JobScheduler {
                       JobType type,
                       uint64_t key) override;
 
+  // Notify the completion of request
+  void notifyCompletion(uint64_t) override {
+    throw std::runtime_error("notifyCompletion is not used in v1");
+  }
+
   // Waits till all queued and currently running jobs are finished
   void finish() override;
 
@@ -129,6 +134,11 @@ class OrderedThreadPoolJobScheduler final : public JobScheduler {
                       folly::StringPiece name,
                       JobType type,
                       uint64_t key) override;
+
+  // Notify the completion of request
+  void notifyCompletion(uint64_t) override {
+    throw std::runtime_error("notifyCompletion is not used in v1");
+  }
 
   // waits till all queued and currently running jobs are finished
   void finish() override;
