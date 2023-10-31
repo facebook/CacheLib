@@ -184,7 +184,12 @@ struct CacheConfig : public JSONConfig {
   // number of asynchronous worker thread for navy write operation,
   uint32_t navyWriterThreads{32};
 
-  // QDepth >= 1 for async IO
+  // Max number of concurrent reads/writes in whole Navy
+  uint32_t navyMaxNumReads{0};
+  uint32_t navyMaxNumWrites{0};
+
+  // qdepth to be used; override if already set automatically
+  // by navyMaxNumReads and navyMaxNumWrites
   uint32_t navyQDepth{0};
   // Use either io_uring or libaio for async IO
   bool navyEnableIoUring{true};

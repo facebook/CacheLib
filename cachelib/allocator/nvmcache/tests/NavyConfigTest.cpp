@@ -210,6 +210,8 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::readerThreads"] = "40";
   expectedConfigMap["navyConfig::writerThreads"] = "40";
   expectedConfigMap["navyConfig::navyReqOrderingShards"] = "30";
+  expectedConfigMap["navyConfig::maxNumReads"] = "0";
+  expectedConfigMap["navyConfig::maxNumWrites"] = "0";
 
   EXPECT_EQ(configMap, expectedConfigMap);
 }
@@ -262,7 +264,6 @@ TEST(NavyConfigTest, Device) {
     EXPECT_THROW(config.setRaidFiles(raidPaths, fileSize, truncateFile),
                  std::invalid_argument);
   }
-
   {
     // set RAID files
     NavyConfig config{};
@@ -280,12 +281,24 @@ TEST(NavyConfigTest, Device) {
     NavyConfig config{};
     EXPECT_EQ(config.getIoEngine(), navy::IoEngine::Sync);
     EXPECT_EQ(config.getQDepth(), 0);
-    EXPECT_THROW(config.enableAsyncIo(0, false), std::invalid_argument);
-    EXPECT_THROW(config.enableAsyncIo(0, true), std::invalid_argument);
     config.enableAsyncIo(1, false);
     EXPECT_EQ(config.getIoEngine(), navy::IoEngine::LibAio);
+    EXPECT_EQ(config.getQDepth(), 1);
     config.enableAsyncIo(64, true);
     EXPECT_EQ(config.getIoEngine(), navy::IoEngine::IoUring);
+    EXPECT_EQ(config.getQDepth(), 64);
+  }
+  {
+    // set async io via job scheduler settings
+    NavyConfig config{};
+    config.setReaderAndWriterThreads(4, 4);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::Sync);
+    EXPECT_EQ(config.getQDepth(), 0);
+    config.setReaderAndWriterThreads(4, 4, 4, 4);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::IoUring);
+    EXPECT_EQ(config.getQDepth(), 1);
+    config.enableAsyncIo(64, false);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::LibAio);
     EXPECT_EQ(config.getQDepth(), 64);
   }
 }

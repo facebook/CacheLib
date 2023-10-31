@@ -301,9 +301,19 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
     const navy::NavyConfig& config) {
   auto readerThreads = config.getReaderThreads();
   auto writerThreads = config.getWriterThreads();
+  auto maxNumReads = config.getMaxNumReads();
+  auto maxNumWrites = config.getMaxNumWrites();
   auto reqOrderShardsPower = config.getNavyReqOrderingShards();
-  return cachelib::navy::createOrderedThreadPoolJobScheduler(
-      readerThreads, writerThreads, reqOrderShardsPower);
+  if (maxNumReads == 0 && maxNumWrites == 0) {
+    return cachelib::navy::createOrderedThreadPoolJobScheduler(
+        readerThreads, writerThreads, reqOrderShardsPower);
+  }
+
+  return cachelib::navy::createNavyRequestScheduler(readerThreads,
+                                                    writerThreads,
+                                                    maxNumReads,
+                                                    maxNumWrites,
+                                                    reqOrderShardsPower);
 }
 } // namespace
 

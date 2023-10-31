@@ -520,6 +520,8 @@ class NavyConfig {
   unsigned int getWriterThreads() const { return writerThreads_; }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
+  unsigned int getMaxNumReads() const { return maxNumReads_; }
+  unsigned int getMaxNumWrites() const { return maxNumWrites_; }
   // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
@@ -562,6 +564,9 @@ class NavyConfig {
   }
 
   // Enable AsyncIo
+  // If enabled already via job config settings, this will override
+  // the qDepth_ or enableIoUring_.
+  // If qDepth is 0, existing qDepth_ will be used
   void enableAsyncIo(unsigned int qDepth, bool enableIoUring);
 
   // ============ BlockCache settings =============
@@ -582,11 +587,13 @@ class NavyConfig {
   }
 
   // ============ Job scheduler settings =============
+  // Set the number of reader threads and writer threads.
+  // If maxNumReads and maxNumWrites are all 0, sync IO will be used
   void setReaderAndWriterThreads(unsigned int readerThreads,
-                                 unsigned int writerThreads) noexcept {
-    readerThreads_ = readerThreads;
-    writerThreads_ = writerThreads;
-  }
+                                 unsigned int writerThreads,
+                                 unsigned int maxNumReads = 0,
+                                 unsigned int maxNumWrites = 0);
+
   // Set Navy request ordering shards (expressed as power of two).
   // @throw std::invalid_argument if the input value is 0.
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
@@ -657,6 +664,9 @@ class NavyConfig {
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
+  // Max number of concurrent reads/writes in whole Navy
+  unsigned int maxNumReads_{0};
+  unsigned int maxNumWrites_{0};
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
   // 0 means unlimited.

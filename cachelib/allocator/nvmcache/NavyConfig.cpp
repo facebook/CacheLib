@@ -65,12 +65,15 @@ RandomAPConfig& RandomAPConfig::setAdmProbability(double admProbability) {
 
 // device settings
 void NavyConfig::enableAsyncIo(unsigned int qDepth, bool enableIoUring) {
-  if (qDepth == 0) {
-    throw std::invalid_argument(
-        folly::sformat("qdepth {} should be >=1 to use async IO", qDepth));
+  if (!qDepth && !qDepth_) {
+    XDCHECK_EQ(ioEngine_, IoEngine::Sync);
+    return;
   }
+
   ioEngine_ = enableIoUring ? IoEngine::IoUring : IoEngine::LibAio;
-  qDepth_ = qDepth;
+  if (qDepth) {
+    qDepth_ = qDepth;
+  }
 }
 
 void NavyConfig::setSimpleFile(const std::string& fileName,
@@ -146,6 +149,41 @@ BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
 }
 
 // job scheduler settings
+
+void NavyConfig::setReaderAndWriterThreads(unsigned int readerThreads,
+                                           unsigned int writerThreads,
+                                           unsigned int maxNumReads,
+                                           unsigned int maxNumWrites) {
+  readerThreads_ = readerThreads;
+  writerThreads_ = writerThreads;
+  maxNumReads_ = maxNumReads;
+  maxNumWrites_ = maxNumWrites;
+
+  if ((maxNumReads > 0 && maxNumWrites == 0) ||
+      (maxNumReads == 0 && maxNumWrites > 0)) {
+    throw std::invalid_argument(
+        "maxNumReads and maxNumWrites should be both 0 or both >0");
+  }
+
+  if (maxNumReads > 0 || maxNumWrites > 0) {
+    if ((maxNumReads % readerThreads_) || (maxNumWrites % writerThreads_)) {
+      throw std::invalid_argument(folly::sformat(
+          "reader threads ({}) and writer threads ({}) should divide evenly "
+          "into maxNumReads ({}) or maxNumWrites ({})",
+          readerThreads_, writerThreads_, maxNumReads, maxNumWrites));
+    }
+  }
+
+  if (!qDepth_) {
+    // Adjust the device qdepth and enable async IO if needed
+    qDepth_ =
+        std::max(maxNumReads_ / readerThreads_, maxNumWrites_ / writerThreads_);
+    if (qDepth_ > 0) {
+      ioEngine_ = IoEngine::IoUring;
+    }
+  }
+}
+
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {
   if (navyReqOrderingShards == 0) {
     throw std::invalid_argument(
@@ -229,6 +267,8 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(writerThreads_);
   configMap["navyConfig::navyReqOrderingShards"] =
       folly::to<std::string>(navyReqOrderingShards_);
+  configMap["navyConfig::maxNumReads"] = folly::to<std::string>(maxNumReads_);
+  configMap["navyConfig::maxNumWrites"] = folly::to<std::string>(maxNumWrites_);
 
   // Other settings
   configMap["navyConfig::maxConcurrentInserts"] =
