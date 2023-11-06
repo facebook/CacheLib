@@ -286,7 +286,8 @@ class ChainedHashTable {
       }
 
       // 1 lock per 1000 buckets.
-      locksPower_ = std::max<unsigned int>(1, bucketsPower_ - 10);
+      locksPower_ =
+          (bucketsPower_ <= 20) ? (bucketsPower_ / 2) + 1 : bucketsPower_ - 10;
     }
 
     unsigned int getBucketsPower() const noexcept { return bucketsPower_; }

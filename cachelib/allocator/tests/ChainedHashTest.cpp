@@ -33,6 +33,10 @@ TEST(ChainedHashTableConfigTest, Size) {
 
   ASSERT_THROW(config.sizeBucketsPowerAndLocksPower(2700000000),
                std::invalid_argument);
+
+  config.sizeBucketsPowerAndLocksPower(1);
+  EXPECT_EQ(config.getBucketsPower(), 1);
+  EXPECT_EQ(config.getLocksPower(), 1);
 }
 
 TEST_F(ChainedHashTest, Insert) { testInsert(); }
