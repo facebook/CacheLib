@@ -565,7 +565,7 @@ struct Stats {
     return 100 - pctFn(ops, total);
   }
 
-} // namespace cachebench
+}; // namespace cachebench
 
 } // namespace cachebench
 } // namespace cachelib
