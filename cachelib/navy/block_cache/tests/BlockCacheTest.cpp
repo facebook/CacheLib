@@ -592,14 +592,14 @@ TEST(BlockCache, ReclaimCorruption) {
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
   // Allow any number of writes in between and after our expected writes
-  EXPECT_CALL(*device, writeImpl(_, _, _)).Times(testing::AtLeast(0));
+  EXPECT_CALL(*device, writeImpl(_, _, _, _)).Times(testing::AtLeast(0));
 
   // Note even tho this item's value is corrupted, we would have aborted
   // the reclaim before we got here. So we will not bump the value checksum
   // error stat on this.
-  EXPECT_CALL(*device, writeImpl(0, 16384, _))
+  EXPECT_CALL(*device, writeImpl(0, 16384, _, _))
       .WillOnce(testing::Invoke(
-          [&device](uint64_t offset, uint32_t size, const void* data) {
+          [&device](uint64_t offset, uint32_t size, const void* data, int) {
             // Note that all items are aligned to 512 bytes in in-mem buffer
             // stacked mode, and we write around 800 bytes, so each is aligned
             // to 1024 bytes
@@ -703,7 +703,7 @@ TEST(BlockCache, RegionUnderflow) {
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _));
+  EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _, _));
   // Although 2k read buffer, shouldn't underflow the region!
   EXPECT_CALL(*device, readImpl(0, 1024, _));
   auto ex = makeJobScheduler();
@@ -730,7 +730,7 @@ TEST(BlockCache, SmallReadBuffer) {
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(
       kDeviceSize, 4096 /* io alignment size */);
-  EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _));
+  EXPECT_CALL(*device, writeImpl(0, 16 * 1024, _, _));
   EXPECT_CALL(*device, readImpl(0, 8192, _));
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
@@ -1057,10 +1057,11 @@ TEST(BlockCache, DeviceFailure) {
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
   {
     testing::InSequence seq;
-    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _)).WillOnce(Return(false));
-    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _));
-    EXPECT_CALL(*device, writeImpl(kRegionSize, kRegionSize, _));
-    EXPECT_CALL(*device, writeImpl(kRegionSize * 2, kRegionSize, _));
+    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _, _))
+        .WillOnce(Return(false));
+    EXPECT_CALL(*device, writeImpl(0, kRegionSize, _, _));
+    EXPECT_CALL(*device, writeImpl(kRegionSize, kRegionSize, _, _));
+    EXPECT_CALL(*device, writeImpl(kRegionSize * 2, kRegionSize, _, _));
 
     EXPECT_CALL(*device, readImpl(0, 1024, _));
     EXPECT_CALL(*device, readImpl(kRegionSize, 1024, _))
@@ -1116,7 +1117,7 @@ namespace {
 std::unique_ptr<Device> setupResetTestDevice(uint32_t size) {
   auto device = std::make_unique<NiceMock<MockDevice>>(size, 512);
   for (uint32_t i = 0; i < 2; i++) {
-    EXPECT_CALL(*device, writeImpl(i * 16 * 1024, 16 * 1024, _));
+    EXPECT_CALL(*device, writeImpl(i * 16 * 1024, 16 * 1024, _, _));
   }
   return device;
 }
@@ -2080,7 +2081,7 @@ TEST(BlockCache, DeviceFlushFailureSync) {
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
 
   testing::InSequence inSeq;
-  EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
+  EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
@@ -2122,7 +2123,7 @@ TEST(BlockCache, DeviceFlushFailureAsync) {
   auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
 
   testing::InSequence inSeq;
-  EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
+  EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
 
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);

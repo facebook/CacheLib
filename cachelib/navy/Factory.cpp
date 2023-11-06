@@ -454,6 +454,7 @@ std::unique_ptr<Device> createFileDevice(
     uint32_t maxDeviceWriteSize,
     IoEngine ioEngine,
     uint32_t qDepth,
+    bool isFDPEnabled,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   // File paths are opened in the increasing order of the
   // path string. This ensures that RAID0 stripes aren't
@@ -476,12 +477,14 @@ std::unique_ptr<Device> createFileDevice(
   }
 
   return createDirectIoFileDevice(std::move(fileVec),
+                                  std::move(filePaths),
                                   fdSize,
                                   blockSize,
                                   stripeSize,
                                   maxDeviceWriteSize,
                                   ioEngine,
                                   qDepth,
+                                  isFDPEnabled,
                                   std::move(encryptor));
 }
 

@@ -173,6 +173,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
           config_.navyReqOrderShardsPower);
     }
     nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
+    nvmConfig.navyConfig.setEnableFDP(config_.deviceEnableFDP);
 
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()

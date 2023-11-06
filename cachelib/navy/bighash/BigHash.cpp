@@ -88,7 +88,8 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       cacheBaseOffset_{config.cacheBaseOffset},
       numBuckets_{config.numBuckets()},
       bloomFilter_{std::move(config.bloomFilter)},
-      device_{*config.device} {
+      device_{*config.device},
+      placementHandle_{device_.allocatePlacementHandle()} {
   XLOGF(INFO,
         "BigHash created: buckets: {}, bucket size: {}, base offset: {}",
         numBuckets_,
@@ -550,6 +551,7 @@ Buffer BigHash::readBucket(BucketId bid) {
 bool BigHash::writeBucket(BucketId bid, Buffer buffer) {
   auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
   bucket->setChecksum(Bucket::computeChecksum(buffer.view()));
-  return device_.write(getBucketOffset(bid), std::move(buffer));
+  return device_.write(
+      getBucketOffset(bid), std::move(buffer), placementHandle_);
 }
 } // namespace facebook::cachelib::navy

@@ -212,6 +212,8 @@ class BigHash final : public Engine {
   std::unique_ptr<BloomFilter> bloomFilter_;
   std::chrono::nanoseconds generationTime_{};
   Device& device_;
+  // handle for data placement technologies like FDP
+  int placementHandle_;
   std::unique_ptr<SharedMutex[]> mutex_{new SharedMutex[kNumMutexes]};
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of

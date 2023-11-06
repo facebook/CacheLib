@@ -278,6 +278,7 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(deviceMaxWriteSize_);
   configMap["navyConfig::ioEngine"] = getIoEngineName(ioEngine_).str();
   configMap["navyConfig::QDepth"] = folly::to<std::string>(qDepth_);
+  configMap["navyConfig::enableFDP"] = folly::to<std::string>(enableFDP_);
 
   // Job scheduler settings
   configMap["navyConfig::readerThreads"] =

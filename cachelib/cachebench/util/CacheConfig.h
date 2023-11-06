@@ -227,6 +227,9 @@ struct CacheConfig : public JSONConfig {
   // Navy will split it into multiple IOs.
   uint32_t deviceMaxWriteSize{1024 * 1024};
 
+  // Enable the FDP Data placement mode in the device, if it is capable.
+  bool deviceEnableFDP{false};
+
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};

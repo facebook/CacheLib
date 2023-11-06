@@ -33,7 +33,7 @@ using testing::_;
 namespace facebook::cachelib::navy::tests {
 TEST(Device, BytesWritten) {
   MockDevice device{100, 1};
-  EXPECT_CALL(device, writeImpl(_, _, _))
+  EXPECT_CALL(device, writeImpl(_, _, _, _))
       .WillOnce(testing::Return(true))
       .WillOnce(testing::Return(true))
       .WillOnce(testing::Return(false));
@@ -109,7 +109,7 @@ TEST(Device, Latency) {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
         return true;
       }));
-  EXPECT_CALL(device, writeImpl(0, 1, _))
+  EXPECT_CALL(device, writeImpl(0, 1, _, _))
       .WillOnce(testing::InvokeWithoutArgs([] {
         std::this_thread::sleep_for(std::chrono::milliseconds{100});
         return true;
@@ -135,7 +135,7 @@ TEST(Device, IOError) {
   MockDevice device{1, 1};
   EXPECT_CALL(device, readImpl(0, 1, _))
       .WillOnce(testing::InvokeWithoutArgs([] { return false; }));
-  EXPECT_CALL(device, writeImpl(0, 1, _))
+  EXPECT_CALL(device, writeImpl(0, 1, _, _))
       .WillOnce(testing::InvokeWithoutArgs([] { return false; }));
 
   Buffer buf{1};
@@ -213,12 +213,14 @@ struct DeviceParamTest
       uint32_t maxDeviceWriteSize,
       std::shared_ptr<DeviceEncryptor> encryptor) {
     device_ = createDirectIoFileDevice(std::move(fVec),
+                                       {},
                                        fileSize,
                                        blockSize,
                                        stripeSize,
                                        maxDeviceWriteSize,
                                        ioEngine_,
                                        qDepth_,
+                                       false,
                                        std::move(encryptor));
     return device_;
   }

@@ -31,6 +31,7 @@ add_library (cachelib_navy
   block_cache/RegionManager.cpp
   common/Buffer.cpp
   common/Device.cpp
+  common/FdpNvme.cpp
   common/Hash.cpp
   common/SizeDistribution.cpp
   common/Types.cpp

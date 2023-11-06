@@ -213,7 +213,7 @@ TEST(BigHash, DeviceErrorStats) {
   BigHash bh(std::move(config));
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key1"), makeView("1")));
-  EXPECT_CALL(*device, writeImpl(0, 64, _)).WillOnce(Return(false));
+  EXPECT_CALL(*device, writeImpl(0, 64, _, _)).WillOnce(Return(false));
   EXPECT_EQ(Status::DeviceError, bh.insert(makeHK("key2"), makeView("1")));
   {
     MockCounterVisitor helper;
@@ -351,12 +351,13 @@ TEST(BigHash, WriteInTwoBuckets) {
       config.cacheBaseOffset + config.cacheSize, 128);
   {
     InSequence inSeq;
+    EXPECT_CALL(*device, allocatePlacementHandle());
     EXPECT_CALL(*device, readImpl(256, 128, _));
-    EXPECT_CALL(*device, writeImpl(256, 128, _));
+    EXPECT_CALL(*device, writeImpl(256, 128, _, _));
     EXPECT_CALL(*device, readImpl(384, 128, _));
-    EXPECT_CALL(*device, writeImpl(384, 128, _));
+    EXPECT_CALL(*device, writeImpl(384, 128, _, _));
     EXPECT_CALL(*device, readImpl(256, 128, _));
-    EXPECT_CALL(*device, writeImpl(256, 128, _));
+    EXPECT_CALL(*device, writeImpl(256, 128, _, _));
   }
   config.device = device.get();
 
@@ -375,10 +376,11 @@ TEST(BigHash, RemoveNotFound) {
   auto device = std::make_unique<StrictMock<MockDevice>>(config.cacheSize, 128);
   {
     InSequence inSeq;
+    EXPECT_CALL(*device, allocatePlacementHandle());
     EXPECT_CALL(*device, readImpl(0, 128, _));
-    EXPECT_CALL(*device, writeImpl(0, 128, _));
+    EXPECT_CALL(*device, writeImpl(0, 128, _, _));
     EXPECT_CALL(*device, readImpl(0, 128, _));
-    EXPECT_CALL(*device, writeImpl(0, 128, _));
+    EXPECT_CALL(*device, writeImpl(0, 128, _, _));
     EXPECT_CALL(*device, readImpl(0, 128, _));
   }
   config.device = device.get();
@@ -541,6 +543,7 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   BigHash::Config config;
   setLayout(config, 128, 2);
   auto device = std::make_unique<StrictMock<MockDevice>>(config.cacheSize, 128);
+  EXPECT_CALL(*device, allocatePlacementHandle());
   EXPECT_CALL(*device, readImpl(_, _, _)).Times(0);
   config.device = device.get();
   config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
@@ -635,8 +638,9 @@ TEST(BigHash, BloomFilterRecovery) {
     setLayout(config, 128, 2);
     auto device =
         std::make_unique<StrictMock<MockDevice>>(config.cacheSize, 128);
+    EXPECT_CALL(*device, allocatePlacementHandle());
     EXPECT_CALL(*device, readImpl(0, 128, _));
-    EXPECT_CALL(*device, writeImpl(0, 128, _));
+    EXPECT_CALL(*device, writeImpl(0, 128, _, _));
     config.device = device.get();
     config.bloomFilter = std::make_unique<BloomFilter>(2, 1, 4);
 
