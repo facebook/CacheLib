@@ -69,7 +69,7 @@ class RegionAllocator {
   // The current region id from which we are allocating
   RegionId rid_;
 
-  mutable TimedMutex mutex_;
+  mutable TimedMutex mutex_{TimedMutex::Options(false)};
 };
 
 // Size class or stack allocator. Thread safe. Syncs access
