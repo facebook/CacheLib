@@ -19,6 +19,7 @@
 #include <folly/Random.h>
 #include <folly/Singleton.h>
 #include <folly/synchronization/Baton.h>
+#include <folly/synchronization/Latch.h>
 
 #include <algorithm>
 #include <chrono>
@@ -2467,6 +2468,80 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     for (const auto& c : chainedAllocs.getChain()) {
       ASSERT_EQ(c.getMemory(), expectedMemory[i++]);
     }
+  }
+
+  // tests case that correct parent item is acquired after move
+  void testChainedItemParentAcquireAfterMoveLoop() {
+    // create an allocator worth 250 slabs
+    // first slab is for overhead, second is parent class
+    // third is chained item 1 and rest are for new chained item alloc
+    // to move to.
+    std::unique_ptr<AllocatorT> alloc;
+    typename AllocatorT::Config config;
+    config.configureChainedItems();
+    config.setCacheSize(250 * Slab::kSize);
+
+    const std::set<uint32_t> allocSizes = {1024, 2048};
+    auto sizes = std::vector<uint32_t>{500, 1500};
+    std::atomic<uint64_t> numMoves{0};
+    std::atomic<uint64_t> numReplaces{0};
+    PoolId pid;
+
+    using Item = typename AllocatorT::Item;
+    config.enableMovingOnSlabRelease([&](Item& oldItem, Item& newItem,
+                                         Item* parentPtr) {
+      assert(oldItem.getSize() == newItem.getSize());
+      assert(oldItem.isChainedItem());
+      std::memcpy(newItem.getMemory(), oldItem.getMemory(), oldItem.getSize());
+      folly::Latch latch(1);
+      auto insertThread = std::make_unique<std::thread>([&]() {
+        ASSERT_NO_THROW({
+          auto parentReplacement =
+              alloc->allocate(pid, parentPtr->getKey(), sizes[0]);
+          Item* parentCopy = parentPtr;
+          latch.count_down();
+          while (parentCopy->isMoving())
+            ;
+          alloc->insertOrReplace(parentReplacement);
+          ++numReplaces;
+        });
+      });
+      insertThread->detach();
+      latch.wait();
+      ++numMoves;
+    });
+
+    alloc = std::make_unique<AllocatorT>(config);
+
+    const size_t numBytes = alloc->getCacheMemoryStats().ramCacheSize;
+    const auto poolSize = numBytes;
+    pid = alloc->addPool("one", poolSize, allocSizes);
+
+    auto allocFn = [&](std::string keyPrefix, std::vector<uint32_t> sizes) {
+      for (unsigned int loop = 0; loop < 20; ++loop) {
+        for (unsigned int i = 0; i < 2048; ++i) {
+          const auto key = keyPrefix + folly::to<std::string>(loop) + "_" +
+                           folly::to<std::string>(i);
+          auto itemHandle =
+              util::allocateAccessible(*alloc, pid, key, sizes[0]);
+          auto childItem = alloc->allocateChainedItem(itemHandle, sizes[1]);
+          ASSERT_NE(nullptr, childItem);
+
+          alloc->addChainedItem(itemHandle, std::move(childItem));
+        }
+      }
+    };
+    allocFn(std::string{"yolo"}, sizes);
+
+    ClassId cid = static_cast<ClassId>(1);
+    for (int i = 0; i < 20; i++) {
+      alloc->releaseSlab(pid, cid, SlabReleaseMode::kRebalance);
+    }
+    while (alloc->getSlabReleaseStats().numSlabReleaseForRebalance < 20) {
+      sleep(1);
+    }
+    // for ASSERT_EXIT
+    exit(0);
   }
 
   // create a chain of allocations, replace the allocation and ensure that the

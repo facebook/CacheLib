@@ -862,13 +862,13 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     headHandle.reset();
 
     if (head == nullptr || &head->getParentItem(compressor_) != &it) {
-      throw std::runtime_error(folly::sformat(
+      throw exception::ChainedItemInvalid(folly::sformat(
           "Mismatch parent pointer. This should not happen. Key: {}",
           it.getKey()));
     }
 
     if (!chainedItemAccessContainer_->remove(*head)) {
-      throw std::runtime_error(folly::sformat(
+      throw exception::ChainedItemInvalid(folly::sformat(
           "Chained item associated with {} cannot be removed from hash table "
           "This should not happen here.",
           it.getKey()));

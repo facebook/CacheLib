@@ -292,6 +292,11 @@ TYPED_TEST(BaseAllocatorTest, TransferChainAfterMoving) {
   this->testTransferChainAfterMoving();
 }
 
+TYPED_TEST(BaseAllocatorTest, ChainedItemParentAcquireAfterMove) {
+  ASSERT_EXIT(this->testChainedItemParentAcquireAfterMoveLoop(),
+              testing::ExitedWithCode(0), ".*");
+}
+
 TYPED_TEST(BaseAllocatorTest, AddAndPopChainedItemMultithread) {
   this->testAddAndPopChainedItemMultithread();
 }
