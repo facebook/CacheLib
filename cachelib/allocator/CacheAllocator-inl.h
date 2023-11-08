@@ -2639,6 +2639,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
   const auto allocInfo = allocator_->getAllocInfo(oldItem.getMemory());
   if (chainedItem) {
     newItemHdl.reset();
+    auto parentKey = parentItem->getKey();
     auto ref = parentItem->unmarkMoving();
     if (UNLIKELY(ref == 0)) {
       wakeUpWaiters(*parentItem, {});
@@ -2648,7 +2649,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
       return true;
     } else {
       XDCHECK_NE(ref, 0);
-      auto parentHdl = acquire(parentItem);
+      auto parentHdl = findInternal(parentKey);
       if (parentHdl) {
         wakeUpWaiters(*parentItem, std::move(parentHdl));
       }
