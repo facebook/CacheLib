@@ -107,7 +107,7 @@ void NavyRequestScheduler::enqueueWithKey(Job job,
   const auto shard = req->getKey() % numShards_;
   std::lock_guard<TimedMutex> l(mutexes_[shard]);
   if (shouldSpool_[shard]) {
-    pendingReqs_[shard].emplace(std::move(req));
+    pendingReqs_[shard].emplace_back(std::move(req));
     numSpooled_.inc();
     currSpooled_.inc();
   } else {
@@ -132,7 +132,7 @@ void NavyRequestScheduler::notifyCompletion(uint64_t key) {
     auto& dispatcher = getDispatcher(nextReq->getKey(), nextReq->getType());
     dispatcher.submitReq(std::move(nextReq));
   }
-  pendingReqs_[shard].pop();
+  pendingReqs_[shard].pop_front();
 }
 
 void NavyRequestScheduler::finish() {}

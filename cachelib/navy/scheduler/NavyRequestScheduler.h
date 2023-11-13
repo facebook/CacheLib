@@ -19,6 +19,7 @@
 #include <folly/fibers/TimedMutex.h>
 #include <folly/io/async/EventBase.h>
 
+#include <list>
 #include <vector>
 
 #include "cachelib/navy/scheduler/JobScheduler.h"
@@ -104,7 +105,7 @@ class NavyRequestScheduler : public JobScheduler {
   // sharding power
   // const size_t numShardsPower_;
   // list of jobs per shard if there is already a job pending for the shard
-  std::vector<std::queue<std::unique_ptr<NavyRequest>>> pendingReqs_;
+  std::vector<std::list<std::unique_ptr<NavyRequest>>> pendingReqs_;
 
   // indicates if there is a pending job for the shard. This is kept as an
   // uint64_t instead of bool to ensure atomicity with sharded locks.
