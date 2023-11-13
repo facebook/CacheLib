@@ -862,13 +862,13 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
     headHandle.reset();
 
     if (head == nullptr || &head->getParentItem(compressor_) != &it) {
-      throw std::runtime_error(folly::sformat(
+      throw exception::ChainedItemInvalid(folly::sformat(
           "Mismatch parent pointer. This should not happen. Key: {}",
           it.getKey()));
     }
 
     if (!chainedItemAccessContainer_->remove(*head)) {
-      throw std::runtime_error(folly::sformat(
+      throw exception::ChainedItemInvalid(folly::sformat(
           "Chained item associated with {} cannot be removed from hash table "
           "This should not happen here.",
           it.getKey()));
@@ -2639,6 +2639,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
   const auto allocInfo = allocator_->getAllocInfo(oldItem.getMemory());
   if (chainedItem) {
     newItemHdl.reset();
+    auto parentKey = parentItem->getKey();
     auto ref = parentItem->unmarkMoving();
     if (UNLIKELY(ref == 0)) {
       wakeUpWaiters(*parentItem, {});
@@ -2648,7 +2649,7 @@ bool CacheAllocator<CacheTrait>::moveForSlabRelease(
       return true;
     } else {
       XDCHECK_NE(ref, 0);
-      auto parentHdl = acquire(parentItem);
+      auto parentHdl = findInternal(parentKey);
       if (parentHdl) {
         wakeUpWaiters(*parentItem, std::move(parentHdl));
       }
