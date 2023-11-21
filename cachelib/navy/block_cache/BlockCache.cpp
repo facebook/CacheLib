@@ -131,6 +131,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.cacheBaseOffset,
                      *config.device,
                      config.cleanRegionsPool,
+                     config.cleanRegionThreads,
                      bindThis(&BlockCache::onRegionReclaim, *this),
                      bindThis(&BlockCache::onRegionCleanup, *this),
                      std::move(config.evictionPolicy),

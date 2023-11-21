@@ -89,8 +89,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.readBufferSize = size;
   }
 
-  void setCleanRegionsPool(uint32_t n) override {
-    config_.cleanRegionsPool = n;
+  void setCleanRegionsPool(uint32_t cleanRegions,
+                           uint32_t cleanRegionThreads) override {
+    config_.cleanRegionsPool = cleanRegions;
+    config_.cleanRegionThreads = cleanRegionThreads;
   }
 
   void setReinsertionConfig(

@@ -44,7 +44,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
 
@@ -141,7 +141,7 @@ TEST(Allocator, TestInMemBufferStates) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
   Allocator allocator{*rm, kNumPriorities};
 
@@ -231,7 +231,7 @@ TEST(Allocator, UsePriorities) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
       kNumRegions /* numInMemBuffers */, 3 /* numPriorities */,
       kFlushRetryLimit);

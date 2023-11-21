@@ -83,6 +83,7 @@ class RegionManager {
                 uint64_t baseOffset,
                 Device& device,
                 uint32_t numCleanRegions,
+                uint32_t numWorkers,
                 RegionEvictCallback evictCb,
                 RegionCleanupCallback cleanupCb,
                 std::unique_ptr<EvictionPolicy> policy,
@@ -93,7 +94,7 @@ class RegionManager {
   RegionManager& operator=(const RegionManager&) = delete;
 
   // Destroy the worker thread for safety first
-  ~RegionManager() { worker_.reset(); }
+  ~RegionManager() { workers_.clear(); }
 
   // return the size of usable space
   uint64_t getSize() const {
@@ -264,6 +265,10 @@ class RegionManager {
     return baseOffset_ + toAbsolute(addr).offset();
   }
 
+  NavyThread& getNextWorker() {
+    return *(workers_[numReclaimScheduled_.add_fetch(1) % workers_.size()]);
+  }
+
   void doReclaim();
   void doFlushInternal(RegionId rid);
 
@@ -300,13 +305,12 @@ class RegionManager {
 
   std::atomic<uint64_t> seqNumber_{0};
 
-  uint32_t reclaimsScheduled_{0};
+  uint32_t reclaimsOutstanding_{0};
 
-  // The thread that runs the flush and reclaim.
-  // We expect one thread is enough to handle the reclaim and flush load;
-  // e.g., BlockCache write rate of 150MBps which corresponds less than
-  // 10 region (150MBps / 16MB) reclaims per second
-  std::unique_ptr<NavyThread> worker_;
+  // The thread that runs the flush and reclaim. Flush is always run by
+  // the last worker thread
+  std::vector<std::unique_ptr<NavyThread>> workers_;
+  mutable AtomicCounter numReclaimScheduled_;
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

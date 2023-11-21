@@ -167,7 +167,8 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   } else {
     blockCache->setFifoEvictionPolicy();
   }
-  blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions());
+  blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions(),
+                                  blockCacheConfig.getCleanRegionThreads());
 
   blockCache->setReinsertionConfig(blockCacheConfig.getReinsertionConfig());
 

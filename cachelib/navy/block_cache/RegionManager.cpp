@@ -26,6 +26,7 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint64_t baseOffset,
                              Device& device,
                              uint32_t numCleanRegions,
+                             uint32_t numWorkers,
                              RegionEvictCallback evictCb,
                              RegionCleanupCallback cleanupCb,
                              std::unique_ptr<EvictionPolicy> policy,
@@ -41,7 +42,6 @@ RegionManager::RegionManager(uint32_t numRegions,
       policy_{std::move(policy)},
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
       numCleanRegions_{numCleanRegions},
-      worker_{std::make_unique<NavyThread>("region_manager")},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers} {
@@ -57,6 +57,12 @@ RegionManager::RegionManager(uint32_t numRegions,
         std::make_unique<Buffer>(device.makeIOBuffer(regionSize_)));
   }
 
+  for (uint32_t i = 0; i < numWorkers; i++) {
+    auto name = fmt::format("region_manager_{}", i);
+    workers_.emplace_back(std::make_unique<NavyThread>(name));
+    workers_.back()->addTaskRemote(
+        [name]() { XLOGF(INFO, "{} started", name); });
+  }
   resetEvictionPolicy();
 }
 
@@ -92,7 +98,7 @@ void RegionManager::reset() {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     // Reset is inherently single threaded. All pending jobs, including
     // reclaims, have to be finished first.
-    XDCHECK_EQ(reclaimsScheduled_, 0u);
+    XDCHECK_EQ(reclaimsOutstanding_, 0u);
     cleanRegions_.clear();
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
@@ -218,10 +224,10 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
       }
       status = OpenStatus::Retry;
     }
-    auto plannedClean = cleanRegions_.size() + reclaimsScheduled_;
+    auto plannedClean = cleanRegions_.size() + reclaimsOutstanding_;
     if (plannedClean < numCleanRegions_) {
       newSched = numCleanRegions_ - plannedClean;
-      reclaimsScheduled_ += newSched;
+      reclaimsOutstanding_ += newSched;
     }
   }
 
@@ -240,7 +246,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
         cleanRegionsCond_.notifyAll();
       }
     }
-  } else if (status == OpenStatus::Retry && newSched > 0) {
+  } else if (status == OpenStatus::Retry) {
     cleanRegionRetries_.inc();
   }
 
@@ -255,7 +261,9 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   numInMemBufWaitingFlush_.inc();
 
   if (async) {
-    worker_->addTaskRemote([this, rid]() { doFlushInternal(rid); });
+    // The flushes are pinned to the last worker thread to make sure all flushes
+    // requested from the reclaims are completed when drained in order
+    workers_.back()->addTaskRemote([this, rid]() { doFlushInternal(rid); });
   } else {
     doFlushInternal(rid);
   }
@@ -298,7 +306,7 @@ void RegionManager::doFlushInternal(RegionId rid) {
 }
 
 void RegionManager::startReclaim() {
-  worker_->addTaskRemote([&]() { doReclaim(); });
+  getNextWorker().addTaskRemote([&]() { doReclaim(); });
 }
 
 void RegionManager::doReclaim() {
@@ -414,7 +422,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   region.reset();
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
-    reclaimsScheduled_--;
+    reclaimsOutstanding_--;
     cleanRegions_.push_back(rid);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
@@ -560,7 +568,12 @@ Buffer RegionManager::read(const RegionDescriptor& desc,
   return device_.read(physicalOffset(addr), size);
 }
 
-void RegionManager::drain() { worker_->drain(); }
+void RegionManager::drain() {
+  // Drain all outstanding reclaims and flushes in the order in the worker list.
+  for (auto& worker : workers_) {
+    worker->drain();
+  }
+}
 
 void RegionManager::flush() {
   drain(); // Flush any pending reclaims

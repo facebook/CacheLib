@@ -179,7 +179,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)
-                         .setCleanRegions(config_.navyCleanRegions)
+                         .setCleanRegions(config_.navyCleanRegions,
+                                          config_.navyCleanRegionThreads)
                          .setRegionSize(config_.navyRegionSizeMB * MB);
 
     // by default lru. if more than one fifo ratio is present, we use

@@ -198,6 +198,9 @@ struct CacheConfig : public JSONConfig {
   // into navy don't queue behind a reclaim of region.
   uint32_t navyCleanRegions{1};
 
+  // The number of RegionManager threads for reclaim and flush
+  uint32_t navyCleanRegionThreads{1};
+
   // disabled when value is 0
   uint32_t navyAdmissionWriteRateMB{0};
 

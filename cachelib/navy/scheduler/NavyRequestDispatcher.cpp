@@ -29,8 +29,10 @@ NavyRequestDispatcher::NavyRequestDispatcher(JobScheduler& scheduler,
       name_(name),
       maxOutstanding_(maxOutstanding),
       worker_{name_} {
-  XLOGF(INFO, "[{}] Starting with max outstanding {}", getName(),
-        maxOutstanding_);
+  worker_.addTaskRemote([this]() {
+    XLOGF(INFO, "[{}] Starting with max outstanding {}", getName(),
+          maxOutstanding_);
+  });
 }
 
 /*

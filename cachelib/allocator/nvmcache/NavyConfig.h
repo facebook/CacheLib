@@ -288,7 +288,8 @@ class BlockCacheConfig {
   // Navy needs to maintain sufficient buffers for each clean region that is
   // reserved. This ensures each time we obtain a new in-mem buffer, we have a
   // clean region to flush it to flash once it's ready.
-  BlockCacheConfig& setCleanRegions(uint32_t cleanRegions) noexcept;
+  BlockCacheConfig& setCleanRegions(uint32_t cleanRegions,
+                                    uint32_t cleanRegionThreads = 1);
 
   BlockCacheConfig& setRegionSize(uint32_t regionSize) noexcept {
     regionSize_ = regionSize;
@@ -318,6 +319,8 @@ class BlockCacheConfig {
 
   uint32_t getCleanRegions() const { return cleanRegions_; }
 
+  uint32_t getCleanRegionThreads() const { return cleanRegionThreads_; }
+
   uint32_t getNumInMemBuffers() const { return numInMemBuffers_; }
 
   uint32_t getRegionSize() const { return regionSize_; }
@@ -342,6 +345,10 @@ class BlockCacheConfig {
   BlockCacheReinsertionConfig reinsertionConfig_;
   // Buffer of clean regions to maintain for eviction.
   uint32_t cleanRegions_{1};
+  // Number of RegionManager threads to run reclaim and flush.
+  // We expect one thread is enough for most of use cases, but can be
+  // configured to more threads if needed
+  unsigned int cleanRegionThreads_{1};
   // Number of Navy BlockCache in-memory buffers.
   uint32_t numInMemBuffers_{2};
   // Size for a region for Navy BlockCache (must be multiple of

@@ -138,6 +138,7 @@ TEST(NavyConfigTest, DefaultVal) {
   EXPECT_EQ(blockCacheConfig.isLruEnabled(), true);
   EXPECT_EQ(blockCacheConfig.getRegionSize(), 16 * 1024 * 1024);
   EXPECT_EQ(blockCacheConfig.getCleanRegions(), 1);
+  EXPECT_EQ(blockCacheConfig.getCleanRegionThreads(), 1);
   EXPECT_TRUE(blockCacheConfig.getSFifoSegmentRatio().empty());
   EXPECT_EQ(blockCacheConfig.getDataChecksum(), true);
   EXPECT_EQ(blockCacheConfig.getNumInMemBuffers(), 2);
@@ -192,6 +193,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";
   expectedConfigMap["navyConfig::blockCacheCleanRegions"] = "4";
+  expectedConfigMap["navyConfig::blockCacheCleanRegionThreads"] = "1";
   expectedConfigMap["navyConfig::blockCacheReinsertionHitsThreshold"] = "111";
   expectedConfigMap["navyConfig::blockCacheReinsertionPctThreshold"] = "0";
   expectedConfigMap["navyConfig::blockCacheNumInMemBuffers"] = "8";

@@ -68,7 +68,8 @@ class BlockCacheProto {
 
   // (Optional) How many clean regions GC should (try to) maintain in the pool.
   // Default: 1
-  virtual void setCleanRegionsPool(uint32_t n) = 0;
+  virtual void setCleanRegionsPool(uint32_t cleanRegions,
+                                   uint32_t cleanRegionThreads) = 0;
 
   // (Optional) Number of In memory buffers to maintain. Default: 0
   virtual void setNumInMemBuffers(uint32_t numInMemBuffers) = 0;

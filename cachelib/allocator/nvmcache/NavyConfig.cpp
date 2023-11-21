@@ -121,13 +121,20 @@ BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
 }
 
 BlockCacheConfig& BlockCacheConfig::setCleanRegions(
-    uint32_t cleanRegions) noexcept {
+    uint32_t cleanRegions, uint32_t cleanRegionThreads) {
+  if (!cleanRegionThreads || cleanRegionThreads > cleanRegions + 1) {
+    throw std::invalid_argument(folly::sformat(
+        "number of clean region threads should be in the range of [1, {}]",
+        cleanRegions + 1));
+  }
+
   cleanRegions_ = cleanRegions;
   // Increasing number of in-mem buffers is a short-term mitigation
   // to avoid reinsertion failure when all buffers in clean regions
   // are pending flush and the reclaim job is running before flushing complete
   // (see T93961857, T93959811)
   numInMemBuffers_ = 2 * cleanRegions;
+  cleanRegionThreads_ = cleanRegionThreads;
   return *this;
 }
 
@@ -202,6 +209,8 @@ std::map<std::string, std::string> EnginesConfig::serialize() const {
       folly::to<std::string>(blockCache().getRegionSize());
   configMap["navyConfig::blockCacheCleanRegions"] =
       folly::to<std::string>(blockCache().getCleanRegions());
+  configMap["navyConfig::blockCacheCleanRegionThreads"] =
+      folly::to<std::string>(blockCache().getCleanRegionThreads());
   configMap["navyConfig::blockCacheReinsertionHitsThreshold"] =
       folly::to<std::string>(
           blockCache().getReinsertionConfig().getHitsThreshold());
