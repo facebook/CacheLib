@@ -88,12 +88,19 @@ void setupTimeoutHandler() {
     stopperThread = std::make_unique<std::thread>([] {
       folly::EventBase eb;
       eb.runAfterDelay(
-          []() {
+          [&eb]() {
+            XLOGF(INFO,
+                  "Stopping due to timeout {} seconds",
+                  FLAGS_timeout_seconds);
             if (runnerInstance) {
               runnerInstance->abort();
             }
+            eb.terminateLoopSoon();
           },
           FLAGS_timeout_seconds * 1000);
+      eb.loopForever();
+      // We give another few seconds for the graceful shutdown to complete
+      eb.runAfterDelay([]() { XCHECK(false); }, 30 * 1000);
       eb.loopForever();
     });
     stopperThread->detach();
@@ -157,4 +164,6 @@ int main(int argc, char** argv) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;
   }
+
+  return 0;
 }

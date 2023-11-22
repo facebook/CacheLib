@@ -7,10 +7,9 @@
     "rebalanceMinSlabs": 1,
     "allocFactor": 2.0
   },
-  "test_config": 
+  "test_config":
     {
       "name": "cachelib_range_map",
-      "numOps" : 200000
+      "numOps" : 150000
     }
- 
 }

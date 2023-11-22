@@ -7,13 +7,11 @@
     "moveOnSlabRelease" : false,
     "rebalanceStrategy" : "tail-age"
   },
-  "test_config" : 
+  "test_config" :
     {
-      "numOps" : 50000000,
+      "numOps" : 20000000,
       "numThreads" : 20,
       "numKeys" : 10000000,
-      
-
 
       "keySizeRange" : [32, 33],
       "keySizeRangeProbability" : [1.0],

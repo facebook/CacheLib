@@ -49,9 +49,10 @@ class Runner {
   // in addition to running time, cachebench has several metrics
   // (hit rate, throughput, ect.) to be compared, use BENCHMARK_COUNTER
   // and put metrics into folly::UserCounters to show metrics in output results.
-  void run(folly::UserCounters&);
+  bool run(folly::UserCounters&);
 
   void abort() {
+    aborted_ = true;
     if (stressor_) {
       stressor_->abort();
     }
@@ -60,6 +61,8 @@ class Runner {
  private:
   // instance of the stressor.
   std::unique_ptr<Stressor> stressor_;
+
+  bool aborted_{false};
 };
 } // namespace cachebench
 } // namespace cachelib

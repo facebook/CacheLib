@@ -52,10 +52,16 @@ bool Runner::run(std::chrono::seconds progressInterval,
   std::cout << std::endl;
 
   stressor_.reset();
-  return cacheStats.renderIsTestPassed(std::cout);
+
+  bool passed = cacheStats.renderIsTestPassed(std::cout);
+  if (aborted_) {
+    std::cerr << "Test aborted.\n";
+    passed = false;
+  }
+  return passed;
 }
 
-void Runner::run(folly::UserCounters& counters) {
+bool Runner::run(folly::UserCounters& counters) {
   stressor_->start();
   stressor_->finish();
 
@@ -77,6 +83,12 @@ void Runner::run(folly::UserCounters& counters) {
 
     stressor_.reset();
   }
+
+  if (aborted_) {
+    std::cerr << "Test aborted.\n";
+    return false;
+  }
+  return true;
 }
 
 } // namespace cachebench

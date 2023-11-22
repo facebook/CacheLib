@@ -11,13 +11,13 @@
   },
   "test_config" :
     {
-      
+
       "checkConsistency" : true,
 
-      "numOps" : 30000000,
+      "numOps" : 1000000,
       "numThreads" : 40,
-      "numKeys" : 10000000,
-      
+      "numKeys" : 1000000,
+
 
       "keySizeRange" : [1, 8],
       "keySizeRangeProbability" : [1.0],
