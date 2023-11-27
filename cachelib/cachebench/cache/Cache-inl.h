@@ -119,8 +119,6 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   if (!isRamOnly()) {
     typename Allocator::NvmCacheConfig nvmConfig;
 
-    nvmConfig.enableFastNegativeLookups = true;
-
     if (config_.nvmCachePaths.size() == 1) {
       // if we get a directory, create a file. we will clean it up. If we
       // already have a file, user provided it. We will also keep it around
