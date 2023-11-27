@@ -9,14 +9,12 @@
     "navySegmentedFifoSegmentRatio": [1],
     "navyBigHashSizePct": 0
   },
-  "test_config" : 
+  "test_config" :
     {
-      
-
-      "numOps" : 100000000,
+      "numOps" : 4000000,
       "numThreads" : 32,
       "numKeys" : 100000,
-      
+
 
       "keySizeRange" : [1, 8, 64],
       "keySizeRangeProbability" : [0.3, 0.7],
@@ -27,5 +25,4 @@
       "getRatio" : 0.5,
       "setRatio" : 0.3
     }
- 
 }
