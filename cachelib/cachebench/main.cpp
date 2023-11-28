@@ -36,7 +36,7 @@
 #endif
 
 #ifdef CACHEBENCH_FB_ENV
-DEFINE_bool(export_to_ods, true, "Upload cachelib stats to ODS");
+DEFINE_bool(export_to_ods, false, "Upload cachelib stats to ODS");
 DEFINE_int32(fb303_port,
              0,
              "Port for cachebench fb303 service. If 0, do not export to fb303. "
