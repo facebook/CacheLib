@@ -67,7 +67,7 @@ inline uint32_t murmurHash2(const void* key, int len, uint32_t seed) {
   case 1:
     h ^= data[0];
     h *= m;
-  };
+  }
 
   // Do a few final mixes of the hash to ensure the last few
   // bytes are well-incorporated.
