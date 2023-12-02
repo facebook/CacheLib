@@ -97,7 +97,7 @@ uint64_t murmurHash64A(const void* key, int len, uint64_t seed) {
   case 1:
     h ^= (uint64_t)data2[0];
     h *= m;
-  };
+  }
 
   h ^= h >> r;
   h *= m;
