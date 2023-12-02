@@ -195,7 +195,7 @@ RangeMap<K, V, C> RangeMap<K, V, C>::create(Cache& cache,
                                             uint32_t numBytes) {
   try {
     return RangeMap{cache, pid, key, numEntries, numBytes};
-  } catch (const std::bad_alloc& ex) {
+  } catch (const std::bad_alloc&) {
     return {};
   }
 }
