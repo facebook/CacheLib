@@ -103,7 +103,7 @@ Status EnginePair::insertInternal(HashedKey hk,
     ioErrorCount_.inc();
     break;
   default:;
-  };
+  }
 
   return status;
 }
