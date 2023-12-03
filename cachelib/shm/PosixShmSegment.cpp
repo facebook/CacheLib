@@ -225,7 +225,7 @@ PosixShmSegment::~PosixShmSegment() {
     // delete the reference mapping so the segment can be deleted if its
     // marked to be.
     deleteReferenceMapping();
-  } catch (const std::system_error& e) {
+  } catch (const std::system_error&) {
   }
 
   // need to close the fd without throwing any exceptions. so we call close
