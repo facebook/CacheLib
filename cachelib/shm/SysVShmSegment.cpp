@@ -86,6 +86,7 @@ int shmGetImpl(key_t key, size_t size, int flags) {
 #endif
     XDCHECK(false);
     util::throwSystemError(errno, "Invalid errno");
+    break;
   default:
     XDCHECK(false);
     util::throwSystemError(errno, "Invalid errno");
@@ -154,13 +155,14 @@ void shmCtlImpl(int shmid, int cmd, shmid_ds* buf) {
   }
 
   switch (errno) {
-  // EOVERFLOW and EACCES make sense only for stat
   case EOVERFLOW:
   case EACCES:
     XDCHECK_EQ(cmd, IPC_STAT);
+    // EOVERFLOW and EACCES make sense only for stat
     if (cmd != IPC_STAT) {
       util::throwSystemError(errno, "Invalid errno");
     }
+    [[fallthrough]];
   case EFAULT:
     util::throwSystemError(errno);
     break;
