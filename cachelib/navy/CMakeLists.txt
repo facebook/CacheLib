@@ -30,6 +30,7 @@ add_library (cachelib_navy
   block_cache/Region.cpp
   block_cache/RegionManager.cpp
   common/Buffer.cpp
+  common/ZoneZbdAdapter.cpp
   common/Device.cpp
   common/Hash.cpp
   common/SizeDistribution.cpp
@@ -76,6 +77,7 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    ${ZBD_LIBRARIES} 
   )
 
 

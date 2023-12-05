@@ -173,7 +173,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
           config_.navyReqOrderShardsPower);
     }
     nvmConfig.navyConfig.setBlockSize(config_.navyBlockSize);
-
+    nvmConfig.navyConfig.setUseZoneFile(config_.isZoneFile);
+    printf(" config_.isZoneFile [%d]\n", config_.isZoneFile);
     // configure BlockCache
     auto& bcConfig = nvmConfig.navyConfig.blockCache()
                          .setDataChecksum(config_.navyDataChecksum)

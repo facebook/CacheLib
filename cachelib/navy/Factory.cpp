@@ -481,4 +481,13 @@ std::unique_ptr<Device> createFileDevice(
                                   std::move(encryptor));
 }
 
+std::unique_ptr<Device> createZNSDevice(
+    std::string fileName,
+    uint64_t size,
+    uint32_t ioAlignSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+  return createDirectIoZNSDevice(fileName, size, ioAlignSize,
+                                  std::move(encryptor), maxDeviceWriteSize);
+}
 } // namespace facebook::cachelib::navy

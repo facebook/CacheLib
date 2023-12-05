@@ -93,6 +93,8 @@ void RegionManager::track(RegionId rid) {
 void RegionManager::reset() {
   for (uint32_t i = 0; i < numRegions_; i++) {
     regions_[i]->reset();
+    auto wAddr = RelAddress{RegionId{i}, 0};
+    deviceReset(wAddr, regionSize_);
   }
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
@@ -159,6 +161,7 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   // Reset all region internal state, making it ready to be
   // used by a region allocator.
   region.reset();
+  deviceReset(RelAddress{rid, 0}, regionSize_);
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
@@ -420,6 +423,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // Reset all region internal state, making it ready to be
   // used by a region allocator.
   region.reset();
+  deviceReset(RelAddress{rid, 0}, regionSize_);
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
     reclaimsOutstanding_--;
@@ -544,6 +548,14 @@ bool RegionManager::deviceWrite(RelAddress addr, BufferView view) {
   return true;
 }
 
+bool RegionManager::deviceReset(RelAddress addr, uint32_t size) {
+  XDCHECK(isValidIORange(addr.offset(), size));
+  auto physOffset = physicalOffset(addr);
+  if (!device_.reset(physOffset, size)) {
+    return false;
+  }
+  return true;
+}
 void RegionManager::write(RelAddress addr, Buffer buf) {
   auto rid = addr.rid();
   auto& region = getRegion(rid);

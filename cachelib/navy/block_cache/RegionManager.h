@@ -273,7 +273,7 @@ class RegionManager {
   void doFlushInternal(RegionId rid);
 
   bool deviceWrite(RelAddress addr, BufferView buf);
-
+  bool deviceReset(RelAddress addr, uint32_t size);
   bool isValidIORange(uint32_t offset, uint32_t size) const;
   std::pair<OpenStatus, std::unique_ptr<CondWaiter>> assignBufferToRegion(
       RegionId rid, bool addWaiter);

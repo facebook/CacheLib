@@ -154,6 +154,9 @@ class Device {
   // Returns the alignment size for device io operations
   uint32_t getIOAlignmentSize() const { return ioAlignmentSize_; }
 
+  virtual uint32_t reset(uint64_t offset, uint32_t size) const { return 0; }
+  virtual void setLayOutInfo(uint64_t blockCacheStart, uint64_t blockCacheSize, 
+    uint64_t bigHashStart, uint64_t bucketNum) const {};
  protected:
   virtual bool writeImpl(uint64_t offset, uint32_t size, const void* value) = 0;
   virtual bool readImpl(uint64_t offset, uint32_t size, void* value) = 0;
@@ -241,6 +244,12 @@ std::unique_ptr<Device> createDirectIoFileDevice(
     uint32_t maxDeviceWriteSize,
     std::shared_ptr<DeviceEncryptor> encryptor);
 
+std::unique_ptr<Device> createDirectIoZNSDevice(
+    std::string& fileName,
+    uint64_t size,
+    uint32_t ioAlignSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize);
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

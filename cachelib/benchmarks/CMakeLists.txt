@@ -26,6 +26,7 @@ if (BUILD_TESTS)
     Folly::follybenchmark
     glog::glog
     gflags
+    ${ZBD_LIBRARIES} 
     GTest::gtest
     GTest::gmock
   )

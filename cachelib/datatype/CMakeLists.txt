@@ -39,6 +39,7 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    ${ZBD_LIBRARIES} 
   )
 
   function (ADD_TEST SOURCE_FILE)

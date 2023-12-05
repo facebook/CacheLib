@@ -482,6 +482,7 @@ class NavyConfig {
 
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
+  bool usesZoneFile() const noexcept { return useZoneFile_; }
   bool isBigHashEnabled() const {
     return enginesConfigs_[0].bigHash().getSizePct() > 0;
   }
@@ -621,7 +622,9 @@ class NavyConfig {
   }
 
   EnginesSelector getEnginesSelector() const { return selector_; }
-
+  void setUseZoneFile(bool useZoneFile) noexcept {
+    useZoneFile_ = useZoneFile;
+  }
  private:
   // ============ AP settings =============
   // Name of the admission policy.
@@ -685,6 +688,7 @@ class NavyConfig {
   // Whether to use write size (instead of parcel size) for Navy admission
   // policy.
   bool useEstimatedWriteSize_{false};
+   bool useZoneFile_{false};
 };
 } // namespace navy
 } // namespace cachelib

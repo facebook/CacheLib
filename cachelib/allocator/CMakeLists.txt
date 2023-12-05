@@ -92,6 +92,7 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    ${ZBD_LIBRARIES}
   )
 
 

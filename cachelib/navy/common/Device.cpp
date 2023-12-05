@@ -15,6 +15,7 @@
  */
 
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/ZoneZbdAdapter.h"
 
 #include <folly/File.h>
 #include <folly/Format.h>
@@ -348,6 +349,59 @@ class MemoryDevice final : public Device {
   }
 
   std::unique_ptr<uint8_t[]> buffer_;
+};
+// Device on zns device descriptor
+class ZNSDevice final : public Device {
+ public:
+  ZNSDevice(ZoneZbdAdapter* zoneAdapter,
+             uint64_t size,
+             uint32_t ioAlignSize,
+             std::shared_ptr<DeviceEncryptor> encryptor,
+             uint32_t maxDeviceWriteSize)
+      : Device{size, std::move(encryptor), ioAlignSize, maxDeviceWriteSize},
+        zoneAdapter_{zoneAdapter} {}
+  ZNSDevice(const ZNSDevice&) = delete;
+  ZNSDevice& operator=(const ZNSDevice&) = delete;
+
+  ~ZNSDevice() override {
+    delete zoneAdapter_;
+    zoneAdapter_ = NULL;
+  }
+
+ private:
+  bool writeImpl(uint64_t offset, uint32_t size, const void* value) override {
+    return zoneAdapter_->writeOffset(value, offset, size);	  
+  }
+
+  bool readImpl(uint64_t offset, uint32_t size, void* value) override {
+    return zoneAdapter_->readOffset(value, offset, size);
+  }
+
+  void flushImpl() override { /*::fsync(file_.fd());*/ }
+
+  uint32_t reset(uint64_t offset, uint32_t size) const override {
+    if (size == 0) {
+      return zoneAdapter_->resetZone(offset, size);
+    } 
+    return zoneAdapter_->resetRegion(offset, size); 
+  }
+  
+  void setLayOutInfo(uint64_t blockCacheStart, uint64_t blockCacheSize, uint64_t bigHashStart, uint64_t bucketNum) const override {
+      zoneAdapter_->setLayOutInfo(blockCacheStart, blockCacheSize, bigHashStart, bucketNum);
+  }
+
+  void reportIOError(const char* opName,
+                     uint64_t offset,
+                     uint32_t size,
+                     ssize_t ioRet) {
+    XLOG_EVERY_N_THREAD(
+        ERR, 1000,
+        folly::sformat("IO error: {} offset={} size={} ret={} errno={} ({})",
+                       opName, offset, size, ioRet, errno,
+                       std::strerror(errno)));
+  }
+
+  ZoneZbdAdapter* zoneAdapter_;
 };
 } // namespace
 
@@ -994,4 +1048,16 @@ std::unique_ptr<Device> createDirectIoFileDevice(
                                   encryptor);
 }
 
+std::unique_ptr<Device> createDirectIoZNSDevice(
+    std::string& fileName,
+    uint64_t size,
+    uint32_t ioAlignSize,
+    std::shared_ptr<DeviceEncryptor> encryptor,
+    uint32_t maxDeviceWriteSize) {
+    ZoneZbdAdapter* zoneAdapter = new ZoneZbdAdapter();
+    int32_t ret = zoneAdapter->openZoneDevice(fileName);
+  return std::make_unique<ZNSDevice>(zoneAdapter, size, ioAlignSize,
+                                      std::move(encryptor),
+                                      maxDeviceWriteSize);
+}
 } // namespace facebook::cachelib::navy

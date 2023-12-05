@@ -237,6 +237,8 @@ void setupCacheProtos(const navy::NavyConfig& config,
   uint64_t bigHashEndOffset = totalCacheSize;
   uint64_t bigHashStartOffset = 0;
 
+  uint64_t bucketNum = 0;
+  uint64_t bCacheSize = 0;
   XLOG(INFO) << "metadataSize: " << metadataSize;
   for (size_t idx = 0; idx < config.enginesConfigs().size(); idx++) {
     XLOG(INFO) << "Setting up engine pair " << idx;
@@ -254,6 +256,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
                            ? bigHashStartOffset - blockCacheStartOffset
                            : blockCacheSize;
       XLOG(INFO) << "blockCacheSize " << blockCacheSize;
+      bucketNum = bigHashSize / enginesConfig.bigHash().getBucketSize() + 1;
     } else {
       bigHashStartOffset = bigHashEndOffset;
       blockCacheSize = blockCacheSize == 0
@@ -263,6 +266,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
     }
 
     // Set up BlockCache if enabled
+    bCacheSize = blockCacheSize;
     if (blockCacheSize > 0) {
       blockCacheEndOffset = setupBlockCache(
           enginesConfig.blockCache(), blockCacheSize, ioAlignSize,
@@ -279,6 +283,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
     bigHashEndOffset = bigHashStartOffset;
     blockCacheStartOffset = blockCacheEndOffset;
   }
+  device.setLayOutInfo(metadataSize, bCacheSize, bigHashStartOffset, bucketNum);
   proto.setEnginesSelector(config.getEnginesSelector());
 }
 
@@ -323,7 +328,15 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   auto blockSize = config.getBlockSize();
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
-  if (config.usesRaidFiles() || config.usesSimpleFile()) {
+  if (config.usesZoneFile()) {
+    printf("config.usesZoneFile()\n");	 
+    return cachelib::navy::createZNSDevice(
+              config.getFileName(),
+              config.getFileSize(),
+              blockSize,
+              std::move(encryptor),
+              maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0);
+  } else if (config.usesRaidFiles() || config.usesSimpleFile()) {
     auto stripeSize = 0;
     auto fileSize = config.getFileSize();
     std::vector<std::string> filePaths;

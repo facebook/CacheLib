@@ -68,6 +68,7 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gtest_main
+    ${ZBD_LIBRARIES}
   )
 
   function (ADD_TEST SOURCE_FILE)

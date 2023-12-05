@@ -105,7 +105,10 @@ find_package(wangle CONFIG REQUIRED)
 find_package(Zlib REQUIRED)
 find_package(Zstd REQUIRED)
 find_package(FBThrift REQUIRED) # must come after wangle
-
+find_package(Zbd REQUIRED)
+find_package(PkgConfig REQUIRED)
+PKG_SEARCH_MODULE(PKG_ZBD REQUIRED libzbd)
+MESSAGE(STATUS "PKG_ZBD_LIBRARY_DIRS ${PKG_ZBD_LIBRARY_DIRS}")
 find_package(uring)
 if (NOT uring_FOUND)
   add_definitions(-DCACHELIB_IOURING_DISABLE)
@@ -133,7 +136,7 @@ function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
 
   add_executable("${TEST_PREFIX}-${TEST_NAME}" "${SOURCE_FILE}")
   target_link_libraries("${TEST_PREFIX}-${TEST_NAME}" "${ARGN}")
-
+  target_link_libraries("${TEST_PREFIX}-${TEST_NAME}"  -lzbd)
   install(
     TARGETS "${TEST_PREFIX}-${TEST_NAME}"
     DESTINATION ${TESTS_INSTALL_DIR}

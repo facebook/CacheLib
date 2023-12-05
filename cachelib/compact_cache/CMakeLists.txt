@@ -22,6 +22,7 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gmock
+    ${ZBD_LIBRARIES}
   )
 
   function (ADD_TEST SOURCE_FILE)

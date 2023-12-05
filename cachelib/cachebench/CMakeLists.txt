@@ -37,6 +37,7 @@ target_link_libraries(cachelib_cachebench PUBLIC
   cachelib_datatype
   cachelib_allocator
   gflags
+  ${ZBD_LIBRARIES}
 )
 
 if ((CMAKE_SYSTEM_NAME STREQUAL Linux) AND
@@ -74,6 +75,7 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    ${ZBD_LIBRARIES} 
   )
 
 
