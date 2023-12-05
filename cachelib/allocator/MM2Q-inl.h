@@ -335,7 +335,8 @@ bool MM2Q::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
       markHot(newNode);
       break;
     case LruType::ColdTail:
-      markTail(newNode); // pass through to also mark cold
+      markTail(newNode);
+      [[fallthrough]]; // pass through to also mark cold
     case LruType::Cold:
       markCold(newNode);
       break;
