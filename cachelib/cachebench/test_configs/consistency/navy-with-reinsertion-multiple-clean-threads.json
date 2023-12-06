@@ -1,0 +1,33 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 100,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true,
+
+    "allocFactor" : 2.0,
+    "navyProbabilityReinsertionThreshold": 50,
+    "navyCleanRegions" : 2,
+    "navyCleanRegionThreads" : 2,
+    "nvmCacheSizeMB" : 512
+  },
+  "test_config" :
+    {
+
+      "checkConsistency" : true,
+
+      "numOps" : 1000000,
+      "numThreads" : 40,
+      "numKeys" : 1000000,
+
+
+      "keySizeRange" : [1, 8],
+      "keySizeRangeProbability" : [1.0],
+
+      "valSizeRange" : [1024, 10240],
+      "valSizeRangeProbability" : [1.0],
+
+      "getRatio" : 0.5,
+      "setRatio" : 0.5,
+      "delRatio" : 0.0
+    }
+}

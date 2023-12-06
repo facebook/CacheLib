@@ -777,9 +777,11 @@ bool AsyncIoContext::submitIo(IOOp& op) {
 
   op.startTime_ = getSteadyClock();
   while (numOutstanding_ >= qDepth_) {
-    XLOG_EVERY_MS(ERR, 10000) << fmt::format(
-        "[{}] the number of outstanding requests {} exceeds the limit {}",
-        getName(), numOutstanding_, qDepth_);
+    if (qDepth_ > 1) {
+      XLOG_EVERY_MS(ERR, 10000) << fmt::format(
+          "[{}] the number of outstanding requests {} exceeds the limit {}",
+          getName(), numOutstanding_, qDepth_);
+    }
     Waiter waiter;
     waitList_.push_back(waiter);
     waiter.baton_.wait();

@@ -1,0 +1,38 @@
+{
+  "cache_config" : {
+    "cacheSizeMB" : 100,
+    "poolRebalanceIntervalSec" : 1,
+    "moveOnSlabRelease" : true,
+
+    "allocFactor" : 2.0,
+    "navyProbabilityReinsertionThreshold": 50,
+
+    "nvmCachePaths" : ["/tmp/cachebench_test_nvm.img"],
+    "nvmCacheSizeMB" : 512,
+
+    "navyBigHashSizePct": 10,
+    "navySmallItemMaxSize": 1024,
+    "navyMaxConcurrentInserts" : 10,
+
+    "navyReaderThreads" : 32,
+    "navyWriterThreads" : 32,
+    "navyMaxNumReads" : 32,
+    "navyMaxNumWrites" : 32
+  },
+  "test_config" :
+    {
+      "numOps" : 10000000,
+      "numThreads" : 20,
+      "numKeys" : 1000000,
+
+      "keySizeRange" : [1, 8, 64],
+      "keySizeRangeProbability" : [0.3, 0.7],
+
+      "valSizeRange" : [256, 1024, 4096],
+      "valSizeRangeProbability" : [0.2, 0.8],
+
+      "getRatio" : 0.5,
+      "setRatio" : 0.5,
+      "delRatio" : 0.0
+    }
+}
