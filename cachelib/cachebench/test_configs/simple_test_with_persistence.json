@@ -5,7 +5,7 @@
     "cacheDir": "/tmp/cachebench_test/metadata",
     "nvmCacheSizeMB" : 1024,
     "nvmCacheMetadataSizeMB": 128,
-    "nvmCachePaths": ["/tmp/cachebench_test/navy_path/"],
+    "nvmCachePaths": ["/tmp/cachebench_test/navy_path"],
     "navyBigHashSizePct": 0,
 
     "poolRebalanceIntervalSec" : 0,
