@@ -307,8 +307,8 @@ class RegionManager {
 
   uint32_t reclaimsOutstanding_{0};
 
-  // The thread that runs the flush and reclaim. Flush is always run by
-  // the last worker thread
+  // The thread that runs the flush and reclaim. For Navy-async thread mode, the
+  // async flushes will be run in-line on fiber by the async NavyThread itself
   std::vector<std::unique_ptr<NavyThread>> workers_;
   mutable AtomicCounter numReclaimScheduled_;
 
