@@ -14,7 +14,9 @@
 
 name: build-cachelib-ubuntu-20
 on:
-#  push:
+  push:
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
   schedule:

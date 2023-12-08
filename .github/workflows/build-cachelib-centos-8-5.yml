@@ -13,7 +13,9 @@
 # limitations under the License.
 name: build-cachelib-centos-8.5
 on:
-#   push:
+  push:
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
   schedule:
