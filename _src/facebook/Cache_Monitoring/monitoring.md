@@ -40,7 +40,7 @@ cachelib.<cache-name>.<pool-name>.usable_size
 cachelib.<cache-name>.<pool-name>.advised_size
 ```
 
-For a complete list of cachelib ODS stats, see this file: https://fburl.com/diffusion/t2uvf1rd
+For a complete list of cachelib ODS stats, see this file: https://fburl.com/code/muqnqont
 
 ## Scuba
 

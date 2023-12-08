@@ -4,7 +4,12 @@ title: "CacheLib Onboarding Guide"
 ---
 
 ## Team Culture
-**[work in progress]**. Refer to [CacheLib Team Work Agreement](https://fb.quip.com/9V15Aar0rOEY)
+**[work in progress]**. Refer to [CacheLib Team Work Agreement](https://docs.google.com/document/d/1A8StkHeR53vOxB5UeA4DGyxcVsECdrNaXdOL_hsHrew/edit)
+
+### Critical Bug Handling
+Since the CacheLib is used by hundreds of services, the bug in CacheLib could be more critical than as we can imagine. Also, it is known to be a wrong assumption that most of the critical bugs impacting customers should be detected by client services' release testings; there could be some bug (e.g., S378191) that is triggered only in either an untested corner cases or a special condition (e.g., peak load) whose detection might have been missed by CI (e.g., cogwheel).
+
+So, once a bug is identified, we should do the careful assessment first. And if it is required to prevent any affected packages from being pushed to production, we should create [BPD](https://www.internalfb.com/intern/wiki/Bad_Package_Detector/) [here](https://www.internalfb.com/intern/sf/bad_package_detector/) immediately even before the fix is available.
 
 ## Get Started
 Read [CacheLib User Guide](https://www.internalfb.com/intern/staticdocs/cachelib/docs/) to understand how cachelib is used by users.
