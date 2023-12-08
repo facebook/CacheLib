@@ -270,7 +270,6 @@ std::unique_ptr<rocksdb::SecondaryCache> NewRocksCachelibWrapper(
         .setMaxWriteRate(opts.maxWriteRate)
         .setAdmWriteRate(opts.admissionWriteRate);
   }
-  nvmConfig.enableFastNegativeLookups = true;
 
   config.setCacheSize(opts.volatileSize)
       .setCacheName(opts.cacheName)
