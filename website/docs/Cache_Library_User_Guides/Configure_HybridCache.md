@@ -7,9 +7,8 @@ title: Configure HybridCache
 
 You can configure the Navy engine (flash cache engine when running in the HybridCache mode) through the `NvmCache::Config::navyConfig` in the Cache config by using APIs provided in `navy::NavyConfig`, for example:
 
-
-
-<details> <summary> Simple hybrid cache setup </summary>
+<details>
+<summary> Simple hybrid cache setup </summary>
 
 ```cpp
 #include "cachelib/allocator/CacheAllocator.h"
@@ -26,7 +25,6 @@ lruConfig.enableNvmCache(nvmConfig);
 ```
 
 </details>
-
 
 All settings are optional, unless marked as **"Required"**.
 
@@ -70,26 +68,70 @@ All settings are optional, unless marked as **"Required"**.
 
   This controls what’s the biggest IO we can write to a device. After it is configured, any IO size above it will be split and issued sequentially.
 
+Optionally, when `NavyRequestScheduler` is used, the queue depth and IO engine of `Device` layer can be adjusted.
+
+  ```cpp
+  navyConfig.enableAsyncIo(qdepth, enableIoUring);
+ ```
+
+* (**Required**) `qdepth` = `0` (default)
+
+   Determines the qdepth of async IO queue used by each Navy thread. By default, this is set automatically as `<max num reads> / <reader threads>` and `<max num writes> / <writer threads>` for reader and writer threads, respectively.
+
+* (**Required**) `enableIoUring` = `true` (default)
+
+    Select Io engine between io_uring and libaio. See [Architecture Guide - Device](/docs/Cache_Library_Architecture_Guide/navy_overview#device) for more details.
 
 ### 2. Common Settings - Job Scheduler
+
+Two types of Job scheduler are supported (see [Architecture Guide - Navy overview](/docs/Cache_Library_Architecture_Guide/navy_overview#job-scheduler)). Common settings are as follows.
+
 ```cpp
-navyConfig.setReaderAndWriterThreads(readerThreads, writerThreads);
 navyConfig.setNavyReqOrderingShards(navyReqOrderingShards);
 ```
-
-* (**Required**) `reader threads` = `32` (default)
-
-  Number of threads available for processing *read* requests.
-
-* (**Required**) `writer threads` = `32` (default)
-
-  Number of threads available for processing *write* requests and navy-internal operations.
-
-
 * `request ordering shards` = `20` (default)
 
   If it is non-zero, we will enable request ordering where we put requests into 2<sup>N</sup> shards and ensure each shard executes requests in order.
 
+Parameters specific to each job scheduler are as follows.
+#### OrderedThreadPoolScheduler
+```cpp
+navyConfig.setReaderAndWriterThreads(readerThreads, writerThreads);
+```
+
+* (**Required**) `reader threads` = `32` (default)
+
+  Number of threads available for processing *read* (lookup) requests.
+
+* (**Required**) `writer threads` = `32` (default)
+
+  Number of threads available for processing *write* (insert and delete) requests.
+
+
+#### NavyRequestScheduler
+
+```cpp
+navyConfig.setReaderAndWriterThreads(readerThreads, writerThreads, maxNumReads, maxNumWrites, stackSizeKB);
+```
+* (**Required**) `reader threads`
+
+  Number of threads available for processing *read* requests. The recommended value is 4.
+
+* (**Required**) `writer threads`
+
+  Number of threads available for processing *write* (insert and delete) requests. The recommended value is 4.
+
+* (**Required**) `max num reads`
+
+  The maximum number of read requests that can be concurrently executed. The suggested value is 64 or 128 depending on application. If the value is larger, throughput can be increased. However, latency could be also increased. This should be integer multiple of the number of reader threads.
+
+* (**Required**) `max num writes`
+
+  The maximum number of write requests that can be concurrently executed. The suggested value is 32 or 64 depending on application. If the value is larger, throughput can be increased. However, latency could be also increased. This should be integer multiple of the number of writer threads.
+
+* (**Optional**) `stack size in KB` = `64` (default)
+
+  This determines the size of the fiber stack. Navy allocates the stack of total size `(<readerThreads> + <writerThreads> + <reclaimThreads>) x 100 x <stack size>` at minimum. The default should work for most of the cases, but can be decreased (e.g., 16KB) if the memory footprint matters. Be aware that this should be enough to run all callbacks (e.g., destructor callback) that can be executed by Navy.
 
 ### 3. Common Settings - Other
  ```cpp
@@ -146,7 +188,7 @@ There are 2 types of admission policy: **"random"** and **"dynamic_random"**. Us
 navyConfig.blockCache()
           .enableSegmentedFifo(sFifoSegmentRatio)
           .enableHitsBasedReinsertion(hitsThreshold)
-          .setCleanRegions(cleanRegions)
+          .setCleanRegions(cleanRegions, cleanRegionThreads)
           .setRegionSize(regionSize)
           .setDataChecksum(false);
 ```
@@ -193,8 +235,12 @@ navyConfig.blockCache()
 
     All writes will first go into a region-sized buffer. Once the buffer is full, we will flush the region to the device. This allows BlockCache to internally pack items closer to each other (saves space) and also improves device read latency (regular sized write IOs means better read performance).
 
+  * `clean region threads` = `1` (default)
+
+    How many threads to use for the reclaims and flush operations. `1` is enough for most of use cases.
+
   ```cpp
-   navyConfig.blockCache().setCleanRegions(cleanRegions);
+   navyConfig.blockCache().setCleanRegions(cleanRegions, cleanRegionThreads);
   ```
 
 * `region size` = `16777216 (16 Mb)` (default)
