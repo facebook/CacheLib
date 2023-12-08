@@ -150,8 +150,8 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
     // For concurrent put, if it is already enqueued, its put context already
     // exists. If it is not enqueued yet (in-flight) the above invalidateToken
     // will prevent the put from being enqueued.
-    if (config_.enableFastNegativeLookups && it == fillMap.end() &&
-        !putContexts_[shard].hasContexts() && !navyCache_->couldExist(hk)) {
+    if (it == fillMap.end() && !putContexts_[shard].hasContexts() &&
+        !navyCache_->couldExist(hk)) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
       return WriteHandle{};
@@ -234,8 +234,8 @@ bool NvmCache<C>::couldExistFast(HashedKey hk) {
   // For concurrent put, if it is already enqueued, its put context already
   // exists. If it is not enqueued yet (in-flight) the above invalidateToken
   // will prevent the put from being enqueued.
-  if (config_.enableFastNegativeLookups && it == fillMap.end() &&
-      !putContexts_[shard].hasContexts() && !navyCache_->couldExist(hk)) {
+  if (it == fillMap.end() && !putContexts_[shard].hasContexts() &&
+      !navyCache_->couldExist(hk)) {
     return false;
   }
 
@@ -813,8 +813,7 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
   // (in-flight puts) before we check for couldExist.  Any put contexts
   // created after couldExist api returns does not matter, since the put
   // token is invalidated before all of this begins.
-  if (config_.enableFastNegativeLookups && !putContexts_[shard].hasContexts() &&
-      !navyCache_->couldExist(hk)) {
+  if (!putContexts_[shard].hasContexts() && !navyCache_->couldExist(hk)) {
     stats().numNvmSkippedDeletes.inc();
     return;
   }

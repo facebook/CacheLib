@@ -111,10 +111,6 @@ class NvmCache {
     // If true, only store the orignal size the user requested.
     bool truncateItemToOriginalAllocSizeInNvm{false};
 
-    // when enabled, nvmcache will attempt to resolve misses without incurring
-    // thread hops by using synchronous methods.
-    bool enableFastNegativeLookups{true};
-
     // serialize the config for debugging purposes
     std::map<std::string, std::string> serialize() const;
 

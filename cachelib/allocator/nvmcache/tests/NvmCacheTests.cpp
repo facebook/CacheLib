@@ -137,7 +137,6 @@ TEST_F(NvmCacheTest, BasicGet) {
 
 TEST_F(NvmCacheTest, CouldExistFast) {
   // Enable fast negative lookup
-  this->allocConfig_.nvmConfig->enableFastNegativeLookups = true;
   this->makeCache();
 
   auto& nvm = this->cache();
