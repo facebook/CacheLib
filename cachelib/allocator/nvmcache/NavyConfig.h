@@ -529,6 +529,7 @@ class NavyConfig {
 
   unsigned int getMaxNumReads() const { return maxNumReads_; }
   unsigned int getMaxNumWrites() const { return maxNumWrites_; }
+  unsigned int getStackSize() const { return stackSize_; }
   // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
@@ -599,7 +600,8 @@ class NavyConfig {
   void setReaderAndWriterThreads(unsigned int readerThreads,
                                  unsigned int writerThreads,
                                  unsigned int maxNumReads = 0,
-                                 unsigned int maxNumWrites = 0);
+                                 unsigned int maxNumWrites = 0,
+                                 unsigned int stackSizeKB = 0);
 
   // Set Navy request ordering shards (expressed as power of two).
   // @throw std::invalid_argument if the input value is 0.
@@ -671,9 +673,16 @@ class NavyConfig {
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
 
-  // Max number of concurrent reads/writes in whole Navy
+  // Max number of concurrent reads/writes in whole Navy.
+  // This needs to be a multiple of the number of readers and writers.
+  // Setting this to non-0 will enable async IO where fibers are used
+  // for Navy operations including device IO
   unsigned int maxNumReads_{0};
   unsigned int maxNumWrites_{0};
+
+  // Stack size of fibers when async-io is enabled. 0 for default
+  unsigned int stackSize_{0};
+
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
   // 0 means unlimited.

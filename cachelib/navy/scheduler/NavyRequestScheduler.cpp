@@ -27,11 +27,13 @@ std::unique_ptr<JobScheduler> createNavyRequestScheduler(
     size_t numWriterThreads,
     size_t maxNumReads,
     size_t maxNumWrites,
+    size_t stackSize,
     size_t reqOrderShardPower) {
   return std::make_unique<NavyRequestScheduler>(numReaderThreads,
                                                 numWriterThreads,
                                                 maxNumReads,
                                                 maxNumWrites,
+                                                stackSize,
                                                 reqOrderShardPower);
 }
 
@@ -39,6 +41,7 @@ NavyRequestScheduler::NavyRequestScheduler(size_t numReaderThreads,
                                            size_t numWriterThreads,
                                            size_t maxNumReads,
                                            size_t maxNumWrites,
+                                           size_t stackSize,
                                            size_t numShardsPower)
     : numReaderThreads_(numReaderThreads),
       numWriterThreads_(numWriterThreads),
@@ -53,18 +56,19 @@ NavyRequestScheduler::NavyRequestScheduler(size_t numReaderThreads,
   for (size_t i = 0; i < numReaderThreads_; i++) {
     auto dispatcher = std::make_shared<NavyRequestDispatcher>(
         *this, fmt::format("navy_reader_{}", i),
-        maxNumReads / numReaderThreads_);
+        maxNumReads / numReaderThreads_, stackSize);
     readerDispatchers_.emplace_back(std::move(dispatcher));
   }
 
   for (size_t i = 0; i < numWriterThreads_; i++) {
     auto dispatcher = std::make_shared<NavyRequestDispatcher>(
         *this, fmt::format("navy_writer_{}", i),
-        maxNumWrites / numWriterThreads_);
+        maxNumWrites / numWriterThreads_, stackSize);
     writerDispatchers_.emplace_back(std::move(dispatcher));
   }
 
-  healthThread_ = std::make_unique<NavyThread>("navy_health");
+  healthThread_ = std::make_unique<NavyThread>("navy_health",
+                                               NavyThread::Options(16 * 1024));
   healthMutex_.lock();
   healthThread_->addTaskRemote([this]() {
     size_t numDispatchers = numReaderThreads_ + numWriterThreads_;

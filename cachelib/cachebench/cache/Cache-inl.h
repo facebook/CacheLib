@@ -214,7 +214,8 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     nvmConfig.navyConfig.setReaderAndWriterThreads(config_.navyReaderThreads,
                                                    config_.navyWriterThreads,
                                                    config_.navyMaxNumReads,
-                                                   config_.navyMaxNumWrites);
+                                                   config_.navyMaxNumWrites,
+                                                   config_.navyStackSizeKB);
 
     // Set enableIoUring (and override qDepth) if async io is enabled
     if (config_.navyMaxNumReads || config_.navyMaxNumWrites ||

@@ -24,11 +24,12 @@ namespace navy {
 
 NavyRequestDispatcher::NavyRequestDispatcher(JobScheduler& scheduler,
                                              folly::StringPiece name,
-                                             size_t maxOutstanding)
+                                             size_t maxOutstanding,
+                                             size_t stackSize)
     : scheduler_(scheduler),
       name_(name),
       maxOutstanding_(maxOutstanding),
-      worker_{name_} {
+      worker_{name_, NavyThread::Options(stackSize)} {
   worker_.addTaskRemote([this]() {
     XLOGF(INFO, "[{}] Starting with max outstanding {}", getName(),
           maxOutstanding_);

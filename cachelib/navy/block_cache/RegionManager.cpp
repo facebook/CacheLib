@@ -27,6 +27,7 @@ RegionManager::RegionManager(uint32_t numRegions,
                              Device& device,
                              uint32_t numCleanRegions,
                              uint32_t numWorkers,
+                             uint32_t stackSize,
                              RegionEvictCallback evictCb,
                              RegionCleanupCallback cleanupCb,
                              std::unique_ptr<EvictionPolicy> policy,
@@ -59,7 +60,8 @@ RegionManager::RegionManager(uint32_t numRegions,
 
   for (uint32_t i = 0; i < numWorkers; i++) {
     auto name = fmt::format("region_manager_{}", i);
-    workers_.emplace_back(std::make_unique<NavyThread>(name));
+    workers_.emplace_back(
+        std::make_unique<NavyThread>(name, NavyThread::Options(stackSize)));
     workers_.back()->addTaskRemote(
         [name]() { XLOGF(INFO, "{} started", name); });
   }

@@ -110,6 +110,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.itemDestructorEnabled = itemDestructorEnabled;
   }
 
+  void setStackSize(uint32_t stackSize) override {
+    config_.stackSize = stackSize;
+  }
+
   void setPreciseRemove(bool preciseRemove) override {
     config_.preciseRemove = preciseRemove;
   }

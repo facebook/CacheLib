@@ -81,6 +81,9 @@ class BlockCacheProto {
   // (Optional) Set if the item destructor feature is enabled.
   virtual void setItemDestructorEnabled(bool itemDestructorEnabled) = 0;
 
+  // (Optional) Set the fiber stack size of region_manager thread
+  virtual void setStackSize(uint32_t stackSize) = 0;
+
   // (Optional) Set if the preciseRemove flag.
   virtual void setPreciseRemove(bool preciseRemove) = 0;
 };

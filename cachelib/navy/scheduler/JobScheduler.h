@@ -82,12 +82,14 @@ std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
 // @param numWriterThreads    The number of fiber threads for writer
 // @param maxNumReads         Max number of outstanding reads
 // @param maxNumWrites        Max number of outstanding writes
+// @param stackSize           Size of fiber stack
 // @param reqOrderShardPower  The number of shards (in power of 2) for ordering
 std::unique_ptr<JobScheduler> createNavyRequestScheduler(
     size_t numReaderThreads,
     size_t numWriterThreads_,
     size_t maxNumReads,
     size_t maxNumWrites,
+    size_t stackSize,
     size_t reqOrderShardPower);
 
 } // namespace navy

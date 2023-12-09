@@ -100,7 +100,8 @@ class NavyRequestDispatcher {
   // @param maxOutstanding  maximum number of concurrently running requests
   NavyRequestDispatcher(JobScheduler& scheduler,
                         folly::StringPiece name,
-                        size_t maxOutstanding);
+                        size_t maxOutstanding,
+                        size_t stackSize);
 
   folly::StringPiece getName() { return name_; }
 

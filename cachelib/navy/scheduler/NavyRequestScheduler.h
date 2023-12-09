@@ -52,6 +52,7 @@ class NavyRequestScheduler : public JobScheduler {
                                 size_t numWriterThreads,
                                 size_t maxNumReads,
                                 size_t maxNumWrites,
+                                size_t stackSize,
                                 size_t reqOrderShardPower);
   NavyRequestScheduler(const NavyRequestScheduler&) = delete;
   NavyRequestScheduler& operator=(const NavyRequestScheduler&) = delete;

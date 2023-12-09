@@ -66,8 +66,10 @@ class BlockCache final : public Engine {
     JobScheduler* scheduler{};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
-    // The number of threads for reclaim and flush
+    // The number of region_manager threads for reclaim and flush
     uint32_t cleanRegionThreads{1};
+    // The fiber stack size of region_manager threads
+    uint32_t stackSize{0};
     // Number of in-memory buffers where writes are buffered before flushed
     // on to the device
     uint32_t numInMemBuffers{1};

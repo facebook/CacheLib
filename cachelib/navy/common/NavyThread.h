@@ -21,7 +21,6 @@
 #include <folly/fibers/TimedMutex.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/ScopedEventBaseThread.h>
-#include <folly/logging/xlog.h>
 
 #include <atomic>
 #include <memory>
@@ -47,6 +46,8 @@ class NavyThread {
     static constexpr size_t kDefaultStackSize{64 * 1024};
     constexpr Options() {}
 
+    explicit Options(size_t size) : stackSize(size) {}
+
     /**
      * Maximum stack size for fibers which will be used for executing all the
      * tasks.
@@ -61,7 +62,8 @@ class NavyThread {
     th_ = std::make_unique<folly::ScopedEventBaseThread>(name.str());
 
     folly::fibers::FiberManager::Options opts;
-    opts.stackSize = options.stackSize;
+    opts.stackSize =
+        options.stackSize ? options.stackSize : Options::kDefaultStackSize;
     fm_ = &folly::fibers::getFiberManager(*th_->getEventBase(), opts);
   }
 

@@ -160,16 +160,26 @@ BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
 void NavyConfig::setReaderAndWriterThreads(unsigned int readerThreads,
                                            unsigned int writerThreads,
                                            unsigned int maxNumReads,
-                                           unsigned int maxNumWrites) {
+                                           unsigned int maxNumWrites,
+                                           unsigned int stackSizeKB) {
   readerThreads_ = readerThreads;
   writerThreads_ = writerThreads;
   maxNumReads_ = maxNumReads;
   maxNumWrites_ = maxNumWrites;
+  stackSize_ = stackSizeKB * 1024;
 
   if ((maxNumReads > 0 && maxNumWrites == 0) ||
       (maxNumReads == 0 && maxNumWrites > 0)) {
     throw std::invalid_argument(
         "maxNumReads and maxNumWrites should be both 0 or both >0");
+  }
+
+  // Limit the fiber stack size to 1MB to prevent any misconfiguration;
+  // The 1MB is too large for most use cases and there will be
+  // lots of memory amounts to >800MB per thread wasted
+  if (stackSizeKB >= 1024) {
+    throw std::invalid_argument(
+        "Maximum fiber stack size for each thread should be less than 1024 KB");
   }
 
   if (maxNumReads > 0 || maxNumWrites > 0) {
@@ -278,6 +288,7 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
       folly::to<std::string>(navyReqOrderingShards_);
   configMap["navyConfig::maxNumReads"] = folly::to<std::string>(maxNumReads_);
   configMap["navyConfig::maxNumWrites"] = folly::to<std::string>(maxNumWrites_);
+  configMap["navyConfig::stackSize"] = folly::to<std::string>(stackSize_);
 
   // Other settings
   configMap["navyConfig::maxConcurrentInserts"] =

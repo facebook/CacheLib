@@ -70,6 +70,9 @@ class RegionManager {
   // @param numCleanRegions           How many regions reclamator maintains in
   //                                  the clean pool
   // @param scheduler                 JobScheduler to run reclamation jobs
+  // @param numWorkers                Number of threads to run reclamation jobs
+  // @param stackSize                 Fiber stack size for each worker thread.
+  //                                  0 for default
   // @param evictCb                   Callback invoked when region evicted
   // @param cleanupCb                 Callback invoked when region cleaned up
   // @param policy                    eviction policy
@@ -84,6 +87,7 @@ class RegionManager {
                 Device& device,
                 uint32_t numCleanRegions,
                 uint32_t numWorkers,
+                uint32_t stackSize,
                 RegionEvictCallback evictCb,
                 RegionCleanupCallback cleanupCb,
                 std::unique_ptr<EvictionPolicy> policy,

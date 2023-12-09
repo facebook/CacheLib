@@ -54,7 +54,7 @@ TEST(RegionManager, ReclaimLruAsFifo) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
       kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -80,7 +80,7 @@ TEST(RegionManager, ReclaimLru) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
       kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -107,7 +107,7 @@ TEST(RegionManager, Recovery) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -143,7 +143,7 @@ TEST(RegionManager, Recovery) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -176,8 +176,8 @@ TEST(RegionManager, ReadWrite) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, kBaseOffset, *device, 1, 1, std::move(evictCb),
-      std::move(cleanupCb), std::make_unique<LruPolicy>(4),
+      kNumRegions, kRegionSize, kBaseOffset, *device, 1, 1, 0,
+      std::move(evictCb), std::move(cleanupCb), std::make_unique<LruPolicy>(4),
       kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
@@ -231,7 +231,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -255,7 +255,7 @@ TEST(RegionManager, RecoveryLRUOrder) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -283,7 +283,7 @@ TEST(RegionManager, Fragmentation) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -317,7 +317,7 @@ TEST(RegionManager, Fragmentation) {
     RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
     RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
     auto rm = std::make_unique<RegionManager>(
-        kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+        kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
         kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
 
@@ -357,7 +357,7 @@ TEST(RegionManager, cleanupRegionFailureSync) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), kNumInMemBuffer, 0,
       kFlushRetryLimit);
 
@@ -465,7 +465,7 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
   RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
-      kNumRegions, kRegionSize, 0, *device, 1, 1, std::move(evictCb),
+      kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), kNumInMemBuffer, 0,
       kFlushRetryLimit);
 

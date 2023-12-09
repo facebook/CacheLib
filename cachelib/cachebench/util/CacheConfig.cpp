@@ -76,6 +76,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyWriterThreads);
   JSONSetVal(configJson, navyMaxNumReads);
   JSONSetVal(configJson, navyMaxNumWrites);
+  JSONSetVal(configJson, navyStackSizeKB);
   JSONSetVal(configJson, navyQDepth);
   JSONSetVal(configJson, navyEnableIoUring);
   JSONSetVal(configJson, navyCleanRegions);

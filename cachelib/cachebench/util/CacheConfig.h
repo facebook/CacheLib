@@ -188,6 +188,9 @@ struct CacheConfig : public JSONConfig {
   uint32_t navyMaxNumReads{0};
   uint32_t navyMaxNumWrites{0};
 
+  // Default stack size of Navy fibers when async IO is enabled
+  uint32_t navyStackSizeKB{16};
+
   // qdepth to be used; override if already set automatically
   // by navyMaxNumReads and navyMaxNumWrites
   uint32_t navyQDepth{0};

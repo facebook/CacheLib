@@ -214,6 +214,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::navyReqOrderingShards"] = "30";
   expectedConfigMap["navyConfig::maxNumReads"] = "0";
   expectedConfigMap["navyConfig::maxNumWrites"] = "0";
+  expectedConfigMap["navyConfig::stackSize"] = "0";
 
   EXPECT_EQ(configMap, expectedConfigMap);
 }

@@ -122,6 +122,7 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
 // @param blockCacheOffset this block cache starts from this address (inclusive)
 // @param useRaidFiles if set to true, the device will setup using raid.
 // @param itemDestructorEnabled
+// @param stackSize size of the stack used by the region_manager thread
 // @param proto
 //
 // @return The end offset (exclusive) of the setup blockcache.
@@ -131,6 +132,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
                          uint64_t blockCacheOffset,
                          bool usesRaidFiles,
                          bool itemDestructorEnabled,
+                         uint32_t stackSize,
                          cachelib::navy::EnginePairProto& proto) {
   auto regionSize = blockCacheConfig.getRegionSize();
   if (regionSize != alignUp(regionSize, ioAlignSize)) {
@@ -174,6 +176,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
 
   blockCache->setNumInMemBuffers(blockCacheConfig.getNumInMemBuffers());
   blockCache->setItemDestructorEnabled(itemDestructorEnabled);
+  blockCache->setStackSize(stackSize);
   blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
 
   proto.setBlockCache(std::move(blockCache));
@@ -267,7 +270,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
       blockCacheEndOffset = setupBlockCache(
           enginesConfig.blockCache(), blockCacheSize, ioAlignSize,
           blockCacheStartOffset, config.usesRaidFiles(), itemDestructorEnabled,
-          *enginePairProto);
+          config.getStackSize(), *enginePairProto);
     }
     if (blockCacheEndOffset > bigHashStartOffset) {
       throw std::invalid_argument(folly::sformat(
@@ -304,6 +307,7 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   auto writerThreads = config.getWriterThreads();
   auto maxNumReads = config.getMaxNumReads();
   auto maxNumWrites = config.getMaxNumWrites();
+  auto stackSize = config.getStackSize();
   auto reqOrderShardsPower = config.getNavyReqOrderingShards();
   if (maxNumReads == 0 && maxNumWrites == 0) {
     return cachelib::navy::createOrderedThreadPoolJobScheduler(
@@ -314,6 +318,7 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
                                                     writerThreads,
                                                     maxNumReads,
                                                     maxNumWrites,
+                                                    stackSize,
                                                     reqOrderShardsPower);
 }
 } // namespace
