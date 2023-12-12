@@ -558,12 +558,10 @@ class CacheAllocator : public CacheBase {
   // should call this API only when they are going to mutate the item data.
   //
   // @param key               the key for lookup
-  // @param isNvmInvalidate   whether to do nvm invalidation;
-  //                          defaults to be true
   //
   // @return      the write handle for the item or a handle to nullptr if the
   //              key does not exist.
-  WriteHandle findToWrite(Key key, bool doNvmInvalidation = true);
+  WriteHandle findToWrite(Key key);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup.
@@ -579,13 +577,10 @@ class CacheAllocator : public CacheBase {
   // item data.
   //
   // @param key         the key for lookup
-  // @param isNvmInvalidate   whether to do nvm invalidation;
-  //                          defaults to be true
   //
   // @return      the write handle for the item or a handle to nullptr if the
   //              key does not exist.
-  FOLLY_ALWAYS_INLINE WriteHandle
-  findFastToWrite(Key key, bool doNvmInvalidation = true);
+  FOLLY_ALWAYS_INLINE WriteHandle findFastToWrite(Key key);
 
   // look up an item by its key. This ignores the nvm cache and only does RAM
   // lookup. This API does not update the stats related to cache gets and misses
