@@ -224,7 +224,7 @@ bool ShmManager::segmentExists(const std::string& cacheDir,
   try {
     ShmSegment(ShmAttach, uniqueIdForName(shmName, cacheDir), posix);
     return true;
-  } catch (const std::exception& e) {
+  } catch (const std::exception&) {
     return false;
   }
 }

@@ -924,7 +924,7 @@ TEST_F(MemoryPoolTest, AllocReleaseMT) {
             mp.free(ctxt.getActiveAllocations().front());
             mp.completeSlabRelease(ctxt);
           }
-        } catch (std::invalid_argument& e) {
+        } catch (std::invalid_argument&) {
           // do nothing. we probably lost race on slab release;
         }
       }
