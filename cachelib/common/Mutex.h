@@ -336,15 +336,13 @@ class BucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
 };
 
 template <typename LockType,
-          typename ReadLockHolderType = std::shared_lock<LockType>,
-          typename WriteLockHolderType = std::unique_lock<LockType>,
           template <class> class LockAlignmentType = DefaultLockAlignment>
 class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
  public:
   using Base = BaseBucketLocks<LockType, LockAlignmentType>;
   using Lock = LockType;
-  using ReadLockHolder = ReadLockHolderType;
-  using WriteLockHolder = WriteLockHolderType;
+  using ReadLockHolder = std::shared_lock<LockType>;
+  using WriteLockHolder = std::unique_lock<LockType>;
 
   RWBucketLocks(uint32_t locksPower, std::shared_ptr<Hash> hasher)
       : Base::BaseBucketLocks(locksPower, std::move(hasher)) {}
