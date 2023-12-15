@@ -229,7 +229,7 @@ void CompactCache<C, A, B>::tableRehash(size_t oldNumChunks,
             bool sameLock = locks_.isSameLock(newBucket, bucket);
             auto higher_lock //
                 = sameLock   //
-                      ? CCRWBucketLocks::WriteLockHolder()
+                      ? std::unique_lock<folly::SharedMutex>()
                       : locks_.lockExclusive(newBucket);
             if (kHasValues) {
               if (kValuesFixedSize) {

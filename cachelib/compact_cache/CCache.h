@@ -40,6 +40,8 @@
 
 #pragma once
 
+#include <folly/SharedMutex.h>
+
 #include <type_traits>
 
 #include "cachelib/allocator/Cache.h"
@@ -47,7 +49,7 @@
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/common/Cohort.h"
 #include "cachelib/common/FastStats.h"
-#include "cachelib/compact_cache/CCacheBucketLock.h"
+#include "cachelib/common/Mutex.h"
 #include "cachelib/compact_cache/CCacheFixedLruBucket.h"
 #include "cachelib/compact_cache/CCacheVariableLruBucket.h"
 
@@ -549,7 +551,7 @@ class CompactCache : public ICompactCache {
    * compact cache.
    */
   Allocator& allocator_;
-  CCRWBucketLocks locks_;
+  RWBucketLocks<folly::SharedMutex> locks_;
   RemoveCb removeCb_;
   ReplaceCb replaceCb_;
   ValidCb validCb_;
