@@ -116,9 +116,9 @@ TEST(PThreadMutex, TestBucketLocks) { testBucketLocks<PThreadMutex>(); }
 TEST(PThreadSpinMutex, TestBucketLocks) { testBucketLocks<PThreadSpinMutex>(); }
 TEST(PThreadSpinLock, TestBucketLocks) { testBucketLocks<PThreadSpinLock>(); }
 
-template <typename Lock, typename Reader, typename Writer>
+template <typename Lock>
 void testRWBucketLocks() {
-  using Locks = RWBucketLocks<Lock, Reader, Writer>;
+  using Locks = RWBucketLocks<Lock>;
   Locks locks(10, std::make_shared<FNVHash>());
 
   // It's fine creating multiple shared locks on the same key
@@ -145,8 +145,7 @@ void testRWBucketLocks() {
   }
 }
 TEST(SharedMutex, TestRWBucketLocks) {
-  testRWBucketLocks<folly::SharedMutex, folly::SharedMutex::ReadHolder,
-                    folly::SharedMutex::WriteHolder>();
+  testRWBucketLocks<folly::SharedMutex>();
 }
 } // namespace cachelib
 } // namespace facebook
