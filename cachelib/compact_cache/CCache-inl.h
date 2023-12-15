@@ -227,8 +227,10 @@ void CompactCache<C, A, B>::tableRehash(size_t oldNumChunks,
             // don't relock the same lock (we don't use recursive
             // locks in general)
             bool sameLock = locks_.isSameLock(newBucket, bucket);
-            auto higher_lock =
-                sameLock ? CCWriteHolder() : locks_.lockExclusive(newBucket);
+            auto higher_lock //
+                = sameLock   //
+                      ? CCRWBucketLocks::WriteLockHolder()
+                      : locks_.lockExclusive(newBucket);
             if (kHasValues) {
               if (kValuesFixedSize) {
                 bucketSet(newBucket, entry.key(), entry.val());
@@ -455,7 +457,7 @@ int CompactCache<C, A, B>::callBucketFn(
   /* 4) Call the request handler. */
   if (immutable_bucket) {
     auto lock = locks_.lockShared(timeout, bucket);
-    if (!lock.locked()) {
+    if (!lock.owns_lock()) {
       XDCHECK(timeout > std::chrono::microseconds::zero());
       ++stats_.tlStats().lockTimeout;
       return -2;
@@ -464,7 +466,7 @@ int CompactCache<C, A, B>::callBucketFn(
     rv = (this->*f)(bucket, key, args...);
   } else {
     auto lock = locks_.lockExclusive(timeout, bucket);
-    if (!lock.locked()) {
+    if (!lock.owns_lock()) {
       XDCHECK(timeout > std::chrono::microseconds::zero());
       ++stats_.tlStats().lockTimeout;
       return -2;
@@ -482,7 +484,7 @@ int CompactCache<C, A, B>::callBucketFn(
 
     if (allowPromotions_) {
       auto lock = locks_.lockExclusive(timeout, bucket);
-      if (!lock.locked()) {
+      if (!lock.owns_lock()) {
         XDCHECK(timeout > std::chrono::microseconds::zero());
         ++stats_.tlStats().promoteTimeout;
       } else {

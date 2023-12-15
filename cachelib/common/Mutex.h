@@ -365,14 +365,20 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
   template <typename... Args>
   ReadLockHolder lockShared(const std::chrono::microseconds& timeout,
                             Args... args) {
-    return ReadLockHolder(Base::getLock(args...), timeout);
+    return //
+        timeout == std::chrono::microseconds::zero()
+            ? ReadLockHolder(Base::getLock(args...))
+            : ReadLockHolder(Base::getLock(args...), timeout);
   }
 
   // try to grab the writer lock for a limit _timeout_ duration
   template <typename... Args>
   WriteLockHolder lockExclusive(const std::chrono::microseconds& timeout,
                                 Args... args) {
-    return WriteLockHolder(Base::getLock(args...), timeout);
+    return //
+        timeout == std::chrono::microseconds::zero()
+            ? WriteLockHolder(Base::getLock(args...))
+            : WriteLockHolder(Base::getLock(args...), timeout);
   }
 };
 
