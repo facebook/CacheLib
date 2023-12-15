@@ -224,12 +224,16 @@ class PThreadSpinLock {
 // to template between using a RW mutex and a mutex
 struct RWMockLock {
   using Lock = folly::MicroSpinLock;
-  using ReadHolder = std::unique_lock<RWMockLock>;
+  using ReadHolder = std::shared_lock<RWMockLock>;
   using WriteHolder = std::unique_lock<RWMockLock>;
 
   void lock() { l_.lock(); }
-  void unlock() { l_.unlock(); }
   bool try_lock() { return l_.try_lock(); }
+  void unlock() { l_.unlock(); }
+
+  void lock_shared() { lock(); }
+  bool try_lock_shared() { return try_lock(); }
+  void unlock_shared() { unlock(); }
 
  private:
   Lock l_;
@@ -332,8 +336,8 @@ class BucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
 };
 
 template <typename LockType,
-          typename ReadLockHolderType = typename LockType::ReadHolder,
-          typename WriteLockHolderType = typename LockType::WriteHolder,
+          typename ReadLockHolderType = std::shared_lock<LockType>,
+          typename WriteLockHolderType = std::unique_lock<LockType>,
           template <class> class LockAlignmentType = DefaultLockAlignment>
 class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
  public:
