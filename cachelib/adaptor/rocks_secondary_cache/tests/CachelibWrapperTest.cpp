@@ -111,10 +111,8 @@ class CachelibWrapperTest : public ::testing::Test,
   static Cache::CacheItemHelper helper_fail_;
 
   static Status CreateCallback(const Slice& data,
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
                                rocksdb::CompressionType /*type*/,
                                rocksdb::CacheTier /*source*/,
-#endif
                                Cache::CreateContext* context,
                                MemoryAllocator* /*allocator*/,
                                void** out_obj,
@@ -146,7 +144,11 @@ class CachelibWrapperTest : public ::testing::Test,
   std::unique_ptr<SecondaryCacheResultHandle> CacheLookup(
       const Slice& key, bool wait, bool advise_erase, bool& is_in_sec_cache) {
     return cache()->Lookup(key, &CachelibWrapperTest::helper_, /*context=*/this,
-                           wait, advise_erase, is_in_sec_cache);
+                           wait, advise_erase,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
+                           /*stats=*/nullptr,
+#endif
+                           is_in_sec_cache);
   }
 
  private:

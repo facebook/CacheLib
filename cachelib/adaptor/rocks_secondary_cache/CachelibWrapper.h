@@ -18,6 +18,7 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/facebook/admin/CacheAdmin.h"
 #include "rocksdb/secondary_cache.h"
+#include "rocksdb/statistics.h"
 #include "rocksdb/types.h"
 #include "rocksdb/version.h"
 
@@ -110,14 +111,12 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
                          const rocksdb::Cache::CacheItemHelper* helper,
                          bool force_erase) override;
 
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
   rocksdb::Status InsertSaved(const rocksdb::Slice& /*key*/,
                               const rocksdb::Slice& /*saved*/,
                               rocksdb::CompressionType /*type*/,
                               rocksdb::CacheTier /*source*/) override {
     return rocksdb::Status::NotSupported();
   }
-#endif
 
   std::unique_ptr<rocksdb::SecondaryCacheResultHandle> Lookup(
       const rocksdb::Slice& key,
@@ -125,6 +124,9 @@ class RocksCachelibWrapper : public rocksdb::SecondaryCache {
       rocksdb::Cache::CreateContext* create_context,
       bool wait,
       bool advise_erase,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
+      rocksdb::Statistics* stats,
+#endif
       bool& is_in_sec_cache) override;
 
   bool SupportForceErase() const override { return false; }

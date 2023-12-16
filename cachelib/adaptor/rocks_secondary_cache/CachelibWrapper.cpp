@@ -124,10 +124,8 @@ class RocksCachelibWrapperHandle : public rocksdb::SecondaryCacheResultHandle {
 
       const char* item = static_cast<const char*>(handle_->getMemory());
       s = helper_->create_cb(rocksdb::Slice(item, size),
-#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR >= 7)
                              rocksdb::CompressionType::kNoCompression,
                              rocksdb::CacheTier::kVolatileTier,
-#endif
                              create_context_,
                              /*allocator*/ nullptr,
                              &val_,
@@ -181,6 +179,9 @@ RocksCachelibWrapper::Lookup(const rocksdb::Slice& key,
                              rocksdb::Cache::CreateContext* create_context,
                              bool wait,
                              bool /*advise_erase*/,
+#if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
+                             rocksdb::Statistics* /*stats*/,
+#endif
                              bool& is_in_sec_cache) {
   std::unique_lock guard(GetRcuDomain());
   FbCache* cache = cache_.load();
