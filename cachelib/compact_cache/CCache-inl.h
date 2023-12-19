@@ -276,7 +276,7 @@ void CompactCache<C, A, B>::resize() {
 
   /* Lock resize operations to prevent more than one from occurring
    * at a time */
-  auto lock = folly::SharedMutex::WriteHolder(resizeLock_);
+  auto lock = std::unique_lock(resizeLock_);
 
   size_t newNumChunks = numChunksWanted;
 

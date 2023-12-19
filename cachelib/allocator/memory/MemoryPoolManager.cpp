@@ -93,7 +93,7 @@ size_t MemoryPoolManager::getRemainingSizeLocked() const noexcept {
 PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
                                         size_t poolSize,
                                         const std::set<uint32_t>& allocSizes) {
-  folly::SharedMutex::WriteHolder l(lock_);
+  std::unique_lock l(lock_);
   if (poolsByName_.find(name) != poolsByName_.end()) {
     throw std::invalid_argument("Duplicate pool");
   }
@@ -185,7 +185,7 @@ bool MemoryPoolManager::resizePools(PoolId src, PoolId dest, size_t bytes) {
   auto& srcPool = getPoolById(src);
   auto& destPool = getPoolById(dest);
 
-  folly::SharedMutex::WriteHolder l(lock_);
+  std::unique_lock l(lock_);
   if (srcPool.getPoolSize() < bytes) {
     return false;
   }
@@ -199,7 +199,7 @@ bool MemoryPoolManager::resizePools(PoolId src, PoolId dest, size_t bytes) {
 bool MemoryPoolManager::shrinkPool(PoolId pid, size_t bytes) {
   auto& pool = getPoolById(pid);
 
-  folly::SharedMutex::WriteHolder l(lock_);
+  std::unique_lock l(lock_);
   if (pool.getPoolSize() < bytes) {
     return false;
   }
@@ -210,7 +210,7 @@ bool MemoryPoolManager::shrinkPool(PoolId pid, size_t bytes) {
 bool MemoryPoolManager::growPool(PoolId pid, size_t bytes) {
   auto& pool = getPoolById(pid);
 
-  folly::SharedMutex::WriteHolder l(lock_);
+  std::unique_lock l(lock_);
   const auto remaining = getRemainingSizeLocked();
   if (remaining < bytes) {
     return false;
@@ -264,7 +264,7 @@ std::unordered_map<PoolId, uint64_t> MemoryPoolManager::getTargetSlabsToAdvise(
 
 PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
     const std::set<PoolId>& poolIds) const {
-  folly::SharedMutex::WriteHolder l(lock_);
+  std::unique_lock l(lock_);
   uint64_t totalSlabsAdvised = 0;
   uint64_t totalSlabsInUse = 0;
   std::unordered_map<PoolId, size_t> numSlabsInUse;

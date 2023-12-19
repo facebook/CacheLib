@@ -167,7 +167,7 @@ class MemoryPoolManager {
   // return total memory currently advised away
   size_t getAdvisedMemorySize() const noexcept {
     size_t sum = 0;
-    folly::SharedMutex::WriteHolder l(lock_);
+    std::unique_lock l(lock_);
     for (PoolId id = 0; id < nextPoolId_; id++) {
       sum += pools_[id]->getPoolAdvisedSize();
     }
