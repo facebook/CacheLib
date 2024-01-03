@@ -129,7 +129,9 @@ module.exports = {
           items: [
             'Cache_Library_User_Guides/Tuning_DRAM_cache_efficiency',
             'Cache_Library_User_Guides/CacheLib_configs',
-            ...fbInternalOnly(['facebook/Cache_Persistence/TW_shm_persistence_setup']),
+            ...fbInternalOnly([
+              'facebook/Cache_Persistence/TW_shm_persistence_setup',
+            ]),
           ],
         },
       ],
@@ -185,6 +187,16 @@ module.exports = {
             'Cache_Library_Architecture_Guide/large_object_cache',
           ],
         },
+        ...fbInternalOnly([
+            {
+              type: 'category',
+              label: 'Object Cache',
+              collapsed: true,
+              items: [
+                'facebook/Object_Cache/Object_Cache_Architecture_Guide',
+              ],
+            },
+          ]),
       ],
     },
   ],
