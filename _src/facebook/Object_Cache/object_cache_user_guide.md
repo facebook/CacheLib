@@ -56,12 +56,67 @@ config.setItemDestructor([&](ObjectCacheDestructorData data) {
  });
 ```
 
-- (**Suggested**) `maxKeySizeBytes`: The maximum size of the key to be inserted. It cannot exceed 255 bytes. Default to `255`. Since we also use this size to decide the size of object-cache, we suggest you set a reasonble value to avoid wasting space.
-- `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`. Check out [hashtable bucket configuration](../../Cache_Library_User_Guides/Configure_HashTable) to select a good value.
-- `l1LockPower`: This controls how many locks are present in object-cache's hashtable. Default to `10`.
+- (**Suggested**) `maxKeySizeBytes`: The maximum size of the key to be inserted. It cannot exceed 255 bytes. Default to `255`. Since we also use this size to decide the allocation size of object-cache, we suggest you set a reasonble value to avoid wasting space.
+
+<details>
+<summary> Max Key Size : Allocation Size Mapping Table  </summary>
+
+
+|Max Key Size Bytes |Allocation Size Bytes |
+|-------------------|----------------------|
+|[8, 16]            | 64                   |
+|[17, 24]           | 72                   |
+|[25, 32]           | 80                   |
+|[33, 40]           | 88                   |
+|[41, 48]           | 96                   |
+|[49, 56]           | 104                  |
+|[57, 64]           | 112                  |
+|[65, 72]           | 120                  |
+|[73, 80]           | 128                  |
+|[81, 88]           | 136                  |
+|[89, 96]           | 144                  |
+|[97, 104]          | 152                  |
+|[105, 112]         | 160                  |
+|[113, 120]         | 168                  |
+|[121, 128]         | 176                  |
+|[129, 136]         | 184                  |
+|[137, 144]         | 192                  |
+|[145, 152]         | 200                  |
+|[153, 160]         | 208                  |
+|[161, 168]         | 216                  |
+|[169, 176]         | 224                  |
+|[177, 184]         | 232                  |
+|[185, 192]         | 240                  |
+|[193, 200]         | 248                  |
+|[201, 208]         | 256                  |
+|[209, 216]         | 264                  |
+|[217, 224]         | 272                  |
+|[225, 232]         | 280                  |
+|[233, 240]         | 288                  |
+|[241, 248]         | 296                  |
+|[249, 255]         | 304                  |
+</details>
+
+- `accessConfig`: Config to tune lookup performance. There are two important parameters:`l1HashTablePower` and `l1LockPower`. Check out [hashtable bucket configuration](../../Cache_Library_User_Guides/Configure_HashTable) to select a good value:
+     - `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`.
+     - `l1LockPower`: This controls how many locks are present in object-cache's hashtable. Default to `10`.
 - `l1NumShards`: Number of shards to improve insert/remove concurrency. Default to `1`.
 - `l1ShardName`: Name of the shards. If not set, we will use the default name `pool`.
+- `evictionPolicyConfig`: Config of the eviction policy. Object-Cache offers the same set of [eviction policies](../../Cache_Library_User_Guides/eviction_policy.md) as the regular cachelib. Typically, you can just leave the config as default. If in some cases, the default one does not work, you are also allowed to modify the settings, e.g.
+```cpp
+// adopting LRU eviction policy
+using ObjectCache = cachelib::objcache2::ObjectCache<cachelib::LruAllocator>;
+typename ObjectCache::EvictionPolicyConfig evictionPolicyConfig;
+// By default, updateOnRead is true and updateOnWrite is false.
+evictionPolicyConfig.updateOnRead = false;
+evictionPolicyConfig.updateOnWrite = true;
 
+ObjectCache::Config config;
+...
+config.setEvictionPolicyConfig(std::move(evictionPolicyConfig));
+```
+
+Here is an example to configure a simple object-cache:
 ```cpp
 #include "cachelib/experimental/objcache2/ObjectCache.h"
 
@@ -587,7 +642,7 @@ config.setItemDestructor(
   }
   ...
   data.deleteObject<T>();
-}
+});
 ```
 
 ### Update TTL
