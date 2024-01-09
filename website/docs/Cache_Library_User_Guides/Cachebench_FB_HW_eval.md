@@ -240,6 +240,10 @@ The list of traces uploaded are as follows
       * prn: 1/4.58, DRAM 8357 MB, NVM 375956 MB
       * eag: 1/13.4, DRAM 2857 MB, NVM 129619 MB
 
+* `storage/202312`
+   * Those are traces captured for 5 consecutive days from a Meta's block storage cluster consisting of 3000 hosts at the sampling ratio of 1/4000
+   * Each host uses (roughly) 10 GB of DRAM and 380 GB of SSD for caching
+   * The traffic factor is ~1
 
 ### Resource Scaling or Trace Amplifcation
 
