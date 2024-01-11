@@ -437,6 +437,9 @@ class NvmCache {
 
   static constexpr size_t kShards = 8192;
 
+  // a function to check if an item is expired
+  const navy::ExpiredCheck checkExpired_;
+
   // a map of all pending fills to prevent thundering herds
   struct {
     alignas(folly::hardware_destructive_interference_size) FillMap fills_;

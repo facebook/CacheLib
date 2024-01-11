@@ -2316,11 +2316,13 @@ TEST_F(NvmCacheTest, testSampleItem) {
   auto pid = this->poolId();
 
   size_t nKeys = 0;
+  static constexpr unsigned kEvenKeyTTL = 5;
   // Insert items until either RAM or NVM cache is full
   for (; numEvicted == 0 && nKeys < numMax; nKeys++) {
+    unsigned ttl = nKeys % 2 == 0 ? kEvenKeyTTL : 0;
     auto key = folly::sformat("key{}", nKeys);
     // the pool's allocsize is
-    auto it = cache.allocate(pid, key, 16 * 1024);
+    auto it = cache.allocate(pid, key, 16 * 1024, ttl);
     ASSERT_NE(nullptr, it);
     cache.insertOrReplace(it);
 
@@ -2331,13 +2333,14 @@ TEST_F(NvmCacheTest, testSampleItem) {
     ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
   }
 
-  // remove even numbered keys to make holes
-  for (size_t i = 0; i < nKeys; i += 2) {
-    auto key = folly::sformat("key{}", i);
-    cache.remove(key);
-  }
   // wait for async remove finish
   cache.flushNvmCache();
+
+  XLOGF(INFO,
+        "Wait {}s until all items with even numbered keys are expired by TTL",
+        kEvenKeyTTL + 1);
+  /* sleep override */ std::this_thread::sleep_for(
+      std::chrono::seconds(kEvenKeyTTL + 1));
 
   {
     std::unique_lock<std::mutex> l(mtx);
@@ -2349,10 +2352,19 @@ TEST_F(NvmCacheTest, testSampleItem) {
   for (size_t i = 0; i < nKeys * 10; i++) {
     auto sample = cache.getSampleItem();
     if (sample.isValid()) {
+      auto keyStr = sample->getKey().toString();
       {
         std::unique_lock<std::mutex> l(mtx);
-        ASSERT_EQ(1, cachedKeys.count(sample->getKey().toString()));
+        ASSERT_EQ(1, cachedKeys.count(keyStr));
       }
+
+      unsigned idx;
+      ASSERT_GT(std::sscanf(keyStr.c_str(), "key%u", &idx), 0);
+      ASSERT_TRUE(idx % 2 != 0) << fmt::format(
+          "Error: expired item with key ({}) and nvm ({}) returned",
+          keyStr,
+          sample.isNvmItem());
+
       if (sample.isNvmItem()) {
         numNvm++;
       } else {

@@ -1897,7 +1897,7 @@ CacheAllocator<CacheTrait>::getSampleItem() {
 
   // Sampling from DRAM cache
   auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
-  if (!item) {
+  if (!item || UNLIKELY(item->isExpired())) {
     return SampleItem{false /* fromNvm */};
   }
 

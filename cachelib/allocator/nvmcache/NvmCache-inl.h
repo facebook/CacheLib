@@ -430,13 +430,14 @@ NvmCache<C>::NvmCache(C& c,
                       const ItemDestructor& itemDestructor)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
+      checkExpired_([](navy::BufferView v) -> bool {
+        const auto& nvmItem = *reinterpret_cast<const NvmItem*>(v.data());
+        return nvmItem.isExpired();
+      }),
       itemDestructor_(itemDestructor) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
-      [](navy::BufferView v) -> bool {
-        const auto& nvmItem = *reinterpret_cast<const NvmItem*>(v.data());
-        return nvmItem.isExpired();
-      },
+      checkExpired_,
       [this](HashedKey hk, navy::BufferView v, navy::DestructorEvent e) {
         this->evictCB(hk, v, e);
       },
@@ -849,7 +850,7 @@ template <typename C>
 typename NvmCache<C>::SampleItem NvmCache<C>::getSampleItem() {
   navy::Buffer value;
   auto [status, keyStr] = navyCache_->getRandomAlloc(value);
-  if (status != navy::Status::Ok) {
+  if (status != navy::Status::Ok || checkExpired_(value.view())) {
     return SampleItem{true /* fromNvm */};
   }
 
