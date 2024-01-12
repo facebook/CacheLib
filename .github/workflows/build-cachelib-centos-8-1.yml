@@ -53,8 +53,10 @@ jobs:
           cd /etc/yum.repos.d/
           sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-*
           sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
-      - name: "install sudo,git"
-        run: dnf install -y sudo git cmake gcc
+      - name: "install sudo,git,gcc-11"
+        run: |
+          dnf install -y sudo git cmake gcc-toolset-11-gcc gcc-toolset-11-gcc-c++
+          update-alternatives --install /usr/bin/gcc gcc /opt/rh/gcc-toolset-11/root/usr/bin/gcc 110 --slave /usr/bin/g++ g++ /opt/rh/gcc-toolset-11/root/usr/bin/g++ --slave /usr/bin/gcov gcov /opt/rh/gcc-toolset-11/root/usr/bin/gcov --slave /usr/bin/gcc-ar gcc-ar /opt/rh/gcc-toolset-11/root/usr/bin/gcc-ar --slave /usr/bin/gcc-ranlib gcc-ranlib /opt/rh/gcc-toolset-11/root/usr/bin/gcc-ranlib  --slave /usr/bin/cpp cpp /opt/rh/gcc-toolset-11/root/usr/bin/cpp
       - name: "System Information"
         run: |
           echo === uname ===

@@ -53,6 +53,13 @@ jobs:
           apt-get update
           apt-get install -y kitware-archive-keyring
           apt-get install -y cmake
+      - name: "update gcc"
+        run: |
+          add-apt-repository ppa:ubuntu-toolchain-r/test -y
+          apt-get update
+          apt-get install -y gcc-11 g++-11
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-7 70 --slave /usr/bin/g++ g++ /usr/bin/g++-7 --slave /usr/bin/gcov gcov /usr/bin/gcov-7 --slave /usr/bin/gcc-ar gcc-ar /usr/bin/gcc-ar-7 --slave /usr/bin/gcc-ranlib gcc-ranlib /usr/bin/gcc-ranlib-7
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 110 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11 --slave /usr/bin/gcc-ar gcc-ar /usr/bin/gcc-ar-11 --slave /usr/bin/gcc-ranlib gcc-ranlib /usr/bin/gcc-ranlib-11
       - name: "System Information"
         run: |
           echo === uname ===
