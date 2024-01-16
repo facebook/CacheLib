@@ -564,8 +564,8 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return removeItem(false);
   }
   auto closeRegionGuard =
-      folly::makeGuard([this, desc = std::move(desc)]() mutable {
-        allocator_.close(std::move(desc));
+      folly::makeGuard([this, desc_2 = std::move(desc)]() mutable {
+        allocator_.close(std::move(desc_2));
       });
 
   // After allocation a region is opened for writing. Until we close it, the
