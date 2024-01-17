@@ -97,7 +97,6 @@ Sometimes you would like your cache to be not persistent when you restart your p
 When you attach to an existing cache, cachelib will try to incorporate the config changes; however not all configs can be changed while attaching. Notice these two important points:
 
 * The size of the cache is immutable unless you drop the previous instance.
-* If using chained items, you must call `config.enableChainedItems()` before constructing the cache. This instructs the cache to save the chained items's hash table so that chained items are accessible on restart.
 
 ## Apply best practices
 
