@@ -573,8 +573,8 @@ impl LruCacheHandle<ReadWriteShared> {
     /// the cache memory block, usable by another process sharing the cache.
     pub fn get_remote_handle(&self) -> Result<LruCacheRemoteHandle<'_>> {
         let cache = get_global_cache()?.get_allocator()?;
-        let len = ffi::get_size(&*self.handle);
-        let src = ffi::get_memory(&*self.handle);
+        let len = ffi::get_size(&self.handle);
+        let src = ffi::get_memory(&self.handle);
         let offset = unsafe { ffi::get_item_ptr_as_offset(cache, src)? };
 
         Ok(LruCacheRemoteHandle {

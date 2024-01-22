@@ -28,7 +28,7 @@ pub fn get_cached<T>(cache_pool: &VolatileLruCachePool, cache_key: &str) -> Resu
 where
     T: abomonation::Abomonation + Clone + Send + 'static,
 {
-    let cache_handle = cache_pool.get_handle(&cache_key)?;
+    let cache_handle = cache_pool.get_handle(cache_key)?;
     let cache_data: Option<Vec<u8>> = match cache_handle {
         None => None,
         Some(cache_handle) => {
@@ -94,43 +94,29 @@ mod test {
 
         let pool = get_or_create_volatile_pool("get_twice", 4 * 1024 * 1024).unwrap();
 
-        assert!(set_cached(&pool, &"key".to_string(), &"hello_world".to_string(), None).unwrap());
+        assert!(set_cached(&pool, "key", &"hello_world".to_string(), None).unwrap());
         assert_eq!(
-            get_cached::<String>(&pool, &"key".to_string())
-                .unwrap()
-                .unwrap(),
+            get_cached::<String>(&pool, "key").unwrap().unwrap(),
             "hello_world"
         );
 
         assert!(
             !set_cached(
                 &pool,
-                &"key".to_string(),
+                "key",
                 &"goodbye world".to_string(),
                 Some(Duration::from_secs(100))
             )
             .unwrap()
         );
         assert_eq!(
-            get_cached::<String>(&pool, &"key".to_string())
-                .unwrap()
-                .unwrap(),
+            get_cached::<String>(&pool, "key").unwrap().unwrap(),
             "hello_world"
         );
 
-        assert!(
-            set_cached(
-                &pool,
-                &"key2".to_string(),
-                &"hello_world2".to_string(),
-                None
-            )
-            .unwrap()
-        );
+        assert!(set_cached(&pool, "key2", &"hello_world2".to_string(), None).unwrap());
         assert_eq!(
-            get_cached::<String>(&pool, &"key2".to_string())
-                .unwrap()
-                .unwrap(),
+            get_cached::<String>(&pool, "key2").unwrap().unwrap(),
             "hello_world2"
         );
     }
