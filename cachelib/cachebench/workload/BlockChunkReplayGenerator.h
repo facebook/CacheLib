@@ -19,36 +19,39 @@
 #include <folly/ProducerConsumerQueue.h>
 #include <folly/ThreadLocal.h>
 
-#include "cachelib/cachebench/workload/PieceWiseCache.h"
+#include <string>
+
+#include "cachelib/cachebench/workload/BlockChunkCache.h"
 #include "cachelib/cachebench/workload/ReplayGeneratorBase.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-class PieceWiseReplayGenerator : public ReplayGeneratorBase {
+class BlockChunkReplayGenerator : public ReplayGeneratorBase {
  public:
-  static constexpr uint32_t kMaxRequestQueueSize = 10000;
+  // The size of request queue for each stress worker thread
+  static constexpr uint32_t kMaxRequestQueueSize = 1000;
 
-  explicit PieceWiseReplayGenerator(const StressorConfig& config)
+  explicit BlockChunkReplayGenerator(const StressorConfig& config)
       : ReplayGeneratorBase(config),
-        traceStream_(config, 0, {}),
-        pieceCacheAdapter_(config.maxCachePieces,
-                           config.replayGeneratorConfig.numAggregationFields,
-                           config.replayGeneratorConfig.statsPerAggField),
+        traceStream_(config, 0, columnTable_),
+        blockCacheAdapter_(config.replayGeneratorConfig.blockSizeKB * 1024,
+                           config.replayGeneratorConfig.chunkSizeKB * 1024),
         activeReqQ_(config.numThreads),
         threadFinished_(config.numThreads) {
     for (uint32_t i = 0; i < numShards_; ++i) {
       activeReqQ_[i] =
-          std::make_unique<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>(
+          std::make_unique<folly::ProducerConsumerQueue<BlockReqWrapper>>(
               kMaxRequestQueueSize);
       threadFinished_[i].store(false, std::memory_order_relaxed);
     }
 
+    // Start a thread which fetches requests from the trace file
     traceGenThread_ = std::thread([this]() { getReqFromTrace(); });
   }
 
-  virtual ~PieceWiseReplayGenerator() {
+  virtual ~BlockChunkReplayGenerator() override {
     markShutdown();
     traceGenThread_.join();
 
@@ -75,20 +78,20 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   void notifyResult(uint64_t requestId, OpResultType result) override;
 
   void setNvmCacheWarmedUp(uint64_t timestamp) override {
-    pieceCacheAdapter_.setNvmCacheWarmedUp(timestamp);
+    blockCacheAdapter_.setNvmCacheWarmedUp(timestamp);
   }
 
   void renderStats(uint64_t elapsedTimeNs, std::ostream& out) const override {
-    pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
+    blockCacheAdapter_.getStats().renderStats(elapsedTimeNs, out);
   }
 
   void renderStats(uint64_t elapsedTimeNs,
                    folly::UserCounters& counters) const override {
-    pieceCacheAdapter_.getStats().renderStats(elapsedTimeNs, counters);
+    blockCacheAdapter_.getStats().renderStats(elapsedTimeNs, counters);
   }
 
   void renderWindowStats(double elapsedSecs, std::ostream& out) const override {
-    pieceCacheAdapter_.getStats().renderWindowStats(elapsedSecs, out);
+    blockCacheAdapter_.getStats().renderWindowStats(elapsedSecs, out);
   }
 
   void markFinish() override {
@@ -98,7 +101,17 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
  private:
   void getReqFromTrace();
 
-  folly::ProducerConsumerQueue<PieceWiseReqWrapper>& getTLReqQueue() {
+  OpType getOpType(const std::string& opName) {
+    if (!opName.compare(0, 12, "getChunkData")) {
+      return OpType::kGet;
+    } else if (!opName.compare(0, 8, "putChunk")) {
+      return OpType::kSet;
+    }
+
+    return OpType::kSize;
+  }
+
+  folly::ProducerConsumerQueue<BlockReqWrapper>& getTLReqQueue() {
     if (!tlStickyIdx_.get()) {
       tlStickyIdx_.reset(new uint32_t(incrementalIdx_++));
     }
@@ -108,34 +121,32 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   }
 
   // Line format for the trace file:
-  // timestamp, cacheKey, OpType, objectSize, responseSize,
-  // responseHeaderSize, rangeStart, rangeEnd, TTL, samplingRate, cacheHit
-  // (extra fields might exist defined by
-  // config_.replayGeneratorConfig.numAggregationFields and
-  // config_.replayGeneratorConfig.numExtraFields)
-  // cacheHit field is for the trace that we know it was a hit or miss. Use
-  // 0 for miss and 1 for hit. Any other values will be ignored. When it is
-  // specified with a valid value, we will calculate the expected hit rate based
-  // on it.
-  enum SampleFields {
-    TIMESTAMP = 0,
-    CACHE_KEY,
-    OP_TYPE,
-    OBJECT_SIZE,
-    RESPONSE_SIZE,
-    RESPONSE_HEADER_SIZE,
-    RANGE_START,
-    RANGE_END,
-    TTL,
-    SAMPLING_RATE,
-    CACHE_HIT,
-    ITEM_VALUE,
-    TOTAL_DEFINED_FIELDS = 12
+  enum SampleFields : uint8_t {
+    OP_TIME = 0,
+    BLOCK_ID,
+    BLOCK_ID_SIZE,
+    SHARD_ID,
+    OP,
+    OP_COUNT,
+    IO_OFFSET,
+    IO_SIZE,
+    END
+  };
+
+  const ColumnTable columnTable_ = {
+      {SampleFields::OP_TIME, false, {"op_time"}},
+      {SampleFields::BLOCK_ID, true, {"block_id"}}, /* required */
+      {SampleFields::BLOCK_ID_SIZE, false, {"block_id_size"}},
+      {SampleFields::SHARD_ID, false, {"rs_shard_id"}},
+      {SampleFields::OP, true, {"op_name"}}, /* required */
+      {SampleFields::OP_COUNT, false, {"op_count"}},
+      {SampleFields::IO_OFFSET, true, {"io_offset"}}, /* required */
+      {SampleFields::IO_SIZE, true, {"io_size"}},     /* required */
   };
 
   TraceFileStream traceStream_;
 
-  PieceWiseCacheAdapter pieceCacheAdapter_;
+  BlockChunkCacheAdapter blockCacheAdapter_;
 
   uint64_t nextReqId_{1};
 
@@ -150,8 +161,7 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
   // The first request in the queue is the active request in processing.
   // Vector size is equal to the # of stressor threads;
   // tlStickyIdx_ is used to index.
-  std::vector<
-      std::unique_ptr<folly::ProducerConsumerQueue<PieceWiseReqWrapper>>>
+  std::vector<std::unique_ptr<folly::ProducerConsumerQueue<BlockReqWrapper>>>
       activeReqQ_;
 
   // Thread that finish its operations mark it here, so we will skip

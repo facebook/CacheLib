@@ -21,6 +21,7 @@
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
+#include "cachelib/cachebench/workload/BlockChunkReplayGenerator.h"
 #include "cachelib/cachebench/workload/KVReplayGenerator.h"
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
@@ -142,6 +143,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
     return std::make_unique<PieceWiseReplayGenerator>(config);
   } else if (config.generator == "replay") {
     return std::make_unique<KVReplayGenerator>(config);
+  } else if (config.generator == "block-replay") {
+    return std::make_unique<BlockChunkReplayGenerator>(config);
   } else if (config.generator.empty() || config.generator == "workload") {
     // TODO: Remove the empty() check once we label workload-based configs
     // properly
@@ -150,7 +153,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
     return std::make_unique<OnlineGenerator>(config);
 
   } else {
-    throw std::invalid_argument("Invalid config");
+    throw std::invalid_argument(fmt::format(
+        "Invalid config: unsupported generator {}", config.generator));
   }
 }
 } // namespace
