@@ -52,7 +52,7 @@ std::vector<uint32_t> AllocatorTest<AllocatorT>::getValidAllocSizes(
     // size is a valid allocation size. If not, try again.
     try {
       util::allocateAccessible(alloc, poolId, key, size);
-    } catch (const std::invalid_argument& e) {
+    } catch (const std::invalid_argument&) {
       continue;
     }
     sizes.push_back(size);
