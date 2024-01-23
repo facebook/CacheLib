@@ -247,7 +247,7 @@ Map<K, V, C> Map<K, V, C>::create(CacheType& cache,
                                   uint32_t numBytes) {
   try {
     return Map{cache, pid, key, numEntries, numBytes};
-  } catch (const std::bad_alloc& ex) {
+  } catch (const std::bad_alloc&) {
     return nullptr;
   }
 }
@@ -376,7 +376,7 @@ typename Map<K, V, C>::InsertOrReplaceResult Map<K, V, C>::insertImpl(
   detail::BufferAddr oldAddr;
   try {
     oldAddr = hashtable_->insertOrReplace(key, addr);
-  } catch (const std::bad_alloc& e) {
+  } catch (const std::bad_alloc&) {
     bufferManager_.remove(addr);
     throw;
   }
@@ -438,7 +438,7 @@ void Map<K, V, C>::compact() {
     detail::BufferAddr oldAddr;
     try {
       oldAddr = hashtable_->insertOrReplace(itr->first, itr.getAsBufferAddr());
-    } catch (const std::bad_alloc& ex) {
+    } catch (const std::bad_alloc&) {
       throw std::runtime_error(
           "hashtable cannot have insufficient space during a compaction");
     }
