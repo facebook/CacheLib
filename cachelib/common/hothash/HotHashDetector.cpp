@@ -28,7 +28,7 @@ namespace cachelib {
 uint8_t HotHashDetector::bumpHash(uint64_t hash) {
   if (UNLIKELY(++bumpsSinceMaintenance_ >= maintenanceInterval_)) {
     doMaintenance();
-  };
+  }
   auto idx = l1HashFunction(hash);
   auto l1count = ++l1Vector_[idx];
   // Checking against threshold/2, hot index should pass after one decay
@@ -114,7 +114,7 @@ void HotHashDetector::doMaintenance() {
   for (auto& cell : l2Vector_) {
     cell.count = std::min<uint32_t>(hotnessMultiplier_ - 1, cell.count / 2);
     cell.hashHits = cell.hashHits / 2;
-  };
+  }
 
   // Hashes in L2 may need to move if their preceding cell has decayed. We
   // have to run at least size() elements, but also continue running in case
