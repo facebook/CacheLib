@@ -555,8 +555,8 @@ class CompactCache : public ICompactCache {
   RemoveCb removeCb_;
   ReplaceCb replaceCb_;
   ValidCb validCb_;
-  facebook::cachelib::Cohort cohort_; /**< resize cohort synchronization */
-  folly::SharedMutex resizeLock_;     /**< Lock to prevent resize conflicts. */
+  facebook::cachelib::Cohort cohort_;     /**< resize cohort synchronization */
+  mutable folly::SharedMutex resizeLock_; /**< Lock to synchronize resize. */
   const size_t bucketsPerChunk_;
   util::FastStats<CCacheStats> stats_;
   const bool allowPromotions_; /**< Whether promotions are allowed on read

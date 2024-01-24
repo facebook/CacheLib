@@ -2124,7 +2124,7 @@ class CacheAllocator : public CacheBase {
   typename Item::PtrCompressor compressor_;
 
   // Lock to synchronize addition of a new pool and its resizing/rebalancing
-  folly::SharedMutex poolsResizeAndRebalanceLock_;
+  mutable folly::SharedMutex poolsResizeAndRebalanceLock_;
 
   // container for the allocations which are currently being memory managed by
   // the cache allocator.
@@ -2167,7 +2167,7 @@ class CacheAllocator : public CacheBase {
 
   // lock to serilize access of isCompactCachePool_ array, including creation of
   // compact cache pools
-  folly::SharedMutex compactCachePoolsLock_;
+  mutable folly::SharedMutex compactCachePoolsLock_;
 
   // mutex protecting the creation and destruction of workers poolRebalancer_,
   // poolResizer_, poolOptimizer_, memMonitor_, reaper_
