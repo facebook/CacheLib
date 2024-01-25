@@ -396,7 +396,7 @@ TEST(RegionManager, cleanupRegionFailureSync) {
 
   std::thread flushThread{[&sp, &device, &rm, &rid] {
     // Make sure flush will fail
-    EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
+    EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
     sp.wait(0); // Flush after active reader
     rm->doFlush(rid, false /* async */);
   }};
@@ -505,7 +505,7 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
 
   std::thread flushThread{[&sp, &device, &rm, &rid] {
     // Make sure flush will fail
-    EXPECT_CALL(*device, writeImpl(_, _, _)).WillRepeatedly(Return(false));
+    EXPECT_CALL(*device, writeImpl(_, _, _, _)).WillRepeatedly(Return(false));
     sp.wait(0); // Flush after active reader
     rm->doFlush(rid, true /* async */);
   }};

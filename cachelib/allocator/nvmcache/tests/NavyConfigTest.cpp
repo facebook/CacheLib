@@ -189,6 +189,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
   expectedConfigMap["navyConfig::ioEngine"] = "io_uring";
   expectedConfigMap["navyConfig::QDepth"] = "64";
+  expectedConfigMap["navyConfig::enableFDP"] = "0";
 
   expectedConfigMap["navyConfig::blockCacheLru"] = "false";
   expectedConfigMap["navyConfig::blockCacheRegionSize"] = "16777216";

@@ -22,7 +22,7 @@ namespace navy {
 MockDevice::MockDevice(uint64_t deviceSize,
                        uint32_t ioAlignSize,
                        std::shared_ptr<DeviceEncryptor> encryptor)
-    : Device{deviceSize, nullptr, ioAlignSize, 0},
+    : Device{deviceSize, nullptr, ioAlignSize, 0, 0},
       device_{deviceSize == 0
                   ? nullptr
                   : createMemoryDevice(
@@ -35,9 +35,9 @@ MockDevice::MockDevice(uint64_t deviceSize,
             return device_->read(offset, size, buffer);
           }));
 
-  ON_CALL(*this, writeImpl(testing::_, testing::_, testing::_))
+  ON_CALL(*this, writeImpl(testing::_, testing::_, testing::_, testing::_))
       .WillByDefault(testing::Invoke(
-          [this](uint64_t offset, uint32_t size, const void* data) {
+          [this](uint64_t offset, uint32_t size, const void* data, int) {
             XDCHECK_EQ(size % getIOAlignmentSize(), 0u);
             XDCHECK_EQ(offset % getIOAlignmentSize(), 0u);
             Buffer buffer = device_->makeIOBuffer(size);
@@ -47,6 +47,10 @@ MockDevice::MockDevice(uint64_t deviceSize,
 
   ON_CALL(*this, flushImpl()).WillByDefault(testing::Invoke([this]() {
     device_->flush();
+  }));
+
+  ON_CALL(*this, allocatePlacementHandle()).WillByDefault(testing::Invoke([]() {
+    return -1;
   }));
 }
 } // namespace navy

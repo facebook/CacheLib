@@ -349,6 +349,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         maxDeviceWriteSize > 0 ? alignDown(maxDeviceWriteSize, blockSize) : 0,
         config.getIoEngine(),
         config.getQDepth(),
+        config.isFDPEnabled(),
         std::move(encryptor));
   } else {
     return cachelib::navy::createMemoryDevice(config.getFileSize(),

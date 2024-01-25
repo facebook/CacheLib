@@ -209,6 +209,7 @@ std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
 // @param maxDeviceWriteSize    device maximum granularity of writes
 // @param ioEngine              IoEngine to be used for IO
 // @param qDepth                queue depth for async IO; 0 for sync IO
+// @param isFDPEnabled          whether FDP placement mode enabled or not
 // @param encryptor             encryption object
 std::unique_ptr<Device> createFileDevice(
     std::vector<std::string> filePaths,
@@ -219,6 +220,7 @@ std::unique_ptr<Device> createFileDevice(
     uint32_t maxDeviceWriteSize,
     IoEngine ioEngine,
     uint32_t qDepth,
+    bool isFDPEnabled,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
 
 } // namespace navy
