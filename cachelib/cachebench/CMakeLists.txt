@@ -27,6 +27,8 @@ add_library (cachelib_cachebench
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
+  ./workload/BlockChunkCache.cpp
+  ./workload/BlockChunkReplayGenerator.cpp
   ./workload/PieceWiseCache.cpp
   ./workload/OnlineGenerator.cpp
   ./workload/WorkloadGenerator.cpp
