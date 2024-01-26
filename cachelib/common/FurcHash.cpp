@@ -78,22 +78,22 @@ uint64_t murmurHash64A(const void* key, int len, uint64_t seed) {
   switch (len & 7) {
   case 7:
     h ^= (uint64_t)data2[6] << 48;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 6:
     h ^= (uint64_t)data2[5] << 40;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 5:
     h ^= (uint64_t)data2[4] << 32;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 4:
     h ^= (uint64_t)data2[3] << 24;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 3:
     h ^= (uint64_t)data2[2] << 16;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 2:
     h ^= (uint64_t)data2[1] << 8;
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case 1:
     h ^= (uint64_t)data2[0];
     h *= m;
