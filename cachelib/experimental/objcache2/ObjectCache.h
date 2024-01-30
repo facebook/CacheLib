@@ -333,6 +333,19 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return getReadHandleRefInternal<T>(object)->getLastAccessTime();
   }
 
+  // Get the creation timestamp of the object
+  // @param  object   object shared pointer returned from ObjectCache APIs
+  //
+  // @return the create timestamp in seconds of the object
+  //         0 if object is nullptr
+  template <typename T>
+  uint32_t getCreationTimeSec(std::shared_ptr<T>& object) {
+    if (object == nullptr) {
+      return 0;
+    }
+    return getReadHandleRefInternal<T>(object)->getCreationTime();
+  }
+
   // Update the expiry timestamp of an object
   //
   // @param  object         object shared pointer returned from ObjectCache APIs

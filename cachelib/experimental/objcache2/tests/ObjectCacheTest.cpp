@@ -1527,6 +1527,31 @@ class ObjectCacheTest : public ::testing::Test {
     EXPECT_LE(lastAccessTime1, lastAccessTime2 - 2);
   }
 
+  void testGetCreationTime() {
+    typename ObjectCache::EvictionPolicyConfig evictionPolicyConfig;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000)
+        .setItemDestructor(
+            [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); })
+        .setEvictionPolicyConfig(evictionPolicyConfig);
+    auto objcache = ObjectCache::create(config);
+
+    // insert one object
+    objcache->insertOrReplace("Foo1", std::make_unique<Foo>());
+
+    std::this_thread::sleep_for(std::chrono::seconds{2});
+    // insert another object
+    objcache->insertOrReplace("Foo2", std::make_unique<Foo>());
+
+    auto found1 = objcache->template find<Foo>("Foo1");
+    auto createTime1 = objcache->getCreationTimeSec(found1);
+
+    auto found2 = objcache->template find<Foo>("Foo2");
+    auto createTime2 = objcache->getCreationTimeSec(found2);
+    EXPECT_LE(createTime1, createTime2 - 2);
+  }
+
   void testMultithreadReplace() {
     // Sanity test to see if insertOrReplace across multiple
     // threads are safe.
@@ -1814,6 +1839,7 @@ TYPED_TEST(ObjectCacheTest, UpdateTtl) { this->testUpdateTtl(); }
 TYPED_TEST(ObjectCacheTest, GetLastAccessTime) {
   this->testGetLastAccessTime();
 }
+TYPED_TEST(ObjectCacheTest, GetCreationTime) { this->testGetCreationTime(); }
 
 TYPED_TEST(ObjectCacheTest, MultithreadReplace) {
   this->testMultithreadReplace();
