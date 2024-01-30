@@ -503,6 +503,7 @@ class NavyConfig {
 
   // ============ Device settings =============
   uint64_t getBlockSize() const { return blockSize_; }
+  bool getExclusiveOwner() const { return isExclusiveOwner_; }
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
   uint64_t getDeviceMetadataSize() const { return deviceMetadataSize_; }
@@ -553,6 +554,11 @@ class NavyConfig {
   void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
   // Set the NVMe FDP Device data placement mode in the Cachelib
   void setEnableFDP(bool enable) noexcept { enableFDP_ = enable; }
+  // If true, Navy will only start if it's the sole owner of the file.
+  // This only applies to non-memory-backed files.
+  void setExclusiveOwner(bool isExclusiveOwner) noexcept {
+    isExclusiveOwner_ = isExclusiveOwner;
+  }
   // Set the parameters for a simple file.
   // @throw std::invalid_argument if RAID files have been already set.
   void setSimpleFile(const std::string& fileName,
@@ -639,6 +645,8 @@ class NavyConfig {
   // ============ Device settings =============
   // Navy specific device block size in bytes.
   uint64_t blockSize_{4096};
+  // If true, Navy will only start if it's the sole owner of the file.
+  bool isExclusiveOwner_{false};
   // The file name/path for caching.
   std::string fileName_;
   // An array of Navy RAID device file paths.

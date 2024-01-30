@@ -197,32 +197,6 @@ std::unique_ptr<CacheProto> createCacheProto();
 // Creates Cache object.
 // @param proto   cache object prototype
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto);
-
-// Creates a direct IO file device.
-// RAID0 with given stripe size is applied if multiple files are provided
-//
-// @param filePaths             name(s) of the file(s)
-// @param fileSize              size of the file(s)
-// @param truncateFile          whether to truncate the file
-// @param blockSize             device block size
-// @param stripeSize            RAID stripe size if applicable
-// @param maxDeviceWriteSize    device maximum granularity of writes
-// @param ioEngine              IoEngine to be used for IO
-// @param qDepth                queue depth for async IO; 0 for sync IO
-// @param isFDPEnabled          whether FDP placement mode enabled or not
-// @param encryptor             encryption object
-std::unique_ptr<Device> createFileDevice(
-    std::vector<std::string> filePaths,
-    uint64_t fileSize,
-    bool truncateFile,
-    uint32_t blockSize,
-    uint32_t stripeSize,
-    uint32_t maxDeviceWriteSize,
-    IoEngine ioEngine,
-    uint32_t qDepth,
-    bool isFDPEnabled,
-    std::shared_ptr<navy::DeviceEncryptor> encryptor);
-
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook

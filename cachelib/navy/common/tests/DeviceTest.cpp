@@ -225,12 +225,54 @@ struct DeviceParamTest
     return device_;
   }
 
+  std::shared_ptr<Device> createFileDeviceNew(
+      std::vector<std::string> filePaths,
+      uint64_t fileSize,
+      uint32_t blockSize,
+      uint32_t stripeSize,
+      uint32_t maxDeviceWriteSize,
+      std::shared_ptr<DeviceEncryptor> encryptor,
+      bool isExclusiveOwner) {
+    device_ =
+        facebook::cachelib::navy::createFileDevice(std::move(filePaths),
+                                                   fileSize,
+                                                   false, /* truncateFile */
+                                                   blockSize,
+                                                   stripeSize,
+                                                   maxDeviceWriteSize,
+                                                   ioEngine_,
+                                                   qDepth_,
+                                                   false /* isFDPEnabled */,
+                                                   std::move(encryptor),
+                                                   isExclusiveOwner);
+    return device_;
+  }
+
   std::shared_ptr<Device> getDevice() const { return device_; }
 
   IoEngine ioEngine_;
   uint32_t qDepth_;
   std::shared_ptr<Device> device_;
 };
+
+TEST_P(DeviceParamTest, ExclusiveOwner) {
+  auto filePath =
+      folly::sformat("/tmp/DEVICE_EXCLUSIVE_OWNER_TEST-{}", ::getpid());
+
+  int deviceSize = 16 * 1024;
+  int ioAlignSize = 1024;
+
+  std::vector<folly::File> fVec;
+  fVec.emplace_back(filePath, O_RDWR | O_CREAT, S_IRWXU);
+
+  EXPECT_NO_THROW(createFileDevice(std::move(fVec), deviceSize, ioAlignSize,
+                                   ioAlignSize, 1024, nullptr));
+
+  EXPECT_THROW(createFileDeviceNew(std::vector<std::string>{filePath},
+                                   deviceSize, ioAlignSize, ioAlignSize, 1024,
+                                   nullptr, true /* isExclusiveOwner */),
+               std::system_error);
+}
 
 TEST_P(DeviceParamTest, MaxWriteSize) {
   auto filePath = folly::sformat("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());

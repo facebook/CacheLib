@@ -350,7 +350,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         config.getIoEngine(),
         config.getQDepth(),
         config.isFDPEnabled(),
-        std::move(encryptor));
+        std::move(encryptor),
+        config.getExclusiveOwner());
   } else {
     return cachelib::navy::createMemoryDevice(config.getFileSize(),
                                               std::move(encryptor), blockSize);

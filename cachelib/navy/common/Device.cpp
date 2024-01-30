@@ -1071,6 +1071,92 @@ int FileDevice::allocatePlacementHandle() {
   return -1;
 }
 
+// Open cache file @fileName and set it size to @size.
+// Throws std::system_error if failed.
+folly::File openCacheFile(const std::string& fileName,
+                          uint64_t size,
+                          bool truncate,
+                          bool isExclusiveOwner) {
+  XLOG(INFO) << "Cache file: " << fileName << " size: " << size
+             << " truncate: " << truncate;
+  if (fileName.empty()) {
+    throw std::invalid_argument("File name is empty");
+  }
+
+  const int flags{O_RDWR | O_CREAT | (isExclusiveOwner ? O_EXCL : 0)};
+  // try opening with o_direct. For tests, we might get a file on tmpfs that
+  // might not support o_direct. Hence, we might have to default to avoiding
+  // o_direct in those cases.
+  folly::File f;
+
+  try {
+    f = folly::File(fileName.c_str(), flags | O_DIRECT);
+  } catch (const std::system_error& e) {
+    if (e.code().value() == EINVAL) {
+      XLOG(ERR) << "Failed to open with o-direct, trying without. Error: "
+                << e.what();
+      f = folly::File(fileName.c_str(), flags);
+    } else {
+      throw;
+    }
+  }
+  XDCHECK_GE(f.fd(), 0);
+
+  // get current file size
+  struct stat fileStat;
+  if (fstat(f.fd(), &fileStat) < 0) {
+    throw std::system_error(
+        errno,
+        std::system_category(),
+        folly::sformat("failed to get the file stat for file {}", fileName));
+  }
+
+  uint64_t curfileSize = fileStat.st_size;
+
+  // ftruncate the file if requesting a smaller file size and truncate flag is
+  // set
+  if (truncate && size < curfileSize) {
+    if (::ftruncate(f.fd(), size /*length*/) < 0) {
+      throw std::system_error(
+          errno,
+          std::system_category(),
+          folly::sformat(
+              "ftruncate failed with requested size {}, current size {}", size,
+              curfileSize));
+    }
+    XLOGF(INFO, "Cache file {} is ftruncated from {} bytes to {} bytes",
+          fileName, curfileSize, size);
+  }
+
+#ifndef MISSING_FALLOCATE
+  // TODO(jiayueb): make allocate flag user configurable and migrate the
+  // existing use cases
+  // fallocate the file if requesting a larger file size and allocate flag is
+  // set
+  if (truncate && size > curfileSize) {
+    if (::fallocate(f.fd(), 0 /*mode*/, curfileSize /*offset*/,
+                    size - curfileSize /*len*/) < 0) {
+      throw std::system_error(
+          errno,
+          std::system_category(),
+          folly::sformat(
+              "fallocate failed with requested size {}, current size {}", size,
+              curfileSize));
+    }
+    XLOGF(INFO, "Cache file {} is fallocated from {} bytes to {} bytes",
+          fileName, curfileSize, size);
+  }
+#endif
+
+#ifndef MISSING_FADVISE
+  if (::posix_fadvise(f.fd(), 0, size, POSIX_FADV_DONTNEED) < 0) {
+    throw std::system_error(errno, std::system_category(),
+                            "Error fadvising cache file");
+  }
+#endif
+
+  return f;
+}
 } // namespace
 
 std::unique_ptr<Device> createMemoryDevice(
@@ -1160,4 +1246,48 @@ std::unique_ptr<Device> createDirectIoFileDevice(
                                   encryptor);
 }
 
+std::unique_ptr<Device> createFileDevice(
+    std::vector<std::string> filePaths,
+    uint64_t fdSize,
+    bool truncateFile,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    uint32_t maxDeviceWriteSize,
+    IoEngine ioEngine,
+    uint32_t qDepth,
+    bool isFDPEnabled,
+    std::shared_ptr<navy::DeviceEncryptor> encryptor,
+    bool isExclusiveOwner) {
+  // File paths are opened in the increasing order of the
+  // path string. This ensures that RAID0 stripes aren't
+  // out of order even if the caller changes the order of
+  // the file paths. We can recover the cache as long as all
+  // the paths are specified, regardless of the order.
+
+  std::sort(filePaths.begin(), filePaths.end());
+  std::vector<folly::File> fileVec;
+  for (const auto& path : filePaths) {
+    folly::File f;
+    try {
+      // TODO: beyondsora implement
+      f = openCacheFile(path, fdSize, truncateFile, isExclusiveOwner);
+    } catch (const std::exception& e) {
+      XLOG(ERR) << "Exception in openCacheFile(" << path << "): " << e.what()
+                << ". Errno: " << errno;
+      throw;
+    }
+    fileVec.push_back(std::move(f));
+  }
+
+  return createDirectIoFileDevice(std::move(fileVec),
+                                  std::move(filePaths),
+                                  fdSize,
+                                  blockSize,
+                                  stripeSize,
+                                  maxDeviceWriteSize,
+                                  ioEngine,
+                                  qDepth,
+                                  isFDPEnabled,
+                                  std::move(encryptor));
+}
 } // namespace facebook::cachelib::navy
