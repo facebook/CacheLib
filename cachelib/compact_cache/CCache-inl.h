@@ -682,7 +682,7 @@ typename CompactCache<C, A, B>::EntryHandle CompactCache<C, A, B>::bucketFind(
 
 template <typename C, typename A, typename B>
 bool CompactCache<C, A, B>::forEachBucket(const BucketCallBack& cb) {
-  auto lock = folly::SharedMutex::ReadHolder(resizeLock_);
+  auto lock = std::shared_lock(resizeLock_);
 
   // this obtains a resize lock so it cannot be occuring during an actual
   // resize; assert that

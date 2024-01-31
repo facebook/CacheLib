@@ -120,7 +120,7 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
 }
 
 MemoryPool& MemoryPoolManager::getPoolByName(const std::string& name) const {
-  folly::SharedMutex::ReadHolder l(lock_);
+  std::shared_lock l(lock_);
   auto it = poolsByName_.find(name);
   if (it == poolsByName_.end()) {
     throw std::invalid_argument(folly::sformat("Invalid pool name {}", name));
@@ -144,7 +144,7 @@ MemoryPool& MemoryPoolManager::getPoolById(PoolId id) const {
 }
 
 const std::string& MemoryPoolManager::getPoolNameById(PoolId id) const {
-  folly::SharedMutex::ReadHolder l(lock_);
+  std::shared_lock l(lock_);
   for (const auto& pair : poolsByName_) {
     if (pair.second == id) {
       return pair.first;
@@ -222,7 +222,7 @@ bool MemoryPoolManager::growPool(PoolId pid, size_t bytes) {
 
 std::set<PoolId> MemoryPoolManager::getPoolsOverLimit() const {
   std::set<PoolId> res;
-  folly::SharedMutex::ReadHolder l(lock_);
+  std::shared_lock l(lock_);
   for (const auto& kv : poolsByName_) {
     const auto poolId = kv.second;
     const auto& pool = getPoolById(poolId);

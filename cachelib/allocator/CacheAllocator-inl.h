@@ -2242,7 +2242,7 @@ template <typename CacheTrait>
 std::set<PoolId> CacheAllocator<CacheTrait>::filterCompactCachePools(
     const PoolIds& poolIds) const {
   PoolIds ret;
-  folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+  std::shared_lock lock(compactCachePoolsLock_);
   for (auto poolId : poolIds) {
     if (!isCompactCachePool_[poolId]) {
       // filter out slab pools backing the compact caches.
@@ -2254,14 +2254,14 @@ std::set<PoolId> CacheAllocator<CacheTrait>::filterCompactCachePools(
 
 template <typename CacheTrait>
 std::set<PoolId> CacheAllocator<CacheTrait>::getRegularPoolIds() const {
-  folly::SharedMutex::ReadHolder r(poolsResizeAndRebalanceLock_);
+  std::shared_lock r(poolsResizeAndRebalanceLock_);
   return filterCompactCachePools(allocator_->getPoolIds());
 }
 
 template <typename CacheTrait>
 std::set<PoolId> CacheAllocator<CacheTrait>::getCCachePoolIds() const {
   PoolIds ret;
-  folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+  std::shared_lock lock(compactCachePoolsLock_);
   for (PoolId id = 0; id < static_cast<PoolId>(MemoryPoolManager::kMaxPools);
        id++) {
     if (isCompactCachePool_[id]) {
@@ -2275,7 +2275,7 @@ std::set<PoolId> CacheAllocator<CacheTrait>::getCCachePoolIds() const {
 template <typename CacheTrait>
 std::set<PoolId> CacheAllocator<CacheTrait>::getRegularPoolIdsForResize()
     const {
-  folly::SharedMutex::ReadHolder r(poolsResizeAndRebalanceLock_);
+  std::shared_lock r(poolsResizeAndRebalanceLock_);
   // If Slabs are getting advised away - as indicated by non-zero
   // getAdvisedMemorySize - then pools may be overLimit even when
   // all slabs are not allocated. Otherwise, pools may be overLimit
@@ -2302,7 +2302,7 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
   // check if this is a compact cache.
   bool isCompactCache = false;
   {
-    folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+    std::shared_lock lock(compactCachePoolsLock_);
     isCompactCache = isCompactCachePool_[poolId];
   }
 
@@ -3028,7 +3028,7 @@ CCacheT* CacheAllocator<CacheTrait>::attachCompactCache(folly::StringPiece name,
 template <typename CacheTrait>
 const ICompactCache& CacheAllocator<CacheTrait>::getCompactCache(
     PoolId pid) const {
-  folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+  std::shared_lock lock(compactCachePoolsLock_);
   if (!isCompactCachePool_[pid]) {
     throw std::invalid_argument(
         folly::sformat("PoolId {} is not a compact cache", pid));
@@ -3087,7 +3087,7 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   metadata_.compactCachePools()->clear();
   const auto pools = getPoolIds();
   {
-    folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+    std::shared_lock lock(compactCachePoolsLock_);
     for (PoolId pid : pools) {
       for (unsigned int cid = 0; cid < (*stats_.fragmentationSize)[pid].size();
            ++cid) {
@@ -3444,7 +3444,7 @@ CacheMemoryStats CacheAllocator<CacheTrait>::getCacheMemoryStats() const {
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::autoResizeEnabledForPool(PoolId pid) const {
-  folly::SharedMutex::ReadHolder lock(compactCachePoolsLock_);
+  std::shared_lock lock(compactCachePoolsLock_);
   if (isCompactCachePool_[pid]) {
     // compact caches need to be registered to enable auto resizing
     return optimizerEnabled_[pid];

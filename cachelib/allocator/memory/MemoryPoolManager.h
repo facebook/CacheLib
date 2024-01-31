@@ -136,7 +136,7 @@ class MemoryPoolManager {
 
   // size in bytes of the remaining size that is not reserved for any pools.
   size_t getBytesUnReserved() const {
-    folly::SharedMutex::ReadHolder l(lock_);
+    std::shared_lock l(lock_);
     return getRemainingSizeLocked();
   }
 

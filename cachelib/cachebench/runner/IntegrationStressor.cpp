@@ -146,7 +146,7 @@ void CachelibMapStressor::testLoop() {
   auto it = cache_->find(key);
   try {
     if (it) {
-      folly::SharedMutex::ReadHolder r{getLock(key)};
+      std::shared_lock r{getLock(key)};
       auto map =
           TestMap::fromWriteHandle(*cache_, std::move(it).toWriteHandle());
       if (map.size() > kMapSizeUpperbound &&
@@ -285,7 +285,7 @@ void CachelibRangeMapStressor::testLoop() {
   auto it = cache_->find(key);
   try {
     if (it) {
-      folly::SharedMutex::ReadHolder r{getLock(key)};
+      std::shared_lock r{getLock(key)};
       auto map =
           TestMap::fromWriteHandle(*cache_, std::move(it).toWriteHandle());
       if (map.size() > kMapSizeUpperbound &&
