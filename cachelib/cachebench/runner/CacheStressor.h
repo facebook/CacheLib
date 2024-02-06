@@ -321,11 +321,11 @@ class CacheStressor : public Stressor {
         const auto pid = static_cast<PoolId>(opPoolDist(gen));
         const Request& req(getReq(pid, gen, lastRequestId));
         OpType op = req.getOp();
-        const std::string* key = &(req.key);
+        std::string_view key = req.key;
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
-          key = &oneHitKey;
+          key = oneHitKey;
         }
 
         OpResultType result(OpResultType::kNop);
@@ -333,12 +333,12 @@ class CacheStressor : public Stressor {
         case OpType::kLoneSet:
         case OpType::kSet: {
           if (config_.onlySetIfMiss) {
-            auto it = cache_->find(*key);
+            auto it = cache_->find(key);
             if (it != nullptr) {
               continue;
             }
           }
-          auto lock = chainedItemAcquireUniqueLock(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap, req.itemValue);
 
@@ -348,8 +348,8 @@ class CacheStressor : public Stressor {
         case OpType::kGet: {
           ++stats.get;
 
-          auto slock = chainedItemAcquireSharedLock(*key);
-          auto xlock = decltype(chainedItemAcquireUniqueLock(*key)){};
+          auto slock = chainedItemAcquireSharedLock(key);
+          auto xlock = decltype(chainedItemAcquireUniqueLock(key)){};
 
           if (ticker_) {
             ticker_->updateTimeStamp(req.timestamp);
@@ -357,8 +357,8 @@ class CacheStressor : public Stressor {
           // TODO currently pure lookaside, we should
           // add a distribution over sequences of requests/access patterns
           // e.g. get-no-set and set-no-get
-          cache_->recordAccess(*key);
-          auto it = cache_->find(*key);
+          cache_->recordAccess(key);
+          auto it = cache_->find(key);
           if (it == nullptr) {
             ++stats.getMiss;
             result = OpResultType::kGetMiss;
@@ -368,7 +368,7 @@ class CacheStressor : public Stressor {
               // upgrade access privledges, (lock_upgrade is not
               // appropriate here)
               slock = {};
-              xlock = chainedItemAcquireUniqueLock(*key);
+              xlock = chainedItemAcquireUniqueLock(key);
               setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                      req.admFeatureMap, req.itemValue);
             }
@@ -380,8 +380,8 @@ class CacheStressor : public Stressor {
         }
         case OpType::kDel: {
           ++stats.del;
-          auto lock = chainedItemAcquireUniqueLock(*key);
-          auto res = cache_->remove(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
+          auto res = cache_->remove(key);
           if (res == CacheT::RemoveRes::kNotFoundInRam) {
             ++stats.delNotFound;
           }
@@ -389,13 +389,13 @@ class CacheStressor : public Stressor {
         }
         case OpType::kAddChained: {
           ++stats.get;
-          auto lock = chainedItemAcquireUniqueLock(*key);
-          auto it = cache_->findToWrite(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
+          auto it = cache_->findToWrite(key);
           if (!it) {
             ++stats.getMiss;
 
             ++stats.set;
-            it = cache_->allocate(pid, *key, *(req.sizeBegin), req.ttlSecs);
+            it = cache_->allocate(pid, key, *(req.sizeBegin), req.ttlSecs);
             if (!it) {
               ++stats.setFailure;
               break;
@@ -426,11 +426,11 @@ class CacheStressor : public Stressor {
         case OpType::kUpdate: {
           ++stats.get;
           ++stats.update;
-          auto lock = chainedItemAcquireUniqueLock(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
           if (ticker_) {
             ticker_->updateTimeStamp(req.timestamp);
           }
-          auto it = cache_->findToWrite(*key);
+          auto it = cache_->findToWrite(key);
           if (it == nullptr) {
             ++stats.getMiss;
             ++stats.updateMiss;
@@ -441,7 +441,7 @@ class CacheStressor : public Stressor {
         }
         case OpType::kCouldExist: {
           ++stats.couldExistOp;
-          if (!cache_->couldExist(*key)) {
+          if (!cache_->couldExist(key)) {
             ++stats.couldExistOpFalse;
           }
           break;
@@ -476,7 +476,7 @@ class CacheStressor : public Stressor {
   OpResultType setKey(
       PoolId pid,
       ThroughputStats& stats,
-      const std::string* key,
+      const std::string_view key,
       size_t size,
       uint32_t ttlSecs,
       const std::unordered_map<std::string, std::string>& featureMap,
@@ -488,7 +488,7 @@ class CacheStressor : public Stressor {
     }
 
     ++stats.set;
-    auto it = cache_->allocate(pid, *key, size, ttlSecs);
+    auto it = cache_->allocate(pid, key, size, ttlSecs);
     if (it == nullptr) {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
