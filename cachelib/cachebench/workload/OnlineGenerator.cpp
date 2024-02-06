@@ -55,10 +55,12 @@ const Request& OnlineGenerator::getReq(uint8_t poolId,
                                        std::optional<uint64_t>) {
   size_t keyIdx = getKeyIdx(poolId, gen);
 
-  generateKey(poolId, keyIdx, req_->key);
+  std::string key(req_->key);
+  generateKey(poolId, keyIdx, key);
   auto sizes = generateSize(poolId, keyIdx);
   req_->sizeBegin = sizes->begin();
   req_->sizeEnd = sizes->end();
+  req_->key = key;
   auto op =
       static_cast<OpType>(workloadDist_[workloadIdx(poolId)].sampleOpDist(gen));
   req_->setOp(op);

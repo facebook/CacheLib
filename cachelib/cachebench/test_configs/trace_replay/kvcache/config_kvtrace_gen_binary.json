@@ -1,0 +1,13 @@
+{
+  "test_config":
+  {
+    "generator": "replay",
+    "replayGeneratorConfig":
+    {
+      "binaryFileName": "kv_trace.bin"
+    },    
+    "repeatTraceReplay": false,
+    "repeatOpCount" : true,
+    "traceFileName": "kv_traces_1.csv"
+  }
+}

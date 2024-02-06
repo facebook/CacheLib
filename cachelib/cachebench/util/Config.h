@@ -124,7 +124,24 @@ struct ReplayGeneratorConfig : public JSONConfig {
   };
   std::string replaySerializationMode{"strict"};
 
+  // amplifies the number of unique keys by
+  // a factor. each key gets amplified by
+  // ampFactor times
   uint32_t ampFactor{1};
+  // amplifies the object size by a factor
+  uint32_t ampSizeFactor{1};
+
+  // the path of the binary file to make
+  std::string binaryFileName{};
+
+  // The number of requests (not including ampFactor) to skip
+  // in the trace. This is so that after warming up the cache
+  // with a certain number of requests, we can easily reattach
+  // and resume execution with different cache configurations.
+  uint64_t fastForwardCount{0};
+
+  // The number of requests to pre load into the request queues
+  uint64_t preLoadReqs{0};
 
   // The time interval threshold when replaySerializationMode is relaxed.
   uint64_t relaxedSerialIntervalMs{500};
