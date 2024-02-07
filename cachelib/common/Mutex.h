@@ -224,8 +224,6 @@ class PThreadSpinLock {
 // to template between using a RW mutex and a mutex
 struct RWMockLock {
   using Lock = folly::MicroSpinLock;
-  using ReadHolder = std::shared_lock<RWMockLock>;
-  using WriteHolder = std::unique_lock<RWMockLock>;
 
   void lock() { l_.lock(); }
   bool try_lock() { return l_.try_lock(); }
