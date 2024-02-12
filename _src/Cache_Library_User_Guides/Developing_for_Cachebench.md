@@ -56,7 +56,6 @@ The following config sets up a basic [hybrid cache](HybridCache) instance with t
 
     "dipperSizeMB" : 512,
     "dipperBackend" : "navy_dipper",
-    "enableChainedItem" : true,
     "dipperUseDirectIO": false,
     "dipperFilePath" : "/dev/shm/cachebench"
   },

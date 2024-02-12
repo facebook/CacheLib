@@ -82,7 +82,6 @@ There will be a section discussing each of the bullets below.
 * Intrusive containers: MMContainer and AccessContainer are intrusive containers with minimum memory overhead. Please skip the following bullet points if you know what intrusive containers are.
    * Intrusive containers refer to containers that store pointers instead copies of its elements. These containers interact with their elements via intrusive hooks. The hook is typically a function (powered by a class member) of the element type.
    * Linked list is an example of intrusive container. The "hook" in this case is the `item* next()` function. To support this, elements of linked list need to have a class member `item* next`. As a result, the container itself has very minimum overhead: it only holds a head pointer.
-   * To put this into example: Let's say you
 
 
 ## DRAM CompactCache

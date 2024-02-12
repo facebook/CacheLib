@@ -103,5 +103,3 @@ std::move(semiFuture).via(
 - The `insert()` API cannot be used with HybridCache.
 - Iteration of the cache only iterates over the DRAM part.
 - When looking at the stats, some stats are broken down by DRAM and NVM. The semantics of getting a uniform stats across both mediums is currently not supported across all stats.
-- RemoveCB is executed for only DRAM cache and is being currently developed
-  for `HybridCache`

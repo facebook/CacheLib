@@ -692,7 +692,7 @@ Cache persistence is an opt-in feature in object-cache to persist objects across
 ### Configure cache persistence
 To enable cache persistence, you need to configure the following parameters:
 - `threadCount`: number of threads to work on persistence/recovery concurrently
-- `persistBasefilePath`: file path to save the persistent data
+- `persistBasefilePath`: **file** path to save the persistent data (a **directory** path will not work)
   - cache metadata will be saved in "persistBasefilePath";
   - objects will be saved in "persistBasefilePath_i", i in [0, threadCount)
 - `serializeCallback`: callback to serialize an object, used for object persisting

@@ -146,10 +146,10 @@ int main(int argc, char** argv) {
 ## Use cache
 
 After setting up a simple cache, you can do the following:
-- [Write data to the cache](Write_data_to_cache).
-- [Read data from the cache](Read_data_from_cache).
-- [Remove data from the cache](Remove_data_from_cache).
-- [Visit data in the cache](Visit_data_in_cache).
+- [Write data to the cache](/docs/Cache_Library_User_Guides/Write_data_to_cache).
+- [Read data from the cache](/docs/Cache_Library_User_Guides/Read_data_from_cache).
+- [Remove data from the cache](/docs/Cache_Library_User_Guides/Remove_data_from_cache).
+- [Visit data in the cache](/docs/Cache_Library_User_Guides/Visit_data_in_cache).
 
 ## Release and delete cache
 
