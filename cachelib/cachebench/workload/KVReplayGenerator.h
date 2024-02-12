@@ -149,6 +149,7 @@ class KVReplayGenerator : public ReplayGeneratorBase {
   // support blocking read or writes with a timeout
   static constexpr uint64_t checkIntervalUs_ = 100;
   static constexpr size_t kMaxRequests = 10000;
+  static constexpr size_t kMinKeySize = 16;
 
   using ReqQueue = folly::ProducerConsumerQueue<std::unique_ptr<ReqWrapper>>;
 
@@ -327,9 +328,9 @@ inline void KVReplayGenerator::genRequests() {
         // Replace the last 4 bytes with thread Id of 4 decimal chars. In doing
         // so, keep at least 10B from the key for uniqueness; 10B is the max
         // number of decimal digits for uint32_t which is used to encode the key
-        if (req->key_.size() > 10) {
+        if (req->key_.size() > kMinKeySize) {
           // trunkcate the key
-          size_t newSize = std::max<size_t>(req->key_.size() - 4, 10u);
+          size_t newSize = std::max<size_t>(req->key_.size() - 4, kMinKeySize);
           req->key_.resize(newSize, '0');
         }
         req->key_.append(folly::sformat("{:04d}", keySuffix));
