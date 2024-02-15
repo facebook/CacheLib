@@ -275,7 +275,7 @@ NvmeData FdpNvme::readNvmeInfo(const std::string& bdevName) {
           namespace_id, lbaShift, maxTfrSize, startLba);
 
     return NvmeData{namespace_id, lbaShift, maxTfrSize, startLba};
-  } catch (const std::system_error& e) {
+  } catch (const std::system_error&) {
     XLOGF(ERR, "Exception in readNvmeInfo for: {}", bdevName);
     throw;
   }
@@ -311,7 +311,7 @@ folly::File FdpNvme::openNvmeCharFile(const std::string& bdevName) {
     auto cdevName = getNvmeCharDevice(bdevName);
     XLOGF(INFO, "Opening NVMe Char Dev file: {}", cdevName);
     f = folly::File(cdevName.c_str(), flags);
-  } catch (const std::system_error& e) {
+  } catch (const std::system_error&) {
     XLOGF(ERR, "Exception in openNvmeCharFile for: {}", bdevName);
     throw;
   }
