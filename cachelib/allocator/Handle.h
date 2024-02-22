@@ -26,6 +26,7 @@
 #include <mutex>
 
 #include "cachelib/allocator/nvmcache/WaitContext.h"
+#include "cachelib/common/Exceptions.h"
 
 namespace facebook {
 namespace cachelib {
@@ -71,7 +72,7 @@ struct ReadHandleImpl {
     try {
       alloc_->release(it_, isNascent());
     } catch (const std::exception& e) {
-      XLOGF(CRITICAL, "Failed to release {:#10x} : {}", static_cast<void*>(it_),
+      XLOGF(CRITICAL, "Failed to release {} : {}", static_cast<void*>(it_),
             e.what());
     }
     it_ = nullptr;

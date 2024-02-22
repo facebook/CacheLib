@@ -253,11 +253,6 @@ bool CacheItem<CacheTrait>::isMoving() const noexcept {
 }
 
 template <typename CacheTrait>
-bool CacheItem<CacheTrait>::isOnlyMoving() const noexcept {
-  return ref_.isOnlyMoving();
-}
-
-template <typename CacheTrait>
 void CacheItem<CacheTrait>::markNvmClean() noexcept {
   ref_.markNvmClean();
 }

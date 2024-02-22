@@ -101,7 +101,7 @@ void RefCountTest::testBasic() {
   ASSERT_FALSE(ref.template isFlagSet<RefcountWithFlags::Flags::kMMFlag1>());
 
   for (uint32_t i = 0; i < RefcountWithFlags::kAccessRefMask; i++) {
-    ASSERT_TRUE(ref.incRef());
+    ASSERT_EQ(ref.incRef(), RefcountWithFlags::kIncOk);
   }
 
   // Incrementing past the max will fail
@@ -160,16 +160,11 @@ void RefCountTest::testBasic() {
   ref.unmarkInMMContainer();
 
   ref.template setFlag<RefcountWithFlags::Flags::kMMFlag0>();
-  // Have no other admin refcount but with a flag still means "isOnlyMoving"
-  ASSERT_TRUE((ref.isOnlyMoving()));
 
-  // Set some flags and verify that "isOnlyMoving" does not care about flags
   ref.markIsChainedItem();
   ASSERT_TRUE(ref.isChainedItem());
-  ASSERT_TRUE((ref.isOnlyMoving()));
   ref.unmarkIsChainedItem();
   ASSERT_FALSE(ref.isChainedItem());
-  ASSERT_TRUE((ref.isOnlyMoving()));
 }
 
 void RefCountTest::testMarkForEvictionAndMoving() {
@@ -215,17 +210,13 @@ void RefCountTest::testMarkForEvictionAndMoving() {
   }
 
   {
-    // can mark moving when ref count > 0
+    // cannot mark moving when ref count > 0
     RefcountWithFlags ref;
     ref.markInMMContainer();
 
     ref.incRef();
 
-    ASSERT_TRUE(ref.markMoving());
-
-    ref.unmarkInMMContainer();
-    auto ret = ref.unmarkMoving();
-    ASSERT_EQ(ret, 1);
+    ASSERT_FALSE(ref.markMoving());
   }
 
   {

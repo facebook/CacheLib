@@ -67,6 +67,11 @@ class SlabReleaseAborted : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+class ChainedItemInvalid : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 // An allocation error. This could be a genuine std::bad_alloc from
 // the global allocator, or it can be an internal allocation error
 // from the backing cachelib item.

@@ -497,6 +497,10 @@ class MMTinyLFU {
     template <typename F>
     void withEvictionIterator(F&& f);
 
+    // Execute provided function under container lock.
+    template <typename F>
+    void withContainerLock(F&& f);
+
     // for saving the state of the lru
     //
     // precondition:  serialization must happen without any reader or writer

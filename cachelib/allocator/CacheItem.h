@@ -309,7 +309,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
   //
   // @return true on success, failure if item is marked as exclusive
   // @throw exception::RefcountOverflow on ref count overflow
-  FOLLY_ALWAYS_INLINE bool incRef() {
+  FOLLY_ALWAYS_INLINE RefcountWithFlags::IncResult incRef() {
     try {
       return ref_.incRef();
     } catch (exception::RefcountOverflow& e) {
@@ -366,13 +366,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
   /**
    * The following functions correspond to whether or not an item is
    * currently in the processed of being moved. When moving, ref count
-   * is always >= 1.
+   * is always == 1.
    *
    * An item can only be marked moving when `isInMMContainer` returns true
    * and item is not already exclusive nor moving.
-   *
-   * User can also query if an item "isOnlyMoving". This returns true only
-   * if the refcount is one and only the exclusive bit is set.
    *
    * Unmarking moving does not depend on `isInMMContainer`
    * Unmarking moving will also return the refcount at the moment of
@@ -381,7 +378,6 @@ class CACHELIB_PACKED_ATTR CacheItem {
   bool markMoving();
   RefcountWithFlags::Value unmarkMoving() noexcept;
   bool isMoving() const noexcept;
-  bool isOnlyMoving() const noexcept;
 
   /** This function attempts to mark item as exclusive.
    * Can only be called on the item that is moving.*/

@@ -357,6 +357,11 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
     return WriteLockHolder{Base::getLock(args...)};
   }
 
+  template <typename... Args>
+  WriteLockHolder tryLockExclusive(Args... args) noexcept {
+    return WriteLockHolder(Base::getLock(args...), std::try_to_lock);
+  }
+
   // try to grab the reader lock for a limit _timeout_ duration
   template <typename... Args>
   ReadLockHolder lockShared(const std::chrono::microseconds& timeout,
