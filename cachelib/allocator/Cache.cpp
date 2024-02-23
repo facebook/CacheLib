@@ -487,6 +487,9 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                         util::narrow_cast<uint64_t>(cacheHitRate.ram));
   counters_.updateCount(statPrefix + "nvm.hit_rate",
                         util::narrow_cast<uint64_t>(cacheHitRate.nvm));
+
+  counters_.updateDelta(statPrefix + "cache.handle_wait_block",
+                        stats.numHandleWaitBlocks);
 }
 
 CacheBase::CacheHitRate CacheBase::calculateCacheHitRate(

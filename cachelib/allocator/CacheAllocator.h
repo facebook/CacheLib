@@ -2143,6 +2143,10 @@ class CacheAllocator : public CacheBase {
     return std::unique_lock<std::mutex>(moveLock_[shard].moveLock_);
   }
 
+  // Bump the number of times handle wait blocks. This is called from
+  // ItemHandle's wait context logic.
+  void bumpHandleWaitBlocks() { stats().numHandleWaitBlocks.inc(); }
+
   // BEGIN private members
 
   // Whether the memory allocator for this cache allocator was created on shared

@@ -80,6 +80,9 @@ struct TestAllocator {
 
   void adjustHandleCountForThread_private(int i) { tlRef_.tlStats() += i; }
 
+  // This is no-op. It's just used to construct a ItemHandle with wait-context.
+  void bumpHandleWaitBlocks() {}
+
   util::FastStats<int> tlRef_;
 };
 } // namespace

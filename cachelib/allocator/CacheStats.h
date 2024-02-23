@@ -552,7 +552,10 @@ struct GlobalCacheStats {
   // current active handles outstanding. This stat should
   // not go to negative. If it's negative, it means we have
   // leaked handles (or some sort of accounting bug internally)
-  int64_t numActiveHandles;
+  int64_t numActiveHandles{0};
+
+  // This stat tracks how many times wait() on ItemHandle blocks
+  uint64_t numHandleWaitBlocks{0};
 };
 
 struct CacheMemoryStats {

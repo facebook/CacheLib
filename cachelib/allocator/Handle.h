@@ -267,6 +267,7 @@ struct ReadHandleImpl {
       if (isReady()) {
         return;
       }
+      alloc_.bumpHandleWaitBlocks();
       baton_.wait();
       XDCHECK(isReady());
     }

@@ -248,6 +248,9 @@ struct Stats {
   // Eviction failures because this item is being moved
   AtomicCounter evictFailMove{0};
 
+  // Number of times wait() blocks for an item handle
+  TLCounter numHandleWaitBlocks{0};
+
   void init();
 
   void populateGlobalCacheStats(GlobalCacheStats& ret) const;
