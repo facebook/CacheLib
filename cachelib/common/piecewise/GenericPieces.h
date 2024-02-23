@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include <folly/dynamic.h>
 #include <folly/io/IOBuf.h>
+#include <folly/json/dynamic.h>
 #include <folly/logging/xlog.h>
 
 #include <memory>

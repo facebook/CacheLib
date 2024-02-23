@@ -16,10 +16,10 @@
 
 #pragma once
 
-#include <folly/DynamicConverter.h>
 #include <folly/Format.h>
 #include <folly/hash/Hash.h>
-#include <folly/json.h>
+#include <folly/json/DynamicConverter.h>
+#include <folly/json/json.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
 #include <sys/stat.h>

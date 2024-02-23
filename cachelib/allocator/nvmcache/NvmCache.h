@@ -18,10 +18,10 @@
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
-#include <folly/dynamic.h>
 #include <folly/fibers/TimedMutex.h>
 #include <folly/hash/Hash.h>
-#include <folly/json.h>
+#include <folly/json/dynamic.h>
+#include <folly/json/json.h>
 #include <folly/synchronization/Baton.h>
 
 #include <array>

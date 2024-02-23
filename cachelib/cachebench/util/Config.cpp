@@ -17,7 +17,7 @@
 #include "cachelib/cachebench/util/Config.h"
 
 #include <folly/FileUtil.h>
-#include <folly/json.h>
+#include <folly/json/json.h>
 
 #include <unordered_map>
 

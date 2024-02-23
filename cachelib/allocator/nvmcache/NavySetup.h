@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include <folly/dynamic.h>
+#include <folly/json/dynamic.h>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"

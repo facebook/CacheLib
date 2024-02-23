@@ -19,7 +19,7 @@
 #include <folly/Format.h>
 #include <folly/String.h>
 #include <folly/Subprocess.h>
-#include <folly/json.h>
+#include <folly/json/json.h>
 #include <folly/logging/xlog.h>
 
 #include <algorithm>
