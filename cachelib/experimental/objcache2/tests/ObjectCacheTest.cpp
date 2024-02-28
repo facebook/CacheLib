@@ -112,7 +112,7 @@ class ObjectCacheTest : public ::testing::Test {
       EXPECT_THROW(config.setCacheCapacity(10'000, 100'000),
                    std::invalid_argument);
 
-      // missing cacheSizeLimit
+      // missing totalObjectSizeLimit
       EXPECT_THROW(config.setCacheCapacity(10'000, 0, 10),
                    std::invalid_argument);
 
@@ -520,7 +520,7 @@ class ObjectCacheTest : public ::testing::Test {
     ObjectCacheConfig config;
     config.setCacheName("test")
         .setCacheCapacity(10'000 /* l1EntriesLimit*/,
-                          10'000'000 /* cacheSizeLimit */,
+                          10'000'000 /* totalObjectSizeLimit */,
                           100 /* sizeControllerIntervalMs */)
         .setItemDestructor(
             [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
@@ -580,7 +580,7 @@ class ObjectCacheTest : public ::testing::Test {
     ObjectCacheConfig config;
     config.setCacheName("test")
         .setCacheCapacity(10'000 /* l1EntriesLimit*/,
-                          10'000'000 /* cacheSizeLimit */,
+                          10'000'000 /* totalObjectSizeLimit */,
                           100 /* sizeControllerIntervalMs */)
         .setItemDestructor(
             [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
@@ -1634,7 +1634,8 @@ class ObjectCacheTest : public ::testing::Test {
   void testMultithreadSizeControl() {
     ObjectCacheConfig config;
     config.setCacheName("test")
-        .setCacheCapacity(200 /* l1EntriesLimit*/, 100000 /* cacheSizeLimit */,
+        .setCacheCapacity(200 /* l1EntriesLimit*/,
+                          100000 /* totalObjectSizeLimit */,
                           100 /* sizeControllerIntervalMs */)
         .setItemDestructor(
             [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
@@ -1920,7 +1921,8 @@ TEST(ObjectCacheTest, LruEvictionWithSizeControl) {
   config.setCacheName("test");
   config.setItemDestructor(
       [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
-  config.setCacheCapacity(50 /* l1EntriesLimit*/, 100 /* cacheSizeLimit */,
+  config.setCacheCapacity(50 /* l1EntriesLimit*/,
+                          100 /* totalObjectSizeLimit */,
                           100 /* sizeControllerIntervalMs */);
   // insert objects with equal size
   {

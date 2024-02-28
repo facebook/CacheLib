@@ -38,12 +38,13 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // achieves the threshold. This is to avoid unreliable calculation of average
   // object size when the cache is new and only has a few objects.
   if (totalObjSize > kSizeControllerThresholdPct *
-                         objCache_.config_.cacheSizeLimit / 100 ||
+                         objCache_.config_.totalObjectSizeLimit / 100 ||
       currentNumEntries > kSizeControllerThresholdPct *
                               objCache_.config_.l1EntriesLimit / 100) {
     auto averageObjSize = totalObjSize / currentNumEntries;
     XDCHECK_NE(0u, averageObjSize);
-    auto newEntriesLimit = objCache_.config_.cacheSizeLimit / averageObjSize;
+    auto newEntriesLimit =
+        objCache_.config_.totalObjectSizeLimit / averageObjSize;
     if (newEntriesLimit > objCache_.config_.l1EntriesLimit) {
       XLOGF_EVERY_MS(INFO, 60'000,
                      "CacheLib size-controller: cache size is bound by "

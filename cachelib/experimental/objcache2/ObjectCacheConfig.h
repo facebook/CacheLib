@@ -40,17 +40,17 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
 
   // Set the cache capacity in terms of the number of objects and
-  // the cache size, i.e., the total size of objects.
+  // the total object size.
   // the entries limit specifies the object number limit to be held in
   // cache. If the limit is exceeded, objects will be evicted.
-  // The cache size needs to be set only to enable "size-aware"
+  // The total object size limit needs to be set only to enable "size-aware"
   // object cache which tracks the object size internally and limits
   // the total memory size consumed by those objects.
   // When enabling the "size-aware" object cache, the size controller interval
   // should also be set to positive number which determines the interval
   // at which the size controller is invoked
   ObjectCacheConfig& setCacheCapacity(size_t _l1EntriesLimit,
-                                      size_t _cacheSizeLimit = 0,
+                                      size_t _totalObjectSizeLimit = 0,
                                       int _sizeControllerIntervalMs = 0);
 
   // Set the number of internal cache pools to be used for sharding.
@@ -184,8 +184,8 @@ struct ObjectCacheConfig {
   int sizeControllerIntervalMs{0};
 
   // With size controller enabled, if total object size is above this limit,
-  // L1 will start evicting
-  size_t cacheSizeLimit{0};
+  // the cache will start evicting
+  size_t totalObjectSizeLimit{0};
 
   // Throttler config of size controller
   util::Throttler::Config sizeControllerThrottlerConfig{};
@@ -245,18 +245,18 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setCacheName(
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setCacheCapacity(
     size_t _l1EntriesLimit,
-    size_t _cacheSizeLimit,
+    size_t _totalObjectSizeLimit,
     int _sizeControllerIntervalMs) {
   l1EntriesLimit = _l1EntriesLimit;
-  cacheSizeLimit = _cacheSizeLimit;
+  totalObjectSizeLimit = _totalObjectSizeLimit;
   sizeControllerIntervalMs = _sizeControllerIntervalMs;
 
-  if (_cacheSizeLimit && _sizeControllerIntervalMs) {
+  if (_totalObjectSizeLimit && _sizeControllerIntervalMs) {
     // object size tracking is enabled as well
     objectSizeTrackingEnabled = true;
-  } else if (_sizeControllerIntervalMs || _cacheSizeLimit) {
+  } else if (_sizeControllerIntervalMs || _totalObjectSizeLimit) {
     throw std::invalid_argument(
-        "Both of sizeControllerIntervalMs and cacheSizeLimit should be "
+        "Both of sizeControllerIntervalMs and totalObjectSizeLimit should be "
         "provided to enable the size controller");
   }
   return *this;
@@ -419,10 +419,11 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
   }
 
   if (objectSizeTrackingEnabled) {
-    if ((sizeControllerIntervalMs && !cacheSizeLimit) ||
-        (!sizeControllerIntervalMs && cacheSizeLimit)) {
+    if ((sizeControllerIntervalMs && !totalObjectSizeLimit) ||
+        (!sizeControllerIntervalMs && totalObjectSizeLimit)) {
       throw std::invalid_argument(
-          "Only one of sizeControllerIntervalMs and cacheSizeLimit is set");
+          "Only one of sizeControllerIntervalMs and totalObjectSizeLimit is "
+          "set");
     }
   }
 

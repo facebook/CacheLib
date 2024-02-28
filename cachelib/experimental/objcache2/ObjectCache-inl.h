@@ -381,7 +381,8 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
   config["l1NumShards"] = std::to_string(config_.l1NumShards);
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {
-    config["l1CacheSizeLimit"] = std::to_string(config_.cacheSizeLimit);
+    config["totalObjectSizeLimit"] =
+        std::to_string(config_.totalObjectSizeLimit);
     config["sizeControllerIntervalMs"] =
         std::to_string(config_.sizeControllerIntervalMs);
   }
