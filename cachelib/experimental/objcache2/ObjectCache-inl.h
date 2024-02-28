@@ -445,6 +445,42 @@ void ObjectCache<AllocatorT>::mutateObject(const std::shared_ptr<T>& object,
   }
 }
 
+template <typename AllocatorT>
+template <typename T>
+bool ObjectCache<AllocatorT>::updateObjectSize(const std::shared_ptr<T>& object,
+                                               size_t newSize) {
+  if (!object) {
+    return false;
+  }
+  if (!config_.objectSizeTrackingEnabled) {
+    XLOG_EVERY_MS(
+        WARN, 60'000,
+        "Object size tracking is not enabled but object size being updated.");
+    return false;
+  }
+  if (newSize == 0) {
+    XLOG_EVERY_MS(
+        WARN, 60'000,
+        "Object size tracking is enabled but object size is updated to be 0.");
+    return false;
+  }
+
+  // do atomic update on objectSize
+  const auto oldSize = __sync_lock_test_and_set(
+      &(reinterpret_cast<ObjectCacheItem*>(
+            getWriteHandleRefInternal<T>(object)->getMemory())
+            ->objectSize),
+      newSize);
+  if (newSize > oldSize) {
+    totalObjectSizeBytes_.fetch_add(newSize - oldSize,
+                                    std::memory_order_relaxed);
+  } else if (newSize < oldSize) {
+    totalObjectSizeBytes_.fetch_sub(oldSize - newSize,
+                                    std::memory_order_relaxed);
+  }
+  return true;
+}
+
 } // namespace objcache2
 } // namespace cachelib
 } // namespace facebook

@@ -807,6 +807,34 @@ class ObjectCacheTest : public ::testing::Test {
     checkObjectSizeTrackingString();
   }
 
+  void testObjectSizeTrackingWithSizeUpdate() {
+    using ObjectType = std::string;
+    ObjectCacheConfig config;
+    config.setCacheName("test")
+        .setCacheCapacity(10'000 /* l1EntriesLimit*/)
+        .setItemDestructor([&](ObjectCacheDestructorData data) {
+          data.deleteObject<ObjectType>();
+        });
+    config.objectSizeTrackingEnabled = true;
+    auto objcache = ObjectCache::create(config);
+
+    auto [_, ptr, __] = objcache->insertOrReplace(
+        "foo", std::make_unique<ObjectType>(), sizeof(ObjectType));
+    EXPECT_EQ(sizeof(ObjectType), objcache->template getObjectSize(ptr));
+    EXPECT_EQ(sizeof(ObjectType), objcache->getTotalObjectSize());
+
+    auto found = objcache->template findToWrite<ObjectType>("foo");
+    ASSERT_NE(nullptr, found);
+
+    *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
+    const size_t newSize = sizeof(*found) + found->size();
+    const auto updated = objcache->updateObjectSize(ptr, newSize);
+    ASSERT_TRUE(updated);
+
+    EXPECT_EQ(newSize, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(newSize, objcache->getTotalObjectSize());
+  }
+
   void testMultithreadObjectSizeTrackingWithMutation() {
     if (!folly::usingJEMalloc()) {
       return;
@@ -1808,6 +1836,9 @@ TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingUniqueInsert) {
 }
 TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithMutation) {
   this->testObjectSizeTrackingWithMutation();
+}
+TYPED_TEST(ObjectCacheTest, ObjectSizeTrackingWithSizeUpdate) {
+  this->testObjectSizeTrackingWithSizeUpdate();
 }
 TYPED_TEST(ObjectCacheTest, MultithreadObjectSizeTrackingWithMutation) {
   this->testMultithreadObjectSizeTrackingWithMutation();

@@ -411,6 +411,18 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
         ->objectSize;
   }
 
+  // Update the object size without updating the object itself.
+  // This is useful when object has been changed, although it's not changed
+  // by mutateObject.
+  //
+  // @param  object       shared pointer of the object whose size is being
+  //                      updated (must be fetched from ObjectCache APIs)
+  // @param  newSize      new object size
+  //
+  // @return boolean indicating whether the object size was successfully updated
+  template <typename T>
+  bool updateObjectSize(const std::shared_ptr<T>& object, size_t newSize);
+
   // Stop all workers
   //
   // @return true if all workers have been successfully stopped
