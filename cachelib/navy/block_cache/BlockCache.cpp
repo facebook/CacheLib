@@ -424,25 +424,32 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     HashedKey hk =
         makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
     BufferView value{desc.valueSize, entryEnd - entrySize};
+
+    BlockCache::ReinsertionRes reinsertionRes = ReinsertionRes::kRemoved;
     if (checksumData_ && desc.cs != checksum(value)) {
       // We do not need to abort here since the EntryDesc checksum was good, so
       // we can safely proceed to read the next entry.
       reclaimValueChecksumErrorCount_.inc();
-    }
-
-    const auto reinsertionRes =
-        reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
-    switch (reinsertionRes) {
-    case ReinsertionRes::kEvicted:
-      evictionCount++;
-      usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
-      break;
-    case ReinsertionRes::kRemoved:
-      holeCount_.sub(1);
-      holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
-      break;
-    case ReinsertionRes::kReinserted:
-      break;
+      if (removeItem(hk, RelAddress{rid, offset})) {
+        reinsertionRes = ReinsertionRes::kEvicted;
+      }
+      // Reset the value to nullptr to avoid the destructor doing wrong thing
+      value = BufferView();
+    } else {
+      reinsertionRes =
+          reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
+      switch (reinsertionRes) {
+      case ReinsertionRes::kEvicted:
+        evictionCount++;
+        usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
+        break;
+      case ReinsertionRes::kRemoved:
+        holeCount_.sub(1);
+        holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
+        break;
+      case ReinsertionRes::kReinserted:
+        break;
+      }
     }
 
     if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
