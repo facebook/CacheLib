@@ -1203,7 +1203,11 @@ template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
                                                  WriteHandle& newItemHdl) {
   XDCHECK(oldItem.isMoving());
-  XDCHECK(!oldItem.isExpired());
+  // If an item is expired, proceed to eviction.
+  if (oldItem.isExpired()) {
+    return false;
+  }
+
   util::LatencyTracker tracker{stats_.moveRegularLatency_};
 
   XDCHECK_EQ(newItemHdl->getSize(), oldItem.getSize());
