@@ -294,7 +294,6 @@ class RegionManager {
   const uint64_t baseOffset_{};
   Device& device_;
   const std::unique_ptr<EvictionPolicy> policy_;
-  mutable util::ConditionVariable evictCond_;
   std::unique_ptr<std::unique_ptr<Region>[]> regions_;
   mutable AtomicCounter externalFragmentation_;
 

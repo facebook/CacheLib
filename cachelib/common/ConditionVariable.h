@@ -18,9 +18,9 @@
 
 #include <folly/IntrusiveList.h>
 #include <folly/Synchronized.h>
+#include <folly/fibers/Baton.h>
 #include <folly/fibers/TimedMutex.h>
 #include <folly/logging/xlog.h>
-#include <folly/synchronization/Baton.h>
 
 namespace facebook {
 namespace cachelib {

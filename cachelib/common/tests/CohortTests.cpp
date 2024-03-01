@@ -15,7 +15,7 @@
  */
 
 #include <folly/Random.h>
-#include <folly/synchronization/Baton.h>
+#include <folly/fibers/Baton.h>
 #include <gtest/gtest.h>
 
 #include "cachelib/common/Cohort.h"
@@ -81,7 +81,7 @@ TEST(Cohort, SwitchWithCohort) {
   auto tok2 = cohort.incrActiveReqs();
   EXPECT_EQ(cohort.getPending(isTop), 3ULL);
 
-  folly::Baton b;
+  folly::fibers::Baton b;
   auto switchingThread = std::thread([&]() {
     cohort.switchCohorts();
     b.post();

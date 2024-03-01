@@ -18,7 +18,6 @@
 
 #include <folly/Random.h>
 #include <folly/Singleton.h>
-#include <folly/synchronization/Baton.h>
 #include <folly/synchronization/Latch.h>
 
 #include <algorithm>

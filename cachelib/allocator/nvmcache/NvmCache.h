@@ -22,7 +22,6 @@
 #include <folly/hash/Hash.h>
 #include <folly/json/dynamic.h>
 #include <folly/json/json.h>
-#include <folly/synchronization/Baton.h>
 
 #include <array>
 #include <stdexcept>

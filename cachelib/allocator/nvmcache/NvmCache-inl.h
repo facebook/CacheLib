@@ -248,7 +248,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
     return nullptr;
   }
 
-  folly::Baton b;
+  folly::fibers::Baton b;
   WriteHandle hdl{};
   hdl.markWentToNvm();
 
