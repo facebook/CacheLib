@@ -220,7 +220,7 @@ struct VariableLruBucket {
     Bucket* bucket_;
     int pos_;
 
-    friend class VariableLruBucket<CompactCacheDescriptor>;
+    friend struct VariableLruBucket<CompactCacheDescriptor>;
   };
 
   /** Type of the callback to be called when an entry is evicted. */
