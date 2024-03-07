@@ -123,7 +123,7 @@ function LearnMore() {
 	</p>
 
     <p align="center">
-	<iframe width="500" height="300" src="https://www.youtube.com/embed/wp_X-Zg9WEo"
+	<iframe width="500" height="300" src="https://www.youtube.com/embed/JIM08lWPvNs"
 		frameborder="0"
 		allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen>
 	</iframe>
