@@ -63,6 +63,7 @@ RegionManager::RegionManager(uint32_t numRegions,
     auto name = fmt::format("region_manager_{}", i);
     workers_.emplace_back(
         std::make_unique<NavyThread>(name, NavyThread::Options(stackSize)));
+    workerSet_.insert(workers_.back().get());
     workers_.back()->addTaskRemote(
         [name]() { XLOGF(INFO, "{} started", name); });
   }
@@ -263,7 +264,7 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   getRegion(rid).setPendingFlush();
   numInMemBufWaitingFlush_.inc();
 
-  if (!async || folly::fibers::onFiber()) {
+  if (!async || isOnWorker()) {
     doFlushInternal(rid);
   } else {
     getNextWorker().addTaskRemote([this, rid]() { doFlushInternal(rid); });

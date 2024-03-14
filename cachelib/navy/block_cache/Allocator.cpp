@@ -22,6 +22,7 @@
 #include <cassert>
 #include <utility>
 
+#include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/common/Utils.h"
 
 namespace facebook::cachelib::navy {
@@ -84,7 +85,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   // picked ended up being full.
   XDCHECK(!rid.valid());
 
-  if (canWait && !folly::fibers::onFiber()) {
+  if (canWait && !getCurrentNavyThread()) {
     // Waiting on main thread could cause indefinite blocking, so do not wait
     canWait = false;
   }

@@ -33,6 +33,7 @@ add_library (cachelib_navy
   common/Device.cpp
   common/FdpNvme.cpp
   common/Hash.cpp
+  common/NavyThread.cpp
   common/SizeDistribution.cpp
   common/Types.cpp
   driver/Driver.cpp

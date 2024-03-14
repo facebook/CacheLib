@@ -31,6 +31,12 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
+class NavyThread;
+
+// @return the current NavyThread context if running on NavyThread. nullptr
+// otherwise.
+NavyThread* getCurrentNavyThread();
+
 /**
  * NavyThread is a wrapper class that wraps folly::ScopedEventBaseThread and
  * FiberManager. The purpose of NavyThread is to start a new thread running
@@ -58,16 +64,9 @@ class NavyThread {
   /**
    * Initializes with current EventBaseManager and passed-in thread name.
    */
-  explicit NavyThread(folly::StringPiece name, Options options = Options()) {
-    th_ = std::make_unique<folly::ScopedEventBaseThread>(name.str());
+  explicit NavyThread(folly::StringPiece name, Options options = Options());
 
-    folly::fibers::FiberManager::Options opts;
-    opts.stackSize =
-        options.stackSize ? options.stackSize : Options::kDefaultStackSize;
-    fm_ = &folly::fibers::getFiberManager(*th_->getEventBase(), opts);
-  }
-
-  ~NavyThread() { th_.reset(); }
+  ~NavyThread();
 
   /**
    * Add the passed-in task to the FiberManager.

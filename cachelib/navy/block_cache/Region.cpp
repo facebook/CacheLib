@@ -16,6 +16,8 @@
 
 #include "cachelib/navy/block_cache/Region.h"
 
+#include "cachelib/navy/common/NavyThread.h"
+
 namespace facebook::cachelib::navy {
 
 bool Region::readyForReclaim(bool wait) {
@@ -50,7 +52,7 @@ RegionDescriptor Region::openForRead() {
   std::unique_lock<TimedMutex> l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
-    if (folly::fibers::onFiber()) {
+    if (getCurrentNavyThread()) {
       // If we are on fiber, we can just sleep here
       cond_.wait(l);
     }
