@@ -82,6 +82,16 @@ Optionally, when `NavyRequestScheduler` is used, the queue depth and IO engine o
 
     Select Io engine between io_uring and libaio. See [Architecture Guide - Device](/docs/Cache_Library_Architecture_Guide/navy_overview#device) for more details.
 
+Optionally, to enable Flexible Data Placement (FDP) support in `Device` layer of Navy.
+
+  ```cpp
+  navyConfig.setEnableFDP(enableFDP);
+ ```
+
+* `enableFDP` = `true`   
+
+   When set to `true`, FDP is enabled and the BigHash and BlockCache device writes get segregated within the SSD. For more details, refer [FDP enabled Cache](/docs/Cache_Library_User_Guides/FDP_enabled_Cache.md).
+
 ### 2. Common Settings - Job Scheduler
 
 Two types of Job scheduler are supported (see [Architecture Guide - Navy overview](/docs/Cache_Library_Architecture_Guide/navy_overview#job-scheduler)). Common settings are as follows.
