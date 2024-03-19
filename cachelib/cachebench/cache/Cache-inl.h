@@ -131,7 +131,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
         if (!isDir) {
           isBlk = cachelib::util::isBlk(path);
         }
-      } catch (const std::system_error& e) {
+      } catch (const std::system_error&) {
         XLOGF(INFO, "nvmCachePath {} does not exist", path);
         isDir = false;
       }
