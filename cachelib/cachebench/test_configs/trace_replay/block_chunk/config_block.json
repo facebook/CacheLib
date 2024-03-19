@@ -6,7 +6,6 @@
     "allocFactor": 1.08,
     "maxAllocSize": 524288,
     "minAllocSize": 64,
-    "enableChainedItem": true,
     "htBucketPower": 29,
     "moveOnSlabRelease": false,
     "poolRebalanceIntervalSec": 2,
@@ -24,9 +23,9 @@
     "repeatOpCount" : true,
     "onlySetIfMiss" : false,
     "timestampFactor": 1,
-    "numOps": 2000000, 
-    "numThreads": 16, 
-    "prepopulateCache": true, 
+    "numOps": 2000000,
+    "numThreads": 16,
+    "prepopulateCache": true,
     "traceFileNames": [
 	    "block_traces_1.csv",
 	    "block_traces_2.csv"

@@ -6,7 +6,6 @@
     "allocFactor": 1.08,
     "maxAllocSize": 524288,
     "minAllocSize": 64,
-    "enableChainedItem": true,
     "htBucketPower": 29,
     "moveOnSlabRelease": false,
     "poolRebalanceIntervalSec": 2,

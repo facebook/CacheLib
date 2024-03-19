@@ -18,7 +18,6 @@
     "navyBlockSize": 4096,
     "navyParcelMemoryMB": 6048,
     "nvmCacheSizeMB": 932000,
-    "enableChainedItem": true,
     "htBucketPower": 27,
     "moveOnSlabRelease": true,
     "poolRebalanceIntervalSec": 2,

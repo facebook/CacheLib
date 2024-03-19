@@ -12,7 +12,6 @@
     "navyBigHashSizePct": 0,
     "navyBlockSize": 4096,
     "navyParcelMemoryMB": 6048,
-    "enableChainedItem": true,
     "htBucketPower": 26,
     "moveOnSlabRelease": true,
     "poolRebalanceIntervalSec": 2,
