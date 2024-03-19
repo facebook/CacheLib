@@ -11,15 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# NOTE:
+# The Debian-10 action had been deprecated because it had been EOLed
+# and the build is broken due to missing kernel headers or definitions
+# (e.g., linux/if_xdp.h)
 name: build-cachelib-debian-10
 on:
-  push:
-    tags:
-      - 'v*'
-  pull_request:
   workflow_dispatch:
-  schedule:
-     - cron:  '0 13 * * *'
 jobs:
   build-cachelib-debian-10:
     name: "Debian-10 (Buster) - Build CacheLib with all dependencies"

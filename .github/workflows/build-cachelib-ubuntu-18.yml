@@ -18,13 +18,7 @@
 # Instead, use "ubuntu-latest" and run Ubuntu-18.04 inside a docker container.
 name: build-cachelib-ubuntu-18
 on:
-  push:
-    tags:
-      - 'v*'
-  pull_request:
   workflow_dispatch:
-  schedule:
-    - cron:  '0 5 * * 2,4,6'
 jobs:
   build-cachelib-ubuntu-18:
     name: "Ubuntu-18 - Build CacheLib with all dependencies"
