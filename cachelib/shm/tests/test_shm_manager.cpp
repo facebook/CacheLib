@@ -50,14 +50,14 @@ class ShmManagerTest : public ShmTestBase {
   void TearDown() final {
     try {
       clearAllSegments();
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
       // ignore
     }
 
     try {
       facebook::cachelib::util::removePath(cacheDir);
       // make sure nothing exists at the end
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
       // ignore
     }
   }

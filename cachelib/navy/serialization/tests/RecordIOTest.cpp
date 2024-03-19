@@ -109,7 +109,7 @@ TEST(RecordIO, MemoryDevice) {
         memset(wbuf->writableData(), testChar, testSize);
         try {
           rw->writeRecord(std::move(wbuf));
-        } catch (std::logic_error& e) {
+        } catch (std::logic_error&) {
           writeFailed = true;
           failedIter = j;
           break;
@@ -127,7 +127,7 @@ TEST(RecordIO, MemoryDevice) {
           for (uint32_t k = 0; k < testSize; k++) {
             EXPECT_EQ(data[k], testChar);
           }
-        } catch (std::logic_error& e) {
+        } catch (std::logic_error&) {
           readFailed = true;
           EXPECT_EQ(j, failedIter);
           break;
@@ -180,7 +180,7 @@ TEST(RecordIO, MemoryDeviceVariousPayloads) {
           memset(wbuf->writableData(), testChar, testSize);
           try {
             rw->writeRecord(std::move(wbuf));
-          } catch (std::logic_error& e) {
+          } catch (std::logic_error&) {
             failedIter = j;
             break;
             /* ignore */
@@ -196,7 +196,7 @@ TEST(RecordIO, MemoryDeviceVariousPayloads) {
             for (uint32_t k = 0; k < testSize; k++) {
               EXPECT_EQ(data[k], testChar);
             }
-          } catch (std::logic_error& e) {
+          } catch (std::logic_error&) {
             // read should fail when we cannot write beyond the metadataSize
             EXPECT_EQ(j, failedIter);
             break;
