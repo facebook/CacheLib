@@ -318,7 +318,6 @@ class ObjectCacheRestorer {
         XLOG(ERR)
             << "forceStopWorker: Restorer thread did not stop, thread name =  "
             << restorer->getName();
-        ;
       }
     }
   }
