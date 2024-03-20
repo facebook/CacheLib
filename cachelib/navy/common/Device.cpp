@@ -1129,7 +1129,7 @@ folly::File openCacheFile(const std::string& fileName,
   }
 
 #ifndef MISSING_FALLOCATE
-  // TODO(jiayueb): make allocate flag user configurable and migrate the
+  // TODO T182882306: make allocate flag user configurable and migrate the
   // existing use cases
   // fallocate the file if requesting a larger file size and allocate flag is
   // set

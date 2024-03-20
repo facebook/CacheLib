@@ -179,7 +179,6 @@ std::unique_ptr<LruItemHandle> find_item(const LruAllocator& cache,
                                          folly::StringPiece key) {
   auto item = const_cast<LruAllocator&>(cache).find(key);
   if (item) {
-    // TODO(jiayueb) remove toWriteHandle() after finishing R/W handle migration
     return std::make_unique<LruItemHandle>(std::move(item).toWriteHandle());
   } else {
     return std::unique_ptr<LruItemHandle>();
