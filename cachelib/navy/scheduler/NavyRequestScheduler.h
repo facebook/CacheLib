@@ -103,8 +103,6 @@ class NavyRequestScheduler : public JobScheduler {
   // mutex per shard. mutex protects the pending jobs and spooling state
   mutable std::vector<TimedMutex> mutexes_;
 
-  // sharding power
-  // const size_t numShardsPower_;
   // list of jobs per shard if there is already a job pending for the shard
   std::vector<std::list<std::unique_ptr<NavyRequest>>> pendingReqs_;
 
