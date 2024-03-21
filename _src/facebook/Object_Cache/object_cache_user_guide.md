@@ -14,6 +14,7 @@ Not sure whether you should use object-cache? Check the [object-cache decision g
 The simplest object-cache is limited by the **number of objects**, i.e. an eviction will be triggered when the total object number reaches certain limit; the limit needs to be configured by the user as `l1EntriesLimit`.
 
 You are good to use this option if
+
 - your system is able to track the number of objects and provide that limit, and
 - there is no memory risk (e.g. memory regression/OOM caused by variations or gradual increase in object size)
 
@@ -61,48 +62,49 @@ config.setItemDestructor([&](ObjectCacheDestructorData data) {
 <details>
 <summary> Max Key Size : Allocation Size Mapping Table  </summary>
 
+| Max Key Size Bytes | Allocation Size Bytes |
+| ------------------ | --------------------- |
+| [8, 16]            | 64                    |
+| [17, 24]           | 72                    |
+| [25, 32]           | 80                    |
+| [33, 40]           | 88                    |
+| [41, 48]           | 96                    |
+| [49, 56]           | 104                   |
+| [57, 64]           | 112                   |
+| [65, 72]           | 120                   |
+| [73, 80]           | 128                   |
+| [81, 88]           | 136                   |
+| [89, 96]           | 144                   |
+| [97, 104]          | 152                   |
+| [105, 112]         | 160                   |
+| [113, 120]         | 168                   |
+| [121, 128]         | 176                   |
+| [129, 136]         | 184                   |
+| [137, 144]         | 192                   |
+| [145, 152]         | 200                   |
+| [153, 160]         | 208                   |
+| [161, 168]         | 216                   |
+| [169, 176]         | 224                   |
+| [177, 184]         | 232                   |
+| [185, 192]         | 240                   |
+| [193, 200]         | 248                   |
+| [201, 208]         | 256                   |
+| [209, 216]         | 264                   |
+| [217, 224]         | 272                   |
+| [225, 232]         | 280                   |
+| [233, 240]         | 288                   |
+| [241, 248]         | 296                   |
+| [249, 255]         | 304                   |
 
-|Max Key Size Bytes |Allocation Size Bytes |
-|-------------------|----------------------|
-|[8, 16]            | 64                   |
-|[17, 24]           | 72                   |
-|[25, 32]           | 80                   |
-|[33, 40]           | 88                   |
-|[41, 48]           | 96                   |
-|[49, 56]           | 104                  |
-|[57, 64]           | 112                  |
-|[65, 72]           | 120                  |
-|[73, 80]           | 128                  |
-|[81, 88]           | 136                  |
-|[89, 96]           | 144                  |
-|[97, 104]          | 152                  |
-|[105, 112]         | 160                  |
-|[113, 120]         | 168                  |
-|[121, 128]         | 176                  |
-|[129, 136]         | 184                  |
-|[137, 144]         | 192                  |
-|[145, 152]         | 200                  |
-|[153, 160]         | 208                  |
-|[161, 168]         | 216                  |
-|[169, 176]         | 224                  |
-|[177, 184]         | 232                  |
-|[185, 192]         | 240                  |
-|[193, 200]         | 248                  |
-|[201, 208]         | 256                  |
-|[209, 216]         | 264                  |
-|[217, 224]         | 272                  |
-|[225, 232]         | 280                  |
-|[233, 240]         | 288                  |
-|[241, 248]         | 296                  |
-|[249, 255]         | 304                  |
 </details>
 
 - `accessConfig`: Config to tune lookup performance. There are two important parameters:`l1HashTablePower` and `l1LockPower`. Check out [hashtable bucket configuration](../../Cache_Library_User_Guides/Configure_HashTable) to select a good value:
-     - `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`.
-     - `l1LockPower`: This controls how many locks are present in object-cache's hashtable. Default to `10`.
+  - `l1HashTablePower`: This controls how many buckets are present in object-cache's hashtable. Default to `10`.
+  - `l1LockPower`: This controls how many locks are present in object-cache's hashtable. Default to `10`.
 - `l1NumShards`: Number of shards to improve insert/remove concurrency. Default to `1`.
 - `l1ShardName`: Name of the shards. If not set, we will use the default name `pool`.
 - `evictionPolicyConfig`: Config of the eviction policy. Object-Cache offers the same set of [eviction policies](../../Cache_Library_User_Guides/eviction_policy.md) as the regular cachelib. Typically, you can just leave the config as default. If in some cases, the default one does not work, you are also allowed to modify the settings, e.g.
+
 ```cpp
 // adopting LRU eviction policy
 using ObjectCache = cachelib::objcache2::ObjectCache<cachelib::LruAllocator>;
@@ -117,6 +119,7 @@ config.setEvictionPolicyConfig(std::move(evictionPolicyConfig));
 ```
 
 Here is an example to configure a simple object-cache:
+
 ```cpp
 #include "cachelib/experimental/objcache2/ObjectCache.h"
 
@@ -149,12 +152,11 @@ void init() {
 
 If your system needs to cap the cache size by bytes where the simple version mentioned above is not good enough, you can enable the "size-awareness" feature.
 
-A "size-aware" object-cache tracks the object size internally and is limited by the **total size of objects**, i.e. an eviction will be triggered when the total size of objects reaches certain limit; the limit needs to be configured by the user as `cacheSizeLimit`.
+A "size-aware" object-cache tracks the object size internally and is limited by both **total size of objects** (configured by the user as `totalObjectSizeLimit`) and the **number of objects** (configured by the user as `l1EntriesLimit`). An eviction will be triggered when the total size of objects reaches `totalObjectSizeLimit` or the total number of objects reaches `l1EntriesLimit` whichever comes first.
 
 :exclamation: **IMPORTANT:** A few notes before you try to create a "size-aware" object-cache:
-- Objects number is still bounded by `l1EntriesLimit`.
-  - Above this many entries, object-cache will start evicting even if `cacheSizeLimit` has not been reached.
-  - Make sure you set a reasonably large `l1EntriesLimit` to avoid objects early eviction when it's far from reaching `cacheSizeLimit`.
+
+- As mentioned above, objects number is still bounded by `l1EntriesLimit`. And you should make sure you DON'T set `l1EntriesLimit` either too small or too large. Check out ["how to set l1EntriesLimit"](#how-to-set-l1entrieslimit)
 - When inserting a new object into object-cache, you are responsible for calculating the size of that new object and passing the value to object-cache:
   - We provide a util class to help calculate the object size. Check out ["how to calculate object size"](#how-to-calculate-object-size).
   - Object-cache maintains the total object size internally based on the object size provided by users. See more in ["how is object size tracked"](#how-is-object-size-tracked).
@@ -165,7 +167,7 @@ A "size-aware" object-cache tracks the object size internally and is limited by 
 To set up a **size-aware** object-cache, besides the [settings](#configuration) mentioned above, also configure the following settings:
 
 - (**Required**) `sizeControllerIntervalMs`: Set a non-zero period (in milliseconds) to enable the ["size-controller"](#what-is-size-controller). `0` means "size-controller" is disabled.
-- (**Required**) `cacheSizeLimit`: The limit of cache size in bytes. If total object size is above this limit, object-cache will start evicting.
+- (**Required**) `totalObjectSizeLimit`: The limit of total object size in bytes. If total object size is above this limit, object-cache will start evicting.
 
 ```cpp
 #include "cachelib/experimental/objcache2/ObjectCache.h"
@@ -181,7 +183,7 @@ void init() {
     ObjectCache::Config config;
     config.setCacheName("SizeAwareObjectCache")
           .setCacheCapacity(10'000 /* l1EntriesLimit*/,
-                            30 * 1024 * 1024 * 1024 /* 30GB, cacheSizeLimit */,
+                            30 * 1024 * 1024 * 1024 /* 30GB, totalObjectSizeLimit */,
                             100 /* sizeControllerIntervalMs */)
           .setItemDestructor(
             [&](cachelib::objcache2::ObjectCacheDestructorData data) {
@@ -196,6 +198,10 @@ void init() {
 }
 
 ```
+
+#### How to set l1EntriesLimit
+
+For a size-aware object-cache, user need to set both `l1EntriesLimit` and `totalObjectSizeLimit` reasonably. `l1EntriesLimit` is still the upper bound of the number of entries in the cache. If you set `l1EntriesLimit` too small, `totalObjectSizeLimit` will be useless, objects will leave the cache as soon as reaching `l1EntriesLimit`. On the other hand, `l1EntriesLimit` decides how much mmapped memory we will pre-allocate to store the metadata; setting an incredibly large value can waste huge amount of memory. We would suggest you set `l1EntriesLimit` to be slightly larger than `totalObjectSizeLimit` / `avgObjSize` where `avgObjSize` is the approximate average object size for your workload.
 
 #### How to calculate object size
 
@@ -240,21 +246,26 @@ auto objectSize = LIKELY(afterMemUsage > beforeMemUsage)
 
 #### How is object size tracked
 
-When an object is inserted to the cache via `insertOrReplace` / `insert` API, users must pass "object size" to the API.
+When a new object is inserted to the cache via `insertOrReplace` / `insert` API, users must pass "object size" to the API (check out [Add objects](#add-objects) section). After that, object-cache knows the size for each cached object and maintains the total object size internally.
 
-After that, object-cache knows the size for each cached object and maintains the total object size internally.
+User is also allowed to do in-place modification on the object via `mutateObject` API. With this API, user can pass a mutation callback where mutated size will be calculated internally (check out [Mutate objects](#mutate-objects) section). After that, the size for each cached object and the total object size will be updated.
 
 #### What is size controller
 
-Size-controller is the key component to achieve a "size-aware" object-cache. It is a periodic background worker that dynamically adjusts the **entries limit** by monitoring the current **total object size** and **total object number**:
+Size-controller is the key component to achieve a "size-aware" object-cache. It is a periodic background worker that dynamically adjusts the **entries limit** by monitoring the current **total object size** and **total object number**; the new entries limit will still be bounded by `l1EntriesLimit`:
 
 ```
 averageObjectSize = totalObjectSize / totalObjectNum
 
-newEntriesLimit = config.cacheSizeLimit / averageObjectSize
+newEntriesLimit = min(config.totalObjectSizeLimit / averageObjectSize, config.l1EntriesLimit)
 ```
 
-In this case, we can guarantee cache size does not exceed `cacheSizeLimit` from long-term perspective. However, as it is not a precise control, we cannot prevent a sudden increase in object sizes.
+The cache will start evicting when total object number exceeds the new entries limit. In this case, we can guarantee the total object size does not exceed `totalObjectSizeLimit` from long-term perspective.
+
+:exclamation: There are a few IMPORTANT things we want to point out here:
+
+1. it is not a precise control: size-controller CANNOT prevent a sudden increase in object sizes.
+2. total object size only tracks the size of actual objects; metadata and cache key size are NOT included. For the details of memory composition, refer to [object cache design](object_cache_architecture_guide.md#design-details).
 
 ### Add monitoring
 
@@ -407,6 +418,7 @@ std::shared_ptr<T> findToWrite(folly::StringPiece key);
 :exclamation: **IMPORTANT:**
 
 Separating write and read traffic is quite important here. A misuse of these two APIs can lead to unreasonable eviction result because we only promotes read traffic by default. For more details, check out ["Eviction policy"](../../Cache_Library_User_Guides/eviction_policy.md#configuration). The guidance here is:
+
 - Always consider `find` API first;
 - Choose `findToWrite` API only when an in-place modification needs to happen.
 
@@ -428,21 +440,26 @@ if (mutableFoo !== nullptr) {
 ```
 
 ### Mutate objects
+
 If size-awareness is enabled, to do in-place modification on an object, you must call `mutateObject` API:
+
 ```cpp
 template <typename T>
 void mutateObject(const std::shared_ptr<T>& object,
                   std::function<void()> mutateCb);
 ```
+
 - there are two parameters:
   - `object`: a shared pointer of the object to be mutated. This shared pointer must be fetched from object-cache APIs `findToWrite`, `insertOrReplace` or `insert`.
   - `mutateCb`: a callback containing mutation logic.
 
 What should happen inside `mutateCb` is:
-  - allocation of the new value
-  - deallocation of the old value to be replaced
+
+- allocation of the new value
+- deallocation of the old value to be replaced
 
 A common incorrect usage is:
+
 ```cpp
 auto ptr = objCache->findToWrite<ObjectType>(...);
 auto newPtr = std::make_unique<ObjectType>(...);
@@ -450,6 +467,7 @@ auto mutateCb = [&ptr, &newPtr]() { ptr = std::move(newPtr); };
 ```
 
 To correct this, you should move the construction of `newPtr` into `mutateCb`:
+
 ```cpp
 auto ptr = objCache->findToWrite<ObjectType>(...);
 auto mutateCb = [&ptr]() {
@@ -459,6 +477,7 @@ auto mutateCb = [&ptr]() {
 ```
 
 Example (`std::string`):
+
 ```cpp
 auto stringPtr = objcache->findToWrite<std::string>("cacheKey");
 
@@ -484,6 +503,7 @@ objcache->mutateObject(stringPtr, std::move(mutateCb3));
 ```
 
 Example (`std::vector`):
+
 ```cpp
 using ObjectType = std::vector<Foo>;
 
@@ -508,6 +528,7 @@ objcache->mutateObject(vectorPtr, std::move(mutateCb3));
 ```
 
 Example (`std::unordere_map`):
+
 ```cpp
 using ObjectType = std::unordered_map<std::string, std::string>;
 
@@ -552,6 +573,27 @@ objcache->insertOrReplace<Foo>("foo", std::move(foo));
 
 objcache->remove<Foo>("foo"); // foo will be removed, return `true`
 ```
+
+## Monitor object-cache
+
+Once CacheAdmin is added, Object-Cache provides the same set of stats as provided in the regular CacheLib. Besides that, if size-awareness is enabled, there are Object-Cache specific stats to monitor the heap memory usage:
+
+- object_size_bytes:
+  - tracking the total object size in bytes on the heap
+  - usage: cachelib.<cache_name>.objcache.object_size_bytes
+- jemalloc fragmentation rate:
+  - tracking the jemalloc (external) fragmentation rate - (below 15% is an acceptable rate)
+  - usage:
+    - jemalloc_active_bytes: cachelib.<cache_name>.objcache.jemalloc_active_bytes
+    - jemalloc_allocated_bytes: cachelib.<cache_name>.objcache.jemalloc_allocated_bytes
+    - jemalloc fragmentation rate = (jemalloc_active_bytes - jemalloc_allocated_bytes) / jemalloc_active_bytes
+  - note: if the jemalloc fragmentation rate is very high(e.g. >20%), your service can be at the risk of OOM and you should consider `config.enableFragmentationTracking()` to bound the cache by total object size AND the approximate fragmentation bytes generated by them
+- object size distribution:
+  - histogram of object size (on the heap)
+  - usage:
+    - set config.objectSizeDistributionTrackingEnabled to be true
+    - regex(cachelib.<cache_name>.objcache.size_distribution.object_size_bytes.\*),
+  - note: this stat is only for debugging/experimental purpose and should never be enabled in production since the calculation is very cpu-intensive
 
 ## TTL (Time To Live)
 
@@ -690,7 +732,9 @@ objcache->extendTtl(obj, std::chrono::seconds(300) /* 5 mins*/); // expiryTime b
 Cache persistence is an opt-in feature in object-cache to persist objects across process restarts. It is useful when you want to restart your binary without losing previously cached objects. Currently we support cache persistence in a multi-thread mode where user can configure the parallelism degree to adjust the persistence/recovery speed. This feature only works when you restart the process in the same machine. Across machines persistence is not supported.
 
 ### Configure cache persistence
+
 To enable cache persistence, you need to configure the following parameters:
+
 - `threadCount`: number of threads to work on persistence/recovery concurrently
 - `persistBasefilePath`: **file** path to save the persistent data (a **directory** path will not work)
   - cache metadata will be saved in "persistBasefilePath";
@@ -760,6 +804,7 @@ config.enablePersistence(threadCount,
 Example (single-type):
 
 Assuming you store C++ objects of type `Foo` in object-cache and build a Thrift type `ThriftFoo` for cache persistence.
+
 ```cpp
 // object.h
 class Foo {

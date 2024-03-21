@@ -92,6 +92,12 @@ Sometimes you would like your cache to be not persistent when you restart your p
 1. Calling the `SharedMemNew` constructor will always create a new instance and blow away the old one.
 2. Indicate to cachelib by blowing away the cache directory that you passed in the `Config`. This will cause `SharedMemAttach` to throw an exception.
 
+If NVM cache is used, it will be dropped along with the RAM cache if `CacheAllocatorConfig.dropNvmCacheOnShmNew` is set to `true`. Otherwise or if you want to drop NVM cache separately, there are two ways to accomplish it.
+
+1. Remove `NvmCacheState` file in `cacheDir`
+
+2. Create (touch) a file named `IceRoll` in `cacheDir`
+
 ## Change configs
 
 When you attach to an existing cache, cachelib will try to incorporate the config changes; however not all configs can be changed while attaching. Notice these two important points:

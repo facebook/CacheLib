@@ -40,7 +40,7 @@ cachelib.<cache-name>.<pool-name>.usable_size
 cachelib.<cache-name>.<pool-name>.advised_size
 ```
 
-For a complete list of cachelib ODS stats, see this file: https://fburl.com/code/muqnqont
+Use our [ODS dashboard](https://fburl.com/unidash/7uqai4oc) to check key stats (you need to select the cacheName and enter the entity). For a complete list of cachelib ODS stats, see [this sheet](https://docs.google.com/spreadsheets/d/1udXP8uavr3wFjOhRoU9Eb_FI5IS8FDrPkz_O9LwNz0k/edit?usp=sharing) and the [code pointer](https://fburl.com/code/84oidxl8) that generate all cachelib ODS stats.
 
 ## Scuba
 

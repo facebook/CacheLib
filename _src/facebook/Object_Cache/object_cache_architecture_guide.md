@@ -18,7 +18,7 @@ This approach also implies that Object-Cache achieves CPU efficiency and impleme
 
 ## Design Details
 
-Object-Cache is built on top of the regular CacheLib. We can view its memory composition as two parts: CacheLib allocated memory (RAM-only) and heap memory.
+Object-Cache is built on top of the regular CacheLib. We can view its memory composition as two parts: CacheLib allocated memory (RAM-only) and heap memory. Total Object-Cache Memory = CacheLib allocated memory + heap memory.
 
 |  | Allocator | Data | Data type |
 | --- | --- | --- | --- |
