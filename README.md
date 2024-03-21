@@ -81,7 +81,7 @@ it eligible for a bounty under our program.
 
 ## Build status
 
-Clicking on a badge will show you the recent builds for that OS. If your target OS's build is failing, you may wish to check recent issues and PRs for known workarounds.
+Clicking on a badge will show you the recent builds for that OS. If your target OS's build is failing, you may check out the latest [release](https://github.com/facebook/CacheLib/releases). If the release is too stale for you, you may wish to check recent issues and PRs for known workarounds.
 
 - [![CentOS 8.1](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-8-1.yml/badge.svg?event=schedule)](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-8-1.yml?query=event%3Aschedule)
 - [![CentOS 8.5](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-8-5.yml/badge.svg?event=schedule)](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-8-5.yml?query=event%3Aschedule)
