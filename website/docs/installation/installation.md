@@ -39,8 +39,6 @@ from source code.
 
 CacheLib provides a build script which prepares and installs all
 dependencies and prerequisites, then builds CacheLib.
-The build script has been tested to work on CentOS 8,
-Ubuntu 18.04, 20.04, and Debian 10, 11.
 
 ```sh
 git clone https://github.com/facebook/CacheLib
@@ -63,7 +61,7 @@ CacheLib dependencies builder
 usage: build.sh [-BdhijOStv]
 
 options:
-  -B    skip build - just download packages and git source                                          
+  -B    skip build - just download packages and git source
   -d    build with DEBUG configuration
         (default is RELEASE with debug information)
   -h    This help screen
@@ -88,13 +86,11 @@ performs them one by one:
 #### Step 1 - System packages
 
 Installs the suitable tools and packages for the operating
-system flavor and version (e.g. Debian 10).
+system flavor and version
 This step requires `sudo`, and uses one of the following scripts:
 `contrib/prerequisites-centos8.sh`,
-`contrib/prerequisites-debian10.sh`,
-`contrib/prerequisites-ubuntu18.sh`.
 
-For Debian/Ubuntu it is a simple matter of running `apt-get` with
+For Ubuntu it is a simple matter of running `apt-get` with
 a known list of packages. For CentOS, the script first adds
 the `Power Tools` repository (required for some of the packages).
 
