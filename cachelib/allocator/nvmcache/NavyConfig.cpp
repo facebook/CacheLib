@@ -196,7 +196,9 @@ void NavyConfig::setReaderAndWriterThreads(unsigned int readerThreads,
     qDepth_ =
         std::max(maxNumReads_ / readerThreads_, maxNumWrites_ / writerThreads_);
     if (qDepth_ > 0) {
-      ioEngine_ = IoEngine::IoUring;
+      XDCHECK_EQ(ioEngine_, IoEngine::Sync);
+      // TODO: default to libaio until T182829130 is fixed
+      ioEngine_ = IoEngine::LibAio;
     }
   }
 }

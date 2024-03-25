@@ -299,10 +299,10 @@ TEST(NavyConfigTest, Device) {
     EXPECT_EQ(config.getIoEngine(), navy::IoEngine::Sync);
     EXPECT_EQ(config.getQDepth(), 0);
     config.setReaderAndWriterThreads(4, 4, 4, 4);
-    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::IoUring);
-    EXPECT_EQ(config.getQDepth(), 1);
-    config.enableAsyncIo(64, false);
     EXPECT_EQ(config.getIoEngine(), navy::IoEngine::LibAio);
+    EXPECT_EQ(config.getQDepth(), 1);
+    config.enableAsyncIo(64, true);
+    EXPECT_EQ(config.getIoEngine(), navy::IoEngine::IoUring);
     EXPECT_EQ(config.getQDepth(), 64);
   }
 }
