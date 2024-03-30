@@ -513,7 +513,7 @@ class AsyncCacheStressor : public Stressor {
           // req might be deleted after calling notifyResult()
           wg_->notifyResult(*req.requestId, result);
         }
-      } catch (const cachebench::EndOfTrace& ex) {
+      } catch (const cachebench::EndOfTrace&) {
         break;
       }
     }
