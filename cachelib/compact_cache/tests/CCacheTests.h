@@ -170,7 +170,7 @@ class TestSetup {
   ~TestSetup() {
     try {
       ccache_.reset();
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
     }
   }
 

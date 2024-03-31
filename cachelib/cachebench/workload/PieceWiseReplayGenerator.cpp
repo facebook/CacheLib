@@ -82,7 +82,7 @@ void PieceWiseReplayGenerator::getReqFromTrace() {
   while (true) {
     try {
       traceStream_.getline(line);
-    } catch (const cachelib::cachebench::EndOfTrace& e) {
+    } catch (const cachelib::cachebench::EndOfTrace&) {
       isEndOfFile_.store(true, std::memory_order_relaxed);
       break;
     }
