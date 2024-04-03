@@ -86,6 +86,7 @@ class CacheObjectHandle {
   }
   CacheObjectHandle& operator=(CacheObjectHandle&& other) {
     if (this != &other) {
+      this->~CacheObjectHandle();
       new (this) CacheObjectHandle(std::move(other));
     }
     return *this;
