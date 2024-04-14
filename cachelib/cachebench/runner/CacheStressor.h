@@ -303,7 +303,7 @@ class CacheStressor : public Stressor {
       try {
         // at the end of every operation, throttle per the config.
         SCOPE_EXIT { throttleFn(); };
-          // detect refcount leaks when run in  debug mode.
+        // detect refcount leaks when run in  debug mode.
 #ifndef NDEBUG
         auto checkCnt = [useCombinedLockForIterators =
                              config_.useCombinedLockForIterators](int cnt) {

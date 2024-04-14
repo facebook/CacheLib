@@ -510,11 +510,13 @@ TEST_F(MemoryAllocatorTest, ResizePool) {
 
   ASSERT_TRUE(m.resizePools(p1, p2, Slab::kSize));
 
-  ASSERT_THROW({ m.resizePools(invalidPoolId, p2, Slab::kSize); },
-               std::invalid_argument);
+  ASSERT_THROW(
+      { m.resizePools(invalidPoolId, p2, Slab::kSize); },
+      std::invalid_argument);
 
-  ASSERT_THROW({ m.resizePools(p1, invalidPoolId, Slab::kSize); },
-               std::invalid_argument);
+  ASSERT_THROW(
+      { m.resizePools(p1, invalidPoolId, Slab::kSize); },
+      std::invalid_argument);
 }
 
 TEST_F(MemoryAllocatorTest, GrowShrinkPool) {
