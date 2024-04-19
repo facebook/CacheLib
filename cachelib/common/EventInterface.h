@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Optional.h>
 #include <folly/logging/xlog.h>
 
 namespace facebook {
