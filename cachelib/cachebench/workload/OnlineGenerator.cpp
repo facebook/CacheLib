@@ -28,7 +28,6 @@ namespace cachebench {
 
 OnlineGenerator::OnlineGenerator(const StressorConfig& config)
     : config_{config},
-      key_([]() { return new std::string(); }),
       req_([&]() { return new Request(*key_, dummy_.begin(), dummy_.end()); }) {
   for (const auto& c : config_.poolDistributions) {
     if (c.keySizeRange.size() != c.keySizeRangeProbability.size() + 1) {
