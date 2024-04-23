@@ -247,8 +247,13 @@ class AsyncIoContext : public IoContext {
   // Prepare an Nvme CMD IO through IOUring
   std::unique_ptr<folly::AsyncBaseOp> prepNvmeIo(IOOp& op);
 
-  // The maximum number of retries when IO failed with EBUSY. 5 is arbitrary
-  static constexpr size_t kRetryLimit = 5;
+  // The maximum number of retries when IO failed with EBUSY.
+  // For now, this could happen only for io_uring when combined with md
+  // devices due to, suspectedly, a different way the partial EAGAINs for
+  // sub-ios are handled in the kernel (see T182829130)
+  // We don't apply any delay in-between retries to avoid additional latencies
+  // and 10000 retries should work for most cases
+  static constexpr size_t kRetryLimit = 10000;
 
   // Waiter context to enforce the qdepth limit
   struct Waiter {
