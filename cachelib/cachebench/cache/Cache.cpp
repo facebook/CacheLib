@@ -25,9 +25,3 @@ DEFINE_string(
     "",
     "Enable reporting statistics for each allocation class. Set to"
     "'human_readable' to print KB/MB/GB or to 'raw' to print in bytes.");
-
-namespace facebook {
-namespace cachelib {
-namespace cachebench {} // namespace cachebench
-} // namespace cachelib
-} // namespace facebook
