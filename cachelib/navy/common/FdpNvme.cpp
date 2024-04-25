@@ -31,8 +31,18 @@ namespace navy {
 
 FdpNvme::FdpNvme(const std::string& bdevName)
     : file_(openNvmeCharFile(bdevName)) {
-  initializeFDP(bdevName);
+  nvmeData_ = readNvmeInfo(bdevName);
+  Buffer buffer = nvmeFdpStatus();
+  struct nvme_fdp_ruh_status* ruh_status =
+      reinterpret_cast<struct nvme_fdp_ruh_status*>(buffer.data());
+  initializeFDPHandles(ruh_status);
   XLOGF(INFO, "Initialized NVMe FDP Device on file: {}", bdevName);
+}
+
+FdpNvme::FdpNvme(NvmeData& data, struct nvme_fdp_ruh_status* ruh_status)
+    : nvmeData_(data) {
+  initializeFDPHandles(ruh_status);
+  XLOGF(INFO, "Initialized NVMe FDP Device");
 }
 
 int FdpNvme::allocateFdpHandle() {
@@ -49,17 +59,11 @@ int FdpNvme::allocateFdpHandle() {
   return static_cast<int>(phndl);
 }
 
-void FdpNvme::initializeFDP(const std::string& bdevName) {
-  nvmeData_ = readNvmeInfo(bdevName);
-
-  Buffer buffer = nvmeFdpStatus();
-  struct nvme_fdp_ruh_status* ruh_status =
-      reinterpret_cast<struct nvme_fdp_ruh_status*>(buffer.data());
-
+void FdpNvme::initializeFDPHandles(struct nvme_fdp_ruh_status* ruh_status) {
   if (!ruh_status->nruhsd) {
     throw std::invalid_argument("Failed to initialize FDP; nruhsd is 0");
   }
-  placementIDs_.reserve(ruh_status->nruhsd);
+  placementIDs_.resize(ruh_status->nruhsd);
   maxPIDIdx_ = ruh_status->nruhsd - 1;
   for (uint16_t i = 0; i <= maxPIDIdx_; ++i) {
     placementIDs_[i] = ruh_status->ruhss[i].pid;
