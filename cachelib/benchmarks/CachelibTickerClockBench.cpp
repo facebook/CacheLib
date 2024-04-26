@@ -32,12 +32,13 @@
 // ============================================================================
 // cachelib/benchmarks/CachelibSteadyTickerBench.cpprelative  time/iter  iters/s
 // ============================================================================
-// inline_steady_clock                                          10.66s   93.85m
-// steady_clock_ticker                               86.29%     12.35s   80.98m
-// inline_steady_clock_in_branch                     99.40%     10.72s   93.29m
-// inline_clock                                     850.06%      1.25s  797.76m
-// clock_ticker                                     655.18%      1.63s  614.88m
-// inline_clock_ticker_in_branch                    843.80%      1.26s  791.89m
+// inline_steady_clock                                         10.13s    98.69m
+// steady_clock_ticker                             90.222%     11.23s    89.04m
+// inline_steady_clock_in_branch                   97.478%     10.39s    96.20m
+// inline_clock                                    781.83%      1.30s   771.61m
+// clock_ticker                                    558.94%      1.81s   551.63m
+// inline_clock_ticker_in_branch                   786.90%      1.29s   776.61m
+// system_clock_sec                                100.73%     10.06s    99.42m
 // ============================================================================
 
 #include <folly/Benchmark.h>
@@ -100,6 +101,17 @@ void benchInlineClock() {
   folly::doNotOptimizeAway(ts);
 }
 
+// benchmark std::chronos::system_clock in seconds.
+void benchSystemClockSec() {
+  uint32_t ts;
+  for (auto i = 0; i < FLAGS_num_ops; i++) {
+    ts = std::chrono::duration_cast<std::chrono::seconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+             .count();
+  }
+  folly::doNotOptimizeAway(ts);
+}
+
 void benchClockTicker() {
   auto ticker =
       std::make_shared<facebook::cachelib::detail::ClockBasedTicker>();
@@ -140,6 +152,9 @@ BENCHMARK_RELATIVE(inline_clock) { facebook::cachelib::benchInlineClock(); }
 BENCHMARK_RELATIVE(clock_ticker) { facebook::cachelib::benchClockTicker(); }
 BENCHMARK_RELATIVE(inline_clock_ticker_in_branch) {
   facebook::cachelib::benchClockTickerInBranch();
+}
+BENCHMARK_RELATIVE(system_clock_sec) {
+  facebook::cachelib::benchSystemClockSec();
 }
 
 int main(int argc, char** argv) {

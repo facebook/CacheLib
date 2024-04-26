@@ -23,8 +23,8 @@ namespace facebook {
 namespace cachelib {
 namespace util {
 
-// ::time is the fastest for getting the second granularity steady clock
-// through the vdso. This is faster than std::chrono::steady_clock::now and
+// ::time is the fastest for getting the second granularity system clock
+// through the vdso. This is faster than std::chrono::system_clock::now and
 // counting it as seconds since epoch.
 inline uint32_t getCurrentTimeSec() {
   // time in seconds since epoch will fit in 32 bit. We use this primarily for
