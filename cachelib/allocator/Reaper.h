@@ -19,11 +19,10 @@
 #include <limits>
 
 #include "cachelib/allocator/CacheStats.h"
+#include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/PeriodicWorker.h"
 
-namespace facebook {
-namespace cachelib {
-
+namespace facebook::cachelib {
 // wrapper that exposes the private APIs of CacheType that are specifically
 // needed for the Reaper.
 template <typename C>
@@ -112,7 +111,123 @@ class Reaper : public PeriodicWorker {
   static constexpr const uint64_t kCheckThreshold = 1ULL << 22;
 };
 
-} // namespace cachelib
-} // namespace facebook
+template <typename CacheT>
+void Reaper<CacheT>::work() {
+  reapSlabWalkMode();
+}
 
-#include "cachelib/allocator/Reaper-inl.h"
+template <typename CacheT>
+void Reaper<CacheT>::TraversalStats::recordTraversalTime(uint64_t msTaken) {
+  lastTraversalTimeMs_.store(msTaken, std::memory_order_relaxed);
+  minTraversalTimeMs_.store(std::min(minTraversalTimeMs_.load(), msTaken),
+                            std::memory_order_relaxed);
+  maxTraversalTimeMs_.store(std::max(maxTraversalTimeMs_.load(), msTaken),
+                            std::memory_order_relaxed);
+  totalTraversalTimeMs_.fetch_add(msTaken, std::memory_order_relaxed);
+}
+
+template <typename CacheT>
+uint64_t Reaper<CacheT>::TraversalStats::getAvgTraversalTimeMs(
+    uint64_t numTraversals) const {
+  return numTraversals ? totalTraversalTimeMs_ / numTraversals : 0;
+}
+
+template <typename CacheT>
+void Reaper<CacheT>::reapSlabWalkMode() {
+  util::Throttler t(throttlerConfig_);
+  const auto begin = util::getCurrentTimeMs();
+  auto currentTimeSec = util::getCurrentTimeSec();
+
+  // use a local to accumulate counts since the lambda could be executed
+  // millions of times per sec.
+  uint64_t visits = 0;
+  uint64_t reaps = 0;
+
+  // unlike the iterator mode, in this mode, we traverse all the way
+  ReaperAPIWrapper<CacheT>::traverseAndExpireItems(
+      cache_, [&](void* ptr, facebook::cachelib::AllocInfo allocInfo) -> bool {
+        XDCHECK(ptr);
+        // see if we need to stop the traversal and accumulate counts to
+        // global
+        if (visits++ == kCheckThreshold) {
+          numVisitedItems_.fetch_add(visits, std::memory_order_relaxed);
+          numReapedItems_.fetch_add(reaps, std::memory_order_relaxed);
+          visits = 0;
+          reaps = 0;
+
+          // abort the current iteration since we have to stop
+          if (shouldStopWork()) {
+            return false;
+          }
+
+          currentTimeSec = util::getCurrentTimeSec();
+        }
+
+        // if we throttle, then we should check for stop condition after
+        // the throttler has actually throttled us.
+        if (t.throttle() && shouldStopWork()) {
+          return false;
+        }
+
+        // get an item and check if it is expired and is in the access
+        // container before we actually grab the
+        // handle to the item and proceed to expire it.
+        const auto& item = *reinterpret_cast<const Item*>(ptr);
+        if (!item.isExpired(currentTimeSec) || !item.isAccessible()) {
+          return true;
+        }
+
+        // Item has to be smaller than the alloc size to be a valid item.
+        auto key = item.getKey();
+        if (Item::getRequiredSize(key, 0 /* value size*/) >
+            allocInfo.allocSize) {
+          return true;
+        }
+
+        try {
+          // obtain a valid handle without disturbing the state of the item in
+          // cache.
+          auto handle = ReaperAPIWrapper<CacheT>::findInternal(cache_, key);
+          auto reaped =
+              ReaperAPIWrapper<CacheT>::removeIfExpired(cache_, handle);
+          if (reaped) {
+            reaps++;
+          }
+        } catch (const std::exception& e) {
+          numErrs_.fetch_add(1, std::memory_order_relaxed);
+          XLOGF(DBG, "Error while reaping. Msg = {}", e.what());
+        }
+        return true;
+      });
+
+  // accumulate any left over visits, reaps.
+  numVisitedItems_.fetch_add(visits, std::memory_order_relaxed);
+  numReapedItems_.fetch_add(reaps, std::memory_order_relaxed);
+  auto end = util::getCurrentTimeMs();
+  traversalStats_.recordTraversalTime(end > begin ? end - begin : 0);
+}
+
+template <typename CacheT>
+Reaper<CacheT>::Reaper(Cache& cache, const util::Throttler::Config& config)
+    : cache_(cache), throttlerConfig_(config) {}
+
+template <typename CacheT>
+Reaper<CacheT>::~Reaper() {
+  stop(std::chrono::seconds(0));
+}
+
+template <typename CacheT>
+ReaperStats Reaper<CacheT>::getStats() const noexcept {
+  ReaperStats stats;
+  stats.numVisitedItems = numVisitedItems_.load(std::memory_order_relaxed);
+  stats.numReapedItems = numReapedItems_.load(std::memory_order_relaxed);
+  stats.numVisitErrs = numErrs_.load(std::memory_order_relaxed);
+  auto runCount = getRunCount();
+  stats.numTraversals = runCount;
+  stats.lastTraversalTimeMs = traversalStats_.getLastTraversalTimeMs();
+  stats.avgTraversalTimeMs = traversalStats_.getAvgTraversalTimeMs(runCount);
+  stats.minTraversalTimeMs = traversalStats_.getMinTraversalTimeMs();
+  stats.maxTraversalTimeMs = traversalStats_.getMaxTraversalTimeMs();
+  return stats;
+}
+} // namespace facebook::cachelib

@@ -73,10 +73,10 @@ With the intrusive implementation, operations on this hash table is easy:
     (`Handle find(Key key)` function in `cachelib/allocator/ChainedHashTable.h`).
 
 * `insert()`: Find the bucket and replace the head with the node to be inserted
-    (`bool ChainedHashTable::Container<...::insert(T& node)` in `cachelib/allocator/ChainedHashTable-inl.h`).
+    (`bool ChainedHashTable::Container<...::insert(T& node)` in `cachelib/allocator/ChainedHashTable.h`).
 
 * `remove()`: Find the bucket and remove the node from the chain
-    (`bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node)` in `cachelib/allocator/ChainedHashTable-inl.h`).
+    (`bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node)` in `cachelib/allocator/ChainedHashTable.h`).
 
 Find and remove requires iteration on the bucket chain but insert does not.
 Note that remove requires the iteration on the chain not to locate the node
@@ -100,20 +100,20 @@ It has the following major API functions:
     inserted into the cache. This can also happen when we are moving an item and we
     need to remove it from one MMContainer and add to another
     (`CacheAllocator<CacheTrait>::insertInMMContainer(Item& item)` in
-    `cachelib/allocator/CacheAllocator-inl.h`).
+    `cachelib/allocator/CacheAllocator.h`).
 * `record`: Record an access of the item. Typically this means promoting the
     item in some form of LRU queue (`void
     CacheAllocator<CacheTrait>::recordAccessInMMContainer(Item& item, AccessMode
-    mode)` in `cachelib/allocator/CacheAllocator-inl.h`).
+    mode)` in `cachelib/allocator/CacheAllocator.h`).
 * `remove`: Remove an item from the eviction queue. This is called when an item
     is removed form the cache (evicted or explicitly removed by the client) (`bool
     CacheAllocator<CacheTrait>::removeFromMMContainer(Item& item)` in
-    `cachelib/allocator/CacheAllocator-inl.h`).
+    `cachelib/allocator/CacheAllocator.h`).
 * `getEvictionIterator`: Return an iterator of items to be evicted. This is
     called when the cache allocator is looking for eviction. Usually the first item
     that can be evicted (no active handles, not moving, etc) is used (see
     `CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid)` in
-    `cachelib/allocator/CacheAllocator-inl.h`).
+    `cachelib/allocator/CacheAllocator.h`).
 * `withEvictionIterator`: Executes callback with eviction iterator passed as a
     parameter. This is alternative for `getEvictionIterator` that offers possibility
     to use combined locking. Combined locking can be turned on by setting:
