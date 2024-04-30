@@ -173,6 +173,7 @@ module.exports = {
             'Cache_Library_Architecture_Guide/ram_cache_design',
             'Cache_Library_Architecture_Guide/ram_cache_indexing_and_eviction',
             'Cache_Library_Architecture_Guide/slab_rebalancing',
+            'Cache_Library_Architecture_Guide/synchronization_in_eviction_and_slab_rebalancing',
             'Cache_Library_Architecture_Guide/compact_cache_design',
           ],
         },
