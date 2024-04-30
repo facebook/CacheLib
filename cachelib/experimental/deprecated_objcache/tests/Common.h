@@ -23,7 +23,7 @@
 #include <scoped_allocator>
 #include <string>
 
-#include "cachelib/experimental/objcache/Allocator.h"
+#include "cachelib/experimental/deprecated_objcache/Allocator.h"
 
 namespace facebook {
 namespace cachelib {

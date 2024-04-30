@@ -19,7 +19,7 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
-#include "cachelib/experimental/objcache/gen-cpp2/ObjectCachePersistence_types.h"
+#include "cachelib/experimental/deprecated_objcache/gen-cpp2/ObjectCachePersistence_types.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 #include "folly/MPMCQueue.h"
 

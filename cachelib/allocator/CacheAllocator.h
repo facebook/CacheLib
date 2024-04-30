@@ -92,6 +92,20 @@ class FbInternalRuntimeUpdateWrapper;
 template <typename K, typename V, typename C>
 class ReadOnlyMap;
 
+namespace objcache {
+template <typename CacheDescriptor, typename AllocatorRes>
+class deprecated_ObjectCache;
+namespace test {
+#define GET_CLASS_NAME(test_case_name, test_name) \
+  test_case_name##_##test_name##_Test
+
+#define GET_DECORATED_CLASS_NAME(namespace, test_case_name, test_name) \
+  namespace ::GET_CLASS_NAME(test_case_name, test_name)
+
+class GET_CLASS_NAME(ObjectCache, ObjectHandleInvalid);
+} // namespace test
+} // namespace objcache
+
 namespace objcache2 {
 template <typename AllocatorT>
 class ObjectCache;
@@ -134,20 +148,6 @@ class NvmAdmissionPolicyTest;
 class CacheAllocatorTestWrapper;
 class PersistenceCache;
 } // namespace tests
-
-namespace objcache {
-template <typename CacheDescriptor, typename AllocatorRes>
-class ObjectCache;
-namespace test {
-#define GET_CLASS_NAME(test_case_name, test_name) \
-  test_case_name##_##test_name##_Test
-
-#define GET_DECORATED_CLASS_NAME(namespace, test_case_name, test_name) \
-  namespace ::GET_CLASS_NAME(test_case_name, test_name)
-
-class GET_CLASS_NAME(ObjectCache, ObjectHandleInvalid);
-} // namespace test
-} // namespace objcache
 
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
 // takes two templated types that control how the allocation is
@@ -2328,7 +2328,7 @@ class CacheAllocator : public CacheBase {
 
   // objectCache
   template <typename CacheDescriptor, typename AllocatorRes>
-  friend class facebook::cachelib::objcache::ObjectCache;
+  friend class facebook::cachelib::objcache::deprecated_ObjectCache;
   friend class GET_DECORATED_CLASS_NAME(objcache::test,
                                         ObjectCache,
                                         ObjectHandleInvalid);

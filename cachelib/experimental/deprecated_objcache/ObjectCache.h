@@ -21,12 +21,12 @@
 
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
-#include "cachelib/experimental/objcache/Allocator.h"
-#include "cachelib/experimental/objcache/Persistence.h"
+#include "cachelib/experimental/deprecated_objcache/Allocator.h"
+#include "cachelib/experimental/deprecated_objcache/Persistence.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
-#include "cachelib/experimental/objcache/gen-cpp2/ObjectCachePersistence_types.h"
+#include "cachelib/experimental/deprecated_objcache/gen-cpp2/ObjectCachePersistence_types.h"
 #pragma GCC diagnostic pop
 
 namespace facebook {
@@ -352,10 +352,10 @@ struct ObjectCacheStats {
   }
 */
 template <typename CacheDescriptor, typename AllocatorRes>
-class ObjectCache {
+class deprecated_ObjectCache {
  public:
   using AllocatorResource = AllocatorRes;
-  using Config = ObjectCacheConfig<ObjectCache>;
+  using Config = ObjectCacheConfig<deprecated_ObjectCache>;
   using CacheAlloc = typename CacheDescriptor::Cache;
   using Item = typename CacheDescriptor::Item;
   using ItemHandle = typename CacheDescriptor::ItemHandle;
@@ -379,7 +379,7 @@ class ObjectCache {
 
   // Compactor is a helper class that exposes only the logic necessary to
   // compact objects.
-  using Compactor = ObjectCacheCompactor<ObjectCache>;
+  using Compactor = ObjectCacheCompactor<deprecated_ObjectCache>;
   // CompactionCallback is a user-supplied callback that compacts object,
   // refer to Config::enableCompaction() for how to use this. This function
   // should not throw. Failure of compaction must not produce any side-effect
@@ -398,12 +398,13 @@ class ObjectCache {
   //
   // TODO: replace "cache" with a "CacheCreator" helper, and update comments
   using DeserializationCallback =
-      std::function<typename ObjectCache::ItemHandle(PoolId poolId,
-                                                     folly::StringPiece key,
-                                                     folly::StringPiece payload,
-                                                     uint32_t creationTime,
-                                                     uint32_t expiryTime,
-                                                     ObjectCache& cache)>;
+      std::function<typename deprecated_ObjectCache::ItemHandle(
+          PoolId poolId,
+          folly::StringPiece key,
+          folly::StringPiece payload,
+          uint32_t creationTime,
+          uint32_t expiryTime,
+          deprecated_ObjectCache& cache)>;
 
   template <typename T>
   using ObjectHandle = CacheObjectHandle<T, CacheDescriptor, AllocatorResource>;
@@ -427,7 +428,8 @@ class ObjectCache {
   // TODO: add shared-mem constructors
   // Creates an object cache that owns the underlying cache
   // @param config    config to create cache allocator managed by ObjectCache
-  explicit ObjectCache(Config config) : ObjectCache(createCache(config), true) {
+  explicit deprecated_ObjectCache(Config config)
+      : deprecated_ObjectCache(createCache(config), true) {
     serializationCallback_ = config.getSerializationCallback();
     deserializationCallback_ = config.getDeserializationCallback();
     persistorRestorerThreadCount_ = config.getPersistorRestorerThreadCount();
@@ -453,10 +455,10 @@ class ObjectCache {
   // @param cache       pointer to the cache allocator
   // @param ownsCache   whether or not this class should own the underlying
   //                    cache allocator
-  ObjectCache(CacheAlloc* cache, bool ownsCache)
+  deprecated_ObjectCache(CacheAlloc* cache, bool ownsCache)
       : cache_{cache}, ownsCache_{ownsCache} {}
 
-  ~ObjectCache() {
+  ~deprecated_ObjectCache() {
     if (compactionWorker_) {
       compactionWorker_->stop();
     }
@@ -470,7 +472,7 @@ class ObjectCache {
 
   void persist() {
     XDCHECK(serializationCallback_);
-    ObjectCachePersistor<ObjectCache> persistor(
+    ObjectCachePersistor<deprecated_ObjectCache> persistor(
         persistorRestorerThreadCount_, serializationCallback_, *this,
         persistFullPathFile_, persistorQueueBatchSize_);
     persistor.run();
@@ -478,7 +480,7 @@ class ObjectCache {
 
   void recover() {
     XDCHECK(deserializationCallback_);
-    ObjectCacheRestorer<ObjectCache> restorer(
+    ObjectCacheRestorer<deprecated_ObjectCache> restorer(
         persistorRestorerThreadCount_, deserializationCallback_, *this,
         persistFullPathFile_, restorerTimeOutDurationInSec_);
     restorer.run();
@@ -606,9 +608,9 @@ class ObjectCache {
   class CompactionWorker : public PeriodicWorker {
    public:
     explicit CompactionWorker(
-        ObjectCache& objcache,
-        typename ObjectCache::CompactionCallback compactionCb,
-        typename ObjectCache::CompactionSync compactionSync,
+        deprecated_ObjectCache& objcache,
+        typename deprecated_ObjectCache::CompactionCallback compactionCb,
+        typename deprecated_ObjectCache::CompactionSync compactionSync,
         std::chrono::milliseconds compactionWork,
         std::chrono::milliseconds compactionSleep)
         : objcache_{objcache},
@@ -649,9 +651,9 @@ class ObjectCache {
     }
 
    private:
-    ObjectCache& objcache_;
-    typename ObjectCache::CompactionCallback compactionCb_;
-    typename ObjectCache::CompactionSync compactionSync_;
+    deprecated_ObjectCache& objcache_;
+    typename deprecated_ObjectCache::CompactionCallback compactionCb_;
+    typename deprecated_ObjectCache::CompactionSync compactionSync_;
     std::chrono::milliseconds compactionWork_;
     std::chrono::milliseconds compactionSleep_;
   };

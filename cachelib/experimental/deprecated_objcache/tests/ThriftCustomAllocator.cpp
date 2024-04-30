@@ -18,13 +18,13 @@
 
 #include <vector>
 
-#include "cachelib/experimental/objcache/Allocator.h"
-#include "cachelib/experimental/objcache/tests/Common.h"
+#include "cachelib/experimental/deprecated_objcache/Allocator.h"
+#include "cachelib/experimental/deprecated_objcache/tests/Common.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
-#include "cachelib/experimental/objcache/tests/gen-cpp2/ThriftCustomAllocator_types.h"
+#include "cachelib/experimental/deprecated_objcache/tests/gen-cpp2/ThriftCustomAllocator_types.h"
 #pragma GCC diagnostic pop
 
 namespace facebook::cachelib::objcache::test {

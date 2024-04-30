@@ -19,8 +19,8 @@
 
 #include <vector>
 
-#include "cachelib/experimental/objcache/Allocator.h"
-#include "cachelib/experimental/objcache/tests/Common.h"
+#include "cachelib/experimental/deprecated_objcache/Allocator.h"
+#include "cachelib/experimental/deprecated_objcache/tests/Common.h"
 #include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
 
 namespace facebook {

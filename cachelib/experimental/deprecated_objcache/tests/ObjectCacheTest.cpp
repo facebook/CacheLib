@@ -23,7 +23,7 @@
 
 #include <vector>
 
-#include "cachelib/experimental/objcache/ObjectCache.h"
+#include "cachelib/experimental/deprecated_objcache/ObjectCache.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 #include "thrift/lib/cpp2/protocol/Cpp2Ops.h"
 
@@ -32,9 +32,9 @@ namespace cachelib {
 namespace objcache {
 namespace test {
 namespace {
-using LruObjectCache =
-    ObjectCache<CacheDescriptor<LruAllocator>,
-                MonotonicBufferResource<CacheDescriptor<LruAllocator>>>;
+using LruObjectCache = deprecated_ObjectCache<
+    CacheDescriptor<LruAllocator>,
+    MonotonicBufferResource<CacheDescriptor<LruAllocator>>>;
 
 std::unique_ptr<LruObjectCache> createCache(LruObjectCache::Config config) {
   auto objcache = std::make_unique<LruObjectCache>(config);

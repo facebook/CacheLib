@@ -16,7 +16,7 @@
 
 namespace cpp2 facebook.cachelib.objcache
 
-cpp_include "cachelib/experimental/objcache/tests/Common.h"
+cpp_include "cachelib/experimental/deprecated_objcache/tests/Common.h"
 
 include "thrift/annotation/cpp.thrift"
 
