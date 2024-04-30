@@ -311,7 +311,7 @@ inline void KVReplayGenerator::genRequests() {
     std::unique_ptr<ReqWrapper> reqWrapper;
     try {
       reqWrapper = getReqInternal();
-    } catch (const EndOfTrace& e) {
+    } catch (const EndOfTrace&) {
       break;
     }
 
