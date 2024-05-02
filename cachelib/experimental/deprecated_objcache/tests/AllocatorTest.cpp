@@ -21,7 +21,7 @@
 
 #include "cachelib/experimental/deprecated_objcache/Allocator.h"
 #include "cachelib/experimental/deprecated_objcache/tests/Common.h"
-#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
+#include "cachelib/object_cache/util/ThreadMemoryTracker.h"
 
 namespace facebook {
 namespace cachelib {

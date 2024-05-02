@@ -22,9 +22,9 @@
 #include <memory>
 
 #include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/experimental/objcache2/ObjectCache.h"
-#include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
-#include "cachelib/experimental/objcache2/tests/gen-cpp2/test_object_types.h"
+#include "cachelib/object_cache/ObjectCache.h"
+#include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
+#include "cachelib/object_cache/tests/gen-cpp2/test_object_types.h"
 
 namespace facebook::cachelib::objcache2::test {
 namespace {

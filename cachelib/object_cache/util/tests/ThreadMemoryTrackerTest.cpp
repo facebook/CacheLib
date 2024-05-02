@@ -17,7 +17,7 @@
 #include <folly/Benchmark.h>
 #include <gtest/gtest.h>
 
-#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
+#include "cachelib/object_cache/util/ThreadMemoryTracker.h"
 
 namespace facebook::cachelib::objcache2::test {
 using Object = std::array<char, 16>;

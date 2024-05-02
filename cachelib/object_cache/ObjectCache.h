@@ -34,13 +34,13 @@
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/common/Time.h"
-#include "cachelib/experimental/objcache2/ObjectCacheBase.h"
-#include "cachelib/experimental/objcache2/ObjectCacheConfig.h"
-#include "cachelib/experimental/objcache2/ObjectCacheSizeController.h"
-#include "cachelib/experimental/objcache2/ObjectCacheSizeDistTracker.h"
-#include "cachelib/experimental/objcache2/persistence/Persistence.h"
-#include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
-#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
+#include "cachelib/object_cache/ObjectCacheBase.h"
+#include "cachelib/object_cache/ObjectCacheConfig.h"
+#include "cachelib/object_cache/ObjectCacheSizeController.h"
+#include "cachelib/object_cache/ObjectCacheSizeDistTracker.h"
+#include "cachelib/object_cache/persistence/Persistence.h"
+#include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
+#include "cachelib/object_cache/util/ThreadMemoryTracker.h"
 
 namespace facebook::cachelib::objcache2 {
 namespace test {

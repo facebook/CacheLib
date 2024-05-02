@@ -26,9 +26,9 @@
 #include "cachelib/common/PeriodicWorker.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/common/Time.h"
-#include "cachelib/experimental/objcache2/persistence/Serialization.h"
-#include "cachelib/experimental/objcache2/persistence/gen-cpp2/persistent_data_types.h"
 #include "cachelib/navy/serialization/RecordIO.h"
+#include "cachelib/object_cache/persistence/Serialization.h"
+#include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
 
 namespace facebook::cachelib::objcache2 {
 template <typename ObjectCache>
