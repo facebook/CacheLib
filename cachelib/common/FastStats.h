@@ -65,10 +65,9 @@ template <typename T>
 class FastStats {
  public:
   explicit FastStats(const T& t)
-      : parent_{t},
-        tlStats_([this]() { return new detail::SafeStat<T>(*this); }) {}
+      : parent_{t}, tlStats_([this]() { return detail::SafeStat<T>(*this); }) {}
 
-  FastStats() : tlStats_([this]() { return new detail::SafeStat<T>(*this); }) {}
+  FastStats() : tlStats_([this]() { return detail::SafeStat<T>(*this); }) {}
 
   // return a reference to the original T
   T& tlStats() { return tlStats_->stats(); }
