@@ -787,21 +787,23 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
       ObjectCacheItem{reinterpret_cast<uintptr_t>(ptr), objectSize};
 
   auto success = this->l1Cache_->insert(handle);
-  if (success) {
-    // update total object size
-    if (config_.objectSizeTrackingEnabled) {
-      totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
-    }
-    // Release the handle now since we have inserted the handle into the cache,
-    // and from now the Cache will be responsible for destroying the object
-    // when it's evicted/removed.
-    object.release();
+  if (!success) {
+    return {AllocStatus::kKeyAlreadyExists,
+            std::shared_ptr<T>(std::move(object))};
   }
+
+  // update total object size
+  if (config_.objectSizeTrackingEnabled) {
+    totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+  }
+  // Release the handle now since we have inserted the handle into the cache,
+  // and from now the Cache will be responsible for destroying the object
+  // when it's evicted/removed.
+  object.release();
 
   // Use custom deleter
   auto deleter = Deleter<T>(std::move(handle));
-  return {success ? AllocStatus::kSuccess : AllocStatus::kKeyAlreadyExists,
-          std::shared_ptr<T>(ptr, std::move(deleter))};
+  return {AllocStatus::kSuccess, std::shared_ptr<T>(ptr, std::move(deleter))};
 }
 
 template <typename AllocatorT>

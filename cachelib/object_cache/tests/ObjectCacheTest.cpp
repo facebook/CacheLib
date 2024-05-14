@@ -505,6 +505,7 @@ class ObjectCacheTest : public ::testing::Test {
     foo2->c = 30;
     res = objcache->insert("Foo", std::move(foo2));
     EXPECT_EQ(ObjectCache::AllocStatus::kKeyAlreadyExists, res.first);
+    EXPECT_EQ(10, res.second->a);
 
     auto found2 = objcache->template find<Foo>("Foo");
     ASSERT_NE(nullptr, found1);
