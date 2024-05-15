@@ -251,6 +251,10 @@ struct Stats {
   // Number of times wait() blocks for an item handle
   TLCounter numHandleWaitBlocks{0};
 
+  // Number of times "expensive" cachelib stats are polled. This is useful as
+  // polling these stats can be expensive. We shouldn't do it too often.
+  TLCounter numExpensiveStatsPolled{0};
+
   void init();
 
   void populateGlobalCacheStats(GlobalCacheStats& ret) const;

@@ -556,6 +556,10 @@ struct GlobalCacheStats {
 
   // This stat tracks how many times wait() on ItemHandle blocks
   uint64_t numHandleWaitBlocks{0};
+
+  // Number of times "expensive" cachelib stats are polled. This is useful as
+  // polling these stats can be expensive. We shouldn't do it too often.
+  uint64_t numExpensiveStatsPolled{0};
 };
 
 struct CacheMemoryStats {

@@ -4644,6 +4644,8 @@ const std::string CacheAllocator<CacheTrait>::getCacheName() const {
 
 template <typename CacheTrait>
 PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
+  stats().numExpensiveStatsPolled.inc();
+
   const auto& pool = allocator_->getPool(poolId);
   const auto& allocSizes = pool.getAllocSizes();
   auto mpStats = pool.getStats();
@@ -4697,6 +4699,8 @@ PoolStats CacheAllocator<CacheTrait>::getPoolStats(PoolId poolId) const {
 template <typename CacheTrait>
 PoolEvictionAgeStats CacheAllocator<CacheTrait>::getPoolEvictionAgeStats(
     PoolId pid, unsigned int slabProjectionLength) const {
+  stats().numExpensiveStatsPolled.inc();
+
   PoolEvictionAgeStats stats;
 
   const auto& pool = allocator_->getPool(pid);
@@ -5533,6 +5537,8 @@ CacheAllocator<CacheTrait>::viewAsChainedAllocsT(const Handle& parent) {
 
 template <typename CacheTrait>
 GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
+  stats().numExpensiveStatsPolled.inc();
+
   GlobalCacheStats ret{};
   stats_.populateGlobalCacheStats(ret);
 
@@ -5895,6 +5901,8 @@ uint64_t CacheAllocator<CacheTrait>::getItemPtrAsOffset(const void* ptr) {
 
 template <typename CacheTrait>
 util::StatsMap CacheAllocator<CacheTrait>::getNvmCacheStatsMap() const {
+  stats().numExpensiveStatsPolled.inc();
+
   auto ret = nvmCache_ ? nvmCache_->getStatsMap() : util::StatsMap{};
   if (nvmAdmissionPolicy_) {
     nvmAdmissionPolicy_->getCounters(ret.createCountVisitor());

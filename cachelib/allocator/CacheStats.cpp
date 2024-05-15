@@ -50,7 +50,7 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<16272>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<16352>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();
@@ -140,6 +140,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.numReaperSkippedSlabs = numReaperSkippedSlabs.get();
 
   ret.numHandleWaitBlocks = numHandleWaitBlocks.get();
+  ret.numExpensiveStatsPolled = numExpensiveStatsPolled.get();
 }
 
 } // namespace detail

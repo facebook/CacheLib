@@ -490,6 +490,9 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
 
   counters_.updateDelta(statPrefix + "cache.handle_wait_block",
                         stats.numHandleWaitBlocks);
+
+  counters_.updateDelta(statPrefix + "cache.expensive_stats_export",
+                        stats.numExpensiveStatsPolled);
 }
 
 CacheBase::CacheHitRate CacheBase::calculateCacheHitRate(
