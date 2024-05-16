@@ -920,9 +920,10 @@ bool CacheItem<CacheTrait>::updateExpiryTime(uint32_t expiryTimeSecs) noexcept {
   while (true) {
     uint32_t currExpTime = expiryTime_;
 #pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Waddress-of-packed-member"
-    if (__sync_bool_compare_and_swap(&expiryTime_, currExpTime,
-                                     expiryTimeSecs)) {
+#pragma clang diagnostic ignored "-Watomic-alignment"
+    if (__atomic_compare_exchange_n(&expiryTime_, &currExpTime, expiryTimeSecs,
+                                    false, __ATOMIC_SEQ_CST,
+                                    __ATOMIC_SEQ_CST)) {
 #pragma clang diagnostic pop
       return true;
     }
