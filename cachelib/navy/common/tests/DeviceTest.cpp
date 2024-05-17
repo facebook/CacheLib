@@ -205,49 +205,6 @@ struct DeviceParamTest
   }
 
  protected:
-  std::shared_ptr<Device> createFileDevice(
-      std::vector<folly::File> fVec,
-      uint64_t fileSize,
-      uint32_t blockSize,
-      uint32_t stripeSize,
-      uint32_t maxDeviceWriteSize,
-      std::shared_ptr<DeviceEncryptor> encryptor) {
-    device_ = createDirectIoFileDevice(std::move(fVec),
-                                       {},
-                                       fileSize,
-                                       blockSize,
-                                       stripeSize,
-                                       maxDeviceWriteSize,
-                                       ioEngine_,
-                                       qDepth_,
-                                       false,
-                                       std::move(encryptor));
-    return device_;
-  }
-
-  std::shared_ptr<Device> createFileDeviceNew(
-      std::vector<std::string> filePaths,
-      uint64_t fileSize,
-      uint32_t blockSize,
-      uint32_t stripeSize,
-      uint32_t maxDeviceWriteSize,
-      std::shared_ptr<DeviceEncryptor> encryptor,
-      bool isExclusiveOwner) {
-    device_ =
-        facebook::cachelib::navy::createFileDevice(std::move(filePaths),
-                                                   fileSize,
-                                                   false, /* truncateFile */
-                                                   blockSize,
-                                                   stripeSize,
-                                                   maxDeviceWriteSize,
-                                                   ioEngine_,
-                                                   qDepth_,
-                                                   false /* isFDPEnabled */,
-                                                   std::move(encryptor),
-                                                   isExclusiveOwner);
-    return device_;
-  }
-
   std::shared_ptr<Device> getDevice() const { return device_; }
 
   IoEngine ioEngine_;
@@ -258,32 +215,37 @@ struct DeviceParamTest
 TEST_P(DeviceParamTest, ExclusiveOwner) {
   auto filePath =
       folly::sformat("/tmp/DEVICE_EXCLUSIVE_OWNER_TEST-{}", ::getpid());
+  std::vector<std::string> filePaths{filePath};
 
   int deviceSize = 16 * 1024;
   int ioAlignSize = 1024;
 
+  EXPECT_NO_THROW(createFileDevice(
+      filePaths, deviceSize, false /* truncateFile */, ioAlignSize, ioAlignSize,
+      1024, ioEngine_, qDepth_, false /* isFDPEnabled */,
+      nullptr /* encryptor */, false /* isExclusiveOwner */));
+
   std::vector<folly::File> fVec;
   fVec.emplace_back(filePath, O_RDWR | O_CREAT, S_IRWXU);
-
-  EXPECT_NO_THROW(createFileDevice(std::move(fVec), deviceSize, ioAlignSize,
-                                   ioAlignSize, 1024, nullptr));
-
-  EXPECT_THROW(createFileDeviceNew(std::vector<std::string>{filePath},
-                                   deviceSize, ioAlignSize, ioAlignSize, 1024,
-                                   nullptr, true /* isExclusiveOwner */),
+  EXPECT_THROW(createFileDevice(filePaths, deviceSize, false /* truncateFile */,
+                                ioAlignSize, ioAlignSize, 1024, ioEngine_,
+                                qDepth_, false /* isFDPEnabled */,
+                                nullptr /* encryptor */,
+                                true /* isExclusiveOwner */),
                std::system_error);
 }
 
 TEST_P(DeviceParamTest, MaxWriteSize) {
   auto filePath = folly::sformat("/tmp/DEVICE_MAXWRITE_TEST-{}", ::getpid());
+  std::vector<std::string> filePaths{filePath};
 
   int deviceSize = 16 * 1024;
   int ioAlignSize = 1024;
-  std::vector<folly::File> fVec;
-  fVec.emplace_back(filePath, O_RDWR | O_CREAT, S_IRWXU);
 
-  auto device = createFileDevice(std::move(fVec), deviceSize, ioAlignSize,
-                                 ioAlignSize, 1024, nullptr);
+  auto device = createFileDevice(
+      filePaths, deviceSize, false /* truncateFile */, ioAlignSize, ioAlignSize,
+      1024, ioEngine_, qDepth_, false /* isFDPEnabled */,
+      nullptr /* encryptor */, false /* isExclusiveOwner */);
   uint32_t bufSize = 4 * 1024;
   Buffer wbuf = device->makeIOBuffer(bufSize);
   Buffer rbuf = device->makeIOBuffer(bufSize);
@@ -313,29 +275,21 @@ TEST_P(DeviceParamTest, RAID0IO) {
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
-  std::vector<std::string> files = {filePath + "/CACHE0", filePath + "/CACHE1",
-                                    filePath + "/CACHE2", filePath + "/CACHE3"};
+  std::vector<std::string> filePaths = {
+      filePath + "/CACHE0", filePath + "/CACHE1", filePath + "/CACHE2",
+      filePath + "/CACHE3"};
 
   int size = 4 * 1024 * 1024;
   int ioAlignSize = 4096;
   int stripeSize = 8192;
 
-  std::vector<folly::File> fvec;
-  for (const auto& file : files) {
-    auto f = folly::File(file.c_str(), O_RDWR | O_CREAT);
-    auto ret = ::fallocate(f.fd(), 0, 0, size);
-    EXPECT_EQ(0, ret);
-    fvec.push_back(std::move(f));
-  }
-  auto vecSize = fvec.size();
-  auto device = createFileDevice(std::move(fvec),
-                                 size,
-                                 ioAlignSize,
-                                 stripeSize,
-                                 0 /* max device write size */,
-                                 nullptr /* encryption */);
+  auto device =
+      createFileDevice(filePaths, size, false /* truncateFile */, ioAlignSize,
+                       stripeSize, 0 /* max device write size */, ioEngine_,
+                       qDepth_, false /* isFDPEnabled */,
+                       nullptr /* encryptor */, false /* isExclusiveOwner */);
 
-  EXPECT_EQ(vecSize * size, device->getSize());
+  EXPECT_EQ(filePaths.size() * size, device->getSize());
 
   // Simple IO
   {
@@ -399,31 +353,23 @@ TEST_P(DeviceParamTest, RAID0IOAlignment) {
   util::makeDir(filePath);
   SCOPE_EXIT { util::removePath(filePath); };
 
-  std::vector<std::string> files = {filePath + "/CACHE0", filePath + "/CACHE1",
-                                    filePath + "/CACHE2", filePath + "/CACHE3"};
+  std::vector<std::string> filePaths = {
+      filePath + "/CACHE0", filePath + "/CACHE1", filePath + "/CACHE2",
+      filePath + "/CACHE3"};
 
   int size = 4 * 1024 * 1024;
   int ioAlignSize = 4096;
   int stripeSize = 8192;
 
-  std::vector<folly::File> fvec;
-  for (const auto& file : files) {
-    auto f = folly::File(file.c_str(), O_RDWR | O_CREAT);
-    auto ret = ::fallocate(f.fd(), 0, 0, size);
-    EXPECT_EQ(0, ret);
-    fvec.push_back(std::move(f));
-  }
-
   // Update individual device size to something smaller but the overall size
   // of all the devices is still aligned on stripe size.
-  size = 2 * 1024 * 1024 + stripeSize / fvec.size();
-  ASSERT_THROW(createFileDevice(std::move(fvec),
-                                size,
-                                ioAlignSize,
-                                stripeSize,
-                                0 /* max device write size */,
-                                nullptr /* encryption */),
-               std::invalid_argument);
+  size = 2 * 1024 * 1024 + stripeSize / filePaths.size();
+  ASSERT_THROW(
+      createFileDevice(filePaths, size, false /* truncateFile */, ioAlignSize,
+                       stripeSize, 0 /* max device write size */, ioEngine_,
+                       qDepth_, false /* isFDPEnabled */,
+                       nullptr /* encryptor */, false /* isExclusiveOwner */),
+      std::invalid_argument);
 }
 
 INSTANTIATE_TEST_SUITE_P(DeviceParamTestSuite,
