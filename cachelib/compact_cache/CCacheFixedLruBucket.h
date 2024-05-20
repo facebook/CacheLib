@@ -51,7 +51,7 @@ struct FixedLruBucket {
   struct Entry {
     Key key;
     /* Expands to NoValue (size 0) if this cache does not store values */
-    Value val;
+    Value val __attribute__((__packed__));
   } __attribute__((__packed__));
 
   /** Type of a bucket.
