@@ -942,21 +942,22 @@ void ObjectCache<AllocatorT>::mutateObject(const std::shared_ptr<T>& object,
 
   auto& hdl = getWriteHandleRefInternal<T>(object);
   size_t memUsageDiff = 0;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Watomic-alignment"
   if (memUsageAfter > memUsageBefore) { // updated to a larger value
     memUsageDiff = memUsageAfter - memUsageBefore;
     // do atomic update on objectSize
-    __sync_fetch_and_add(
-        &(reinterpret_cast<ObjectCacheItem*>(hdl->getMemory())->objectSize),
-        memUsageDiff);
+    ObjectCacheItem* o = reinterpret_cast<ObjectCacheItem*>(hdl->getMemory());
+    __atomic_fetch_add(&(o->objectSize), memUsageDiff, __ATOMIC_SEQ_CST);
     totalObjectSizeBytes_.fetch_add(memUsageDiff, std::memory_order_relaxed);
   } else if (memUsageAfter < memUsageBefore) { // updated to a smaller value
     memUsageDiff = memUsageBefore - memUsageAfter;
     // do atomic update on objectSize
-    __sync_fetch_and_sub(
-        &(reinterpret_cast<ObjectCacheItem*>(hdl->getMemory())->objectSize),
-        memUsageDiff);
+    ObjectCacheItem* o = reinterpret_cast<ObjectCacheItem*>(hdl->getMemory());
+    __atomic_fetch_sub(&(o->objectSize), memUsageDiff, __ATOMIC_SEQ_CST);
     totalObjectSizeBytes_.fetch_sub(memUsageDiff, std::memory_order_relaxed);
   }
+#pragma clang diagnostic pop
 }
 
 template <typename AllocatorT>
