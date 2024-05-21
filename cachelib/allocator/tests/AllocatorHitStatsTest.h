@@ -338,7 +338,7 @@ class AllocatorHitStatsTest : public SlabAllocatorTestBase {
             } else {
               ++nAllocSuccess;
             }
-          } catch (const std::exception& e) {
+          } catch (const std::exception&) {
             ++nInvalid;
           }
         }
