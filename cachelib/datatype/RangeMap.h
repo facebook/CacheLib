@@ -48,7 +48,7 @@ class RangeMap {
 
   struct FOLLY_PACK_ATTR EntryKeyValue {
     EntryKey key;
-    EntryValue value;
+    EntryValue value __attribute__((__packed__));
   };
   using Itr = detail::BinaryIndexIterator<EntryKey,
                                           EntryKeyValue,
