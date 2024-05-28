@@ -347,7 +347,7 @@ class Map {
 
   struct FOLLY_PACK_ATTR EntryKeyValue {
     EntryKey first;
-    EntryValue second;
+    EntryValue second __attribute__((__packed__));
   };
 
   // Create a new cachelib::Map
