@@ -48,7 +48,7 @@ template <typename AllocatorT>
 class ObjectCacheTest;
 }
 
-struct FOLLY_PACK_ATTR ObjectCacheItem {
+struct ObjectCacheItem {
   uintptr_t objectPtr;
   size_t objectSize;
 };
