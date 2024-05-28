@@ -49,7 +49,7 @@ struct FixedLruBucket {
   /** Type of the data stored in a bucket entry.
    *  This contains the key and the value (if any). */
   struct Entry {
-    Key key;
+    Key key __attribute__((__packed__));
     /* Expands to NoValue (size 0) if this cache does not store values */
     Value val __attribute__((__packed__));
   } __attribute__((__packed__));
