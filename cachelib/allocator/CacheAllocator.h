@@ -3638,13 +3638,14 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
                                              ClassId cid,
                                              unsigned int& searchTries) {
   typename NvmCacheT::PutToken token;
+  std::vector<typename NvmCacheT::PutToken> rejectedTokens;
   Item* toRecycle = nullptr;
   Item* candidate = nullptr;
   auto& mmContainer = getMMContainer(pid, cid);
 
   mmContainer.withEvictionIterator([this, pid, cid, &candidate, &toRecycle,
-                                    &searchTries, &mmContainer,
-                                    &token](auto&& itr) {
+                                    &searchTries, &mmContainer, &token,
+                                    &rejectedTokens](auto&& itr) {
     if (!itr) {
       ++searchTries;
       (*stats_.evictionAttempts)[pid][cid].inc();
@@ -3681,6 +3682,11 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
         } else {
           stats_.evictFailAC.inc();
         }
+        // We move the token to be destroyed outside of this DMutex
+        // critical section. Token destruction takes out a fiber
+        // compatible TimedMutex. If we're on fiber and context switch
+        // from this DMutex critical section, we will deadlock.
+        rejectedTokens.emplace_back(std::move(putToken));
         ++itr;
         continue;
       }
@@ -3702,6 +3708,8 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
       return;
     }
   });
+
+  rejectedTokens.clear();
 
   if (!toRecycle) {
     return {candidate, toRecycle};
