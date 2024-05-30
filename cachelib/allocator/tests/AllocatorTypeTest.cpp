@@ -522,6 +522,88 @@ TEST_F(Lru2QAllocatorTest, MMReconfigure) {
   this->testMM2QReconfigure(mmConfig);
 }
 
+TEST_F(TinyLFUAllocatorTest, ScanResistance) {
+  typename TinyLFUAllocator::Config config;
+  // Only 3 slab will be for caching. The other is metadata for slabs.
+  config.setCacheSize(4 * Slab::kSize);
+
+  // Use close to 4MB alloc size so one item is one slab. This cache
+  // can only cache 3 items at maximum.
+  const std::set<uint32_t> allocSizes = {4 * 1024 * 1024 - 100};
+
+  // Set 30% of the cache for the tiny queue. This means out of 3 items
+  // cached, 1 will be in tiny and 2 will be in main cache.
+  // Set newcomerWinsOnTie to true. This is the default behavior
+  MMTinyLFU::Config mmTinyLFUConfig(1, 0.0, false, true, false, 32,
+                                    34 /* tinySizePct = 34% * 3 = 1.02 */, 0,
+                                    true /* newcomerWinsOnTie */);
+
+  // Return true on hit and false on miss
+  auto doLookasideCache = [](auto& cache, folly::StringPiece key,
+                             PoolId poolId) {
+    if (cache.find(key)) {
+      return true;
+    }
+    auto it = cache.allocate(poolId, key, 3 * 1024 * 1024);
+    XDCHECK_NE(nullptr, it);
+    cache.insertOrReplace(it);
+    return false;
+  };
+
+  // Default: newcomer wins on Tie. This is not scan resistant.
+  {
+    TinyLFUAllocator cache(config);
+    const size_t numBytes = cache.getCacheMemoryStats().ramCacheSize;
+    const auto poolId =
+        cache.addPool("foobar", numBytes, allocSizes, mmTinyLFUConfig);
+
+    EXPECT_FALSE(doLookasideCache(cache, "key_1", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_2", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_3", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_4", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_5", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_6", poolId));
+
+    // All misses on second access
+    EXPECT_FALSE(doLookasideCache(cache, "key_1", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_2", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_3", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_4", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_5", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_6", poolId));
+  }
+
+  // Configure newcomer loses on tie. This is scan-resistant.
+  {
+    mmTinyLFUConfig.newcomerWinsOnTie = false;
+
+    TinyLFUAllocator cache(config);
+    const size_t numBytes = cache.getCacheMemoryStats().ramCacheSize;
+    const auto poolId =
+        cache.addPool("foobar", numBytes, allocSizes, mmTinyLFUConfig);
+
+    EXPECT_FALSE(doLookasideCache(cache, "key_1", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_2", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_3", poolId));
+
+    // Evicts "key_3"
+    EXPECT_FALSE(doLookasideCache(cache, "key_4", poolId));
+    // Evicts "key_4"
+    EXPECT_FALSE(doLookasideCache(cache, "key_5", poolId));
+    // Evicts "key_5"
+    EXPECT_FALSE(doLookasideCache(cache, "key_6", poolId));
+
+    // Hits on the first 2 items on second access. Only the first
+    // 2 because we had to evict an item for allocation. The
+    // cache actually only has 2 items after the first access.
+    EXPECT_TRUE(doLookasideCache(cache, "key_1", poolId));
+    EXPECT_TRUE(doLookasideCache(cache, "key_2", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_3", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_4", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_5", poolId));
+    EXPECT_FALSE(doLookasideCache(cache, "key_6", poolId));
+  }
+}
 } // namespace
 
 } // end of namespace tests

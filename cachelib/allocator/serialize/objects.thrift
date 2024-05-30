@@ -117,6 +117,8 @@ struct MMTinyLFUConfig {
   5: bool updateOnRead = true;
   6: bool tryLockUpdate = false;
   7: double lruRefreshRatio = 0.0;
+  8: i32 mmReconfigureIntervalSecs = 0;
+  9: bool newcomerWinsOnTie = true;
 }
 
 struct MMTinyLFUObject {

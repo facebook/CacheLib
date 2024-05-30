@@ -84,7 +84,9 @@ class MMTinyLFU {
                  *configState.updateOnRead(),
                  *configState.tryLockUpdate(),
                  *configState.windowToCacheSizeRatio(),
-                 *configState.tinySizePercent()) {}
+                 *configState.tinySizePercent(),
+                 *configState.mmReconfigureIntervalSecs(),
+                 *configState.newcomerWinsOnTie()) {}
 
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
@@ -172,6 +174,7 @@ class MMTinyLFU {
                  windowToCacheSize,
                  tinySizePct,
                  0) {}
+
     // @param time                    the LRU refresh time in seconds.
     //                                An item will be promoted only once in each
     //                                lru refresh time depite the number of
@@ -206,6 +209,47 @@ class MMTinyLFU {
           tinySizePercent(tinySizePct),
           mmReconfigureIntervalSecs(
               std::chrono::seconds(mmReconfigureInterval)) {
+      checkConfig();
+    }
+
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
+    // @param newcomerWinsOnTie       If true, new comer will replace existing
+    //                                item if their access frequencies tie.
+    Config(uint32_t time,
+           double ratio,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           size_t windowToCacheSize,
+           size_t tinySizePct,
+           uint32_t mmReconfigureInterval,
+           bool _newcomerWinsOnTie)
+        : defaultLruRefreshTime(time),
+          lruRefreshRatio(ratio),
+          updateOnWrite(updateOnW),
+          updateOnRead(updateOnR),
+          tryLockUpdate(tryLockU),
+          windowToCacheSizeRatio(windowToCacheSize),
+          tinySizePercent(tinySizePct),
+          mmReconfigureIntervalSecs(
+              std::chrono::seconds(mmReconfigureInterval)),
+          newcomerWinsOnTie(_newcomerWinsOnTie) {
       checkConfig();
     }
 
@@ -268,6 +312,13 @@ class MMTinyLFU {
     // Minimum interval between reconfigurations. If 0, reconfigure is never
     // called.
     std::chrono::seconds mmReconfigureIntervalSecs{};
+
+    // If true, then if an item in the tail of the Tiny queue ties with the
+    // item in the tail of the main queue, the item from Tiny (newcomer) will
+    // replace the item from Main. This is fine for a default, but for
+    // strictly scan patterns (access a key exactly once and move on), this
+    // is not a desirable behavior (we'll always cache miss).
+    bool newcomerWinsOnTie{true};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -549,7 +600,11 @@ class MMTinyLFU {
       XDCHECK(!isTiny(mainNode));
       auto tinyFreq = accessFreq_.getCount(hashNode(tinyNode));
       auto mainFreq = accessFreq_.getCount(hashNode(mainNode));
-      return tinyFreq >= mainFreq;
+      if (config_.newcomerWinsOnTie) {
+        return tinyFreq >= mainFreq;
+      } else {
+        return tinyFreq > mainFreq;
+      }
     }
 
     // remove node from lru and adjust insertion points
@@ -941,6 +996,9 @@ serialization::MMTinyLFUObject MMTinyLFU::Container<T, HookPtr>::saveState()
   *configObject.updateOnRead() = config_.updateOnRead;
   *configObject.windowToCacheSizeRatio() = config_.windowToCacheSizeRatio;
   *configObject.tinySizePercent() = config_.tinySizePercent;
+  *configObject.mmReconfigureIntervalSecs() =
+      config_.mmReconfigureIntervalSecs.count();
+  *configObject.newcomerWinsOnTie() = config_.newcomerWinsOnTie;
   // TODO: May be save/restore the counters.
 
   serialization::MMTinyLFUObject object;
