@@ -655,6 +655,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   auto desc = *reinterpret_cast<EntryDesc*>(entryEnd - sizeof(EntryDesc));
   if (desc.csSelf != desc.computeChecksum()) {
     lookupEntryHeaderChecksumErrorCount_.inc();
+    XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
+        "Header checksum mismatch at offset: {} ", addr.offset());
     return Status::DeviceError;
   }
 
@@ -684,8 +686,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   if (checksumData_ && desc.cs != checksum(value.view())) {
     XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
         "Item value checksum mismatch when looking up key {}. "
-        "Expected:{}, Actual: {}.",
-        key, desc.cs, checksum(value.view()));
+        "Expected:{}, Actual: {}, Item Offset: {}.",
+        key, desc.cs, checksum(value.view()), addr.offset());
     value.reset();
     lookupValueChecksumErrorCount_.inc();
     return Status::DeviceError;
