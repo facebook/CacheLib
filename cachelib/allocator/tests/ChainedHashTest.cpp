@@ -53,6 +53,10 @@ TEST_F(ChainedHashTest, HandleIteration) {
 
 TEST_F(ChainedHashTest, RemoveIf) { testRemoveIf(); }
 
+TEST_F(ChainedHashTest, testIteratorMayContainNull) {
+  testIteratorMayContainNull();
+}
+
 TEST_F(ChainedHashTest, Chaining) {
   using HashConfig = ChainedHashTable::Config;
   const unsigned int bucketsPower = 5;

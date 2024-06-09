@@ -155,6 +155,9 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
 
   // try to iterate while calling saveState()
   void testIteratorWithSerialization();
+
+  // test iterator when handler maker returns null
+  void testIteratorMayContainNull();
 };
 
 template <typename AccessType>
@@ -584,6 +587,69 @@ void AccessTypeTest<AccessType>::testRemoveIf() {
 
     ASSERT_EQ(c.find(node->getKey()).get(), node.get());
   }
+}
+
+template <typename AccessType>
+void AccessTypeTest<AccessType>::testIteratorMayContainNull() {
+  std::string keyToReturnNull{};
+  Container c{Config{}, PtrCompressor{},
+              [&keyToReturnNull](Node* node) -> Node::Handle {
+                if (!node) {
+                  return nullptr;
+                }
+                if (node->getKey() == keyToReturnNull) {
+                  return nullptr;
+                }
+                node->incRef();
+                return typename Node::Handle{node};
+              }};
+
+  // empty container should not have anything when you iterate.
+  ASSERT_EQ(0, iterateAndGetKeys(c).size());
+
+  auto nodes = createSimpleContainer(c);
+
+  std::set<std::string> existingKeys;
+  for (const auto& node : nodes) {
+    existingKeys.insert(node->getKey().str());
+  }
+
+  // all nodes must be present in the absence of any writes.
+  ASSERT_EQ(existingKeys, iterateAndGetKeys(c));
+
+  // Mark one key for the handle maker to return null
+  keyToReturnNull = *existingKeys.begin();
+
+  std::set<std::string> visitedKeys1;
+  std::set<std::string> visitedKeys2;
+  // start two iterators and visit them with interleaving.
+  auto iter1 = c.begin();
+  while (iter1 != c.end() && visitedKeys1.size() < nodes.size() / 2) {
+    visitedKeys1.insert(iter1->getKey().str());
+    ++iter1;
+  }
+
+  auto iter2 = c.begin();
+  while (iter2 != c.end() && visitedKeys2.size() < nodes.size() / 2) {
+    visitedKeys2.insert(iter2->getKey().str());
+    ++iter2;
+  }
+
+  while (iter1 != c.end() || iter2 != c.end()) {
+    auto rand = folly::Random::rand32();
+    if (iter1 != c.end() && rand % 2) {
+      visitedKeys1.insert(iter1->getKey().str());
+      ++iter1;
+    }
+
+    if (iter2 != c.end() && rand % 3) {
+      visitedKeys2.insert(iter2->getKey().str());
+      ++iter2;
+    }
+  }
+  ASSERT_EQ(visitedKeys1, visitedKeys2);
+  existingKeys.erase(keyToReturnNull);
+  ASSERT_EQ(existingKeys, visitedKeys1);
 }
 } // namespace tests
 } // namespace cachelib

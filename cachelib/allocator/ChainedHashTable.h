@@ -1169,7 +1169,10 @@ void ChainedHashTable::Container<T, HookPtr, LockT>::getBucketElems(
   ht_.forEachBucketElem(bucket, [this, &handles](T* e) {
     try {
       XDCHECK(e);
-      handles.emplace_back(handleMaker_(e));
+      auto h = handleMaker_(e);
+      if (h) {
+        handles.emplace_back(std::move(h));
+      }
     } catch (const std::exception&) {
       // if we are not able to acquire a handle, skip over them.
     }
