@@ -1019,7 +1019,7 @@ void NvmCache<C>::put(Item& item, PutToken token) {
             stats().nvmPutSize_.trackValue(valSize);
           } else if (st == navy::Status::BadState) {
             // we set disable navy since we got a BadState from navy
-            disableNavy("Delete Failure. BadState");
+            disableNavy("Insert Failure. BadState");
           } else {
             // put failed, DRAM eviction happened and destructor was not
             // executed. we unconditionally trigger destructor here for cleanup.
