@@ -41,6 +41,7 @@ Configs to initialize NVM cache lives in `CacheAllocatorConfig::nvmConfig` and a
 * `setNvmCacheAdmissionPolicy`/`enableRejectFirstAPForNvm`: Sets the NvmAdmissionPolicy. Notice that the field lives with CacheAllocatorConfig.
 * `setNvmAdmissionMinTTL`: Sets the NVM admission min TTL. Similarly this lives directly with CacheAllocatorConfig.
 * `enableNvmCache`: Sets `CacheAllocatorConfig::nvmConfig` directly. This function should be called first if you intend to turn on NVM cache. And the other functions above would correctly modify the nvmConfig.
+* `deviceEnableFDP`: Enables Flexible Data Placement (FDP) in Navy. This ensures a segregation of the LOC and SOC data within the SSD. Note that this works only if the SSD supports FDP.
 
 ### WORKERS
 

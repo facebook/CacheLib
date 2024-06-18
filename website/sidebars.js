@@ -120,6 +120,7 @@ module.exports = {
             'Cache_Library_User_Guides/chained_items',
             'Cache_Library_User_Guides/compact_cache',
             'Cache_Library_User_Guides/Structured_Cache',
+	    'Cache_Library_User_Guides/FDP_enabled_Cache',
           ],
         },
         {

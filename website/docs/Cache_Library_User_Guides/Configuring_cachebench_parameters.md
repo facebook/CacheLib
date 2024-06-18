@@ -228,6 +228,7 @@ Number of shards used for request ordering. The default is 21, corresponding to 
 Truncates item to allocated size to optimize write performance.
 * `deviceMaxWriteSize`
 This controls the largest IO size we will write to the device. Any IO above this size will be split up into multiple IOs.
+* `deviceEnableFDP` This enables the use of FDP in Navy which results in a segregation of BigHash and BlockCache writes to the SSD.
 
 ###  Small item engine parameters
 
