@@ -593,7 +593,7 @@ template <typename AccessType>
 void AccessTypeTest<AccessType>::testIteratorMayContainNull() {
   std::string keyToReturnNull{};
   Container c{Config{}, PtrCompressor{},
-              [&keyToReturnNull](Node* node) -> Node::Handle {
+              [&keyToReturnNull](Node* node) -> typename Node::Handle {
                 if (!node) {
                   return nullptr;
                 }
