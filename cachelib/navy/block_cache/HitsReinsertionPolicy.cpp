@@ -25,7 +25,8 @@ HitsReinsertionPolicy::HitsReinsertionPolicy(uint8_t hitsThreshold,
                                              const Index& index)
     : hitsThreshold_{hitsThreshold}, index_(index) {}
 
-bool HitsReinsertionPolicy::shouldReinsert(folly::StringPiece key) {
+bool HitsReinsertionPolicy::shouldReinsert(folly::StringPiece key,
+                                           folly::StringPiece /* value */) {
   const auto lr = index_.peek(
       makeHK(
           BufferView{key.size(), reinterpret_cast<const uint8_t*>(key.data())})

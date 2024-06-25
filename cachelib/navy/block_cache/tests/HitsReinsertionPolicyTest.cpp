@@ -55,7 +55,7 @@ TEST(HitsReinsertionPolicy, Simple) {
 
   {
     auto lr = index.peek(hk1.keyHash());
-    EXPECT_TRUE(tracker.shouldReinsert(strKey));
+    EXPECT_TRUE(tracker.shouldReinsert(strKey, ""));
     EXPECT_EQ(1, lr.totalHits());
     EXPECT_EQ(1, lr.currentHits());
   }

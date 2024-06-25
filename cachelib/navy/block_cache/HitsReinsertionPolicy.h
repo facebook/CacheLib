@@ -43,7 +43,8 @@ class HitsReinsertionPolicy : public BlockCacheReinsertionPolicy {
 
   // Applies hits based policy to determine whether or not we should keep
   // this key around longer in cache.
-  bool shouldReinsert(folly::StringPiece key) override;
+  bool shouldReinsert(folly::StringPiece key,
+                      folly::StringPiece value) override;
 
   // Exports hits based reinsertion policy stats via CounterVisitor.
   void getCounters(const util::CounterVisitor& visitor) const override;

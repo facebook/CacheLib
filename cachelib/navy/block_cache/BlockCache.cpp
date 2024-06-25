@@ -542,7 +542,8 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return removeItem(true);
   }
 
-  if (!reinsertionPolicy_ || !reinsertionPolicy_->shouldReinsert(hk.key())) {
+  if (!reinsertionPolicy_ ||
+      !reinsertionPolicy_->shouldReinsert(hk.key(), toStringPiece(value))) {
     return removeItem(false);
   }
 

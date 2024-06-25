@@ -41,7 +41,8 @@ class PercentageReinsertionPolicy : public BlockCacheReinsertionPolicy {
 
   // Applies percentage based policy to determine whether or not we should keep
   // this key around longer in cache.
-  bool shouldReinsert(folly::StringPiece /* key */) override {
+  bool shouldReinsert(folly::StringPiece /* key */,
+                      folly::StringPiece /* value */) override {
     return folly::Random::rand32() % 100 < percentage_;
   }
 

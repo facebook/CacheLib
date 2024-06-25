@@ -56,7 +56,10 @@ const std::vector<unsigned int> blockCacheSegmentedFifoSegmentRatio = {111, 222,
 
 class DummyReinsertionPolicy : public BlockCacheReinsertionPolicy {
  public:
-  bool shouldReinsert(folly::StringPiece /* key */) override { return true; }
+  bool shouldReinsert(folly::StringPiece /* key */,
+                      folly::StringPiece /* value */) override {
+    return true;
+  }
 
   void getCounters(const util::CounterVisitor& /* visitor */) const override {}
 };

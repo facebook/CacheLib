@@ -31,7 +31,8 @@ class BlockCacheReinsertionPolicy {
 
   // When the region an item belongs to is evicted, figure out
   // whether the item should be inserted to block cache.
-  virtual bool shouldReinsert(folly::StringPiece key) = 0;
+  virtual bool shouldReinsert(folly::StringPiece key,
+                              folly::StringPiece value) = 0;
 
   // Exports policy stats via CounterVisitor.
   virtual void getCounters(const util::CounterVisitor& visitor) const = 0;
