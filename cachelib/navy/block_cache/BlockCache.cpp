@@ -259,6 +259,19 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
     if (status == Status::Ok) {
       regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
+    } else if (status == Status::DeviceError) {
+      // Read again for debugging
+      auto retryStatus =
+          readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
+      XLOGF(ERR,
+            "Retry reading an entry after checksum for debugging. Return code: "
+            "{}",
+            retryStatus);
+
+      // Remove this item from index so no future lookup will
+      // ever attempt to read this key. Reclaim will also not be
+      // albe to re-insert this item as it does not exist in index.
+      index_.remove(hk.keyHash());
     }
     regionManager_.close(std::move(desc));
     lookupCount_.inc();
@@ -325,10 +338,13 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
     if (checksumData_ && desc.cs != checksum(valueView)) {
       XLOGF(ERR,
             "Item value checksum mismatch. Region {} is likely corrupted. "
-            "Expected:{}, Actual: {}.",
+            "Expected:{}, Actual: {}, Payload (hex): {}",
             rid.index(),
             desc.cs,
-            checksum(valueView));
+            checksum(valueView),
+            // call folly::unhexlify to convert it back to binary data
+            folly::hexlify(
+                folly::ByteRange(valueView.data(), valueView.dataEnd())));
       break;
     }
 
@@ -429,6 +445,15 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     if (checksumData_ && desc.cs != checksum(value)) {
       // We do not need to abort here since the EntryDesc checksum was good, so
       // we can safely proceed to read the next entry.
+      XLOGF(ERR,
+            "Item value checksum mismatch. Region {} is likely corrupted. "
+            "Expected:{}, Actual: {}. Aborting reclaim. Remaining items in the "
+            "region will not be cleaned up (destructor won't be invoked). "
+            "Payload (hex): {}",
+            rid.index(),
+            desc.cs,
+            checksum(value),
+            folly::hexlify(folly::ByteRange(value.data(), value.dataEnd())));
       reclaimValueChecksumErrorCount_.inc();
       if (removeItem(hk, RelAddress{rid, offset})) {
         reinsertionRes = ReinsertionRes::kEvicted;
@@ -687,8 +712,10 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   if (checksumData_ && desc.cs != checksum(value.view())) {
     XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(
         "Item value checksum mismatch when looking up key {}. "
-        "Expected:{}, Actual: {}, Item Offset: {}.",
-        key, desc.cs, checksum(value.view()), addr.offset());
+        "Expected:{}, Actual: {}, Item Offset: {}, Payload (hex): {}",
+        key, desc.cs, checksum(value.view()), addr.offset(),
+        folly::hexlify(
+            folly::ByteRange(value.data(), value.data() + value.size())));
     value.reset();
     lookupValueChecksumErrorCount_.inc();
     return Status::DeviceError;

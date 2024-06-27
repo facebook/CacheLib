@@ -1064,7 +1064,10 @@ TEST(BlockCache, DeviceFailure) {
     EXPECT_CALL(*device, writeImpl(kRegionSize * 2, kRegionSize, _, _));
 
     EXPECT_CALL(*device, readImpl(0, 1024, _));
+    // We will fail twice on reading "key2" because after the first failure,
+    // BlockCache will retry the read for debugging purposes.
     EXPECT_CALL(*device, readImpl(kRegionSize, 1024, _))
+        .WillOnce(Return(false))
         .WillOnce(Return(false));
     EXPECT_CALL(*device, readImpl(kRegionSize * 2, 1024, _));
   }
