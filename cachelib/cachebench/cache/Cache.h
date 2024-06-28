@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/Format.h>
+#include <folly/container/F14Map.h>
 #include <folly/hash/Hash.h>
 #include <folly/json/DynamicConverter.h>
 #include <folly/json/json.h>
@@ -312,8 +313,8 @@ class Cache {
   // return true if the key was previously detected to be inconsistent. This
   // is useful only when consistency checking is enabled by calling
   // enableConsistencyCheck()
-  bool isInvalidKey(const std::string& key) {
-    return invalidKeys_[key].load(std::memory_order_relaxed);
+  bool isInvalidKey(const std::string_view key) {
+    return invalidKeys_.find(key)->second.load(std::memory_order_relaxed);
   }
 
   // Get overall stats on the whole cache allocator
@@ -426,7 +427,7 @@ class Cache {
   // Since this can be accessed from multiple threads, the map is initialized
   // during start up and only the value is updated by flipping the bit
   // atomically.
-  std::unordered_map<std::string, std::atomic<bool>> invalidKeys_;
+  folly::F14NodeMap<std::string, std::atomic<bool>> invalidKeys_;
 
   // number of inconsistency detected so far with the operations
   std::atomic<unsigned int> inconsistencyCount_{0};
@@ -835,7 +836,7 @@ void Cache<Allocator>::enableConsistencyCheck(
   valueTracker_ =
       std::make_unique<ValueTracker>(ValueTracker::wrapStrings(keys));
   for (const std::string& key : keys) {
-    invalidKeys_[key] = false;
+    invalidKeys_.emplace(key, false);
   }
 }
 
@@ -983,7 +984,7 @@ typename Cache<Allocator>::ReadHandle Cache<Allocator>::find(Key key) {
   auto opId = valueTracker_->beginGet(key);
   auto it = findFn();
   if (checkGet(opId, it)) {
-    invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+    invalidKeys_.find(key)->second.store(true, std::memory_order_relaxed);
   }
   return it;
 }
@@ -1027,7 +1028,7 @@ Cache<Allocator>::asyncFind(Key key) {
 
   if (sf.isReady()) {
     if (checkGet(opId, sf.value())) {
-      invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+      invalidKeys_.find(key)->second.store(true, std::memory_order_relaxed);
     }
 
     return sf;
@@ -1038,7 +1039,7 @@ Cache<Allocator>::asyncFind(Key key) {
   return std::move(sf).deferValue(
       [this, opId = std::move(opId), key = std::move(key)](auto handle) {
         if (checkGet(opId, handle)) {
-          invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+          invalidKeys_.find(key)->second.store(true, std::memory_order_relaxed);
         }
 
         return handle;
@@ -1070,7 +1071,7 @@ typename Cache<Allocator>::WriteHandle Cache<Allocator>::findToWrite(Key key) {
   auto opId = valueTracker_->beginGet(key);
   auto it = findToWriteFn();
   if (checkGet(opId, it)) {
-    invalidKeys_[key.str()].store(true, std::memory_order_relaxed);
+    invalidKeys_.find(key)->second.store(true, std::memory_order_relaxed);
   }
   return it;
 }
