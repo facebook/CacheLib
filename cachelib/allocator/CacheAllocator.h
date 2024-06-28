@@ -21,6 +21,7 @@
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
 #include <folly/fibers/TimedMutex.h>
+#include <folly/json/DynamicConverter.h>
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <gtest/gtest.h>
@@ -1939,7 +1940,25 @@ class CacheAllocator : public CacheBase {
 
   std::map<std::string, std::string> serializeConfigParams()
       const override final {
-    return config_.serialize();
+    auto configMap = config_.serialize();
+
+    auto exportRebalanceStrategyConfig = [this](PoolId poolId) {
+      auto strategy = getRebalanceStrategy(poolId);
+      if (!strategy) {
+        return std::map<std::string, std::string>{};
+      }
+      return strategy->exportConfig();
+    };
+
+    auto regularPoolIds = getRegularPoolIds();
+    for (const auto poolId : regularPoolIds) {
+      auto poolName = getPoolName(poolId);
+      configMap[folly::sformat("{}_rebalance_policy", poolName)] =
+          folly::json::serialize(
+              folly::toDynamic(exportRebalanceStrategyConfig(poolId)), {});
+    }
+
+    return configMap;
   }
 
   typename Item::PtrCompressor createPtrCompressor() const {

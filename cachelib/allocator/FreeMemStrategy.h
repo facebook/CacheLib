@@ -52,6 +52,14 @@ class FreeMemStrategy : public RebalanceStrategy {
 
   explicit FreeMemStrategy(Config config = {});
 
+  std::map<std::string, std::string> exportConfig() const override {
+    return {{"rebalancer_type", folly::sformat("{}", getTypeString())},
+            {"min_slabs", folly::sformat("{}", config_.minSlabs)},
+            {"num_free_slabs", folly::sformat("{}", config_.numFreeSlabs)},
+            {"max_unallocated_slabs",
+             folly::sformat("{}", config_.maxUnAllocatedSlabs)}};
+  }
+
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase& cache,
                                              PoolId pid,
                                              const PoolStats& poolStats) final;

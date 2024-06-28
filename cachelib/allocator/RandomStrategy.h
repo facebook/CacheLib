@@ -34,8 +34,13 @@ class RandomStrategy : public RebalanceStrategy {
     unsigned int minSlabs{1};
   };
 
-  RandomStrategy() = default;
+  RandomStrategy() : RebalanceStrategy(Random) {}
   explicit RandomStrategy(Config c) : RebalanceStrategy(Random), config_{c} {}
+
+  std::map<std::string, std::string> exportConfig() const override {
+    return {{"rebalancer_type", folly::sformat("{}", getTypeString())},
+            {"min_slabs", folly::sformat("{}", config_.minSlabs)}};
+  }
 
   RebalanceContext pickVictimAndReceiverImpl(const CacheBase&,
                                              PoolId,

@@ -82,6 +82,16 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
 
   explicit HitsPerSlabStrategy(Config config = {});
 
+  std::map<std::string, std::string> exportConfig() const override {
+    return {{"rebalancer_type", folly::sformat("{}", getTypeString())},
+            {"min_slabs", folly::sformat("{}", config_.minSlabs)},
+            {"num_slabs_free_mem", folly::sformat("{}", config_.minSlabs)},
+            {"min_lru_tail_age", folly::sformat("{}", config_.minLruTailAge)},
+            {"max_lru_tail_age", folly::sformat("{}", config_.maxLruTailAge)},
+            {"diff_ratio", folly::sformat("{}", config_.diffRatio)},
+            {"min_diff", folly::sformat("{}", config_.minDiff)}};
+  }
+
  protected:
   // This returns a copy of the current config.
   // This ensures that we're always looking at the same config even though

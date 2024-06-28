@@ -45,7 +45,7 @@ struct RebalanceContext {
 class RebalanceStrategy {
  public:
   enum Type {
-    PickNothingOrTest,
+    PickNothingOrTest = 0,
     Random,
     MarginalHits,
     FreeMem,
@@ -62,6 +62,10 @@ class RebalanceStrategy {
 
   virtual ~RebalanceStrategy() = default;
 
+  virtual std::map<std::string, std::string> exportConfig() const {
+    return {{"rebalancer_type", folly::sformat("{}", getTypeString())}};
+  }
+
   // Pick an victim and receiver from the same pool
   //
   // @param allocator   Cache allocator that implements CacheBase @param pid
@@ -77,6 +81,29 @@ class RebalanceStrategy {
   virtual void updateConfig(const BaseConfig&) {}
 
   Type getType() const { return type_; }
+
+  std::string getTypeString() const {
+    switch (type_) {
+    case PickNothingOrTest:
+      return "PickNothingOrTest";
+    case Random:
+      return "Random";
+    case MarginalHits:
+      return "MarginalHits";
+    case FreeMem:
+      return "FreeMem";
+    case HitsPerSlab:
+      return "HitsPerSlab";
+    case LruTailAge:
+      return "LruTailAge";
+    case PoolResize:
+      return "PoolResize";
+    case StressRebalance:
+      return "StressRebalance";
+    default:
+      return "Invalid rebalance strategy";
+    }
+  }
 
  protected:
   using PoolState = std::array<detail::Info, MemoryAllocator::kMaxClasses>;

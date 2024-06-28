@@ -17,6 +17,8 @@
 #pragma once
 
 #include <folly/Optional.h>
+#include <folly/json/DynamicConverter.h>
+#include <folly/json/json.h>
 
 #include <chrono>
 #include <functional>
@@ -1275,28 +1277,10 @@ std::string CacheAllocatorConfig<T>::stringifyAddr(const void* addr) const {
 template <typename T>
 std::string CacheAllocatorConfig<T>::stringifyRebalanceStrategy(
     const std::shared_ptr<RebalanceStrategy>& strategy) const {
-  if (!strategy)
+  if (!strategy) {
     return "empty";
-  switch (strategy->getType()) {
-  case RebalanceStrategy::PickNothingOrTest:
-    return "PickNothingOrTest";
-  case RebalanceStrategy::Random:
-    return "Random";
-  case RebalanceStrategy::MarginalHits:
-    return "MarginalHits";
-  case RebalanceStrategy::FreeMem:
-    return "FreeMem";
-  case RebalanceStrategy::HitsPerSlab:
-    return "HitsPerSlab";
-  case RebalanceStrategy::LruTailAge:
-    return "LruTailAge";
-  case RebalanceStrategy::PoolResize:
-    return "PoolResize";
-  case RebalanceStrategy::StressRebalance:
-    return "StressRebalance";
-  default:
-    return "undefined";
   }
+  return folly::json::serialize(folly::toDynamic(strategy->exportConfig()), {});
 }
 } // namespace cachelib
 } // namespace facebook
