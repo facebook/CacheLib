@@ -19,7 +19,6 @@
 #include <folly/Format.h>
 #include <glog/logging.h>
 
-#include <cassert>
 #include <cstdint>
 
 namespace facebook {
@@ -34,10 +33,6 @@ void MockJobScheduler::enqueueWithKey(Job job,
                                       uint64_t) {
   std::lock_guard<std::mutex> lock{m_};
   switch (type) {
-  case JobType::Reclaim:
-  case JobType::Flush:
-    q_.emplace_front(std::move(job), name);
-    break;
   case JobType::Read:
   case JobType::Write:
     q_.emplace_back(std::move(job), name);

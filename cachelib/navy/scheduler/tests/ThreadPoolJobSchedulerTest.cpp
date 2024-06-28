@@ -59,46 +59,6 @@ TEST(ThreadPoolJobScheduler, StopEmpty) {
   ThreadPoolJobScheduler scheduler{1, 1};
 }
 
-TEST(ThreadPoolJobScheduler, EnqueueFirst) {
-  ThreadPoolJobScheduler scheduler{1, 1};
-  uint64_t key = 0;
-  // There are no races with one thread, but just to be sure
-  for (int i = 0; i < 50; i++) {
-    // Assumes one thread
-    std::vector<int> v;
-    scheduler.enqueueWithKey(
-        [&scheduler, &v]() {
-          v.push_back(0);
-          size_t key = 1000;
-          for (int j = 1; j < 3; j++) {
-            scheduler.enqueueWithKey(
-                [&v, j]() {
-                  v.push_back(j);
-                  return JobExitCode::Done;
-                },
-                "write1",
-                JobType::Write,
-                key++);
-          }
-          scheduler.enqueueWithKey(
-              [&v]() {
-                v.push_back(3);
-                return JobExitCode::Done;
-              },
-              "reclaim",
-              JobType::Reclaim,
-              key++);
-          return JobExitCode::Done;
-        },
-        "write2",
-        JobType::Write,
-        key++);
-    scheduler.finish();
-    std::vector<int> expected{0, 3, 1, 2};
-    EXPECT_EQ(expected, v);
-  }
-}
-
 TEST(ThreadPoolJobScheduler, EnqueueWithKey) {
   ThreadPoolJobScheduler scheduler{1, 2};
   // Ensure the result is consistent
@@ -183,14 +143,14 @@ TEST(ThreadPoolJobScheduler, FinishSchedulesNew) {
   t.join();
 }
 
-TEST(ThreadPoolJobScheduler, ReadWriteReclaim) {
+TEST(ThreadPoolJobScheduler, ReadWriteReschedule) {
   std::vector<int> v;
   ThreadPoolJobScheduler scheduler{1, 1};
   uint64_t key = 0;
 
   SeqPoints sp;
   sp.setName(0, "Write issued");
-  sp.setName(1, "Reclaim issued");
+  sp.setName(1, "Write issued");
   sp.setName(2, "Read issued");
   scheduler.enqueueWithKey(
       [&sp, &scheduler, &v] {
@@ -229,7 +189,7 @@ TEST(ThreadPoolJobScheduler, ReadWriteReclaim) {
         sp.reached(1);
         return JobExitCode::Done;
       },
-      "reclaim",
+      "write",
       JobType::Write,
       key++);
   scheduler.finish();

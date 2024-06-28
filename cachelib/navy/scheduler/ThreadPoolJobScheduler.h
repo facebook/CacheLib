@@ -128,7 +128,7 @@ class OrderedThreadPoolJobScheduler final : public JobScheduler {
   // execution ordering of the key is guaranteed
   // @param job   the job to be executed
   // @param name  name of the job, for logging/debugging purposes
-  // @param type  the type of job: Read/Write/Reclaim/Flush
+  // @param type  the type of job: Read/Write
   // @param key   the key hash
   void enqueueWithKey(Job job,
                       folly::StringPiece name,

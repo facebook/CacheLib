@@ -106,14 +106,6 @@ void ThreadPoolJobScheduler::enqueueWithKey(Job job,
   case JobType::Write:
     writer_.enqueueWithKey(std::move(job), name, JobQueue::QueuePos::Back, key);
     break;
-  case JobType::Reclaim:
-    writer_.enqueueWithKey(std::move(job), name, JobQueue::QueuePos::Front,
-                           key);
-    break;
-  case JobType::Flush:
-    writer_.enqueueWithKey(std::move(job), name, JobQueue::QueuePos::Front,
-                           key);
-    break;
   default:
     XLOGF(ERR,
           "JobScheduler: unrecognized job type: {}",

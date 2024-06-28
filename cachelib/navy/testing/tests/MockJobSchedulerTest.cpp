@@ -96,7 +96,7 @@ TEST(MockJobScheduler, JobSchedulesFirst) {
   ex.enqueueWithKey(
       [&ex] {
         ex.enqueueWithKey(
-            [] { return JobExitCode::Done; }, "child", JobType::Reclaim, 1000);
+            [] { return JobExitCode::Done; }, "child", JobType::Read, 1000);
         return JobExitCode::Done;
       },
       "first",

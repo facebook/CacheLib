@@ -167,8 +167,7 @@ TEST(OrderedThreadPoolJobScheduler, SpoolAndFinish) {
 // We enqueue three jobs for same key that can reschedule and ensure that
 // after reschedule, the order is maintained as well.
 TEST(OrderedThreadPoolJobScheduler, JobWithRetry) {
-  std::array<JobType, 3> jobTypes = {JobType::Read, JobType::Write,
-                                     JobType::Reclaim};
+  std::array<JobType, 2> jobTypes = {JobType::Read, JobType::Write};
   uint64_t key = 5;
   SeqPoints sp;
 

@@ -39,8 +39,7 @@ class MockJobScheduler : public JobScheduler {
 
   // @param job   The job enqueued on the scheduler
   // @param name  Name associated with the job
-  // @param type  Job type. This indicates if this is a read, write, or
-  //              Navy internal jobs such as reclaim or flush.
+  // @param type  Job type. This indicates if this is a read or write.
   // @param key   Key is ignored in the mock scheduler since we do NOT
   //              shard the jobs internally.
   void enqueueWithKey(Job job,
