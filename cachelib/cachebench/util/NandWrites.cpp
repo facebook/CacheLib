@@ -141,11 +141,31 @@ std::optional<uint64_t> getBytesWritten(
     const std::shared_ptr<ProcessFactory>& processFactory,
     const folly::StringPiece& nvmePath,
     const std::vector<std::string>& args,
-    const size_t fieldNum,
+    const int32_t reqFieldNum,
     const uint64_t factor) {
+  size_t fieldNum = 0;
   std::vector<std::string> fields =
       getBytesWrittenLine(processFactory, nvmePath, args);
   XLOG(DBG) << "got fields: " << folly::join(",", fields);
+
+  if (!fields.size()) {
+    XLOG(ERR) << "No line for the written bytes found!";
+    return std::nullopt;
+  }
+
+  // On negative reqFieldNum we count from right to left.
+  if (reqFieldNum < 0) {
+    auto index = fields.size() + reqFieldNum;
+    if (index < 0) {
+      XLOG(ERR) << "Unexpected number of fields in line! Got " << fields.size()
+                << " fields, but expected at least " << reqFieldNum * -1 << ".";
+      return std::nullopt;
+    }
+    fieldNum = index;
+  } else {
+    fieldNum = reqFieldNum;
+  }
+
   if (fields.size() <= fieldNum) {
     XLOG(ERR) << "Unexpected number of fields in line! Got " << fields.size()
               << " fields, but expected at least " << fieldNum + 1 << ".";
@@ -310,7 +330,7 @@ std::optional<uint64_t> wdcWriteBytes(
   return getBytesWritten(processFactory,
                          nvmePath,
                          {"wdc", "vs-smart-add-log", devicePath.str()},
-                         7 /* field num */,
+                         -1 /* field num */,
                          1 /* factor */);
 }
 
