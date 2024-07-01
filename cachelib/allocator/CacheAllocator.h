@@ -1951,12 +1951,15 @@ class CacheAllocator : public CacheBase {
     };
 
     auto regularPoolIds = getRegularPoolIds();
+    std::map<std::string, std::map<std::string, std::string>>
+        mapRebalancePolicyConfigs;
     for (const auto poolId : regularPoolIds) {
       auto poolName = getPoolName(poolId);
-      configMap[folly::sformat("{}_rebalance_policy", poolName)] =
-          folly::json::serialize(
-              folly::toDynamic(exportRebalanceStrategyConfig(poolId)), {});
+      mapRebalancePolicyConfigs[poolName] =
+          exportRebalanceStrategyConfig(poolId);
     }
+    configMap["rebalance_policy_configs"] =
+        folly::json::serialize(folly::toDynamic(mapRebalancePolicyConfigs), {});
 
     return configMap;
   }
