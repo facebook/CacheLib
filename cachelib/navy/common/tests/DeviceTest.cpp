@@ -17,6 +17,7 @@
 #include <folly/File.h>
 #include <folly/Random.h>
 #include <folly/ScopeGuard.h>
+#include <folly/experimental/io/IoUring.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -24,6 +25,7 @@
 
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/FdpNvme.h"
 #include "cachelib/navy/testing/BufferGen.h"
 #include "cachelib/navy/testing/Callbacks.h"
 #include "cachelib/navy/testing/MockDevice.h"
@@ -194,6 +196,70 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
   device.getCounters({toCallback(visitor)});
+}
+
+// Test for FdpNvme Constructor
+TEST(FDP, InitializationTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status ruh_status{};
+  ruh_status.nruhsd = 10;
+
+  EXPECT_NO_THROW(FdpNvme fdp = FdpNvme(data, &ruh_status));
+}
+
+// Test the Fdp Handle allocation
+TEST(FDP, FdpHandleAllocationTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status ruh_status{};
+  ruh_status.nruhsd = 4;
+
+  FdpNvme fdp = FdpNvme(data, &ruh_status);
+  for (auto i = 1; i < ruh_status.nruhsd; i++) {
+    EXPECT_EQ(i, fdp.allocateFdpHandle());
+  }
+
+  EXPECT_EQ(0, fdp.allocateFdpHandle());
+}
+
+// Test IO uring read, write command preparation
+TEST(FDP, PrepUringTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status ruh_status{};
+  ruh_status.nruhsd = 4;
+
+  FdpNvme fdp = FdpNvme(data, &ruh_status);
+  std::unique_ptr<folly::IoUringOp> iouringCmdOp;
+  folly::IoUringOp::Options options;
+  options.sqe128 = true;
+  options.cqe32 = true;
+
+  iouringCmdOp = std::make_unique<folly::IoUringOp>(
+      folly::AsyncBaseOp::NotificationCallback(), options);
+  iouringCmdOp->initBase();
+  struct io_uring_sqe& sqe = iouringCmdOp->getSqe();
+
+  void* buf{};
+  size_t size = 8192;
+  off_t start = 0;
+  int handle = 1;
+
+  EXPECT_NO_THROW(fdp.prepReadUringCmdSqe(sqe, buf, size, start));
+  EXPECT_NO_THROW(fdp.prepWriteUringCmdSqe(sqe, buf, size, start, handle));
 }
 
 struct DeviceParamTest
