@@ -434,6 +434,11 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
                 {"wus4bb019d4m9e7", wdcWriteBytes},
                 {"wus4bb019djese7", wdcWriteBytes},
                 {"wus4bb038djese7", wdcWriteBytes},
+                {"wus6a7619pjp8x7", wdcWriteBytes},
+                {"wus6a7638pjp8x7", wdcWriteBytes},
+                {"wus6a7676pjp8x7", wdcWriteBytes},
+                {"wus6a762tp9p8x7", wdcWriteBytes},
+                {"wus6a76a1pjp8x7", wdcWriteBytes},
                 {"micron", micronWriteBytes},
                 {"hfs512gde9x083n", skhmsWriteBytes}};
   for (const auto& [vendor, func] : vendorMap) {
