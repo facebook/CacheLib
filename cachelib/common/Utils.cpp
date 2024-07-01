@@ -15,7 +15,7 @@
  */
 
 #include <dirent.h>
-#include <folly/experimental/exception_tracer/ExceptionTracer.h>
+#include <folly/debugging/exception_tracer/ExceptionTracer.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/shm.h>
