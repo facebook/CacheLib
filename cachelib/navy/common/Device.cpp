@@ -220,12 +220,13 @@ class CompletionHandler : public folly::EventHandler {
 // Per-thread context for AsyncIO like libaio or io_uring
 class AsyncIoContext : public IoContext {
  public:
-  AsyncIoContext(std::unique_ptr<folly::AsyncBase>&& asyncBase,
-                 size_t id,
-                 folly::EventBase* evb,
-                 size_t capacity,
-                 bool useIoUring,
-                 std::vector<std::shared_ptr<FdpNvme>> fdpNvmeVec);
+  AsyncIoContext(
+      std::unique_ptr<folly::AsyncBase>&& asyncBase,
+      size_t id,
+      folly::EventBase* evb,
+      size_t capacity,
+      bool useIoUring,
+      const std::unordered_map<int, std::shared_ptr<FdpNvme>>& fdpNvmeDevs);
 
   ~AsyncIoContext() override = default;
 
@@ -279,10 +280,8 @@ class AsyncIoContext : public IoContext {
   size_t numSubmitted_ = 0;
   size_t numCompleted_ = 0;
 
-  // Device info vector for FDP support
-  const std::vector<std::shared_ptr<FdpNvme>> fdpNvmeVec_{};
-  // As of now, only one FDP enabled Device is supported
-  static constexpr uint16_t kDefaultFdpIdx = 0u;
+  // Map of file descriptors to FdpNvme device objects
+  const std::unordered_map<int, std::shared_ptr<FdpNvme>>& fdpNvmeDevs_;
 };
 
 // An FileDevice manages direct I/O to either a single or multiple (RAID0)
@@ -290,7 +289,7 @@ class AsyncIoContext : public IoContext {
 class FileDevice : public Device {
  public:
   FileDevice(std::vector<folly::File>&& fvec,
-             std::vector<std::shared_ptr<FdpNvme>>&& fdpNvmeVec,
+             std::unordered_map<int, std::shared_ptr<FdpNvme>>&& fdpNvmeDevs,
              uint64_t size,
              uint32_t blockSize,
              uint32_t stripeSize,
@@ -317,8 +316,8 @@ class FileDevice : public Device {
   // File vector for devices or regular files
   const std::vector<folly::File> fvec_{};
 
-  // Device info vector for FDP support
-  const std::vector<std::shared_ptr<FdpNvme>> fdpNvmeVec_{};
+  // Map of file descriptors to FdpNvme device objects
+  const std::unordered_map<int, std::shared_ptr<FdpNvme>> fdpNvmeDevs_;
 
   // RAID stripe size when multiple devices are used
   const uint32_t stripeSize_;
@@ -750,20 +749,21 @@ bool SyncIoContext::submitIo(IOOp& op) {
 /*
  * AsyncIoContext
  */
-AsyncIoContext::AsyncIoContext(std::unique_ptr<folly::AsyncBase>&& asyncBase,
-                               size_t id,
-                               folly::EventBase* evb,
-                               size_t capacity,
-                               bool useIoUring,
-                               std::vector<std::shared_ptr<FdpNvme>> fdpNvmeVec)
+AsyncIoContext::AsyncIoContext(
+    std::unique_ptr<folly::AsyncBase>&& asyncBase,
+    size_t id,
+    folly::EventBase* evb,
+    size_t capacity,
+    bool useIoUring,
+    const std::unordered_map<int, std::shared_ptr<FdpNvme>>& fdpNvmeDevs)
     : asyncBase_(std::move(asyncBase)),
       id_(id),
       qDepth_(capacity),
       useIoUring_(useIoUring),
-      fdpNvmeVec_(fdpNvmeVec) {
+      fdpNvmeDevs_(fdpNvmeDevs) {
 #ifdef CACHELIB_IOURING_DISABLE
   // io_uring is not available on the system
-  XDCHECK(!useIoUring_ && !(fdpNvmeVec_.size() > 0));
+  XDCHECK(!useIoUring_ && !(fdpNvmeDevs_.size() > 0));
   useIoUring_ = false;
 #endif
   if (evb) {
@@ -781,7 +781,7 @@ AsyncIoContext::AsyncIoContext(std::unique_ptr<folly::AsyncBase>&& asyncBase,
         "[{}] Created new async io context with qdepth {}{} io_engine {} {}",
         getName(), qDepth_, qDepth_ == 1 ? " (sync wait)" : "",
         useIoUring_ ? "io_uring" : "libaio",
-        (fdpNvmeVec_.size() > 0) ? "FDP enabled" : "");
+        (fdpNvmeDevs_.size() > 0) ? "FDP enabled" : "");
 }
 
 void AsyncIoContext::pollCompletion() {
@@ -820,7 +820,7 @@ void AsyncIoContext::handleCompletion(
     }
 
     auto len = aop->result();
-    if (fdpNvmeVec_.size() > 0) {
+    if (fdpNvmeDevs_.size() > 0) {
       // 0 means success here, so get the completed size from iop
       len = !len ? iop->size_ : 0;
     }
@@ -869,7 +869,7 @@ bool AsyncIoContext::submitIo(IOOp& op) {
 }
 
 std::unique_ptr<folly::AsyncBaseOp> AsyncIoContext::prepAsyncIo(IOOp& op) {
-  if (fdpNvmeVec_.size() > 0) {
+  if (fdpNvmeDevs_.size() > 0) {
     return prepNvmeIo(op);
   }
 
@@ -905,10 +905,10 @@ std::unique_ptr<folly::AsyncBaseOp> AsyncIoContext::prepNvmeIo(IOOp& op) {
   iouringCmdOp->initBase();
   struct io_uring_sqe& sqe = iouringCmdOp->getSqe();
   if (req.opType_ == OpType::READ) {
-    fdpNvmeVec_[kDefaultFdpIdx]->prepReadUringCmdSqe(sqe, op.data_, op.size_,
-                                                     op.offset_);
+    fdpNvmeDevs_.at(op.fd_)->prepReadUringCmdSqe(sqe, op.data_, op.size_,
+                                                 op.offset_);
   } else {
-    fdpNvmeVec_[kDefaultFdpIdx]->prepWriteUringCmdSqe(
+    fdpNvmeDevs_.at(op.fd_)->prepWriteUringCmdSqe(
         sqe, op.data_, op.size_, op.offset_, op.placeHandle_.value_or(-1));
   }
   io_uring_sqe_set_data(&sqe, iouringCmdOp.get());
@@ -921,23 +921,24 @@ std::unique_ptr<folly::AsyncBaseOp> AsyncIoContext::prepNvmeIo(IOOp& op) {
 /*
  * FileDevice
  */
-FileDevice::FileDevice(std::vector<folly::File>&& fvec,
-                       std::vector<std::shared_ptr<FdpNvme>>&& fdpNvmeVec,
-                       uint64_t fileSize,
-                       uint32_t blockSize,
-                       uint32_t stripeSize,
-                       uint32_t maxIOSize,
-                       uint32_t maxDeviceWriteSize,
-                       IoEngine ioEngine,
-                       uint32_t qDepthPerContext,
-                       std::shared_ptr<DeviceEncryptor> encryptor)
+FileDevice::FileDevice(
+    std::vector<folly::File>&& fvec,
+    std::unordered_map<int, std::shared_ptr<FdpNvme>>&& fdpNvmeDevs,
+    uint64_t fileSize,
+    uint32_t blockSize,
+    uint32_t stripeSize,
+    uint32_t maxIOSize,
+    uint32_t maxDeviceWriteSize,
+    IoEngine ioEngine,
+    uint32_t qDepthPerContext,
+    std::shared_ptr<DeviceEncryptor> encryptor)
     : Device(fileSize * fvec.size(),
              std::move(encryptor),
              blockSize,
              maxIOSize,
              maxDeviceWriteSize),
       fvec_(std::move(fvec)),
-      fdpNvmeVec_(std::move(fdpNvmeVec)),
+      fdpNvmeDevs_(std::move(fdpNvmeDevs)),
       stripeSize_(stripeSize),
       ioEngine_(ioEngine),
       qDepthPerContext_(qDepthPerContext) {
@@ -974,7 +975,7 @@ FileDevice::FileDevice(std::vector<folly::File>&& fvec,
       "num_fdp_devices {}",
       fvec_.size(), getSize(), blockSize, stripeSize, maxDeviceWriteSize,
       maxIOSize, getIoEngineName(ioEngine_), qDepthPerContext_,
-      fdpNvmeVec_.size());
+      fdpNvmeDevs_.size());
 }
 
 bool FileDevice::readImpl(uint64_t offset, uint32_t size, void* value) {
@@ -1030,7 +1031,7 @@ IoContext* FileDevice::getIoContext() {
     std::unique_ptr<folly::AsyncBase> asyncBase;
     if (useIoUring) {
 #ifndef CACHELIB_IOURING_DISABLE
-      if (fdpNvmeVec_.size() > 0) {
+      if (fdpNvmeDevs_.size() > 0) {
         // Big sqe/cqe is mandatory for NVMe passthrough
         // https://elixir.bootlin.com/linux/v6.7/source/drivers/nvme/host/ioctl.c#L742
         folly::IoUringOp::Options options;
@@ -1051,7 +1052,7 @@ IoContext* FileDevice::getIoContext() {
     auto idx = incrementalIdx_++;
     tlContext_.reset(new AsyncIoContext(std::move(asyncBase), idx, evb,
                                         qDepthPerContext_, useIoUring,
-                                        fdpNvmeVec_));
+                                        fdpNvmeDevs_));
 
     {
       // Keep pointers in a vector to ease the gdb debugging
@@ -1067,10 +1068,20 @@ IoContext* FileDevice::getIoContext() {
 }
 
 int FileDevice::allocatePlacementHandle() {
-  static constexpr uint16_t kDefaultFdpIdx = 0u;
 #ifndef CACHELIB_IOURING_DISABLE
-  if (fdpNvmeVec_.size() > 0) {
-    return fdpNvmeVec_[kDefaultFdpIdx]->allocateFdpHandle();
+  if (fdpNvmeDevs_.size() > 0) {
+    auto fdpHandle = -1;
+    // Ensuring that same FDP placement handle is allocated for all FdpNvme
+    // devices for RAID, and returns the allocated handle if successful,
+    // or -1 if there is a conflict
+    for (auto& nvmeFdp : fdpNvmeDevs_) {
+      auto tempHandle = nvmeFdp.second->allocateFdpHandle();
+      if (fdpHandle != -1 && (tempHandle != fdpHandle)) {
+        return -1;
+      }
+      fdpHandle = tempHandle;
+    }
+    return fdpHandle;
   }
 #endif
   return -1;
@@ -1186,18 +1197,12 @@ std::unique_ptr<Device> createDirectIoFileDevice(
   XDCHECK(folly::isPowTwo(blockSize));
 
   uint32_t maxIOSize = maxDeviceWriteSize;
-  std::vector<std::shared_ptr<FdpNvme>> fdpNvmeVec{};
+  std::unordered_map<int, std::shared_ptr<FdpNvme>> fdpNvmeDevs;
 #ifndef CACHELIB_IOURING_DISABLE
   if (isFDPEnabled) {
     try {
-      if (filePaths.size() > 1) {
-        throw std::invalid_argument(folly::sformat(
-            "{} input files; but FDP mode does not support RAID files yet",
-            filePaths.size()));
-      }
-
-      for (const auto& path : filePaths) {
-        auto fdpNvme = std::make_shared<FdpNvme>(path);
+      for (size_t i = 0; i < filePaths.size(); i++) {
+        auto fdpNvme = std::make_shared<FdpNvme>(filePaths[i]);
 
         auto maxDevIOSize = fdpNvme->getMaxIOSize();
         if (maxDevIOSize != 0u &&
@@ -1205,12 +1210,12 @@ std::unique_ptr<Device> createDirectIoFileDevice(
           maxIOSize = maxDevIOSize;
         }
 
-        fdpNvmeVec.push_back(std::move(fdpNvme));
+        fdpNvmeDevs.insert({fVec[i].fd(), std::move(fdpNvme)});
       }
     } catch (const std::exception& e) {
       XLOGF(ERR, "NVMe FDP mode could not be enabled {}, Errno: {}", e.what(),
             errno);
-      fdpNvmeVec.clear();
+      fdpNvmeDevs.clear();
       maxIOSize = 0u;
     }
   }
@@ -1221,7 +1226,7 @@ std::unique_ptr<Device> createDirectIoFileDevice(
   }
 
   return std::make_unique<FileDevice>(std::move(fVec),
-                                      std::move(fdpNvmeVec),
+                                      std::move(fdpNvmeDevs),
                                       fileSize,
                                       blockSize,
                                       stripeSize,
