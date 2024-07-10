@@ -46,6 +46,13 @@ struct Cache {
 
     Key getKey() const { return key_; }
 
+    // This is the size of the memory allocation requested by the user.
+    // The memory range [getMemory(), getMemory() + getSize()) is usable.
+    uint32_t getSize() const noexcept { return key_.size(); }
+
+    // This is the total memory used including header and user data
+    uint32_t getTotalSize() const noexcept { return key_.size() + 32; }
+
     std::chrono::seconds getConfiguredTTL() const {
       return std::chrono::seconds(ttl_);
     }

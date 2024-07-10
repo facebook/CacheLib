@@ -86,6 +86,9 @@ TEST_F(NvmAdmissionPolicyTest, InvalidAPTests) {
   EXPECT_EQ(ctrs["ap.called"], 2);
   EXPECT_EQ(ctrs["ap.accepted"], 1);
   EXPECT_EQ(ctrs["ap.rejected"], 1);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 0);
+  EXPECT_EQ(ctrs["ap.rejected_bytes"],
+            item1.getKey().size() + 32 /* "key" + 32 bytes*/);
 
   const Cache::Item item2{"key 2"};
   // Throw.
@@ -104,7 +107,7 @@ TEST_F(NvmAdmissionPolicyTest, MemOnlyTTLTests) {
   EXPECT_EQ(ctrs["ap.called"], 1);
   EXPECT_EQ(ctrs["ap.accepted"], 1);
   EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 0);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 0);
 
   const Cache::Item item1{"key1", 10};
   ap.accept(item1, dummyChainedItem);
@@ -112,7 +115,7 @@ TEST_F(NvmAdmissionPolicyTest, MemOnlyTTLTests) {
   EXPECT_EQ(ctrs["ap.called"], 2);
   EXPECT_EQ(ctrs["ap.accepted"], 2);
   EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 0);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 0);
 
   // Set TTL to 11.
   ap.initMinTTL(11);
@@ -122,15 +125,15 @@ TEST_F(NvmAdmissionPolicyTest, MemOnlyTTLTests) {
   ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["ap.called"], 3);
   EXPECT_EQ(ctrs["ap.accepted"], 2);
-  EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 1);
+  EXPECT_EQ(ctrs["ap.rejected"], 1);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 1);
 
   ap.accept(item1, dummyChainedItem);
   ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["ap.called"], 4);
   EXPECT_EQ(ctrs["ap.accepted"], 2);
-  EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 2);
+  EXPECT_EQ(ctrs["ap.rejected"], 2);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 2);
 
   // Items with TTL of 11 will be accepted
   const Cache::Item item2{"key2", 11};
@@ -138,8 +141,8 @@ TEST_F(NvmAdmissionPolicyTest, MemOnlyTTLTests) {
   ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["ap.called"], 5);
   EXPECT_EQ(ctrs["ap.accepted"], 3);
-  EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 2);
+  EXPECT_EQ(ctrs["ap.rejected"], 2);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 2);
 
   // Items with TTL >11 will be accepted
   const Cache::Item item3{"key3", 100};
@@ -147,8 +150,8 @@ TEST_F(NvmAdmissionPolicyTest, MemOnlyTTLTests) {
   ctrs = ap.getCounters();
   EXPECT_EQ(ctrs["ap.called"], 6);
   EXPECT_EQ(ctrs["ap.accepted"], 4);
-  EXPECT_EQ(ctrs["ap.rejected"], 0);
-  EXPECT_EQ(ctrs["ap.ttlRejected"], 2);
+  EXPECT_EQ(ctrs["ap.rejected"], 2);
+  EXPECT_EQ(ctrs["ap.ttl_rejected"], 2);
 
   // TTL can not be initialized more than once.
   EXPECT_THROW({ ap.initMinTTL(12); }, std::invalid_argument);

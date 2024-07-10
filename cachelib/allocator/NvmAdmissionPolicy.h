@@ -43,27 +43,39 @@ class NvmAdmissionPolicy {
   // It captures the common logics (e.g statistics) then
   // delicates the detailed implementation to subclasses in acceptImpl.
   virtual bool accept(const Item& item,
-                      folly::Range<ChainedItemIter> chainItem) final {
+                      folly::Range<ChainedItemIter> chainedItems) final {
     util::LatencyTracker overallTracker(overallLatency_);
     overallCount_.inc();
+
+    // Track the size of the item. Note this size is an estimate, the
+    // actual size when written into NvmCache could be larger (e.g. align to
+    // device alignment, and in the case of BigHash, each write IO is 4KB)
+    auto itemSize = item.getTotalSize();
+    for (const auto& c : chainedItems) {
+      itemSize += c.getTotalSize();
+    }
 
     auto minTTL = minTTL_.load(std::memory_order_relaxed);
     auto itemTTL = static_cast<uint64_t>(item.getConfiguredTTL().count());
     if (minTTL > 0 && itemTTL < minTTL) {
       ttlRejected_.inc();
+      rejected_.inc();
+      rejectedBytes_.add(itemSize);
       return false;
     }
 
-    const bool decision = acceptImpl(item, chainItem);
+    const bool decision = acceptImpl(item, chainedItems);
     if (decision) {
       accepted_.inc();
     } else {
       rejected_.inc();
+      rejectedBytes_.add(itemSize);
     }
     return decision;
   }
 
-  // same as the above, but makes admission decisions given just the key and
+  // This API is meant to be called directly. This is why we only need the key.
+  // Same as the above, but makes admission decisions given just the key and
   // not the entire item. This can be used when we can infer the information
   // needed for admission decision from only the key.
   // Note: minTTL will be ignored if a callsite uses this function to test
@@ -102,13 +114,15 @@ class NvmAdmissionPolicy {
             util::CounterVisitor::CounterType::RATE);
     visitor("ap.rejected", rejected_.get(),
             util::CounterVisitor::CounterType::RATE);
+    visitor("ap.rejected_bytes", rejectedBytes_.get(),
+            util::CounterVisitor::CounterType::RATE);
+    visitor("ap.ttl_rejected", ttlRejected_.get());
 
     overallLatency_.visitQuantileEstimator(
         [&visitor](folly::StringPiece name, double count) {
           visitor(name.toString(), count / 1000);
         },
         "ap.latency_us");
-    visitor("ap.ttlRejected", ttlRejected_.get());
   }
 
   // Track access for an item.
@@ -152,6 +166,7 @@ class NvmAdmissionPolicy {
   AtomicCounter overallCount_{0};
   AtomicCounter accepted_{0};
   AtomicCounter rejected_{0};
+  AtomicCounter rejectedBytes_{0};
   AtomicCounter ttlRejected_{0};
   // The minimum TTL to an item need to have to be accepted.
   std::atomic<uint64_t> minTTL_{0};
