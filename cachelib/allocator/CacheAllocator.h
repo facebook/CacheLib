@@ -805,6 +805,18 @@ class CacheAllocator : public CacheBase {
                  std::shared_ptr<RebalanceStrategy> resizeStrategy = nullptr,
                  bool ensureProvisionable = false);
 
+  // This should only be called on cache startup on a new memory pool. Provision
+  // a pool by filling up each allocation class with prescribed number of slabs.
+  // This is useful for users that know their workload distribution in
+  // allocation sizes.
+  //
+  // @param poolId              id of the pool to provision
+  // @param slabsDistribution   number of slabs in each AC
+  // @return true if we have enough memory and filled each AC successfully
+  //         false otherwise. On false, we also revert all provisioned ACs.
+  bool provisionPool(PoolId poolId,
+                     const std::vector<uint32_t>& slabsDistribution);
+
   // update an existing pool's config
   //
   // @param pid       pool id for the pool to be updated
@@ -4518,6 +4530,13 @@ PoolId CacheAllocator<CacheTrait>::addPool(
   }
 
   return pid;
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::provisionPool(
+    PoolId poolId, const std::vector<uint32_t>& slabsDistribution) {
+  std::unique_lock w(poolsResizeAndRebalanceLock_);
+  return allocator_->provisionPool(poolId, slabsDistribution);
 }
 
 template <typename CacheTrait>

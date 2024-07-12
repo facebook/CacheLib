@@ -262,6 +262,41 @@ Slab* MemoryPool::getSlabLocked() noexcept {
   return slab;
 }
 
+bool MemoryPool::provision(const std::vector<uint32_t>& slabsDistribution) {
+  if (slabsDistribution.size() != ac_.size()) {
+    throw std::invalid_argument(
+        folly::sformat("Invalid slabs distribution. Expected {} ACs, Got {}",
+                       ac_.size(), slabsDistribution.size()));
+  }
+
+  auto freeAllSlabs = [this](const std::list<Slab*>& slabs) {
+    for (auto* s : slabs) {
+      slabAllocator_.freeSlab(s);
+      currSlabAllocSize_ -= Slab::kSize;
+    }
+  };
+
+  LockHolder l(lock_);
+  uint32_t totalSlabsToAllocate =
+      std::accumulate(slabsDistribution.begin(), slabsDistribution.end(), 0);
+  std::list<Slab*> slabs;
+  for (uint32_t i = 0; i < totalSlabsToAllocate; i++) {
+    auto slab = getSlabLocked();
+    if (slab == nullptr) {
+      freeAllSlabs(slabs);
+      return false;
+    }
+    slabs.push_back(slab);
+  }
+  for (size_t i = 0; i < slabsDistribution.size(); i++) {
+    for (size_t j = 0; j < slabsDistribution[i]; ++j) {
+      ac_[i]->addSlab(slabs.front());
+      slabs.pop_front();
+    }
+  }
+  return true;
+}
+
 void* MemoryPool::allocate(uint32_t size) {
   auto& ac = getAllocationClassFor(size);
 

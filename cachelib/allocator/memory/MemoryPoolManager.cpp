@@ -119,6 +119,14 @@ PoolId MemoryPoolManager::createNewPool(folly::StringPiece name,
   return id;
 }
 
+bool MemoryPoolManager::provisionPool(
+    PoolId pid, const std::vector<uint32_t>& slabsDistribution) {
+  if (pid >= static_cast<PoolId>(pools_.size())) {
+    throw std::invalid_argument(folly::sformat("Invalid pool id {}", pid));
+  }
+  return pools_[pid]->provision(slabsDistribution);
+}
+
 MemoryPool& MemoryPoolManager::getPoolByName(const std::string& name) const {
   std::shared_lock l(lock_);
   auto it = poolsByName_.find(name);

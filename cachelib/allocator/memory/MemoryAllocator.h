@@ -207,6 +207,20 @@ class MemoryAllocator {
                  const std::set<uint32_t>& allocSizes = {},
                  bool ensureProvisionable = false);
 
+  // This should only be called on cache startup on a new memory pool. Provision
+  // a pool by filling up each allocation class with prescribed number of slabs.
+  // This is useful for users that know their workload distribution in
+  // allocation sizes.
+  //
+  // @param poolId              id of the pool to provision
+  // @param slabsDistribution   number of slabs in each AC
+  // @return true if we have enough memory and filled each AC successfully
+  //         false otherwise. On false, we also revert all provisioned ACs.
+  bool provisionPool(PoolId pid,
+                     const std::vector<uint32_t>& slabsDistribution) {
+    return memoryPoolManager_.provisionPool(pid, slabsDistribution);
+  }
+
   // shrink the existing pool by _bytes_ .
   // @param id     the id for the pool
   // @param bytes  the number of bytes to be taken away from the pool

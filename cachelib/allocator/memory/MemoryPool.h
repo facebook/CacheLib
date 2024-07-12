@@ -133,6 +133,13 @@ class MemoryPool {
 
   MPStats getStats() const;
 
+  // Provision each allocation class with prescribed number of slabs.
+  //
+  // @param slabsDistribution   number of slabs in each AC
+  // @return true if we have enough memory and filled each AC successfully
+  //         false otherwise. On false, we also revert all provisioned ACs.
+  bool provision(const std::vector<uint32_t>& slabsDistribution);
+
   // allocates memory of at least _size_ bytes.
   //
   // @param size  size of the allocation.

@@ -6296,6 +6296,66 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
         });
     EXPECT_EQ(intervalNameExists, 4);
   }
+
+  void testProvisionPool() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(20 * Slab::kSize);
+    config.cacheName = "foobar";
+
+    // Provision all slabs into the first AC
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes, {64, 1024});
+      ASSERT_TRUE(alloc.provisionPool(poolId, {19, 0}));
+
+      auto smallIt = util::allocateAccessible(alloc, poolId, "small", 10);
+      EXPECT_NE(nullptr, smallIt);
+
+      auto largeIt = util::allocateAccessible(alloc, poolId, "large", 500);
+      EXPECT_EQ(nullptr, largeIt);
+    }
+
+    // Provision one slab into the second AC and rest to the first AC
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes, {64, 1024});
+      ASSERT_TRUE(alloc.provisionPool(poolId, {18, 1}));
+
+      auto smallIt = util::allocateAccessible(alloc, poolId, "small", 10);
+      EXPECT_NE(nullptr, smallIt);
+
+      auto largeIt = util::allocateAccessible(alloc, poolId, "large", 500);
+      EXPECT_NE(nullptr, largeIt);
+    }
+
+    // Invalid config. More than the number of ACs
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes, {64, 1024});
+      EXPECT_THROW(alloc.provisionPool(poolId, {17, 1, 1}),
+                   std::invalid_argument);
+    }
+
+    // Invalid config. Trying to provision more slabs than available.
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes, {64, 1024});
+      EXPECT_FALSE(alloc.provisionPool(poolId, {19, 1}));
+
+      // Correct config will succeed
+      ASSERT_TRUE(alloc.provisionPool(poolId, {18, 1}));
+
+      auto smallIt = util::allocateAccessible(alloc, poolId, "small", 10);
+      EXPECT_NE(nullptr, smallIt);
+
+      auto largeIt = util::allocateAccessible(alloc, poolId, "large", 500);
+      EXPECT_NE(nullptr, largeIt);
+    }
+  }
 };
 } // namespace tests
 } // namespace cachelib
