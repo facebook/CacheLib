@@ -436,6 +436,23 @@ inline uint64_t strict_aliasing_safe_read64(const void* ptr) {
   memcpy(&result, ptr, sizeof(result));
   return result;
 }
+
+inline size_t byteIndex(size_t bitIdx) { return bitIdx >> 3u; }
+
+inline uint8_t bitMask(size_t bitIdx) {
+  return static_cast<uint8_t>(1u << (bitIdx & 7u));
+}
+
+// @bitSet, @bitGet are helper functions to test and set bit.
+// @bitIndex is an arbitrary large bit index to test/set. @ptr points to the
+// first byte of large bitfield.
+inline void bitSet(uint8_t* ptr, size_t bitIdx) {
+  ptr[byteIndex(bitIdx)] |= bitMask(bitIdx);
+}
+
+inline bool bitGet(const uint8_t* ptr, size_t bitIdx) {
+  return ptr[byteIndex(bitIdx)] & bitMask(bitIdx);
+}
 } // namespace util
 } // namespace cachelib
 } // namespace facebook

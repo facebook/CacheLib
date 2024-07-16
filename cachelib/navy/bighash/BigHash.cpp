@@ -25,9 +25,9 @@
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Utils.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook::cachelib::navy {
+constexpr uint32_t kBigHashValidBucketCheckerBucketsPerBit = 100;
 
 constexpr uint32_t BigHash::kFormatVersion;
 
@@ -106,6 +106,9 @@ void BigHash::reset() {
     bloomFilter_->reset();
   }
 
+  validBucketChecker_ = std::make_unique<ValidBucketChecker>(
+      numBuckets_, kBigHashValidBucketCheckerBucketsPerBit);
+
   itemCount_.set(0);
   insertCount_.set(0);
   succInsertCount_.set(0);
@@ -166,18 +169,18 @@ std::pair<Status, std::string> BigHash::getRandomAlloc(Buffer& value) {
 void BigHash::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bh_size", getSize());
   visitor("navy_bh_items", itemCount_.get());
-  visitor(
-      "navy_bh_inserts", insertCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_inserts", insertCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_inserts",
           succInsertCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor(
-      "navy_bh_lookups", lookupCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_lookups", lookupCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_lookups",
           succLookupCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor(
-      "navy_bh_removes", removeCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_removes", removeCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bh_succ_removes",
           succRemoveCount_.get(),
           CounterVisitor::CounterType::RATE);
@@ -207,6 +210,14 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
           checksumErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bh_used_size_bytes", usedSizeBytes_.get());
+  visitor("navy_bh_disabled_bucket_lookup", disabledBucketLookup_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_disabled_bucket_insert", disabledBucketInsert_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_disabled_bucket_remove", disabledBucketRemove_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bh_disabled_buckets",
+          validBucketChecker_->numDisabledBuckets());
   bucketExpirationsDist_x100_.visitQuantileEstimator(
       visitor, "navy_bh_expired_loop_x100");
 }
@@ -221,6 +232,7 @@ void BigHash::persist(RecordWriter& rw) {
   *pd.cacheBaseOffset() = cacheBaseOffset_;
   *pd.numBuckets() = numBuckets_;
   *pd.usedSizeBytes() = usedSizeBytes_.get();
+  *pd.validBucketCheckerState() = validBucketChecker_->persist();
   serializeProto(pd, rw);
 
   if (bloomFilter_) {
@@ -259,6 +271,12 @@ bool BigHash::recover(RecordReader& rr) {
       bloomFilter_->recover<ProtoSerializer>(rr);
       XLOG(INFO, "Recovered bloom filter");
     }
+
+    if (!validBucketChecker_->recover(*pd.validBucketCheckerState())) {
+      throw std::logic_error{"failed to recover valid bucket checker"};
+    }
+    XLOGF(INFO, "Recovered valid bucket checker. {} buckets diabled.",
+          validBucketChecker_->numDisabledBuckets());
   } catch (const std::exception& e) {
     XLOGF(ERR, "Exception: {}", e.what());
     XLOG(ERR, "Failed to recover bighash. Resetting cache.");
@@ -274,6 +292,11 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   const auto bid = getBucketId(hk);
   insertCount_.inc();
 
+  if (!validBucketChecker_->isBucketValid(bid.index())) {
+    disabledBucketInsert_.inc();
+    return Status::Rejected;
+  }
+
   uint32_t removed{0};
   uint32_t evicted{0};
   uint32_t evictExpired{0};
@@ -284,11 +307,11 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   // we copy the items and trigger the destructorCb after bucket lock is
   // released to avoid possible heavy operations or locks in the destrcutor.
   std::vector<std::tuple<Buffer, Buffer, DestructorEvent>> removedItems;
-  DestructorCallback cb =
-      [&removedItems](HashedKey key, BufferView val, DestructorEvent event) {
-        // must make a copy for the key, o/w data might be deleted
-        removedItems.emplace_back(Buffer{makeView(key.key())}, val, event);
-      };
+  DestructorCallback cb = [&removedItems](HashedKey key, BufferView val,
+                                          DestructorEvent event) {
+    // must make a copy for the key, o/w data might be deleted
+    removedItems.emplace_back(Buffer{makeView(key.key())}, val, event);
+  };
 
   {
     std::unique_lock<SharedMutex> lock{getMutex(bid)};
@@ -367,6 +390,11 @@ Status BigHash::lookup(HashedKey hk, Buffer& value) {
   const auto bid = getBucketId(hk);
   lookupCount_.inc();
 
+  if (!validBucketChecker_->isBucketValid(bid.index())) {
+    disabledBucketLookup_.inc();
+    return Status::NotFound;
+  }
+
   Bucket* bucket{nullptr};
   Buffer buffer;
 
@@ -402,14 +430,19 @@ Status BigHash::remove(HashedKey hk) {
   const auto bid = getBucketId(hk);
   removeCount_.inc();
 
+  if (!validBucketChecker_->isBucketValid(bid.index())) {
+    disabledBucketRemove_.inc();
+    return Status::NotFound;
+  }
+
   uint32_t oldRemainingBytes = 0;
   uint32_t newRemainingBytes = 0;
 
   // we copy the items and trigger the destructorCb after bucket lock is
   // released to avoid possible heavy operations or locks in the destrcutor.
   Buffer valueCopy;
-  DestructorCallback cb = [&valueCopy](
-                              HashedKey, BufferView value, DestructorEvent) {
+  DestructorCallback cb = [&valueCopy](HashedKey, BufferView value,
+                                       DestructorEvent) {
     valueCopy = Buffer{value};
   };
 
@@ -522,27 +555,33 @@ Buffer BigHash::readBucket(BucketId bid) {
   const bool res =
       device_.read(getBucketOffset(bid), buffer.size(), buffer.data());
   if (!res) {
+    validBucketChecker_->disableBucket(bid.index());
     return {};
   }
 
   auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
 
-  const auto checksumSuccess =
-      Bucket::computeChecksum(buffer.view()) == bucket->getChecksum();
-  // TODO (T93631284) we only read a bucket if the bloom filter indicates that
-  // the bucket could have the element. Hence, if check sum errors out and bloom
-  // filter is enable, we could record the checksum error. However, doing so
-  // could lead to false positives on check sum errors for buckets that were not
-  // initialized (by writing to it), but were read due to bloom filter having a
-  // false positive.  Hence, we can't differentiate between false positives and
-  // real check sum errors due device failures
-  //
-  // if (!checksumSuccess && bloomFilter_) {
-  //  checksumErrorCount_.inc();
-  // }
+  auto checksumCheck = [](auto* b, auto bufferView) {
+    const bool checksumSuccess =
+        Bucket::computeChecksum(bufferView) == b->getChecksum();
+    // TODO (T93631284) we only read a bucket if the bloom filter indicates that
+    // the bucket could have the element. Hence, if check sum errors out and
+    // bloom filter is enable, we could record the checksum error. However,
+    // doing so could lead to false positives on check sum errors for buckets
+    // that were not initialized (by writing to it), but were read due to bloom
+    // filter having a false positive.  Hence, we can't differentiate between
+    // false positives and real check sum errors due device failures
+    //
+    // if (!checksumSuccess && bloomFilter_) {
+    //  validBucketChecker_->disableBucket(bid.index());
+    //  checksumErrorCount_.inc();
+    // }
+    return checksumSuccess;
+  };
 
-  if (!checksumSuccess || static_cast<uint64_t>(generationTime_.count()) !=
-                              bucket->generationTime()) {
+  if (static_cast<uint64_t>(generationTime_.count()) !=
+          bucket->generationTime() ||
+      !checksumCheck(bucket, buffer.view())) {
     Bucket::initNew(buffer.mutableView(), generationTime_.count());
   }
   return buffer;
@@ -551,7 +590,11 @@ Buffer BigHash::readBucket(BucketId bid) {
 bool BigHash::writeBucket(BucketId bid, Buffer buffer) {
   auto* bucket = reinterpret_cast<Bucket*>(buffer.data());
   bucket->setChecksum(Bucket::computeChecksum(buffer.view()));
-  return device_.write(
-      getBucketOffset(bid), std::move(buffer), placementHandle_);
+  const bool res =
+      device_.write(getBucketOffset(bid), std::move(buffer), placementHandle_);
+  if (!res) {
+    validBucketChecker_->disableBucket(bid.index());
+  }
+  return res;
 }
 } // namespace facebook::cachelib::navy

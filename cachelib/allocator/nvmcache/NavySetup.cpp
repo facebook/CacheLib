@@ -18,10 +18,12 @@
 
 #include <folly/File.h>
 #include <folly/logging/xlog.h>
+#include <gmock/gmock.h>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/Factory.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
+#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook {
 namespace cachelib {
@@ -366,6 +368,30 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
     bool itemDestructorEnabled) {
   auto device = createDevice(config, std::move(encryptor));
+
+  if (config.hasDeviceDataCorruptionForTesting()) {
+    // Use mock device. This is for testing
+    auto mockDevice = std::make_unique<navy::MockDevice>(
+        device->getSize(), device->getIOAlignmentSize());
+    mockDevice->setRealDevice(std::move(device));
+    ON_CALL(*mockDevice, readImpl(testing::_, testing::_, testing::_))
+        .WillByDefault(
+            testing::Invoke([d = &mockDevice->getRealDeviceRef()](
+                                uint64_t offset, uint32_t size, void* buffer) {
+              XDCHECK_EQ(size % d->getIOAlignmentSize(), 0u);
+              XDCHECK_EQ(offset % d->getIOAlignmentSize(), 0u);
+              auto res = d->read(offset, size, buffer);
+              if (!res) {
+                return res;
+              }
+
+              // Corrupt the first byte which will break checksum
+              reinterpret_cast<char*>(buffer)[0] += 1;
+              return res;
+            }));
+
+    device = std::move(mockDevice);
+  }
 
   auto proto = cachelib::navy::createCacheProto();
   auto* devicePtr = device.get();

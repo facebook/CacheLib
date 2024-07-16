@@ -270,7 +270,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
 
       // Remove this item from index so no future lookup will
       // ever attempt to read this key. Reclaim will also not be
-      // albe to re-insert this item as it does not exist in index.
+      // able to re-insert this item as it does not exist in index.
       index_.remove(hk.keyHash());
     }
     regionManager_.close(std::move(desc));

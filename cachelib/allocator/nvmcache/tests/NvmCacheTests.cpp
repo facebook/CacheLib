@@ -1749,6 +1749,10 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p9999"));
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p99999"));
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_p999999"));
+  EXPECT_TRUE(cs("navy_bh_disabled_bucket_lookup"));
+  EXPECT_TRUE(cs("navy_bh_disabled_bucket_insert"));
+  EXPECT_TRUE(cs("navy_bh_disabled_bucket_remove"));
+  EXPECT_TRUE(cs("navy_bh_disabled_buckets"));
 
   EXPECT_TRUE(cs("navy_device_encryption_errors"));
   EXPECT_TRUE(cs("navy_device_decryption_errors"));
@@ -2689,6 +2693,70 @@ TEST_F(NvmCacheTest, IsNewCacheInstanceStat) {
   EXPECT_TRUE(stats.isNewRamCache);
   EXPECT_TRUE(stats.isNewNvmCache);
   std::this_thread::sleep_for(std::chrono::seconds{2});
+}
+
+TEST_F(NvmCacheTest, BadDevice) {
+  // Device errors along the deletion path will disable NvmCache
+  {
+    const auto key = "test_key_foo";
+    auto& config = getConfig();
+    // Disable remove callback to set item dtor instead
+    config.setRemoveCallback({});
+    config.setItemDestructor([](const DestructedData&) {
+      // noop. Need to set item dtor to activate lookup on remove in BC
+    });
+    config.nvmConfig->navyConfig.setBadDeviceForTesting(
+        true /*hasDataCorruption=*/);
+    auto& cache = makeCache();
+    {
+      auto it = cache.allocate(this->poolId(), key, 200);
+      std::memcpy(it->getMemory(), "foobar", sizeof("foobar"));
+      cache.insertOrReplace(it);
+    }
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+    cache.flushNvmCache();
+    this->removeFromRamForTesting(key);
+    EXPECT_TRUE(cache.isNvmCacheEnabled());
+
+    // Checksum error on remove disables nvm-cache
+    cache.remove(key);
+    cache.flushNvmCache();
+    EXPECT_FALSE(cache.isNvmCacheEnabled());
+  }
+
+  // NvmCache remains usable after device errors. However, the items that are
+  // caught in errors will never be returned to the user again.
+  {
+    const auto key = "test_key_foo";
+    auto& config = getConfig();
+    // Disable remove callback to set item dtor instead
+    config.setRemoveCallback({});
+    config.setItemDestructor([](const DestructedData&) {
+      // noop. Need to set item dtor to activate lookup on remove in BC
+    });
+    config.nvmConfig->navyConfig.setBadDeviceForTesting(
+        true /*hasDataCorruption=*/);
+    // Do not disable NvmCache
+    config.nvmConfig->disableNvmCacheOnBadState_S421120 = false;
+    auto& cache = makeCache();
+    {
+      auto it = cache.allocate(this->poolId(), key, 200);
+      std::memcpy(it->getMemory(), "foobar", sizeof("foobar"));
+      cache.insertOrReplace(it);
+    }
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+    cache.flushNvmCache();
+    this->removeFromRamForTesting(key);
+    EXPECT_TRUE(cache.isNvmCacheEnabled());
+
+    // Checksum error on remove does not disable nvm-cache
+    cache.remove(key);
+    cache.flushNvmCache();
+    EXPECT_TRUE(cache.isNvmCacheEnabled());
+
+    auto it = cache.find(key);
+    EXPECT_EQ(nullptr, it);
+  }
 }
 } // namespace tests
 } // namespace cachelib

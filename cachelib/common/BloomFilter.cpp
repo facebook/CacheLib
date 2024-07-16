@@ -22,27 +22,11 @@
 #include <cstring>
 
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Utils.h"
 
 namespace facebook {
 namespace cachelib {
 namespace {
-size_t byteIndex(size_t bitIdx) { return bitIdx >> 3u; }
-
-uint8_t bitMask(size_t bitIdx) {
-  return static_cast<uint8_t>(1u << (bitIdx & 7u));
-}
-
-// @bitSet, @bitGet are helper functions to test and set bit.
-// @bitIndex is an arbitrary large bit index to test/set. @ptr points to the
-// first byte of large bitfield.
-void bitSet(uint8_t* ptr, size_t bitIdx) {
-  ptr[byteIndex(bitIdx)] |= bitMask(bitIdx);
-}
-
-bool bitGet(const uint8_t* ptr, size_t bitIdx) {
-  return ptr[byteIndex(bitIdx)] & bitMask(bitIdx);
-}
-
 size_t bitsToBytes(size_t bits) {
   // align to closest 8 byte
   return ((bits + 7ULL) & ~(7ULL)) >> 3u;
@@ -64,7 +48,6 @@ std::pair<uint32_t, size_t> findOptimalParams(size_t elementCount,
 
   return std::make_pair(minK, static_cast<size_t>(minM));
 }
-
 } // namespace
 
 BloomFilter BloomFilter::makeBloomFilter(uint32_t numFilters,
@@ -106,7 +89,7 @@ void BloomFilter::set(uint32_t idx, uint64_t key) {
     XDCHECK_LT(idx, numFilters_);
     auto bitNum =
         facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
-    bitSet(filterPtr, firstBit + bitNum);
+    util::bitSet(filterPtr, firstBit + bitNum);
     firstBit += hashTableBitSize_;
   }
 }
@@ -119,7 +102,7 @@ bool BloomFilter::couldExist(uint32_t idx, uint64_t key) const {
     const auto* filterPtr = getFilterBytes(idx);
     auto bitNum =
         facebook::cachelib::combineHashes(key, seed) % hashTableBitSize_;
-    if (!bitGet(filterPtr, firstBit + bitNum)) {
+    if (!util::bitGet(filterPtr, firstBit + bitNum)) {
       return false;
     }
     firstBit += hashTableBitSize_;

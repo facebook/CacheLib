@@ -109,6 +109,15 @@ class NvmCache {
     // If true, only store the orignal size the user requested.
     bool truncateItemToOriginalAllocSizeInNvm{false};
 
+    // Whether or not to disable the entire NvmCache after getting
+    // a bad state from the underlying flash cache engine. A bad state
+    // means we attempted to remove something but encountered error.
+    // This used to mean the Flash engine may return the data we tried
+    // to delete at a later time. Now it's no longer possible. So
+    // this option is merely here to allow us to disable this behavior
+    // gradually. See S421120 for more details.
+    bool disableNvmCacheOnBadState_S421120{true};
+
     // serialize the config for debugging purposes
     std::map<std::string, std::string> serialize() const;
 
@@ -485,6 +494,8 @@ std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
   configMap["encryption"] = deviceEncryptor ? "set" : "empty";
   configMap["truncateItemToOriginalAllocSizeInNvm"] =
       truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
+  configMap["disableNvmCacheOnBadState_S421120"] =
+      disableNvmCacheOnBadState_S421120 ? "true" : "false";
   return configMap;
 }
 
@@ -1241,7 +1252,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
 
 template <typename C>
 void NvmCache<C>::disableNavy(const std::string& msg) {
-  if (isEnabled()) {
+  if (isEnabled() && config_.disableNvmCacheOnBadState_S421120) {
     navyEnabled_ = false;
     XLOGF(CRITICAL, "Disabling navy. {}", msg);
   }

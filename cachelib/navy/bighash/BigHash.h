@@ -31,6 +31,7 @@
 #include "cachelib/navy/common/SizeDistribution.h"
 #include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/engine/Engine.h"
+#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
@@ -38,6 +39,9 @@ namespace navy {
 // SharedMutex is write priority by default
 using SharedMutex =
     folly::fibers::TimedRWMutexWritePriority<folly::fibers::Baton>;
+
+class ValidBucketChecker;
+
 // BigHash is a small item flash-based cache engine. It divides the device into
 // a series of buckets. One can think of it as a on-device hash table.
 //
@@ -210,6 +214,7 @@ class BigHash final : public Engine {
   const uint64_t cacheBaseOffset_{};
   const uint64_t numBuckets_{};
   std::unique_ptr<BloomFilter> bloomFilter_;
+  std::unique_ptr<ValidBucketChecker> validBucketChecker_;
   std::chrono::nanoseconds generationTime_{};
   Device& device_;
   // handle for data placement technologies like FDP
@@ -245,12 +250,106 @@ class BigHash final : public Engine {
   mutable AtomicCounter bfRebuildCount_;
   mutable AtomicCounter checksumErrorCount_;
   mutable AtomicCounter usedSizeBytes_;
+  mutable AtomicCounter disabledBucketLookup_;
+  mutable AtomicCounter disabledBucketInsert_;
+  mutable AtomicCounter disabledBucketRemove_;
   // counters to quantify the expired eviction overhead (temporary)
   // PercentileStats generates outputs in integers, so amplify by 100x
   mutable util::PercentileStats bucketExpirationsDist_x100_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");
+
+  friend class ValidBucketChecker;
+};
+
+// Helper to determine which bucket is valid and can be served from BigHash
+class ValidBucketChecker {
+ public:
+  explicit ValidBucketChecker(uint32_t numBuckets, uint32_t numBucketsPerBit)
+      : numBuckets_{numBuckets},
+        numBucketsPerBit_{numBucketsPerBit},
+        numBytes_{getBytes(numBuckets, numBucketsPerBit)},
+        bits_{std::make_unique<uint8_t[]>(numBytes_)} {
+    XLOGF(INFO,
+          "For ValidBucketChecker, allocating {} bytes for {} buckets at {} "
+          "buckets per bit.",
+          numBytes_,
+          numBuckets_,
+          numBucketsPerBit_);
+  }
+
+  serialization::ValidBucketCheckerState persist() {
+    serialization::ValidBucketCheckerState state;
+    state.numBuckets() = numBuckets_;
+    state.numBucketsPerBit() = numBucketsPerBit_;
+    state.numDisabledBuckets() = numDisabledBuckets_.get();
+    state.bytes()->reserve(numBytes_);
+    for (uint32_t i = 0; i < numBytes_; ++i) {
+      state.bytes()->push_back(bits_[i]);
+    }
+    return state;
+  }
+
+  bool recover(const serialization::ValidBucketCheckerState& state) {
+    if (static_cast<uint32_t>(*state.numBuckets()) != numBuckets_ ||
+        static_cast<uint32_t>(*state.numBucketsPerBit()) != numBucketsPerBit_ ||
+        state.bytes()->size() != numBytes_) {
+      XLOGF(ERR,
+            "Failed to recover ValidBucketChecker. Expected {} buckets, "
+            "{} per bit, but got {}, {}",
+            numBuckets_,
+            numBucketsPerBit_,
+            *state.numBuckets(),
+            *state.numBucketsPerBit());
+      return false;
+    }
+
+    numDisabledBuckets_.set(*state.numDisabledBuckets());
+
+    for (uint32_t i = 0; i < numBytes_; ++i) {
+      *(bits_.get() + i) = (*state.bytes())[i];
+    }
+
+    return true;
+  }
+
+  uint32_t numDisabledBuckets() const { return numDisabledBuckets_.get(); }
+
+  bool isBucketValid(uint32_t idx) const {
+    XDCHECK_GE(numBuckets_, idx);
+    uint32_t numBits = idx / numBucketsPerBit_;
+    auto* byte = bits_.get() + numBits / 8;
+    return !util::bitGet(byte, numBits % 8);
+  }
+
+  void disableBucket(uint32_t idx) {
+    XDCHECK_GE(numBuckets_, idx);
+    uint32_t numBits = idx / numBucketsPerBit_;
+    auto* byte = bits_.get() + numBits / 8;
+    util::bitSet(byte, numBits % 8);
+  }
+
+ private:
+  static uint32_t getBytes(uint32_t numBuckets, uint32_t numBucketsPerBit) {
+    // Align up the bits so we have enough to cover all buckets
+    const uint32_t numBits =
+        (numBuckets + numBucketsPerBit - 1) / numBucketsPerBit;
+    // Align up the bytes so we have enough to cover all bytes
+    const uint32_t numBytes = (numBits + 7) / 8;
+    return numBytes;
+  }
+
+  const uint32_t numBuckets_{};
+  const uint32_t numBucketsPerBit_{};
+  const uint32_t numBytes_{};
+
+  // 1 means disabled. 0 means active.
+  std::unique_ptr<uint8_t[]> bits_;
+
+  // # of buckets disabled since BigHash has been created.
+  // This is persisted across restarts.
+  AtomicCounter numDisabledBuckets_;
 };
 } // namespace navy
 } // namespace cachelib

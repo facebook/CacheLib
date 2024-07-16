@@ -512,6 +512,9 @@ class NavyConfig {
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
   IoEngine getIoEngine() const { return ioEngine_; }
   unsigned int getQDepth() const { return qDepth_; }
+  bool hasDeviceDataCorruptionForTesting() const {
+    return testingBadDeviceHasDataCorruption_;
+  }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
@@ -574,6 +577,18 @@ class NavyConfig {
   // This function is only for cachebench and unit tests to create
   // a MemoryDevice when no file path is set.
   void setMemoryFile(uint64_t fileSize) noexcept { fileSize_ = fileSize; }
+  // Set up a bad device backed by the existing device that user has configured.
+  // This requires the user to have also set up a real device (one of the
+  // above).
+  // @param hasDataCorruption: whether the device will return corrupted data
+  // TODO: user can add more options to tune the bad device's behavior. E.g. add
+  //       probability for introducting data corruption. Add probability to
+  //       return error on read or write IOs.
+  void setBadDeviceForTesting(bool hasDataCorruption) {
+    testingBadDeviceHasDataCorruption_ = hasDataCorruption;
+  }
+
+  // Configure the size of the metadata partition reserved for Navy
   void setDeviceMetadataSize(uint64_t deviceMetadataSize) noexcept {
     deviceMetadataSize_ = deviceMetadataSize;
   }
@@ -661,6 +676,8 @@ class NavyConfig {
   // This controls granularity of the writes when we flush the region.
   // This is only used when in-mem buffer is enabled.
   uint32_t deviceMaxWriteSize_{};
+  // This controls whether or not the device will return corrupted data.
+  bool testingBadDeviceHasDataCorruption_{false};
 
   // IoEngine type used for IO
   IoEngine ioEngine_{IoEngine::Sync};
