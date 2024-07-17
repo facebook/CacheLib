@@ -12,7 +12,9 @@
     "allocFactor" : 10,
 
     "nvmCacheSizeMB" : 512,
-    "nvmCachePaths": ["/tmp/cachebench_navy_test_default"]
+    "nvmCachePaths": ["/tmp/cachebench_navy_test_default"],
+    "navyMaxNumReads": 256,
+    "navyMaxNumWrites": 64
   },
   "test_config" :
     {

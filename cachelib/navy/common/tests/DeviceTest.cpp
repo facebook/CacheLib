@@ -159,6 +159,7 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_avg"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_min"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_max"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p5"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p10"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p25"), 0));
@@ -172,10 +173,10 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_p99999"), 0));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_read_latency_us_p999999"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_read_latency_us_max"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_read_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_avg"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_min"), 0));
+  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p5"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p10"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_p25"), 0));
@@ -190,9 +191,105 @@ TEST(Device, Stats) {
               call(strPiece("navy_device_write_latency_us_p99999"), 0));
   EXPECT_CALL(visitor,
               call(strPiece("navy_device_write_latency_us_p999999"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_avg"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_min"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_max"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p5"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p10"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p25"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p50"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p75"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p90"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p95"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p99"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p999"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p9999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p99999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_read_device_latency_us_p999999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_avg"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_min"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_max"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p5"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p10"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p25"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p50"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p75"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p90"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p95"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p99"), 0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p9999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p99999"),
+           0));
+  EXPECT_CALL(
+      visitor,
+      call(strPiece("navy_device_async_io_op_write_device_latency_us_p999999"),
+           0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_encryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
-  EXPECT_CALL(visitor, call(strPiece("navy_device_write_latency_us_max"), 0));
   device.getCounters({toCallback(visitor)});
 }
 

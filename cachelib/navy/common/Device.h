@@ -190,6 +190,14 @@ class Device {
   virtual bool readImpl(uint64_t offset, uint32_t size, void* value) = 0;
   virtual void flushImpl() = 0;
 
+  // This measures the latency of an individual read or write iop between its
+  // submission and completion. Slowdowns in the kernel and the boundary between
+  // kernel and userspace will negatively affect this latency metric. For
+  // example: stall during submission, completion callback not invoked
+  // immediately after the IO is complete.
+  mutable util::PercentileStats readIOOpDeviceLatencyEstimator_;
+  mutable util::PercentileStats writeIOOpDeviceLatencyEstimator_;
+
  private:
   mutable AtomicCounter bytesWritten_;
   mutable AtomicCounter bytesRead_;
@@ -198,6 +206,10 @@ class Device {
   mutable AtomicCounter encryptionErrors_;
   mutable AtomicCounter decryptionErrors_;
 
+  // This measures the latency of a read or write request. For synchronous IO,
+  // this measures the latency of pread/pwrite. For async IO, this measures
+  // the time of creating async io context, any navy async-io queuing delays,
+  // and the time spent in the kernel actually scheduling and running the iop.
   mutable util::PercentileStats readLatencyEstimator_;
   mutable util::PercentileStats writeLatencyEstimator_;
 

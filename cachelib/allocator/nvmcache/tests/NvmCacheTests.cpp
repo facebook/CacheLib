@@ -1707,6 +1707,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_write_errors"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_avg"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_min"));
+  EXPECT_TRUE(cs("navy_device_read_latency_us_max"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p5"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p10"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p25"));
@@ -1719,9 +1720,9 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_read_latency_us_p9999"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_read_latency_us_p999999"));
-  EXPECT_TRUE(cs("navy_device_read_latency_us_max"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_avg"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_min"));
+  EXPECT_TRUE(cs("navy_device_write_latency_us_max"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p5"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p10"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p25"));
@@ -1734,6 +1735,36 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_device_write_latency_us_p9999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p99999"));
   EXPECT_TRUE(cs("navy_device_write_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_avg"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_min"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_max"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p5"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p10"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p25"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p75"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p95"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_read_device_latency_us_p999999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_avg"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_min"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_max"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p5"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p10"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p25"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p50"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p75"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p90"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p95"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p99"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p9999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p99999"));
+  EXPECT_TRUE(cs("navy_device_async_io_op_write_device_latency_us_p999999"));
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_avg"));
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_min"));
   EXPECT_TRUE(cs("navy_bh_expired_loop_x100_max"));
@@ -1756,7 +1787,6 @@ TEST_F(NvmCacheTest, NavyStats) {
 
   EXPECT_TRUE(cs("navy_device_encryption_errors"));
   EXPECT_TRUE(cs("navy_device_decryption_errors"));
-  EXPECT_TRUE(cs("navy_device_write_latency_us_max"));
 
   // item destructor
   EXPECT_TRUE(cs("items_tracked_for_destructor"));

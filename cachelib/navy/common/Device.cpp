@@ -59,6 +59,7 @@ struct IOOp {
                 uint64_t offset,
                 uint32_t size,
                 void* data,
+                std::function<void(double)> trackIOOpDeviceLatency,
                 std::optional<int> placeHandle = std::nullopt)
       : parent_(parent),
         idx_(idx),
@@ -66,6 +67,7 @@ struct IOOp {
         offset_(offset),
         size_(size),
         data_(data),
+        trackIOOpDeviceLatency_(std::move(trackIOOpDeviceLatency)),
         placeHandle_(placeHandle) {}
 
   std::string toString() const;
@@ -81,6 +83,8 @@ struct IOOp {
   const uint64_t offset_ = 0;
   const uint32_t size_ = 0;
   void* const data_;
+  // Completion - Submit
+  std::function<void(double)> trackIOOpDeviceLatency_;
   std::optional<int> placeHandle_;
 
   // The number of resubmission on EAGAIN error
@@ -102,6 +106,7 @@ struct IOReq {
                  uint64_t offset,
                  uint32_t size,
                  void* data,
+                 std::function<void(double)> trackIOOpDeviceLatency,
                  std::optional<int> placeHandle = std::nullopt);
 
   const char* getOpName() const {
@@ -134,6 +139,8 @@ struct IOReq {
   const uint64_t offset_ = 0;
   const uint32_t size_ = 0;
   void* const data_;
+  // Completion - Start
+  std::function<void(double)> trackIOReqTotalLatency_;
   std::optional<int> placeHandle_;
 
   // Aggregate result of operations
@@ -162,19 +169,23 @@ class IoContext {
   virtual bool isAsyncIoCompletion() = 0;
 
   // Create and submit read req
-  std::shared_ptr<IOReq> submitRead(const std::vector<folly::File>& fvec,
-                                    uint32_t stripeSize,
-                                    uint64_t offset,
-                                    uint32_t size,
-                                    void* data);
+  std::shared_ptr<IOReq> submitRead(
+      const std::vector<folly::File>& fvec,
+      uint32_t stripeSize,
+      uint64_t offset,
+      uint32_t size,
+      void* data,
+      std::function<void(double)> trackIOOpDeviceLatency);
 
   // Create and submit write req
-  std::shared_ptr<IOReq> submitWrite(const std::vector<folly::File>& fvec,
-                                     uint32_t stripeSize,
-                                     uint64_t offset,
-                                     uint32_t size,
-                                     const void* data,
-                                     int placeHandle);
+  std::shared_ptr<IOReq> submitWrite(
+      const std::vector<folly::File>& fvec,
+      uint32_t stripeSize,
+      uint64_t offset,
+      uint32_t size,
+      const void* data,
+      std::function<void(double)> trackIOOpDeviceLatency,
+      int placeHandle);
 
   // Submit a IOOp to the device; should not fail for AsyncIoContext
   virtual bool submitIo(IOOp& op) = 0;
@@ -528,10 +539,6 @@ void Device::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_device_bytes_read", getBytesRead(),
           CounterVisitor::CounterType::RATE);
-  readLatencyEstimator_.visitQuantileEstimator(visitor,
-                                               "navy_device_read_latency_us");
-  writeLatencyEstimator_.visitQuantileEstimator(visitor,
-                                                "navy_device_write_latency_us");
   visitor("navy_device_read_errors", readIOErrors_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_device_write_errors", writeIOErrors_.get(),
@@ -540,6 +547,15 @@ void Device::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_device_decryption_errors", decryptionErrors_.get(),
           CounterVisitor::CounterType::RATE);
+
+  readIOOpDeviceLatencyEstimator_.visitQuantileEstimator(
+      visitor, "navy_device_async_io_op_read_device_latency_us");
+  writeIOOpDeviceLatencyEstimator_.visitQuantileEstimator(
+      visitor, "navy_device_async_io_op_write_device_latency_us");
+  readLatencyEstimator_.visitQuantileEstimator(visitor,
+                                               "navy_device_read_latency_us");
+  writeLatencyEstimator_.visitQuantileEstimator(visitor,
+                                                "navy_device_write_latency_us");
 }
 
 namespace {
@@ -575,6 +591,8 @@ bool IOOp::done(ssize_t len) {
                        toMillis(curTime - submitTime_).count(), toString());
   }
 
+  trackIOOpDeviceLatency_(toMicros(curTime - submitTime_).count());
+
   parent_.notifyOpResult(result);
   return result;
 }
@@ -590,6 +608,7 @@ IOReq::IOReq(IoContext& context,
              uint64_t offset,
              uint32_t size,
              void* data,
+             std::function<void(double)> trackIOOpDeviceLatency,
              std::optional<int> placeHandle)
     : context_(context),
       opType_(opType),
@@ -610,7 +629,7 @@ IOReq::IOReq(IoContext& context,
 
       ops_.emplace_back(*this, idx++, fvec[fdIdx].fd(),
                         stripeStartOffset + ioOffsetInStripe, allowedIOSize,
-                        buf, placeHandle_);
+                        buf, trackIOOpDeviceLatency, placeHandle_);
 
       size -= allowedIOSize;
       offset += allowedIOSize;
@@ -618,7 +637,7 @@ IOReq::IOReq(IoContext& context,
     }
   } else {
     ops_.emplace_back(*this, idx++, fvec[0].fd(), offset_, size_, data_,
-                      placeHandle_);
+                      trackIOOpDeviceLatency, placeHandle_);
   }
 
   numRemaining_ = ops_.size();
@@ -682,9 +701,11 @@ std::shared_ptr<IOReq> IoContext::submitRead(
     uint32_t stripeSize,
     uint64_t offset,
     uint32_t size,
-    void* data) {
-  auto req = std::make_shared<IOReq>(*this, fvec, stripeSize, OpType::READ,
-                                     offset, size, data);
+    void* data,
+    std::function<void(double)> trackIOOpDeviceLatency) {
+  auto req =
+      std::make_shared<IOReq>(*this, fvec, stripeSize, OpType::READ, offset,
+                              size, data, trackIOOpDeviceLatency);
   submitReq(req);
   return req;
 }
@@ -695,10 +716,11 @@ std::shared_ptr<IOReq> IoContext::submitWrite(
     uint64_t offset,
     uint32_t size,
     const void* data,
+    std::function<void(double)> trackIOOpDeviceLatency,
     int placeHandle) {
-  auto req =
-      std::make_shared<IOReq>(*this, fvec, stripeSize, OpType::WRITE, offset,
-                              size, const_cast<void*>(data), placeHandle);
+  auto req = std::make_shared<IOReq>(*this, fvec, stripeSize, OpType::WRITE,
+                                     offset, size, const_cast<void*>(data),
+                                     trackIOOpDeviceLatency, placeHandle);
   submitReq(req);
   return req;
 }
@@ -848,12 +870,11 @@ bool AsyncIoContext::submitIo(IOOp& op) {
     waiter.baton_.wait();
   }
 
+  op.submitTime_ = getSteadyClock();
   std::unique_ptr<folly::AsyncBaseOp> asyncOp;
   asyncOp = prepAsyncIo(op);
   asyncOp->setUserData(&op);
   asyncBase_->submit(asyncOp.release());
-
-  op.submitTime_ = getSteadyClock();
 
   numOutstanding_++;
   numSubmitted_++;
@@ -978,8 +999,11 @@ FileDevice::FileDevice(std::vector<folly::File>&& fvec,
 }
 
 bool FileDevice::readImpl(uint64_t offset, uint32_t size, void* value) {
-  auto req =
-      getIoContext()->submitRead(fvec_, stripeSize_, offset, size, value);
+  auto trackIOOpDeviceLatency = [this](double value) {
+    readIOOpDeviceLatencyEstimator_.trackValue(value);
+  };
+  auto req = getIoContext()->submitRead(fvec_, stripeSize_, offset, size, value,
+                                        std::move(trackIOOpDeviceLatency));
   return req->waitCompletion();
 }
 
@@ -987,8 +1011,12 @@ bool FileDevice::writeImpl(uint64_t offset,
                            uint32_t size,
                            const void* value,
                            int placeHandle) {
-  auto req = getIoContext()->submitWrite(fvec_, stripeSize_, offset, size,
-                                         value, placeHandle);
+  auto trackIOOpDeviceLatency = [this](double value) {
+    writeIOOpDeviceLatencyEstimator_.trackValue(value);
+  };
+  auto req = getIoContext()->submitWrite(
+      fvec_, stripeSize_, offset, size, value,
+      std::move(trackIOOpDeviceLatency), placeHandle);
   return req->waitCompletion();
 }
 
