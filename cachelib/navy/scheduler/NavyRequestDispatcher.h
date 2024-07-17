@@ -116,6 +116,9 @@ class NavyRequestDispatcher {
   // Return dispatcher stats
   Stats getStats();
 
+  // Drain all events from the eventbase
+  void finish() { worker_.drain(); }
+
  private:
   // Request dispatch loop
   void processLoop();

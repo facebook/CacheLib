@@ -139,7 +139,14 @@ void NavyRequestScheduler::notifyCompletion(uint64_t key) {
   pendingReqs_[shard].pop_front();
 }
 
-void NavyRequestScheduler::finish() {}
+void NavyRequestScheduler::finish() {
+  for (auto& dispatcher : readerDispatchers_) {
+    dispatcher->finish();
+  }
+  for (auto& dispatcher : writerDispatchers_) {
+    dispatcher->finish();
+  }
+}
 
 void NavyRequestScheduler::getCounters(const CounterVisitor& visitor) const {
   auto visitdispatcherStats =
