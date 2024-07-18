@@ -156,7 +156,7 @@ std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
   if (pctThreshold) {
     return std::make_shared<PercentageReinsertionPolicy>(pctThreshold);
   }
-  return reinsertionConfig.getCustomPolicy();
+  return reinsertionConfig.getCustomPolicy(index_);
 }
 
 uint32_t BlockCache::serializedSize(uint32_t keySize,

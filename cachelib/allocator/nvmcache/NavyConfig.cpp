@@ -116,7 +116,15 @@ BlockCacheConfig& BlockCacheConfig::enablePctBasedReinsertion(
 
 BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
     std::shared_ptr<BlockCacheReinsertionPolicy> policy) {
-  reinsertionConfig_.enableCustom(policy);
+  reinsertionConfig_.enableCustom(
+      [p = std::move(policy)](const Index&) mutable { return std::move(p); });
+  return *this;
+}
+
+BlockCacheConfig& BlockCacheConfig::enableCustomReinsertion(
+    std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
+        makeCustomPolicy) {
+  reinsertionConfig_.enableCustom(makeCustomPolicy);
   return *this;
 }
 

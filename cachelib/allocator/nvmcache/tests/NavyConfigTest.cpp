@@ -21,7 +21,8 @@
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
-#include "cachelib/navy/common/Types.h"
+#include "cachelib/navy/block_cache/Index.h"
+
 namespace facebook {
 namespace cachelib {
 namespace tests {
@@ -335,6 +336,8 @@ TEST(NavyConfigTest, BlockCache) {
 
   auto customPolicy = std::make_shared<DummyReinsertionPolicy>();
 
+  navy::Index index;
+
   // test cannot enable both hits-based and probability-based reinsertion policy
   config = NavyConfig{};
   EXPECT_THROW(
@@ -347,7 +350,7 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getHitsThreshold(),
             blockCacheReinsertionHitsThreshold);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getPctThreshold(), 0);
-  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(),
+  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(index),
             nullptr);
 
   config = NavyConfig{};
@@ -360,7 +363,7 @@ TEST(NavyConfigTest, BlockCache) {
                std::invalid_argument);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getPctThreshold(), 50);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getHitsThreshold(), 0);
-  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(),
+  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(index),
             nullptr);
 
   // test invalid input for percentage based reinsertion policy
@@ -378,7 +381,7 @@ TEST(NavyConfigTest, BlockCache) {
                std::invalid_argument);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getPctThreshold(), 0);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getHitsThreshold(), 0);
-  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(),
+  EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(index),
             customPolicy);
 }
 

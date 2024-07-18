@@ -27,6 +27,9 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+
+class Index;
+
 /**
  * RandomAPConfig provides APIs for users to configure one of the admission
  * policy - "random". Admission policy is one part of NavyConfig.
@@ -157,7 +160,7 @@ class DynamicRandomAPConfig {
 class BlockCacheReinsertionConfig {
  public:
   BlockCacheReinsertionConfig& enableHitsBased(uint8_t hitsThreshold) {
-    if (pctThreshold_ > 0 || custom_) {
+    if (pctThreshold_ > 0 || makeCustomPolicy_) {
       throw std::invalid_argument(
           "already set reinsertion percentage threshold, should not set "
           "reinsertion hits threshold");
@@ -168,7 +171,7 @@ class BlockCacheReinsertionConfig {
   }
 
   BlockCacheReinsertionConfig& enablePctBased(unsigned int pctThreshold) {
-    if (hitsThreshold_ > 0 || custom_) {
+    if (hitsThreshold_ > 0 || makeCustomPolicy_) {
       throw std::invalid_argument(
           "already set reinsertion hits threshold, should not set reinsertion "
           "probability threshold");
@@ -184,23 +187,26 @@ class BlockCacheReinsertionConfig {
   }
 
   BlockCacheReinsertionConfig& enableCustom(
-      std::shared_ptr<BlockCacheReinsertionPolicy> policy) {
+      std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
+          makeCustomPolicy) {
     if (hitsThreshold_ > 0 || pctThreshold_ > 0) {
       throw std::invalid_argument(
           "Already set reinsertion hits threshold {}, or reinsertion "
           "probability threshold {} while trying to set a custom reinsertion "
           "policy.");
     }
-    custom_ = policy;
+    makeCustomPolicy_ = makeCustomPolicy;
     return *this;
   }
 
   BlockCacheReinsertionConfig& validate() {
-    if ((pctThreshold_ > 0) + (hitsThreshold_ > 0) + (custom_ != nullptr) > 1) {
+    if ((pctThreshold_ > 0) + (hitsThreshold_ > 0) +
+            (makeCustomPolicy_ != nullptr) >
+        1) {
       throw std::invalid_argument(folly::sformat(
           "More than one configuration for reinsertion policy is specified: "
           "pctThreshold_ {}, hitsThreshold_ {}, custom_ {}",
-          pctThreshold_, hitsThreshold_, custom_ != nullptr));
+          pctThreshold_, hitsThreshold_, makeCustomPolicy_ != nullptr));
     }
     return *this;
   }
@@ -209,8 +215,10 @@ class BlockCacheReinsertionConfig {
 
   unsigned int getPctThreshold() const { return pctThreshold_; }
 
-  std::shared_ptr<BlockCacheReinsertionPolicy> getCustomPolicy() const {
-    return custom_;
+  std::shared_ptr<BlockCacheReinsertionPolicy> getCustomPolicy(
+      const Index& index) const {
+    ensureCustomPolicy(index);
+    return createdCustomPolicy_;
   }
 
  private:
@@ -224,8 +232,17 @@ class BlockCacheReinsertionConfig {
   // The percentage value is between 0 and 100 for reinsertion.
   unsigned int pctThreshold_{0};
 
-  // Custom created reinsertion policy.
-  std::shared_ptr<BlockCacheReinsertionPolicy> custom_{nullptr};
+  // A constructor for a custom reinsertion policy.
+  std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
+      makeCustomPolicy_{nullptr};
+  std::shared_ptr<BlockCacheReinsertionPolicy> createdCustomPolicy_{nullptr};
+
+  void ensureCustomPolicy(const Index& index) const {
+    if (!createdCustomPolicy_ && makeCustomPolicy_) {
+      const_cast<BlockCacheReinsertionConfig*>(this)->createdCustomPolicy_ =
+          makeCustomPolicy_(index);
+    }
+  }
 };
 
 /**
@@ -282,6 +299,15 @@ class BlockCacheConfig {
   // enabled.
   BlockCacheConfig& enableCustomReinsertion(
       std::shared_ptr<BlockCacheReinsertionPolicy> policy);
+
+  // Enable a customized reinsertion policy created by the user.
+  // This version calls a user-provided function to construct the policy
+  // and the policy will have access to the BlockCache Index.
+  // @throw std::invalid_argument if any other reinsertion policy has been
+  // enabled.
+  BlockCacheConfig& enableCustomReinsertion(
+      std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
+          makeCustomPolicy);
 
   // Set number of clean regions that are maintained for incoming write and
   // whether the writes are buffered in-memory.
