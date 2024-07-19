@@ -24,7 +24,7 @@ CLCMAKE="$CLBASE/cachelib/cmake"
 # After ensuring we are in the correct directory, set the installation prefix"
 PREFIX="$CLBASE/opt/cachelib/"
 
-CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX='$PREFIX' -DCMAKE_MODULE_PATH='$CLCMAKE'"
+CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX='$PREFIX' -DCMAKE_MODULE_PATH='$CLCMAKE' -DCMAKE_BUILD_TYPE=Debug"
 
 CMAKE_PREFIX_PATH="$PREFIX/lib/cmake:$PREFIX/lib64/cmake:$PREFIX/lib:$PREFIX/lib64:$PREFIX:${CMAKE_PREFIX_PATH:-}"
 export CMAKE_PREFIX_PATH
