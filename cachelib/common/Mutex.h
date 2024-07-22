@@ -19,6 +19,7 @@
 #include <folly/ScopeGuard.h>
 #include <folly/SharedMutex.h>
 #include <folly/SpinLock.h>
+#include <folly/fibers/TimedMutex.h>
 #include <folly/logging/xlog.h>
 #include <folly/portability/Asm.h>
 #include <pthread.h>
@@ -382,7 +383,8 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
             : WriteLockHolder(Base::getLock(args...), timeout);
   }
 };
-
+using TimedMutexRWBuckets =
+    RWBucketLocks<folly::fibers::TimedRWMutex<folly::fibers::Baton>>;
 using SharedMutexBuckets = RWBucketLocks<folly::SharedMutex>;
 
 // a spinning mutex appearing as a rw mutex
