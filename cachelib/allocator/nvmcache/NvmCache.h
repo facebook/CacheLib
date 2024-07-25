@@ -593,6 +593,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
         hdl.markExpired();
         stats().numNvmGetMissExpired.inc();
         stats().numNvmGetMissFast.inc();
+        stats().numNvmGetMiss.inc();
       }
       return hdl;
     }
