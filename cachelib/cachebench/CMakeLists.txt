@@ -41,6 +41,25 @@ target_link_libraries(cachelib_cachebench PUBLIC
   gflags
 )
 
+add_library (cachelib_binary_trace_gen
+  ./runner/Runner.cpp
+  ./runner/Stressor.cpp
+  ./util/CacheConfig.cpp
+  ./util/Config.cpp
+  ./workload/BlockChunkCache.cpp
+  ./workload/BlockChunkReplayGenerator.cpp
+  ./workload/PieceWiseCache.cpp
+  ./workload/OnlineGenerator.cpp
+  ./workload/WorkloadGenerator.cpp
+  ./workload/PieceWiseReplayGenerator.cpp
+  )
+add_dependencies(cachelib_binary_trace_gen thrift_generated_files)
+target_link_libraries(cachelib_binary_trace_gen PUBLIC
+  cachelib_datatype
+  cachelib_allocator
+  gflags
+)
+
 if ((CMAKE_SYSTEM_NAME STREQUAL Linux) AND
     (CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64))
 else()
@@ -49,11 +68,14 @@ endif()
 
 
 add_executable (cachebench main.cpp)
+add_executable (binary_trace_gen binary_trace_gen.cpp)
 target_link_libraries(cachebench cachelib_cachebench)
+target_link_libraries(binary_trace_gen cachelib_binary_trace_gen)
 
 install(
   TARGETS
      cachebench
+     binary_trace_gen
   DESTINATION ${BIN_INSTALL_DIR}
 )
 
