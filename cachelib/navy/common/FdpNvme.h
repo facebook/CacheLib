@@ -83,6 +83,7 @@ enum nvme_io_opcode {
   nvme_cmd_io_mgmt_recv = 0x12,
   nvme_cmd_io_mgmt_send = 0x1d,
 };
+#endif
 
 // NVMe specific data for a device
 //
@@ -127,7 +128,6 @@ class NvmeData {
   uint32_t maxTfrSize_;
   uint64_t startLba_;
 };
-#endif
 
 // FDP specific info and handling
 //
