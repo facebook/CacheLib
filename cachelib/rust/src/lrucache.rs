@@ -695,6 +695,43 @@ pub struct LruCachePool {
 }
 
 impl LruCachePool {
+    /// Setting max TTL allowed to be 2 months
+    const MAX_TTL_SECS: u32 = 2 * 30 * 86400;
+
+    fn calc_ttl(&self, ttl: Option<Duration>) -> Result<u32, Error> {
+        // Unless ttl is 0 or empty, ttl_secs will be at least 1 and upto
+        // 2 months which is equal to 2 * 30 * 86,400 seconds (MAX_TTL_SECS).
+        // For example, if ttl is 0 (unit doesn't matter), ttl_secs = 0.
+        // If ttl is <=1 sec (100ms, 999ms, 10us, 1000ms), ttl_secs = 1.
+        // If ttl is > 1 sec and <= MAX_TTL_SECS, ttl_secs = ttl (round down to the nearest second).
+        // If ttl is 1999ms, ttl_secs = 1 sec.
+        // if ttl > MAX_TTL_SECS, return Error
+
+        // convert Duration to seconds
+        let ttl_secs = ttl.map_or(0, |d| {
+            if d == Duration::default() {
+                // respect 0 for None and 0 Duration with any unit (ns, us, ms or s)
+                0
+            } else {
+                // if ttl > 0 and <= 1 second, set to 1
+                // if ttl > 1, round down to closest second
+                std::cmp::max(1, d.as_secs())
+            }
+        });
+
+        // check if input in seconds in valid
+        if ttl_secs > LruCachePool::MAX_TTL_SECS.into() {
+            Err(Error::new(ErrorKind::LargeTTLError(
+                ttl_secs,
+                LruCachePool::MAX_TTL_SECS,
+            )))
+        } else {
+            Ok(ttl_secs
+                .try_into()
+                .expect("MAX_TTL_SECS should be const-asserted to fit into a u32"))
+        }
+    }
+
     /// Allocate memory for a key of known size; this will claim the memory until the handle is
     /// dropped or inserted into the cache.
     ///
@@ -714,22 +751,25 @@ impl LruCachePool {
         let mut full_key = self.pool_name.clone().into_bytes();
         full_key.extend_from_slice(key.as_ref());
         let key = StringPiece::from(full_key.as_slice());
-        // Cachelib uses a 0 TTL for "infinite". Turn larger than 2**32 seconds
-        // into 2**32, and no TTL into infinite
-        // If you ask for a TTL less than 1 second, turn it into 1 second
-        let ttl_secs = ttl
-            .map_or(0, |d| std::cmp::min(d.as_secs(), 1))
-            .try_into()
-            .unwrap_or(u32::MAX);
-        let size = size.try_into().context("Cache allocation too large")?;
-        let handle = ffi::allocate_item(cache, self.pool, key, size, ttl_secs)?;
-        if handle.is_null() {
-            Ok(None)
-        } else {
-            Ok(Some(LruCacheHandle {
-                handle,
-                _marker: PhantomData,
-            }))
+
+        let ttl_secs = self.calc_ttl(ttl);
+        match ttl_secs {
+            Ok(ttl_secs) => {
+                let size = size.try_into().context("Cache allocation too large")?;
+                let handle = ffi::allocate_item(cache, self.pool, key, size, ttl_secs)?;
+                if handle.is_null() {
+                    Ok(None)
+                } else {
+                    Ok(Some(LruCacheHandle {
+                        handle,
+                        _marker: PhantomData,
+                    }))
+                }
+            }
+            Err(e) => {
+                eprintln!("An error in calculating TTL: {}", e);
+                Ok(None)
+            }
         }
     }
 
@@ -1437,5 +1477,97 @@ mod test {
             "non-existent pool found"
         );
         Ok(())
+    }
+
+    #[fbinit::test]
+    fn ttl(fb: FacebookInit) {
+        // test ttl in seconds of cache items are set correctly based on the input
+
+        create_cache(fb);
+        let pool = get_or_create_volatile_pool("ttl", 4 * 1024 * 1024).unwrap();
+
+        let ttl_test = |pool: &VolatileLruCachePool,
+                        key: &[u8],
+                        ttl_duration: Option<Duration>,
+                        ttl_sec_expected: u32| {
+            const VAL: &[u8] = b"TICK TOK";
+            assert!(
+                pool.set_with_ttl(key, Bytes::from(VAL), ttl_duration)
+                    .unwrap(),
+                "Set failed in ttl test."
+            );
+
+            let item_handle = pool.get_handle(key).unwrap().unwrap();
+            let item = item_handle.handle.as_ref().unwrap();
+            assert_eq!(
+                ffi::get_ttl_secs(item),
+                ttl_sec_expected,
+                "TTL in seconds did not match."
+            );
+        };
+
+        // 1. None and 0 (s, ms, us, ns) input sets ttl to 0.
+        ttl_test(&pool, b"None", Option::None, 0);
+        ttl_test(&pool, b"0ns", Option::Some(Duration::from_nanos(0)), 0);
+        ttl_test(&pool, b"0us", Option::Some(Duration::from_micros(0)), 0);
+        ttl_test(&pool, b"0ms", Option::Some(Duration::from_millis(0)), 0);
+        ttl_test(&pool, b"0s", Option::Some(Duration::from_secs(0)), 0);
+
+        // 2. Any value < 1 second should set ttl to 1.
+        // 2a. Test with the smallest value > 0.
+        ttl_test(&pool, b"1ns", Option::Some(Duration::from_nanos(1)), 1);
+
+        // 2b. Test with the largest value we can specify less than 1 second.
+        ttl_test(
+            &pool,
+            b"999999999ns",
+            Option::Some(Duration::from_nanos(999999999)),
+            1,
+        );
+
+        // 3. Any value >= 1 should round down to the closest second but max value tested
+        // is ttl of 2 months. Large values like u32:MAX fail. The smallest value tested that
+        // failed is 3 months (3 * 30 * 86400).
+        ttl_test(
+            &pool,
+            b"6999ms",
+            Option::Some(Duration::from_millis(6999)),
+            6,
+        );
+
+        ttl_test(
+            &pool,
+            b"16999999us",
+            Option::Some(Duration::from_micros(16999999)),
+            16,
+        );
+
+        ttl_test(
+            &pool,
+            b"4days",
+            Option::Some(Duration::from_secs(4 * 86400)),
+            4 * 86400,
+        );
+
+        ttl_test(
+            &pool,
+            b"7days",
+            Option::Some(Duration::from_secs(7 * 86400)),
+            7 * 86400,
+        );
+
+        ttl_test(
+            &pool,
+            b"30days",
+            Option::Some(Duration::from_secs(30 * 86400)),
+            30 * 86400,
+        );
+
+        ttl_test(
+            &pool,
+            b"60days",
+            Option::Some(Duration::from_secs(2 * 30 * 86400)),
+            2 * 30 * 86400,
+        );
     }
 }

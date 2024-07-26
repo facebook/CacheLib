@@ -144,6 +144,9 @@ size_t get_size(const LruItemHandle& handle) { return handle->getSize(); }
 const uint8_t* get_memory(const LruItemHandle& handle) {
   return static_cast<const uint8_t*>(handle->getMemory());
 }
+uint32_t get_ttl_secs(const LruItemHandle& handle) {
+  return static_cast<const uint32_t>(handle->getConfiguredTTL().count());
+}
 uint8_t* get_writable_memory(LruItemHandle& handle) {
   return static_cast<uint8_t*>(handle->getMemory());
 }

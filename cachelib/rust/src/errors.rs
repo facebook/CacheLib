@@ -48,4 +48,6 @@ pub enum ErrorKind {
     BadPersistenceConfig(String),
     #[error("Requested a volatile cache pool from a persistent cache.")]
     VolatileCachePoolError,
+    #[error("TTL too large: {0}. Maximum TTL is {1}.")]
+    LargeTTLError(u64, u32),
 }

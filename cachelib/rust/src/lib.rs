@@ -129,6 +129,8 @@ mod ffi {
         type LruItemHandle;
         fn get_size(handle: &LruItemHandle) -> usize;
         fn get_memory(handle: &LruItemHandle) -> *const u8;
+        #[allow(dead_code)]
+        fn get_ttl_secs(handle: &LruItemHandle) -> u32;
         fn get_writable_memory(handle: Pin<&mut LruItemHandle>) -> Result<*mut u8>;
         unsafe fn get_item_ptr_as_offset(cache: &LruAllocator, ptr: *const u8) -> Result<usize>;
 

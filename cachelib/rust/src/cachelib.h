@@ -91,6 +91,8 @@ size_t get_unreserved_size(const LruAllocator& cache);
 
 size_t get_size(const LruItemHandle& handle);
 const uint8_t* get_memory(const LruItemHandle& handle);
+uint32_t get_ttl_secs(const LruItemHandle& handle);
+
 uint8_t* get_writable_memory(LruItemHandle& handle);
 size_t get_item_ptr_as_offset(const LruAllocator& cache, const uint8_t* ptr);
 
