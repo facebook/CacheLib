@@ -83,6 +83,8 @@ inline std::ostream& operator<<(std::ostream& os, Status status) {
 inline std::ostream& operator<<(std::ostream& os, DestructorEvent e) {
   return os << "DestructorEvent::" << toString(e);
 }
+
+inline int format_as(Status s) { return folly::to_underlying(s); }
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
