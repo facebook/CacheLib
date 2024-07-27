@@ -266,7 +266,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
       XLOGF(ERR,
             "Retry reading an entry after checksum for debugging. Return code: "
             "{}",
-            retryStatus);
+            toString(retryStatus));
 
       // Remove this item from index so no future lookup will
       // ever attempt to read this key. Reclaim will also not be
