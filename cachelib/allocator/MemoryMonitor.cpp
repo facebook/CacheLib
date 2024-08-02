@@ -236,7 +236,8 @@ void MemoryMonitor::adviseAwaySlabs() {
           "%) in the item cache memory have been advised away. "
           "This exceeds the maximum limit of {}"
           "%. Disabling advising which may result in an OOM.",
-          numAdvised, totalSlabs, advisedPercent, maxLimitPercent_);
+          numAdvised, numAdvised + totalSlabs, advisedPercent,
+          maxLimitPercent_);
     return;
   }
   // Advise percentAdvisePerIteration_% of upperLimit_ - lowerLimit_
