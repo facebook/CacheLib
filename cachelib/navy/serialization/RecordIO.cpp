@@ -89,6 +89,11 @@ class DeviceMetaDataWriter final : public RecordWriter {
       memset(buffer.data(), 0, blockSize_);
       dev_.write(offset_, std::move(buffer));
     }
+
+    XLOGF(INFO,
+          "DeviceMetaDataWriter: wrote {} bytes out of total size: {}",
+          offset_,
+          metadataSize_);
   }
 
   void writeRecord(std::unique_ptr<folly::IOBuf> buf) override {
