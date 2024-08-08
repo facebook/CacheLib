@@ -52,7 +52,7 @@ class SlabAllocator;
 
 class CACHELIB_PACKED_ATTR CompressedPtr {
  public:
-  using PtrType = uint32_t;
+  using PtrType = uint64_t;
   // Thrift doesn't support unsigned type
   using SerializedPtrType = int64_t;
 
@@ -75,8 +75,7 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
 
   // maximum addressable memory for pointer compression to work.
   static constexpr size_t getMaxAddressableSize() noexcept {
-    return static_cast<size_t>(1)
-           << (numSlabIdxBits(false) + Slab::kNumSlabBits);
+    return std::numeric_limits<size_t>::max();
   }
 
   // default construct to nullptr.
@@ -95,7 +94,7 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
  private:
   // null pointer representation. This is almost never guaranteed to be a
   // valid pointer that we can compress to.
-  static constexpr PtrType kNull = 0xffffffff;
+  static constexpr PtrType kNull = 0xffffffffffffffffULL;
 
   // default construct to null.
   PtrType ptr_{kNull};
@@ -116,7 +115,7 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
       Slab::kNumSlabBits - Slab::kMinAllocPower;
 
   // Use 32nd bit position for TierId
-  static constexpr unsigned int kNumTierIdxOffset = 31;
+  static constexpr unsigned int kNumTierIdxOffset = 63;
 
   static constexpr PtrType kAllocIdxMask = ((PtrType)1 << kNumAllocIdxBits) - 1;
 
@@ -140,12 +139,12 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
                           bool isMultiTiered,
                           TierId tid) noexcept {
     XDCHECK_LE(allocIdx, kAllocIdxMask);
-    XDCHECK_LT(slabIdx, (1u << numSlabIdxBits(isMultiTiered)) - 1);
+    XDCHECK_LT(slabIdx, (1llu << numSlabIdxBits(isMultiTiered)) - 1);
     if (!isMultiTiered) {
-      return (slabIdx << kNumAllocIdxBits) + allocIdx;
+      return (static_cast<PtrType>(slabIdx) << kNumAllocIdxBits) + allocIdx;
     }
-    return (static_cast<uint32_t>(tid) << kNumTierIdxOffset) +
-           (slabIdx << kNumAllocIdxBits) + allocIdx;
+    return (static_cast<PtrType>(tid) << kNumTierIdxOffset) +
+           (static_cast<PtrType>(slabIdx) << kNumAllocIdxBits) + allocIdx;
   }
 
   // Get the slab index of the compressed ptr
@@ -169,7 +168,7 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   }
 
   void setTierId(TierId tid) noexcept {
-    ptr_ += static_cast<uint32_t>(tid) << kNumTierIdxOffset;
+    ptr_ += static_cast<PtrType>(tid) << kNumTierIdxOffset;
   }
 
   friend SlabAllocator;
