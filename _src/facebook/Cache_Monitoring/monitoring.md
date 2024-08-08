@@ -8,8 +8,8 @@ Cachelib offers both ODS and Scuba monitoring for your cache health. To enable m
 ## CacheLib Monitoring Dashboards
 
 In addition to building your own dashboard (and adding alarms), you can also use Cachelib's dashboards for high level metrics on how your cache is doing. We offer two dashboards:
-1. [ODS](https://fburl.com/unidash/ehpb743v) - High level cachelib metrics on ODS
-2. [Scuba](https://fburl.com/unidash/5l3bbo4u) - Deeper dive into cachelib's ram cache behavior
+1. **[Main](https://fburl.com/unidash/ehpb743v) - Most of the relevant cachelib metrics for our users**
+2. **[Allocation Class](https://fburl.com/unidash/5l3bbo4u) - Deeper dive into cachelib's ram cache behavior split by allocation classes**
 
 Please contact our oncall if you have a feature request or any ideas to improve these dashboards further.
 

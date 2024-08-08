@@ -9,6 +9,13 @@ Not sure whether you should use object-cache? Check the [object-cache decision g
 
 ## Set up object-cache
 
+
+
+
+
+
+
+
 ### Create a simple object-cache
 
 The simplest object-cache is limited by the **number of objects**, i.e. an eviction will be triggered when the total object number reaches certain limit; the limit needs to be configured by the user as `l1EntriesLimit`.
@@ -121,7 +128,7 @@ config.setEvictionPolicyConfig(std::move(evictionPolicyConfig));
 Here is an example to configure a simple object-cache:
 
 ```cpp
-#include "cachelib/experimental/objcache2/ObjectCache.h"
+#include "cachelib/object_cache/ObjectCache.h"
 
 using ObjectCache = cachelib::objcache2::ObjectCache<cachelib::LruAllocator>;
 std::unique_ptr<ObjectCache> objCache;
@@ -170,7 +177,7 @@ To set up a **size-aware** object-cache, besides the [settings](#configuration) 
 - (**Required**) `totalObjectSizeLimit`: The limit of total object size in bytes. If total object size is above this limit, object-cache will start evicting.
 
 ```cpp
-#include "cachelib/experimental/objcache2/ObjectCache.h"
+#include "cachelib/object_cache/ObjectCache.h"
 
 using ObjectCache = cachelib::objcache2::ObjectCache<cachelib::LruAllocator>;
 std::unique_ptr<ObjectCache> objCacheSizeAware;
@@ -227,7 +234,7 @@ The basic idea is:
 Example:
 
 ```cpp
-#include "cachelib/experimental/objcache2/util/ThreadMemoryTracker.h"
+#include "cachelib/object_cache/util/ThreadMemoryTracker.h"
 
 // initialize memory tracker only at the beginning
 cachelib::objcache2::ThreadMemoryTracker tMemTracker;
@@ -248,7 +255,7 @@ auto objectSize = LIKELY(afterMemUsage > beforeMemUsage)
 
 When a new object is inserted to the cache via `insertOrReplace` / `insert` API, users must pass "object size" to the API (check out [Add objects](#add-objects) section). After that, object-cache knows the size for each cached object and maintains the total object size internally.
 
-User is also allowed to do in-place modification on the object via `mutateObject` API. With this API, user can pass a mutation callback where mutated size will be calculated internally (check out [Mutate objects](#mutate-objects) section). After that, the size for each cached object and the total object size will be updated.
+User is also allowed to do in-place modification on the object via `mutateObject` API. With this API, user can pass a mutation callback where mutated size will be calculated internally (check out [Mutate objects](#mutate-objects) section). After that, the size for each cached object and the total object size will be updated. Alternatively, user can directly modify an object's size via `updateObjectSize` API if the user knows the size difference post-mutation. This latter approach is more error-prone, and we strongly suggest you use `mutateObject` API which can track size difference automatically.
 
 #### What is size controller
 
@@ -463,7 +470,11 @@ A common incorrect usage is:
 ```cpp
 auto ptr = objCache->findToWrite<ObjectType>(...);
 auto newPtr = std::make_unique<ObjectType>(...);
-auto mutateCb = [&ptr, &newPtr]() { ptr = std::move(newPtr); };
+auto mutateCb = [&ptr, &newPtr]() {
+    // (Bad!) move-assignment from new object into existing
+    // We don't know the size of new object
+    *ptr = std::move(*newPtr);
+};
 ```
 
 To correct this, you should move the construction of `newPtr` into `mutateCb`:
@@ -471,8 +482,11 @@ To correct this, you should move the construction of `newPtr` into `mutateCb`:
 ```cpp
 auto ptr = objCache->findToWrite<ObjectType>(...);
 auto mutateCb = [&ptr]() {
+    // (Good!) construct new object in the callback and then
+    // move-assignment into existing object. We know the size
+    // of new object, and can calculate the delta correctly
     auto newPtr = std::make_unique<ObjectType>(...);
-    ptr = std::move(newPtr);
+    *ptr = std::move(*newPtr);
 };
 ```
 

@@ -39,7 +39,10 @@ For more details on the available knobs, see [eviction policy](eviction_policy/ 
 
 Cachelib has locks at several granularity to protect the internal data structures. If there is a contention, there are few options to reduce the contention depending on the type.
 
-To estimate, collect a strobelight profile. If the strobelight profile indicates more than 4% spent on `allocate()` or `insertOrReplace()` or `find()`, there is potential to look into this further.
+To estimate, collect a strobelight profile. If the strobelight profile indicates double-digit percentage CPU spent across `allocate()`, `insertOrReplace()` and `find()`, there is potential to optimize this further.
+
+- Contention in `find()`
+If you see contention in `find()` resulting in `SharedMutex` showing up beneath it, this could be due to hashtable being sized too small. Check the number of items in your cache and also the hashpower for the hashtable. In general, we want the hashtable to have a load factor around 0.5 (e.g. 150M items needs a hashpower of 2^28 (256M slots)).
 
 - Contention in `insertOrReplace`
 If you see contention in `insertOrReplace` resulting in `SharedMutex` showing up beneath it, usually this is a result of misconfigured Hashtable. This can be tuned by adjusting the [lockPower](Configure_HashTable/#lockspower ).
@@ -48,4 +51,4 @@ If you see contention in `insertOrReplace` resulting in `SharedMutex` showing up
 Similar to above, we have a separate hash table to keep track of chained items. If you see contention here, adjust lockPower the same way as above.
 
 - Contention in LRU
-If you notice contention under MMLru or MM2Q, it indicates you have quite a lot of activity (400k/sec+) concentrated around objects of a particular size. To remediate this, we have a few options. If the number of `allocate()` calls per alloc size is too high, sharding the `allocate()` calls by creating additional pools would help. If the contention is coming from `find()`, adjusting the `lruRefreshThreshold` or turning on `dynamicLruRefreshThreshold` could help as documented in [eviction policy](eviction_policy/ ).
+If you notice contention under MMLru or MM2Q, it indicates you have quite a lot of activity (400k/sec+) concentrated around objects of a particular size. To remediate this, we have a few options. If the number of `allocate()` calls per alloc size is too high, sharding the `allocate()` calls by creating additional pools would help (e.g. create 8 pools and use `poolId = hash(key) % 8` when calling into allocate()) If the contention is coming from `find()`, adjusting the `lruRefreshThreshold` or turning on `dynamicLruRefreshThreshold` could help as documented in [eviction policy](eviction_policy/ ).

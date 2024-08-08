@@ -15,6 +15,7 @@ Navy is the SSD optimized cache engine leveraged for Hybrid Cache. Navy is plugg
 - Different admission policies to optimize write endurance, hit ratio, IOPS
 - Supports Direct IO and raw devices
 - Supports async IO with either [io_uring](https://lwn.net/Articles/776703/) or libaio
+- Supports Flexible Data Placement (FDP) to improve write endurance of the device
 
 ## Design overview
 There are three over-arching goals in the design of Navy
@@ -128,3 +129,7 @@ All IO operations within Navy happen over a range of block offsets. `Device` pro
 `FileDevice` implements `Device` over one or more regular or block device files. When multiple regular or block devices are used, `FileDevice` operates like a software RAID-0 where a single IO can be splitted into multiple IOs in the unit of fixed `stripe` size.  Note, this striping is orthogonal to the chunking that happens with `Device`. Usually, the stripe size is set to the size of a Navy region(16-64MB).
 
 For actual IO operations, `FileDevice` supports both sync and async operations. For async operations, `FileDevice` supports [`io_uring`](https://lwn.net/Articles/776703/) and `libaio` which are supported by [folly](https://github.com/facebook/folly) as `folly::IoUring` and `folly::AsyncIO`, respectively.
+
+#### FdpNvme
+
+`FdpNvme` embeds the FDP semantics and specific IO handling. IO with FDP semantics need to be sent through the io_uring_cmd interface and `FdpNvme` implements interfaces to allocate FDP specific `placementHandle`s, to prepare the UringCmd Sqe, etc. When FDP is enabled, `FileDevice` makes use of `FdpNvme` to use the FDP enabled file device path. For more informtaion read [FDP enabled Cache](/docs/Cache_Library_User_Guides/FDP_enabled_Cache.md). 

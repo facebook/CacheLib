@@ -67,4 +67,4 @@ This means we cannot let everything go through object-cache API, and we have to 
 
 Please let us know if your particular usage is not captured in the decision framework above.
 
-Option 1 is ready today in the form of CacheLib's ObjectCache v2 (check out our user guide). Option 2 is on our roadmap as of 2023. Let us know if you need a L2 serialized cache and we will try to prioritize it. If you fall under option 3, you likely need a fairly specialized setup. Please reach out to us, and we can work together to figure out how to incorporate object-cache in your setup.
+Option 1 is ready today in the form of CacheLib's ObjectCache v2 (check out our user guide). Option 2 is on our back-burner as we haven't seen any active interest. Let us know if you need a L2 serialized cache. If you fall under option 3, you likely need a fairly specialized setup with custom code that glues together object cache and serialized cache. Please reach out to us; we would love to learn about your use-case and provide support accordingly.
