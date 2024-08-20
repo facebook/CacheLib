@@ -191,6 +191,9 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<AsyncCacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "SIEVE"){
+      return std::make_unique<AsyncCacheStressor<SieveAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
     }
   } else {
     auto generator = makeGenerator(stressorConfig);
@@ -200,6 +203,9 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
           cacheConfig, stressorConfig, std::move(generator));
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "SIEVE"){ 
+      return std::make_unique<CacheStressor<SieveAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
   }
