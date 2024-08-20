@@ -55,5 +55,11 @@ struct TinyLFUCacheTrait {
   using AccessTypeLocks = SharedMutexBuckets;
 };
 
+struct SieveCacheTrait {
+  using MMType = MMTinyLFU;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+};
+
 } // namespace cachelib
 } // namespace facebook

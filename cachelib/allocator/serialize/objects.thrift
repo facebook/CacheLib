@@ -135,6 +135,25 @@ struct MMTinyLFUCollection {
   1: required map<i32, map<i32, MMTinyLFUObject>> pools;
 }
 
+struct MMSieveConfig { 
+  1: bool updateOnWrite = true;
+  2: bool updateOnRead = true; 
+}
+
+struct MMSieveObject {
+  1: required MMSieveConfig config;
+
+  // number of evictions for this MM object.
+  5: i64 evictions = 0;
+  
+  6: required SieveListObject queue;
+  7: required i64 compressedHand;
+}
+
+struct MMSieveCollection {
+  1: required map<i32, map<i32, MMSieveObject>> pools;
+}
+
 struct ChainedHashTableObject {
   // fields in ChainedHashTable::Config
   1: required i32 bucketsPower;
