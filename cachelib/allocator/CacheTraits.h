@@ -56,7 +56,7 @@ struct TinyLFUCacheTrait {
 };
 
 struct SieveCacheTrait {
-  using MMType = MMTinyLFU;
+  using MMType = MMSieve;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
 };

@@ -343,7 +343,6 @@ bool MMSieve::Container<T, HookPtr>::recordAccess(T& node,
       (mode == AccessMode::kRead && !config_.updateOnRead)) {
     return false;
   }
-  const auto curr = static_cast<Time>(util::getCurrentTimeSec());
   // check if the node is still being memory managed
   if (node.isInMMContainer() && !isAccessed(node)){
 	markAccessed(node);
@@ -364,6 +363,9 @@ cachelib::EvictionAgeStat
 MMSieve::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
   EvictionAgeStat stat{};
+  /*Eviction Age is used by LruTailAge Rebalance Strategy, 
+   * but Sieve doesn't have a defined tail age.*/
+
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
   const T* node = queue_.getTail();
@@ -418,8 +420,8 @@ void MMSieve::Container<T, HookPtr>::inspectHand() noexcept{
   std::cout << "hand: ";
   if (hand==nullptr)std::cout<<"null" << std::endl;
   else {
-	  std::cout << hand->getKey().toString(); 
- 	  std::cout<<", visited: "<< isAccessed(*hand)<< std::endl;
+    std::cout << hand->getKey().toString(); 
+    std::cout<<", visited: "<< isAccessed(*hand)<< std::endl;
   }
 }
 
