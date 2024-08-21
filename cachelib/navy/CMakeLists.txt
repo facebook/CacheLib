@@ -44,6 +44,7 @@ add_library (cachelib_navy
   scheduler/ThreadPoolJobScheduler.cpp
   scheduler/ThreadPoolJobQueue.cpp
   serialization/RecordIO.cpp
+  testing/MockDevice.cpp
   )
 add_dependencies(cachelib_navy thrift_generated_files)
 
@@ -57,6 +58,7 @@ endif()
 
 target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
+  GTest::gmock
   )
 
 install(TARGETS cachelib_navy
