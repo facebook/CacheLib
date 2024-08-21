@@ -34,6 +34,89 @@
 using testing::_;
 
 namespace facebook::cachelib::navy::tests {
+#ifndef CACHELIB_IOURING_DISABLE
+
+// Reference: https://github.com/axboe/fio/blob/master/engines/nvme.h
+// If the uapi headers installed on the system lacks nvme uring command
+// support, use the local version to prevent compilation issues.
+#ifndef CONFIG_NVME_URING_CMD
+
+// Test for FdpNvme Constructor
+TEST(FDP, InitializationTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+  uint32_t numRuhs = 10;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status* ruh_status{};
+  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
+                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
+  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
+  ruh_status->nruhsd = numRuhs;
+  EXPECT_NO_THROW(FdpNvme fdp = FdpNvme(data, ruh_status));
+}
+
+// Test the Fdp Handle allocation
+TEST(FDP, FdpHandleAllocationTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+  uint32_t numRuhs = 10;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status* ruh_status{};
+  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
+                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
+  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
+  ruh_status->nruhsd = numRuhs;
+  FdpNvme fdp = FdpNvme(data, ruh_status);
+  for (auto i = 1; i < ruh_status->nruhsd; i++) {
+    EXPECT_EQ(i, fdp.allocateFdpHandle());
+  }
+
+  EXPECT_EQ(0, fdp.allocateFdpHandle());
+}
+
+// Test IO uring read, write command preparation
+TEST(FDP, PrepUringTest) {
+  int nsId = 1;
+  uint32_t lbaShift = 12;
+  uint32_t maxTfrSize = 262144;
+  uint64_t startLba = 0;
+  uint32_t numRuhs = 10;
+
+  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
+  struct nvme_fdp_ruh_status* ruh_status{};
+  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
+                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
+  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
+  ruh_status->nruhsd = numRuhs;
+  FdpNvme fdp = FdpNvme(data, ruh_status);
+  std::unique_ptr<folly::IoUringOp> iouringCmdOp;
+  folly::IoUringOp::Options options;
+  options.sqe128 = true;
+  options.cqe32 = true;
+
+  iouringCmdOp = std::make_unique<folly::IoUringOp>(
+      folly::AsyncBaseOp::NotificationCallback(), options);
+  iouringCmdOp->initBase();
+  struct io_uring_sqe& sqe = iouringCmdOp->getSqe();
+
+  void* buf{};
+  size_t size = 8192;
+  off_t start = 0;
+  int handle = 1;
+
+  EXPECT_NO_THROW(fdp.prepReadUringCmdSqe(sqe, buf, size, start));
+  EXPECT_NO_THROW(fdp.prepWriteUringCmdSqe(sqe, buf, size, start, handle));
+}
+
+#endif
+#endif
+
 TEST(Device, BytesWritten) {
   MockDevice device{100, 1};
   EXPECT_CALL(device, writeImpl(_, _, _, _))
@@ -294,79 +377,6 @@ TEST(Device, Stats) {
   EXPECT_CALL(visitor, call(strPiece("navy_device_encryption_errors"), 0));
   EXPECT_CALL(visitor, call(strPiece("navy_device_decryption_errors"), 0));
   device.getCounters({toCallback(visitor)});
-}
-
-// Test for FdpNvme Constructor
-TEST(FDP, InitializationTest) {
-  int nsId = 1;
-  uint32_t lbaShift = 12;
-  uint32_t maxTfrSize = 262144;
-  uint64_t startLba = 0;
-  uint32_t numRuhs = 10;
-
-  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
-  struct nvme_fdp_ruh_status* ruh_status{};
-  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
-                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
-  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
-  ruh_status->nruhsd = numRuhs;
-  EXPECT_NO_THROW(FdpNvme fdp = FdpNvme(data, ruh_status));
-}
-
-// Test the Fdp Handle allocation
-TEST(FDP, FdpHandleAllocationTest) {
-  int nsId = 1;
-  uint32_t lbaShift = 12;
-  uint32_t maxTfrSize = 262144;
-  uint64_t startLba = 0;
-  uint32_t numRuhs = 10;
-
-  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
-  struct nvme_fdp_ruh_status* ruh_status{};
-  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
-                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
-  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
-  ruh_status->nruhsd = numRuhs;
-  FdpNvme fdp = FdpNvme(data, ruh_status);
-  for (auto i = 1; i < ruh_status->nruhsd; i++) {
-    EXPECT_EQ(i, fdp.allocateFdpHandle());
-  }
-
-  EXPECT_EQ(0, fdp.allocateFdpHandle());
-}
-
-// Test IO uring read, write command preparation
-TEST(FDP, PrepUringTest) {
-  int nsId = 1;
-  uint32_t lbaShift = 12;
-  uint32_t maxTfrSize = 262144;
-  uint64_t startLba = 0;
-  uint32_t numRuhs = 10;
-
-  NvmeData data(nsId, lbaShift, maxTfrSize, startLba);
-  struct nvme_fdp_ruh_status* ruh_status{};
-  Buffer buffer{sizeof(struct nvme_fdp_ruh_status) +
-                (numRuhs * sizeof(struct nvme_fdp_ruh_status_desc))};
-  ruh_status = reinterpret_cast<nvme_fdp_ruh_status*>(buffer.data());
-  ruh_status->nruhsd = numRuhs;
-  FdpNvme fdp = FdpNvme(data, ruh_status);
-  std::unique_ptr<folly::IoUringOp> iouringCmdOp;
-  folly::IoUringOp::Options options;
-  options.sqe128 = true;
-  options.cqe32 = true;
-
-  iouringCmdOp = std::make_unique<folly::IoUringOp>(
-      folly::AsyncBaseOp::NotificationCallback(), options);
-  iouringCmdOp->initBase();
-  struct io_uring_sqe& sqe = iouringCmdOp->getSqe();
-
-  void* buf{};
-  size_t size = 8192;
-  off_t start = 0;
-  int handle = 1;
-
-  EXPECT_NO_THROW(fdp.prepReadUringCmdSqe(sqe, buf, size, start));
-  EXPECT_NO_THROW(fdp.prepWriteUringCmdSqe(sqe, buf, size, start, handle));
 }
 
 struct DeviceParamTest
