@@ -263,11 +263,13 @@ class RegionManager {
   // Evicts a region by calling @evictCb_ during region reclamation.
   void doEviction(RegionId rid, BufferView buffer) const;
 
- private:
-  using LockGuard = std::lock_guard<TimedMutex>;
+  // Convert relative address to phsyical offset on the device
   uint64_t physicalOffset(RelAddress addr) const {
     return baseOffset_ + toAbsolute(addr).offset();
   }
+
+ private:
+  using LockGuard = std::lock_guard<TimedMutex>;
 
   NavyThread& getNextWorker() {
     return *(workers_[numReclaimScheduled_.add_fetch(1) % workers_.size()]);
