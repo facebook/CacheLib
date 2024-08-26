@@ -676,7 +676,7 @@ Status BlockCache::writeEntry(RelAddress addr,
 }
 
 Status BlockCache::readEntry(const RegionDescriptor& readDesc,
-                             RelAddress addr,
+                             RelAddress addrEnd,
                              uint32_t approxSize,
                              HashedKey expected,
                              Buffer& value) {
@@ -691,7 +691,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   // Because we either use a predefined read buffer size, or align the size
   // up by kMinAllocAlignSize, our size might be bigger than the actual item
   // size. So we need to ensure we're not reading past the region's beginning.
-  approxSize = std::min(approxSize, addr.offset());
+  approxSize = std::min(approxSize, addrEnd.offset());
 
   XDCHECK_EQ(approxSize % allocAlignSize_, 0ULL) << folly::sformat(
       " alignSize={}, approxSize={}", allocAlignSize_, approxSize);
@@ -700,7 +700,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   // must be atleast as big as EntryDesc aligned to next 2 power
   XDCHECK_GE(approxSize, folly::nextPowTwo(sizeof(EntryDesc)));
 
-  auto buffer = regionManager_.read(readDesc, addr.sub(approxSize), approxSize);
+  auto buffer =
+      regionManager_.read(readDesc, addrEnd.sub(approxSize), approxSize);
   if (buffer.isNull()) {
     return Status::DeviceError;
   }
@@ -713,8 +714,9 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
         "Header checksum mismatch in readEntry() at Region: {}, Expected: {}, "
         "Actual: {}, Offset-end: {}, Physical-offset-end: {}, Header size: {}, "
         "Header (hex): {}",
-        addr.rid().index(), desc.csSelf, desc.computeChecksum(), addr.offset(),
-        regionManager_.physicalOffset(addr), sizeof(EntryDesc),
+        addrEnd.rid().index(), desc.csSelf, desc.computeChecksum(),
+        addrEnd.offset(), regionManager_.physicalOffset(addrEnd),
+        sizeof(EntryDesc),
         folly::hexlify(
             folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
     return Status::DeviceError;
@@ -735,7 +737,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     buffer.trimStart(buffer.size() - size);
   } else if (buffer.size() < size) {
     // Read less than actual size. Read again with proper buffer.
-    buffer = regionManager_.read(readDesc, addr.sub(size), size);
+    buffer = regionManager_.read(readDesc, addrEnd.sub(size), size);
     if (buffer.isNull()) {
       return Status::DeviceError;
     }
@@ -748,8 +750,8 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
         "Item value checksum mismatch in readEntry() looking up key {} in "
         "Region {}. Expected: {}, Actual: {}, Offset: {}, Physical-offset: {}, "
         "Value-size: {} Payload (hex): {}",
-        key, addr.rid().index(), desc.cs, checksum(value.view()),
-        addr.offset() - size, regionManager_.physicalOffset(addr) - size,
+        key, addrEnd.rid().index(), desc.cs, checksum(value.view()),
+        addrEnd.offset() - size, regionManager_.physicalOffset(addrEnd) - size,
         value.size(),
         folly::hexlify(
             folly::ByteRange(value.data(), value.data() + value.size())));
