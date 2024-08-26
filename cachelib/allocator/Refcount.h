@@ -317,7 +317,7 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
    * A `moving` item cannot be recycled nor freed to the allocator. It has
    * to be unmarked first.
    *
-   * Item can only be marked for eviction when `kLinked` is set, `kExclusive`
+   * Item can only be marked for moving when `kLinked` is set, `kExclusive`
    * is not set, and access ref count is 0. This operation is atomic.
    *
    * When marked as moving, access ref count is always 1 and `kExclusive` bit
