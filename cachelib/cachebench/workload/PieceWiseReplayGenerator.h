@@ -45,7 +45,10 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
       threadFinished_[i].store(false, std::memory_order_relaxed);
     }
 
-    traceGenThread_ = std::thread([this]() { getReqFromTrace(); });
+    traceGenThread_ = std::thread([this]() {
+      traceStream_.fastForwardTrace(fastForwardCount_);
+      getReqFromTrace();
+    });
   }
 
   virtual ~PieceWiseReplayGenerator() {

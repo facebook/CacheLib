@@ -50,8 +50,9 @@ struct TraceEntry {
     if (!valid_) {
       return;
     }
-    const std::string& reqKey = req.req_.key;
-    ASSERT_EQ(0, reqKey.compare(0, key_.size(), key_));
+    const std::string& reqKey = std::string{req.req_.key};
+    ASSERT_EQ(0, reqKey.compare(0, key_.size(), key_))
+        << folly::sformat("key mismatch: {} vs {}", reqKey, key_);
     size_t expKeySize = std::max<size_t>(keySize_, reqKey.size());
     expKeySize = std::min<size_t>(expKeySize, 256);
     ASSERT_EQ(reqKey.size(), expKeySize);

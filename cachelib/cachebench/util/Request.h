@@ -60,6 +60,35 @@ enum class OpResultType {
   kCouldExistFalse
 };
 
+struct BinaryRequest {
+  uint8_t keySize_;
+  uint8_t op_;
+  uint16_t repeats_;
+  uint32_t ttl_;
+  uint64_t keyOffset_;
+  uint32_t valueSize_;
+
+  BinaryRequest() = default;
+
+  BinaryRequest(uint8_t keySize,
+                size_t valueSize,
+                uint16_t repeats,
+                uint8_t op,
+                uint32_t ttl,
+                size_t keyOffset)
+      : keySize_(keySize),
+        op_(op),
+        repeats_(repeats),
+        ttl_(ttl),
+        keyOffset_(keyOffset),
+        valueSize_(valueSize) {}
+
+  std::string_view getKey() const {
+    return std::string_view(reinterpret_cast<const char*>(this) + keyOffset_,
+                            keySize_);
+  }
+};
+
 struct Request {
   Request(std::string& k,
           std::vector<size_t>::iterator b,
@@ -78,6 +107,9 @@ struct Request {
           OpType o,
           uint64_t reqId)
       : key(k), sizeBegin(b), sizeEnd(e), requestId(reqId), op(o) {}
+
+  Request(std::string_view k, size_t* b, OpType o, uint64_t reqId)
+      : key(k), sizeBegin(b), sizeEnd(b), requestId(reqId), op(o) {}
 
   Request(std::string& k,
           std::vector<size_t>::iterator b,
@@ -121,12 +153,24 @@ struct Request {
 
   Request(Request&& r) noexcept
       : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd) {}
-  Request& operator=(Request&& r) = delete;
+  Request& operator=(Request&&) = delete;
 
+  inline void update(std::string_view k,
+                     size_t* valueSize,
+                     OpType o,
+                     uint32_t ttl,
+                     uint64_t reqId) {
+    key = k;
+    op = o;
+    ttlSecs = ttl;
+    requestId = reqId;
+    sizeBegin = std::vector<size_t>::iterator(valueSize);
+    sizeEnd = std::vector<size_t>::iterator(valueSize);
+  }
   OpType getOp() const noexcept { return op.load(); }
   void setOp(OpType o) noexcept { op = o; }
 
-  std::string& key;
+  std::string_view key;
 
   // size iterators in case this request is
   // deemed to be a chained item.
@@ -137,7 +181,7 @@ struct Request {
   // TTL in seconds.
   uint32_t ttlSecs{0};
 
-  const std::optional<uint64_t> requestId;
+  std::optional<uint64_t> requestId;
 
   // Feature map for this request sample, which is used for for admission
   // policy: feature name --> feature value
@@ -154,7 +198,6 @@ struct Request {
  private:
   std::atomic<OpType> op{OpType::kGet};
 };
-
 } // namespace cachebench
 } // namespace cachelib
 } // namespace facebook

@@ -206,8 +206,8 @@ struct BlockReqWrapper {
   std::string pieceKey;
   std::vector<size_t> sizes;
   const OpType op;
-  // Its internal key is a reference to pieceKey.
-  // Immutable except the op field
+  // Its internal key is a string_view to pieceKey. Updating the pieceKey must
+  // also update req's internal key. Immutable except the op field.
   Request req;
   std::unique_ptr<ChunkPieces> cachePieces;
   const RequestRange requestRange;
@@ -219,6 +219,11 @@ struct BlockReqWrapper {
   // Tracker to record the start/end of request. Initialize it at the
   // start of request processing.
   std::unique_ptr<util::LatencyTracker> latencyTracker_;
+
+  void updatePieceKey(const std::string& newPieceKey) {
+    pieceKey = newPieceKey;
+    req.key = pieceKey;
+  }
 
   // @param cache: the cache adapter instance
   // @param timestamp: the timestamp of the request

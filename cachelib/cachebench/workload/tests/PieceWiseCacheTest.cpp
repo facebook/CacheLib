@@ -117,10 +117,10 @@ TEST_F(PieceWiseCacheTest, PieceWiseReqWrapperTest) {
   // update pieceReqCopy, but not pieceReq1
   auto nextPieceIndex = pieceReqCopy.cachePieces->getCurFetchingPieceIndex();
   EXPECT_EQ(nextPieceIndex, 0);
-  pieceReqCopy.pieceKey = GenericPieces::createPieceKey(
+  pieceReqCopy.updatePieceKey(GenericPieces::createPieceKey(
       pieceReqCopy.baseKey,
       nextPieceIndex,
-      pieceReqCopy.cachePieces->getPiecesPerGroup());
+      pieceReqCopy.cachePieces->getPiecesPerGroup()));
   pieceReqCopy.sizes[0] =
       pieceReqCopy.cachePieces->getSizeOfAPiece(nextPieceIndex);
   pieceReqCopy.pieceType = PieceType::Body;

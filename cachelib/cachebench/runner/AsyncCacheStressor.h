@@ -222,9 +222,9 @@ class AsyncCacheStressor : public Stressor {
                 ThroughputStats& stats,
                 const Request* req,
                 folly::EventBase* evb,
-                const std::string* key) {
+                const std::string_view key) {
     ++stats.get;
-    auto lock = chainedItemAcquireSharedLock(*key);
+    auto lock = chainedItemAcquireSharedLock(key);
 
     if (ticker_) {
       ticker_->updateTimeStamp(req->timestamp);
@@ -233,8 +233,7 @@ class AsyncCacheStressor : public Stressor {
     // add a distribution over sequences of requests/access patterns
     // e.g. get-no-set and set-no-get
 
-    auto onReadyFn = [&, req, key = *key,
-                      l = std::move(lock)](auto hdl) mutable {
+    auto onReadyFn = [&, req, key, l = std::move(lock)](auto hdl) mutable {
       auto result = OpResultType::kGetMiss;
 
       if (hdl == nullptr) {
@@ -247,7 +246,7 @@ class AsyncCacheStressor : public Stressor {
           // appropriate here)
           l.unlock();
           auto xlock = chainedItemAcquireUniqueLock(key);
-          setKey(pid, stats, &key, *(req->sizeBegin), req->ttlSecs,
+          setKey(pid, stats, key, *(req->sizeBegin), req->ttlSecs,
                  req->admFeatureMap);
         }
       } else {
@@ -260,8 +259,8 @@ class AsyncCacheStressor : public Stressor {
       }
     };
 
-    cache_->recordAccess(*key);
-    auto sf = cache_->asyncFind(*key);
+    cache_->recordAccess(key);
+    auto sf = cache_->asyncFind(key);
     if (sf.isReady()) {
       // If the handle is ready, call onReadyFn directly to process the handle
       onReadyFn(std::move(sf).value());
@@ -283,9 +282,9 @@ class AsyncCacheStressor : public Stressor {
                        ThroughputStats& stats,
                        const Request* req,
                        folly::EventBase* evb,
-                       const std::string* key) {
+                       const std::string_view key) {
     ++stats.get;
-    auto lock = chainedItemAcquireUniqueLock(*key);
+    auto lock = chainedItemAcquireUniqueLock(key);
 
     // This was moved outside the lambda, as otherwise gcc-8.x crashes with an
     // internal compiler error here (suspected regression in folly).
@@ -297,7 +296,7 @@ class AsyncCacheStressor : public Stressor {
         ++stats.getMiss;
 
         ++stats.set;
-        wHdl = cache_->allocate(pid, *key, *(req->sizeBegin), req->ttlSecs);
+        wHdl = cache_->allocate(pid, key, *(req->sizeBegin), req->ttlSecs);
         if (!wHdl) {
           ++stats.setFailure;
           return;
@@ -327,7 +326,7 @@ class AsyncCacheStressor : public Stressor {
     };
 
     // Always use asyncFind as findToWrite is sync when using HybridCache
-    auto sf = cache_->asyncFind(*key);
+    auto sf = cache_->asyncFind(key);
     if (sf.isReady()) {
       onReadyFn(std::move(sf).value());
       return;
@@ -345,10 +344,10 @@ class AsyncCacheStressor : public Stressor {
   void asyncUpdate(ThroughputStats& stats,
                    const Request* req,
                    folly::EventBase* evb,
-                   const std::string* key) {
+                   const std::string_view key) {
     ++stats.get;
     ++stats.update;
-    auto lock = chainedItemAcquireUniqueLock(*key);
+    auto lock = chainedItemAcquireUniqueLock(key);
     if (ticker_) {
       ticker_->updateTimeStamp(req->timestamp);
     }
@@ -363,7 +362,7 @@ class AsyncCacheStressor : public Stressor {
       cache_->updateItemRecordVersion(wHdl);
     };
 
-    auto sf = cache_->asyncFind(*key);
+    auto sf = cache_->asyncFind(key);
     if (sf.isReady()) {
       onReadyFn(std::move(sf).value());
       return;
@@ -457,18 +456,18 @@ class AsyncCacheStressor : public Stressor {
         const auto pid = static_cast<PoolId>(opPoolDist(gen));
         const Request& req(getReq(pid, gen, lastRequestId));
         OpType op = req.getOp();
-        const std::string* key = &(req.key);
+        std::string_view key = req.key;
         std::string oneHitKey;
         if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
           oneHitKey = Request::getUniqueKey();
-          key = &oneHitKey;
+          key = oneHitKey;
         }
 
         OpResultType result(OpResultType::kNop);
         switch (op) {
         case OpType::kLoneSet:
         case OpType::kSet: {
-          auto lock = chainedItemAcquireUniqueLock(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
           result = setKey(pid, stats, key, *(req.sizeBegin), req.ttlSecs,
                           req.admFeatureMap);
 
@@ -481,8 +480,8 @@ class AsyncCacheStressor : public Stressor {
         }
         case OpType::kDel: {
           ++stats.del;
-          auto lock = chainedItemAcquireUniqueLock(*key);
-          auto res = cache_->remove(*key);
+          auto lock = chainedItemAcquireUniqueLock(key);
+          auto res = cache_->remove(key);
           if (res == CacheT::RemoveRes::kNotFoundInRam) {
             ++stats.delNotFound;
           }
@@ -532,7 +531,7 @@ class AsyncCacheStressor : public Stressor {
   OpResultType setKey(
       PoolId pid,
       ThroughputStats& stats,
-      const std::string* key,
+      const std::string_view key,
       size_t size,
       uint32_t ttlSecs,
       const std::unordered_map<std::string, std::string>& featureMap) {
@@ -543,7 +542,7 @@ class AsyncCacheStressor : public Stressor {
     }
 
     ++stats.set;
-    auto it = cache_->allocate(pid, *key, size, ttlSecs);
+    auto it = cache_->allocate(pid, key, size, ttlSecs);
     if (it == nullptr) {
       ++stats.setFailure;
       return OpResultType::kSetFailure;

@@ -261,8 +261,8 @@ struct PieceWiseReqWrapper {
   const std::string baseKey;
   std::string pieceKey;
   std::vector<size_t> sizes;
-  // Its internal key is a reference to pieceKey.
-  // Immutable except the op field
+  // Its internal key is a string_view to pieceKey. Updating the pieceKey must
+  // also update req's internal key. Immutable except the op field.
   Request req;
   std::unique_ptr<GenericPieces> cachePieces;
   const RequestRange requestRange;
@@ -284,6 +284,11 @@ struct PieceWiseReqWrapper {
   // Tracker to record the start/end of request. Initialize it at the
   // start of request processing.
   std::unique_ptr<util::LatencyTracker> latencyTracker_;
+
+  void updatePieceKey(const std::string& newPieceKey) {
+    pieceKey = newPieceKey;
+    req.key = pieceKey;
+  }
 
   // @param cachePieceSize: byte size of a cache piece
   // @param reqId: the unique request id for the raw request

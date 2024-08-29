@@ -16,9 +16,15 @@
 
 #pragma once
 
+#include <errno.h>
+#include <fcntl.h>
 #include <folly/Format.h>
 #include <folly/Random.h>
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/DistributedMutex.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -30,14 +36,17 @@
 
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
+#include "cachelib/cachebench/util/Request.h"
 #include "cachelib/cachebench/workload/GeneratorBase.h"
+
+#define PG_SIZE 4096
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
+constexpr size_t kPgRelease = 100000000;
 constexpr size_t kIfstreamBufferSize = 1L << 14;
-
 // ColumnInfo is to pass the information required to parse the trace
 // to map the column to the replayer-specific field ID.
 struct ColumnInfo {
@@ -83,6 +92,81 @@ class TraceFileStream {
     }
 
     return infile_;
+  }
+
+  // Returns the total number of requests in the trace
+  // plus the average key size so we can properly
+  // set up the binary file stream via mmap
+  //
+  // We return a pair, the first value is the number
+  // of lines in the trace and the second value is the
+  // average key size
+  std::pair<uint64_t, uint64_t> getTraceRequestStats() {
+    uint64_t lines = 0;
+    uint64_t totalKeySize = 0;
+    const std::string& traceFileName = infileNames_[0];
+    std::string filePath;
+    if (traceFileName[0] == '/') {
+      filePath = traceFileName;
+    } else {
+      filePath = folly::sformat("{}/{}", configPath_, traceFileName);
+    }
+
+    std::ifstream file;
+    std::string line;
+    file.open(filePath);
+    if (file.fail()) {
+      XLOGF(ERR, "Failed to open trace file {}", filePath);
+      return std::make_pair(0, 0);
+    }
+
+    XLOGF(INFO, "Opened trace file {}", filePath);
+    bool first = true;
+    while (std::getline(file, line)) {
+      if (first) {
+        setHeaderRow(line);
+        first = false;
+      } else {
+        // Default order is key,op,size,op_count,key_size,ttl
+        nextLineFields_.clear();
+        folly::split(",", line, nextLineFields_);
+
+        if (nextLineFields_.size() < minNumFields_) {
+          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+              "Error parsing next line \"{}\": shorter than min required "
+              "fields {}",
+              line, minNumFields_);
+        }
+        auto keySizeField = getField<size_t>(2);
+        if (!keySizeField.hasValue()) {
+          XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
+              "Error parsing next line \"{}\": key size not found", line);
+        } else {
+          // The key is encoded as <encoded key, key size>.
+          size_t keySize = keySizeField.value();
+          // The key size should not exceed 256
+          keySize = std::min<size_t>(keySize, 256);
+          totalKeySize += keySize;
+          lines++;
+        }
+      }
+    }
+    file.close();
+
+    return std::make_pair(lines, totalKeySize);
+  }
+
+  // The number of requests (not including ampFactor) to skip
+  // in the trace. This is so that after warming up the cache
+  // with a certain number of requests, we can easily reattach
+  // and resume execution with different cache configurations.
+  void fastForwardTrace(uint64_t fastForwardCount) {
+    uint64_t count = 0;
+    while (count < fastForwardCount) {
+      std::string line;
+      this->getline(line); // can throw
+      count++;
+    }
   }
 
   bool setNextLine(const std::string& line) {
@@ -189,7 +273,7 @@ class TraceFileStream {
       }
 
       XLOGF_EVERY_MS(
-          INFO, 100'000,
+          INFO, 60'000,
           "{} Reached the end of trace files. Restarting from beginning.",
           idStr_);
       nextInfileIdx_ = 0;
@@ -211,11 +295,11 @@ class TraceFileStream {
 
     infile_.open(filePath);
     if (infile_.fail()) {
-      XLOGF(ERR, "{} Failed to open trace file {}", idStr_, traceFileName);
+      XLOGF(ERR, "{} Failed to open trace file {}", idStr_, filePath);
       return false;
     }
 
-    XLOGF(INFO, "{} Opened trace file {}", idStr_, traceFileName);
+    XLOGF(INFO, "{} Opened trace file {}", idStr_, filePath);
     infile_.rdbuf()->pubsetbuf(infileBuffer_, sizeof(infileBuffer_));
     // header
     std::string headerLine;
@@ -257,12 +341,135 @@ class TraceFileStream {
   std::vector<std::string> keys_;
 };
 
+class BinaryFileStream {
+ public:
+  BinaryFileStream(const StressorConfig& config)
+      : infileName_(config.traceFileName) {
+    std::string filePath;
+    if (infileName_[0] == '/') {
+      filePath = infileName_;
+    } else {
+      filePath = folly::sformat("{}/{}", config.configPath, infileName_);
+    }
+    fd_ = open(filePath.c_str(), O_RDONLY);
+    // Get the size of the file
+    struct stat fileStat;
+    if (fstat(fd_, &fileStat) == -1) {
+      close(fd_);
+      XLOGF(INFO, "Error reading file size {}", filePath);
+    }
+    size_t* binaryData = reinterpret_cast<size_t*>(
+        mmap(nullptr, fileStat.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE,
+             fd_, 0));
+
+    // binary data pg align save for releasing old requests
+    pgBinaryData_ = reinterpret_cast<void*>(binaryData);
+
+    // first value is the number of requests in the file
+    nreqs_ = binaryData[0];
+    binaryData++;
+    // next is the request data
+    binaryReqData_ = reinterpret_cast<BinaryRequest*>(binaryData);
+    binaryKeyData_ = reinterpret_cast<char*>(binaryData);
+
+    // keys are stored after request structures
+    binaryKeyData_ += nreqs_ * sizeof(BinaryRequest);
+    // save the pg aligned key space for releasing old key data
+    pgBinaryKeyData_ = reinterpret_cast<void*>(
+        reinterpret_cast<uint64_t>(binaryKeyData_) +
+        (PG_SIZE - (reinterpret_cast<uint64_t>(binaryKeyData_) % PG_SIZE)));
+
+    releaseCount_ = 1; // release data after first nRelease reqs
+    nRelease_ = kPgRelease;
+    releaseIdx_ = nRelease_ * releaseCount_;
+  }
+
+  ~BinaryFileStream() { close(fd_); }
+
+  uint64_t getNumReqs() { return nreqs_; }
+
+  void releaseOldData(uint64_t reqsCompleted) {
+    // The number of bytes from the key data stream to release
+    uint64_t keyBytes =
+        (reinterpret_cast<uint64_t>(binaryReqData_ + releaseIdx_) +
+         binaryReqData_[releaseIdx_].keyOffset_) -
+        reinterpret_cast<uint64_t>(binaryKeyData_);
+
+    int kres = madvise(reinterpret_cast<void*>(pgBinaryKeyData_), keyBytes,
+                       MADV_DONTNEED);
+    if (kres != 0) {
+      XLOGF(INFO, "Failed to release old keys, key bytes: {}, result: {}",
+            keyBytes, strerror(errno));
+      XDCHECK_EQ(kres, 0);
+    } else {
+      XLOGF(INFO, "Release old keys, key bytes: {}", keyBytes);
+    }
+
+    int reqRes = madvise(reinterpret_cast<void*>(pgBinaryData_),
+                         (releaseIdx_) * sizeof(BinaryRequest) + sizeof(size_t),
+                         MADV_DONTNEED);
+
+    XDCHECK_EQ(reqRes, 0);
+    if (reqRes != 0) {
+      XLOGF(INFO,
+            "Failed to release old requests, released: {}, completed: {}, "
+            "result: {}",
+            releaseIdx_, reqsCompleted, strerror(errno));
+    } else {
+      XLOGF(INFO, "Released old requests, released: {}, completed: {}",
+            releaseIdx_, reqsCompleted);
+    }
+
+    releaseIdx_ = nRelease_ * (++releaseCount_);
+  }
+
+  BinaryRequest* getNextPtr(uint64_t reqIdx) {
+    if ((reqIdx > releaseIdx_) && (reqIdx % nRelease_ == 0)) {
+      releaseOldData(reqIdx);
+    }
+    if (reqIdx >= nreqs_) {
+      releaseCount_ = 1;
+      releaseIdx_ = nRelease_ * releaseCount_;
+      throw cachelib::cachebench::EndOfTrace("");
+    }
+    BinaryRequest* binReq = binaryReqData_ + reqIdx;
+    XDCHECK_LT(binReq->op_, 12);
+    return binReq;
+  }
+
+ private:
+  const StressorConfig config_;
+  std::string infileName_;
+
+  // pointers to mmaped data
+  BinaryRequest* binaryReqData_;
+  char* binaryKeyData_;
+
+  // these two pointers are to madvise
+  // away old request data
+  void* pgBinaryKeyData_;
+  void* pgBinaryData_;
+
+  // number of requests released so far
+  size_t releaseIdx_;
+  size_t releaseCount_;
+  // how often to release old requests
+  size_t nRelease_;
+
+  uint64_t nreqs_;
+  int fd_;
+};
+
 class ReplayGeneratorBase : public GeneratorBase {
  public:
   explicit ReplayGeneratorBase(const StressorConfig& config)
       : config_(config),
         repeatTraceReplay_{config_.repeatTraceReplay},
         ampFactor_(config.replayGeneratorConfig.ampFactor),
+        ampSizeFactor_(config.replayGeneratorConfig.ampSizeFactor),
+        fastForwardCount_(config.replayGeneratorConfig.fastForwardCount),
+        preLoadReqs_(config.replayGeneratorConfig.preLoadReqs),
+        binaryFileName_(config.replayGeneratorConfig.binaryFileName),
         timestampFactor_(config.timestampFactor),
         numShards_(config.numThreads),
         mode_(config_.replayGeneratorConfig.getSerializationMode()) {
@@ -280,7 +487,10 @@ class ReplayGeneratorBase : public GeneratorBase {
   const StressorConfig config_;
   const bool repeatTraceReplay_;
   const size_t ampFactor_;
-
+  const size_t ampSizeFactor_;
+  const uint64_t fastForwardCount_;
+  const uint64_t preLoadReqs_;
+  const std::string binaryFileName_;
   // The constant to be divided from the timestamp value
   // to turn the timestamp into seconds.
   const uint64_t timestampFactor_{1};

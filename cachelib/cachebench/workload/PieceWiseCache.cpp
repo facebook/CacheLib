@@ -387,7 +387,7 @@ PieceWiseReqWrapper::PieceWiseReqWrapper(
                                         &requestRange);
 
     // Metadata piece is the first piece
-    pieceKey = baseKey;
+    updatePieceKey(baseKey);
     pieceType = PieceType::Metadata;
     sizes[0] = metadataSize;
   }
@@ -509,7 +509,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessingMetadataPiece(
   }
 
   // Next piece is a header piece
-  rw.pieceKey = GenericPieces::createPieceHeaderKey(rw.baseKey);
+  rw.updatePieceKey(GenericPieces::createPieceHeaderKey(rw.baseKey));
   rw.sizes[0] = rw.headerSize;
   rw.pieceType = PieceType::Header;
 
@@ -543,8 +543,8 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
         nextPieceIndex < maxCachePieces_) {
       // First set the correct key. Header piece has already been fetched,
       // this is now a body piece.
-      rw.pieceKey = GenericPieces::createPieceKey(
-          rw.baseKey, nextPieceIndex, rw.cachePieces->getPiecesPerGroup());
+      rw.updatePieceKey(GenericPieces::createPieceKey(
+          rw.baseKey, nextPieceIndex, rw.cachePieces->getPiecesPerGroup()));
 
       // Set the size of the piece
       rw.sizes[0] = rw.cachePieces->getSizeOfAPiece(nextPieceIndex);

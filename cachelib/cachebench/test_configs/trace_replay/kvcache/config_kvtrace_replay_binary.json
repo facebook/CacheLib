@@ -1,0 +1,27 @@
+{
+  "cache_config":
+  {
+    "cacheSizeMB": 500,
+    "cacheDir": "/tmp/cachelib_metadata",
+    "allocFactor": 1.08,
+    "maxAllocSize": 524288,
+    "minAllocSize": 64,
+    "htBucketPower": 29,
+    "moveOnSlabRelease": false,
+    "poolRebalanceIntervalSec": 2,
+    "poolResizeIntervalSec": 1,
+    "rebalanceStrategy": "hits"
+  },
+  "test_config":
+  {
+    "generator": "binary-replay",
+    "repeatTraceReplay": true,
+    "repeatOpCount" : true,
+    "onlySetIfMiss" : false,
+    "timestampFactor": 1,
+    "numOps": 2000000,
+    "numThreads": 16,
+    "prepopulateCache": true,
+    "traceFileName": "kv_trace.bin"
+  }
+}

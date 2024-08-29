@@ -259,8 +259,8 @@ BlockReqWrapper::BlockReqWrapper(BlockChunkCacheAdapter& cache,
   cachePieces = std::make_unique<ChunkPieces>(baseKey, cache.chunkSize_,
                                               cache.blockSize_, &requestRange);
 
-  pieceKey = ChunkPieces::createPieceKey(
-      baseKey, cachePieces->getCurFetchingPieceIndex());
+  updatePieceKey(ChunkPieces::createPieceKey(
+      baseKey, cachePieces->getCurFetchingPieceIndex()));
 
   sizes[0] =
       cachePieces->getSizeOfAPiece(cachePieces->getCurFetchingPieceIndex());
@@ -337,7 +337,8 @@ bool BlockChunkCacheAdapter::processReq(BlockReqWrapper& rw,
       // Reset op since it could have been changed to kSet
       rw.req.setOp(rw.op);
       // Update the piece key and the size
-      rw.pieceKey = ChunkPieces::createPieceKey(rw.baseKey, nextPieceIndex);
+      rw.updatePieceKey(
+          ChunkPieces::createPieceKey(rw.baseKey, nextPieceIndex));
       XDCHECK_EQ(rw.sizes.size(), 1u);
       rw.sizes[0] = rw.cachePieces->getSizeOfAPiece(nextPieceIndex);
     } else {
