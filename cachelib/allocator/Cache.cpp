@@ -371,6 +371,10 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
 
   counters_.updateDelta(statPrefix + "evictions.concurrent_fill_failure",
                         stats.numEvictionFailureFromConcurrentFill);
+  counters_.updateDelta(statPrefix + "evictions.concurrent_access_failure",
+                        stats.numEvictionFailureFromConcurrentAccess);
+  counters_.updateDelta(statPrefix + "evictions.put_token_lock_failure",
+                        stats.numEvictionFailureFromPutTokenLock);
   counters_.updateDelta(statPrefix + "evictions.remove_failure",
                         stats.numEvictionFailureFromAccessContainer);
   counters_.updateDelta(statPrefix + "evictions.moving_failure",

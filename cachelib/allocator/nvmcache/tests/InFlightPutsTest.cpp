@@ -29,7 +29,7 @@ namespace tests {
 TEST(InFlightPutsTest, FunctionExecution) {
   InFlightPuts p;
   folly::StringPiece key = "foobar";
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
 
   bool executed = false;
@@ -48,7 +48,7 @@ TEST(InFlightPutsTest, TokenMove) {
   InFlightPuts p;
   folly::StringPiece key = "foobar";
   {
-    auto token = p.tryAcquireToken(key);
+    auto token = *p.tryAcquireToken(key, []() { return true; });
     ASSERT_TRUE(token.isValid());
     auto movedToken = std::move(token);
 
@@ -61,14 +61,14 @@ TEST(InFlightPutsTest, TokenMove) {
     ASSERT_FALSE(movedToken.isValid());
     ASSERT_TRUE(moveAssignToken.isValid());
   }
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
 }
 
 TEST(InFlightPutsTest, FunctionException) {
   InFlightPuts p;
   folly::StringPiece key = "foobar";
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
 
   bool executed = false;
@@ -89,15 +89,16 @@ TEST(InFlightPutsTest, Collision) {
   InFlightPuts p;
   folly::StringPiece key = "foobar";
   {
-    auto token = p.tryAcquireToken(key);
+    auto token = *p.tryAcquireToken(key, []() { return true; });
     ASSERT_TRUE(token.isValid());
 
-    auto token2 = p.tryAcquireToken(key);
-    ASSERT_FALSE(token2.isValid());
+    auto token2rv = p.tryAcquireToken(key, []() { return true; });
+    ASSERT_TRUE(token2rv.hasError());
+    ASSERT_EQ(token2rv.error(), InFlightPuts::PutTokenError::TOKEN_EXISTS);
   }
 
   // should be able to create one now
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
 }
 
@@ -105,7 +106,7 @@ TEST(InFlightPutsTest, InvalidationSimple) {
   InFlightPuts p;
   folly::StringPiece key = "foobar";
 
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
 
   p.invalidateToken(key);
@@ -119,7 +120,9 @@ TEST(InFlightPutsTest, InvalidationSimple) {
   ASSERT_FALSE(executed);
 
   // should not be able to create a token even if an invalid one is around.
-  ASSERT_FALSE(p.tryAcquireToken(key).isValid());
+  auto token2rv = p.tryAcquireToken(key, []() { return true; });
+  ASSERT_TRUE(token2rv.hasError());
+  ASSERT_EQ(token2rv.error(), InFlightPuts::PutTokenError::TOKEN_EXISTS);
 }
 
 // invalidate the token for key and try to create a new token before the old
@@ -131,7 +134,7 @@ TEST(InFlightPutsTest, InvalidationAndCreate) {
   bool executed = false;
   auto fn = [&]() { executed = true; };
   {
-    auto token = p.tryAcquireToken(key);
+    auto token = *p.tryAcquireToken(key, []() { return true; });
     ASSERT_TRUE(token.isValid());
 
     p.invalidateToken(key);
@@ -140,15 +143,16 @@ TEST(InFlightPutsTest, InvalidationAndCreate) {
 
     // try to create the new token and this should not produce a valid token
     // since there is already one outstanding token.
-    auto newToken = p.tryAcquireToken(key);
-    ASSERT_FALSE(newToken.isValid());
+    auto newTokenRv = p.tryAcquireToken(key, []() { return true; });
+    ASSERT_TRUE(newTokenRv.hasError());
+    ASSERT_EQ(newTokenRv.error(), InFlightPuts::PutTokenError::TOKEN_EXISTS);
 
     // executing a function should fail since the token was invalidated.
     ASSERT_FALSE(token.executeIfValid(fn));
     ASSERT_FALSE(executed);
   }
 
-  auto token = p.tryAcquireToken(key);
+  auto token = *p.tryAcquireToken(key, []() { return true; });
   ASSERT_TRUE(token.isValid());
   executed = false;
   ASSERT_TRUE(token.executeIfValid(fn));

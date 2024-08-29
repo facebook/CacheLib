@@ -108,7 +108,13 @@ class NvmCacheTest : public testing::Test {
   void pushToNvmCacheFromRamForTesting(WriteHandle& handle) {
     auto nvmCache = getNvmCache();
     if (nvmCache) {
-      nvmCache->put(*handle, nvmCache->createPutToken(handle->getKey()));
+      auto putTokenRv =
+          nvmCache->createPutToken(handle->getKey(), []() { return true; });
+      InFlightPuts::PutToken putToken{};
+      if (putTokenRv) {
+        putToken = std::move(*putTokenRv);
+      }
+      nvmCache->put(*handle, std::move(putToken));
     }
   }
 

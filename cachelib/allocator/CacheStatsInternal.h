@@ -245,6 +245,15 @@ struct Stats {
   // to NvmCache.h for more details.
   AtomicCounter evictFailConcurrentFill{0};
 
+  // Eviction failures because we failed to acquire the lock and cannot
+  // prove the absence of concurrent fills, so we can't evict it. Refer
+  // to NvmCache.h for more details.
+  AtomicCounter evictFailPutTokenLock{0};
+
+  // Eviction failures because we failed to mark the item as being evicted
+  // due to a concurrent ongoing read. Refer to NvmCache.h for more details.
+  AtomicCounter evictFailConcurrentAccess{0};
+
   // Eviction failures because this item is being moved
   AtomicCounter evictFailMove{0};
 

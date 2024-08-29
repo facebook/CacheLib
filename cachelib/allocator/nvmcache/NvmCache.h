@@ -157,10 +157,14 @@ class NvmCache {
   // presence of concurrent gets and deletes from other threads.
   //
   // @param key         the key which is being evicted
-  // @return            return true if successfully marked and the eviction
-  //                    can proceed to queue a put in the future.  return
-  //                    false otherwise
-  PutToken createPutToken(folly::StringPiece key);
+  // @param fn          if the token is acquired successfully,
+  //                    fn() will be executed while holding the token lock.
+  //                    If fn() returns false, the token is discarded.
+  // @return            a valid token if successfully marked and fn() returned
+  // true.
+  template <typename F>
+  folly::Expected<PutToken, InFlightPuts::PutTokenError> createPutToken(
+      folly::StringPiece key, F&& fn);
 
   // store the given item in navy
   // @param item        reference to cache item
@@ -1061,9 +1065,12 @@ void NvmCache<C>::put(Item& item, PutToken token) {
 }
 
 template <typename C>
-typename NvmCache<C>::PutToken NvmCache<C>::createPutToken(
-    folly::StringPiece key) {
-  return inflightPuts_[getShardForKey(key)].tryAcquireToken(key);
+template <typename F>
+typename folly::Expected<typename NvmCache<C>::PutToken,
+                         InFlightPuts::PutTokenError>
+NvmCache<C>::createPutToken(folly::StringPiece key, F&& fn) {
+  return inflightPuts_[getShardForKey(key)].tryAcquireToken(
+      key, std::forward<F>(fn));
 }
 
 template <typename C>

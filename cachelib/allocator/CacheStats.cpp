@@ -50,7 +50,7 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<16352>{};
+  SizeVerify<sizeof(Stats)> a = SizeVerify<16368>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();
@@ -133,6 +133,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 
   ret.numEvictionFailureFromAccessContainer = evictFailAC.get();
   ret.numEvictionFailureFromConcurrentFill = evictFailConcurrentFill.get();
+  ret.numEvictionFailureFromConcurrentAccess = evictFailConcurrentAccess.get();
+  ret.numEvictionFailureFromPutTokenLock = evictFailPutTokenLock.get();
   ret.numEvictionFailureFromParentAccessContainer = evictFailParentAC.get();
   ret.numEvictionFailureFromMoving = evictFailMove.get();
   ret.numEvictionFailureFromParentMoving = evictFailParentMove.get();

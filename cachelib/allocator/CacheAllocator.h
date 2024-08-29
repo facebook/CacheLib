@@ -3648,8 +3648,15 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::NvmCacheT::PutToken
 CacheAllocator<CacheTrait>::createPutToken(Item& item) {
   const bool evictToNvmCache = shouldWriteToNvmCache(item);
-  return evictToNvmCache ? nvmCache_->createPutToken(item.getKey())
-                         : typename NvmCacheT::PutToken{};
+  if (evictToNvmCache) {
+    auto putTokenRv =
+        nvmCache_->createPutToken(item.getKey(), []() { return true; });
+    if (putTokenRv) {
+      return std::move(*putTokenRv);
+    }
+  }
+
+  return {};
 }
 
 template <typename CacheTrait>
@@ -3697,26 +3704,49 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
               ? &toRecycle_->asChainedItem().getParentItem(compressor_)
               : toRecycle_;
 
+      typename NvmCacheT::PutToken putToken{};
       const bool evictToNvmCache = shouldWriteToNvmCache(*candidate_);
-      auto putToken = evictToNvmCache
-                          ? nvmCache_->createPutToken(candidate_->getKey())
-                          : typename NvmCacheT::PutToken{};
 
-      if (evictToNvmCache && !putToken.isValid()) {
-        stats_.evictFailConcurrentFill.inc();
-        ++itr;
-        continue;
-      }
-
-      auto markedForEviction = candidate_->markForEviction();
-      if (!markedForEviction) {
-        if (candidate_->hasChainedItem()) {
-          stats_.evictFailParentAC.inc();
-        } else {
-          stats_.evictFailAC.inc();
+      auto markForEviction = [&candidate_, this]() {
+        auto markedForEviction = candidate_->markForEviction();
+        if (!markedForEviction) {
+          if (candidate_->hasChainedItem()) {
+            stats_.evictFailParentAC.inc();
+          } else {
+            stats_.evictFailAC.inc();
+          }
+          return false;
         }
-        ++itr;
-        continue;
+        return true;
+      };
+
+      if (evictToNvmCache) {
+        auto putTokenRv = nvmCache_->createPutToken(
+            candidate_->getKey(),
+            [&markForEviction]() { return markForEviction(); });
+
+        if (!putTokenRv) {
+          switch (putTokenRv.error()) {
+          case InFlightPuts::PutTokenError::TRY_LOCK_FAIL:
+            stats_.evictFailPutTokenLock.inc();
+            break;
+          case InFlightPuts::PutTokenError::TOKEN_EXISTS:
+            stats_.evictFailConcurrentFill.inc();
+            break;
+          case InFlightPuts::PutTokenError::CALLBACK_FAILED:
+            stats_.evictFailConcurrentAccess.inc();
+            break;
+          }
+          ++itr;
+          continue;
+        }
+        putToken = std::move(*putTokenRv);
+        XDCHECK(putToken.isValid());
+      } else {
+        if (!markForEviction()) {
+          ++itr;
+          continue;
+        }
       }
 
       // markForEviction to make sure no other thead is evicting the item
@@ -3932,7 +3962,13 @@ bool CacheAllocator<CacheTrait>::pushToNvmCacheFromRamForTesting(
 
   if (handle && nvmCache_ && shouldWriteToNvmCache(*handle) &&
       shouldWriteToNvmCacheExclusive(*handle)) {
-    nvmCache_->put(*handle, nvmCache_->createPutToken(handle->getKey()));
+    auto putTokenRv =
+        nvmCache_->createPutToken(handle->getKey(), []() { return true; });
+    InFlightPuts::PutToken putToken{};
+    if (putTokenRv) {
+      putToken = std::move(*putTokenRv);
+    }
+    nvmCache_->put(*handle, std::move(putToken));
     return true;
   }
   return false;

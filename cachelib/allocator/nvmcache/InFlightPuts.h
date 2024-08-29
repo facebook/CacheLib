@@ -40,22 +40,37 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
 
  public:
   class PutToken;
+
+  enum class PutTokenError { TRY_LOCK_FAIL, TOKEN_EXISTS, CALLBACK_FAILED };
+
   // inserts an in-flight put into the map if none exists and acquires a
-  // token. Caller can check if the token is valid to determine if they can
-  // use it to complete the operation.
-  PutToken tryAcquireToken(folly::StringPiece key) {
+  // token.  If a token is acquired successfully, will call fn() while
+  // holding the mutex_. If fn() returns false, deletes the token otherwise
+  // return the valid token.
+  template <typename F>
+  folly::Expected<PutToken, PutTokenError> tryAcquireToken(
+      folly::StringPiece key, F&& fn) {
     UniqueLock l(mutex_, std::try_to_lock);
     if (!l.owns_lock()) {
-      return PutToken{};
+      return folly::makeUnexpected(PutTokenError::TRY_LOCK_FAIL);
     }
 
     auto ret = keys_.emplace(key, true);
     // record for same key being inflight written to nvmcache should be rare.
     // In that case, fail the latter one.
-    if (ret.second) {
+    if (!ret.second) {
+      return folly::makeUnexpected(PutTokenError::TOKEN_EXISTS);
+    }
+
+    bool fnRet = std::forward<F>(fn)();
+    if (fnRet) {
       return PutToken{key, *this};
     }
-    return PutToken{};
+
+    // if fn() failed, erase the token
+    auto eraseRet = keys_.erase(key);
+    XDCHECK_EQ(eraseRet, 1u);
+    return folly::makeUnexpected(PutTokenError::CALLBACK_FAILED);
   }
 
   // marks the token as invalidated. This will ensure that we dont execute any
