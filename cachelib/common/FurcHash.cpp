@@ -157,7 +157,7 @@ uint32_t getbit(FurcHashState* statep, uint32_t choice) {
 //    2) the original recursive algorithm for the decision tree has been
 //       made iterative
 //
-// Assumes that "m" is 8 million or less (2^kFurcShift).  Making kFurcShift
+// Assumes that "nPart" is 8 million or less (2^kFurcShift).  Making kFurcShift
 // bigger also makes FurcHash modestly slower.
 //
 // Performance is in the sub-500ns range to over 100,000 shards with 13-byte
