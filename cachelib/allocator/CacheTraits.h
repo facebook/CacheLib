@@ -19,6 +19,7 @@
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MMLru.h"
 #include "cachelib/allocator/MMTinyLFU.h"
+#include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/common/Mutex.h"
 
 namespace facebook {
@@ -35,24 +36,28 @@ struct LruCacheTrait {
   using MMType = MMLru;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr;
 };
 
 struct LruCacheWithSpinBucketsTrait {
   using MMType = MMLru;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SpinBuckets;
+  using CompressedPtrType = CompressedPtr;
 };
 
 struct Lru2QCacheTrait {
   using MMType = MM2Q;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr;
 };
 
 struct TinyLFUCacheTrait {
   using MMType = MMTinyLFU;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr;
 };
 
 } // namespace cachelib

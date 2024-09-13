@@ -180,6 +180,7 @@ template <typename CacheTrait>
 class CacheAllocator : public CacheBase {
  public:
   using CacheT = CacheAllocator<CacheTrait>;
+  using CompressedPtrType = typename CacheTrait::CompressedPtrType;
   using MMType = typename CacheTrait::MMType;
   using AccessType = typename CacheTrait::AccessType;
   using Config = CacheAllocatorConfig<CacheT>;

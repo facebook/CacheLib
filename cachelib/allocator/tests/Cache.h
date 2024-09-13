@@ -24,6 +24,7 @@ namespace tests {
 struct Cache {
   using AccessType = LruCacheTrait::AccessType;
   using AccessTypeLocks = LruCacheTrait::AccessTypeLocks;
+  using CompressedPtrType = LruCacheTrait::CompressedPtrType;
   struct AccessConfig {};
   struct ChainedItemMovingSync {};
   struct RemoveCb {};
