@@ -527,14 +527,14 @@ class MemoryAllocator {
   // @throw std::logic_error if the object state can not be serialized
   serialization::MemoryAllocatorObject saveState();
 
-  using CompressedPtr = facebook::cachelib::CompressedPtr;
-  template <typename PtrType>
-  using PtrCompressor =
-      facebook::cachelib::PtrCompressor<PtrType, SlabAllocator>;
+  using CompressedPtrType = facebook::cachelib::CompressedPtr;
+  template <typename PtrType, typename CompressedPtrType>
+  using PtrCompressor = facebook::cachelib::
+      PtrCompressor<PtrType, SlabAllocator, CompressedPtrType>;
 
-  template <typename PtrType>
-  PtrCompressor<PtrType> createPtrCompressor() {
-    return slabAllocator_.createPtrCompressor<PtrType>();
+  template <typename PtrType, typename CompressedPtrType>
+  PtrCompressor<PtrType, CompressedPtrType> createPtrCompressor() {
+    return slabAllocator_.createPtrCompressor<PtrType, CompressedPtrType>();
   }
 
   // compress a given pointer to a valid allocation made out of this allocator

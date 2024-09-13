@@ -175,17 +175,17 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   friend SlabAllocator;
 };
 
-template <typename PtrType, typename AllocatorT>
+template <typename PtrType, typename AllocatorT, typename CompressedPtrType>
 class PtrCompressor {
  public:
   explicit PtrCompressor(const AllocatorT& allocator) noexcept
       : allocator_(allocator) {}
 
-  const CompressedPtr compress(const PtrType* uncompressed) const {
+  const CompressedPtrType compress(const PtrType* uncompressed) const {
     return allocator_.compress(uncompressed, false /* isMultiTiered */);
   }
 
-  PtrType* unCompress(const CompressedPtr compressed) const {
+  PtrType* unCompress(const CompressedPtrType& compressed) const {
     return static_cast<PtrType*>(
         allocator_.unCompress(compressed, false /* isMultiTiered */));
   }

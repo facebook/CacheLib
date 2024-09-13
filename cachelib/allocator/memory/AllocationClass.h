@@ -444,8 +444,8 @@ class AllocationClass {
   // list.
   struct CACHELIB_PACKED_ATTR FreeAlloc {
     using CompressedPtr = facebook::cachelib::CompressedPtr;
-    using PtrCompressor =
-        facebook::cachelib::PtrCompressor<FreeAlloc, SlabAllocator>;
+    using PtrCompressor = facebook::cachelib::
+        PtrCompressor<FreeAlloc, SlabAllocator, CompressedPtr>;
     SListHook<FreeAlloc> hook_{};
   };
 

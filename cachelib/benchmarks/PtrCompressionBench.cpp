@@ -24,7 +24,6 @@
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 
 using namespace facebook::cachelib;
-using CompressedPtr = MemoryAllocator::CompressedPtr;
 using AllocPair = std::pair<void*, CompressedPtr>;
 
 namespace {

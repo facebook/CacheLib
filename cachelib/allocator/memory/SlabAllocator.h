@@ -317,9 +317,10 @@ class SlabAllocator {
     return &slabMemoryStart_[idx];
   }
 
-  template <typename PtrType>
-  PtrCompressor<PtrType, SlabAllocator> createPtrCompressor() const {
-    return PtrCompressor<PtrType, SlabAllocator>(*this);
+  template <typename PtrType, typename CompressedPtrType>
+  PtrCompressor<PtrType, SlabAllocator, CompressedPtrType> createPtrCompressor()
+      const {
+    return PtrCompressor<PtrType, SlabAllocator, CompressedPtrType>(*this);
   }
 
  private:
