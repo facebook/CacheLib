@@ -36,7 +36,7 @@ class MMTypeTest;
 template <typename T, DListHook<T> T::*HookPtr>
 class MultiDList {
  public:
-  using CompressedPtr = typename T::CompressedPtr;
+  using CompressedPtrType = typename T::CompressedPtrType;
   using PtrCompressor = typename T::PtrCompressor;
   using SingleDList = DList<T, HookPtr>;
   using DListIterator = typename SingleDList::Iterator;

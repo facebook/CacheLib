@@ -60,7 +60,7 @@ class ChainedHashTable {
    public:
     using Key = typename T::Key;
     using BucketId = size_t;
-    using CompressedPtr = typename T::CompressedPtr;
+    using CompressedPtrType = typename T::CompressedPtrType;
     using PtrCompressor = typename T::PtrCompressor;
 
     // allocate memory for hash table; the memory is managed by Impl.
@@ -98,7 +98,7 @@ class ChainedHashTable {
       return (node.*HookPtr).getHashNext(compressor_);
     }
 
-    CompressedPtr getHashNextCompressed(const T& node) const noexcept {
+    CompressedPtrType getHashNextCompressed(const T& node) const noexcept {
       return (node.*HookPtr).getHashNext();
     }
 
@@ -106,7 +106,7 @@ class ChainedHashTable {
       (node.*HookPtr).setHashNext(next, compressor_);
     }
 
-    void setHashNext(T& node, CompressedPtr next) {
+    void setHashNext(T& node, CompressedPtrType next) {
       (node.*HookPtr).setHashNext(next);
     }
 
@@ -160,7 +160,9 @@ class ChainedHashTable {
     bool isRestorable() const noexcept { return restorable_; }
 
     // return the hashtable size in bytes
-    size_t size() const noexcept { return numBuckets_ * sizeof(CompressedPtr); }
+    size_t size() const noexcept {
+      return numBuckets_ * sizeof(CompressedPtrType);
+    }
 
     // return the number of buckets in hash table
     size_t getNumBuckets() const noexcept { return numBuckets_; }
@@ -182,7 +184,7 @@ class ChainedHashTable {
     const size_t numBucketsMask_{0};
 
     // actual buckets.
-    std::unique_ptr<CompressedPtr[]> hashTable_;
+    std::unique_ptr<CompressedPtrType[]> hashTable_;
 
     // indicate whether or not the hash table uses user-managed memory and
     // is thus restorable from serialized state
@@ -202,24 +204,24 @@ class ChainedHashTable {
   // node used for chaining the hash table for collision.
   template <typename T>
   struct CACHELIB_PACKED_ATTR Hook {
-    using CompressedPtr = typename T::CompressedPtr;
+    using CompressedPtrType = typename T::CompressedPtrType;
     using PtrCompressor = typename T::PtrCompressor;
     // sets the next in the hash chain to the passed in value.
     void setHashNext(T* n, const PtrCompressor& compressor) noexcept {
       next_ = compressor.compress(n);
     }
 
-    void setHashNext(CompressedPtr n) noexcept { next_ = n; }
+    void setHashNext(CompressedPtrType n) noexcept { next_ = n; }
 
     // gets the next in hash chain for this node.
     T* getHashNext(const PtrCompressor& compressor) const noexcept {
       return compressor.unCompress(next_);
     }
 
-    CompressedPtr getHashNext() const noexcept { return next_; }
+    CompressedPtrType getHashNext() const noexcept { return next_; }
 
    private:
-    CompressedPtr next_{};
+    CompressedPtrType next_{};
   };
 
   // Config class for the chained hash table.
@@ -346,7 +348,7 @@ class ChainedHashTable {
     using Key = typename T::Key;
     using Handle = typename T::Handle;
     using HandleMaker = typename T::HandleMaker;
-    using CompressedPtr = typename T::CompressedPtr;
+    using CompressedPtrType = typename T::CompressedPtrType;
     using PtrCompressor = typename T::PtrCompressor;
 
     // default handle maker that calls incRef
@@ -515,7 +517,7 @@ class ChainedHashTable {
 
     // get the required size for the buckets.
     static size_t getRequiredSize(size_t numBuckets) noexcept {
-      return sizeof(CompressedPtr) * numBuckets;
+      return sizeof(CompressedPtrType) * numBuckets;
     }
 
     const Config& getConfig() const noexcept { return config_; }
@@ -715,9 +717,9 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
   if (numBuckets & (numBuckets - 1)) {
     throw std::invalid_argument("Number of buckets must be a power of two");
   }
-  hashTable_ = std::make_unique<CompressedPtr[]>(numBuckets_);
-  CompressedPtr* memStart = hashTable_.get();
-  std::fill(memStart, memStart + numBuckets_, CompressedPtr{});
+  hashTable_ = std::make_unique<CompressedPtrType[]>(numBuckets_);
+  CompressedPtrType* memStart = hashTable_.get();
+  std::fill(memStart, memStart + numBuckets_, CompressedPtrType{});
 }
 
 template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
@@ -728,7 +730,7 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
                                          bool resetMem)
     : numBuckets_(numBuckets),
       numBucketsMask_(numBuckets - 1),
-      hashTable_(static_cast<CompressedPtr*>(memStart)),
+      hashTable_(static_cast<CompressedPtrType*>(memStart)),
       restorable_(true),
       compressor_(compressor),
       hasher_(hasher) {
@@ -739,8 +741,10 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
     throw std::invalid_argument("Number of buckets must be a power of two");
   }
   if (resetMem) {
-    CompressedPtr* memStartBucket = static_cast<CompressedPtr*>(memStart);
-    std::fill(memStartBucket, memStartBucket + numBuckets_, CompressedPtr{});
+    CompressedPtrType* memStartBucket =
+        static_cast<CompressedPtrType*>(memStart);
+    std::fill(memStartBucket, memStartBucket + numBuckets_,
+              CompressedPtrType{});
   }
 }
 

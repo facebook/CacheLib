@@ -34,14 +34,16 @@ class DListNode {
 
   explicit DListNode() noexcept = default;
 
-  using CompressedPtr = DListNode*;
+  using CompressedPtrType = DListNode*;
 
   struct PtrCompressor {
-    constexpr CompressedPtr compress(DListNode* uncompressed) const noexcept {
+    constexpr CompressedPtrType compress(
+        DListNode* uncompressed) const noexcept {
       return uncompressed;
     }
 
-    constexpr DListNode* unCompress(CompressedPtr compressed) const noexcept {
+    constexpr DListNode* unCompress(
+        CompressedPtrType compressed) const noexcept {
       return compressed;
     }
   };

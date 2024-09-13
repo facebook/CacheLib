@@ -137,8 +137,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
    * store than raw pointers and can be leveraged to allow the cache
    * to be mapped to different addresses on shared memory.
    */
-  using CompressedPtr = facebook::cachelib::CompressedPtr;
-  using PtrCompressor = MemoryAllocator::PtrCompressor<Item, CompressedPtr>;
+  using CompressedPtrType = facebook::cachelib::CompressedPtr;
+  using PtrCompressor = MemoryAllocator::PtrCompressor<Item, CompressedPtrType>;
 
   // Get the required size for a cache item given the size of memory
   // user wants to allocate and the key size for the item
@@ -481,7 +481,7 @@ class CACHELIB_PACKED_ATTR CacheItem {
 // | --------------------- |
 // |  K | size_            |
 // |  A | ---------------- |
-// |  l |       | keyData  | <-- sizeof(CompressedPtr)
+// |  l |       | keyData  | <-- sizeof(CompressedPtrType)
 // |  l |       | -------- |
 // |  o |       | P | hook | <-- sizeof(SlistHook<ChainedItem>)
 // |  c | data_ | a | data |
@@ -497,7 +497,7 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
   using Item = CacheItem<CacheTrait>;
   using ChainedItem = CacheChainedItem<CacheTrait>;
   using Payload = ChainedItemPayload<CacheTrait>;
-  using CompressedPtr = typename Item::CompressedPtr;
+  using CompressedPtrType = typename Item::CompressedPtrType;
   using PtrCompressor = typename Item::PtrCompressor;
 
   /**
@@ -505,7 +505,7 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
    * so it is 8 bytes big.
    */
   using Key = typename Item::Key;
-  static constexpr uint32_t kKeySize = sizeof(CompressedPtr);
+  static constexpr uint32_t kKeySize = sizeof(CompressedPtrType);
 
   // Get the required size for a cache item given the size of memory
   // user wants to allocate
@@ -536,7 +536,7 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
   // @param allocSize   This is the size of the entire allocation for
   //                    constructing this item
   // @param creationTime  Timestamp when this item was created
-  CacheChainedItem(CompressedPtr key, uint32_t size, uint32_t creationTime);
+  CacheChainedItem(CompressedPtrType key, uint32_t size, uint32_t creationTime);
 
   // reset the key of the ChainedItem. For regular Items, we dont allow doing
   // this. However for chained items since the parent is the key, we need to
@@ -544,7 +544,7 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
   //
   // @throw std::invalid_argument if the chained item is still in accessible
   //        state.
-  void changeKey(CompressedPtr newKey);
+  void changeKey(CompressedPtrType newKey);
 
   // Append chain to this item. The new chain can contain one or more items
   // but this item to which the new chain is being appended must be a single
@@ -982,7 +982,7 @@ uint32_t CacheChainedItem<CacheTrait>::getRequiredSize(uint32_t size) noexcept {
 }
 
 template <typename CacheTrait>
-CacheChainedItem<CacheTrait>::CacheChainedItem(CompressedPtr ptr,
+CacheChainedItem<CacheTrait>::CacheChainedItem(CompressedPtrType ptr,
                                                uint32_t size,
                                                uint32_t creationTime)
     : Item(Key{reinterpret_cast<const char*>(&ptr), kKeySize},
@@ -996,7 +996,7 @@ CacheChainedItem<CacheTrait>::CacheChainedItem(CompressedPtr ptr,
 }
 
 template <typename CacheTrait>
-void CacheChainedItem<CacheTrait>::changeKey(CompressedPtr newKey) {
+void CacheChainedItem<CacheTrait>::changeKey(CompressedPtrType newKey) {
   if (this->isAccessible()) {
     throw std::invalid_argument(folly::sformat(
         "chained item {} is still in access container while modifying the key ",
@@ -1010,7 +1010,7 @@ typename CacheChainedItem<CacheTrait>::Item&
 CacheChainedItem<CacheTrait>::getParentItem(
     const PtrCompressor& compressor) const noexcept {
   const auto compressedPtr =
-      *reinterpret_cast<const CompressedPtr*>(this->getKey().begin());
+      *reinterpret_cast<const CompressedPtrType*>(this->getKey().begin());
   return *compressor.unCompress(compressedPtr);
 }
 
@@ -1029,7 +1029,7 @@ uint32_t CacheChainedItem<CacheTrait>::getSize() const noexcept {
 template <typename CacheTrait>
 std::string CacheChainedItem<CacheTrait>::toString() const {
   const auto cPtr =
-      *reinterpret_cast<const CompressedPtr*>(Item::getKey().data());
+      *reinterpret_cast<const CompressedPtrType*>(Item::getKey().data());
   return folly::sformat(
       "chained item: "
       "memory={}:raw-ref={}:size={}:parent-compressed-ptr={}:"

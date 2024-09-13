@@ -146,13 +146,13 @@ struct Node {
 
   // Node does not perform pointer compression, but it needs to supply a dummy
   // PtrCompressor
-  using CompressedPtr = Node*;
+  using CompressedPtrType = Node*;
   struct PtrCompressor {
-    constexpr CompressedPtr compress(Node* uncompressed) const noexcept {
+    constexpr CompressedPtrType compress(Node* uncompressed) const noexcept {
       return uncompressed;
     }
 
-    constexpr Node* unCompress(CompressedPtr compressed) const noexcept {
+    constexpr Node* unCompress(CompressedPtrType compressed) const noexcept {
       return compressed;
     }
   };

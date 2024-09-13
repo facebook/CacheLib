@@ -1979,7 +1979,7 @@ class CacheAllocator : public CacheBase {
 
   typename Item::PtrCompressor createPtrCompressor() const {
     return allocator_
-        ->createPtrCompressor<Item, typename Item::CompressedPtr>();
+        ->createPtrCompressor<Item, typename Item::CompressedPtrType>();
   }
 
   // helper utility to throttle and optionally log.

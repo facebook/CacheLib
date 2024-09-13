@@ -249,7 +249,7 @@ class MMLru {
     using LockHolder = std::unique_lock<Mutex>;
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
-    using CompressedPtr = typename T::CompressedPtr;
+    using CompressedPtrType = typename T::CompressedPtrType;
     using RefFlags = typename T::Flags;
 
    public:
@@ -517,7 +517,7 @@ MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
     : compressor_(std::move(compressor)),
       lru_(*object.lru(), compressor_),
       insertionPoint_(compressor_.unCompress(
-          CompressedPtr{*object.compressedInsertionPoint()})),
+          CompressedPtrType{*object.compressedInsertionPoint()})),
       tailSize_(*object.tailSize()),
       config_(*object.config()) {
   lruRefreshTime_ = config_.lruRefreshTime;

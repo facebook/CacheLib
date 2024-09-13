@@ -99,12 +99,12 @@ class MMTypeTest : public testing::Test {
    public:
     // Node does not perform pointer compression, but it needs to supply a dummy
     // PtrCompressor
-    struct CACHELIB_PACKED_ATTR CompressedPtr {
+    struct CACHELIB_PACKED_ATTR CompressedPtrType {
      public:
       // default construct to nullptr.
-      CompressedPtr() = default;
+      CompressedPtrType() = default;
 
-      explicit CompressedPtr(int64_t ptr) : ptr_(ptr) {}
+      explicit CompressedPtrType(int64_t ptr) : ptr_(ptr) {}
 
       int64_t saveState() const noexcept { return ptr_; }
 
@@ -112,11 +112,11 @@ class MMTypeTest : public testing::Test {
     };
 
     struct PtrCompressor {
-      CompressedPtr compress(const Node* uncompressed) const noexcept {
-        return CompressedPtr{reinterpret_cast<int64_t>(uncompressed)};
+      CompressedPtrType compress(const Node* uncompressed) const noexcept {
+        return CompressedPtrType{reinterpret_cast<int64_t>(uncompressed)};
       }
 
-      Node* unCompress(CompressedPtr compressed) const noexcept {
+      Node* unCompress(CompressedPtrType compressed) const noexcept {
         return reinterpret_cast<Node*>(compressed.ptr_);
       }
     };

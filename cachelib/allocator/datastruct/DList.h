@@ -32,28 +32,32 @@ namespace facebook::cachelib {
 template <typename T>
 struct CACHELIB_PACKED_ATTR DListHook {
   using Time = uint32_t;
-  using CompressedPtr = typename T::CompressedPtr;
+  using CompressedPtrType = typename T::CompressedPtrType;
   using PtrCompressor = typename T::PtrCompressor;
 
   void setNext(T* const n, const PtrCompressor& compressor) noexcept {
     next_ = compressor.compress(n);
   }
 
-  void setNext(CompressedPtr next) noexcept { next_ = next; }
+  void setNext(CompressedPtrType next) noexcept { next_ = next; }
 
   void setPrev(T* const p, const PtrCompressor& compressor) noexcept {
     prev_ = compressor.compress(p);
   }
 
-  void setPrev(CompressedPtr prev) noexcept { prev_ = prev; }
+  void setPrev(CompressedPtrType prev) noexcept { prev_ = prev; }
 
-  CompressedPtr getNext() const noexcept { return CompressedPtr(next_); }
+  CompressedPtrType getNext() const noexcept {
+    return CompressedPtrType(next_);
+  }
 
   T* getNext(const PtrCompressor& compressor) const noexcept {
     return compressor.unCompress(next_);
   }
 
-  CompressedPtr getPrev() const noexcept { return CompressedPtr(prev_); }
+  CompressedPtrType getPrev() const noexcept {
+    return CompressedPtrType(prev_);
+  }
 
   T* getPrev(const PtrCompressor& compressor) const noexcept {
     return compressor.unCompress(prev_);
@@ -71,8 +75,8 @@ struct CACHELIB_PACKED_ATTR DListHook {
   }
 
  private:
-  CompressedPtr next_{}; // next node in the linked list
-  CompressedPtr prev_{}; // previous node in the linked list
+  CompressedPtrType next_{}; // next node in the linked list
+  CompressedPtrType prev_{}; // previous node in the linked list
   // timestamp when this was last updated to the head of the list
   Time updateTime_{0};
 };
@@ -82,7 +86,7 @@ struct CACHELIB_PACKED_ATTR DListHook {
 template <typename T, DListHook<T> T::*HookPtr>
 class DList {
  public:
-  using CompressedPtr = typename T::CompressedPtr;
+  using CompressedPtrType = typename T::CompressedPtrType;
   using PtrCompressor = typename T::PtrCompressor;
   using DListObject = serialization::DListObject;
 
@@ -99,8 +103,10 @@ class DList {
   // @param compressor          PtrCompressor object
   DList(const DListObject& object, PtrCompressor compressor)
       : compressor_(std::move(compressor)),
-        head_(compressor_.unCompress(CompressedPtr{*object.compressedHead()})),
-        tail_(compressor_.unCompress(CompressedPtr{*object.compressedTail()})),
+        head_(compressor_.unCompress(
+            CompressedPtrType{*object.compressedHead()})),
+        tail_(compressor_.unCompress(
+            CompressedPtrType{*object.compressedTail()})),
         size_(*object.size()) {}
 
   /**

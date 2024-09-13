@@ -32,7 +32,7 @@ namespace facebook::cachelib {
 template <typename T>
 struct CACHELIB_PACKED_ATTR SListHook {
  public:
-  using CompressedPtr = typename T::CompressedPtr;
+  using CompressedPtrType = typename T::CompressedPtrType;
   using PtrCompressor = typename T::PtrCompressor;
 
   T* getNext(const PtrCompressor& compressor) const noexcept {
@@ -45,7 +45,7 @@ struct CACHELIB_PACKED_ATTR SListHook {
   }
 
  private:
-  CompressedPtr next_{};
+  CompressedPtrType next_{};
 };
 
 /**
@@ -56,7 +56,7 @@ struct CACHELIB_PACKED_ATTR SListHook {
 template <typename T, SListHook<T> T::*HookPtr>
 class SList {
  public:
-  using CompressedPtr = typename T::CompressedPtr;
+  using CompressedPtrType = typename T::CompressedPtrType;
   using PtrCompressor = typename T::PtrCompressor;
   using SListObject = serialization::SListObject;
 
@@ -84,11 +84,13 @@ class SList {
   explicit SList(const SListObject& object, PtrCompressor compressor)
       : compressor_(std::move(compressor)),
         size_(*object.size()),
-        head_(compressor_.unCompress(CompressedPtr{*object.compressedHead()})) {
+        head_(compressor_.unCompress(
+            CompressedPtrType{*object.compressedHead()})) {
     // TODO(bwatling): eventually we'll always have 'compressedTail' and we can
     // remove the loop below.
     if (*object.compressedTail() >= 0) {
-      tail_ = compressor_.unCompress(CompressedPtr{*object.compressedTail()});
+      tail_ =
+          compressor_.unCompress(CompressedPtrType{*object.compressedTail()});
     } else if (head_) {
       tail_ = head_;
       while (T* next = getNext(*tail_)) {

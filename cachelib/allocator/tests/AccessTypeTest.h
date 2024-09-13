@@ -88,13 +88,13 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
    public:
     // Node does not perform pointer compression, but it needs to supply a dummy
     // PtrCompressor
-    using CompressedPtr = Node*;
+    using CompressedPtrType = Node*;
     struct PtrCompressor {
-      constexpr CompressedPtr compress(Node* uncompressed) const {
+      constexpr CompressedPtrType compress(Node* uncompressed) const {
         return uncompressed;
       }
 
-      constexpr Node* unCompress(CompressedPtr compressed) const {
+      constexpr Node* unCompress(CompressedPtrType compressed) const {
         return compressed;
       }
     };
@@ -112,7 +112,7 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
   using Container =
       typename AccessType::template Container<Node, &Node::accessHook_>;
   using Config = typename AccessType::Config;
-  using CompressedPtr = typename Node::CompressedPtr;
+  using CompressedPtrType = typename Node::CompressedPtrType;
   using PtrCompressor = typename Node::PtrCompressor;
   using HandleMaker = typename Node::HandleMaker;
 
@@ -313,9 +313,9 @@ void AccessTypeTest<AccessType>::testFind() {
 template <typename AccessType>
 void AccessTypeTest<AccessType>::testSerialization() {
   Config config;
-  std::unique_ptr<CompressedPtr[]> memStart(
-      new CompressedPtr[config.getNumBuckets()]);
-  size_t hashTableSize = sizeof(CompressedPtr) * config.getNumBuckets();
+  std::unique_ptr<CompressedPtrType[]> memStart(
+      new CompressedPtrType[config.getNumBuckets()]);
+  size_t hashTableSize = sizeof(CompressedPtrType) * config.getNumBuckets();
   memset(memStart.get(), 0, hashTableSize);
 
   Container c1(config,
@@ -386,9 +386,10 @@ void AccessTypeTest<AccessType>::testSerialization() {
 template <typename AccessType>
 void AccessTypeTest<AccessType>::testIteratorWithSerialization() {
   Config config;
-  std::unique_ptr<CompressedPtr[]> memStart(
-      new CompressedPtr[config.getNumBuckets()]);
-  memset(memStart.get(), 0, sizeof(CompressedPtr*) * config.getNumBuckets());
+  std::unique_ptr<CompressedPtrType[]> memStart(
+      new CompressedPtrType[config.getNumBuckets()]);
+  memset(memStart.get(), 0,
+         sizeof(CompressedPtrType*) * config.getNumBuckets());
   Container c{std::move(config), reinterpret_cast<Node**>(memStart.get()),
               typename Node::PtrCompressor()};
 

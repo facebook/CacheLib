@@ -28,12 +28,12 @@ class SListTest : public ::testing::Test {};
 
 class CACHELIB_PACKED_ATTR SListNode {
  public:
-  struct CACHELIB_PACKED_ATTR CompressedPtr {
+  struct CACHELIB_PACKED_ATTR CompressedPtrType {
    public:
     // default construct to nullptr.
-    CompressedPtr() = default;
+    CompressedPtrType() = default;
 
-    explicit CompressedPtr(int64_t ptr) : ptr_(ptr) {}
+    explicit CompressedPtrType(int64_t ptr) : ptr_(ptr) {}
 
     int64_t saveState() const noexcept { return ptr_; }
 
@@ -41,11 +41,11 @@ class CACHELIB_PACKED_ATTR SListNode {
   };
 
   struct PtrCompressor {
-    CompressedPtr compress(const SListNode* uncompressed) const noexcept {
-      return CompressedPtr{reinterpret_cast<int64_t>(uncompressed)};
+    CompressedPtrType compress(const SListNode* uncompressed) const noexcept {
+      return CompressedPtrType{reinterpret_cast<int64_t>(uncompressed)};
     }
 
-    SListNode* unCompress(CompressedPtr compressed) const noexcept {
+    SListNode* unCompress(CompressedPtrType compressed) const noexcept {
       return reinterpret_cast<SListNode*>(compressed.ptr_);
     }
   };

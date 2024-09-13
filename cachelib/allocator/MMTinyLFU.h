@@ -334,7 +334,7 @@ class MMTinyLFU {
     using LockHolder = std::unique_lock<Mutex>;
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
-    using CompressedPtr = typename T::CompressedPtr;
+    using CompressedPtrType = typename T::CompressedPtrType;
     using RefFlags = typename T::Flags;
 
    public:
