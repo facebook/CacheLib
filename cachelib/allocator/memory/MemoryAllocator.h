@@ -527,13 +527,12 @@ class MemoryAllocator {
   // @throw std::logic_error if the object state can not be serialized
   serialization::MemoryAllocatorObject saveState();
 
-  using CompressedPtrType = facebook::cachelib::CompressedPtr;
   template <typename PtrType, typename CompressedPtrType>
-  using PtrCompressor = facebook::cachelib::
+  using PtrCompressorType = facebook::cachelib::
       PtrCompressor<PtrType, SlabAllocator, CompressedPtrType>;
 
   template <typename PtrType, typename CompressedPtrType>
-  PtrCompressor<PtrType, CompressedPtrType> createPtrCompressor() {
+  PtrCompressorType<PtrType, CompressedPtrType> createPtrCompressor() {
     return slabAllocator_.createPtrCompressor<PtrType, CompressedPtrType>();
   }
 
@@ -548,9 +547,10 @@ class MemoryAllocator {
   //                as the original pointer is valid.
   //
   // @throw  std::invalid_argument if the ptr is invalid.
-  CompressedPtr CACHELIB_INLINE compress(const void* ptr,
-                                         bool isMultiTiered) const {
-    return slabAllocator_.compress(ptr, isMultiTiered);
+  template <typename CompressedPtrType>
+  CompressedPtrType CACHELIB_INLINE compress(const void* ptr,
+                                             bool isMultiTiered) const {
+    return slabAllocator_.compress<CompressedPtrType>(ptr, isMultiTiered);
   }
 
   // retrieve the raw pointer corresponding to the compressed pointer. This is
@@ -561,9 +561,10 @@ class MemoryAllocator {
   // @return        the raw pointer corresponding to this compressed pointer.
   //
   // @throw   std::invalid_argument if the compressed pointer is invalid.
-  void* CACHELIB_INLINE unCompress(const CompressedPtr cPtr,
+  template <typename CompressedPtrType>
+  void* CACHELIB_INLINE unCompress(const CompressedPtrType& cPtr,
                                    bool isMultiTiered) const {
-    return slabAllocator_.unCompress(cPtr, isMultiTiered);
+    return slabAllocator_.unCompress<CompressedPtrType>(cPtr, isMultiTiered);
   }
 
   // a special implementation of pointer compression for benchmarking purposes.

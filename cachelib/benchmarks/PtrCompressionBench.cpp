@@ -61,8 +61,9 @@ void buildAllocs(size_t poolSize) {
         void* alloc = ma->allocate(pid, size);
         XDCHECK_GE(size, CompressedPtrType::getMinAllocSize());
         if (alloc != nullptr) {
-          validAllocs.emplace_back(
-              alloc, ma->compress(alloc, false /* isMultiTiered */));
+          validAllocs.emplace_back(alloc,
+                                   ma->compress<CompressedPtrType>(
+                                       alloc, false /* isMultiTiered */));
           validAllocsAlt.emplace_back(alloc, ma->compressAlt(alloc));
           numAllocations++;
         }
@@ -84,7 +85,8 @@ BENCHMARK(CompressionAlt) {
 
 BENCHMARK_RELATIVE(Compression) {
   for (const auto& alloc : validAllocs) {
-    CompressedPtrType c = m->compress(alloc.first, false /* isMultiTiered */);
+    CompressedPtrType c =
+        m->compress<CompressedPtrType>(alloc.first, false /* isMultiTiered */);
     folly::doNotOptimizeAway(c);
   }
 }
@@ -98,7 +100,8 @@ BENCHMARK(DeCompressAlt) {
 
 BENCHMARK_RELATIVE(DeCompress) {
   for (const auto& alloc : validAllocs) {
-    void* ptr = m->unCompress(alloc.second, false /* isMultiTiered */);
+    void* ptr = m->unCompress<CompressedPtrType>(alloc.second,
+                                                 false /* isMultiTiered */);
     folly::doNotOptimizeAway(ptr);
   }
 }

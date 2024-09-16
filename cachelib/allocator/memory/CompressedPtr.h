@@ -182,12 +182,14 @@ class PtrCompressor {
       : allocator_(allocator) {}
 
   const CompressedPtrType compress(const PtrType* uncompressed) const {
-    return allocator_.compress(uncompressed, false /* isMultiTiered */);
+    return allocator_.template compress<CompressedPtrType>(
+        uncompressed, false /* isMultiTiered */);
   }
 
   PtrType* unCompress(const CompressedPtrType& compressed) const {
     return static_cast<PtrType*>(
-        allocator_.unCompress(compressed, false /* isMultiTiered */));
+        allocator_.template unCompress<CompressedPtrType>(
+            compressed, false /* isMultiTiered */));
   }
 
   bool operator==(const PtrCompressor& rhs) const noexcept {

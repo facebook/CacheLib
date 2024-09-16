@@ -225,10 +225,11 @@ class SlabAllocator {
   // the corresponding memory allocator. trying to inline this just increases
   // the code size and does not move the needle on the benchmarks much.
   // Calling this with invalid input in optimized build is undefined behavior.
-  CompressedPtr CACHELIB_INLINE compress(const void* ptr,
-                                         bool isMultiTiered) const {
+  template <typename CompressedPtrType>
+  CompressedPtrType CACHELIB_INLINE compress(const void* ptr,
+                                             bool isMultiTiered) const {
     if (ptr == nullptr) {
-      return CompressedPtr{};
+      return CompressedPtrType{};
     }
 
     const Slab* slab = getSlabForMemory(ptr);
@@ -247,13 +248,14 @@ class SlabAllocator {
         static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(ptr) -
                               reinterpret_cast<const uint8_t*>(slab)) /
         allocSize;
-    return CompressedPtr{slabIndex, allocIdx, isMultiTiered};
+    return CompressedPtrType{slabIndex, allocIdx, isMultiTiered};
   }
 
   // uncompress the point and return the raw ptr.  This function never throws
   // in optimized build and assumes that the caller is responsible for calling
   // it with a valid compressed pointer.
-  void* CACHELIB_INLINE unCompress(const CompressedPtr ptr,
+  template <typename CompressedPtrType>
+  void* CACHELIB_INLINE unCompress(const CompressedPtrType& ptr,
                                    bool isMultiTiered) const {
     if (ptr.isNull()) {
       return nullptr;
@@ -277,7 +279,7 @@ class SlabAllocator {
     const auto* header = getSlabHeader(slabIndex);
     const uint32_t allocSize = header->allocSize;
 
-    XDCHECK_GE(allocSize, CompressedPtr::getMinAllocSize());
+    XDCHECK_GE(allocSize, CompressedPtrType::getMinAllocSize());
     const auto offset = allocSize * allocIdx;
 
 #ifndef NDEBUG
