@@ -568,11 +568,11 @@ class MemoryAllocator {
   }
 
   // a special implementation of pointer compression for benchmarking purposes.
-  CompressedPtr CACHELIB_INLINE compressAlt(const void* ptr) const {
+  CompressedPtr4B CACHELIB_INLINE compressAlt(const void* ptr) const {
     return slabAllocator_.compressAlt(ptr);
   }
 
-  void* CACHELIB_INLINE unCompressAlt(const CompressedPtr cPtr) const {
+  void* CACHELIB_INLINE unCompressAlt(const CompressedPtr4B cPtr) const {
     return slabAllocator_.unCompressAlt(cPtr);
   }
 

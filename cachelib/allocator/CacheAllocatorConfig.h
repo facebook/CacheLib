@@ -1095,7 +1095,7 @@ const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
         "Tail hits tracking cannot be enabled on MMTypes except MM2Q.");
   }
 
-  size_t maxCacheSize = CompressedPtr::getMaxAddressableSize();
+  size_t maxCacheSize = CompressedPtr4B::getMaxAddressableSize();
   // Configured cache size should not exceed the maximal addressable space for
   // cache.
   if (size > maxCacheSize) {

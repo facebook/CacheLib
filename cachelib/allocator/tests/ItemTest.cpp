@@ -141,7 +141,7 @@ TEST(ItemTest, ChainedItemConstruction) {
   ASSERT_FALSE(regularItem->isChainedItem());
   ASSERT_FALSE(regularItem->hasChainedItem());
 
-  const CompressedPtr dummyCompressedPtr;
+  const CompressedPtr4B dummyCompressedPtr;
   auto chainedItem =
       new (buffer2) ChainedItem(dummyCompressedPtr, valueSize, 0);
   ASSERT_TRUE(chainedItem->isChainedItem());
@@ -166,7 +166,7 @@ TEST(ItemTest, ChangeKey) {
   ASSERT_THROW(item->changeKey("helloworl1"), std::invalid_argument);
   ASSERT_THROW(item->changeKey("helloworl12"), std::invalid_argument);
 
-  CompressedPtr dummyCompressedPtr;
+  CompressedPtr4B dummyCompressedPtr;
   auto chainedItem =
       new (buffer) ChainedItem(dummyCompressedPtr, valueSize, now);
   const auto size = item->getSize();
@@ -207,7 +207,7 @@ TEST(ItemTest, ToString) {
                 reinterpret_cast<const char*>(&hexKey), sizeof(HexKey)})),
             std::string::npos);
 
-  CompressedPtr dummyCompressedPtr;
+  CompressedPtr4B dummyCompressedPtr;
   auto chainedItem =
       new (buffer) ChainedItem(dummyCompressedPtr, valueSize, now);
   chainedItem->toString();

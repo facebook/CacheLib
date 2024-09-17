@@ -353,14 +353,14 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
   void* memory = allocate(totalSize);
   // ensure that the allocation sizes are compatible for pointer compression.
   auto allocSizes =
-      getRandomAllocSizes(numClasses, CompressedPtr::getMinAllocSize());
+      getRandomAllocSizes(numClasses, CompressedPtr4B::getMinAllocSize());
   MemoryAllocator m(getDefaultConfig(allocSizes), memory, totalSize);
 
   std::unordered_map<PoolId, const std::set<uint32_t>> pools;
   for (unsigned int i = 0; i < numPools; i++) {
     auto nClasses = folly::Random::rand32() % numClasses + 1;
     auto sizes =
-        getRandomAllocSizes(nClasses, CompressedPtr::getMinAllocSize());
+        getRandomAllocSizes(nClasses, CompressedPtr4B::getMinAllocSize());
     auto pid = m.addPool(getRandomStr(), poolSize, sizes);
     ASSERT_NE(pid, Slab::kInvalidPoolId);
     pools.insert({pid, sizes});
@@ -375,7 +375,7 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
     std::vector<void*> allocs;
     unsigned int numAllocations = 0;
     do {
-      uint32_t prev = CompressedPtr::getMinAllocSize();
+      uint32_t prev = CompressedPtr4B::getMinAllocSize();
       numAllocations = 0;
       for (const auto size : sizes) {
         const auto range = prev == size ? 1 : size - prev;
@@ -400,34 +400,34 @@ TEST_F(MemoryAllocatorTest, PointerCompression) {
   for (const auto& pool : poolAllocs) {
     const auto& allocs = pool.second;
     for (const auto* alloc : allocs) {
-      CompressedPtr ptr =
-          m.compress<CompressedPtr>(alloc, false /* isMultiTiered */);
+      CompressedPtr4B ptr =
+          m.compress<CompressedPtr4B>(alloc, false /* isMultiTiered */);
       ASSERT_FALSE(ptr.isNull());
       ASSERT_EQ(alloc,
-                m.unCompress<CompressedPtr>(ptr, false /* isMultiTiered */));
+                m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */));
     }
   }
 
   ASSERT_EQ(nullptr,
-            m.unCompress<CompressedPtr>(
-                m.compress<CompressedPtr>(nullptr, false /* isMultiTiered */),
+            m.unCompress<CompressedPtr4B>(
+                m.compress<CompressedPtr4B>(nullptr, false /* isMultiTiered */),
                 false /* isMultiTiered */));
 
   // test pointer compression with multi-tier
   for (const auto& pool : poolAllocs) {
     const auto& allocs = pool.second;
     for (const auto* alloc : allocs) {
-      CompressedPtr ptr =
-          m.compress<CompressedPtr>(alloc, true /* isMultiTiered */);
+      CompressedPtr4B ptr =
+          m.compress<CompressedPtr4B>(alloc, true /* isMultiTiered */);
       ASSERT_FALSE(ptr.isNull());
       ASSERT_EQ(alloc,
-                m.unCompress<CompressedPtr>(ptr, true /* isMultiTiered */));
+                m.unCompress<CompressedPtr4B>(ptr, true /* isMultiTiered */));
     }
   }
 
   ASSERT_EQ(nullptr,
-            m.unCompress<CompressedPtr>(
-                m.compress<CompressedPtr>(nullptr, true /* isMultiTiered */),
+            m.unCompress<CompressedPtr4B>(
+                m.compress<CompressedPtr4B>(nullptr, true /* isMultiTiered */),
                 true /* isMultiTiered */));
 }
 

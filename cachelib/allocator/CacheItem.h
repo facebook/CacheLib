@@ -1010,9 +1010,8 @@ template <typename CacheTrait>
 typename CacheChainedItem<CacheTrait>::Item&
 CacheChainedItem<CacheTrait>::getParentItem(
     const PtrCompressor& compressor) const noexcept {
-  const auto compressedPtr =
-      *reinterpret_cast<const CompressedPtrType*>(this->getKey().begin());
-  return *compressor.unCompress(compressedPtr);
+  return *compressor.unCompress(
+      *reinterpret_cast<const CompressedPtrType*>(this->getKey().begin()));
 }
 
 template <typename CacheTrait>

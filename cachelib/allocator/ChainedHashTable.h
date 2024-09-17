@@ -79,7 +79,7 @@ class ChainedHashTable {
     //                      accommodate the number of the buckets
     // @param compressor    object used to compress/decompress node pointers
     // @param hasher        object used to hash the key for its bucket id
-    // @param resetMem      fill memory with CompressedPtr{}
+    // @param resetMem      fill memory with CompressedPtrType{}
     Impl(size_t numBuckets,
          void* memStart,
          const PtrCompressor& compressor,

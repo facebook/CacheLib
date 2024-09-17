@@ -1246,7 +1246,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
         return nullptr;
       }
       auto chainedItem = new (chained->writableData()) ChainedItem(
-          CompressedPtr(), cBlob.origAllocSize, util::getCurrentTimeSec());
+          CompressedPtr4B(), cBlob.origAllocSize, util::getCurrentTimeSec());
       XDCHECK(chainedItem->isChainedItem());
       ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
                cBlob.origAllocSize);

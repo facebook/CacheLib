@@ -27,10 +27,10 @@ namespace cachelib {
 
 class SlabAllocator;
 
-// This CompressedPtr makes decompression fast by staying away from division and
-// modulo arithmetic and doing those during the compression time. We most often
-// decompress a CompressedPtr than compress a pointer while creating one. This
-// is used for pointer compression by the memory allocator.
+// This CompressedPtr4B makes decompression fast by staying away from division
+// and modulo arithmetic and doing those during the compression time. We most
+// often decompress a CompressedPtr4B than compress a pointer while creating
+// one. This is used for pointer compression by the memory allocator.
 
 // We compress pointers by storing the tier index, slab index and alloc index of
 // the allocation inside the slab.
@@ -50,7 +50,7 @@ class SlabAllocator;
 // for the slab index. Hence we can index 128 GiB of memory per tier in
 // multi-tier configuration.
 
-class CACHELIB_PACKED_ATTR CompressedPtr {
+class CACHELIB_PACKED_ATTR CompressedPtr4B {
  public:
   using PtrType = uint32_t;
   // Thrift doesn't support unsigned type
@@ -63,7 +63,7 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   bool isNull() const noexcept { return ptr_ == kNull; }
 
   bool operator==(const PtrType ptr) const noexcept { return ptr_ == ptr; }
-  bool operator==(const CompressedPtr ptr) const noexcept {
+  bool operator==(const CompressedPtr4B ptr) const noexcept {
     return ptr_ == ptr.ptr_;
   }
   bool operator!=(const PtrType ptr) const noexcept { return !(ptr == ptr_); }
@@ -80,10 +80,10 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   }
 
   // default construct to nullptr.
-  CompressedPtr() = default;
+  CompressedPtr4B() = default;
 
   // Restore from serialization
-  explicit CompressedPtr(SerializedPtrType ptr)
+  explicit CompressedPtr4B(SerializedPtrType ptr)
       : ptr_(static_cast<PtrType>(ptr)) {}
 
   SerializedPtrType saveState() const noexcept {
@@ -101,13 +101,13 @@ class CACHELIB_PACKED_ATTR CompressedPtr {
   PtrType ptr_{kNull};
 
   // create a compressed pointer for a valid memory allocation.
-  CompressedPtr(uint32_t slabIdx,
-                uint32_t allocIdx,
-                bool isMultiTiered,
-                TierId tid = 0)
+  CompressedPtr4B(uint32_t slabIdx,
+                  uint32_t allocIdx,
+                  bool isMultiTiered,
+                  TierId tid = 0)
       : ptr_(compress(slabIdx, allocIdx, isMultiTiered, tid)) {}
 
-  constexpr explicit CompressedPtr(PtrType ptr) noexcept : ptr_{ptr} {}
+  constexpr explicit CompressedPtr4B(PtrType ptr) noexcept : ptr_{ptr} {}
 
   // number of bits for the Allocation offset in a slab.  With slab size of 22
   // bits and minimum allocation size of 64 bytes, this will be the bottom 16

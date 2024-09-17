@@ -37,7 +37,7 @@ CCacheAllocator::CCacheAllocator(MemoryAllocator& allocator,
   for (auto chunk : *object.chunks()) {
     // TODO : pass multi-tier flag when compact cache supports multi-tier config
     currentChunks.push_back(
-        allocator_.unCompress(CompressedPtr(chunk), false /* isMultiTier */));
+        allocator_.unCompress(CompressedPtr4B(chunk), false /* isMultiTier */));
   }
 }
 
@@ -101,7 +101,7 @@ CCacheAllocator::SerializationType CCacheAllocator::saveState() {
     // TODO : pass multi-tier flag when compact cache supports multi-tier config
     object.chunks()->push_back(
         // TODO(bpranav): Only supporting 4 byte compressed pointer for now.
-        allocator_.compress<CompressedPtr>(chunk, false /* isMultiTier */)
+        allocator_.compress<CompressedPtr4B>(chunk, false /* isMultiTier */)
             .saveState());
   }
   return object;

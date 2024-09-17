@@ -46,10 +46,10 @@ static inline size_t roundDownToSlabSize(size_t size) {
 } // namespace
 
 // definitions to avoid ODR violation.
-using PtrType = CompressedPtr::PtrType;
+using PtrType = CompressedPtr4B::PtrType;
 constexpr uint64_t SlabAllocator::kAddressMask;
-constexpr PtrType CompressedPtr::kAllocIdxMask;
-constexpr unsigned int CompressedPtr::kNumAllocIdxBits;
+constexpr PtrType CompressedPtr4B::kAllocIdxMask;
+constexpr unsigned int CompressedPtr4B::kNumAllocIdxBits;
 
 constexpr unsigned int SlabAllocator::kLockSleepMS;
 constexpr size_t SlabAllocator::kPagesPerStep;
@@ -160,10 +160,10 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
         *object.slabSize()));
   }
 
-  if (CompressedPtr::getMinAllocSize() != *object.minAllocSize()) {
+  if (CompressedPtr4B::getMinAllocSize() != *object.minAllocSize()) {
     throw std::invalid_argument(folly::sformat(
         "current min alloc size {} does not match the previous one {}",
-        CompressedPtr::getMinAllocSize(),
+        CompressedPtr4B::getMinAllocSize(),
         *object.minAllocSize()));
   }
 
@@ -521,24 +521,24 @@ serialization::SlabAllocatorObject SlabAllocator::saveState() {
   }
 
   *object.slabSize() = Slab::kSize;
-  *object.minAllocSize() = CompressedPtr::getMinAllocSize();
+  *object.minAllocSize() = CompressedPtr4B::getMinAllocSize();
   return object;
 }
 
 // for benchmarking purposes.
 const unsigned int kMarkerBits = 6;
-CompressedPtr SlabAllocator::compressAlt(const void* ptr) const {
+CompressedPtr4B SlabAllocator::compressAlt(const void* ptr) const {
   if (ptr == nullptr) {
-    return CompressedPtr{};
+    return CompressedPtr4B{};
   }
 
   ptrdiff_t delta = reinterpret_cast<const uint8_t*>(ptr) -
                     reinterpret_cast<const uint8_t*>(slabMemoryStart_);
-  return CompressedPtr{
-      static_cast<CompressedPtr::PtrType>(delta >> kMarkerBits)};
+  return CompressedPtr4B{
+      static_cast<CompressedPtr4B::PtrType>(delta >> kMarkerBits)};
 }
 
-void* SlabAllocator::unCompressAlt(const CompressedPtr cPtr) const {
+void* SlabAllocator::unCompressAlt(const CompressedPtr4B cPtr) const {
   if (cPtr.isNull()) {
     return nullptr;
   }

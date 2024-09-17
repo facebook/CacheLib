@@ -242,7 +242,7 @@ class SlabAllocator {
     const SlabHeader* header = getSlabHeader(slabIndex);
 
     const uint32_t allocSize = header->allocSize;
-    XDCHECK(allocSize >= CompressedPtr::getMinAllocSize());
+    XDCHECK(allocSize >= CompressedPtr4B::getMinAllocSize());
 
     const auto allocIdx =
         static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(ptr) -
@@ -295,8 +295,8 @@ class SlabAllocator {
   }
 
   // a special implementation of pointer compression for benchmarking purposes.
-  CompressedPtr compressAlt(const void* ptr) const;
-  void* unCompressAlt(const CompressedPtr ptr) const;
+  CompressedPtr4B compressAlt(const void* ptr) const;
+  void* unCompressAlt(const CompressedPtr4B ptr) const;
 
   // returns the index of the slab from the start of the slab memory
   SlabIdx slabIdx(const Slab* const slab) const noexcept {
