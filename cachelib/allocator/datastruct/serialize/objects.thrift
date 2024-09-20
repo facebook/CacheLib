@@ -38,3 +38,10 @@ struct DListObject {
 struct MultiDListObject {
   1: required list<DListObject> lists;
 }
+
+struct SieveListObject{
+  1: required i64 compressedHead;
+  2: required i64 compressedTail;
+  3: required i64 compressedHand;
+  4: required i64 size;
+}

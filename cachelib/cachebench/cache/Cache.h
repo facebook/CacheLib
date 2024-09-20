@@ -473,7 +473,7 @@ inline typename LruAllocator::MMConfig makeMMConfig(CacheConfig const& config) {
                                 config.useCombinedLockForIterators);
 }
 
-// LRU
+// LRU2Q
 template <>
 inline typename Lru2QAllocator::MMConfig makeMMConfig(
     CacheConfig const& config) {
@@ -488,6 +488,17 @@ inline typename Lru2QAllocator::MMConfig makeMMConfig(
                                   0,
                                   config.useCombinedLockForIterators);
 }
+
+// SIEVE
+template <>
+inline typename SieveAllocator::MMConfig makeMMConfig(
+    CacheConfig const& config) {
+  return SieveAllocator::MMConfig(config.sieveUpdateOnWrite,
+                                  config.sieveUpdateOnRead,
+                    		  config.useCombinedLockForIterators);
+}
+
+
 
 template <typename Allocator>
 uint64_t Cache<Allocator>::fetchNandWrites() const {

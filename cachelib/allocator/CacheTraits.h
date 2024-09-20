@@ -60,5 +60,11 @@ struct TinyLFUCacheTrait {
   using CompressedPtrType = CompressedPtr4B;
 };
 
+struct SieveCacheTrait {
+  using MMType = MMSieve;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+};
+
 } // namespace cachelib
 } // namespace facebook

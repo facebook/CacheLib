@@ -6018,4 +6018,12 @@ using Lru2QAllocator = CacheAllocator<Lru2QCacheTrait>;
 // inserted items. And eventually it will onl admit items that are accessed
 // beyond a threshold into the warm cache.
 using TinyLFUAllocator = CacheAllocator<TinyLFUCacheTrait>;
+
+
+// CacheAllocator with Sieve eviction policy
+// It uses the access bit keep track of item's popularity
+// During eviction, the hand ptr sweeps backward to find itme with access bit turned off,
+// and turns off access bit as it goes. 
+using SieveAllocator = CacheAllocator<SieveCacheTrait>;
+
 } // namespace facebook::cachelib
