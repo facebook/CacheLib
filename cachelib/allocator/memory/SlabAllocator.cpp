@@ -45,12 +45,6 @@ static inline size_t roundDownToSlabSize(size_t size) {
 }
 } // namespace
 
-// definitions to avoid ODR violation.
-using PtrType = CompressedPtr4B::PtrType;
-constexpr uint64_t SlabAllocator::kAddressMask;
-constexpr PtrType CompressedPtr4B::kAllocIdxMask;
-constexpr unsigned int CompressedPtr4B::kNumAllocIdxBits;
-
 constexpr unsigned int SlabAllocator::kLockSleepMS;
 constexpr size_t SlabAllocator::kPagesPerStep;
 
@@ -160,10 +154,17 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
         *object.slabSize()));
   }
 
-  if (CompressedPtr4B::getMinAllocSize() != *object.minAllocSize()) {
+  if (getMinAllocSize() != *object.minAllocSize()) {
     throw std::invalid_argument(folly::sformat(
         "current min alloc size {} does not match the previous one {}",
-        CompressedPtr4B::getMinAllocSize(),
+        getMinAllocSize(),
+        *object.minAllocSize()));
+  }
+
+  if (getMinAllocSize() != *object.minAllocSize()) {
+    throw std::invalid_argument(folly::sformat(
+        "current min alloc size {} does not match the previous one {}",
+        getMinAllocSize(),
         *object.minAllocSize()));
   }
 
@@ -521,7 +522,7 @@ serialization::SlabAllocatorObject SlabAllocator::saveState() {
   }
 
   *object.slabSize() = Slab::kSize;
-  *object.minAllocSize() = CompressedPtr4B::getMinAllocSize();
+  *object.minAllocSize() = getMinAllocSize();
   return object;
 }
 

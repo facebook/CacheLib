@@ -661,6 +661,11 @@ class MemoryAllocator {
     memoryPoolManager_.updateNumSlabsToAdvise(numSlabs);
   }
 
+  // return the minimum allocation size
+  uint32_t getMinAllocSize() const noexcept {
+    return slabAllocator_.getMinAllocSize();
+  }
+
  private:
   // @param memory    pointer to the memory.
   // @return          the MemoryPool corresponding to the memory.

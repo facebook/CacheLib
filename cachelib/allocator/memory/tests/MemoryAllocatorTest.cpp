@@ -32,12 +32,6 @@ constexpr size_t SerializationBufferSize = 100 * 1024;
 using Config = typename MemoryAllocator::Config;
 
 namespace {
-Config getDefaultConfig(std::set<uint32_t> allocSizes) {
-  return {
-      std::move(allocSizes), false /* enabledZerodSlabAllocs */,
-      true /* disableFullCoreDump */, false /* lockMemory */
-  };
-}
 unsigned int forEachAllocationCount;
 bool test_callback(void* /* unused */, AllocInfo /* unused */) {
   forEachAllocationCount++;
@@ -51,7 +45,7 @@ TEST_F(MemoryAllocatorTest, Create) {
   size_t size = 100 * Slab::kSize;
   void* memory = allocate(size);
   auto allocSizes = getRandomAllocSizes(5);
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, size);
+  MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory, size);
 
   ASSERT_EQ(m.getPoolIds().size(), 0);
   ASSERT_LE(m.getMemorySize(), size);
@@ -74,12 +68,13 @@ TEST_F(MemoryAllocatorTest, AddPool) {
   ASSERT_THROW(
       {
         auto allocSizes = getRandomAllocSizes(MemoryAllocator::kMaxClasses + 1);
-        MemoryAllocator m(getDefaultConfig(allocSizes), memory, size);
+        MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory,
+                          size);
       },
       std::invalid_argument);
 
   auto allocSizes = getRandomAllocSizes(numClasses);
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, size);
+  MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory, size);
 
   ASSERT_GE(m.getMemorySize(), numPools * poolSize);
 
@@ -157,7 +152,8 @@ TEST_F(MemoryAllocatorTest, AllocFree) {
   const size_t totalSize = numPools * poolSize + 2 * Slab::kSize;
   void* memory = allocate(totalSize);
   auto allocSizes = getRandomAllocSizes(numClasses);
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, totalSize);
+  MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory,
+                    totalSize);
 
   std::unordered_map<PoolId, const std::set<uint32_t>> pools;
   std::unordered_map<PoolId, size_t> beforeSizes;
@@ -231,8 +227,9 @@ TEST_F(MemoryAllocatorTest, GetAllocInfo) {
   // allocate enough memory for all the pools plus slab headers.
   const size_t size = numPools * poolSize + 2 * Slab::kSize;
 
-  MemoryAllocator m(getDefaultConfig(getRandomAllocSizes(numClasses)),
-                    allocate(size), size);
+  MemoryAllocator m(
+      getDefaultMemoryAllocatorConfig(getRandomAllocSizes(numClasses)),
+      allocate(size), size);
 
   ASSERT_EQ(m.getPoolIds().size(), 0);
 
@@ -274,8 +271,9 @@ TEST_F(MemoryAllocatorTest, Serialization) {
   const size_t size = numPools * poolSize + 2 * Slab::kSize;
 
   void* memory = allocate(size);
-  MemoryAllocator m(getDefaultConfig(getRandomAllocSizes(numClasses)), memory,
-                    size);
+  MemoryAllocator m(
+      getDefaultMemoryAllocatorConfig(getRandomAllocSizes(numClasses)), memory,
+      size);
 
   ASSERT_EQ(m.getPoolIds().size(), 0);
 
@@ -342,95 +340,6 @@ TEST_F(MemoryAllocatorTest, Serialization) {
   }
 }
 
-TEST_F(MemoryAllocatorTest, PointerCompression) {
-  const unsigned int numClasses = 10;
-  const unsigned int numPools = 4;
-  // create enough memory for 4 pools with 5 allocation classes each and 5 slabs
-  // each for each allocation class.
-  const size_t poolSize = numClasses * 5 * Slab::kSize;
-  // allocate enough memory for all the pools plus slab headers.
-  const size_t totalSize = numPools * poolSize + 2 * Slab::kSize;
-  void* memory = allocate(totalSize);
-  // ensure that the allocation sizes are compatible for pointer compression.
-  auto allocSizes =
-      getRandomAllocSizes(numClasses, CompressedPtr4B::getMinAllocSize());
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, totalSize);
-
-  std::unordered_map<PoolId, const std::set<uint32_t>> pools;
-  for (unsigned int i = 0; i < numPools; i++) {
-    auto nClasses = folly::Random::rand32() % numClasses + 1;
-    auto sizes =
-        getRandomAllocSizes(nClasses, CompressedPtr4B::getMinAllocSize());
-    auto pid = m.addPool(getRandomStr(), poolSize, sizes);
-    ASSERT_NE(pid, Slab::kInvalidPoolId);
-    pools.insert({pid, sizes});
-  }
-
-  ASSERT_EQ(pools.size(), numPools);
-
-  using PoolAllocs = std::unordered_map<PoolId, std::vector<void*>>;
-  PoolAllocs poolAllocs;
-  auto makeAllocsOutOfPool = [&m, &poolAllocs, &pools](PoolId pid) {
-    const auto& sizes = pools[pid];
-    std::vector<void*> allocs;
-    unsigned int numAllocations = 0;
-    do {
-      uint32_t prev = CompressedPtr4B::getMinAllocSize();
-      numAllocations = 0;
-      for (const auto size : sizes) {
-        const auto range = prev == size ? 1 : size - prev;
-        uint32_t randomSize = folly::Random::rand32() % range + prev;
-        void* alloc = m.allocate(pid, randomSize);
-        if (alloc != nullptr) {
-          allocs.push_back(alloc);
-          numAllocations++;
-        }
-        prev = size + 1;
-      }
-    } while (numAllocations > 0);
-    poolAllocs[pid] = allocs;
-  };
-
-  for (const auto& pool : pools) {
-    makeAllocsOutOfPool(pool.first);
-  }
-
-  // now we have a list of allocations across all the pools. go through them
-  // and ensure that they do well with pointer compression.
-  for (const auto& pool : poolAllocs) {
-    const auto& allocs = pool.second;
-    for (const auto* alloc : allocs) {
-      CompressedPtr4B ptr =
-          m.compress<CompressedPtr4B>(alloc, false /* isMultiTiered */);
-      ASSERT_FALSE(ptr.isNull());
-      ASSERT_EQ(alloc,
-                m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */));
-    }
-  }
-
-  ASSERT_EQ(nullptr,
-            m.unCompress<CompressedPtr4B>(
-                m.compress<CompressedPtr4B>(nullptr, false /* isMultiTiered */),
-                false /* isMultiTiered */));
-
-  // test pointer compression with multi-tier
-  for (const auto& pool : poolAllocs) {
-    const auto& allocs = pool.second;
-    for (const auto* alloc : allocs) {
-      CompressedPtr4B ptr =
-          m.compress<CompressedPtr4B>(alloc, true /* isMultiTiered */);
-      ASSERT_FALSE(ptr.isNull());
-      ASSERT_EQ(alloc,
-                m.unCompress<CompressedPtr4B>(ptr, true /* isMultiTiered */));
-    }
-  }
-
-  ASSERT_EQ(nullptr,
-            m.unCompress<CompressedPtr4B>(
-                m.compress<CompressedPtr4B>(nullptr, true /* isMultiTiered */),
-                true /* isMultiTiered */));
-}
-
 TEST_F(MemoryAllocatorTest, Restorable) {
   const unsigned int numClasses = 10;
   const unsigned int numPools = 3;
@@ -438,7 +347,7 @@ TEST_F(MemoryAllocatorTest, Restorable) {
   // allocate enough memory for all the pools plus slab headers.
   const size_t size = numPools * poolSize + 2 * Slab::kSize;
 
-  auto c = getDefaultConfig(getRandomAllocSizes(numClasses));
+  auto c = getDefaultMemoryAllocatorConfig(getRandomAllocSizes(numClasses));
   {
     void* memory = allocate(size);
     MemoryAllocator m(c, memory, size);
@@ -501,7 +410,7 @@ TEST_F(MemoryAllocatorTest, ResizePool) {
   allocSizes.insert(Slab::kSize);
 
   void* memory = allocate(size);
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, size);
+  MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory, size);
 
   auto poolName1 = getRandomStr();
   auto p1 = m.addPool(poolName1, poolSize);
@@ -537,7 +446,7 @@ TEST_F(MemoryAllocatorTest, GrowShrinkPool) {
   void* memory = allocate(size);
   std::set<uint32_t> allocSizes;
   allocSizes.insert(Slab::kSize);
-  MemoryAllocator m(getDefaultConfig(allocSizes), memory, size);
+  MemoryAllocator m(getDefaultMemoryAllocatorConfig(allocSizes), memory, size);
 
   auto poolName1 = getRandomStr();
   auto p1 = m.addPool(poolName1, poolSize);
@@ -583,7 +492,8 @@ TEST_F(MemoryAllocatorTest, isAllocFreed) {
   const size_t size = numSlabs * Slab::kSize;
   const size_t allocatorSize = size + 10 * Slab::kSize;
   const size_t smallSize = Slab::kSize / 10;
-  auto config = getDefaultConfig(std::set<uint32_t>{smallSize, Slab::kSize});
+  auto config = getDefaultMemoryAllocatorConfig(
+      std::set<uint32_t>{smallSize, Slab::kSize});
 
   void* memory = allocate(allocatorSize);
   MemoryAllocator m(config, memory, allocatorSize);
@@ -629,8 +539,9 @@ TEST_F(MemoryAllocatorTest, ReleaseSlabToReceiver) {
   const size_t size2 = Slab::kSize / 10;
 
   void* memory = allocate(allocatorSize);
-  MemoryAllocator m(getDefaultConfig(std::set<uint32_t>{size1, size2}), memory,
-                    allocatorSize);
+  MemoryAllocator m(
+      getDefaultMemoryAllocatorConfig(std::set<uint32_t>{size1, size2}), memory,
+      allocatorSize);
   auto pid = m.addPool(getRandomStr(), usableSize);
 
   // allocate until no more space
@@ -790,7 +701,8 @@ TEST_F(MemoryAllocatorTest, forEachAllocation) {
   const size_t size = numSlabs * Slab::kSize;
   const size_t allocatorSize = size + 10 * Slab::kSize;
   const size_t smallSize = Slab::kSize / 10;
-  auto config = getDefaultConfig(std::set<uint32_t>{smallSize, Slab::kSize});
+  auto config = getDefaultMemoryAllocatorConfig(
+      std::set<uint32_t>{smallSize, Slab::kSize});
 
   void* memory = allocate(allocatorSize);
   MemoryAllocator m(config, memory, allocatorSize);

@@ -55,10 +55,40 @@ class AllocTestBase : public testing::Test {
     return memory;
   }
 
+  static constexpr uint32_t getMinAllocSize() noexcept {
+    return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
+  }
+
   ~AllocTestBase() override {
     for (auto m : toFree_) {
       free(m);
     }
+  }
+
+  template <typename CompressedPtrType>
+  unsigned int getCompressedPtrNumAllocIdxBits() {
+    return CompressedPtrType::kNumAllocIdxBits;
+  }
+
+  template <typename CompressedPtrType>
+  unsigned int getCompressedPtrNumSlabIdxBits(CompressedPtrType ptr,
+                                              bool isMultiTiered) {
+    return ptr.numSlabIdxBits(isMultiTiered);
+  }
+
+  template <typename CompressedPtrType>
+  CompressedPtrType::PtrType compress(CompressedPtrType ptr,
+                                      uint32_t slabIdx,
+                                      uint32_t allocIdx,
+                                      bool isMultiTiered) {
+    return ptr.compress(
+        slabIdx, allocIdx, isMultiTiered, isMultiTiered ? 1 : 0);
+  }
+
+  bool compareCompressedPtr(const CompressedPtr4B& ptr1,
+                            const CompressedPtr5B& ptr2) {
+    return ((ptr1.getSlabIdx(false) == ptr2.getSlabIdx(false)) &&
+            (ptr1.getAllocIdx() == ptr2.getAllocIdx()));
   }
 
   static bool isSameSlabList(const std::vector<Slab*>& slabs1,
@@ -94,6 +124,16 @@ class AllocTestBase : public testing::Test {
   std::vector<void*> toFree_{};
 };
 
+// Returns a random allocation size in the range [kReservedSize, Slab::kSize]
+uint32_t getRandomAllocSize();
+
+// generate n random allocation sizes that are powers of two.
+std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n);
+
+// generate n random allocation sizes.
+std::set<uint32_t> getRandomAllocSizes(unsigned int n,
+                                       size_t minSize = Slab::kMinAllocSize);
+
 // base class for all tests that require a slab allocator
 class SlabAllocatorTestBase : public AllocTestBase {
  public:
@@ -110,21 +150,70 @@ class SlabAllocatorTestBase : public AllocTestBase {
     return allocator;
   }
 
+  MemoryAllocator::Config getDefaultMemoryAllocatorConfig(
+      std::set<uint32_t> allocSizes) {
+    return {
+        std::move(allocSizes), false /* enabledZerodSlabAllocs */,
+        true /* disableFullCoreDump */, false /* lockMemory */
+    };
+  }
+
+  std::unique_ptr<MemoryAllocator> createFilledMemoryAllocator() {
+    const unsigned int numClasses = 10;
+    const unsigned int numPools = 4;
+    // create enough memory for 4 pools with 5 allocation classes each and 5
+    // slabs each for each allocation class.
+    const size_t poolSize = numClasses * 5 * Slab::kSize;
+    // allocate enough memory for all the pools plus slab headers.
+    const size_t totalSize = numPools * poolSize + 2 * Slab::kSize;
+    void* memory = allocate(totalSize);
+    auto m = std::unique_ptr<MemoryAllocator>(
+        new MemoryAllocator(getDefaultMemoryAllocatorConfig(getRandomAllocSizes(
+                                numClasses, getMinAllocSize())),
+                            memory,
+                            totalSize));
+
+    std::unordered_map<PoolId, const std::set<uint32_t>> pools;
+    for (unsigned int i = 0; i < numPools; i++) {
+      auto nClasses = folly::Random::rand32() % numClasses + 1;
+      auto sizes = getRandomAllocSizes(nClasses, getMinAllocSize());
+      auto pid = m->addPool(getRandomStr(), poolSize, sizes);
+      pools.insert({pid, sizes});
+    }
+
+    using PoolAllocs = std::unordered_map<PoolId, std::vector<void*>>;
+    PoolAllocs poolAllocs;
+    auto makeAllocsOutOfPool = [&m, &poolAllocs, &pools](PoolId pid) {
+      const auto& sizes = pools[pid];
+      std::vector<void*> allocs;
+      unsigned int numAllocations = 0;
+      do {
+        uint32_t prev = getMinAllocSize();
+        numAllocations = 0;
+        for (const auto size : sizes) {
+          const auto range = prev == size ? 1 : size - prev;
+          uint32_t randomSize = folly::Random::rand32() % range + prev;
+          void* alloc = m->allocate(pid, randomSize);
+          if (alloc != nullptr) {
+            allocs.push_back(alloc);
+            numAllocations++;
+          }
+          prev = size + 1;
+        }
+      } while (numAllocations > 0);
+      poolAllocs[pid] = allocs;
+    };
+    for (const auto& pool : pools) {
+      makeAllocsOutOfPool(pool.first);
+    }
+    return m;
+  }
+
   static std::string getRandomStr() {
     unsigned int len = folly::Random::rand32() % 40 + 10;
     return facebook::cachelib::test_util::getRandomAsciiStr(len);
   }
 };
-
-// Returns a random allocation size in the range [kReservedSize, Slab::kSize]
-uint32_t getRandomAllocSize();
-
-// generate n random allocation sizes that are powers of two.
-std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n);
-
-// generate n random allocation sizes.
-std::set<uint32_t> getRandomAllocSizes(unsigned int n,
-                                       size_t minSize = Slab::kMinAllocSize);
 
 } // namespace tests
 } // namespace cachelib

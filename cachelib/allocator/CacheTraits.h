@@ -25,13 +25,13 @@
 namespace facebook {
 namespace cachelib {
 // The cache traits supported by CacheLib.
-// Cache trait is a combination of MMType, AccessType and AccesTypeLock.
-// MMType is the type of MM (memory management) container used by the cache,
-// which controls a cache item's life time.
-// AccessType is the type of access container, which controls how an item is
-// accessed.
-// AccessTypeLock is the lock type for the access container that supports
-// multiple locking primitives
+// Cache trait is a combination of MMType, AccessType, AccesTypeLock and
+// CompressedPtr. MMType is the type of MM (memory management) container used by
+// the cache, which controls a cache item's life time. AccessType is the type of
+// access container, which controls how an item is accessed. AccessTypeLock is
+// the lock type for the access container that supports multiple locking
+// primitives CompressedPtr maps slabs and allocations within slabs in cache
+// memory.
 struct LruCacheTrait {
   using MMType = MMLru;
   using AccessType = ChainedHashTable;
@@ -58,6 +58,34 @@ struct TinyLFUCacheTrait {
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
   using CompressedPtrType = CompressedPtr4B;
+};
+
+struct Lru5BCacheTrait {
+  using MMType = MMLru;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr5B;
+};
+
+struct Lru5BCacheWithSpinBucketsTrait {
+  using MMType = MMLru;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SpinBuckets;
+  using CompressedPtrType = CompressedPtr5B;
+};
+
+struct Lru5B2QCacheTrait {
+  using MMType = MM2Q;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr5B;
+};
+
+struct TinyLFU5BCacheTrait {
+  using MMType = MMTinyLFU;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr5B;
 };
 
 } // namespace cachelib

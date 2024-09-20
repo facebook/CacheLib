@@ -183,6 +183,7 @@ class CacheAllocator : public CacheBase {
   using CompressedPtrType = typename CacheTrait::CompressedPtrType;
   using MMType = typename CacheTrait::MMType;
   using AccessType = typename CacheTrait::AccessType;
+
   using Config = CacheAllocatorConfig<CacheT>;
 
   // configs for the MMtype and AccessType.
@@ -1336,7 +1337,9 @@ class CacheAllocator : public CacheBase {
                  sizeof(typename RefcountWithFlags::Value) + sizeof(uint32_t) +
                  sizeof(uint32_t) + sizeof(KAllocation)) == sizeof(Item),
                 "vtable overhead");
-  static_assert(32 == sizeof(Item), "item overhead is 32 bytes");
+  static_assert((20 + (3 * sizeof(CompressedPtrType))) == sizeof(Item),
+                "item overhead is 32 bytes for 4 byte compressed pointer and "
+                "35 bytes for 5 bytes compressed pointer.");
 
   // make sure there is no overhead in ChainedItem on top of a regular Item
   static_assert(sizeof(Item) == sizeof(ChainedItem),

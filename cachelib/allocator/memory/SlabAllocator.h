@@ -242,7 +242,7 @@ class SlabAllocator {
     const SlabHeader* header = getSlabHeader(slabIndex);
 
     const uint32_t allocSize = header->allocSize;
-    XDCHECK(allocSize >= CompressedPtr4B::getMinAllocSize());
+    XDCHECK(allocSize >= getMinAllocSize());
 
     const auto allocIdx =
         static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(ptr) -
@@ -279,7 +279,7 @@ class SlabAllocator {
     const auto* header = getSlabHeader(slabIndex);
     const uint32_t allocSize = header->allocSize;
 
-    XDCHECK_GE(allocSize, CompressedPtrType::getMinAllocSize());
+    XDCHECK_GE(allocSize, getMinAllocSize());
     const auto offset = allocSize * allocIdx;
 
 #ifndef NDEBUG
@@ -323,6 +323,10 @@ class SlabAllocator {
   PtrCompressor<PtrType, SlabAllocator, CompressedPtrType> createPtrCompressor()
       const {
     return PtrCompressor<PtrType, SlabAllocator, CompressedPtrType>(*this);
+  }
+
+  static constexpr uint32_t getMinAllocSize() noexcept {
+    return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
   }
 
  private:
@@ -439,6 +443,9 @@ class SlabAllocator {
 
   // number of pages to touch in eash step.
   static constexpr size_t kPagesPerStep = 10000;
+
+  static constexpr size_t minAllocSize = static_cast<uint32_t>(1)
+                                         << (Slab::kMinAllocPower);
 
   static_assert((Slab::kSize & (Slab::kSize - 1)) == 0,
                 "Slab size is not power of two");

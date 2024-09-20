@@ -26,6 +26,9 @@ namespace facebook {
 namespace cachelib {
 
 class SlabAllocator;
+namespace tests {
+class AllocTestBase;
+}
 
 // This CompressedPtr4B makes decompression fast by staying away from division
 // and modulo arithmetic and doing those during the compression time. We most
@@ -69,9 +72,9 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
   bool operator!=(const PtrType ptr) const noexcept { return !(ptr == ptr_); }
   // If the allocSize is smaller than this, then pointer compression is not
   // going to work.
-  static constexpr uint32_t getMinAllocSize() noexcept {
-    return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
-  }
+  // static constexpr uint32_t getMinAllocSize() noexcept {
+  //   return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
+  // }
 
   // maximum addressable memory for pointer compression to work.
   static constexpr size_t getMaxAddressableSize() noexcept {
@@ -173,6 +176,182 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
   }
 
   friend SlabAllocator;
+  // Allow access to private members by unit tests
+  friend class tests::AllocTestBase;
+};
+
+// CompressedPtr5B indexes more slabs than CompressedPtr4B.
+// 16 bits are used to index allocations (min size 64 bytes) within a 4MB slab.
+// 16 bits are used to index 4MB slabs which can represent upto 256GB of memory.
+// If single-tiered, 8 bits are used to map 256 GB regions totaling to 64 TB.
+// If CXL multi-tiered, 7 bits are used to map 256 GB regions totaling to 32 TB.
+class CACHELIB_PACKED_ATTR CompressedPtr5B {
+ public:
+  using PtrType = uint64_t;
+  using IdxPtrType32 = uint32_t;
+  using RegionPtrType8 = uint8_t;
+  // Thrift doesn't support unsigned type
+  using SerializedPtrType = int64_t;
+
+  static constexpr unsigned int kIdxNumBits = NumBits<IdxPtrType32>::value;
+  static constexpr unsigned int kRegionNumBits = NumBits<RegionPtrType8>::value;
+
+  // true if the compressed ptr expands to nullptr.
+  bool isNull() const noexcept {
+    return (ptr_ == kNull) && (regionIdx_ == kRegionNull);
+  }
+
+  bool operator==(const SerializedPtrType ptr) const noexcept {
+    return (ptr_ == deserializePtr(ptr)) &&
+           (regionIdx_ == deserializeRegion(ptr));
+  }
+
+  bool operator==(const CompressedPtr5B ptr) const noexcept {
+    return (ptr_ == ptr.ptr_) && (regionIdx_ == ptr.regionIdx_);
+  }
+
+  bool operator!=(const SerializedPtrType ptr) const noexcept {
+    return !(*this == ptr);
+  }
+
+  // maximum addressable memory for pointer compression to work.
+  static constexpr size_t getMaxAddressableSize() noexcept {
+    return static_cast<size_t>(1)
+           << (numSlabIdxBits(/* isMultiTiered */ false) + Slab::kNumSlabBits);
+  }
+
+  // default construct to nullptr.
+  CompressedPtr5B() = default;
+
+  // Restore from serialization
+  explicit CompressedPtr5B(SerializedPtrType ptr)
+      : ptr_(deserializePtr(ptr)), regionIdx_(deserializeRegion(ptr)) {}
+
+  SerializedPtrType saveState() const noexcept { return getRaw(); }
+
+  PtrType getRaw() const noexcept {
+    return (static_cast<PtrType>(regionIdx_) << kIdxNumBits) +
+           static_cast<PtrType>(ptr_);
+  }
+
+ private:
+  // null pointer representation. This is almost never guaranteed to be a
+  // valid pointer that we can compress to.
+  static constexpr IdxPtrType32 kNull = 0xffffffff;
+  static constexpr RegionPtrType8 kRegionNull = 0xff;
+
+  // default construct to null.
+  IdxPtrType32 ptr_{kNull};
+  RegionPtrType8 regionIdx_{kRegionNull};
+
+  // create a compressed pointer for a valid memory allocation.
+  CompressedPtr5B(uint32_t slabIdx,
+                  uint32_t allocIdx,
+                  bool isMultiTiered,
+                  TierId tid = 0)
+      : ptr_(compress(slabIdx, allocIdx, isMultiTiered, tid)),
+        regionIdx_(getRegionIdx(slabIdx, isMultiTiered, tid)) {}
+
+  constexpr explicit CompressedPtr5B(PtrType ptr) noexcept
+      : ptr_(deserializePtr(ptr)), regionIdx_(deserializeRegion(ptr)) {}
+
+  // number of bits for the Allocation offset in a slab.  With slab size of 22
+  // bits and minimum allocation size of 64 bytes, this will be the bottom 16
+  // bits of the compressed ptr.
+  static constexpr unsigned int kNumAllocIdxBits =
+      Slab::kNumSlabBits - Slab::kMinAllocPower;
+
+  // Use 8th bit position in regionIdx for TierId.
+  // Left the 7th bit for DRAM/NVM item.
+  static constexpr unsigned int kNumTierIdxOffset = kRegionNumBits - 2;
+
+  static constexpr IdxPtrType32 kAllocIdxMask =
+      ((IdxPtrType32)1 << kNumAllocIdxBits) - 1;
+
+  // kNumTierIdxBits most significant bits
+  static constexpr RegionPtrType8 kTierIdxMask = static_cast<RegionPtrType8>(1);
+
+  // Slab index uses 16 bits to index 4MB slabs and additional bits
+  // to map indexes. 8 bits in sigle-tier case. 7 bits in multi-tier
+  // case where the 8th bit is the tier id.
+  static constexpr unsigned int numSlabIdxBits(bool isMultiTiered) {
+    return kNumTierIdxOffset + (kIdxNumBits - kNumAllocIdxBits) +
+           (!isMultiTiered);
+  }
+
+  // Compress the given slabIdx and allocIdx into a 32-bit compressed
+  // pointer.
+  static PtrType compress(uint32_t slabIdx,
+                          uint32_t allocIdx,
+                          bool isMultiTiered,
+                          TierId tid) noexcept {
+    XDCHECK_LE(allocIdx, kAllocIdxMask);
+    XDCHECK_LT(slabIdx, (1u << numSlabIdxBits(isMultiTiered)) - 1);
+    if (!isMultiTiered) {
+      return (slabIdx << kNumAllocIdxBits) + allocIdx;
+    }
+    return (static_cast<PtrType>(tid) << (kNumTierIdxOffset + kIdxNumBits)) +
+           (slabIdx << kNumAllocIdxBits) + allocIdx;
+  }
+
+  static IdxPtrType32 deserializePtr(SerializedPtrType ptr) {
+    XDCHECK(ptr >= 0);
+    return static_cast<IdxPtrType32>(ptr);
+  }
+
+  static RegionPtrType8 deserializeRegion(SerializedPtrType ptr) {
+    XDCHECK(ptr >= 0);
+    return static_cast<RegionPtrType8>(ptr >> kIdxNumBits);
+  }
+
+  static RegionPtrType8 getRegionIdx(uint32_t slabIdx,
+                                     bool isMultiTiered,
+                                     TierId tid) noexcept {
+    if (isMultiTiered) {
+      return static_cast<RegionPtrType8>(tid << kNumTierIdxOffset) +
+             static_cast<RegionPtrType8>(
+                 ((slabIdx >> (kIdxNumBits - kNumAllocIdxBits)) &
+                  ~kTierIdxMask));
+    }
+    return static_cast<RegionPtrType8>(slabIdx >>
+                                       (kIdxNumBits - kNumAllocIdxBits));
+  }
+
+  // Get the slab index of the compressed ptr
+  uint32_t getSlabIdx(bool isMultiTiered) const noexcept {
+    XDCHECK(!isNull());
+    // This slab index will not contain the tid for CXL tiering cases.
+    // TODO (pranav): Maybe problem for CXL use case? Review
+    IdxPtrType32 noTierIdPtr =
+        isMultiTiered ? static_cast<IdxPtrType32>(regionIdx_) & ~kTierIdxMask
+                      : static_cast<IdxPtrType32>(regionIdx_);
+    return (noTierIdPtr << (kIdxNumBits - kNumAllocIdxBits)) +
+           static_cast<IdxPtrType32>(ptr_ >> kNumAllocIdxBits);
+  }
+
+  // Get the allocation index of the compressed ptr
+  uint32_t getAllocIdx() const noexcept {
+    XDCHECK(!isNull());
+    // Note: tid check not required in ptr_ since only
+    //       the lower 16 bits are being read here.
+    return static_cast<uint32_t>(ptr_ & kAllocIdxMask);
+  }
+
+  uint32_t getTierId(bool isMultiTiered) const noexcept {
+    XDCHECK(!isNull());
+    return isMultiTiered
+               ? static_cast<uint32_t>(regionIdx_ >> kNumTierIdxOffset)
+               : 0;
+  }
+
+  // Taken from CompressedPtr. Why adding here instead of setting?
+  // We are trusting users to not call this twice?
+  void setTierId(TierId tid) noexcept {
+    regionIdx_ += static_cast<uint32_t>(tid) << kNumTierIdxOffset;
+  }
+
+  friend SlabAllocator;
+  friend class facebook::cachelib::tests::AllocTestBase;
 };
 
 template <typename PtrType, typename AllocatorT, typename CompressedPtrType>
