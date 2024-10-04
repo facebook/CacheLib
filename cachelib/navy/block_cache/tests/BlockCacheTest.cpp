@@ -2347,4 +2347,100 @@ TEST(BlockCache, SizeAndAlignment) {
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, hugeValue.view()),
             alignSize * 2);
 }
+
+// Test retry reading for transient checksum errors (S421120)
+TEST(BlockCache, RetryRead) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto device = std::make_unique<MockDevice>(kDeviceSize, 1024);
+
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(*ex, std::move(policy), *device);
+  config.checksum = true;
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  BufferGen bg;
+  CacheEntry e{bg.gen(8), bg.gen(800)};
+  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
+  driver->flush();
+
+  EXPECT_CALL(*device, readImpl(_, 1024, _))
+      .WillOnce(Invoke(
+          [dev = device.get()](uint64_t offset, uint32_t size, void* buffer) {
+            dev->getRealDeviceRef().read(offset, size, buffer);
+            // Corrupt the buffer
+            auto buf32 = static_cast<uint32_t*>(buffer);
+            buf32[0] = buf32[0] + 1;
+            buf32[1] = buf32[1] + 1;
+            return true;
+          }))
+      .WillOnce(Invoke(
+          [dev = device.get()](uint64_t offset, uint32_t size, void* buffer) {
+            // no corruption with the retry
+            return dev->getRealDeviceRef().read(offset, size, buffer);
+          }));
+  Buffer value;
+  driver->lookup(e.key(), value);
+
+  // checking the counters.
+  driver->getCounters({[](folly::StringPiece name, double count) {
+    // Eventually lookup succeeded
+    if (name == "navy_bc_lookups") {
+      EXPECT_EQ(1, count);
+    }
+    if (name == "navy_bc_succ_lookup") {
+      EXPECT_EQ(1, count);
+    }
+    // There was one re-read with one checksum error
+    if (name == "navy_bc_retry_reads") {
+      EXPECT_EQ(1, count);
+    }
+    if (name == "navy_bc_lookup_value_checksum_errors") {
+      EXPECT_EQ(1, count);
+    }
+  }});
+
+  EXPECT_CALL(*device, readImpl(_, 1024, _))
+      .WillOnce(Invoke(
+          [dev = device.get()](uint64_t offset, uint32_t size, void* buffer) {
+            dev->getRealDeviceRef().read(offset, size, buffer);
+            // Corrupt the buffer
+            auto buf32 = static_cast<uint32_t*>(buffer);
+            buf32[0] = buf32[0] + 1;
+            buf32[1] = buf32[1] + 1;
+            return true;
+          }))
+      .WillOnce(Invoke(
+          [dev = device.get()](uint64_t offset, uint32_t size, void* buffer) {
+            dev->getRealDeviceRef().read(offset, size, buffer);
+            // Corrupt the buffer
+            auto buf32 = static_cast<uint32_t*>(buffer);
+            buf32[0] = buf32[0] + 1;
+            buf32[1] = buf32[1] + 1;
+            return true;
+          }));
+
+  driver->lookup(e.key(), value);
+
+  // checking the counters
+  driver->getCounters({[](folly::StringPiece name, double count) {
+    // Lookup was initiated, but eventually failed
+    if (name == "navy_bc_lookups") {
+      EXPECT_EQ(2, count);
+    }
+    // It didn't succeed, so it's not increased
+    if (name == "navy_bc_succ_lookup") {
+      EXPECT_EQ(1, count);
+    }
+    // There was one re-read
+    if (name == "navy_bc_retry_reads") {
+      EXPECT_EQ(2, count);
+    }
+    // Two more checksum errors (re-read also failed)
+    if (name == "navy_bc_lookup_value_checksum_errors") {
+      EXPECT_EQ(3, count);
+    }
+  }});
+}
 } // namespace facebook::cachelib::navy::tests

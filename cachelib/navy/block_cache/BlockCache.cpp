@@ -256,22 +256,29 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   case OpenStatus::Ready: {
     auto status =
         readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
+
+    if (FOLLY_UNLIKELY(status == Status::DeviceError)) {
+      // In case we are getting transient checksum error, we will retry to read
+      // the entry (S421120)
+      status =
+          readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
+      XLOGF(ERR,
+            "Retry reading an entry after checksum error. Return code: "
+            "{}",
+            status);
+      retryReadCount_.inc();
+
+      if (status != Status::Ok) {
+        // Still failing. Remove this item from index so no future lookup will
+        // ever attempt to read this key. Reclaim will also not be
+        // able to re-insert this item as it does not exist in index.
+        index_.remove(hk.keyHash());
+      }
+    }
+
     if (status == Status::Ok) {
       regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
-    } else if (status == Status::DeviceError) {
-      // Read again for debugging
-      auto retryStatus =
-          readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
-      XLOGF(ERR,
-            "Retry reading an entry after checksum for debugging. Return code: "
-            "{}",
-            retryStatus);
-
-      // Remove this item from index so no future lookup will
-      // ever attempt to read this key. Reclaim will also not be
-      // able to re-insert this item as it does not exist in index.
-      index_.remove(hk.keyHash());
     }
     regionManager_.close(std::move(desc));
     lookupCount_.inc();
@@ -820,6 +827,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           cleanupValueChecksumErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_succ_lookups", succLookupCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_retry_reads", retryReadCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_removes", removeCount_.get(),
           CounterVisitor::CounterType::RATE);

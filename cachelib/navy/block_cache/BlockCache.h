@@ -379,6 +379,7 @@ class BlockCache final : public Engine {
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;
   mutable TLCounter succLookupCount_;
+  mutable TLCounter retryReadCount_;
 
   // atomic counters in asynchronized path
   mutable AtomicCounter insertCount_;
