@@ -115,7 +115,7 @@ cachebench supports generating synthetic workloads using a few techniques. The t
 Generates popularity of keys through a discrete distribution specified in  *popularityBuckets* and *popularityWeights* parameter. Discrete sizes are generated through a discrete distribution specified through `valSizeRange` and `valSizeRangeProbability`. The value size configuration can be provided inline as an array or through a `valSizeDistFile` in json format.
 
 * **normal**
-Uses normal workload distribution for popularity of keys as opposed to discrete popularity buckets. For value sizes, it supports both discrete and continuous value size distribution. To use discrete value size distribution, the `valSizeRangeProbabilithy` should have same number of values as `valSizeRange` array. When `valSizeRangeProbabilithy` contains one less member than `valSizeRange`, we interpret the probability as corresponding to each interval in `valSizeRange` and use a piecewise_constant_distribution.
+Uses normal workload distribution for popularity of keys as opposed to discrete popularity buckets. For value sizes, it supports both discrete and continuous value size distribution. To use discrete value size distribution, the `valSizeRangeProbability` should have same number of values as `valSizeRange` array. When `valSizeRangeProbability` contains one less member than `valSizeRange`, we interpret the probability as corresponding to each interval in `valSizeRange` and use a piecewise_constant_distribution.
 
 In all above setups, cachebench overrides the `valSizeRange` and `vaSizeRangeProbability` from inline json array if `valSizeDistFile` is present.
 
