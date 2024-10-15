@@ -70,7 +70,7 @@ class CACHELIB_PACKED_ATTR CacheValue {
   // static function to make sure the item size is at least sizeof CacheValue
   // so we have enough space for fields used by sanity checks
   static size_t getSize(size_t size) {
-    return std::max<size_t>(size, sizeof(CacheValue));
+    return std::max<size_t>((uint32_t)size, sizeof(CacheValue));
   }
   // static function to help to initialize CacheValue with given item's data
   // pointer.
