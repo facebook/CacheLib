@@ -70,7 +70,10 @@ NvmItem::NvmItem(PoolId id,
   }
 }
 
-NvmItem::NvmItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob)
+NvmItem::NvmItem(PoolId id,
+                 uint32_t creationTime,
+                 uint32_t expTime,
+                 const Blob& blob)
     : id_(id), creationTime_(creationTime), expTime_(expTime), numBlobs_(1) {
   auto& blobInfo = getBlobInfo(0);
   if (blob.data.size() >
@@ -111,7 +114,7 @@ size_t NvmItem::estimateVariableSize(const std::vector<Blob>& blobs) {
   return total;
 }
 
-size_t NvmItem::estimateVariableSize(Blob blob) {
+size_t NvmItem::estimateVariableSize(const Blob& blob) {
   return sizeof(BlobInfo) + blob.data.size();
 }
 

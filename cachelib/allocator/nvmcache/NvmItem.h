@@ -21,6 +21,7 @@
 #include <folly/io/IOBuf.h>
 
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/navy/common/Buffer.h"
 namespace facebook {
 namespace cachelib {
 
@@ -34,6 +35,27 @@ struct Blob {
 
   // full payload including the trailing bytes
   folly::StringPiece data;
+};
+
+// Blob with a buffer that hold a copy of the data.
+// We'll assume the iobuf has only one node as in the current implmentation
+// under cachelib/object_cache/persistence/Persistence.h
+// TODO: Make Blob take an IOBuf instead of a StringPiece and handle the copy
+// correctly.
+struct BufferedBlob {
+  uint32_t origAllocSize{0};
+  std::unique_ptr<folly::IOBuf> data;
+
+  // Create a Blob wrapping around the ioBuf owned by this instance.
+  Blob toBlob() const {
+    if (!data) {
+      return Blob{origAllocSize, {}};
+    } else {
+      return Blob{
+          origAllocSize,
+          {reinterpret_cast<const char*>(data->data()), data->length()}};
+    }
+  }
 };
 
 // NvmItem is used to store CacheItems in nvm cache.
@@ -55,7 +77,7 @@ class FOLLY_PACK_ATTR NvmItem {
   //  instantiate a vector
   //
   // @throw std::out_of_range if the total size of blob exceeds 4GB.
-  NvmItem(PoolId id, uint32_t creationTime, uint32_t expTime, Blob blob);
+  NvmItem(PoolId id, uint32_t creationTime, uint32_t expTime, const Blob& blob);
 
   // A custom new that allocates NvmItem with extra
   // bytes space at the end for data
@@ -100,7 +122,7 @@ class FOLLY_PACK_ATTR NvmItem {
 
   // estimate the additional malloc size for a single blob to be passed to the
   // new operator
-  static size_t estimateVariableSize(Blob blob);
+  static size_t estimateVariableSize(const Blob& blob);
 
   // estimate the additional  malloc size for a vector of blobs
   static size_t estimateVariableSize(const std::vector<Blob>& blobs);

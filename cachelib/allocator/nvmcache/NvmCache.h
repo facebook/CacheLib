@@ -59,6 +59,7 @@ class NvmCache {
   using Item = typename C::Item;
   using ChainedItem = typename Item::ChainedItem;
   using ChainedItemIter = typename C::ChainedItemIter;
+  using WritableChainedItemIter = typename C::WritableChainedItemIter;
   using ItemDestructor = typename C::ItemDestructor;
   using DestructorData = typename C::DestructorData;
   using SampleItem = typename C::SampleItem;
@@ -91,6 +92,25 @@ class NvmCache {
   using DeleteTombStoneGuard = typename TombStones::Guard;
   using PutToken = typename InFlightPuts::PutToken;
 
+  // Callback function to make a vector of BufferedBlob from the item being
+  // evicted from DRAM. If the item does not have chained items, the vector
+  // should have one single element containing the item converted to a
+  // BufferedBlob that's ready to be copied to NvmItem buffer. If the item
+  // contains chained item, the vector should have N+1 elements, where the
+  // element 0 is the parent item, element [1, N] should be the N chained item
+  // as ordered in the range. When an empty vector is returned, the insertion
+  // will abort.
+  using MakeBlobCB = typename std::function<std::vector<BufferedBlob>(
+      const Item&, folly::Range<ChainedItemIter>)>;
+
+  // Callback function to propagate the item when fetched from NVM.
+  // The item and chained items are already allocated with the size from
+  // NvmItem::Blobs::origSize.
+  // Return false if there was an error and the insertion back to DRAM cache
+  // should not proceed.
+  using MakeObjCB = typename std::function<bool(
+      const NvmItem&, Item&, folly::Range<WritableChainedItemIter>)>;
+
   struct Config {
     navy::NavyConfig navyConfig{};
 
@@ -100,6 +120,14 @@ class NvmCache {
     // before encryption and after decryption respectively if enabled.
     EncodeCB encodeCb{};
     DecodeCB decodeCb{};
+
+    // (Optional) Callback overriding logic between DRAM item and NVMItem. This
+    // allows the user of cachelib to provide logic to:
+    // 1. Create blobs to be copied into NvmItem from the Item being evicted
+    // from DRAM; and
+    // 2. Propagate the content of Item with the Blobs retrieved from NvmItem.
+    MakeBlobCB makeBlobCb{};
+    MakeObjCB makeObjCb{};
 
     // (Optional) This enables encryption on a device level. Everything we write
     // into the nvm device will be encrypted.
@@ -290,7 +318,18 @@ class NvmCache {
   // iteration on the item will be LIFO of the addChainedItem calls.
   // This is only used when we have to create cache items on heap (IOBuf) for
   // the purpose of ItemDestructor.
-  folly::Range<ChainedItemIter> viewAsChainedAllocsRange(folly::IOBuf*) const;
+  template <typename Iter>
+  folly::Range<Iter> viewAsChainedAllocsRangeT(folly::IOBuf* buf) const;
+
+  folly::Range<ChainedItemIter> viewAsChainedAllocsRange(
+      folly::IOBuf* parent) const {
+    return viewAsChainedAllocsRangeT<ChainedItemIter>(parent);
+  }
+
+  folly::Range<WritableChainedItemIter> viewAsWritableChainedAllocsRange(
+      folly::IOBuf* parent) const {
+    return viewAsChainedAllocsRangeT<WritableChainedItemIter>(parent);
+  }
 
   // returns true if there is tombstone entry for the key.
   bool hasTombStone(HashedKey hk);
@@ -887,14 +926,14 @@ void NvmCache<C>::evictCB(HashedKey hk,
 }
 
 template <typename C>
-folly::Range<typename C::ChainedItemIter> NvmCache<C>::viewAsChainedAllocsRange(
+template <typename Iter>
+folly::Range<Iter> NvmCache<C>::viewAsChainedAllocsRangeT(
     folly::IOBuf* parent) const {
   XDCHECK(parent);
   auto& item = *reinterpret_cast<Item*>(parent->writableData());
   return item.hasChainedItem()
-             ? folly::Range<ChainedItemIter>{ChainedItemIter{parent->next()},
-                                             ChainedItemIter{parent}}
-             : folly::Range<ChainedItemIter>{};
+             ? folly::Range<Iter>{Iter{parent->next()}, Iter{parent}}
+             : folly::Range<Iter>{};
 }
 
 template <typename C>
@@ -953,22 +992,44 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item) {
     return nullptr;
   }
 
-  if (item.hasChainedItem()) {
-    std::vector<Blob> blobs;
-    blobs.push_back(makeBlob(item));
-
-    for (auto& chainedItem : chainedItemRange) {
-      blobs.push_back(makeBlob(chainedItem));
+  if (config_.makeBlobCb) {
+    std::vector<BufferedBlob> bufferedBlobs =
+        config_.makeBlobCb(item, chainedItemRange);
+    if (bufferedBlobs.empty()) {
+      return nullptr;
     }
-
+    std::vector<Blob> blobs;
+    for (const auto& bufferedBlob : bufferedBlobs) {
+      blobs.push_back(bufferedBlob.toBlob());
+    }
     const size_t bufSize = NvmItem::estimateVariableSize(blobs);
-    return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
-        poolId, item.getCreationTime(), item.getExpiryTime(), blobs));
+    return blobs.size() == 1 ? std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
+                                   poolId, item.getCreationTime(),
+                                   item.getExpiryTime(), blobs[0]))
+                             : std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
+                                   poolId, item.getCreationTime(),
+                                   item.getExpiryTime(), blobs));
+
   } else {
-    Blob blob = makeBlob(item);
-    const size_t bufSize = NvmItem::estimateVariableSize(blob);
-    return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
-        poolId, item.getCreationTime(), item.getExpiryTime(), blob));
+    if (item.hasChainedItem()) {
+      std::vector<Blob> blobs;
+      blobs.push_back(makeBlob(item));
+
+      for (auto& chainedItem : chainedItemRange) {
+        blobs.push_back(makeBlob(chainedItem));
+      }
+
+      const size_t bufSize = NvmItem::estimateVariableSize(blobs);
+      return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
+          poolId, item.getCreationTime(), item.getExpiryTime(), blobs));
+    } else {
+      Blob blob;
+      // Support object cache without chained items only.
+      blob = makeBlob(item);
+      const size_t bufSize = NvmItem::estimateVariableSize(blob);
+      return std::unique_ptr<NvmItem>(new (bufSize) NvmItem(
+          poolId, item.getCreationTime(), item.getExpiryTime(), blob));
+    }
   }
 }
 
@@ -1151,35 +1212,57 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
   auto it = CacheAPIWrapperForNvm<C>::allocateInternal(
       cache_, nvmItem.poolId(), key, pBlob.origAllocSize,
       nvmItem.getCreationTime(), nvmItem.getExpiryTime());
+
   if (!it) {
     return nullptr;
   }
-
-  XDCHECK_LE(pBlob.data.size(), getStorageSizeInNvm(*it));
-  XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-  ::memcpy(it->getMemory(), pBlob.data.data(), pBlob.data.size());
-  it->markNvmClean();
-
-  // if we have more, then we need to allocate them as chained items and add
-  // them in the same order. To do that, we need to add them from the inverse
-  // order
-  if (numBufs > 1) {
-    // chained items need to be added in reverse order to maintain the same
-    // order as what we serialized.
+  if (config_.makeObjCb) {
     for (int i = numBufs - 1; i >= 1; i--) {
       auto cBlob = nvmItem.getBlob(i);
-      XDCHECK_GT(cBlob.origAllocSize, 0u);
-      XDCHECK_GT(cBlob.data.size(), 0u);
-      stats().numNvmAllocAttempts.inc();
       auto chainedIt = cache_.allocateChainedItem(it, cBlob.origAllocSize);
       if (!chainedIt) {
         return nullptr;
       }
       XDCHECK(chainedIt->isChainedItem());
       XDCHECK_LE(cBlob.data.size(), getStorageSizeInNvm(*chainedIt));
-      ::memcpy(chainedIt->getMemory(), cBlob.data.data(), cBlob.data.size());
       cache_.addChainedItem(it, std::move(chainedIt));
       XDCHECK(it->hasChainedItem());
+    }
+    if (!config_.makeObjCb(
+            nvmItem, *it,
+            CacheAPIWrapperForNvm<C>::viewAsWritableChainedAllocsRange(cache_,
+                                                                       *it))) {
+      return nullptr;
+    }
+    it->markNvmClean();
+  } else {
+    XDCHECK_LE(pBlob.data.size(), getStorageSizeInNvm(*it));
+    XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
+    ::memcpy(it->getMemory(), pBlob.data.data(), pBlob.data.size());
+    it->markNvmClean();
+
+    // if we have more, then we need to allocate them as chained items and add
+    // them in the same order. To do that, we need to add them from the inverse
+    // order
+    if (numBufs > 1) {
+      XDCHECK(!config_.makeObjCb);
+      // chained items need to be added in reverse order to maintain the same
+      // order as what we serialized.
+      for (int i = numBufs - 1; i >= 1; i--) {
+        auto cBlob = nvmItem.getBlob(i);
+        XDCHECK_GT(cBlob.origAllocSize, 0u);
+        XDCHECK_GT(cBlob.data.size(), 0u);
+        stats().numNvmAllocAttempts.inc();
+        auto chainedIt = cache_.allocateChainedItem(it, cBlob.origAllocSize);
+        if (!chainedIt) {
+          return nullptr;
+        }
+        XDCHECK(chainedIt->isChainedItem());
+        XDCHECK_LE(cBlob.data.size(), getStorageSizeInNvm(*chainedIt));
+        ::memcpy(chainedIt->getMemory(), cBlob.data.data(), cBlob.data.size());
+        cache_.addChainedItem(it, std::move(chainedIt));
+        XDCHECK(it->hasChainedItem());
+      }
     }
   }
 
@@ -1207,7 +1290,9 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     // because the slack space might be used if nvmcache is configured
     // with useTruncatedAllocSize == false
     XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-    auto size = Item::getRequiredSize(key, pBlob.data.size());
+    auto size = config_.makeObjCb
+                    ? Item::getRequiredSize(key, pBlob.origAllocSize)
+                    : Item::getRequiredSize(key, pBlob.data.size());
 
     head = folly::IOBuf::create(size);
     head->append(size);
@@ -1221,13 +1306,18 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
 
   XDCHECK_LE(pBlob.origAllocSize, item->getSize());
   XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-  ::memcpy(item->getMemory(), pBlob.data.data(), pBlob.data.size());
+
+  if (!config_.makeObjCb) {
+    ::memcpy(item->getMemory(), pBlob.data.data(), pBlob.data.size());
+  }
+
   item->markNvmClean();
   item->markNvmEvicted();
-
   // if we have more, then we need to allocate them as chained items and add
   // them in the same order. To do that, we need to add them from the inverse
-  // order
+  // order.
+  // We'll allocate the chained items and add to the chain first, then use the
+  // customized callback to propagate their payload.
   if (numBufs > 1) {
     // chained items need to be added in reverse order to maintain the same
     // order as what we serialized.
@@ -1248,15 +1338,26 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
       auto chainedItem = new (chained->writableData())
           ChainedItem(typename C::CompressedPtrType(), cBlob.origAllocSize,
                       util::getCurrentTimeSec());
-
       XDCHECK(chainedItem->isChainedItem());
-      ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
-               cBlob.origAllocSize);
+      // Propagate the payload directly from Blob only if no customized callback
+      // is set.
+      if (!config_.makeObjCb) {
+        ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
+                 cBlob.origAllocSize);
+      }
       head->appendChain(std::move(chained));
       item->markHasChainedItem();
       XDCHECK(item->hasChainedItem());
     }
   }
+  // If the customized callback is set, we'll call it to propagate the payload.
+  if (config_.makeObjCb) {
+    if (!config_.makeObjCb(nvmItem, *item,
+                           viewAsWritableChainedAllocsRange(head.get()))) {
+      return nullptr;
+    }
+  }
+
   return head;
 }
 

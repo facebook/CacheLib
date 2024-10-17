@@ -1574,6 +1574,11 @@ class CacheAllocator : public CacheBase {
   CacheChainedAllocs<CacheT, Handle, Iter> viewAsChainedAllocsT(
       const Handle& parent);
 
+  // return an iterator to the item's chained allocations. The order of
+  // iteration on the item will be LIFO of the addChainedItem calls.
+  template <typename Iter>
+  folly::Range<Iter> viewAsChainedAllocsRangeT(const Item& parent) const;
+
   // template class for convertToIOBuf that takes either ReadHandle or
   // WriteHandle
   template <typename Handle>
@@ -2054,10 +2059,15 @@ class CacheAllocator : public CacheBase {
 
   void initStats();
 
-  // return a read-only iterator to the item's chained allocations. The order of
-  // iteration on the item will be LIFO of the addChainedItem calls.
   folly::Range<ChainedItemIter> viewAsChainedAllocsRange(
-      const Item& parent) const;
+      const Item& parent) const {
+    return viewAsChainedAllocsRangeT<ChainedItemIter>(parent);
+  }
+
+  folly::Range<WritableChainedItemIter> viewAsWritableChainedAllocsRange(
+      const Item& parent) const {
+    return viewAsChainedAllocsRangeT<WritableChainedItemIter>(parent);
+  }
 
   // updates the maxWriteRate for DynamicRandomAdmissionPolicy
   // returns true if update successfully
@@ -3830,14 +3840,14 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
 }
 
 template <typename CacheTrait>
-folly::Range<typename CacheAllocator<CacheTrait>::ChainedItemIter>
-CacheAllocator<CacheTrait>::viewAsChainedAllocsRange(const Item& parent) const {
+template <typename Iter>
+folly::Range<Iter> CacheAllocator<CacheTrait>::viewAsChainedAllocsRangeT(
+    const Item& parent) const {
   return parent.hasChainedItem()
-             ? folly::Range<ChainedItemIter>{ChainedItemIter{
-                                                 findChainedItem(parent).get(),
-                                                 compressor_},
-                                             ChainedItemIter{}}
-             : folly::Range<ChainedItemIter>{};
+             ? folly::Range<Iter>{Iter{findChainedItem(parent).get(),
+                                       compressor_},
+                                  Iter{}}
+             : folly::Range<Iter>{};
 }
 
 template <typename CacheTrait>

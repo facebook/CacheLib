@@ -27,6 +27,7 @@ template <typename C>
 class CacheAPIWrapperForNvm {
   using Item = typename C::Item;
   using ChainedItemIter = typename C::ChainedItemIter;
+  using WritableChainedItemIter = typename C::WritableChainedItemIter;
   using Key = typename Item::Key;
   using WriteHandle = typename C::WriteHandle;
   using ReadHandle = typename C::ReadHandle;
@@ -42,6 +43,18 @@ class CacheAPIWrapperForNvm {
   static folly::Range<ChainedItemIter> viewAsChainedAllocsRange(
       C& cache, const Item& parent) {
     return cache.viewAsChainedAllocsRange(parent);
+  }
+
+  // Get writable chained allocation on the item.
+  // The order of iteration will be LIFO of the addChainedItem calls.
+  //
+  // @param cache   the cache instance using nvmcache
+  // @param parent  the item to get chained allocations
+  // @return iterator to the item's chained allocations
+
+  static folly::Range<WritableChainedItemIter> viewAsWritableChainedAllocsRange(
+      C& cache, const Item& parent) {
+    return cache.viewAsWritableChainedAllocsRange(parent);
   }
 
   // Grab a refcounted handle to the item.
