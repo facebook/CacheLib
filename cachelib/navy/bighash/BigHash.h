@@ -171,6 +171,15 @@ class BigHash final : public Engine {
   Buffer readBucket(BucketId bid);
   bool writeBucket(BucketId bid, Buffer buffer);
 
+  // Initialize the SharedMutexes.
+  std::vector<std::unique_ptr<SharedMutex>> initalizeMutexes() {
+    std::vector<std::unique_ptr<SharedMutex>> mutex;
+    for (size_t i = 0; i < kNumMutexes; ++i) {
+      mutex.emplace_back(std::make_unique<SharedMutex>());
+    }
+    return mutex;
+  }
+
   // The corresponding r/w bucket lock must be held during the entire
   // duration of the read and write operations. For example, during write,
   // if write lock is dropped after a bucket is read from device, user
@@ -180,7 +189,7 @@ class BigHash final : public Engine {
   //
   // In short, just hold the lock during the entire operation!
   SharedMutex& getMutex(BucketId bid) const {
-    return mutex_[bid.index() & (kNumMutexes - 1)];
+    return *mutex_[bid.index() & (kNumMutexes - 1)].get();
   }
 
   folly::SpinLock& getBfLock(BucketId bid) const {
@@ -219,7 +228,7 @@ class BigHash final : public Engine {
   Device& device_;
   // handle for data placement technologies like FDP
   int placementHandle_;
-  std::unique_ptr<SharedMutex[]> mutex_{new SharedMutex[kNumMutexes]};
+  std::vector<std::unique_ptr<SharedMutex>> mutex_{initalizeMutexes()};
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of
   // couldExist which needs to be fast against other long running or
