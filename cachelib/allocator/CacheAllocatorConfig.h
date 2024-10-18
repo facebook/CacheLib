@@ -52,6 +52,8 @@ class CacheAllocatorConfig {
   using ItemDestructor = typename CacheT::ItemDestructor;
   using NvmCacheEncodeCb = typename CacheT::NvmCacheT::EncodeCB;
   using NvmCacheDecodeCb = typename CacheT::NvmCacheT::DecodeCB;
+  using NvmCacheMakeBlobCb = typename CacheT::NvmCacheT::MakeBlobCB;
+  using NvmCacheMakeObjCb = typename CacheT::NvmCacheT::MakeObjCB;
   using NvmCacheDeviceEncryptor = typename CacheT::NvmCacheT::DeviceEncryptor;
   using MoveCb = typename CacheT::MoveCb;
   using NvmCacheConfig = typename CacheT::NvmCacheT::Config;
@@ -123,6 +125,18 @@ class CacheAllocatorConfig {
 
   // enables decoding items before they get back into ram cache
   CacheAllocatorConfig& setNvmCacheDecodeCallback(NvmCacheDecodeCb cb);
+
+  // Set callback to create blobs to be copied into NvmItem from the Item being
+  // evicted from DRAM. This is useful for cases where we need to change the
+  // data. For example, we can use it to encrypt data before writing it into
+  // NVM.
+  CacheAllocatorConfig& setNvmCacheMakeBlobCallback(NvmCacheMakeBlobCb cb);
+
+  // Set callback override logic to propagate the content of Item with the Blobs
+  // retrieved from NvmItem. This is useful for cases where we need to change
+  // the data. For example, we can use it to decrypt data before loading it into
+  // DRAM.
+  CacheAllocatorConfig& setNvmCacheMakeObjCallback(NvmCacheMakeObjCb cb);
 
   // enable encryption support for NvmCache. This will encrypt every byte
   // written to the device.
@@ -784,6 +798,28 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheDecodeCallback(
         "NvmCache filter callback can not be set unless nvmcache is used");
   }
   nvmConfig->decodeCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheMakeBlobCallback(
+    NvmCacheMakeBlobCb cb) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmCache filter callback can not be set unless nvmcache is used");
+  }
+  nvmConfig->makeBlobCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheMakeObjCallback(
+    NvmCacheMakeObjCb cb) {
+  if (!nvmConfig) {
+    throw std::invalid_argument(
+        "NvmCache filter callback can not be set unless nvmcache is used");
+  }
+  nvmConfig->makeObjCb = std::move(cb);
   return *this;
 }
 
