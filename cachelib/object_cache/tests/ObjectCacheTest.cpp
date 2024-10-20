@@ -1225,9 +1225,11 @@ class ObjectCacheTest : public ::testing::Test {
         auto* itemPtr = reinterpret_cast<typename ObjectCache::Item*>(
             evictItr->getMemory());
         auto* objectPtr = reinterpret_cast<ThriftFoo*>(itemPtr->objectPtr);
-        content.push_back(folly::sformat(
-            "{}: a {} b {} c {}", evictItr->getKey(), objectPtr->get_a(),
-            objectPtr->get_b(), objectPtr->get_c()));
+        content.push_back(folly::sformat("{}: a {} b {} c {}",
+                                         evictItr->getKey(),
+                                         folly::copy(objectPtr->a().value()),
+                                         folly::copy(objectPtr->b().value()),
+                                         folly::copy(objectPtr->c().value())));
         ++evictItr;
       }
       return content;
