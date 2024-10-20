@@ -16,8 +16,6 @@
 
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 
-#include <folly/logging/xlog.h>
-
 #include "cachelib/navy/common/Hash.h"
 
 namespace facebook::cachelib::navy {

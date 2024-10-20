@@ -17,7 +17,6 @@
 #include "cachelib/navy/common/Hash.h"
 
 #include <folly/hash/Checksum.h>
-#include <folly/hash/Hash.h>
 
 namespace facebook::cachelib::navy {
 uint64_t hashBuffer(BufferView key, uint64_t seed) {

@@ -25,7 +25,6 @@
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/tests/TestHelpers.h"
 #include "cachelib/navy/testing/MockDevice.h"
-#include "cachelib/navy/testing/MockJobScheduler.h"
 
 namespace facebook::cachelib::navy::tests {
 namespace {

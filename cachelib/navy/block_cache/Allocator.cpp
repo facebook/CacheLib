@@ -16,14 +16,12 @@
 
 #include "cachelib/navy/block_cache/Allocator.h"
 
-#include <folly/Format.h>
 #include <folly/logging/xlog.h>
 
 #include <cassert>
 #include <utility>
 
 #include "cachelib/navy/common/NavyThread.h"
-#include "cachelib/navy/common/Utils.h"
 
 namespace facebook::cachelib::navy {
 

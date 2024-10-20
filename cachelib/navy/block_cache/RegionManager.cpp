@@ -18,7 +18,6 @@
 
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/common/Utils.h"
-#include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook::cachelib::navy {
 RegionManager::RegionManager(uint32_t numRegions,

@@ -16,13 +16,11 @@
 
 #include "cachelib/navy/driver/Driver.h"
 
-#include <folly/Format.h>
 #include <folly/Range.h>
 #include <folly/fibers/Baton.h>
 
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
-#include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
 namespace facebook::cachelib::navy {

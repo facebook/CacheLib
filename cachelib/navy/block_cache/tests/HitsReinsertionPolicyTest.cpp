@@ -20,7 +20,6 @@
 
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/common/Hash.h"
-#include "cachelib/navy/serialization/RecordIO.h"
 
 namespace facebook::cachelib::navy::tests {
 

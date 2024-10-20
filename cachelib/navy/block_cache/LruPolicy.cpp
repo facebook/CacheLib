@@ -16,7 +16,6 @@
 
 #include "cachelib/navy/block_cache/LruPolicy.h"
 
-#include <folly/Format.h>
 #include <folly/logging/xlog.h>
 
 #include <cstdio>
