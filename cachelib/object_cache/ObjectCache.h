@@ -309,8 +309,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @return the configured TTL in seconds of the object
   //         0 if object is nullptr
   template <typename T>
-  std::chrono::seconds getConfiguredTtl(
-      const std::shared_ptr<T>& object) const {
+  static std::chrono::seconds getConfiguredTtl(
+      const std::shared_ptr<T>& object) {
     if (object == nullptr) {
       return std::chrono::seconds{0};
     }
@@ -471,8 +471,8 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Get a ReadHandle reference from the object shared_ptr
   template <typename T>
-  typename AllocatorT::ReadHandle& getReadHandleRefInternal(
-      const std::shared_ptr<T>& object) const {
+  static typename AllocatorT::ReadHandle& getReadHandleRefInternal(
+      const std::shared_ptr<T>& object) {
     auto* deleter = std::get_deleter<Deleter<T>>(object);
     XDCHECK(deleter != nullptr);
     auto& hdl = deleter->getReadHandleRef();
@@ -482,7 +482,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Get a WriteHandle reference from the object shared_ptr
   template <typename T>
-  typename AllocatorT::WriteHandle& getWriteHandleRefInternal(
+  static typename AllocatorT::WriteHandle& getWriteHandleRefInternal(
       const std::shared_ptr<T>& object) {
     auto* deleter = std::get_deleter<Deleter<T>>(object);
     XDCHECK(deleter != nullptr);
