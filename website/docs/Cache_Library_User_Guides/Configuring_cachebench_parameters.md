@@ -117,7 +117,7 @@ Generates popularity of keys through a discrete distribution specified in  *popu
 * **normal**
 Uses normal workload distribution for popularity of keys as opposed to discrete popularity buckets. For value sizes, it supports both discrete and continuous value size distribution. To use discrete value size distribution, the `valSizeRangeProbability` should have same number of values as `valSizeRange` array. When `valSizeRangeProbability` contains one less member than `valSizeRange`, we interpret the probability as corresponding to each interval in `valSizeRange` and use a piecewise_constant_distribution.
 
-In all above setups, cachebench overrides the `valSizeRange` and `vaSizeRangeProbability` from inline json array if `valSizeDistFile` is present.
+In all above setups, cachebench overrides the `valSizeRange` and `valSizeRangeProbability` from inline json array if `valSizeDistFile` is present.
 
 ### Throttling the benchmark
 
