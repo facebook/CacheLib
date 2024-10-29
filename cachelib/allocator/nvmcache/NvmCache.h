@@ -999,6 +999,7 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item) {
       return nullptr;
     }
     std::vector<Blob> blobs;
+    blobs.reserve(bufferedBlobs.size());
     for (const auto& bufferedBlob : bufferedBlobs) {
       blobs.push_back(bufferedBlob.toBlob());
     }
