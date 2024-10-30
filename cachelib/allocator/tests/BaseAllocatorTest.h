@@ -6356,6 +6356,50 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_NE(nullptr, largeIt);
     }
   }
+
+  void testProvisionPoolWithPowerLaw() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    config.cacheName = "foobar";
+
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes,
+                                  {64, 128, 256, 512, 1024, 2048, 4096, 8192});
+      EXPECT_TRUE(alloc.provisionPoolWithPowerLaw(poolId, 0.5 /* power */,
+                                                  1 /* minSlabsPerAC */));
+
+      auto poolStats = alloc.getPoolStats(poolId);
+      EXPECT_EQ(21, poolStats.numSlabsForClass(0));
+      EXPECT_EQ(15, poolStats.numSlabsForClass(1));
+      EXPECT_EQ(13, poolStats.numSlabsForClass(2));
+      EXPECT_EQ(11, poolStats.numSlabsForClass(3));
+      EXPECT_EQ(10, poolStats.numSlabsForClass(4));
+      EXPECT_EQ(9, poolStats.numSlabsForClass(5));
+      EXPECT_EQ(8, poolStats.numSlabsForClass(6));
+      EXPECT_EQ(8, poolStats.numSlabsForClass(7));
+    }
+
+    {
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes,
+                                  {64, 128, 256, 512, 1024, 2048, 4096, 8192});
+      EXPECT_TRUE(alloc.provisionPoolWithPowerLaw(poolId, 2.0 /* power */,
+                                                  2 /* minSlabsPerAC */));
+
+      auto poolStats = alloc.getPoolStats(poolId);
+      EXPECT_EQ(56, poolStats.numSlabsForClass(0));
+      EXPECT_EQ(15, poolStats.numSlabsForClass(1));
+      EXPECT_EQ(8, poolStats.numSlabsForClass(2));
+      EXPECT_EQ(5, poolStats.numSlabsForClass(3));
+      EXPECT_EQ(4, poolStats.numSlabsForClass(4));
+      EXPECT_EQ(3, poolStats.numSlabsForClass(5));
+      EXPECT_EQ(3, poolStats.numSlabsForClass(6));
+      EXPECT_EQ(2, poolStats.numSlabsForClass(7));
+    }
+  }
 };
 } // namespace tests
 } // namespace cachelib

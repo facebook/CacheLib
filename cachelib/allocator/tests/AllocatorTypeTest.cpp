@@ -413,6 +413,10 @@ TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {
 
 TYPED_TEST(BaseAllocatorTest, ProvisionPool) { this->testProvisionPool(); }
 
+TYPED_TEST(BaseAllocatorTest, ProvisionPoolWithPowerLaw) {
+  this->testProvisionPoolWithPowerLaw();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;

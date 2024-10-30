@@ -819,6 +819,16 @@ class CacheAllocator : public CacheBase {
   bool provisionPool(PoolId poolId,
                      const std::vector<uint32_t>& slabsDistribution);
 
+  // Provision slabs to a memory pool using power law from small AC to large.
+  // @param poolId          id of the pool to provision
+  // @param power           power for the power law
+  // @param minSlabsPerAC   min number of slabs for each AC before power law
+  // @return true if we have enough memory and filled each AC successfully
+  //         false otherwise. On false, we also revert all provisioned ACs.
+  bool provisionPoolWithPowerLaw(PoolId poolId,
+                                 double power,
+                                 uint32_t minSlabsPerAC = 1);
+
   // update an existing pool's config
   //
   // @param pid       pool id for the pool to be updated
@@ -4588,6 +4598,47 @@ bool CacheAllocator<CacheTrait>::provisionPool(
     PoolId poolId, const std::vector<uint32_t>& slabsDistribution) {
   std::unique_lock w(poolsResizeAndRebalanceLock_);
   return allocator_->provisionPool(poolId, slabsDistribution);
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::provisionPoolWithPowerLaw(
+    PoolId poolId, double power, uint32_t minSlabsPerAC) {
+  const auto& poolSize = allocator_->getPool(poolId).getPoolSize();
+  const uint32_t numACs =
+      allocator_->getPool(poolId).getStats().classIds.size();
+  const uint32_t numSlabs = poolSize / Slab::kSize;
+  const uint32_t minSlabsRequired = numACs * minSlabsPerAC;
+  if (numSlabs < minSlabsRequired) {
+    XLOGF(ERR,
+          "Insufficinet slabs to satisfy minSlabPerAC. PoolID: {}, Need: {}, "
+          "Actual: {}",
+          poolId, minSlabsRequired, numSlabs);
+    return false;
+  }
+
+  std::vector<uint32_t> slabsDistribution(numACs, minSlabsPerAC);
+  const uint32_t remainingSlabs = numSlabs - minSlabsRequired;
+
+  auto calcPowerLawSum = [](int n, double p) {
+    double sum = 0;
+    for (int i = 1; i <= n; ++i) {
+      sum += std::pow(i, -p);
+    }
+    return sum;
+  };
+
+  const double powerLawSum = calcPowerLawSum(numACs, power);
+  for (uint32_t i = 0, allocatedSlabs = 0;
+       i < numACs && allocatedSlabs < remainingSlabs; i++) {
+    const uint32_t slabsToAllocate =
+        std::min(static_cast<uint32_t>(remainingSlabs *
+                                       std::pow(i + 1, -power) / powerLawSum),
+                 remainingSlabs - allocatedSlabs);
+    slabsDistribution[i] += slabsToAllocate;
+    allocatedSlabs += slabsToAllocate;
+  }
+
+  return provisionPool(poolId, slabsDistribution);
 }
 
 template <typename CacheTrait>
