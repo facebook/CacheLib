@@ -33,6 +33,7 @@
 #include "cachelib/allocator/CCacheAllocator.h"
 #include "cachelib/allocator/FreeMemStrategy.h"
 #include "cachelib/allocator/LruTailAgeStrategy.h"
+#include "cachelib/allocator/ManualStrategy.h"
 #include "cachelib/allocator/MarginalHitsOptimizeStrategy.h"
 #include "cachelib/allocator/MarginalHitsStrategy.h"
 #include "cachelib/allocator/PoolRebalancer.h"
@@ -6398,6 +6399,36 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_EQ(3, poolStats.numSlabsForClass(5));
       EXPECT_EQ(3, poolStats.numSlabsForClass(6));
       EXPECT_EQ(2, poolStats.numSlabsForClass(7));
+    }
+  }
+
+  void testManualRebalanceStrategy() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(11 * Slab::kSize);
+    config.cacheName = "foobar";
+    auto manualStrategy = std::make_shared<ManualStrategy>();
+    config.enablePoolRebalancing(manualStrategy, std::chrono::milliseconds{10});
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes, {64, 256, 1024});
+
+    ASSERT_TRUE(alloc.provisionPool(poolId, {2, 5, 3}));
+    {
+      auto poolStats = alloc.getPoolStats(poolId);
+      EXPECT_EQ(2, poolStats.numSlabsForClass(0));
+      EXPECT_EQ(5, poolStats.numSlabsForClass(1));
+      EXPECT_EQ(3, poolStats.numSlabsForClass(2));
+    }
+
+    manualStrategy->updateConfig(ManualStrategy::Config{
+        .slabsDistribution = std::vector<uint32_t>{5, 1, 4}});
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+    {
+      auto poolStats = alloc.getPoolStats(poolId);
+      EXPECT_EQ(5, poolStats.numSlabsForClass(0));
+      EXPECT_EQ(1, poolStats.numSlabsForClass(1));
+      EXPECT_EQ(4, poolStats.numSlabsForClass(2));
     }
   }
 };

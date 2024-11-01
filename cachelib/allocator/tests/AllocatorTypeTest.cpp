@@ -417,6 +417,10 @@ TYPED_TEST(BaseAllocatorTest, ProvisionPoolWithPowerLaw) {
   this->testProvisionPoolWithPowerLaw();
 }
 
+TYPED_TEST(BaseAllocatorTest, ManualRebalanceStrategy) {
+  this->testManualRebalanceStrategy();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;

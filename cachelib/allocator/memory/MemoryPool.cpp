@@ -284,6 +284,10 @@ bool MemoryPool::provision(const std::vector<uint32_t>& slabsDistribution) {
     auto slab = getSlabLocked();
     if (slab == nullptr) {
       freeAllSlabs(slabs);
+      XLOGF(ERR,
+            "Failed to find enough slabs to provision for pool {}. Need: {}, "
+            "Found: {}",
+            id_, totalSlabsToAllocate, i);
       return false;
     }
     slabs.push_back(slab);

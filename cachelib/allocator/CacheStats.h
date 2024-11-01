@@ -237,6 +237,9 @@ struct PoolStats {
   // computes the maximum eviction age across all class Ids
   uint64_t maxEvictionAge() const;
 
+  // return number of slabs per AC in a vector. Sorted by ClassId.
+  std::vector<uint32_t> slabsDistribution() const;
+
   // aggregate this pool stats with another that is compatible. To be
   // compatible, they need to have the same number of classIds
   //

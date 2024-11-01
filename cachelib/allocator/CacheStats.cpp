@@ -321,6 +321,21 @@ uint64_t PoolStats::maxEvictionAge() const {
       ->second.getEvictionAge();
 }
 
+std::vector<uint32_t> PoolStats::slabsDistribution() const {
+  if (isCompactCache) {
+    return {};
+  }
+
+  XDCHECK_GT(cacheStats.size(), 0u);
+  std::vector<uint32_t> ret;
+  auto& acStats = mpStats.acStats;
+  XDCHECK_LE(acStats.size(), MemoryAllocator::kMaxClasses);
+  for (size_t i = 0; i < acStats.size(); i++) {
+    ret.push_back(acStats.at(static_cast<ClassId>(i)).totalSlabs());
+  }
+  return ret;
+}
+
 double CCacheStats::hitRatio() const {
   return util::hitRatioCalc(get, getMiss);
 }

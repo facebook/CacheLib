@@ -53,6 +53,7 @@ class RebalanceStrategy {
     LruTailAge,
     PoolResize,
     StressRebalance,
+    Manual,
     NumTypes
   };
 
