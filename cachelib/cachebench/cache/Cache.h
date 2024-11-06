@@ -715,7 +715,7 @@ Cache<Allocator>::Cache(const CacheConfig& config,
     allocatorConfig_.enableNvmCache(nvmConfig);
 
     if (config_.navyEncryption && config_.createEncryptor) {
-      allocatorConfig_.enableNvmCacheEncryption(config_.createEncryptor());
+      allocatorConfig_.enableNvmCacheBlockEncryption(config_.createEncryptor());
     }
     if (config_.nvmAdmissionPolicyFactory) {
       try {

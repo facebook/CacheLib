@@ -36,7 +36,7 @@ Configs to initialize NVM cache lives in `CacheAllocatorConfig::nvmConfig` and a
 
 * `enableCachePersistence`: cache directory is used to initialize NVM cache as well.
 * `setDropNvmCacheOnShmNew`: This flag is used to determine whether the NVM cache would start truncated.
-* `enableNvmCacheEncryption`: This sets CacheAllocatorConfig::nvmConfig::deviceEncryptor.
+* `enableNvmCacheBlockEncryption`: This sets CacheAllocatorConfig::nvmConfig::deviceEncryptor.
 * `enableNvmCacheTruncateAllocSize`: This sets CacheAllocatorConfig::nvmConfig::truncateItemToOriginalAllocSizeInNvm.
 * `setNvmCacheAdmissionPolicy`/`enableRejectFirstAPForNvm`: Sets the NvmAdmissionPolicy. Notice that the field lives with CacheAllocatorConfig.
 * `setNvmAdmissionMinTTL`: Sets the NVM admission min TTL. Similarly this lives directly with CacheAllocatorConfig.

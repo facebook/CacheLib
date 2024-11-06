@@ -140,7 +140,7 @@ class CacheAllocatorConfig {
 
   // enable encryption support for NvmCache. This will encrypt every byte
   // written to the device.
-  CacheAllocatorConfig& enableNvmCacheEncryption(
+  CacheAllocatorConfig& enableNvmCacheBlockEncryption(
       std::shared_ptr<NvmCacheDeviceEncryptor> encryptor);
 
   // return if NvmCache encryption is enabled
@@ -824,7 +824,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNvmCacheMakeObjCallback(
 }
 
 template <typename T>
-CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheEncryption(
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheBlockEncryption(
     std::shared_ptr<NvmCacheDeviceEncryptor> encryptor) {
   if (!nvmConfig) {
     throw std::invalid_argument(
