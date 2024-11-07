@@ -119,6 +119,8 @@ struct MMTinyLFUConfig {
   7: double lruRefreshRatio = 0.0;
   8: i32 mmReconfigureIntervalSecs = 0;
   9: bool newcomerWinsOnTie = true;
+  10: i32 protectionFreq_ = 3;
+  11: i32 protectionSegmentSizePct = 80;
 }
 
 struct MMTinyLFUObject {

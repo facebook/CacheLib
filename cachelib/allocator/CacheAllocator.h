@@ -6060,6 +6060,7 @@ extern template class CacheAllocator<LruCacheTrait>;
 extern template class CacheAllocator<LruCacheWithSpinBucketsTrait>;
 extern template class CacheAllocator<Lru2QCacheTrait>;
 extern template class CacheAllocator<TinyLFUCacheTrait>;
+extern template class CacheAllocator<WTinyLFUCacheTrait>;
 
 // CacheAllocator with an LRU eviction policy
 // LRU policy can be configured to act as a segmented LRU as well
@@ -6082,4 +6083,14 @@ using Lru2QAllocator = CacheAllocator<Lru2QCacheTrait>;
 // inserted items. And eventually it will onl admit items that are accessed
 // beyond a threshold into the warm cache.
 using TinyLFUAllocator = CacheAllocator<TinyLFUCacheTrait>;
+
+// CacheAllocator with Tiny LFU eviction policy with the protection segment
+// It has a window initially to gauage the frequency of accesses of newly
+// inserted items. The Main Cache is broken down into probation segement taking
+// ~20% queue size and protection segment taking ~ 80%. For popular items
+// that exceed a defined protected frequence. It will be preserved in the
+// protection segment. If protectionSegment is full, it will no immediate
+// evict out main queue, but moved into the probation segment. This will
+// prevent the popular items from being evicted out immediately.
+using WTinyLFUAllocator = CacheAllocator<WTinyLFUCacheTrait>;
 } // namespace facebook::cachelib

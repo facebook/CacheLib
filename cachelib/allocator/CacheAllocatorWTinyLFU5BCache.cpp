@@ -14,19 +14,8 @@
  * limitations under the License.
  */
 
-#include "cachelib/allocator/ChainedHashTable.h"
-#include "cachelib/allocator/MM2Q.h"
-#include "cachelib/allocator/MMLru.h"
-#include "cachelib/allocator/MMTinyLFU.h"
-#include "cachelib/allocator/MMWTinyLFU.h"
-namespace facebook::cachelib {
-// Types of AccessContainer and MMContainer
-// MMType
-const int MMLru::kId = 1;
-const int MM2Q::kId = 2;
-const int MMTinyLFU::kId = 3;
-const int MMWTinyLFU::kId = 4;
+#include "cachelib/allocator/CacheAllocator.h"
 
-// AccessType
-const int ChainedHashTable::kId = 1;
-} // namespace facebook::cachelib
+namespace facebook::cachelib {
+template class CacheAllocator<WTinyLFU5BCacheTrait>;
+}
