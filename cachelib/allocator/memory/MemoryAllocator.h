@@ -168,6 +168,15 @@ class MemoryAllocator {
   //        invalid.
   void* allocate(PoolId id, uint32_t size);
 
+  // allocates a batches of memory for a corresponding class id
+  // @param pid    the pool id to be used for this allocation.
+  // @param cid    the class id for the allocation.
+  // @param batch  the number of allocations to be made.
+  // @return a vector of pointers to the memory corresponding to the allocation.
+  // @throw std::invalid_argument if the poolId is invalid or the class id is
+  //       invalid.
+  std::vector<void*> allocateByCidBatch(PoolId id, ClassId cid, size_t batch);
+
   // Allocate a zeroed Slab
   //
   // This guarantees the content of the allocated slab is zero because when
@@ -185,6 +194,14 @@ class MemoryAllocator {
   // @throw std::invalid_argument if the memory does not belong to any active
   //        allocation handed out by this allocator.
   void free(void* memory);
+
+  // frees a list of items back to the class
+  // avoids locking the AC for each free
+  template <typename It>
+  void freeBatch(It begin, It end, PoolId pid, ClassId cid) {
+    auto& mp = memoryPoolManager_.getPoolById(pid);
+    mp.freeBatch(begin, end, cid);
+  }
 
   // Memory pool interface. The memory pools must be established before the
   // first allocation happens. Currently we dont support adding / removing
