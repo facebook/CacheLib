@@ -77,7 +77,7 @@ class AllocTestBase : public testing::Test {
   }
 
   template <typename CompressedPtrType>
-  CompressedPtrType::PtrType compress(CompressedPtrType ptr,
+  typename CompressedPtrType::PtrType compress(CompressedPtrType ptr,
                                       uint32_t slabIdx,
                                       uint32_t allocIdx,
                                       bool isMultiTiered) {
