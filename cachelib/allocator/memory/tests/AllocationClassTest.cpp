@@ -19,7 +19,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <random>
 #include <vector>
 
 #include "cachelib/allocator/memory/AllocationClass.h"

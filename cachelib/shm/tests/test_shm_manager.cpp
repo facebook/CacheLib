@@ -16,7 +16,6 @@
 
 #include <folly/FileUtil.h>
 #include <folly/Random.h>
-#include <sys/time.h>
 
 #include <fstream>
 
@@ -24,7 +23,6 @@
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/ShmCommon.h"
 #include "cachelib/shm/ShmManager.h"
-#include "cachelib/shm/SysVShmSegment.h"
 #include "cachelib/shm/tests/common.h"
 
 static const std::string namePrefix = "shm-test";

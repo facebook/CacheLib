@@ -28,7 +28,6 @@
 
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MMLru.h"
-#include "cachelib/common/Mutex.h"
 
 DEFINE_uint32(num_nodes, 10000, "Number of nodes to populate the list with");
 DEFINE_uint32(num_threads,

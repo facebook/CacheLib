@@ -20,7 +20,6 @@
 #include <folly/lang/Bits.h>
 #include <folly/logging/xlog.h>
 #include <sys/resource.h>
-#include <sys/time.h>
 
 #include <iomanip>
 

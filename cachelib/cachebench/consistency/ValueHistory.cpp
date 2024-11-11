@@ -17,7 +17,6 @@
 #include "cachelib/cachebench/consistency/ValueHistory.h"
 
 #include <folly/logging/xlog.h>
-#include <glog/logging.h>
 
 #include <algorithm>
 #include <cstdio>

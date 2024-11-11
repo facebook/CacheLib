@@ -16,8 +16,6 @@
 
 #include "cachelib/allocator/FreeThresholdStrategy.h"
 
-#include <folly/logging/xlog.h>
-
 namespace facebook::cachelib {
 
 FreeThresholdStrategy::FreeThresholdStrategy(double lowEvictionAcWatermark,

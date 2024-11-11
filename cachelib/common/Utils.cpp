@@ -18,7 +18,6 @@
 #include <folly/debugging/exception_tracer/ExceptionTracer.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
-#include <sys/shm.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 

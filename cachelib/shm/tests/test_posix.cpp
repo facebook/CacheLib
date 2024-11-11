@@ -16,7 +16,6 @@
 
 #include <sys/mman.h>
 #include <sys/resource.h>
-#include <sys/time.h>
 
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/tests/common.h"

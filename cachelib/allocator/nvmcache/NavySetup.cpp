@@ -16,7 +16,6 @@
 
 #include "cachelib/allocator/nvmcache/NavySetup.h"
 
-#include <folly/File.h>
 #include <folly/logging/xlog.h>
 #include <gmock/gmock.h>
 

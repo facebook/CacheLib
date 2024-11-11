@@ -29,7 +29,6 @@
 #pragma GCC diagnostic pop
 
 #include "cachelib/common/Utils.h"
-#include "cachelib/shm/ShmManager.h"
 #include "cachelib/shm/gen-cpp2/shm_types.h"
 
 namespace facebook {

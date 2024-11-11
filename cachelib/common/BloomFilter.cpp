@@ -16,8 +16,6 @@
 
 #include "cachelib/common/BloomFilter.h"
 
-#include <folly/lang/Bits.h>
-
 #include <cassert>
 #include <cstring>
 

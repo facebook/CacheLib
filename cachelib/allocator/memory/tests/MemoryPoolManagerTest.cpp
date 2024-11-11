@@ -17,7 +17,6 @@
 #include <folly/Random.h>
 
 #include <memory>
-#include <random>
 
 #include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"

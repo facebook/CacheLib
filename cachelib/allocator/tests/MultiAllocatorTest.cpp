@@ -17,7 +17,6 @@
 #include "cachelib/allocator/tests/MultiAllocatorTest.h"
 
 #include <algorithm>
-#include <future>
 #include <mutex>
 #include <thread>
 

@@ -49,8 +49,6 @@ clang-format on
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/benchmarks/BenchmarkUtils.h"
-#include "cachelib/common/BytesEqual.h"
-#include "cachelib/common/PercentileStats.h"
 #include "cachelib/navy/testing/SeqPoints.h"
 
 namespace facebook {

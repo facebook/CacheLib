@@ -16,8 +16,6 @@
 
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 
-#include <glog/logging.h>
-
 #include <limits>
 
 namespace facebook {

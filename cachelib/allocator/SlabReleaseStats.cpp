@@ -18,9 +18,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <stdexcept>
-#include <thread>
-
 namespace facebook::cachelib {
 
 void ReleaseStats::addSlabReleaseEvent(const ClassId from,

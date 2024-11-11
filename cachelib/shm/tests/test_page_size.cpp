@@ -17,7 +17,6 @@
 #include "cachelib/shm/PosixShmSegment.h"
 #include "cachelib/shm/Shm.h"
 #include "cachelib/shm/ShmCommon.h"
-#include "cachelib/shm/SysVShmSegment.h"
 #include "cachelib/shm/tests/common.h"
 
 using facebook::cachelib::detail::getPageAlignedSize;

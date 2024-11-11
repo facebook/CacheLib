@@ -20,8 +20,6 @@
 #include <string>
 #include <vector>
 
-#include "folly/container/Access.h"
-
 namespace facebook {
 namespace cachelib {
 namespace navy {

@@ -21,8 +21,6 @@
 #include <algorithm>
 #include <functional>
 
-#include "cachelib/allocator/Util.h"
-
 namespace facebook::cachelib {
 
 MarginalHitsStrategy::MarginalHitsStrategy(Config config)

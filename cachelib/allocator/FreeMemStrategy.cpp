@@ -18,10 +18,7 @@
 
 #include <folly/logging/xlog.h>
 
-#include <algorithm>
 #include <functional>
-
-#include "cachelib/allocator/Util.h"
 
 namespace facebook::cachelib {
 

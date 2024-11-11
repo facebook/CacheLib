@@ -17,8 +17,6 @@
 #include <folly/container/Array.h>
 #include <folly/portability/GTest.h>
 
-#include <map>
-
 #include "cachelib/common/Iterators.h"
 
 using namespace facebook::cachelib::detail;
