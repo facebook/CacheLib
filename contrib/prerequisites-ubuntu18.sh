@@ -41,7 +41,7 @@ sudo apt-get install -y \
   libdwarf-dev \
   libsodium-dev \
   libaio-dev \
-  xxhash \
+  libxxhash-dev \
   libnuma-dev
 
 # NOTE:

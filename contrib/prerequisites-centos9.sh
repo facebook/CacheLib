@@ -35,7 +35,7 @@ sudo dnf install -y \
   gtest-devel \
   libsodium-static \
   libdwarf-static \
-  xxhash \
+  xxhash-devel \
   numactl-devel
 
 
