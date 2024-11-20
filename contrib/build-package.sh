@@ -59,7 +59,7 @@ options:
 NAME: the dependency to build supported values are:
   zstd
   googlelog, googleflags, googletest,
-  fmt, sparsemap,
+  fmt, sparsemap, fastfloat,
   folly, fizz, wangle, mvfst, fbthrift,
   cachelib
 
@@ -190,6 +190,14 @@ case "$1" in
   sparsemap)
     NAME=sparsemap
     REPO=https://github.com/Tessil/sparse-map.git
+    REPODIR=cachelib/external/$NAME
+    SRCDIR=$REPODIR
+    external_git_clone=yes
+    ;;
+
+  fastfloat)
+    NAME=fastfloat
+    REPO=https://github.com/fastfloat/fast_float.git
     REPODIR=cachelib/external/$NAME
     SRCDIR=$REPODIR
     external_git_clone=yes
