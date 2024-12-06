@@ -27,7 +27,16 @@ add_library (cachelib_allocator
   ${SERIALIZE_THRIFT_FILES}
   ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
   ${MEMORY_SERIALIZE_THRIFT_FILES}
-    CacheAllocator.cpp
+    CacheAllocatorLru2QCache.cpp
+    CacheAllocatorLru5B2QCache.cpp
+    CacheAllocatorLru5BCache.cpp
+    CacheAllocatorLru5BCacheWithSpinBuckets.cpp
+    CacheAllocatorLruCache.cpp
+    CacheAllocatorLruCacheWithSpinBuckets.cpp
+    CacheAllocatorTinyLFU5BCache.cpp
+    CacheAllocatorTinyLFUCache.cpp
+    CacheAllocatorWTinyLFU5BCache.cpp
+    CacheAllocatorWTinyLFUCache.cpp
     Cache.cpp
     CacheDetails.cpp
     CacheStats.cpp

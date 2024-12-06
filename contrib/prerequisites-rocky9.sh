@@ -39,6 +39,7 @@ sudo dnf install -y \
   libsodium-devel \
   libaio-devel \
   binutils-devel \
+  xxhash-devel \
   numactl-devel
 
 

@@ -78,6 +78,8 @@ jobs:
         run: ./contrib/build-package.sh -j -v -i sparsemap
       - name: "Install dependency: fmt"
         run: ./contrib/build-package.sh -j -v -i fmt
+      - name: "Install dependency: fastfloat"
+        run: ./contrib/build-package.sh -j -v -i fastfloat
       - name: "Install dependency: folly"
         run: ./contrib/build-package.sh -j -v -i folly
       - name: "Install dependency: fizz"
