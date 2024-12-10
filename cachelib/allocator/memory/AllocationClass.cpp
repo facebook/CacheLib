@@ -51,7 +51,7 @@ AllocationClass::AllocationClass(ClassId classId,
       allocationSize_(allocSize),
       slabAlloc_(s),
       freedAllocations_{
-          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()} {
+          slabAlloc_.createSingleTierPtrCompressor<FreeAlloc, CompressedPtr4B>()} {
   checkState();
 }
 
@@ -104,7 +104,7 @@ AllocationClass::AllocationClass(
       slabAlloc_(s),
       freedAllocations_(
           *object.freedAllocationsObject(),
-          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()),
+          slabAlloc_.createSingleTierPtrCompressor<FreeAlloc, CompressedPtr4B>()),
       canAllocate_(*object.canAllocate()) {
   if (!slabAlloc_.isRestorable()) {
     throw std::logic_error("The allocation class cannot be restored.");
@@ -142,6 +142,27 @@ void* AllocationClass::addSlabAndAllocate(Slab* slab) {
   });
 }
 
+std::vector<void*> AllocationClass::addSlabAndAllocateBatch(Slab* slab,
+                                                            size_t batch) {
+  XDCHECK_NE(nullptr, slab);
+  std::vector<void*> allocs;
+  allocs.reserve(batch);
+  lock_->lock_combine([this, slab, batch, &allocs]() {
+    addSlabLocked(slab);
+    size_t total = 0;
+    while (total < batch) {
+      void* alloc = allocateLocked();
+      if (alloc != nullptr) {
+        allocs.push_back(alloc);
+        total++;
+      } else {
+        break;
+      }
+    }
+  });
+  return allocs;
+}
+
 void* AllocationClass::allocateFromCurrentSlabLocked() noexcept {
   XDCHECK(canAllocateFromCurrentSlabLocked());
   void* ret = currSlab_->memoryAtOffset(currOffset_);
@@ -159,6 +180,26 @@ void* AllocationClass::allocate() {
     return nullptr;
   }
   return lock_->lock_combine([this]() -> void* { return allocateLocked(); });
+}
+
+std::vector<void*> AllocationClass::allocateBatch(size_t batch) {
+  std::vector<void*> allocs;
+  if (!canAllocate_) {
+    return allocs;
+  }
+  lock_->lock_combine([this, &allocs, batch]() {
+    size_t total = 0;
+    while (total < batch) {
+      void* alloc = allocateLocked();
+      if (alloc != nullptr) {
+        allocs.push_back(alloc);
+        total++;
+      } else {
+        break;
+      }
+    }
+  });
+  return allocs;
 }
 
 void* AllocationClass::allocateLocked() {
@@ -359,10 +400,10 @@ std::pair<bool, std::vector<void*>> AllocationClass::pruneFreeAllocs(
   // Set the bit to true if the corresponding allocation is freed, false
   // otherwise.
   FreeList freeAllocs{
-      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
+      slabAlloc_.createSingleTierPtrCompressor<FreeAlloc, CompressedPtr4B>()};
   FreeList notInSlab{
-      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
-  FreeList inSlab{slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
+      slabAlloc_.createSingleTierPtrCompressor<FreeAlloc, CompressedPtr4B>()};
+  FreeList inSlab{slabAlloc_.createSingleTierPtrCompressor<FreeAlloc, CompressedPtr4B>()};
 
   lock_->lock_combine([&]() {
     // Take the allocation class free list offline
@@ -626,6 +667,37 @@ void AllocationClass::processAllocForRelease(
   });
 }
 
+void AllocationClass::freeLocked(const SlabHeader* header,
+                                 const Slab* slab,
+                                 void* memory,
+                                 uintptr_t slabPtrVal) {
+  // check under the lock we actually add the allocation back to the free list
+  if (header->isMarkedForRelease()) {
+    auto it = slabReleaseAllocMap_.find(slabPtrVal);
+
+    // this should not happen.
+    if (it == slabReleaseAllocMap_.end()) {
+      throw std::runtime_error(folly::sformat(
+          "Invalid slabReleaseAllocMap "
+          "state when attempting to free an allocation. Memory: {}",
+          memory));
+    }
+
+    auto& allocState = it->second;
+    const auto idx = getAllocIdx(slab, memory);
+    if (allocState[idx]) {
+      throw std::invalid_argument(
+          folly::sformat("Allocation {} is already marked as free", memory));
+    }
+    allocState[idx] = true;
+    return;
+  }
+
+  // TODO add checks here to ensure that we dont double free in debug mode.
+  freedAllocations_.insert(*reinterpret_cast<FreeAlloc*>(memory));
+  canAllocate_ = true;
+}
+
 void AllocationClass::free(void* memory) {
   const auto* header = slabAlloc_.getSlabHeader(memory);
   auto* slab = slabAlloc_.getSlabForMemory(memory);
@@ -638,31 +710,7 @@ void AllocationClass::free(void* memory) {
 
   const auto slabPtrVal = getSlabPtrValue(slab);
   lock_->lock_combine([this, header, slab, memory, slabPtrVal]() {
-    // check under the lock we actually add the allocation back to the free list
-    if (header->isMarkedForRelease()) {
-      auto it = slabReleaseAllocMap_.find(slabPtrVal);
-
-      // this should not happen.
-      if (it == slabReleaseAllocMap_.end()) {
-        throw std::runtime_error(folly::sformat(
-            "Invalid slabReleaseAllocMap "
-            "state when attempting to free an allocation. Memory: {}",
-            memory));
-      }
-
-      auto& allocState = it->second;
-      const auto idx = getAllocIdx(slab, memory);
-      if (allocState[idx]) {
-        throw std::invalid_argument(
-            folly::sformat("Allocation {} is already marked as free", memory));
-      }
-      allocState[idx] = true;
-      return;
-    }
-
-    // TODO add checks here to ensure that we dont double free in debug mode.
-    freedAllocations_.insert(*reinterpret_cast<FreeAlloc*>(memory));
-    canAllocate_ = true;
+    freeLocked(header, slab, memory, slabPtrVal);
   });
 }
 
@@ -705,6 +753,23 @@ ACStats AllocationClass::getStats() const {
     return {allocationSize_, perSlab,       nSlabsAllocated, freeSlabs_.size(),
             nFreedAllocs,    nActiveAllocs, isFull()};
   });
+}
+
+std::pair<size_t, double> AllocationClass::getApproxUsage() const {
+  const unsigned long long nSlabsAllocated = allocatedSlabs_.size();
+  if (nSlabsAllocated == 0) {
+    return {0, 0.0};
+  }
+  const unsigned long long perSlab = getAllocsPerSlab();
+  const auto freeAllocsInCurrSlab =
+      canAllocateFromCurrentSlabLocked()
+          ? (Slab::kSize - currOffset_) / allocationSize_
+          : 0;
+  const unsigned long long nFreedAllocs = freedAllocations_.size();
+  const unsigned long long nActiveAllocs =
+      nSlabsAllocated * perSlab - nFreedAllocs - freeAllocsInCurrSlab;
+  return {nActiveAllocs,
+          (double)nActiveAllocs / (double)(nSlabsAllocated * perSlab)};
 }
 
 void AllocationClass::createSlabReleaseAllocMapLocked(const Slab* slab) {

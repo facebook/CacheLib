@@ -301,6 +301,68 @@ bool MemoryPool::provision(const std::vector<uint32_t>& slabsDistribution) {
   return true;
 }
 
+std::vector<void*> MemoryPool::allocateByCidBatch(ClassId cid, size_t batch) {
+  uint64_t total = 0;
+  auto& ac = getAllocationClassFor(cid);
+  const auto allocSize = ac.getAllocSize();
+  auto allocs = ac.allocateBatch(batch);
+  if (allocs.size() > 0) {
+    total += allocs.size();
+    currAllocSize_ += allocSize * allocs.size();
+  }
+  if (total == batch) {
+    return allocs;
+  }
+  // atomically see if we can acquire a slab by checking if we have
+  // reached the limit by size. If not, then they can be acquired from
+  // either the slab allocator or our free list. It is important to check
+  // this before we grab it from the slab allocator or free list. Things
+  // that release slab, bump down the currSlabAllocSize_ after actually
+  // releasing and adding it to free list or slab allocator.
+  if (allSlabsAllocated()) {
+    return allocs;
+  }
+
+  uint32_t remain = batch - total;
+  // TODO: introduce a new sharded lock by allocation class id for this slow
+  // path Currently this would also serialize the slow paths of two different
+  // allocation class ids that need slab to initiate an allocation.
+  LockHolder l(lock_);
+  auto allocs2 = ac.allocateBatch(remain);
+  if (allocs2.size() > 0) {
+    total += allocs2.size();
+    currAllocSize_ += allocSize * allocs2.size();
+    allocs.insert(allocs.end(), allocs2.begin(), allocs2.end());
+  }
+  if (total == batch) {
+    return allocs;
+  }
+
+  remain = batch - total;
+  // see if we have a slab to add to the allocation class.
+  auto slab = getSlabLocked();
+  while (remain && slab != nullptr) {
+    if (slab == nullptr) {
+      // out of memory
+      return allocs;
+    }
+
+    // add it to the allocation class and try to allocate.
+    auto allocs3 = ac.addSlabAndAllocateBatch(slab, remain);
+    // XDCHECK_NE(nullptr, alloc);
+
+    currAllocSize_ += allocSize * allocs3.size();
+    total += allocs3.size();
+    remain -= allocs3.size();
+    allocs.insert(allocs.end(), allocs3.begin(), allocs3.end());
+    if (total == batch) {
+      return allocs;
+    }
+    slab = getSlabLocked();
+  }
+  return allocs;
+}
+
 void* MemoryPool::allocate(uint32_t size) {
   auto& ac = getAllocationClassFor(size);
 
@@ -561,4 +623,9 @@ MPStats MemoryPool::getStats() const {
   return MPStats{std::move(classIds), std::move(acStats), freeSlabs_.size(),
                  slabsUnAllocated,    nSlabResize_,       nSlabRebalance_,
                  curSlabsAdvised_};
+}
+
+std::pair<size_t, double> MemoryPool::getApproxUsage(ClassId cid) const {
+  auto& ac = getAllocationClassFor(cid);
+  return ac.getApproxUsage();
 }
