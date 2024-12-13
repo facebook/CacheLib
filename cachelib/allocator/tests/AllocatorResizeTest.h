@@ -966,23 +966,23 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       for (i = 1; i <= numItersToMaxAdviseAway + 1; i++) {
         alloc.memMonitor_->adviseAwaySlabs();
         std::this_thread::sleep_for(std::chrono::seconds{2});
-        ASSERT_EQ(alloc.allocator_->getAdvisedMemorySize(), i * perIterAdvSize);
+        ASSERT_EQ(alloc.allocator_[0 /* TODO - extend test */]->getAdvisedMemorySize(), i * perIterAdvSize);
       }
       i--;
       // This should fail
       alloc.memMonitor_->adviseAwaySlabs();
       std::this_thread::sleep_for(std::chrono::seconds{2});
-      auto totalAdvisedAwayMemory = alloc.allocator_->getAdvisedMemorySize();
+      auto totalAdvisedAwayMemory = alloc.allocator_[0 /* TODO - extend test */]->getAdvisedMemorySize();
       ASSERT_EQ(totalAdvisedAwayMemory, i * perIterAdvSize);
 
       // Try to reclaim back
       for (i = 1; i <= numItersToMaxAdviseAway + 1; i++) {
         alloc.memMonitor_->reclaimSlabs();
         std::this_thread::sleep_for(std::chrono::seconds{2});
-        ASSERT_EQ(alloc.allocator_->getAdvisedMemorySize(),
+        ASSERT_EQ(alloc.allocator_[0 /* TODO - extend test */]->getAdvisedMemorySize(),
                   totalAdvisedAwayMemory - i * perIterAdvSize);
       }
-      totalAdvisedAwayMemory = alloc.allocator_->getAdvisedMemorySize();
+      totalAdvisedAwayMemory = alloc.allocator_[0 /* TODO - extend test */]->getAdvisedMemorySize();
       ASSERT_EQ(totalAdvisedAwayMemory, 0);
     }
   }

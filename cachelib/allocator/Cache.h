@@ -73,6 +73,25 @@ enum class DestructorContext {
   kRemovedFromNVM
 };
 
+// a tuple that describes the memory pool and allocation class
+struct MemoryDescriptorType {
+  MemoryDescriptorType(TierId tid, PoolId pid, ClassId cid) : 
+      tid_(tid), pid_(pid), cid_(cid) {}
+  TierId tid_;
+  PoolId pid_;
+  ClassId cid_;
+
+  bool operator<(const MemoryDescriptorType& rhs) const {
+    return std::make_tuple(tid_, pid_, cid_) < 
+        std::make_tuple(rhs.tid_, rhs.pid_, rhs.cid_);
+  }
+
+  bool operator==(const MemoryDescriptorType& rhs) const {
+    return std::make_tuple(tid_, pid_, cid_) == 
+        std::make_tuple(rhs.tid_, rhs.pid_, rhs.cid_);
+  }
+};
+
 // A base class of cache exposing members and status agnostic of template type.
 class CacheBase {
  public:
@@ -96,11 +115,23 @@ class CacheBase {
   // @param poolId    The pool id to query
   virtual const MemoryPool& getPool(PoolId poolId) const = 0;
 
+  // Get the reference to a memory pool using a tier id, for stats purposes
+  //
+  // @param poolId    The pool id to query
+  // @param tierId    The tier of the pool id
+  virtual const MemoryPool& getPoolByTid(PoolId poolId, TierId tid) const = 0;
+
   // Get Pool specific stats (regular pools). This includes stats from the
   // Memory Pool and also the cache.
   //
   // @param poolId   the pool id
   virtual PoolStats getPoolStats(PoolId poolId) const = 0;
+
+  // Get Allocation Class specific stats.
+  //
+  // @param poolId   the pool id
+  // @param classId   the class id
+  virtual ACStats getACStats(TierId tid,PoolId poolId, ClassId classId) const = 0;
 
   // @param poolId   the pool id
   virtual AllSlabReleaseEvents getAllSlabReleaseEvents(PoolId poolId) const = 0;
@@ -212,6 +243,9 @@ class CacheBase {
 
   // <Stat -> Count/Delta> maps
   mutable RateMap counters_;
+
+  // max number of tiers
+  static const size_t kMaxTiers = 2;
 
  protected:
   // move bytes from one pool to another. The source pool should be at least
