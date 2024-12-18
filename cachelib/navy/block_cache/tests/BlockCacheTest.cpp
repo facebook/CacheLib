@@ -1062,10 +1062,7 @@ TEST(BlockCache, DeviceFailure) {
     EXPECT_CALL(*device, writeImpl(kRegionSize * 2, kRegionSize, _, _));
 
     EXPECT_CALL(*device, readImpl(0, 1024, _));
-    // We will fail twice on reading "key2" because after the first failure,
-    // BlockCache will retry the read for debugging purposes.
     EXPECT_CALL(*device, readImpl(kRegionSize, 1024, _))
-        .WillOnce(Return(false))
         .WillOnce(Return(false));
     EXPECT_CALL(*device, readImpl(kRegionSize * 2, 1024, _));
   }
@@ -1792,7 +1789,7 @@ TEST(BlockCache, Checksum) {
   Buffer buf{2 * kIOAlignSize, kIOAlignSize};
   memcpy(buf.data() + buf.size() - 4, "hack", 4);
   EXPECT_TRUE(device->write(0, std::move(buf)));
-  EXPECT_EQ(Status::DeviceError, driver->lookup(e1.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value));
 
   const char corruption[kIOAlignSize]{"hack"};
   // Corrupt e2: key, reported as "key not found"
@@ -1808,7 +1805,7 @@ TEST(BlockCache, Checksum) {
       3 * kIOAlignSize,
       Buffer{BufferView{1024, reinterpret_cast<const uint8_t*>(corruption)},
              kIOAlignSize}));
-  EXPECT_EQ(Status::DeviceError, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e3.key(), value));
 
   EXPECT_EQ(0, exPtr->getQueueSize());
 }

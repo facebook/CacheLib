@@ -258,6 +258,11 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
         readEntry(desc, addrEnd, decodeSizeHint(lr.sizeHint()), hk, value);
 
     if (FOLLY_UNLIKELY(status == Status::DeviceError)) {
+      // Remove this item from index so no future lookup will
+      // ever attempt to read this key. Reclaim will also not be
+      // able to re-insert this item as it does not exist in index.
+      index_.remove(hk.keyHash());
+    } else if (status == Status::ChecksumError) {
       // In case we are getting transient checksum error, we will retry to read
       // the entry (S421120)
       status =
@@ -726,7 +731,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
         sizeof(EntryDesc),
         folly::hexlify(
             folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
-    return Status::DeviceError;
+    return Status::ChecksumError;
   }
 
   folly::StringPiece key{reinterpret_cast<const char*>(
@@ -764,7 +769,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
             folly::ByteRange(value.data(), value.data() + value.size())));
     value.reset();
     lookupValueChecksumErrorCount_.inc();
-    return Status::DeviceError;
+    return Status::ChecksumError;
   }
   return Status::Ok;
 }

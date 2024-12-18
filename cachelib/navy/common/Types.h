@@ -47,6 +47,9 @@ enum class Status {
 
   // Internal invariant broken. Consistency may be violated.
   BadState,
+
+  // Internal checksum mismatch (header or value)
+  ChecksumError,
 };
 
 enum class DestructorEvent {

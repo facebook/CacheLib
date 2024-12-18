@@ -31,6 +31,8 @@ const char* toString(Status status) {
     return "DeviceError";
   case Status::BadState:
     return "BadState";
+  case Status::ChecksumError:
+    return "ChecksumError";
   }
   return "Unknown";
 }

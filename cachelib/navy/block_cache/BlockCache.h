@@ -142,6 +142,7 @@ class BlockCache final : public Engine {
   // @return  Status::Ok on success,
   //          Status::NotFound if the key is not found,
   //          Status::Retry read cannot be served and needs to be retried again.
+  //          Status::ChecksumError if the internal checksum does not match,
   //          Status::DeviceError otherwise.
   Status lookup(HashedKey hk, Buffer& value) override;
 
