@@ -70,7 +70,7 @@ void printCmd(const std::vector<std::string>& argv) {
 }
 
 bool runNvmeCmd(const std::shared_ptr<ProcessFactory>& processFactory,
-                const folly::StringPiece& nvmePath,
+                const folly::StringPiece nvmePath,
                 const std::vector<std::string>& args,
                 std::string& out) {
   std::vector<std::string> argv{nvmePath.str()};
@@ -109,7 +109,7 @@ bool runNvmeCmd(const std::shared_ptr<ProcessFactory>& processFactory,
 // delimited) fields. If no matching line is found, returns an empty vector.
 std::vector<std::string> getBytesWrittenLine(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
+    const folly::StringPiece nvmePath,
     const std::vector<std::string>& args) {
   std::string out;
   if (!runNvmeCmd(processFactory, nvmePath, args, out)) {
@@ -139,7 +139,7 @@ std::vector<std::string> getBytesWrittenLine(
 // functions below.
 std::optional<uint64_t> getBytesWritten(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
+    const folly::StringPiece nvmePath,
     const std::vector<std::string>& args,
     const int32_t reqFieldNum,
     const uint64_t factor) {
@@ -189,8 +189,8 @@ std::optional<uint64_t> getBytesWritten(
 // all the vendor output the same way.
 std::optional<uint64_t> samsungWriteBytes(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   // For Samsung devices, the returned count is already in bytes.
   return getBytesWritten(processFactory,
                          nvmePath,
@@ -208,8 +208,8 @@ std::optional<uint64_t> samsungWriteBytes(
 // clang-format on
 std::optional<uint64_t> liteonWriteBytes(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   // For LiteOn devices, the returned count is already in bytes.
   return getBytesWritten(processFactory,
                          nvmePath,
@@ -230,8 +230,8 @@ std::optional<uint64_t> liteonWriteBytes(
 // clang-format on
 std::optional<uint64_t> seagateWriteBytes(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   // For Segate, the output is a count of 500 KiB blocks written.
   //
   // XXX The code in NandWrites.cpp assumes this, but the name of the attribute
@@ -252,8 +252,8 @@ std::optional<uint64_t> seagateWriteBytes(
 // clang-format on
 std::optional<uint64_t> toshibaWriteBytes(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   // We expect the units to be one of 'KiB', 'MiB', 'GiB', or 'TiB'.
   const auto& fields =
       getBytesWrittenLine(processFactory,
@@ -297,8 +297,8 @@ std::optional<uint64_t> toshibaWriteBytes(
 // all the vendor output the same way.
 std::optional<uint64_t> intelWriteBytes(
     const std::shared_ptr<ProcessFactory>& processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   // For Intel devices, the output is in number of 32 MB pages.
   //
   // XXX The code in NandWrites assumes that the output is a number of 32 MB
@@ -372,8 +372,8 @@ std::optional<uint64_t> skhmsWriteBytes(
 // Gets the output of `nvme list` for the given device.
 std::optional<std::string> getDeviceModelNumber(
     std::shared_ptr<ProcessFactory> processFactory,
-    const folly::StringPiece& nvmePath,
-    const folly::StringPiece& devicePath) {
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
   std::string out;
   if (!runNvmeCmd(processFactory, nvmePath, {"list", "-o", "json"}, out)) {
     XLOG(ERR) << "Failed to run nvme command!";
@@ -402,8 +402,8 @@ std::optional<std::string> getDeviceModelNumber(
 } // anonymous namespace
 
 // TODO: add unit tests
-uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
-                        const folly::StringPiece& nvmePath,
+uint64_t nandWriteBytes(const folly::StringPiece deviceName,
+                        const folly::StringPiece nvmePath,
                         std::shared_ptr<ProcessFactory> processFactory) {
   const auto& devicePath = folly::sformat("/dev/{}", deviceName);
   auto modelNumber = getDeviceModelNumber(processFactory, nvmePath, devicePath);
@@ -416,8 +416,8 @@ uint64_t nandWriteBytes(const folly::StringPiece& deviceName,
   static const std::map<std::string,
                         std::function<std::optional<uint64_t>(
                             const std::shared_ptr<ProcessFactory>&,
-                            const folly::StringPiece&,
-                            const folly::StringPiece&)>>
+                            const folly::StringPiece,
+                            const folly::StringPiece)>>
       vendorMap{{"samsung", samsungWriteBytes},
                 {"mz1lb960hbjr-", samsungWriteBytes},
                 {"mzol23t8hcls-", samsungWriteBytes},
