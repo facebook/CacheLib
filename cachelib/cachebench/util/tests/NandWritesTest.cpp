@@ -711,5 +711,147 @@ host_bytes_written              : 100%       sectors: 172365270
             7547837550166016);
 }
 
+TEST_F(NandWritesTest, nandWriteBytes_handlesOcpSupportedDevice_ModelListed) {
+  // This test is for the case for the device where the model number is listed
+  // as vendor specific command list, but only supports OCP smart add log. In
+  // this case, device will throw error with the vendor specific plug-in command
+  // and only return the proper result with the OCP smart-add-log command
+  constexpr auto* kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "NameSpace" : 1,
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "RG109W08",
+      "Index" : 0,
+      "ModelNumber" : "WUS6A7619PJP8X7",
+      "ProductName" : "Non-Volatile memory controller: Western Digital Device 0x2750",
+      "SerialNumber" : "232439E0007010",
+      "UsedBytes" : 486186942464,
+      "MaximumLBA" : 468843606,
+      "PhysicalSize" : 1920383410176,
+      "SectorSize" : 4096
+    }
+  ]})EOF";
+
+  constexpr auto& kSmartLogOutputErr = R"EOF(
+  ERROR : WDC: unsupported device for this command
+  )EOF";
+
+  constexpr auto& kSmartLogOutputOcp = R"EOF(
+  SMART Cloud Attributes :- 
+  Physical media units written -   	        0 80410014056448
+  Physical media units read    - 	        0 84923571298304
+  Bad user nand blocks - Raw			0
+  Bad user nand blocks - Normalized		100
+  Bad system nand blocks - Raw			0
+  Bad system nand blocks - Normalized		100
+  XOR recovery count				0
+  Uncorrectable read error count		0
+  Soft ecc error count				0
+  End to end corrected errors			0
+  End to end detected errors			0
+  System data percent used			0
+  Refresh counts				79503
+  Max User data erase counts			34
+  Min User data erase counts			25
+  Number of Thermal throttling events		0
+  Current throttling status		  	0x0
+  PCIe correctable error count			0
+  Incomplete shutdowns				0
+  Percent free blocks				100
+  Capacitor health				100
+  Unaligned I/O					0
+  Security Version Number			1
+  NUSE - Namespace utilization			118697984
+  PLP start count				101
+  Endurance estimate				23175501818990592
+  Log page version				3
+  Log page GUID					0xafd514c97c6f4f9ca4f2bfea2810afc5
+  Errata Version Field                          0
+  Point Version Field                           0
+  Minor Version Field                           0
+  Major Version Field                           2
+  NVMe Errata Version				98
+  PCIe Link Retraining Count			0
+  )EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "wdc", "vs-smart-add-log", "/dev/nvme0n1"},
+        kSmartLogOutputErr},
+       {{kNvmePath, "ocp", "smart-add-log", "/dev/nvme0n1"},
+        kSmartLogOutputOcp}});
+  EXPECT_EQ(nandWriteBytes("nvme0n1", kNvmePath, mockFactory_), 80410014056448);
+}
+
+TEST_F(NandWritesTest,
+       nandWriteBytes_handlesOcpSupportedDevice_ModelNotListed) {
+  // This test is for the case where the device where the model number is not
+  // listed as vendor specific list, but supports OCP smart add log. In this
+  // case, after it fails to find the proper vendor specific plug-in with our
+  // vendor map, we will try ocp smart-add-log just in case, and it should
+  // succeed.
+  constexpr auto* kListOutput = R"EOF({
+  "Devices" : [
+    {
+      "NameSpace" : 1,
+      "DevicePath" : "/dev/nvme0n1",
+      "Firmware" : "51096F10",
+      "Index" : 0,
+      "ModelNumber" : "HFS11111ABC",
+      "ProductName" : "Non-Volatile memory controller: SK hynix Device 0x2259",
+      "SerialNumber" : "1424BID4T0001I020A16",
+      "UsedBytes" : 486186942464,
+      "MaximumLBA" : 468975616,
+      "PhysicalSize" : 1920924123136,
+      "SectorSize" : 4096
+    }
+  ]})EOF";
+
+  constexpr auto& kSmartLogOutputOcp = R"EOF(
+  SMART Cloud Attributes :- 
+  Physical media units written -   	        0 88403820249088
+  Physical media units read    - 	        0 101477049159680
+  Bad user nand blocks - Raw			0
+  Bad user nand blocks - Normalized		100
+  Bad system nand blocks - Raw			0
+  Bad system nand blocks - Normalized		100
+  XOR recovery count				0
+  Uncorrectable read error count		0
+  Soft ecc error count				0
+  End to end corrected errors			0
+  End to end detected errors			0
+  System data percent used			0
+  Refresh counts				88867
+  Max User data erase counts			37
+  Min User data erase counts			28
+  Number of Thermal throttling events		0
+  Current throttling status		  	0x0
+  PCIe correctable error count			10450
+  Incomplete shutdowns				0
+  Percent free blocks				100
+  Capacitor health				100
+  Unaligned I/O					0
+  Security Version Number			1
+  NUSE - Namespace utilization			118697984
+  PLP start count				106
+  Endurance estimate				25319737374277632
+  Log page version				3
+  Log page GUID					0xafd514c97c6f4f9ca4f2bfea2810afc5
+  Errata Version Field                          0
+  Point Version Field                           0
+  Minor Version Field                           0
+  Major Version Field                           2
+  NVMe Errata Version				98
+  PCIe Link Retraining Count			8084
+  )EOF";
+
+  mockFactory_->expectedCommands(
+      {{{kNvmePath, "list", "-o", "json"}, kListOutput},
+       {{kNvmePath, "ocp", "smart-add-log", "/dev/nvme0n1"},
+        kSmartLogOutputOcp}});
+  EXPECT_EQ(nandWriteBytes("nvme0n1", kNvmePath, mockFactory_), 88403820249088);
+}
+
 } // namespace hw
 } // namespace facebook

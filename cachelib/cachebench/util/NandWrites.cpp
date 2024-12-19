@@ -369,6 +369,36 @@ std::optional<uint64_t> skhmsWriteBytes(
                          1 /* factor */);
 }
 
+// With OCP (Open Compute Project) SSD specification, devices should support the
+// unified way to report SMART log by using the ocp plug-in for nvme CLI (not
+// by each vendor's plug-in).
+// This can be configure by fw, so it's not solely determined by vendor/model
+// name whether it supports OCP smart log or not.
+//
+// The output for a OCP nvme CLI plug-in looks like:
+//
+// clang-format off
+// ...
+// SMART Cloud Attributes :- 
+//   Physical media units written -   	        0 24698875318272
+// ...
+// clang-format on
+//
+// Note that it's using two 8 bytes (total 16 bytes) to represent the value.
+// For now, handling only the lower 8 bytes is enough. (Covering 16EiB of
+// writes)
+std::optional<uint64_t> ocpWriteBytes(
+    const std::shared_ptr<ProcessFactory>& processFactory,
+    const folly::StringPiece nvmePath,
+    const folly::StringPiece devicePath) {
+  // For Samsung devices, the returned count is already in bytes.
+  return getBytesWritten(processFactory,
+                         nvmePath,
+                         {"ocp", "smart-add-log", devicePath.str()},
+                         -1 /* field num */,
+                         1 /* factor */);
+}
+
 // Gets the output of `nvme list` for the given device.
 std::optional<std::string> getDeviceModelNumber(
     std::shared_ptr<ProcessFactory> processFactory,
@@ -441,6 +471,29 @@ uint64_t nandWriteBytes(const folly::StringPiece deviceName,
                 {"wus6a76a1pjp8x7", wdcWriteBytes},
                 {"micron", micronWriteBytes},
                 {"hfs512gde9x083n", skhmsWriteBytes}};
+
+  // For the model numbers that we have already found how to get nand write
+  // bytes
+  static std::map<std::string,
+                  std::function<std::optional<uint64_t>(
+                      const std::shared_ptr<ProcessFactory>&,
+                      const folly::StringPiece,
+                      const folly::StringPiece)>>
+      resolvedMap{};
+
+  // Check if the model number is already found how to get the bytes written
+  if (resolvedMap.find(modelNumber.value()) != resolvedMap.end()) {
+    XLOG(DBG) << "Found the model number " << modelNumber.value()
+              << " in resolvedMap";
+
+    const auto& bytesWritten =
+        resolvedMap[modelNumber.value()](processFactory, nvmePath, devicePath);
+    if (bytesWritten) {
+      // it's all good, return the bytes written
+      return bytesWritten.value();
+    }
+  }
+
   for (const auto& [vendor, func] : vendorMap) {
     XLOG(DBG) << "Looking for vendor " << vendor << " in device model string \""
               << modelNumber.value() << "\".";
@@ -448,6 +501,16 @@ uint64_t nandWriteBytes(const folly::StringPiece deviceName,
       XLOG(DBG) << "Matched vendor " << vendor;
       const auto& bytesWritten = func(processFactory, nvmePath, devicePath);
       if (!bytesWritten) {
+        // Retry with the OCP plug-in, since this device may support it
+        // instead of vendor specific way to report SMART info
+        const auto& bytesWrittenRetry =
+            ocpWriteBytes(processFactory, nvmePath, devicePath);
+        if (bytesWrittenRetry) {
+          // let's update the resolvedMap to use the ocp plug-in later on
+          resolvedMap[modelNumber.value()] = ocpWriteBytes;
+          return bytesWrittenRetry.value();
+        }
+
         // Throw an exception to maintain the same contract as the old version
         // of this code.
         //
@@ -455,13 +518,25 @@ uint64_t nandWriteBytes(const folly::StringPiece deviceName,
         throw std::invalid_argument(folly::sformat(
             "Failed to get bytes written for device {}", deviceName));
       }
+      // Add it to resolvedMap[] so that it doesn't need to be resolved again
+      resolvedMap[modelNumber.value()] = func;
       return bytesWritten.value();
     }
   }
 
-  // We got a model string but didn't match the vendor.
-  throw std::invalid_argument(folly::sformat(
-      "Vendor not recogized in device model number {}", modelNumber.value()));
+  // We got a model string but it didn't match with any vendor in our map.
+  // Let's try with the OCP plug-in in case it supports OCP SMART log (Since
+  // it'll be new standard for OCP devices)
+  const auto& bytesWritten =
+      ocpWriteBytes(processFactory, nvmePath, devicePath);
+  if (!bytesWritten) {
+    // It doesn't support OCP SMART log either, give it up
+    throw std::invalid_argument(folly::sformat(
+        "Vendor not recogized in device model number {}", modelNumber.value()));
+  }
+  // Add it to resolvedMap[] so that it could be retrieved next time
+  resolvedMap[modelNumber.value()] = ocpWriteBytes;
+  return bytesWritten.value();
 }
 
 } // namespace hw
