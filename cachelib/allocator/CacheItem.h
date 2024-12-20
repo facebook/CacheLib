@@ -44,6 +44,9 @@ template <typename AllocatorT>
 class AllocatorHitStatsTest;
 
 template <typename AllocatorT>
+class AllocatorMemoryTiersTest;
+
+template <typename AllocatorT>
 class MapTest;
 
 class CacheAllocatorTestWrapper;
@@ -270,6 +273,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Returns true if the item is in access container, false otherwise
   bool isAccessible() const noexcept;
 
+  bool isAccessed() const noexcept;
+
  protected:
   // construct an item without expiry timestamp.
   CacheItem(Key key, uint32_t size, uint32_t creationTime);
@@ -467,6 +472,8 @@ class CACHELIB_PACKED_ATTR CacheItem {
   FRIEND_TEST(ItemTest, NonStringKey);
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::AllocatorHitStatsTest;
+  template <typename AllocatorT>
+  friend class facebook::cachelib::tests::AllocatorMemoryTiersTest;
 };
 
 // A chained item has a hook pointing to the next chained item. The hook is
@@ -767,6 +774,11 @@ void CacheItem<CacheTrait>::markInMMContainer() noexcept {
 template <typename CacheTrait>
 void CacheItem<CacheTrait>::unmarkInMMContainer() noexcept {
   ref_.unmarkInMMContainer();
+}
+
+template <typename CacheTrait>
+bool CacheItem<CacheTrait>::isAccessed() const noexcept {
+  return ref_.isAccessed();
 }
 
 template <typename CacheTrait>

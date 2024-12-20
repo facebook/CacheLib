@@ -244,6 +244,7 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
       statPrefix + "cache.size.configured",
       memStats.configuredRamCacheSize + memStats.nvmCacheSize);
 
+  //TODO: add specific per-tier counters
   const auto stats = getGlobalCacheStats();
 
   // Eviction Stats
@@ -253,7 +254,8 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   //   from both ram and nvm, this is counted as a single eviction from cache.
   // Ram Evictions: item evicted from ram but it can be inserted into nvm
   const std::string ramEvictionKey = statPrefix + "ram.evictions";
-  counters_.updateDelta(ramEvictionKey, stats.numEvictions);
+  counters_.updateDelta(ramEvictionKey,
+                        std::accumulate(stats.numEvictions.begin(), stats.numEvictions.end(), 0));
   // Nvm Evictions: item evicted from nvm but it can be still in ram
   const std::string nvmEvictionKey = statPrefix + "nvm.evictions";
   counters_.updateDelta(nvmEvictionKey, stats.numNvmEvictions);
@@ -295,11 +297,11 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
   }
 
   counters_.updateDelta(statPrefix + "cache.alloc_attempts",
-                        stats.allocAttempts);
+                        std::accumulate(stats.allocAttempts.begin(), stats.allocAttempts.end(),0));
   counters_.updateDelta(statPrefix + "cache.eviction_attempts",
-                        stats.evictionAttempts);
+                        std::accumulate(stats.evictionAttempts.begin(),stats.evictionAttempts.end(),0));
   counters_.updateDelta(statPrefix + "cache.alloc_failures",
-                        stats.allocFailures);
+                        std::accumulate(stats.allocFailures.begin(),stats.allocFailures.end(),0));
   counters_.updateDelta(statPrefix + "cache.invalid_allocs",
                         stats.invalidAllocs);
 
