@@ -249,10 +249,11 @@ class CACHELIB_PACKED_ATTR CompressedPtr5B {
                   uint32_t allocIdx,
                   bool isMultiTiered,
                   TierId tid = 0)
-      : ptr_(compress(slabIdx, allocIdx, isMultiTiered, tid)),
+      : ptr_(static_cast<IdxPtrType32>(
+            compress(slabIdx, allocIdx, isMultiTiered, tid))),
         regionIdx_(getRegionIdx(slabIdx, isMultiTiered, tid)) {}
 
-  constexpr explicit CompressedPtr5B(PtrType ptr) noexcept
+  explicit CompressedPtr5B(PtrType ptr) noexcept
       : ptr_(deserializePtr(ptr)), regionIdx_(deserializeRegion(ptr)) {}
 
   // number of bits for the Allocation offset in a slab.  With slab size of 22
