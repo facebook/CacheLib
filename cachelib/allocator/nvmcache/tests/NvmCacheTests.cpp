@@ -2814,10 +2814,14 @@ TEST_F(NvmCacheTest, DataCorruption) {
     this->removeFromRamForTesting(key);
     EXPECT_TRUE(cache.isNvmCacheEnabled());
 
-    // Checksum error on remove still disable nvm-cache
+    // Checksum error on remove does not disable nvm-cache
     cache.remove(key);
     cache.flushNvmCache();
-    EXPECT_FALSE(cache.isNvmCacheEnabled());
+    EXPECT_TRUE(cache.isNvmCacheEnabled());
+
+    // The item with checksum error was removed from NvmCache
+    auto it = cache.find(key);
+    EXPECT_EQ(nullptr, it);
   }
 }
 } // namespace tests

@@ -1415,7 +1415,8 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
       eventTracker->record(AllocatorApiEvent::NVM_REMOVE, ctx.key(), result);
     }
     delContexts.destroyContext(ctx);
-    if (status == navy::Status::Ok || status == navy::Status::NotFound) {
+    if (status == navy::Status::Ok || status == navy::Status::NotFound ||
+        status == navy::Status::ChecksumError) {
       return;
     }
     // we set disable navy since we failed to delete something
