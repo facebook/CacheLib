@@ -368,9 +368,11 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     bool itemDestructorEnabled) {
   auto device = createDevice(config, std::move(encryptor));
 
-  if (config.hasDeviceDataCorruptionForTesting()) {
+  std::unique_ptr<navy::MockDevice> mockDevice;
+  switch (config.hasBadDeviceForTesting()) {
+  case navy::BadDeviceStatus::DataCorruption:
     // Use mock device. This is for testing
-    auto mockDevice = std::make_unique<navy::MockDevice>(
+    mockDevice = std::make_unique<navy::MockDevice>(
         device->getSize(), device->getIOAlignmentSize());
     mockDevice->setRealDevice(std::move(device));
     ON_CALL(*mockDevice, readImpl(testing::_, testing::_, testing::_))
@@ -390,6 +392,19 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
             }));
 
     device = std::move(mockDevice);
+    break;
+  case navy::BadDeviceStatus::IoReqFailure:
+    // Use mock device. This is for testing
+    mockDevice = std::make_unique<navy::MockDevice>(
+        device->getSize(), device->getIOAlignmentSize());
+    mockDevice->setRealDevice(std::move(device));
+    ON_CALL(*mockDevice, readImpl(testing::_, testing::_, testing::_))
+        .WillByDefault(testing::Return(false));
+
+    device = std::move(mockDevice);
+    break;
+  default:
+    break;
   }
 
   auto proto = cachelib::navy::createCacheProto();

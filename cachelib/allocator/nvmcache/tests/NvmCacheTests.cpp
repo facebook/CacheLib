@@ -2726,7 +2726,7 @@ TEST_F(NvmCacheTest, IsNewCacheInstanceStat) {
   std::this_thread::sleep_for(std::chrono::seconds{2});
 }
 
-TEST_F(NvmCacheTest, BadDevice) {
+TEST_F(NvmCacheTest, BadDeviceIoFailure) {
   // Device errors along the deletion path will disable NvmCache
   {
     const auto key = "test_key_foo";
@@ -2737,7 +2737,7 @@ TEST_F(NvmCacheTest, BadDevice) {
       // noop. Need to set item dtor to activate lookup on remove in BC
     });
     config.nvmConfig->navyConfig.setBadDeviceForTesting(
-        true /*hasDataCorruption=*/);
+        navy::BadDeviceStatus::IoReqFailure);
     auto& cache = makeCache();
     {
       auto it = cache.allocate(this->poolId(), key, 200);
@@ -2749,7 +2749,7 @@ TEST_F(NvmCacheTest, BadDevice) {
     this->removeFromRamForTesting(key);
     EXPECT_TRUE(cache.isNvmCacheEnabled());
 
-    // Checksum error on remove disables nvm-cache
+    // Device error on remove disables nvm-cache
     cache.remove(key);
     cache.flushNvmCache();
     EXPECT_FALSE(cache.isNvmCacheEnabled());
@@ -2766,7 +2766,7 @@ TEST_F(NvmCacheTest, BadDevice) {
       // noop. Need to set item dtor to activate lookup on remove in BC
     });
     config.nvmConfig->navyConfig.setBadDeviceForTesting(
-        true /*hasDataCorruption=*/);
+        navy::BadDeviceStatus::IoReqFailure);
     // Do not disable NvmCache
     config.nvmConfig->disableNvmCacheOnBadState_S421120 = false;
     auto& cache = makeCache();
@@ -2780,13 +2780,44 @@ TEST_F(NvmCacheTest, BadDevice) {
     this->removeFromRamForTesting(key);
     EXPECT_TRUE(cache.isNvmCacheEnabled());
 
-    // Checksum error on remove does not disable nvm-cache
+    // Device error on remove does not disable nvm-cache
     cache.remove(key);
     cache.flushNvmCache();
     EXPECT_TRUE(cache.isNvmCacheEnabled());
 
     auto it = cache.find(key);
     EXPECT_EQ(nullptr, it);
+  }
+}
+
+TEST_F(NvmCacheTest, DataCorruption) {
+  // Checksum error with data corruption will not disable NvmCache
+  // Only the item with checksum error will be removed from NvmCache
+  {
+    const auto key = "test_key_foo";
+    auto& config = getConfig();
+    // Disable remove callback to set item dtor instead
+    config.setRemoveCallback({});
+    config.setItemDestructor([](const DestructedData&) {
+      // noop. Need to set item dtor to activate lookup on remove in BC
+    });
+    config.nvmConfig->navyConfig.setBadDeviceForTesting(
+        navy::BadDeviceStatus::DataCorruption);
+    auto& cache = makeCache();
+    {
+      auto it = cache.allocate(this->poolId(), key, 200);
+      std::memcpy(it->getMemory(), "foobar", sizeof("foobar"));
+      cache.insertOrReplace(it);
+    }
+    ASSERT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+    cache.flushNvmCache();
+    this->removeFromRamForTesting(key);
+    EXPECT_TRUE(cache.isNvmCacheEnabled());
+
+    // Checksum error on remove still disable nvm-cache
+    cache.remove(key);
+    cache.flushNvmCache();
+    EXPECT_FALSE(cache.isNvmCacheEnabled());
   }
 }
 } // namespace tests

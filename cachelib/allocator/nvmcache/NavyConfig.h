@@ -489,6 +489,17 @@ inline const folly::StringPiece getIoEngineName(IoEngine e) {
 }
 
 /**
+ * For testing, we can simulate bad device by setting this enum value
+ * with NavyConfig::setBadDeviceForTesting()
+ */
+enum class BadDeviceStatus : uint8_t {
+  None,           // No bad device
+  DataCorruption, // Data corruption (Doesn't necessarily mean device's fault,
+                  // will yield checksum error)
+  IoReqFailure    // Device that fails with IO requests
+};
+
+/**
  * NavyConfig provides APIs for users to set up Navy related settings for
  * NvmCache.
  *
@@ -538,9 +549,7 @@ class NavyConfig {
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
   IoEngine getIoEngine() const { return ioEngine_; }
   unsigned int getQDepth() const { return qDepth_; }
-  bool hasDeviceDataCorruptionForTesting() const {
-    return testingBadDeviceHasDataCorruption_;
-  }
+  BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
@@ -606,12 +615,13 @@ class NavyConfig {
   // Set up a bad device backed by the existing device that user has configured.
   // This requires the user to have also set up a real device (one of the
   // above).
-  // @param hasDataCorruption: whether the device will return corrupted data
+  // @param badStatus: whether the device will return bad behavior defined in
+  //                   BadDeviceStatus enum.
   // TODO: user can add more options to tune the bad device's behavior. E.g. add
   //       probability for introducting data corruption. Add probability to
   //       return error on read or write IOs.
-  void setBadDeviceForTesting(bool hasDataCorruption) {
-    testingBadDeviceHasDataCorruption_ = hasDataCorruption;
+  void setBadDeviceForTesting(BadDeviceStatus badStatus) {
+    testingBadDevice_ = badStatus;
   }
 
   // Configure the size of the metadata partition reserved for Navy
@@ -702,8 +712,8 @@ class NavyConfig {
   // This controls granularity of the writes when we flush the region.
   // This is only used when in-mem buffer is enabled.
   uint32_t deviceMaxWriteSize_{};
-  // This controls whether or not the device will return corrupted data.
-  bool testingBadDeviceHasDataCorruption_{false};
+  // This controls if device is in bad status (for testing).
+  BadDeviceStatus testingBadDevice_{BadDeviceStatus::None};
 
   // IoEngine type used for IO
   IoEngine ioEngine_{IoEngine::Sync};

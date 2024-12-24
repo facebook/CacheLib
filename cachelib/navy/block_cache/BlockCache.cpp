@@ -401,8 +401,14 @@ Status BlockCache::remove(HashedKey hk) {
         return status;
       } else if (status != Status::NotFound) {
         lookupForItemDestructorErrorCount_.inc();
-        // still fail after retry, return a BadState to disable navy
-        return Status::BadState;
+        if (status == Status::ChecksumError) {
+          // checksum error doesn't need to be treated as a whole device's bad
+          // status
+          return status;
+        } else {
+          // still fail after retry, return a BadState to disable navy
+          return Status::BadState;
+        }
       } else {
         // NotFound
         removeAttemptCollisions_.inc();
