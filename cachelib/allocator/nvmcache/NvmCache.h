@@ -144,7 +144,11 @@ class NvmCache {
     // to delete at a later time. Now it's no longer possible. So
     // this option is merely here to allow us to disable this behavior
     // gradually. See S421120 for more details.
-    bool disableNvmCacheOnBadState_S421120{true};
+    // Update: We're now disabling the NvmCache only when the device is throwing
+    // errors with IO reqeusts from the remove path. (DeviceError - which is
+    // real error). Leaving this option here for now, since it could be useful
+    // in the future.
+    bool disableNvmCacheOnBadState{true};
 
     // serialize the config for debugging purposes
     std::map<std::string, std::string> serialize() const;
@@ -537,8 +541,8 @@ std::map<std::string, std::string> NvmCache<C>::Config::serialize() const {
   configMap["encryption"] = deviceEncryptor ? "set" : "empty";
   configMap["truncateItemToOriginalAllocSizeInNvm"] =
       truncateItemToOriginalAllocSizeInNvm ? "true" : "false";
-  configMap["disableNvmCacheOnBadState_S421120"] =
-      disableNvmCacheOnBadState_S421120 ? "true" : "false";
+  configMap["disableNvmCacheOnBadState"] =
+      disableNvmCacheOnBadState ? "true" : "false";
   return configMap;
 }
 
@@ -1364,7 +1368,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
 
 template <typename C>
 void NvmCache<C>::disableNavy(const std::string& msg) {
-  if (isEnabled() && config_.disableNvmCacheOnBadState_S421120) {
+  if (isEnabled() && config_.disableNvmCacheOnBadState) {
     navyEnabled_ = false;
     XLOGF(CRITICAL, "Disabling navy. {}", msg);
   }

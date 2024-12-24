@@ -2768,7 +2768,7 @@ TEST_F(NvmCacheTest, BadDeviceIoFailure) {
     config.nvmConfig->navyConfig.setBadDeviceForTesting(
         navy::BadDeviceStatus::IoReqFailure);
     // Do not disable NvmCache
-    config.nvmConfig->disableNvmCacheOnBadState_S421120 = false;
+    config.nvmConfig->disableNvmCacheOnBadState = false;
     auto& cache = makeCache();
     {
       auto it = cache.allocate(this->poolId(), key, 200);
