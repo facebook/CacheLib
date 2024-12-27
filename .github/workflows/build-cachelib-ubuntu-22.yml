@@ -33,7 +33,7 @@ jobs:
       - name: "update packages"
         run: sudo apt-get update
       - name: "install sudo,git"
-        run: sudo apt-get install -y git procps
+        run: sudo apt-get install -y git procps libfast-float-dev
       - name: "System Information"
         run: |
           echo === uname ===
