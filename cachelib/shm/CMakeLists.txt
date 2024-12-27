@@ -24,7 +24,7 @@ add_library (cachelib_shm
 add_dependencies(cachelib_shm thrift_generated_files)
 target_link_libraries(cachelib_shm PUBLIC
   cachelib_common
-  numa
+  NUMA::NUMA
 )
 
 install(TARGETS cachelib_shm

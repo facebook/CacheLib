@@ -20,6 +20,7 @@ add_library (cachelib_datatype
 add_dependencies(cachelib_datatype thrift_generated_files)
 target_link_libraries(cachelib_datatype PUBLIC
   cachelib_common
+  GTest::gtest
 )
 
 install(TARGETS cachelib_datatype
