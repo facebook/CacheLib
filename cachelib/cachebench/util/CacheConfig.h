@@ -93,6 +93,8 @@ struct CacheConfig : public JSONConfig {
   bool lruUpdateOnRead{true};
   bool tryLockUpdate{false};
   bool useCombinedLockForIterators{false};
+  bool insertToFirstFreeTier{false};
+  bool evictIfNotAccessed{false};
 
   // LRU param
   uint64_t lruIpSpec{0};
@@ -242,6 +244,23 @@ struct CacheConfig : public JSONConfig {
 
   // Memory tiers configs
   std::vector<MemoryTierCacheConfig> memoryTierConfigs{};
+
+  // time interval to sleep in ms between runs of the background mover
+  size_t backgroundMoverIntervalMilSec{0};
+
+  // number of thread used by background mover
+  size_t backgroundMoverThreads{0};
+
+  // How much to keep the cache memory free. This is used by the background
+  // mover to decide when to evict items.
+  double backgroundTargetFree{0.02};
+
+  // The number of items to evict in each batch in the background mover
+  size_t backgroundEvictionBatch{10};
+
+  // The number of items to promote in each batch in the background mover
+  // only available when there are multiple memory tiers
+  size_t backgroundPromotionBatch{10};
 
   // If enabled, we will use the timestamps from the trace file in the ticker
   // so that the cachebench will observe time based on timestamps from the trace

@@ -224,6 +224,19 @@ void MMTypeTest<MMType>::testIterate(std::vector<std::unique_ptr<Node>>& nodes,
 }
 
 template <typename MMType>
+void MMTypeTest<MMType>::testIterateHot(std::vector<std::unique_ptr<Node>>& nodes,
+                                     Container& c) {
+  auto it = nodes.rbegin();
+  c.withPromotionIterator([&it,&c](auto &&it2q) {
+    while (it2q && c.isHot(*it2q)) {
+        ASSERT_EQ(it2q->getId(), (*it)->getId());
+        ++it2q;
+        ++it;
+    }
+  });
+}
+
+template <typename MMType>
 void MMTypeTest<MMType>::testMatch(std::string expected,
                                    MMTypeTest<MMType>::Container& c) {
   std::string actual;
@@ -235,6 +248,23 @@ void MMTypeTest<MMType>::testMatch(std::string expected,
         (c.isHot(*it2q) ? "H" : (c.isCold(*it2q) ? "C" : "W")));
     ++it2q;
   }
+  ASSERT_EQ(expected, actual);
+}
+
+template <typename MMType>
+void MMTypeTest<MMType>::testMatchHot(std::string expected,
+                                   MMTypeTest<MMType>::Container& c) {
+  int index = -1;
+  std::string actual;
+  c.withPromotionIterator([&c,&actual,&index](auto &&it2q) {
+    while (it2q) {
+      ++index;
+      actual += folly::stringPrintf(
+          "%d:%s, ", it2q->getId(),
+          (c.isHot(*it2q) ? "H" : (c.isCold(*it2q) ? "C" : "W")));
+      ++it2q;
+    }
+  });
   ASSERT_EQ(expected, actual);
 }
 
@@ -259,8 +289,11 @@ TEST_F(MM2QTest, DetailedTest) {
   }
 
   testIterate(nodes, c);
+  testIterateHot(nodes, c);
 
   testMatch("0:C, 1:C, 2:C, 3:C, 4:H, 5:H, ", c);
+  testMatchHot("5:H, 4:H, 3:C, 2:C, 1:C, 0:C, ", c);
+
   // Move 3 to top of the hot cache
   c.recordAccess(*(nodes[4]), AccessMode::kRead);
   testMatch("0:C, 1:C, 2:C, 3:C, 5:H, 4:H, ", c);
