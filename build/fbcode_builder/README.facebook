@@ -1,0 +1,80 @@
+# Overview
+
+`fbcode_builder/getdeps.py` is a tool to make it easy to build Facebook open
+source projects.  It supports building both from the project's GitHub
+repository, as well as replicating the open source build from an fbsource
+checkout.
+
+Building the open source flavor of most projects is more complicated than
+internal Buck-based builds.  Unlike fbsource, where all code resides in a
+single repository, Facebook open source projects are shipped to GitHub as
+multiple separate repositories.  Each project has its own separate build
+scripts, and building one project usually requires building multiple separate
+dependencies first, and correctly configuring the build to find all of these
+dependencies.
+
+`getdeps.py` helps manage the process of finding and building all dependencies
+first, and configuring each project to find its dependencies correctly.
+
+
+# Setting up a new project with `fbcode_builder`
+
+Each project has a configuration file in the
+`opensource/fbcode_builder/manifests/` directory that tells `getdeps.py` how to
+build it.
+
+This includes information about the GitHub repository location, how ShipIt will
+transform the paths from fbsource to the GitHub repository, and what tool is
+used to perform the build.  Most Facebook projects use CMake for their open
+source builds, but `getdeps.py` also supports a number of other build tools as
+well.  If you need to add custom builder support the code for this is in
+`getdeps/builder.py`
+
+## Adding the `fbcode_builder` sources to your GitHub repository
+
+In most cases projects that use `getdeps.py` will want to publish the entire
+`fbcode_builder` subdirectory into their GitHub repository.  This allows
+external users to also use `getdeps.py` to build the project from the GitHub
+repository.
+
+In order to have ShipIt publish the `fbcode_builder` subdirectory to your
+GitHub repository, you should specify `hackPlugin="FBCodeBuilderPlugin"` in the
+`ShipItStaticConfig` section of your project's ShipIt configuration.
+If your project depends on other Facebook open source projects you will also
+want to list those in the `fbCodeBuilderDependencies=[]` section.
+
+See `source/opensource/shipit_config/facebook/watchman.cconf` in configerator
+for an example configuration file that does this.
+
+
+# Building manually from fbsource
+
+To perform the open source build of a project from an fbsource checkout, you
+can simply invoke `getdeps.py build PROJECT_NAME` on your devserver.
+
+For example, to build `eden` you can run:
+
+```
+[fbcode]$ ./opensource/fbcode_builder/getdeps.py build eden
+```
+
+The full build will be performed in a scratch directory.  You can use the
+`--scratch-path argument to control the location of this scratch directory.
+
+This script will build all dependencies first, then the project itself.  For
+each Facebook project, `getdeps.py` will first transform install the sources in
+the scratch directory to match the open source GitHub repository layout, then
+will perform the build using the project's open source build scripts.
+
+
+# Running Legocastle builds manually
+
+Once you check in a manifest for your project target determinator will
+automatically kick off builds for your project on diffs that affect it.
+
+You can also manually kick off sandcastle jobs to build your project using
+the `sandcastle` subcommand.  e.g.:
+
+```
+[fbcode]$ ./opensource/fbcode_builder/getdeps.py sandcastle eden
+```
