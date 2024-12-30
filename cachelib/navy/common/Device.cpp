@@ -23,6 +23,7 @@
 #include <folly/experimental/io/AsyncIO.h>
 #include <folly/experimental/io/IoUring.h>
 #include <folly/fibers/TimedMutex.h>
+#include <folly/io/async/AsyncIO.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/io/async/EventHandler.h>
