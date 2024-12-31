@@ -352,6 +352,43 @@ class CacheAllocator : public CacheBase {
     // if user-supplied SyncObj can fail. e.g. if a lock can timeout.
     virtual bool isValid() const { return true; }
   };
+
+  // For background worker stats
+  using ClassBgStatsType =
+      std::map<MemoryDescriptorType, std::pair<size_t, size_t>>;
+
+  // Movement (eviction/promotion) related data returned from
+  // function executed under mmContainer lock
+  struct MoveData {
+    MoveData() = delete;
+    MoveData(Item* candidate_,
+             Item* toRecycle_,
+             Item* toRecycleParent_,
+             bool chainedItem_,
+             bool expired_,
+             typename NvmCacheT::PutToken token_,
+             WriteHandle candidateHandle_)
+        : candidate(candidate_),
+          toRecycle(toRecycle_),
+          toRecycleParent(toRecycleParent_),
+          expired(expired_),
+          chainedItem(chainedItem_),
+          token(std::move(token_)),
+          candidateHandle(std::move(candidateHandle_)) {}
+
+    // item that is candidate for eviction
+    Item* candidate;
+    // acutal alloc that will be recycled
+    // back up to allocator
+    Item* toRecycle;
+    // possible parent ref
+    Item* toRecycleParent;
+    bool expired;                       // is item expired
+    bool chainedItem;                   // is it a chained item
+    typename NvmCacheT::PutToken token; // put token for NVM cache
+    WriteHandle candidateHandle;        // hande in case we don't use moving bit
+  };
+
   using ChainedItemMovingSync = std::function<std::unique_ptr<SyncObj>(Key)>;
 
   using AccessContainer = typename Item::AccessContainer;
@@ -1083,25 +1120,12 @@ class CacheAllocator : public CacheBase {
   bool startNewReaper(std::chrono::milliseconds interval,
                       util::Throttler::Config reaperThrottleConfig);
 
-  // start background promoter, starting/stopping of this worker
-  // should not be done concurrently with addPool
-  // @param interval                the period this worker fires
-  // @param strategy                strategy to promote items
-  // @param threads                 number of threads used by the worker
-  bool startNewBackgroundPromoter(
-      std::chrono::milliseconds interval,
-      std::shared_ptr<BackgroundMoverStrategy> strategy,
-      size_t threads);
-
-  // start background evictor, starting/stopping of this worker
-  // should not be done concurrently with addPool
-  // @param interval                the period this worker fires
-  // @param strategy                strategy to evict items
-  // @param threads                 number of threads used by the worker
-  bool startNewBackgroundEvictor(
-      std::chrono::milliseconds interval,
-      std::shared_ptr<BackgroundMoverStrategy> strategy,
-      size_t threads);
+  // start background mover
+  bool startNewBackgroundMover(std::chrono::milliseconds interval,
+                               size_t evictionBatch,
+                               size_t promotionBatch,
+                               double targetFree,
+                               size_t threads);
 
   // Stop existing workers with a timeout
   bool stopPoolRebalancer(std::chrono::seconds timeout = std::chrono::seconds{
@@ -1111,10 +1135,8 @@ class CacheAllocator : public CacheBase {
                              0});
   bool stopMemMonitor(std::chrono::seconds timeout = std::chrono::seconds{0});
   bool stopReaper(std::chrono::seconds timeout = std::chrono::seconds{0});
-  bool stopBackgroundEvictor(
-      std::chrono::seconds timeout = std::chrono::seconds{0});
-  bool stopBackgroundPromoter(
-      std::chrono::seconds timeout = std::chrono::seconds{0});
+  bool stopBackgroundMover(std::chrono::seconds timeout = std::chrono::seconds{
+                               0});
 
   // Set pool optimization to either true or false
   //
@@ -1196,6 +1218,30 @@ class CacheAllocator : public CacheBase {
   // returns the reaper stats
   ReaperStats getReaperStats() const {
     auto stats = reaper_ ? reaper_->getStats() : ReaperStats{};
+    return stats;
+  }
+
+  // returns the background mover stats per thread
+  std::vector<BackgroundMoverStats> getBackgroundMoverStats() const {
+    auto stats = std::vector<BackgroundMoverStats>();
+    for (auto& bg : backgroundMover_) {
+      stats.push_back(bg->getStats());
+    }
+    return stats;
+  }
+
+  ClassBgStatsType getBackgroundMoverClassStats() const {
+    ClassBgStatsType stats;
+    auto record = [&](auto& bg) {
+      // gives a unique descriptor
+      auto classStats = bg->getPerClassStats();
+      for (const auto& [key, value] : classStats) {
+        stats[key] = value;
+      }
+    };
+    for (auto& bg : backgroundMover_) {
+      record(bg);
+    }
     return stats;
   }
 
@@ -1486,8 +1532,7 @@ class CacheAllocator : public CacheBase {
                                Key key,
                                uint32_t size,
                                uint32_t creationTime,
-                               uint32_t expiryTime,
-                               bool fromBgThread = false);
+                               uint32_t expiryTime);
 
   // Allocate a chained item
   //
@@ -1573,10 +1618,15 @@ class CacheAllocator : public CacheBase {
   //
   // @param oldItem     Reference to the item being moved
   // @param newItemHdl  Reference to the handle of the new item being moved into
+  // @param skipAddInMMContainer so we can tell if we should add in mmContainer
+  // or wait
+  //                     to do in batch
   //
   // @return true  If the move was completed, and the containers were updated
   //               successfully.
-  bool moveRegularItem(Item& oldItem, WriteHandle& newItemHdl);
+  bool moveRegularItem(Item& oldItem,
+                       WriteHandle& newItemHdl,
+                       bool skipAddInMMContainer = false);
 
   // template class for viewAsChainedAllocs that takes either ReadHandle or
   // WriteHandle
@@ -1762,6 +1812,11 @@ class CacheAllocator : public CacheBase {
   std::pair<Item*, Item*> getNextCandidate(PoolId pid,
                                            ClassId cid,
                                            unsigned int& searchTries);
+  // similiar to the above method but returns a batch of evicted items
+  // as a pair of vectors
+  std::vector<MoveData> getNextCandidates(PoolId pid,
+                                          ClassId cid,
+                                          uint32_t batch);
 
   using EvictionIterator = typename MMContainer::LockedIterator;
 
@@ -1898,18 +1953,46 @@ class CacheAllocator : public CacheBase {
 
   // exposed for the background evictor to iterate through the memory and evict
   // in batch. This should improve insertion path for tiered memory config
-  size_t traverseAndEvictItems(unsigned int /* pid */,
-                               unsigned int /* cid */,
-                               size_t /* batch */) {
-    throw std::runtime_error("Not supported yet!");
-  }
-
-  // exposed for the background promoter to iterate through the memory and
-  // promote in batch. This should improve find latency
-  size_t traverseAndPromoteItems(unsigned int /* pid */,
-                                 unsigned int /* cid */,
-                                 size_t /* batch */) {
-    throw std::runtime_error("Not supported yet!");
+  // promotion batch only applies to tiered memory config
+  std::pair<size_t, size_t> traverseAndMoveItems(PoolId pid,
+                                                 ClassId cid,
+                                                 size_t evictionBatch,
+                                                 size_t promotionBatch) {
+    auto& mmContainer = getMMContainer(pid, cid);
+    uint32_t currItems = mmContainer.size();
+    if (currItems < evictionBatch) {
+      evictionBatch = currItems;
+    }
+    if (evictionBatch == 0) {
+      return {0, 0};
+    }
+    auto evictionData = getNextCandidates(pid, cid, evictionBatch);
+    // we now have a list of candidates and toRecycles, they should go back
+    // to the allocator and we will do this in batch to avoid AC lock contention
+    // note - for chained items - we can't do this in bulk
+    std::vector<size_t> chainedIdx;
+    std::vector<Item*> toRecycles;
+    size_t idx = 0;
+    for (auto& data : evictionData) {
+      if (data.chainedItem) {
+        XDCHECK(data.candidate->hasChainedItem());
+        chainedIdx.push_back(idx);
+      } else {
+        XDCHECK_EQ(data.candidate, data.toRecycle);
+        toRecycles.push_back(data.candidate);
+      }
+      idx++;
+    }
+    for (int i = 0; i < chainedIdx.size(); i++) {
+      auto& data = evictionData[chainedIdx[i]];
+      releaseBackToAllocator(*data.candidate, RemoveContext::kNormal, false,
+                             data.toRecycle);
+      (*stats_.chainedItemEvictions)[pid][cid].inc();
+    }
+    allocator_->freeBatch(toRecycles.begin(), toRecycles.end(), pid, cid);
+    size_t evictions = toRecycles.size();
+    (*stats_.regularItemEvictions)[pid][cid].add(evictions);
+    return {evictions, 0};
   }
 
   // returns true if nvmcache is enabled and we should write this item to
@@ -2087,44 +2170,6 @@ class CacheAllocator : public CacheBase {
                      : false;
   }
 
-  // returns the background mover stats
-  BackgroundMoverStats getBackgroundMoverStats(MoverDir direction) const {
-    auto stats = BackgroundMoverStats{};
-    if (direction == MoverDir::Evict) {
-      for (auto& bg : backgroundEvictor_)
-        stats += bg->getStats();
-    } else if (direction == MoverDir::Promote) {
-      for (auto& bg : backgroundPromoter_)
-        stats += bg->getStats();
-    }
-    return stats;
-  }
-
-  std::map<PoolId, std::map<ClassId, uint64_t>> getBackgroundMoverClassStats(
-      MoverDir direction) const {
-    std::map<PoolId, std::map<ClassId, uint64_t>> stats;
-
-    if (direction == MoverDir::Evict) {
-      for (auto& bg : backgroundEvictor_) {
-        for (auto& pid : bg->getClassStats()) {
-          for (auto& cid : pid.second) {
-            stats[pid.first][cid.first] += cid.second;
-          }
-        }
-      }
-    } else if (direction == MoverDir::Promote) {
-      for (auto& bg : backgroundPromoter_) {
-        for (auto& pid : bg->getClassStats()) {
-          for (auto& cid : pid.second) {
-            stats[pid.first][cid.first] += cid.second;
-          }
-        }
-      }
-    }
-
-    return stats;
-  }
-
   bool tryGetHandleWithWaitContextForMovingItem(Item& item,
                                                 WriteHandle& handle);
 
@@ -2285,9 +2330,8 @@ class CacheAllocator : public CacheBase {
   // free memory monitor
   std::unique_ptr<MemoryMonitor> memMonitor_;
 
-  // background evictor
-  std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundEvictor_;
-  std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundPromoter_;
+  // background data movement, for single tier, this just evicts
+  std::vector<std::unique_ptr<BackgroundMover<CacheT>>> backgroundMover_;
 
   // check whether a pool is a slabs pool
   std::array<bool, MemoryPoolManager::kMaxPools> isCompactCachePool_{};
@@ -2612,16 +2656,12 @@ void CacheAllocator<CacheTrait>::initWorkers() {
                           config_.ccacheOptimizeStepSizePercent);
   }
 
-  if (config_.backgroundEvictorEnabled()) {
-    startNewBackgroundEvictor(config_.backgroundEvictorInterval,
-                              config_.backgroundEvictorStrategy,
-                              config_.backgroundEvictorThreads);
-  }
-
-  if (config_.backgroundPromoterEnabled()) {
-    startNewBackgroundPromoter(config_.backgroundPromoterInterval,
-                               config_.backgroundPromoterStrategy,
-                               config_.backgroundPromoterThreads);
+  if (config_.backgroundMoverEnabled()) {
+    startNewBackgroundMover(config_.backgroundMoverInterval,
+                            config_.backgroundEvictionBatch,
+                            config_.backgroundPromotionBatch,
+                            config_.backgroundTargetFree,
+                            config_.backgroundMoverThreads);
   }
 }
 
@@ -2719,8 +2759,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              typename Item::Key key,
                                              uint32_t size,
                                              uint32_t creationTime,
-                                             uint32_t expiryTime,
-                                             bool fromBgThread) {
+                                             uint32_t expiryTime) {
   util::LatencyTracker tracker{stats().allocateLatency_};
 
   SCOPE_FAIL { stats_.invalidAllocs.inc(); };
@@ -2734,13 +2773,6 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
   (*stats_.allocAttempts)[pid][cid].inc();
 
   void* memory = allocator_->allocate(pid, requiredSize);
-
-  if (backgroundEvictor_.size() && !fromBgThread &&
-      (memory == nullptr || shouldWakeupBgEvictor(pid, cid))) {
-    backgroundEvictor_[BackgroundMover<CacheT>::workerId(
-                           pid, cid, backgroundEvictor_.size())]
-        ->wakeUp();
-  }
 
   if (memory == nullptr) {
     memory = findEviction(pid, cid);
@@ -3575,7 +3607,8 @@ void CacheAllocator<CacheTrait>::wakeUpWaiters(folly::StringPiece key,
 
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
-                                                 WriteHandle& newItemHdl) {
+                                                 WriteHandle& newItemHdl,
+                                                 bool skipAddInMMContainer) {
   XDCHECK(oldItem.isMoving());
   // If an item is expired, proceed to eviction.
   if (oldItem.isExpired()) {
@@ -3605,8 +3638,12 @@ bool CacheAllocator<CacheTrait>::moveRegularItem(Item& oldItem,
   // Adding the item to mmContainer has to succeed since no one can remove the
   // item
   auto& newContainer = getMMContainer(*newItemHdl);
-  auto mmContainerAdded = newContainer.add(*newItemHdl);
-  XDCHECK(mmContainerAdded);
+  if (!skipAddInMMContainer) {
+    // Adding the item to mmContainer has to succeed since no one can remove the
+    // item
+    auto mmContainerAdded = newContainer.add(*newItemHdl);
+    XDCHECK(mmContainerAdded);
+  }
 
   if (oldItem.hasChainedItem()) {
     XDCHECK(!newItemHdl->hasChainedItem()) << newItemHdl->toString();
@@ -3806,6 +3843,117 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
     nvmCache_->put(*candidate, std::move(token));
   }
   return {candidate, toRecycle};
+}
+
+// Used for the background movers to get a batch of items
+// to move/evict
+template <typename CacheTrait>
+std::vector<typename CacheAllocator<CacheTrait>::MoveData>
+CacheAllocator<CacheTrait>::getNextCandidates(PoolId pid,
+                                              ClassId cid,
+                                              uint32_t batch) {
+  std::vector<MoveData> evictionData;
+  evictionData.reserve(batch);
+
+  auto& mmContainer = getMMContainer(pid, cid);
+  unsigned int maxSearchTries =
+      std::max(config_.evictionSearchTries, batch * 2);
+
+  mmContainer.withEvictionIterator([this, pid, cid, batch, maxSearchTries,
+                                    &evictionData, &mmContainer](auto&& itr) {
+    unsigned int searchTries = 0;
+    if (!itr) {
+      ++searchTries;
+      (*stats_.evictionAttempts)[pid][cid].inc();
+      return;
+    }
+
+    while ((config_.evictionSearchTries == 0 || maxSearchTries > searchTries) &&
+           itr && evictionData.size() < batch) {
+      ++searchTries;
+      (*stats_.evictionAttempts)[pid][cid].inc();
+
+      auto* toRecycle_ = itr.get();
+      bool isChained_ = toRecycle_->isChainedItem();
+      auto* candidate_ =
+          isChained_ ? &toRecycle_->asChainedItem().getParentItem(compressor_)
+                     : toRecycle_;
+
+      typename NvmCacheT::PutToken putToken{};
+      const bool evictToNvmCache = shouldWriteToNvmCache(*candidate_);
+
+      auto markForEviction = [&candidate_, this]() {
+        auto markedForEviction = candidate_->markForEviction();
+        if (!markedForEviction) {
+          if (candidate_->hasChainedItem()) {
+            stats_.evictFailParentAC.inc();
+          } else {
+            stats_.evictFailAC.inc();
+          }
+          return false;
+        }
+        return true;
+      };
+
+      if (evictToNvmCache) {
+        auto putTokenRv = nvmCache_->createPutToken(
+            candidate_->getKey(),
+            [&markForEviction]() { return markForEviction(); });
+
+        if (!putTokenRv) {
+          switch (putTokenRv.error()) {
+          case InFlightPuts::PutTokenError::TRY_LOCK_FAIL:
+            stats_.evictFailPutTokenLock.inc();
+            break;
+          case InFlightPuts::PutTokenError::TOKEN_EXISTS:
+            stats_.evictFailConcurrentFill.inc();
+            break;
+          case InFlightPuts::PutTokenError::CALLBACK_FAILED:
+            stats_.evictFailConcurrentAccess.inc();
+            break;
+          }
+          ++itr;
+          continue;
+        }
+        putToken = std::move(*putTokenRv);
+        XDCHECK(putToken.isValid());
+      } else {
+        if (!markForEviction()) {
+          ++itr;
+          continue;
+        }
+      }
+
+      // markForEviction to make sure no other thead is evicting the item
+      // nor holding a handle to that item
+
+      // Check if parent changed for chained items - if yes, we cannot
+      // remove the child from the mmContainer as we will not be evicting
+      // it. We could abort right here, but we need to cleanup in case
+      // unmarkForEviction() returns 0 - so just go through normal path.
+      if (!toRecycle_->isChainedItem() ||
+          &toRecycle_->asChainedItem().getParentItem(compressor_) ==
+              candidate_) {
+        mmContainer.remove(itr);
+        MoveData moveData(candidate_, toRecycle_, nullptr,
+                          isChained_ || candidate_->hasChainedItem(),
+                          candidate_->isExpired(),
+                          std::move(putToken), nullptr);
+        evictionData.push_back(std::move(moveData));
+      }
+    }
+  });
+
+  for (auto& moveData : evictionData) {
+    Item* candidate = moveData.candidate;
+    unlinkItemForEviction(*moveData.candidate);
+    if (moveData.token.isValid() &&
+        shouldWriteToNvmCacheExclusive(*moveData.candidate)) {
+      nvmCache_->put(*moveData.candidate, std::move(moveData.token));
+    }
+  }
+
+  return evictionData;
 }
 
 template <typename CacheTrait>
@@ -4574,20 +4722,12 @@ PoolId CacheAllocator<CacheTrait>::addPool(
   setRebalanceStrategy(pid, std::move(rebalanceStrategy));
   setResizeStrategy(pid, std::move(resizeStrategy));
 
-  if (backgroundEvictor_.size()) {
+  if (backgroundMover_.size()) {
     auto memoryAssignments =
-        createBgWorkerMemoryAssignments(backgroundEvictor_.size());
-    for (size_t id = 0; id < backgroundEvictor_.size(); id++)
-      backgroundEvictor_[id]->setAssignedMemory(
-          std::move(memoryAssignments[id]));
-  }
-
-  if (backgroundPromoter_.size()) {
-    auto memoryAssignments =
-        createBgWorkerMemoryAssignments(backgroundPromoter_.size());
-    for (size_t id = 0; id < backgroundPromoter_.size(); id++)
-      backgroundPromoter_[id]->setAssignedMemory(
-          std::move(memoryAssignments[id]));
+        createBgWorkerMemoryAssignments(backgroundMover_.size());
+    for (size_t id = 0; id < backgroundMover_.size(); id++) {
+      backgroundMover_[id]->setAssignedMemory(std::move(memoryAssignments[id]));
+    }
   }
 
   return pid;
@@ -5112,8 +5252,7 @@ CacheAllocator<CacheTrait>::allocateNewItemForOldItem(const Item& oldItem) {
                                      oldItem.getKey(),
                                      oldItem.getSize(),
                                      oldItem.getCreationTime(),
-                                     oldItem.getExpiryTime(),
-                                     false);
+                                     oldItem.getExpiryTime());
   if (!newItemHdl) {
     return {};
   }
@@ -5434,8 +5573,7 @@ bool CacheAllocator<CacheTrait>::stopWorkers(std::chrono::seconds timeout) {
   success &= stopPoolResizer(timeout);
   success &= stopMemMonitor(timeout);
   success &= stopReaper(timeout);
-  success &= stopBackgroundEvictor(timeout);
-  success &= stopBackgroundPromoter(timeout);
+  success &= stopBackgroundMover(timeout);
   return success;
 }
 
@@ -5694,8 +5832,7 @@ GlobalCacheStats CacheAllocator<CacheTrait>::getGlobalCacheStats() const {
   ret.nvmCacheEnabled = nvmCache_ ? nvmCache_->isEnabled() : false;
   ret.reaperStats = getReaperStats();
   ret.rebalancerStats = getRebalancerStats();
-  ret.evictionStats = getBackgroundMoverStats(MoverDir::Evict);
-  ret.promotionStats = getBackgroundMoverStats(MoverDir::Promote);
+  ret.moverStats = getBackgroundMoverStats();
   ret.numActiveHandles = getNumActiveHandles();
 
   ret.isNewRamCache = cacheCreationTime_ == cacheInstanceCreationTime_;
@@ -5881,47 +6018,23 @@ auto CacheAllocator<CacheTrait>::createBgWorkerMemoryAssignments(
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::startNewBackgroundEvictor(
+bool CacheAllocator<CacheTrait>::startNewBackgroundMover(
     std::chrono::milliseconds interval,
-    std::shared_ptr<BackgroundMoverStrategy> strategy,
+    size_t evictionBatch,
+    size_t promotionBatch,
+    double targetFree,
     size_t threads) {
   XDCHECK(threads > 0);
-  backgroundEvictor_.resize(threads);
+  backgroundMover_.resize(threads);
   bool result = true;
-
   auto memoryAssignments = createBgWorkerMemoryAssignments(threads);
   for (size_t i = 0; i < threads; i++) {
-    auto ret = startNewWorker("BackgroundEvictor" + std::to_string(i),
-                              backgroundEvictor_[i], interval, *this, strategy,
-                              MoverDir::Evict);
+    auto ret = startNewWorker("BackgroundMover" + std::to_string(i),
+                              backgroundMover_[i], interval, *this,
+                              evictionBatch, promotionBatch, targetFree);
     result = result && ret;
-
     if (result) {
-      backgroundEvictor_[i]->setAssignedMemory(std::move(memoryAssignments[i]));
-    }
-  }
-  return result;
-}
-
-template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::startNewBackgroundPromoter(
-    std::chrono::milliseconds interval,
-    std::shared_ptr<BackgroundMoverStrategy> strategy,
-    size_t threads) {
-  XDCHECK(threads > 0);
-  backgroundPromoter_.resize(threads);
-  bool result = true;
-
-  auto memoryAssignments = createBgWorkerMemoryAssignments(threads);
-  for (size_t i = 0; i < threads; i++) {
-    auto ret = startNewWorker("BackgroundPromoter" + std::to_string(i),
-                              backgroundPromoter_[i], interval, *this, strategy,
-                              MoverDir::Promote);
-    result = result && ret;
-
-    if (result) {
-      backgroundPromoter_[i]->setAssignedMemory(
-          std::move(memoryAssignments[i]));
+      backgroundMover_[i]->setAssignedMemory(std::move(memoryAssignments[i]));
     }
   }
   return result;
@@ -5976,23 +6089,11 @@ bool CacheAllocator<CacheTrait>::stopReaper(std::chrono::seconds timeout) {
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::stopBackgroundEvictor(
+bool CacheAllocator<CacheTrait>::stopBackgroundMover(
     std::chrono::seconds timeout) {
   bool result = true;
-  for (size_t i = 0; i < backgroundEvictor_.size(); i++) {
-    auto ret = stopWorker("BackgroundEvictor", backgroundEvictor_[i], timeout);
-    result = result && ret;
-  }
-  return result;
-}
-
-template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::stopBackgroundPromoter(
-    std::chrono::seconds timeout) {
-  bool result = true;
-  for (size_t i = 0; i < backgroundPromoter_.size(); i++) {
-    auto ret =
-        stopWorker("BackgroundPromoter", backgroundPromoter_[i], timeout);
+  for (size_t i = 0; i < backgroundMover_.size(); i++) {
+    auto ret = stopWorker("BackgroundMover", backgroundMover_[i], timeout);
     result = result && ret;
   }
   return result;
