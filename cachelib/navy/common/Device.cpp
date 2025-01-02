@@ -902,7 +902,7 @@ std::unique_ptr<folly::AsyncBaseOp> AsyncIoContext::prepAsyncIo(IOOp& op) {
     asyncOp = std::make_unique<folly::IoUringOp>();
 #endif
   } else {
-    asyncOp = std::move(std::make_unique<folly::AsyncIOOp>());
+    asyncOp = asyncOp.reset(new folly::AsyncIOOp());
   }
 
   if (req.opType_ == OpType::READ) {
