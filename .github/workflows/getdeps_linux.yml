@@ -17,6 +17,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
+    - name: "update packages"
+      run: sudo apt-get update
+    - name: "install sudo,git"
+      run: sudo apt-get install -y libaio-dev
     - uses: actions/checkout@v4
     - name: Fetch ninja
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests ninja
