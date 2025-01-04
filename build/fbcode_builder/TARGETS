@@ -1,9 +1,0 @@
-load("@fbsource//tools/build_defs:export_directory.bzl", "export_directory")
-
-oncall("scm_client_infra")
-
-export_directory(
-    name = "manifests",
-    srcs = glob(["manifests/**/*"]),
-    visibility = ["PUBLIC"],
-)
