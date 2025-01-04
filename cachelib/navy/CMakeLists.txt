@@ -14,6 +14,8 @@
 
 add_thrift_file(SERIALIZATION serialization/objects.thrift json)
 
+include_directories(${FOLLY_INCLUDE_DIR})
+
 add_library (cachelib_navy
   ${SERIALIZATION_THRIFT_FILES}
   admission_policy/DynamicRandomAP.cpp

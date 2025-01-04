@@ -23,6 +23,7 @@
 #include <folly/experimental/io/AsyncIO.h>
 #include <folly/experimental/io/IoUring.h>
 #include <folly/fibers/TimedMutex.h>
+#include <folly/io/async/AsyncIO.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/io/async/EventHandler.h>
@@ -901,7 +902,7 @@ std::unique_ptr<folly::AsyncBaseOp> AsyncIoContext::prepAsyncIo(IOOp& op) {
     asyncOp = std::make_unique<folly::IoUringOp>();
 #endif
   } else {
-    asyncOp = std::make_unique<folly::AsyncIOOp>();
+    asyncOp = asyncOp.reset(new folly::AsyncIOOp());
   }
 
   if (req.opType_ == OpType::READ) {
