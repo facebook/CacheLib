@@ -50,6 +50,8 @@ void PoolOptimizer::optimizeRegularPoolSizes() {
 
 void PoolOptimizer::optimizeCompactCacheSizes() {
   try {
+    // TODO: should optimizer look at each tier individually?
+    // If yes, then resizePools should be per-tier
     auto strategy = cache_.getPoolOptimizeStrategy();
     if (!strategy) {
       strategy = strategy_;
