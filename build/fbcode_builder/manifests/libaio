@@ -1,8 +1,8 @@
 [manifest]
 name = libaio
 
-[debs.all(distro=ubuntu,distro_vers="22.04", fb=off, fbsource=off, os=linux, shared_libs=off, test=off)]
+[debs.all(distro=ubuntu,distro_vers="22.04")]
 libaio-dev
 
-[rpms.all(any(distro=centos_stream,distro_vers=9, fb=off, fbsource=off, os=linux, shared_libs=off, test=off), (distro=rocky,distro_vers=9, fb=off, fbsource=off, os=linux, shared_libs=off, test=off))]
+[rpms.all(distro=centos_stream,distro_vers=9)]
 libaio-devel
