@@ -3,7 +3,7 @@ name = libaio
 
 [download]
 url = https://github.com/anlongfei/libaio/archive/refs/heads/master.zip
-sha256 = 54f41674f6be93de2a5fdf85e5322ce933f8e652
+sha256 = e5d7188947e9189f11ef3d7bb14c155f26fb1c38fb5f80bea8c5f19f281c6dc0
 
 [build]
 builder = make
