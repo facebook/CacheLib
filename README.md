@@ -31,27 +31,53 @@ and examples.
 CacheLib has one single version number `facebook::cachelib::kCachelibVersion` that can be located at [CacheVersion.h](https://github.com/facebook/CacheLib/blob/main/cachelib/allocator/CacheVersion.h#L31). This version number must be incremented when incompatible changes are introduced. A change is incompatible if it could cause a complication failure due to removing public API or requires dropping the cache. Details about the compatibility information when the version number increases can be found in the [changelog](https://github.com/facebook/CacheLib/blob/main/CHANGELOG.md).
 
 
-## Building and installation
+## Building and installation with `getdeps.py`
 
-CacheLib provides a build script which prepares and installs all
-dependencies and prerequisites, then builds CacheLib.
-The build script has been tested to work on CentOS 8,
-Ubuntu 18.04, and Debian 10.
+This script is used by many of Meta's OSS tools.  It will download and build all of the necessary dependencies first, and will then invoke cmake etc to build folly.  This will help ensure that you build with relevant versions of all of the dependent libraries, taking into account what versions are installed locally on your system.
 
-```sh
-git clone https://github.com/facebook/CacheLib
-cd CacheLib
-./contrib/build.sh -d -j -v
+### Dependencies
 
-# The resulting library and executables:
-./opt/cachelib/bin/cachebench --help
-```
+You can install system dependencies to save building them:
 
-Re-running `./contrib/build.sh` will update CacheLib and its dependencies
-to their latest versions and rebuild them.
+    # Clone the repo
+    git clone https://github.com/facebook/CacheLib
+    # Install dependencies
+    cd CacheLib
+    sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
 
-See [build](https://cachelib.org/docs/installation/) for more details about
-the building and installation process.
+If you'd like to see the packages before installing them:
+
+    ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive
+
+On other platforms or if on Linux and without system dependencies `getdeps.py` will mostly download and build them for you during the build step.
+
+Some of the dependencies `getdeps.py` uses and installs are:
+
+  * a version of boost compiled with C++14 support.
+  * googletest is required to build and run folly's tests.
+
+### Build
+
+This script will download and build all of the necessary dependencies first,
+and will then invoke cmake etc to build CacheLib.  This will help ensure that you build with relevant versions of all of the dependent libraries, taking into account what versions are installed locally on your system.
+
+`getdeps.py` currently requires python 3.6+ to be on your path.
+
+`getdeps.py` will invoke cmake etc.
+
+    # Clone the repo
+    git clone https://github.com/facebook/CacheLib
+    cd CacheLib
+    # Build, using system dependencies if available
+    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
+
+### Run tests
+
+By default `getdeps.py` will build the tests for folly. To run them:
+
+    cd folly
+    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
+
 
 
 ## Contributing
@@ -83,6 +109,5 @@ it eligible for a bounty under our program.
 
 Clicking on a badge will show you the recent builds for that OS. If your target OS's build is failing, you may check out the latest [release](https://github.com/facebook/CacheLib/releases). If the release is too stale for you, you may wish to check recent issues and PRs for known workarounds.
 
-- [![CentOS 9](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-9.yml/badge.svg?event=schedule)](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-centos-9.yml?query=event%3Aschedule)
-- [![Rocky Linux 9](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-rockylinux-9.yml/badge.svg?event=schedule)](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-rockylinux-9.yml?query=event%3Aschedule)
-- [![Ubuntu 22](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-ubuntu-22.yml/badge.svg?event=schedule)](https://github.com/facebook/cachelib/actions/workflows/build-cachelib-ubuntu-22.yml?query=event%3Aschedule)
+
+[![linux](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml/badge.svg)](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml)
