@@ -1,6 +1,13 @@
 [manifest]
 name = libaio
 
+[download]
+url = https://github.com/anlongfei/libaio/archive/refs/heads/master.zip
+sha256 = 54f41674f6be93de2a5fdf85e5322ce933f8e652
+
+[build]
+builder = make
+
 [debs.all(distro=ubuntu,distro_vers="22.04")]
 libaio-dev
 
