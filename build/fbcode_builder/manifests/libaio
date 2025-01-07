@@ -7,6 +7,7 @@ sha256 = e5d7188947e9189f11ef3d7bb14c155f26fb1c38fb5f80bea8c5f19f281c6dc0
 
 [build]
 builder = make
+build_in_src_dir = true
 
 [debs.all(distro=ubuntu,distro_vers="22.04")]
 libaio-dev
