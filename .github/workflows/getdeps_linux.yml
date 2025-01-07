@@ -16,7 +16,7 @@ permissions:
 jobs:
   build:
     runs-on:
-      labels: ubuntu-20.04-16core
+      labels: 16-core-ubuntu
     steps:
     - uses: actions/checkout@v4
     - name: Fetch libaio
