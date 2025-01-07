@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: 16-core-ubuntu
     steps:
     - uses: actions/checkout@v4
     - name: Update system package info
