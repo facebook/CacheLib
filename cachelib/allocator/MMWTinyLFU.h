@@ -451,6 +451,15 @@ class MMWTinyLFU {
     //          is unchanged.
     bool add(T& node) noexcept;
 
+    // adds the given nodes into the container and marks each as being present
+    // in the container. The nodes are added to the head of the lru.
+    //
+    // @param vector of nodes  The nodes to be added to the container.
+    // @return  number of nodes added - it is up to user to verify all
+    //          expected nodes have been added.
+    template <typename It>
+    uint32_t addBatch(It begin, It end) noexcept;
+
     // removes the node from the lru and sets it previous and next to nullptr.
     //
     // @param node  The node to be removed from the container.
@@ -629,6 +638,11 @@ class MMWTinyLFU {
     // iterator passed as parameter.
     template <typename F>
     void withEvictionIterator(F&& f);
+    
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withPromotionIterator(F&& f);
 
     // Execute provided function under container lock.
     template <typename F>
@@ -973,6 +987,12 @@ void MMWTinyLFU::Container<T, HookPtr>::maybePromoteTailLocked() noexcept {
   lru_.getList(LruType::Probation).moveToHead(*probationNode);
 }
 
+template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename It>
+uint32_t MMWTinyLFU::Container<T, HookPtr>::addBatch(It begin, It end) noexcept {
+ return 0; //TODO implement
+}
+
 template <typename T, MMWTinyLFU::Hook<T> T::*HookPtr>
 bool MMWTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
@@ -1023,6 +1043,13 @@ template <typename F>
 void MMWTinyLFU::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   // TinyLFU uses spin lock which does not support combined locking
   fun(getEvictionIterator());
+}
+
+template <typename T, MMWTinyLFU::Hook<T> T::*HookPtr>
+template <typename F>
+void MMWTinyLFU::Container<T, HookPtr>::withPromotionIterator(F&& fun) {
+  // TODO: Implement this
+  return;
 }
 
 template <typename T, MMWTinyLFU::Hook<T> T::*HookPtr>
