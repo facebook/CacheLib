@@ -6065,6 +6065,7 @@ extern template class CacheAllocator<WTinyLFUCacheTrait>;
 // CacheAllocator with an LRU eviction policy
 // LRU policy can be configured to act as a segmented LRU as well
 using LruAllocator = CacheAllocator<LruCacheTrait>;
+using Lru5BAllocator = CacheAllocator<Lru5BCacheTrait>;
 using LruAllocatorSpinBuckets = CacheAllocator<LruCacheWithSpinBucketsTrait>;
 
 // CacheAllocator with 2Q eviction policy
@@ -6077,6 +6078,7 @@ using LruAllocatorSpinBuckets = CacheAllocator<LruCacheWithSpinBucketsTrait>;
 //     otherwise, item will enter cold queue
 //  3. items in cold queue are evicted to make room for new items
 using Lru2QAllocator = CacheAllocator<Lru2QCacheTrait>;
+using Lru5B2QAllocator = CacheAllocator<Lru5B2QCacheTrait>;
 
 // CacheAllocator with Tiny LFU eviction policy
 // It has a window initially to gauage the frequency of accesses of newly
