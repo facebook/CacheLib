@@ -34,7 +34,7 @@ constexpr size_t MB = 1024ULL * 1024ULL;
 constexpr size_t GB = MB * 1024ULL;
 
 const size_t defaultTotalCacheSize{1 * GB};
-const std::string defaultCacheDir{"/var/metadataDir"};
+const std::string defaultCacheDir{"/tmp/metadataDir"};
 
 template <typename Allocator>
 class MemoryTiersTest : public AllocatorTest<Allocator> {
@@ -109,7 +109,7 @@ class MemoryTiersTest : public AllocatorTest<Allocator> {
   void validatePoolSize(PoolId poolId,
                         std::unique_ptr<LruAllocator>& allocator,
                         size_t expectedSize) {
-    size_t actualSize = allocator->getPool(poolId).getPoolSize();
+    size_t actualSize = allocator->getPoolSize(poolId);
     EXPECT_EQ(actualSize, expectedSize);
   }
 
@@ -119,9 +119,9 @@ class MemoryTiersTest : public AllocatorTest<Allocator> {
                    size_t numTiers = 2) {
     if (isSizeValid) {
       auto pool = alloc->addPool("validPoolSize", poolSize);
-      EXPECT_LE(alloc->getPool(pool).getPoolSize(), poolSize);
+      EXPECT_LE(alloc->getPoolSize(pool), poolSize);
       if (poolSize >= numTiers * Slab::kSize)
-        EXPECT_GE(alloc->getPool(pool).getPoolSize(),
+        EXPECT_GE(alloc->getPoolSize(pool),
                   poolSize - numTiers * Slab::kSize);
     } else {
       EXPECT_THROW(alloc->addPool("invalidPoolSize", poolSize),
@@ -171,6 +171,84 @@ TEST_F(LruMemoryTiersTest, TestInvalid2TierConfigRatioNotSet) {
 
 TEST_F(LruMemoryTiersTest, TestInvalid2TierConfigSizesNeCacheSize) {
   EXPECT_THROW(createTestCacheConfig({0, 0}), std::invalid_argument);
+}
+
+TEST_F(LruMemoryTiersTest, TestPoolAllocations) {
+  std::vector<size_t> totalCacheSizes = {8 * GB, 2 * GB};
+
+  static const size_t numExtraSizes = 4;
+  static const size_t numExtraSlabs = 20;
+
+  for (size_t i = 0; i < numExtraSizes; i++) {
+    totalCacheSizes.push_back(totalCacheSizes.back() +
+                              (folly::Random::rand64() % numExtraSlabs) *
+                                  Slab::kSize);
+  }
+
+  size_t min_ratio = 1;
+  size_t max_ratio = 111;
+
+  static const size_t numCombinations = 10;
+
+  for (auto totalCacheSize : totalCacheSizes) {
+    for (size_t k = 0; k < numCombinations; k++) {
+      const size_t i = folly::Random::rand32() % max_ratio + min_ratio;
+      const size_t j = folly::Random::rand32() % max_ratio + min_ratio;
+      LruAllocatorConfig cfg =
+          createTestCacheConfig({i, j},
+                                /* usePoisx */ true, totalCacheSize);
+      basicCheck(cfg, totalCacheSize);
+
+      std::unique_ptr<LruAllocator> alloc = std::unique_ptr<LruAllocator>(
+          new LruAllocator(LruAllocator::SharedMemNew, cfg));
+
+      size_t size = (folly::Random::rand64() %
+                      (alloc->getCacheMemoryStats().ramCacheSize - Slab::kSize)) +
+                    Slab::kSize;
+      testAddPool(alloc, size, true);
+    }
+  }
+}
+
+TEST_F(LruMemoryTiersTest, TestPoolInvalidAllocations) {
+  std::vector<size_t> totalCacheSizes = {48 * MB, 51 * MB, 256 * MB,
+                                         1 * GB,  5 * GB,  8 * GB};
+  size_t min_ratio = 1;
+  size_t max_ratio = 111;
+
+  static const size_t numCombinations = 10;
+
+  for (auto totalCacheSize : totalCacheSizes) {
+    for (size_t k = 0; k < numCombinations; k++) {
+      const size_t i = folly::Random::rand32() % max_ratio + min_ratio;
+      const size_t j = folly::Random::rand32() % max_ratio + min_ratio;
+      LruAllocatorConfig cfg =
+          createTestCacheConfig({i, j},
+                                /* usePoisx */ true, totalCacheSize);
+
+      std::unique_ptr<LruAllocator> alloc = nullptr;
+      try {
+         alloc = std::unique_ptr<LruAllocator>(
+            new LruAllocator(LruAllocator::SharedMemNew, cfg));
+      } catch(...) {
+        // expection only if cache too small
+        size_t sum_ratios = std::accumulate(
+          cfg.getMemoryTierConfigs().begin(), cfg.getMemoryTierConfigs().end(), 0UL,
+          [](const size_t i, const MemoryTierCacheConfig& config) {
+            return i + config.getRatio();
+        });
+        auto tier1slabs = cfg.getMemoryTierConfigs()[0].calculateTierSize(cfg.getCacheSize(), sum_ratios) / Slab::kSize;
+        auto tier2slabs = cfg.getMemoryTierConfigs()[1].calculateTierSize(cfg.getCacheSize(), sum_ratios) / Slab::kSize;
+        EXPECT_TRUE(tier1slabs <= 2 || tier2slabs <= 2);
+
+        continue;
+      }
+
+      size_t size = (folly::Random::rand64() % (100 * GB)) +
+                    alloc->getCacheMemoryStats().ramCacheSize;
+      testAddPool(alloc, size, false);
+    }
+  }
 }
 } // namespace tests
 } // namespace cachelib
