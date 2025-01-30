@@ -929,7 +929,12 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
         config.getBucketsPower()));
   }
 
-  if (nBytes != ht_.size()) {
+  // Take page alignment into consideration when comparing the size of the
+  // shared memory and the size of the hashtable.
+  size_t pageSize =
+      facebook::cachelib::detail::getPageSize(config_.getPageSize());
+
+  if (nBytes != util::getAlignedSize(ht_.size(), pageSize)) {
     throw std::invalid_argument(
         folly::sformat("Hashtable size not compatible. old = {}, new = {}",
                        ht_.size(),
