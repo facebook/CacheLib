@@ -211,23 +211,26 @@ struct Stats {
   // we're currently writing into flash.
   mutable util::PercentileStats nvmPutSize_;
 
-  using PerPoolClassAtomicCounters =
+  using PerTierPerPoolClassAtomicCounters = std::array<
       std::array<std::array<AtomicCounter, MemoryAllocator::kMaxClasses>,
-                 MemoryPoolManager::kMaxPools>;
+                 MemoryPoolManager::kMaxPools>,
+      CacheBase::kMaxTiers>;
 
   // count of a stat for a specific allocation class
-  using PerPoolClassTLCounters =
+  using PerTierPerPoolClassTLCounters = std::array<
       std::array<std::array<TLCounter, MemoryAllocator::kMaxClasses>,
-                 MemoryPoolManager::kMaxPools>;
+                 MemoryPoolManager::kMaxPools>,
+      CacheBase::kMaxTiers>;
 
   // hit count for every alloc class in every pool
-  std::unique_ptr<PerPoolClassTLCounters> cacheHits{};
-  std::unique_ptr<PerPoolClassAtomicCounters> allocAttempts{};
-  std::unique_ptr<PerPoolClassAtomicCounters> evictionAttempts{};
-  std::unique_ptr<PerPoolClassAtomicCounters> allocFailures{};
-  std::unique_ptr<PerPoolClassAtomicCounters> fragmentationSize{};
-  std::unique_ptr<PerPoolClassAtomicCounters> chainedItemEvictions{};
-  std::unique_ptr<PerPoolClassAtomicCounters> regularItemEvictions{};
+  std::unique_ptr<PerTierPerPoolClassTLCounters> cacheHits{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> allocAttempts{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> evictionAttempts{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> allocFailures{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> fragmentationSize{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> chainedItemEvictions{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> regularItemEvictions{};
+  std::unique_ptr<PerTierPerPoolClassAtomicCounters> numWritebacks{};
 
   // Eviction failures due to parent cannot be removed from access container
   AtomicCounter evictFailParentAC{0};

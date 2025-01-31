@@ -1,14 +1,18 @@
 // @nolint instantiates a small cache and runs a quick run of basic operations.
 {
     "cache_config" : {
-      "cacheSizeMB" : 512,
-      "usePosixShm" : false,
+      "cacheSizeMB" : 9024,
       "cacheDir" : "/tmp/mem-tiers",
       "memoryTiers" : [
         {
           "ratio": 1,
           "memBindNodes": "0"
+        },
+        {
+          "ratio": 1,
+          "memBindNodes": "0"
         }
+
       ],
       "poolRebalanceIntervalSec" : 1,
       "moveOnSlabRelease" : false,
@@ -19,12 +23,12 @@
     "test_config" : {
         "numOps" : 100000,
         "numThreads" : 32,
-        "numKeys" : 1000000,
+        "numKeys" : 2000000,
 
         "keySizeRange" : [1, 8, 64],
         "keySizeRangeProbability" : [0.3, 0.7],
 
-        "valSizeRange" : [1, 32, 10240, 409200],
+        "valSizeRange" : [1, 32, 10240, 52000],
         "valSizeRangeProbability" : [0.1, 0.2, 0.7],
 
         "getRatio" : 0.15,
