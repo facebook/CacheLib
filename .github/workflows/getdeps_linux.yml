@@ -16,10 +16,20 @@ permissions:
 jobs:
   build:
     runs-on: 16-core-ubuntu
+    container: "quay.io/centos/centos:stream9"
     steps:
+    - name: "Show Head Commit"
+      env:
+        CONTENT: ${{ toJSON(github.event.head_commit) }}
+      run: echo "$CONTENT"
+    - name: "update packages"
+      # stock centos has a problem with CMAKE, fails with:
+      #  "cmake: symbol lookup error: cmake: undefined symbol: archive_write_add_filter_zstd"
+      # updating solves it
+      run: dnf update -y
+    - name: "install sudo,git"
+      run: dnf install -y sudo git cmake gcc procps
     - uses: actions/checkout@v4
-    - name: Update system package info
-      run: sudo apt-get update
     - name: Install system deps
       run: sudo python3 build/fbcode_builder/getdeps.py --allow-system-packages install-system-deps --recursive cachelib && sudo python3 build/fbcode_builder/getdeps.py --allow-system-packages install-system-deps --recursive patchelf
     - id: paths
