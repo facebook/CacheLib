@@ -54,11 +54,11 @@ namespace facebook::cachelib::cachebench {
  * No matter how the state of the item is changed in cache, in RAM, NVM,
  * evicted, or removed, the record will be kept in ItemRecords until the end of
  * test.
- * The version field is the latest version of the item (via in-palce or
- * chianed mutation). This ensures that the destructor is only triggers for
+ * The version field is the latest version of the item (via in-place or
+ * chained mutation). This ensures that the destructor is only triggered for
  * the latest version of the item.
  * The destructCount field is incremented in the ItemDestructor, it ensures that
- * each allocation triggers destructor once and only once.
+ * each allocation triggers the destructor once and only once.
  */
 struct ItemRecord {
   uint32_t destructCount{0};
