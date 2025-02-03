@@ -26,6 +26,7 @@
 #include "cachelib/cachebench/workload/KVReplayGenerator.h"
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
+#include "cachelib/cachebench/workload/SimpleFlashBenchmarkGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
@@ -155,6 +156,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   } else if (config.generator == "online") {
     return std::make_unique<OnlineGenerator>(config);
 
+  } else if (config.generator == "simple-flash-benchmark") {
+    return std::make_unique<SimpleFlashBenchmarkGenerator>(config);
   } else {
     throw std::invalid_argument(fmt::format(
         "Invalid config: unsupported generator {}", config.generator));
