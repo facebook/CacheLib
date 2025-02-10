@@ -33,6 +33,7 @@ add_library (cachelib_cachebench
   ./workload/OnlineGenerator.cpp
   ./workload/WorkloadGenerator.cpp
   ./workload/PieceWiseReplayGenerator.cpp
+  ./workload/SimpleFlashBenchmarkGenerator.cpp
   )
 add_dependencies(cachelib_cachebench thrift_generated_files)
 target_link_libraries(cachelib_cachebench PUBLIC
