@@ -6189,6 +6189,53 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_EQ(0, alloc.getSlabReleaseStats().numSlabReleaseStuck);
   }
 
+  void testBackgroundEviction() {
+    typename AllocatorT::Config config{};
+    size_t cacheSize = 5 * Slab::kSize; // 20 MB
+    double targetFree = 0.03;           // 3% of the cache kept free
+    config.setCacheSize(cacheSize);
+    config.enableBackgroundMover(std::chrono::milliseconds{10000},
+                                 20, // just test eviction for single tier
+                                 0,
+                                 targetFree, // try and keep 0.03 of the cache
+                                             // free
+                                 1);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+    const unsigned int keyLen = 20;
+    const std::vector<unsigned int> size{500};
+    auto& pool = alloc.getPool(poolId);
+
+    this->fillUpPoolUntilEvictions(alloc, poolId, size, keyLen);
+    int classId = pool.getAllocationClassId(size[0]);
+    auto stats = alloc.getGlobalCacheStats();
+    auto mpStats = pool.getStats();
+    auto [currItems, currUsage] = pool.getApproxUsage(classId);
+    size_t maxItems = (currItems / currUsage);
+    size_t targetItems = maxItems * (1 - targetFree);
+    size_t approxEvictionsNeeded =
+        currItems > targetItems ? currItems - targetItems : 0;
+    XLOGF(INFO, "Current usage: {:.2f}, Current items: {}", currUsage,
+          currItems);
+    XLOGF(INFO, "Target items: {}, Approx evictions needed: {}", targetItems,
+          approxEvictionsNeeded);
+
+    while (stats.moverStats[0].numEvictedItems < approxEvictionsNeeded &&
+           currUsage > (1 - targetFree)) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      stats = alloc.getGlobalCacheStats();
+      mpStats = pool.getStats();
+      currUsage = pool.getApproxUsage(classId).second;
+    }
+    XLOGF(INFO, "Evictions needed: {}, Evictions performed: {}",
+          approxEvictionsNeeded, stats.moverStats[0].numEvictedItems);
+    ASSERT_GE(stats.moverStats[0].numEvictedItems,
+              approxEvictionsNeeded * 0.90); // at least 90% of the evictions
+                                             // should be done by the background
+                                             // mover
+  }
+
   void testRateMap() {
     RateMap counters;
     counters.updateCount("stat1", 11);

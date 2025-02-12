@@ -405,6 +405,10 @@ TYPED_TEST(BaseAllocatorTest, SlabReleaseStuck) {
   this->testSlabReleaseStuck();
 }
 
+TYPED_TEST(BaseAllocatorTest, BackgroundEviction) {
+  this->testBackgroundEviction();
+}
+
 TYPED_TEST(BaseAllocatorTest, RateMap) { this->testRateMap(); }
 
 TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {

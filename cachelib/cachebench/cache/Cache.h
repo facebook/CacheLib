@@ -518,6 +518,13 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       config_.getRebalanceStrategy(),
       std::chrono::seconds(config_.poolRebalanceIntervalSec));
 
+  allocatorConfig_.enableBackgroundMover(
+      std::chrono::milliseconds(config_.backgroundMoverIntervalMilSec),
+      config_.backgroundEvictionBatch,
+      config_.backgroundPromotionBatch,
+      config_.backgroundTargetFree,
+      config_.backgroundMoverThreads);
+
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
     allocatorConfig_.enableMovingOnSlabRelease(
         [](Item& oldItem, Item& newItem, Item* parentPtr) {
@@ -1125,14 +1132,15 @@ Stats Cache<Allocator>::getStats() const {
     aggregate += poolStats;
   }
 
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats{};
+  std::map<MemoryDescriptorType, ACStats> allocationClassStats{};
 
   for (size_t pid = 0; pid < pools_.size(); pid++) {
     PoolId poolId = static_cast<PoolId>(pid);
     auto poolStats = cache_->getPoolStats(poolId);
     auto cids = poolStats.getClassIds();
     for (auto [cid, stats] : poolStats.mpStats.acStats) {
-      allocationClassStats[poolId][cid] = stats;
+      MemoryDescriptorType md(poolId, cid);
+      allocationClassStats[md] = stats;
     }
   }
 
@@ -1141,21 +1149,14 @@ Stats Cache<Allocator>::getStats() const {
   const auto navyStats = cache_->getNvmCacheStatsMap().toMap();
 
   ret.allocationClassStats = allocationClassStats;
+  ret.backgroundMoverStats = cacheStats.moverStats;
   ret.numEvictions = aggregate.numEvictions();
   ret.numItems = aggregate.numItems();
   ret.evictAttempts = cacheStats.evictionAttempts;
   ret.allocAttempts = cacheStats.allocAttempts;
   ret.allocFailures = cacheStats.allocFailures;
 
-  ret.backgndEvicStats.nEvictedItems = cacheStats.evictionStats.numMovedItems;
-  ret.backgndEvicStats.nTraversals = cacheStats.evictionStats.runCount;
-  ret.backgndEvicStats.nClasses = cacheStats.evictionStats.totalClasses;
-  ret.backgndEvicStats.evictionSize = cacheStats.evictionStats.totalBytesMoved;
-
-  ret.backgndPromoStats.nPromotedItems =
-      cacheStats.promotionStats.numMovedItems;
-  ret.backgndPromoStats.nTraversals = cacheStats.promotionStats.runCount;
-
+  ret.backgroundMoverClasses = cache_->getBackgroundMoverClassStats();
   ret.numCacheGets = cacheStats.numCacheGets;
   ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
   ret.numCacheEvictions = cacheStats.numCacheEvictions;
@@ -1202,11 +1203,6 @@ Stats Cache<Allocator>::getStats() const {
   if (config_.printNvmCounters) {
     ret.nvmCounters = cache_->getNvmCacheStatsMap().toMap();
   }
-
-  ret.backgroundEvictionClasses =
-      cache_->getBackgroundMoverClassStats(MoverDir::Evict);
-  ret.backgroundPromotionClasses =
-      cache_->getBackgroundMoverClassStats(MoverDir::Promote);
 
   // nvm stats from navy
   if (!isRamOnly() && !navyStats.empty()) {

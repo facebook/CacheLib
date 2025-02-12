@@ -27,31 +27,8 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-struct BackgroundEvictionStats {
-  // the number of items this worker evicted by looking at pools/classes stats
-  uint64_t nEvictedItems{0};
-
-  // number of times we went executed the thread //TODO: is this def correct?
-  uint64_t nTraversals{0};
-
-  // number of classes
-  uint64_t nClasses{0};
-
-  // size of evicted items
-  uint64_t evictionSize{0};
-};
-
-struct BackgroundPromotionStats {
-  // the number of items this worker evicted by looking at pools/classes stats
-  uint64_t nPromotedItems{0};
-
-  // number of times we went executed the thread //TODO: is this def correct?
-  uint64_t nTraversals{0};
-};
-
 struct Stats {
-  BackgroundEvictionStats backgndEvicStats;
-  BackgroundPromotionStats backgndPromoStats;
+  std::vector<BackgroundMoverStats> backgroundMoverStats;
 
   uint64_t numEvictions{0};
   uint64_t numItems{0};
@@ -127,15 +104,17 @@ struct Stats {
   uint64_t invalidDestructorCount{0};
   int64_t unDestructedItemCount{0};
 
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats;
+  std::map<MemoryDescriptorType, ACStats> allocationClassStats;
 
   // populate the counters related to nvm usage. Cache implementation can decide
   // what to populate since not all of those are interesting when running
   // cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
-  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundEvictionClasses;
-  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundPromotionClasses;
+  using ClassBgStatsType =
+      std::map<MemoryDescriptorType, std::pair<size_t, size_t>>;
+
+  ClassBgStatsType backgroundMoverClasses;
 
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
@@ -157,10 +136,9 @@ struct Stats {
     out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
 
     auto foreachAC = [](const auto& map, auto cb) {
-      for (auto& pidStat : map) {
-        for (auto& cidStat : pidStat.second) {
-          cb(pidStat.first, cidStat.first, cidStat.second);
-        }
+      for (const auto& [key, value] : map) {
+        auto [pid, cid] = key;
+        cb(pid, cid, value);
       }
     };
 
@@ -253,40 +231,50 @@ struct Stats {
       }
     }
 
-    if (!backgroundEvictionClasses.empty() &&
-        backgndEvicStats.nEvictedItems > 0) {
-      out << "== Class Background Eviction Counters Map ==" << std::endl;
-      foreachAC(backgroundEvictionClasses,
-                [&](auto pid, auto cid, auto evicted) {
-                  out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
-                                        cid, evicted)
-                      << std::endl;
-                });
-
-      out << folly::sformat("Background Evicted Items : {:,}",
-                            backgndEvicStats.nEvictedItems)
-          << std::endl;
-      out << folly::sformat("Background Evictor Traversals : {:,}",
-                            backgndEvicStats.nTraversals)
-          << std::endl;
+    size_t bgId = 1;
+    size_t totalBgEvicted = 0;
+    size_t totalBgPromoted = 0;
+    for (auto& bgWorkerStats : backgroundMoverStats) {
+      if (bgWorkerStats.numEvictedItems > 0 ||
+          bgWorkerStats.numPromotedItems > 0) {
+        out << folly::sformat(" == Background Mover {} Threads ==", bgId)
+            << std::endl;
+        if (bgWorkerStats.numEvictedItems > 0) {
+          out << folly::sformat("Evicted Items: {:,}",
+                                bgWorkerStats.numEvictedItems)
+              << std::endl;
+        }
+        if (bgWorkerStats.numPromotedItems > 0) {
+          out << folly::sformat("Promoted Items: {:,}",
+                                bgWorkerStats.numPromotedItems)
+              << std::endl;
+        }
+        out << folly::sformat(
+                   "Traversals: {:,}\n"
+                   "Run Count: {:,}\n"
+                   "Avg Time Per Traversal in ns: {:,}\n"
+                   "Avg Items Evicted: {:.2f}",
+                   bgWorkerStats.numTraversals, bgWorkerStats.runCount,
+                   bgWorkerStats.avgTraversalTimeNs,
+                   (double)bgWorkerStats.numEvictedItems /
+                       (double)bgWorkerStats.numTraversals)
+            << std::endl;
+        totalBgEvicted += bgWorkerStats.numEvictedItems;
+        totalBgPromoted += bgWorkerStats.numPromotedItems;
+        bgId++;
+      }
     }
 
-    if (!backgroundPromotionClasses.empty() &&
-        backgndPromoStats.nPromotedItems > 0) {
-      out << "== Class Background Promotion Counters Map ==" << std::endl;
-      foreachAC(backgroundPromotionClasses,
-                [&](auto pid, auto cid, auto promoted) {
-                  out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
-                                        cid, promoted)
-                      << std::endl;
-                });
-
-      out << folly::sformat("Background Promoted Items : {:,}",
-                            backgndPromoStats.nPromotedItems)
-          << std::endl;
-      out << folly::sformat("Background Promoter Traversals : {:,}",
-                            backgndPromoStats.nTraversals)
-          << std::endl;
+    if (!backgroundMoverClasses.empty() &&
+        (totalBgEvicted || totalBgPromoted)) {
+      out << "== Per Class Background Movers Counters ==" << std::endl;
+      foreachAC(backgroundMoverClasses, [&](auto pid, auto cid, auto pair) {
+        if (pair.first > 0 || pair.second > 0) {
+          out << folly::sformat("pid{:2} cid{:4} evicted: {:4} promoted: {:4}",
+                                pid, cid, pair.first, pair.second)
+              << std::endl;
+        }
+      });
     }
 
     if (numNvmGets > 0 || numNvmDeletes > 0 || numNvmPuts > 0) {
@@ -426,6 +414,11 @@ struct Stats {
     if (numCacheEvictions > 0) {
       out << folly::sformat("Total eviction executed {}", numCacheEvictions)
           << std::endl;
+      if (totalBgEvicted) {
+        out << folly::sformat("Total background eviction executed {}",
+                              totalBgEvicted)
+            << std::endl;
+      }
     }
   }
 

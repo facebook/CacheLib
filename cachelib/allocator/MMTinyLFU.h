@@ -377,6 +377,18 @@ class MMTinyLFU {
     //          is unchanged.
     bool add(T& node) noexcept;
 
+    // helper function to add the node under the container lock
+    void addNodeLocked(T& node, const Time& currTime);
+
+    // adds the given nodes into the container and marks each as being present
+    // in the container. The nodes are added to the head of the lru.
+    //
+    // @param vector of nodes  The nodes to be added to the container.
+    // @return  number of nodes added - it is up to user to verify all
+    //          expected nodes have been added.
+    template <typename It>
+    uint32_t addBatch(It begin, It end) noexcept;
+
     // removes the node from the lru and sets it previous and next to nullptr.
     //
     // @param node  The node to be removed from the container.
@@ -545,6 +557,11 @@ class MMTinyLFU {
     // iterator passed as parameter.
     template <typename F>
     void withEvictionIterator(F&& f);
+
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withPromotionIterator(F&& f);
 
     // Execute provided function under container lock.
     template <typename F>
@@ -856,7 +873,16 @@ bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   if (node.isInMMContainer()) {
     return false;
   }
+  addNodeLocked(node, currTime);
+  return true;
+}
 
+// adds the node to the list assuming not in
+// container and holding container lock
+template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+void MMTinyLFU::Container<T, HookPtr>::addNodeLocked(T& node,
+                                                     const Time& currTime) {
+  XDCHECK(!node.isInMMContainer());
   auto& tinyLru = lru_.getList(LruType::Tiny);
   tinyLru.linkAtHead(node);
   markTiny(node);
@@ -884,7 +910,23 @@ bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   node.markInMMContainer();
   setUpdateTime(node, currTime);
   unmarkAccessed(node);
-  return true;
+}
+
+template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename It>
+uint32_t MMTinyLFU::Container<T, HookPtr>::addBatch(It begin, It end) noexcept {
+  const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
+  LockHolder l(lruMutex_);
+  uint32_t i = 0;
+  for (auto itr = begin; itr != end; itr++) {
+    T* node = *itr;
+    if (node->isInMMContainer()) {
+      return i;
+    }
+    addNodeLocked(*node, currTime);
+    i++;
+  }
+  return i;
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
@@ -899,6 +941,12 @@ template <typename F>
 void MMTinyLFU::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   // TinyLFU uses spin lock which does not support combined locking
   fun(getEvictionIterator());
+}
+
+template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename F>
+void MMTinyLFU::Container<T, HookPtr>::withPromotionIterator(F&& fun) {
+  throw std::runtime_error("Not supported");
 }
 
 template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>

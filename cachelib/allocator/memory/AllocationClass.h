@@ -97,6 +97,10 @@ class AllocationClass {
   // fetch stats about this allocation class.
   ACStats getStats() const;
 
+  // (1) total active allocs in this class
+  // (2) approx usage as fraction of used allocs/total allocs in this class
+  std::pair<size_t, double> getApproxUsage() const;
+
   // Whether the pool is full or free to allocate more in the current state.
   // This is only a hint and not a gurantee that subsequent allocate will
   // fail/succeed.
@@ -109,6 +113,13 @@ class AllocationClass {
   //          don't have any free memory. The caller will have to add a slab
   //          to this slab class to make further allocations out of it.
   void* allocate();
+
+  // allocates a batch of memory corresponding to the allocation size of this
+  // AllocationClass.
+  //
+  // @return  vector of pointers to the memory of allocationSize_ chunk or
+  //          empty vector if we don't have any free memory.
+  std::vector<void*> allocateBatch(size_t batch);
 
   // @param ctx     release context for the slab owning this alloc
   // @param memory  memory to check
@@ -212,6 +223,39 @@ class AllocationClass {
   // this slab class.
   void free(void* memory);
 
+  // releases the memory under the AC lock
+  void freeLocked(const SlabHeader* header,
+                  const Slab* slab,
+                  void* memory,
+                  uintptr_t slabPtrVal);
+
+  // release the memory back to the class in batch
+  // avoids the overhead of locking for each free
+  template <typename It>
+  uint32_t freeBatch(It begin, It end) {
+    return lock_->lock_combine([this, begin, end]() -> uint32_t {
+      uint32_t i = 0;
+      for (auto itr = begin; itr != end; ++itr) {
+        void* memory = *itr;
+        const auto* header = slabAlloc_.getSlabHeader(memory);
+        auto* slab = slabAlloc_.getSlabForMemory(memory);
+        if (header == nullptr || header->classId != classId_) {
+          throw std::invalid_argument(folly::sformat(
+              "trying to free memory {} (with ClassId {}), not belonging to "
+              "this "
+              "AllocationClass (ClassId {})",
+              memory, header ? header->classId : Slab::kInvalidClassId,
+              classId_));
+        }
+
+        const auto slabPtrVal = getSlabPtrValue(slab);
+        freeLocked(header, slab, memory, slabPtrVal);
+        i++;
+      }
+      return i;
+    });
+  }
+
   // acquires a new slab for this allocation class.
   // @param slab    a new slab to be added. This can NOT be nullptr.
   void addSlab(Slab* slab);
@@ -220,6 +264,12 @@ class AllocationClass {
   // @param slab    a new slab to be added. This can NOT be nullptr.
   // @return  new allocation. This cannot fail.
   void* addSlabAndAllocate(Slab* slab);
+
+  // acquires a new slab and allocates a batch right away
+  // @param slab a new slab to be added.
+  // @param batch number of allocations to be made.
+  // @return  vector of pointers to the memory of new allocations
+  std::vector<void*> addSlabAndAllocateBatch(Slab* slab, size_t batch);
 
   // Releasing a slab is a two step process.
   // 1. Mark a slab for release, by calling `startSlabRelease`.
