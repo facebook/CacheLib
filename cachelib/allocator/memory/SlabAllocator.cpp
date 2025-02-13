@@ -161,13 +161,6 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
         *object.minAllocSize()));
   }
 
-  if (getMinAllocSize() != *object.minAllocSize()) {
-    throw std::invalid_argument(folly::sformat(
-        "current min alloc size {} does not match the previous one {}",
-        getMinAllocSize(),
-        *object.minAllocSize()));
-  }
-
   XDCHECK(isRestorable());
 
   const size_t currSize = roundDownToSlabSize(memSize);

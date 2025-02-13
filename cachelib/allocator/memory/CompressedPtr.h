@@ -70,11 +70,6 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
     return ptr_ == ptr.ptr_;
   }
   bool operator!=(const PtrType ptr) const noexcept { return !(ptr == ptr_); }
-  // If the allocSize is smaller than this, then pointer compression is not
-  // going to work.
-  // static constexpr uint32_t getMinAllocSize() noexcept {
-  //   return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
-  // }
 
   // maximum addressable memory for pointer compression to work.
   static constexpr size_t getMaxAddressableSize() noexcept {
