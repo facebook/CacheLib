@@ -42,7 +42,8 @@
         "setRatio": 0.0,
         "popDistFile": "pop.json",
         "setRatio": 0.0,
-        "valSizeDistFile": "sizes.json"
+        "valSizeDistFile": "sizes.json",
+        "useLegacyKeyGen": true
       }
     ],
 

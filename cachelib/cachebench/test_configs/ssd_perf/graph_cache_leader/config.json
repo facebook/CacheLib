@@ -53,7 +53,8 @@
         "loneGetRatio": 0.2315436539873129,
         "popDistFile": "fbobj_pop.json",
         "setRatio": 0.0,
-        "valSizeDistFile": "fbobj_sizes.json"
+        "valSizeDistFile": "fbobj_sizes.json",
+        "useLegacyKeyGen": true
       },
       {
         "addChainedRatio": 0.0,
@@ -69,7 +70,8 @@
         "loneGetRatio": 0.1158887280020357,
         "popDistFile": "assoc_pop.json",
         "setRatio": 0.0,
-        "valSizeDistFile": "assoc_sizes.json"
+        "valSizeDistFile": "assoc_sizes.json",
+        "useLegacyKeyGen": true
       }
     ]
   }

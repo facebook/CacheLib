@@ -74,6 +74,21 @@ struct DistributionConfig : public JSONConfig {
   double updateRatio{0.0};
   double couldExistRatio{0.0};
 
+  // Set useLegacyKeyGen true when using the old distribution data based on old
+  // key generation scheme. (ex. test configs like graph_cache_leader or
+  // kvcache_l2_wc).
+  //
+  // Our old key generation scheme didn't populate all the keys within the key
+  // space. It was just using some of the keys which was grabbed for the
+  // popularity data from the production workload. So, even though numKeys in
+  // config can be configured to any number, # of total utilized keys are always
+  // # of collected keys or less than that. This was changed to generate any key
+  // within the key space given by numKeys, but with the new scheme, old test
+  // configs key population data is not working anymore. Since we still need to
+  // test with the old test configs based on old key generation scheme, this
+  // option is added.
+  bool useLegacyKeyGen{false};
+
   bool usesChainedItems() const { return addChainedRatio > 0; }
 
   // for continuous value sizes, the probability is expressed per interval

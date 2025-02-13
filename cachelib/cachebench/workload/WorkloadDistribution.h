@@ -92,7 +92,11 @@ class WorkloadDistribution {
   std::unique_ptr<Distribution> getPopDist(size_t left, size_t right) const {
     if (config_.usesDiscretePopularity()) {
       return std::make_unique<FastDiscreteDistribution>(
-          left, right, config_.popularityBuckets, config_.popularityWeights);
+          left,
+          right,
+          config_.popularityBuckets,
+          config_.popularityWeights,
+          config_.useLegacyKeyGen);
     } else {
       // TODO In general, could have different keyFrequency factor besides 2
       double mu = (left + right) * 0.5;
