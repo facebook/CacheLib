@@ -117,9 +117,13 @@ TYPED_TEST(BaseAllocatorTest, DropFile) { this->testDropFile(); }
 TYPED_TEST(BaseAllocatorTest, ShmTemporary) { this->testShmTemporary(); }
 
 TYPED_TEST(BaseAllocatorTest, Serialization) { this->testSerialization(); }
+TYPED_TEST(BaseAllocatorTest, MultiTierSerialization) { this->testMultiTierSerialization(); }
 
 TYPED_TEST(BaseAllocatorTest, SerializationMMConfig) {
   this->testSerializationMMConfig();
+}
+TYPED_TEST(BaseAllocatorTest, MultiTierSerializationMMConfig) {
+  this->testMultiTierSerializationMMConfig();
 }
 
 TYPED_TEST(BaseAllocatorTest, testSerializationWithFragmentation) {
@@ -405,11 +409,16 @@ TYPED_TEST(BaseAllocatorTest, SlabReleaseStuck) {
   this->testSlabReleaseStuck();
 }
 
+TYPED_TEST(BaseAllocatorTest, BackgroundEviction) {
+  this->testBackgroundEviction();
+}
+
 TYPED_TEST(BaseAllocatorTest, RateMap) { this->testRateMap(); }
 
 TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {
   this->testStatSnapshotTest();
 }
+TYPED_TEST(BaseAllocatorTest, BasicMultiTier) {this->testBasicMultiTier(); }
 
 TYPED_TEST(BaseAllocatorTest, ProvisionPool) { this->testProvisionPool(); }
 

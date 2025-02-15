@@ -326,6 +326,10 @@ class Cache {
   // return the stats for the pool.
   PoolStats getPoolStats(PoolId pid) const { return cache_->getPoolStats(pid); }
 
+  ACStats getACStats(TierId tid, PoolId pid, ClassId cid) const {
+    return cache_->getACStats(tid, pid, cid);
+  }
+
   // return the total number of inconsistent operations detected since start.
   unsigned int getInconsistencyCount() const {
     return inconsistencyCount_.load(std::memory_order_relaxed);
@@ -518,6 +522,13 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       config_.getRebalanceStrategy(),
       std::chrono::seconds(config_.poolRebalanceIntervalSec));
 
+  allocatorConfig_.enableBackgroundMover(
+      std::chrono::milliseconds(config_.backgroundMoverIntervalMilSec),
+      config_.backgroundEvictionBatch,
+      config_.backgroundPromotionBatch,
+      config_.backgroundTargetFree,
+      config_.backgroundMoverThreads);
+
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
     allocatorConfig_.enableMovingOnSlabRelease(
         [](Item& oldItem, Item& newItem, Item* parentPtr) {
@@ -565,6 +576,9 @@ Cache<Allocator>::Cache(const CacheConfig& config,
   if (!config_.memoryTierConfigs.empty()) {
     allocatorConfig_.configureMemoryTiers(config_.memoryTierConfigs);
   }
+
+  allocatorConfig_.insertToFirstFreeTier = config_.insertToFirstFreeTier;
+  allocatorConfig_.evictIfNotAccessed = config_.evictIfNotAccessed;
 
   auto cleanupGuard = folly::makeGuard([&] {
     if (!nvmCacheFilePath_.empty()) {
@@ -1111,28 +1125,37 @@ double Cache<Allocator>::getNvmBytesWritten() const {
 
 template <typename Allocator>
 Stats Cache<Allocator>::getStats() const {
-  PoolStats aggregate = cache_->getPoolStats(pools_[0]);
-  auto usageFraction =
-      1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
-                aggregate.poolUsableSize;
   Stats ret;
-  ret.poolUsageFraction.push_back(usageFraction);
-  for (size_t pid = 1; pid < pools_.size(); pid++) {
-    auto poolStats = cache_->getPoolStats(static_cast<PoolId>(pid));
-    usageFraction = 1.0 - (static_cast<double>(poolStats.freeMemoryBytes())) /
-                              poolStats.poolUsableSize;
-    ret.poolUsageFraction.push_back(usageFraction);
-    aggregate += poolStats;
+  for (TierId tid = 0; tid < cache_->getNumTiers(); tid++) {
+    PoolStats aggregate = cache_->getPoolStats(tid,pools_[0]);
+    auto usageFraction =
+        1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
+                  aggregate.poolUsableSize;
+    ret.poolUsageFraction[tid].push_back(usageFraction);
+    for (size_t pid = 1; pid < pools_.size(); pid++) {
+      auto poolStats = cache_->getPoolStats(tid, static_cast<PoolId>(pid));
+      usageFraction = 1.0 - (static_cast<double>(poolStats.freeMemoryBytes())) /
+                                poolStats.poolUsableSize;
+      ret.poolUsageFraction[tid].push_back(usageFraction);
+      aggregate += poolStats;
+    }
+    ret.numEvictions.push_back(aggregate.numEvictions());
+    ret.numWritebacks.push_back(aggregate.numWritebacks());
+    ret.numCacheHits.push_back(aggregate.numHits());
+    ret.numItems.push_back(aggregate.numItems());
   }
 
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats{};
+  std::map<MemoryDescriptorType, ACStats> allocationClassStats{};
 
   for (size_t pid = 0; pid < pools_.size(); pid++) {
     PoolId poolId = static_cast<PoolId>(pid);
     auto poolStats = cache_->getPoolStats(poolId);
     auto cids = poolStats.getClassIds();
-    for (auto [cid, stats] : poolStats.mpStats.acStats) {
-      allocationClassStats[poolId][cid] = stats;
+    for (TierId tid = 0; tid < cache_->getNumTiers(); tid++) {
+      for (auto cid : cids) {
+        MemoryDescriptorType md(tid, poolId, cid);
+        allocationClassStats[md] = cache_->getACStats(tid, poolId, cid);
+      }
     }
   }
 
@@ -1141,21 +1164,13 @@ Stats Cache<Allocator>::getStats() const {
   const auto navyStats = cache_->getNvmCacheStatsMap().toMap();
 
   ret.allocationClassStats = allocationClassStats;
-  ret.numEvictions = aggregate.numEvictions();
-  ret.numItems = aggregate.numItems();
+  ret.backgroundMoverStats = cacheStats.moverStats;
   ret.evictAttempts = cacheStats.evictionAttempts;
   ret.allocAttempts = cacheStats.allocAttempts;
   ret.allocFailures = cacheStats.allocFailures;
 
-  ret.backgndEvicStats.nEvictedItems = cacheStats.evictionStats.numMovedItems;
-  ret.backgndEvicStats.nTraversals = cacheStats.evictionStats.runCount;
-  ret.backgndEvicStats.nClasses = cacheStats.evictionStats.totalClasses;
-  ret.backgndEvicStats.evictionSize = cacheStats.evictionStats.totalBytesMoved;
-
-  ret.backgndPromoStats.nPromotedItems =
-      cacheStats.promotionStats.numMovedItems;
-  ret.backgndPromoStats.nTraversals = cacheStats.promotionStats.runCount;
-
+  ret.backgroundMoverClasses = cache_->getBackgroundMoverClassStats();
+  
   ret.numCacheGets = cacheStats.numCacheGets;
   ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
   ret.numCacheEvictions = cacheStats.numCacheEvictions;
@@ -1202,11 +1217,6 @@ Stats Cache<Allocator>::getStats() const {
   if (config_.printNvmCounters) {
     ret.nvmCounters = cache_->getNvmCacheStatsMap().toMap();
   }
-
-  ret.backgroundEvictionClasses =
-      cache_->getBackgroundMoverClassStats(MoverDir::Evict);
-  ret.backgroundPromotionClasses =
-      cache_->getBackgroundMoverClassStats(MoverDir::Promote);
 
   // nvm stats from navy
   if (!isRamOnly() && !navyStats.empty()) {

@@ -1,0 +1,70 @@
+// @nolint like default.json, but moves items during slab release instead of
+    // evicting them.
+    {
+      "cache_config": {
+        "cacheSizeMB": 2248,
+        "cacheDir": "/tmp/mem-tier5",
+        "memoryTiers": [
+          {
+            "ratio": 1,
+            "memBindNodes": 0
+          },
+          {
+            "ratio": 1,
+            "memBindNodes": 0
+          }
+        ],
+        "poolRebalanceIntervalSec": 1,
+        "moveOnSlabRelease": true,
+        "rebalanceMinSlabs": 2,
+        "backgroundMoverThreads": 2,
+        "backgroundMoverIntervalMilSec": 100
+      },
+      "test_config": {
+        "preallocateCache": true,
+        "numOps": 20000000,
+        "numThreads": 32,
+        "numKeys": 250000,
+        "generator": "online",
+        "keySizeRange": [
+          1,
+          8,
+          32,
+          64,
+          128,
+          256,
+          512
+        ],
+        "keySizeRangeProbability": [
+          0.1,
+          0.1,
+          0.2,
+          0.2,
+          0.3,
+          0.1
+        ],
+        "valSizeRange": [
+          1,
+          128,
+          512,
+          1024,
+          4096,
+          10240,
+          20480,
+          40960,
+          60000
+        ],
+        "valSizeRangeProbability": [
+          0.1,
+          0.1,
+          0.1,
+          0.2,
+          0.2,
+          0.1,
+          0.1,
+          0.1
+        ],
+        "getRatio": 0.70,
+        "setRatio": 0.30
+      }
+    }

@@ -27,40 +27,19 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-struct BackgroundEvictionStats {
-  // the number of items this worker evicted by looking at pools/classes stats
-  uint64_t nEvictedItems{0};
-
-  // number of times we went executed the thread //TODO: is this def correct?
-  uint64_t nTraversals{0};
-
-  // number of classes
-  uint64_t nClasses{0};
-
-  // size of evicted items
-  uint64_t evictionSize{0};
-};
-
-struct BackgroundPromotionStats {
-  // the number of items this worker evicted by looking at pools/classes stats
-  uint64_t nPromotedItems{0};
-
-  // number of times we went executed the thread //TODO: is this def correct?
-  uint64_t nTraversals{0};
-};
-
 struct Stats {
-  BackgroundEvictionStats backgndEvicStats;
-  BackgroundPromotionStats backgndPromoStats;
+  std::vector<BackgroundMoverStats> backgroundMoverStats;
 
-  uint64_t numEvictions{0};
-  uint64_t numItems{0};
+  std::vector<uint64_t> numEvictions;
+  std::vector<uint64_t> numWritebacks;
+  std::vector<uint64_t> numCacheHits;
+  std::vector<uint64_t> numItems;
 
-  uint64_t evictAttempts{0};
-  uint64_t allocAttempts{0};
-  uint64_t allocFailures{0};
+  std::vector<uint64_t> evictAttempts{0};
+  std::vector<uint64_t> allocAttempts{0};
+  std::vector<uint64_t> allocFailures{0};
 
-  std::vector<double> poolUsageFraction;
+  std::map<TierId,std::vector<double>> poolUsageFraction;
 
   uint64_t numCacheGets{0};
   uint64_t numCacheGetMiss{0};
@@ -127,15 +106,17 @@ struct Stats {
   uint64_t invalidDestructorCount{0};
   int64_t unDestructedItemCount{0};
 
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats;
+  std::map<MemoryDescriptorType, ACStats> allocationClassStats;
 
   // populate the counters related to nvm usage. Cache implementation can decide
   // what to populate since not all of those are interesting when running
   // cachebench.
   std::unordered_map<std::string, double> nvmCounters;
 
-  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundEvictionClasses;
-  std::map<PoolId, std::map<ClassId, uint64_t>> backgroundPromotionClasses;
+  using ClassBgStatsType =
+      std::map<MemoryDescriptorType, std::pair<size_t, size_t>>;
+
+  ClassBgStatsType backgroundMoverClasses;
 
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
@@ -143,31 +124,49 @@ struct Stats {
   void render(std::ostream& out) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
-    out << folly::sformat("Items in RAM  : {:,}", numItems) << std::endl;
-    out << folly::sformat("Items in NVM  : {:,}", numNvmItems) << std::endl;
-
-    out << folly::sformat("Alloc Attempts: {:,} Success: {:.2f}%",
-                          allocAttempts,
-                          invertPctFn(allocFailures, allocAttempts))
-        << std::endl;
-    out << folly::sformat("Evict Attempts: {:,} Success: {:.2f}%",
-                          evictAttempts,
-                          pctFn(numEvictions, evictAttempts))
-        << std::endl;
-    out << folly::sformat("RAM Evictions : {:,}", numEvictions) << std::endl;
+    const auto nTiers = numItems.size();
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Items in Tier {}  : {:,}", tid, numItems[tid]) << std::endl;
+    }
+    out << folly::sformat("Items in NVM    : {:,}", numNvmItems) << std::endl;
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Tier {} Alloc Attempts: {:,} Success: {:.2f}%",
+                              tid,
+                              allocAttempts[tid],
+                              invertPctFn(allocFailures[tid], allocAttempts[tid]))
+            << std::endl;
+    }
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat(
+                   "Tier {} Evict Attempts: {:,} Success: {:.2f}%",
+                   tid,
+                   evictAttempts[tid],
+                   pctFn(numEvictions[tid], evictAttempts[tid]))
+            << std::endl;
+    }
+    for (TierId tid = 0; tid < nTiers; tid++) {
+        out << folly::sformat("Tier {} Evictions : {:,} Writebacks: {:,} Success: {:.2f}%",
+                tid, numEvictions[tid], numWritebacks[tid],
+                invertPctFn(numEvictions[tid] - numWritebacks[tid], numEvictions[tid])) << std::endl;
+    }
 
     auto foreachAC = [](const auto& map, auto cb) {
-      for (auto& pidStat : map) {
-        for (auto& cidStat : pidStat.second) {
-          cb(pidStat.first, cidStat.first, cidStat.second);
-        }
+      for (const auto& [key, value] : map) {
+        auto [tid, pid, cid] = key;
+        cb(tid, pid, cid, value);
       }
     };
 
-    for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
-      out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
-                            poolUsageFraction[pid])
-          << std::endl;
+    for (auto entry : poolUsageFraction) {
+        auto tid = entry.first;
+        auto usageFraction = entry.second;
+        for (auto pid = 0U; pid < usageFraction.size(); pid++) {
+          out << folly::sformat("Tier {} fraction of pool {:,} used : {:.2f}",
+                                tid,
+                                pid,
+                                usageFraction[pid])
+              << std::endl;
+        }
     }
 
     if (FLAGS_report_ac_memory_usage_stats != "") {
@@ -191,34 +190,28 @@ struct Stats {
         }
       };
 
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto tid, auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
         auto [memorySizeSuffix, memorySize] =
-            formatMemory(stats.activeAllocs * stats.allocSize);
-        out << folly::sformat("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
-                              pid, cid, allocSize, allocSizeSuffix, memorySize,
+            formatMemory(stats.totalAllocatedSize());
+        out << folly::sformat("tid{:2} pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
+                              tid, pid, cid, allocSize, allocSizeSuffix, memorySize,
                               memorySizeSuffix)
             << std::endl;
       });
 
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+      foreachAC(allocationClassStats, [&](auto tid, auto pid, auto cid, auto stats) {
         auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
 
         // If the pool is not full, extrapolate usageFraction for AC assuming it
         // will grow at the same rate. This value will be the same for all ACs.
-        double acUsageFraction;
-        if (poolUsageFraction[pid] < 1.0) {
-          acUsageFraction = poolUsageFraction[pid];
-        } else if (stats.usedSlabs == 0) {
-          acUsageFraction = 0.0;
-        } else {
-          acUsageFraction =
-              stats.activeAllocs / (stats.usedSlabs * stats.allocsPerSlab);
-        }
+        const auto acUsageFraction = (poolUsageFraction.at(tid)[pid] < 1.0)
+                                   ? poolUsageFraction.at(tid)[pid]
+                                   : stats.usageFraction();
 
         out << folly::sformat(
-                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,
-                   allocSize, allocSizeSuffix, acUsageFraction)
+                   "tid{:2} pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}",
+                   tid, pid, cid, allocSize, allocSizeSuffix, acUsageFraction)
             << std::endl;
       });
     }
@@ -227,7 +220,11 @@ struct Stats {
       out << folly::sformat("Cache Gets    : {:,}", numCacheGets) << std::endl;
       out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
-
+      for (TierId tid = 0; tid < numCacheHits.size(); tid++) {
+        double tierHitRatio = pctFn(numCacheHits[tid],numCacheGets);
+        out << folly::sformat("Tier {} Hit Ratio     : {:6.2f}%", tid, tierHitRatio)
+            << std::endl;
+      }
       if (FLAGS_report_api_latency) {
         auto printLatencies =
             [&out](folly::StringPiece cat,
@@ -253,40 +250,50 @@ struct Stats {
       }
     }
 
-    if (!backgroundEvictionClasses.empty() &&
-        backgndEvicStats.nEvictedItems > 0) {
-      out << "== Class Background Eviction Counters Map ==" << std::endl;
-      foreachAC(backgroundEvictionClasses,
-                [&](auto pid, auto cid, auto evicted) {
-                  out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
-                                        cid, evicted)
-                      << std::endl;
-                });
-
-      out << folly::sformat("Background Evicted Items : {:,}",
-                            backgndEvicStats.nEvictedItems)
-          << std::endl;
-      out << folly::sformat("Background Evictor Traversals : {:,}",
-                            backgndEvicStats.nTraversals)
-          << std::endl;
+    size_t bgId = 1;
+    size_t totalBgEvicted = 0;
+    size_t totalBgPromoted = 0;
+    for (auto& bgWorkerStats : backgroundMoverStats) {
+      if (bgWorkerStats.numEvictedItems > 0 ||
+          bgWorkerStats.numPromotedItems > 0) {
+        out << folly::sformat(" == Background Mover {} Threads ==", bgId)
+            << std::endl;
+        if (bgWorkerStats.numEvictedItems > 0) {
+          out << folly::sformat("Evicted Items: {:,}",
+                                bgWorkerStats.numEvictedItems)
+              << std::endl;
+        }
+        if (bgWorkerStats.numPromotedItems > 0) {
+          out << folly::sformat("Promoted Items: {:,}",
+                                bgWorkerStats.numPromotedItems)
+              << std::endl;
+        }
+        out << folly::sformat(
+                   "Traversals: {:,}\n"
+                   "Run Count: {:,}\n"
+                   "Avg Time Per Traversal in ns: {:,}\n"
+                   "Avg Items Evicted: {:.2f}",
+                   bgWorkerStats.numTraversals, bgWorkerStats.runCount,
+                   bgWorkerStats.avgTraversalTimeNs,
+                   (double)bgWorkerStats.numEvictedItems /
+                       (double)bgWorkerStats.numTraversals)
+            << std::endl;
+        totalBgEvicted += bgWorkerStats.numEvictedItems;
+        totalBgPromoted += bgWorkerStats.numPromotedItems;
+        bgId++;
+      }
     }
 
-    if (!backgroundPromotionClasses.empty() &&
-        backgndPromoStats.nPromotedItems > 0) {
-      out << "== Class Background Promotion Counters Map ==" << std::endl;
-      foreachAC(backgroundPromotionClasses,
-                [&](auto pid, auto cid, auto promoted) {
-                  out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
-                                        cid, promoted)
-                      << std::endl;
-                });
-
-      out << folly::sformat("Background Promoted Items : {:,}",
-                            backgndPromoStats.nPromotedItems)
-          << std::endl;
-      out << folly::sformat("Background Promoter Traversals : {:,}",
-                            backgndPromoStats.nTraversals)
-          << std::endl;
+    if (!backgroundMoverClasses.empty() &&
+        (totalBgEvicted || totalBgPromoted)) {
+      out << "== Per Class Background Movers Counters ==" << std::endl;
+      foreachAC(backgroundMoverClasses, [&](auto tid, auto pid, auto cid, auto pair) {
+        if (pair.first > 0 || pair.second > 0) {
+          out << folly::sformat("tid{:2} pid{:2} cid{:4} evicted: {:4} promoted: {:4}",
+                                tid, pid, cid, pair.first, pair.second)
+              << std::endl;
+        }
+      });
     }
 
     if (numNvmGets > 0 || numNvmDeletes > 0 || numNvmPuts > 0) {
@@ -426,6 +433,11 @@ struct Stats {
     if (numCacheEvictions > 0) {
       out << folly::sformat("Total eviction executed {}", numCacheEvictions)
           << std::endl;
+      if (totalBgEvicted) {
+        out << folly::sformat("Total background eviction executed {}",
+                              totalBgEvicted)
+            << std::endl;
+      }
     }
   }
 
@@ -483,7 +495,8 @@ struct Stats {
     };
 
     auto totalMisses = getTotalMisses();
-    counters["num_items"] = numItems;
+    //TODO: per tier
+    counters["num_items"] = std::accumulate(numItems.begin(),numItems.end(),0);
     counters["num_nvm_items"] = numNvmItems;
     counters["hit_rate"] = calcInvertPctFn(totalMisses, numCacheGets);
 
