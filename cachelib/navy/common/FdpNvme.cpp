@@ -88,15 +88,14 @@ int FdpNvme::nvmeIOMgmtRecv(uint32_t nsid,
   uint32_t cdw10 = (op & 0xf) | (op_specific & 0xff << 16);
   uint32_t cdw11 = (data_len >> 2) - 1; // cdw11 is 0 based
 
-  struct nvme_passthru_cmd cmd = {
-      .opcode = nvme_cmd_io_mgmt_recv,
-      .nsid = nsid,
-      .addr = (uint64_t)(uintptr_t)data,
-      .data_len = data_len,
-      .cdw10 = cdw10,
-      .cdw11 = cdw11,
-      .timeout_ms = NVME_DEFAULT_IOCTL_TIMEOUT,
-  };
+  struct nvme_passthru_cmd cmd = {};
+  cmd.opcode = nvme_cmd_io_mgmt_recv;
+  cmd.nsid = nsid;
+  cmd.addr = (uint64_t)(uintptr_t)data;
+  cmd.data_len = data_len;
+  cmd.cdw10 = cdw10;
+  cmd.cdw11 = cdw11;
+  cmd.timeout_ms = NVME_DEFAULT_IOCTL_TIMEOUT;
 
   return ioctl(file_.fd(), NVME_IOCTL_IO_CMD, &cmd);
 }
