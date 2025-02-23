@@ -171,6 +171,8 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
   }
 
   friend SlabAllocator;
+  template <typename PtrType, typename AllocatorContainer, typename CPtrType>
+  friend class PtrCompressor;
   // Allow access to private members by unit tests
   friend class tests::AllocTestBase;
 };
@@ -348,20 +350,23 @@ class CACHELIB_PACKED_ATTR CompressedPtr5B {
     regionIdx_ += static_cast<uint32_t>(tid) << kNumTierIdxOffset;
   }
 
+  template <typename PtrType, typename AllocatorContainer, typename CPtrType>
+  friend class PtrCompressor;
+
   friend SlabAllocator;
   friend class facebook::cachelib::tests::AllocTestBase;
 };
 
 template <typename PtrType, typename AllocatorT, typename CompressedPtrType>
-class PtrCompressor {
+class SingleTierPtrCompressor {
  public:
-  explicit PtrCompressor(const AllocatorT& allocator) noexcept
+  explicit SingleTierPtrCompressor(const AllocatorT& allocator) noexcept
       : allocator_(allocator) {}
 
   const CompressedPtrType compress(const PtrType* uncompressed) const {
     return allocator_.template compress<CompressedPtrType>(
         uncompressed, false /* isMultiTiered */);
-  }
+}
 
   PtrType* unCompress(const CompressedPtrType& compressed) const {
     return static_cast<PtrType*>(
@@ -369,8 +374,57 @@ class PtrCompressor {
             compressed, false /* isMultiTiered */));
   }
 
-  bool operator==(const PtrCompressor& rhs) const noexcept {
+  bool operator==(const SingleTierPtrCompressor& rhs) const noexcept {
     return &allocator_ == &rhs.allocator_;
+  }
+
+  bool operator!=(const SingleTierPtrCompressor& rhs) const noexcept {
+    return !(*this == rhs);
+  }
+
+ private:
+  // memory allocator that does the pointer compression.
+  const AllocatorT& allocator_;
+};
+
+template <typename PtrType, typename AllocatorContainer, typename CompressedPtrType>
+class PtrCompressor {
+ public:
+  explicit PtrCompressor(const AllocatorContainer& allocators) noexcept
+      : allocators_(allocators) {}
+
+  const CompressedPtrType compress(const PtrType* uncompressed) const {
+    if (uncompressed == nullptr) {
+      return CompressedPtrType();
+    }
+    TierId tid;
+    for (tid = 0; tid < allocators_.size(); tid++) {
+      if (allocators_[tid]->isMemoryInAllocator(
+              static_cast<const void*>(uncompressed)))
+        break;
+    }
+    bool isMultiTiered = allocators_.size() > 1;
+    auto cptr = allocators_[tid]->template compress<CompressedPtrType>(
+        uncompressed, isMultiTiered);
+    if (isMultiTiered) {
+      cptr.setTierId(tid);
+    }
+    return cptr;
+  }
+
+  PtrType* unCompress(const CompressedPtrType& compressed) const {
+    if (compressed.isNull()) {
+      return nullptr;
+    }
+    bool isMultiTiered = allocators_.size() > 1;
+    auto& allocator = *allocators_[compressed.getTierId(isMultiTiered)];
+    return static_cast<PtrType*>(
+        allocator.template unCompress<CompressedPtrType>(
+            compressed, isMultiTiered));
+  }
+
+  bool operator==(const PtrCompressor& rhs) const noexcept {
+    return &allocators_ == &rhs.allocators_;
   }
 
   bool operator!=(const PtrCompressor& rhs) const noexcept {
@@ -379,7 +433,7 @@ class PtrCompressor {
 
  private:
   // memory allocator that does the pointer compression.
-  const AllocatorT& allocator_;
+  const AllocatorContainer& allocators_;
 };
 } // namespace cachelib
 } // namespace facebook

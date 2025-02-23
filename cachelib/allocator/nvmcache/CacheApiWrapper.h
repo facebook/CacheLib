@@ -94,7 +94,7 @@ class CacheAPIWrapperForNvm {
                                       uint32_t size,
                                       uint32_t creationTime,
                                       uint32_t expiryTime) {
-    return cache.allocateInternal(id, key, size, creationTime, expiryTime);
+    return cache.allocateInternal(id, key, size, creationTime, expiryTime, false);
   }
 
   // Insert the allocated handle into the AccessContainer from nvmcache, making

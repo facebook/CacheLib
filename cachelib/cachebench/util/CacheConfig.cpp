@@ -44,6 +44,8 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, tryLockUpdate);
   JSONSetVal(configJson, lruIpSpec);
   JSONSetVal(configJson, useCombinedLockForIterators);
+  
+  JSONSetVal(configJson, insertToFirstFreeTier);
 
   JSONSetVal(configJson, lru2qHotPct);
   JSONSetVal(configJson, lru2qColdPct);
@@ -90,6 +92,13 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, deviceMaxWriteSize);
   JSONSetVal(configJson, deviceEnableFDP);
 
+  // Background mover related configs
+  JSONSetVal(configJson, backgroundMoverIntervalMilSec);
+  JSONSetVal(configJson, backgroundMoverThreads);
+  JSONSetVal(configJson, backgroundTargetFree);
+  JSONSetVal(configJson, backgroundEvictionBatch);
+  JSONSetVal(configJson, backgroundPromotionBatch);
+
   JSONSetVal(configJson, memoryOnlyTTL);
 
   JSONSetVal(configJson, usePosixShm);
@@ -112,7 +121,7 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 760>();
+  checkCorrectSize<CacheConfig, 800>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

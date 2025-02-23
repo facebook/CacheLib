@@ -133,6 +133,12 @@ class MemoryPool {
 
   MPStats getStats() const;
 
+  // gets the approximate class usage for the given class id.
+  //
+  // @param cid  the class id for which we want to get the usage.
+  // @return a pair of number of active allocations and the usage in the slab.
+  std::pair<size_t, double> getApproxUsage(ClassId cid) const;
+
   // Provision each allocation class with prescribed number of slabs.
   //
   // @param slabsDistribution   number of slabs in each AC
@@ -146,6 +152,14 @@ class MemoryPool {
   // @return pointer to allocation or nullptr on failure to allocate.
   // @throw  std::invalid_argument if size is invalid.
   void* allocate(uint32_t size);
+
+  // allocates memory of at least _size_ bytes in a batch.
+  //
+  // @param cid    the class id for the allocation.
+  // @param batch  the number of allocations to be made.
+  // @return a vector of pointers to the memory of the class
+  // @throw  std::invalid_argument if the class id is invalid.
+  std::vector<void*> allocateByCidBatch(ClassId cid, size_t batch);
 
   // Allocate a slab with zeroed memory
   //
@@ -164,6 +178,19 @@ class MemoryPool {
   // @throw std::invalid_argument if the memory does not belong to this pool.
   // @throw std::run_time_error if the slab class information is corrupted.
   void free(void* memory);
+
+  // frees a batch of memory batch to the pool. throws an exception if the
+  // memory does not belong to this pool.
+  //
+  // @param  begin  iterator to the start of the batch
+  // @param  end    iterator to the end of the batch
+  // @param  cid    the allocation class id of the batch
+  template <typename It>
+  void freeBatch(It begin, It end, ClassId cid) {
+    auto& ac = getAllocationClassFor(cid);
+    auto freed = ac.freeBatch(begin, end);
+    currAllocSize_ -= ac.getAllocSize() * freed;
+  }
 
   // resize the memory pool. This only adjusts the Pool size. It does not
   // release the slabs back to the SlabAllocator if the new size is less than
