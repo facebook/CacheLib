@@ -443,7 +443,7 @@ class AllocationClass {
   // void* is re-interpreted as FreeAlloc* before being stored in the free
   // list.
   struct CACHELIB_PACKED_ATTR FreeAlloc {
-    using CompressedPtrType = facebook::cachelib::CompressedPtr4B;
+    using CompressedPtrType = facebook::cachelib::CompressedPtr5B;
     using PtrCompressor = facebook::cachelib::
         PtrCompressor<FreeAlloc, SlabAllocator, CompressedPtrType>;
     SListHook<FreeAlloc> hook_{};
