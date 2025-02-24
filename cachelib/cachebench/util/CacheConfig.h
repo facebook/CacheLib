@@ -39,6 +39,8 @@ class CacheMonitorFactory {
   virtual ~CacheMonitorFactory() = default;
   virtual std::unique_ptr<CacheMonitor> create(LruAllocator& cache) = 0;
   virtual std::unique_ptr<CacheMonitor> create(Lru2QAllocator& cache) = 0;
+  virtual std::unique_ptr<CacheMonitor> create(Lru5BAllocator& cache) = 0;
+  virtual std::unique_ptr<CacheMonitor> create(Lru5B2QAllocator& cache) = 0;
 };
 
 // Parse memory tiers configuration from JSON config
