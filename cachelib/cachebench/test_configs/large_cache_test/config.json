@@ -1,0 +1,40 @@
+{
+  "cache_config": {
+    "cacheSizeMB": 220616,
+    "allocSizes": [262144, 524288, 1048576, 4194304],
+    "allocator": "LRU5B2Q"
+  },
+  "test_config":
+    {
+      "name": "stressor",
+      "enableLookaside": true,
+      "getRatio": 0.7684563460126871,
+      "keySizeRange": [
+        1,
+        8,
+        64
+      ],
+      "keySizeRangeProbability": [
+        0.3,
+        0.7
+      ],
+      "loneGetRatio": 0.2315436539873129,
+      "numKeys": 125000,
+      "numOps": 600000,
+      "numThreads": 16,
+      "valSizeRange": [
+        260000,
+        524000,
+        1040000,
+        4190000,
+        4194000
+      ],
+      "valSizeRangeProbability": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    }
+
+}
