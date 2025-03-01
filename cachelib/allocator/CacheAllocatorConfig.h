@@ -345,6 +345,9 @@ class CacheAllocatorConfig {
   // CacheAllocator::startCacheWorkers()
   CacheAllocatorConfig& setDelayCacheWorkersStart();
 
+  // Set numShards to use for CacheAllocator locks
+  CacheAllocatorConfig& setNumShards(size_t shards);
+
   // skip promote children items in chained when parent fail to promote
   bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
     return skipPromoteChildrenWhenParentFailed;
@@ -654,6 +657,8 @@ class CacheAllocatorConfig {
   // If true, we will delay worker start until user explicitly calls
   // CacheAllocator::startCacheWorkers()
   bool delayCacheWorkersStart{false};
+
+  size_t numShards{8192};
 
   friend CacheT;
 
@@ -1124,6 +1129,12 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDelayCacheWorkersStart() {
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNumShards(size_t shards) {
+  numShards = shards;
+  return *this;
+}
+
+template <typename T>
 const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
   // we can track tail hits only if MMType is MM2Q
   if (trackTailHits && T::MMType::kId != MM2Q::kId) {
@@ -1274,6 +1285,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   configMap["delayCacheWorkersStart"] =
       delayCacheWorkersStart ? "true" : "false";
+  configMap["numShards"] = std::to_string(numShards);
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),

@@ -2185,8 +2185,8 @@ class CacheAllocator : public CacheBase {
                          std::unique_ptr<MoveCtx>,
                          folly::HeterogeneousAccessHash<folly::StringPiece>>;
 
-  static size_t getShardForKey(folly::StringPiece key) {
-    return folly::Hash()(key) % kShards;
+  size_t getShardForKey(folly::StringPiece key) {
+    return folly::Hash()(key) % shards_;
   }
 
   MoveMap& getMoveMapForShard(size_t shard) {
@@ -2300,7 +2300,7 @@ class CacheAllocator : public CacheBase {
   // poolResizer_, poolOptimizer_, memMonitor_, reaper_
   mutable std::mutex workersMutex_;
 
-  static constexpr size_t kShards = 8192; // TODO: need to define right value
+  const size_t shards_;
 
   struct MovesMapShard {
     alignas(folly::hardware_destructive_interference_size) MoveMap movesMap_;
@@ -2455,8 +2455,9 @@ CacheAllocator<CacheTrait>::CacheAllocator(
                               config.chainedItemAccessConfig)),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
-      movesMap_(kShards),
-      moveLock_(kShards),
+      shards_{config_.numShards},
+      movesMap_(shards_),
+      moveLock_(shards_),
       cacheCreationTime_{
           type != InitMemType::kMemAttach
               ? util::getCurrentTimeSec()
