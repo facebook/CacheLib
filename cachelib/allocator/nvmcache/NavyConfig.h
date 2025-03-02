@@ -575,6 +575,7 @@ class NavyConfig {
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
+  size_t getNumShards() const { return numShards_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -678,6 +679,7 @@ class NavyConfig {
   void setUseEstimatedWriteSize(bool useEstimatedWriteSize) noexcept {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
+  void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -762,6 +764,8 @@ class NavyConfig {
   // Whether Navy support the NVMe FDP data placement(TP4146) directives or not.
   // Reference: https://nvmexpress.org/nvmeflexible-data-placement-fdp-blog/
   bool enableFDP_{false};
+  // Number of nvm lock shards
+  size_t numShards_{8192};
 };
 } // namespace navy
 } // namespace cachelib
