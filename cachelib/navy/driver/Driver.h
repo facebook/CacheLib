@@ -189,6 +189,10 @@ class Driver final : public AbstractCache {
   mutable TLCounter rejectedBytes_;
   mutable TLCounter acceptedCount_;
   mutable TLCounter acceptedBytes_;
+  mutable std::vector<TLCounter> rejectedCountByEngine_;
+  mutable std::vector<TLCounter> rejectedConcurrentInsertsCountByEngine_;
+  mutable std::vector<TLCounter> rejectedParcelMemoryCountByEngine_;
+  mutable std::vector<TLCounter> rejectedBytesByEngine_;
 
   // atomic counters in asynchronized path
 
