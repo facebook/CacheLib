@@ -468,9 +468,14 @@ class EnginesConfig {
 
   bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
 
+  const std::string& getName() const { return name_; }
+
+  void setName(std::string&& name) { name_ = std::move(name); }
+
  private:
   BlockCacheConfig blockCacheConfig_;
   BigHashConfig bigHashConfig_;
+  std::string name_;
 };
 
 enum class IoEngine : uint8_t { IoUring, LibAio, Sync };

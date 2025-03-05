@@ -166,7 +166,7 @@ EnginePair makeEnginePair(JobScheduler* scheduler,
                           std::unique_ptr<Engine> smallItemCache = nullptr,
                           uint32_t smallItemMaxSize = kSmallItemMaxSize) {
   return EnginePair{std::move(smallItemCache), std::move(largeItemCache),
-                    smallItemMaxSize, scheduler};
+                    smallItemMaxSize, scheduler, "" /* name */};
 }
 
 Driver::Config makeDriverConfig(std::unique_ptr<Engine> bc,

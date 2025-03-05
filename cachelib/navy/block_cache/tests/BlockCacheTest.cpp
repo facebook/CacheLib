@@ -86,7 +86,7 @@ std::unique_ptr<Driver> makeDriver(std::unique_ptr<Engine> largeItemCache,
                                    size_t metadataSize = 0) {
   Driver::Config config;
   config.enginePairs.emplace_back(nullptr, std::move(largeItemCache), 0,
-                                  scheduler.get());
+                                  scheduler.get(), "");
   config.scheduler = std::move(scheduler);
   config.metadataSize = metadataSize;
   config.device = std::move(device);

@@ -247,6 +247,7 @@ void setupCacheProtos(const navy::NavyConfig& config,
     const auto& enginesConfig = config.enginesConfigs()[idx];
     uint64_t blockCacheSize = enginesConfig.blockCache().getSize();
     auto enginePairProto = cachelib::navy::createEnginePairProto();
+    enginePairProto->setName(enginesConfig.getName());
 
     if (enginesConfig.isBigHashEnabled()) {
       uint64_t bigHashSize =

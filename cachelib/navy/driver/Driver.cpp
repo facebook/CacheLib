@@ -296,9 +296,14 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   scheduler_->getCounters(visitor);
   if (enginePairs_.size() > 1) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
+      auto suffix =
+          enginePairs_[idx].getName().empty()
+              ? ""
+              : folly::to<std::string>(":", enginePairs_[idx].getName());
+
       const CounterVisitor pv{
-          [&visitor, idx](folly::StringPiece name, double count) {
-            visitor(folly::to<std::string>(name, "_", idx), count);
+          [&visitor, idx, &suffix](folly::StringPiece name, double count) {
+            visitor(folly::to<std::string>(name, "_", idx, suffix), count);
           }};
       enginePairs_[idx].getCounters(pv);
     }

@@ -122,6 +122,8 @@ class EnginePairProto {
   // Set up big hash engine.
   virtual void setBigHash(std::unique_ptr<BigHashProto> proto,
                           uint32_t smallItemMaxSize) = 0;
+
+  virtual void setName(const std::string& name) = 0;
 };
 
 // Cache object prototype. Setup cache desired parameters and pass proto to

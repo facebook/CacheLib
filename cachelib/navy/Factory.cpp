@@ -188,6 +188,7 @@ class EnginePairProtoImpl final : public EnginePairProto {
     bigHashProto_ = std::move(proto.bigHashProto_);
     blockCacheProto_ = std::move(proto.blockCacheProto_);
     smallItemMaxSize_ = proto.smallItemMaxSize_;
+    name_ = std::move(proto.name_);
   }
 
   void setBigHash(std::unique_ptr<BigHashProto> proto,
@@ -225,13 +226,16 @@ class EnginePairProtoImpl final : public EnginePairProto {
     }
 
     return EnginePair{std::move(bh), std::move(bc), smallItemMaxSize_,
-                      &scheduler};
+                      &scheduler, std::move(name_)};
   }
+
+  void setName(const std::string& name) override { name_ = name; }
 
  private:
   std::unique_ptr<BigHashProto> bigHashProto_;
   std::unique_ptr<BlockCacheProto> blockCacheProto_;
   uint32_t smallItemMaxSize_;
+  std::string name_;
 };
 
 class CacheProtoImpl final : public CacheProto {
