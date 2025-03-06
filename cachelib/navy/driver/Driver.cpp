@@ -330,10 +330,11 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
               ? ""
               : folly::to<std::string>(":", enginePairs_[idx].getName());
 
-      const CounterVisitor pv{
-          [&visitor, idx, &suffix](folly::StringPiece name, double count) {
-            visitor(folly::to<std::string>(name, "_", idx, suffix), count);
-          }};
+      const CounterVisitor pv{[&visitor, idx,
+                               &suffix](folly::StringPiece name, double count,
+                                        CounterVisitor::CounterType type) {
+        visitor(folly::to<std::string>(name, "_", idx, suffix), count, type);
+      }};
       enginePairs_[idx].getCounters(pv);
 
       visitor(folly::to<std::string>("navy_rejected_", idx, suffix),
