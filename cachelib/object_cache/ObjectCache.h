@@ -146,6 +146,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
  public:
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
+  using RemoveCb = std::function<void(ObjectCacheDestructorData)>;
   using Key = KAllocation::Key;
   using Config = ObjectCacheConfig<ObjectCache<AllocatorT>>;
   using EvictionPolicyConfig = typename AllocatorT::MMType::Config;
@@ -550,34 +551,66 @@ void ObjectCache<AllocatorT>::init() {
       .setDefaultAllocSizes({l1AllocSize})
       .enableItemReaperInBackground(config_.reaperInterval)
       .setEventTracker(std::move(config_.eventTracker))
-      .setEvictionSearchLimit(config_.evictionSearchLimit)
-      .setItemDestructor([this](typename AllocatorT::DestructorData data) {
-        ObjectCacheDestructorContext ctx;
-        if (data.context == DestructorContext::kEvictedFromRAM) {
-          evictions_.inc();
-          ctx = ObjectCacheDestructorContext::kEvicted;
-        } else if (data.context == DestructorContext::kRemovedFromRAM) {
-          ctx = ObjectCacheDestructorContext::kRemoved;
-        } else { // should not enter here
-          ctx = ObjectCacheDestructorContext::kUnknown;
-        }
-
-        auto& item = data.item;
-
-        auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
-
-        SCOPE_EXIT {
-          if (config_.objectSizeTrackingEnabled) {
-            // update total object size
-            totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
-                                            std::memory_order_relaxed);
+      .setEvictionSearchLimit(config_.evictionSearchLimit);
+  if (config_.itemDestructor) {
+    l1Config.setItemDestructor(
+        [this](typename AllocatorT::DestructorData data) {
+          ObjectCacheDestructorContext ctx;
+          if (data.context == DestructorContext::kEvictedFromRAM) {
+            evictions_.inc();
+            ctx = ObjectCacheDestructorContext::kEvicted;
+          } else if (data.context == DestructorContext::kRemovedFromRAM) {
+            ctx = ObjectCacheDestructorContext::kRemoved;
+          } else { // should not enter here
+            ctx = ObjectCacheDestructorContext::kUnknown;
           }
-          // execute user defined item destructor
-          config_.itemDestructor(ObjectCacheDestructorData(
-              ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-              item.getCreationTime(), item.getLastAccessTime()));
-        };
-      });
+
+          auto& item = data.item;
+
+          auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+
+          SCOPE_EXIT {
+            if (config_.objectSizeTrackingEnabled) {
+              // update total object size
+              totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                              std::memory_order_relaxed);
+            }
+            // execute user defined item destructor
+            config_.itemDestructor(ObjectCacheDestructorData(
+                ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+                item.getCreationTime(), item.getLastAccessTime()));
+          };
+        });
+  } else {
+    l1Config.setRemoveCallback([this](typename AllocatorT::RemoveCbData data) {
+      ObjectCacheDestructorContext ctx;
+      if (data.context == RemoveContext::kEviction) {
+        evictions_.inc();
+        ctx = ObjectCacheDestructorContext::kEvicted;
+      } else if (data.context == RemoveContext::kNormal) {
+        ctx = ObjectCacheDestructorContext::kRemoved;
+      } else { // should not enter here
+        ctx = ObjectCacheDestructorContext::kUnknown;
+      }
+
+      auto& item = data.item;
+
+      auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+
+      SCOPE_EXIT {
+        if (config_.objectSizeTrackingEnabled) {
+          // update total object size
+          totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                          std::memory_order_relaxed);
+        }
+        // execute user defined item destructor
+        config_.removeCb(ObjectCacheDestructorData(
+            ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+            item.getCreationTime(), item.getLastAccessTime()));
+      };
+    });
+  }
+
   if (config_.delayCacheWorkersStart) {
     l1Config.setDelayCacheWorkersStart();
   }

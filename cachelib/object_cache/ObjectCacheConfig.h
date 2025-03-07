@@ -32,6 +32,7 @@ struct ObjectCacheConfig {
   using Key = KAllocation::Key;
   using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
+  using RemoveCb = typename ObjectCache::RemoveCb;
   using SerializeCb = typename ObjectCache::SerializeCb;
   using DeserializeCb = typename ObjectCache::DeserializeCb;
   using EvictionPolicyConfig = typename ObjectCache::EvictionPolicyConfig;
@@ -105,6 +106,8 @@ struct ObjectCacheConfig {
   //     }
   // });
   ObjectCacheConfig& setItemDestructor(ItemDestructor destructor);
+
+  ObjectCacheConfig& setRemoveCb(RemoveCb cb);
 
   // Run in a multi-thread mode, eviction order is not guaranteed to persist.
   // @param threadCount          number of threads to work on persistence
@@ -196,6 +199,8 @@ struct ObjectCacheConfig {
   // ItemDestructor which is invoked for each item that is evicted
   // or explicitly from cache
   ItemDestructor itemDestructor{};
+
+  RemoveCb removeCb{};
 
   // time to sleep between each reaping period.
   std::chrono::milliseconds reaperInterval{5000};
@@ -318,6 +323,12 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemDestructor(
 }
 
 template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRemoveCb(RemoveCb cb) {
+  removeCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
     uint32_t threadCount,
     std::string basefilePath,
@@ -413,9 +424,10 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
     throw std::invalid_argument("l1EntriesLimit is not provided");
   }
 
-  if (!itemDestructor) {
+  if ((!itemDestructor && !removeCb) || (itemDestructor && removeCb)) {
     throw std::invalid_argument(
-        "ItemDestructor is mandatory, but not provided");
+        "Only one of ItemDestructor or RemoveCb can be set. Not both, nor "
+        "neither.");
   }
 
   if (objectSizeTrackingEnabled) {
