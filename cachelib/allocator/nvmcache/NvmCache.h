@@ -1254,6 +1254,14 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
             CacheAPIWrapperForNvm<C>::viewAsWritableChainedAllocsRange(cache_,
                                                                        *it))) {
       return nullptr;
+    } else {
+      // Often times an object needs its associated destructor to be triggered
+      // to release resources (such as memory) properly. Today we use removeCB
+      // or ItemDestructor to represent this logic for cachelib's object-cache.
+      // Thus, we need to ensure these callbacks are always invoked when this
+      // item goes away even if the item had never been inserted into cache (aka
+      // not visible to other threads).
+      it.unmarkNascent();
     }
     it->markNvmClean();
   } else {
@@ -1299,6 +1307,8 @@ template <typename C>
 std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     folly::StringPiece key, const NvmItem& nvmItem, bool parentOnly) {
   const size_t numBufs = parentOnly ? 1 : nvmItem.getNumBlobs();
+  // Only use custom cb if we are not doing parent only.
+  bool useCustomCb = !parentOnly && config_.makeObjCb;
   // parent item
   XDCHECK_GE(numBufs, 1u);
   const auto pBlob = nvmItem.getBlob(0);
@@ -1328,7 +1338,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
   XDCHECK_LE(pBlob.origAllocSize, item->getSize());
   XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
 
-  if (!config_.makeObjCb) {
+  if (!useCustomCb) {
     ::memcpy(item->getMemory(), pBlob.data.data(), pBlob.data.size());
   }
 
@@ -1362,7 +1372,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
       XDCHECK(chainedItem->isChainedItem());
       // Propagate the payload directly from Blob only if no customized callback
       // is set.
-      if (!config_.makeObjCb) {
+      if (!useCustomCb) {
         ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
                  cBlob.origAllocSize);
       }
@@ -1372,7 +1382,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     }
   }
   // If the customized callback is set, we'll call it to propagate the payload.
-  if (config_.makeObjCb) {
+  if (useCustomCb) {
     if (!config_.makeObjCb(nvmItem, *item,
                            viewAsWritableChainedAllocsRange(head.get()))) {
       return nullptr;
