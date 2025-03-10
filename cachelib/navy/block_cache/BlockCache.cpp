@@ -42,7 +42,7 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (!device || !evictionPolicy) {
     throw std::invalid_argument("missing required param");
   }
-  if (regionSize > 256u << 20) {
+  if (regionSize > 1024u << 20) {
     // We allocate region in memory to reclaim. Too large region will cause
     // problems: at least, long allocation times.
     throw std::invalid_argument("region is too large");

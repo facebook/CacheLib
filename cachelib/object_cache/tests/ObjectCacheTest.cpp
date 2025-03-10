@@ -22,6 +22,7 @@
 #include <memory>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/tests/NvmTestUtils.h"
 #include "cachelib/object_cache/ObjectCache.h"
 #include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
 #include "cachelib/object_cache/tests/gen-cpp2/test_object_types.h"
@@ -884,6 +885,17 @@ class ObjectCacheTest : public ::testing::Test {
 
   void testPersistence() {
     auto persistBaseFilePath = std::tmpnam(nullptr);
+    std::function<ObjectCacheConfig()> makeBaseConfig = []() {
+      ObjectCacheConfig config;
+
+      config.setCacheName("test")
+          .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+          .setItemDestructor([&](ObjectCacheDestructorData data) {
+            data.deleteObject<ThriftFoo>();
+          });
+      config.objectSizeTrackingEnabled = true;
+      return config;
+    };
     ThriftFoo foo1;
     foo1.a().value() = 1;
     foo1.b().value() = 2;
@@ -899,23 +911,15 @@ class ObjectCacheTest : public ::testing::Test {
     auto ttlSecs = 10;
 
     size_t threadsCount = 10;
-
-    ObjectCacheConfig config;
-
-    config.setCacheName("test")
-        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
-        .setItemDestructor([&](ObjectCacheDestructorData data) {
-          data.deleteObject<ThriftFoo>();
-        })
-        .enablePersistence(
-            threadsCount, persistBaseFilePath,
-            [&](typename ObjectCache::Serializer serializer) {
-              return serializer.template serialize<ThriftFoo>();
-            },
-            [&](typename ObjectCache::Deserializer deserializer) {
-              return deserializer.template deserialize<ThriftFoo>();
-            });
-    config.objectSizeTrackingEnabled = true;
+    ObjectCacheConfig config = makeBaseConfig();
+    config.enablePersistence(
+        threadsCount, persistBaseFilePath,
+        [&](typename ObjectCache::Serializer serializer) {
+          return serializer.template serialize<ThriftFoo>();
+        },
+        [&](typename ObjectCache::Deserializer deserializer) {
+          return deserializer.template deserialize<ThriftFoo>();
+        });
 
     {
       auto objcache = ObjectCache::create(config);
@@ -966,7 +970,8 @@ class ObjectCacheTest : public ::testing::Test {
 
     // test recover failure
     {
-      config.enablePersistence(
+      ObjectCacheConfig newConfig = makeBaseConfig();
+      newConfig.enablePersistence(
           threadsCount, "random_path",
           [&](typename ObjectCache::Serializer serializer) {
             return serializer.template serialize<ThriftFoo>();
@@ -974,13 +979,14 @@ class ObjectCacheTest : public ::testing::Test {
           [&](typename ObjectCache::Deserializer deserializer) {
             return deserializer.template deserialize<ThriftFoo>();
           });
-      auto objcache = ObjectCache::create(config);
+      auto objcache = ObjectCache::create(newConfig);
       ASSERT_EQ(objcache->recover(), false);
     }
 
     // test different thread count won't fail recover
     {
-      config.enablePersistence(
+      ObjectCacheConfig newConfig = makeBaseConfig();
+      newConfig.enablePersistence(
           threadsCount - 2, persistBaseFilePath,
           [&](typename ObjectCache::Serializer serializer) {
             return serializer.template serialize<ThriftFoo>();
@@ -989,7 +995,7 @@ class ObjectCacheTest : public ::testing::Test {
             return deserializer.template deserialize<ThriftFoo>();
           });
 
-      auto objcache = ObjectCache::create(config);
+      auto objcache = ObjectCache::create(newConfig);
       ASSERT_EQ(objcache->recover(), true);
       auto found = objcache->template find<ThriftFoo>("Foo2");
       ASSERT_NE(nullptr, found);
@@ -1018,33 +1024,38 @@ class ObjectCacheTest : public ::testing::Test {
 
     size_t threadsCount = 10;
 
-    ObjectCacheConfig config;
-    config.setCacheName("test")
-        .setCacheCapacity(10'000 /*l1EntriesLimit*/)
-        .setItemDestructor([&](ObjectCacheDestructorData data) {
-          if (data.key == "Foo1") {
-            data.deleteObject<ThriftFoo>();
+    std::function<ObjectCacheConfig()> makeBaseConfig = []() {
+      ObjectCacheConfig config;
+
+      config.setCacheName("test")
+          .setCacheCapacity(10'000 /*l1EntriesLimit*/)
+          .setItemDestructor([&](ObjectCacheDestructorData data) {
+            if (data.key == "Foo1") {
+              data.deleteObject<ThriftFoo>();
+            } else {
+              data.deleteObject<ThriftFoo2>();
+            }
+          });
+      config.objectSizeTrackingEnabled = true;
+      return config;
+    };
+    ObjectCacheConfig config = makeBaseConfig();
+    config.enablePersistence(
+        threadsCount, persistBaseFilePath,
+        [&](typename ObjectCache::Serializer serializer) {
+          if (serializer.key == "Foo1") {
+            return serializer.template serialize<ThriftFoo>();
           } else {
-            data.deleteObject<ThriftFoo2>();
+            return serializer.template serialize<ThriftFoo2>();
           }
-        })
-        .enablePersistence(
-            threadsCount, persistBaseFilePath,
-            [&](typename ObjectCache::Serializer serializer) {
-              if (serializer.key == "Foo1") {
-                return serializer.template serialize<ThriftFoo>();
-              } else {
-                return serializer.template serialize<ThriftFoo2>();
-              }
-            },
-            [&](typename ObjectCache::Deserializer deserializer) {
-              if (deserializer.key == "Foo1") {
-                return deserializer.template deserialize<ThriftFoo>();
-              } else {
-                return deserializer.template deserialize<ThriftFoo2>();
-              }
-            });
-    config.objectSizeTrackingEnabled = true;
+        },
+        [&](typename ObjectCache::Deserializer deserializer) {
+          if (deserializer.key == "Foo1") {
+            return deserializer.template deserialize<ThriftFoo>();
+          } else {
+            return deserializer.template deserialize<ThriftFoo2>();
+          }
+        });
 
     {
       auto objcache = ObjectCache::create(config);
@@ -1095,7 +1106,8 @@ class ObjectCacheTest : public ::testing::Test {
 
     // test recover failure
     {
-      config.enablePersistence(
+      ObjectCacheConfig newConfig = makeBaseConfig();
+      newConfig.enablePersistence(
           threadsCount, "random_path",
           [&](typename ObjectCache::Serializer serializer) {
             if (serializer.key == "Foo1") {
@@ -1111,12 +1123,13 @@ class ObjectCacheTest : public ::testing::Test {
               return deserializer.template deserialize<ThriftFoo2>();
             }
           });
-      auto objcache = ObjectCache::create(config);
+      auto objcache = ObjectCache::create(newConfig);
       ASSERT_EQ(objcache->recover(), false);
     }
     // test different thread count won't fail recover
     {
-      config.enablePersistence(
+      ObjectCacheConfig newConfig = makeBaseConfig();
+      newConfig.enablePersistence(
           threadsCount - 2, persistBaseFilePath,
           [&](typename ObjectCache::Serializer serializer) {
             if (serializer.key == "Foo1") {
@@ -1133,7 +1146,7 @@ class ObjectCacheTest : public ::testing::Test {
             }
           });
 
-      auto objcache = ObjectCache::create(config);
+      auto objcache = ObjectCache::create(newConfig);
       ASSERT_EQ(objcache->recover(), true);
       auto found = objcache->template find<ThriftFoo2>("Foo2");
       ASSERT_NE(nullptr, found);
@@ -2044,5 +2057,25 @@ TEST(ObjectCacheTest, ExportStats) {
         }
       });
   EXPECT_EQ(intervalNameExists, 2);
+}
+
+// Test the case when init() throws exception. Make sure the exception is
+// correctly thrown without hitting segfault.
+TEST(ObjectCacheTest, InitException) {
+  ObjectCache::Config config;
+
+  config.setCacheName("test");
+  config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+  config.setCacheCapacity(50 /* l1EntriesLimit*/,
+                          100 /* totalObjectSizeLimit */,
+                          100 /* sizeControllerIntervalMs */);
+  ObjectCache::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = tests::utils::getNvmTestConfig("/tmp");
+  // Make region size too large
+  nvmConfig.navyConfig.blockCache().setRegionSize(100 * 1024 * 1024);
+  config.enableNvm(nvmConfig);
+
+  EXPECT_THROW(ObjectCache::create(config), std::invalid_argument);
 }
 } // namespace facebook::cachelib::objcache2::test

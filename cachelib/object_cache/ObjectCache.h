@@ -159,6 +159,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using Restorer = Restorer<ObjectCache<AllocatorT>>;
   using EvictionIterator = typename AllocatorT::EvictionIterator;
   using AccessIterator = typename AllocatorT::AccessIterator;
+  using NvmCache = typename AllocatorT::NvmCacheT;
+  using NvmCacheConfig = typename AllocatorT::NvmCacheT::Config;
+  using WriteHandle = typename AllocatorT::WriteHandle;
+  using CacheItem = typename AllocatorT::Item;
 
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
@@ -430,7 +434,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
         util::stopPeriodicWorker(kSizeControllerName, sizeController_, timeout);
     success &= util::stopPeriodicWorker(kSizeDistTrackerName, sizeDistTracker_,
                                         timeout);
-    success &= this->l1Cache_->stopWorkers(timeout);
+    // Nullproof. This function can be called in the destructor before init()
+    // completes successfully.
+    if (this->l1Cache_) {
+      success &= this->l1Cache_->stopWorkers(timeout);
+    }
     return success;
   }
 
@@ -613,6 +621,10 @@ void ObjectCache<AllocatorT>::init() {
 
   if (config_.delayCacheWorkersStart) {
     l1Config.setDelayCacheWorkersStart();
+  }
+
+  if (config_.nvmConfig.has_value()) {
+    l1Config.nvmConfig.assign(std::move(config_.nvmConfig.value()));
   }
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
@@ -880,9 +892,11 @@ template <typename AllocatorT>
 ObjectCache<AllocatorT>::~ObjectCache() {
   stopAllWorkers();
 
-  for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
-       ++itr) {
-    this->l1Cache_->remove(itr.asHandle());
+  if (this->l1Cache_) {
+    for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
+         ++itr) {
+      this->l1Cache_->remove(itr.asHandle());
+    }
   }
 }
 

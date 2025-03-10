@@ -20,6 +20,7 @@
 #include <string>
 
 #include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Throttler.h"
 
@@ -36,6 +37,9 @@ struct ObjectCacheConfig {
   using SerializeCb = typename ObjectCache::SerializeCb;
   using DeserializeCb = typename ObjectCache::DeserializeCb;
   using EvictionPolicyConfig = typename ObjectCache::EvictionPolicyConfig;
+  using NvmCacheConfig = typename ObjectCache::NvmCacheConfig;
+  using ToBlobCb = std::function<std::unique_ptr<folly::IOBuf>(uintptr_t)>;
+  using ToPtrCb = std::function<uintptr_t(folly::StringPiece)>;
 
   // Set cache name as a string
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
@@ -147,6 +151,12 @@ struct ObjectCacheConfig {
   // ObjectCache::startCacheWorkers()
   ObjectCacheConfig& setDelayCacheWorkersStart();
 
+  /**
+   * Enable NVM cache.
+   */
+  ObjectCacheConfig& enableNvm(NvmCacheConfig config);
+  ObjectCacheConfig& overrideNvmCbs(ToBlobCb blobCb, ToPtrCb ptrCb);
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -236,6 +246,8 @@ struct ObjectCacheConfig {
   // If true, we will delay worker start until user explicitly calls
   // ObjectCache::startCacheWorkers()
   bool delayCacheWorkersStart{false};
+
+  std::optional<typename ObjectCache::NvmCacheConfig> nvmConfig{};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -353,6 +365,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
         "Serialize and deserialize callback must be set to enable cache "
         "persistence");
   }
+  persistenceEnabled = true;
   persistThreadCount = threadCount;
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
@@ -379,6 +392,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistenceWithEvictionOrder(
         "Serialize and deserialize callback must be set to enable cache "
         "persistence");
   }
+  persistenceEnabled = true;
   persistThreadCount = 1;
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
@@ -410,6 +424,56 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setEvictionSearchLimit(
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setDelayCacheWorkersStart() {
   delayCacheWorkersStart = true;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enableNvm(NvmCacheConfig config) {
+  nvmConfig = std::move(config);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
+                                                           ToPtrCb ptrCb) {
+  if (!nvmConfig || nvmConfig->makeBlobCb || nvmConfig->makeObjCb) {
+    throw std::invalid_argument(
+        "Do not set makeBlobCb or makeObjCb in nvmConfig before calling "
+        "overriceNvmCbs.");
+  }
+
+  nvmConfig->makeBlobCb =
+      [blobCb = std::move(blobCb)](
+          const typename T::CacheItem& item,
+          folly::Range<typename T::NvmCache::ChainedItemIter>) {
+        uintptr_t ptr =
+            item.template getMemoryAs<typename T::Item>()->objectPtr;
+        auto blob = blobCb(ptr);
+        std::vector<BufferedBlob> blobs;
+        if (blob == nullptr) {
+          return blobs;
+        }
+        blobs.emplace_back(BufferedBlob{static_cast<uint32_t>(item.getSize()),
+                                        std::move(blob)});
+        return blobs;
+      };
+
+  nvmConfig->makeObjCb =
+      [ptrCb = std::move(ptrCb)](
+          const NvmItem& nvmItem, typename T::CacheItem& it,
+          folly::Range<typename T::NvmCache::WritableChainedItemIter>) {
+        // Create ptr. Do not consider chained item.
+        auto pBlob = nvmItem.getBlob(0);
+        uintptr_t ptr = ptrCb(pBlob.data);
+        // TODO: Is there a better way to do this?
+        if (ptr == reinterpret_cast<uintptr_t>(nullptr)) {
+          return false;
+        }
+        *it.template getMemoryAs<typename T::Item>() =
+            typename T::Item{ptr, pBlob.data.size()};
+
+        return true;
+      };
   return *this;
 }
 
@@ -450,6 +514,7 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
         "Object size tracking has to be enabled to track object size "
         "distribution");
   }
+
   return *this;
 }
 
