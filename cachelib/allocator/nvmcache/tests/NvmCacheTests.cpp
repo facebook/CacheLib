@@ -2411,7 +2411,7 @@ TEST_F(NvmCacheTest, testSampleItem) {
   // internal fragmentation for RAM and NVM are around
   // 20% (16K / 20K) and 37.5% (20K / 32K), respectively
   // 15% is arbitrary and pessimistic target
-  size_t targetCnt = (size_t)((double)nKeys * 10.0 * 0.5 * 0.15);
+  size_t targetCnt = (size_t)(static_cast<double>(nKeys) * 10.0 * 0.5 * 0.15);
   ASSERT_GE(numNvm, targetCnt);
   ASSERT_GE(numRam, targetCnt);
   // Should reset the cache since the destructor callback
