@@ -505,7 +505,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessingMetadataPiece(
     // Fetch next piece
     rw.req.setOp(OpType::kSet);
   } else {
-    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+    XLOG(INFO) << "Unsupported OpResultType: " << static_cast<int>(result);
   }
 
   // Next piece is a header piece
@@ -603,7 +603,7 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
     // No need to set subsequent pieces.
     done = true;
   } else {
-    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+    XLOG(INFO) << "Unsupported OpResultType: " << static_cast<int>(result);
   }
   return done;
 }
@@ -631,7 +631,7 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
     // Perform set operation next
     rw.req.setOp(OpType::kSet);
   } else {
-    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+    XLOG(INFO) << "Unsupported OpResultType: " << static_cast<int>(result);
   }
 
   return done;
