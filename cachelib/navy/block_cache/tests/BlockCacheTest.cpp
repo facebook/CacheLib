@@ -2305,8 +2305,8 @@ TEST(BlockCache, RandomAlloc) {
   // Expected success rate is 3 regions / 4 regions
   // Allow margins of upto 20% for success rate and
   // 20% for deviation of each item
-  EXPECT_GT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 0.8 / 4.0));
-  EXPECT_LT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 1.2 / 4.0));
+  EXPECT_GT(succ_cnt, (size_t)(static_cast<double>(loopCnt) * 3.0 * 0.8 / 4.0));
+  EXPECT_LT(succ_cnt, (size_t)(static_cast<double>(loopCnt) * 3.0 * 1.2 / 4.0));
   EXPECT_LT(stddev, avg * 0.2);
 }
 
