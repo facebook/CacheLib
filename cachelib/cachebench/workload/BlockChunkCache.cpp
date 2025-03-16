@@ -356,7 +356,7 @@ bool BlockChunkCacheAdapter::processReq(BlockReqWrapper& rw,
     }
     rw.missPieceRange.second = curIndex;
   } else {
-    XLOG(INFO) << "Unsupported OpResultType: " << (int)result;
+    XLOG(INFO) << "Unsupported OpResultType: " << static_cast<int>(result);
     done = true;
   }
 
