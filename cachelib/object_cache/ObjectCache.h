@@ -636,8 +636,13 @@ void ObjectCache<AllocatorT>::init() {
     if (config_.l1NumShards > 1) {
       shardName += folly::sformat("_{}", i);
     }
-    this->l1Cache_->addPool(shardName, perPoolSize, {} /* allocSizes */,
-                            config_.evictionPolicyConfig);
+    PoolId pid = this->l1Cache_->addPool(
+        shardName, perPoolSize, {} /* allocSizes */,
+        config_.evictionPolicyConfig /* MMConfig*/,
+        nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy*/,
+        true /* ensureProvisionable */);
+    this->l1Cache_->provisionPool(pid,
+                                  {static_cast<unsigned int>(slabsPerShard)});
   }
 
   // Allocate placeholder items such that the cache will fit no more than
