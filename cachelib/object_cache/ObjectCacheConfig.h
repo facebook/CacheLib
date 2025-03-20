@@ -155,6 +155,14 @@ struct ObjectCacheConfig {
    * Enable NVM cache.
    */
   ObjectCacheConfig& enableNvm(NvmCacheConfig config);
+  /**
+   * @param blobCb  Given the raw pointer of the object in DRAM, create a
+   * unique_ptr<IOBuf> to a buffer that can be copied to NVM. The IOBuf does not
+   * need to hold the underlying buffer if the buffer just wraps around the
+   * original DRAM data. Return nullptr if the conversion fails.
+   * @param ptrCb  Given the StringPiece that wraps around the NvmItem payload,
+   * return a raw pointer of the object. Return nullptr if the conversion fails.
+   */
   ObjectCacheConfig& overrideNvmCbs(ToBlobCb blobCb, ToPtrCb ptrCb);
 
   // With size controller disabled, above this many entries, L1 will start
