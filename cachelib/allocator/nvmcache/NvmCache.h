@@ -523,8 +523,8 @@ class NvmCache {
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::vector<TimedMutex> itemDestructorMutex_{numShards_,
-                                                       TimedMutex()};
+  mutable std::vector<TimedMutex> itemDestructorMutex_{numShards_};
+
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
   // DRAM. The ownership of item destructor is already managed elsewhere for
