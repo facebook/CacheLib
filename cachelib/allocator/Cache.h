@@ -73,6 +73,9 @@ enum class DestructorContext {
   kRemovedFromNVM
 };
 
+// Enum class indicating where a key is stored in the cache
+enum class StorageMedium { NONE = 0, DRAM, NVM };
+
 // A base class of cache exposing members and status agnostic of template type.
 class CacheBase {
  public:

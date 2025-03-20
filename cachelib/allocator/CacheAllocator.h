@@ -593,15 +593,18 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ReadHandle peek(Key key);
 
-  // Returns true if a key is potentially in cache. There is a non-zero chance
-  // the key does not exist in cache (e.g. hash collision in NvmCache). This
-  // check is meant to be synchronous and fast as we only check DRAM cache and
-  // in-memory index for NvmCache. Similar to peek, this does not indicate to
-  // cachelib you have looked up an item (i.e. no stats bump, no eviction queue
-  // promotion, etc.)
+  // Returns the storage medium if a key is potentially in cache. There is a
+  // non-zero chance the key does not exist in cache (e.g. hash collision in
+  // NvmCache) even if a stoage medium is returned. This check is meant to be
+  // synchronous and fast as we only check DRAM cache and in-memory index for
+  // NvmCache. Similar to peek, this does not indicate to cachelib you have
+  // looked up an item (i.e. no stats bump, no eviction queue promotion, etc.)
   //
   // @param key   the key for lookup
   // @return      true if the key could exist, false otherwise
+  StorageMedium existFast(Key key);
+
+  // Returns true if a key is potentially in cache, based on existFast.
   bool couldExistFast(Key key);
 
   // Mark an item that was fetched through peek as useful. This is useful when
@@ -4128,23 +4131,32 @@ CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
+StorageMedium CacheAllocator<CacheTrait>::existFast(typename Item::Key key) {
   // At this point, a key either definitely exists or does NOT exist in cache
 
   // We treat this as a peek, since couldExist() shouldn't actually promote
   // an item as we expect the caller to issue a regular find soon afterwards.
   auto handle = findInternalWithExpiration(key, AllocatorApiEvent::PEEK);
   if (handle) {
-    return true;
-  }
-
-  if (!nvmCache_) {
-    return false;
+    return StorageMedium::DRAM;
   }
 
   // When we have to go to NvmCache, we can only probalistically determine
   // if a key could possibly exist in cache, or definitely NOT exist.
-  return nvmCache_->couldExistFast(HashedKey{key});
+  if (nvmCache_ && nvmCache_->couldExistFast(HashedKey{key})) {
+    return StorageMedium::NVM;
+  } else {
+    return StorageMedium::NONE;
+  }
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
+  if (existFast(key) == StorageMedium::NONE) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 template <typename CacheTrait>

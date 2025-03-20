@@ -186,6 +186,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   template <typename T>
   std::shared_ptr<const T> find(folly::StringPiece key);
 
+  // Return whether an object exists in cache without looking up the device.
+  StorageMedium existFast(folly::StringPiece key);
+
   // Look up an object in mutable access
   // @param key   the key to the object
   //
@@ -705,6 +708,11 @@ std::unique_ptr<ObjectCache<AllocatorT>> ObjectCache<AllocatorT>::create(
       std::make_unique<ObjectCache>(InternalConstructor(), std::move(config));
   obj->init();
   return obj;
+}
+
+template <typename AllocatorT>
+StorageMedium ObjectCache<AllocatorT>::existFast(folly::StringPiece key) {
+  return this->l1Cache_->existFast(key);
 }
 
 template <typename AllocatorT>
