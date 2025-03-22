@@ -336,7 +336,7 @@ TEST_F(MM2QTest, SegmentStress) {
         return;
       }
       auto n = folly::Random::rand32() % nNodes;
-      while (inLru.count(n) != 0) {
+      while (inLru.contains(n)) {
         n = folly::Random::rand32() % nNodes;
       }
       c.add(*nodes[n]);
@@ -355,7 +355,7 @@ TEST_F(MM2QTest, SegmentStress) {
         n = folly::Random::rand32() % nNodes;
       }
       c.remove(*nodes[n]);
-      assert(inLru.count(n) != 0);
+      assert(inLru.contains(n));
       inLru.erase(n);
     };
 
