@@ -1321,9 +1321,8 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     // because the slack space might be used if nvmcache is configured
     // with useTruncatedAllocSize == false
     XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-    auto size = config_.makeObjCb
-                    ? Item::getRequiredSize(key, pBlob.origAllocSize)
-                    : Item::getRequiredSize(key, pBlob.data.size());
+    auto size = useCustomCb ? Item::getRequiredSize(key, pBlob.origAllocSize)
+                            : Item::getRequiredSize(key, pBlob.data.size());
 
     head = folly::IOBuf::create(size);
     head->append(size);
