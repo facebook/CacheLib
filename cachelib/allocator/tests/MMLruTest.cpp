@@ -419,7 +419,7 @@ TEST_F(MMLruTest, InsertionPointStress) {
         return;
       }
       auto n = folly::Random::rand32() % nNodes;
-      while (inLru.contains(n)) {
+      while (inLru.count(n) != 0) {
         n = folly::Random::rand32() % nNodes;
       }
       c.add(*nodes[n]);
@@ -442,7 +442,7 @@ TEST_F(MMLruTest, InsertionPointStress) {
         n = folly::Random::rand32() % nNodes;
       }
       c.remove(*nodes[n]);
-      assert(inLru.contains(n));
+      assert(inLru.count(n) != 0);
       inLru.erase(n);
 #ifdef PRINT_DEBUG_STR
       XLOG(INFO) << "remove " << n;

@@ -321,7 +321,7 @@ TEST_F(MMTinyLFUTest, SegmentStress) {
         return;
       }
       auto n = folly::Random::rand32() % nNodes;
-      while (inLru.contains(n)) {
+      while (inLru.count(n) != 0) {
         n = folly::Random::rand32() % nNodes;
       }
       c.add(*nodes[n]);
@@ -340,7 +340,7 @@ TEST_F(MMTinyLFUTest, SegmentStress) {
         n = folly::Random::rand32() % nNodes;
       }
       c.remove(*nodes[n]);
-      assert(inLru.contains(n));
+      assert(inLru.count(n) != 0);
       inLru.erase(n);
     };
 
