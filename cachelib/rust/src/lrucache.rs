@@ -154,6 +154,24 @@ struct AccessConfig {
     lock_power: u32,
 }
 
+/// NvmDevice configuration options.
+#[allow(dead_code)]
+enum NvmDevice {
+    SimpleFile {
+        file_name: String,
+        file_size: u64,
+        truncate: bool,
+    },
+    DefaultDevice,
+}
+
+/// NvmCache configuration options.
+struct NvmCacheConfig {
+    block_size: u64,
+    region_size: u32,
+    device: NvmDevice,
+}
+
 /// LRU cache configuration options.
 pub struct LruCacheConfig {
     size: usize,
@@ -164,6 +182,7 @@ pub struct LruCacheConfig {
     access_config: Option<AccessConfig>,
     cache_directory: Option<PathBuf>,
     base_address: Option<*mut std::ffi::c_void>,
+    nvm_cache_config: Option<NvmCacheConfig>,
 }
 
 impl LruCacheConfig {
@@ -178,7 +197,15 @@ impl LruCacheConfig {
             access_config: None,
             cache_directory: None,
             base_address: None,
+            nvm_cache_config: None,
         }
+    }
+
+    /// Enable NvmCache with the given configuration.
+    #[allow(private_interfaces)]
+    pub fn set_nvm_cache_config(mut self, config: NvmCacheConfig) -> Self {
+        self.nvm_cache_config = Some(config);
+        self
     }
 
     /// Enables the container shrinker if running in a supported container runtime.
@@ -352,6 +379,22 @@ impl LruCache {
 
         if let Some(addr) = config.base_address {
             ffi::set_base_address(cache_config.pin_mut(), addr as usize)?;
+        }
+
+        if let Some(nvm_config) = config.nvm_cache_config {
+            let mut nvm_cache_config = ffi::make_nvm_cache_config()?;
+            ffi::set_block_size(nvm_cache_config.pin_mut(), nvm_config.block_size)?;
+            if let NvmDevice::SimpleFile {
+                file_name,
+                file_size,
+                truncate,
+            } = nvm_config.device
+            {
+                let_cxx_string!(name = file_name);
+                ffi::set_simple_file(nvm_cache_config.pin_mut(), &name, file_size, truncate)?;
+            }
+            ffi::set_region_size(nvm_cache_config.pin_mut(), nvm_config.region_size)?;
+            ffi::enable_nvm_cache(cache_config.pin_mut(), nvm_cache_config.pin_mut())?;
         }
 
         if let Some(cache_directory) = config.cache_directory {
@@ -1163,12 +1206,13 @@ impl VolatileLruCachePool {
 
 #[cfg(test)]
 mod test {
+    use tempfile::NamedTempFile;
     use tempfile::TempDir;
 
     use super::*;
 
-    fn create_cache(fb: FacebookInit) {
-        let config = LruCacheConfig::new(128 * 1024 * 1024)
+    fn create_basic_cache_config() -> LruCacheConfig {
+        LruCacheConfig::new(128 * 1024 * 1024)
             .set_shrinker(ShrinkMonitor {
                 shrinker_type: ShrinkMonitorType::ResidentSize {
                     max_process_size_gib: 16,
@@ -1196,7 +1240,11 @@ mod test {
                     age_difference_ratio: 0.1,
                     min_retained_slabs: 1,
                 },
-            });
+            })
+    }
+
+    fn create_cache(fb: FacebookInit) {
+        let config = create_basic_cache_config();
 
         if let Err(e) = init_cache(fb, config) {
             panic!("{}", e);
@@ -1207,38 +1255,34 @@ mod test {
         TempDir::with_prefix(dir_prefix).expect("failed to create temp dir")
     }
 
-    fn create_shared_cache(fb: FacebookInit, cache_directory: PathBuf) {
-        let config = LruCacheConfig::new(128 * 1024 * 1024)
-            .set_shrinker(ShrinkMonitor {
-                shrinker_type: ShrinkMonitorType::ResidentSize {
-                    max_process_size_gib: 16,
-                    min_process_size_gib: 1,
-                },
-                interval: Duration::new(1, 0),
-                max_resize_per_iteration_percent: 10,
-                max_removed_percent: 90,
-                strategy: RebalanceStrategy::LruTailAge {
-                    age_difference_ratio: 0.1,
-                    min_retained_slabs: 1,
-                },
-            })
-            .set_pool_resizer(PoolResizeConfig {
-                interval: Duration::new(1, 0),
-                slabs_per_iteration: 100,
-                strategy: RebalanceStrategy::LruTailAge {
-                    age_difference_ratio: 0.1,
-                    min_retained_slabs: 1,
-                },
-            })
-            .set_cache_dir(cache_directory)
-            .set_pool_rebalance(PoolRebalanceConfig {
-                interval: Duration::new(1, 0),
-                strategy: RebalanceStrategy::LruTailAge {
-                    age_difference_ratio: 0.1,
-                    min_retained_slabs: 1,
-                },
-            });
+    fn create_temp_file() -> String {
+        NamedTempFile::new()
+            .expect("Failed to create temporary file in test")
+            .path()
+            .to_string_lossy()
+            .to_string()
+    }
 
+    fn create_shared_cache(fb: FacebookInit, cache_directory: PathBuf) {
+        let mut config = create_basic_cache_config();
+        config = config.set_cache_dir(cache_directory);
+        if let Err(e) = init_cache(fb, config) {
+            panic!("{}", e);
+        }
+    }
+
+    fn create_hybrid_cache(fb: FacebookInit) {
+        let mut config = create_basic_cache_config();
+        let nvm_cache_config = NvmCacheConfig {
+            block_size: 4096,
+            region_size: 16 * 1024 * 1024,
+            device: NvmDevice::SimpleFile {
+                file_name: create_temp_file(),
+                file_size: 18 * 1024 * 1024,
+                truncate: false,
+            },
+        };
+        config = config.set_nvm_cache_config(nvm_cache_config);
         if let Err(e) = init_cache(fb, config) {
             panic!("{}", e);
         }
@@ -1255,6 +1299,11 @@ mod test {
             fb,
             create_temp_dir("test_create_shared_cache").path().into(),
         );
+    }
+
+    #[fbinit::test]
+    fn only_create_hybrid_cache(fb: FacebookInit) {
+        create_hybrid_cache(fb);
     }
 
     #[fbinit::test]
@@ -1475,6 +1524,42 @@ mod test {
         assert!(
             get_pool("There is no pool").is_none(),
             "non-existent pool found"
+        );
+        Ok(())
+    }
+
+    #[fbinit::test]
+    fn test_hybrid_cache(fb: FacebookInit) -> Result<()> {
+        create_hybrid_cache(fb);
+
+        // Test set or replace (since Insert API is not support for HybridCache right now)
+        let pool = get_or_create_pool("find_pool_by_name", 24 * 1024 * 1024)?;
+        assert!(
+            pool.set_or_replace(b"rimmer", Bytes::from(b"I am a fish".as_ref()))
+                .unwrap(),
+            "Set failed"
+        );
+
+        // Fetch an item that doesn't exist
+        assert_eq!(
+            pool.get(b"doesnotexist").unwrap(),
+            None,
+            "Successfully fetched a bad value"
+        );
+
+        // Test get
+        assert_eq!(
+            pool.get(b"rimmer").unwrap(),
+            Some(Bytes::from(b"I am a fish".as_ref())),
+            "Fetch failed"
+        );
+
+        // Test update and fetch
+        pool.set_or_replace(b"rimmer", Bytes::from(b"I am a bird".as_ref()))?;
+        assert_eq!(
+            pool.get(b"rimmer").unwrap(),
+            Some(Bytes::from(b"I am a bird".as_ref())),
+            "Fetch failed"
         );
         Ok(())
     }

@@ -29,6 +29,7 @@ namespace cachelib {
 using LruAllocator = facebook::cachelib::LruAllocator;
 using LruAllocatorConfig = LruAllocator::Config;
 using LruItemHandle = LruAllocator::WriteHandle;
+using NvmCacheConfig = LruAllocator::NvmCacheConfig;
 
 std::unique_ptr<facebook::cachelib::CacheAdmin> make_cacheadmin(
     LruAllocator& cache, const std::string& oncall);
@@ -38,7 +39,11 @@ std::unique_ptr<LruAllocator> make_shm_lru_allocator(
     std::unique_ptr<LruAllocatorConfig> config);
 std::unique_ptr<LruAllocatorConfig> make_lru_allocator_config();
 
+std::unique_ptr<NvmCacheConfig> make_nvm_cache_config();
+
 bool enable_container_memory_monitor(LruAllocatorConfig& config);
+
+void enable_nvm_cache(LruAllocatorConfig& config, NvmCacheConfig& nvmConfig);
 
 std::shared_ptr<facebook::cachelib::RebalanceStrategy>
 make_hits_per_slab_rebalancer(double diff_ratio,
@@ -83,6 +88,15 @@ void enable_cache_persistence(LruAllocatorConfig& config,
                               std::string& directory);
 
 void set_base_address(LruAllocatorConfig& config, size_t addr);
+
+void set_block_size(NvmCacheConfig& config, uint64_t blockSize);
+
+void set_simple_file(NvmCacheConfig& config,
+                     const std::string& fileName,
+                     uint64_t fileSize,
+                     bool truncateFile);
+
+void set_region_size(NvmCacheConfig& config, uint32_t regionSize);
 
 int8_t add_pool(const LruAllocator& cache,
                 folly::StringPiece name,
