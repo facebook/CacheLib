@@ -168,7 +168,7 @@ std::memcpy(handle->getMemory(), data.data(), data.size());
 // Insert the item handle into the cache.
 cache->insertOrReplace(handle);
 
-data = "Repalce the data associated with key key1";
+data = "Replace the data associated with key key1";
 // Allocate memory for the replacement data.
 handle = cache->allocate(pool_id, "key1", data.size());
 
