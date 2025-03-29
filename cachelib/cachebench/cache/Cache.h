@@ -1234,7 +1234,7 @@ Stats Cache<Allocator>::getStats() const {
         lookup("navy_device_read_latency_us_p99999");
     ret.nvmReadLatencyMicrosP999999 =
         lookup("navy_device_read_latency_us_p999999");
-    ret.nvmReadLatencyMicrosP100 = lookup("navy_device_read_latency_us_p100");
+    ret.nvmReadLatencyMicrosP100 = lookup("navy_device_read_latency_us_max");
     ret.nvmWriteLatencyMicrosP50 = lookup("navy_device_write_latency_us_p50");
     ret.nvmWriteLatencyMicrosP90 = lookup("navy_device_write_latency_us_p90");
     ret.nvmWriteLatencyMicrosP99 = lookup("navy_device_write_latency_us_p99");
@@ -1245,7 +1245,7 @@ Stats Cache<Allocator>::getStats() const {
         lookup("navy_device_write_latency_us_p99999");
     ret.nvmWriteLatencyMicrosP999999 =
         lookup("navy_device_write_latency_us_p999999");
-    ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_p100");
+    ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_max");
     ret.numNvmItemRemovedSetSize = lookup("items_tracked_for_destructor");
 
     // track any non-zero check sum errors or io errors
