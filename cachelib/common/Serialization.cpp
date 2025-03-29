@@ -16,6 +16,8 @@
 
 #include "cachelib/common/Serialization.h"
 
+#include <folly/Format.h>
+
 namespace facebook {
 namespace cachelib {
 Serializer::Serializer(uint8_t* begin, const uint8_t* const end)
