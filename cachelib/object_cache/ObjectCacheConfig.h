@@ -165,6 +165,15 @@ struct ObjectCacheConfig {
    */
   ObjectCacheConfig& overrideNvmCbs(ToBlobCb blobCb, ToPtrCb ptrCb);
 
+  /**
+   * Enable pool provisioning. See the doc for provisionPool.
+   * Setting this to true would make cachelib take the entire space it is
+   * configured to upon startup to avoid certain race conditions (S498497).
+   * Keep it false if your object cache has an arbitrarilty large number of
+   * entries.
+   */
+  ObjectCacheConfig& enablePoolProvisioning();
+
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
   // With size controller enabled, this is only a hint used for initialization.
@@ -256,6 +265,9 @@ struct ObjectCacheConfig {
   bool delayCacheWorkersStart{false};
 
   std::optional<typename ObjectCache::NvmCacheConfig> nvmConfig{};
+
+  // If true, we'll provision pools proactively upon creation.
+  bool provisionPool{false};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -482,6 +494,12 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
 
         return true;
       };
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePoolProvisioning() {
+  provisionPool = true;
   return *this;
 }
 
