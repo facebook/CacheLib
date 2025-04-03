@@ -125,7 +125,7 @@ class MemoryPoolManager {
   // access the memory pool by its name and id.
   // @returns returns a valid MemoryPool.
   // @throw std::invalid_argument if the name or id is invalid.
-  MemoryPool& getPoolByName(const std::string& name) const;
+  MemoryPool& getPoolByName(std::string_view name) const;
   MemoryPool& getPoolById(PoolId id) const;
 
   // returns the pool's name by its pool ID

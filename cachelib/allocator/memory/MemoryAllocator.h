@@ -388,7 +388,7 @@ class MemoryAllocator {
   // @param name  the name of the pool
   // @return  poold id corresponding to the name if it exists or
   //          kInvalidPoolId if name is not a recognized pool.
-  PoolId getPoolId(const std::string& name) const noexcept;
+  PoolId getPoolId(std::string_view name) const noexcept;
 
   // get the pool name corresponding to its PoolId
   //

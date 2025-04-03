@@ -4718,7 +4718,7 @@ void CacheAllocator<CacheTrait>::createMMContainers(const PoolId pid,
 template <typename CacheTrait>
 PoolId CacheAllocator<CacheTrait>::getPoolId(
     folly::StringPiece name) const noexcept {
-  return allocator_->getPoolId(name.str());
+  return allocator_->getPoolId(name);
 }
 
 // The Function returns a consolidated vector of Release Slab
