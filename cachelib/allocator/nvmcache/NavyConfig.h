@@ -696,7 +696,7 @@ class NavyConfig {
   // ============ AP settings =============
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).
-  std::string admissionPolicy_{""};
+  std::string admissionPolicy_;
   DynamicRandomAPConfig dynamicRandomAPConfig_{};
   RandomAPConfig randomAPConfig_{};
 
