@@ -54,7 +54,7 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #define EXPECTED_SIZE 16368
 #endif
 #ifdef _LIBCPP_VERSION
-#define EXPECTED_SIZE 17504
+#define EXPECTED_SIZE 16368
 #endif
   SizeVerify<sizeof(Stats)> a = SizeVerify<EXPECTED_SIZE>{};
   std::ignore = a;
