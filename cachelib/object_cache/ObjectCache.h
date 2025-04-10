@@ -691,8 +691,8 @@ void ObjectCache<AllocatorT>::startCacheWorkers() {
 
 template <typename AllocatorT>
 void ObjectCache<AllocatorT>::initWorkers() {
-  if (config_.objectSizeTrackingEnabled &&
-      config_.sizeControllerIntervalMs != 0) {
+  if ((config_.objectSizeTrackingEnabled &&
+       config_.sizeControllerIntervalMs != 0)) {
     util::startPeriodicWorker(
         kSizeControllerName, sizeController_,
         std::chrono::milliseconds{config_.sizeControllerIntervalMs}, *this,

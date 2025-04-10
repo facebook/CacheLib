@@ -24,7 +24,6 @@
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/tests/NvmTestUtils.h"
 #include "cachelib/object_cache/ObjectCache.h"
-#include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
 #include "cachelib/object_cache/tests/gen-cpp2/test_object_types.h"
 
 namespace facebook::cachelib::objcache2::test {
@@ -62,6 +61,12 @@ struct Foo5 : FooBase {
   int e{};
   int f{};
 };
+
+struct MemoryConsumer {
+  std::vector<char> data;
+  explicit MemoryConsumer(size_t sizeBytes) : data(sizeBytes) {}
+};
+
 } // namespace
 
 template <typename AllocatorT>
@@ -2077,5 +2082,145 @@ TEST(ObjectCacheTest, InitException) {
   config.enableNvm(nvmConfig);
 
   EXPECT_THROW(ObjectCache::create(config), std::invalid_argument);
+}
+
+TEST(ObjectCacheTest, FreeMemSizeControlTest) {
+  // Create two caches A and B and fill it completely.
+  // Set free mem function to always return a value between the lower and upper
+  // range and one below the lower range. The cache with free memory in range
+  // should not change in size whereas the one where we return value lower than
+  // the lower limit should lead to a reduced cache size.
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;               // 1 KB
+  uint64_t maxNumEntries = 1024 * 30; // 30 MB
+  uint64_t sizeControlInternalMs = 10;
+
+  ObjectCache::Config configA;
+  ObjectCache::Config configB;
+
+  configA.setCacheName("testA");
+  configB.setCacheName("testB");
+
+  configA.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+  configB.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+
+  configA.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                           sizeControlInternalMs);
+  configB.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                           sizeControlInternalMs);
+
+  configA.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemory,
+                                      upperLimitBytes, lowerLimitBytes);
+  configB.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemory,
+                                      upperLimitBytes, lowerLimitBytes);
+
+  configA.memoryMode = FreeMemory;
+  configB.memoryMode = FreeMemory;
+
+  configA.setFreeMemCb([]() { return 15 * kMB; });
+  configB.setFreeMemCb([]() { return 7 * kMB; });
+
+  auto objcacheA = ObjectCache::create(configA);
+  auto objcacheB = ObjectCache::create(configB);
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcacheA->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                               itemSize);
+  }
+  auto numEntriesA = objcacheA->getCurrentEntriesLimit();
+  auto totalSizeA = objcacheA->getTotalObjectSize();
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcacheB->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                               itemSize);
+  }
+  auto numEntriesB = objcacheB->getCurrentEntriesLimit();
+  auto totalSizeB = objcacheB->getTotalObjectSize();
+
+  // No change as our free memory byte is in range.
+  EXPECT_EQ(numEntriesA, maxNumEntries);
+  EXPECT_EQ(totalSizeA, maxNumEntries * itemSize);
+  // Since free memory less than lower limit, objcacheB should be smaller.
+  EXPECT_LT(numEntriesB, numEntriesA);
+  EXPECT_LT(totalSizeB, totalSizeA);
+}
+
+TEST(ObjectCacheTest, RSSSizeControlTest) {
+  // Create two caches A and B and fill it completely.
+  // Set RSS mem function to always return a value above the higher range
+  // and one below the lower range. The cache with RSS memory greater
+  // than the upper limit leads to a reduced cache size whereas the cache
+  // with RSS memory less than the lower limit will have the cache size
+  // unchanged.
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;               // 1 KB
+  uint64_t maxNumEntries = 1024 * 30; // 30 MB
+  uint64_t sizeControlInternalMs = 10;
+
+  ObjectCache::Config configA;
+  ObjectCache::Config configB;
+
+  configA.setCacheName("testA");
+  configB.setCacheName("testB");
+
+  configA.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+  configB.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+
+  configA.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                           sizeControlInternalMs);
+  configB.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                           sizeControlInternalMs);
+
+  configA.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemory,
+                                      upperLimitBytes, lowerLimitBytes);
+  configB.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemory,
+                                      upperLimitBytes, lowerLimitBytes);
+
+  configA.memoryMode = ResidentMemory;
+  configB.memoryMode = ResidentMemory;
+
+  configA.setRSSMemCb([]() { return 16 * kMB; });
+  configB.setRSSMemCb([]() { return 7 * kMB; });
+
+  auto objcacheA = ObjectCache::create(configA);
+  auto objcacheB = ObjectCache::create(configB);
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcacheA->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                               itemSize);
+  }
+  auto numEntriesA = objcacheA->getCurrentEntriesLimit();
+  auto totalSizeA = objcacheA->getTotalObjectSize();
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcacheB->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                               itemSize);
+  }
+  auto numEntriesB = objcacheB->getCurrentEntriesLimit();
+  auto totalSizeB = objcacheB->getTotalObjectSize();
+
+  // No change as RSS size is less than the lower limit
+  EXPECT_EQ(numEntriesB, maxNumEntries);
+  EXPECT_EQ(totalSizeB, maxNumEntries * itemSize);
+
+  // Since RSS size is high, objcacheA should be smaller.
+  EXPECT_LT(numEntriesA, numEntriesB);
+  EXPECT_LT(totalSizeA, totalSizeB);
 }
 } // namespace facebook::cachelib::objcache2::test

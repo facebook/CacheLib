@@ -23,6 +23,8 @@
 #include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Throttler.h"
+#include "cachelib/common/Utils.h"
+#include "cachelib/object_cache/ObjectCacheSizeController.h"
 
 namespace facebook {
 namespace cachelib {
@@ -40,6 +42,10 @@ struct ObjectCacheConfig {
   using NvmCacheConfig = typename ObjectCache::NvmCacheConfig;
   using ToBlobCb = std::function<std::unique_ptr<folly::IOBuf>(uintptr_t)>;
   using ToPtrCb = std::function<uintptr_t(folly::StringPiece)>;
+  using GetFreeMemCb =
+      typename ObjectCacheSizeController<ObjectCache>::GetFreeMemCb;
+  using GetRSSMemCb =
+      typename ObjectCacheSizeController<ObjectCache>::GetRSSMemCb;
 
   // Set cache name as a string
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
@@ -57,6 +63,19 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setCacheCapacity(size_t _l1EntriesLimit,
                                       size_t _totalObjectSizeLimit = 0,
                                       int _sizeControllerIntervalMs = 0);
+
+  // Set the memory mode to use from Object Size, FreeMemory and RSS.
+  ObjectCacheConfig& setObjectSizeControllerMode(ObjCacheSizeControlMode _mode,
+                                                 uint64_t _upperLimitBytes,
+                                                 uint64_t _lowerLimitBytes);
+
+  // Set a custom function to compute the free memory bytes.
+  // If not set, the default function util::getMemAvailable() will be used.
+  ObjectCacheConfig& setFreeMemCb(GetFreeMemCb _getFreeMemBytes);
+
+  // Set a custom function to compute the RSS bytes.
+  // If not set, the default function util::getRSSBytes() will be used.
+  ObjectCacheConfig& setRSSMemCb(GetRSSMemCb _getRSSBytes);
 
   // Set the number of internal cache pools to be used for sharding.
   // This determines the number of concurrent inserts/removes. Default is 1
@@ -260,6 +279,31 @@ struct ObjectCacheConfig {
   // 0 means it's infinite
   uint32_t evictionSearchLimit{50};
 
+  // The memory mode to use from Object Size, FreeMemory and RSS
+  // Object Size has no memory tracking but ensures the number of objects
+  // and its total size are within the limit.
+  // FreeMemory makes sure that the system has the specified amounts
+  // of free memory at all times on top of Object Size mode guarantees.
+  // RSS mode makes sure that the RSS of the process is within the limit
+  // on top of Object Size mode guarantees.
+  ObjCacheSizeControlMode memoryMode{ObjCacheSizeControlMode::ObjectSize};
+
+  // The number of entries to add or remove per iteration.
+  // The limits means different things for different memory modes.
+  // For Object Size mode,
+  //   - upperLimitBytes: max total object size limit (shrink cache)
+  //   - lowerLimitBytes: min total object size limit (expand cache)
+  // For FreeMemory mode,
+  //   - upperLimitBytes: max free memory limit (expand cache)
+  //   - lowerLimitBytes: min free memory limit (shrink cache)
+  // For RSS mode,
+  //   - upperLimitBytes: max RSS limit (shrink cache)
+  //   - lowerLimitBytes: min RSS limit (expand cache)
+  uint64_t upperLimitBytes{0};
+  uint64_t lowerLimitBytes{0};
+  GetFreeMemCb getFreeMemBytes = util::getMemAvailable;
+  GetRSSMemCb getRSSMemBytes = util::getRSSBytes;
+
   // If true, we will delay worker start until user explicitly calls
   // ObjectCache::startCacheWorkers()
   bool delayCacheWorkersStart{false};
@@ -296,6 +340,35 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setCacheCapacity(
         "Both of sizeControllerIntervalMs and totalObjectSizeLimit should be "
         "provided to enable the size controller");
   }
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setObjectSizeControllerMode(
+    ObjCacheSizeControlMode _memoryMode,
+    uint64_t _upperLimitBytes,
+    uint64_t _lowerLimitBytes) {
+  if (!objectSizeTrackingEnabled) {
+    throw std::invalid_argument(
+        "Enable object size tracking before setting size controller mode.");
+  }
+  memoryMode = _memoryMode;
+  upperLimitBytes = _upperLimitBytes;
+  lowerLimitBytes = _lowerLimitBytes;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setFreeMemCb(
+    GetFreeMemCb _getFreeMemBytes) {
+  getFreeMemBytes = _getFreeMemBytes;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRSSMemCb(
+    GetRSSMemCb _getRSSBytes) {
+  getRSSMemBytes = _getRSSBytes;
   return *this;
 }
 
