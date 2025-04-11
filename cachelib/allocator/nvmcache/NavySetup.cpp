@@ -172,6 +172,8 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   }
   blockCache->setCleanRegionsPool(blockCacheConfig.getCleanRegions(),
                                   blockCacheConfig.getCleanRegionThreads());
+  blockCache->setRegionManagerFlushAsync(
+      blockCacheConfig.isRegionManagerFlushAsync());
 
   blockCache->setReinsertionConfig(blockCacheConfig.getReinsertionConfig());
 

@@ -93,7 +93,8 @@ class RegionManager {
                 std::unique_ptr<EvictionPolicy> policy,
                 uint32_t numInMemBuffers,
                 uint16_t numPriorities,
-                uint16_t inMemBufFlushRetryLimit);
+                uint16_t inMemBufFlushRetryLimit,
+                bool workerFlushAsync);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -325,6 +326,10 @@ class RegionManager {
   // async flushes will be run in-line on fiber by the async NavyThread itself
   std::vector<std::unique_ptr<NavyThread>> workers_;
   std::unordered_set<NavyThread*> workerSet_;
+  // Whether to schedule async flushes on the workers itself (as opposed to run
+  // flushes inline).
+  // TODO (@haowux): Evaluate and always flush async.
+  const bool workerFlushAsync_{false};
   mutable AtomicCounter numReclaimScheduled_;
 
   const RegionEvictCallback evictCb_;

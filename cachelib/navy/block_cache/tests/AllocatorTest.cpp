@@ -44,7 +44,8 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
-      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
+      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit,
+      true /* workeAsyncFlush */);
   Allocator allocator{*rm, kNumPriorities};
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
@@ -141,7 +142,8 @@ TEST(Allocator, TestInMemBufferStates) {
   RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
-      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit);
+      std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit,
+      true /* workeAsyncFlush */);
   Allocator allocator{*rm, kNumPriorities};
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
@@ -233,7 +235,7 @@ TEST(Allocator, UsePriorities) {
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
       kNumRegions /* numInMemBuffers */, 3 /* numPriorities */,
-      kFlushRetryLimit);
+      kFlushRetryLimit, true /* workeAsyncFlush */);
 
   Allocator allocator{*rm, 3 /* numPriorities */};
 

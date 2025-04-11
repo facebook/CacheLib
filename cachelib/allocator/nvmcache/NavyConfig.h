@@ -337,6 +337,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setRegionManagerFlushAsync(bool async) noexcept {
+    regionManagerFlushAsync_ = async;
+    return *this;
+  }
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -354,6 +359,8 @@ class BlockCacheConfig {
   bool getDataChecksum() const { return dataChecksum_; }
 
   uint64_t getSize() const { return size_; }
+
+  bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
 
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
@@ -389,6 +396,9 @@ class BlockCacheConfig {
   // Intended size of the block cache.
   // If 0, this block cache takes all the space left on the device.
   uint64_t size_{0};
+
+  // Whether the region manager workers flushes asynchronously.
+  bool regionManagerFlushAsync_{false};
 
   friend class NavyConfig;
 };

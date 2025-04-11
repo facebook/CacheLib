@@ -118,6 +118,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.preciseRemove = preciseRemove;
   }
 
+  void setRegionManagerFlushAsync(bool asyn) override {
+    config_.regionManagerFlushAsync = asyn;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {

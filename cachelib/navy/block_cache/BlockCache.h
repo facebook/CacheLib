@@ -88,6 +88,8 @@ class BlockCache final : public Engine {
 
     // whether to remove an item by checking the full key.
     bool preciseRemove{false};
+    // Whether region manager's worker threads should flush asynchronously.
+    bool regionManagerFlushAsync{false};
 
     // Calculates the total region number.
     uint32_t getNumRegions() const {

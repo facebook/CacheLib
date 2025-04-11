@@ -32,7 +32,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              std::unique_ptr<EvictionPolicy> policy,
                              uint32_t numInMemBuffers,
                              uint16_t numPriorities,
-                             uint16_t inMemBufFlushRetryLimit)
+                             uint16_t inMemBufFlushRetryLimit,
+                             bool workerFlushAsync)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -42,6 +43,7 @@ RegionManager::RegionManager(uint32_t numRegions,
       policy_{std::move(policy)},
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
       numCleanRegions_{numCleanRegions},
+      workerFlushAsync_{workerFlushAsync},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
@@ -263,10 +265,24 @@ void RegionManager::doFlush(RegionId rid, bool async) {
   getRegion(rid).setPendingFlush();
   numInMemBufWaitingFlush_.inc();
 
-  if (!async || isOnWorker()) {
+  if (!async) {
     doFlushInternal(rid);
   } else {
-    getNextWorker().addTaskRemote([this, rid]() { doFlushInternal(rid); });
+    if (isOnWorker()) {
+      // If configured to flush async, schedule the flush job.
+      // It has to be scheduled to the same worker thread. Otherwise if we are
+      // draining, this flush job might be scheduled to an already drained
+      // worker thread.
+      if (workerFlushAsync_) {
+        getCurrentNavyThread()->addTaskRemote(
+            [this, rid]() { doFlushInternal(rid); });
+      } else {
+        doFlushInternal(rid);
+      }
+
+    } else {
+      getNextWorker().addTaskRemote([this, rid]() { doFlushInternal(rid); });
+    }
   }
 }
 
