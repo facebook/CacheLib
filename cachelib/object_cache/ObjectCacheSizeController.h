@@ -107,6 +107,9 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // entries) and system metrics (free memory and RSS).
   auto totalObjSize = getTotalObjSizeBytes();
   auto currentNumEntries = objCache_.getNumEntries();
+  if (currentNumEntries == 0) {
+    return;
+  }
   auto minEntriesWarmCacheThreshold =
       kSizeControllerThresholdPct * objCache_.config_.l1EntriesLimit / 100;
   auto totalObjectSizeWarmCacheThreshold =
