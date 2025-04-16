@@ -69,6 +69,22 @@ class MemoryRecordWriter final : public RecordWriter {
   }
   bool invalidate() override { return false; }
 
+  uint64_t getCurPos() const override {
+    // IOBufQueue::chainLength() will throw std::invalid_argument exception if
+    // cacheChainLength option is not set when it's created. (default is false)
+    // Since this function is mostly for informational purpose and this class
+    // is mostly for testing, we can just return 0 instead of throwing
+    // exception.
+    try {
+      auto pos = ioQueue_.chainLength();
+      return pos;
+    } catch (const std::invalid_argument& e) {
+      // let's just return 0
+      XLOGF(ERR, "Error getting current position: {}", e.what());
+      return 0;
+    }
+  }
+
  private:
   folly::IOBufQueue& ioQueue_;
 };

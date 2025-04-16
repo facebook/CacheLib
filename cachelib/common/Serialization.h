@@ -167,6 +167,7 @@ class RecordWriter {
   virtual ~RecordWriter() = default;
   virtual void writeRecord(std::unique_ptr<folly::IOBuf> buf) = 0;
   virtual bool invalidate() = 0;
+  virtual uint64_t getCurPos() const = 0;
 };
 
 class RecordReader {

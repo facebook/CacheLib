@@ -35,6 +35,7 @@ class FileRecordWriter final : public RecordWriter {
     writer_.write(std::move(buf));
   }
   bool invalidate() override { return false; }
+  uint64_t getCurPos() const override { return writer_.filePos(); }
 
  private:
   folly::RecordIOWriter writer_;
@@ -155,6 +156,8 @@ class DeviceMetaDataWriter final : public RecordWriter {
     memset(invalidateBuffer.data(), 0, blockSize_);
     return dev_.write(0, std::move(invalidateBuffer));
   }
+
+  uint64_t getCurPos() const override { return offset_; }
 
  private:
   static constexpr size_t kBlockSizeDefault = 4096;
