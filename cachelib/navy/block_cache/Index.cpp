@@ -163,6 +163,72 @@ size_t Index::computeSize() const {
   return size;
 }
 
+Index::MemFootprintRange Index::computeMemFootprintRange() const {
+  // For now, this function's implementation is tightly coupled with the
+  // sparse_map implementation that we curretly use and that is intended.
+  // TODO: Make this function more general to cover other index implementation
+  // by looking at the config value (when other index implementation is added)
+  using sparseArray = tsl::detail_sparse_hash::sparse_array<
+      std::pair<typename Map::key_type, typename Map::value_type>,
+      typename Map::allocator_type,
+      tsl::sh::sparsity::medium>;
+
+  Index::MemFootprintRange range;
+  auto sparseBucketSize = sizeof(sparseArray);
+  // sparse_map is using std::pair<Key, Value> for actual data to be stored,
+  // so actual size that is stored can be larger than sizeof(Key) +
+  // sizeof(Value) due to the alignment within std::pair
+  auto entrySize =
+      sizeof(std::pair<typename Map::key_type, typename Map::value_type>);
+
+  for (uint32_t i = 0; i < kNumBuckets; i++) {
+    auto lock = std::lock_guard{getMutexOfBucket(i)};
+
+    // add the size of fixed mem used for sparse_map's member (sparse_hash)
+    size_t bucketMemUsed = sizeof(buckets_[i]);
+
+    // The number of buckets is a power of 2 and one sparse array instance will
+    // cover 64 buckets, so there will be (# of buckets) / 64 sparse array
+    // instances (called sparse bucket in sparse_map implementation).
+    auto sparseBucketCount = (buckets_[i].bucket_count() == 0)
+                                 ? 0
+                                 : ((buckets_[i].bucket_count() - 1) >> 6) + 1;
+    bucketMemUsed += sparseBucketCount * sparseBucketSize;
+
+    // For each entry in the hash table (sparse_hash)
+    auto entryCount = buckets_[i].size();
+
+    // For memory consumed for the entries in the sparse_hash, we can only
+    // calculate the range that it will consume without directly touching
+    // sparse_map implementation. Real memory consumed by it is up to how hash
+    // values of keys are distributed
+    //
+    // The default config for sparse_array will increase the real array by 4 per
+    // every resize. For the worst case, we may have 4 additional entries per
+    // each sparse array instance (sparse bucket)
+    // (# of real buckets)
+    // = (# of entries - (# of entries mod 4)) + (# of sparse buckets) * 4
+    range.maxUsedBytes +=
+        bucketMemUsed + ((entryCount == 0) ? 0
+                                           : ((((entryCount - 1) >> 2) << 2) +
+                                              (sparseBucketCount << 2)) *
+                                                 entrySize);
+
+    // For the best case, all sparse_array will be filled with the exact number
+    // (mod 4 == 0) of real buckets and only one sparse array may have
+    // additional buckets
+    // (# of real buckets)
+    // = (# of entries - (# of entries mod 4)) + (1 or 0) * 4
+    range.minUsedBytes +=
+        bucketMemUsed + ((entryCount == 0)
+                             ? 0
+                             : ((((entryCount - 1) >> 2) << 2) +
+                                (((sparseBucketCount > 0) ? 1 : 0) << 2)) *
+                                   entrySize);
+  }
+  return range;
+}
+
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   for (uint32_t i = 0; i < kNumBuckets; i++) {

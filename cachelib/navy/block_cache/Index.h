@@ -34,6 +34,11 @@
 namespace facebook {
 namespace cachelib {
 namespace navy {
+// for unit tests private members access
+#ifdef Index_TEST_FRIENDS_FORWARD_DECLARATION
+Index_TEST_FRIENDS_FORWARD_DECLARATION;
+#endif
+
 // folly::SharedMutex is write priority by default
 using SharedMutex =
     folly::fibers::TimedRWMutexWritePriority<folly::fibers::Baton>;
@@ -116,6 +121,11 @@ class Index {
     bool found_{false};
   };
 
+  struct MemFootprintRange {
+    size_t maxUsedBytes{0};
+    size_t minUsedBytes{0};
+  };
+
   // Gets value and update tracking counters
   LookupResult lookup(uint64_t key);
 
@@ -153,6 +163,13 @@ class Index {
 
   // Walks buckets and computes total index entry count
   size_t computeSize() const;
+
+  // Walks buckets and computes max/min memory footprint range that index will
+  // currently use for the entries it currently has. (Since sparse_map is
+  // difficult to get the internal status without modifying its implementaion
+  // directly, this function will calculate max/min memory footprint range by
+  // considering the current entry count and sparse_map's implementation)
+  MemFootprintRange computeMemFootprintRange() const;
 
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const;
@@ -196,6 +213,11 @@ class Index {
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");
+
+// For unit tests private member access
+#ifdef Index_TEST_FRIENDS
+  Index_TEST_FRIENDS;
+#endif
 };
 } // namespace navy
 } // namespace cachelib
