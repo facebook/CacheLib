@@ -170,8 +170,7 @@ Index::MemFootprintRange Index::computeMemFootprintRange() const {
   // by looking at the config value (when other index implementation is added)
   using sparseArray = tsl::detail_sparse_hash::sparse_array<
       std::pair<typename Map::key_type, typename Map::value_type>,
-      typename Map::allocator_type,
-      tsl::sh::sparsity::medium>;
+      typename Map::allocator_type, tsl::sh::sparsity::medium>;
 
   Index::MemFootprintRange range;
   auto sparseBucketSize = sizeof(sparseArray);
@@ -231,6 +230,9 @@ Index::MemFootprintRange Index::computeMemFootprintRange() const {
 
 void Index::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
+  auto prevPos = rw.getCurPos();
+  uint64_t persisted = 0;
+
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     *bucket.bucketId() = i;
     // Convert index entries to thrift objects
@@ -243,8 +245,31 @@ void Index::persist(RecordWriter& rw) const {
       entry.currentHits() = record.currentHits;
       bucket.entries()->push_back(entry);
     }
-    // Serialize bucket then clear contents to reuse memory.
-    serializeProto(bucket, rw);
+
+    try {
+      // Serialize bucket and this may throw exception when it's exceeding the
+      // meta data size limit
+      serializeProto(bucket, rw);
+      persisted += bucket.entries()->size();
+    } catch (const std::exception& e) {
+      // Log the error and more info on current index
+      XLOGF(ERR,
+            "Error persisting Block Cache Index: {}, persist() began at pos {} "
+            "and current pos {}, trying to add {} entries from bucket {}",
+            e.what(), prevPos, rw.getCurPos(), bucket.entries()->size(), i);
+      auto memFootprint = computeMemFootprintRange();
+      XLOGF(ERR,
+            "Current Block cache items count: {}, persisted {} items, index "
+            "size in memory {} "
+            "(max) - {} (min)",
+            computeSize(),
+            persisted,
+            memFootprint.maxUsedBytes,
+            memFootprint.minUsedBytes);
+      // rethrow to the caller
+      throw;
+    }
+    // Clear contents to reuse memory.
     bucket.entries()->clear();
   }
 }

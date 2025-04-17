@@ -27,6 +27,7 @@
 #define Index_TEST_FRIENDS FRIEND_TEST(Index, MemFootprintRangeTest)
 
 #include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook::cachelib::navy::tests {
 TEST(Index, Recovery) {
@@ -246,6 +247,24 @@ TEST(Index, MemFootprintRangeTest) {
   // computeMemFootprintRange() will return mem consumed for the best and the
   // worst cases
   EXPECT_NE(range.maxUsedBytes, range.minUsedBytes);
+}
+
+TEST(Index, PersistFailureTest) {
+  Index index;
+
+  size_t numEntries = 1000;
+  for (uint64_t i = 0; i < numEntries; i++) {
+    // Randomly put some entries into the index, but let's make it distributed
+    // across buckets
+    index.insert(i << 32, i + 100, 100);
+  }
+
+  // create a mock device with much smaller size intentionally
+  size_t devSize = 2 * 4096;
+  MockDevice device(devSize, 1);
+  auto rw = createMetadataRecordWriter(device, devSize);
+
+  EXPECT_THROW(index.persist(*rw), std::logic_error);
 }
 
 } // namespace facebook::cachelib::navy::tests
