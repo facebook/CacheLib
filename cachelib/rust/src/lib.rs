@@ -14,15 +14,11 @@
  * limitations under the License.
  */
 
-mod abomonation_cache;
+pub mod abomonation_cache;
 pub mod bincode_cache;
 mod errors;
 mod lrucache;
 
-// export Abomonation so that users of this crate don't need to add abomination as dependency
-pub use abomonation::Abomonation;
-
-pub use crate::abomonation_cache::*;
 pub use crate::errors::*;
 pub use crate::lrucache::*;
 
