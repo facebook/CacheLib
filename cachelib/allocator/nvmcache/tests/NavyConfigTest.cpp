@@ -21,7 +21,7 @@
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
-#include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 namespace facebook {
 namespace cachelib {
@@ -336,7 +336,7 @@ TEST(NavyConfigTest, BlockCache) {
 
   auto customPolicy = std::make_shared<DummyReinsertionPolicy>();
 
-  navy::Index index;
+  navy::SparseMapIndex index;
 
   // test cannot enable both hits-based and probability-based reinsertion policy
   config = NavyConfig{};

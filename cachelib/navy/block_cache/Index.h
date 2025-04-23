@@ -17,53 +17,32 @@
 #pragma once
 
 #include <folly/Portability.h>
-#include <folly/fibers/TimedMutex.h>
-#include <folly/stats/QuantileEstimator.h>
-#include <tsl/sparse_map.h>
 
 #include <cassert>
-#include <chrono>
-#include <functional>
-#include <memory>
-#include <utility>
 
-#include "cachelib/common/AtomicCounter.h"
-#include "cachelib/common/PercentileStats.h"
-#include "cachelib/navy/serialization/RecordIO.h"
+#include "cachelib/common/Serialization.h"
+#include "cachelib/navy/common/Types.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
-// for unit tests private members access
-#ifdef Index_TEST_FRIENDS_FORWARD_DECLARATION
-Index_TEST_FRIENDS_FORWARD_DECLARATION;
-#endif
 
-// folly::SharedMutex is write priority by default
-using SharedMutex =
-    folly::fibers::TimedRWMutexWritePriority<folly::fibers::Baton>;
-
-// NVM index: map from key to value. Under the hood, stores key hash to value
-// map. If collision happened, returns undefined value (last inserted actually,
-// but we do not want people to rely on that).
+// Base interface class for NVM index: map from key to value.
+// Under the hood, it stores key hash to value map
 class Index {
  public:
-  // Specify 1 second window size for quantile estimator.
+  // Specify 1 second window size for quantile estimator with any Index.
+  // TODO: this will be deprecated when we deprecated totalHits tracking.
   static constexpr std::chrono::seconds kQuantileWindowSize{1};
 
-  Index() = default;
-  Index(const Index&) = delete;
-  Index& operator=(const Index&) = delete;
+  virtual ~Index() = default;
 
-  // Writes index to a Thrift object one bucket at a time and passes each bucket
-  // to @persistCb. The reason for this is because the index can be very large
-  // and serializing everything at once uses a lot of RAM.
-  void persist(RecordWriter& rw) const;
-
-  // Resets index then inserts entries read from @deserializer. Throws
-  // std::exception on failure.
-  void recover(RecordReader& rr);
-
+  // ItemRecord is the structure that will be used for LookupResult used by
+  // Index's APIs.
+  // (Though we will use a different format for actual stored payload in memory
+  // per different types of Index implementation, we keep this strucutre as it
+  // is for now since it's being used in interface's return type)
+  // TODO: totalHits will be deprecated soon.
   struct FOLLY_PACK_ATTR ItemRecord {
     // encoded address
     uint32_t address{0};
@@ -119,6 +98,8 @@ class Index {
    private:
     ItemRecord record_;
     bool found_{false};
+
+    friend class SparseMapIndex;
   };
 
   struct MemFootprintRange {
@@ -126,98 +107,64 @@ class Index {
     size_t minUsedBytes{0};
   };
 
+  // Writes index to a Thrift object
+  virtual void persist(RecordWriter& rw) const = 0;
+
+  // Resets index then inserts entries read from @deserializer.
+  virtual void recover(RecordReader& rr) = 0;
+
   // Gets value and update tracking counters
-  LookupResult lookup(uint64_t key);
+  virtual LookupResult lookup(uint64_t key) = 0;
 
   // Gets value without updating tracking counters
-  LookupResult peek(uint64_t key) const;
+  virtual LookupResult peek(uint64_t key) const = 0;
 
-  // Overwrites existing key if exists with new address and size, and it also
-  // will reset hits counting. If the entry was successfully overwritten,
-  // LookupResult.found() returns true and LookupResult.record() returns the old
-  // record.
-  LookupResult insert(uint64_t key, uint32_t address, uint16_t sizeHint);
+  // Inserts or overwrites existing key if exists with new address and size, and
+  // it also will reset hits counting. If the entry was successfully
+  // overwritten, LookupResult.found() returns true and LookupResult.record()
+  // returns the old record.
+  virtual LookupResult insert(uint64_t key,
+                              uint32_t address,
+                              uint16_t sizeHint) = 0;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
   // All other fields in the record is retained.
   //
   // @return true if replaced.
-  bool replaceIfMatch(uint64_t key, uint32_t newAddress, uint32_t oldAddress);
+  virtual bool replaceIfMatch(uint64_t key,
+                              uint32_t newAddress,
+                              uint32_t oldAddress) = 0;
 
   // If the entry was successfully removed, LookupResult.found() returns true
   // and LookupResult.record() returns the record that was just found.
   // If the entry wasn't found, then LookupResult.found() returns false.
-  LookupResult remove(uint64_t key);
+  virtual LookupResult remove(uint64_t key) = 0;
 
   // Removes only if both key and address match.
   //
   // @return true if removed successfully, false otherwise.
-  bool removeIfMatch(uint64_t key, uint32_t address);
+  virtual bool removeIfMatch(uint64_t key, uint32_t address) = 0;
 
   // Updates hits information of a key.
-  void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits);
+  virtual void setHits(uint64_t key,
+                       uint8_t currentHits,
+                       uint8_t totalHits) = 0;
 
   // Resets all the buckets to the initial state.
-  void reset();
+  virtual void reset() = 0;
 
   // Walks buckets and computes total index entry count
-  size_t computeSize() const;
+  virtual size_t computeSize() const = 0;
 
   // Walks buckets and computes max/min memory footprint range that index will
-  // currently use for the entries it currently has. (Since sparse_map is
-  // difficult to get the internal status without modifying its implementaion
-  // directly, this function will calculate max/min memory footprint range by
-  // considering the current entry count and sparse_map's implementation)
-  MemFootprintRange computeMemFootprintRange() const;
+  // currently use for the entries it currently has. (Since there could be cases
+  // that it's difficult to get exact number with the memory footprint (ex.
+  // sparse_map) this function should return max/min range of memory footprint
+  virtual MemFootprintRange computeMemFootprintRange() const = 0;
 
   // Exports index stats via CounterVisitor.
-  void getCounters(const CounterVisitor& visitor) const;
-
- private:
-  static constexpr uint32_t kNumBuckets{64 * 1024};
-  static constexpr uint32_t kNumMutexes{1024};
-
-  using Map = tsl::sparse_map<uint32_t, ItemRecord>;
-
-  static uint32_t bucket(uint64_t hash) {
-    return (hash >> 32) & (kNumBuckets - 1);
-  }
-
-  static uint32_t subkey(uint64_t hash) { return hash & 0xffffffffu; }
-
-  SharedMutex& getMutexOfBucket(uint32_t bucket) const {
-    XDCHECK(folly::isPowTwo(kNumMutexes));
-    return mutex_[bucket & (kNumMutexes - 1)];
-  }
-
-  SharedMutex& getMutex(uint64_t hash) const {
-    auto b = bucket(hash);
-    return getMutexOfBucket(b);
-  }
-
-  Map& getMap(uint64_t hash) const {
-    auto b = bucket(hash);
-    return buckets_[b];
-  }
-
-  void trackRemove(uint8_t totalHits);
-
-  // Experiments with 64 byte alignment didn't show any throughput test
-  // performance improvement.
-  std::unique_ptr<SharedMutex[]> mutex_{new SharedMutex[kNumMutexes]};
-  std::unique_ptr<Map[]> buckets_{new Map[kNumBuckets]};
-
-  mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
-  mutable AtomicCounter unAccessedItems_;
-
-  static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
-                "number of mutexes must be power of two");
-
-// For unit tests private member access
-#ifdef Index_TEST_FRIENDS
-  Index_TEST_FRIENDS;
-#endif
+  virtual void getCounters(const CounterVisitor& visitor) const = 0;
 };
 } // namespace navy
 } // namespace cachelib

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-#include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 #include <folly/Format.h>
 
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook::cachelib::navy {
-constexpr uint32_t Index::kNumBuckets; // Link error otherwise
+// constexpr uint32_t SparseMapIndex::kNumBuckets; // Link error otherwise
 
 namespace {
 // increase val if no overflow, otherwise do nothing
@@ -33,7 +33,9 @@ uint8_t safeInc(uint8_t val) {
 }
 } // namespace
 
-void Index::setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits) {
+void SparseMapIndex::setHits(uint64_t key,
+                             uint8_t currentHits,
+                             uint8_t totalHits) {
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
@@ -44,7 +46,7 @@ void Index::setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits) {
   }
 }
 
-Index::LookupResult Index::lookup(uint64_t key) {
+Index::LookupResult SparseMapIndex::lookup(uint64_t key) {
   LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
@@ -59,7 +61,7 @@ Index::LookupResult Index::lookup(uint64_t key) {
   return lr;
 }
 
-Index::LookupResult Index::peek(uint64_t key) const {
+Index::LookupResult SparseMapIndex::peek(uint64_t key) const {
   LookupResult lr;
   const auto& map = getMap(key);
   auto lock = std::shared_lock{getMutex(key)};
@@ -72,9 +74,9 @@ Index::LookupResult Index::peek(uint64_t key) const {
   return lr;
 }
 
-Index::LookupResult Index::insert(uint64_t key,
-                                  uint32_t address,
-                                  uint16_t sizeHint) {
+Index::LookupResult SparseMapIndex::insert(uint64_t key,
+                                           uint32_t address,
+                                           uint16_t sizeHint) {
   LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
@@ -94,9 +96,9 @@ Index::LookupResult Index::insert(uint64_t key,
   return lr;
 }
 
-bool Index::replaceIfMatch(uint64_t key,
-                           uint32_t newAddress,
-                           uint32_t oldAddress) {
+bool SparseMapIndex::replaceIfMatch(uint64_t key,
+                                    uint32_t newAddress,
+                                    uint32_t oldAddress) {
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
@@ -110,14 +112,14 @@ bool Index::replaceIfMatch(uint64_t key,
   return false;
 }
 
-void Index::trackRemove(uint8_t totalHits) {
+void SparseMapIndex::trackRemove(uint8_t totalHits) {
   hitsEstimator_.trackValue(totalHits);
   if (totalHits == 0) {
     unAccessedItems_.inc();
   }
 }
 
-Index::LookupResult Index::remove(uint64_t key) {
+Index::LookupResult SparseMapIndex::remove(uint64_t key) {
   LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
@@ -133,7 +135,7 @@ Index::LookupResult Index::remove(uint64_t key) {
   return lr;
 }
 
-bool Index::removeIfMatch(uint64_t key, uint32_t address) {
+bool SparseMapIndex::removeIfMatch(uint64_t key, uint32_t address) {
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
@@ -146,7 +148,7 @@ bool Index::removeIfMatch(uint64_t key, uint32_t address) {
   return false;
 }
 
-void Index::reset() {
+void SparseMapIndex::reset() {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     auto lock = std::lock_guard{getMutexOfBucket(i)};
     buckets_[i].clear();
@@ -154,7 +156,7 @@ void Index::reset() {
   unAccessedItems_.set(0);
 }
 
-size_t Index::computeSize() const {
+size_t SparseMapIndex::computeSize() const {
   size_t size = 0;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     auto lock = std::lock_guard{getMutexOfBucket(i)};
@@ -163,7 +165,7 @@ size_t Index::computeSize() const {
   return size;
 }
 
-Index::MemFootprintRange Index::computeMemFootprintRange() const {
+Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   // For now, this function's implementation is tightly coupled with the
   // sparse_map implementation that we curretly use and that is intended.
   // TODO: Make this function more general to cover other index implementation
@@ -228,7 +230,7 @@ Index::MemFootprintRange Index::computeMemFootprintRange() const {
   return range;
 }
 
-void Index::persist(RecordWriter& rw) const {
+void SparseMapIndex::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucket;
   auto prevPos = rw.getCurPos();
   uint64_t persisted = 0;
@@ -274,7 +276,7 @@ void Index::persist(RecordWriter& rw) const {
   }
 }
 
-void Index::recover(RecordReader& rr) {
+void SparseMapIndex::recover(RecordReader& rr) {
   for (uint32_t i = 0; i < kNumBuckets; i++) {
     auto bucket = deserializeProto<serialization::IndexBucket>(rr);
     uint32_t id = *bucket.bucketId();
@@ -294,7 +296,7 @@ void Index::recover(RecordReader& rr) {
   }
 }
 
-void Index::getCounters(const CounterVisitor& visitor) const {
+void SparseMapIndex::getCounters(const CounterVisitor& visitor) const {
   hitsEstimator_.visitQuantileEstimator(visitor, "navy_bc_item_hits");
   visitor("navy_bc_item_removed_with_no_access", unAccessedItems_.get());
 }

@@ -364,15 +364,15 @@ class BlockCache final : public Engine {
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset 0
-  // of the slot and header (footer) at the end.
+  // of the slot and header (EntryDescriptor) at the end.
   //
-  // -------------------------------------------
-  // |     Value                    |  Footer  |
-  // -------------------------------------------
-  // ^                                         ^
-  // |                                         |
-  // Buffer*                          Index points here
-  Index index_;
+  // ----------------------------------------------------
+  // |     Value                    |  EntryDescriptor  |
+  // ----------------------------------------------------
+  // ^                                                  ^
+  // |                                                  |
+  // Buffer*                                    Index points here
+  std::unique_ptr<Index> index_;
   RegionManager regionManager_;
   Allocator allocator_;
   // It is vital that the reinsertion policy is initialized after index_.
