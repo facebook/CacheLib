@@ -15,6 +15,7 @@
  */
 
 mod abomonation_cache;
+pub mod bincode_cache;
 mod errors;
 mod lrucache;
 

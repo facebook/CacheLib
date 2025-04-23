@@ -634,6 +634,23 @@ pub struct LruCacheHandleReader<'a> {
     buffer: Cursor<&'a [u8]>,
 }
 
+impl<'a> LruCacheHandleReader<'a> {
+    pub fn peek(&mut self, cnt: usize) -> Option<&[u8]> {
+        let start = self.buffer.position() as usize;
+        let data = self.buffer.get_ref();
+        if start + cnt < data.len() {
+            Some(&data[start..start + cnt])
+        } else {
+            None
+        }
+    }
+
+    /// Get direct access to the underlying buffer.
+    pub fn buffer(&self) -> &[u8] {
+        self.buffer.get_ref()
+    }
+}
+
 impl<'a> Buf for LruCacheHandleReader<'a> {
     fn remaining(&self) -> usize {
         self.buffer.remaining()
@@ -662,6 +679,17 @@ impl<'a> Read for LruCacheHandleReader<'a> {
 /// `bytes::{Buf, BufMut}` for easy access to the data within the handle
 pub struct LruCacheHandleWriter<'a> {
     buffer: Cursor<&'a mut [u8]>,
+}
+
+impl<'a> LruCacheHandleWriter<'a> {
+    pub fn position(&self) -> usize {
+        self.buffer.position() as usize
+    }
+
+    /// Get direct access to the underlying buffer.
+    pub fn buffer(&mut self) -> &mut [u8] {
+        self.buffer.get_mut()
+    }
 }
 
 // SAFETY: Only calls to advance_mut modify the current position.
