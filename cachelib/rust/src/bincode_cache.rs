@@ -62,7 +62,7 @@ const CONFIG: bincode::config::Configuration<
 /// Will attempt to fetch and decode a cached item
 pub fn get_cached<T>(cache_pool: &VolatileLruCachePool, cache_key: &str) -> Result<Option<T>>
 where
-    T: bincode::Decode<()> + Clone + Send + 'static,
+    T: bincode::Decode<()>,
 {
     if let Some(cache_handle) = cache_pool.get_handle(cache_key)? {
         let reader = cache_handle.get_reader()?;
@@ -115,7 +115,7 @@ pub fn set_cached<T>(
     ttl: Option<Duration>,
 ) -> Result<bool>
 where
-    T: bincode::Encode + Clone + Send + 'static,
+    T: bincode::Encode,
 {
     let size = encoded_size(entry, CONFIG)?;
     let handle = cache_pool.allocate_with_ttl(cache_key, size, ttl)?;
