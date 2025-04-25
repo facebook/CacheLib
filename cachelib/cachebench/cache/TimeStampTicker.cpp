@@ -39,10 +39,10 @@ bool TimeStampTicker::advanceTimeStamp(uint32_t currTimeStamp) {
   auto currentBucket = currTimeStamp / bucketTicks_;
 
   if (oldBucket > currentBucket) {
-    XLOGF(ERR, "Bucket going BACKWARD from {} to {}", oldBucket, currentBucket);
     // This is an indication that our time-advancing mechanism has a bug.
-    // TODO: Once T85645217 is fixed, throw an exception.
-    return false;
+    // TODO: Fix T85645217.
+    throw std::runtime_error(folly::to<std::string>(
+        "Bucket going BACKWARD from", oldBucket, "to", currentBucket));
   }
 
   // Bucket matches. No update required.
