@@ -604,7 +604,7 @@ struct CacheMemoryStats {
   // returns the advised memory in the unit of slabs.
   size_t numAdvisedSlabs() const { return advisedSize / Slab::kSize; }
 
-  // returne usable portion of the cache size
+  // returns usable portion of the cache size
   size_t usableRamCacheSize() const { return ramCacheSize; }
 };
 
