@@ -68,6 +68,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, checkNvmCacheWarmUp);
 
   JSONSetVal(configJson, useCombinedLockForIterators);
+  JSONSetVal(configJson, useDTOAsync);
 
   if (configJson.count("poolDistributions")) {
     for (auto& it : configJson["poolDistributions"]) {
