@@ -140,10 +140,10 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   // First thing, we want to take care of is to make sure that the total
   // object size and number of objects are within the limit.
   auto averageObjSize = totalObjSize / currentNumEntries;
+  XDCHECK_NE(0u, averageObjSize);
   if (averageObjSize == 0) {
     return;
   }
-  XDCHECK_NE(0u, averageObjSize);
   auto newEntriesLimit =
       objCache_.config_.totalObjectSizeLimit / averageObjSize;
 
