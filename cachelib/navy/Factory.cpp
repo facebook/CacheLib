@@ -206,8 +206,8 @@ class EnginePairProtoImpl final : public EnginePairProto {
   }
 
   EnginePair create(Device* device,
-                    ExpiredCheck checkExpired,
-                    DestructorCallback destructorCb,
+                    const ExpiredCheck& checkExpired,
+                    const DestructorCallback& destructorCb,
                     JobScheduler& scheduler) {
     std::unique_ptr<Engine> bh;
 
