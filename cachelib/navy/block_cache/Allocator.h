@@ -77,18 +77,19 @@ class Allocator {
  public:
   // Constructs an allocator.
   //
-  // @param regionManager     Used to get eviction information and for
-  //                          locking regions
-  // @param numPriorities     Specifies how many priorities this allocator
-  //                          supports
-  // Throws std::exception if invalid arguments
-  explicit Allocator(RegionManager& regionManager, uint16_t numPriorities);
+  // @param regionManager           Used to get eviction information and for
+  //                                locking regions
+  // @param allocatorsPerPriority   Number of allocators per priority
+  explicit Allocator(RegionManager& regionManager,
+                     const std::vector<uint32_t>& allocatorsPerPriority);
 
   // Allocates and opens for writing.
   //
   // @param size          Allocation size
   // @param priority      Specifies how important this allocation is
   // @param canWait       If true, wait until allocation can be retried
+  // @param keyHash       Hash of the key to allocate for. Used for deciding the
+  // allocator if there's more than one for the priority.
   //
   // Returns a tuple containing region descriptor, allocated slotSize and
   // allocated address
@@ -102,7 +103,8 @@ class Allocator {
   // this allocator.
   std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(uint32_t size,
                                                               uint16_t priority,
-                                                              bool canWait);
+                                                              bool canWait,
+                                                              uint64_t keyHash);
 
   // Closes the region.
   void close(RegionDescriptor&& rid);
@@ -132,7 +134,7 @@ class Allocator {
 
   RegionManager& regionManager_;
   // Multiple allocators when we use priority-based allocation
-  std::vector<RegionAllocator> allocators_;
+  std::vector<std::vector<RegionAllocator>> allocators_;
 
   mutable AtomicCounter allocRetryWaits_;
 };

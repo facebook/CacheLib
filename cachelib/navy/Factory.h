@@ -89,6 +89,10 @@ class BlockCacheProto {
 
   // (Optional) Set if the region manager worker flush should be async.
   virtual void setRegionManagerFlushAsync(bool flushAsync) = 0;
+
+  // Set number of allocators per priority.
+  virtual void setNumAllocatorsPerPriority(
+      std::vector<uint32_t> numAllocatorsPerPriority) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

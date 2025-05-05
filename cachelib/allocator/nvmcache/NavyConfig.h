@@ -273,9 +273,16 @@ class BlockCacheConfig {
   //             {1, 2, 3} gives the 1/6th of the items in the first segment (P0
   //             least important), 2/6th of the items in the second segment
   //             (P1), and finally 3/6th of the items in the third segment (P2).
+  // @param Number of allocators for each priority. If not set, each priority
+  // would have one allocator.
   BlockCacheConfig& enableSegmentedFifo(
-      std::vector<unsigned int> sFifoSegmentRatio) noexcept {
+      std::vector<unsigned int> sFifoSegmentRatio,
+      std::vector<uint32_t> allocatorCounts = {}) noexcept {
     sFifoSegmentRatio_ = std::move(sFifoSegmentRatio);
+    if (allocatorCounts.size() > 0) {
+      XDCHECK_EQ(sFifoSegmentRatio_.size(), allocatorCounts.size());
+      allocatorsPerPriority_ = std::move(allocatorCounts);
+    }
     lru_ = false;
     return *this;
   }
@@ -342,6 +349,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
+    allocatorsPerPriority_ = {numAllocators};
+    return *this;
+  }
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -367,6 +379,10 @@ class BlockCacheConfig {
   }
 
   bool isPreciseRemove() const { return preciseRemove_; }
+
+  const std::vector<uint32_t>& getNumAllocatorsPerPriority() const {
+    return allocatorsPerPriority_;
+  }
 
  private:
   // Whether Navy BlockCache will use region-based LRU eviction policy.
@@ -399,6 +415,11 @@ class BlockCacheConfig {
 
   // Whether the region manager workers flushes asynchronously.
   bool regionManagerFlushAsync_{false};
+
+  // Number of allocators per priority.
+  // Do not set this directly. This should be configured by setAllocatorCount
+  // for FIFO and LRU, and enableSegmentedFifio for segmented FIFO.
+  std::vector<uint32_t> allocatorsPerPriority_{1};
 
   friend class NavyConfig;
 };

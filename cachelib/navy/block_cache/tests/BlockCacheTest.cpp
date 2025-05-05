@@ -1963,7 +1963,8 @@ TEST(BlockCache, UsePriorities) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
-  config.numPriorities = 3;
+  // 3 priorities
+  config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;
@@ -2019,7 +2020,7 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
-  config.numPriorities = 3;
+  config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;

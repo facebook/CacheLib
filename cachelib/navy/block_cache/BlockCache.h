@@ -81,10 +81,12 @@ class BlockCache final : public Engine {
     // directly fail it.
     uint16_t inMemBufFlushRetryLimit{10};
 
-    // Number of priorities. Items of the same priority will be put into
-    // the same reigon. The effect of priorities will be up to the particular
+    // The effect of priorities will be up to the particular
     // eviction policy. There must be at least one priority.
-    uint16_t numPriorities{1};
+    // This vector is the number of allocators for each priority. Under the same
+    // priority, allocators will be picked by key hash and written into one of
+    // the regions.
+    std::vector<uint32_t> allocatorsPerPriority{1};
 
     // whether to remove an item by checking the full key.
     bool preciseRemove{false};

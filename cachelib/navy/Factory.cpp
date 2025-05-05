@@ -80,9 +80,13 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     if (config_.evictionPolicy) {
       throw std::invalid_argument("There's already an eviction policy set");
     }
-    config_.numPriorities = static_cast<uint16_t>(segmentRatio.size());
     config_.evictionPolicy =
         std::make_unique<SegmentedFifoPolicy>(std::move(segmentRatio));
+  }
+
+  void setNumAllocatorsPerPriority(
+      std::vector<uint32_t> allocatorsPerPriority) override {
+    config_.allocatorsPerPriority = std::move(allocatorsPerPriority);
   }
 
   void setReadBufferSize(uint32_t size) override {

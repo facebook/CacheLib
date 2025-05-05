@@ -29,8 +29,15 @@
 namespace facebook::cachelib::navy::tests {
 namespace {
 constexpr uint16_t kNoPriority = 0;
-constexpr uint16_t kNumPriorities = 1;
+const std::vector<uint32_t> kAllocatorsPerPriority{1};
+constexpr uint32_t kKeyHash = 0;
 constexpr uint16_t kFlushRetryLimit = 10;
+
+Allocator makeAllocator(RegionManager& rm,
+                        const std::vector<uint32_t>& allocatorsPerPriority =
+                            kAllocatorsPerPriority) {
+  return Allocator{rm, allocatorsPerPriority};
+}
 } // namespace
 
 TEST(Allocator, RegionSyncInMemBuffers) {
@@ -46,7 +53,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit,
       true /* workeAsyncFlush */);
-  Allocator allocator{*rm, kNumPriorities};
+  Allocator allocator = makeAllocator(*rm);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
@@ -61,7 +68,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) =
-        allocator.allocate(1024, kNoPriority, false);
+        allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
     // Reclaim should have been started; complete the reclaim
     EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
@@ -73,7 +80,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     {
       RegionDescriptor desc{OpenStatus::Retry};
       std::tie(desc, slotSize, addr) =
-          allocator.allocate(1024, kNoPriority, false);
+          allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(desc.isReady());
 
       if (i > 0) {
@@ -93,7 +100,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
     for (uint32_t j = 0; j < 15; j++) {
       RegionDescriptor desc{OpenStatus::Retry};
       std::tie(desc, slotSize, addr) =
-          allocator.allocate(1024, kNoPriority, false);
+          allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(desc.isReady());
       EXPECT_EQ(RegionId{i}, addr.rid());
       EXPECT_EQ(1024 * (j + 1), addr.offset());
@@ -114,7 +121,7 @@ TEST(Allocator, RegionSyncInMemBuffers) {
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) =
-        allocator.allocate(1024, kNoPriority, false);
+        allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{3}, addr.rid());
     EXPECT_EQ(0, addr.offset());
@@ -144,7 +151,7 @@ TEST(Allocator, TestInMemBufferStates) {
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), 3, 0, kFlushRetryLimit,
       true /* workeAsyncFlush */);
-  Allocator allocator{*rm, kNumPriorities};
+  Allocator allocator = makeAllocator(*rm);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
@@ -158,7 +165,7 @@ TEST(Allocator, TestInMemBufferStates) {
   {
     RegionDescriptor desc{OpenStatus::Retry};
     std::tie(desc, slotSize, addr) =
-        allocator.allocate(1024, kNoPriority, false);
+        allocator.allocate(1024, kNoPriority, false, kKeyHash);
     EXPECT_EQ(OpenStatus::Retry, desc.status());
   }
 
@@ -171,7 +178,7 @@ TEST(Allocator, TestInMemBufferStates) {
       RegionDescriptor wdesc{OpenStatus::Retry};
       // There should be clean region available
       std::tie(wdesc, slotSize, addr) =
-          allocator.allocate(1024, kNoPriority, false);
+          allocator.allocate(1024, kNoPriority, false, kKeyHash);
       EXPECT_TRUE(wdesc.isReady());
       EXPECT_EQ(0, wdesc.id().index());
       // Clean region is allocated, so another reclaim should
@@ -184,7 +191,7 @@ TEST(Allocator, TestInMemBufferStates) {
       for (uint32_t j = 0; j < 15; j++) {
         RegionDescriptor desc{OpenStatus::Retry};
         std::tie(desc, slotSize, addr) =
-            allocator.allocate(1024, kNoPriority, false);
+            allocator.allocate(1024, kNoPriority, false, kKeyHash);
         EXPECT_TRUE(desc.isReady());
         EXPECT_EQ(0, desc.id().index());
         rm->close(std::move(desc));
@@ -196,7 +203,7 @@ TEST(Allocator, TestInMemBufferStates) {
         // A reclaim will also be triggered
         RegionDescriptor desc{OpenStatus::Retry};
         std::tie(desc, slotSize, addr) =
-            allocator.allocate(1024, kNoPriority, false);
+            allocator.allocate(1024, kNoPriority, false, kKeyHash);
         EXPECT_EQ(OpenStatus::Ready, desc.status());
         EXPECT_EQ(1, desc.id().index());
         rm->close(std::move(desc));
@@ -237,21 +244,23 @@ TEST(Allocator, UsePriorities) {
       kNumRegions /* numInMemBuffers */, 3 /* numPriorities */,
       kFlushRetryLimit, true /* workeAsyncFlush */);
 
-  Allocator allocator{*rm, 3 /* numPriorities */};
+  Allocator allocator =
+      makeAllocator(*rm, {1, 1, 1} /* allocatorsPerPriority */);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
   injectPauseSet("pause_reclaim_done");
 
   // Allocate to make sure a reclaim is triggered
-  auto [desc, slotSize, addr] = allocator.allocate(1024, 0, false);
+  auto [desc, slotSize, addr] = allocator.allocate(1024, 0, false, kKeyHash);
   EXPECT_EQ(OpenStatus::Retry, desc.status());
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   // Allocate one item from each priortiy, we should see each allocation
   // results in a new region being allocated for its priority
   for (uint16_t pri = 0; pri < 3; pri++) {
-    std::tie(desc, slotSize, addr) = allocator.allocate(1024, pri, false);
+    std::tie(desc, slotSize, addr) =
+        allocator.allocate(1024, pri, false, kKeyHash);
     EXPECT_TRUE(desc.isReady());
     EXPECT_EQ(RegionId{pri}, addr.rid());
     EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());

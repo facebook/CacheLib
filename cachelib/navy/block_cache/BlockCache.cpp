@@ -64,8 +64,14 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (numInMemBuffers == 0) {
     throw std::invalid_argument("there must be at least one in-mem buffers");
   }
-  if (numPriorities == 0) {
-    throw std::invalid_argument("allocator must have at least one priority");
+  if (allocatorsPerPriority.size() == 0) {
+    throw std::invalid_argument("Allocators must have at least one priority");
+  }
+  for (const auto& ac : allocatorsPerPriority) {
+    if (ac == 0) {
+      throw std::invalid_argument(
+          "Each priority must have at least one allocator");
+    }
   }
 
   reinsertionConfig.validate();
@@ -115,7 +121,8 @@ BlockCache::BlockCache(Config&& config)
 
 BlockCache::BlockCache(Config&& config, ValidConfigTag)
     : config_{serializeConfig(config)},
-      numPriorities_{config.numPriorities},
+      numPriorities_{
+          static_cast<uint16_t>(config.allocatorsPerPriority.size())},
       checkExpired_{std::move(config.checkExpired)},
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
@@ -141,10 +148,10 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      bindThis(&BlockCache::onRegionCleanup, *this),
                      std::move(config.evictionPolicy),
                      config.numInMemBuffers,
-                     config.numPriorities,
+                     static_cast<uint16_t>(config.allocatorsPerPriority.size()),
                      config.inMemBufFlushRetryLimit,
                      config.regionManagerFlushAsync},
-      allocator_{regionManager_, config.numPriorities},
+      allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
   XLOG(INFO, "Block cache created");
@@ -181,8 +188,8 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto [desc, slotSize, addr] =
-      allocator_.allocate(size, kDefaultItemPriority, true /* canWait */);
+  auto [desc, slotSize, addr] = allocator_.allocate(
+      size, kDefaultItemPriority, true /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
   case OpenStatus::Error:
@@ -634,7 +641,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
 
   uint32_t size = serializedSize(hk.key().size(), value.size());
   auto [desc, slotSize, addr] =
-      allocator_.allocate(size, priority, false /* canWait */);
+      allocator_.allocate(size, priority, false /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
   case OpenStatus::Ready:
