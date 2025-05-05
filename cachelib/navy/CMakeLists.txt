@@ -25,10 +25,10 @@ add_library (cachelib_navy
   block_cache/BlockCache.cpp
   block_cache/FifoPolicy.cpp
   block_cache/HitsReinsertionPolicy.cpp
-  block_cache/Index.cpp
   block_cache/LruPolicy.cpp
   block_cache/Region.cpp
   block_cache/RegionManager.cpp
+  block_cache/SparseMapIndex.cpp
   common/Buffer.cpp
   common/Device.cpp
   common/FdpNvme.cpp
