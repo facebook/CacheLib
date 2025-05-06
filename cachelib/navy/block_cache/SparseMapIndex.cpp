@@ -46,53 +46,51 @@ void SparseMapIndex::setHits(uint64_t key,
 }
 
 Index::LookupResult SparseMapIndex::lookup(uint64_t key) {
-  LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
   auto it = map.find(subkey(key));
   if (it != map.end()) {
-    lr.found_ = true;
-    lr.record_ = it->second;
-    it.value().totalHits = safeInc(lr.record_.totalHits);
-    it.value().currentHits = safeInc(lr.record_.currentHits);
+    LookupResult lr{true, it->second};
+
+    it.value().totalHits = safeInc(it.value().totalHits);
+    it.value().currentHits = safeInc(it.value().currentHits);
+    return lr;
   }
-  return lr;
+  return {};
 }
 
 Index::LookupResult SparseMapIndex::peek(uint64_t key) const {
-  LookupResult lr;
   const auto& map = getMap(key);
   auto lock = std::shared_lock{getMutex(key)};
 
   auto it = map.find(subkey(key));
   if (it != map.end()) {
-    lr.found_ = true;
-    lr.record_ = it->second;
+    return LookupResult(true, it->second);
   }
-  return lr;
+  return {};
 }
 
 Index::LookupResult SparseMapIndex::insert(uint64_t key,
                                            uint32_t address,
                                            uint16_t sizeHint) {
-  LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
   auto it = map.find(subkey(key));
   if (it != map.end()) {
-    lr.found_ = true;
-    lr.record_ = it->second;
+    LookupResult lr{true, it->second};
+
     trackRemove(it->second.totalHits);
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = address;
     it.value().currentHits = 0;
     it.value().totalHits = 0;
     it.value().sizeHint = sizeHint;
-  } else {
-    map.try_emplace(key, address, sizeHint);
+    return lr;
   }
-  return lr;
+  map.try_emplace(subkey(key), address, sizeHint);
+
+  return {};
 }
 
 bool SparseMapIndex::replaceIfMatch(uint64_t key,
@@ -119,19 +117,18 @@ void SparseMapIndex::trackRemove(uint8_t totalHits) {
 }
 
 Index::LookupResult SparseMapIndex::remove(uint64_t key) {
-  LookupResult lr;
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 
   auto it = map.find(subkey(key));
   if (it != map.end()) {
-    lr.found_ = true;
-    lr.record_ = it->second;
+    LookupResult lr{true, it->second};
 
     trackRemove(it->second.totalHits);
     map.erase(it);
+    return lr;
   }
-  return lr;
+  return {};
 }
 
 bool SparseMapIndex::removeIfMatch(uint64_t key, uint32_t address) {
@@ -158,7 +155,7 @@ void SparseMapIndex::reset() {
 size_t SparseMapIndex::computeSize() const {
   size_t size = 0;
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    auto lock = std::lock_guard{getMutexOfBucket(i)};
+    auto lock = std::shared_lock{getMutexOfBucket(i)};
     size += buckets_[i].size();
   }
   return size;
@@ -182,7 +179,7 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
       sizeof(std::pair<typename Map::key_type, typename Map::value_type>);
 
   for (uint32_t i = 0; i < kNumBuckets; i++) {
-    auto lock = std::lock_guard{getMutexOfBucket(i)};
+    auto lock = std::shared_lock{getMutexOfBucket(i)};
 
     // add the size of fixed mem used for sparse_map's member (sparse_hash)
     size_t bucketMemUsed = sizeof(buckets_[i]);

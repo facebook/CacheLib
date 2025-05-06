@@ -102,8 +102,6 @@ class Index {
    private:
     ItemRecord record_;
     bool found_{false};
-
-    friend class SparseMapIndex;
   };
 
   struct MemFootprintRange {
