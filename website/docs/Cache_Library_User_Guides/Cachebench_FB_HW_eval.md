@@ -250,6 +250,12 @@ The list of traces uploaded are as follows
    * Those are traces captured for 5 consecutive days from a Meta's block storage cluster consisting of 3000 hosts at the sampling ratio of 1/4000
    * Each host uses (roughly) 10 GB of DRAM and 380 GB of SSD for caching
    * The traffic factor is ~1
+   
+* `cdn/202504`
+   * Those are traces captured for 7 consecurive days from a selected CDN edge cluster.
+   * The cluster contains around 300 hosts.
+   * Each host uses roughly 105GB DRAM and 3577 GB SSD for caching.
+   * Traffic factor is 1/7.08. Scaled cache size DRAM 15150MB, SSD 1032294 MB.
 
 ### Resource Scaling or Trace Amplifcation
 
