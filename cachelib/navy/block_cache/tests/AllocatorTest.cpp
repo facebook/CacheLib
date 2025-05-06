@@ -272,4 +272,69 @@ TEST(Allocator, UsePriorities) {
   }
 }
 
+TEST(Allocator, UseDifferentAllocatorsForPriorities) {
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<MockPolicy>(&hits);
+
+  std::vector<uint32_t> allocatorsPerPriority{1, 2, 3};
+  // One regions per priority and one extra clean region.
+  uint32_t kNumRegions = std::accumulate(allocatorsPerPriority.begin(),
+                                         allocatorsPerPriority.end(), 0U) +
+                         1;
+  constexpr uint32_t kRegionSize = 16 * 1024;
+  auto device =
+      createMemoryDevice(kNumRegions * kRegionSize, nullptr /* encryption */);
+  RegionEvictCallback evictCb{[](RegionId, BufferView) { return 0; }};
+  RegionCleanupCallback cleanupCb{[](RegionId, BufferView) {}};
+  auto rm = std::make_unique<RegionManager>(
+      kNumRegions, kRegionSize, 0, *device, 1 /* numCleanRegions */,
+      1 /* numWorkers */, 0, std::move(evictCb), std::move(cleanupCb),
+      std::move(policy), kNumRegions /* numInMemBuffers */,
+      3 /* numPriorities */, kFlushRetryLimit, true /* workeAsyncFlush */);
+
+  Allocator allocator = makeAllocator(*rm, allocatorsPerPriority);
+
+  ENABLE_INJECT_PAUSE_IN_SCOPE();
+
+  injectPauseSet("pause_reclaim_done");
+
+  // Allocate to make sure a reclaim is triggered
+  auto [desc, slotSize, addr] = allocator.allocate(1024, 0, false, kKeyHash);
+  EXPECT_EQ(OpenStatus::Retry, desc.status());
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+
+  uint32_t allocatedRegion = 0;
+  // Allocate one item from each priortiy, we should see each allocation
+  // results in a new region being allocated for its priority
+  for (uint16_t pri = 0; pri < 3; pri++) {
+    // For each priority, allocate one item per allocator
+    for (uint32_t index = 0; index < allocatorsPerPriority[pri]; index++) {
+      // Use index as keyhash to allocate via a specific allocator.
+      std::tie(desc, slotSize, addr) =
+          allocator.allocate(1024, pri, false, index);
+      EXPECT_TRUE(desc.isReady());
+      EXPECT_EQ(RegionId{allocatedRegion++}, addr.rid());
+      EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());
+      // The allocation should be from a fresh region
+      EXPECT_EQ(0, addr.offset());
+      // Reclaim should have been triggered
+      EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+    }
+    // Now that each allocator has their region allocated into, further
+    // allocating to the region (provide it is not full) should not trigger
+    // reclaim.
+    for (uint32_t index = 0; index < allocatorsPerPriority[pri]; index++) {
+      // Use index as keyhash to allocate via a specific allocator.
+      std::tie(desc, slotSize, addr) =
+          allocator.allocate(1024, pri, false, index);
+      EXPECT_TRUE(desc.isReady());
+      EXPECT_EQ(pri, rm->getRegion(addr.rid()).getPriority());
+      // The allocation should be from an existing region as the second item
+      EXPECT_EQ(1024, addr.offset());
+      // Reclaim should not have been triggered
+      EXPECT_FALSE(injectPauseWait("pause_reclaim_done"));
+    }
+  }
+}
+
 } // namespace facebook::cachelib::navy::tests
