@@ -414,6 +414,7 @@ class BlockCache final : public Engine {
   mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable AtomicCounter lookupForItemDestructorErrorCount_;
+  mutable AtomicCounter excessiveReadBytes_;
 };
 } // namespace navy
 } // namespace cachelib

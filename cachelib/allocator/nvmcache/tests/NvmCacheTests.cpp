@@ -1638,6 +1638,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reinsertions"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_bytes"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_errors"));
+  EXPECT_TRUE(cs("navy_bc_excessive_read_bytes"));
   EXPECT_TRUE(cs("navy_bc_lookup_for_item_destructor_errors"));
   EXPECT_TRUE(cs("navy_bc_reclaim_entry_header_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_reclaim_value_checksum_errors"));

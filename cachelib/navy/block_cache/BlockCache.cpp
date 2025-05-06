@@ -764,6 +764,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   uint32_t size = serializedSize(desc.keySize, desc.valueSize);
   if (buffer.size() > size) {
     // Read more than actual size. Trim the invalid data in the beginning
+    excessiveReadBytes_.add(buffer.size() - size);
     buffer.trimStart(buffer.size() - size);
   } else if (buffer.size() < size) {
     // Read less than actual size. Read again with proper buffer.
@@ -875,6 +876,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_reinsertion_bytes", reinsertionBytes_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_excessive_read_bytes", excessiveReadBytes_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_lookup_for_item_destructor_errors",
           lookupForItemDestructorErrorCount_.get(),
