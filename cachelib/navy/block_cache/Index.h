@@ -68,6 +68,10 @@ class Index {
   struct LookupResult {
     friend class Index;
 
+    LookupResult() = default;
+    explicit LookupResult(bool found, ItemRecord record)
+        : record_(record), found_(found) {}
+
     bool found() const { return found_; }
 
     ItemRecord record() const {

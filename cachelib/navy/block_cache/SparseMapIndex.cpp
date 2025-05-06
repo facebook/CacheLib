@@ -21,7 +21,6 @@
 #include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook::cachelib::navy {
-// constexpr uint32_t SparseMapIndex::kNumBuckets; // Link error otherwise
 
 namespace {
 // increase val if no overflow, otherwise do nothing
