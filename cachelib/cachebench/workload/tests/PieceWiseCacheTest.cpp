@@ -33,7 +33,7 @@ class PieceWiseCacheTest : public ::testing::Test {
     std::unordered_map<uint32_t, std::vector<std::string>> statsPerAggField;
     std::unordered_map<std::string, std::string> admFeatureMap1, admFeatureMap2,
         admFeatureMap3;
-    std::string itemValue = "";
+    std::string itemValue;
 
     piecewiseCache =
         std::make_unique<PieceWiseCacheAdapter>(/*maxCachePiecesv=*/32000,
