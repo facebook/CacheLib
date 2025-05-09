@@ -332,7 +332,7 @@ TEST(Allocator, UseDifferentAllocatorsForPriorities) {
       // The allocation should be from an existing region as the second item
       EXPECT_EQ(1024, addr.offset());
       // Reclaim should not have been triggered
-      EXPECT_FALSE(injectPauseWait("pause_reclaim_done"));
+      EXPECT_FALSE(injectPauseWait("pause_reclaim_done", 1, true, 1000));
     }
   }
 }
