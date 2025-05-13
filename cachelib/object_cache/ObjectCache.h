@@ -627,6 +627,17 @@ void ObjectCache<AllocatorT>::init() {
   }
 
   if (config_.nvmConfig.has_value()) {
+    // Update the callback to track size
+    config_.nvmConfig->makeObjCb =
+        [this, makeObjCb = std::move(config_.nvmConfig->makeObjCb)](
+            auto& nvmItem, auto& item, auto chain) {
+          auto ret = makeObjCb(nvmItem, item, chain);
+          if (ret) {
+            totalObjectSizeBytes_.fetch_add(
+                item.template getMemoryAs<ObjectCacheItem>()->objectSize);
+          }
+          return ret;
+        };
     l1Config.nvmConfig.assign(std::move(config_.nvmConfig.value()));
   }
 
