@@ -30,6 +30,7 @@
 #include <folly/logging/xlog.h>
 
 #include <numeric>
+#include <utility>
 
 namespace facebook {
 namespace cachelib {
@@ -74,14 +75,14 @@ class CounterVisitor {
   }
 
   void operator=(std::function<void(folly::StringPiece, double)> biFn) {
-    biFn_ = biFn;
+    biFn_ = std::move(biFn);
     triFn_ = nullptr;
     init();
   }
 
   void operator=(
       std::function<void(folly::StringPiece, double, CounterType)> triFn) {
-    triFn_ = triFn;
+    triFn_ = std::move(triFn);
     biFn_ = nullptr;
     init();
   }
@@ -133,10 +134,10 @@ class StatsMap {
   }
 
   // Insert a count stat
-  void insertCount(std::string key, double val) { countMap[key] = val; }
+  void insertCount(const std::string& key, double val) { countMap[key] = val; }
 
   // Insert a rate stat
-  void insertRate(std::string key, double val) { rateMap[key] = val; }
+  void insertRate(const std::string& key, double val) { rateMap[key] = val; }
 
   const std::unordered_map<std::string, double>& getCounts() const {
     return countMap;

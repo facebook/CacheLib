@@ -36,7 +36,7 @@ constexpr uint64_t kDefaultTimeoutSecs = 30;
  * by calling this one.
  */
 ::testing::AssertionResult eventuallyTrue(
-    std::function<::testing::AssertionResult(bool)> test,
+    const std::function<::testing::AssertionResult(bool)>& test,
     uint64_t timeoutSecs) {
   constexpr uint64_t kMicrosPerSec = 1000000;
   const uint64_t timeoutUSec = timeoutSecs * kMicrosPerSec;
