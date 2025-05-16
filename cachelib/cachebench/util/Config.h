@@ -337,8 +337,8 @@ class CacheBenchConfig {
   // @param c      the customization function for cache config (optional)
   // @param s      the customization function for stressor config (optional)
   explicit CacheBenchConfig(const std::string& path,
-                            CacheConfigCustomizer c = {},
-                            StressorConfigCustomizer s = {});
+                            const CacheConfigCustomizer& c = {},
+                            const StressorConfigCustomizer& s = {});
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
   const StressorConfig& getStressorConfig() const { return stressorConfig_; }

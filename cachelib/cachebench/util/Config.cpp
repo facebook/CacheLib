@@ -104,8 +104,8 @@ bool StressorConfig::usesChainedItems() const {
 
 CacheBenchConfig::CacheBenchConfig(
     const std::string& path,
-    CacheConfigCustomizer cacheConfigCustomizer,
-    StressorConfigCustomizer stressorConfigCustomizer) {
+    const CacheConfigCustomizer& cacheConfigCustomizer,
+    const StressorConfigCustomizer& stressorConfigCustomizer) {
   std::string configString;
   if (!folly::readFile(path.c_str(), configString)) {
     throw std::invalid_argument(
