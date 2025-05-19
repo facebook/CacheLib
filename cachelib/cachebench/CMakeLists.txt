@@ -102,17 +102,17 @@ if (BUILD_TESTS)
   )
 
 
-  function (ADD_TEST SOURCE_FILE)
-     generic_add_test("cachebench-test" "${SOURCE_FILE}"
+  function (add_source_test SOURCE_FILE)
+     generic_add_source_test("cachebench-test" "${SOURCE_FILE}"
                       cachebench_test_support "${ARGN}")
   endfunction()
 
-  add_test (workload/tests/WorkloadGeneratorTest.cpp)
-  add_test (workload/tests/PieceWiseCacheTest.cpp)
-  add_test (consistency/tests/RingBufferTest.cpp)
-  add_test (consistency/tests/ShortThreadIdTest.cpp)
-  add_test (consistency/tests/ValueHistoryTest.cpp)
-  add_test (consistency/tests/ValueTrackerTest.cpp)
-  add_test (util/tests/NandWritesTest.cpp)
-  add_test (cache/tests/TimeStampTickerTest.cpp)
+  add_source_test (workload/tests/WorkloadGeneratorTest.cpp)
+  add_source_test (workload/tests/PieceWiseCacheTest.cpp)
+  add_source_test (consistency/tests/RingBufferTest.cpp)
+  add_source_test (consistency/tests/ShortThreadIdTest.cpp)
+  add_source_test (consistency/tests/ValueHistoryTest.cpp)
+  add_source_test (consistency/tests/ValueTrackerTest.cpp)
+  add_source_test (util/tests/NandWritesTest.cpp)
+  add_source_test (cache/tests/TimeStampTickerTest.cpp)
 endif()
