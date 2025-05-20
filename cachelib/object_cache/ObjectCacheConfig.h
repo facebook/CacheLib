@@ -141,7 +141,7 @@ struct ObjectCacheConfig {
   // @param serializeCallback    callback to serialize an object
   // @param deserializeCallback  callback to deserialize an object
   ObjectCacheConfig& enablePersistence(uint32_t threadCount,
-                                       std::string basefilePath,
+                                       const std::string& basefilePath,
                                        SerializeCb serializeCallback,
                                        DeserializeCb deserializeCallback);
 
@@ -152,7 +152,7 @@ struct ObjectCacheConfig {
   // @param serializeCallback    callback to serialize an object
   // @param deserializeCallback  callback to deserialize an object
   ObjectCacheConfig& enablePersistenceWithEvictionOrder(
-      std::string basefilePath,
+      const std::string& basefilePath,
       SerializeCb serializeCallback,
       DeserializeCb deserializeCallback);
 
@@ -436,7 +436,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRemoveCb(RemoveCb cb) {
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
     uint32_t threadCount,
-    std::string basefilePath,
+    const std::string& basefilePath,
     SerializeCb serializeCallback,
     DeserializeCb deserializeCallback) {
   if (persistenceEnabled) {
@@ -468,7 +468,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
 
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistenceWithEvictionOrder(
-    std::string basefilePath,
+    const std::string& basefilePath,
     SerializeCb serializeCallback,
     DeserializeCb deserializeCallback) {
   if (persistenceEnabled) {
