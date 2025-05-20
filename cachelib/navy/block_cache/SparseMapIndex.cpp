@@ -47,9 +47,9 @@ void SparseMapIndex::initialize() {
         numBuckets_, totalMutexes_);
 }
 
-void SparseMapIndex::setHits(uint64_t key,
-                             uint8_t currentHits,
-                             uint8_t totalHits) {
+void SparseMapIndex::setHitsTestOnly(uint64_t key,
+                                     uint8_t currentHits,
+                                     uint8_t totalHits) {
   auto& map = getMap(key);
   auto lock = std::lock_guard{getMutex(key)};
 

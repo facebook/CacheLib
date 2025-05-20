@@ -106,9 +106,6 @@ class SparseMapIndex : public Index {
   // @return true if removed successfully, false otherwise.
   bool removeIfMatch(uint64_t key, uint32_t address) override;
 
-  // Updates hits information of a key.
-  void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits) override;
-
   // Resets all the buckets to the initial state.
   void reset() override;
 
@@ -133,6 +130,11 @@ class SparseMapIndex : public Index {
   uint32_t totalMutexes_{1024};
 
   void initialize();
+
+  // Updates hits information of a key.
+  void setHitsTestOnly(uint64_t key,
+                       uint8_t currentHits,
+                       uint8_t totalHits) override;
 
   using Map = tsl::sparse_map<uint32_t, ItemRecord>;
 

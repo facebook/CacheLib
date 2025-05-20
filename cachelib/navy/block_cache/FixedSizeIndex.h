@@ -110,9 +110,6 @@ class FixedSizeIndex : public Index {
   // @return true if removed successfully, false otherwise.
   bool removeIfMatch(uint64_t key, uint32_t address) override;
 
-  // Updates hits information of a key.
-  void setHits(uint64_t key, uint8_t currentHits, uint8_t totalHits) override;
-
   // Resets all the buckets to the initial state.
   void reset() override;
 
@@ -217,6 +214,11 @@ class FixedSizeIndex : public Index {
                 "PackedItemRecord size is 5 bytes");
 
   void initialize();
+
+  // Updates hits information of a key.
+  void setHitsTestOnly(uint64_t key,
+                       uint8_t currentHits,
+                       uint8_t totalHits) override;
 
   uint64_t bucketId(uint64_t hash) const {
     uint64_t cid = (hash >> 32) % numChunks_;

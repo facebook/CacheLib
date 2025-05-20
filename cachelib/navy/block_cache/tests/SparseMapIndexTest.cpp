@@ -21,11 +21,13 @@
 #define SparseMapIndex_TEST_FRIENDS_FORWARD_DECLARATION \
   namespace tests {                                     \
   class SparseMapIndex_MemFootprintRangeTest_Test;      \
+  class SparseMapIndex_Hits_Test;                       \
   }                                                     \
   using namespace ::facebook::cachelib::navy::tests
 
-#define SparseMapIndex_TEST_FRIENDS \
-  FRIEND_TEST(SparseMapIndex, MemFootprintRangeTest)
+#define SparseMapIndex_TEST_FRIENDS                   \
+  FRIEND_TEST(SparseMapIndex, MemFootprintRangeTest); \
+  FRIEND_TEST(SparseMapIndex, Hits)
 
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/testing/MockDevice.h"
@@ -119,7 +121,7 @@ TEST(SparseMapIndex, Hits) {
   EXPECT_EQ(1, index.peek(key).totalHits());
   EXPECT_EQ(1, index.peek(key).currentHits());
 
-  index.setHits(key, 2, 5);
+  index.setHitsTestOnly(key, 2, 5);
   EXPECT_EQ(5, index.peek(key).totalHits());
   EXPECT_EQ(2, index.peek(key).currentHits());
 

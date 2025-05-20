@@ -148,11 +148,6 @@ class Index {
   // @return true if removed successfully, false otherwise.
   virtual bool removeIfMatch(uint64_t key, uint32_t address) = 0;
 
-  // Updates hits information of a key.
-  virtual void setHits(uint64_t key,
-                       uint8_t currentHits,
-                       uint8_t totalHits) = 0;
-
   // Resets all the buckets to the initial state.
   virtual void reset() = 0;
 
@@ -167,6 +162,12 @@ class Index {
 
   // Exports index stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
+
+ protected:
+  // Updates hits information of a key.
+  virtual void setHitsTestOnly(uint64_t key,
+                               uint8_t currentHits,
+                               uint8_t totalHits) = 0;
 };
 } // namespace navy
 } // namespace cachelib

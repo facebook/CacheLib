@@ -21,11 +21,13 @@
 #define FixedSizeIndex_TEST_FRIENDS_FORWARD_DECLARATION \
   namespace tests {                                     \
   class FixedSizeIndex_MemFootprintRangeTest_Test;      \
+  class FixedSizeIndex_Hits_Test;                       \
   }                                                     \
   using namespace ::facebook::cachelib::navy::tests
 
-#define FixedSizeIndex_TEST_FRIENDS \
-  FRIEND_TEST(FixedSizeIndex, MemFootprintRangeTest)
+#define FixedSizeIndex_TEST_FRIENDS                   \
+  FRIEND_TEST(FixedSizeIndex, MemFootprintRangeTest); \
+  FRIEND_TEST(FixedSizeIndex, Hits)
 
 #include "cachelib/navy/block_cache/FixedSizeIndex.h"
 #include "cachelib/navy/testing/MockDevice.h"
@@ -121,7 +123,7 @@ TEST(FixedSizeIndex, Hits) {
   index.lookup(key);
   EXPECT_EQ(1, index.peek(key).currentHits());
 
-  index.setHits(key, 2, 0);
+  index.setHitsTestOnly(key, 2, 0);
   EXPECT_EQ(2, index.peek(key).currentHits());
 
   index.lookup(key);

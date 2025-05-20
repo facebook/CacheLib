@@ -223,16 +223,17 @@ void FixedSizeIndex::getCounters(const CounterVisitor&) const {
   return;
 }
 
-void FixedSizeIndex::setHits(uint64_t key,
-                             uint8_t currentHits,
-                             uint8_t totalHits) {
+void FixedSizeIndex::setHitsTestOnly(uint64_t key,
+                                     uint8_t currentHits,
+                                     uint8_t totalHits) {
   ExclusiveLockedBucket elb{key, *this};
 
   if (elb.recordRef().isValid()) {
     elb.recordRef().info.curHits =
         PackedItemRecord::truncateCurHits(currentHits);
     XLOGF(INFO,
-          "setHits() for {}. totalHits {} was discarded in FixedSizeIndex",
+          "setHitsTestOnly() for {}. totalHits {} was discarded in "
+          "FixedSizeIndex",
           key,
           totalHits);
   }
