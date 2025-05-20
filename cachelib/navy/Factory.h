@@ -93,6 +93,9 @@ class BlockCacheProto {
   // Set number of allocators per priority.
   virtual void setNumAllocatorsPerPriority(
       std::vector<uint32_t> numAllocatorsPerPriority) = 0;
+
+  // (Optional) Set Index related config.
+  virtual void setIndexConfig(const BlockCacheIndexConfig& config) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

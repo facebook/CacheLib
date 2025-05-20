@@ -151,8 +151,94 @@ class DynamicRandomAPConfig {
 };
 
 /**
+ * BlockCacheIndexConfig provides APIs for users to configure BlockCache index.
+ * BlockCache index can be either fixed sized or sparse_map.
+ *
+ * With fixed sized index, users can configure the number of buckets and mutexes
+ * it will maintain, and the overall memory footprint used for index will be
+ * fixed depending on that configuration. If too small number of buckets are
+ * populated, it will increase the chances of hash collision. Also too small
+ * number of mutexes will increase the lock contention.
+ *
+ * With sparse_map index, it will dynamically adjust the number of buckets
+ * depending on the number of entries stored and hash distribution to avoid hash
+ * collision. However, it will kepp rehashing on the runtime, meaning that it
+ * will increase resizing costs (accompanying memory allocations and copies) and
+ * also memory footprint that it uses can't be controlled (Adding more
+ * entries will consume more memory)
+ * Another side effect caused by sparse_map index implementatoin is, it may
+ * consume much more memory per entries than fixed sized one even with the same
+ * number of buckets are populated and stored.
+ *
+ * TODO: For now, only SparseMapIndex related configs are supported here
+ */
+class BlockCacheIndexConfig {
+ public:
+  // These default constants are defined here for backward compatibility
+  // Without changing any BlockCacheIndexConfig, it should give the same
+  // config values as previously used in SparseMapIndex implementation.
+  static constexpr uint32_t kDefaultNumSparseMapBuckets{64 * 1024};
+  static constexpr uint64_t kDefaultNumBucketsPerMutex{64};
+
+  BlockCacheIndexConfig& setNumBucketsPerMutex(uint64_t numBucketsPerMutex) {
+    if (numBucketsPerMutex == 0) {
+      throw std::invalid_argument("numBucketsPerMutex must be > 0");
+    }
+    numBucketsPerMutex_ = numBucketsPerMutex;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& setNumSparseMapBuckets(uint32_t numSparseMapBuckets) {
+    if (numSparseMapBuckets == 0 || !folly::isPowTwo(numSparseMapBuckets)) {
+      throw std::invalid_argument("numSparseMapBuckets must be power of two");
+    }
+    numSparseMapBuckets_ = numSparseMapBuckets;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& validate() {
+    // with SparseMapIndex
+    if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numSparseMapBuckets must be power of two");
+    }
+    if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numBucketsPerMutex must be power of two");
+    }
+    if (numBucketsPerMutex_ > numSparseMapBuckets_) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numBucketsPerMutex must be <= "
+          "numSparseMapBuckets");
+    }
+    return *this;
+  }
+
+  // getter functions
+  bool isFixedSizeIndexEnabled() const { return enableFixedSizeIndex_; }
+
+  uint64_t getNumBucketsPerMutex() const { return numBucketsPerMutex_; }
+  uint32_t getNumSparseMapBuckets() const { return numSparseMapBuckets_; }
+
+ private:
+  // Whether to enable fixed size index, true for enabling it.
+  // If false, we will use sparse_map index which will dynamically adjust the
+  // sizes and the number of buckets which is convenient but more expensive
+  bool enableFixedSizeIndex_{false};
+  // The number of buckets per mutex. Each mutex will cover a consecutive range
+  // of buckets with the size of the given number here.
+  uint64_t numBucketsPerMutex_{kDefaultNumBucketsPerMutex};
+
+  // The number of buckets with SparseMapIndex
+  // Each 'bucket' in SparseMapIndex is a sparse_map instance and will be
+  // expanded to a hashtable with mem alloc and rehashing while more items
+  // are populated
+  uint32_t numSparseMapBuckets_{kDefaultNumSparseMapBuckets};
+};
+
+/**
  * BlockCacheReinsertionConfig provides APIs for users to configure BlockCache
- * reinsertion policy, whic is a part of NavyConfig.
+ * reinsertion policy, which is a part of NavyConfig.
  *
  * By this class, user can:
  * - enable hits-based OR probability based reinsertion policy (but not both)
@@ -354,6 +440,16 @@ class BlockCacheConfig {
     return *this;
   }
 
+  // TO enable Sparse Map Index with the configurable parameters. Without
+  // calling this explicitly, default index will be still SparseMapIndex
+  // with the default parameters.
+  // Call enableSparseMapIndex() explicitly when parameters should be changed.
+  // numSparseMapBuckets will determine the number of sparse map instances.
+  // numBucketsPerMutes will be used to determine the number of sparse map
+  // instances covered by each mutex.
+  BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
+                                         uint32_t numBucketsPerMutex);
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -377,6 +473,8 @@ class BlockCacheConfig {
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
+
+  const BlockCacheIndexConfig& getIndexConfig() const { return indexConfig_; }
 
   bool isPreciseRemove() const { return preciseRemove_; }
 
@@ -420,6 +518,9 @@ class BlockCacheConfig {
   // Do not set this directly. This should be configured by setAllocatorCount
   // for FIFO and LRU, and enableSegmentedFifio for segmented FIFO.
   std::vector<uint32_t> allocatorsPerPriority_{1};
+
+  // Index related config. If not specified, SparseMapIndex will be used
+  BlockCacheIndexConfig indexConfig_;
 
   friend class NavyConfig;
 };
@@ -587,7 +688,7 @@ class NavyConfig {
   unsigned int getQDepth() const { return qDepth_; }
   BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
 
-  // Return a const BlockCacheConfig to read values of its parameters.
+  // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
     XDCHECK(enginesConfigs_.size() == 1);
     return enginesConfigs_[0].bigHash();

@@ -183,6 +183,7 @@ uint64_t setupBlockCache(const navy::BlockCacheConfig& blockCacheConfig,
   blockCache->setItemDestructorEnabled(itemDestructorEnabled);
   blockCache->setStackSize(stackSize);
   blockCache->setPreciseRemove(blockCacheConfig.isPreciseRemove());
+  blockCache->setIndexConfig(blockCacheConfig.getIndexConfig());
 
   proto.setBlockCache(std::move(blockCache));
   return blockCacheOffset + blockCacheSize;

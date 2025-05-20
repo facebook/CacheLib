@@ -383,6 +383,29 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getHitsThreshold(), 0);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(index),
             customPolicy);
+
+  config = NavyConfig{};
+  // Default is sparse map index with the default config parameters that are
+  // previously hard coded with SparseMapIndex
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            navy::BlockCacheIndexConfig::kDefaultNumSparseMapBuckets);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(),
+            navy::BlockCacheIndexConfig::kDefaultNumBucketsPerMutex);
+
+  // Enable SparseMap with the different parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  // Try with invalid arguments
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(0, 128),
+               std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 100),
+               std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 64 * 1024),
+               std::invalid_argument);
 }
 
 TEST(NavyConfigTest, BigHash) {

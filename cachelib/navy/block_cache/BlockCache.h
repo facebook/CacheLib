@@ -93,6 +93,9 @@ class BlockCache final : public Engine {
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
 
+    // Index related config
+    BlockCacheIndexConfig indexConfig{};
+
     // Calculates the total region number.
     uint32_t getNumRegions() const {
       XDCHECK_EQ(0ul, cacheSize % regionSize);
@@ -246,6 +249,9 @@ class BlockCache final : public Engine {
 
   struct ValidConfigTag {};
   BlockCache(Config&& config, ValidConfigTag);
+
+  static std::unique_ptr<Index> createIndex(
+      const BlockCacheIndexConfig& indexConfig);
 
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;

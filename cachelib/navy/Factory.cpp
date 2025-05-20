@@ -126,6 +126,10 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.regionManagerFlushAsync = asyn;
   }
 
+  void setIndexConfig(const BlockCacheIndexConfig& indexConfig) override {
+    config_.indexConfig = indexConfig;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {
