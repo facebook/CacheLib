@@ -49,7 +49,15 @@ using SharedMutex =
 // but we do not want people to rely on that).
 class SparseMapIndex : public Index {
  public:
-  SparseMapIndex() = default;
+  static constexpr uint32_t kDefaultNumBuckets{64 * 1024};
+  static constexpr uint32_t kDefaultBucketsPerMutex{64};
+
+  explicit SparseMapIndex(uint32_t numBuckets, uint32_t numBucketsPerMutex)
+      : numBuckets_(numBuckets), numBucketsPerMutex_(numBucketsPerMutex) {
+    initialize();
+  }
+  SparseMapIndex()
+      : SparseMapIndex(kDefaultNumBuckets, kDefaultBucketsPerMutex) {}
   ~SparseMapIndex() override = default;
   SparseMapIndex(const SparseMapIndex&) = delete;
   SparseMapIndex(SparseMapIndex&&) = delete;
@@ -118,20 +126,25 @@ class SparseMapIndex : public Index {
   void getCounters(const CounterVisitor& visitor) const override;
 
  private:
-  static constexpr uint32_t kNumBuckets{64 * 1024};
-  static constexpr uint32_t kNumMutexes{1024};
+  // Configuration related variables
+  const uint32_t numBuckets_{64 * 1024};
+  const uint32_t numBucketsPerMutex_{64};
+
+  uint32_t totalMutexes_{1024};
+
+  void initialize();
 
   using Map = tsl::sparse_map<uint32_t, ItemRecord>;
 
-  static uint32_t bucket(uint64_t hash) {
-    return (hash >> 32) & (kNumBuckets - 1);
+  uint32_t bucket(uint64_t hash) const {
+    return (hash >> 32) & (numBuckets_ - 1);
   }
 
-  static uint32_t subkey(uint64_t hash) { return hash & 0xffffffffu; }
+  uint32_t subkey(uint64_t hash) const { return hash & 0xffffffffu; }
 
   SharedMutex& getMutexOfBucket(uint32_t bucket) const {
-    XDCHECK(folly::isPowTwo(kNumMutexes));
-    return mutex_[bucket & (kNumMutexes - 1)];
+    XDCHECK(folly::isPowTwo(totalMutexes_));
+    return mutex_[bucket & (totalMutexes_ - 1)];
   }
 
   SharedMutex& getMutex(uint64_t hash) const {
@@ -148,14 +161,11 @@ class SparseMapIndex : public Index {
 
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
-  std::unique_ptr<SharedMutex[]> mutex_{new SharedMutex[kNumMutexes]};
-  std::unique_ptr<Map[]> buckets_{new Map[kNumBuckets]};
+  std::unique_ptr<SharedMutex[]> mutex_;
+  std::unique_ptr<Map[]> buckets_;
 
   mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
   mutable AtomicCounter unAccessedItems_;
-
-  static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
-                "number of mutexes must be power of two");
 
 // For unit tests private member access
 #ifdef SparseMapIndex_TEST_FRIENDS

@@ -32,6 +32,21 @@ uint8_t safeInc(uint8_t val) {
 }
 } // namespace
 
+void SparseMapIndex::initialize() {
+  XDCHECK(numBuckets_ != 0 && numBucketsPerMutex_ != 0);
+  XDCHECK(folly::isPowTwo(numBuckets_) && folly::isPowTwo(numBucketsPerMutex_));
+  XDCHECK(numBuckets_ >= numBucketsPerMutex_);
+
+  totalMutexes_ = numBuckets_ / numBucketsPerMutex_;
+
+  buckets_ = std::make_unique<Map[]>(numBuckets_);
+  mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
+
+  XLOGF(INFO,
+        "SparseMapIndex was created with numBuckets_ = {}, totalMutexes_ = {}",
+        numBuckets_, totalMutexes_);
+}
+
 void SparseMapIndex::setHits(uint64_t key,
                              uint8_t currentHits,
                              uint8_t totalHits) {
@@ -145,7 +160,7 @@ bool SparseMapIndex::removeIfMatch(uint64_t key, uint32_t address) {
 }
 
 void SparseMapIndex::reset() {
-  for (uint32_t i = 0; i < kNumBuckets; i++) {
+  for (uint32_t i = 0; i < numBuckets_; i++) {
     auto lock = std::lock_guard{getMutexOfBucket(i)};
     buckets_[i].clear();
   }
@@ -154,7 +169,7 @@ void SparseMapIndex::reset() {
 
 size_t SparseMapIndex::computeSize() const {
   size_t size = 0;
-  for (uint32_t i = 0; i < kNumBuckets; i++) {
+  for (uint32_t i = 0; i < numBuckets_; i++) {
     auto lock = std::shared_lock{getMutexOfBucket(i)};
     size += buckets_[i].size();
   }
@@ -178,7 +193,7 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   auto entrySize =
       sizeof(std::pair<typename Map::key_type, typename Map::value_type>);
 
-  for (uint32_t i = 0; i < kNumBuckets; i++) {
+  for (uint32_t i = 0; i < numBuckets_; i++) {
     auto lock = std::shared_lock{getMutexOfBucket(i)};
 
     // add the size of fixed mem used for sparse_map's member (sparse_hash)
@@ -231,7 +246,7 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
   auto prevPos = rw.getCurPos();
   uint64_t persisted = 0;
 
-  for (uint32_t i = 0; i < kNumBuckets; i++) {
+  for (uint32_t i = 0; i < numBuckets_; i++) {
     *bucket.bucketId() = i;
     // Convert index entries to thrift objects
     for (const auto& [key, record] : buckets_[i]) {
@@ -273,13 +288,13 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
 }
 
 void SparseMapIndex::recover(RecordReader& rr) {
-  for (uint32_t i = 0; i < kNumBuckets; i++) {
+  for (uint32_t i = 0; i < numBuckets_; i++) {
     auto bucket = deserializeProto<serialization::IndexBucket>(rr);
     uint32_t id = *bucket.bucketId();
-    if (id >= kNumBuckets) {
+    if (id >= numBuckets_) {
       throw std::invalid_argument{
           folly::sformat("Invalid bucket id. Max buckets: {}, bucket id: {}",
-                         kNumBuckets,
+                         numBuckets_,
                          id)};
     }
     for (auto& entry : *bucket.entries()) {
