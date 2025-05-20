@@ -24,10 +24,10 @@ if (BUILD_TESTS)
     GTest::gmock
   )
 
-  function (ADD_TEST SOURCE_FILE)
-     generic_add_test("compact-cache-test" "${SOURCE_FILE}"
+  function (add_source_test SOURCE_FILE)
+     generic_add_source_test("compact-cache-test" "${SOURCE_FILE}"
                       compact_cache_test_support "${ARGN}")
   endfunction()
 
-  add_test (tests/CCacheTests.cpp)
+  add_source_test (tests/CCacheTests.cpp)
 endif()

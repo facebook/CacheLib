@@ -42,15 +42,15 @@ if (BUILD_TESTS)
     GTest::gmock
   )
 
-  function (ADD_TEST SOURCE_FILE)
-     generic_add_test("datatype-test" "${SOURCE_FILE}"
+  function (add_source_test SOURCE_FILE)
+     generic_add_source_test("datatype-test" "${SOURCE_FILE}"
                       datatype_test_support "${ARGN}")
   endfunction()
 
-  add_test (tests/RangeMapTest.cpp)
-  add_test (tests/BufferTest.cpp)
-  add_test (tests/FixedSizeArrayTest.cpp)
-  add_test (tests/MapTest.cpp)
+  add_source_test (tests/RangeMapTest.cpp)
+  add_source_test (tests/BufferTest.cpp)
+  add_source_test (tests/FixedSizeArrayTest.cpp)
+  add_source_test (tests/MapTest.cpp)
   # Temporary disabled due to compilation error with GCC
-  # add_test (tests/MapViewTest.cpp)
+  # add_source_test (tests/MapViewTest.cpp)
 endif()

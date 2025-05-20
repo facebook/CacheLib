@@ -116,7 +116,9 @@ find_package(Boost REQUIRED COMPONENTS
              system filesystem regex context program_options thread)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_package(GTest CONFIG REQUIRED)
+find_package(GTest REQUIRED)
+include(GoogleTest)
+enable_testing()
 find_package(folly CONFIG REQUIRED)
 find_package(fizz CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
@@ -145,7 +147,7 @@ add_custom_target(thrift_generated_files)
 
 set_property(GLOBAL PROPERTY TEST_BINARIES)
 
-function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
+function (generic_add_source_test TEST_PREFIX SOURCE_FILE)
   # Get the basename of the first source file
   get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
 
@@ -160,9 +162,17 @@ function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
     DESTINATION ${TESTS_INSTALL_DIR}
   )
 
-   get_property(tmp GLOBAL PROPERTY TEST_BINARIES)
-   set(tmp "${tmp} \\\n\t${TEST_PREFIX}-${TEST_NAME}")
-   set_property(GLOBAL PROPERTY TEST_BINARIES "${tmp}")
+  get_property(tmp GLOBAL PROPERTY TEST_BINARIES)
+  set(tmp "${tmp} \\\n\t${TEST_PREFIX}-${TEST_NAME}")
+  set_property(GLOBAL PROPERTY TEST_BINARIES "${tmp}")
+
+  # make tests visible to ctest
+  gtest_add_tests(TARGET "${TEST_PREFIX}-${TEST_NAME}"
+                        WORKING_DIRECTORY "${TOP_DIR}"
+                        TEST_PREFIX "${TEST_PREFIX}-${TEST_NAME}."
+                        TEST_LIST "test_cases")
+  # use same timeout as folly
+  set_tests_properties(${test_cases} PROPERTIES TIMEOUT 120)
 endfunction()
 
 
