@@ -44,16 +44,17 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_TESTS "If enabled, compile the tests." ON)
 
+include(GNUInstallDirs)
 
-set(BIN_INSTALL_DIR bin CACHE STRING
+set(BIN_INSTALL_DIR ${CMAKE_INSTALL_BINDIR} CACHE STRING
     "The subdirectory where binaries should be installed")
 set(TESTS_INSTALL_DIR tests CACHE STRING
     "The subdirectory where test binaries should be installed")
-set(INCLUDE_INSTALL_DIR include/cachelib CACHE STRING
+set(INCLUDE_INSTALL_DIR ${CMAKE_INSTALL_INCLUDEDIR}/cachelib CACHE STRING
     "The subdirectory where header files should be installed")
-set(LIB_INSTALL_DIR lib CACHE STRING
+set(LIB_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR} CACHE STRING
     "The subdirectory where libraries should be installed")
-set(CMAKE_INSTALL_DIR lib/cmake/cachelib CACHE STRING
+set(CMAKE_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/cachelib CACHE STRING
     "The subdirectory where CMake package config files should be installed")
 set(CONFIGS_INSTALL_DIR test_configs CACHE STRING
     "The subdirectory where sample test configurations should be installed")
