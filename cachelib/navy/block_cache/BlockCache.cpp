@@ -239,7 +239,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
 }
 
 bool BlockCache::couldExist(HashedKey hk) {
-  const auto lr = index_->lookup(hk.keyHash());
+  const auto lr = index_->peek(hk.keyHash());
   if (!lr.found()) {
     lookupCount_.inc();
     return false;
@@ -391,7 +391,7 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
     // confirm that the chosen NvmItem is still being mapped with the key
     HashedKey hk =
         makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
-    const auto lr = index_->lookup(hk.keyHash());
+    const auto lr = index_->peek(hk.keyHash());
     if (!lr.found() || addrEnd != decodeRelAddress(lr.address())) {
       // overwritten
       break;
