@@ -17,7 +17,6 @@
 #include <folly/Random.h>
 #include <gtest/gtest.h>
 
-#include <set>
 #include <thread>
 
 #include "cachelib/navy/scheduler/ThreadPoolJobScheduler.h"
