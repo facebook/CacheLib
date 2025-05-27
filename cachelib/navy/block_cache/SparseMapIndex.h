@@ -49,24 +49,26 @@ using SharedMutex =
 // but we do not want people to rely on that).
 class SparseMapIndex : public Index {
  public:
-  static constexpr uint32_t kDefaultNumBuckets{64 * 1024};
-  static constexpr uint32_t kDefaultBucketsPerMutex{64};
+  static constexpr uint32_t kDefaultNumBucketMaps{64 * 1024};
+  static constexpr uint32_t kDefaultBucketMapsPerMutex{64};
 
-  explicit SparseMapIndex(uint32_t numBuckets, uint32_t numBucketsPerMutex)
-      : numBuckets_(numBuckets), numBucketsPerMutex_(numBucketsPerMutex) {
+  explicit SparseMapIndex(uint32_t numBucketMaps,
+                          uint32_t numBucketMapsPerMutex)
+      : numBucketMaps_(numBucketMaps),
+        numBucketMapsPerMutex_(numBucketMapsPerMutex) {
     initialize();
   }
   SparseMapIndex()
-      : SparseMapIndex(kDefaultNumBuckets, kDefaultBucketsPerMutex) {}
+      : SparseMapIndex(kDefaultNumBucketMaps, kDefaultBucketMapsPerMutex) {}
   ~SparseMapIndex() override = default;
   SparseMapIndex(const SparseMapIndex&) = delete;
   SparseMapIndex(SparseMapIndex&&) = delete;
   SparseMapIndex& operator=(const SparseMapIndex&) = delete;
   SparseMapIndex& operator=(SparseMapIndex&&) = delete;
 
-  // Writes index to a Thrift object one bucket at a time and passes each bucket
-  // to @persistCb. The reason for this is because the index can be very large
-  // and serializing everything at once uses a lot of RAM.
+  // Writes index to a Thrift object one bucket map at a time and passes each
+  // bucket map to @persistCb. The reason for this is because the index can be
+  // very large and serializing everything at once uses a lot of RAM.
   void persist(RecordWriter& rw) const override;
 
   // Resets index then inserts entries read from @deserializer. Throws
@@ -109,11 +111,11 @@ class SparseMapIndex : public Index {
   // Resets all the buckets to the initial state.
   void reset() override;
 
-  // Walks buckets and computes total index entry count
+  // Walks bucket maps and computes total index entry count
   size_t computeSize() const override;
 
-  // Walks buckets and computes max/min memory footprint range that index will
-  // currently use for the entries it currently has. (Since sparse_map is
+  // Walks bucket maps and computes max/min memory footprint range that index
+  // will currently use for the entries it currently has. (Since sparse_map is
   // difficult to get the internal status without modifying its implementaion
   // directly, this function will calculate max/min memory footprint range by
   // considering the current entry count and sparse_map's implementation)
@@ -124,8 +126,8 @@ class SparseMapIndex : public Index {
 
  private:
   // Configuration related variables
-  const uint32_t numBuckets_{64 * 1024};
-  const uint32_t numBucketsPerMutex_{64};
+  const uint32_t numBucketMaps_{64 * 1024};
+  const uint32_t numBucketMapsPerMutex_{64};
 
   uint32_t totalMutexes_{1024};
 
@@ -138,25 +140,25 @@ class SparseMapIndex : public Index {
 
   using Map = tsl::sparse_map<uint32_t, ItemRecord>;
 
-  uint32_t bucket(uint64_t hash) const {
-    return (hash >> 32) & (numBuckets_ - 1);
+  uint32_t bucketMap(uint64_t hash) const {
+    return (hash >> 32) & (numBucketMaps_ - 1);
   }
 
   uint32_t subkey(uint64_t hash) const { return hash & 0xffffffffu; }
 
-  SharedMutex& getMutexOfBucket(uint32_t bucket) const {
+  SharedMutex& getMutexOfBucketMap(uint32_t bucketMap) const {
     XDCHECK(folly::isPowTwo(totalMutexes_));
-    return mutex_[bucket & (totalMutexes_ - 1)];
+    return mutex_[bucketMap & (totalMutexes_ - 1)];
   }
 
   SharedMutex& getMutex(uint64_t hash) const {
-    auto b = bucket(hash);
-    return getMutexOfBucket(b);
+    auto b = bucketMap(hash);
+    return getMutexOfBucketMap(b);
   }
 
   Map& getMap(uint64_t hash) const {
-    auto b = bucket(hash);
-    return buckets_[b];
+    auto b = bucketMap(hash);
+    return bucketMaps_[b];
   }
 
   void trackRemove(uint8_t totalHits);
@@ -164,7 +166,7 @@ class SparseMapIndex : public Index {
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
   std::unique_ptr<SharedMutex[]> mutex_;
-  std::unique_ptr<Map[]> buckets_;
+  std::unique_ptr<Map[]> bucketMaps_;
 
   mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};
   mutable AtomicCounter unAccessedItems_;

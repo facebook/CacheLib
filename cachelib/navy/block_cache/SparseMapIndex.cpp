@@ -33,18 +33,20 @@ uint8_t safeInc(uint8_t val) {
 } // namespace
 
 void SparseMapIndex::initialize() {
-  XDCHECK(numBuckets_ != 0 && numBucketsPerMutex_ != 0);
-  XDCHECK(folly::isPowTwo(numBuckets_) && folly::isPowTwo(numBucketsPerMutex_));
-  XDCHECK(numBuckets_ >= numBucketsPerMutex_);
+  XDCHECK(numBucketMaps_ != 0 && numBucketMapsPerMutex_ != 0);
+  XDCHECK(folly::isPowTwo(numBucketMaps_) &&
+          folly::isPowTwo(numBucketMapsPerMutex_));
+  XDCHECK(numBucketMaps_ >= numBucketMapsPerMutex_);
 
-  totalMutexes_ = numBuckets_ / numBucketsPerMutex_;
+  totalMutexes_ = numBucketMaps_ / numBucketMapsPerMutex_;
 
-  buckets_ = std::make_unique<Map[]>(numBuckets_);
+  bucketMaps_ = std::make_unique<Map[]>(numBucketMaps_);
   mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
 
-  XLOGF(INFO,
-        "SparseMapIndex was created with numBuckets_ = {}, totalMutexes_ = {}",
-        numBuckets_, totalMutexes_);
+  XLOGF(
+      INFO,
+      "SparseMapIndex was created with numBucketMaps_ = {}, totalMutexes_ = {}",
+      numBucketMaps_, totalMutexes_);
 }
 
 void SparseMapIndex::setHitsTestOnly(uint64_t key,
@@ -160,18 +162,18 @@ bool SparseMapIndex::removeIfMatch(uint64_t key, uint32_t address) {
 }
 
 void SparseMapIndex::reset() {
-  for (uint32_t i = 0; i < numBuckets_; i++) {
-    auto lock = std::lock_guard{getMutexOfBucket(i)};
-    buckets_[i].clear();
+  for (uint32_t i = 0; i < numBucketMaps_; i++) {
+    auto lock = std::lock_guard{getMutexOfBucketMap(i)};
+    bucketMaps_[i].clear();
   }
   unAccessedItems_.set(0);
 }
 
 size_t SparseMapIndex::computeSize() const {
   size_t size = 0;
-  for (uint32_t i = 0; i < numBuckets_; i++) {
-    auto lock = std::shared_lock{getMutexOfBucket(i)};
-    size += buckets_[i].size();
+  for (uint32_t i = 0; i < numBucketMaps_; i++) {
+    auto lock = std::shared_lock{getMutexOfBucketMap(i)};
+    size += bucketMaps_[i].size();
   }
   return size;
 }
@@ -193,22 +195,23 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   auto entrySize =
       sizeof(std::pair<typename Map::key_type, typename Map::value_type>);
 
-  for (uint32_t i = 0; i < numBuckets_; i++) {
-    auto lock = std::shared_lock{getMutexOfBucket(i)};
+  for (uint32_t i = 0; i < numBucketMaps_; i++) {
+    auto lock = std::shared_lock{getMutexOfBucketMap(i)};
 
     // add the size of fixed mem used for sparse_map's member (sparse_hash)
-    size_t bucketMemUsed = sizeof(buckets_[i]);
+    size_t bucketMapMemUsed = sizeof(bucketMaps_[i]);
 
     // The number of buckets is a power of 2 and one sparse array instance will
     // cover 64 buckets, so there will be (# of buckets) / 64 sparse array
     // instances (called sparse bucket in sparse_map implementation).
-    auto sparseBucketCount = (buckets_[i].bucket_count() == 0)
-                                 ? 0
-                                 : ((buckets_[i].bucket_count() - 1) >> 6) + 1;
-    bucketMemUsed += sparseBucketCount * sparseBucketSize;
+    auto sparseBucketCount =
+        (bucketMaps_[i].bucket_count() == 0)
+            ? 0
+            : ((bucketMaps_[i].bucket_count() - 1) >> 6) + 1;
+    bucketMapMemUsed += sparseBucketCount * sparseBucketSize;
 
     // For each entry in the hash table (sparse_hash)
-    auto entryCount = buckets_[i].size();
+    auto entryCount = bucketMaps_[i].size();
 
     // For memory consumed for the entries in the sparse_hash, we can only
     // calculate the range that it will consume without directly touching
@@ -221,10 +224,11 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (# of sparse buckets) * 4
     range.maxUsedBytes +=
-        bucketMemUsed + ((entryCount == 0) ? 0
-                                           : ((((entryCount - 1) >> 2) << 2) +
-                                              (sparseBucketCount << 2)) *
-                                                 entrySize);
+        bucketMapMemUsed +
+        ((entryCount == 0)
+             ? 0
+             : ((((entryCount - 1) >> 2) << 2) + (sparseBucketCount << 2)) *
+                   entrySize);
 
     // For the best case, all sparse_array will be filled with the exact number
     // (mod 4 == 0) of real buckets and only one sparse array may have
@@ -232,44 +236,44 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (1 or 0) * 4
     range.minUsedBytes +=
-        bucketMemUsed + ((entryCount == 0)
-                             ? 0
-                             : ((((entryCount - 1) >> 2) << 2) +
-                                (((sparseBucketCount > 0) ? 1 : 0) << 2)) *
-                                   entrySize);
+        bucketMapMemUsed + ((entryCount == 0)
+                                ? 0
+                                : ((((entryCount - 1) >> 2) << 2) +
+                                   (((sparseBucketCount > 0) ? 1 : 0) << 2)) *
+                                      entrySize);
   }
   return range;
 }
 
 void SparseMapIndex::persist(RecordWriter& rw) const {
-  serialization::IndexBucket bucket;
+  serialization::IndexBucket bucketMap;
   auto prevPos = rw.getCurPos();
   uint64_t persisted = 0;
 
-  for (uint32_t i = 0; i < numBuckets_; i++) {
-    *bucket.bucketId() = i;
+  for (uint32_t i = 0; i < numBucketMaps_; i++) {
+    *bucketMap.bucketId() = i;
     // Convert index entries to thrift objects
-    for (const auto& [key, record] : buckets_[i]) {
+    for (const auto& [key, record] : bucketMaps_[i]) {
       serialization::IndexEntry entry;
       entry.key() = key;
       entry.address() = record.address;
       entry.sizeHint() = record.sizeHint;
       entry.totalHits() = record.totalHits;
       entry.currentHits() = record.currentHits;
-      bucket.entries()->push_back(entry);
+      bucketMap.entries()->push_back(entry);
     }
 
     try {
       // Serialize bucket and this may throw exception when it's exceeding the
       // meta data size limit
-      serializeProto(bucket, rw);
-      persisted += bucket.entries()->size();
+      serializeProto(bucketMap, rw);
+      persisted += bucketMap.entries()->size();
     } catch (const std::exception& e) {
       // Log the error and more info on current index
       XLOGF(ERR,
             "Error persisting Block Cache Index: {}, persist() began at pos {} "
-            "and current pos {}, trying to add {} entries from bucket {}",
-            e.what(), prevPos, rw.getCurPos(), bucket.entries()->size(), i);
+            "and current pos {}, trying to add {} entries from bucketMap {}",
+            e.what(), prevPos, rw.getCurPos(), bucketMap.entries()->size(), i);
       auto memFootprint = computeMemFootprintRange();
       XLOGF(ERR,
             "Current Block cache items count: {}, persisted {} items, index "
@@ -283,26 +287,26 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
       throw;
     }
     // Clear contents to reuse memory.
-    bucket.entries()->clear();
+    bucketMap.entries()->clear();
   }
 }
 
 void SparseMapIndex::recover(RecordReader& rr) {
-  for (uint32_t i = 0; i < numBuckets_; i++) {
-    auto bucket = deserializeProto<serialization::IndexBucket>(rr);
-    uint32_t id = *bucket.bucketId();
-    if (id >= numBuckets_) {
-      throw std::invalid_argument{
-          folly::sformat("Invalid bucket id. Max buckets: {}, bucket id: {}",
-                         numBuckets_,
-                         id)};
+  for (uint32_t i = 0; i < numBucketMaps_; i++) {
+    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr);
+    uint32_t id = *bucketMap.bucketId();
+    if (id >= numBucketMaps_) {
+      throw std::invalid_argument{folly::sformat(
+          "Invalid bucket map id. Max bucketMaps: {}, bucket map id: {}",
+          numBucketMaps_,
+          id)};
     }
-    for (auto& entry : *bucket.entries()) {
-      buckets_[id].try_emplace(*entry.key(),
-                               *entry.address(),
-                               *entry.sizeHint(),
-                               *entry.totalHits(),
-                               *entry.currentHits());
+    for (auto& entry : *bucketMap.entries()) {
+      bucketMaps_[id].try_emplace(*entry.key(),
+                                  *entry.address(),
+                                  *entry.sizeHint(),
+                                  *entry.totalHits(),
+                                  *entry.currentHits());
     }
   }
 }

@@ -219,7 +219,7 @@ TEST(SparseMapIndex, MemFootprintRangeTest) {
   auto baseSize = range.maxUsedBytes;
   // no difference between min and max with empty index
   EXPECT_EQ(range.maxUsedBytes, range.minUsedBytes);
-  EXPECT_EQ(baseSize, index.numBuckets_ * sizeof(SparseMapIndex::Map));
+  EXPECT_EQ(baseSize, index.numBucketMaps_ * sizeof(SparseMapIndex::Map));
   EXPECT_GT(baseSize, 0);
 
   // just a random number
