@@ -44,6 +44,9 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     // max tail age for an allocation class to be excluded from being a receiver
     unsigned int maxLruTailAge{0};
 
+    // Enable victim selection based on free memory
+    bool enableVictimByFreeMem{true};
+
     // optionial weight function based on allocation class size
     using WeightFn = std::function<double(
         const PoolId, const ClassId, const PoolStats& pStats)>;

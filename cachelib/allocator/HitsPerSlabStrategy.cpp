@@ -62,11 +62,13 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
   }
 
   const auto& poolState = getPoolState(pid);
-  auto victimClassId = pickVictimByFreeMem(
-      victims, stats, config.getFreeMemThreshold(), poolState);
+  if (config.enableVictimByFreeMem) {
+    auto victimClassId = pickVictimByFreeMem(
+        victims, stats, config.getFreeMemThreshold(), poolState);
 
-  if (victimClassId != Slab::kInvalidClassId) {
-    return victimClassId;
+    if (victimClassId != Slab::kInvalidClassId) {
+      return victimClassId;
+    }
   }
 
   // prioritize victims with max LRU tail age
