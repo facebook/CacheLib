@@ -296,7 +296,7 @@ class Cache {
     return !isRamOnly() && !cache_->isNvmCacheEnabled();
   }
 
-  bool hasNvmCacheWarmedUp() const;
+  double getNvmEvictionRate() const;
 
   // enables consistency checking for the cache. This should be done before
   // any find/insert/remove is called.
@@ -1261,14 +1261,14 @@ Stats Cache<Allocator>::getStats() const {
 }
 
 template <typename Allocator>
-bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
+double Cache<Allocator>::getNvmEvictionRate() const {
   const auto nvmStats = cache_->getNvmCacheStatsMap();
   const auto& ratesMap = nvmStats.getRates();
   const auto it = ratesMap.find("navy_bc_evictions");
   if (it == ratesMap.end()) {
-    return false;
+    return 0;
   }
-  return it->second > 0;
+  return it->second;
 }
 
 template <typename Allocator>

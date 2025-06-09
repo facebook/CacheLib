@@ -202,6 +202,28 @@ class StressorAdmPolicy {
   }
 };
 
+// Defines the warmup check policy. The default policy ends the warmup period on
+// the first eviction from the cache. It also allows using a fixed request
+// timestamp or the earlier of the two.
+struct WarmupCheckPolicy : public JSONConfig {
+  WarmupCheckPolicy() {}
+
+  explicit WarmupCheckPolicy(const folly::dynamic& configJson);
+
+  WarmupCheckPolicy(uint64_t evictionCountThreshold,
+                    uint64_t requestTimestampThreshold)
+      : evictionCountThreshold(evictionCountThreshold),
+        requestTimestampThreshold(requestTimestampThreshold) {}
+
+  // Consider the cache warmed up after this many evictions from the cache. Use
+  // 0 to disable eviction checks.
+  uint64_t evictionCountThreshold{1};
+
+  // Consider the cache warmed up with the first request having a timestamp
+  // greater than this value. Use 0 to disable timestamp checks.
+  uint64_t requestTimestampThreshold{0};
+};
+
 struct StressorConfig : public JSONConfig {
   // Which workload generator to use, default is
   // workload generator which samples from some distribution
@@ -243,6 +265,9 @@ struct StressorConfig : public JSONConfig {
   // If enabled, stressor will check whether nvm cache has been warmed up and
   // output stats after warmup.
   bool checkNvmCacheWarmUp{false};
+
+  // Valid when checkNvmCacheWarmUp is true
+  WarmupCheckPolicy nvmCacheWarmupCheckPolicy{1, 0};
 
   // If enabled, each value will be read on find. This is useful for measuring
   // performance of value access.

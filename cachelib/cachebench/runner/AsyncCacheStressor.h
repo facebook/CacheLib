@@ -597,7 +597,11 @@ class AsyncCacheStressor : public Stressor {
     if (cache_->isNvmCacheDisabled()) {
       return;
     }
-    if (cache_->hasNvmCacheWarmedUp()) {
+    const auto& policy = config_.nvmCacheWarmupCheckPolicy;
+    if ((policy.requestTimestampThreshold > 0 &&
+         requestTimestamp >= policy.requestTimestampThreshold) ||
+        (policy.evictionCountThreshold > 0 &&
+         cache_->getNvmEvictionRate() >= policy.evictionCountThreshold)) {
       wg_->setNvmCacheWarmedUp(requestTimestamp);
       XLOG(INFO) << "NVM cache has been warmed up";
       hasNvmCacheWarmedUp_ = true;

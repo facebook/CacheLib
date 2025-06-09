@@ -82,6 +82,11 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
         ReplayGeneratorConfig{configJson["replayGeneratorConfig"]};
   }
 
+  if (configJson.count("nvmCacheWarmupCheckPolicy")) {
+    nvmCacheWarmupCheckPolicy =
+        WarmupCheckPolicy{configJson["nvmCacheWarmupCheckPolicy"]};
+  }
+
   if (!traceFileName.empty() && !traceFileNames.empty()) {
     throw std::invalid_argument(
         folly::sformat("set only one of traceFileName or traceFileNames"));
@@ -90,7 +95,7 @@ StressorConfig::StressorConfig(const folly::dynamic& configJson) {
   // If you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<StressorConfig, 560>();
+  checkCorrectSize<StressorConfig, 584>();
 }
 
 bool StressorConfig::usesChainedItems() const {
@@ -249,6 +254,16 @@ MLAdmissionConfig::MLAdmissionConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, admitCategory);
 
   checkCorrectSize<MLAdmissionConfig, 160>();
+}
+
+WarmupCheckPolicy::WarmupCheckPolicy(const folly::dynamic& configJson) {
+  // reset the default values to make sure they are not used
+  evictionCountThreshold = 0;
+  requestTimestampThreshold = 0;
+  JSONSetVal(configJson, evictionCountThreshold);
+  JSONSetVal(configJson, requestTimestampThreshold);
+
+  checkCorrectSize<WarmupCheckPolicy, 16>();
 }
 
 } // namespace cachebench
