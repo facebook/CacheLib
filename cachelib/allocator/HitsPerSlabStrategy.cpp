@@ -61,6 +61,16 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
     return Slab::kInvalidClassId;
   }
 
+  if (config.classIdTargetEvictionAge != nullptr &&
+      !config.classIdTargetEvictionAge->empty()) {
+    victims = filterVictimsByTargetEvictionAge(
+        stats, std::move(victims), *config.classIdTargetEvictionAge.get());
+  }
+
+  if (victims.empty()) {
+    return Slab::kInvalidClassId;
+  }
+
   const auto& poolState = getPoolState(pid);
   if (config.enableVictimByFreeMem) {
     auto victimClassId = pickVictimByFreeMem(
@@ -127,6 +137,17 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
     if (!candidates.empty()) {
       receivers = std::move(candidates);
     }
+  }
+
+  if (receivers.empty()) {
+    return Slab::kInvalidClassId;
+  }
+
+  // filter out alloc classes above retention target
+  if (config.classIdTargetEvictionAge != nullptr &&
+      !config.classIdTargetEvictionAge->empty()) {
+    receivers = filterReceiversByTargetEvictionAge(
+        stats, std::move(receivers), *config.classIdTargetEvictionAge.get());
   }
 
   if (receivers.empty()) {

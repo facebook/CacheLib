@@ -216,6 +216,35 @@ std::set<ClassId> RebalanceStrategy::filterVictimsByHoldOff(
   return filter(std::move(victims), condition, "remove recent receivers");
 }
 
+std::set<ClassId> RebalanceStrategy::filterReceiversByTargetEvictionAge(
+    const PoolStats& stats,
+    std::set<ClassId> candidates,
+    const folly::F14FastMap<uint32_t, uint32_t>& map) {
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) {
+        auto it = map.find(cid);
+        // filter out AC not in map or with evictionAge above target
+        return (it == map.end() ||
+                (stats.evictionAgeForClass(cid) >= it->second));
+      },
+      " candidates greater than or equal to eviction age target");
+}
+
+std::set<ClassId> RebalanceStrategy::filterVictimsByTargetEvictionAge(
+    const PoolStats& stats,
+    std::set<ClassId> candidates,
+    const folly::F14FastMap<uint32_t, uint32_t>& map) {
+  return filter(
+      std::move(candidates),
+      [&](ClassId cid) {
+        auto it = map.find(cid);
+        return (it != map.end() &&
+                (stats.evictionAgeForClass(cid) < it->second));
+      },
+      " candidates below eviction age target");
+}
+
 RebalanceContext RebalanceStrategy::pickVictimAndReceiver(
     const CacheBase& cache, PoolId pid) {
   return executeAndRecordCurrentState<RebalanceContext>(

@@ -182,6 +182,16 @@ class RebalanceStrategy {
                                            const PoolStats& stats,
                                            std::set<ClassId> victims);
 
+  static std::set<ClassId> filterVictimsByTargetEvictionAge(
+      const PoolStats& stats,
+      std::set<ClassId> candidates,
+      const folly::F14FastMap<uint32_t, uint32_t>& map);
+
+  static std::set<ClassId> filterReceiversByTargetEvictionAge(
+      const PoolStats& stats,
+      std::set<ClassId> candidates,
+      const folly::F14FastMap<uint32_t, uint32_t>& map);
+
   static ClassId pickVictimByFreeMem(const std::set<ClassId>& victims,
                                      const PoolStats& poolStats,
                                      size_t threshold,
