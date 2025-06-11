@@ -161,11 +161,6 @@ class RebalanceStrategy {
 
   // filter the candidates based on whether they have at least this much tail
   // age
-  static std::set<ClassId> filterByMinTailAge(
-      const PoolEvictionAgeStats& poolEvictionAgeStats,
-      std::set<ClassId> candidates,
-      unsigned int minTailAge);
-
   static std::set<ClassId> filterByMinTailAge(const PoolStats& stats,
                                               std::set<ClassId> candidates,
                                               unsigned int minTailAge);

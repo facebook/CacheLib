@@ -154,6 +154,20 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
     return Slab::kInvalidClassId;
   }
 
+  // prioritize receivers with eviction age below min LRU tail age
+  if (config.minLruTailAge != 0) {
+    auto minAgeReceivers = filter(
+        receivers,
+        [&](ClassId cid) {
+          return stats.evictionAgeForClass(cid) >= config.minLruTailAge;
+        },
+        folly::sformat(" candidates with more than {} seconds for tail age",
+                       config.minLruTailAge));
+    if (!minAgeReceivers.empty()) {
+      receivers = std::move(minAgeReceivers);
+    }
+  }
+
   return *std::max_element(
       receivers.begin(), receivers.end(), [&](ClassId a, ClassId b) {
         double weight_a =

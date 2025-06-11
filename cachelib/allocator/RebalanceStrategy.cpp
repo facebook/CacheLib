@@ -134,19 +134,6 @@ std::set<ClassId> RebalanceStrategy::filterByNoEvictions(
 }
 
 std::set<ClassId> RebalanceStrategy::filterByMinTailAge(
-    const PoolEvictionAgeStats& poolEvictionAgeStats,
-    std::set<ClassId> candidates,
-    unsigned int minTailAge) {
-  return filter(
-      std::move(candidates),
-      [&](ClassId cid) {
-        return poolEvictionAgeStats.getOldestElementAge(cid) < minTailAge;
-      },
-      folly::sformat(" candidates with less than {} seconds for tail age",
-                     minTailAge));
-}
-
-std::set<ClassId> RebalanceStrategy::filterByMinTailAge(
     const PoolStats& stats,
     std::set<ClassId> candidates,
     unsigned int minTailAge) {
