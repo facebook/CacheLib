@@ -42,7 +42,7 @@ inline std::string pathName(const std::string& dir, const std::string& file) {
 
 ShmManager::ShmManager(const std::string& dir, bool usePosix)
     : controlDir_(dir),
-      dirHash_(std::to_string(folly::hash::fnv64(controlDir_))),
+      dirHash_(std::to_string(folly::hash::fnv64_BROKEN(controlDir_))),
       usePosix_(usePosix) {
   // check that the directory exists. If it does not exist, create
   // one. If it exists, extract the name to key mapping from the metadata

@@ -35,7 +35,7 @@ using Hasher = std::shared_ptr<Hash>;
 
 struct FNVHash final : public Hash {
   uint32_t operator()(const void* buf, size_t n) const noexcept override {
-    return folly::hash::fnv32_buf(buf, n, folly::hash::fnv32_hash_start);
+    return folly::hash::fnv32_buf_BROKEN(buf, n, folly::hash::fnv32_hash_start);
   }
   int getMagicId() const noexcept override { return 1; }
 };
