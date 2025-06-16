@@ -17,7 +17,6 @@
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 
 #include <folly/Format.h>
-#include <folly/hash/Hash.h>
 #include <folly/lang/Bits.h>
 
 #include <algorithm>
