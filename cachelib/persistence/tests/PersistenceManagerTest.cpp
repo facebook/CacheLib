@@ -94,7 +94,7 @@ TEST_F(PersistenceManagerTest, testConfigChange) {
 
 TEST_F(PersistenceManagerTest, testSmallSinglePool) {
   std::string key = "key";
-  std::string data = "Repalce the data associated with key key";
+  std::string data = "Replace the data associated with key key";
   // test single item, one pool
   cache_.test({{key, data}}, 1, 0, false);
 }
