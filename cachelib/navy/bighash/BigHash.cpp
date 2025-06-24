@@ -29,8 +29,6 @@
 namespace facebook::cachelib::navy {
 constexpr uint32_t kBigHashValidBucketCheckerBucketsPerBit = 100;
 
-constexpr uint32_t BigHash::kFormatVersion;
-
 BigHash::Config& BigHash::Config::validate() {
   if (cacheSize < bucketSize) {
     throw std::invalid_argument(

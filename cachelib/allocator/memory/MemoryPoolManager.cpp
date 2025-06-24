@@ -25,8 +25,6 @@
 
 using namespace facebook::cachelib;
 
-constexpr unsigned int MemoryPoolManager::kMaxPools;
-
 MemoryPoolManager::MemoryPoolManager(SlabAllocator& slabAlloc)
     : slabAlloc_(slabAlloc) {}
 

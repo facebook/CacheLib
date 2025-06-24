@@ -38,10 +38,6 @@
 
 using namespace facebook::cachelib;
 
-constexpr unsigned int AllocationClass::kFreeAllocsPruneLimit;
-constexpr unsigned int AllocationClass::kFreeAllocsPruneSleepMicroSecs;
-constexpr unsigned int AllocationClass::kForEachAllocPrefetchOffset;
-
 AllocationClass::AllocationClass(ClassId classId,
                                  PoolId poolId,
                                  uint32_t allocSize,

@@ -45,9 +45,6 @@ static inline size_t roundDownToSlabSize(size_t size) {
 }
 } // namespace
 
-constexpr unsigned int SlabAllocator::kLockSleepMS;
-constexpr size_t SlabAllocator::kPagesPerStep;
-
 void SlabAllocator::checkState() const {
   if (memoryStart_ == nullptr || memorySize_ <= Slab::kSize) {
     throw std::invalid_argument(
