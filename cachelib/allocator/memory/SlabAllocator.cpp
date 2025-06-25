@@ -21,7 +21,6 @@
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 
 #include <chrono>
 #include <memory>
