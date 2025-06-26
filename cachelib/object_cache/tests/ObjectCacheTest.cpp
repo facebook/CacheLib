@@ -642,7 +642,7 @@ class ObjectCacheTest : public ::testing::Test {
     folly::doNotOptimizeAway(objectCopy);
     auto memUsage2 = tMemTracker.getMemUsageBytes();
 
-    EXPECT_EQ(memUsage2 - memUsage1, objcache.template getObjectSize(object));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache.getObjectSize(object));
   }
 
   void checkTotalObjectSize(ObjectCache& objcache) {
@@ -676,7 +676,7 @@ class ObjectCacheTest : public ::testing::Test {
 
     auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(map),
                                                   memUsage2 - memUsage1);
-    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getObjectSize(ptr));
     EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
 
     auto found = objcache->template findToWrite<ObjectType>("cacheKey");
@@ -729,7 +729,7 @@ class ObjectCacheTest : public ::testing::Test {
 
     auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(vec),
                                                   memUsage2 - memUsage1);
-    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getObjectSize(ptr));
     EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
 
     auto found = objcache->template findToWrite<ObjectType>("cacheKey");
@@ -776,7 +776,7 @@ class ObjectCacheTest : public ::testing::Test {
 
     auto [_, ptr, __] = objcache->insertOrReplace("cacheKey", std::move(str),
                                                   memUsage2 - memUsage1);
-    EXPECT_EQ(memUsage2 - memUsage1, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(memUsage2 - memUsage1, objcache->getObjectSize(ptr));
     EXPECT_EQ(memUsage2 - memUsage1, objcache->getTotalObjectSize());
 
     auto found = objcache->template findToWrite<ObjectType>("cacheKey");
@@ -827,7 +827,7 @@ class ObjectCacheTest : public ::testing::Test {
 
     auto [_, ptr, __] = objcache->insertOrReplace(
         "foo", std::make_unique<ObjectType>(), sizeof(ObjectType));
-    EXPECT_EQ(sizeof(ObjectType), objcache->template getObjectSize(ptr));
+    EXPECT_EQ(sizeof(ObjectType), objcache->getObjectSize(ptr));
     EXPECT_EQ(sizeof(ObjectType), objcache->getTotalObjectSize());
 
     auto found = objcache->template findToWrite<ObjectType>("foo");
@@ -838,7 +838,7 @@ class ObjectCacheTest : public ::testing::Test {
     const auto updated = objcache->updateObjectSize(ptr, newSize);
     ASSERT_TRUE(updated);
 
-    EXPECT_EQ(newSize, objcache->template getObjectSize(ptr));
+    EXPECT_EQ(newSize, objcache->getObjectSize(ptr));
     EXPECT_EQ(newSize, objcache->getTotalObjectSize());
   }
 
@@ -884,8 +884,7 @@ class ObjectCacheTest : public ::testing::Test {
     }
 
     auto found = objcache->template find<ObjectType>("cacheKey");
-    EXPECT_EQ(objcache->template getObjectSize(found),
-              objcache->getTotalObjectSize());
+    EXPECT_EQ(objcache->getObjectSize(found), objcache->getTotalObjectSize());
   }
 
   void testPersistence() {
