@@ -276,10 +276,11 @@ class BlockCacheReinsertionConfig {
       std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
           makeCustomPolicy) {
     if (hitsThreshold_ > 0 || pctThreshold_ > 0) {
-      throw std::invalid_argument(
+      throw std::invalid_argument(folly::sformat(
           "Already set reinsertion hits threshold {}, or reinsertion "
           "probability threshold {} while trying to set a custom reinsertion "
-          "policy.");
+          "policy.",
+          hitsThreshold_, pctThreshold_));
     }
     makeCustomPolicy_ = makeCustomPolicy;
     return *this;
