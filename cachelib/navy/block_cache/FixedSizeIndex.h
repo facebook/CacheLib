@@ -287,16 +287,18 @@ class FixedSizeIndex : public Index {
 
   void initialize();
 
+  // Random prime numbers for the distance for next bucket slot to use.
+  static constexpr uint8_t kNextBucketOffset[4] = {0, 23, 61, 97};
+
   uint8_t decideBucketOffset(uint64_t bid, uint64_t key) const {
     auto mid = mutexId(bid);
 
     // Check if there's already one matching
     for (auto i = 0; i < 4; i++) {
-      auto curBid = bid + i;
-      if (mutexId(curBid) != mid) {
-        // Let's not come across the mutex boundary
-        break;
-      }
+      auto curBid = calcBucketId(bid, i);
+      // Make sure we don't go across the mutex boundary
+      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
+
       if (ht_[curBid].isValid() &&
           bucketDistInfo_.getBucketFillOffset(curBid) == i &&
           partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
@@ -306,11 +308,10 @@ class FixedSizeIndex : public Index {
 
     // No match. Find the empty one
     for (auto i = 0; i < 4; i++) {
-      auto curBid = bid + i;
-      if (mutexId(curBid) != mid) {
-        // Let's not come across the mutex boundary
-        break;
-      }
+      auto curBid = calcBucketId(bid, i);
+      // Make sure we don't go across the mutex boundary
+      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
+
       if (!ht_[curBid].isValid()) {
         return i;
       }
@@ -324,11 +325,10 @@ class FixedSizeIndex : public Index {
     auto mid = mutexId(bid);
 
     for (auto i = 1; i < 4; i++) {
-      auto curBid = bid + i;
-      if (mutexId(curBid) != mid) {
-        // Let's not come across the mutex boundary
-        break;
-      }
+      auto curBid = calcBucketId(bid, i);
+      // Make sure we don't go across the mutex boundary
+      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
+
       if (ht_[curBid].isValid() &&
           bucketDistInfo_.getBucketFillOffset(curBid) == i &&
           partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
@@ -361,6 +361,15 @@ class FixedSizeIndex : public Index {
     return ((key >> 40) & 0xff);
   }
 
+  // Get the next bucket id to check or use
+  uint64_t calcBucketId(uint64_t bid, uint8_t offset) const {
+    // We don't want to go across the mutex boundary, so if it goes beyond that,
+    // it will wrap around and go back to the beginning of current mutex
+    // boundary
+    return (bid / numBucketsPerMutex_) * numBucketsPerMutex_ +
+           ((bid + kNextBucketOffset[offset]) % numBucketsPerMutex_);
+  }
+
   // Configuration related variables
   const uint32_t numChunks_{0};
   const uint8_t numBucketsPerChunkPower_{0};
@@ -384,15 +393,18 @@ class FixedSizeIndex : public Index {
   // Locked mutex will be released when it's destroyed.
   class ExclusiveLockedBucket {
    public:
-    explicit ExclusiveLockedBucket(uint64_t key, FixedSizeIndex& index)
+    explicit ExclusiveLockedBucket(uint64_t key,
+                                   FixedSizeIndex& index,
+                                   bool alloc)
         : bid_(index.bucketId(key)),
           mid_{index.mutexId(bid_)},
           lg_{index.mutex_[mid_]},
           record_{&index.ht_[bid_]},
           size_{index.sizeForMutex_[mid_]} {
-      auto offset = index.decideBucketOffset(bid_, key);
+      auto offset = alloc ? index.decideBucketOffset(bid_, key)
+                          : index.checkBucketOffset(bid_, key);
       if (offset != 0) {
-        bid_ += offset;
+        bid_ = index.calcBucketId(bid_, offset);
         record_ = &index.ht_[bid_];
         bucketOffset_ = offset;
       }
@@ -428,7 +440,7 @@ class FixedSizeIndex : public Index {
       // check next bucket if it should be used
       auto offset = (index.checkBucketOffset(bid_, key));
       if (offset != 0) {
-        bid_ += offset;
+        bid_ = index.calcBucketId(bid_, offset);
         record_ = &index.ht_[bid_];
       }
     }

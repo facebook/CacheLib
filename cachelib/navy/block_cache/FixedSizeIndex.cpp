@@ -51,7 +51,7 @@ Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
   // TODO 2: couldExist() currently calls Index::lookup(). Need to re-evaluate
   // if we should use peek() instead so that it could avoid exclusive lock and
   // also not sure if bumping up hit count with couldExist() makes sense.
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.recordRef().isValid()) {
     return LookupResult(true,
@@ -82,7 +82,7 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
                                            uint32_t address,
                                            uint16_t sizeHint) {
   LookupResult lr;
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, true};
 
   if (elb.recordRef().isValid()) {
     lr = LookupResult(true,
@@ -104,7 +104,7 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
 bool FixedSizeIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.recordRef().address == oldAddress) {
     elb.recordRef().address = newAddress;
@@ -115,7 +115,7 @@ bool FixedSizeIndex::replaceIfMatch(uint64_t key,
 }
 
 Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.recordRef().isValid()) {
     LookupResult lr{true, ItemRecord(elb.recordRef().address,
@@ -134,7 +134,7 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
 }
 
 bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.recordRef().address == address) {
     elb.recordRef() = PackedItemRecord{};
@@ -262,7 +262,7 @@ void FixedSizeIndex::getCounters(const CounterVisitor&) const {
 void FixedSizeIndex::setHitsTestOnly(uint64_t key,
                                      uint8_t currentHits,
                                      uint8_t totalHits) {
-  ExclusiveLockedBucket elb{key, *this};
+  ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.recordRef().isValid()) {
     elb.recordRef().info.curHits =
