@@ -38,6 +38,8 @@ void FixedSizeIndex::initialize() {
   ht_ = std::make_unique<PackedItemRecord[]>(totalBuckets_);
   mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
   sizeForMutex_ = std::make_unique<size_t[]>(totalMutexes_);
+
+  bucketDistInfo_.initialize(totalBuckets_);
 }
 
 Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
@@ -91,7 +93,10 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
   } else {
     ++elb.sizeRef();
   }
+  // TODO: need to combine this two ops into one to make sure updateDistInfo()
+  // part is not missed
   elb.recordRef() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateDistInfo(key, *this);
 
   return lr;
 }
@@ -171,6 +176,9 @@ Index::MemFootprintRange FixedSizeIndex::computeMemFootprintRange() const {
   memUsage += totalMutexes_ * sizeof(SharedMutex);
   memUsage += totalMutexes_ * sizeof(size_t);
 
+  // for BucketDistInfo
+  memUsage += bucketDistInfo_.getBucketDistInfoBufSize();
+
   range.maxUsedBytes = memUsage;
   range.minUsedBytes = memUsage;
   return range;
@@ -178,11 +186,22 @@ Index::MemFootprintRange FixedSizeIndex::computeMemFootprintRange() const {
 
 void FixedSizeIndex::persist(RecordWriter& rw) const {
   // TODO: need to revisit persist and recover
-  // : We already know that we don't handle well when we write more than
-  // pre-configured metadata size by serializing too many items, and there are
-  // ideas for improvements for that.
-  // For now, this will follow the same logic with the exisiting SparseMapIndex
+  // : We already know that current persist and recover are not efficient
+  // and we don't handle well when we write more than pre-configured metadata
+  // size by serializing too many items.
+  // We will change to use shm for FixedSizeIndex for persist/recover soon.
+  // For now, this code will follow the same logic with the exisiting
+  // SparseMapIndex
   XLOGF(INFO, "Persisting BlockCache hashtable: {} buckets", totalBuckets_);
+
+  auto fillMapBuf = folly::IOBuf::wrapBuffer(bucketDistInfo_.fillMap_.get(),
+                                             bucketDistInfo_.fillMapBufSize_);
+  auto partialBitsBuf = folly::IOBuf::wrapBuffer(
+      bucketDistInfo_.partialBits_.get(), bucketDistInfo_.partialBitsBufSize_);
+
+  rw.writeRecord(std::move(fillMapBuf));
+  rw.writeRecord(std::move(partialBitsBuf));
+
   for (uint64_t i = 0; i < totalBuckets_; ++i) {
     serialization::IndexEntry entry;
     entry.key() = i;
@@ -198,6 +217,23 @@ void FixedSizeIndex::persist(RecordWriter& rw) const {
 void FixedSizeIndex::recover(RecordReader& rr) {
   // TODO need to revisit persist and recover. See the comment in persist().
   XLOGF(INFO, "Recovering BlockCache hashtable: {} buckets", totalBuckets_);
+
+  auto fillMapBuf = rr.readRecord();
+  auto partialBitsBuf = rr.readRecord();
+
+  if (fillMapBuf->length() != bucketDistInfo_.fillMapBufSize_ ||
+      partialBitsBuf->length() != bucketDistInfo_.partialBitsBufSize_) {
+    XLOG(ERR) << "Failed to recover BlockCache index. BucketDistInfo format is "
+                 "different";
+    return;
+  }
+
+  memcpy(
+      bucketDistInfo_.fillMap_.get(), fillMapBuf->data(), fillMapBuf->length());
+  memcpy(bucketDistInfo_.partialBits_.get(),
+         partialBitsBuf->data(),
+         partialBitsBuf->length());
+
   for (uint64_t i = 0; i < totalBuckets_; ++i) {
     auto entry = deserializeProto<serialization::IndexEntry>(rr);
     if (static_cast<uint64_t>(*entry.key()) >= totalBuckets_) {

@@ -213,7 +213,130 @@ class FixedSizeIndex : public Index {
   static_assert(5 == sizeof(PackedItemRecord),
                 "PackedItemRecord size is 5 bytes");
 
+  class BucketDistInfo {
+    // 1. It's assumed that caller (FixedSizeIndex) will handle all the
+    // parameters validity for each function. It'll be only XDCHECKed here.
+    // 2. # of buckets per mutex for FixedSizeIndex should be multiple of 8 so
+    // that each byte in this info won't be shared across the buckets mutex
+    // boundary
+    // 3. For now, it's 2-bit for fill info and 8-bit for partial key bits. All
+    // those are hard coded
+   public:
+    BucketDistInfo() = default;
+
+    void initialize(uint64_t numBuckets) {
+      XDCHECK(numBuckets > 0);
+
+      numBuckets_ = numBuckets;
+      fillMapBufSize_ = (numBuckets - 1) / 4 + 1;
+      partialBitsBufSize_ = numBuckets;
+      fillMap_ = std::make_unique<uint8_t[]>(fillMapBufSize_);
+      partialBits_ = std::make_unique<uint8_t[]>(partialBitsBufSize_);
+    }
+
+    void updateBucketFillInfo(uint64_t bucketId,
+                              uint8_t offset,
+                              uint8_t partialKeys) {
+      XDCHECK(bucketId < numBuckets_) << bucketId;
+      XDCHECK(offset <= 0x3) << offset;
+
+      setBucketFillInfo(bucketId, offset);
+      setPartialBits(bucketId, partialKeys);
+    }
+
+    uint8_t getBucketFillOffset(uint64_t bucketId) const {
+      XDCHECK(bucketId < numBuckets_) << bucketId;
+      return getBucketFillInfo(bucketId);
+    }
+
+    uint8_t getPartialKey(uint64_t bucketId) const {
+      XDCHECK(bucketId < numBuckets_) << bucketId;
+
+      return getPartialBits(bucketId);
+    }
+
+    uint64_t getBucketDistInfoBufSize() const {
+      return fillMapBufSize_ + partialBitsBufSize_;
+    }
+
+   private:
+    void setBucketFillInfo(uint64_t bid, uint8_t bucketOffset) {
+      uint64_t idx = bid / 4;
+      uint8_t offset = (bid & 0x3) << 1;
+      fillMap_[idx] =
+          (fillMap_[idx] & ~(0x3 << offset)) | (bucketOffset << offset);
+    }
+
+    uint8_t getBucketFillInfo(uint64_t bid) const {
+      return (fillMap_[bid / 4] >> ((bid & 0x3) << 1)) & 0x3;
+    }
+
+    void setPartialBits(uint64_t bid, uint8_t bits) {
+      partialBits_[bid] = bits;
+    }
+    uint8_t getPartialBits(uint64_t bid) const { return partialBits_[bid]; }
+
+    std::unique_ptr<uint8_t[]> fillMap_;
+    uint64_t fillMapBufSize_{0};
+    std::unique_ptr<uint8_t[]> partialBits_;
+    uint64_t partialBitsBufSize_{0};
+    uint64_t numBuckets_{0};
+
+    friend class FixedSizeIndex;
+  };
+
   void initialize();
+
+  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) const {
+    auto mid = mutexId(bid);
+
+    // Check if there's already one matching
+    for (auto i = 0; i < 4; i++) {
+      auto curBid = bid + i;
+      if (mutexId(curBid) != mid) {
+        // Let's not come across the mutex boundary
+        break;
+      }
+      if (ht_[curBid].isValid() &&
+          bucketDistInfo_.getBucketFillOffset(curBid) == i &&
+          partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
+        return i;
+      }
+    }
+
+    // No match. Find the empty one
+    for (auto i = 0; i < 4; i++) {
+      auto curBid = bid + i;
+      if (mutexId(curBid) != mid) {
+        // Let's not come across the mutex boundary
+        break;
+      }
+      if (!ht_[curBid].isValid()) {
+        return i;
+      }
+    }
+
+    // Let's just replace the current one
+    return 0;
+  }
+
+  uint8_t checkBucketOffset(uint64_t bid, uint64_t key) const {
+    auto mid = mutexId(bid);
+
+    for (auto i = 1; i < 4; i++) {
+      auto curBid = bid + i;
+      if (mutexId(curBid) != mid) {
+        // Let's not come across the mutex boundary
+        break;
+      }
+      if (ht_[curBid].isValid() &&
+          bucketDistInfo_.getBucketFillOffset(curBid) == i &&
+          partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
+        return i;
+      }
+    }
+    return 0;
+  }
 
   // Updates hits information of a key.
   void setHitsTestOnly(uint64_t key,
@@ -231,6 +354,13 @@ class FixedSizeIndex : public Index {
     return bucketId / numBucketsPerMutex_;
   }
 
+  // Return the partial key bits to be used for hash collision open addressing
+  uint8_t partialKeyBits(uint64_t key) const {
+    // TODO: this is temporary and hard coded one... Need to think about more
+    // where to choose
+    return ((key >> 40) & 0xff);
+  }
+
   // Configuration related variables
   const uint32_t numChunks_{0};
   const uint8_t numBucketsPerChunkPower_{0};
@@ -245,6 +375,8 @@ class FixedSizeIndex : public Index {
   // The size for ht (stored bucket count) will be managed per Mutex basis
   std::unique_ptr<size_t[]> sizeForMutex_;
 
+  BucketDistInfo bucketDistInfo_;
+
   // A helper class for exclusive locked access to a bucket.
   // It will lock the proper mutex with the given key when it's created.
   // recordRef() and sizeRef() will return the record and size with exclusively
@@ -256,18 +388,30 @@ class FixedSizeIndex : public Index {
         : bid_(index.bucketId(key)),
           mid_{index.mutexId(bid_)},
           lg_{index.mutex_[mid_]},
-          record_{index.ht_[bid_]},
-          size_{index.sizeForMutex_[mid_]} {}
+          record_{&index.ht_[bid_]},
+          size_{index.sizeForMutex_[mid_]} {
+      auto offset = index.decideBucketOffset(bid_, key);
+      if (offset != 0) {
+        bid_ += offset;
+        record_ = &index.ht_[bid_];
+        bucketOffset_ = offset;
+      }
+    }
 
-    PackedItemRecord& recordRef() { return record_; }
+    PackedItemRecord& recordRef() { return *record_; }
     size_t& sizeRef() { return size_; }
+    void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
+      index.bucketDistInfo_.updateBucketFillInfo(
+          bid_, bucketOffset_, index.partialKeyBits(key));
+    }
 
    private:
     uint64_t bid_;
     uint64_t mid_;
     std::lock_guard<SharedMutex> lg_;
-    PackedItemRecord& record_;
+    PackedItemRecord* record_;
     size_t& size_;
+    uint8_t bucketOffset_{0};
   };
 
   // A helper class for shared locked access to a bucket.
@@ -280,15 +424,22 @@ class FixedSizeIndex : public Index {
         : bid_(index.bucketId(key)),
           mid_{index.mutexId(bid_)},
           lg_{index.mutex_[mid_]},
-          record_{index.ht_[bid_]} {}
+          record_{&index.ht_[bid_]} {
+      // check next bucket if it should be used
+      auto offset = (index.checkBucketOffset(bid_, key));
+      if (offset != 0) {
+        bid_ += offset;
+        record_ = &index.ht_[bid_];
+      }
+    }
 
-    const PackedItemRecord& recordRef() const { return record_; }
+    const PackedItemRecord& recordRef() const { return *record_; }
 
    private:
     uint64_t bid_;
     uint64_t mid_;
     std::shared_lock<SharedMutex> lg_;
-    const PackedItemRecord& record_;
+    const PackedItemRecord* record_;
   };
 
 // For unit tests private member access
