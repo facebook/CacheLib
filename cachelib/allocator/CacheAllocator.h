@@ -5580,14 +5580,11 @@ serialization::CacheAllocatorMetadata
 CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
     Deserializer& deserializer) {
   auto meta = deserializer.deserialize<serialization::CacheAllocatorMetadata>();
-  // TODO:
-  // Once everyone is on v8 or later, remove the outter if.
-  if (kCachelibVersion > 8) {
-    if (*meta.ramFormatVersion() != kCacheRamFormatVersion) {
-      throw std::runtime_error(
-          folly::sformat("Expected cache ram format version {}. But found {}.",
-                         kCacheRamFormatVersion, *meta.ramFormatVersion()));
-    }
+
+  if (*meta.ramFormatVersion() != kCacheRamFormatVersion) {
+    throw std::runtime_error(
+        folly::sformat("Expected cache ram format version {}. But found {}.",
+                       kCacheRamFormatVersion, *meta.ramFormatVersion()));
   }
 
   if (*meta.accessType() != AccessType::kId) {
