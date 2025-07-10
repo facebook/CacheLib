@@ -659,15 +659,15 @@ jobs:
        path: ${{ steps.paths.outputs.fbthrift_INSTALL }}
        key: ${{ steps.paths.outputs.fbthrift_CACHE_KEY }}-install
     - name: Build cachelib
-      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages build --src-dir=. cachelib  --project-install-prefix cachelib:/usr/local
+      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages build --src-dir=. cachelib --project-install-prefix cachelib:/usr/local
     - name: Copy artifacts
-      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages fixup-dyn-deps --strip --src-dir=. cachelib _artifacts/linux  --project-install-prefix cachelib:/usr/local --final-install-prefix /usr/local
+      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages fixup-dyn-deps --strip --src-dir=. cachelib _artifacts/linux --project-install-prefix cachelib:/usr/local --final-install-prefix /usr/local
     - uses: actions/upload-artifact@v4
       with:
         name: cachelib
         path: _artifacts
     - name: Test cachelib
-      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages test --src-dir=. cachelib  --project-install-prefix cachelib:/usr/local
+      run: python3 build/fbcode_builder/getdeps.py --allow-system-packages test --src-dir=. cachelib --project-install-prefix cachelib:/usr/local
     - name: Show disk space at end
       if: always()
       run: df -h
