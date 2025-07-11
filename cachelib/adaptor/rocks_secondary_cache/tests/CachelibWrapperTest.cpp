@@ -143,8 +143,8 @@ class CachelibWrapperTest : public ::testing::Test,
 
   std::unique_ptr<SecondaryCacheResultHandle> CacheLookup(
       const Slice& key, bool wait, bool advise_erase, bool& is_in_sec_cache) {
-    return cache()->Lookup(key, &CachelibWrapperTest::helper_, /*context=*/this,
-                           wait, advise_erase,
+    return cache()->Lookup(key, &CachelibWrapperTest::helper_,
+                           /*create_context=*/this, wait, advise_erase,
 #if ROCKSDB_MAJOR > 8 || (ROCKSDB_MAJOR == 8 && ROCKSDB_MINOR > 9)
                            /*stats=*/nullptr,
 #endif
