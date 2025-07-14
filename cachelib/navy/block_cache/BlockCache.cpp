@@ -21,7 +21,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <numeric>
 #include <utility>
 
 #include "cachelib/common/inject_pause.h"
