@@ -158,7 +158,7 @@ struct AccessConfig {
 #[allow(dead_code)]
 pub enum NvmDevice {
     SimpleFile {
-        file_name: String,
+        file_name: PathBuf,
         file_size: u64,
         truncate: bool,
     },
@@ -389,7 +389,7 @@ impl LruCache {
                 truncate,
             } = nvm_config.device
             {
-                let_cxx_string!(name = file_name);
+                let_cxx_string!(name = file_name.as_os_str().as_bytes());
                 ffi::set_simple_file(nvm_cache_config.pin_mut(), &name, file_size, truncate)?;
             }
             ffi::set_region_size(nvm_cache_config.pin_mut(), nvm_config.region_size)?;
@@ -1282,12 +1282,11 @@ mod test {
         TempDir::with_prefix(dir_prefix).expect("failed to create temp dir")
     }
 
-    fn create_temp_file() -> String {
+    fn create_temp_file() -> PathBuf {
         NamedTempFile::new()
             .expect("Failed to create temporary file in test")
             .path()
-            .to_string_lossy()
-            .to_string()
+            .to_path_buf()
     }
 
     fn create_shared_cache(fb: FacebookInit, cache_directory: PathBuf) {
