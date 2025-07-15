@@ -19,7 +19,6 @@
 namespace facebook {
 namespace cachelib {
 namespace detail {
-constexpr uint32_t Buffer::kInvalidOffset;
 
 bool Buffer::canAllocate(uint32_t size) const {
   return Slot::getAllocSize(size) <= (remainingBytes() + wastedBytes());
@@ -132,10 +131,6 @@ uint32_t Buffer::getDataOffset(const Slot& slot) const {
       reinterpret_cast<const uint8_t*>(data_));
 }
 
-constexpr uint32_t BufferAddr::kInvalidOffset;
-constexpr uint32_t BufferAddr::kByteOffsetBits;
-constexpr uint32_t BufferAddr::kByteOffsetMask;
-constexpr uint32_t BufferAddr::kMaxNumChainedItems;
 } // namespace detail
 } // namespace cachelib
 } // namespace facebook

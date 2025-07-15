@@ -31,12 +31,6 @@
 
 namespace facebook::cachelib::navy {
 
-constexpr uint32_t BlockCache::kMinAllocAlignSize;
-constexpr uint32_t BlockCache::kMaxItemSize;
-constexpr uint32_t BlockCache::kFormatVersion;
-constexpr uint32_t BlockCache::kDefReadBufferSize;
-constexpr uint16_t BlockCache::kDefaultItemPriority;
-
 BlockCache::Config& BlockCache::Config::validate() {
   XDCHECK_NE(scheduler, nullptr);
   if (!device || !evictionPolicy) {
