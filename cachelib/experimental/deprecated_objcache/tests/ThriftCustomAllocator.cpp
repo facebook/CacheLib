@@ -169,11 +169,11 @@ TEST(ThriftCustomAllocator, Deserialization) {
 TEST(ThriftCustomAllocator, UnionSimple) {
   {
     UnionWithCustomAllocator someUnion;
-    someUnion.m1_ref() = {{1, "value-1"}, {2, "value-2"}};
+    someUnion.m1() = {{1, "value-1"}, {2, "value-2"}};
     EXPECT_EQ("value-1", someUnion.get_m1().find(1)->second);
-    someUnion.m2_ref() = "some string";
+    someUnion.m2() = "some string";
     EXPECT_EQ("some string", someUnion.get_m2());
-    someUnion.m3_ref() = 123;
+    someUnion.m3() = 123;
     EXPECT_EQ(123, someUnion.get_m3());
   }
 
@@ -187,7 +187,7 @@ TEST(ThriftCustomAllocator, UnionSimple) {
     // 2 allocators for the two values
     EXPECT_EQ(4, alloc.getNumAllocs());
     // Copied over. So 4 more allocations were made
-    someUnion.m1_ref() = myMap;
+    someUnion.m1() = myMap;
     EXPECT_EQ(myMap.get_allocator(), someUnion.get_m1().get_allocator());
     EXPECT_EQ(8, alloc.getNumAllocs());
   }
@@ -202,7 +202,7 @@ TEST(ThriftCustomAllocator, UnionSimple) {
     // 2 allocators for the two values
     EXPECT_EQ(4, alloc.getNumAllocs());
     // Moved over. So no extra allocations were made
-    someUnion.m1_ref() = std::move(myMap);
+    someUnion.m1() = std::move(myMap);
     EXPECT_EQ(myMap.get_allocator(), someUnion.get_m1().get_allocator());
     EXPECT_EQ(4, alloc.getNumAllocs());
   }
@@ -217,7 +217,7 @@ TEST(ThriftCustomAllocator, UnionSimple) {
     // 2 allocators for the two values
     EXPECT_EQ(4, alloc.getNumAllocs());
     // Moved over. So no extra allocations were made
-    someUnion.m1_ref() = std::move(myMap);
+    someUnion.m1() = std::move(myMap);
     EXPECT_EQ(myMap.get_allocator(), someUnion.get_m1().get_allocator());
     EXPECT_EQ(4, alloc.getNumAllocs());
 
