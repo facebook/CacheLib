@@ -41,9 +41,10 @@ class CACHELIB_PACKED_ATTR KAllocation {
   using KeyLenT = uint8_t;
   // Maximum size of the key.
   static constexpr KeyLenT kKeyMaxLen = std::numeric_limits<KeyLenT>::max();
+  static constexpr uint32_t kMaxKeySizeBits = NumBits<KeyLenT>::value;
   // Maximum number of bits of the value (payload minus the key)
   static constexpr uint32_t kMaxValSizeBits =
-      NumBits<uint32_t>::value - NumBits<KeyLenT>::value;
+      NumBits<uint32_t>::value - kMaxKeySizeBits;
   // Maximum size of the value (payload minus the key)
   static constexpr uint32_t kMaxValSize =
       (static_cast<uint32_t>(1) << kMaxValSizeBits) - 1;
@@ -76,8 +77,8 @@ class CACHELIB_PACKED_ATTR KAllocation {
   //
   // @throw std::invalid_argument if the key/size is invalid.
   KAllocation(const Key key, uint32_t valSize)
-      : size_((static_cast<uint32_t>(key.size()) << kMaxValSizeBits) |
-              valSize) {
+      : size_(PackedSize{.valSize_ = valSize,
+                         .keySize_ = static_cast<uint32_t>(key.size())}) {
     if (valSize > kMaxValSize) {
       throw std::invalid_argument(folly::sformat(
           "value size exceeded maximum allowed. total size: {}", valSize));
@@ -111,7 +112,7 @@ class CACHELIB_PACKED_ATTR KAllocation {
   void* getMemory() const noexcept { return &data_[getKeySize()]; }
 
   // get the size of the value.
-  uint32_t getSize() const noexcept { return size_ & kMaxValSize; }
+  uint32_t getSize() const noexcept { return size_.valSize_; }
 
   // Check if the key is valid.  The length of the key needs to be in (0,
   // kKeyMaxLen) to be valid
@@ -142,15 +143,18 @@ class CACHELIB_PACKED_ATTR KAllocation {
  private:
   // Top 8 bits are for key size (up to 255 bytes)
   // Bottom 24 bits are for value size (up to 16777215 bytes)
-  const uint32_t size_;
+  struct PackedSize {
+    uint32_t valSize_ : kMaxValSizeBits;
+    uint32_t keySize_ : kMaxKeySizeBits;
+  };
+  static_assert(sizeof(PackedSize) == sizeof(uint32_t));
+  const PackedSize size_;
 
   // beginning of the byte array. First keylen bytes correspond to the key and
   // the next size - keylen_ bytes are usable.
   mutable unsigned char data_[0];
 
-  uint32_t getKeySize() const noexcept {
-    return static_cast<uint32_t>(size_ >> kMaxValSizeBits);
-  }
+  uint32_t getKeySize() const noexcept { return size_.keySize_; }
 };
 } // namespace cachelib
 } // namespace facebook
