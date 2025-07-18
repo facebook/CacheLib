@@ -29,7 +29,6 @@
 #include "cachelib/navy/block_cache/LruPolicy.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/driver/Driver.h"
-#include "cachelib/navy/serialization/RecordIO.h"
 
 /* O_DIRECT not available on Mac OS */
 #ifndef O_DIRECT
