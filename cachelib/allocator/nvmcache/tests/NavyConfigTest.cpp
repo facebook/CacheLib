@@ -399,13 +399,33 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
             32 * 1024);
   EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            false);
+  // Enable SparseMap with the alternative parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128, false);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            false);
+  // Enable SparseMap with the alternative parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128, true);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            true);
+
   // Try with invalid arguments
   EXPECT_THROW(config.blockCache().enableSparseMapIndex(0, 128),
                std::invalid_argument);
-  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 100),
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 100, false),
                std::invalid_argument);
-  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 64 * 1024),
-               std::invalid_argument);
+  EXPECT_THROW(
+      config.blockCache().enableSparseMapIndex(32 * 1024, 64 * 1024, true),
+      std::invalid_argument);
 }
 
 TEST(NavyConfigTest, BigHash) {

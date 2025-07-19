@@ -196,6 +196,11 @@ class BlockCacheIndexConfig {
     return *this;
   }
 
+  BlockCacheIndexConfig& enableTrackItemHistory() {
+    trackItemHistory_ = true;
+    return *this;
+  }
+
   BlockCacheIndexConfig& validate() {
     // with SparseMapIndex
     if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
@@ -219,6 +224,7 @@ class BlockCacheIndexConfig {
 
   uint64_t getNumBucketsPerMutex() const { return numBucketsPerMutex_; }
   uint32_t getNumSparseMapBuckets() const { return numSparseMapBuckets_; }
+  bool isTrackItemHistoryEnabled() const { return trackItemHistory_; }
 
  private:
   // Whether to enable fixed size index, true for enabling it.
@@ -234,6 +240,11 @@ class BlockCacheIndexConfig {
   // expanded to a hashtable with mem alloc and rehashing while more items
   // are populated
   uint32_t numSparseMapBuckets_{kDefaultNumSparseMapBuckets};
+
+  // Whether to track item's hits history instead of total hits. Only applies to
+  // SparseMapIndex. This is a compromise to keep index size low, enabling this
+  // will make totalHits return undefined value.
+  bool trackItemHistory_{false};
 };
 
 /**
@@ -450,6 +461,9 @@ class BlockCacheConfig {
   // instances covered by each mutex.
   BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
                                          uint32_t numBucketsPerMutex);
+  BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
+                                         uint32_t numBucketsPerMutex,
+                                         bool trackItemHistory);
 
   bool isLruEnabled() const { return lru_; }
 

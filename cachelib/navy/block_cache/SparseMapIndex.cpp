@@ -58,7 +58,7 @@ void SparseMapIndex::setHitsTestOnly(uint64_t key,
   auto it = map.find(subkey(key));
   if (it != map.end()) {
     it.value().currentHits = currentHits;
-    it.value().totalHits = totalHits;
+    it.value().extra.totalHits = totalHits;
   }
 }
 
@@ -70,7 +70,9 @@ Index::LookupResult SparseMapIndex::lookup(uint64_t key) {
   if (it != map.end()) {
     LookupResult lr{true, it->second};
 
-    it.value().totalHits = safeInc(it.value().totalHits);
+    if (extraField_ == ExtraField::kTotalHits) {
+      it.value().extra.totalHits = safeInc(it.value().extra.totalHits);
+    }
     it.value().currentHits = safeInc(it.value().currentHits);
     return lr;
   }
@@ -97,11 +99,11 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
   if (it != map.end()) {
     LookupResult lr{true, it->second};
 
-    trackRemove(it->second.totalHits);
+    trackRemove(it->second);
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = address;
     it.value().currentHits = 0;
-    it.value().totalHits = 0;
+    it.value().extra = {0};
     it.value().sizeHint = sizeHint;
     return lr;
   }
@@ -120,13 +122,34 @@ bool SparseMapIndex::replaceIfMatch(uint64_t key,
   if (it != map.end() && it->second.address == oldAddress) {
     // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
     it.value().address = newAddress;
+    if (extraField_ == ExtraField::kItemHitHistory) {
+      it.value().extra.itemHistory >>= 1;
+      if (it.value().currentHits > 0) {
+        it.value().extra.itemHistory |= 0x80;
+      }
+    }
     it.value().currentHits = 0;
     return true;
   }
   return false;
 }
 
-void SparseMapIndex::trackRemove(uint8_t totalHits) {
+void SparseMapIndex::trackRemove(const ItemRecord& record) {
+  int totalHits;
+
+  switch (extraField_) {
+  case ExtraField::kTotalHits:
+    totalHits = record.extra.totalHits;
+    break;
+  case ExtraField::kItemHitHistory:
+    // inaccurate, but unaccessed items will have 0 value and accessed won't
+    auto estimatedTotalHits =
+        std::max(__builtin_popcount(record.extra.itemHistory),
+                 static_cast<int>(record.currentHits));
+    totalHits = estimatedTotalHits;
+    break;
+  }
+
   hitsEstimator_.trackValue(totalHits);
   if (totalHits == 0) {
     unAccessedItems_.inc();
@@ -141,7 +164,7 @@ Index::LookupResult SparseMapIndex::remove(uint64_t key) {
   if (it != map.end()) {
     LookupResult lr{true, it->second};
 
-    trackRemove(it->second.totalHits);
+    trackRemove(it->second);
     map.erase(it);
     return lr;
   }
@@ -154,7 +177,7 @@ bool SparseMapIndex::removeIfMatch(uint64_t key, uint32_t address) {
 
   auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == address) {
-    trackRemove(it->second.totalHits);
+    trackRemove(it->second);
     map.erase(it);
     return true;
   }
@@ -258,7 +281,7 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
       entry.key() = key;
       entry.address() = record.address;
       entry.sizeHint() = record.sizeHint;
-      entry.totalHits() = record.totalHits;
+      entry.totalHits() = record.extra.totalHits;
       entry.currentHits() = record.currentHits;
       bucketMap.entries()->push_back(entry);
     }

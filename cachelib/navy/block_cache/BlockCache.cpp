@@ -113,8 +113,12 @@ uint32_t BlockCache::calcAllocAlignSize() const {
 std::unique_ptr<Index> BlockCache::createIndex(
     const BlockCacheIndexConfig& indexConfig) {
   // always SparseMapIndex for now
-  return std::make_unique<SparseMapIndex>(indexConfig.getNumSparseMapBuckets(),
-                                          indexConfig.getNumBucketsPerMutex());
+  return std::make_unique<SparseMapIndex>(
+      indexConfig.getNumSparseMapBuckets(),
+      indexConfig.getNumBucketsPerMutex(),
+      indexConfig.isTrackItemHistoryEnabled()
+          ? SparseMapIndex::ExtraField::kItemHitHistory
+          : SparseMapIndex::ExtraField::kTotalHits);
 }
 
 BlockCache::BlockCache(Config&& config)

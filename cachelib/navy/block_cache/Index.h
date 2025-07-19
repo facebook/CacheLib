@@ -49,18 +49,24 @@ class Index {
     // a hint for the item size. It is the responsibility of the caller
     // to translate this hint back into a usable size.
     uint16_t sizeHint{0};
-    // total hits during this item's entire lifetime in cache
-    uint8_t totalHits{0};
+    // either total hits during this item's entire lifetime in cache or
+    // binary representation of item hits history (MSB is 1 if item had hits in
+    // the last write cycle, LSB represents 8 cycles ago), depending on the
+    // BlockCacheIndexConfig
+    union {
+      uint8_t totalHits;
+      uint8_t itemHistory;
+    } extra{0};
+
     // hits during the current window for this item (e.g. before re-admission)
     uint8_t currentHits{0};
-
     ItemRecord(uint32_t _address = 0,
                uint16_t _sizeHint = 0,
-               uint8_t _totalHits = 0,
+               uint8_t _extra = 0,
                uint8_t _currentHits = 0)
         : address(_address),
           sizeHint(_sizeHint),
-          totalHits(_totalHits),
+          extra(_extra),
           currentHits(_currentHits) {}
   };
   static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
@@ -96,7 +102,12 @@ class Index {
 
     uint8_t totalHits() const {
       XDCHECK(found_);
-      return record_.totalHits;
+      return record_.extra.totalHits;
+    }
+
+    uint8_t itemHistory() const {
+      XDCHECK(found_);
+      return record_.extra.itemHistory;
     }
 
    private:
