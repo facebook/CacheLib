@@ -66,8 +66,9 @@ class Index {
                uint8_t _currentHits = 0)
         : address(_address),
           sizeHint(_sizeHint),
-          extra(_extra),
-          currentHits(_currentHits) {}
+          currentHits(_currentHits) {
+        extra.totalHits = _extra;  // Initialize union in constructor body
+    }
   };
   static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
 
