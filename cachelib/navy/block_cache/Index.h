@@ -53,15 +53,15 @@ class Index {
     uint8_t totalHits{0};
     // hits during the current window for this item (e.g. before re-admission)
     uint8_t currentHits{0};
-
     ItemRecord(uint32_t _address = 0,
                uint16_t _sizeHint = 0,
-               uint8_t _totalHits = 0,
+               uint8_t _extra = 0,
                uint8_t _currentHits = 0)
         : address(_address),
           sizeHint(_sizeHint),
-          totalHits(_totalHits),
-          currentHits(_currentHits) {}
+          currentHits(_currentHits) {
+        extra.totalHits = _extra;  // Initialize union in constructor body
+    }
   };
   static_assert(8 == sizeof(ItemRecord), "ItemRecord size is 8 bytes");
 
