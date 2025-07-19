@@ -173,6 +173,58 @@ TEST(SparseMapIndex, HitsAfterUpdate) {
   EXPECT_EQ(0, index.peek(key).currentHits());
 }
 
+TEST(SparseMapIndex, ItemHistory) {
+  SparseMapIndex index{SparseMapIndex::kDefaultNumBucketMaps,
+                       SparseMapIndex::kDefaultBucketMapsPerMutex,
+                       SparseMapIndex::ExtraField::kItemHitHistory};
+  const uint64_t key = 9527;
+
+  // Hits after inserting should be 0
+  index.insert(key, 0, 0);
+  EXPECT_EQ(0, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  // Hits after lookup should increase, history doesn't change
+  index.lookup(key);
+  EXPECT_EQ(0, index.peek(key).itemHistory());
+  EXPECT_EQ(1, index.peek(key).currentHits());
+
+  // replace should update history
+  EXPECT_TRUE(index.replaceIfMatch(key, 100, 0));
+  EXPECT_EQ(0b10000000, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  // re-insert
+  index.insert(key, 100, 0);
+  // all should be cleared after insert
+  EXPECT_EQ(0, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  index.lookup(key);
+  EXPECT_EQ(0, index.peek(key).itemHistory());
+  EXPECT_EQ(1, index.peek(key).currentHits());
+
+  EXPECT_TRUE(index.replaceIfMatch(key, 200, 100));
+  EXPECT_EQ(0b10000000, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  index.lookup(key);
+  EXPECT_EQ(0b10000000, index.peek(key).itemHistory());
+  EXPECT_EQ(1, index.peek(key).currentHits());
+
+  EXPECT_TRUE(index.replaceIfMatch(key, 300, 200));
+  EXPECT_EQ(0b11000000, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  EXPECT_TRUE(index.replaceIfMatch(key, 400, 300));
+  EXPECT_EQ(0b01100000, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+
+  EXPECT_FALSE(index.replaceIfMatch(key, 402, 401));
+  EXPECT_EQ(0b01100000, index.peek(key).itemHistory());
+  EXPECT_EQ(0, index.peek(key).currentHits());
+}
+
 TEST(SparseMapIndex, HitsUpperBound) {
   SparseMapIndex index;
   const uint64_t key = 8341;

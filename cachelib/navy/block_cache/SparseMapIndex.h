@@ -49,6 +49,13 @@ using SharedMutex =
 // but we do not want people to rely on that).
 class SparseMapIndex : public Index {
  public:
+  // ExtraField can be used to add extra information for the index record.
+  // -kTotalHits: Keeps track of the total hits for a given key since the
+  //   insertion in the index.
+  // -kItemHitHistory: Keeps track of item's hits history for the last 8
+  // reinserts.
+  enum class ExtraField { kTotalHits = 0, kItemHitHistory };
+
   static constexpr uint32_t kDefaultNumBucketMaps{64 * 1024};
   static constexpr uint32_t kDefaultBucketMapsPerMutex{64};
 
@@ -56,6 +63,14 @@ class SparseMapIndex : public Index {
                           uint32_t numBucketMapsPerMutex)
       : numBucketMaps_(numBucketMaps),
         numBucketMapsPerMutex_(numBucketMapsPerMutex) {
+    initialize();
+  }
+  explicit SparseMapIndex(uint32_t numBucketMaps,
+                          uint32_t numBucketMapsPerMutex,
+                          ExtraField extraField)
+      : numBucketMaps_(numBucketMaps),
+        numBucketMapsPerMutex_(numBucketMapsPerMutex),
+        extraField_(extraField) {
     initialize();
   }
   SparseMapIndex()
@@ -128,6 +143,7 @@ class SparseMapIndex : public Index {
   // Configuration related variables
   const uint32_t numBucketMaps_{64 * 1024};
   const uint32_t numBucketMapsPerMutex_{64};
+  const ExtraField extraField_{ExtraField::kTotalHits};
 
   uint32_t totalMutexes_{1024};
 
@@ -161,7 +177,7 @@ class SparseMapIndex : public Index {
     return bucketMaps_[b];
   }
 
-  void trackRemove(uint8_t totalHits);
+  void trackRemove(const ItemRecord&);
 
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
