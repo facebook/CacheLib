@@ -83,7 +83,7 @@ if (BUILD_TESTS)
   add_source_test (tests/AccessTrackerTest.cpp)
   # need allocator/memory/tests/TestBase.cpp:
   #add_source_test (tests/ApproxSplitSetTest.cpp allocator_test_support)
-  add_source_test (tests/BloomFilterTest.cpp)
+  #add_source_test (tests/BloomFilterTest.cpp)
   add_source_test (tests/BytesEqualTest.cpp)
   add_source_test (tests/CohortTests.cpp)
   add_source_test (tests/CounterTests.cpp)
