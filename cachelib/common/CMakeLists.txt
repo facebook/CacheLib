@@ -50,6 +50,7 @@ install(TARGETS cachelib_common
 if (BUILD_TESTS)
   add_library (common_test_utils STATIC
     TestUtils.cpp
+    ${BLOOM_THRIFT_FILES}
   )
   target_link_libraries (common_test_utils PUBLIC
     cachelib_common
@@ -70,7 +71,6 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gtest_main
-    ${BLOOM_THRIFT_FILES}
   )
 
   function (add_source_test SOURCE_FILE)
