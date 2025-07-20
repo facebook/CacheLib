@@ -70,6 +70,7 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gtest_main
+    ${BLOOM_THRIFT_FILES}
   )
 
   function (add_source_test SOURCE_FILE)
