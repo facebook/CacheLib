@@ -25,6 +25,8 @@ add_dependencies(cachelib_shm thrift_generated_files)
 target_link_libraries(cachelib_shm PUBLIC
   cachelib_common
   NUMA::NUMA
+  FBThrift::thriftcpp2
+  FBThrift::thriftprotocol
 )
 
 install(TARGETS cachelib_shm
