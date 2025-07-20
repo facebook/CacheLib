@@ -56,6 +56,8 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gtest_main
+    FBThrift::thriftcpp2          # Add this
+    FBThrift::thriftprotocol      # Add this
   )
   add_library (common_test_support OBJECT
     hothash/HotHashDetectorTest.cpp
