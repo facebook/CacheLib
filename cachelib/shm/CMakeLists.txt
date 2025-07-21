@@ -43,6 +43,8 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    FBThrift::thriftcpp2          # Add this
+    FBThrift::thriftprotocol      # Add this
   )
 
   function (add_source_test SOURCE_FILE)
