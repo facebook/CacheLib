@@ -13,6 +13,8 @@
 # limitations under the License.
 
 add_thrift_file(BLOOM BloomFilter.thrift frozen2)
+add_thrift_file(MEMORY_SERIALIZE
+                memory/serialize/objects.thrift frozen2)
 
 add_library (cachelib_common
   BloomFilter.cpp
@@ -51,6 +53,7 @@ if (BUILD_TESTS)
   add_library (common_test_utils STATIC
     TestUtils.cpp
     ${BLOOM_THRIFT_FILES}
+    ${MEMORY_SERIALIZE_THRIFT_FILES}
   )
   target_link_libraries (common_test_utils PUBLIC
     cachelib_common
