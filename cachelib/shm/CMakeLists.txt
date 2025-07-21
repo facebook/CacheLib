@@ -34,7 +34,7 @@ install(TARGETS cachelib_shm
         DESTINATION ${LIB_INSTALL_DIR} )
 
 if (BUILD_TESTS)
-  add_library (shm_test_support
+  add_library (shm_test_support STATIC
     tests/common.cpp
     ${SHM_THRIFT_FILES})
   target_link_libraries (shm_test_support PUBLIC
