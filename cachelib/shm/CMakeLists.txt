@@ -35,7 +35,8 @@ install(TARGETS cachelib_shm
 
 if (BUILD_TESTS)
   add_library (shm_test_support
-    tests/common.cpp)
+    tests/common.cpp
+    ${SHM_THRIFT_FILES})
   target_link_libraries (shm_test_support PUBLIC
     cachelib_shm
     glog::glog
