@@ -13,8 +13,7 @@
 # limitations under the License.
 
 add_thrift_file(BLOOM BloomFilter.thrift frozen2)
-add_thrift_file(MEMORY_SERIALIZE
-                memory/serialize/objects.thrift frozen2)
+add_thrift_file(MEMORY_SERIALIZE memory/serialize/objects.thrift frozen2)
 
 add_library (cachelib_common
   BloomFilter.cpp
