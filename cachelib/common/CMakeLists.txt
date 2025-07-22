@@ -28,6 +28,8 @@ add_library (cachelib_common
   piecewise/RequestRange.cpp
   Serialization.cpp
   Utils.cpp
+  ${MEMORY_SERIALIZE_THRIFT_FILES}
+  ${SERIALIZE_THRIFT_FILES}
 )
 add_dependencies(cachelib_common thrift_generated_files)
 
@@ -50,17 +52,12 @@ install(TARGETS cachelib_common
 if (BUILD_TESTS)
   add_library (common_test_utils STATIC
     TestUtils.cpp
-    ${BLOOM_THRIFT_FILES}
-    ${MEMORY_SERIALIZE_THRIFT_FILES}
-    ${MEMORY_SERIALIZE}
   )
   target_link_libraries (common_test_utils PUBLIC
     cachelib_common
     gflags
     GTest::gtest
     GTest::gtest_main
-    FBThrift::thriftcpp2          # Add this
-    FBThrift::thriftprotocol      # Add this
   )
   add_library (common_test_support OBJECT
     hothash/HotHashDetectorTest.cpp
