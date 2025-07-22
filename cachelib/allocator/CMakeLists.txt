@@ -87,10 +87,6 @@ install(TARGETS cachelib_allocator
 
 if (BUILD_TESTS)
   add_library (allocator_test_support OBJECT
-    ${SERIALIZE_THRIFT_FILES}
-    ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
-    ${MEMORY_SERIALIZE_THRIFT_FILES}
-    ${DATASTRUCT_TESTS_THRIFT_FILES}
     ./nvmcache/tests/NvmTestBase.cpp
     ./memory/tests/TestBase.cpp
     )
