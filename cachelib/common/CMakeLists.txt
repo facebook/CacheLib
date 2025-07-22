@@ -30,6 +30,7 @@ add_library (cachelib_common
   Utils.cpp
   ${MEMORY_SERIALIZE_THRIFT_FILES}
   ${SERIALIZE_THRIFT_FILES}
+  ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
 )
 add_dependencies(cachelib_common thrift_generated_files)
 
