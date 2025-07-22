@@ -68,6 +68,7 @@ if (BUILD_TESTS)
     gflags
     GTest::gtest
     GTest::gtest_main
+    GTest::gmock
   )
 
   function (add_source_test SOURCE_FILE)
