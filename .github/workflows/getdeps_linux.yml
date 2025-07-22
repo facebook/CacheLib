@@ -26,6 +26,8 @@ jobs:
       run: df -h
     - name: Update system package info
       run: sudo --preserve-env=http_proxy apt-get update
+    - name: Install liburing
+      run: sudo --preserve-env=http_proxy apt-get install -y liburing-dev
     - name: Install system deps
       run: sudo --preserve-env=http_proxy python3 build/fbcode_builder/getdeps.py --allow-system-packages install-system-deps --recursive cachelib && sudo --preserve-env=http_proxy python3 build/fbcode_builder/getdeps.py --allow-system-packages install-system-deps --recursive patchelf
     - id: paths
