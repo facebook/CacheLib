@@ -90,6 +90,7 @@ if (BUILD_TESTS)
     ${SERIALIZE_THRIFT_FILES}
     ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
     ${MEMORY_SERIALIZE_THRIFT_FILES}
+    ${DATASTRUCT_TESTS_THRIFT_FILES}
     ./nvmcache/tests/NvmTestBase.cpp
     ./memory/tests/TestBase.cpp
     )
