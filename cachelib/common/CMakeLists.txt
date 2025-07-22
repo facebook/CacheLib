@@ -52,6 +52,7 @@ if (BUILD_TESTS)
     TestUtils.cpp
     ${BLOOM_THRIFT_FILES}
     ${MEMORY_SERIALIZE_THRIFT_FILES}
+    ${MEMORY_SERIALIZE}
   )
   target_link_libraries (common_test_utils PUBLIC
     cachelib_common
