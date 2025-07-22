@@ -198,6 +198,17 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   template <typename T>
   std::shared_ptr<T> findToWrite(folly::StringPiece key);
 
+  // Quickly peek an object in mutable access
+  // Unlike findToWrite, this API doesn't update access frequency or stat. It
+  // also ignores the nvm cache and only does RAM lookup.
+  // It can be used when caller wants to quickly check item's existence to
+  // mutate the object without changing the item's ranking or stats
+  // @param key   the key to the object
+  //
+  // @return shared pointer to a mutable version of the object
+  template <typename T>
+  std::shared_ptr<T> peekToWrite(folly::StringPiece key);
+
   // Insert the object into the cache with given key. If the key exists in the
   // cache, it will be replaced with new obejct.
   //
@@ -759,6 +770,21 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
     return nullptr;
   }
   succL1Lookups_.inc();
+
+  auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
+  // Use custom deleter
+  auto deleter = Deleter<T>(std::move(found));
+  return std::shared_ptr<T>(reinterpret_cast<T*>(ptr), std::move(deleter));
+}
+
+template <typename AllocatorT>
+template <typename T>
+std::shared_ptr<T> ObjectCache<AllocatorT>::peekToWrite(
+    folly::StringPiece key) {
+  auto found = this->l1Cache_->peek(key);
+  if (!found) {
+    return nullptr;
+  }
 
   auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
   // Use custom deleter

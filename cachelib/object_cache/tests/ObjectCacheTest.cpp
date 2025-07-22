@@ -2222,4 +2222,57 @@ TEST(ObjectCacheTest, RSSSizeControlTest) {
   EXPECT_LT(numEntriesA, numEntriesB);
   EXPECT_LT(totalSizeA, totalSizeB);
 }
+
+TEST(ObjectCacheTest, PeekToFindTest) {
+  ObjectCache::Config config;
+  config.setCacheName("test").setCacheCapacity(128);
+  config.setItemDestructor(
+      [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+  config.evictionPolicyConfig.updateOnWrite = true;
+  auto objcache = ObjectCache::create(config);
+
+  int seq = 0;
+  // Fill the cache
+  for (; seq < 128; seq++) {
+    auto foo = std::make_unique<Foo>();
+    foo->a = seq;
+    auto key = folly::sformat("key_{}", seq);
+    objcache->insertOrReplace(key, std::move(foo));
+  }
+
+  // FindToWrite will promote it in the LRU list
+  auto found = objcache->findToWrite<Foo>("key_0");
+  ASSERT_NE(nullptr, found);
+  EXPECT_EQ(0, found->a);
+  found.reset();
+
+  // Add one entry and key_0 should be still there
+  auto foo = std::make_unique<Foo>();
+  foo->a = seq;
+  auto key = folly::sformat("key_{}", seq++);
+  objcache->insertOrReplace(key, std::move(foo));
+
+  auto checkExist = objcache->find<Foo>("key_0");
+  ASSERT_NE(nullptr, checkExist);
+  EXPECT_EQ(0, checkExist->a);
+  checkExist.reset();
+  // key_1 was evicted instead
+  checkExist = objcache->find<Foo>("key_1");
+  ASSERT_EQ(nullptr, checkExist);
+
+  // PeekToWrite will not move it in the LRU list
+  found = objcache->peekToWrite<Foo>("key_2");
+  ASSERT_NE(nullptr, found);
+  EXPECT_EQ(2, found->a);
+  found.reset();
+
+  // Add one entry and key_2 should be evicted
+  foo = std::make_unique<Foo>();
+  foo->a = seq;
+  key = folly::sformat("key_{}", seq++);
+  objcache->insertOrReplace(key, std::move(foo));
+
+  checkExist = objcache->find<Foo>("key_2");
+  ASSERT_EQ(nullptr, checkExist);
+}
 } // namespace facebook::cachelib::objcache2::test
