@@ -28,9 +28,6 @@ add_library (cachelib_common
   piecewise/RequestRange.cpp
   Serialization.cpp
   Utils.cpp
-  ${MEMORY_SERIALIZE_THRIFT_FILES}
-  ${SERIALIZE_THRIFT_FILES}
-  ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
 )
 add_dependencies(cachelib_common thrift_generated_files)
 
@@ -94,7 +91,7 @@ if (BUILD_TESTS)
   add_source_test (tests/IteratorsTests.cpp)
   add_source_test (tests/MutexTests.cpp)
   add_source_test (tests/PeriodicWorkerTest.cpp)
-  add_source_test (tests/SerializationTest.cpp allocator_test_support cachelib_allocator cachelib_navy)
+  add_source_test (tests/SerializationTest.cpp allocator_test_support)
   add_source_test (tests/UtilTests.cpp)
   add_source_test (tests/CountDownLatchTest.cpp)
   # fails from cmake: add_source_test (tests/UtilTestsRSS.cpp)
