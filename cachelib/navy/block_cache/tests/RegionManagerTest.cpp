@@ -54,7 +54,8 @@ TEST(RegionManager, ReclaimLruAsFifo) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
-      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+      true /* workerFlushAsync */);
 
   // without touch, the first region inserted is reclaimed
   EXPECT_EQ(kRegion0.id(), rm->evict());
@@ -80,7 +81,8 @@ TEST(RegionManager, ReclaimLru) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy),
-      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+      true /* workerFlushAsync */);
 
   rm->touch(kRegion0.id());
   rm->touch(kRegion1.id());
@@ -107,7 +109,8 @@ TEST(RegionManager, Recovery) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     // Empty region, like it was evicted and reclaimed
     for (int i = 0; i < 20; i++) {
@@ -143,7 +146,8 @@ TEST(RegionManager, Recovery) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -176,7 +180,8 @@ TEST(RegionManager, ReadWrite) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, kBaseOffset, *device, 1, 1, 0,
       std::move(evictCb), std::move(cleanupCb), std::make_unique<LruPolicy>(4),
-      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+      kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+      true /* workerFlushAsync */);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
@@ -231,7 +236,8 @@ TEST(RegionManager, RecoveryLRUOrder) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
@@ -255,7 +261,8 @@ TEST(RegionManager, RecoveryLRUOrder) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     auto rr = createMemoryRecordReader(ioq);
     rm->recover(*rr);
@@ -283,7 +290,8 @@ TEST(RegionManager, Fragmentation) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
@@ -317,7 +325,8 @@ TEST(RegionManager, Fragmentation) {
     auto rm = std::make_unique<RegionManager>(
         kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
         std::move(cleanupCb), std::move(policy),
-        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit);
+        kNumRegions /* numInMemBuffers */, 0, kFlushRetryLimit,
+        true /* workerFlushAsync */);
 
     rm->getCounters({[](folly::StringPiece name, double count) {
       if (name == "navy_bc_external_fragmentation") {
@@ -357,7 +366,7 @@ TEST(RegionManager, cleanupRegionFailureSync) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), kNumInMemBuffer, 0,
-      kFlushRetryLimit);
+      kFlushRetryLimit, true /* workerFlushAsync */);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
@@ -465,7 +474,7 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
   auto rm = std::make_unique<RegionManager>(
       kNumRegions, kRegionSize, 0, *device, 1, 1, 0, std::move(evictCb),
       std::move(cleanupCb), std::move(policy), kNumInMemBuffer, 0,
-      kFlushRetryLimit);
+      kFlushRetryLimit, true /* workerFlushAsync */);
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 

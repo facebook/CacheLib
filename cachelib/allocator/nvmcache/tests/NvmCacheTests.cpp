@@ -153,7 +153,30 @@ TEST_F(NvmCacheTest, CouldExistFast) {
 
   ASSERT_TRUE(this->cache().couldExistFast(key));
   this->pushToNvmCacheFromRamForTesting(key);
+  this->removeFromRamForTesting(key);
   ASSERT_TRUE(this->cache().couldExistFast(key));
+}
+
+TEST_F(NvmCacheTest, ExistFast) {
+  // Enable fast negative lookup
+  this->makeCache();
+
+  auto& nvm = this->cache();
+  auto pid = this->poolId();
+
+  std::string key = "blah";
+
+  ASSERT_EQ(StorageMedium::NONE, this->cache().existFast(key));
+
+  {
+    auto it = nvm.allocate(pid, key, 100);
+    nvm.insertOrReplace(it);
+  }
+
+  ASSERT_EQ(StorageMedium::DRAM, this->cache().existFast(key));
+  this->pushToNvmCacheFromRamForTesting(key);
+  this->removeFromRamForTesting(key);
+  ASSERT_EQ(StorageMedium::NVM, this->cache().existFast(key));
 }
 
 TEST_F(NvmCacheTest, EvictToNvmGet) {
@@ -1615,6 +1638,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reinsertions"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_bytes"));
   EXPECT_TRUE(cs("navy_bc_reinsertion_errors"));
+  EXPECT_TRUE(cs("navy_bc_excessive_read_bytes"));
   EXPECT_TRUE(cs("navy_bc_lookup_for_item_destructor_errors"));
   EXPECT_TRUE(cs("navy_bc_reclaim_entry_header_checksum_errors"));
   EXPECT_TRUE(cs("navy_bc_reclaim_value_checksum_errors"));
@@ -2411,7 +2435,7 @@ TEST_F(NvmCacheTest, testSampleItem) {
   // internal fragmentation for RAM and NVM are around
   // 20% (16K / 20K) and 37.5% (20K / 32K), respectively
   // 15% is arbitrary and pessimistic target
-  size_t targetCnt = (size_t)((double)nKeys * 10.0 * 0.5 * 0.15);
+  size_t targetCnt = (size_t)(static_cast<double>(nKeys) * 10.0 * 0.5 * 0.15);
   ASSERT_GE(numNvm, targetCnt);
   ASSERT_GE(numRam, targetCnt);
   // Should reset the cache since the destructor callback

@@ -24,8 +24,6 @@
 
 namespace facebook::cachelib::navy {
 
-constexpr std::chrono::seconds LruPolicy::kEstimatorWindow;
-
 LruPolicy::LruPolicy(uint32_t expectedNumRegions)
     : secSinceInsertionEstimator_{kEstimatorWindow},
       secSinceAccessEstimator_{kEstimatorWindow},

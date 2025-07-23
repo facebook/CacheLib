@@ -26,6 +26,7 @@
 #include "cachelib/cachebench/workload/KVReplayGenerator.h"
 #include "cachelib/cachebench/workload/OnlineGenerator.h"
 #include "cachelib/cachebench/workload/PieceWiseReplayGenerator.h"
+#include "cachelib/cachebench/workload/SimpleFlashBenchmarkGenerator.h"
 #include "cachelib/cachebench/workload/WorkloadGenerator.h"
 #include "cachelib/common/Utils.h"
 
@@ -155,6 +156,8 @@ std::unique_ptr<GeneratorBase> makeGenerator(const StressorConfig& config) {
   } else if (config.generator == "online") {
     return std::make_unique<OnlineGenerator>(config);
 
+  } else if (config.generator == "simple-flash-benchmark") {
+    return std::make_unique<SimpleFlashBenchmarkGenerator>(config);
   } else {
     throw std::invalid_argument(fmt::format(
         "Invalid config: unsupported generator {}", config.generator));
@@ -194,6 +197,12 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<AsyncCacheStressor<Lru2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B") {
+      return std::make_unique<AsyncCacheStressor<Lru5BAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B2Q") {
+      return std::make_unique<AsyncCacheStressor<Lru5B2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
     }
   } else {
     auto generator = makeGenerator(stressorConfig);
@@ -203,6 +212,12 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
           cacheConfig, stressorConfig, std::move(generator));
     } else if (cacheConfig.allocator == "LRU2Q") {
       return std::make_unique<CacheStressor<Lru2QAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B") {
+      return std::make_unique<CacheStressor<Lru5BAllocator>>(
+          cacheConfig, stressorConfig, std::move(generator));
+    } else if (cacheConfig.allocator == "LRU5B2Q") {
+      return std::make_unique<CacheStressor<Lru5B2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
   }

@@ -21,7 +21,7 @@
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
-#include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 namespace facebook {
 namespace cachelib {
@@ -336,7 +336,7 @@ TEST(NavyConfigTest, BlockCache) {
 
   auto customPolicy = std::make_shared<DummyReinsertionPolicy>();
 
-  navy::Index index;
+  navy::SparseMapIndex index;
 
   // test cannot enable both hits-based and probability-based reinsertion policy
   config = NavyConfig{};
@@ -383,6 +383,49 @@ TEST(NavyConfigTest, BlockCache) {
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getHitsThreshold(), 0);
   EXPECT_EQ(config.blockCache().getReinsertionConfig().getCustomPolicy(index),
             customPolicy);
+
+  config = NavyConfig{};
+  // Default is sparse map index with the default config parameters that are
+  // previously hard coded with SparseMapIndex
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            navy::BlockCacheIndexConfig::kDefaultNumSparseMapBuckets);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(),
+            navy::BlockCacheIndexConfig::kDefaultNumBucketsPerMutex);
+
+  // Enable SparseMap with the different parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            false);
+  // Enable SparseMap with the alternative parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128, false);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            false);
+  // Enable SparseMap with the alternative parameters
+  config.blockCache().enableSparseMapIndex(32 * 1024, 128, true);
+  EXPECT_FALSE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumSparseMapBuckets(),
+            32 * 1024);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(), 128);
+  EXPECT_EQ(config.blockCache().getIndexConfig().isTrackItemHistoryEnabled(),
+            true);
+
+  // Try with invalid arguments
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(0, 128),
+               std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableSparseMapIndex(32 * 1024, 100, false),
+               std::invalid_argument);
+  EXPECT_THROW(
+      config.blockCache().enableSparseMapIndex(32 * 1024, 64 * 1024, true),
+      std::invalid_argument);
 }
 
 TEST(NavyConfigTest, BigHash) {

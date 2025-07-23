@@ -19,13 +19,14 @@
 #include <thread>
 
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
 
 namespace facebook::cachelib::navy::tests {
 
 TEST(HitsReinsertionPolicy, Simple) {
-  Index index;
-  HitsReinsertionPolicy tracker{1, index};
+  std::unique_ptr<Index> index = std::make_unique<SparseMapIndex>();
+  HitsReinsertionPolicy tracker{1, *index};
 
   auto hk1 = makeHK("test_key_1");
   folly::StringPiece strKey{reinterpret_cast<const char*>(hk1.key().data()),
@@ -33,73 +34,73 @@ TEST(HitsReinsertionPolicy, Simple) {
 
   // lookup before inserting has no effect
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_FALSE(lr.found());
   }
 
   // lookup after inserting has effect
-  index.insert(hk1.keyHash(), 0, 0);
+  index->insert(hk1.keyHash(), 0, 0);
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(0, lr.totalHits());
     EXPECT_EQ(0, lr.currentHits());
   }
 
-  index.lookup(hk1.keyHash());
+  index->lookup(hk1.keyHash());
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(1, lr.totalHits());
     EXPECT_EQ(1, lr.currentHits());
   }
 
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_TRUE(tracker.shouldReinsert(strKey, ""));
     EXPECT_EQ(1, lr.totalHits());
     EXPECT_EQ(1, lr.currentHits());
   }
 
   // lookup again
-  index.lookup(hk1.keyHash());
+  index->lookup(hk1.keyHash());
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(2, lr.totalHits());
     EXPECT_EQ(2, lr.currentHits());
   }
 
-  index.remove(hk1.keyHash());
+  index->remove(hk1.keyHash());
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_FALSE(lr.found());
   }
 
   // removing a second time is fine. Just no-op
-  index.remove(hk1.keyHash());
+  index->remove(hk1.keyHash());
 }
 
 TEST(HitsReinsertionPolicy, UpperBound) {
-  Index index;
+  std::unique_ptr<Index> index = std::make_unique<SparseMapIndex>();
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0, 0);
+  index->insert(hk1.keyHash(), 0, 0);
   for (int i = 0; i < 1000; i++) {
-    index.lookup(hk1.keyHash());
+    index->lookup(hk1.keyHash());
   }
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(255, lr.totalHits());
     EXPECT_EQ(255, lr.currentHits());
   }
 }
 
 TEST(HitsReinsertionPolicy, ThreadSafe) {
-  Index index;
+  std::unique_ptr<Index> index = std::make_unique<SparseMapIndex>();
 
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0, 0);
+  index->insert(hk1.keyHash(), 0, 0);
 
-  auto lookup = [&]() { index.lookup(hk1.keyHash()); };
+  auto lookup = [&]() { index->lookup(hk1.keyHash()); };
 
   std::vector<std::thread> threads;
   for (int i = 0; i < 159; i++) {
@@ -111,7 +112,7 @@ TEST(HitsReinsertionPolicy, ThreadSafe) {
   }
 
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
 
     EXPECT_EQ(159, lr.totalHits());
     EXPECT_EQ(159, lr.currentHits());
@@ -119,15 +120,15 @@ TEST(HitsReinsertionPolicy, ThreadSafe) {
 }
 
 TEST(HitsReinsertionPolicy, Recovery) {
-  Index index;
+  std::unique_ptr<Index> index = std::make_unique<SparseMapIndex>();
   auto hk1 = makeHK("test_key_1");
 
-  index.insert(hk1.keyHash(), 0, 0);
+  index->insert(hk1.keyHash(), 0, 0);
   for (int i = 0; i < 1000; i++) {
-    index.lookup(hk1.keyHash());
+    index->lookup(hk1.keyHash());
   }
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(255, lr.totalHits());
     EXPECT_EQ(255, lr.currentHits());
   }
@@ -135,15 +136,15 @@ TEST(HitsReinsertionPolicy, Recovery) {
   // persist to memory then recover from it
   folly::IOBufQueue buf;
   auto rw = createMemoryRecordWriter(buf);
-  index.persist(*rw);
-  index.reset();
+  index->persist(*rw);
+  index->reset();
 
   auto rr = createMemoryRecordReader(buf);
-  index.recover(*rr);
+  index->recover(*rr);
 
   // access stats should be the same
   {
-    auto lr = index.peek(hk1.keyHash());
+    auto lr = index->peek(hk1.keyHash());
     EXPECT_EQ(255, lr.totalHits());
     EXPECT_EQ(255, lr.currentHits());
   }

@@ -29,7 +29,6 @@
 
 #include <chrono>
 #include <cstring>
-#include <numeric>
 
 #include "cachelib/navy/common/FdpNvme.h"
 #include "cachelib/navy/common/Utils.h"

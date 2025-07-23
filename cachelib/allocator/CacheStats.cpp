@@ -50,7 +50,13 @@ struct SizeVerify {};
 
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
-  SizeVerify<sizeof(Stats)> a = SizeVerify<16368>{};
+#ifdef __GLIBCXX__
+#define EXPECTED_SIZE 16368
+#endif
+#ifdef _LIBCPP_VERSION
+#define EXPECTED_SIZE 16368
+#endif
+  SizeVerify<sizeof(Stats)> a = SizeVerify<EXPECTED_SIZE>{};
   std::ignore = a;
 #endif
   ret.numCacheGets = numCacheGets.get();

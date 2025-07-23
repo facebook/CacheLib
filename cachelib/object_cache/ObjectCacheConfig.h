@@ -20,8 +20,11 @@
 #include <string>
 
 #include "cachelib/allocator/KAllocation.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Throttler.h"
+#include "cachelib/common/Utils.h"
+#include "cachelib/object_cache/ObjectCacheSizeController.h"
 
 namespace facebook {
 namespace cachelib {
@@ -32,9 +35,17 @@ struct ObjectCacheConfig {
   using Key = KAllocation::Key;
   using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
+  using RemoveCb = typename ObjectCache::RemoveCb;
   using SerializeCb = typename ObjectCache::SerializeCb;
   using DeserializeCb = typename ObjectCache::DeserializeCb;
   using EvictionPolicyConfig = typename ObjectCache::EvictionPolicyConfig;
+  using NvmCacheConfig = typename ObjectCache::NvmCacheConfig;
+  using ToBlobCb = std::function<std::unique_ptr<folly::IOBuf>(uintptr_t)>;
+  using ToPtrCb = std::function<uintptr_t(folly::StringPiece)>;
+  using GetFreeMemCb =
+      typename ObjectCacheSizeController<ObjectCache>::GetFreeMemCb;
+  using GetRSSMemCb =
+      typename ObjectCacheSizeController<ObjectCache>::GetRSSMemCb;
 
   // Set cache name as a string
   ObjectCacheConfig& setCacheName(const std::string& _cacheName);
@@ -52,6 +63,19 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setCacheCapacity(size_t _l1EntriesLimit,
                                       size_t _totalObjectSizeLimit = 0,
                                       int _sizeControllerIntervalMs = 0);
+
+  // Set the memory mode to use from Object Size, FreeMemory and RSS.
+  ObjectCacheConfig& setObjectSizeControllerMode(ObjCacheSizeControlMode _mode,
+                                                 uint64_t _upperLimitBytes,
+                                                 uint64_t _lowerLimitBytes);
+
+  // Set a custom function to compute the free memory bytes.
+  // If not set, the default function util::getMemAvailable() will be used.
+  ObjectCacheConfig& setFreeMemCb(GetFreeMemCb _getFreeMemBytes);
+
+  // Set a custom function to compute the RSS bytes.
+  // If not set, the default function util::getRSSBytes() will be used.
+  ObjectCacheConfig& setRSSMemCb(GetRSSMemCb _getRSSBytes);
 
   // Set the number of internal cache pools to be used for sharding.
   // This determines the number of concurrent inserts/removes. Default is 1
@@ -106,6 +130,8 @@ struct ObjectCacheConfig {
   // });
   ObjectCacheConfig& setItemDestructor(ItemDestructor destructor);
 
+  ObjectCacheConfig& setRemoveCb(RemoveCb cb);
+
   // Run in a multi-thread mode, eviction order is not guaranteed to persist.
   // @param threadCount          number of threads to work on persistence
   //                             concurrently
@@ -115,7 +141,7 @@ struct ObjectCacheConfig {
   // @param serializeCallback    callback to serialize an object
   // @param deserializeCallback  callback to deserialize an object
   ObjectCacheConfig& enablePersistence(uint32_t threadCount,
-                                       std::string basefilePath,
+                                       const std::string& basefilePath,
                                        SerializeCb serializeCallback,
                                        DeserializeCb deserializeCallback);
 
@@ -126,7 +152,7 @@ struct ObjectCacheConfig {
   // @param serializeCallback    callback to serialize an object
   // @param deserializeCallback  callback to deserialize an object
   ObjectCacheConfig& enablePersistenceWithEvictionOrder(
-      std::string basefilePath,
+      const std::string& basefilePath,
       SerializeCb serializeCallback,
       DeserializeCb deserializeCallback);
 
@@ -143,6 +169,29 @@ struct ObjectCacheConfig {
   // We will delay worker start until user explicitly calls
   // ObjectCache::startCacheWorkers()
   ObjectCacheConfig& setDelayCacheWorkersStart();
+
+  /**
+   * Enable NVM cache.
+   */
+  ObjectCacheConfig& enableNvm(NvmCacheConfig config);
+  /**
+   * @param blobCb  Given the raw pointer of the object in DRAM, create a
+   * unique_ptr<IOBuf> to a buffer that can be copied to NVM. The IOBuf does not
+   * need to hold the underlying buffer if the buffer just wraps around the
+   * original DRAM data. Return nullptr if the conversion fails.
+   * @param ptrCb  Given the StringPiece that wraps around the NvmItem payload,
+   * return a raw pointer of the object. Return nullptr if the conversion fails.
+   */
+  ObjectCacheConfig& overrideNvmCbs(ToBlobCb blobCb, ToPtrCb ptrCb);
+
+  /**
+   * Enable pool provisioning. See the doc for provisionPool.
+   * Setting this to true would make cachelib take the entire space it is
+   * configured to upon startup to avoid certain race conditions (S498497).
+   * Keep it false if your object cache has an arbitrarilty large number of
+   * entries.
+   */
+  ObjectCacheConfig& enablePoolProvisioning();
 
   // With size controller disabled, above this many entries, L1 will start
   // evicting.
@@ -197,6 +246,8 @@ struct ObjectCacheConfig {
   // or explicitly from cache
   ItemDestructor itemDestructor{};
 
+  RemoveCb removeCb{};
+
   // time to sleep between each reaping period.
   std::chrono::milliseconds reaperInterval{5000};
 
@@ -228,9 +279,39 @@ struct ObjectCacheConfig {
   // 0 means it's infinite
   uint32_t evictionSearchLimit{50};
 
+  // The memory mode to use from Object Size, FreeMemory and RSS
+  // Object Size has no memory tracking but ensures the number of objects
+  // and its total size are within the limit.
+  // FreeMemory makes sure that the system has the specified amounts
+  // of free memory at all times on top of Object Size mode guarantees.
+  // RSS mode makes sure that the RSS of the process is within the limit
+  // on top of Object Size mode guarantees.
+  ObjCacheSizeControlMode memoryMode{ObjCacheSizeControlMode::ObjectSize};
+
+  // The number of entries to add or remove per iteration.
+  // The limits means different things for different memory modes.
+  // For Object Size mode,
+  //   - upperLimitBytes: max total object size limit (shrink cache)
+  //   - lowerLimitBytes: min total object size limit (expand cache)
+  // For FreeMemory mode,
+  //   - upperLimitBytes: max free memory limit (expand cache)
+  //   - lowerLimitBytes: min free memory limit (shrink cache)
+  // For RSS mode,
+  //   - upperLimitBytes: max RSS limit (shrink cache)
+  //   - lowerLimitBytes: min RSS limit (expand cache)
+  uint64_t upperLimitBytes{0};
+  uint64_t lowerLimitBytes{0};
+  GetFreeMemCb getFreeMemBytes = util::getMemAvailable;
+  GetRSSMemCb getRSSMemBytes = util::getRSSBytes;
+
   // If true, we will delay worker start until user explicitly calls
   // ObjectCache::startCacheWorkers()
   bool delayCacheWorkersStart{false};
+
+  std::optional<typename ObjectCache::NvmCacheConfig> nvmConfig{};
+
+  // If true, we'll provision pools proactively upon creation.
+  bool provisionPool{false};
 
   const ObjectCacheConfig& validate() const;
 };
@@ -259,6 +340,35 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setCacheCapacity(
         "Both of sizeControllerIntervalMs and totalObjectSizeLimit should be "
         "provided to enable the size controller");
   }
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setObjectSizeControllerMode(
+    ObjCacheSizeControlMode _memoryMode,
+    uint64_t _upperLimitBytes,
+    uint64_t _lowerLimitBytes) {
+  if (!objectSizeTrackingEnabled) {
+    throw std::invalid_argument(
+        "Enable object size tracking before setting size controller mode.");
+  }
+  memoryMode = _memoryMode;
+  upperLimitBytes = _upperLimitBytes;
+  lowerLimitBytes = _lowerLimitBytes;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setFreeMemCb(
+    GetFreeMemCb _getFreeMemBytes) {
+  getFreeMemBytes = _getFreeMemBytes;
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRSSMemCb(
+    GetRSSMemCb _getRSSBytes) {
+  getRSSMemBytes = _getRSSBytes;
   return *this;
 }
 
@@ -318,9 +428,15 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setItemDestructor(
 }
 
 template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::setRemoveCb(RemoveCb cb) {
+  removeCb = std::move(cb);
+  return *this;
+}
+
+template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
     uint32_t threadCount,
-    std::string basefilePath,
+    const std::string& basefilePath,
     SerializeCb serializeCallback,
     DeserializeCb deserializeCallback) {
   if (persistenceEnabled) {
@@ -342,6 +458,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
         "Serialize and deserialize callback must be set to enable cache "
         "persistence");
   }
+  persistenceEnabled = true;
   persistThreadCount = threadCount;
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
@@ -351,7 +468,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistence(
 
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistenceWithEvictionOrder(
-    std::string basefilePath,
+    const std::string& basefilePath,
     SerializeCb serializeCallback,
     DeserializeCb deserializeCallback) {
   if (persistenceEnabled) {
@@ -368,6 +485,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePersistenceWithEvictionOrder(
         "Serialize and deserialize callback must be set to enable cache "
         "persistence");
   }
+  persistenceEnabled = true;
   persistThreadCount = 1;
   persistBaseFilePath = basefilePath;
   serializeCb = std::move(serializeCallback);
@@ -403,6 +521,62 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setDelayCacheWorkersStart() {
 }
 
 template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enableNvm(NvmCacheConfig config) {
+  nvmConfig = std::move(config);
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
+                                                           ToPtrCb ptrCb) {
+  if (!nvmConfig || nvmConfig->makeBlobCb || nvmConfig->makeObjCb) {
+    throw std::invalid_argument(
+        "Do not set makeBlobCb or makeObjCb in nvmConfig before calling "
+        "overriceNvmCbs.");
+  }
+
+  nvmConfig->makeBlobCb =
+      [blobCb = std::move(blobCb)](
+          const typename T::CacheItem& item,
+          folly::Range<typename T::NvmCache::ChainedItemIter>) {
+        uintptr_t ptr =
+            item.template getMemoryAs<typename T::Item>()->objectPtr;
+        auto blob = blobCb(ptr);
+        std::vector<BufferedBlob> blobs;
+        if (blob == nullptr) {
+          return blobs;
+        }
+        blobs.emplace_back(BufferedBlob{static_cast<uint32_t>(item.getSize()),
+                                        std::move(blob)});
+        return blobs;
+      };
+
+  nvmConfig->makeObjCb =
+      [ptrCb = std::move(ptrCb)](
+          const NvmItem& nvmItem, typename T::CacheItem& it,
+          folly::Range<typename T::NvmCache::WritableChainedItemIter>) {
+        // Create ptr. Do not consider chained item.
+        auto pBlob = nvmItem.getBlob(0);
+        uintptr_t ptr = ptrCb(pBlob.data);
+        // TODO: Is there a better way to do this?
+        if (ptr == reinterpret_cast<uintptr_t>(nullptr)) {
+          return false;
+        }
+        *it.template getMemoryAs<typename T::Item>() =
+            typename T::Item{ptr, pBlob.data.size()};
+
+        return true;
+      };
+  return *this;
+}
+
+template <typename T>
+ObjectCacheConfig<T>& ObjectCacheConfig<T>::enablePoolProvisioning() {
+  provisionPool = true;
+  return *this;
+}
+
+template <typename T>
 const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
   // checking missing params
   if (cacheName.empty()) {
@@ -413,9 +587,10 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
     throw std::invalid_argument("l1EntriesLimit is not provided");
   }
 
-  if (!itemDestructor) {
+  if ((!itemDestructor && !removeCb) || (itemDestructor && removeCb)) {
     throw std::invalid_argument(
-        "ItemDestructor is mandatory, but not provided");
+        "Only one of ItemDestructor or RemoveCb can be set. Not both, nor "
+        "neither.");
   }
 
   if (objectSizeTrackingEnabled) {
@@ -438,6 +613,7 @@ const ObjectCacheConfig<T>& ObjectCacheConfig<T>::validate() const {
         "Object size tracking has to be enabled to track object size "
         "distribution");
   }
+
   return *this;
 }
 

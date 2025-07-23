@@ -75,7 +75,7 @@ class TestEventInterface : public facebook::cachelib::EventInterface<Key> {
   void check(AllocatorApiEvent event,
              Key key,
              AllocatorApiResult result,
-             SizeT valueSize,
+             const SizeT& valueSize,
              TtlT ttl) {
     ASSERT_EQ(event, lastEvent);
     ASSERT_EQ(key, lastKey);

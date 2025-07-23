@@ -454,9 +454,13 @@ class NvmCache {
   using FillMap =
       folly::F14ValueMap<folly::StringPiece, std::unique_ptr<GetCtx>>;
 
-  static size_t getShardForKey(HashedKey hk) { return hk.keyHash() % kShards; }
+  size_t getShardForKey(HashedKey hk) const {
+    return hk.keyHash() % numShards_;
+  }
 
-  static size_t getShardForKey(folly::StringPiece key) {
+  size_t getNumShards() const { return numShards_; }
+
+  size_t getShardForKey(folly::StringPiece key) const {
     return getShardForKey(HashedKey{key});
   }
 
@@ -489,42 +493,45 @@ class NvmCache {
   C& cache_;                            //< cache allocator
   std::atomic<bool> navyEnabled_{true}; //< switch to turn off/on navy
 
-  static constexpr size_t kShards = 8192;
+  const size_t numShards_;
 
   // a function to check if an item is expired
   const navy::ExpiredCheck checkExpired_;
 
   // a map of all pending fills to prevent thundering herds
-  struct {
+  struct FillStruct {
     alignas(folly::hardware_destructive_interference_size) FillMap fills_;
-  } fills_[kShards];
+  };
+  std::vector<FillStruct> fills_;
 
   // a map of fill locks for each shard
-  struct {
+  struct FillLockStruct {
     alignas(folly::hardware_destructive_interference_size) TimedMutex fillLock_;
-  } fillLock_[kShards];
+  };
+  std::vector<FillLockStruct> fillLock_;
 
   // currently queued put operations to navy.
-  std::array<PutContexts, kShards> putContexts_;
+  std::vector<PutContexts> putContexts_;
 
   // currently queued delete operations to navy.
-  std::array<DelContexts, kShards> delContexts_;
+  std::vector<DelContexts> delContexts_;
 
   // co-ordination between in-flight evictions from cache that are not queued
   // to navy and in-flight gets into nvmcache that are not yet queued.
-  std::array<InFlightPuts, kShards> inflightPuts_;
-  std::array<TombStones, kShards> tombstones_;
+  std::vector<InFlightPuts> inflightPuts_;
+  std::vector<TombStones> tombstones_;
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::array<TimedMutex, kShards> itemDestructorMutex_{TimedMutex()};
+  mutable std::vector<TimedMutex> itemDestructorMutex_{numShards_};
+
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
   // DRAM. The ownership of item destructor is already managed elsewhere for
   // these keys. This data struct is updated prior to issueing NvmCache::remove
   // to handle any racy eviction from NVM before the NvmCache::remove is
   // finished.
-  std::array<folly::F14FastSet<std::string>, kShards> itemRemoved_;
+  std::vector<folly::F14FastSet<std::string>> itemRemoved_;
 
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
@@ -588,7 +595,7 @@ template <typename C>
 typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
     HashedKey hk) {
   // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % kShards;
+  const auto shard = hk.keyHash() % numShards_;
   auto guard = tombstones_[shard].add(hk.key());
 
   // need to synchronize tombstone creations with fill lock to serialize
@@ -609,7 +616,7 @@ typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
 template <typename C>
 bool NvmCache<C>::hasTombStone(HashedKey hk) {
   // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % kShards;
+  const auto shard = hk.keyHash() % numShards_;
   return tombstones_[shard].isPresent(hk.key());
 }
 
@@ -947,11 +954,20 @@ NvmCache<C>::NvmCache(C& c,
                       const ItemDestructor& itemDestructor)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
+      numShards_{config_.navyConfig.getNumShards()},
       checkExpired_([](navy::BufferView v) -> bool {
         const auto& nvmItem = *reinterpret_cast<const NvmItem*>(v.data());
         return nvmItem.isExpired();
       }),
-      itemDestructor_(itemDestructor) {
+      fills_(numShards_),
+      fillLock_(numShards_),
+      putContexts_(numShards_),
+      delContexts_(numShards_),
+      inflightPuts_(numShards_),
+      tombstones_(numShards_),
+      itemDestructor_(itemDestructor),
+      itemDestructorMutex_(numShards_),
+      itemRemoved_(numShards_) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
       checkExpired_,
@@ -1238,6 +1254,14 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
             CacheAPIWrapperForNvm<C>::viewAsWritableChainedAllocsRange(cache_,
                                                                        *it))) {
       return nullptr;
+    } else {
+      // Often times an object needs its associated destructor to be triggered
+      // to release resources (such as memory) properly. Today we use removeCB
+      // or ItemDestructor to represent this logic for cachelib's object-cache.
+      // Thus, we need to ensure these callbacks are always invoked when this
+      // item goes away even if the item had never been inserted into cache (aka
+      // not visible to other threads).
+      it.unmarkNascent();
     }
     it->markNvmClean();
   } else {
@@ -1283,6 +1307,8 @@ template <typename C>
 std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     folly::StringPiece key, const NvmItem& nvmItem, bool parentOnly) {
   const size_t numBufs = parentOnly ? 1 : nvmItem.getNumBlobs();
+  // Only use custom cb if we are not doing parent only.
+  bool useCustomCb = !parentOnly && config_.makeObjCb;
   // parent item
   XDCHECK_GE(numBufs, 1u);
   const auto pBlob = nvmItem.getBlob(0);
@@ -1295,9 +1321,8 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     // because the slack space might be used if nvmcache is configured
     // with useTruncatedAllocSize == false
     XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
-    auto size = config_.makeObjCb
-                    ? Item::getRequiredSize(key, pBlob.origAllocSize)
-                    : Item::getRequiredSize(key, pBlob.data.size());
+    auto size = useCustomCb ? Item::getRequiredSize(key, pBlob.origAllocSize)
+                            : Item::getRequiredSize(key, pBlob.data.size());
 
     head = folly::IOBuf::create(size);
     head->append(size);
@@ -1312,7 +1337,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
   XDCHECK_LE(pBlob.origAllocSize, item->getSize());
   XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
 
-  if (!config_.makeObjCb) {
+  if (!useCustomCb) {
     ::memcpy(item->getMemory(), pBlob.data.data(), pBlob.data.size());
   }
 
@@ -1346,7 +1371,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
       XDCHECK(chainedItem->isChainedItem());
       // Propagate the payload directly from Blob only if no customized callback
       // is set.
-      if (!config_.makeObjCb) {
+      if (!useCustomCb) {
         ::memcpy(chainedItem->getMemory(), cBlob.data.data(),
                  cBlob.origAllocSize);
       }
@@ -1356,7 +1381,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
     }
   }
   // If the customized callback is set, we'll call it to propagate the payload.
-  if (config_.makeObjCb) {
+  if (useCustomCb) {
     if (!config_.makeObjCb(nvmItem, *item,
                            viewAsWritableChainedAllocsRange(head.get()))) {
       return nullptr;
@@ -1509,7 +1534,7 @@ bool NvmCache<C>::checkAndUnmarkItemRemovedLocked(HashedKey hk) {
 template <typename C>
 uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
   uint64_t size = 0;
-  for (size_t i = 0; i < kShards; ++i) {
+  for (size_t i = 0; i < numShards_; ++i) {
     auto lock = std::unique_lock<TimedMutex>{itemDestructorMutex_[i]};
     size += itemRemoved_[i].size();
   }

@@ -21,28 +21,22 @@
 
 #include <algorithm>
 #include <cstring>
-#include <numeric>
 #include <utility>
 
 #include "cachelib/common/inject_pause.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
 #include "folly/Range.h"
 
 namespace facebook::cachelib::navy {
 
-constexpr uint32_t BlockCache::kMinAllocAlignSize;
-constexpr uint32_t BlockCache::kMaxItemSize;
-constexpr uint32_t BlockCache::kFormatVersion;
-constexpr uint32_t BlockCache::kDefReadBufferSize;
-constexpr uint16_t BlockCache::kDefaultItemPriority;
-
 BlockCache::Config& BlockCache::Config::validate() {
   XDCHECK_NE(scheduler, nullptr);
   if (!device || !evictionPolicy) {
     throw std::invalid_argument("missing required param");
   }
-  if (regionSize > 256u << 20) {
+  if (regionSize > 1024u << 20) {
     // We allocate region in memory to reclaim. Too large region will cause
     // problems: at least, long allocation times.
     throw std::invalid_argument("region is too large");
@@ -63,11 +57,18 @@ BlockCache::Config& BlockCache::Config::validate() {
   if (numInMemBuffers == 0) {
     throw std::invalid_argument("there must be at least one in-mem buffers");
   }
-  if (numPriorities == 0) {
-    throw std::invalid_argument("allocator must have at least one priority");
+  if (allocatorsPerPriority.size() == 0) {
+    throw std::invalid_argument("Allocators must have at least one priority");
+  }
+  for (const auto& ac : allocatorsPerPriority) {
+    if (ac == 0) {
+      throw std::invalid_argument(
+          "Each priority must have at least one allocator");
+    }
   }
 
   reinsertionConfig.validate();
+  indexConfig.validate();
 
   return *this;
 }
@@ -109,12 +110,24 @@ uint32_t BlockCache::calcAllocAlignSize() const {
   return folly::nextPowTwo(allocAlignSize);
 }
 
+std::unique_ptr<Index> BlockCache::createIndex(
+    const BlockCacheIndexConfig& indexConfig) {
+  // always SparseMapIndex for now
+  return std::make_unique<SparseMapIndex>(
+      indexConfig.getNumSparseMapBuckets(),
+      indexConfig.getNumBucketsPerMutex(),
+      indexConfig.isTrackItemHistoryEnabled()
+          ? SparseMapIndex::ExtraField::kItemHitHistory
+          : SparseMapIndex::ExtraField::kTotalHits);
+}
+
 BlockCache::BlockCache(Config&& config)
     : BlockCache{std::move(config.validate()), ValidConfigTag{}} {}
 
 BlockCache::BlockCache(Config&& config, ValidConfigTag)
     : config_{serializeConfig(config)},
-      numPriorities_{config.numPriorities},
+      numPriorities_{
+          static_cast<uint16_t>(config.allocatorsPerPriority.size())},
       checkExpired_{std::move(config.checkExpired)},
       destructorCb_{std::move(config.destructorCb)},
       checksumData_{config.checksum},
@@ -126,6 +139,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       regionSize_{config.regionSize},
       itemDestructorEnabled_{config.itemDestructorEnabled},
       preciseRemove_{config.preciseRemove},
+      index_(createIndex(config.indexConfig)),
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,
@@ -137,9 +151,10 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      bindThis(&BlockCache::onRegionCleanup, *this),
                      std::move(config.evictionPolicy),
                      config.numInMemBuffers,
-                     config.numPriorities,
-                     config.inMemBufFlushRetryLimit},
-      allocator_{regionManager_, config.numPriorities},
+                     static_cast<uint16_t>(config.allocatorsPerPriority.size()),
+                     config.inMemBufFlushRetryLimit,
+                     config.regionManagerFlushAsync},
+      allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
   XLOG(INFO, "Block cache created");
@@ -149,14 +164,14 @@ std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
   auto hitsThreshold = reinsertionConfig.getHitsThreshold();
   if (hitsThreshold) {
-    return std::make_shared<HitsReinsertionPolicy>(hitsThreshold, index_);
+    return std::make_shared<HitsReinsertionPolicy>(hitsThreshold, *index_);
   }
 
   auto pctThreshold = reinsertionConfig.getPctThreshold();
   if (pctThreshold) {
     return std::make_shared<PercentageReinsertionPolicy>(pctThreshold);
   }
-  return reinsertionConfig.getCustomPolicy(index_);
+  return reinsertionConfig.getCustomPolicy(*index_);
 }
 
 uint32_t BlockCache::serializedSize(uint32_t keySize,
@@ -176,8 +191,8 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto [desc, slotSize, addr] =
-      allocator_.allocate(size, kDefaultItemPriority, true /* canWait */);
+  auto [desc, slotSize, addr] = allocator_.allocate(
+      size, kDefaultItemPriority, true /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
   case OpenStatus::Error:
@@ -197,7 +212,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   const auto status = writeEntry(addr, slotSize, hk, value);
   auto newObjSizeHint = encodeSizeHint(slotSize);
   if (status == Status::Ok) {
-    const auto lr = index_.insert(
+    const auto lr = index_->insert(
         hk.keyHash(), encodeRelAddress(addr.add(slotSize)), newObjSizeHint);
     // We replaced an existing key in the index
     uint64_t newObjSize = decodeSizeHint(newObjSizeHint);
@@ -221,7 +236,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
 }
 
 bool BlockCache::couldExist(HashedKey hk) {
-  const auto lr = index_.lookup(hk.keyHash());
+  const auto lr = index_->peek(hk.keyHash());
   if (!lr.found()) {
     lookupCount_.inc();
     return false;
@@ -235,7 +250,7 @@ uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
 
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   const auto seqNumber = regionManager_.getSeqNumber();
-  const auto lr = index_.lookup(hk.keyHash());
+  const auto lr = index_->lookup(hk.keyHash());
   if (!lr.found()) {
     lookupCount_.inc();
     return Status::NotFound;
@@ -261,7 +276,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
       // Remove this item from index so no future lookup will
       // ever attempt to read this key. Reclaim will also not be
       // able to re-insert this item as it does not exist in index.
-      index_.remove(hk.keyHash());
+      index_->remove(hk.keyHash());
     } else if (status == Status::ChecksumError) {
       // In case we are getting transient checksum error, we will retry to read
       // the entry (S421120)
@@ -277,7 +292,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
         // Still failing. Remove this item from index so no future lookup will
         // ever attempt to read this key. Reclaim will also not be
         // able to re-insert this item as it does not exist in index.
-        index_.remove(hk.keyHash());
+        index_->remove(hk.keyHash());
       }
     }
 
@@ -373,7 +388,7 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
     // confirm that the chosen NvmItem is still being mapped with the key
     HashedKey hk =
         makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
-    const auto lr = index_.lookup(hk.keyHash());
+    const auto lr = index_->peek(hk.keyHash());
     if (!lr.found() || addrEnd != decodeRelAddress(lr.address())) {
       // overwritten
       break;
@@ -419,7 +434,7 @@ Status BlockCache::remove(HashedKey hk) {
     }
   }
 
-  auto lr = index_.remove(hk.keyHash());
+  auto lr = index_->remove(hk.keyHash());
   if (lr.found()) {
     uint64_t removedObjectSize = decodeSizeHint(lr.sizeHint());
     holeSizeTotal_.add(removedObjectSize);
@@ -584,7 +599,7 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
 }
 
 bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
-  if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
+  if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
     return true;
   }
   evictionLookupMissCounter_.inc();
@@ -594,7 +609,7 @@ bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
 BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
   auto removeItem = [this, hk, currAddr](bool expired) {
-    if (index_.removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
+    if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       if (expired) {
         evictionExpiredCount_.inc();
       }
@@ -603,7 +618,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
     return ReinsertionRes::kRemoved;
   };
 
-  const auto lr = index_.peek(hk.keyHash());
+  const auto lr = index_->peek(hk.keyHash());
   if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
     return ReinsertionRes::kRemoved;
@@ -629,7 +644,7 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
 
   uint32_t size = serializedSize(hk.key().size(), value.size());
   auto [desc, slotSize, addr] =
-      allocator_.allocate(size, priority, false /* canWait */);
+      allocator_.allocate(size, priority, false /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
   case OpenStatus::Ready:
@@ -656,9 +671,9 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   }
 
   const auto replaced =
-      index_.replaceIfMatch(hk.keyHash(),
-                            encodeRelAddress(addr.add(slotSize)),
-                            encodeRelAddress(currAddr));
+      index_->replaceIfMatch(hk.keyHash(),
+                             encodeRelAddress(addr.add(slotSize)),
+                             encodeRelAddress(currAddr));
   if (!replaced) {
     reinsertionErrorCount_.inc();
     return removeItem(false);
@@ -752,6 +767,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
   uint32_t size = serializedSize(desc.keySize, desc.valueSize);
   if (buffer.size() > size) {
     // Read more than actual size. Trim the invalid data in the beginning
+    excessiveReadBytes_.add(buffer.size() - size);
     buffer.trimStart(buffer.size() - size);
   } else if (buffer.size() < size) {
     // Read less than actual size. Read again with proper buffer.
@@ -790,7 +806,7 @@ void BlockCache::flush() {
 
 void BlockCache::reset() {
   XLOG(INFO, "Reset block cache");
-  index_.reset();
+  index_->reset();
   // Allocator resets region manager
   allocator_.reset();
 
@@ -808,7 +824,7 @@ void BlockCache::reset() {
 
 void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_size", getSize());
-  visitor("navy_bc_items", index_.computeSize());
+  visitor("navy_bc_items", index_->computeSize());
   visitor("navy_bc_inserts", insertCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_insert_hash_collisions", insertHashCollisionCount_.get(),
@@ -864,6 +880,8 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_reinsertion_errors", reinsertionErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_excessive_read_bytes", excessiveReadBytes_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_bc_lookup_for_item_destructor_errors",
           lookupForItemDestructorErrorCount_.get(),
           CounterVisitor::CounterType::RATE);
@@ -871,7 +889,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   // Allocator visits region manager
   allocator_.getCounters(visitor);
-  index_.getCounters(visitor);
+  index_->getCounters(visitor);
 
   if (reinsertionPolicy_) {
     reinsertionPolicy_->getCounters(visitor);
@@ -888,7 +906,7 @@ void BlockCache::persist(RecordWriter& rw) {
   *config.reinsertionPolicyEnabled() = (reinsertionPolicy_ != nullptr);
   serializeProto(config, rw);
   regionManager_.persist(rw);
-  index_.persist(rw);
+  index_->persist(rw);
 
   XLOG(INFO, "Finished block cache persist");
 }
@@ -919,7 +937,7 @@ void BlockCache::tryRecover(RecordReader& rr) {
   holeSizeTotal_.set(*config.holeSizeTotal());
   usedSizeBytes_.set(*config.usedSizeBytes());
   regionManager_.recover(rr);
-  index_.recover(rr);
+  index_->recover(rr);
 }
 
 bool BlockCache::isValidRecoveryData(

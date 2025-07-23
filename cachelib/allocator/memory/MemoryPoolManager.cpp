@@ -25,8 +25,6 @@
 
 using namespace facebook::cachelib;
 
-constexpr unsigned int MemoryPoolManager::kMaxPools;
-
 MemoryPoolManager::MemoryPoolManager(SlabAllocator& slabAlloc)
     : slabAlloc_(slabAlloc) {}
 
@@ -127,7 +125,7 @@ bool MemoryPoolManager::provisionPool(
   return pools_[pid]->provision(slabsDistribution);
 }
 
-MemoryPool& MemoryPoolManager::getPoolByName(const std::string& name) const {
+MemoryPool& MemoryPoolManager::getPoolByName(std::string_view name) const {
   std::shared_lock l(lock_);
   auto it = poolsByName_.find(name);
   if (it == poolsByName_.end()) {

@@ -187,16 +187,48 @@ TEST_F(CompressedPtrTest, Compare) {
       // Both pointer should not be null
       ASSERT_FALSE((ptr.isNull()) || (ptr5b.isNull()));
 
-      // Both pointer types should return the same raw value when uncompressed
-      ASSERT_EQ(ptr.getRaw(), ptr5b.getRaw());
+      // Both pointer should be able to read the serialized value and create
+      // an equivalent compressed pointer.
+      int64_t serialized4b = ptr.saveState();
+      int64_t serialized5b = ptr5b.saveState();
 
-      // Both pointers should return the input value when compressed and
-      // uncompressed immediately.
-      ASSERT_EQ(alloc,
-                m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */));
+      // Both pointer types should return the same raw value when uncompressed
+      ASSERT_EQ(serialized4b, serialized5b);
+
+      // We load 4-byte with 5-byte serialized value and vice versa.
+      CompressedPtr4B newPtr4b = CompressedPtr4B(serialized5b);
+      CompressedPtr5B newPtr5b = CompressedPtr5B(serialized4b);
+
+      // Both compressed pointers when uncompressed should return the same
+      // value even 4-byte compressed pointer is loaded with the value
+      // of 5-byte compressed pointer when serialized and vice versa.
       ASSERT_EQ(
-          alloc,
+          m.unCompress<CompressedPtr5B>(newPtr5b, false /* isMultiTiered */),
+          m.unCompress<CompressedPtr4B>(newPtr4b, false /* isMultiTiered */));
+
+      // All the pointer types should return the same value when uncompressed.
+      ASSERT_EQ(m.unCompress<CompressedPtr5B>(ptr5b, false /* isMultiTiered */),
+                m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */));
+
+      ASSERT_EQ(
+          m.unCompress<CompressedPtr5B>(ptr5b, false /* isMultiTiered */),
+          m.unCompress<CompressedPtr5B>(newPtr5b, false /* isMultiTiered */));
+
+      ASSERT_EQ(
+          m.unCompress<CompressedPtr5B>(ptr5b, false /* isMultiTiered */),
+          m.unCompress<CompressedPtr4B>(newPtr4b, false /* isMultiTiered */));
+
+      ASSERT_EQ(
+          m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */),
+          m.unCompress<CompressedPtr4B>(newPtr4b, false /* isMultiTiered */));
+
+      ASSERT_EQ(
+          m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */),
           m.unCompress<CompressedPtr5B>(ptr5b, false /* isMultiTiered */));
+
+      ASSERT_EQ(
+          m.unCompress<CompressedPtr4B>(ptr, false /* isMultiTiered */),
+          m.unCompress<CompressedPtr5B>(newPtr5b, false /* isMultiTiered */));
     }
   }
 

@@ -167,6 +167,7 @@ class RecordWriter {
   virtual ~RecordWriter() = default;
   virtual void writeRecord(std::unique_ptr<folly::IOBuf> buf) = 0;
   virtual bool invalidate() = 0;
+  virtual uint64_t getCurPos() const = 0;
 };
 
 class RecordReader {
@@ -186,7 +187,7 @@ std::unique_ptr<RecordReader> createMemoryRecordReader(
 template <typename ThriftObject, typename SerializationProto>
 void serializeProto(const ThriftObject& obj, RecordWriter& writer) {
   folly::IOBufQueue temp;
-  SerializationProto::template serialize(obj, &temp);
+  SerializationProto::serialize(obj, &temp);
   // Passes linked chain of IOBufs
   writer.writeRecord(temp.move());
 }

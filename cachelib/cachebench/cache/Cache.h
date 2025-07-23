@@ -296,7 +296,7 @@ class Cache {
     return !isRamOnly() && !cache_->isNvmCacheEnabled();
   }
 
-  bool hasNvmCacheWarmedUp() const;
+  double getNvmEvictionRate() const;
 
   // enables consistency checking for the cache. This should be done before
   // any find/insert/remove is called.
@@ -1234,7 +1234,7 @@ Stats Cache<Allocator>::getStats() const {
         lookup("navy_device_read_latency_us_p99999");
     ret.nvmReadLatencyMicrosP999999 =
         lookup("navy_device_read_latency_us_p999999");
-    ret.nvmReadLatencyMicrosMax = lookup("navy_device_read_latency_us_max");
+    ret.nvmReadLatencyMicrosP100 = lookup("navy_device_read_latency_us_max");
     ret.nvmWriteLatencyMicrosP50 = lookup("navy_device_write_latency_us_p50");
     ret.nvmWriteLatencyMicrosP90 = lookup("navy_device_write_latency_us_p90");
     ret.nvmWriteLatencyMicrosP99 = lookup("navy_device_write_latency_us_p99");
@@ -1245,7 +1245,7 @@ Stats Cache<Allocator>::getStats() const {
         lookup("navy_device_write_latency_us_p99999");
     ret.nvmWriteLatencyMicrosP999999 =
         lookup("navy_device_write_latency_us_p999999");
-    ret.nvmWriteLatencyMicrosMax = lookup("navy_device_write_latency_us_max");
+    ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_max");
     ret.numNvmItemRemovedSetSize = lookup("items_tracked_for_destructor");
 
     // track any non-zero check sum errors or io errors
@@ -1261,14 +1261,14 @@ Stats Cache<Allocator>::getStats() const {
 }
 
 template <typename Allocator>
-bool Cache<Allocator>::hasNvmCacheWarmedUp() const {
+double Cache<Allocator>::getNvmEvictionRate() const {
   const auto nvmStats = cache_->getNvmCacheStatsMap();
   const auto& ratesMap = nvmStats.getRates();
   const auto it = ratesMap.find("navy_bc_evictions");
   if (it == ratesMap.end()) {
-    return false;
+    return 0;
   }
-  return it->second > 0;
+  return it->second;
 }
 
 template <typename Allocator>

@@ -151,8 +151,105 @@ class DynamicRandomAPConfig {
 };
 
 /**
+ * BlockCacheIndexConfig provides APIs for users to configure BlockCache index.
+ * BlockCache index can be either fixed sized or sparse_map.
+ *
+ * With fixed sized index, users can configure the number of buckets and mutexes
+ * it will maintain, and the overall memory footprint used for index will be
+ * fixed depending on that configuration. If too small number of buckets are
+ * populated, it will increase the chances of hash collision. Also too small
+ * number of mutexes will increase the lock contention.
+ *
+ * With sparse_map index, it will dynamically adjust the number of buckets
+ * depending on the number of entries stored and hash distribution to avoid hash
+ * collision. However, it will kepp rehashing on the runtime, meaning that it
+ * will increase resizing costs (accompanying memory allocations and copies) and
+ * also memory footprint that it uses can't be controlled (Adding more
+ * entries will consume more memory)
+ * Another side effect caused by sparse_map index implementatoin is, it may
+ * consume much more memory per entries than fixed sized one even with the same
+ * number of buckets are populated and stored.
+ *
+ * TODO: For now, only SparseMapIndex related configs are supported here
+ */
+class BlockCacheIndexConfig {
+ public:
+  // These default constants are defined here for backward compatibility
+  // Without changing any BlockCacheIndexConfig, it should give the same
+  // config values as previously used in SparseMapIndex implementation.
+  static constexpr uint32_t kDefaultNumSparseMapBuckets{64 * 1024};
+  static constexpr uint64_t kDefaultNumBucketsPerMutex{64};
+
+  BlockCacheIndexConfig& setNumBucketsPerMutex(uint64_t numBucketsPerMutex) {
+    if (numBucketsPerMutex == 0) {
+      throw std::invalid_argument("numBucketsPerMutex must be > 0");
+    }
+    numBucketsPerMutex_ = numBucketsPerMutex;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& setNumSparseMapBuckets(uint32_t numSparseMapBuckets) {
+    if (numSparseMapBuckets == 0 || !folly::isPowTwo(numSparseMapBuckets)) {
+      throw std::invalid_argument("numSparseMapBuckets must be power of two");
+    }
+    numSparseMapBuckets_ = numSparseMapBuckets;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& enableTrackItemHistory() {
+    trackItemHistory_ = true;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& validate() {
+    // with SparseMapIndex
+    if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numSparseMapBuckets must be power of two");
+    }
+    if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numBucketsPerMutex must be power of two");
+    }
+    if (numBucketsPerMutex_ > numSparseMapBuckets_) {
+      throw std::invalid_argument(
+          "with SparseMapIndex, numBucketsPerMutex must be <= "
+          "numSparseMapBuckets");
+    }
+    return *this;
+  }
+
+  // getter functions
+  bool isFixedSizeIndexEnabled() const { return enableFixedSizeIndex_; }
+
+  uint64_t getNumBucketsPerMutex() const { return numBucketsPerMutex_; }
+  uint32_t getNumSparseMapBuckets() const { return numSparseMapBuckets_; }
+  bool isTrackItemHistoryEnabled() const { return trackItemHistory_; }
+
+ private:
+  // Whether to enable fixed size index, true for enabling it.
+  // If false, we will use sparse_map index which will dynamically adjust the
+  // sizes and the number of buckets which is convenient but more expensive
+  bool enableFixedSizeIndex_{false};
+  // The number of buckets per mutex. Each mutex will cover a consecutive range
+  // of buckets with the size of the given number here.
+  uint64_t numBucketsPerMutex_{kDefaultNumBucketsPerMutex};
+
+  // The number of buckets with SparseMapIndex
+  // Each 'bucket' in SparseMapIndex is a sparse_map instance and will be
+  // expanded to a hashtable with mem alloc and rehashing while more items
+  // are populated
+  uint32_t numSparseMapBuckets_{kDefaultNumSparseMapBuckets};
+
+  // Whether to track item's hits history instead of total hits. Only applies to
+  // SparseMapIndex. This is a compromise to keep index size low, enabling this
+  // will make totalHits return undefined value.
+  bool trackItemHistory_{false};
+};
+
+/**
  * BlockCacheReinsertionConfig provides APIs for users to configure BlockCache
- * reinsertion policy, whic is a part of NavyConfig.
+ * reinsertion policy, which is a part of NavyConfig.
  *
  * By this class, user can:
  * - enable hits-based OR probability based reinsertion policy (but not both)
@@ -190,10 +287,11 @@ class BlockCacheReinsertionConfig {
       std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(const Index&)>
           makeCustomPolicy) {
     if (hitsThreshold_ > 0 || pctThreshold_ > 0) {
-      throw std::invalid_argument(
+      throw std::invalid_argument(folly::sformat(
           "Already set reinsertion hits threshold {}, or reinsertion "
           "probability threshold {} while trying to set a custom reinsertion "
-          "policy.");
+          "policy.",
+          hitsThreshold_, pctThreshold_));
     }
     makeCustomPolicy_ = makeCustomPolicy;
     return *this;
@@ -273,9 +371,16 @@ class BlockCacheConfig {
   //             {1, 2, 3} gives the 1/6th of the items in the first segment (P0
   //             least important), 2/6th of the items in the second segment
   //             (P1), and finally 3/6th of the items in the third segment (P2).
+  // @param Number of allocators for each priority. If not set, each priority
+  // would have one allocator.
   BlockCacheConfig& enableSegmentedFifo(
-      std::vector<unsigned int> sFifoSegmentRatio) noexcept {
+      std::vector<unsigned int> sFifoSegmentRatio,
+      std::vector<uint32_t> allocatorCounts = {}) noexcept {
     sFifoSegmentRatio_ = std::move(sFifoSegmentRatio);
+    if (allocatorCounts.size() > 0) {
+      XDCHECK_EQ(sFifoSegmentRatio_.size(), allocatorCounts.size());
+      allocatorsPerPriority_ = std::move(allocatorCounts);
+    }
     lru_ = false;
     return *this;
   }
@@ -337,6 +442,29 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setRegionManagerFlushAsync(bool async) noexcept {
+    regionManagerFlushAsync_ = async;
+    return *this;
+  }
+
+  BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
+    allocatorsPerPriority_ = {numAllocators};
+    return *this;
+  }
+
+  // TO enable Sparse Map Index with the configurable parameters. Without
+  // calling this explicitly, default index will be still SparseMapIndex
+  // with the default parameters.
+  // Call enableSparseMapIndex() explicitly when parameters should be changed.
+  // numSparseMapBuckets will determine the number of sparse map instances.
+  // numBucketsPerMutes will be used to determine the number of sparse map
+  // instances covered by each mutex.
+  BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
+                                         uint32_t numBucketsPerMutex);
+  BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
+                                         uint32_t numBucketsPerMutex,
+                                         bool trackItemHistory);
+
   bool isLruEnabled() const { return lru_; }
 
   const std::vector<unsigned int>& getSFifoSegmentRatio() const {
@@ -355,11 +483,19 @@ class BlockCacheConfig {
 
   uint64_t getSize() const { return size_; }
 
+  bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
+
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
 
+  const BlockCacheIndexConfig& getIndexConfig() const { return indexConfig_; }
+
   bool isPreciseRemove() const { return preciseRemove_; }
+
+  const std::vector<uint32_t>& getNumAllocatorsPerPriority() const {
+    return allocatorsPerPriority_;
+  }
 
  private:
   // Whether Navy BlockCache will use region-based LRU eviction policy.
@@ -389,6 +525,17 @@ class BlockCacheConfig {
   // Intended size of the block cache.
   // If 0, this block cache takes all the space left on the device.
   uint64_t size_{0};
+
+  // Whether the region manager workers flushes asynchronously.
+  bool regionManagerFlushAsync_{false};
+
+  // Number of allocators per priority.
+  // Do not set this directly. This should be configured by setAllocatorCount
+  // for FIFO and LRU, and enableSegmentedFifio for segmented FIFO.
+  std::vector<uint32_t> allocatorsPerPriority_{1};
+
+  // Index related config. If not specified, SparseMapIndex will be used
+  BlockCacheIndexConfig indexConfig_;
 
   friend class NavyConfig;
 };
@@ -468,9 +615,14 @@ class EnginesConfig {
 
   bool isBigHashEnabled() const { return bigHashConfig_.getSizePct() > 0; }
 
+  const std::string& getName() const { return name_; }
+
+  void setName(std::string&& name) { name_ = std::move(name); }
+
  private:
   BlockCacheConfig blockCacheConfig_;
   BigHashConfig bigHashConfig_;
+  std::string name_;
 };
 
 enum class IoEngine : uint8_t { IoUring, LibAio, Sync };
@@ -551,7 +703,7 @@ class NavyConfig {
   unsigned int getQDepth() const { return qDepth_; }
   BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
 
-  // Return a const BlockCacheConfig to read values of its parameters.
+  // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
     XDCHECK(enginesConfigs_.size() == 1);
     return enginesConfigs_[0].bigHash();
@@ -575,6 +727,7 @@ class NavyConfig {
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
+  size_t getNumShards() const { return numShards_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -678,6 +831,7 @@ class NavyConfig {
   void setUseEstimatedWriteSize(bool useEstimatedWriteSize) noexcept {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
+  void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -689,7 +843,7 @@ class NavyConfig {
   // ============ AP settings =============
   // Name of the admission policy.
   // This could only be "dynamic_random" or "random" (or empty).
-  std::string admissionPolicy_{""};
+  std::string admissionPolicy_;
   DynamicRandomAPConfig dynamicRandomAPConfig_{};
   RandomAPConfig randomAPConfig_{};
 
@@ -762,6 +916,8 @@ class NavyConfig {
   // Whether Navy support the NVMe FDP data placement(TP4146) directives or not.
   // Reference: https://nvmexpress.org/nvmeflexible-data-placement-fdp-blog/
   bool enableFDP_{false};
+  // Number of nvm lock shards
+  size_t numShards_{8192};
 };
 } // namespace navy
 } // namespace cachelib

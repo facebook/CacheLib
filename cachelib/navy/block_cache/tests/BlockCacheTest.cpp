@@ -86,7 +86,7 @@ std::unique_ptr<Driver> makeDriver(std::unique_ptr<Engine> largeItemCache,
                                    size_t metadataSize = 0) {
   Driver::Config config;
   config.enginePairs.emplace_back(nullptr, std::move(largeItemCache), 0,
-                                  scheduler.get());
+                                  scheduler.get(), "");
   config.scheduler = std::move(scheduler);
   config.metadataSize = metadataSize;
   config.device = std::move(device);
@@ -1963,7 +1963,8 @@ TEST(BlockCache, UsePriorities) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
-  config.numPriorities = 3;
+  // 3 priorities
+  config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;
@@ -2019,7 +2020,7 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
   auto device = createMemoryDevice(deviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device, kRegionSize * 6);
-  config.numPriorities = 3;
+  config.allocatorsPerPriority = {1, 1, 1};
   config.reinsertionConfig = makeHitsReinsertionConfig(1);
   // Enable in-mem buffer so size align on 512 bytes boundary
   config.numInMemBuffers = 3;
@@ -2305,8 +2306,8 @@ TEST(BlockCache, RandomAlloc) {
   // Expected success rate is 3 regions / 4 regions
   // Allow margins of upto 20% for success rate and
   // 20% for deviation of each item
-  EXPECT_GT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 0.8 / 4.0));
-  EXPECT_LT(succ_cnt, (size_t)((double)loopCnt * 3.0 * 1.2 / 4.0));
+  EXPECT_GT(succ_cnt, (size_t)(static_cast<double>(loopCnt) * 3.0 * 0.8 / 4.0));
+  EXPECT_LT(succ_cnt, (size_t)(static_cast<double>(loopCnt) * 3.0 * 1.2 / 4.0));
   EXPECT_LT(stddev, avg * 0.2);
 }
 

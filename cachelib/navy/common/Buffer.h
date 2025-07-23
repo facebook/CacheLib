@@ -261,6 +261,10 @@ inline BufferView makeView(folly::StringPiece str) {
   return {str.size(), reinterpret_cast<const uint8_t*>(str.data())};
 }
 
+inline Buffer makeBuffer(folly::StringPiece str) {
+  return Buffer{makeView(str)};
+}
+
 inline folly::StringPiece toStringPiece(BufferView view) {
   return {reinterpret_cast<const char*>(view.data()), view.size()};
 }

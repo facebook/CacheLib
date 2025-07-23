@@ -26,7 +26,7 @@ use crate::lrucache::VolatileLruCachePool;
 /// Will attempt to fetch and decode a cached item
 pub fn get_cached<T>(cache_pool: &VolatileLruCachePool, cache_key: &str) -> Result<Option<T>>
 where
-    T: abomonation::Abomonation + Clone + Send + 'static,
+    T: abomonation::Abomonation + Clone,
 {
     let cache_handle = cache_pool.get_handle(cache_key)?;
     let cache_data: Option<Vec<u8>> = match cache_handle {
@@ -60,7 +60,7 @@ pub fn set_cached<T>(
     ttl: Option<Duration>,
 ) -> Result<bool>
 where
-    T: abomonation::Abomonation + Clone + Send + 'static,
+    T: abomonation::Abomonation,
 {
     let handle = cache_pool.allocate_with_ttl(cache_key, abomonation::measure(entry), ttl)?;
     let mut handle = handle.ok_or_else(|| Error::msg("can not allocate cachelib handle"))?;

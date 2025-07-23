@@ -70,11 +70,6 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
     return ptr_ == ptr.ptr_;
   }
   bool operator!=(const PtrType ptr) const noexcept { return !(ptr == ptr_); }
-  // If the allocSize is smaller than this, then pointer compression is not
-  // going to work.
-  // static constexpr uint32_t getMinAllocSize() noexcept {
-  //   return static_cast<uint32_t>(1) << (Slab::kMinAllocPower);
-  // }
 
   // maximum addressable memory for pointer compression to work.
   static constexpr size_t getMaxAddressableSize() noexcept {
@@ -183,8 +178,9 @@ class CACHELIB_PACKED_ATTR CompressedPtr4B {
 // CompressedPtr5B indexes more slabs than CompressedPtr4B.
 // 16 bits are used to index allocations (min size 64 bytes) within a 4MB slab.
 // 16 bits are used to index 4MB slabs which can represent upto 256GB of memory.
-// If single-tiered, 8 bits are used to map 256 GB regions totaling to 64 TB.
-// If CXL multi-tiered, 7 bits are used to map 256 GB regions totaling to 32 TB.
+// If single-tiered, 7 bits are used to map 256 GB regions totaling to 32 TB.
+// If CXL multi-tiered, 6 bits are used to map 256 GB regions totaling to 16 TB.
+// 8th bit is reserved for the flag to indicate DRAM/NVM item.
 class CACHELIB_PACKED_ATTR CompressedPtr5B {
  public:
   using PtrType = uint64_t;
@@ -262,25 +258,26 @@ class CACHELIB_PACKED_ATTR CompressedPtr5B {
   static constexpr unsigned int kNumAllocIdxBits =
       Slab::kNumSlabBits - Slab::kMinAllocPower;
 
-  // Use 8th bit position in regionIdx for TierId.
-  // Left the 7th bit for DRAM/NVM item.
+  // Use 7th bit position in regionIdx for TierId.
+  // Reserverd the 8th bit for DRAM/NVM item flag.
   static constexpr unsigned int kNumTierIdxOffset = kRegionNumBits - 2;
 
   static constexpr IdxPtrType32 kAllocIdxMask =
       ((IdxPtrType32)1 << kNumAllocIdxBits) - 1;
 
-  // kNumTierIdxBits most significant bits
-  static constexpr RegionPtrType8 kTierIdxMask = static_cast<RegionPtrType8>(1);
+  // kNumTierIdxBits 7th bits
+  static constexpr RegionPtrType8 kTierIdxMask = static_cast<RegionPtrType8>(1)
+                                                 << kNumTierIdxOffset;
 
-  // Slab index uses 16 bits to index 4MB slabs and additional bits
-  // to map indexes. 8 bits in sigle-tier case. 7 bits in multi-tier
-  // case where the 8th bit is the tier id.
+  // Slab index uses 16 bits to index 4MB slabs within a region and additional
+  // bits to map region (7 bits in sigle-tier case. 6 bits in multi-tier case
+  // where the 7th bit is the tier id)
   static constexpr unsigned int numSlabIdxBits(bool isMultiTiered) {
     return kNumTierIdxOffset + (kIdxNumBits - kNumAllocIdxBits) +
            (!isMultiTiered);
   }
 
-  // Compress the given slabIdx and allocIdx into a 32-bit compressed
+  // Compress the given slabIdx and allocIdx into a 64-bit compressed
   // pointer.
   static PtrType compress(uint32_t slabIdx,
                           uint32_t allocIdx,

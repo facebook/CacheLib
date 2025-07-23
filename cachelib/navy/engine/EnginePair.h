@@ -34,14 +34,16 @@ class EnginePair {
   EnginePair(std::unique_ptr<Engine> smallItemCache,
              std::unique_ptr<Engine> largeItemCache,
              uint32_t smallItemMaxSize,
-             JobScheduler* scheduler);
+             JobScheduler* scheduler,
+             std::string&& name);
 
   // Move constructor.
   EnginePair(EnginePair&& ep) noexcept
       : EnginePair(std::move(ep.smallItemCache_),
                    std::move(ep.largeItemCache_),
                    ep.smallItemMaxSize_,
-                   ep.scheduler_) {}
+                   ep.scheduler_,
+                   std::move(ep.name_)) {}
 
   // Move assignment operator.
   EnginePair& operator=(EnginePair&& other) = delete;
@@ -105,6 +107,8 @@ class EnginePair {
 
   void validate();
 
+  std::string_view getName() const { return name_; }
+
  private:
   // Update statistics for lookup
   void updateLookupStats(Status status) const;
@@ -134,6 +138,8 @@ class EnginePair {
   std::unique_ptr<Engine> smallItemCache_;
 
   JobScheduler* scheduler_;
+
+  std::string name_;
 
   // These stats are bumped only once per call.
   mutable TLCounter insertCount_;

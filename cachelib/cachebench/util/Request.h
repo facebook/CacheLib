@@ -172,6 +172,11 @@ struct Request {
 
   std::string_view key;
 
+  // For online generator, key will be created on the fly and should be valid
+  // until this request is processed. Since 'key' is a string_view type, this
+  // field will store the actual string for the lifetime of this request.
+  std::string onlineKeyString;
+
   // size iterators in case this request is
   // deemed to be a chained item.
   // If not chained, the size is *sizeBegin

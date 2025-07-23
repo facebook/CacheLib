@@ -51,10 +51,15 @@ void ProgressTracker::work() {
   auto [overallHitRatio, ramHitRatio, nvmHitRatio] =
       currCacheStats.getHitRatios(prevStats_);
   auto thStr = folly::sformat(
-      "{} {:>10.2f}M ops completed. Hit Ratio {:6.2f}% "
-      "(RAM {:6.2f}%, NVM {:6.2f}%)",
+      "{} {:>10.2f}M ops completed. {} items in cache. {} items in nvm cache. "
+      "{} items evicted from nvm cache. "
+      "Hit Ratio {:6.2f}% "
+      "(RAM {:6.2f}%, NVM {:6.2f}%).",
       buf,
       mOpsPerSec,
+      currCacheStats.numItems,
+      currCacheStats.numNvmItems,
+      currCacheStats.numNvmEvictions,
       overallHitRatio,
       ramHitRatio,
       nvmHitRatio);

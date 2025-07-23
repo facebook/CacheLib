@@ -103,7 +103,7 @@ TEST(HashTable, Hash) {
       uint64_t c;
       uint64_t d;
 
-      bool operator==(const Key& rhs) {
+      bool operator==(const Key& rhs) const {
         return std::memcmp(this, &rhs, sizeof(Key));
       }
     };

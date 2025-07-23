@@ -23,11 +23,13 @@ namespace facebook::cachelib::navy {
 EnginePair::EnginePair(std::unique_ptr<Engine> smallItemCache,
                        std::unique_ptr<Engine> largeItemCache,
                        uint32_t smallItemMaxSize,
-                       JobScheduler* scheduler)
+                       JobScheduler* scheduler,
+                       std::string&& name)
     : smallItemMaxSize_(smallItemCache ? smallItemMaxSize : 0),
       largeItemCache_{std::move(largeItemCache)},
       smallItemCache_{std::move(smallItemCache)},
-      scheduler_(scheduler) {}
+      scheduler_(scheduler),
+      name_{std::move(name)} {}
 
 bool EnginePair::isItemLarge(HashedKey key, BufferView value) const {
   return key.key().size() + value.size() > smallItemMaxSize_;
@@ -217,9 +219,7 @@ Status EnginePair::removeHashedKeyInternal(HashedKey hk,
 
 void EnginePair::scheduleRemove(HashedKey hk, RemoveCallback cb) {
   scheduler_->enqueueWithKey(
-      [this,
-       cb = std::move(cb),
-       hk = hk,
+      [this, cb = std::move(cb), hk = hk,
        skipSmallItemCache = false]() mutable {
         auto status = removeHashedKeyInternal(hk, skipSmallItemCache);
         if (status == Status::Retry) {
@@ -262,23 +262,23 @@ bool EnginePair::recover(RecordReader& rr) {
 }
 
 void EnginePair::getCounters(const CounterVisitor& visitor) const {
-  visitor(
-      "navy_inserts", insertCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_inserts", insertCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_succ_inserts",
           succInsertCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor(
-      "navy_lookups", lookupCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_lookups", lookupCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_succ_lookups",
           succLookupCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor(
-      "navy_removes", removeCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_removes", removeCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_succ_removes",
           succRemoveCount_.get(),
           CounterVisitor::CounterType::RATE);
-  visitor(
-      "navy_io_errors", ioErrorCount_.get(), CounterVisitor::CounterType::RATE);
+  visitor("navy_io_errors", ioErrorCount_.get(),
+          CounterVisitor::CounterType::RATE);
   visitor("navy_total_usable_size", getUsableSize());
   largeItemCache_->getCounters(visitor);
   smallItemCache_->getCounters(visitor);

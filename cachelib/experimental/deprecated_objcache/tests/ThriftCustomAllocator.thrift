@@ -19,7 +19,14 @@ namespace cpp2 facebook.cachelib.objcache
 cpp_include "cachelib/experimental/deprecated_objcache/tests/Common.h"
 
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/thrift.thrift"
 
+@thrift.DeprecatedUnvalidatedAnnotations{
+  items = {
+    "cpp.allocator": "facebook::cachelib::objcache::test::ScopedTestAllocator",
+    "cpp.allocator_via": "m",
+  },
+}
 struct UseSimpleCustomAllocator {
   // map<string, string>
   // We want to use custom allocator for it
@@ -29,10 +36,7 @@ struct UseSimpleCustomAllocator {
 
   // Native types or types that do not allocate memory do NOT need custom allocator
   2: i32 m2;
-} (
-  cpp.allocator = "facebook::cachelib::objcache::test::ScopedTestAllocator",
-  cpp.allocator_via = "m",
-)
+}
 // TODO: thrift allocator propagation behavior is broken. Right now, for the following
 //          myObj1 = myObj2;
 //       even if the allocator copy-assignment propagation is false, myObj2's
@@ -41,11 +45,16 @@ struct UseSimpleCustomAllocator {
 //       or any member that implements allocator propagation correctly
 // } (cpp.allocator="facebook::cachelib::objcache::test::ScopedTestAllocator")
 
+@thrift.DeprecatedUnvalidatedAnnotations{
+  items = {
+    "cpp.allocator": "facebook::cachelib::objcache::test::ScopedTestAllocator",
+  },
+}
 union UnionWithCustomAllocator {
   1: map_i32_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_4964 m1;
   2: string_9300 m2;
   3: i32 m3;
-} (cpp.allocator = "facebook::cachelib::objcache::test::ScopedTestAllocator")
+}
 // TODO: even though thrift union does not support allocator. We still need to
 //       annotate it with allocator so it has a `get_allocator()` method so
 //       that when deserializing it will be able to pass an allocator an inner
@@ -73,37 +82,40 @@ union UnionWithCustomAllocator {
 //            cache->insertOrReplace(objectHandle);
 //          }
 
+@thrift.DeprecatedUnvalidatedAnnotations{
+  items = {
+    "cpp.allocator": "facebook::cachelib::objcache::test::TestF14TemplateAllocator<std::pair<const int32_t, int32_t>>",
+  },
+}
 struct UseTwoF14Maps {
   1: map_i32_i32_5945 m1;
   2: map_i32_double_308 m2;
-} (
-  cpp.allocator = "facebook::cachelib::objcache::test::TestF14TemplateAllocator<std::pair<const int32_t, int32_t>>",
-)
+}
 
 // The following were automatically generated and may benefit from renaming.
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{name = "facebook::cachelib::objcache::test::TestString"}
-typedef string (
-  cpp.use_allocator = '1',
-) string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
+typedef string string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
 
 // The following were automatically generated and may benefit from renaming.
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{template = "facebook::cachelib::objcache::test::TestFollyF14FastMap"}
-typedef map<i32, double> (cpp.use_allocator = "1") map_i32_double_308
+typedef map<i32, double> map_i32_double_308
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{template = "facebook::cachelib::objcache::test::TestFollyF14FastMap"}
-typedef map<i32, i32> (cpp.use_allocator = "1") map_i32_i32_5945
+typedef map<i32, i32> map_i32_i32_5945
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{template = "facebook::cachelib::objcache::test::TestMap"}
 typedef map<
   i32,
   string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
-> (
-  cpp.use_allocator = "1",
-) map_i32_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_4964
+> map_i32_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_4964
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{template = "facebook::cachelib::objcache::test::TestMap"}
 typedef map<
   string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607,
   string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_607
-> (
-  cpp.use_allocator = "1",
-) map_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_2760
+> map_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_string_cpptype_facebookcachelibobjcachetestTestString_cppuse_allocator_1_2760
+@thrift.DeprecatedUnvalidatedAnnotations{items = {"cpp.use_allocator": "1"}}
 @cpp.Type{name = "facebook::cachelib::objcache::test::TestString"}
-typedef string (cpp.use_allocator = "1") string_9300
+typedef string string_9300

@@ -593,15 +593,18 @@ class CacheAllocator : public CacheBase {
   //              not exist.
   FOLLY_ALWAYS_INLINE ReadHandle peek(Key key);
 
-  // Returns true if a key is potentially in cache. There is a non-zero chance
-  // the key does not exist in cache (e.g. hash collision in NvmCache). This
-  // check is meant to be synchronous and fast as we only check DRAM cache and
-  // in-memory index for NvmCache. Similar to peek, this does not indicate to
-  // cachelib you have looked up an item (i.e. no stats bump, no eviction queue
-  // promotion, etc.)
+  // Returns the storage medium if a key is potentially in cache. There is a
+  // non-zero chance the key does not exist in cache (e.g. hash collision in
+  // NvmCache) even if a stoage medium is returned. This check is meant to be
+  // synchronous and fast as we only check DRAM cache and in-memory index for
+  // NvmCache. Similar to peek, this does not indicate to cachelib you have
+  // looked up an item (i.e. no stats bump, no eviction queue promotion, etc.)
   //
   // @param key   the key for lookup
   // @return      true if the key could exist, false otherwise
+  StorageMedium existFast(Key key);
+
+  // Returns true if a key is potentially in cache, based on existFast.
   bool couldExistFast(Key key);
 
   // Mark an item that was fetched through peek as useful. This is useful when
@@ -2185,8 +2188,8 @@ class CacheAllocator : public CacheBase {
                          std::unique_ptr<MoveCtx>,
                          folly::HeterogeneousAccessHash<folly::StringPiece>>;
 
-  static size_t getShardForKey(folly::StringPiece key) {
-    return folly::Hash()(key) % kShards;
+  size_t getShardForKey(folly::StringPiece key) {
+    return folly::Hash()(key) % shards_;
   }
 
   MoveMap& getMoveMapForShard(size_t shard) {
@@ -2300,7 +2303,7 @@ class CacheAllocator : public CacheBase {
   // poolResizer_, poolOptimizer_, memMonitor_, reaper_
   mutable std::mutex workersMutex_;
 
-  static constexpr size_t kShards = 8192; // TODO: need to define right value
+  const size_t shards_;
 
   struct MovesMapShard {
     alignas(folly::hardware_destructive_interference_size) MoveMap movesMap_;
@@ -2455,8 +2458,9 @@ CacheAllocator<CacheTrait>::CacheAllocator(
                               config.chainedItemAccessConfig)),
       chainedItemLocks_(config_.chainedItemsLockPower,
                         std::make_shared<MurmurHash2>()),
-      movesMap_(kShards),
-      moveLock_(kShards),
+      shards_{config_.numShards},
+      movesMap_(shards_),
+      moveLock_(shards_),
       cacheCreationTime_{
           type != InitMemType::kMemAttach
               ? util::getCurrentTimeSec()
@@ -4127,23 +4131,32 @@ CacheAllocator<CacheTrait>::peek(typename Item::Key key) {
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
+StorageMedium CacheAllocator<CacheTrait>::existFast(typename Item::Key key) {
   // At this point, a key either definitely exists or does NOT exist in cache
 
   // We treat this as a peek, since couldExist() shouldn't actually promote
   // an item as we expect the caller to issue a regular find soon afterwards.
   auto handle = findInternalWithExpiration(key, AllocatorApiEvent::PEEK);
   if (handle) {
-    return true;
-  }
-
-  if (!nvmCache_) {
-    return false;
+    return StorageMedium::DRAM;
   }
 
   // When we have to go to NvmCache, we can only probalistically determine
   // if a key could possibly exist in cache, or definitely NOT exist.
-  return nvmCache_->couldExistFast(HashedKey{key});
+  if (nvmCache_ && nvmCache_->couldExistFast(HashedKey{key})) {
+    return StorageMedium::NVM;
+  } else {
+    return StorageMedium::NONE;
+  }
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::couldExistFast(typename Item::Key key) {
+  if (existFast(key) == StorageMedium::NONE) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 template <typename CacheTrait>
@@ -4705,7 +4718,7 @@ void CacheAllocator<CacheTrait>::createMMContainers(const PoolId pid,
 template <typename CacheTrait>
 PoolId CacheAllocator<CacheTrait>::getPoolId(
     folly::StringPiece name) const noexcept {
-  return allocator_->getPoolId(name.str());
+  return allocator_->getPoolId(name);
 }
 
 // The Function returns a consolidated vector of Release Slab
@@ -5567,14 +5580,11 @@ serialization::CacheAllocatorMetadata
 CacheAllocator<CacheTrait>::deserializeCacheAllocatorMetadata(
     Deserializer& deserializer) {
   auto meta = deserializer.deserialize<serialization::CacheAllocatorMetadata>();
-  // TODO:
-  // Once everyone is on v8 or later, remove the outter if.
-  if (kCachelibVersion > 8) {
-    if (*meta.ramFormatVersion() != kCacheRamFormatVersion) {
-      throw std::runtime_error(
-          folly::sformat("Expected cache ram format version {}. But found {}.",
-                         kCacheRamFormatVersion, *meta.ramFormatVersion()));
-    }
+
+  if (*meta.ramFormatVersion() != kCacheRamFormatVersion) {
+    throw std::runtime_error(
+        folly::sformat("Expected cache ram format version {}. But found {}.",
+                       kCacheRamFormatVersion, *meta.ramFormatVersion()));
   }
 
   if (*meta.accessType() != AccessType::kId) {
@@ -6065,6 +6075,7 @@ extern template class CacheAllocator<WTinyLFUCacheTrait>;
 // CacheAllocator with an LRU eviction policy
 // LRU policy can be configured to act as a segmented LRU as well
 using LruAllocator = CacheAllocator<LruCacheTrait>;
+using Lru5BAllocator = CacheAllocator<Lru5BCacheTrait>;
 using LruAllocatorSpinBuckets = CacheAllocator<LruCacheWithSpinBucketsTrait>;
 
 // CacheAllocator with 2Q eviction policy
@@ -6077,6 +6088,7 @@ using LruAllocatorSpinBuckets = CacheAllocator<LruCacheWithSpinBucketsTrait>;
 //     otherwise, item will enter cold queue
 //  3. items in cold queue are evicted to make room for new items
 using Lru2QAllocator = CacheAllocator<Lru2QCacheTrait>;
+using Lru5B2QAllocator = CacheAllocator<Lru5B2QCacheTrait>;
 
 // CacheAllocator with Tiny LFU eviction policy
 // It has a window initially to gauage the frequency of accesses of newly

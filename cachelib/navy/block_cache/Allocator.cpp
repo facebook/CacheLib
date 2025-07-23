@@ -32,21 +32,27 @@ void RegionAllocator::setAllocationRegion(RegionId rid) {
 
 void RegionAllocator::reset() { rid_ = RegionId{}; }
 
-Allocator::Allocator(RegionManager& regionManager, uint16_t numPriorities)
+Allocator::Allocator(RegionManager& regionManager,
+                     const std::vector<uint32_t>& allocatorsPerPriority)
     : regionManager_{regionManager} {
+  size_t numPriorities = allocatorsPerPriority.size();
   XLOGF(INFO,
         "Enable priority-based allocation for Allocator. Number of "
         "priorities: {}",
         numPriorities);
   for (uint16_t i = 0; i < numPriorities; i++) {
-    allocators_.emplace_back(i /* priority */);
+    allocators_.emplace_back();
+    for (uint32_t j = 0; j < allocatorsPerPriority[i]; j++) {
+      allocators_.back().emplace_back(i /* priority */);
+    }
   }
 }
 
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size, uint16_t priority, bool canWait) {
+    uint32_t size, uint16_t priority, bool canWait, uint64_t keyHash) {
   XDCHECK_LT(priority, allocators_.size());
-  RegionAllocator* ra = &allocators_[priority];
+  RegionAllocator* ra =
+      &allocators_[priority][keyHash % allocators_[priority].size()];
   if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
                            RelAddress());
@@ -125,18 +131,22 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
 }
 
 void Allocator::flush() {
-  for (auto& ra : allocators_) {
-    std::lock_guard<TimedMutex> lock{ra.getLock()};
-    flushAndReleaseRegionFromRALocked(ra, false /* async */);
+  for (auto& ras : allocators_) {
+    for (auto& ra : ras) {
+      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      flushAndReleaseRegionFromRALocked(ra, false /* async */);
+    }
   }
 }
 
 void Allocator::reset() {
   allocRetryWaits_.set(0);
   regionManager_.reset();
-  for (auto& ra : allocators_) {
-    std::lock_guard<TimedMutex> lock{ra.getLock()};
-    ra.reset();
+  for (auto& ras : allocators_) {
+    for (auto& ra : ras) {
+      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      ra.reset();
+    }
   }
 }
 

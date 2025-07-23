@@ -144,6 +144,24 @@ BlockCacheConfig& BlockCacheConfig::setCleanRegions(
   return *this;
 }
 
+BlockCacheConfig& BlockCacheConfig::enableSparseMapIndex(
+    uint32_t numSparseMapBuckets, uint32_t numBucketsPerMutex) {
+  return enableSparseMapIndex(numSparseMapBuckets, numBucketsPerMutex, false);
+}
+
+BlockCacheConfig& BlockCacheConfig::enableSparseMapIndex(
+    uint32_t numSparseMapBuckets,
+    uint32_t numBucketsPerMutex,
+    bool trackItemHistory) {
+  if (trackItemHistory) {
+    indexConfig_.enableTrackItemHistory();
+  }
+  indexConfig_.setNumSparseMapBuckets(numSparseMapBuckets)
+      .setNumBucketsPerMutex(numBucketsPerMutex)
+      .validate();
+  return *this;
+}
+
 // BigHash settings
 BigHashConfig& BigHashConfig::setSizePctAndMaxItemSize(
     unsigned int sizePct, uint64_t smallItemMaxSize) {

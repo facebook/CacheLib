@@ -340,7 +340,7 @@ key_t SysVShmSegment::createKeyForName(const std::string& name) noexcept {
                 "key type is incompatible");
 
   // key_t is an int
-  return folly::hash::fnv32(name);
+  return folly::hash::fnv32_BROKEN(name);
 }
 
 void SysVShmSegment::createReferenceMapping() {

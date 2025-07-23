@@ -953,10 +953,5 @@ struct VariableLruBucket {
   }
 };
 
-template <typename CompactCacheDescriptor>
-constexpr size_t VariableLruBucket<CompactCacheDescriptor>::kBucketDataSize;
-
-template <typename CompactCacheDescriptor>
-constexpr size_t VariableLruBucket<CompactCacheDescriptor>::kMaxValueSize;
 } // namespace cachelib
 } // namespace facebook

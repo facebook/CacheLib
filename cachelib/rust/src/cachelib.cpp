@@ -47,6 +47,11 @@ std::unique_ptr<LruAllocator> make_shm_lru_allocator(
 std::unique_ptr<LruAllocatorConfig> make_lru_allocator_config() {
   return std::make_unique<LruAllocatorConfig>();
 }
+
+std::unique_ptr<NvmCacheConfig> make_nvm_cache_config() {
+  return std::make_unique<NvmCacheConfig>();
+}
+
 std::shared_ptr<facebook::cachelib::RebalanceStrategy>
 make_hits_per_slab_rebalancer(double diff_ratio,
                               unsigned int min_retained_slabs,
@@ -128,6 +133,25 @@ void enable_cache_persistence(LruAllocatorConfig& config,
 
 void set_base_address(LruAllocatorConfig& config, size_t addr) {
   config.slabMemoryBaseAddr = (void*)addr;
+}
+
+void enable_nvm_cache(LruAllocatorConfig& config, NvmCacheConfig& nvmConfig) {
+  config.enableNvmCache(nvmConfig);
+}
+
+void set_block_size(NvmCacheConfig& config, uint64_t blockSize) {
+  config.navyConfig.setBlockSize(blockSize);
+}
+
+void set_simple_file(NvmCacheConfig& config,
+                     const std::string& fileName,
+                     uint64_t fileSize,
+                     bool truncateFile) {
+  config.navyConfig.setSimpleFile(fileName, fileSize, truncateFile);
+}
+
+void set_region_size(NvmCacheConfig& config, uint32_t regionSize) {
+  config.navyConfig.blockCache().setRegionSize(regionSize);
 }
 
 int8_t add_pool(const LruAllocator& cache,

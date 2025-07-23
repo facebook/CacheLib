@@ -58,6 +58,15 @@ set(CMAKE_INSTALL_DIR lib/cmake/cachelib CACHE STRING
 set(CONFIGS_INSTALL_DIR test_configs CACHE STRING
     "The subdirectory where sample test configurations should be installed")
 
+# CMake include directories
+set(CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_SOURCE_DIR}/CMake"
+  # For shipit-transformed builds
+  "${CMAKE_CURRENT_SOURCE_DIR}/../build/fbcode_builder/CMake"
+  ${CMAKE_MODULE_PATH})
+
+include(FBThriftLibrary)
+
 # When installing the library (and dependencies like folly) in a non-default
 # prefix, this will let projects linking against *.so to find libfolly.so
 # automatically.
@@ -82,8 +91,18 @@ set(CMAKE_MODULE_PATH
   ${CMAKE_MODULE_PATH})
 
 # specify the C++ standard
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  message(STATUS "setting C++ standard to C++${CMAKE_CXX_STANDARD}")
+endif()
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Explicitly enable coroutine support, since GCC does not enable it
+# by default when targeting C++17.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
+endif()
 
 # include(fb_cxx_flags)
 message(STATUS "Update CXXFLAGS: ${CMAKE_CXX_FLAGS}")
@@ -97,7 +116,9 @@ find_package(Boost REQUIRED COMPONENTS
              system filesystem regex context program_options thread)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_package(GTest CONFIG REQUIRED)
+find_package(GTest REQUIRED)
+include(GoogleTest)
+enable_testing()
 find_package(folly CONFIG REQUIRED)
 find_package(fizz CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
@@ -126,7 +147,7 @@ add_custom_target(thrift_generated_files)
 
 set_property(GLOBAL PROPERTY TEST_BINARIES)
 
-function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
+function (generic_add_source_test TEST_PREFIX SOURCE_FILE)
   # Get the basename of the first source file
   get_filename_component(TEST_NAME "${SOURCE_FILE}" NAME_WE)
 
@@ -141,9 +162,17 @@ function (GENERIC_ADD_TEST TEST_PREFIX SOURCE_FILE)
     DESTINATION ${TESTS_INSTALL_DIR}
   )
 
-   get_property(tmp GLOBAL PROPERTY TEST_BINARIES)
-   set(tmp "${tmp} \\\n\t${TEST_PREFIX}-${TEST_NAME}")
-   set_property(GLOBAL PROPERTY TEST_BINARIES "${tmp}")
+  get_property(tmp GLOBAL PROPERTY TEST_BINARIES)
+  set(tmp "${tmp} \\\n\t${TEST_PREFIX}-${TEST_NAME}")
+  set_property(GLOBAL PROPERTY TEST_BINARIES "${tmp}")
+
+  # make tests visible to ctest
+  gtest_add_tests(TARGET "${TEST_PREFIX}-${TEST_NAME}"
+                        WORKING_DIRECTORY "${TOP_DIR}"
+                        TEST_PREFIX "${TEST_PREFIX}-${TEST_NAME}."
+                        TEST_LIST "test_cases")
+  # use same timeout as folly
+  set_tests_properties(${test_cases} PROPERTIES TIMEOUT 120)
 endfunction()
 
 
@@ -217,6 +246,8 @@ function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
     "types_custom_protocol.h"
     "types.h"
     "types.tcc"
+    "types_binary.cpp"
+    "types_compact.cpp"
     )
 
   # The thrift cpp option "frozen2"

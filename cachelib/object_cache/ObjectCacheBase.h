@@ -26,6 +26,7 @@ namespace objcache2 {
 
 template <typename AllocatorT>
 class ObjectCacheBase : public CacheBase {
+ public:
   // Get a string referring to the cache name for this cache
   const std::string getCacheName() const override {
     return l1Cache_->getCacheName();

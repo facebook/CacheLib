@@ -18,8 +18,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <map>
-
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/bighash/BigHash.h"
@@ -762,7 +760,7 @@ TEST(BigHash, RandomAlloc) {
       [](const std::pair<std::string, size_t>& p) { return p.second; });
   auto [avg, stddev] = util::getMeanDeviation(cnts);
 
-  EXPECT_GT(succ_cnt, (size_t)((double)loopCnt * 0.8));
+  EXPECT_GT(succ_cnt, (size_t)(static_cast<double>(loopCnt) * 0.8));
   EXPECT_LT(stddev, avg * 0.2);
 }
 

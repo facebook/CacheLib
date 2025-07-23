@@ -81,13 +81,20 @@ class BlockCache final : public Engine {
     // directly fail it.
     uint16_t inMemBufFlushRetryLimit{10};
 
-    // Number of priorities. Items of the same priority will be put into
-    // the same reigon. The effect of priorities will be up to the particular
+    // The effect of priorities will be up to the particular
     // eviction policy. There must be at least one priority.
-    uint16_t numPriorities{1};
+    // This vector is the number of allocators for each priority. Under the same
+    // priority, allocators will be picked by key hash and written into one of
+    // the regions.
+    std::vector<uint32_t> allocatorsPerPriority{1};
 
     // whether to remove an item by checking the full key.
     bool preciseRemove{false};
+    // Whether region manager's worker threads should flush asynchronously.
+    bool regionManagerFlushAsync{false};
+
+    // Index related config
+    BlockCacheIndexConfig indexConfig{};
 
     // Calculates the total region number.
     uint32_t getNumRegions() const {
@@ -243,6 +250,9 @@ class BlockCache final : public Engine {
   struct ValidConfigTag {};
   BlockCache(Config&& config, ValidConfigTag);
 
+  static std::unique_ptr<Index> createIndex(
+      const BlockCacheIndexConfig& indexConfig);
+
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
 
@@ -362,15 +372,15 @@ class BlockCache final : public Engine {
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset 0
-  // of the slot and header (footer) at the end.
+  // of the slot and header (EntryDescriptor) at the end.
   //
-  // -------------------------------------------
-  // |     Value                    |  Footer  |
-  // -------------------------------------------
-  // ^                                         ^
-  // |                                         |
-  // Buffer*                          Index points here
-  Index index_;
+  // ----------------------------------------------------
+  // |     Value                    |  EntryDescriptor  |
+  // ----------------------------------------------------
+  // ^                                                  ^
+  // |                                                  |
+  // Buffer*                                    Index points here
+  std::unique_ptr<Index> index_;
   RegionManager regionManager_;
   Allocator allocator_;
   // It is vital that the reinsertion policy is initialized after index_.
@@ -410,6 +420,7 @@ class BlockCache final : public Engine {
   mutable AtomicCounter cleanupEntryHeaderChecksumErrorCount_;
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable AtomicCounter lookupForItemDestructorErrorCount_;
+  mutable AtomicCounter excessiveReadBytes_;
 };
 } // namespace navy
 } // namespace cachelib

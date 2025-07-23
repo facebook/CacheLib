@@ -82,8 +82,11 @@ class FastDiscreteDistribution final : public Distribution {
                            size_t right,
                            std::vector<size_t> sizes,
                            std::vector<double> probs,
+                           bool useLegacyKeyGen,
                            size_t numBuckets = 2048)
-      : leftOffset_(left), rightOffset_(right) {
+      : leftOffset_(left),
+        rightOffset_(right),
+        useLegacyKeyGen_(useLegacyKeyGen) {
     double totalWeight = std::accumulate(probs.begin(), probs.end(), 0.0);
     double totalObjects = std::accumulate(sizes.begin(), sizes.end(), 0.0);
     bucketWeight_ = totalWeight / numBuckets;
@@ -113,15 +116,25 @@ class FastDiscreteDistribution final : public Distribution {
         // Determine bucket size. In doing so, take max against 1
         // before and after scaling to account for scaling factors
         objectsSeen = std::max(1UL, objectsSeen);
-        auto scaledObjects =
-            static_cast<uint64_t>(objectsSeen * scalingFactor_);
-        buckets.push_back(std::max(1UL, scaledObjects));
-        DCHECK_LE(bucketOffsets_.back() + buckets.back(), rightOffset_);
 
-        // determine the offset for next bucket
-        auto nextOffset = static_cast<uint64_t>(sumObjects * scalingFactor_);
-        bucketOffsets_.push_back(nextOffset);
-        DCHECK_LE(nextOffset, rightOffset_);
+        if (useLegacyKeyGen_) {
+          buckets.push_back(std::max(1UL, objectsSeen));
+          DCHECK_LE(bucketOffsets_.back() + buckets.back(), rightOffset_);
+
+          bucketOffsets_.push_back(sumObjects);
+          DCHECK_LE(sumObjects, rightOffset_);
+        } else {
+          auto scaledObjects =
+              static_cast<uint64_t>(objectsSeen * scalingFactor_);
+          buckets.push_back(std::max(1UL, scaledObjects));
+          DCHECK_LE(bucketOffsets_.back() + buckets.back(), rightOffset_);
+
+          // determine the offset for next bucket
+          auto nextOffset = static_cast<uint64_t>(sumObjects * scalingFactor_);
+          bucketOffsets_.push_back(nextOffset);
+          DCHECK_LE(nextOffset, rightOffset_);
+        }
+
         weightSeen = 0.0;
         objectsSeen = 0;
       } else {
@@ -147,8 +160,9 @@ class FastDiscreteDistribution final : public Distribution {
     size_t bucket = bucketDistribution_(gen);
     size_t objectInBucket = facebook::cachelib::util::narrow_cast<size_t>(
         insideBucketDistributions_[bucket](gen));
+    auto multiplier = useLegacyKeyGen_ ? scalingFactor_ : 1;
     auto ret = facebook::cachelib::util::narrow_cast<size_t>(
-                   (bucketOffsets_[bucket] + objectInBucket)) +
+                   (multiplier * (bucketOffsets_[bucket] + objectInBucket))) +
                leftOffset_;
     XDCHECK_LE(ret, rightOffset_);
     XDCHECK_GE(ret, leftOffset_);
@@ -169,6 +183,7 @@ class FastDiscreteDistribution final : public Distribution {
   std::vector<uint64_t> bucketOffsets_{};
   const size_t leftOffset_{};
   const size_t rightOffset_{};
+  bool useLegacyKeyGen_{false};
   double scalingFactor_{};
   double bucketWeight_{};
   std::uniform_int_distribution<uint64_t> bucketDistribution_{};

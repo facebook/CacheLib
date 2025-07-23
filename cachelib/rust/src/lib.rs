@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-mod abomonation_cache;
+pub mod abomonation_cache;
+pub mod bincode_cache;
 mod errors;
 mod lrucache;
 
-// export Abomonation so that users of this crate don't need to add abomination as dependency
-pub use abomonation::Abomonation;
-
-pub use crate::abomonation_cache::*;
 pub use crate::errors::*;
 pub use crate::lrucache::*;
 
@@ -55,6 +52,9 @@ mod ffi {
             config: UniquePtr<LruAllocatorConfig>,
         ) -> Result<UniquePtr<LruAllocator>>;
 
+        type NvmCacheConfig;
+        fn make_nvm_cache_config() -> Result<UniquePtr<NvmCacheConfig>>;
+
         type LruAllocatorConfig;
         fn make_lru_allocator_config() -> Result<UniquePtr<LruAllocatorConfig>>;
         fn setCacheSize(
@@ -74,6 +74,11 @@ mod ffi {
             age_difference_ratio: f64,
             min_retained_slabs: u32,
         ) -> Result<SharedPtr<RebalanceStrategy>>;
+
+        fn enable_nvm_cache(
+            config: Pin<&mut LruAllocatorConfig>,
+            nvm_config: Pin<&mut NvmCacheConfig>,
+        ) -> Result<()>;
 
         fn enable_free_memory_monitor(
             config: Pin<&mut LruAllocatorConfig>,
@@ -122,6 +127,17 @@ mod ffi {
             config: Pin<&mut LruAllocatorConfig>,
             directory: Pin<&mut CxxString>,
         );
+
+        fn set_block_size(config: Pin<&mut NvmCacheConfig>, size: u64) -> Result<()>;
+
+        fn set_simple_file(
+            config: Pin<&mut NvmCacheConfig>,
+            file_name: &CxxString,
+            file_size: u64,
+            truncate_file: bool,
+        ) -> Result<()>;
+
+        fn set_region_size(config: Pin<&mut NvmCacheConfig>, region_size: u32) -> Result<()>;
 
         fn add_pool(cache: &LruAllocator, name: StringPiece<'_>, size: usize) -> Result<i8>;
         fn get_unreserved_size(cache: &LruAllocator) -> usize;

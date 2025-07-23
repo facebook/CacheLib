@@ -509,12 +509,6 @@ class BufferManagerIterator
 };
 
 template <typename C>
-constexpr uint32_t BufferManager<C>::kMaxBufferCapacity;
-
-template <typename C>
-constexpr uint32_t BufferManager<C>::kExpansionFactor;
-
-template <typename C>
 BufferAddr BufferManager<C>::allocate(uint32_t size) {
   XDCHECK((*parent_)->hasChainedItem());
 

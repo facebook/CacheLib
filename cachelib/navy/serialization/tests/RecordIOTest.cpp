@@ -15,6 +15,7 @@
  */
 
 #include <folly/File.h>
+#include <folly/io/RecordIO.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -28,23 +29,42 @@ bool ioBufEquals(const folly::IOBuf& ioBuf, const char* expected) {
   return folly::StringPiece{expected} == str;
 }
 
+constexpr std::string_view kStr1 = "cat";
+constexpr std::string_view kStr2 = "frog";
+constexpr std::string_view kStr3 = " and ";
+constexpr std::string_view kStr4 = "toad";
+
 void writeRecords(RecordWriter& rw) {
   {
     folly::IOBufQueue ioq;
-    ioq.append(folly::IOBuf::copyBuffer("cat"));
+    ioq.append(folly::IOBuf::copyBuffer(kStr1));
     auto ioBuf = ioq.move();
     EXPECT_EQ(1, ioBuf->countChainElements());
     rw.writeRecord(std::move(ioBuf));
+    // FileRecordWriter and DeviceMetaDataWriter will write with the header
+    // (from folly::recordio_helpers::prependHeader()), while MemoryRecordWriter
+    // will just write the payload without header
+    EXPECT_TRUE(kStr1.length() + folly::recordio_helpers::headerSize() ==
+                    rw.getCurPos() ||
+                kStr1.length() == rw.getCurPos());
   }
 
   {
     folly::IOBufQueue ioq;
-    ioq.append(folly::IOBuf::copyBuffer("frog"));
-    ioq.append(folly::IOBuf::copyBuffer(" and "));
-    ioq.append(folly::IOBuf::copyBuffer("toad"));
+    ioq.append(folly::IOBuf::copyBuffer(kStr2));
+    ioq.append(folly::IOBuf::copyBuffer(kStr3));
+    ioq.append(folly::IOBuf::copyBuffer(kStr4));
     auto ioBuf = ioq.move();
     EXPECT_EQ(3, ioBuf->countChainElements());
+    auto prevPos = rw.getCurPos();
     rw.writeRecord(std::move(ioBuf));
+    // FileRecordWriter and DeviceMetaDataWriter will write with the header,
+    // while MemoryRecordWriter will just write the payload without header
+    EXPECT_TRUE(prevPos + kStr2.length() + kStr3.length() + kStr4.length() +
+                        folly::recordio_helpers::headerSize() ==
+                    rw.getCurPos() ||
+                prevPos + kStr2.length() + kStr3.length() + kStr4.length() ==
+                    rw.getCurPos());
   }
 }
 
@@ -53,12 +73,14 @@ void checkRecords(RecordReader& rr) {
   {
     auto rec = rr.readRecord();
     EXPECT_EQ(1, rec->countChainElements());
-    EXPECT_TRUE(ioBufEquals(*rec, "cat"));
+    EXPECT_TRUE(ioBufEquals(*rec, kStr1.data()));
   }
   {
     auto rec = rr.readRecord();
     EXPECT_EQ(1, rec->countChainElements());
-    EXPECT_TRUE(ioBufEquals(*rec, "frog and toad"));
+    std::string expectedStr =
+        std::string(kStr2) + std::string(kStr3) + std::string(kStr4);
+    EXPECT_TRUE(ioBufEquals(*rec, expectedStr.c_str()));
   }
   EXPECT_TRUE(rr.isEnd());
 }
@@ -73,7 +95,7 @@ TEST(RecordIO, File) {
 }
 
 TEST(RecordIO, Memory) {
-  folly::IOBufQueue ioq;
+  folly::IOBufQueue ioq{folly::IOBufQueue::cacheChainLength()};
   auto rw = createMemoryRecordWriter(ioq);
   writeRecords(*rw);
   auto rr = createMemoryRecordReader(ioq);

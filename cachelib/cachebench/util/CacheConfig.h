@@ -39,6 +39,8 @@ class CacheMonitorFactory {
   virtual ~CacheMonitorFactory() = default;
   virtual std::unique_ptr<CacheMonitor> create(LruAllocator& cache) = 0;
   virtual std::unique_ptr<CacheMonitor> create(Lru2QAllocator& cache) = 0;
+  virtual std::unique_ptr<CacheMonitor> create(Lru5BAllocator& cache) = 0;
+  virtual std::unique_ptr<CacheMonitor> create(Lru5B2QAllocator& cache) = 0;
 };
 
 // Parse memory tiers configuration from JSON config
@@ -58,7 +60,7 @@ struct MemoryTierConfig : public JSONConfig {
   // Specifies ratio of this memory tier to other tiers
   size_t ratio{0};
   // Allocate memory only from specified NUMA nodes
-  std::string memBindNodes{""};
+  std::string memBindNodes;
 };
 
 struct CacheConfig : public JSONConfig {
@@ -67,7 +69,7 @@ struct CacheConfig : public JSONConfig {
 
   // if set, we will persist the cache across cachebench runs. The directory
   // is used to store some metadata about the cache.
-  std::string cacheDir{""};
+  std::string cacheDir;
 
   uint64_t cacheSizeMB{0};
   uint64_t poolRebalanceIntervalSec{0};

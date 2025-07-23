@@ -146,6 +146,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
  public:
   using ItemDestructor = std::function<void(ObjectCacheDestructorData)>;
+  using RemoveCb = std::function<void(ObjectCacheDestructorData)>;
   using Key = KAllocation::Key;
   using Config = ObjectCacheConfig<ObjectCache<AllocatorT>>;
   using EvictionPolicyConfig = typename AllocatorT::MMType::Config;
@@ -158,6 +159,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using Restorer = Restorer<ObjectCache<AllocatorT>>;
   using EvictionIterator = typename AllocatorT::EvictionIterator;
   using AccessIterator = typename AllocatorT::AccessIterator;
+  using NvmCache = typename AllocatorT::NvmCacheT;
+  using NvmCacheConfig = typename AllocatorT::NvmCacheT::Config;
+  using WriteHandle = typename AllocatorT::WriteHandle;
+  using CacheItem = typename AllocatorT::Item;
 
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
@@ -181,6 +186,9 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   template <typename T>
   std::shared_ptr<const T> find(folly::StringPiece key);
 
+  // Return whether an object exists in cache without looking up the device.
+  StorageMedium existFast(folly::StringPiece key);
+
   // Look up an object in mutable access
   // @param key   the key to the object
   //
@@ -189,6 +197,17 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @return shared pointer to a mutable version of the object
   template <typename T>
   std::shared_ptr<T> findToWrite(folly::StringPiece key);
+
+  // Quickly peek an object in mutable access
+  // Unlike findToWrite, this API doesn't update access frequency or stat. It
+  // also ignores the nvm cache and only does RAM lookup.
+  // It can be used when caller wants to quickly check item's existence to
+  // mutate the object without changing the item's ranking or stats
+  // @param key   the key to the object
+  //
+  // @return shared pointer to a mutable version of the object
+  template <typename T>
+  std::shared_ptr<T> peekToWrite(folly::StringPiece key);
 
   // Insert the object into the cache with given key. If the key exists in the
   // cache, it will be replaced with new obejct.
@@ -429,7 +448,11 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
         util::stopPeriodicWorker(kSizeControllerName, sizeController_, timeout);
     success &= util::stopPeriodicWorker(kSizeDistTrackerName, sizeDistTracker_,
                                         timeout);
-    success &= this->l1Cache_->stopWorkers(timeout);
+    // Nullproof. This function can be called in the destructor before init()
+    // completes successfully.
+    if (this->l1Cache_) {
+      success &= this->l1Cache_->stopWorkers(timeout);
+    }
     return success;
   }
 
@@ -550,36 +573,83 @@ void ObjectCache<AllocatorT>::init() {
       .setDefaultAllocSizes({l1AllocSize})
       .enableItemReaperInBackground(config_.reaperInterval)
       .setEventTracker(std::move(config_.eventTracker))
-      .setEvictionSearchLimit(config_.evictionSearchLimit)
-      .setItemDestructor([this](typename AllocatorT::DestructorData data) {
-        ObjectCacheDestructorContext ctx;
-        if (data.context == DestructorContext::kEvictedFromRAM) {
-          evictions_.inc();
-          ctx = ObjectCacheDestructorContext::kEvicted;
-        } else if (data.context == DestructorContext::kRemovedFromRAM) {
-          ctx = ObjectCacheDestructorContext::kRemoved;
-        } else { // should not enter here
-          ctx = ObjectCacheDestructorContext::kUnknown;
-        }
-
-        auto& item = data.item;
-
-        auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
-
-        SCOPE_EXIT {
-          if (config_.objectSizeTrackingEnabled) {
-            // update total object size
-            totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
-                                            std::memory_order_relaxed);
+      .setEvictionSearchLimit(config_.evictionSearchLimit);
+  if (config_.itemDestructor) {
+    l1Config.setItemDestructor(
+        [this](typename AllocatorT::DestructorData data) {
+          ObjectCacheDestructorContext ctx;
+          if (data.context == DestructorContext::kEvictedFromRAM) {
+            evictions_.inc();
+            ctx = ObjectCacheDestructorContext::kEvicted;
+          } else if (data.context == DestructorContext::kRemovedFromRAM) {
+            ctx = ObjectCacheDestructorContext::kRemoved;
+          } else { // should not enter here
+            ctx = ObjectCacheDestructorContext::kUnknown;
           }
-          // execute user defined item destructor
-          config_.itemDestructor(ObjectCacheDestructorData(
-              ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
-              item.getCreationTime(), item.getLastAccessTime()));
-        };
-      });
+
+          auto& item = data.item;
+
+          auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+
+          SCOPE_EXIT {
+            if (config_.objectSizeTrackingEnabled) {
+              // update total object size
+              totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                              std::memory_order_relaxed);
+            }
+            // execute user defined item destructor
+            config_.itemDestructor(ObjectCacheDestructorData(
+                ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+                item.getCreationTime(), item.getLastAccessTime()));
+          };
+        });
+  } else {
+    l1Config.setRemoveCallback([this](typename AllocatorT::RemoveCbData data) {
+      ObjectCacheDestructorContext ctx;
+      if (data.context == RemoveContext::kEviction) {
+        evictions_.inc();
+        ctx = ObjectCacheDestructorContext::kEvicted;
+      } else if (data.context == RemoveContext::kNormal) {
+        ctx = ObjectCacheDestructorContext::kRemoved;
+      } else { // should not enter here
+        ctx = ObjectCacheDestructorContext::kUnknown;
+      }
+
+      auto& item = data.item;
+
+      auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+
+      SCOPE_EXIT {
+        if (config_.objectSizeTrackingEnabled) {
+          // update total object size
+          totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
+                                          std::memory_order_relaxed);
+        }
+        // execute user defined item destructor
+        config_.removeCb(ObjectCacheDestructorData(
+            ctx, itemPtr->objectPtr, item.getKey(), item.getExpiryTime(),
+            item.getCreationTime(), item.getLastAccessTime()));
+      };
+    });
+  }
+
   if (config_.delayCacheWorkersStart) {
     l1Config.setDelayCacheWorkersStart();
+  }
+
+  if (config_.nvmConfig.has_value()) {
+    // Update the callback to track size
+    config_.nvmConfig->makeObjCb =
+        [this, makeObjCb = std::move(config_.nvmConfig->makeObjCb)](
+            auto& nvmItem, auto& item, auto chain) {
+          auto ret = makeObjCb(nvmItem, item, chain);
+          if (ret) {
+            totalObjectSizeBytes_.fetch_add(
+                item.template getMemoryAs<ObjectCacheItem>()->objectSize);
+          }
+          return ret;
+        };
+    l1Config.nvmConfig.assign(std::move(config_.nvmConfig.value()));
   }
 
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
@@ -591,8 +661,19 @@ void ObjectCache<AllocatorT>::init() {
     if (config_.l1NumShards > 1) {
       shardName += folly::sformat("_{}", i);
     }
-    this->l1Cache_->addPool(shardName, perPoolSize, {} /* allocSizes */,
-                            config_.evictionPolicyConfig);
+
+    if (config_.provisionPool) {
+      PoolId pid = this->l1Cache_->addPool(
+          shardName, perPoolSize, {} /* allocSizes */,
+          config_.evictionPolicyConfig /* MMConfig*/,
+          nullptr /* rebalanceStrategy */, nullptr /* resizeStrategy*/,
+          true /* ensureProvisionable */);
+      this->l1Cache_->provisionPool(pid,
+                                    {static_cast<unsigned int>(slabsPerShard)});
+    } else {
+      this->l1Cache_->addPool(shardName, perPoolSize, {} /* allocSizes */,
+                              config_.evictionPolicyConfig);
+    }
   }
 
   // Allocate placeholder items such that the cache will fit no more than
@@ -632,8 +713,8 @@ void ObjectCache<AllocatorT>::startCacheWorkers() {
 
 template <typename AllocatorT>
 void ObjectCache<AllocatorT>::initWorkers() {
-  if (config_.objectSizeTrackingEnabled &&
-      config_.sizeControllerIntervalMs != 0) {
+  if ((config_.objectSizeTrackingEnabled &&
+       config_.sizeControllerIntervalMs != 0)) {
     util::startPeriodicWorker(
         kSizeControllerName, sizeController_,
         std::chrono::milliseconds{config_.sizeControllerIntervalMs}, *this,
@@ -655,6 +736,11 @@ std::unique_ptr<ObjectCache<AllocatorT>> ObjectCache<AllocatorT>::create(
       std::make_unique<ObjectCache>(InternalConstructor(), std::move(config));
   obj->init();
   return obj;
+}
+
+template <typename AllocatorT>
+StorageMedium ObjectCache<AllocatorT>::existFast(folly::StringPiece key) {
+  return this->l1Cache_->existFast(key);
 }
 
 template <typename AllocatorT>
@@ -684,6 +770,21 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
     return nullptr;
   }
   succL1Lookups_.inc();
+
+  auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
+  // Use custom deleter
+  auto deleter = Deleter<T>(std::move(found));
+  return std::shared_ptr<T>(reinterpret_cast<T*>(ptr), std::move(deleter));
+}
+
+template <typename AllocatorT>
+template <typename T>
+std::shared_ptr<T> ObjectCache<AllocatorT>::peekToWrite(
+    folly::StringPiece key) {
+  auto found = this->l1Cache_->peek(key);
+  if (!found) {
+    return nullptr;
+  }
 
   auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
   // Use custom deleter
@@ -847,9 +948,11 @@ template <typename AllocatorT>
 ObjectCache<AllocatorT>::~ObjectCache() {
   stopAllWorkers();
 
-  for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
-       ++itr) {
-    this->l1Cache_->remove(itr.asHandle());
+  if (this->l1Cache_) {
+    for (auto itr = this->l1Cache_->begin(); itr != this->l1Cache_->end();
+         ++itr) {
+      this->l1Cache_->remove(itr.asHandle());
+    }
   }
 }
 

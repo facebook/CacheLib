@@ -69,11 +69,6 @@ class ForwardIterator
   T* end_{};
 };
 
-namespace detail {
-template <typename...>
-using void_t = void;
-} // namespace detail
-
 // The following detects whether or not a user-provided value is variable size
 // This user-providied type must implement `getStorageSize()` to indicate it
 // is variable size.
@@ -83,7 +78,7 @@ struct is_variable_length : std::false_type {};
 template <typename T>
 struct is_variable_length<
     T,
-    detail::void_t<decltype(std::declval<T>().getStorageSize())>>
+    std::void_t<decltype(std::declval<T>().getStorageSize())>>
     : std::true_type {};
 
 // The following will get value size by using sizeof() for types that do not

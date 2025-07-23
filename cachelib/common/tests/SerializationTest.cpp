@@ -40,7 +40,7 @@ TEST(Serializer, InvalidSerialization) {
   {
     const size_t smallSize = bytesUsed / 2;
     ASSERT_LT(smallSize, bytesUsed);
-    uint8_t smallBuf[smallSize];
+    uint8_t smallBuf[SerializationBufferSize];
     Serializer s2(&smallBuf[0], &smallBuf[smallSize - 1]);
     ASSERT_THROW(s2.serialize(m), std::exception);
   }

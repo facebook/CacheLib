@@ -63,7 +63,14 @@ Driver::Driver(Config&& config, ValidConfigTag)
       scheduler_{std::move(config.scheduler)},
       selector_{std::move(config.selector)},
       enginePairs_{std::move(config.enginePairs)},
-      admissionPolicy_{std::move(config.admissionPolicy)} {
+      admissionPolicy_{std::move(config.admissionPolicy)},
+      rejectedCountByEngine_{enginePairs_.size() > 1 ? enginePairs_.size() : 0},
+      rejectedConcurrentInsertsCountByEngine_{
+          enginePairs_.size() > 1 ? enginePairs_.size() : 0},
+      rejectedParcelMemoryCountByEngine_{
+          enginePairs_.size() > 1 ? enginePairs_.size() : 0},
+      rejectedBytesByEngine_{enginePairs_.size() > 1 ? enginePairs_.size()
+                                                     : 0} {
   getRandomAllocDist = getDist(enginePairs_);
   XLOGF(INFO, "Max concurrent inserts: {}", maxConcurrentInserts_);
   XLOGF(INFO, "Max parcel memory: {}", maxParcelMemory_);
@@ -123,6 +130,7 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   size_t parcelSize = hk.key().size() + value.size();
   auto currParcelMemory = parcelMemory_.add_fetch(parcelSize);
   auto currConcurrentInserts = concurrentInserts_.add_fetch(1);
+  auto enginePairIndex = selectEnginePair(hk);
 
   if (!admissionPolicy_ ||
       admissionPolicy_->accept(hk, value, estimateWriteSize(hk, value))) {
@@ -133,13 +141,25 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
         return true;
       } else {
         rejectedParcelMemoryCount_.inc();
+        if (rejectedParcelMemoryCountByEngine_.size() > enginePairIndex) {
+          rejectedParcelMemoryCountByEngine_[enginePairIndex].inc();
+        }
       }
     } else {
       rejectedConcurrentInsertsCount_.inc();
+      if (rejectedConcurrentInsertsCountByEngine_.size() > enginePairIndex) {
+        rejectedConcurrentInsertsCountByEngine_[enginePairIndex].inc();
+      }
     }
   }
   rejectedCount_.inc();
   rejectedBytes_.add(parcelSize);
+  if (rejectedCountByEngine_.size() > enginePairIndex) {
+    rejectedCountByEngine_[enginePairIndex].inc();
+  }
+  if (rejectedBytesByEngine_.size() > enginePairIndex) {
+    rejectedBytesByEngine_[enginePairIndex].add(parcelSize);
+  }
 
   // Revert counter modifications. Remember, can't assign back atomic.
   concurrentInserts_.dec();
@@ -152,6 +172,15 @@ Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
   if (hk.key().size() > kMaxKeySize) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
+
+    auto enginePairIndex = selectEnginePair(hk);
+    if (rejectedCountByEngine_.size() > enginePairIndex) {
+      rejectedCountByEngine_[enginePairIndex].inc();
+    }
+    if (rejectedBytesByEngine_.size() > enginePairIndex) {
+      rejectedBytesByEngine_[enginePairIndex].add(hk.key().size() +
+                                                  value.size());
+    }
     return Status::Rejected;
   }
 
@@ -296,11 +325,32 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
   scheduler_->getCounters(visitor);
   if (enginePairs_.size() > 1) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
-      const CounterVisitor pv{
-          [&visitor, idx](folly::StringPiece name, double count) {
-            visitor(folly::to<std::string>(name, "_", idx), count);
-          }};
+      auto suffix =
+          enginePairs_[idx].getName().empty()
+              ? ""
+              : folly::to<std::string>(":", enginePairs_[idx].getName());
+
+      const CounterVisitor pv{[&visitor, idx,
+                               &suffix](folly::StringPiece name, double count,
+                                        CounterVisitor::CounterType type) {
+        visitor(folly::to<std::string>(name, "_", idx, suffix), count, type);
+      }};
       enginePairs_[idx].getCounters(pv);
+
+      visitor(folly::to<std::string>("navy_rejected_", idx, suffix),
+              rejectedCountByEngine_[idx].get(),
+              CounterVisitor::CounterType::RATE);
+      visitor(folly::to<std::string>("navy_rejected_concurrent_inserts_", idx,
+                                     suffix),
+              rejectedConcurrentInsertsCountByEngine_[idx].get(),
+              CounterVisitor::CounterType::RATE);
+      visitor(
+          folly::to<std::string>("navy_rejected_parcel_memory_", idx, suffix),
+          rejectedParcelMemoryCountByEngine_[idx].get(),
+          CounterVisitor::CounterType::RATE);
+      visitor(folly::to<std::string>("navy_rejected_bytes_", idx, suffix),
+              rejectedBytesByEngine_[idx].get(),
+              CounterVisitor::CounterType::RATE);
     }
     visitor("navy_total_usable_size", getUsableSize());
   } else {

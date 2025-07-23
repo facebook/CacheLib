@@ -16,6 +16,12 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
+
+#include <memory>
+#include <sstream>
+#include <string>
+
 #include "cachelib/allocator/RebalanceStrategy.h"
 
 namespace facebook {
@@ -44,10 +50,17 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     // max tail age for an allocation class to be excluded from being a receiver
     unsigned int maxLruTailAge{0};
 
+    // Enable victim selection based on free memory
+    bool enableVictimByFreeMem{true};
+
     // optionial weight function based on allocation class size
     using WeightFn = std::function<double(
         const PoolId, const ClassId, const PoolStats& pStats)>;
     WeightFn getWeight = {};
+
+    // A map of classId to target eviction age
+    std::shared_ptr<folly::F14FastMap<uint32_t, uint32_t>>
+        classIdTargetEvictionAge;
 
     // free memory threshold used to pick victim.
     size_t getFreeMemThreshold() const noexcept {
@@ -63,14 +76,6 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
         : diffRatio(ratio),
           minSlabs(_minSlabs),
           minLruTailAge(_minLruTailAge) {}
-    Config(double ratio,
-           unsigned int _minSlabs,
-           unsigned int _minLruTailAge,
-           const WeightFn& weightFunction) noexcept
-        : diffRatio(ratio),
-          minSlabs(_minSlabs),
-          minLruTailAge(_minLruTailAge),
-          getWeight(weightFunction) {}
   };
 
   // Update the config. This will not affect the current rebalancing, but
@@ -82,6 +87,18 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
 
   explicit HitsPerSlabStrategy(Config config = {});
 
+  std::string evictionAgeMapToStr(
+      const folly::F14FastMap<uint32_t, uint32_t>* map) const {
+    if (!map) {
+      return "";
+    }
+    std::ostringstream oss;
+    for (const auto& [k, v] : *map) {
+      oss << (oss.tellp() ? ", " : "") << k << ":" << v;
+    }
+    return oss.str();
+  }
+
   std::map<std::string, std::string> exportConfig() const override {
     return {{"rebalancer_type", folly::sformat("{}", getTypeString())},
             {"min_slabs", folly::sformat("{}", config_.minSlabs)},
@@ -89,7 +106,9 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
             {"min_lru_tail_age", folly::sformat("{}", config_.minLruTailAge)},
             {"max_lru_tail_age", folly::sformat("{}", config_.maxLruTailAge)},
             {"diff_ratio", folly::sformat("{}", config_.diffRatio)},
-            {"min_diff", folly::sformat("{}", config_.minDiff)}};
+            {"min_diff", folly::sformat("{}", config_.minDiff)},
+            {"eviction_age_map",
+             evictionAgeMapToStr(config_.classIdTargetEvictionAge.get())}};
   }
 
  protected:

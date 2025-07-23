@@ -213,7 +213,8 @@ class ShmManager {
 
   static std::string uniqueIdForName(const std::string& name,
                                      const std::string& cacheDir) {
-    const std::string dirHash = std::to_string(folly::hash::fnv64(cacheDir));
+    const std::string dirHash =
+        std::to_string(folly::hash::fnv64_BROKEN(cacheDir));
     return name + dirHash;
   }
 

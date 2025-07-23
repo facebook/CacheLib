@@ -103,7 +103,7 @@ PoolId MemoryAllocator::addPool(folly::StringPiece name,
   return memoryPoolManager_.createNewPool(name, size, poolAllocSizes);
 }
 
-PoolId MemoryAllocator::getPoolId(const std::string& name) const noexcept {
+PoolId MemoryAllocator::getPoolId(std::string_view name) const noexcept {
   try {
     const auto& mp = memoryPoolManager_.getPoolByName(name);
     return mp.getId();

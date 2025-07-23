@@ -74,6 +74,21 @@ struct DistributionConfig : public JSONConfig {
   double updateRatio{0.0};
   double couldExistRatio{0.0};
 
+  // Set useLegacyKeyGen true when using the old distribution data based on old
+  // key generation scheme. (ex. test configs like graph_cache_leader or
+  // kvcache_l2_wc).
+  //
+  // Our old key generation scheme didn't populate all the keys within the key
+  // space. It was just using some of the keys which was grabbed for the
+  // popularity data from the production workload. So, even though numKeys in
+  // config can be configured to any number, # of total utilized keys are always
+  // # of collected keys or less than that. This was changed to generate any key
+  // within the key space given by numKeys, but with the new scheme, old test
+  // configs key population data is not working anymore. Since we still need to
+  // test with the old test configs based on old key generation scheme, this
+  // option is added.
+  bool useLegacyKeyGen{false};
+
   bool usesChainedItems() const { return addChainedRatio > 0; }
 
   // for continuous value sizes, the probability is expressed per interval
@@ -187,6 +202,28 @@ class StressorAdmPolicy {
   }
 };
 
+// Defines the warmup check policy. The default policy ends the warmup period on
+// the first eviction from the cache. It also allows using a fixed request
+// timestamp or the earlier of the two.
+struct WarmupCheckPolicy : public JSONConfig {
+  WarmupCheckPolicy() {}
+
+  explicit WarmupCheckPolicy(const folly::dynamic& configJson);
+
+  WarmupCheckPolicy(uint64_t evictionCountThreshold,
+                    uint64_t requestTimestampThreshold)
+      : evictionCountThreshold(evictionCountThreshold),
+        requestTimestampThreshold(requestTimestampThreshold) {}
+
+  // Consider the cache warmed up after this many evictions from the cache. Use
+  // 0 to disable eviction checks.
+  uint64_t evictionCountThreshold{1};
+
+  // Consider the cache warmed up with the first request having a timestamp
+  // greater than this value. Use 0 to disable timestamp checks.
+  uint64_t requestTimestampThreshold{0};
+};
+
 struct StressorConfig : public JSONConfig {
   // Which workload generator to use, default is
   // workload generator which samples from some distribution
@@ -228,6 +265,9 @@ struct StressorConfig : public JSONConfig {
   // If enabled, stressor will check whether nvm cache has been warmed up and
   // output stats after warmup.
   bool checkNvmCacheWarmUp{false};
+
+  // Valid when checkNvmCacheWarmUp is true
+  WarmupCheckPolicy nvmCacheWarmupCheckPolicy{1, 0};
 
   // If enabled, each value will be read on find. This is useful for measuring
   // performance of value access.
@@ -322,8 +362,8 @@ class CacheBenchConfig {
   // @param c      the customization function for cache config (optional)
   // @param s      the customization function for stressor config (optional)
   explicit CacheBenchConfig(const std::string& path,
-                            CacheConfigCustomizer c = {},
-                            StressorConfigCustomizer s = {});
+                            const CacheConfigCustomizer& c = {},
+                            const StressorConfigCustomizer& s = {});
 
   const CacheConfig& getCacheConfig() const { return cacheConfig_; }
   const StressorConfig& getStressorConfig() const { return stressorConfig_; }

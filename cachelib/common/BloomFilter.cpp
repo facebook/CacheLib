@@ -59,8 +59,6 @@ BloomFilter BloomFilter::makeBloomFilter(uint32_t numFilters,
   return BloomFilter{numFilters, numHashes, bitsPerFilter};
 }
 
-constexpr uint32_t BloomFilter::kPersistFragmentSize;
-
 BloomFilter::BloomFilter(uint32_t numFilters,
                          uint32_t numHashes,
                          size_t hashTableBitSize)

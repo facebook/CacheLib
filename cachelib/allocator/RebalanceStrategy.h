@@ -161,11 +161,6 @@ class RebalanceStrategy {
 
   // filter the candidates based on whether they have at least this much tail
   // age
-  static std::set<ClassId> filterByMinTailAge(
-      const PoolEvictionAgeStats& poolEvictionAgeStats,
-      std::set<ClassId> candidates,
-      unsigned int minTailAge);
-
   static std::set<ClassId> filterByMinTailAge(const PoolStats& stats,
                                               std::set<ClassId> candidates,
                                               unsigned int minTailAge);
@@ -181,6 +176,16 @@ class RebalanceStrategy {
   std::set<ClassId> filterVictimsByHoldOff(PoolId pid,
                                            const PoolStats& stats,
                                            std::set<ClassId> victims);
+
+  static std::set<ClassId> filterVictimsByTargetEvictionAge(
+      const PoolStats& stats,
+      std::set<ClassId> candidates,
+      const folly::F14FastMap<uint32_t, uint32_t>& map);
+
+  static std::set<ClassId> filterReceiversByTargetEvictionAge(
+      const PoolStats& stats,
+      std::set<ClassId> candidates,
+      const folly::F14FastMap<uint32_t, uint32_t>& map);
 
   static ClassId pickVictimByFreeMem(const std::set<ClassId>& victims,
                                      const PoolStats& poolStats,

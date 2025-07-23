@@ -61,12 +61,24 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
     return Slab::kInvalidClassId;
   }
 
-  const auto& poolState = getPoolState(pid);
-  auto victimClassId = pickVictimByFreeMem(
-      victims, stats, config.getFreeMemThreshold(), poolState);
+  if (config.classIdTargetEvictionAge != nullptr &&
+      !config.classIdTargetEvictionAge->empty()) {
+    victims = filterVictimsByTargetEvictionAge(
+        stats, std::move(victims), *config.classIdTargetEvictionAge.get());
+  }
 
-  if (victimClassId != Slab::kInvalidClassId) {
-    return victimClassId;
+  if (victims.empty()) {
+    return Slab::kInvalidClassId;
+  }
+
+  const auto& poolState = getPoolState(pid);
+  if (config.enableVictimByFreeMem) {
+    auto victimClassId = pickVictimByFreeMem(
+        victims, stats, config.getFreeMemThreshold(), poolState);
+
+    if (victimClassId != Slab::kInvalidClassId) {
+      return victimClassId;
+    }
   }
 
   // prioritize victims with max LRU tail age
@@ -129,6 +141,31 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
 
   if (receivers.empty()) {
     return Slab::kInvalidClassId;
+  }
+
+  // filter out alloc classes above retention target
+  if (config.classIdTargetEvictionAge != nullptr &&
+      !config.classIdTargetEvictionAge->empty()) {
+    receivers = filterReceiversByTargetEvictionAge(
+        stats, std::move(receivers), *config.classIdTargetEvictionAge.get());
+  }
+
+  if (receivers.empty()) {
+    return Slab::kInvalidClassId;
+  }
+
+  // prioritize receivers with eviction age below min LRU tail age
+  if (config.minLruTailAge != 0) {
+    auto minAgeReceivers = filter(
+        receivers,
+        [&](ClassId cid) {
+          return stats.evictionAgeForClass(cid) >= config.minLruTailAge;
+        },
+        folly::sformat(" candidates with more than {} seconds for tail age",
+                       config.minLruTailAge));
+    if (!minAgeReceivers.empty()) {
+      receivers = std::move(minAgeReceivers);
+    }
   }
 
   return *std::max_element(

@@ -38,10 +38,6 @@
 
 using namespace facebook::cachelib;
 
-constexpr unsigned int AllocationClass::kFreeAllocsPruneLimit;
-constexpr unsigned int AllocationClass::kFreeAllocsPruneSleepMicroSecs;
-constexpr unsigned int AllocationClass::kForEachAllocPrefetchOffset;
-
 AllocationClass::AllocationClass(ClassId classId,
                                  PoolId poolId,
                                  uint32_t allocSize,
@@ -51,7 +47,7 @@ AllocationClass::AllocationClass(ClassId classId,
       allocationSize_(allocSize),
       slabAlloc_(s),
       freedAllocations_{
-          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()} {
+          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr5B>()} {
   checkState();
 }
 
@@ -104,7 +100,7 @@ AllocationClass::AllocationClass(
       slabAlloc_(s),
       freedAllocations_(
           *object.freedAllocationsObject(),
-          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()),
+          slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr5B>()),
       canAllocate_(*object.canAllocate()) {
   if (!slabAlloc_.isRestorable()) {
     throw std::logic_error("The allocation class cannot be restored.");
@@ -359,10 +355,10 @@ std::pair<bool, std::vector<void*>> AllocationClass::pruneFreeAllocs(
   // Set the bit to true if the corresponding allocation is freed, false
   // otherwise.
   FreeList freeAllocs{
-      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
+      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr5B>()};
   FreeList notInSlab{
-      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
-  FreeList inSlab{slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr4B>()};
+      slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr5B>()};
+  FreeList inSlab{slabAlloc_.createPtrCompressor<FreeAlloc, CompressedPtr5B>()};
 
   lock_->lock_combine([&]() {
     // Take the allocation class free list offline

@@ -28,7 +28,7 @@ from getdeps.fetcher import (
 from getdeps.load import ManifestLoader
 from getdeps.manifest import ManifestParser
 from getdeps.platform import HostType
-from getdeps.runcmd import run_cmd
+from getdeps.runcmd import check_cmd
 from getdeps.subcmd import add_subcommands, cmd, SubCmd
 
 try:
@@ -432,23 +432,35 @@ class InstallSysDepsCmd(ProjectCmdBase):
                 merged += v
                 all_packages[k] = merged
 
-        cmd_args = None
+        cmd_argss = []
         if manager == "rpm":
             packages = sorted(set(all_packages["rpm"]))
             if packages:
-                cmd_args = ["sudo", "dnf", "install", "-y"] + packages
+                cmd_argss.append(
+                    ["sudo", "dnf", "install", "-y", "--skip-broken"] + packages
+                )
         elif manager == "deb":
             packages = sorted(set(all_packages["deb"]))
             if packages:
-                cmd_args = ["sudo", "apt", "install", "-y"] + packages
+                cmd_argss.append(
+                    [
+                        "sudo",
+                        "--preserve-env=http_proxy",
+                        "apt-get",
+                        "install",
+                        "-y",
+                    ]
+                    + packages
+                )
+                cmd_argss.append(["pip", "install", "pex"])
         elif manager == "homebrew":
             packages = sorted(set(all_packages["homebrew"]))
             if packages:
-                cmd_args = ["brew", "install"] + packages
+                cmd_argss.append(["brew", "install"] + packages)
         elif manager == "pacman-package":
             packages = sorted(list(set(all_packages["pacman-package"])))
             if packages:
-                cmd_args = ["pacman", "-S"] + packages
+                cmd_argss.append(["pacman", "-S"] + packages)
         else:
             host_tuple = loader.build_opts.host_type.as_tuple_string()
             print(
@@ -456,11 +468,11 @@ class InstallSysDepsCmd(ProjectCmdBase):
             )
             return
 
-        if cmd_args:
+        for cmd_args in cmd_argss:
             if args.dry_run:
                 print(" ".join(cmd_args))
             else:
-                run_cmd(cmd_args)
+                check_cmd(cmd_args)
         else:
             print("no packages to install")
 
@@ -1001,7 +1013,12 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
         if args.run_on_all_branches:
             return self.RUN_ON_ALL
         if args.cron:
-            return f"""
+            if args.cron == "never":
+                return " {}"
+            elif args.cron == "workflow_dispatch":
+                return "\n  workflow_dispatch"
+            else:
+                return f"""
   schedule:
     - cron: '{args.cron}'"""
 
@@ -1056,18 +1073,27 @@ class GenerateGitHubActionsCmd(ProjectCmdBase):
 
         if build_opts.is_linux():
             artifacts = "linux"
-            runs_on = f"ubuntu-{args.ubuntu_version}"
-            if args.cpu_cores:
-                runs_on = f"{args.cpu_cores}-core-ubuntu-{args.ubuntu_version}"
+            if args.runs_on:
+                runs_on = args.runs_on
+            else:
+                runs_on = f"ubuntu-{args.ubuntu_version}"
+                if args.cpu_cores:
+                    runs_on = f"{args.cpu_cores}-core-ubuntu-{args.ubuntu_version}"
         elif build_opts.is_windows():
             artifacts = "windows"
-            runs_on = "windows-2019"
+            if args.runs_on:
+                runs_on = args.runs_on
+            else:
+                runs_on = "windows-2022"
             # The windows runners are python 3 by default; python2.exe
             # is available if needed.
             py3 = "python"
         else:
             artifacts = "mac"
-            runs_on = "macOS-latest"
+            if args.runs_on:
+                runs_on = args.runs_on
+            else:
+                runs_on = "macOS-latest"
 
         os.makedirs(args.output_dir, exist_ok=True)
 
@@ -1155,7 +1181,7 @@ jobs:
                 build_opts.allow_system_packages
                 and build_opts.host_type.get_package_manager()
             ):
-                sudo_arg = "sudo "
+                sudo_arg = "sudo --preserve-env=http_proxy "
                 allow_sys_arg = " --allow-system-packages"
                 if build_opts.host_type.get_package_manager() == "deb":
                     out.write("    - name: Update system package info\n")
@@ -1300,7 +1326,7 @@ jobs:
                 no_deps_arg = "--no-deps "
 
             out.write(
-                f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{tests_arg}{no_deps_arg}--src-dir=. {manifest.name} {project_prefix}\n"
+                f"      run: {getdepscmd}{allow_sys_arg} build {build_type_arg}{tests_arg}{no_deps_arg}--src-dir=. {manifest.name}{project_prefix}\n"
             )
 
             out.write("    - name: Copy artifacts\n")
@@ -1315,7 +1341,7 @@ jobs:
 
             out.write(
                 f"      run: {getdepscmd}{allow_sys_arg} fixup-dyn-deps{strip} "
-                f"--src-dir=. {manifest.name} _artifacts/{artifacts} {project_prefix} "
+                f"--src-dir=. {manifest.name} _artifacts/{artifacts}{project_prefix} "
                 f"--final-install-prefix /usr/local\n"
             )
 
@@ -1331,7 +1357,7 @@ jobs:
 
                 out.write("    - name: Test %s\n" % manifest.name)
                 out.write(
-                    f"      run: {getdepscmd}{allow_sys_arg} test {num_jobs_arg}--src-dir=. {manifest.name} {project_prefix}\n"
+                    f"      run: {getdepscmd}{allow_sys_arg} test {num_jobs_arg}--src-dir=. {manifest.name}{project_prefix}\n"
                 )
             if build_opts.free_up_disk and not build_opts.is_windows():
                 out.write("    - name: Show disk space at end\n")
@@ -1361,8 +1387,12 @@ jobs:
             help="Number of CPU cores to use (applicable for Linux OS)",
         )
         parser.add_argument(
+            "--runs-on",
+            help="Allow specifying explicit runs-on: for github actions",
+        )
+        parser.add_argument(
             "--cron",
-            help="Specify that the job runs on a cron schedule instead of on pushes",
+            help="Specify that the job runs on a cron schedule instead of on pushes. Pass never to disable the action.",
         )
         parser.add_argument(
             "--main-branch",

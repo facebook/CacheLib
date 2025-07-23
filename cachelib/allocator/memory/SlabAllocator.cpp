@@ -21,7 +21,6 @@
 #include <folly/logging/xlog.h>
 #include <folly/synchronization/SanitizeThread.h>
 #include <sys/mman.h>
-#include <sys/types.h>
 
 #include <chrono>
 #include <memory>
@@ -44,9 +43,6 @@ static inline size_t roundDownToSlabSize(size_t size) {
   return size - (size % sizeof(Slab));
 }
 } // namespace
-
-constexpr unsigned int SlabAllocator::kLockSleepMS;
-constexpr size_t SlabAllocator::kPagesPerStep;
 
 void SlabAllocator::checkState() const {
   if (memoryStart_ == nullptr || memorySize_ <= Slab::kSize) {
@@ -152,13 +148,6 @@ SlabAllocator::SlabAllocator(const serialization::SlabAllocatorObject& object,
         "current slab size {} does not match the previous one {}",
         Slab::kSize,
         *object.slabSize()));
-  }
-
-  if (getMinAllocSize() != *object.minAllocSize()) {
-    throw std::invalid_argument(folly::sformat(
-        "current min alloc size {} does not match the previous one {}",
-        getMinAllocSize(),
-        *object.minAllocSize()));
   }
 
   if (getMinAllocSize() != *object.minAllocSize()) {
