@@ -55,7 +55,6 @@ add_library (cachelib_allocator
     memory/MemoryPoolManager.cpp
     MemoryMonitor.cpp
     memory/SlabAllocator.cpp
-    memory/Slab.cpp
     nvmcache/NvmItem.cpp
     nvmcache/NavyConfig.cpp
     nvmcache/NavySetup.cpp
