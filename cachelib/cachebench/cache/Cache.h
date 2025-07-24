@@ -1326,8 +1326,9 @@ template <typename Allocator>
 void Cache<Allocator>::setStringItem(WriteHandle& handle,
                                      const std::string& str) {
   auto dataSize = getSize(handle);
-  if (dataSize < 1)
+  if (dataSize < 1) {
     return;
+  }
 
   auto ptr = reinterpret_cast<char*>(getMemory(handle));
   std::strncpy(ptr, str.c_str(), dataSize);
