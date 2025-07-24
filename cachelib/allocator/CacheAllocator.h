@@ -2094,11 +2094,13 @@ class CacheAllocator : public CacheBase {
   BackgroundMoverStats getBackgroundMoverStats(MoverDir direction) const {
     auto stats = BackgroundMoverStats{};
     if (direction == MoverDir::Evict) {
-      for (auto& bg : backgroundEvictor_)
+      for (auto& bg : backgroundEvictor_) {
         stats += bg->getStats();
+      }
     } else if (direction == MoverDir::Promote) {
-      for (auto& bg : backgroundPromoter_)
+      for (auto& bg : backgroundPromoter_) {
         stats += bg->getStats();
+      }
     }
     return stats;
   }
@@ -4590,17 +4592,19 @@ PoolId CacheAllocator<CacheTrait>::addPool(
   if (backgroundEvictor_.size()) {
     auto memoryAssignments =
         createBgWorkerMemoryAssignments(backgroundEvictor_.size());
-    for (size_t id = 0; id < backgroundEvictor_.size(); id++)
+    for (size_t id = 0; id < backgroundEvictor_.size(); id++) {
       backgroundEvictor_[id]->setAssignedMemory(
           std::move(memoryAssignments[id]));
+    }
   }
 
   if (backgroundPromoter_.size()) {
     auto memoryAssignments =
         createBgWorkerMemoryAssignments(backgroundPromoter_.size());
-    for (size_t id = 0; id < backgroundPromoter_.size(); id++)
+    for (size_t id = 0; id < backgroundPromoter_.size(); id++) {
       backgroundPromoter_[id]->setAssignedMemory(
           std::move(memoryAssignments[id]));
+    }
   }
 
   return pid;
@@ -5487,11 +5491,13 @@ CacheAllocator<CacheTrait>::shutDown() {
   shmManager_.reset();
 
   if (shmShutDownSucceeded) {
-    if (!nvmShutDownStatusOpt || *nvmShutDownStatusOpt)
+    if (!nvmShutDownStatusOpt || *nvmShutDownStatusOpt) {
       return ShutDownStatus::kSuccess;
+    }
 
-    if (nvmShutDownStatusOpt && !*nvmShutDownStatusOpt)
+    if (nvmShutDownStatusOpt && !*nvmShutDownStatusOpt) {
       return ShutDownStatus::kSavedOnlyDRAM;
+    }
   }
 
   XLOGF(ERR, "Could not shutdown DRAM cache cleanly. ShutDownRes={}",

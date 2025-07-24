@@ -1292,8 +1292,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
                   "chainedItemAccessConfig");
   mergeWithPrefix(configMap, accessConfig.serialize(), "accessConfig");
   mergeWithPrefix(configMap, reaperConfig.serialize(), "reaperConfig");
-  if (nvmConfig)
+  if (nvmConfig) {
     mergeWithPrefix(configMap, nvmConfig->serialize(), "nvmConfig");
+  }
 
   return configMap;
 }
@@ -1310,8 +1311,9 @@ void CacheAllocatorConfig<T>::mergeWithPrefix(
 
 template <typename T>
 std::string CacheAllocatorConfig<T>::stringifyAddr(const void* addr) const {
-  if (addr == nullptr)
+  if (addr == nullptr) {
     return "";
+  }
   const std::string HEX = "0123456789abcdef";
   uintptr_t num = (uintptr_t)slabMemoryBaseAddr;
   std::string res = "";

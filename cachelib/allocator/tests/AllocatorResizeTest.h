@@ -1153,8 +1153,9 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
             }
           }
         }
-        if (++poolId == numPools)
+        if (++poolId == numPools) {
           poolId = 0;
+        }
       }
     };
     std::vector<std::thread> threads;
