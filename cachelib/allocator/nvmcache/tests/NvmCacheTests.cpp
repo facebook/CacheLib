@@ -2414,7 +2414,7 @@ TEST_F(NvmCacheTest, testSampleItem) {
       auto keyStr = sample->getKey().toString();
       {
         std::unique_lock<std::mutex> l(mtx);
-        ASSERT_EQ(1, cachedKeys.contains(keyStr));
+        ASSERT_EQ(1, cachedKeys.count(keyStr));
       }
 
       unsigned idx;
