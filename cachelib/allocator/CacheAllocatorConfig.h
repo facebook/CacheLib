@@ -536,6 +536,9 @@ class CacheAllocatorConfig {
 
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
+  
+  // when doing tail hits tracking for MM2Q, do we consider cold tail hits only or both cold and warm tail hits
+  bool countColdTailHitsOnly{false};
 
   // Memory monitoring config
   MemoryMonitor::Config memMonitorConfig;

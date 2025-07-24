@@ -28,9 +28,35 @@ struct RebalanceContext {
   ClassId victimClassId{Slab::kInvalidClassId};
   ClassId receiverClassId{Slab::kInvalidClassId};
 
+  // to support multiple <victim, receiver> pairs at a time
+  std::vector<std::pair<ClassId, ClassId>> victimReceiverPairs{};
+  // tracking the diff between victim and receiver
+  double diffValue{0.0};
+
   RebalanceContext() = default;
   RebalanceContext(ClassId victim, ClassId receiver)
       : victimClassId(victim), receiverClassId(receiver) {}
+  
+  explicit RebalanceContext(const std::vector<std::pair<ClassId, ClassId>>& pairs)
+      : victimReceiverPairs(pairs) {}
+  
+  bool isEffective() const {
+    auto isPairEffective = [](ClassId victim, ClassId receiver) {
+      return victim != Slab::kInvalidClassId &&
+            receiver != Slab::kInvalidClassId &&
+            victim != receiver;
+    };
+
+    bool singleEffective = isPairEffective(victimClassId, receiverClassId);
+
+    bool pairEffective = std::any_of(
+        victimReceiverPairs.begin(), victimReceiverPairs.end(),
+        [&](const std::pair<ClassId, ClassId>& p) {
+          return isPairEffective(p.first, p.second);
+        });
+
+    return singleEffective || pairEffective;
+  }
 };
 
 // Base class for rebalance strategy.
@@ -48,6 +74,7 @@ class RebalanceStrategy {
     PickNothingOrTest = 0,
     Random,
     MarginalHits,
+    MarginalHitsNew,
     FreeMem,
     HitsPerSlab,
     LruTailAge,
@@ -81,6 +108,15 @@ class RebalanceStrategy {
 
   virtual void updateConfig(const BaseConfig&) {}
 
+
+  void recordRebalanceEvent(PoolId pid, RebalanceContext ctx, size_t maxQueueSize); 
+
+  double getMinDiffValueFromRebalanceEvents(PoolId pid) const;
+
+  unsigned int getRebalanceEventQueueSize(PoolId pid) const;
+
+  void clearPoolRebalanceEvent(PoolId pid);
+
   Type getType() const { return type_; }
 
   std::string getTypeString() const {
@@ -91,6 +127,8 @@ class RebalanceStrategy {
       return "Random";
     case MarginalHits:
       return "MarginalHits";
+    case MarginalHitsNew:
+      return "MarginalHitsNew";
     case FreeMem:
       return "FreeMem";
     case HitsPerSlab:
