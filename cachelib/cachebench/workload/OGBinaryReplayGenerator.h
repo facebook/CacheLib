@@ -47,6 +47,12 @@ struct OGReqWrapper {
              reinterpret_cast<uint64_t>(this),
              other.req_),
         repeats_(other.repeats_) {}
+  
+  void updateKey(const std::string& key) {
+    key_ = key;
+    // Request's key is now std::string_view
+    req_.key = key_;
+  }
 
   // current outstanding key
   std::string key_;
@@ -239,7 +245,8 @@ inline bool OGBinaryReplayGenerator::parseRequest(
   }
 
   // Set key
-  req->key_ = traceStream_.template getField<>(SampleFields::OBJECT_ID).value();
+  auto parsedKey = traceStream_.template getField<>(SampleFields::OBJECT_ID).value();
+  req->updateKey(std::string{parsedKey});
 
   // Convert timestamp to seconds.
   // todo: clarify time precision

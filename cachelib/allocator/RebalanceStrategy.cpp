@@ -60,6 +60,7 @@ void RebalanceStrategy::initPoolState(PoolId pid, const PoolStats& stats) {
         Info{id, stats.mpStats.acStats.at(id).totalSlabs(),
              stats.cacheStats.at(id).numEvictions(), stats.numHitsForClass(id),
              stats.cacheStats.at(id).containerStat.numTailAccesses,
+             0,
              stats.numHitsForClass(id) + stats.cacheStats.at(id).allocAttempts,
              stats.numHitsForClass(id) + stats.cacheStats.at(id).allocAttempts}; // hits + allocs => nr of requests
   }
@@ -367,6 +368,23 @@ double RebalanceStrategy::queryEffectiveMoveRate(PoolId pid) const{
   int totalEffectiveMoves = currentAbsNet / 2;
 
   return static_cast<double>(totalEffectiveMoves) / events.size();
+}
+
+double RebalanceStrategy::getMinDiffValueFromRebalanceEvents(PoolId pid) const {
+  const auto it = recentRebalanceEvents_.find(pid);
+  if (it == recentRebalanceEvents_.end() || it->second.empty()) {
+    return 0.0; // Return 0.0 if the queue is empty or the pool ID is not found
+  }
+
+  const auto& events = it->second;
+
+  // Find the minimum diffValue in the queue
+  double minDiffValue = std::numeric_limits<double>::max();
+  for (const auto& ctx : events) {
+    minDiffValue = std::min(minDiffValue, ctx.diffValue);
+  }
+
+  return minDiffValue;
 }
 
 } // namespace facebook::cachelib

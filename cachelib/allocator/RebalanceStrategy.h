@@ -117,6 +117,8 @@ class RebalanceStrategy {
 
   void clearPoolRebalanceEvent(PoolId pid);
 
+  double queryEffectiveMoveRate(PoolId pid) const;
+
   Type getType() const { return type_; }
 
   std::string getTypeString() const {
@@ -229,6 +231,8 @@ class RebalanceStrategy {
                                      const PoolStats& poolStats,
                                      size_t threshold,
                                      const PoolState& prevState);
+
+  std::unordered_map<PoolId, std::deque<RebalanceContext>> recentRebalanceEvents_;
 
  private:
   // picks any of the class id ordered by the total slabs.

@@ -47,6 +47,8 @@ struct Info {
   // accumulative number of hits in the tail slab of this allocation class
   uint64_t accuTailHits{0};
 
+  double decayedAccuTailHits{0.0};
+
   // accumalative number of requests seen for this allocation class
   uint64_t numRequests{0};
 
@@ -61,9 +63,10 @@ struct Info {
        unsigned long long evicts,
        uint64_t h,
        uint64_t th,
+       double dath,
        uint64_t nr,
        uint64_t nrld) noexcept
-      : id(_id), nSlabs(slabs), evictions(evicts), hits(h), accuTailHits(th), numRequests(nr), numRequestsAtLastDecay(nrld) {}
+      : id(_id), nSlabs(slabs), evictions(evicts), hits(h), accuTailHits(th), decayedAccuTailHits(dath), numRequests(nr), numRequestsAtLastDecay(nrld) {}
 
   // number of rounds we hold off for when we acquire a slab.
   static constexpr unsigned int kNumHoldOffRounds = 10;
