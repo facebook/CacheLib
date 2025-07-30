@@ -1123,6 +1123,14 @@ impl VolatileLruCachePool {
         })
     }
 
+    /// Insert a previously allocated handle into the cache, replacing any pre-existing data.
+    pub fn insert_or_replace_handle(&self, handle: LruCacheHandle<ReadWrite>) -> Result<()> {
+        self.inner.insert_or_replace_handle(LruCacheHandle {
+            handle: handle.handle,
+            _marker: PhantomData,
+        })
+    }
+
     /// Insert a key->value mapping into the pool. Returns true if the insertion was successful,
     /// false otherwise. This will not overwrite existing data.
     pub fn set_with_ttl<K, V>(&self, key: K, value: V, ttl: Option<Duration>) -> Result<bool>
