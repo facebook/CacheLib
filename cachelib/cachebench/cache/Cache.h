@@ -513,10 +513,16 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       nandBytesBegin_{fetchNandWrites()},
       itemRecords_(config_.enableItemDestructorCheck) {
   constexpr size_t MB = 1024ULL * 1024ULL;
-
+  
+  if (config_.rebalanceStrategy == "marginal-hits" ||
+      config_.rebalanceStrategy == "marginal-hits-new") {
+        allocatorConfig_.enableTailHitsTracking();
+  }
   allocatorConfig_.enablePoolRebalancing(
       config_.getRebalanceStrategy(),
       std::chrono::seconds(config_.poolRebalanceIntervalSec));
+  
+  allocatorConfig_.countColdTailHitsOnly = config_.countColdTailHitsOnly;
 
   if (config_.moveOnSlabRelease && movingSync != nullptr) {
     allocatorConfig_.enableMovingOnSlabRelease(
