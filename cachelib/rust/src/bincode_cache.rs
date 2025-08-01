@@ -129,6 +129,28 @@ where
     cache_pool.insert_handle(handle)
 }
 
+/// Encodes an item via bincode, and then inserts it into a volatile pool, replacing any pre-existing data.
+pub fn set_or_replace_cached<T>(
+    cache_pool: &VolatileLruCachePool,
+    cache_key: &str,
+    entry: &T,
+    ttl: Option<Duration>,
+) -> Result<()>
+where
+    T: bincode::Encode,
+{
+    let size = encoded_size(entry, CONFIG)?;
+    let handle = cache_pool.allocate_with_ttl(cache_key, size, ttl)?;
+    let mut handle = handle.ok_or_else(|| Error::msg("cannot allocate cachelib handle"))?;
+    let mut writer = handle.get_writer()?;
+    let written = bincode::encode_into_slice(entry, writer.buffer(), CONFIG)?;
+    anyhow::ensure!(
+        written == size,
+        "Buffer underrun encoding cache item '{cache_key}': {written} < {size}"
+    );
+    cache_pool.insert_or_replace_handle(handle)
+}
+
 #[cfg(test)]
 mod test {
     use fbinit::FacebookInit;
