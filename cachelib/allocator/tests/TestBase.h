@@ -38,11 +38,10 @@ namespace tests {
 // type for TYPED_TEST_CASE
 // in tests, 0 means LruAllocator, 1 means Lru2QAllocator, 2 means
 // TinyLFUAllocator, 4 is LruAllocatorSpinBuckets
-typedef ::testing::Types<LruAllocator,
-                         Lru2QAllocator,
-                         TinyLFUAllocator,
-                         LruAllocatorSpinBuckets>
-    AllocatorTypes;
+using AllocatorTypes = ::testing::Types<LruAllocator,
+                                        Lru2QAllocator,
+                                        TinyLFUAllocator,
+                                        LruAllocatorSpinBuckets>;
 
 template <typename AllocatorT>
 class AllocatorTest : public SlabAllocatorTestBase {
