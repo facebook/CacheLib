@@ -73,9 +73,9 @@ and will then invoke cmake etc to build CacheLib.  This will help ensure that yo
 
 ### Run tests
 
-By default `getdeps.py` will build the tests for folly. To run them:
+By default `getdeps.py` will build the tests for CacheLib. To run them:
 
-    cd folly
+    cd CacheLib
     python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
 
 
