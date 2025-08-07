@@ -66,7 +66,7 @@ using facebook::cachelib::objcache::test::ObjCacheString;
 template <>
 class Cpp2Ops<ObjCacheString> {
  public:
-  typedef ObjCacheString Type;
+  using Type = ObjCacheString;
   static constexpr protocol::TType thriftType() { return protocol::T_STRING; }
   template <class Protocol>
   static uint32_t write(Protocol* prot, const Type* value) {
