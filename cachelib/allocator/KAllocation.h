@@ -150,7 +150,7 @@ class CACHELIB_PACKED_ATTR KAllocation {
   // Check if the key is valid.  The length of the key needs to be in (0,
   // kKeyMaxLen) to be valid
   static bool isKeyValid(folly::StringPiece key) {
-    // StringPiece empty() does not realy check for start being nullptr
+    // StringPiece empty() does not really check for start being nullptr
     return (key.size() <= kKeyMaxLen) && (!key.empty()) && (key.start());
   }
 

@@ -174,7 +174,7 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     typename AllocatorT::Config config;
     config.setRemoveCallback(removeCb);
 
-    // create an allocator worth 100 slabs.
+    // create an allocator with 100 slabs.
     config.setCacheSize(100 * Slab::kSize);
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;

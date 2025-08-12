@@ -579,7 +579,7 @@ class MemoryAllocator {
   // Traverse each slab and call user defined callback on each allocation
   // within the slab. Callback will be invoked if the slab is not advised,
   // marked for release or currently being moved. Callbacks will be invoked
-  // irrespective of whether the slab is allocated for free.
+  // irrespective of whether the slab is allocated or free.
   //
   // @param callback   Callback to be executed on each allocation
   // @return           The number of slabs skipped

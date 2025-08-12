@@ -405,6 +405,8 @@ class CacheAllocator : public CacheBase {
   //                        size.
   // @param ttlSecs         Time To Live(second) for the item,
   //                        default with 0 means no expiration time.
+  // @param creationTime    time when the object was created, default with 0
+  //                        means creation time of now
   //
   // @return      the handle for the item or an invalid handle(nullptr) if the
   //              allocation failed. Allocation can fail if we are out of memory
@@ -716,9 +718,6 @@ class CacheAllocator : public CacheBase {
 
   // create memory assignment to bg workers
   auto createBgWorkerMemoryAssignments(size_t numWorkers);
-
-  // whether bg worker should be woken
-  bool shouldWakeupBgEvictor(PoolId pid, ClassId cid);
 
   // Get a random item from memory
   // This is useful for profiling and sampling cachelib managed memory
@@ -2714,12 +2713,6 @@ CacheAllocator<CacheTrait>::allocate(PoolId poolId,
 }
 
 template <typename CacheTrait>
-bool CacheAllocator<CacheTrait>::shouldWakeupBgEvictor(PoolId /* pid */,
-                                                       ClassId /* cid */) {
-  return false;
-}
-
-template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
                                              typename Item::Key key,
@@ -2741,8 +2734,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
 
   void* memory = allocator_->allocate(pid, requiredSize);
 
-  if (backgroundEvictor_.size() && !fromBgThread &&
-      (memory == nullptr || shouldWakeupBgEvictor(pid, cid))) {
+  if (backgroundEvictor_.size() && !fromBgThread && memory == nullptr) {
     backgroundEvictor_[BackgroundMover<CacheT>::workerId(
                            pid, cid, backgroundEvictor_.size())]
         ->wakeUp();
@@ -3834,7 +3826,7 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
          config_.evictionSearchTries > searchTries) {
     auto [candidate, toRecycle] = getNextCandidate(pid, cid, searchTries);
 
-    // Reached the end of the eviction queue but doulen't find a candidate,
+    // Reached the end of the eviction queue but couldn't find a candidate,
     // start again.
     if (!toRecycle) {
       continue;

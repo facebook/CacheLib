@@ -94,14 +94,15 @@ bool eventuallyZero(std::function<int(bool)> test) {
 
 std::string getRandomAsciiStr(unsigned int len) {
   std::string s;
+  s.reserve(len);
   static const char start[] = {'a', 'A', '0'};
   static const int size[] = {26, 26, 10};
 
   for (unsigned int i = 0; i < len; i++) {
     unsigned int index =
-        folly::Random::rand32() % (sizeof(start) / sizeof(start[0]));
-    const char c = (start[index] +
-                    static_cast<char>((folly::Random::rand32() % size[index])));
+        folly::Random::rand32(sizeof(start) / sizeof(start[0]));
+    const char c =
+        (start[index] + static_cast<char>(folly::Random::rand32(size[index])));
     s += c;
   }
   XDCHECK_EQ(s.length(), len);

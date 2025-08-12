@@ -181,7 +181,7 @@ class AllocationClass {
       return SlabIterationStatus::kSkippedCurrentSlabAndContinue;
     }
 
-    // Prefetch the first kForEachAllocPrefetchPffset items in the slab.
+    // Prefetch the first kForEachAllocPrefetchOffset items in the slab.
     // Note that the prefetch is for read with no temporal locality.
     void* prefetchOffsetPtr = reinterpret_cast<void*>(slab);
     for (unsigned int i = 0; i < kForEachAllocPrefetchOffset; i++) {
