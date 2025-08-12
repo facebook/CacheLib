@@ -565,7 +565,7 @@ Buffer BigHash::readBucket(BucketId bid) {
         Bucket::computeChecksum(bufferView) == b->getChecksum();
     // TODO (T93631284) we only read a bucket if the bloom filter indicates that
     // the bucket could have the element. Hence, if check sum errors out and
-    // bloom filter is enable, we could record the checksum error. However,
+    // bloom filter is enabled, we could record the checksum error. However,
     // doing so could lead to false positives on check sum errors for buckets
     // that were not initialized (by writing to it), but were read due to bloom
     // filter having a false positive.  Hence, we can't differentiate between

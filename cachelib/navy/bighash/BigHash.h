@@ -46,10 +46,10 @@ class ValidBucketChecker;
 // a series of buckets. One can think of it as a on-device hash table.
 //
 // Each item is hashed to a bucket according to its key. There is no size class,
-// and each bucket is consist of various variable-sized items. When full, we
-// evict the items in their insertion order. An eviction call back is guaranteed
-// to be invoked once per item. We currently do not support removeCB. That is
-// coming as part of Navy eventually.
+// and each bucket consists of various variable-sized items. When full, we evict
+// the items in their insertion order. An eviction call back is guaranteed to be
+// invoked once per item. We currently do not support removeCB. That is coming
+// as part of Navy eventually.
 //
 // Each read and write via BigHash happens in `bucketSize` granularity. This
 // means, you will read a full bucket even if your item is only 100 bytes.
@@ -176,15 +176,6 @@ class BigHash final : public Engine {
   Buffer readBucket(BucketId bid);
   bool writeBucket(BucketId bid, Buffer buffer);
 
-  // Initialize the SharedMutexes.
-  std::vector<std::unique_ptr<SharedMutex>> initalizeMutexes() {
-    std::vector<std::unique_ptr<SharedMutex>> mutex;
-    for (size_t i = 0; i < kNumMutexes; ++i) {
-      mutex.emplace_back(std::make_unique<SharedMutex>());
-    }
-    return mutex;
-  }
-
   // The corresponding r/w bucket lock must be held during the entire
   // duration of the read and write operations. For example, during write,
   // if write lock is dropped after a bucket is read from device, user
@@ -194,7 +185,7 @@ class BigHash final : public Engine {
   //
   // In short, just hold the lock during the entire operation!
   SharedMutex& getMutex(BucketId bid) const {
-    return *mutex_[bid.index() & (kNumMutexes - 1)].get();
+    return mutex_[bid.index() & (kNumMutexes - 1)];
   }
 
   folly::SpinLock& getBfLock(BucketId bid) const {
@@ -233,7 +224,7 @@ class BigHash final : public Engine {
   Device& device_;
   // handle for data placement technologies like FDP
   int placementHandle_;
-  std::vector<std::unique_ptr<SharedMutex>> mutex_{initalizeMutexes()};
+  mutable std::vector<SharedMutex> mutex_{kNumMutexes};
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of
   // couldExist which needs to be fast against other long running or
@@ -241,14 +232,14 @@ class BigHash final : public Engine {
   // happens against the remove or evict of the given item, there could
   // be a false positive which is ok.
   // Nested lock orders are always mutex-then-spinlock
-  std::unique_ptr<folly::SpinLock[]> bfLock_{new folly::SpinLock[kNumMutexes]};
+  mutable std::vector<folly::SpinLock> bfLock_{kNumMutexes};
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;
   mutable TLCounter bfProbeCount_;
   mutable TLCounter bfRejectCount_;
 
-  // atomic counters in asynchronized path
+  // atomic counters in asynchronous path
   mutable AtomicCounter itemCount_;
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter succInsertCount_;
