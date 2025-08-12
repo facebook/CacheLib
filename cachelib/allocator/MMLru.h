@@ -85,7 +85,6 @@ class MMLru {
     //                    time depite the number of accesses it gets.
     // @param udpateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
-    // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
     //                    length from the end of the queue. For example, value 1
     //                    means the insertion point is 1/2 from the end of LRU;
@@ -165,10 +164,10 @@ class MMLru {
     //                    length from the end of the queue. For example, value 1
     //                    means the insertion point is 1/2 from the end of LRU;
     //                    value 2 means 1/4 from the end of LRU.
-    // @param mmReconfigureInterval   Time interval for recalculating lru
-    //                                refresh time according to the ratio.
-    // useCombinedLockForIterators    Whether to use combined locking for
-    //                                withEvictionIterator
+    // @param mmReconfigureInterval         Time interval for recalculating lru
+    //                                      refresh time according to the ratio.
+    // @param useCombinedLockForIterators   Whether to use combined locking for
+    //                                      withEvictionIterator
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
@@ -237,7 +236,7 @@ class MMLru {
   };
 
   // The container object which can be used to keep track of objects of type
-  // T. T must have a public member of type Hook. This object is wrapper
+  // T. T must have a public member of type Hook. This object is a wrapper
   // around DList, is thread safe and can be accessed from multiple threads.
   // The current implementation models an LRU using the above DList
   // implementation.

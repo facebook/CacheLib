@@ -125,7 +125,7 @@ class NvmCache {
     // allows the user of cachelib to provide logic to:
     // 1. Create blobs to be copied into NvmItem from the Item being evicted
     // from DRAM; and
-    // 2. Propagate the content of Item with the Blobs retrieved from NvmItem.
+    // 2. Populate the content of Item with the Blobs retrieved from NvmItem.
     MakeBlobCB makeBlobCb{};
     MakeObjCB makeObjCb{};
 
@@ -133,7 +133,7 @@ class NvmCache {
     // into the nvm device will be encrypted.
     std::shared_ptr<navy::DeviceEncryptor> deviceEncryptor{};
 
-    // Whether or not store full alloc-class sizes into NVM device.
+    // Whether or not to store full alloc-class sizes into NVM device.
     // If true, only store the orignal size the user requested.
     bool truncateItemToOriginalAllocSizeInNvm{false};
 
@@ -145,7 +145,7 @@ class NvmCache {
     // this option is merely here to allow us to disable this behavior
     // gradually. See S421120 for more details.
     // Update: We're now disabling the NvmCache only when the device is throwing
-    // errors with IO reqeusts from the remove path. (DeviceError - which is
+    // errors with IO requests from the remove path. (DeviceError - which is a
     // real error). Leaving this option here for now, since it could be useful
     // in the future.
     bool disableNvmCacheOnBadState{true};
