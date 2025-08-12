@@ -81,6 +81,9 @@ class CacheAllocatorConfig {
       uint32_t _minAllocationClassSize,
       bool _reduceFragmentationInAllocationClass);
 
+  // Set whether users are allowed to use large keys (> 255 bytes)
+  CacheAllocatorConfig& setAllowLargeKeys(bool largeKeys);
+
   // Set the access config for cachelib's access container. Refer to our
   // user guide for how to tune access container (configure hashtable).
   CacheAllocatorConfig& setAccessConfig(AccessConfig config);
@@ -444,6 +447,9 @@ class CacheAllocatorConfig {
   // a custom set of alloc sizes.
   std::set<uint32_t> defaultAllocSizes;
 
+  // whether to allow large keys (> 255 bytes)
+  bool allowLargeKeys{false};
+
   // whether to detach allocator memory upon a core dump
   bool disableFullCoredump{true};
 
@@ -710,6 +716,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDefaultAllocSizes(
   maxAllocationClassSize = _maxAllocationClassSize;
   minAllocationClassSize = _minAllocationClassSize;
   reduceFragmentationInAllocationClass = _reduceFragmentationInAllocationClass;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAllowLargeKeys(
+    bool largeKeys) {
+  allowLargeKeys = largeKeys;
   return *this;
 }
 

@@ -89,7 +89,7 @@ struct ObjectCacheConfig {
   ObjectCacheConfig& setShardName(const std::string& _l1ShardName);
 
   // Set the maximum size of the key. The default is 255
-  ObjectCacheConfig& setMaxKeySizeBytes(uint8_t _maxKeySizeBytes);
+  ObjectCacheConfig& setMaxKeySizeBytes(uint32_t _maxKeySizeBytes);
 
   // Set the access config for cachelib's access container
   ObjectCacheConfig& setAccessConfig(uint32_t _l1HashTablePower,
@@ -214,8 +214,8 @@ struct ObjectCacheConfig {
   std::string cacheName;
 
   // The maximum key size in bytes. Default to 255 bytes which is the maximum
-  // key size cachelib supports.
-  uint8_t maxKeySizeBytes{255};
+  // small key size cachelib supports.
+  uint32_t maxKeySizeBytes{255};
 
   // If this is enabled, user has to pass the object size upon insertion
   bool objectSizeTrackingEnabled{false};
@@ -387,7 +387,8 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::setShardName(
 
 template <typename T>
 ObjectCacheConfig<T>& ObjectCacheConfig<T>::setMaxKeySizeBytes(
-    uint8_t _maxKeySizeBytes) {
+    uint32_t _maxKeySizeBytes) {
+  XDCHECK_GT(_maxKeySizeBytes, 0U) << "Must allow keys larger than 0 bytes";
   maxKeySizeBytes = _maxKeySizeBytes;
   return *this;
 }

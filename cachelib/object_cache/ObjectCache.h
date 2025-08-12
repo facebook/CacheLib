@@ -295,7 +295,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   AccessIterator end() { return this->l1Cache_->end(); }
 
   // Get the default l1 allocation size in bytes.
-  static uint32_t getL1AllocSize(uint8_t maxKeySizeBytes);
+  static uint32_t getL1AllocSize(uint32_t maxKeySizeBytes);
 
   // Get the total size of all cached objects in bytes.
   size_t getTotalObjectSize() const {
@@ -652,6 +652,10 @@ void ObjectCache<AllocatorT>::init() {
     l1Config.nvmConfig.assign(std::move(config_.nvmConfig.value()));
   }
 
+  if (config_.maxKeySizeBytes > KAllocation::kKeyMaxLenSmall) {
+    l1Config.setAllowLargeKeys(true);
+  }
+
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   // add a pool per shard
   for (size_t i = 0; i < config_.l1NumShards; i++) {
@@ -934,9 +938,9 @@ bool ObjectCache<AllocatorT>::allocatePlaceholder() {
 }
 
 template <typename AllocatorT>
-uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint8_t maxKeySizeBytes) {
-  auto requiredSizeBytes = maxKeySizeBytes + sizeof(ObjectCacheItem) +
-                           sizeof(typename AllocatorT::Item);
+uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint32_t maxKeySizeBytes) {
+  auto requiredSizeBytes = AllocatorT::Item::getRequiredSize(
+      maxKeySizeBytes, sizeof(ObjectCacheItem));
   if (requiredSizeBytes <= kL1AllocSizeMin) {
     return kL1AllocSizeMin;
   }

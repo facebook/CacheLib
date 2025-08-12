@@ -411,7 +411,7 @@ class CacheAllocator : public CacheBase {
   //              and can not find an eviction.
   // @throw   std::invalid_argument if the poolId is invalid or the size
   //          requested is invalid or if the key is invalid(key.size() == 0 or
-  //          key.size() > 255)
+  //          key.size() > max key length)
   WriteHandle allocate(PoolId id,
                        Key key,
                        uint32_t size,
@@ -2762,6 +2762,16 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
       // free back the memory to the allocator since we failed.
       allocator_->free(memory);
     };
+
+    // Disallow large keys if not enabled in the config
+    if (!config_.allowLargeKeys && key.size() > KAllocation::kKeyMaxLenSmall) {
+      auto badKey =
+          (key.start()) ? std::string(key.start(), key.size()) : std::string{};
+      throw std::invalid_argument{folly::sformat(
+          "Large cache key (> {} bytes) but large keys not "
+          "enabled : {} (size = {})",
+          KAllocation::kKeyMaxLenSmall, folly::humanify(badKey), key.size())};
+    }
 
     handle = acquire(new (memory) Item(key, size, creationTime, expiryTime));
     if (handle) {

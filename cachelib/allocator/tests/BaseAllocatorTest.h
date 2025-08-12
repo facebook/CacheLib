@@ -5891,6 +5891,75 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     }
   }
 
+  void testLargeKeys() {
+    const size_t nSizes = 10;
+    const size_t nTries = 10;
+    // limit key size for the main part of the test to keep test time small
+    const auto maxTestKeySize = KAllocation::kKeyMaxLen / 1024;
+    size_t numSucceeded;
+    size_t numFailed;
+
+    auto allocateLargeKeys = [&](bool allowLargeKeys) {
+      typename AllocatorT::Config config;
+      config.setCacheSize(100 * Slab::kSize);
+      config.setAllowLargeKeys(allowLargeKeys);
+      AllocatorT alloc(config);
+      const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+      auto poolId = alloc.addPool("foobar", numBytes);
+
+      const auto maxKeySize =
+          allowLargeKeys ? maxTestKeySize : KAllocation::kKeyMaxLenSmall;
+      const auto sizes =
+          this->getValidAllocSizes(alloc, poolId, nSizes, maxKeySize);
+
+      // empty the cache.
+      for (const auto& it : alloc) {
+        alloc.remove(it.getKey());
+      }
+
+      numSucceeded = 0;
+      numFailed = 0;
+      for (unsigned int i = 0; i < nTries; i++) {
+        for (auto size : sizes) {
+          auto keySize = folly::Random::rand32(KAllocation::kKeyMaxLenSmall + 1,
+                                               maxTestKeySize);
+          try {
+            alloc.allocate(poolId, test_util::getRandomAsciiStr(keySize), size);
+            numSucceeded++;
+          } catch (const std::invalid_argument&) {
+            numFailed++;
+          }
+        }
+
+        for (const auto& it : alloc) {
+          alloc.remove(it.getKey());
+        }
+      }
+
+      EXPECT_EQ(alloc.getPoolStats(poolId).numActiveAllocs(), 0);
+    };
+
+    // disable large keys, all allocations should fail
+    allocateLargeKeys(/* allowLargeKeys */ false);
+    EXPECT_EQ(numSucceeded, 0);
+    EXPECT_EQ(numFailed, nSizes * nTries);
+
+    // enable large keys, all allocations should succeed
+    allocateLargeKeys(/* allowLargeKeys */ true);
+    EXPECT_EQ(numSucceeded, nSizes * nTries);
+    EXPECT_EQ(numFailed, 0);
+
+    // try allocating a really large key
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    config.setAllowLargeKeys(true);
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId = alloc.addPool("foobar", numBytes);
+    const size_t mb = 1024 * 1024;
+    alloc.allocate(poolId, test_util::getRandomAsciiStr(mb), /* size */ mb);
+  }
+
   void testRebalanceByAllocFailure() {
     typename AllocatorT::Config config;
     const size_t nSlabs = 3;

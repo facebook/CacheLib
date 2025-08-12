@@ -148,6 +148,11 @@ class CACHELIB_PACKED_ATTR CacheItem {
   //         0 otherwise
   static uint32_t getRequiredSize(Key key, uint32_t size) noexcept;
 
+  // Same as above but explicitly passes in the key size.  Can be used in
+  // checks and compile-time constants.
+  static constexpr uint32_t getRequiredSize(uint32_t keySize,
+                                            uint32_t size) noexcept;
+
   // Get the number of maximum outstanding handles there can be at any given
   // time for an item
   static uint64_t getRefcountMax() noexcept;
@@ -582,11 +587,25 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
 template <typename CacheTrait>
 uint32_t CacheItem<CacheTrait>::getRequiredSize(Key key,
                                                 uint32_t size) noexcept {
-  const uint64_t requiredSize =
-      static_cast<uint64_t>(size) + key.size() + sizeof(Item);
+  const uint64_t requiredSize = static_cast<uint64_t>(size) + key.size() +
+                                sizeof(Item) +
+                                KAllocation::extraBytesForLargeKeys(key.size());
 
   XDCHECK_LE(requiredSize,
              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+  if (requiredSize >
+      static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+    return 0;
+  }
+  return static_cast<uint32_t>(requiredSize);
+}
+
+template <typename CacheTrait>
+constexpr uint32_t CacheItem<CacheTrait>::getRequiredSize(
+    uint32_t keySize, uint32_t size) noexcept {
+  const uint64_t requiredSize = static_cast<uint64_t>(size) + keySize +
+                                sizeof(Item) +
+                                KAllocation::extraBytesForLargeKeys(keySize);
   if (requiredSize >
       static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
     return 0;

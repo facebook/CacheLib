@@ -381,6 +381,8 @@ TYPED_TEST(BaseAllocatorTest, CacheKeyValidity) {
   this->testCacheKeyValidity();
 }
 
+TYPED_TEST(BaseAllocatorTest, LargeCacheKey) { this->testLargeKeys(); }
+
 TYPED_TEST(BaseAllocatorTest, RefcountOverflow) {
   this->testRefcountOverflow();
 }
