@@ -133,6 +133,12 @@ class AbstractCache {
   // Get key and Buffer for a random sample
   virtual std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) = 0;
+
+  // Update any stats needed to be updated when eviction is done
+  // For now, only itme lifetime is updated
+  virtual void updateEvictionStats(HashedKey key,
+                                   BufferView value,
+                                   uint32_t lifetime) = 0;
 };
 } // namespace navy
 } // namespace cachelib

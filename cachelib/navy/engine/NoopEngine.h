@@ -43,6 +43,7 @@ class NoopEngine final : public Engine {
   std::pair<Status, std::string> getRandomAlloc(Buffer&) override {
     return std::make_pair(Status::NotFound, "");
   }
+  void updateEvictionStats(uint32_t /* lifetime */) override {}
 };
 } // namespace navy
 } // namespace cachelib

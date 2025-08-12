@@ -155,6 +155,11 @@ class Driver final : public AbstractCache {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(HashedKey key,
+                           BufferView value,
+                           uint32_t lifetime) override;
+
  private:
   struct ValidConfigTag {};
 

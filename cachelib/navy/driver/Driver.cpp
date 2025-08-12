@@ -370,4 +370,10 @@ std::pair<Status, std::string> Driver::getRandomAlloc(Buffer& value) {
   size_t idx = getRandomAllocDist(getRandomAllocGen);
   return enginePairs_[idx].getRandomAlloc(value);
 }
+
+void Driver::updateEvictionStats(HashedKey key,
+                                 BufferView value,
+                                 uint32_t lifetime) {
+  enginePairs_[selectEnginePair(key)].updateEvictionStats(key, value, lifetime);
+}
 } // namespace facebook::cachelib::navy

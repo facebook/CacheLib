@@ -326,4 +326,14 @@ void EnginePair::validate() {
   }
 }
 
+void EnginePair::updateEvictionStats(HashedKey hk,
+                                     BufferView value,
+                                     uint32_t lifetime) {
+  if (isItemLarge(hk, value)) {
+    largeItemCache_->updateEvictionStats(lifetime);
+  } else {
+    smallItemCache_->updateEvictionStats(lifetime);
+  }
+}
+
 } // namespace facebook::cachelib::navy

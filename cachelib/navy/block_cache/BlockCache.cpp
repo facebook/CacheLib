@@ -887,6 +887,7 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_remove_attempt_collisions", removeAttemptCollisions_.get(),
           CounterVisitor::CounterType::RATE);
+  bcLifetimeSecs_.visitQuantileEstimator(visitor, "navy_bc_item_lifetime_secs");
   // Allocator visits region manager
   allocator_.getCounters(visitor);
   index_->getCounters(visitor);

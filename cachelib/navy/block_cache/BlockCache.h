@@ -201,6 +201,11 @@ class BlockCache final : public Engine {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(uint32_t lifetime) override {
+    bcLifetimeSecs_.trackValue(lifetime);
+  }
+
   // The minimum alloc alignment size can be as small as 1. Since the
   // test cases have very small device size, they will end up with alloc
   // alignment size of 1 (if determined as device_size >> 32 ) and we may
@@ -421,6 +426,8 @@ class BlockCache final : public Engine {
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable AtomicCounter lookupForItemDestructorErrorCount_;
   mutable AtomicCounter excessiveReadBytes_;
+
+  mutable util::PercentileStats bcLifetimeSecs_;
 };
 } // namespace navy
 } // namespace cachelib

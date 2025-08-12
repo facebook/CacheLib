@@ -109,6 +109,9 @@ class EnginePair {
 
   std::string_view getName() const { return name_; }
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(HashedKey hk, BufferView value, uint32_t lifetime);
+
  private:
   // Update statistics for lookup
   void updateLookupStats(Status status) const;

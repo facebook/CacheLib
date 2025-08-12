@@ -819,6 +819,8 @@ void NvmCache<C>::evictCB(HashedKey hk,
     navyCache_->isItemLarge(hk, value)
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
+    navyCache_->updateEvictionStats(hk, value, lifetime);
+
     if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
       eventTracker->record(AllocatorApiEvent::NVM_EVICT, hk.key(),
                            AllocatorApiResult::EVICTED);

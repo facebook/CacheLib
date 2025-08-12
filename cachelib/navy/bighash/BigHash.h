@@ -147,6 +147,11 @@ class BigHash final : public Engine {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(uint32_t lifetime) override {
+    bhLifetimeSecs_.trackValue(lifetime);
+  }
+
  private:
   class BucketId {
    public:
@@ -265,6 +270,7 @@ class BigHash final : public Engine {
   // counters to quantify the expired eviction overhead (temporary)
   // PercentileStats generates outputs in integers, so amplify by 100x
   mutable util::PercentileStats bucketExpirationsDist_x100_;
+  mutable util::PercentileStats bhLifetimeSecs_;
 
   static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
                 "number of mutexes must be power of two");

@@ -218,6 +218,7 @@ void BigHash::getCounters(const CounterVisitor& visitor) const {
           validBucketChecker_->numDisabledBuckets());
   bucketExpirationsDist_x100_.visitQuantileEstimator(
       visitor, "navy_bh_expired_loop_x100");
+  bhLifetimeSecs_.visitQuantileEstimator(visitor, "navy_bh_item_lifetime_secs");
 }
 
 void BigHash::persist(RecordWriter& rw) {
