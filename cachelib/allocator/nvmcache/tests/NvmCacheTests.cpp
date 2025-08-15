@@ -249,6 +249,7 @@ TEST_F(NvmCacheTest, EvictToNvmGet) {
   }
 
   // Reads are done. We should be at "0" active handle count across all threads.
+  nvm.flushNvmCache();
   ASSERT_EQ(0, nvm.getNumActiveHandles());
   ASSERT_EQ(0, nvm.getHandleCountForThread());
 }
