@@ -242,6 +242,7 @@ function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
     "types.tcc"
     "types_binary.cpp"
     "types_compact.cpp"
+    "types_serialization.cpp"
     )
 
   # The thrift cpp option "frozen2"
