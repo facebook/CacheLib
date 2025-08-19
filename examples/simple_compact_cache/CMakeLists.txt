@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required (VERSION 3.12)
+cmake_minimum_required (VERSION 3.12...4.0)
 
 project (cachelib-cmake-test-project VERSION 0.1)
 
