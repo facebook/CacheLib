@@ -147,32 +147,6 @@ class CACHELIB_PACKED_ATTR KAllocation {
   // get the size of the value.
   uint32_t getSize() const noexcept { return size_.valSize_; }
 
-  // Check if the key is valid.  The length of the key needs to be in (0,
-  // kKeyMaxLen) to be valid
-  static bool isKeyValid(folly::StringPiece key) {
-    // StringPiece empty() does not really check for start being nullptr
-    return (key.size() <= kKeyMaxLen) && (!key.empty()) && (key.start());
-  }
-
-  // Throw readable exception if the key is invalid.
-  static void throwIfKeyInvalid(folly::StringPiece key) {
-    if (!isKeyValid(key)) {
-      // We need to construct the key for the error message manually here for
-      // two reasons
-      //
-      // 1) The StringPiece can start with a nullptr, and have a non-0 length,
-      //    this in turn means that std::string's constructor will throw a
-      //    std::logic_error.  So we construct the string manually
-      // 2) The StringPiece might not be null terminated.  So we construct the
-      //    std::string manually with a pointer and size.  Which mandates good
-      //    internal representation
-      auto badKey =
-          (key.start()) ? std::string(key.start(), key.size()) : std::string{};
-      throw std::invalid_argument{
-          folly::sformat("Invalid cache key : {}", folly::humanify(badKey))};
-    }
-  }
-
  private:
   // Top 8 bits are for key size (up to 255 bytes)
   // Bottom 24 bits are for value size (up to 16777215 bytes)
@@ -204,6 +178,49 @@ class CACHELIB_PACKED_ATTR KAllocation {
     return isSmallKey() ? size_.keySize_
                         : reinterpret_cast<LargeKey*>(data_)->largeKeySize_;
   }
+
+  // Check if the key is valid.  The length of the key needs to be in (0,
+  // kKeyMaxLen) to be valid
+  static bool isKeyValid(folly::StringPiece key) {
+    // StringPiece empty() does not really check for start being nullptr
+    return (key.size() <= kKeyMaxLen) && (!key.empty()) && (key.start());
+  }
+
+  // Throw readable exception if the key is invalid.
+  static void throwIfKeyInvalid(folly::StringPiece key) {
+    if (!isKeyValid(key)) {
+      // We need to construct the key for the error message manually here for
+      // two reasons
+      //
+      // 1) The StringPiece can start with a nullptr, and have a non-0 length,
+      //    this in turn means that std::string's constructor will throw a
+      //    std::logic_error.  So we construct the string manually
+      // 2) The StringPiece might not be null terminated.  So we construct the
+      //    std::string manually with a pointer and size.  Which mandates good
+      //    internal representation
+      auto badKey =
+          (key.start()) ? std::string(key.start(), key.size()) : std::string{};
+      throw std::invalid_argument{
+          folly::sformat("Invalid cache key : {}", folly::humanify(badKey))};
+    }
+  }
+
+  // Same as above but for small keys.
+  static bool isSmallKeyValid(folly::StringPiece key) {
+    return (key.size() <= kKeyMaxLenSmall) && (!key.empty()) && (key.start());
+  }
+
+  static void throwIfSmallKeyInvalid(folly::StringPiece key) {
+    if (!isSmallKeyValid(key)) {
+      auto badKey =
+          (key.start()) ? std::string(key.start(), key.size()) : std::string{};
+      throw std::invalid_argument{
+          folly::sformat("Invalid cache key : {}", folly::humanify(badKey))};
+    }
+  }
+
+  template <typename T>
+  friend class CacheAllocator;
 };
 } // namespace cachelib
 } // namespace facebook

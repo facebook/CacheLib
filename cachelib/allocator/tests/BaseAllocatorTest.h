@@ -5861,24 +5861,28 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
   }
 
   void testCacheKeyValidity() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    AllocatorT alloc(config);
+
     {
       // valid case
       auto key = std::string{"a"};
-      EXPECT_TRUE(util::isKeyValid(key));
-      EXPECT_NO_THROW(util::throwIfKeyInvalid(key));
+      EXPECT_TRUE(alloc.isKeyValid(key));
+      EXPECT_NO_THROW(alloc.throwIfKeyInvalid(key));
     }
     {
       // 1) invalid due to key length
-      auto key = std::string(KAllocation::kKeyMaxLen + 1, 'a');
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      auto key = std::string(KAllocation::kKeyMaxLenSmall + 1, 'a');
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
     }
     {
       // 2) invalid due to size being 0
       auto string = std::string{"some string"};
       auto key = folly::StringPiece{string.data(), std::size_t{0}};
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
     }
     // Note: we don't test for a null stringpiece with positive size as the
     // key
@@ -5886,8 +5890,44 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     {
       // 3) invalid due due a null key
       auto key = folly::StringPiece{nullptr, std::size_t{0}};
-      EXPECT_FALSE(util::isKeyValid(key));
-      EXPECT_THROW(util::throwIfKeyInvalid(key), std::invalid_argument);
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
+    }
+  }
+
+  void testLargeCacheKeyValidity() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(100 * Slab::kSize);
+    config.allowLargeKeys(true);
+    AllocatorT alloc(config);
+
+    {
+      // valid case
+      auto key = std::string{"a"};
+      EXPECT_TRUE(alloc.isKeyValid(key));
+      EXPECT_NO_THROW(alloc.throwIfKeyInvalid(key));
+    }
+    {
+      // 1) invalid due to key length
+      auto key = std::string(KAllocation::kKeyMaxLen + 1, 'a');
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
+    }
+    {
+      // 2) invalid due to size being 0
+      auto string = std::string{"some string"};
+      auto key = folly::StringPiece{string.data(), std::size_t{0}};
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
+    }
+    // Note: we don't test for a null stringpiece with positive size as the
+    // key
+    //       because folly::StringPiece now throws an exception for it
+    {
+      // 3) invalid due due a null key
+      auto key = folly::StringPiece{nullptr, std::size_t{0}};
+      EXPECT_FALSE(alloc.isKeyValid(key));
+      EXPECT_THROW(alloc.throwIfKeyInvalid(key), std::invalid_argument);
     }
   }
 

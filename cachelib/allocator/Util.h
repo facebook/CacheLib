@@ -166,22 +166,6 @@ uint32_t getFragmentation(const T& cache, const U& item) {
   return cache.getUsableSize(item) - item.getSize();
 }
 
-// Check if the given key is valid.  If the key is not valid, and is passed to
-// other cachelib functions, they might throw exceptions, return null or fail
-// with an error
-//
-// @param key The key to check
-// @return true if the key is a valid cachelib key, false otherwise
-inline bool isKeyValid(folly::StringPiece key) {
-  return KAllocation::isKeyValid(key);
-}
-
-// Same as isKeyValid() above, but throws a std::invalid_argument error when
-// the key is not valid
-inline void throwIfKeyInvalid(folly::StringPiece key) {
-  KAllocation::throwIfKeyInvalid(key);
-}
-
 // helper function to generate the allocation sizes for addPool()
 inline std::set<uint32_t> generateAllocSizes(
     double allocationClassSizeFactor,

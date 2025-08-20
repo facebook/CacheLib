@@ -274,6 +274,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // @return false if no recovery happened
   bool recover();
 
+  // Return whether a key is valid. The length of the key needs to be in (0,
+  // kKeyMaxLenSmall) to be valid.
+  bool isKeyValid(Key key) const;
+
   // Get all the stats related to object-cache
   // @param visitor   callback that will be invoked with
   //                  {stat-name, value} for each stat
@@ -964,6 +968,11 @@ template <typename AllocatorT>
 bool ObjectCache<AllocatorT>::remove(folly::StringPiece key) {
   removes_.inc();
   return this->l1Cache_->remove(key) == AllocatorT::RemoveRes::kSuccess;
+}
+
+template <typename AllocatorT>
+bool ObjectCache<AllocatorT>::isKeyValid(Key key) const {
+  return this->l1Cache_->isKeyValid(key);
 }
 
 template <typename AllocatorT>

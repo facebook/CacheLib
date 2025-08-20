@@ -708,6 +708,13 @@ class CacheAllocator : public CacheBase {
     return viewAsChainedAllocsT<WriteHandle, WritableChainedItemIter>(parent);
   }
 
+  // Return whether a key is valid.  The length of the key needs to be in (0,
+  // kKeyMaxLenSmall) or (0, kKeyMaxLen) for large keys to be valid.
+  bool isKeyValid(Key key) const;
+
+  // Throw if the key is invalid.
+  void throwIfKeyInvalid(Key key) const;
+
   // Returns the full usable size for this item
   // This can be bigger than item.getSize()
   //
@@ -2760,7 +2767,7 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
       auto badKey =
           (key.start()) ? std::string(key.start(), key.size()) : std::string{};
       throw std::invalid_argument{folly::sformat(
-          "Large cache key (> {} bytes) but large keys not "
+          "Invalid cache key - large key (> {} bytes) but large keys not "
           "enabled : {} (size = {})",
           KAllocation::kKeyMaxLenSmall, folly::humanify(badKey), key.size())};
     }
@@ -4343,6 +4350,21 @@ uint32_t CacheAllocator<CacheTrait>::getUsableSize(const Item& item) const {
   return item.isChainedItem()
              ? allocSize - ChainedItem::getRequiredSize(0)
              : allocSize - Item::getRequiredSize(item.getKey(), 0);
+}
+
+template <typename CacheTrait>
+bool CacheAllocator<CacheTrait>::isKeyValid(Key key) const {
+  return config_.allowLargeKeys ? KAllocation::isKeyValid(key)
+                                : KAllocation::isSmallKeyValid(key);
+}
+
+template <typename CacheTrait>
+void CacheAllocator<CacheTrait>::throwIfKeyInvalid(Key key) const {
+  if (config_.allowLargeKeys) {
+    KAllocation::throwIfKeyInvalid(key);
+  } else {
+    KAllocation::throwIfSmallKeyInvalid(key);
+  }
 }
 
 template <typename CacheTrait>
