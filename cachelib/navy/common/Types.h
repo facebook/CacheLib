@@ -71,8 +71,6 @@ using ExpiredCheck = std::function<bool(BufferView value)>;
 // Get CounterVisitor into navy namespace.
 using CounterVisitor = util::CounterVisitor;
 
-constexpr uint32_t kMaxKeySize{255};
-
 // Convert status to string message. Return "Unknown" if invalid status.
 const char* toString(Status status);
 

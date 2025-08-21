@@ -696,6 +696,7 @@ class NavyConfig {
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
   uint64_t getDeviceMetadataSize() const { return deviceMetadataSize_; }
+  uint32_t getMaxKeySize() const { return maxKeySize_; }
   uint64_t getFileSize() const { return fileSize_; }
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
@@ -785,6 +786,9 @@ class NavyConfig {
     deviceMaxWriteSize_ = deviceMaxWriteSize;
   }
 
+  // Configure the max key size for Navy
+  void setMaxKeySize(uint32_t maxKeySize) noexcept { maxKeySize_ = maxKeySize; }
+
   // Enable AsyncIo
   // If enabled already via job config settings, this will override
   // the qDepth_ or enableIoUring_.
@@ -850,6 +854,8 @@ class NavyConfig {
   // ============ Device settings =============
   // Navy specific device block size in bytes.
   uint64_t blockSize_{4096};
+  // The maximum key size (in bytes) for items cached in Navy.
+  uint32_t maxKeySize_{255};
   // If true, Navy will only start if it's the sole owner of the file.
   bool isExclusiveOwner_{false};
   // The file name/path for caching.

@@ -272,6 +272,10 @@ class CacheProtoImpl final : public CacheProto {
 
   void setMetadataSize(size_t size) override { config_.metadataSize = size; }
 
+  void setMaxKeySize(uint32_t keySize) override {
+    config_.maxKeySize = keySize;
+  }
+
   void setExpiredCheck(ExpiredCheck checkExpired) override {
     checkExpired_ = std::move(checkExpired);
   }

@@ -237,6 +237,8 @@ void setupCacheProtos(const navy::NavyConfig& config,
   }
   proto.setMetadataSize(metadataSize);
 
+  proto.setMaxKeySize(config.getMaxKeySize());
+
   // Start offsets are inclusive. End offsets are exclusive.
   // For each engine pair, bigHashStartOffset will be calculated by setting up
   // bighash from its end offset. blockCacheEndOffset will be calculated by

@@ -2554,6 +2554,9 @@ void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
       }
       nvmAdmissionPolicy_->initMinTTL(config_.nvmAdmissionMinTTL);
     }
+    if (config_.allowLargeKeys) {
+      config_.nvmConfig->navyConfig.setMaxKeySize(KAllocation::kKeyMaxLen);
+    }
   }
   initStats();
   initNvmCache(dramCacheAttached);

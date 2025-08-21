@@ -158,6 +158,9 @@ class CacheProto {
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
 
+  // Sets maximum key size.
+  virtual void setMaxKeySize(uint32_t keySize) = 0;
+
   // Set JobScheduler for async function calls.
   virtual void setJobScheduler(std::unique_ptr<JobScheduler> ex) = 0;
 

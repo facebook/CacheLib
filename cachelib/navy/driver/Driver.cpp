@@ -58,6 +58,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
     : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
+      maxKeySize_{config.maxKeySize},
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
@@ -169,7 +170,7 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
 }
 
 Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
-  if (hk.key().size() > kMaxKeySize) {
+  if (hk.key().size() > maxKeySize_) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
 
