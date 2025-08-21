@@ -298,6 +298,7 @@ std::map<std::string, std::string> NavyConfig::serialize() const {
   configMap["navyConfig::raidPaths"] = folly::join(",", raidPaths_);
   configMap["navyConfig::deviceMetadataSize"] =
       std::to_string(deviceMetadataSize_);
+  configMap["navyConfig::maxKeySize"] = std::to_string(maxKeySize_);
   configMap["navyConfig::fileSize"] = folly::to<std::string>(fileSize_);
   configMap["navyConfig::truncateFile"] = truncateFile_ ? "true" : "false";
   configMap["navyConfig::deviceMaxWriteSize"] =

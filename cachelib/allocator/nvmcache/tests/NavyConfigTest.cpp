@@ -188,6 +188,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::fileName"] = "";
   expectedConfigMap["navyConfig::raidPaths"] = "test1,test2";
   expectedConfigMap["navyConfig::deviceMetadataSize"] = "1073741824";
+  expectedConfigMap["navyConfig::maxKeySize"] = "255";
   expectedConfigMap["navyConfig::fileSize"] = "10485760";
   expectedConfigMap["navyConfig::truncateFile"] = "false";
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";

@@ -1233,6 +1233,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
     configMap["defaultAllocSizes"] += std::to_string(elem);
   }
   configMap["disableFullCoredump"] = std::to_string(disableFullCoredump);
+  configMap["allowLargeKeys"] = std::to_string(allowLargeKeys);
   configMap["dropNvmCacheOnShmNew"] = std::to_string(dropNvmCacheOnShmNew);
   configMap["trackRecentItemsForDump"] =
       std::to_string(trackRecentItemsForDump);
