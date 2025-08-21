@@ -69,7 +69,6 @@ NavyRequestScheduler::NavyRequestScheduler(size_t numReaderThreads,
 
   healthThread_ = std::make_unique<NavyThread>("navy_health",
                                                NavyThread::Options(16 * 1024));
-  healthMutex_.lock();
   healthThread_->addTaskRemote([this]() {
     size_t numDispatchers = numReaderThreads_ + numWriterThreads_;
     std::vector<NavyRequestDispatcher::Stats> lastStats(numDispatchers);
@@ -83,8 +82,7 @@ NavyRequestScheduler::NavyRequestScheduler(size_t numReaderThreads,
 
     std::chrono::milliseconds interval(kHealthCheckIntervalMs);
     while (!stopped_) {
-      bool status = healthMutex_.try_lock_for(interval);
-      XDCHECK(!status);
+      folly::futures::sleep(interval).wait();
       checkHealth(dispatchers, lastStats);
     }
   });

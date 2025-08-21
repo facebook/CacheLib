@@ -118,7 +118,6 @@ class NavyRequestScheduler : public JobScheduler {
 
   // Thread to check the health of the scheduler and dispatchers
   std::unique_ptr<NavyThread> healthThread_;
-  TimedMutex healthMutex_;
 
   // The number of times health check failed
   uint64_t numUnhealthy_{0};
