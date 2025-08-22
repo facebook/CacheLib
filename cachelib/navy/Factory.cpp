@@ -135,7 +135,6 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.scheduler = &scheduler;
     config_.checkExpired = std::move(checkExpired);
     config_.destructorCb = std::move(cb);
-    config_.validate();
     return std::make_unique<BlockCache>(std::move(config_));
   }
 

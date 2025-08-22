@@ -53,7 +53,7 @@ class RandomAPConfig {
 };
 
 /**
- * RandomDynamicAPConfig provides APIs for users to configure one of the
+ * DynamicRandomAPConfig provides APIs for users to configure one of the
  * admission policy - "dynamic_random". Admission policy is one part of
  * NavyConfig.
  *
@@ -115,6 +115,7 @@ class DynamicRandomAPConfig {
     return *this;
   }
 
+  // Set a function to determine which items bypass the admission policy.
   DynamicRandomAPConfig& setFnBypass(FnBypass fn) {
     fnBypass_ = std::move(fn);
     return *this;
@@ -171,12 +172,13 @@ class DynamicRandomAPConfig {
  *
  * With sparse_map index, it will dynamically adjust the number of buckets
  * depending on the number of entries stored and hash distribution to avoid hash
- * collision. However, it will kepp rehashing on the runtime, meaning that it
- * will increase resizing costs (accompanying memory allocations and copies) and
- * also memory footprint that it uses can't be controlled (Adding more
- * entries will consume more memory)
- * Another side effect caused by sparse_map index implementatoin is, it may
- * consume much more memory per entries than fixed sized one even with the same
+ * collision. However, it will keep rehashing at runtime, meaning that it will
+ * increase resizing costs (accompanying memory allocations and copies) and also
+ * memory footprint that it uses can't be controlled (Adding more entries will
+ * consume more memory).
+ *
+ * Another side effect caused by sparse_map index implementation is that it may
+ * consume much more memory per entries than fixed sized one even when the same
  * number of buckets are populated and stored.
  *
  * TODO: For now, only SparseMapIndex related configs are supported here
@@ -260,8 +262,10 @@ class BlockCacheIndexConfig {
  * BlockCacheReinsertionConfig provides APIs for users to configure BlockCache
  * reinsertion policy, which is a part of NavyConfig.
  *
- * By this class, user can:
- * - enable hits-based OR probability based reinsertion policy (but not both)
+ * By this class, users can enable one of the following reinsertion policies:
+ * - hits-based
+ * - probability-based
+ * - custom
  */
 class BlockCacheReinsertionConfig {
  public:

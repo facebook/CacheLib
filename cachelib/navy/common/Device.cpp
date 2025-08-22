@@ -295,7 +295,7 @@ class AsyncIoContext : public IoContext {
   static constexpr uint16_t kDefaultFdpIdx = 0u;
 };
 
-// An FileDevice manages direct I/O to either a single or multiple (RAID0)
+// A FileDevice manages direct I/O to either a single or multiple (RAID0)
 // block device(s) or regular file(s).
 class FileDevice : public Device {
  public:
@@ -1103,7 +1103,7 @@ int FileDevice::allocatePlacementHandle() {
   return -1;
 }
 
-// Open cache file @fileName and set it size to @size.
+// Open cache file @fileName and set its size to @size.
 // Throws std::system_error if failed.
 folly::File openCacheFile(const std::string& fileName,
                           uint64_t size,
