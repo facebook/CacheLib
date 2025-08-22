@@ -88,9 +88,9 @@ class NavyRequestDispatcher {
     uint64_t numSubmitted = 0;
     // The number requests dispatched to worker thread
     uint64_t numDispatched = 0;
-    // The number of requests currently outstanding
-    uint64_t numCompleted = 0;
     // The number of requests completed
+    uint64_t numCompleted = 0;
+    // The number of requests currently outstanding
     uint64_t curOutstanding = 0;
   };
 
