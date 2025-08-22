@@ -323,6 +323,7 @@ class CacheProtoImpl final : public CacheProto {
       apConfig.probFactorLowerBound = probFactorLowerBound;
       apConfig.probFactorUpperBound = probFactorUpperBound;
     }
+    apConfig.enableLogging = config.getEnableLogging();
     auto fnBypass = config.getFnBypass();
     if (fnBypass) {
       apConfig.fnBypass = std::move(fnBypass);

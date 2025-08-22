@@ -99,6 +99,9 @@ class DynamicRandomAP final : public AdmissionPolicy {
 
     double probFactorUpperBound{kUpperBound_};
 
+    // Whether to putting out logs for more information
+    bool enableLogging{false};
+
     FnBypass fnBypass;
     // Throws if invalid config
     Config& validate();
@@ -187,6 +190,7 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const FnBytesWritten fnBytesWritten_;
   const double lowerBound_{};
   const double upperBound_{};
+  const bool enableLogging_{};
   const FnBypass fnBypass_;
 
   mutable TLCounter acceptedBytes_;

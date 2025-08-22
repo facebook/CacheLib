@@ -110,6 +110,11 @@ class DynamicRandomAPConfig {
     return *this;
   }
 
+  DynamicRandomAPConfig& enableLogging(bool enable) noexcept {
+    enableLogging_ = enable;
+    return *this;
+  }
+
   DynamicRandomAPConfig& setFnBypass(FnBypass fn) {
     fnBypass_ = std::move(fn);
     return *this;
@@ -126,6 +131,8 @@ class DynamicRandomAPConfig {
   double getProbFactorLowerBound() const { return probFactorLowerBound_; }
 
   double getProbFactorUpperBound() const { return probFactorUpperBound_; }
+
+  bool getEnableLogging() const { return enableLogging_; }
 
   FnBypass getFnBypass() const { return fnBypass_; }
 
@@ -146,6 +153,8 @@ class DynamicRandomAPConfig {
   // Upper bound of the probability factor. Non-positive value would be
   // replaced the default value from DynamicRandomAP::Config
   double probFactorUpperBound_{0};
+  // Whether to putting out logs for more information
+  bool enableLogging_{false};
   // Bypass function to determine keys to bypass in admission policy.
   FnBypass fnBypass_;
 };
