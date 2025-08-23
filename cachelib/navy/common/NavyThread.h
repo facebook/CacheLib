@@ -36,6 +36,7 @@ class NavyThread;
 // @return the current NavyThread context if running on NavyThread. nullptr
 // otherwise.
 NavyThread* getCurrentNavyThread();
+bool isOnNavyThread();
 
 /**
  * NavyThread is a wrapper class that wraps folly::ScopedEventBaseThread and

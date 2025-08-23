@@ -52,7 +52,7 @@ RegionDescriptor Region::openForRead() {
   std::unique_lock<TimedMutex> l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
-    if (getCurrentNavyThread()) {
+    if (isOnNavyThread()) {
       // If we are on fiber, we can just sleep here
       cond_.wait(l);
     }

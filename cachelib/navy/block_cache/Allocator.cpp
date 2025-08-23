@@ -89,7 +89,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   // picked ended up being full.
   XDCHECK(!rid.valid());
 
-  if (canWait && !getCurrentNavyThread()) {
+  if (canWait && !isOnNavyThread()) {
     // Waiting on main thread could cause indefinite blocking, so do not wait
     canWait = false;
   }
