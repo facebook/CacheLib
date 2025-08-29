@@ -74,6 +74,44 @@ void NavyConfig::enableAsyncIo(unsigned int qDepth, bool enableIoUring) {
   }
 }
 
+void NavyConfig::enableAsyncIo(uint32_t maxNumReads,
+                               uint32_t maxNumWrites,
+                               bool useIoUring,
+                               uint32_t stackSizeKB) {
+  if (maxNumReads == 0 || maxNumWrites == 0) {
+    throw std::invalid_argument(
+        "maxNumReads and maxNumWrites should be both > 0");
+  }
+
+  if (readerThreads_ == 0 || writerThreads_ == 0) {
+    throw std::runtime_error(
+        "number of read/write threads should be set first as non-zero value");
+  }
+
+  if ((maxNumReads % readerThreads_) || (maxNumWrites % writerThreads_)) {
+    throw std::invalid_argument(folly::sformat(
+        "reader threads ({}) and writer threads ({}) should divide evenly "
+        "into maxNumReads ({}) or maxNumWrites ({})",
+        readerThreads_, writerThreads_, maxNumReads, maxNumWrites));
+  }
+
+  // Limit the fiber stack size to 1MB to prevent any misconfiguration;
+  // The 1MB is already too large for most use cases and there will be lots of
+  // memory wasted
+  if (stackSizeKB >= 1024) {
+    throw std::invalid_argument(
+        "Maximum fiber stack size for each thread should be less than 1024 KB");
+  }
+
+  maxNumReads_ = maxNumReads;
+  maxNumWrites_ = maxNumWrites;
+  stackSize_ = stackSizeKB * 1024;
+  qDepth_ =
+      std::max(maxNumReads_ / readerThreads_, maxNumWrites_ / writerThreads_);
+
+  ioEngine_ = (useIoUring) ? IoEngine::IoUring : IoEngine::LibAio;
+}
+
 void NavyConfig::setSimpleFile(const std::string& fileName,
                                uint64_t fileSize,
                                bool truncateFile) {
@@ -225,6 +263,17 @@ void NavyConfig::setReaderAndWriterThreads(unsigned int readerThreads,
       ioEngine_ = IoEngine::LibAio;
     }
   }
+}
+
+void NavyConfig::setReaderAndWriterThreads(uint32_t readerThreads,
+                                           uint32_t writerThreads) {
+  if (readerThreads == 0 || writerThreads == 0) {
+    throw std::invalid_argument(
+        "The number of reader threads and writer threads should be both > 0");
+  }
+
+  readerThreads_ = readerThreads;
+  writerThreads_ = writerThreads;
 }
 
 void NavyConfig::setNavyReqOrderingShards(uint64_t navyReqOrderingShards) {

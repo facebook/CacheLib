@@ -681,6 +681,8 @@ class NavyConfig {
 
   static constexpr folly::StringPiece kAdmPolicyRandom{"random"};
   static constexpr folly::StringPiece kAdmPolicyDynamicRandom{"dynamic_random"};
+  static constexpr uint32_t kDefaultNumReaderThreads{32};
+  static constexpr uint32_t kDefaultNumWriterThreads{32};
 
   bool usesSimpleFile() const noexcept { return !fileName_.empty(); }
   bool usesRaidFiles() const noexcept { return raidPaths_.size() > 0; }
@@ -714,7 +716,7 @@ class NavyConfig {
   bool getTruncateFile() const { return truncateFile_; }
   uint32_t getDeviceMaxWriteSize() const { return deviceMaxWriteSize_; }
   IoEngine getIoEngine() const { return ioEngine_; }
-  unsigned int getQDepth() const { return qDepth_; }
+  uint32_t getQDepth() const { return qDepth_; }
   BadDeviceStatus hasBadDeviceForTesting() const { return testingBadDevice_; }
 
   // Return a const BigHashConfig to read values of its parameters.
@@ -730,13 +732,19 @@ class NavyConfig {
   }
 
   // ============ Job scheduler settings =============
-  unsigned int getReaderThreads() const { return readerThreads_; }
-  unsigned int getWriterThreads() const { return writerThreads_; }
+  uint32_t getReaderThreads() const {
+    // return default value if it's not explicitly set
+    return (readerThreads_ == 0) ? kDefaultNumReaderThreads : readerThreads_;
+  }
+  uint32_t getWriterThreads() const {
+    // return default value if it's not explicitly set
+    return (writerThreads_ == 0) ? kDefaultNumWriterThreads : writerThreads_;
+  }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
-  unsigned int getMaxNumReads() const { return maxNumReads_; }
-  unsigned int getMaxNumWrites() const { return maxNumWrites_; }
-  unsigned int getStackSize() const { return stackSize_; }
+  uint32_t getMaxNumReads() const { return maxNumReads_; }
+  uint32_t getMaxNumWrites() const { return maxNumWrites_; }
+  uint32_t getStackSize() const { return stackSize_; }
   // ============ other settings =============
   uint32_t getMaxConcurrentInserts() const { return maxConcurrentInserts_; }
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
@@ -806,7 +814,22 @@ class NavyConfig {
   // If enabled already via job config settings, this will override
   // the qDepth_ or enableIoUring_.
   // If qDepth is 0, existing qDepth_ will be used
+  // * CAUTION: This version of enableAsyncIo() is DEPRECATED.
+  //          Please use the version with four arguments below
   void enableAsyncIo(unsigned int qDepth, bool enableIoUring);
+
+  // Enable async IO (IO to the device) - either libaio or io_uring
+  //  - maxNumReads : the number of concurrent reads issued to the queues and in
+  //  process
+  //  - maxNumWrites: the number of concurrent writes issued to the queues
+  //  and in process
+  //  - useIoUring : true to use io_uring
+  //  - stackSizeKB : size of the stack for each fibers with the async job
+  //  scheduler. 0 for default stack size
+  void enableAsyncIo(uint32_t maxNumReads,
+                     uint32_t maxNumWrites,
+                     bool useIoUring,
+                     uint32_t stackSizeKB = 0);
 
   // ============ BlockCache settings =============
   // Return BlockCacheConfig for configuration.
@@ -828,11 +851,18 @@ class NavyConfig {
   // ============ Job scheduler settings =============
   // Set the number of reader threads and writer threads.
   // If maxNumReads and maxNumWrites are all 0, sync IO will be used
+  // * CAUTION: This version of setReaderAndWriterThreads() is DEPRECATED.
+  //          Please use the version with two arguments below.
   void setReaderAndWriterThreads(unsigned int readerThreads,
                                  unsigned int writerThreads,
-                                 unsigned int maxNumReads = 0,
-                                 unsigned int maxNumWrites = 0,
+                                 unsigned int maxNumReads,
+                                 unsigned int maxNumWrites,
                                  unsigned int stackSizeKB = 0);
+
+  // ============ Job scheduler settings =============
+  // Set the number of reader threads and writer threads.
+  void setReaderAndWriterThreads(uint32_t readerThreads,
+                                 uint32_t writerThreads);
 
   // Set Navy request ordering shards (expressed as power of two).
   // @throw std::invalid_argument if the input value is 0.
@@ -893,7 +923,7 @@ class NavyConfig {
 
   // Number of queue depth per thread for async IO.
   // 0 for Sync io engine and >1 for libaio and io_uring
-  unsigned int qDepth_{0};
+  uint32_t qDepth_{0};
 
   // ============ Engines settings =============
   // Currently we support one pair of engines.
@@ -903,9 +933,9 @@ class NavyConfig {
 
   // ============ Job scheduler settings =============
   // Number of asynchronous worker thread for read operation.
-  unsigned int readerThreads_{32};
+  uint32_t readerThreads_{0};
   // Number of asynchronous worker thread for write operation.
-  unsigned int writerThreads_{32};
+  uint32_t writerThreads_{0};
   // Number of shards expressed as power of two for native request ordering in
   // Navy.
   // This value needs to be non-zero.
@@ -915,11 +945,11 @@ class NavyConfig {
   // This needs to be a multiple of the number of readers and writers.
   // Setting this to non-0 will enable async IO where fibers are used
   // for Navy operations including device IO
-  unsigned int maxNumReads_{0};
-  unsigned int maxNumWrites_{0};
+  uint32_t maxNumReads_{0};
+  uint32_t maxNumWrites_{0};
 
   // Stack size of fibers when async-io is enabled. 0 for default
-  unsigned int stackSize_{0};
+  uint32_t stackSize_{0};
 
   // ============ Other settings =============
   // Maximum number of concurrent inserts we allow globally for Navy.
