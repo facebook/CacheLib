@@ -310,16 +310,16 @@ void testBatch(int numThreads,
     std::mt19937 gen;
     std::uniform_int_distribution<uint64_t> dist(0, numObjects - 1);
     for (uint64_t loop = 0; loop < kLoops / BATCH_SIZE; loop++) {
-      std::array<Object*, BATCH_SIZE> objects;
+      std::array<Object*, BATCH_SIZE> batchObjects;
       std::array<std::string, BATCH_SIZE> batchedKeys;
       BENCHMARK_SUSPEND {
         for (auto& key : batchedKeys) {
           key = keys[dist(gen)];
         }
       }
-      ht->template multiLookup<BATCH_SIZE>(batchedKeys, objects,
+      ht->template multiLookup<BATCH_SIZE>(batchedKeys, batchObjects,
                                            doesPrefetchObject);
-      folly::doNotOptimizeAway(objects);
+      folly::doNotOptimizeAway(batchObjects);
     }
   };
 
