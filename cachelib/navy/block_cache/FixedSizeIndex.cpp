@@ -37,7 +37,7 @@ void FixedSizeIndex::initialize() {
 
   ht_ = std::make_unique<PackedItemRecord[]>(totalBuckets_);
   mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
-  sizeForMutex_ = std::make_unique<size_t[]>(totalMutexes_);
+  validBucketsPerMutex_ = std::make_unique<size_t[]>(totalMutexes_);
 
   bucketDistInfo_.initialize(totalBuckets_);
 }
@@ -91,7 +91,7 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
                                  0, /* totalHits */
                                  elb.recordRef().info.curHits));
   } else {
-    ++elb.sizeRef();
+    ++elb.validBucketCntRef();
   }
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
@@ -123,8 +123,8 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
                                      0, /* totalHits */
                                      elb.recordRef().info.curHits)};
 
-    XDCHECK(elb.sizeRef() > 0);
-    --elb.sizeRef();
+    XDCHECK(elb.validBucketCntRef() > 0);
+    --elb.validBucketCntRef();
     elb.recordRef() = PackedItemRecord{};
     return lr;
   }
@@ -139,8 +139,8 @@ bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
   if (elb.recordRef().address == address) {
     elb.recordRef() = PackedItemRecord{};
 
-    XDCHECK(elb.sizeRef() > 0);
-    --elb.sizeRef();
+    XDCHECK(elb.validBucketCntRef() > 0);
+    --elb.validBucketCntRef();
 
     return true;
   }
@@ -154,7 +154,7 @@ void FixedSizeIndex::reset() {
     for (uint64_t j = 0; j < numBucketsPerMutex_; ++j) {
       ht_[bucketId++] = PackedItemRecord{};
     }
-    sizeForMutex_[i] = 0;
+    validBucketsPerMutex_[i] = 0;
   }
 }
 
@@ -162,7 +162,7 @@ size_t FixedSizeIndex::computeSize() const {
   size_t size = 0;
   for (uint32_t i = 0; i < totalMutexes_; i++) {
     auto lock = std::shared_lock{mutex_[i]};
-    size += sizeForMutex_[i];
+    size += validBucketsPerMutex_[i];
   }
 
   return size;
@@ -246,7 +246,7 @@ void FixedSizeIndex::recover(RecordReader& rr) {
           PackedItemRecord{static_cast<uint32_t>(*entry.address()),
                            static_cast<uint16_t>(*entry.sizeHint()),
                            static_cast<uint8_t>(*entry.currentHits())};
-      ++sizeForMutex_[*entry.key() / numBucketsPerMutex_];
+      ++validBucketsPerMutex_[*entry.key() / numBucketsPerMutex_];
     } else {
       ht_[*entry.key()] = PackedItemRecord{};
     }

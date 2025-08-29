@@ -382,15 +382,15 @@ class FixedSizeIndex : public Index {
   std::unique_ptr<PackedItemRecord[]> ht_;
   std::unique_ptr<SharedMutex[]> mutex_;
   // The size for ht (stored bucket count) will be managed per Mutex basis
-  std::unique_ptr<size_t[]> sizeForMutex_;
+  std::unique_ptr<size_t[]> validBucketsPerMutex_;
 
   BucketDistInfo bucketDistInfo_;
 
   // A helper class for exclusive locked access to a bucket.
   // It will lock the proper mutex with the given key when it's created.
-  // recordRef() and sizeRef() will return the record and size with exclusively
-  // locked bucket reference.
-  // Locked mutex will be released when it's destroyed.
+  // recordRef() and validBucketCntRef() will return the record and
+  // valid bucket count with exclusively locked bucket reference. Locked
+  // mutex will be released when it's destroyed.
   class ExclusiveLockedBucket {
    public:
     explicit ExclusiveLockedBucket(uint64_t key,
@@ -400,7 +400,7 @@ class FixedSizeIndex : public Index {
           mid_{index.mutexId(bid_)},
           lg_{index.mutex_[mid_]},
           record_{&index.ht_[bid_]},
-          size_{index.sizeForMutex_[mid_]} {
+          validBuckets_{index.validBucketsPerMutex_[mid_]} {
       auto offset = alloc ? index.decideBucketOffset(bid_, key)
                           : index.checkBucketOffset(bid_, key);
       if (offset != 0) {
@@ -411,7 +411,7 @@ class FixedSizeIndex : public Index {
     }
 
     PackedItemRecord& recordRef() { return *record_; }
-    size_t& sizeRef() { return size_; }
+    size_t& validBucketCntRef() { return validBuckets_; }
     void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
       index.bucketDistInfo_.updateBucketFillInfo(
           bid_, bucketOffset_, index.partialKeyBits(key));
@@ -422,7 +422,7 @@ class FixedSizeIndex : public Index {
     uint64_t mid_;
     std::lock_guard<SharedMutex> lg_;
     PackedItemRecord* record_;
-    size_t& size_;
+    size_t& validBuckets_;
     uint8_t bucketOffset_{0};
   };
 
