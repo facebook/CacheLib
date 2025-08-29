@@ -237,4 +237,52 @@ TEST(FixedSizeIndex, MemFootprintRangeTest) {
   EXPECT_EQ(range.maxUsedBytes, rangeEmpty.maxUsedBytes);
 }
 
+TEST(FixedSizeIndex, Reset) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Insert some items
+  for (int i = 0; i < 100; i++) {
+    index.insert(i, i + 100, 200);
+    // Verify items are in the index
+    EXPECT_TRUE(index.lookup(i).found());
+    EXPECT_EQ(i + 100, index.lookup(i).address());
+  }
+
+  // Reset the index
+  index.reset();
+
+  // Verify all items are removed
+  for (int i = 0; i < 100; i++) {
+    EXPECT_FALSE(index.lookup(i).found());
+  }
+}
+
+TEST(FixedSizeIndex, ComputeSize) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Initially the size should be 0
+  EXPECT_EQ(0, index.computeSize());
+
+  // Insert some items
+  const int numItems = 50;
+  for (int i = 0; i < numItems; i++) {
+    index.insert(i, i + 100, 200);
+    // Verify items are in the index
+    EXPECT_TRUE(index.lookup(i).found());
+  }
+
+  // Verify the size matches the number of items inserted
+  EXPECT_EQ(numItems, index.computeSize());
+
+  // Remove some items
+  const int numToRemove = 20;
+  for (int i = 0; i < numToRemove; i++) {
+    index.remove(i);
+    EXPECT_FALSE(index.lookup(i).found());
+  }
+
+  // Verify the size is updated correctly
+  EXPECT_EQ(numItems - numToRemove, index.computeSize());
+}
+
 } // namespace facebook::cachelib::navy::tests
