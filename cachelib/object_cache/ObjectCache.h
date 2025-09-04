@@ -660,6 +660,11 @@ void ObjectCache<AllocatorT>::init() {
     l1Config.setAllowLargeKeys(true);
   }
 
+  // Apply aggregate pool stats configuration if enabled
+  if (config_.isAggregatePoolStatsEnabled()) {
+    this->aggregatePoolStats_ = true;
+  }
+
   this->l1Cache_ = std::make_unique<AllocatorT>(l1Config);
   // add a pool per shard
   for (size_t i = 0; i < config_.l1NumShards; i++) {
@@ -1008,6 +1013,7 @@ ObjectCache<AllocatorT>::serializeConfigParams() const {
   auto config = this->l1Cache_->serializeConfigParams();
   config["l1EntriesLimit"] = std::to_string(config_.l1EntriesLimit);
   config["l1NumShards"] = std::to_string(config_.l1NumShards);
+  config["aggregatePoolStats"] = config_.aggregatePoolStats ? "true" : "false";
   if (config_.objectSizeTrackingEnabled &&
       config_.sizeControllerIntervalMs > 0) {
     config["totalObjectSizeLimit"] =

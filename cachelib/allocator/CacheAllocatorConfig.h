@@ -356,6 +356,35 @@ class CacheAllocatorConfig {
     return skipPromoteChildrenWhenParentFailed;
   }
 
+  // Enable aggregating pool stats to a single stat
+  //
+  // When enabled, pool stats from all pools will be aggregated into a single
+  // "aggregated" stat to reduce ODS counter inflation. For example, with two
+  // pools and this option disabled, you will have separate stats like:
+  // -
+  // cachelib.cache_name.pool.cache_name_0.items
+  // -
+  // cachelib.cache_name.pool.cache_name_1.items
+  // With this option enabled, it will be aggregated to:
+  // - cachelib.cache_name.pool.aggregated.items
+  //
+  // LIMITATIONS:
+  // 1. If the cache is using more than 128 distinct allocation sizes across
+  //    all pools, pool stats cannot be aggregated and will fall back to
+  //    separate stat logging.
+  // 2. Some statistics such as evictionAgeSecs (avg and quantiles) may not be
+  //    mathematically precise. These stats are aggregated using weighted
+  //    averages based on the relative number of evictions from each pool.
+  //    While this provides a reasonable approximation, it may not represent
+  //    the exact distribution that would result from treating all pools as
+  //    a single entity.
+  CacheAllocatorConfig& enableAggregatePoolStats();
+
+  // @return whether pool stats aggregation is enabled
+  bool isAggregatePoolStatsEnabled() const noexcept {
+    return aggregatePoolStats;
+  }
+
   // @return whether compact cache is enabled
   bool isCompactCacheEnabled() const noexcept { return enableZeroedSlabAllocs; }
 
@@ -665,6 +694,9 @@ class CacheAllocatorConfig {
   bool delayCacheWorkersStart{false};
 
   size_t numShards{8192};
+
+  // If true, aggregate pool stats into a single stat before exporting
+  bool aggregatePoolStats{false};
 
   friend CacheT;
 
@@ -1148,6 +1180,12 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNumShards(size_t shards) {
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableAggregatePoolStats() {
+  aggregatePoolStats = true;
+  return *this;
+}
+
+template <typename T>
 const CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::validate() const {
   // we can track tail hits only if MMType is MM2Q
   if (trackTailHits && T::MMType::kId != MM2Q::kId) {
@@ -1300,6 +1338,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["delayCacheWorkersStart"] =
       delayCacheWorkersStart ? "true" : "false";
   configMap["numShards"] = std::to_string(numShards);
+  configMap["aggregatePoolStats"] = aggregatePoolStats ? "true" : "false";
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),

@@ -16,6 +16,8 @@
 
 #include "cachelib/allocator/Cache.h"
 
+#include <folly/logging/xlog.h>
+
 #include <mutex>
 
 #include "cachelib/allocator/RebalanceStrategy.h"
@@ -89,6 +91,11 @@ void CacheBase::updateObjectCacheStats(const std::string& statPrefix) const {
 void CacheBase::updatePoolStats(const std::string& statPrefix,
                                 PoolId pid) const {
   const PoolStats stats = getPoolStats(pid);
+  updatePoolStats(statPrefix, stats);
+}
+
+void CacheBase::updatePoolStats(const std::string& statPrefix,
+                                const PoolStats& stats) const {
   const std::string prefix = statPrefix + "pool." + stats.poolName + ".";
 
   counters_.updateCount(prefix + "size", stats.poolSize);
@@ -531,6 +538,12 @@ CacheBase::CacheHitRate CacheBase::calculateCacheHitRate(
   return {overall, ram, nvm};
 }
 
+void CacheBase::updateIndividualPoolStats(const std::string& statPrefix) const {
+  for (const auto pid : getRegularPoolIds()) {
+    updatePoolStats(statPrefix, pid);
+  }
+}
+
 void CacheBase::exportStats(
     const std::string& statPrefix,
     std::chrono::seconds aggregationInterval,
@@ -539,8 +552,15 @@ void CacheBase::exportStats(
   updateNvmCacheStats(statPrefix);
   updateEventTrackerStats(statPrefix);
 
-  for (const auto pid : getRegularPoolIds()) {
-    updatePoolStats(statPrefix, pid);
+  if (aggregatePoolStats_ && canAggregatePoolStats()) {
+    updateAggregatedPoolStats(statPrefix);
+  } else {
+    // Log warning when aggregation is enabled but not possible
+    if (aggregatePoolStats_) {
+      XLOG(WARN) << "Pool stats aggregation is enabled but cannot be performed "
+                    "due to too many allocation classes";
+    }
+    updateIndividualPoolStats(statPrefix);
   }
 
   for (const auto pid : getCCachePoolIds()) {
@@ -556,4 +576,37 @@ void CacheBase::exportStats(
 
   return counters_.exportStats(aggregationInterval, cb);
 }
+
+bool CacheBase::canAggregatePoolStats() const {
+  const auto poolIds = getRegularPoolIds();
+  XDCHECK(!poolIds.empty(), "Regular pool IDs should not be empty");
+
+  // Collect all unique allocation sizes from all pools
+  std::unordered_set<uint32_t> allAllocSizes;
+  for (const auto pid : poolIds) {
+    const auto& pool = getPool(pid);
+    for (const auto& allocSize : pool.getAllocSizes()) {
+      allAllocSizes.insert(allocSize);
+    }
+  }
+  return allAllocSizes.size() <= MemoryAllocator::kMaxClasses;
+}
+
+void CacheBase::updateAggregatedPoolStats(const std::string& statPrefix) const {
+  const auto poolIds = getRegularPoolIds();
+  XDCHECK(!poolIds.empty(), "Regular pool IDs should not be empty");
+  // Get the first pool stats to initialize the aggregated stats
+  auto poolIdsIter = poolIds.begin();
+  PoolStats aggregatedStats = getPoolStats(*poolIdsIter);
+  ++poolIdsIter;
+
+  // Aggregate all remaining pool stats
+  for (; poolIdsIter != poolIds.end(); ++poolIdsIter) {
+    const PoolStats stats = getPoolStats(*poolIdsIter);
+    aggregatedStats += stats;
+  }
+  aggregatedStats.poolName = "aggregated";
+  updatePoolStats(statPrefix, aggregatedStats);
+}
+
 } // namespace facebook::cachelib

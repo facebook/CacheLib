@@ -2539,6 +2539,9 @@ CacheAllocator<CacheTrait>::restoreCCacheManager() {
 
 template <typename CacheTrait>
 void CacheAllocator<CacheTrait>::initCommon(bool dramCacheAttached) {
+  // Initialize aggregate pool stats from config
+  aggregatePoolStats_ = config_.isAggregatePoolStatsEnabled();
+
   if (config_.nvmConfig.has_value()) {
     if (config_.nvmCacheAP) {
       nvmAdmissionPolicy_ = config_.nvmCacheAP;

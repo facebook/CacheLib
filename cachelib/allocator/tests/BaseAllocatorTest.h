@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <ctime>
 #include <future>
 #include <mutex>
@@ -6539,6 +6540,302 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       EXPECT_EQ(1, poolStats.numSlabsForClass(1));
       EXPECT_EQ(4, poolStats.numSlabsForClass(2));
     }
+  }
+
+ private:
+  static constexpr const char* kTestCachePrefix = "cachelib.test_cache.";
+  static constexpr const char* kPool1Name = "pool1";
+  static constexpr const char* kPool2Name = "pool2";
+  static constexpr const char* kAggregatedName = "aggregated";
+
+  AllocatorT createPoolStatsTestAllocator(bool enableAggregation = false) {
+    typename AllocatorT::Config config;
+    config.setCacheSize(20 * Slab::kSize).cacheName = "test_cache";
+    if (enableAggregation) {
+      config.enableAggregatePoolStats();
+    }
+    return AllocatorT(config);
+  }
+
+  void setupTestPools(AllocatorT& alloc,
+                      const std::set<uint32_t>& pool1Sizes,
+                      const std::set<uint32_t>& pool2Sizes) {
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, pool1Sizes);
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, pool2Sizes);
+
+    auto item1 = util::allocateAccessible(alloc, poolId1, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId2, "key2", 120);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+  }
+
+  bool hasAggregatedStats(AllocatorT& alloc) {
+    bool foundAggregated = false;
+    bool foundIndividual = false;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName, ".");
+    std::string pool1NamePrefix =
+        folly::to<std::string>("pool.", kPool1Name, ".");
+    std::string pool2NamePrefix =
+        folly::to<std::string>("pool.", kPool2Name, ".");
+
+    alloc.exportStats(
+        kTestCachePrefix, std::chrono::seconds{60},
+        [&](folly::StringPiece name, uint64_t) {
+          const std::string nameStr = name.str();
+          if (nameStr.find(aggregatedNamePrefix) != std::string::npos) {
+            foundAggregated = true;
+          }
+          if (nameStr.find(pool1NamePrefix) != std::string::npos ||
+              nameStr.find(pool2NamePrefix) != std::string::npos) {
+            foundIndividual = true;
+          }
+        });
+    XDCHECK(foundAggregated ^ foundIndividual,
+            "Expected to find aggregated or individual stats only, not both or "
+            "neither");
+    return foundAggregated;
+  }
+
+ public:
+  void testAggregatePoolStatsDiffAC() {
+    auto alloc = createPoolStatsTestAllocator(true);
+    // Test aggregation of stats from two pools with different allocation
+    // classes
+    const std::set<uint32_t> pool1Sizes = {64, 128, 256};
+    const std::set<uint32_t> pool2Sizes = {256, 512};
+    setupTestPools(alloc, pool1Sizes, pool2Sizes);
+    EXPECT_TRUE(hasAggregatedStats(alloc));
+
+    auto poolId1 = alloc.getPoolId(kPool1Name);
+    auto poolId2 = alloc.getPoolId(kPool2Name);
+
+    // Add items for each allocation class in pool1
+    auto item1_64 = util::allocateAccessible(alloc, poolId1, "key1_64", 20);
+    auto item1_128 = util::allocateAccessible(alloc, poolId1, "key1_128", 80);
+    auto item1_256 = util::allocateAccessible(alloc, poolId1, "key1_256", 200);
+    ASSERT_NE(nullptr, item1_64);
+    ASSERT_NE(nullptr, item1_128);
+    ASSERT_NE(nullptr, item1_256);
+
+    // Add items for each allocation class in pool2
+    auto item2_256 = util::allocateAccessible(alloc, poolId2, "key2_256", 200);
+    auto item2_512 = util::allocateAccessible(alloc, poolId2, "key2_512", 450);
+    ASSERT_NE(nullptr, item2_256);
+    ASSERT_NE(nullptr, item2_512);
+
+    auto pool1Stats = alloc.getPoolStats(poolId1);
+    auto pool2Stats = alloc.getPoolStats(poolId2);
+
+    // Capture aggregated pool statistics from exportStats() callback
+    uint64_t aggregatedSize = 0;
+    uint64_t aggregatedItems = 0;
+    uint64_t aggregatedFreeMemoryBytes = 0;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName);
+    std::string sizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".size");
+    std::string itemsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".items");
+    std::string freeMemoryBytesIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".free_memory_bytes");
+
+    alloc.exportStats(kTestCachePrefix, std::chrono::seconds{60},
+                      [&](folly::StringPiece name, uint64_t value) {
+                        if (name.endsWith(sizeIdentifier)) {
+                          aggregatedSize = value;
+                        } else if (name.endsWith(itemsIdentifier)) {
+                          aggregatedItems = value;
+                        } else if (name.endsWith(freeMemoryBytesIdentifier)) {
+                          aggregatedFreeMemoryBytes = value;
+                        }
+                      });
+
+    // Verify aggregated stats match the sum of individual pool stats
+    EXPECT_EQ(aggregatedSize, pool1Stats.poolSize + pool2Stats.poolSize);
+    EXPECT_EQ(aggregatedItems, pool1Stats.numItems() + pool2Stats.numItems());
+    EXPECT_EQ(aggregatedFreeMemoryBytes,
+              pool1Stats.freeMemoryBytes() + pool2Stats.freeMemoryBytes());
+
+    // Verify we have correct number of items in both pools
+    // 3 new items + 1 from setupTestPools
+    EXPECT_EQ(pool1Stats.numItems(), 4);
+    // 2 new items + 1 from setupTestPools
+    EXPECT_EQ(pool2Stats.numItems(), 3);
+  }
+
+  void testNonAggregatePoolStats() {
+    auto alloc = createPoolStatsTestAllocator(false);
+    setupTestPools(alloc, {64, 128, 256}, {64, 128, 256});
+    EXPECT_FALSE(hasAggregatedStats(alloc));
+  }
+
+  void testAggregatePoolStatsValues() {
+    auto alloc = createPoolStatsTestAllocator(true);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, {64, 128});
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, {64, 128});
+
+    auto pool1Stats = alloc.getPoolStats(poolId1);
+    auto pool2Stats = alloc.getPoolStats(poolId2);
+
+    // Capture specific aggregated pool statistics from exportStats() callback.
+    // Hand-picked a few representative stats to avoid checking 10+ different
+    // stats. Verify these exported aggregated values match manually summed
+    // individual pool stats.
+    uint64_t aggregatedSize = 0;
+    uint64_t aggregatedUsableSize = 0;
+    uint64_t aggregatedItems = 0;
+    uint64_t aggregatedAllocAttempts = 0;
+
+    std::string aggregatedNamePrefix =
+        folly::to<std::string>("pool.", kAggregatedName);
+    std::string sizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".size");
+    std::string usableSizeIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".usable_size");
+    std::string itemsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".items");
+    std::string allocAttemptsIdentifier =
+        folly::to<std::string>(aggregatedNamePrefix, ".alloc.attempts");
+
+    alloc.exportStats(kTestCachePrefix, std::chrono::seconds{60},
+                      [&](folly::StringPiece name, uint64_t value) {
+                        if (name.endsWith(sizeIdentifier)) {
+                          aggregatedSize = value;
+                        } else if (name.endsWith(usableSizeIdentifier)) {
+                          aggregatedUsableSize = value;
+                        } else if (name.endsWith(itemsIdentifier)) {
+                          aggregatedItems = value;
+                        } else if (name.endsWith(allocAttemptsIdentifier)) {
+                          aggregatedAllocAttempts = value;
+                        }
+                      });
+
+    EXPECT_EQ(aggregatedSize, pool1Stats.poolSize + pool2Stats.poolSize);
+    EXPECT_EQ(aggregatedUsableSize,
+              pool1Stats.poolUsableSize + pool2Stats.poolUsableSize);
+    EXPECT_EQ(aggregatedItems, pool1Stats.numItems() + pool2Stats.numItems());
+    EXPECT_EQ(aggregatedAllocAttempts,
+              pool1Stats.numAllocAttempts() + pool2Stats.numAllocAttempts());
+  }
+
+  void testEvictionAgeAggregation() {
+    // Create a small allocator to fill up quickly
+    typename AllocatorT::Config config;
+    config.setCacheSize(6 * Slab::kSize);
+    AllocatorT alloc(config);
+
+    const std::set<uint32_t> allocSizes{150};
+
+    // Create two pools of different sizes to get different eviction patterns
+    auto poolId1 = alloc.addPool("pool1", Slab::kSize, allocSizes);
+    auto poolId2 = alloc.addPool("pool2", 2 * Slab::kSize, allocSizes);
+
+    ASSERT_NE(Slab::kInvalidPoolId, poolId1);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId2);
+
+    std::vector<uint32_t> sizes = {80};
+    const unsigned int keyLen = 30;
+
+    // Fill pools until evictions happen
+    this->fillUpPoolUntilEvictions(alloc, poolId1, sizes, keyLen);
+    this->fillUpPoolUntilEvictions(alloc, poolId2, sizes, keyLen);
+
+    // Cause different amounts of evictions to generate different age statistics
+    // Pool1 (smaller) - cause more evictions relative to its size
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId1, sizes, keyLen,
+                                        Slab::kSize / 2, false);
+    // Pool2 (larger) - cause fewer evictions relative to its size
+    this->ensureAllocsOnlyFromEvictions(alloc, poolId2, sizes, keyLen,
+                                        Slab::kSize / 4, false);
+
+    // Get individual pool stats
+    auto stats1 = alloc.getPoolStats(poolId1);
+    auto stats2 = alloc.getPoolStats(poolId2);
+
+    // Verify both pools have evictions
+    ASSERT_GT(stats1.numEvictions(), 0) << "Pool 1 should have evictions";
+    ASSERT_GT(stats2.numEvictions(), 0) << "Pool 2 should have evictions";
+
+    auto aggregated = stats1;
+    aggregated += stats2;
+    const uint64_t totalEvictions =
+        stats1.numEvictions() + stats2.numEvictions();
+
+    // Verify eviction counts are summed
+    ASSERT_EQ(aggregated.numEvictions(), totalEvictions);
+
+    const double expectedWeightedAvg =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.avg +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.avg) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.avg,
+              static_cast<uint64_t>(std::round(expectedWeightedAvg)))
+        << "Aggregated eviction age should be weighted average";
+
+    // Test a few percentiles to ensure the weighted averaging works across
+    // all fields
+    const double expectedWeightedP50 =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.p50 +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.p50) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.p50,
+              static_cast<uint64_t>(std::round(expectedWeightedP50)))
+        << "Aggregated p50 should be weighted average";
+
+    const double expectedWeightedP99 =
+        (static_cast<double>(stats1.numEvictions()) *
+             stats1.evictionAgeSecs.p99 +
+         static_cast<double>(stats2.numEvictions()) *
+             stats2.evictionAgeSecs.p99) /
+        totalEvictions;
+
+    ASSERT_EQ(aggregated.evictionAgeSecs.p99,
+              static_cast<uint64_t>(std::round(expectedWeightedP99)))
+        << "Aggregated p99 should be weighted average";
+  }
+
+  void testPoolAggregationWithMaxClasses() {
+    auto alloc = createPoolStatsTestAllocator(true);
+
+    // Create two pools whose sum of allocation classes exceeds
+    // MemoryAllocator::kMaxClasses
+    std::set<uint32_t> pool1Sizes;
+    std::set<uint32_t> pool2Sizes;
+
+    for (unsigned int i = 1; i <= MemoryAllocator::kMaxClasses + 1; ++i) {
+      if (i < MemoryAllocator::kMaxClasses / 2) {
+        pool1Sizes.insert(64 * i);
+      } else {
+        pool2Sizes.insert(64 * i);
+      }
+    }
+
+    // This creates exactly MemoryAllocator::kMaxClasses + 1 (=129) distinct
+    // allocation sizes which does not allow aggregated stats
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    auto poolId1 = alloc.addPool(kPool1Name, numBytes / 2, pool1Sizes);
+    auto poolId2 = alloc.addPool(kPool2Name, numBytes / 2, pool2Sizes);
+
+    // Allocate one item in each pool
+    auto item1 = util::allocateAccessible(alloc, poolId1, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId2, "key2", 4200);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+
+    // Verify that aggregated stats are not present
+    ASSERT_FALSE(hasAggregatedStats(alloc));
   }
 };
 } // namespace tests

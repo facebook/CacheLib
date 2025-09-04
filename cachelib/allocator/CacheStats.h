@@ -245,6 +245,14 @@ struct PoolStats {
   //
   // throws when the operation is not compatible.
   PoolStats& operator+=(const PoolStats& other);
+
+  // Check if the given pool stats can be aggregated without exceeding
+  // the maximum number of allocation classes
+  static bool canAggregate(const PoolStats& lhs, const PoolStats& rhs);
+
+ private:
+  // aggregate eviction age statistics by merging the underlying data
+  void aggregateEvictionAgeStats(const PoolStats& other);
 };
 
 // Stats for slab release events

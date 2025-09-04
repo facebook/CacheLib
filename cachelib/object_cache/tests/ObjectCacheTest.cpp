@@ -2275,4 +2275,48 @@ TEST(ObjectCacheTest, PeekToFindTest) {
   checkExist = objcache->find<Foo>("key_2");
   ASSERT_EQ(nullptr, checkExist);
 }
+
+TEST(ObjectCacheTest, AggregatePoolStatsWithTwoShards) {
+  ObjectCache::Config config;
+  config.setCacheName("test")
+      .setCacheCapacity(10'000)
+      .setNumShards(2)
+      .enableAggregatePoolStats()
+      .setItemDestructor(
+          [&](ObjectCacheDestructorData data) { data.deleteObject<Foo>(); });
+
+  auto objcache = ObjectCache::create(config);
+
+  auto poolIds = objcache->getL1Cache().getRegularPoolIds();
+  EXPECT_EQ(2, poolIds.size());
+
+  // Insert some items to generate stats
+  for (int i = 0; i < 10; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<Foo>());
+  }
+
+  // Test stats export to see what we actually get
+  bool foundAggregatedStats = false;
+  bool foundIndividualStats = false;
+
+  objcache->exportStats(
+      "test_prefix.", std::chrono::seconds{60},
+      [&](folly::StringPiece name, uint64_t value) {
+        std::string nameStr = name.str();
+        if (nameStr.find("pool.aggregated.") != std::string::npos) {
+          foundAggregatedStats = true;
+          XLOGF(INFO, "Found aggregated stat: {} = {}", name, value);
+        } else if (nameStr.find("pool.pool_0.") != std::string::npos ||
+                   nameStr.find("pool.pool_1.") != std::string::npos) {
+          foundIndividualStats = true;
+          XLOGF(INFO, "Found individual stat: {} = {}", name, value);
+        }
+      });
+
+  EXPECT_TRUE(foundAggregatedStats)
+      << "Should find aggregated stats with enableAggregatePoolStats()";
+  EXPECT_FALSE(foundIndividualStats) << "Should NOT find individual shard "
+                                        "stats with enableAggregatePoolStats()";
+}
 } // namespace facebook::cachelib::objcache2::test

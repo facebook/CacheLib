@@ -216,6 +216,9 @@ class CacheBase {
   // <Stat -> Count/Delta> maps
   mutable RateMap counters_;
 
+  // Whether to aggregate pool stats to reduce ODS counter inflation
+  bool aggregatePoolStats_{false};
+
  protected:
   // move bytes from one pool to another. The source pool should be at least
   // _bytes_ in size.
@@ -304,6 +307,21 @@ class CacheBase {
   //   @param pid    the poolId that needs updating
   void updatePoolStats(const std::string& statPrefix, PoolId pid) const;
 
+  // Update pool stats with a PoolStats object directly
+  //   @param stats  the PoolStats object to update
+  void updatePoolStats(const std::string& statPrefix,
+                       const PoolStats& stats) const;
+
+  // Update individual pool stats (each pool reported separately)
+  void updateIndividualPoolStats(const std::string& statPrefix) const;
+
+  // Update aggregated pool stats (all pools combined into one stat)
+  void updateAggregatedPoolStats(const std::string& statPrefix) const;
+
+  // Returns true if the number of distinct allocation sizes across all pools is
+  // less than the maximum number of allocation sizes allowed.
+  bool canAggregatePoolStats() const;
+
   // Update stats specific to compact caches
   void updateCompactCacheStats(const std::string& statPrefix,
                                const ICompactCache& c) const;
@@ -341,6 +359,12 @@ class CacheBase {
   std::unordered_map<PoolId, std::shared_ptr<RebalanceStrategy>>
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
+
+  // Enable aggregating pool stats
+  void enableAggregatePoolStats() { aggregatePoolStats_ = true; }
+
+  // Check if pool stats aggregation is enabled
+  bool isAggregatePoolStatsEnabled() const { return aggregatePoolStats_; }
 
   friend PoolResizer;
   friend PoolRebalancer;

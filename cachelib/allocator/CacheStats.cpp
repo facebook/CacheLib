@@ -16,6 +16,9 @@
 
 #include "cachelib/allocator/CacheStats.h"
 
+#include <cmath>
+#include <unordered_set>
+
 #include "cachelib/allocator/CacheStatsInternal.h"
 
 namespace facebook::cachelib {
@@ -153,19 +156,29 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 
 } // namespace detail
 
+bool PoolStats::canAggregate(const PoolStats& lhs, const PoolStats& rhs) {
+  std::unordered_set<uint32_t> allAllocSizes;
+  for (const auto& [classId, stats] : lhs.cacheStats) {
+    allAllocSizes.insert(stats.allocSize);
+  }
+  for (const auto& [classId, stats] : rhs.cacheStats) {
+    allAllocSizes.insert(stats.allocSize);
+  }
+  return allAllocSizes.size() <= MemoryAllocator::kMaxClasses;
+}
+
 PoolStats& PoolStats::operator+=(const PoolStats& other) {
-  auto verify = [](bool isCompatible) {
-    if (!isCompatible) {
-      throw std::invalid_argument(
-          "attempting to aggregate incompatible pool stats");
-    }
-  };
+  if (!canAggregate(*this, other)) {
+    throw std::invalid_argument(
+        "Cannot aggregate pool stats: would exceed maximum allocation classes "
+        "(" +
+        std::to_string(MemoryAllocator::kMaxClasses) + "). ");
+  }
 
-  XDCHECK_EQ(cacheStats.size(), mpStats.acStats.size());
-
-  verify(cacheStats.size() == other.cacheStats.size());
-  verify(mpStats.acStats.size() == other.mpStats.acStats.size());
-  verify(getClassIds() == other.getClassIds());
+  // aggregate pool-level stats
+  poolSize += other.poolSize;
+  poolUsableSize += other.poolUsableSize;
+  poolAdvisedSize += other.poolAdvisedSize;
 
   // aggregate mp stats
   {
@@ -178,55 +191,156 @@ PoolStats& PoolStats::operator+=(const PoolStats& other) {
     d.numSlabAdvise += s.numSlabAdvise;
   }
 
-  for (const ClassId i : other.getClassIds()) {
-    verify(cacheStats.at(i).allocSize == other.cacheStats.at(i).allocSize);
+  // aggregate eviction age statistics using weighted average before aggregating
+  // eviction counts
+  aggregateEvictionAgeStats(other);
 
-    // aggregate CacheStat stats
-    {
-      auto& d = cacheStats.at(i);
-      const auto& s = other.cacheStats.at(i);
-      d.allocAttempts += s.allocAttempts;
-      d.evictionAttempts += s.evictionAttempts;
-      d.allocFailures += s.allocFailures;
-      d.fragmentationSize += s.fragmentationSize;
-      d.numHits += s.numHits;
-      d.chainedItemEvictions += s.chainedItemEvictions;
-      d.regularItemEvictions += s.regularItemEvictions;
+  // Process allocation classes from other pool
+  for (const ClassId i : other.getClassIds()) {
+    const auto& otherStats = other.cacheStats.at(i);
+    const auto& otherAcStats = other.mpStats.acStats.at(i);
+
+    // Look for an existing class in this pool with the same allocation size
+    ClassId targetClassId;
+    bool foundMatchingSize = false;
+
+    for (const auto& [existingClassId, existingStats] : cacheStats) {
+      if (existingStats.allocSize == otherStats.allocSize) {
+        targetClassId = existingClassId;
+        foundMatchingSize = true;
+        break;
+      }
     }
 
-    // aggregate container stats within CacheStat
-    {
-      auto& d = cacheStats.at(i).containerStat;
-      const auto& s = other.cacheStats.at(i).containerStat;
-      d.size += s.size;
-
-      if (d.oldestTimeSec < s.oldestTimeSec) {
-        d.oldestTimeSec = s.oldestTimeSec;
+    if (foundMatchingSize) {
+      // Aggregate with the existing class that has the same allocation size
+      // aggregate CacheStat stats
+      {
+        auto& d = cacheStats.at(targetClassId);
+        const auto& s = otherStats;
+        d.allocAttempts += s.allocAttempts;
+        d.evictionAttempts += s.evictionAttempts;
+        d.allocFailures += s.allocFailures;
+        d.fragmentationSize += s.fragmentationSize;
+        d.numHits += s.numHits;
+        d.chainedItemEvictions += s.chainedItemEvictions;
+        d.regularItemEvictions += s.regularItemEvictions;
       }
 
-      d.numHotAccesses += s.numHotAccesses;
-      d.numColdAccesses += s.numColdAccesses;
-      d.numWarmAccesses += s.numWarmAccesses;
-    }
+      // aggregate container stats within CacheStat
+      {
+        auto& d = cacheStats.at(targetClassId).containerStat;
+        const auto& s = otherStats.containerStat;
+        d.size += s.size;
 
-    // aggregate ac stats
-    {
-      auto& d = mpStats.acStats.at(i);
-      const auto& s = other.mpStats.acStats.at(i);
-      // allocsPerSlab is fixed for each allocation class, and thus
-      // there is no need to aggregate it
-      /* d.allocsPerSlab */
-      d.usedSlabs += s.usedSlabs;
-      d.freeSlabs += s.freeSlabs;
-      d.freeAllocs += s.freeAllocs;
-      d.activeAllocs += s.activeAllocs;
-      d.full = d.full && s.full ? true : false;
+        if (d.oldestTimeSec < s.oldestTimeSec) {
+          d.oldestTimeSec = s.oldestTimeSec;
+        }
+
+        d.numHotAccesses += s.numHotAccesses;
+        d.numColdAccesses += s.numColdAccesses;
+        d.numWarmAccesses += s.numWarmAccesses;
+      }
+
+      // aggregate ac stats
+      {
+        auto& d = mpStats.acStats.at(targetClassId);
+        const auto& s = otherAcStats;
+        // allocsPerSlab is fixed for each allocation class, and thus
+        // there is no need to aggregate it
+        /* d.allocsPerSlab */
+        d.usedSlabs += s.usedSlabs;
+        d.freeSlabs += s.freeSlabs;
+        d.freeAllocs += s.freeAllocs;
+        d.activeAllocs += s.activeAllocs;
+        d.full = d.full && s.full ? true : false;
+      }
+    } else {
+      // No existing class with matching allocation size found, so create a new
+      // one. Find a new class ID to avoid conflicts
+      ClassId newClassId = static_cast<ClassId>(cacheStats.size());
+      while (cacheStats.find(newClassId) != cacheStats.end()) {
+        newClassId++;
+      }
+
+      // Copy the stats with the new class ID
+      cacheStats[newClassId] = otherStats;
+      mpStats.acStats[newClassId] = otherAcStats;
+      mpStats.classIds.insert(newClassId);
     }
   }
 
   // aggregate rest of PoolStats
   numPoolGetHits += other.numPoolGetHits;
   return *this;
+}
+
+void PoolStats::aggregateEvictionAgeStats(const PoolStats& other) {
+  // Get the total number of evictions from both pools to use as weights
+  const uint64_t thisEvictions = numEvictions();
+  const uint64_t otherEvictions = other.numEvictions();
+  const uint64_t totalEvictions = thisEvictions + otherEvictions;
+
+  // If no evictions in either pool, keep the current evictionAgeSecs unchanged
+  if (totalEvictions == 0) {
+    return;
+  }
+
+  // If only one pool has evictions, use that pool's statistics
+  if (thisEvictions == 0) {
+    evictionAgeSecs = other.evictionAgeSecs;
+    return;
+  }
+
+  if (otherEvictions == 0) {
+    // Keep current evictionAgeSecs unchanged
+    return;
+  }
+
+  // Use the relative number of evictions as weights for aggregating eviction
+  // age statistics
+  const double thisWeight = static_cast<double>(thisEvictions) / totalEvictions;
+  const double otherWeight =
+      static_cast<double>(otherEvictions) / totalEvictions;
+
+  auto weightedAverage = [thisWeight, otherWeight](
+                             uint64_t thisVal, uint64_t otherVal) -> uint64_t {
+    double result = thisWeight * thisVal + otherWeight * otherVal;
+    return static_cast<uint64_t>(std::round(result));
+  };
+
+  // Aggregate all percentile estimates using weighted averages
+  util::PercentileStats::Estimates aggregated{};
+  aggregated.avg =
+      weightedAverage(evictionAgeSecs.avg, other.evictionAgeSecs.avg);
+  aggregated.p0 = weightedAverage(evictionAgeSecs.p0, other.evictionAgeSecs.p0);
+  aggregated.p5 = weightedAverage(evictionAgeSecs.p5, other.evictionAgeSecs.p5);
+  aggregated.p10 =
+      weightedAverage(evictionAgeSecs.p10, other.evictionAgeSecs.p10);
+  aggregated.p25 =
+      weightedAverage(evictionAgeSecs.p25, other.evictionAgeSecs.p25);
+  aggregated.p50 =
+      weightedAverage(evictionAgeSecs.p50, other.evictionAgeSecs.p50);
+  aggregated.p75 =
+      weightedAverage(evictionAgeSecs.p75, other.evictionAgeSecs.p75);
+  aggregated.p90 =
+      weightedAverage(evictionAgeSecs.p90, other.evictionAgeSecs.p90);
+  aggregated.p95 =
+      weightedAverage(evictionAgeSecs.p95, other.evictionAgeSecs.p95);
+  aggregated.p99 =
+      weightedAverage(evictionAgeSecs.p99, other.evictionAgeSecs.p99);
+  aggregated.p999 =
+      weightedAverage(evictionAgeSecs.p999, other.evictionAgeSecs.p999);
+  aggregated.p9999 =
+      weightedAverage(evictionAgeSecs.p9999, other.evictionAgeSecs.p9999);
+  aggregated.p99999 =
+      weightedAverage(evictionAgeSecs.p99999, other.evictionAgeSecs.p99999);
+  aggregated.p999999 =
+      weightedAverage(evictionAgeSecs.p999999, other.evictionAgeSecs.p999999);
+  aggregated.p100 =
+      weightedAverage(evictionAgeSecs.p100, other.evictionAgeSecs.p100);
+
+  evictionAgeSecs = aggregated;
 }
 
 uint64_t PoolStats::numFreeAllocs() const noexcept {
