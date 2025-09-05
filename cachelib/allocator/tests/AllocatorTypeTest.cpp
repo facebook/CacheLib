@@ -452,6 +452,12 @@ TYPED_TEST(BaseAllocatorTest, PoolAggregationWithMaxClasses) {
   this->testPoolAggregationWithMaxClasses();
 }
 
+// Test that pool aggregation falls back to individual pool stats when only a
+// single pool is present
+TYPED_TEST(BaseAllocatorTest, PoolAggregationWithOnePool) {
+  this->testAggregatePoolStatsSinglePool();
+}
+
 namespace { // the tests that cannot be done by TYPED_TEST.
 
 using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;

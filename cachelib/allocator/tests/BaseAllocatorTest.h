@@ -6837,6 +6837,26 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // Verify that aggregated stats are not present
     ASSERT_FALSE(hasAggregatedStats(alloc));
   }
+
+  void testAggregatePoolStatsSinglePool() {
+    // Test fallback to individual pool stats when only one pool exists
+    // and aggregatePoolStats is enabled
+    auto alloc = createPoolStatsTestAllocator(true);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    // Add a single pool
+    auto poolId = alloc.addPool(kPool1Name, numBytes, {64, 128, 256});
+
+    // Add some items to the pool
+    auto item1 = util::allocateAccessible(alloc, poolId, "key1", 60);
+    auto item2 = util::allocateAccessible(alloc, poolId, "key2", 120);
+    ASSERT_NE(nullptr, item1);
+    ASSERT_NE(nullptr, item2);
+
+    // With only one pool, exportStats should fall back to individual
+    // pool stats and NOT export aggregated stats (nothing to aggregate)
+    EXPECT_FALSE(hasAggregatedStats(alloc));
+  }
 };
 } // namespace tests
 } // namespace cachelib

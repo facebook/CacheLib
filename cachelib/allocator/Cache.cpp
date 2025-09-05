@@ -581,6 +581,11 @@ bool CacheBase::canAggregatePoolStats() const {
   const auto poolIds = getRegularPoolIds();
   XDCHECK(!poolIds.empty(), "Regular pool IDs should not be empty");
 
+  // If we only have one pool, there is nothing to aggregate
+  if (poolIds.size() < 2) {
+    return false;
+  }
+
   // Collect all unique allocation sizes from all pools
   std::unordered_set<uint32_t> allAllocSizes;
   for (const auto pid : poolIds) {
