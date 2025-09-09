@@ -3828,8 +3828,20 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
 
   unlinkItemForEviction(*candidate);
 
+  // track DRAM eviction and its result
+  auto eventTracker = getEventTracker();
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*candidate)) {
+    if (eventTracker) {
+      eventTracker->record(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                           AllocatorApiResult::NVM_ADMITTED,
+                           candidate->getSize());
+    }
     nvmCache_->put(*candidate, std::move(token));
+  } else {
+    if (eventTracker) {
+      eventTracker->record(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                           AllocatorApiResult::EVICTED, candidate->getSize());
+    }
   }
   return {candidate, toRecycle};
 }
@@ -3856,12 +3868,6 @@ CacheAllocator<CacheTrait>::findEviction(PoolId pid, ClassId cid) {
       (*stats_.chainedItemEvictions)[pid][cid].inc();
     } else {
       (*stats_.regularItemEvictions)[pid][cid].inc();
-    }
-
-    if (auto eventTracker = getEventTracker()) {
-      eventTracker->record(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
-                           AllocatorApiResult::EVICTED, candidate->getSize(),
-                           candidate->getConfiguredTTL().count());
     }
 
     // check if by releasing the item we intend to, we actually
