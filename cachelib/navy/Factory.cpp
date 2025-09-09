@@ -129,6 +129,12 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.indexConfig = indexConfig;
   }
 
+  void setEventTracker(
+      const std::optional<std::reference_wrapper<EventTracker>>& eventTracker)
+      override {
+    config_.eventTracker = eventTracker;
+  }
+
   std::unique_ptr<Engine> create(JobScheduler& scheduler,
                                  ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {

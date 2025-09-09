@@ -37,6 +37,8 @@ namespace navy {
 // to CacheProto::setBlockCache.
 class BlockCacheProto {
  public:
+  using EventTracker = EventInterface<KAllocation::Key>;
+
   virtual ~BlockCacheProto() = default;
 
   // Set cache layout. Cache will start at @baseOffset and will be @size bytes
@@ -96,6 +98,10 @@ class BlockCacheProto {
 
   // (Optional) Set Index related config.
   virtual void setIndexConfig(const BlockCacheIndexConfig& config) = 0;
+
+  virtual void setEventTracker(
+      const std::optional<std::reference_wrapper<EventTracker>>&
+          eventTracker) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)

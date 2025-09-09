@@ -16,15 +16,12 @@
 
 #pragma once
 
-#include <atomic>
-#include <chrono>
 #include <memory>
-#include <stdexcept>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/common/AtomicCounter.h"
-#include "cachelib/common/CompilerUtils.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
@@ -32,9 +29,7 @@
 #include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/common/Device.h"
-#include "cachelib/navy/common/SizeDistribution.h"
 #include "cachelib/navy/engine/Engine.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
@@ -75,6 +70,8 @@ class BlockCache final : public Engine {
     uint32_t numInMemBuffers{1};
     // whether ItemDestructor is enabled
     bool itemDestructorEnabled{false};
+
+    std::optional<std::reference_wrapper<EventTracker>> eventTracker;
 
     // Maximum number of retry times for in-mem buffer flushing.
     // When exceeding the limit, we will not reschedule any flushing job but
@@ -391,6 +388,7 @@ class BlockCache final : public Engine {
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
+  std::optional<std::reference_wrapper<EventTracker>> eventTracker_;
 
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;

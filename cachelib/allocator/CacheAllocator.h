@@ -2586,6 +2586,11 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
     nvmCacheState_.markTruncated();
   }
 
+  auto eventTracker = getEventTracker();
+  if (eventTracker) {
+    config_.nvmConfig->navyConfig.blockCache().setEventTracker(*eventTracker);
+  }
+
   nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
                                           config_.itemDestructor);
   if (!config_.cacheDir.empty()) {

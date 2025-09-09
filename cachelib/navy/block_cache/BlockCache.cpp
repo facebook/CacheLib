@@ -159,6 +159,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   validate(config);
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
+
+  eventTracker_ = config.eventTracker;
 }
 std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
@@ -449,7 +451,10 @@ Status BlockCache::remove(HashedKey hk) {
   return Status::NotFound;
 }
 
-// Remove all region entries from index and invoke callback
+// Callback for region eviction. The evicted region is reclaimed by removing,
+// evicting or reinserting each item in the region so that the region
+// can be freed.
+//
 // See @RegionEvictCallback for details
 uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
   // Eviction callback guarantees are the following:

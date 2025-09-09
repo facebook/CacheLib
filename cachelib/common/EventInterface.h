@@ -19,6 +19,8 @@
 #include <folly/Optional.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/allocator/KAllocation.h"
+
 namespace facebook {
 namespace cachelib {
 
@@ -149,6 +151,8 @@ class EventInterface {
   virtual void getStats(
       std::unordered_map<std::string, uint64_t>& statsMap) const = 0;
 };
+
+using EventTracker = EventInterface<KAllocation::Key>;
 
 } // namespace cachelib
 } // namespace facebook
