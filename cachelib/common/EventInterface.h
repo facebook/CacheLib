@@ -94,6 +94,7 @@ enum class AllocatorApiResult : uint8_t {
   REMOVED = 7,             // Removed an item.
   EVICTED = 8,             // Evicted an item.
   EXPIRED = 9,             // An item has expired.
+  REINSERTED = 10,         // Reinserted an item.
 };
 
 inline const char* toString(AllocatorApiResult result) {
@@ -118,6 +119,8 @@ inline const char* toString(AllocatorApiResult result) {
     return "EVICTED";
   case AllocatorApiResult::EXPIRED:
     return "EXPIRED";
+  case AllocatorApiResult::REINSERTED:
+    return "REINSERTED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";

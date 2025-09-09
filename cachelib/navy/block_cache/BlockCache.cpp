@@ -497,7 +497,6 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
         makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
     BufferView value{desc.valueSize, entryEnd - entrySize};
 
-    BlockCache::ReinsertionRes reinsertionRes = ReinsertionRes::kRemoved;
     if (checksumData_ && desc.cs != checksum(value)) {
       // We do not need to abort here since the EntryDesc checksum was good, so
       // we can safely proceed to read the next entry.
@@ -515,30 +514,30 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
             desc.valueSize,
             folly::hexlify(folly::ByteRange(value.data(), value.dataEnd())));
       reclaimValueChecksumErrorCount_.inc();
-      if (removeItem(hk, RelAddress{rid, offset})) {
-        reinsertionRes = ReinsertionRes::kEvicted;
-      }
+      removeItem(hk, RelAddress{rid, offset});
       // Reset the value to nullptr to avoid the destructor doing wrong thing
       value = BufferView();
     } else {
-      reinsertionRes =
+      AllocatorApiResult reinsertionRes =
           reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
       switch (reinsertionRes) {
-      case ReinsertionRes::kEvicted:
+      case AllocatorApiResult::EVICTED:
         evictionCount++;
         usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
         break;
-      case ReinsertionRes::kRemoved:
+      case AllocatorApiResult::REMOVED:
         holeCount_.sub(1);
         holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
         break;
-      case ReinsertionRes::kReinserted:
+      default:
         break;
       }
-    }
-
-    if (destructorCb_ && reinsertionRes == ReinsertionRes::kEvicted) {
-      destructorCb_(hk, value, DestructorEvent::Recycled);
+      if (destructorCb_ && reinsertionRes == AllocatorApiResult::EVICTED) {
+        destructorCb_(hk, value, DestructorEvent::Recycled);
+      } else {
+        updateEventTracker(hk.key(), AllocatorApiEvent::NVM_EVICT,
+                           reinsertionRes, entrySize);
+      }
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -611,22 +610,34 @@ bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
   return false;
 }
 
-BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
-    HashedKey hk, BufferView value, uint32_t entrySize, RelAddress currAddr) {
+void BlockCache::updateEventTracker(folly::StringPiece key,
+                                    AllocatorApiEvent event,
+                                    AllocatorApiResult result,
+                                    uint32_t size) {
+  if (eventTracker_.has_value()) {
+    eventTracker_->get().record(event, key, result, size);
+  }
+}
+
+AllocatorApiResult BlockCache::reinsertOrRemoveItem(HashedKey hk,
+                                                    BufferView value,
+                                                    uint32_t entrySize,
+                                                    RelAddress currAddr) {
   auto removeItem = [this, hk, currAddr](bool expired) {
     if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       if (expired) {
         evictionExpiredCount_.inc();
+        return AllocatorApiResult::EXPIRED;
       }
-      return ReinsertionRes::kEvicted;
+      return AllocatorApiResult::EVICTED;
     }
-    return ReinsertionRes::kRemoved;
+    return AllocatorApiResult::REMOVED;
   };
 
   const auto lr = index_->peek(hk.keyHash());
   if (!lr.found() || decodeRelAddress(lr.address()) != currAddr) {
     evictionLookupMissCounter_.inc();
-    return ReinsertionRes::kRemoved;
+    return AllocatorApiResult::REMOVED;
   }
 
   if (checkExpired_ && checkExpired_(value)) {
@@ -657,10 +668,12 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
   case OpenStatus::Error:
     allocErrorCount_.inc();
     reinsertionErrorCount_.inc();
-    break;
+    removeItem(false);
+    return AllocatorApiResult::FAILED;
   case OpenStatus::Retry:
     reinsertionErrorCount_.inc();
-    return removeItem(false);
+    removeItem(false);
+    return AllocatorApiResult::FAILED;
   }
   auto closeRegionGuard =
       folly::makeGuard([this, desc_2 = std::move(desc)]() mutable {
@@ -680,12 +693,14 @@ BlockCache::ReinsertionRes BlockCache::reinsertOrRemoveItem(
                              encodeRelAddress(addr.add(slotSize)),
                              encodeRelAddress(currAddr));
   if (!replaced) {
+    // happens if you can't find the key in the map
     reinsertionErrorCount_.inc();
-    return removeItem(false);
+    removeItem(false);
+    return AllocatorApiResult::FAILED;
   }
   reinsertionCount_.inc();
   reinsertionBytes_.add(entrySize);
-  return ReinsertionRes::kReinserted;
+  return AllocatorApiResult::REINSERTED;
 }
 
 Status BlockCache::writeEntry(RelAddress addr,

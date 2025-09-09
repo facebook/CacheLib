@@ -327,21 +327,19 @@ class BlockCache final : public Engine {
     return regionManager_.toRelative(decodeAbsAddress(code).sub(1)).add(1);
   }
 
-  enum class ReinsertionRes {
-    // Item was reinserted back into the cache
-    kReinserted,
-    // Item was removed by user earlier
-    kRemoved,
-    // Item wasn't eligible for re-insertion and was evicted
-    kEvicted,
-  };
-  ReinsertionRes reinsertOrRemoveItem(HashedKey hk,
-                                      BufferView value,
-                                      uint32_t entrySize,
-                                      RelAddress currAddr);
+  void updateEventTracker(folly::StringPiece key,
+                          AllocatorApiEvent event,
+                          AllocatorApiResult result,
+                          uint32_t size);
+
+  AllocatorApiResult reinsertOrRemoveItem(HashedKey hk,
+                                          BufferView value,
+                                          uint32_t entrySize,
+                                          RelAddress currAddr);
 
   // Removes an entry key from the index.
-  // @return true if the item is successfully removed; false if the item cannot
+  // @return true if the item is successfully removed; false if the item
+  // cannot
   //         be found or was removed earlier.
   bool removeItem(HashedKey hk, RelAddress currAddr);
 
@@ -373,8 +371,8 @@ class BlockCache final : public Engine {
   const bool preciseRemove_{false};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
-  // "buffer pointer is value pointer", which means value has to be at offset 0
-  // of the slot and header (EntryDescriptor) at the end.
+  // "buffer pointer is value pointer", which means value has to be at offset
+  // 0 of the slot and header (EntryDescriptor) at the end.
   //
   // ----------------------------------------------------
   // |     Value                    |  EntryDescriptor  |
