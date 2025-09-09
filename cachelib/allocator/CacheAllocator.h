@@ -4217,16 +4217,7 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
   if (UNLIKELY(!handle)) {
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
-    }
-    if (eventTracker) {
-      // If caller issued a regular find and we have nvm-cache enabled,
-      // it is expected a nvm-cache lookup will follow. We don't know
-      // for sure if the lookup will be a hit or miss, so we only record
-      // a NOT_FOUND_IN_MEMORY result for now.
-      if (event == AllocatorApiEvent::FIND && nvmCache_ != nullptr) {
-        eventTracker->record(event, key,
-                             AllocatorApiResult::NOT_FOUND_IN_MEMORY);
-      } else {
+      if (eventTracker) {
         eventTracker->record(event, key, AllocatorApiResult::NOT_FOUND);
       }
     }
@@ -4238,16 +4229,16 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
       stats_.numCacheGetExpiries.inc();
-    }
-    if (eventTracker) {
-      eventTracker->record(event, key, AllocatorApiResult::EXPIRED);
+      if (eventTracker) {
+        eventTracker->record(event, key, AllocatorApiResult::EXPIRED);
+      }
     }
     WriteHandle ret;
     ret.markExpired();
     return ret;
   }
 
-  if (eventTracker) {
+  if ((eventTracker) && (needToBumpStats)) {
     eventTracker->record(event, key, AllocatorApiResult::FOUND,
                          folly::Optional<uint32_t>(handle->getSize()),
                          handle->getConfiguredTTL().count());
