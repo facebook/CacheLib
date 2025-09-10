@@ -461,8 +461,18 @@ class NvmCache {
 
   FillMap& getFillMapForShard(size_t shard) { return fills_[shard].fills_; }
 
-  std::unique_lock<TimedMutex> getFillLockForShard(size_t shard) {
-    return std::unique_lock<TimedMutex>(fillLock_[shard].fillLock_);
+  /**
+   * Obtains an exclusive fill lock for the shard.
+   */
+  auto getFillLockForShard(size_t shard) {
+    return std::unique_lock{fillLock_[shard].fillLock_};
+  }
+
+  /**
+   * Obtains a shared fill lock for the shard.
+   */
+  auto getSharedFillLockForShard(size_t shard) {
+    return std::shared_lock{fillLock_[shard].fillLock_};
   }
 
   void onGetComplete(GetCtx& ctx,
@@ -493,7 +503,8 @@ class NvmCache {
 
   // a map of fill locks for each shard
   struct FillLockStruct {
-    alignas(folly::hardware_destructive_interference_size) TimedMutex fillLock_;
+    alignas(folly::hardware_destructive_interference_size) folly::fibers::
+        TimedRWMutexWritePriority<folly::fibers::GenericBaton> fillLock_;
   };
   std::vector<FillLockStruct> fillLock_;
 
@@ -620,25 +631,25 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
 
   stats().numNvmGets.inc();
 
-  GetCtx* ctx{nullptr};
-  WriteHandle hdl{nullptr};
-  {
-    auto lock = getFillLockForShard(shard);
+  auto& fillMap = getFillMapForShard(shard);
+
+  auto checkShared =
+      [this, &hk, &shard, &fillMap](
+          typename FillMap::iterator& itOut) -> std::optional<WriteHandle> {
     // do not use the Cache::find() since that will call back into us.
-    hdl = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
-    if (UNLIKELY(hdl != nullptr)) {
-      if (hdl->isExpired()) {
-        hdl.reset();
-        hdl.markExpired();
+    auto hdlShared = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
+    if (UNLIKELY(hdlShared != nullptr)) {
+      if (hdlShared->isExpired()) {
+        hdlShared.reset();
+        hdlShared.markExpired();
         stats().numNvmGetMissExpired.inc();
         stats().numNvmGetMissFast.inc();
         stats().numNvmGetMiss.inc();
       }
-      return hdl;
+      return hdlShared;
     }
 
-    auto& fillMap = getFillMapForShard(shard);
-    auto it = fillMap.find(hk.key());
+    itOut = fillMap.find(hk.key());
     // we use async apis for nvmcache operations into navy. async apis for
     // lookups incur additional overheads and thread hops. However, navy can
     // quickly answer negative lookups through a synchronous api. So we try to
@@ -659,11 +670,34 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
     // For concurrent put, if it is already enqueued, its put context already
     // exists. If it is not enqueued yet (in-flight) the above invalidateToken
     // will prevent the put from being enqueued.
-    if (it == fillMap.end() && !putContexts_[shard].hasContexts() &&
+    if (itOut == fillMap.end() && !putContexts_[shard].hasContexts() &&
         !navyCache_->couldExist(hk)) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
       return WriteHandle{};
+    }
+    return std::nullopt;
+  };
+
+  WriteHandle hdl{nullptr};
+  typename FillMap::iterator it{};
+  GetCtx* ctx{nullptr};
+
+  {
+    // Hot miss path: shared lock, immutable access only
+    auto lock = getSharedFillLockForShard(shard);
+    if (auto hdlShared = checkShared(it)) {
+      return *std::move(hdlShared);
+    }
+    // fallthrough
+  }
+  {
+    // Slow path: exclusive lock
+    auto lock = getFillLockForShard(shard);
+
+    // Recheck miss path under exclusive lock
+    if (auto hdlShared = checkShared(it)) {
+      return *std::move(hdlShared);
     }
 
     hdl = CacheAPIWrapperForNvm<C>::createNvmCacheFillHandle(cache_);
