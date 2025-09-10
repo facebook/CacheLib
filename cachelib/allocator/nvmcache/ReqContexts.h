@@ -96,7 +96,7 @@ class ContextMap {
     // lookup.
     auto ctx = std::make_unique<T>(key, std::forward<Args>(args)...);
     uintptr_t ctxKey = reinterpret_cast<uintptr_t>(ctx.get());
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::unique_lock l{rwMutex_};
     auto it = map_.find(ctxKey);
     if (it != map_.end()) {
       throw std::invalid_argument(
@@ -111,7 +111,7 @@ class ContextMap {
   // returns true if this map has active contexts and false if the map is
   // empty.
   bool hasContexts() const {
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::shared_lock l{rwMutex_};
     return map_.size() != 0;
   }
 
@@ -119,7 +119,7 @@ class ContextMap {
   // caller is supposed to not refer to it anymore.
   void destroyContext(const T& ctx) {
     uintptr_t ctxKey = reinterpret_cast<uintptr_t>(&ctx);
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::unique_lock l{rwMutex_};
     size_t numRemoved = map_.erase(ctxKey);
     if (numRemoved != 1) {
       throw std::invalid_argument(
@@ -132,7 +132,8 @@ class ContextMap {
 
  private:
   folly::F14FastMap<uintptr_t, std::unique_ptr<T>> map_;
-  mutable TimedMutex mutex_;
+  mutable folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>
+      rwMutex_;
 };
 } // namespace detail
 
