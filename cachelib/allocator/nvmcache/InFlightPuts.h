@@ -35,9 +35,6 @@ using folly::fibers::TimedMutex;
 // user guarantees that the lifetime of the token is within the lifetime of the
 // string piece with which they obtain the token.
 class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
-  using LockGuard = std::lock_guard<TimedMutex>;
-  using UniqueLock = std::unique_lock<TimedMutex>;
-
  public:
   class PutToken;
 
@@ -50,12 +47,12 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
   template <typename F>
   folly::Expected<PutToken, PutTokenError> tryAcquireToken(
       folly::StringPiece key, F&& fn) {
-    UniqueLock l(mutex_, std::try_to_lock);
+    std::unique_lock l{rwMutex_, std::try_to_lock};
     if (!l.owns_lock()) {
       return folly::makeUnexpected(PutTokenError::TRY_LOCK_FAIL);
     }
 
-    auto ret = keys_.emplace(key, true);
+    auto ret = keys_.emplace(key, std::make_unique<std::atomic<bool>>(true));
     // record for same key being inflight written to nvmcache should be rare.
     // In that case, fail the latter one.
     if (!ret.second) {
@@ -77,10 +74,10 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
   // function on this token and simply remove the token when the token gets
   // destroyed.
   void invalidateToken(folly::StringPiece key) {
-    LockGuard l(mutex_);
+    std::shared_lock l{rwMutex_};
     auto it = keys_.find(key);
     if (it != keys_.end()) {
-      it->second = false;
+      it->second->store(false);
     }
   }
 
@@ -157,9 +154,9 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
   //  @throw    if fn throws, token is preserved.
   template <typename F>
   bool executeIfValid(folly::StringPiece key, F&& fn) {
-    LockGuard l(mutex_);
+    std::unique_lock l{rwMutex_};
     auto it = keys_.find(key);
-    const bool valid = it != keys_.end() && it->second;
+    const bool valid = it != keys_.end() && it->second->load();
     if (valid) {
       fn();
       keys_.erase(it);
@@ -170,16 +167,20 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
 
   // erases the record from inflight map.
   void removeToken(folly::StringPiece key) {
-    LockGuard l(mutex_);
+    std::unique_lock l{rwMutex_};
     auto res = keys_.erase(key);
     XDCHECK_EQ(res, 1u);
   }
 
   // map storing the presence of a token  and its validity
-  folly::F14FastMap<folly::StringPiece, bool, folly::Hash> keys_;
+  folly::F14FastMap<folly::StringPiece,
+                    std::unique_ptr<std::atomic<bool>>,
+                    folly::Hash>
+      keys_;
 
   // mutex protecting the map.
-  TimedMutex mutex_;
+  folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>
+      rwMutex_;
 };
 
 } // namespace cachelib
