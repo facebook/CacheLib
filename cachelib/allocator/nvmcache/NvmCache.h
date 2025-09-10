@@ -422,8 +422,9 @@ class NvmCache {
   void removeFromFillMap(HashedKey hk) {
     std::unique_ptr<GetCtx> to_delete;
     {
-      auto lock = getFillLock(hk);
-      auto& map = getFillMap(hk);
+      const auto shard = getShardForKey(hk);
+      auto lock = getFillLockForShard(shard);
+      auto& map = getFillMapForShard(shard);
       auto it = map.find(hk.key());
       if (it == map.end()) {
         return;
@@ -436,7 +437,7 @@ class NvmCache {
   // Erase entry for the ctx from the fill map
   // @param     key   item key
   void invalidateFill(HashedKey hk) {
-    auto shard = getShardForKey(hk);
+    const auto shard = getShardForKey(hk);
     auto lock = getFillLockForShard(shard);
     auto& map = getFillMapForShard(shard);
     auto it = map.find(hk.key());
@@ -458,24 +459,10 @@ class NvmCache {
     return hk.keyHash() % numShards_;
   }
 
-  size_t getNumShards() const { return numShards_; }
-
-  size_t getShardForKey(folly::StringPiece key) const {
-    return getShardForKey(HashedKey{key});
-  }
-
   FillMap& getFillMapForShard(size_t shard) { return fills_[shard].fills_; }
-
-  FillMap& getFillMap(HashedKey hk) {
-    return getFillMapForShard(getShardForKey(hk));
-  }
 
   std::unique_lock<TimedMutex> getFillLockForShard(size_t shard) {
     return std::unique_lock<TimedMutex>(fillLock_[shard].fillLock_);
-  }
-
-  std::unique_lock<TimedMutex> getFillLock(HashedKey hk) {
-    return getFillLockForShard(getShardForKey(hk));
   }
 
   void onGetComplete(GetCtx& ctx,
@@ -595,7 +582,7 @@ template <typename C>
 typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
     HashedKey hk) {
   // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % numShards_;
+  const auto shard = getShardForKey(hk);
   auto guard = tombstones_[shard].add(hk.key());
 
   // need to synchronize tombstone creations with fill lock to serialize
@@ -615,9 +602,7 @@ typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
 
 template <typename C>
 bool NvmCache<C>::hasTombStone(HashedKey hk) {
-  // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % numShards_;
-  return tombstones_[shard].isPresent(hk.key());
+  return tombstones_[getShardForKey(hk)].isPresent(hk.key());
 }
 
 template <typename C>
@@ -721,7 +706,7 @@ bool NvmCache<C>::couldExistFast(HashedKey hk) {
     return false;
   }
 
-  auto shard = getShardForKey(hk);
+  const auto shard = getShardForKey(hk);
   // invalidateToken any inflight puts for the same key since we are filling
   // from nvmcache.
   inflightPuts_[shard].invalidateToken(hk.key());
@@ -1153,7 +1138,7 @@ template <typename F>
 typename folly::Expected<typename NvmCache<C>::PutToken,
                          InFlightPuts::PutTokenError>
 NvmCache<C>::createPutToken(folly::StringPiece key, F&& fn) {
-  return inflightPuts_[getShardForKey(key)].tryAcquireToken(
+  return inflightPuts_[getShardForKey(HashedKey{key})].tryAcquireToken(
       key, std::forward<F>(fn));
 }
 
@@ -1205,7 +1190,7 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
   XDCHECK(it->isNvmClean());
 
-  auto lock = getFillLock(hk);
+  auto lock = getFillLockForShard(getShardForKey(hk));
   if (hasTombStone(hk) || !ctx.isValid()) {
     // a racing remove or evict while we were filling
     stats().numNvmGetMiss.inc();

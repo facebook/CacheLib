@@ -154,9 +154,9 @@ class NvmCacheTest : public testing::Test {
   // Helper for ShardHashIsNotFillMapHash because we're the friend of NvmCache.
   std::pair<size_t, size_t> getNvmShardAndHashForKey(folly::StringPiece key) {
     auto nvm = getNvmCache();
-    auto shard = nvm->getShardForKey(key);
-    auto hash = typename NvmCacheT::FillMap{}.hash_function()(key) %
-                nvm->getNumShards();
+    auto shard = nvm->getShardForKey(HashedKey{key});
+    auto hash =
+        typename NvmCacheT::FillMap{}.hash_function()(key) % nvm->numShards_;
     return std::make_pair(shard, hash);
   }
 
