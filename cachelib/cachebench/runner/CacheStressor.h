@@ -48,10 +48,12 @@ namespace cachebench {
 
 constexpr uint32_t kNvmCacheWarmUpCheckRate = 1000;
 
+#ifdef HAVE_DTO
 void async_memcpy_callback(void *arg) {
     auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
     fn();
 }
+#endif
 
 // Implementation of stressor that uses a workload generator to stress an
 // instance of the cache.  All item's value in CacheStressor follows CacheValue

@@ -69,7 +69,6 @@ install(TARGETS cachelib_navy
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
 
-
 if (BUILD_TESTS)
   add_library(navy_test_support
     testing/BufferGen.cpp

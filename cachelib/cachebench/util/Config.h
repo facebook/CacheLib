@@ -331,7 +331,7 @@ struct StressorConfig : public JSONConfig {
   uint64_t timestampFactor{1000};
 
   bool useCombinedLockForIterators{false};
-  
+
   // if we want to use async DSA function
   bool useDTOAsync{false};
 

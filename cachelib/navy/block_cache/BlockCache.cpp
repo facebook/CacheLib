@@ -35,10 +35,13 @@
 
 namespace facebook::cachelib::navy {
 
+#ifdef HAVE_DTO
 void async_memcpy_crc_cb(void *arg) {
     auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
     fn();
 }
+#endif
+
 
 BlockCache::Config& BlockCache::Config::validate() {
   XDCHECK_NE(scheduler, nullptr);
