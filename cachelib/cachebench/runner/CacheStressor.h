@@ -28,7 +28,10 @@
 #include <thread>
 #include <unordered_set>
 
+#ifdef HAVE_DTO
 #include <dto.h>
+#define DTO_DSA_MIN_THRESHOLD (32 * 1024)
+#endif
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
@@ -500,20 +503,19 @@ class CacheStressor : public Stressor {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
-      if (config_.useDTOAsync && size > 32*1024) {
-        //it->markMoving();
+#ifdef HAVE_DTO
+      if (config_.useDTOAsync && size >= DTO_DSA_MIN_THRESHOLD) {
         auto insertToCache = [&] {
             cache_->insertOrReplace(it);
         };
-                  
         std::function<void(void)> fn = insertToCache;
         dto_memcpy_async(
             it->getMemory(), itemValue.data(), size, &async_memcpy_callback, &insertToCache);
-        //it->unmarkMoving();
-      } else {
-        populateItem(it, itemValue);
-        cache_->insertOrReplace(it);
+        return OpResultType::kSetSuccess;
       }
+#endif
+      populateItem(it, itemValue);
+      cache_->insertOrReplace(it);
       return OpResultType::kSetSuccess;
     }
   }

@@ -1,0 +1,9 @@
+[manifest]
+name = uuid
+
+[rpms]
+libuuid-devel
+
+[debs]
+uuid-dev
+

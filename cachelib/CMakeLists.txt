@@ -44,6 +44,16 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_TESTS "If enabled, compile the tests." ON)
 
+option(BUILD_WITH_DTO "If enabled, build with the DTO library for DSA support." OFF)
+
+if (BUILD_WITH_DTO)
+    find_package(DTO REQUIRED)
+    if (DTO_FOUND)
+        message(STATUS "DTO found, remember to configure DSA devices for acceleration. If no DSA device is found, cachelib will fallback to software path.")
+        add_compile_definitions(HAVE_DTO)
+    endif()
+endif ()
+
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")

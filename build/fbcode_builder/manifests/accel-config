@@ -1,0 +1,9 @@
+[manifest]
+name = accel-config
+
+[rpms]
+accel-config-devel
+
+[debs.distro=ubuntu]
+libaccel-config-dev
+

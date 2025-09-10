@@ -67,11 +67,14 @@ else()
   target_compile_definitions(cachelib_cachebench PRIVATE SKIP_OPTION_SIZE_VERIFY)
 endif()
 
-
 add_executable (cachebench main.cpp)
 add_executable (binary_trace_gen binary_trace_gen.cpp)
 target_link_libraries(cachebench cachelib_cachebench)
 target_link_libraries(binary_trace_gen cachelib_binary_trace_gen)
+
+if (BUILD_WITH_DTO)
+    target_link_libraries(cachebench accel-config DTO::dto)
+endif()
 
 install(
   TARGETS
