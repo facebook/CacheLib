@@ -23,6 +23,10 @@
 #include <cstring>
 #include <utility>
 
+#ifdef HAVE_DTO
+#include <dto.h>
+#endif
+
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
@@ -30,6 +34,11 @@
 #include "folly/Range.h"
 
 namespace facebook::cachelib::navy {
+
+void async_memcpy_crc_cb(void *arg) {
+    auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
+    fn();
+}
 
 BlockCache::Config& BlockCache::Config::validate() {
   XDCHECK_NE(scheduler, nullptr);
@@ -702,11 +711,24 @@ Status BlockCache::writeEntry(RelAddress addr,
   auto desc = new (buffer.data() + descOffset)
       EntryDesc(hk.key().size(), value.size(), hk.keyHash());
   if (checksumData_) {
+#ifdef HAVE_DTO
+    auto keyCopy = [hk, descOffset, &buffer]() {
+      // Copy the key to the buffer at the end
+      buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
+    };
+    std::function<void(void)> fn = keyCopy;
+    //buffer data is dest, value is src, keyCopy is function to execute while waiting
+    desc->cs = dto_memcpy_crc_async(buffer.data(), static_cast<const void*>(value.data()),  value.size(), &async_memcpy_crc_cb, &fn);
+#else
     desc->cs = checksum(value);
+    buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
+    buffer.copyFrom(0, value);
+#endif
+  } else {
+    buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
+    buffer.copyFrom(0, value);
   }
 
-  buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
-  buffer.copyFrom(0, value);
 
   regionManager_.write(addr, std::move(buffer));
   logicalWrittenCount_.add(hk.key().size() + value.size());

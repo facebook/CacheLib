@@ -17,7 +17,6 @@
 #pragma once
 
 #include <cstdint>
-
 #include "cachelib/common/Hash.h"
 #include "cachelib/navy/common/Buffer.h"
 
