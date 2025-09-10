@@ -44,7 +44,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_TESTS "If enabled, compile the tests." ON)
 
-option(BUILD_WITH_DTO "If enabled, build with the DTO library for DSA support." OFF)
+option(BUILD_WITH_DTO "If enabled, build with the DTO library for DSA support." ON)
 
 if (BUILD_WITH_DTO)
     find_package(DTO REQUIRED)
