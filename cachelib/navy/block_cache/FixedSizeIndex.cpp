@@ -53,12 +53,12 @@ Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
   // also not sure if bumping up hit count with couldExist() makes sense.
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.recordRef().isValid()) {
+  if (elb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(elb.recordRef().address,
-                                   elb.recordRef().getSizeHint(),
+                        ItemRecord(elb.recordPtr()->address,
+                                   elb.recordPtr()->getSizeHint(),
                                    0, /* totalHits */
-                                   elb.recordRef().bumpCurHits()));
+                                   elb.recordPtr()->bumpCurHits()));
   }
 
   return {};
@@ -67,12 +67,12 @@ Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
 Index::LookupResult FixedSizeIndex::peek(uint64_t key) const {
   SharedLockedBucket slb{key, *this};
 
-  if (slb.recordRef().isValid()) {
+  if (slb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(slb.recordRef().address,
-                                   slb.recordRef().getSizeHint(),
+                        ItemRecord(slb.recordPtr()->address,
+                                   slb.recordPtr()->getSizeHint(),
                                    0, /* totalHits */
-                                   slb.recordRef().info.curHits));
+                                   slb.recordPtr()->info.curHits));
   }
 
   return {};
@@ -84,18 +84,19 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
   LookupResult lr;
   ExclusiveLockedBucket elb{key, *this, true};
 
-  if (elb.recordRef().isValid()) {
+  XDCHECK(elb.bucketExist());
+  if (elb.isValidRecord()) {
     lr = LookupResult(true,
-                      ItemRecord(elb.recordRef().address,
-                                 elb.recordRef().getSizeHint(),
+                      ItemRecord(elb.recordPtr()->address,
+                                 elb.recordPtr()->getSizeHint(),
                                  0, /* totalHits */
-                                 elb.recordRef().info.curHits));
+                                 elb.recordPtr()->info.curHits));
   } else {
     ++elb.validBucketCntRef();
   }
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
-  elb.recordRef() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
   elb.updateDistInfo(key, *this);
 
   return lr;
@@ -106,9 +107,9 @@ bool FixedSizeIndex::replaceIfMatch(uint64_t key,
                                     uint32_t oldAddress) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.recordRef().address == oldAddress) {
-    elb.recordRef().address = newAddress;
-    elb.recordRef().info.curHits = 0;
+  if (elb.isValidRecord() && elb.recordPtr()->address == oldAddress) {
+    elb.recordPtr()->address = newAddress;
+    elb.recordPtr()->info.curHits = 0;
     return true;
   }
   return false;
@@ -117,27 +118,29 @@ bool FixedSizeIndex::replaceIfMatch(uint64_t key,
 Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.recordRef().isValid()) {
-    LookupResult lr{true, ItemRecord(elb.recordRef().address,
-                                     elb.recordRef().getSizeHint(),
+  if (elb.isValidRecord()) {
+    LookupResult lr{true, ItemRecord(elb.recordPtr()->address,
+                                     elb.recordPtr()->getSizeHint(),
                                      0, /* totalHits */
-                                     elb.recordRef().info.curHits)};
+                                     elb.recordPtr()->info.curHits)};
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
-    elb.recordRef() = PackedItemRecord{};
+    *elb.recordPtr() = PackedItemRecord{};
     return lr;
   }
 
-  elb.recordRef() = PackedItemRecord{};
+  if (elb.bucketExist()) {
+    *elb.recordPtr() = PackedItemRecord{};
+  }
   return {};
 }
 
 bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.recordRef().address == address) {
-    elb.recordRef() = PackedItemRecord{};
+  if (elb.isValidRecord() && elb.recordPtr()->address == address) {
+    *elb.recordPtr() = PackedItemRecord{};
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
@@ -264,8 +267,8 @@ void FixedSizeIndex::setHitsTestOnly(uint64_t key,
                                      uint8_t totalHits) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.recordRef().isValid()) {
-    elb.recordRef().info.curHits =
+  if (elb.isValidRecord()) {
+    elb.recordPtr()->info.curHits =
         PackedItemRecord::truncateCurHits(currentHits);
     XLOGF(INFO,
           "setHitsTestOnly() for {}. totalHits {} was discarded in "

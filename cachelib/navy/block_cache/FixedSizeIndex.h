@@ -288,13 +288,18 @@ class FixedSizeIndex : public Index {
   void initialize();
 
   // Random prime numbers for the distance for next bucket slot to use.
-  static constexpr uint8_t kNextBucketOffset[4] = {0, 23, 61, 97};
+  static constexpr std::array<uint8_t, 4> kNextBucketOffset{0, 23, 61, 97};
+  // This offset will be used to indicate there's no valid bucket slot matching
+  // the given key
+  static constexpr uint8_t kInvalidBucketSlotOffset = 0xff;
+  // This bucket id will be used to indicate there's no valid bucket for the key
+  static constexpr uint64_t kInvalidBucketId = 0xffffffffffffffff;
 
   uint8_t decideBucketOffset(uint64_t bid, uint64_t key) const {
     auto mid = mutexId(bid);
 
     // Check if there's already one matching
-    for (auto i = 0; i < 4; i++) {
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
       auto curBid = calcBucketId(bid, i);
       // Make sure we don't go across the mutex boundary
       XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
@@ -307,7 +312,7 @@ class FixedSizeIndex : public Index {
     }
 
     // No match. Find the empty one
-    for (auto i = 0; i < 4; i++) {
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
       auto curBid = calcBucketId(bid, i);
       // Make sure we don't go across the mutex boundary
       XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
@@ -324,7 +329,7 @@ class FixedSizeIndex : public Index {
   uint8_t checkBucketOffset(uint64_t bid, uint64_t key) const {
     auto mid = mutexId(bid);
 
-    for (auto i = 1; i < 4; i++) {
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
       auto curBid = calcBucketId(bid, i);
       // Make sure we don't go across the mutex boundary
       XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
@@ -335,7 +340,20 @@ class FixedSizeIndex : public Index {
         return i;
       }
     }
-    return 0;
+    return kInvalidBucketSlotOffset;
+  }
+
+  // This helper will get the proper bucket id and record entry
+  // Return value : The pair of <Bucket id, pointer to the record>
+  std::pair<uint64_t, PackedItemRecord*> getBucket(uint64_t orgBid,
+                                                   uint8_t offset) const {
+    if (offset != kInvalidBucketSlotOffset) {
+      auto bid = calcBucketId(orgBid, offset);
+      return std::make_pair(bid, &ht_[bid]);
+    } else {
+      // There's no bucket for the given key
+      return std::make_pair(kInvalidBucketId, nullptr);
+    }
   }
 
   // Updates hits information of a key.
@@ -366,6 +384,7 @@ class FixedSizeIndex : public Index {
     // We don't want to go across the mutex boundary, so if it goes beyond that,
     // it will wrap around and go back to the beginning of current mutex
     // boundary
+    XDCHECK(offset < kNextBucketOffset.size()) << offset;
     return (bid / numBucketsPerMutex_) * numBucketsPerMutex_ +
            ((bid + kNextBucketOffset[offset]) % numBucketsPerMutex_);
   }
@@ -388,8 +407,8 @@ class FixedSizeIndex : public Index {
 
   // A helper class for exclusive locked access to a bucket.
   // It will lock the proper mutex with the given key when it's created.
-  // recordRef() and validBucketCntRef() will return the record and
-  // valid bucket count with exclusively locked bucket reference. Locked
+  // recordPtr() and validBucketCntRef() will return the record and
+  // valid bucket count with exclusively locked bucket. Locked
   // mutex will be released when it's destroyed.
   class ExclusiveLockedBucket {
    public:
@@ -399,59 +418,60 @@ class FixedSizeIndex : public Index {
         : bid_(index.bucketId(key)),
           mid_{index.mutexId(bid_)},
           lg_{index.mutex_[mid_]},
-          record_{&index.ht_[bid_]},
           validBuckets_{index.validBucketsPerMutex_[mid_]} {
       auto offset = alloc ? index.decideBucketOffset(bid_, key)
                           : index.checkBucketOffset(bid_, key);
-      if (offset != 0) {
-        bid_ = index.calcBucketId(bid_, offset);
-        record_ = &index.ht_[bid_];
-        bucketOffset_ = offset;
-      }
+      std::tie(bid_, record_) = index.getBucket(bid_, offset);
+      bucketOffset_ = offset;
     }
 
-    PackedItemRecord& recordRef() { return *record_; }
+    PackedItemRecord* recordPtr() { return record_; }
     size_t& validBucketCntRef() { return validBuckets_; }
     void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
-      index.bucketDistInfo_.updateBucketFillInfo(
-          bid_, bucketOffset_, index.partialKeyBits(key));
+      if (bucketOffset_ != kInvalidBucketSlotOffset) {
+        index.bucketDistInfo_.updateBucketFillInfo(
+            bid_, bucketOffset_, index.partialKeyBits(key));
+      }
     }
+    bool isValidRecord() const {
+      return (record_ != nullptr && record_->isValid());
+    }
+    bool bucketExist() const { return record_ != nullptr; }
 
    private:
     uint64_t bid_;
     uint64_t mid_;
     std::lock_guard<SharedMutex> lg_;
-    PackedItemRecord* record_;
     size_t& validBuckets_;
-    uint8_t bucketOffset_{0};
+    PackedItemRecord* record_{};
+    uint8_t bucketOffset_{kInvalidBucketSlotOffset};
   };
 
   // A helper class for shared locked access to a bucket.
   // It will lock the proper mutex with the given key when it's created.
-  // recordRef() will return the record with shared locked bucket reference.
+  // recordPtr() will return the record with shared locked bucket.
   // Locked mutex will be released when it's destroyed.
   class SharedLockedBucket {
    public:
     explicit SharedLockedBucket(uint64_t key, const FixedSizeIndex& index)
         : bid_(index.bucketId(key)),
           mid_{index.mutexId(bid_)},
-          lg_{index.mutex_[mid_]},
-          record_{&index.ht_[bid_]} {
+          lg_{index.mutex_[mid_]} {
       // check next bucket if it should be used
-      auto offset = (index.checkBucketOffset(bid_, key));
-      if (offset != 0) {
-        bid_ = index.calcBucketId(bid_, offset);
-        record_ = &index.ht_[bid_];
-      }
+      std::tie(bid_, record_) =
+          index.getBucket(bid_, index.checkBucketOffset(bid_, key));
     }
 
-    const PackedItemRecord& recordRef() const { return *record_; }
+    const PackedItemRecord* recordPtr() const { return record_; }
+    bool isValidRecord() const {
+      return (record_ != nullptr && record_->isValid());
+    }
 
    private:
     uint64_t bid_;
     uint64_t mid_;
     std::shared_lock<SharedMutex> lg_;
-    const PackedItemRecord* record_;
+    const PackedItemRecord* record_{};
   };
 
 // For unit tests private member access
