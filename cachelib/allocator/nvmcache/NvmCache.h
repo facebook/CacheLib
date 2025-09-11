@@ -566,7 +566,7 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
     if (blockSize % encryptionBlockSize != 0) {
       throw std::invalid_argument(folly::sformat(
           "Encryption enabled but the encryption block granularity is not "
-          "aligned to the navy block size. ecryption block size: {}, "
+          "aligned to the navy block size. encryption block size: {}, "
           "block size: {}",
           encryptionBlockSize,
           blockSize));
