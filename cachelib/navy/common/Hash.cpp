@@ -17,7 +17,7 @@
 #include "cachelib/navy/common/Hash.h"
 
 #include <folly/hash/Checksum.h>
-#ifdef HAVE_DTO
+#ifdef DTO_API
 #include <dto.h>
 #endif
 
@@ -27,7 +27,7 @@ uint64_t hashBuffer(BufferView key, uint64_t seed) {
 }
 
 uint32_t checksum(BufferView data, uint32_t startingChecksum) {
-#ifdef HAVE_DTO
+#ifdef DTO_API
   return dto_crc(data.data(), data.size(), nullptr, nullptr);
 #else
   return folly::crc32(data.data(), data.size(), startingChecksum);

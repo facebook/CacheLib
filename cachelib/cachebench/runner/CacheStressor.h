@@ -28,7 +28,7 @@
 #include <thread>
 #include <unordered_set>
 
-#ifdef HAVE_DTO
+#ifdef DTO_API
 #include <dto.h>
 #define DTO_DSA_MIN_THRESHOLD (32 * 1024)
 #endif
@@ -48,7 +48,7 @@ namespace cachebench {
 
 constexpr uint32_t kNvmCacheWarmUpCheckRate = 1000;
 
-#ifdef HAVE_DTO
+#ifdef DTO_API
 void async_memcpy_callback(void *arg) {
     auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
     fn();
@@ -505,7 +505,7 @@ class CacheStressor : public Stressor {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
-#ifdef HAVE_DTO
+#ifdef DTO_API
       if (config_.useDTOAsync && size >= DTO_DSA_MIN_THRESHOLD) {
         auto insertToCache = [&] {
             cache_->insertOrReplace(it);

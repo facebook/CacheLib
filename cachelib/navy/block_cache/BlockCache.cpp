@@ -23,7 +23,7 @@
 #include <cstring>
 #include <utility>
 
-#ifdef HAVE_DTO
+#ifdef DTO_API
 #include <dto.h>
 #endif
 
@@ -35,7 +35,7 @@
 
 namespace facebook::cachelib::navy {
 
-#ifdef HAVE_DTO
+#ifdef DTO_API
 void async_memcpy_crc_cb(void *arg) {
     auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
     fn();
@@ -714,7 +714,7 @@ Status BlockCache::writeEntry(RelAddress addr,
   auto desc = new (buffer.data() + descOffset)
       EntryDesc(hk.key().size(), value.size(), hk.keyHash());
   if (checksumData_) {
-#ifdef HAVE_DTO
+#ifdef DTO_API
     auto keyCopy = [hk, descOffset, &buffer]() {
       // Copy the key to the buffer at the end
       buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
