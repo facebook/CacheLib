@@ -312,7 +312,7 @@ BENCHMARK_RELATIVE(MockSpinLockBuckets) {
 } // namespace
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   gLoadInfo = {FLAGS_reads, FLAGS_writes};
 
   if (FLAGS_num_threads == 0) {
