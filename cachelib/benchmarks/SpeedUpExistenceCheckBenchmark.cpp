@@ -349,7 +349,7 @@ int main(int argc, char** argv) {
   static_assert(sizeof(SharedMutex) < sizeof(SharedMutexAligned), "alignment");
   static_assert(sizeof(SpinLock) < sizeof(SpinLockAligned), "alignment");
 
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   // clang-format off
   printMsg("Benchmark Starting Now");
