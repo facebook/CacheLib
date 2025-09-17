@@ -178,7 +178,7 @@ tslMap_u64  :   13,242,368
 #endif
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
 
   // memory footprint

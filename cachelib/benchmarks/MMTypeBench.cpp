@@ -254,7 +254,7 @@ BENCHMARK_RELATIVE(MM2QRecordAccessWriteUpdateRdWr) {
 } // namespace facebook
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   if (FLAGS_num_threads == 0) {
     FLAGS_num_threads = std::thread::hardware_concurrency();

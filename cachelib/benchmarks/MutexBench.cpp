@@ -418,7 +418,7 @@ BENCHMARK_RELATIVE(PThreadSpinLock) {
 } // namespace
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   gLru = std::make_unique<Lru>(FLAGS_size);
   gLoadInfo = {FLAGS_updates, FLAGS_evicts, FLAGS_deletes};
 
