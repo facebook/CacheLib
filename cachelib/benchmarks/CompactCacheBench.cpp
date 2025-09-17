@@ -142,6 +142,6 @@ BENCHMARK(ItemCache400) { runCacheRW<200>(true); }
 BENCHMARK_RELATIVE(CompactCache400) { runCacheRW<200>(false); }
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
 }
