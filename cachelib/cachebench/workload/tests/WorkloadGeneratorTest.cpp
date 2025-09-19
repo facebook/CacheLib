@@ -30,7 +30,7 @@ TEST(WorkloadGeneratorTest, SimplePiecewiseValueSizes) {
   config.numKeys = 1000;
   config.numOps = 10000;
   config.numThreads = 1;
-  config.poolDistributions.push_back(DistributionConfig{});
+  config.poolDistributions.emplace_back();
   auto& workloadConfig = config.poolDistributions.back();
   workloadConfig.getRatio = 1.0;
   workloadConfig.keySizeRange = std::vector<double>{10, 11};
@@ -55,7 +55,7 @@ TEST(WorkloadGeneratorTest, SimpleDiscreteValueSizes) {
   config.numKeys = 1000;
   config.numOps = 10000;
   config.numThreads = 1;
-  config.poolDistributions.push_back(DistributionConfig{});
+  config.poolDistributions.emplace_back();
   auto& workloadConfig = config.poolDistributions.back();
   workloadConfig.getRatio = 1.0;
   workloadConfig.keySizeRange = std::vector<double>{10, 11};
@@ -80,7 +80,7 @@ TEST(WorkloadGeneratorTest, InvalidValueSizes) {
   config.numKeys = 1000;
   config.numOps = 10000;
   config.numThreads = 1;
-  config.poolDistributions.push_back(DistributionConfig{});
+  config.poolDistributions.emplace_back();
   auto& workloadConfig = config.poolDistributions.back();
   workloadConfig.getRatio = 1.0;
   workloadConfig.keySizeRange = std::vector<double>{10, 11};

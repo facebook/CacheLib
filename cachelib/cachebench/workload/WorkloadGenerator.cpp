@@ -31,7 +31,7 @@ WorkloadGenerator::WorkloadGenerator(const StressorConfig& config)
           "Key size range and their probabilities do not match up. Check your "
           "test config.");
     }
-    workloadDist_.push_back(WorkloadDistribution(c));
+    workloadDist_.emplace_back(c);
   }
 
   if (config_.numKeys > std::numeric_limits<uint32_t>::max()) {
@@ -162,9 +162,9 @@ void WorkloadGenerator::generateKeyDistributions() {
     std::cout << folly::sformat("Generating {:.2f}M sampled accesses",
                                 numOpsForPool / 1e6)
               << std::endl;
-    keyGenForPool_.push_back(std::uniform_int_distribution<uint32_t>(
-        0, util::narrow_cast<uint32_t>(numOpsForPool) - 1));
-    keyIndicesForPool_.push_back(std::vector<uint32_t>(numOpsForPool));
+    keyGenForPool_.emplace_back(0,
+                                util::narrow_cast<uint32_t>(numOpsForPool) - 1);
+    keyIndicesForPool_.emplace_back(numOpsForPool);
 
     duration += detail::executeParallel(
         [&, this](size_t start, size_t end) {
