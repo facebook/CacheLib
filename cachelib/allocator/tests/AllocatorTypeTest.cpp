@@ -576,7 +576,7 @@ TEST_F(TinyLFUAllocatorTest, ScanResistance) {
 
   // Use close to 4MB alloc size so one item is one slab. This cache
   // can only cache 3 items at maximum.
-  const std::set<uint32_t> allocSizes = {4 * 1024 * 1024 - 100};
+  const std::set<uint32_t> allocSizes = {Slab::kSize - 100};
 
   // Set 30% of the cache for the tiny queue. This means out of 3 items
   // cached, 1 will be in tiny and 2 will be in main cache.

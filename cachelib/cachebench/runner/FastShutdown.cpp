@@ -33,10 +33,9 @@ FastShutdownStressor::FastShutdownStressor(const CacheConfig& cacheConfig,
 
 void FastShutdownStressor::start() {
   startTime_ = std::chrono::system_clock::now();
-  constexpr uint32_t kSlabSize = 4 * 1024 * 1024;
 
-  uint32_t nslabs = cache_->getCacheSize() / kSlabSize;
-  uint32_t numSmallAllocs = kSlabSize / 64;
+  uint32_t nslabs = static_cast<uint32_t>(cache_->getCacheSize() / Slab::kSize);
+  uint32_t numSmallAllocs = Slab::kSize / 64;
   using CacheType = Cache<LruAllocator>;
   uint64_t expectedAbortCount = 0;
 
