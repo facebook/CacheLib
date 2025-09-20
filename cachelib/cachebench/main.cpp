@@ -141,7 +141,7 @@ int main(int argc, char** argv) {
   }
   std::cout << "Welcome to FB-internal version of cachebench" << std::endl;
 #else
-  folly::init(&argc, &argv, true);
+  const folly::Init init(&argc, &argv, true);
   if (!checkArgsValidity()) {
     return 1;
   }

@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   using namespace facebook::cachelib;
   using namespace facebook::cachelib::cachebench;
 
-  folly::init(&argc, &argv, true);
+  const folly::Init init(&argc, &argv, true);
   if (!checkArgsValidity()) {
     return 1;
   }
