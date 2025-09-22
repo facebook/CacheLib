@@ -212,7 +212,7 @@ void NavyRequestScheduler::checkHealth(
     }
     lastStats[i] = stat;
 
-    funcs.push_back([i, &healthy, &dispatchers]() {
+    funcs.emplace_back([i, &healthy, &dispatchers]() {
       auto& dispatcher = dispatchers[i];
       auto baton = std::make_shared<folly::fibers::Baton>();
       // Check the loop time of the eventbase by pushing a dummy task
