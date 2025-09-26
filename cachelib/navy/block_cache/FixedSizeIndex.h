@@ -295,7 +295,7 @@ class FixedSizeIndex : public Index {
   // This bucket id will be used to indicate there's no valid bucket for the key
   static constexpr uint64_t kInvalidBucketId = 0xffffffffffffffff;
 
-  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) const {
+  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) {
     auto mid = mutexId(bid);
 
     // Check if there's already one matching
@@ -319,6 +319,33 @@ class FixedSizeIndex : public Index {
 
       if (!ht_[curBid].isValid()) {
         return i;
+      }
+
+      // If it's occupied and not for the same key's bucket, let's see if we
+      // can move it
+      auto curOffset = bucketDistInfo_.getBucketFillOffset(curBid);
+      if (curOffset != i) {
+        // Get the original bid before applying the offset. Also need to
+        // consider the wraparound on the mutex boundary.
+        auto orgBid =
+            ((curBid % numBucketsPerMutex_) >= kNextBucketOffset[curOffset])
+                ? curBid - kNextBucketOffset[curOffset]
+                : curBid + numBucketsPerMutex_ - kNextBucketOffset[curOffset];
+        // Check if any sub bucket is empty and we can move this there
+        for (size_t sub = 0; sub < kNextBucketOffset.size(); sub++) {
+          if (sub != curOffset) {
+            auto checkBid = calcBucketId(orgBid, sub);
+            if (!ht_[checkBid].isValid()) {
+              // Move current one to this bucket
+              ht_[checkBid] = ht_[curBid];
+              ht_[curBid] = {};
+              bucketDistInfo_.updateBucketFillInfo(
+                  checkBid, sub, bucketDistInfo_.getPartialKey(curBid));
+              // Moved, let's use this bucket.
+              return i;
+            }
+          }
+        }
       }
     }
 
