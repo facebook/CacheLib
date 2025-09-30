@@ -123,17 +123,8 @@ class CacheHandler : public RequestHandler {
 
   void handlePut(const std::string& key) {
     // Flatten body
-    //auto body = bodyQueue_.toStdString();
-
-    // 1. Split the queue into a unique_ptr to the IOBuf chain.
-    //std::unique_ptr<folly::IOBuf> bufChain = bodyQueue_.split(bodyQueue_.chainLength());
-    //
-    //
-    folly::StringPiece body(reinterpret_cast<const char*>(bodyQueue_.front(), bodyQueue_.front()->length()));
-    // // 2. Coalesce the IOBuf chain into a single contiguous buffer.
-    // //    This performs a memory copy.
-    //auto* flatBuf = bufChain->coalesce();
-    //folly::StringPiece body{reinterpret_cast<const char*>(flatBuf->data()), flatBuf->length()};
+    std::unique_ptr<folly::IOBuf> buf = bodyQueue_.move();
+    auto body = buf->coalesce();
     if (body.size() == 0) {
       ResponseBuilder(downstream_)
         .status(400, "Bad Request")
@@ -198,16 +189,15 @@ class CacheHandlerFactory : public RequestHandlerFactory {
 
 std::unique_ptr<Cache> buildCache(size_t cacheBytes, facebook::cachelib::PoolId& poolOut) {
   CacheConfig config;
-  config.setCacheName("proxygen-cachelib");
+  config.setCacheName("proxygen-cache");
   config.setCacheSize(cacheBytes);
 
-  // Reasonable defaults; tune as needed
-  //config.setAccessConfig({25 /*numWays*/, 20 /*bucketPower*/});
-  //config.enableItemReaper(true);
-
   auto cache = std::make_unique<Cache>(config);
+  auto numBytes = cache->getCacheMemoryStats().ramCacheSize;
+
+  LOG(INFO) << "creating cache with size " << numBytes << " bytes";
   // Make a single pool covering all memory
-  poolOut = cache->addPool("default", cacheBytes/2);
+  poolOut = cache->addPool("default", numBytes);
   return cache;
 }
 
@@ -215,10 +205,13 @@ std::unique_ptr<Cache> buildCache(size_t cacheBytes, facebook::cachelib::PoolId&
 
 int main(int argc, char* argv[]) {
   folly::Init init(&argc, &argv);
-
+  FLAGS_logtostderr   = 1;  // show logs on stderr
+  FLAGS_minloglevel   = 0;  // include INFO
+  FLAGS_stderrthreshold = 0;
+  FLAGS_v             = 2;  // enable VLOG(1..2)
   // Flags (basic): port and cache size
-  uint16_t port = 8080;
-  size_t cacheBytes = 256ULL * 1024ULL * 1024ULL; // 256MB
+  uint16_t port = 8111;
+  size_t cacheBytes = 1024*1024*1024; // 1 GB
   if (argc >= 2) {
     port = static_cast<uint16_t>(std::stoi(argv[1]));
   }
@@ -243,8 +236,7 @@ int main(int argc, char* argv[]) {
   };
   server.bind(ips);
 
-  LOG(INFO) << "Listening on port " << port
-            << " with cache size " << cacheBytes << " bytes";
+  LOG(INFO) << "Listening on port " << port;
   server.start();
   return 0;
 }
