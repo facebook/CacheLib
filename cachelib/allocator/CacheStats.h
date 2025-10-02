@@ -457,7 +457,7 @@ struct GlobalCacheStats {
 
   // attempts made from nvm cache to allocate an item for its destructor
   uint64_t numNvmAllocForItemDestructor{0};
-  // heap allocate errors for item destrutor
+  // heap allocate errors for item destructor
   uint64_t numNvmItemDestructorAllocErrors{0};
 
   // size of itemRemoved_ hash set in nvm
@@ -705,7 +705,7 @@ enum PoolWorkerType {
 
 /* Slab release event data */
 struct SlabReleaseData {
-  // Time when release occured.
+  // Time when release occurred.
   std::chrono::system_clock::time_point timeOfRelease;
   // The class where the slab was released from.
   ClassId from;

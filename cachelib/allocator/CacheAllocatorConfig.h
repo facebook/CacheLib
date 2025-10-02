@@ -796,7 +796,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableRejectFirstAPForNvm(
     bool useDramHitSignal) {
   if (numEntries == 0) {
     throw std::invalid_argument(
-        "Enalbing reject first AP needs non zero numEntries");
+        "Enabling reject first AP needs non zero numEntries");
   }
   rejectFirstAPNumEntries = numEntries;
   rejectFirstAPNumSplits = numSplits;
@@ -878,7 +878,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheBlockEncryption(
     std::shared_ptr<NvmCacheDeviceEncryptor> encryptor) {
   if (!nvmConfig) {
     throw std::invalid_argument(
-        "NvmCache encrytion/decrytion callbacks can not be set unless nvmcache "
+        "NvmCache encryption/decryption callbacks can not be set unless "
+        "nvmcache "
         "is used");
   }
   if (!encryptor) {

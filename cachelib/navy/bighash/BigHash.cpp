@@ -304,7 +304,7 @@ Status BigHash::insert(HashedKey hk, BufferView value) {
   uint32_t newRemainingBytes = 0;
 
   // we copy the items and trigger the destructorCb after bucket lock is
-  // released to avoid possible heavy operations or locks in the destrcutor.
+  // released to avoid possible heavy operations or locks in the destructor.
   std::vector<std::tuple<Buffer, Buffer, DestructorEvent>> removedItems;
   DestructorCallback cb = [&removedItems](HashedKey key, BufferView val,
                                           DestructorEvent event) {
@@ -438,7 +438,7 @@ Status BigHash::remove(HashedKey hk) {
   uint32_t newRemainingBytes = 0;
 
   // we copy the items and trigger the destructorCb after bucket lock is
-  // released to avoid possible heavy operations or locks in the destrcutor.
+  // released to avoid possible heavy operations or locks in the destructor.
   Buffer valueCopy;
   DestructorCallback cb = [&valueCopy](HashedKey, BufferView value,
                                        DestructorEvent) {

@@ -1105,7 +1105,7 @@ typename CompactCache<C, A, B>::BucketReturn CompactCache<C, A, B>::bucketSet(
     int rv = BucketDescriptor::insert(bucket, key, val, size, evictionCallback);
 
     if (rv == -1) {
-      /* An error occured when inserting. */
+      /* An error occurred when inserting. */
       XLOG(ERR) << "Unable to insert entry in compact cache.";
       return BucketReturn::ERROR;
     }

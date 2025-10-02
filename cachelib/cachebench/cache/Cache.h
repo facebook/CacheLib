@@ -1275,7 +1275,7 @@ template <typename Allocator>
 void Cache<Allocator>::clearCache(uint64_t errorLimit) {
   if (config_.enableItemDestructorCheck) {
     // all items leftover in the cache must be removed
-    // at the end of the test to trigger ItemDestrutor
+    // at the end of the test to trigger ItemDestructor
     // so that we are able to check if ItemDestructor
     // are called once and only once for every item.
     auto keys = itemRecords_.getKeys();

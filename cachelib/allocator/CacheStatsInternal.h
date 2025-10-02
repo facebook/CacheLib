@@ -143,7 +143,7 @@ struct Stats {
 
   // attempts made from nvm cache to allocate an item for its destructor
   TLCounter numNvmAllocForItemDestructor{0};
-  // heap allocate errors for item destrutor
+  // heap allocate errors for item destructor
   TLCounter numNvmItemDestructorAllocErrors{0};
 
   // the number of allocated items that are permanent

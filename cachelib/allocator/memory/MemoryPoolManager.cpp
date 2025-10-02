@@ -156,7 +156,7 @@ const std::string& MemoryPoolManager::getPoolNameById(PoolId id) const {
       return pair.first;
     }
   }
-  throw std::invalid_argument(folly::sformat("Invali pool id {}", id));
+  throw std::invalid_argument(folly::sformat("Invalid pool id {}", id));
 }
 
 serialization::MemoryPoolManagerObject MemoryPoolManager::saveState() const {

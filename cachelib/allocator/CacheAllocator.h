@@ -3208,7 +3208,7 @@ CacheAllocator<CacheTrait>::releaseBackToAllocator(Item& it,
   if (it.isChainedItem()) {
     if (toRecycle) {
       throw std::runtime_error(
-          folly::sformat("Can not recycle a chained item {}, toRecyle",
+          folly::sformat("Can not recycle a chained item {}, toRecycle {}",
                          it.toString(), toRecycle->toString()));
     }
 
@@ -4966,7 +4966,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
     stats_.numAbortedSlabReleases.inc();
     throw exception::SlabReleaseAborted(folly::sformat(
         "Slab release aborted while releasing "
-        "a slab in pool {} victim {} receiver {}. Original ex msg: ",
+        "a slab in pool {} victim {} receiver {}. Original ex msg: {}",
         pid, static_cast<int>(victim), static_cast<int>(receiver), e.what()));
   }
 }
