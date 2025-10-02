@@ -332,6 +332,11 @@ class BucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
   LockHolder tryLock(Args... args) noexcept {
     return LockHolder(Base::getLock(args...), std::try_to_lock);
   }
+
+  template <typename... Args>
+  LockHolder deferLock(Args... args) noexcept {
+    return LockHolder(Base::getLock(args...), std::defer_lock);
+  }
 };
 
 template <typename LockType,
