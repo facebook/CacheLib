@@ -121,10 +121,12 @@ class Index {
   };
 
   // Writes index to a Thrift object
-  virtual void persist(RecordWriter& rw) const = 0;
+  virtual void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const = 0;
 
   // Resets index then inserts entries read from @deserializer.
-  virtual void recover(RecordReader& rr) = 0;
+  virtual void recover(
+      std::optional<std::reference_wrapper<RecordReader>> rr) = 0;
 
   // Gets value and update tracking counters
   virtual LookupResult lookup(uint64_t key) = 0;

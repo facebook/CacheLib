@@ -187,7 +187,8 @@ Index::MemFootprintRange FixedSizeIndex::computeMemFootprintRange() const {
   return range;
 }
 
-void FixedSizeIndex::persist(RecordWriter& rw) const {
+void FixedSizeIndex::persist(
+    std::optional<std::reference_wrapper<RecordWriter>> rw) const {
   // TODO: need to revisit persist and recover
   // : We already know that current persist and recover are not efficient
   // and we don't handle well when we write more than pre-configured metadata
@@ -196,14 +197,15 @@ void FixedSizeIndex::persist(RecordWriter& rw) const {
   // For now, this code will follow the same logic with the exisiting
   // SparseMapIndex
   XLOGF(INFO, "Persisting BlockCache hashtable: {} buckets", totalBuckets_);
+  XDCHECK(rw.has_value());
 
   auto fillMapBuf = folly::IOBuf::wrapBuffer(bucketDistInfo_.fillMap_.get(),
                                              bucketDistInfo_.fillMapBufSize_);
   auto partialBitsBuf = folly::IOBuf::wrapBuffer(
       bucketDistInfo_.partialBits_.get(), bucketDistInfo_.partialBitsBufSize_);
 
-  rw.writeRecord(std::move(fillMapBuf));
-  rw.writeRecord(std::move(partialBitsBuf));
+  rw->get().writeRecord(std::move(fillMapBuf));
+  rw->get().writeRecord(std::move(partialBitsBuf));
 
   for (uint64_t i = 0; i < totalBuckets_; ++i) {
     serialization::IndexEntry entry;
@@ -212,17 +214,19 @@ void FixedSizeIndex::persist(RecordWriter& rw) const {
     entry.sizeHint() = ht_[i].getSizeHint();
     entry.currentHits() = (uint8_t)(ht_[i].info.curHits);
 
-    serializeProto(entry, rw);
+    serializeProto(entry, rw->get());
   }
   XLOG(INFO) << "Finished persisting BlockCache hashtable";
 }
 
-void FixedSizeIndex::recover(RecordReader& rr) {
+void FixedSizeIndex::recover(
+    std::optional<std::reference_wrapper<RecordReader>> rr) {
   // TODO need to revisit persist and recover. See the comment in persist().
   XLOGF(INFO, "Recovering BlockCache hashtable: {} buckets", totalBuckets_);
+  XDCHECK(rr.has_value());
 
-  auto fillMapBuf = rr.readRecord();
-  auto partialBitsBuf = rr.readRecord();
+  auto fillMapBuf = rr->get().readRecord();
+  auto partialBitsBuf = rr->get().readRecord();
 
   if (fillMapBuf->length() != bucketDistInfo_.fillMapBufSize_ ||
       partialBitsBuf->length() != bucketDistInfo_.partialBitsBufSize_) {
@@ -238,7 +242,7 @@ void FixedSizeIndex::recover(RecordReader& rr) {
          partialBitsBuf->length());
 
   for (uint64_t i = 0; i < totalBuckets_; ++i) {
-    auto entry = deserializeProto<serialization::IndexEntry>(rr);
+    auto entry = deserializeProto<serialization::IndexEntry>(rr->get());
     if (static_cast<uint64_t>(*entry.key()) >= totalBuckets_) {
       continue;
     }

@@ -69,11 +69,12 @@ class FixedSizeIndex : public Index {
   static constexpr double kSizeExpBase = 1.1925;
 
   // Writes index content to a Thrift object
-  void persist(RecordWriter& rw) const override;
+  void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const override;
 
   // Resets index then inserts entries from a Thrift object read from
   // RecordReader.
-  void recover(RecordReader& rr) override;
+  void recover(std::optional<std::reference_wrapper<RecordReader>> rr) override;
 
   // Gets value and update tracking counters
   LookupResult lookup(uint64_t key) override;
