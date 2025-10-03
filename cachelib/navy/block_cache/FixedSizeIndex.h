@@ -388,11 +388,37 @@ class FixedSizeIndex : public Index {
                        uint8_t currentHits,
                        uint8_t totalHits) override;
 
+  // These are random prime numbers for distributing bucket id
+  static constexpr uint16_t kBucketRandomizeOffset[64] = {
+      1229, 1543, 1867, 2179, 2521, 2833, 3203, 3539, 3877, 4229, 4567,
+      4919, 5231, 5557, 5861, 6217, 1097, 1423, 1693, 2003, 3121, 3463,
+      4099, 4451, 4793, 5119, 5483, 5827, 6197, 6547, 6899, 7283, 7649,
+      5717, 6011, 7127, 7459, 7867, 8011, 8167, 8293, 8447, 8623, 8737,
+      8863, 9013, 9173, 9319, 9437, 7103, 6823, 6959, 7079, 7993, 8147,
+      8431, 8719, 9007, 9293, 9551, 9851, 2203, 4967, 5653};
+
+  // Current bit mapping from the hash (64bits) to the bucket id and others
+  // bit 0 ~ 31 : Reserved for bucket offset within chunk
+  // bit 32 ~  : Used for chunk id modulo calculation. The numChunks can be
+  //             configured as any integer up to 2^8 - 1 (8bit)
+  // bit 40 ~ 47 : Used for partial key bits (For utilizing 4 bucket slots)
+  // bit 48 ~ 61 : Used for randomizing bucket id
   uint64_t bucketId(uint64_t hash) const {
     uint64_t cid = (hash >> 32) % numChunks_;
     uint64_t bid = hash & (bucketsPerChunk_ - 1);
 
-    return ((cid << numBucketsPerChunkPower_) + bid);
+    // Random offset to further distribute bucket id by using the bits 48 ~ 61
+    // from hashed key
+    // offset will be decided by using 6bit + 6bit and 2bit as the weight
+    uint64_t randomizeOffset1 = (hash >> 48) & 0x3F;
+    uint64_t randomizeOffset2 = (hash >> 54) & 0x3F;
+    uint64_t addOffset2 = (hash >> 60) & 0x3;
+
+    // Adding calculated offset to bid to randomize distribution for the bucket
+    return (((cid << numBucketsPerChunkPower_) + bid) +
+            kBucketRandomizeOffset[randomizeOffset1] +
+            (kBucketRandomizeOffset[randomizeOffset2] << addOffset2)) %
+           totalBuckets_;
   }
 
   uint64_t mutexId(uint64_t bucketId) const {
