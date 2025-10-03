@@ -108,7 +108,7 @@ class AbstractCache {
   virtual void reset() = 0;
 
   // Stores information needed to restart the cache to device
-  virtual void persist() const = 0;
+  virtual void persist() = 0;
 
   // Recovers cache information. Returns true on success.
   virtual bool recover() = 0;

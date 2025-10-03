@@ -30,6 +30,8 @@
 #include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/engine/Engine.h"
+#include "cachelib/navy/serialization/Serialization.h"
+#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -43,6 +45,7 @@ class BlockCache final : public Engine {
   // See CacheProto for details
   struct Config {
     Device* device{};
+    ShmManager* shmManager{};
     ExpiredCheck checkExpired;
     DestructorCallback destructorCb;
     // Checksum data read/written

@@ -62,6 +62,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
+      shmManager_(std::move(config.shmManager)),
       selector_{std::move(config.selector)},
       enginePairs_{std::move(config.enginePairs)},
       admissionPolicy_{std::move(config.admissionPolicy)},
@@ -244,12 +245,16 @@ void Driver::reset() {
   }
 }
 
-void Driver::persist() const {
+void Driver::persist() {
   auto rw = createMetadataRecordWriter(*device_, metadataSize_);
   if (rw) {
     for (size_t idx = 0; idx < enginePairs_.size(); idx++) {
       enginePairs_[idx].persist(*rw);
     }
+  }
+  if (shmManager_) {
+    shmManager_->shutDown();
+    shmManager_.reset();
   }
 }
 

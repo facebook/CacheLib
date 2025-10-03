@@ -331,12 +331,19 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
                                                     stackSize,
                                                     reqOrderShardsPower);
 }
+
+std::string getShmDir(const std::string& mainCacheDir) {
+  return folly::sformat("{}/{}", mainCacheDir, "navy_shm");
+}
+
 } // namespace
 
-std::unique_ptr<cachelib::navy::Device> createDevice(
+std::unique_ptr<navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
-  auto blockSize = config.getBlockSize();
+  // 32bit should be more than enough for Device block size
+  uint32_t blockSize = static_cast<uint32_t>(config.getBlockSize());
+
   auto maxDeviceWriteSize = config.getDeviceMaxWriteSize();
   if (config.usesRaidFiles() || config.usesSimpleFile()) {
     auto stripeSize = 0;
@@ -350,7 +357,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       fileSize = alignDown(fileSize, stripeSize);
     }
 
-    return cachelib::navy::createFileDevice(
+    return navy::createFileDevice(
         filePaths,
         fileSize,
         config.getTruncateFile(),
@@ -363,8 +370,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         std::move(encryptor),
         config.getExclusiveOwner());
   } else {
-    return cachelib::navy::createMemoryDevice(config.getFileSize(),
-                                              std::move(encryptor), blockSize);
+    return navy::createMemoryDevice(config.getFileSize(), std::move(encryptor),
+                                    blockSize);
   }
 }
 
@@ -374,7 +381,8 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    bool itemDestructorEnabled) {
+    bool itemDestructorEnabled,
+    const NavyShmParams& shmParams) {
   auto device = createDevice(config, std::move(encryptor));
 
   std::unique_ptr<navy::MockDevice> mockDevice;
@@ -416,7 +424,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     break;
   }
 
-  auto proto = cachelib::navy::createCacheProto();
+  auto proto = navy::createCacheProto();
   auto* devicePtr = device.get();
   proto->setDevice(std::move(device));
   proto->setJobScheduler(createJobScheduler(config));
@@ -426,6 +434,16 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   setAdmissionPolicy(config, *proto);
   proto->setExpiredCheck(checkExpired);
   proto->setDestructorCallback(destructorCb);
+
+  if (shmParams.mainCacheDir.empty()) {
+    // This means that persistence isn't enabled for the main cache, so we don't
+    // create a shm for navy either.
+    proto->setShmManager(nullptr);
+  } else {
+    auto shmManager = std::make_unique<ShmManager>(
+        getShmDir(shmParams.mainCacheDir), shmParams.usePosixShm);
+    proto->setShmManager(std::move(shmManager));
+  }
 
   setupCacheProtos(config, *devicePtr, *proto, itemDestructorEnabled);
 
