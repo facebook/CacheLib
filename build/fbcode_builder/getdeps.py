@@ -452,7 +452,7 @@ class InstallSysDepsCmd(ProjectCmdBase):
                     ]
                     + packages
                 )
-                cmd_argss.append(["pip", "install", "pex"])
+                cmd_argss.append(["pip", "install","--break-system-packages", "pex"])
         elif manager == "homebrew":
             packages = sorted(set(all_packages["homebrew"]))
             if packages:
