@@ -24,7 +24,7 @@ find_package(cachelib CONFIG REQUIRED)
 find_package(proxygen CONFIG REQUIRED)
 find_package(GTest  CONFIG REQUIRED)         # GTest::gtest, GTest::gmock
 find_package(NUMA   REQUIRED)         # NUMA::NUMA
-find_package(Glog REQUIRED)         # Glog::glog
+find_package(glog REQUIRED)         # Glog::glog
 
 add_executable(proxygen_cache main.cpp)
 

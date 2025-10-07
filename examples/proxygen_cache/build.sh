@@ -15,19 +15,14 @@
 
 set -e
 
-# Root directory for the CacheLib project
-CLBASE="$PWD/../.."
+CLBASE="/tmp/fbcode_builder_getdeps-ZsrcZCacheLibZbuildZfbcode_builder-root/installed"
 
 # Additional "FindXXX.cmake" files are here (e.g. FindSodium.cmake)
-CLCMAKE="$CLBASE/cachelib/cmake"
+#CLCMAKE="$CLBASE/cachelib/cmake"
 
 # After ensuring we are in the correct directory, set the installation prefix"
-PREFIX="$CLBASE/opt/cachelib/"
-PREFIXB="$CLBASE/opt/"
-GLOG=$1
-
-CMAKE_PARAMS="-DCMAKE_INSTALL_PREFIX='$PREFIX' -DCMAKE_MODULE_PATH='$CLCMAKE' -DCMAKE_BUILD_TYPE=Debug -DGLOG_LIBRARYDIR=$1/lib -DGLOG_INCLUDE_DIR=$1/include"
-#-DGLOG_LIBRARYDIR='$PREFIXB/glog-d0ga0GeTcb_RtwEq1XZwx252avcQvY5AVUshDhtM7bg/lib' -DGLOG_INCLUDE_DIR='$PREFIXB/glog-"
+PREFIX="$CLBASE/cachelib/usr/local"
+PREFIXB="$CLBASE/"
 CMAKE_PREFIX_PATH="$PREFIX/lib/cmake:$PREFIX/lib64/cmake:$PREFIX/lib:$PREFIX/lib64:$PREFIX:$PREFIXB:${CMAKE_PREFIX_PATH:-}"
 export CMAKE_PREFIX_PATH
 PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"

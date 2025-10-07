@@ -24,7 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     accel-config uuid-dev linux-libc-dev libaccel-config-dev \
     sudo python3-pip \
     libssl-dev zlib1g-dev libunwind-dev libevent-dev libnuma-dev libaio-dev \
-    vim less
+    vim less libbz2-dev
 
 # Make sure /usr/local is searched for headers/libs and pkg-config
 ENV LD_LIBRARY_PATH=/usr/local/lib
