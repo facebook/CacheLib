@@ -58,6 +58,7 @@ endif()
 
 target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
+  cachelib_shm
   GTest::gmock
   )
 
