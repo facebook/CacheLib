@@ -85,6 +85,11 @@ class ShmSegment {
     }
   }
 
+  ShmSegment(const ShmSegment&) = delete;
+  ShmSegment& operator=(const ShmSegment&) = delete;
+  ShmSegment(ShmSegment&&) = default;
+  ShmSegment& operator=(ShmSegment&&) = default;
+
   // maps the segment into the address for the segment's current length. If the
   // segment is invalid or deleted, returns false and does nothing.
   //
