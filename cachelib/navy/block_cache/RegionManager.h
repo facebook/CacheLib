@@ -67,10 +67,9 @@ class RegionManager {
   // @param regionSize                size of the region
   // @param baseOffset                base offset of the region
   // @param device                    reference to device
-  // @param numCleanRegions           How many regions reclamator maintains in
+  // @param numCleanRegions           How many regions should be maintained in
   //                                  the clean pool
-  // @param scheduler                 JobScheduler to run reclamation jobs
-  // @param numWorkers                Number of threads to run reclamation jobs
+  // @param numWorkers                Number of threads to run reclaim jobs
   // @param stackSize                 Fiber stack size for each worker thread.
   //                                  0 for default
   // @param evictCb                   Callback invoked when region evicted
@@ -81,6 +80,8 @@ class RegionManager {
   //                                  regions
   // @param inMemBufFlushRetryLimit   max number of flushing retry times for
   //                                  in-mem buffer
+  // @param workerFlushAsync          whether to schedule async flushes with the
+  //                                  workers (during reclaim)
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -145,7 +146,7 @@ class RegionManager {
 
   // Atomically loads the current sequence number (in memory_order_acquire
   // order).
-  // Sequence number increases when a reclamation finished. Since reclamation
+  // Sequence number increases when a reclaim finished. Since reclaim
   // may start during reading, by checking whether the sequence number changes,
   // we avoid reading a region that has been reclaimed.
   uint64_t getSeqNumber() const {
@@ -233,7 +234,7 @@ class RegionManager {
   //
   // @param rid         region ID
   // @param seqNumber   the sequence number aqcuired before opening the region
-  //                    for read; it is used to determine whether a reclamation
+  //                    for read; it is used to determine whether a reclaim
   //                    happened during reading
   RegionDescriptor openForRead(RegionId rid, uint64_t seqNumber);
 
@@ -254,14 +255,14 @@ class RegionManager {
   // Schedules region reclaim job to create a clean region
   void startReclaim();
 
-  // Releases a region that was evicted during region reclamation.
+  // Releases a region that was evicted during region reclaim.
   //
   // @param rid        region ID
-  // @param startTime  time when a reclamation starts;
-  //                   it is used to count the reclamation time duration
+  // @param startTime  time when the reclaim starts;
+  //                   it is used to count the reclaim time duration
   void releaseEvictedRegion(RegionId rid, std::chrono::nanoseconds startTime);
 
-  // Evicts a region by calling @evictCb_ during region reclamation.
+  // Evicts a region by calling @evictCb_ during region reclaim.
   void doEviction(RegionId rid, BufferView buffer) const;
 
   // Convert relative address to phsyical offset on the device
@@ -335,10 +336,10 @@ class RegionManager {
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;
 
-  // To understand naming here, let me explain difference between "reclamation"
+  // To understand naming here, let me explain difference between "reclaim"
   // and "eviction". Cache evicts item and makes it inaccessible via lookup. It
-  // is an item level operation. When we say "reclamation" about regions we
-  // refer to wiping an entire region for reuse. As part of reclamation, every
+  // is an item level operation. When we say "reclaim" about regions we
+  // refer to wiping an entire region for reuse. As part of reclaim, every
   // item in the region gets evicted.
   mutable AtomicCounter reclaimCount_;
   mutable AtomicCounter reclaimTimeCountUs_;

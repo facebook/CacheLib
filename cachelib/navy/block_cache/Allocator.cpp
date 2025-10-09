@@ -62,9 +62,9 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
 
 // Allocates using region allocator @ra. If region is full, we take another
 // from the clean list (regions ready for allocation) If the clean list is
-// empty, we retry allocation. This means reclamation doesn't keep up and we
+// empty, we retry allocation. This means reclaim doesn't keep up and we
 // have to wait. Every time we take a region from the clean list, we schedule
-// new reclamation job to refill it. Caller must close the region after data
+// new reclaim job to refill it. Caller must close the region after data
 // written to the slot.
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     RegionAllocator& ra, uint32_t size, bool canWait) {

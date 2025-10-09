@@ -463,7 +463,7 @@ TEST(BlockCache, SimpleReclaim) {
     driver->flush();
   }
 
-  // This insert will trigger reclamation because there are 4 regions in total
+  // This insert will trigger reclaim because there are 4 regions in total
   // and the device was configured to require 1 clean region at all times
   for (size_t i = 0; i < 16; i++) {
     CacheEntry e{bg.gen(8), bg.gen(800)};
@@ -541,7 +541,7 @@ TEST(BlockCache, HoleStats) {
   EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
   EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
 
-  // Force reclamation on region 0. There are 4 regions and the device
+  // Force reclaim on region 0. There are 4 regions and the device
   // was configured to require 1 clean region at all times.
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
@@ -635,7 +635,7 @@ TEST(BlockCache, ReclaimCorruption) {
     }
   }});
 
-  // Force reclamation on region 0 by allocating region 3. There are 4 regions
+  // Force reclaim on region 0 by allocating region 3. There are 4 regions
   // and the device was configured to require 1 clean region at all times
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};
@@ -908,7 +908,7 @@ TEST(BlockCache, StackAllocReclaim) {
   }
   driver->flush();
   // Fill region 3
-  // Triggers reclamation of region 0
+  // Triggers reclaim of region 0
   { // 15k
     CacheEntry e{bg.gen(8), bg.gen(15'000)};
     EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
@@ -988,7 +988,7 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   injectPauseSet("pause_reclaim_begin");
   injectPauseSet("pause_reclaim_done");
 
-  // Send insert. Will schedule a reclamation job. We will also track
+  // Send insert. Will schedule a reclaim job. We will also track
   // the third region as it had been filled up. We will also expect
   // to evict the first region eventually for the reclaim.
   CacheEntry e{bg.gen(8), bg.gen(1000)};
@@ -1273,7 +1273,7 @@ TEST(BlockCache, RegionLastOffset) {
     driver->flush();
   }
 
-  // Triggers reclamation
+  // Triggers reclaim
   for (size_t i = 0; i < 7; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1800)};
     EXPECT_EQ(Status::Ok, driver->insertAsync(e.key(), e.value(), nullptr));
@@ -1333,7 +1333,7 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
     driver->flush();
   }
 
-  // Triggers reclamation
+  // Triggers reclaim
   expectRegionsTracked(mp, {3});
   for (size_t i = 0; i < 7; i++) {
     CacheEntry e{bg.gen(8), bg.gen(1800)};
@@ -1878,7 +1878,7 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   // Delete the first key
   EXPECT_EQ(Status::Ok, driver->remove(log[0].key()));
 
-  // This insert will trigger reclamation because there are 4 regions in total
+  // This insert will trigger reclaim because there are 4 regions in total
   // and the device was configured to require 1 clean region at all times
   {
     CacheEntry e{bg.gen(8), bg.gen(800)};

@@ -261,13 +261,13 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   // previous region (this is address of its end). To compensate for this, we
   // subtract 1 before conversion and add after to relative address.
   auto addrEnd = decodeRelAddress(lr.address());
-  // Between acquring @seqNumber and @openForRead reclamation may start. There
+  // Between acquring @seqNumber and @openForRead reclaim may start. There
   // are two options what can happen in @openForRead:
-  //  - Reclamation in progress and open will fail because access mask disables
+  //  - Reclaim in progress and open will fail because access mask disables
   //    read and write,
-  //  - Reclamation finished, sequence number increased and open will fail
+  //  - Reclaim finished, sequence number increased and open will fail
   //    because of sequence number check. This means sequence number has to be
-  //    increased when we finish reclamation.
+  //    increased when we finish reclaim.
   RegionDescriptor desc = regionManager_.openForRead(addrEnd.rid(), seqNumber);
   switch (desc.status()) {
   case OpenStatus::Ready: {

@@ -87,11 +87,11 @@ class AbstractCache {
   // is user responsibility to make a copy if needed (capture in callback).
   virtual void lookupAsync(HashedKey key, LookupCallback cb) = 0;
 
-  // Removes from the index, space reused after reclamation.
+  // Removes from the index, space reused after reclaim.
   // Returns: Ok, NotFound
   virtual Status remove(HashedKey key) = 0;
 
-  // Asynchronously removes key from the index, space reused after reclamation.
+  // Asynchronously removes key from the index, space reused after reclaim.
   // Callback is optional.
   //
   // See @lookupAsync about @key lifetime.

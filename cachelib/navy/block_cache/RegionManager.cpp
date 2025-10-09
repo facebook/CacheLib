@@ -453,7 +453,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
 void RegionManager::doEviction(RegionId rid, BufferView buffer) const {
   INJECT_PAUSE(pause_do_eviction_start);
   if (buffer.isNull()) {
-    XLOGF(ERR, "Error reading region {} on reclamation", rid.index());
+    XLOGF(ERR, "Error reading region {} on reclaim", rid.index());
   } else {
     const auto evictStartTime = getSteadyClock();
     XLOGF(DBG, "Evict region {} entries", rid.index());

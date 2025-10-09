@@ -96,7 +96,7 @@ class Allocator {
   // The region descriptor contains region id, open mode and status,
   // which is one of the following
   //  - Ready   Fills @addr and @slotSize
-  //  - Retry   Retry later, reclamation is running
+  //  - Retry   Retry later, reclaim is running
   //  - Error   Can't allocate this size even later (hard failure)
   // When allocating with a priority, the priority must NOT exceed the
   // max priority which is (@numPriorities - 1) specified when constructing
