@@ -98,6 +98,11 @@ struct EventInfo {
 // and keep is cheap.
 class EventStream {
  public:
+  EventStream() = default;
+  EventStream(const EventStream&) = delete;
+  EventStream& operator=(const EventStream&) = delete;
+  EventStream(EventStream&&) = delete;
+  EventStream& operator=(EventStream&&) = delete;
   virtual ~EventStream() = default;
 
   // @index     Reverse index of event (latest event has index 0)
@@ -128,6 +133,9 @@ class ValueHistory {
   ValueHistory() {}
   ValueHistory(const ValueHistory&) = delete;
   ValueHistory& operator=(const ValueHistory&) = delete;
+  ValueHistory(ValueHistory&&) = delete;
+  ValueHistory& operator=(ValueHistory&&) = delete;
+  ~ValueHistory() = default;
 
   // beginXXX returns new log record index in the log
   uint32_t beginGet(EventInfo ei);

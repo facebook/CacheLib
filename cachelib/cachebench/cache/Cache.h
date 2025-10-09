@@ -115,6 +115,10 @@ class Cache {
                  std::string cacheDir = "",
                  bool touchValue = false);
 
+  Cache(const Cache&) = delete;
+  Cache& operator=(const Cache&) = delete;
+  Cache(Cache&&) = delete;
+  Cache& operator=(Cache&&) = delete;
   ~Cache();
 
   // allocate an item from the cache.
