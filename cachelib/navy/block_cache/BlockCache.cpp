@@ -304,6 +304,9 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
     }
     regionManager_.close(std::move(desc));
     lookupCount_.inc();
+    if (reinsertionPolicy_) {
+      reinsertionPolicy_->onLookup(hk.key());
+    }
     return status;
   }
   case OpenStatus::Retry:

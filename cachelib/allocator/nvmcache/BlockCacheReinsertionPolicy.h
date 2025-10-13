@@ -34,6 +34,11 @@ class BlockCacheReinsertionPolicy {
   virtual bool shouldReinsert(folly::StringPiece key,
                               folly::StringPiece value) = 0;
 
+  // This function is called when a key is looked up in block cache in function
+  // BlockCache::lookup(HashedKey hk, Buffer& value). The function is used to
+  // by reinsertion policy that track access history of items.
+  virtual void onLookup(folly::StringPiece) {}
+
   // Exports policy stats via CounterVisitor.
   virtual void getCounters(const util::CounterVisitor& visitor) const = 0;
 };
