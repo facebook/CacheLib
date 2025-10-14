@@ -278,6 +278,11 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
     visitor("objcache.jemalloc_active_bytes", jemallocActiveBytes);
     visitor("objcache.jemalloc_allocated_bytes", jemallocAllocatedBytes);
   }
+  visitor("objcache.num_entries", objCache_.getNumEntries());
+  visitor("objcache.free_mem_bytes", objCache_.config_.getFreeMemBytes());
+  visitor("objcache.rss_mem_bytes", objCache_.config_.getRSSMemBytes());
+  visitor("objcache.current_entries_limit",
+          currentEntriesLimit_.load(std::memory_order_relaxed));
 }
 
 template <typename AllocatorT>
