@@ -74,6 +74,8 @@ class CACHELIB_PACKED_ATTR KAllocation {
    public:
     using folly::StringPiece::StringPiece;
 
+    explicit Key(const std::string& key) : folly::StringPiece(key) {}
+
     /* implicit */
     Key(folly::StringPiece rhs) : folly::StringPiece(rhs) {}
 
