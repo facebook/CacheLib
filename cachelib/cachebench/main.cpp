@@ -55,6 +55,7 @@ DEFINE_string(progress_stats_file,
 DEFINE_int32(timeout_seconds,
              0,
              "Maximum allowed seconds for running test. 0 means no timeout");
+DEFINE_bool(enable_debug_log, false, "Enable debug logging");
 
 struct sigaction act;
 std::unique_ptr<facebook::cachelib::cachebench::Runner> runnerInstance;
@@ -144,6 +145,10 @@ int main(int argc, char** argv) {
   const folly::Init init(&argc, &argv, true);
   if (!checkArgsValidity()) {
     return 1;
+  }
+
+  if(FLAGS_enable_debug_log) {
+    folly::LoggerDB::get().setLevel("", folly::LogLevel::DBG);
   }
 
   CacheBenchConfig config(FLAGS_json_test_config);
