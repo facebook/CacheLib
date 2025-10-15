@@ -268,11 +268,9 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   return range;
 }
 
-void SparseMapIndex::persist(
-    std::optional<std::reference_wrapper<RecordWriter>> rw) const {
-  XDCHECK(rw.has_value());
+void SparseMapIndex::persist(RecordWriter& rw) const {
   serialization::IndexBucket bucketMap;
-  auto prevPos = rw->get().getCurPos();
+  auto prevPos = rw.getCurPos();
   uint64_t persisted = 0;
 
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
@@ -291,15 +289,14 @@ void SparseMapIndex::persist(
     try {
       // Serialize bucket and this may throw exception when it's exceeding the
       // meta data size limit
-      serializeProto(bucketMap, rw->get());
+      serializeProto(bucketMap, rw);
       persisted += bucketMap.entries()->size();
     } catch (const std::exception& e) {
       // Log the error and more info on current index
       XLOGF(ERR,
             "Error persisting Block Cache Index: {}, persist() began at pos {} "
             "and current pos {}, trying to add {} entries from bucketMap {}",
-            e.what(), prevPos, rw->get().getCurPos(),
-            bucketMap.entries()->size(), i);
+            e.what(), prevPos, rw.getCurPos(), bucketMap.entries()->size(), i);
       auto memFootprint = computeMemFootprintRange();
       XLOGF(ERR,
             "Current Block cache items count: {}, persisted {} items, index "
@@ -317,11 +314,9 @@ void SparseMapIndex::persist(
   }
 }
 
-void SparseMapIndex::recover(
-    std::optional<std::reference_wrapper<RecordReader>> rr) {
-  XDCHECK(rr.has_value());
+void SparseMapIndex::recover(RecordReader& rr) {
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
-    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr->get());
+    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr);
     uint32_t id = *bucketMap.bucketId();
     if (id >= numBucketMaps_) {
       throw std::invalid_argument{folly::sformat(

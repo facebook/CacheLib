@@ -84,12 +84,11 @@ class SparseMapIndex : public Index {
   // Writes index to a Thrift object one bucket map at a time and passes each
   // bucket map to @persistCb. The reason for this is because the index can be
   // very large and serializing everything at once uses a lot of RAM.
-  void persist(
-      std::optional<std::reference_wrapper<RecordWriter>> rw) const override;
+  void persist(RecordWriter& rw) const override;
 
   // Resets index then inserts entries read from @deserializer. Throws
   // std::exception on failure.
-  void recover(std::optional<std::reference_wrapper<RecordReader>> rr) override;
+  void recover(RecordReader& rr) override;
 
   // Gets value and update tracking counters
   LookupResult lookup(uint64_t key) override;
