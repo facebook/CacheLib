@@ -167,8 +167,7 @@ class NvmCache {
   NvmCache(C& c,
            Config config,
            bool truncate,
-           const ItemDestructor& itemDestructor,
-           NavyShmParams navyShmParams = {});
+           const ItemDestructor& itemDestructor);
 
   // Look up item by key
   // @param key         key to lookup
@@ -973,8 +972,7 @@ template <typename C>
 NvmCache<C>::NvmCache(C& c,
                       Config config,
                       bool truncate,
-                      const ItemDestructor& itemDestructor,
-                      NavyShmParams shmParams)
+                      const ItemDestructor& itemDestructor)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
       numShards_{config_.navyConfig.getNumShards()},
@@ -999,8 +997,7 @@ NvmCache<C>::NvmCache(C& c,
       },
       truncate,
       std::move(config.deviceEncryptor),
-      itemDestructor_ ? true : false,
-      shmParams);
+      itemDestructor_ ? true : false);
 }
 
 template <typename C>

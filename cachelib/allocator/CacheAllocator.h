@@ -2591,10 +2591,8 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
     config_.nvmConfig->navyConfig.blockCache().setEventTracker(*eventTracker);
   }
 
-  // These values will be set following the main config's value
-  nvmCache_ = std::make_unique<NvmCacheT>(
-      *this, *config_.nvmConfig, truncate, config_.itemDestructor,
-      NavyShmParams{config_.cacheDir, config_.usePosixShm});
+  nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
+                                          config_.itemDestructor);
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();
   }

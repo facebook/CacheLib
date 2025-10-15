@@ -31,7 +31,6 @@
 #include "cachelib/navy/engine/Engine.h"
 #include "cachelib/navy/engine/EnginePair.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
-#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -47,8 +46,6 @@ class Driver final : public AbstractCache {
     std::unique_ptr<JobScheduler> scheduler;
     std::vector<EnginePair> enginePairs;
     std::unique_ptr<AdmissionPolicy> admissionPolicy;
-    std::unique_ptr<ShmManager> shmManager;
-
     uint32_t smallItemMaxSize{};
     // Limited by scheduler parallelism (thread), this is large enough value to
     // mean "no limit".
@@ -134,7 +131,7 @@ class Driver final : public AbstractCache {
   void reset() override;
 
   // persist the navy engines state
-  void persist() override;
+  void persist() const override;
 
   // recover the navy engines state
   bool recover() override;
@@ -184,7 +181,6 @@ class Driver final : public AbstractCache {
 
   std::unique_ptr<Device> device_;
   std::unique_ptr<JobScheduler> scheduler_;
-  std::unique_ptr<ShmManager> shmManager_;
 
   const EnginePairSelector selector_{};
   std::vector<EnginePair> enginePairs_;

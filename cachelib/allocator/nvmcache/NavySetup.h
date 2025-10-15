@@ -21,32 +21,19 @@
 #include "cachelib/navy/AbstractCache.h"
 namespace facebook {
 namespace cachelib {
-
-// Parameters needed to configure shm for navy.
-// Rather than make it as another configurable args, we will just pass down the
-// parameters used for main cache's shm
-struct NavyShmParams {
-  // Path for main cache.
-  // It's not set when persistence is not enabled for the main cache
-  std::string mainCacheDir{};
-  // If true, uses posix shm; if not, uses sys-v (default)
-  bool usePosixShm{false};
-};
-
 // return a navy cache which is created by CacheProto whose data is from
 // NavyConfig.
-std::unique_ptr<navy::AbstractCache> createNavyCache(
+std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
     const navy::NavyConfig& config,
-    navy::ExpiredCheck checkExpired,
-    navy::DestructorCallback destructorCb,
+    facebook::cachelib::navy::ExpiredCheck checkExpired,
+    facebook::cachelib::navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    bool itemDestructorEnabled,
-    const NavyShmParams& shmParams = {});
+    bool itemDestructorEnabled);
 
 // create a flash device for Navy engines to use
 // made public for testing purposes
-std::unique_ptr<navy::Device> createDevice(
+std::unique_ptr<cachelib::navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
 } // namespace cachelib

@@ -24,7 +24,6 @@
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
-#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -162,8 +161,6 @@ class CacheProto {
   // Sets device that engine will use.
   virtual void setDevice(std::unique_ptr<Device> device) = 0;
 
-  // Sets ShmManager navy will use.
-  virtual void setShmManager(std::unique_ptr<ShmManager> shmManager) = 0;
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
 
