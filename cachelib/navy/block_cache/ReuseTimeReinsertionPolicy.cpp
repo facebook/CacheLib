@@ -26,10 +26,10 @@ ReuseTimeReinsertionPolicy::ReuseTimeReinsertionPolicy(
     size_t bucketSize,
     uint32_t reinsertionThreshold,
     std::shared_ptr<Ticker> ticker)
-    : index_(index),
+    : reuseTimeThreshold_(reinsertionThreshold),
+      index_(index),
       numBuckets_(numBuckets),
-      bucketSize_(bucketSize),
-      reuseTimeThreshold_(reinsertionThreshold) {
+      bucketSize_(bucketSize) {
   auto config = AccessTracker::Config();
   config.numBuckets = numBuckets_;
   config.useCounts = false;
@@ -96,6 +96,10 @@ void ReuseTimeReinsertionPolicy::getCounters(
           cachelib::util::CounterVisitor::CounterType::RATE);
   // Report percentile stats for reuse time values
   reuseTimeStats_.visitQuantileEstimator(visitor, "bc_reinsert_reuse_time");
+}
+
+uint32_t ReuseTimeReinsertionPolicy::getReuseThreshold() const {
+  return reuseTimeThreshold_.load(std::memory_order_relaxed);
 }
 
 size_t ReuseTimeReinsertionPolicy::getReuseTime(folly::StringPiece key) {

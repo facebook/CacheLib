@@ -19,6 +19,8 @@
 #include <cachelib/navy/block_cache/Index.h>
 #include <folly/container/F14Map.h>
 
+#include <atomic>
+#include <shared_mutex>
 #include <tuple>
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
@@ -53,6 +55,11 @@ class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
 
   void getCounters(const util::CounterVisitor& visitor) const override;
 
+  uint32_t getReuseThreshold() const;
+
+ protected:
+  std::atomic<uint32_t> reuseTimeThreshold_{0};
+
  private:
   static uint32_t isExpired(folly::StringPiece value);
   std::tuple<int64_t, int64_t> getPrevAccessBuckets(folly::StringPiece key);
@@ -61,7 +68,7 @@ class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
   const cachelib::navy::Index& index_;
   size_t numBuckets_{0};
   size_t bucketSize_{0};
-  uint32_t reuseTimeThreshold_{0};
+
   std::unique_ptr<AccessTracker> tracker_;
   AtomicCounter reinsertAttempts_{0};
   AtomicCounter keyNotFound_{0};
