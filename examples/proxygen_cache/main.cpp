@@ -18,6 +18,11 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <algorithm>
+#include <chrono>
+#include <cstdint>
+#include <cstring>
+#include <stdexcept>
 
 using proxygen::HTTPMessage;
 using proxygen::HTTPServer;
@@ -32,8 +37,99 @@ using CacheConfig = facebook::cachelib::LruAllocator::Config;
 using WriteHandle = Cache::WriteHandle;
 using ReadHandle = Cache::ReadHandle;
 
+struct SampleDataView {
+  const uint8_t* data;
+  size_t len;
+  size_t offset;
+};
+
+class SampleData {
+ public:
+  static constexpr size_t kDefaultSize = 64ull * 1024 * 1024; // 64 MiB
+  static constexpr size_t kAlign = 64;
+
+  explicit SampleData(size_t bytes = kDefaultSize)
+      : size_(bytes) {
+    if (bytes == 0) throw std::invalid_argument("data size must be > 0");
+#if defined(_ISOC11_SOURCE) || (__STDC_VERSION__ >= 201112L) || defined(_GNU_SOURCE)
+    data_ = static_cast<uint8_t*>(aligned_alloc(kAlign, roundUp(bytes, kAlign)));
+    if (!data_) throw std::bad_alloc();
+#else
+    if (posix_memalign(reinterpret_cast<void**>(&data_), kAlign, roundUp(bytes, kAlign)))
+      throw std::bad_alloc();
+#endif
+    fillWithPattern();
+  }
+
+  SampleData(const SampleData&) = delete;
+  SampleData& operator=(const SampleData&) = delete;
+  SampleData(SampleData&& o) noexcept : data_(o.data_), size_(o.size_) {
+    o.data_ = nullptr; o.size_ = 0;
+  }
+  SampleData& operator=(SampleData&& o) noexcept {
+    if (this != &o) {
+      free(data_);
+      data_ = o.data_;
+      size_ = o.size_;
+      o.data_ = nullptr;
+      o.size_ = 0;
+    }
+    return *this;
+  }
+  ~SampleData() { free(data_); }
+
+  size_t size() const noexcept { return size_; }
+  const uint8_t* raw() const noexcept { return data_; }
+
+  // Get a random aligned slice [ptr, ptr+len)
+  SampleDataView getData(size_t len) const {
+    if (len == 0) return {data_, 0, 0};
+    if (len > size_) throw std::invalid_argument("len exceeds data size");
+
+    thread_local uint64_t seed = initSeed();
+    uint64_t r = rngNext(seed);
+
+    size_t maxOff = size_ - len;
+    maxOff &= ~(kAlign - 1);
+    size_t off = static_cast<size_t>(r % (maxOff + 1));
+    off &= ~(kAlign - 1);
+
+    return {data_ + off, len, off};
+  }
+
+ private:
+  static size_t roundUp(size_t n, size_t a) { return (n + (a - 1)) & ~(a - 1); }
+
+  static inline uint64_t initSeed() {
+    uint64_t t = static_cast<uint64_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    uint64_t x = t ^ (0x9E3779B97F4A7C15ull * reinterpret_cast<uintptr_t>(&t));
+    return x ? x : 0xA5A5A5A5A5A5A5A5ull;
+  }
+
+  static inline uint64_t rngNext(uint64_t& s) {
+    s ^= s >> 12; s ^= s << 25; s ^= s >> 27;
+    return s * 0x2545F4914F6CDD1Dull;
+  }
+
+  void fillWithPattern() {
+    static constexpr char kPattern[] = "the quick brown fox jumps over the lazy dog";
+    const size_t plen = sizeof(kPattern) - 1;
+    for (size_t off = 0; off < size_;) {
+      const size_t n = std::min(plen, size_ - off);
+      std::memcpy(data_ + off, kPattern, n);
+      off += n;
+    }
+  }
+
+  uint8_t* data_{nullptr};
+  size_t size_{0};
+};
+
+
 struct CacheCtx {
   std::unique_ptr<Cache> cache;
+  bool enableLookaside{false};
   facebook::cachelib::PoolId poolId{};
 };
 
@@ -67,7 +163,8 @@ class CacheHandler : public RequestHandler {
 
       if (method == proxygen::HTTPMethod::GET) {
         handleGet(key);
-      } else if (method == proxygen::HTTPMethod::PUT) {
+      } else if (method == proxygen::HTTPMethod::PUT ||
+                  method == proxygen::HTTPMethod::POST) {
         handlePut(key);
       } else if (method == proxygen::HTTPMethod::DELETE) {
         handleDelete(key);
@@ -110,6 +207,19 @@ class CacheHandler : public RequestHandler {
           .status(404, "Not Found")
           .body("Key not found\n")
           .sendWithEOM();
+      if (ctx_->enableLookaside) {
+        WriteHandle wh = ctx_->cache->allocate(ctx_->poolId, key, ctx_->getSampleDataSize());
+        if (wh) {
+          auto sample = sampleData_.getData(ctx_->getSampleDataSize());
+          std::memcpy(wh->getMemory(), sample.data, sample.len);
+          ctx_->cache->insertOrReplace(std::move(wh));
+          VLOG(1) << "Lookaside: populated key " << key << " with "
+                  << sample.len << " bytes from offset " << sample.offset;
+        } else {
+          VLOG(1) << "Lookaside: allocation failed for key " << key;
+        }
+
+      }
       return;
     }
     auto data = reinterpret_cast<const char*>(h->getMemory());
@@ -171,6 +281,7 @@ class CacheHandler : public RequestHandler {
   CacheCtx* ctx_;
   std::unique_ptr<HTTPMessage> req_;
   folly::IOBufQueue bodyQueue_{folly::IOBufQueue::cacheChainLength()};
+  SampleData sampleData_;
 };
 
 class CacheHandlerFactory : public RequestHandlerFactory {
@@ -215,15 +326,30 @@ int main(int argc, char* argv[]) {
   // Flags (basic): port and cache size
   uint16_t port = 8111;
   size_t cacheBytes = 1024 * 1024 * 1024; // 1 GB
+  bool enableLookaside = false;
+  bool itemSize = 1024;
   if (argc >= 2) {
     port = static_cast<uint16_t>(std::stoi(argv[1]));
   }
   if (argc >= 3) {
     cacheBytes = folly::to<size_t>(argv[2]); // bytes
   }
+  if (argc >= 4) {
+    enableLookaside = (std::strcmp(argv[3], "1") == 0);
+  }
+  if (argc >= 5) {
+    itemSize = folly::to<size_t>(argv[4]);
+  }
+  if (argc >= 6) {
+    LOG(ERROR) << "Usage: " << argv[0]
+               << " [port] [cache_bytes] [enable_lookaside (1 == enabled, 0 disable)] [item_size (bytes)];
+    return 1;
+  }
 
   auto ctx = std::make_shared<CacheCtx>();
   ctx->cache = buildCache(cacheBytes, ctx->poolId);
+  ctx->enableLookaside = enableLookaside;
+  ctx->getSampleDataSize = [itemSize]() { return itemSize; };
 
   proxygen::HTTPServerOptions options;
   options.threads = static_cast<size_t>(std::thread::hardware_concurrency());
