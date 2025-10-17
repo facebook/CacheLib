@@ -6,6 +6,7 @@
 #include <folly/String.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
+#include <gflags/gflags.h>
 #include <proxygen/httpserver/Filters.h>
 #include <proxygen/httpserver/HTTPServer.h>
 #include <proxygen/httpserver/HTTPServerOptions.h>
@@ -129,7 +130,9 @@ class SampleData {
 
 struct CacheCtx {
   std::unique_ptr<Cache> cache;
+  SampleData sampleData_;
   bool enableLookaside{false};
+  std::function<size_t()> getSampleDataSize;
   facebook::cachelib::PoolId poolId{};
 };
 
@@ -203,14 +206,10 @@ class CacheHandler : public RequestHandler {
   void handleGet(const std::string& key) {
     ReadHandle h = ctx_->cache->find(key);
     if (!h) {
-      ResponseBuilder(downstream_)
-          .status(404, "Not Found")
-          .body("Key not found\n")
-          .sendWithEOM();
       if (ctx_->enableLookaside) {
         WriteHandle wh = ctx_->cache->allocate(ctx_->poolId, key, ctx_->getSampleDataSize());
         if (wh) {
-          auto sample = sampleData_.getData(ctx_->getSampleDataSize());
+          auto sample = ctx_->sampleData_.getData(ctx_->getSampleDataSize());
           std::memcpy(wh->getMemory(), sample.data, sample.len);
           ctx_->cache->insertOrReplace(std::move(wh));
           VLOG(1) << "Lookaside: populated key " << key << " with "
@@ -218,8 +217,11 @@ class CacheHandler : public RequestHandler {
         } else {
           VLOG(1) << "Lookaside: allocation failed for key " << key;
         }
-
       }
+      ResponseBuilder(downstream_)
+          .status(404, "Not Found")
+          .body("Key not found\n")
+          .sendWithEOM();
       return;
     }
     auto data = reinterpret_cast<const char*>(h->getMemory());
@@ -281,7 +283,6 @@ class CacheHandler : public RequestHandler {
   CacheCtx* ctx_;
   std::unique_ptr<HTTPMessage> req_;
   folly::IOBufQueue bodyQueue_{folly::IOBufQueue::cacheChainLength()};
-  SampleData sampleData_;
 };
 
 class CacheHandlerFactory : public RequestHandlerFactory {
@@ -317,39 +318,45 @@ std::unique_ptr<Cache> buildCache(size_t cacheBytes,
 
 } // anonymous namespace
 
+// ---- Flags ----
+DEFINE_uint32(port, 8111, "Port to listen on");
+DEFINE_uint64(cache_size, 1ULL * 1024, "Cache size in MB");
+DEFINE_int32(item_size, 65536, "Default item size (bytes) for lookaside fills");
+DEFINE_bool(enable_lookaside, false, "Enable lookaside population on GET miss");
+
 int main(int argc, char* argv[]) {
   folly::Init init(&argc, &argv);
   FLAGS_logtostderr = 1; // show logs on stderr
   FLAGS_minloglevel = 0; // include INFO
   FLAGS_stderrthreshold = 0;
-  FLAGS_v = 2; // enable VLOG(1..2)
-  // Flags (basic): port and cache size
-  uint16_t port = 8111;
-  size_t cacheBytes = 1024 * 1024 * 1024; // 1 GB
-  bool enableLookaside = false;
-  bool itemSize = 1024;
-  if (argc >= 2) {
-    port = static_cast<uint16_t>(std::stoi(argv[1]));
+  FLAGS_v = 0; // enable VLOG(1..2)
+
+  // All argument parsing is handled by gflags via folly::Init above.
+  // Read the values from FLAGS_*.
+  const uint16_t port = static_cast<uint16_t>(FLAGS_port);
+  const size_t cacheBytes = static_cast<size_t>(FLAGS_cache_size) * 1024 * 1024;
+  const bool enableLookaside = FLAGS_enable_lookaside;
+  const int itemSize = FLAGS_item_size;
+
+  if (itemSize <= 0) {
+    LOG(ERROR) << "--item_size must be > 0 (got " << itemSize << ")";
+    return 2;
   }
-  if (argc >= 3) {
-    cacheBytes = folly::to<size_t>(argv[2]); // bytes
+  if (cacheBytes < static_cast<size_t>(itemSize)) {
+    LOG(WARNING) << "--cache_size (" << cacheBytes
+                 << ") is smaller than --item_size (" << itemSize
+                 << "); allocations may fail.";
   }
-  if (argc >= 4) {
-    enableLookaside = (std::strcmp(argv[3], "1") == 0);
-  }
-  if (argc >= 5) {
-    itemSize = folly::to<size_t>(argv[4]);
-  }
-  if (argc >= 6) {
-    LOG(ERROR) << "Usage: " << argv[0]
-               << " [port] [cache_bytes] [enable_lookaside (1 == enabled, 0 disable)] [item_size (bytes)];
-    return 1;
-  }
+
+  LOG(INFO) << "Effective config: port=" << port
+            << " cache_size=" << cacheBytes
+            << " enable_lookaside=" << (enableLookaside ? "true" : "false")
+            << " item_size=" << itemSize;
 
   auto ctx = std::make_shared<CacheCtx>();
   ctx->cache = buildCache(cacheBytes, ctx->poolId);
   ctx->enableLookaside = enableLookaside;
-  ctx->getSampleDataSize = [itemSize]() { return itemSize; };
+  ctx->getSampleDataSize = [itemSize]() { return static_cast<size_t>(itemSize); };
 
   proxygen::HTTPServerOptions options;
   options.threads = static_cast<size_t>(std::thread::hardware_concurrency());
@@ -360,7 +367,7 @@ int main(int argc, char* argv[]) {
 
   HTTPServer server(std::move(options));
   std::vector<HTTPServer::IPConfig> ips = {
-      {folly::SocketAddress("0.0.0.0", port, true),
+      {folly::SocketAddress("0.0.0.0", static_cast<uint16_t>(port), true),
        proxygen::HTTPServer::Protocol::HTTP}};
   server.bind(ips);
 
