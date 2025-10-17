@@ -320,7 +320,7 @@ std::unique_ptr<Cache> buildCache(size_t cacheBytes,
 
 // ---- Flags ----
 DEFINE_uint32(port, 8111, "Port to listen on");
-DEFINE_uint64(cache_size, 1ULL * 1024, "Cache size in MB");
+DEFINE_uint64(cache_size_mb, 1ULL * 1024, "Cache size in MB");
 DEFINE_int32(item_size, 65536, "Default item size (bytes) for lookaside fills");
 DEFINE_bool(enable_lookaside, false, "Enable lookaside population on GET miss");
 
@@ -334,7 +334,7 @@ int main(int argc, char* argv[]) {
   // All argument parsing is handled by gflags via folly::Init above.
   // Read the values from FLAGS_*.
   const uint16_t port = static_cast<uint16_t>(FLAGS_port);
-  const size_t cacheBytes = static_cast<size_t>(FLAGS_cache_size) * 1024 * 1024;
+  const size_t cacheBytes = static_cast<size_t>(FLAGS_cache_size_mb) * 1024 * 1024;
   const bool enableLookaside = FLAGS_enable_lookaside;
   const int itemSize = FLAGS_item_size;
 
@@ -343,7 +343,7 @@ int main(int argc, char* argv[]) {
     return 2;
   }
   if (cacheBytes < static_cast<size_t>(itemSize)) {
-    LOG(WARNING) << "--cache_size (" << cacheBytes
+    LOG(WARNING) << "--cache_size_mb (" << cacheBytes
                  << ") is smaller than --item_size (" << itemSize
                  << "); allocations may fail.";
   }
