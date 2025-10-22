@@ -638,6 +638,35 @@ class MemoryAllocator {
       uint32_t minSize = 72,
       bool reduceFragmentation = false);
 
+  // Maximizes the allocation size while maintaining the number of allocations
+  // per slab and alignment. Given a size, this function calculates the maximum
+  // allocation size that maintains the same number of allocations per slab.
+  //
+  // For example: If slabs are 4MB and the input size is 900KB, this allows
+  // 4096KB / 900KB = 4 allocations per slab. This leaves 496KB of space
+  // unusable in each slab. This function returns the maximum allocation size
+  // that still allows 4 allocations per slab but reduces external
+  // fragmentation. For this example, it would return 1MB.
+  //
+  // @param size      the initial allocation size
+  // @param slabSize  the size of a slab
+  // @param alignment the alignment requirement for allocation sizes
+  //
+  // @return the maximum aligned allocation size that maintains the same number
+  // of allocations per slab
+  static uint32_t maximizeAllocSize(uint32_t size,
+                                    uint32_t slabSize,
+                                    uint32_t alignment) {
+    const uint32_t perSlab = slabSize / size;
+    XDCHECK_GT(perSlab, 0ULL);
+    const uint32_t maxAllocSize = slabSize / perSlab;
+    // Align down to maintain same number of allocations per slab
+    const uint32_t alignedSize = maxAllocSize - maxAllocSize % alignment;
+    XDCHECK_EQ(alignedSize % alignment, 0ULL);
+    XDCHECK_EQ(slabSize / alignedSize, perSlab);
+    return alignedSize;
+  }
+
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
   // @param poolIds    list of pools to process
