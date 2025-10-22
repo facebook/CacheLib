@@ -24,6 +24,7 @@
 #include <random>
 #include <vector>
 
+#include "cachelib/allocator/Util.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
 #include "cachelib/allocator/memory/tests/TestBase.h"
 #include "cachelib/common/Serialization.h"
@@ -779,4 +780,44 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesWithBadFactor) {
   ASSERT_THROW(
       MemoryAllocator::generateAllocSizes(0.90, maxSize, minSize, true),
       std::invalid_argument);
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2) {
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(6, 10);
+    std::set<uint32_t> expected = {64, 128, 256, 512, 1024};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(8, 12);
+    std::set<uint32_t> expected = {256, 512, 1024, 2048, 4096};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(6, 6);
+    std::set<uint32_t> expected = {64};
+    EXPECT_EQ(expected, allocSizes);
+  }
+
+  {
+    auto allocSizes = util::generateAllocSizesPowerOf2(Slab::kMinAllocPower,
+                                                       Slab::kNumSlabBits);
+    EXPECT_EQ(Slab::kMinAllocSize, *allocSizes.begin());
+    EXPECT_EQ(Slab::kSize, *allocSizes.rbegin());
+    EXPECT_EQ(17u, allocSizes.size());
+  }
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(10, Slab::kMinAllocPower),
+               std::invalid_argument);
+
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(Slab::kMinAllocPower - 1, 10),
+               std::invalid_argument);
+
+  ASSERT_THROW(util::generateAllocSizesPowerOf2(Slab::kMinAllocPower,
+                                                Slab::kNumSlabBits + 1),
+               std::invalid_argument);
 }

@@ -179,6 +179,52 @@ inline std::set<uint32_t> generateAllocSizes(
       reduceFragmentationInAllocationClass);
 }
 
+// Helper function to generate allocation sizes as powers of 2.
+// This provides a simple, uniform distribution of allocation sizes where each
+// size is double the previous one. This can be useful when you want predictable
+// allocation class sizes, when your workload's size distribution aligns well
+// with power-of-2 buckets, or as a reasonable default/safeguard when you don't
+// have detailed knowledge of your item size distribution.
+//
+// @param minPowerOf2  The minimum power of 2 for allocation sizes
+//                     (must be >= Slab::kMinAllocPower, i.e., >= 6 for 64
+//                     bytes)
+// @param maxPowerOf2  The maximum power of 2 for allocation sizes
+//                     (must be <= Slab::kNumSlabBits, i.e., <= 22 for 4MB)
+//
+// @return  A set of allocation sizes where each size is 2^i for i in
+//          [minPowerOf2, maxPowerOf2]. For example, minPowerOf2=6 and
+//          maxPowerOf2=10 generates {64, 128, 256, 512, 1024}.
+//
+// @throw std::invalid_argument if minPowerOf2 > maxPowerOf2
+// @throw std::invalid_argument if minPowerOf2 < Slab::kMinAllocPower
+// @throw std::invalid_argument if maxPowerOf2 > Slab::kNumSlabBits
+inline std::set<uint32_t> generateAllocSizesPowerOf2(uint32_t minPowerOf2,
+                                                     uint32_t maxPowerOf2) {
+  if (minPowerOf2 > maxPowerOf2) {
+    throw std::invalid_argument("minPowerOf2 must be <= maxPowerOf2");
+  }
+  if (minPowerOf2 < Slab::kMinAllocPower) {
+    throw std::invalid_argument(folly::sformat(
+        "minPowerOf2 must be >= {} because allocation size must be >= {}",
+        Slab::kMinAllocPower,
+        Slab::kMinAllocSize));
+  }
+  if (maxPowerOf2 > Slab::kNumSlabBits) {
+    throw std::invalid_argument(
+        folly::sformat("maxPowerOf2 must be <= {} because allocation size "
+                       "must be <= {} (Slab::kSize)",
+                       Slab::kNumSlabBits,
+                       Slab::kSize));
+  }
+
+  std::set<uint32_t> allocSizes;
+  for (uint32_t i = minPowerOf2; i <= maxPowerOf2; i++) {
+    allocSizes.insert(1 << i);
+  }
+  return allocSizes;
+}
+
 // Calculates curr - prev, returning 0 if curr is less than prev
 inline uint64_t safeDiff(const uint64_t prev, const uint64_t curr) {
   return curr > prev ? curr - prev : 0;
