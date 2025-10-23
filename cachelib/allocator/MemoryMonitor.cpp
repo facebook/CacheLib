@@ -183,6 +183,7 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
               stats.numFreeAllocsForClass(classId));
 
         } catch (const exception::SlabReleaseAborted& e) {
+          cache_.incrementAbortedSlabReleases();
           XLOGF(WARN,
                 "Aborted trying to advise away a slab from pool {} for"
                 " allocation class {}. Error: {}",

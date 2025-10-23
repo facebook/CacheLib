@@ -1181,6 +1181,11 @@ class CacheAllocator : public CacheBase {
   // get stats related to all kinds of slab release events.
   SlabReleaseStats getSlabReleaseStats() const noexcept override final;
 
+  // Increment the number of aborted slab releases stat
+  void incrementAbortedSlabReleases() override final {
+    stats_.numAbortedSlabReleases.inc();
+  }
+
   // return the distribution of the keys in the cache. This is expensive to
   // compute at times even with caching. So use with caution.
   // TODO think of a way to abstract this since it only makes sense for
@@ -4963,7 +4968,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
 
     allocator_->completeSlabRelease(releaseContext);
   } catch (const exception::SlabReleaseAborted& e) {
-    stats_.numAbortedSlabReleases.inc();
+    incrementAbortedSlabReleases();
     throw exception::SlabReleaseAborted(folly::sformat(
         "Slab release aborted while releasing "
         "a slab in pool {} victim {} receiver {}. Original ex msg: {}",

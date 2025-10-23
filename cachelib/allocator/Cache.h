@@ -140,6 +140,9 @@ class CacheBase {
   // @return the slab release stats.
   virtual SlabReleaseStats getSlabReleaseStats() const = 0;
 
+  // Increment the number of aborted slab releases stat
+  virtual void incrementAbortedSlabReleases() = 0;
+
   // export stats via callback. This function is not thread safe
   //
   // @param statPrefix prefix to be added for stat names

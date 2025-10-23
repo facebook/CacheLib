@@ -75,6 +75,7 @@ void PoolResizer::work() {
             poolStats.evictionAgeForClass(classId), 0,
             poolStats.mpStats.acStats.at(classId).freeAllocs);
       } catch (const exception::SlabReleaseAborted& e) {
+        cache_.incrementAbortedSlabReleases();
         XLOGF(WARN,
               "Aborted trying to resize pool {} for allocation class {}. "
               "Error: {}",

@@ -101,6 +101,11 @@ class ObjectCacheBase : public CacheBase {
     return l1Cache_->getSlabReleaseStats();
   }
 
+  // Increment the number of aborted slab releases stat
+  void incrementAbortedSlabReleases() override {
+    l1Cache_->incrementAbortedSlabReleases();
+  }
+
   // return the list of currently active pools that are oversized
   std::set<PoolId> getRegularPoolIdsForResize() const override {
     return l1Cache_->getRegularPoolIdsForResize();
