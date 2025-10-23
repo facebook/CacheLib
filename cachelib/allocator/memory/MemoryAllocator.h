@@ -638,6 +638,26 @@ class MemoryAllocator {
       uint32_t minSize = 72,
       bool reduceFragmentation = false);
 
+  // Checks if a given allocation size is valid for cachelib. A valid
+  // allocation size must satisfy the following requirements:
+  // 1. >= Slab::kMinAllocSize (64 bytes)
+  // 2. <= Slab::kSize (4MB)
+  // 3. Properly aligned to kAlignment (8 bytes)
+  //
+  // @param size  the allocation size to validate
+  //
+  // @return true if the size is valid, false otherwise
+  static bool isValidAllocSize(uint32_t size) {
+    if (size < Slab::kMinAllocSize) {
+      return false;
+    } else if (size > Slab::kSize) {
+      return false;
+    } else if (size % kAlignment != 0) {
+      return false;
+    }
+    return true;
+  }
+
   // Maximizes the allocation size while maintaining the number of allocations
   // per slab and alignment. Given a size, this function calculates the maximum
   // allocation size that maintains the same number of allocations per slab.
