@@ -277,6 +277,13 @@ std::enable_if_t<std::is_arithmetic<T>::value, T> getAlignedSize(
   return rem == 0 ? size : size + alignment - rem;
 }
 
+// @return size aligned down to the previous multiple of _alignment_
+template <typename T>
+std::enable_if_t<std::is_arithmetic<T>::value, T> getAlignedSizeDown(
+    T size, uint32_t alignment) {
+  return size - (size % alignment);
+}
+
 // @return ceiling of the quotient
 template <typename T>
 std::enable_if_t<std::is_arithmetic<T>::value, T> getDivCeiling(

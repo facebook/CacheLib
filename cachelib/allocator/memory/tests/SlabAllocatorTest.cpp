@@ -768,6 +768,18 @@ TEST_F(SlabAllocatorTest, TestAlignedSize) {
   }
 }
 
+TEST_F(SlabAllocatorTest, TestAlignedSizeDown) {
+  for (uint32_t i = 57; i <= 63; ++i) {
+    EXPECT_EQ(56, util::getAlignedSizeDown(i, 8));
+  }
+  for (uint32_t i = 65; i <= 71; ++i) {
+    EXPECT_EQ(64, util::getAlignedSizeDown(i, 8));
+  }
+  EXPECT_EQ(64, util::getAlignedSizeDown(64, 8));
+  EXPECT_EQ(0, util::getAlignedSizeDown(0, 8));
+  EXPECT_EQ(0, util::getAlignedSizeDown(7, 8));
+}
+
 TEST_F(SlabAllocatorTest, TestGenerateAllocSizesWithBadFactor) {
   uint32_t minSize = 64;
   uint32_t maxSize = 104;
