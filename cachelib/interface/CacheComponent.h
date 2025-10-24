@@ -20,6 +20,7 @@
 
 #include "cachelib/interface/CacheItem.h"
 #include "cachelib/interface/Handle.h"
+#include "cachelib/interface/Result.h"
 
 namespace facebook::cachelib::interface {
 
@@ -37,6 +38,85 @@ class CacheComponent {
    * @return the name of the component
    */
   virtual const std::string& getName() const noexcept = 0;
+
+  /**
+   * Allocate space for a new item. Returns an AllocatedHandle that can be used
+   * to access the allocated memory.
+   *
+   * Note: the item *must* be inserted before it is visible for lookups.
+   * Allocated items that are not inserted into cache will be freed when the
+   * returned AllocatedHandle goes out of scope.  In other words if you've got
+   * an AllocatedHandle, it's not yet in cache!
+   *
+   * @param key cache item key
+   * @param size size of the value of the item
+   * @param creationTime when the item was created
+   * @param ttlSecs time-to-live of the item in seconds. After the item has been
+   * in cache for this long, it will no longer be visible.
+   * @return an AllocatedHandle suitable for writing to cache memory if space
+   * was allocated or an error result otherwise
+   */
+  virtual folly::coro::Task<Result<AllocatedHandle>> allocate(
+      Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) = 0;
+
+  /**
+   * Insert an item into cache using an AllocatedHandle returned by allocate().
+   * If inserted, the AllocatedHandle is no longer usable (moved out).
+   *
+   * @param handle AllocatedHandle returned by allocate()
+   * @return folly::unit or an error result otherwise
+   */
+  virtual folly::coro::Task<UnitResult> insert(AllocatedHandle&& handle) = 0;
+
+  /**
+   * Same as above, but replaces the item if it was already inserted into cache.
+   * Returns an AllocatedHandle to the old item if it was replaced. The input
+   * AllocatedHandle is no longer usable (moved out).
+   *
+   * @param handle AllocatedHandle returned by allocate()
+   * @return an empty optional if the item was inserted, an AllocatedHandle to
+   * the replaced item if it was replaced (no longer findable replaced) or an
+   * error result otherwise
+   */
+  virtual folly::coro::Task<Result<std::optional<AllocatedHandle>>>
+  insertOrReplace(AllocatedHandle&& handle) = 0;
+
+  /**
+   * Find an item in cache. Returns a handle if found, std::nullopt otherwise.
+   * find() is for read-only access, findToWrite() is for write access.
+   *
+   * @param key cache item key
+   * @return a handle if found, std::nullopt if not found or an error result
+   * otherwise
+   */
+  virtual folly::coro::Task<Result<std::optional<ReadHandle>>> find(
+      Key key) = 0;
+  virtual folly::coro::Task<Result<std::optional<WriteHandle>>> findToWrite(
+      Key key) = 0;
+
+  /**
+   * Remove an item from cache if it is present.
+   * @param key cache item key
+   * @return a bool indicating whether the item was removed or an error result
+   * otherwise
+   */
+  virtual folly::coro::Task<Result<bool>> remove(Key key) = 0;
+
+  /**
+   * Remove an item from cache. The ReadHandle is no longer usable (moved out).
+   * @param handle cache item handle
+   * @return folly::unit if the item was removed or an error result otherwise
+   */
+  virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
+
+ protected:
+  /**
+   * Release a handle (make unusable) without adjusting refcounts. Useful when
+   * CacheComponent takes an rvalue ref to a handle that needs to be destroyed.
+   *
+   * @param handle handle to release
+   */
+  FOLLY_ALWAYS_INLINE void releaseHandle(Handle&& handle) { handle.release(); }
 
  private:
   // ------------------------------ Interface ------------------------------ //

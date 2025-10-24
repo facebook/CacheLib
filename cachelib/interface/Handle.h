@@ -71,6 +71,10 @@ class Handle {
  private:
   // Whether the CacheItem has been inserted
   bool inserted_;
+
+  FOLLY_ALWAYS_INLINE void release() noexcept { item_ = nullptr; }
+
+  friend class CacheComponent;
 };
 
 /**
