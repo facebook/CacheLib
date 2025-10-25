@@ -305,7 +305,7 @@ class MM2Q {
     }
 
     // adding extra config after generating the config: tailSize
-    void addExtraConfig(size_t tSize) { tailSize = tSize; }
+    void addExtraConfig(size_t tSize, bool coldOnly=false) { tailSize = tSize; coldTailOnly = coldOnly;}
 
     // threshold value in seconds to compare with a node's update time to
     // determine if we need to update the position of the node in the linked
@@ -345,6 +345,8 @@ class MM2Q {
     // This should be set by cache allocator through addExtraConfig(); user
     // should not set this manually.
     size_t tailSize{0};
+
+    bool coldTailOnly{false};
 
     // Minimum interval between reconfigurations. If 0, reconfigure is never
     // called.
@@ -1100,7 +1102,7 @@ MMContainerStat MM2Q::Container<T, HookPtr>::getStats() const noexcept {
         numHotAccesses_,
         numColdAccesses_,
         numWarmAccesses_,
-        computeWeightedAccesses(numWarmTailAccesses_, numColdTailAccesses_)};
+        config_.coldTailOnly? numColdTailAccesses_ : computeWeightedAccesses(numWarmTailAccesses_, numColdTailAccesses_)};
   });
 }
 
