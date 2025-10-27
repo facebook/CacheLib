@@ -98,7 +98,7 @@ class LruPolicy final : public EvictionPolicy {
   void dumpList(const char* tag,
                 uint32_t n,
                 uint32_t first,
-                uint32_t ListNode::*link) const;
+                uint32_t ListNode::* link) const;
 
   static constexpr std::chrono::seconds kEstimatorWindow{5};
 

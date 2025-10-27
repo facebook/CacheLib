@@ -326,7 +326,7 @@ class MMTinyLFU {
   // around DList, is thread safe and can be accessed from multiple threads.
   // The current implementation models an LRU using the above DList
   // implementation.
-  template <typename T, Hook<T> T::*HookPtr>
+  template <typename T, Hook<T> T::* HookPtr>
   struct Container {
    private:
     using LruList = MultiDList<T, HookPtr>;
@@ -692,7 +692,7 @@ class MMTinyLFU {
 };
 
 /* Container Interface Implementation */
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 MMTinyLFU::Container<T, HookPtr>::Container(
     serialization::MMTinyLFUObject object, PtrCompressor compressor)
     : lru_(*object.lrus(), std::move(compressor)), config_(*object.config()) {
@@ -704,7 +704,7 @@ MMTinyLFU::Container<T, HookPtr>::Container(
   maybeGrowAccessCountersLocked();
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T,
                           HookPtr>::maybeGrowAccessCountersLocked() noexcept {
   size_t capacity = lru_.size();
@@ -735,7 +735,7 @@ void MMTinyLFU::Container<T,
       facebook::cachelib::util::CountMinSketch(numCounters, kHashCount);
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::recordAccess(T& node,
                                                     AccessMode mode) noexcept {
   if ((mode == AccessMode::kWrite && !config_.updateOnWrite) ||
@@ -774,14 +774,14 @@ bool MMTinyLFU::Container<T, HookPtr>::recordAccess(T& node,
   return false;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat MMTinyLFU::Container<T, HookPtr>::getEvictionAgeStat(
     uint64_t projectedLength) const noexcept {
   LockHolder l(lruMutex_);
   return getEvictionAgeStatLocked(projectedLength);
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat
 MMTinyLFU::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
@@ -802,7 +802,7 @@ MMTinyLFU::Container<T, HookPtr>::getEvictionAgeStatLocked(
   return stat;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::updateFrequenciesLocked(
     const T& node) noexcept {
   accessFreq_.increment(hashNode(node));
@@ -816,7 +816,7 @@ void MMTinyLFU::Container<T, HookPtr>::updateFrequenciesLocked(
   }
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::maybePromoteTailLocked() noexcept {
   // Choose eviction candidate and place it at the tail of tiny cache
   // from where evictions occur.
@@ -849,7 +849,7 @@ void MMTinyLFU::Container<T, HookPtr>::maybePromoteTailLocked() noexcept {
   lru_.getList(LruType::Main).moveToHead(*mainNode);
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
   LockHolder l(lruMutex_);
@@ -887,28 +887,28 @@ bool MMTinyLFU::Container<T, HookPtr>::add(T& node) noexcept {
   return true;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 typename MMTinyLFU::Container<T, HookPtr>::LockedIterator
 MMTinyLFU::Container<T, HookPtr>::getEvictionIterator() const noexcept {
   LockHolder l(lruMutex_);
   return LockedIterator{std::move(l), *this};
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 template <typename F>
 void MMTinyLFU::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   // TinyLFU uses spin lock which does not support combined locking
   fun(getEvictionIterator());
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 template <typename F>
 void MMTinyLFU::Container<T, HookPtr>::withContainerLock(F&& fun) {
   LockHolder l(lruMutex_);
   fun();
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   if (isTiny(node)) {
     lru_.getList(LruType::Tiny).remove(node);
@@ -922,7 +922,7 @@ void MMTinyLFU::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   return;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::remove(T& node) noexcept {
   LockHolder l(lruMutex_);
   if (!node.isInMMContainer()) {
@@ -932,7 +932,7 @@ bool MMTinyLFU::Container<T, HookPtr>::remove(T& node) noexcept {
   return true;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
   T& node = *it;
   XDCHECK(node.isInMMContainer());
@@ -940,7 +940,7 @@ void MMTinyLFU::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
   removeLocked(node);
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 bool MMTinyLFU::Container<T, HookPtr>::replace(T& oldNode,
                                                T& newNode) noexcept {
   LockHolder l(lruMutex_);
@@ -968,13 +968,13 @@ bool MMTinyLFU::Container<T, HookPtr>::replace(T& oldNode,
   return true;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 typename MMTinyLFU::Config MMTinyLFU::Container<T, HookPtr>::getConfig() const {
   LockHolder l(lruMutex_);
   return config_;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::setConfig(const Config& c) {
   LockHolder l(lruMutex_);
   config_ = c;
@@ -985,7 +985,7 @@ void MMTinyLFU::Container<T, HookPtr>::setConfig(const Config& c) {
                                    config_.mmReconfigureIntervalSecs.count();
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 serialization::MMTinyLFUObject MMTinyLFU::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMTinyLFUConfig configObject;
@@ -1007,7 +1007,7 @@ serialization::MMTinyLFUObject MMTinyLFU::Container<T, HookPtr>::saveState()
   return object;
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 MMContainerStat MMTinyLFU::Container<T, HookPtr>::getStats() const noexcept {
   LockHolder l(lruMutex_);
   auto* tail = lru_.size() == 0 ? nullptr : lru_.rbegin().get();
@@ -1020,7 +1020,7 @@ MMContainerStat MMTinyLFU::Container<T, HookPtr>::getStats() const noexcept {
           0};
 }
 
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 void MMTinyLFU::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
   if (currTime < nextReconfigureTime_) {
     return;
@@ -1039,7 +1039,7 @@ void MMTinyLFU::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
 }
 
 // Locked Iterator Context Implementation
-template <typename T, MMTinyLFU::Hook<T> T::*HookPtr>
+template <typename T, MMTinyLFU::Hook<T> T::* HookPtr>
 MMTinyLFU::Container<T, HookPtr>::LockedIterator::LockedIterator(
     LockHolder l, const Container<T, HookPtr>& c) noexcept
     : c_(c),

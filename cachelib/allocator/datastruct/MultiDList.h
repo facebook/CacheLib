@@ -33,7 +33,7 @@ class MMTypeTest;
 
 // Implements an intrusive doubly linked list using DList. This is used to build
 // MMContainers with multiple priorities.
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 class MultiDList {
  public:
   using CompressedPtrType = typename T::CompressedPtrType;
@@ -194,7 +194,7 @@ class MultiDList {
 };
 
 /* Iterator Implementation */
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 void MultiDList<T, HookPtr>::Iterator::goForward() noexcept {
   if (index_ == kInvalidIndex) {
     return; // Can't go any further
@@ -211,7 +211,7 @@ void MultiDList<T, HookPtr>::Iterator::goForward() noexcept {
   }
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 void MultiDList<T, HookPtr>::Iterator::goBackward() noexcept {
   if (index_ == mlist_.lists_.size()) {
     return; // Can't go backward
@@ -233,7 +233,7 @@ void MultiDList<T, HookPtr>::Iterator::goBackward() noexcept {
   }
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 void MultiDList<T, HookPtr>::Iterator::initToValidRBeginFrom(
     size_t listIdx) noexcept {
   // Find the first non-empty list.
@@ -247,27 +247,27 @@ void MultiDList<T, HookPtr>::Iterator::initToValidRBeginFrom(
                   : mlist_.lists_[index_]->rbegin();
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 typename MultiDList<T, HookPtr>::Iterator&
 MultiDList<T, HookPtr>::Iterator::operator++() noexcept {
   goForward();
   return *this;
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 typename MultiDList<T, HookPtr>::Iterator&
 MultiDList<T, HookPtr>::Iterator::operator--() noexcept {
   goBackward();
   return *this;
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin()
     const noexcept {
   return MultiDList<T, HookPtr>::Iterator(*this);
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin(
     size_t listIdx) const {
   if (listIdx >= lists_.size()) {
@@ -276,7 +276,7 @@ typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rbegin(
   return MultiDList<T, HookPtr>::Iterator(*this, listIdx);
 }
 
-template <typename T, DListHook<T> T::*HookPtr>
+template <typename T, DListHook<T> T::* HookPtr>
 typename MultiDList<T, HookPtr>::Iterator MultiDList<T, HookPtr>::rend()
     const noexcept {
   auto it = MultiDList<T, HookPtr>::Iterator(*this);

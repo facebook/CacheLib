@@ -181,9 +181,7 @@ void* mmapAlignedZeroedMemory(size_t alignment,
 }
 
 void setMaxLockMemory(uint64_t bytes) {
-  struct rlimit rlim {
-    bytes, bytes
-  };
+  struct rlimit rlim{bytes, bytes};
   const int rv = setrlimit(RLIMIT_MEMLOCK, &rlim);
   if (rv == 0) {
     return;

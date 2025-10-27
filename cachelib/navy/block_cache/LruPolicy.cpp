@@ -152,7 +152,7 @@ void LruPolicy::dump(uint32_t n) const {
 void LruPolicy::dumpList(const char* tag,
                          uint32_t n,
                          uint32_t first,
-                         uint32_t ListNode::*link) const {
+                         uint32_t ListNode::* link) const {
   if (first == kInvalidIndex) {
     XLOGF(ERR, "LRU {} is empty", tag);
     return;

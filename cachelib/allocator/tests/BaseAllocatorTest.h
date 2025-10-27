@@ -1554,7 +1554,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(AllocatorT::ShutDownStatus::kSuccess, alloc.shutDown());
     }
     testShmIsNotRemoved(config);
-    { ASSERT_NO_THROW(AllocatorT alloc(AllocatorT::SharedMemAttach, config)); }
+    {
+      ASSERT_NO_THROW(AllocatorT alloc(AllocatorT::SharedMemAttach, config));
+    }
   }
 
   void testSerialization() {
@@ -6197,7 +6199,9 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     AllocatorT alloc(config);
     const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
     auto poolId = alloc.addPool("default", numBytes);
-    { auto handle = alloc.allocate(poolId, "test", 100); }
+    {
+      auto handle = alloc.allocate(poolId, "test", 100);
+    }
     EXPECT_EQ(false, isRemoveCbTriggered);
     {
       auto handle = alloc.allocate(poolId, "test", 100);

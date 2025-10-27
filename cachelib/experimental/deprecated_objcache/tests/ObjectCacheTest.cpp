@@ -1160,8 +1160,8 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
     for (int i = 0; i < 3; i++) {
       semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
           [sp](ObjCacheString* str) mutable
-          -> folly::SemiFuture<
-              std::pair<ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> {
+              -> folly::SemiFuture<std::pair<
+                  ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> {
             return std::make_pair(str, std::move(sp));
           }));
     }
@@ -1232,7 +1232,7 @@ TEST(ObjectCache, SharedPromiseColocateObject2) {
     for (int i = 0; i < 3; i++) {
       semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
           [sp](ObjCacheString* str) mutable
-          -> folly::SemiFuture<std::shared_ptr<ObjCacheString>> {
+              -> folly::SemiFuture<std::shared_ptr<ObjCacheString>> {
             return std::shared_ptr<ObjCacheString>{
                 str, [sp = std::move(sp)](auto /* unused */) {
                   // once sp goes out of
