@@ -269,6 +269,7 @@ struct SlabReleaseStats {
   uint64_t numEvictionAttempts;
   uint64_t numEvictionSuccesses;
   uint64_t numSlabReleaseStuck;
+  uint64_t numAbortedSlabReleases;
 };
 
 // Stats for reaper

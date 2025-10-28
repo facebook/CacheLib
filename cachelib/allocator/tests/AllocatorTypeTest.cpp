@@ -407,6 +407,14 @@ TYPED_TEST(BaseAllocatorTest, SlabReleaseStuck) {
   this->testSlabReleaseStuck();
 }
 
+TYPED_TEST(BaseAllocatorTest, SlabReleaseTimeout) {
+  this->testSlabReleaseTimeout();
+}
+
+TYPED_TEST(BaseAllocatorTest, SlabReleaseTimeoutZero) {
+  this->testSlabReleaseTimeoutZero();
+}
+
 TYPED_TEST(BaseAllocatorTest, RateMap) { this->testRateMap(); }
 
 TYPED_TEST(BaseAllocatorTest, StatSnapshotTest) {

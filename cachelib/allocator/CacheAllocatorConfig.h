@@ -313,6 +313,10 @@ class CacheAllocatorConfig {
   CacheAllocatorConfig& setSlabReleaseStuckThreashold(
       std::chrono::milliseconds threshold);
 
+  // Set the timeout for slab rebalance operations
+  CacheAllocatorConfig& setSlabRebalanceTimeout(
+      std::chrono::milliseconds timeout);
+
   // This customizes how many items we try to evict before giving up.s
   // We may fail to evict if someone else (another thread) is using an item.
   // Setting this to a high limit leads to a higher chance of successful
@@ -596,6 +600,11 @@ class CacheAllocatorConfig {
   // the number of tries to search for an item to evict
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
+
+  // the amount of time to wait for a slab to be released before giving up
+  // and aborting the release. 0 means we will wait forever
+  std::chrono::milliseconds slabRebalanceTimeout{
+      std::chrono::milliseconds(5000)};
 
   // If refcount is larger than this threshold, we will use shared_ptr
   // for handles in IOBuf chains.
@@ -1117,6 +1126,13 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabReleaseStuckThreashold(
     std::chrono::milliseconds threshold) {
   slabReleaseStuckThreshold = threshold;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabRebalanceTimeout(
+    std::chrono::milliseconds timeout) {
+  slabRebalanceTimeout = timeout;
   return *this;
 }
 

@@ -4992,7 +4992,8 @@ SlabReleaseStats CacheAllocator<CacheTrait>::getSlabReleaseStats()
                           stats_.numMoveSuccesses.get(),
                           stats_.numEvictionAttempts.get(),
                           stats_.numEvictionSuccesses.get(),
-                          stats_.numSlabReleaseStuck.get()};
+                          stats_.numSlabReleaseStuck.get(),
+                          stats_.numAbortedSlabReleases.get()};
 }
 
 template <typename CacheTrait>
@@ -5293,7 +5294,7 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     });
   };
 
-  auto startTime = util::getCurrentTimeSec();
+  auto startTime = util::getCurrentTimeMs();
   while (true) {
     allocator_->processAllocForRelease(ctx, alloc, fn);
 
@@ -5317,12 +5318,27 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
                          static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
                          ctx.getClassId()));
     }
+
+    if (config_.slabRebalanceTimeout.count() > 0) {
+      auto elapsedTime = util::getCurrentTimeMs() - startTime;
+      if (elapsedTime >
+          static_cast<uint64_t>(config_.slabRebalanceTimeout.count())) {
+        allocator_->abortSlabRelease(ctx);
+        throw exception::SlabReleaseAborted(
+            folly::sformat("Slab Release aborted after {} ms while still"
+                           " trying to mark as moving for Item: {}. Pool: {},"
+                           " Class: {}.",
+                           elapsedTime, static_cast<Item*>(alloc)->toString(),
+                           ctx.getPoolId(), ctx.getClassId()));
+      }
+    }
+
     stats_.numMoveAttempts.inc();
     throttleWith(throttler, [&] {
       XLOGF(WARN,
             "Spent {} seconds, slab release still trying to mark as moving for "
             "Item: {}. Pool: {}, Class: {}.",
-            util::getCurrentTimeSec() - startTime,
+            (util::getCurrentTimeMs() - startTime) / 1000,
             static_cast<Item*>(alloc)->toString(), ctx.getPoolId(),
             ctx.getClassId());
     });
