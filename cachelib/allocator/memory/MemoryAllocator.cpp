@@ -18,6 +18,8 @@
 
 #include <folly/Format.h>
 
+#include <algorithm>
+
 using namespace facebook::cachelib;
 
 namespace {
@@ -256,5 +258,72 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
   }
 
   allocSizes.insert(util::getAlignedSize(maxSize, kAlignment));
+  return allocSizes;
+}
+
+std::set<uint32_t> MemoryAllocator::generateOptimalAllocSizesForItemRange(
+    uint32_t minItemSize, uint32_t maxItemSize) {
+  if (minItemSize > maxItemSize) {
+    throw std::invalid_argument("minItemSize must be <= maxItemSize");
+  }
+  if (maxItemSize > Slab::kSize) {
+    throw std::invalid_argument(
+        folly::sformat("maxItemSize must be <= {} because allocation size "
+                       "must be <= {} (Slab::kSize)",
+                       Slab::kSize,
+                       Slab::kSize));
+  }
+
+  // Handling items smaller than Slab::kMinAllocSize as Slab::kMinAllocSize
+  // to simplify the logic
+  minItemSize =
+      std::max(minItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
+  maxItemSize =
+      std::max(maxItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
+
+  // Looks confusing but since maxItemSize >= minItemSize, the number of
+  // allocations per slab is smaller when dividing slab size by maxItemSize
+  uint32_t minAllocsPerSlab = Slab::kSize / maxItemSize;
+  uint32_t maxAllocsPerSlab = Slab::kSize / minItemSize;
+
+  std::set<uint32_t> allocSizes;
+  for (uint32_t i = minAllocsPerSlab; i <= maxAllocsPerSlab; i++) {
+    uint32_t allocSize = Slab::kSize / i;
+    // We need to make sure that allocSize is aligned to kAlignment.
+
+    // allocSize is already chosen such that it is the largest size that enables
+    // i allocs per slab. If we would align by incrementing, we might end up
+    // reducing the number of allocs per slab, so we try to align by
+    // decrementing.
+
+    // Example: 4MB / 62 = 67650. If we incremented to align, we would get
+    // 67656. 4MB / 67656 = 61.99 (this would maximize external fragmentation
+    // which we want to avoid). If we align by decrementing, we get 67648.
+    // 4MB / 67648 = 62.001 (this minimizes external fragmentation)
+    uint32_t alignedSize = util::getAlignedSizeDown(allocSize, kAlignment);
+    if (alignedSize < minItemSize ||
+        (i == minAllocsPerSlab && (maxItemSize > alignedSize))) {
+      // we want to avoid adding an allocation size which is smaller than
+      // minItemSize. Consider allocSize=500. This will get aligned down to
+      // 496. if minItemSize is 500, we are adding a size that will probably not
+      // be used. So, we align up and maximize alloc size to keep same number of
+      // allocs per slab. In this case we would pick 504.
+      // We also want to make sure that maxItemSize is covered by an allocation
+      // class. If i==minAllocsPerSlab, then allocSize is maximal. If the
+      // aligned down size is smaller than maxItemSize we align up instead.
+      uint32_t alignedUp = util::getAlignedSize(allocSize, kAlignment);
+      alignedSize = maximizeAllocSize(alignedUp, Slab::kSize, kAlignment);
+    }
+    XDCHECK(isValidAllocSize(alignedSize));
+    allocSizes.insert(alignedSize);
+    if (allocSizes.size() > kMaxClasses) {
+      throw std::runtime_error(
+          folly::sformat("Optimal number of allocations required is at least "
+                         "{} which is more than the "
+                         "maximum number of allocation classes allowed {}",
+                         allocSizes.size(), kMaxClasses));
+    }
+  }
+  XDCHECK_LE(maxItemSize, *allocSizes.rbegin());
   return allocSizes;
 }

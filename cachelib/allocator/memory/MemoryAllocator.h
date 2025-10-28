@@ -638,6 +638,30 @@ class MemoryAllocator {
       uint32_t minSize = 72,
       bool reduceFragmentation = false);
 
+  // Generates an optimal set of allocation sizes for a given range of item
+  // sizes. This function creates allocation classes that minimize slab
+  // fragmentation.
+  //
+  // For example: if minItemSize=33904 and maxItemSize=103496 and slab
+  // size=4MB.
+  // 4MB / 33904 ~ 123.71
+  // 4MB / 103496 ~ 40.52
+  // This function will create 83 allocation classes: [aligned(4MB / 40),
+  // aligned(4MB / 41), ..., aligned(4MB / 123)].
+  //
+  //
+  // @param minItemSize  The minimum expected item size in bytes
+  // @param maxItemSize  The maximum expected item size in bytes
+  //
+  // @return  std::set of allocation sizes that optimally cover the item size
+  //          range. Each allocation size is aligned to kAlignment (8 bytes).
+  //
+  // @throw std::invalid_argument if minItemSize > maxItemSize
+  // @throw std::invalid_argument if maxItemSize > Slab::kSize
+  // @throw std::invalid_argument if the optimal number of allocation classes
+  //                              exceeds kMaxClasses
+  static std::set<uint32_t> generateOptimalAllocSizesForItemRange(
+      uint32_t minItemSize, uint32_t maxItemSize);
   // Checks if a given allocation size is valid for cachelib. A valid
   // allocation size must satisfy the following requirements:
   // 1. >= Slab::kMinAllocSize (64 bytes)

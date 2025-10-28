@@ -833,3 +833,79 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
                                                 Slab::kNumSlabBits + 1),
                std::invalid_argument);
 }
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {
+  auto expectAllAllocSizesValid = [](const std::set<uint32_t>& allocSizes) {
+    for (auto allocSize : allocSizes) {
+      EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
+    }
+  };
+
+  {
+    auto allocSizes = MemoryAllocator::generateOptimalAllocSizesForItemRange(
+        Slab::kSize / 4, Slab::kSize);
+    EXPECT_EQ(allocSizes.size(), 4u);
+    EXPECT_NE(allocSizes.find(Slab::kSize), allocSizes.end());
+    EXPECT_NE(allocSizes.find(Slab::kSize / 4), allocSizes.end());
+    EXPECT_NE(allocSizes.find(Slab::kSize / 2), allocSizes.end());
+    EXPECT_NE(allocSizes.find(1398096), allocSizes.end());
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(500, 500);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), 504);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes = MemoryAllocator::generateOptimalAllocSizesForItemRange(
+        Slab::kSize, Slab::kSize);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kSize);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(33904, 103496);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(32, 40);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kMinAllocSize);
+    expectAllAllocSizesValid(allocSizes);
+  }
+
+  {
+    auto allocSizes =
+        MemoryAllocator::generateOptimalAllocSizesForItemRange(64, 128);
+    EXPECT_EQ(allocSizes.size(), 9u);
+    for (int i = 64; i <= 128; i += 8) {
+      EXPECT_NE(allocSizes.find(i), allocSizes.end());
+    }
+    expectAllAllocSizesValid(allocSizes);
+  }
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRangeWithBadParams) {
+  // min size larger than max size
+  ASSERT_THROW(
+      MemoryAllocator::generateOptimalAllocSizesForItemRange(1000, 100),
+      std::invalid_argument);
+
+  // max size larger than slab size
+  ASSERT_THROW(MemoryAllocator::generateOptimalAllocSizesForItemRange(
+                   100, Slab::kSize + 1),
+               std::invalid_argument);
+
+  // requires too many allocation classes
+  ASSERT_THROW(MemoryAllocator::generateOptimalAllocSizesForItemRange(64, 2048),
+               std::runtime_error);
+}
