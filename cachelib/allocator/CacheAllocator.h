@@ -221,7 +221,7 @@ class CacheAllocator : public CacheBase {
   using Key = typename Item::Key;
   using PoolIds = std::set<PoolId>;
 
-  using EventTracker = EventInterface<Key>;
+  using EventTracker = facebook::cachelib::LegacyEventTracker;
 
   // SampleItem is a wrapper for the CacheItem which is provided as the sample
   // for uploading to Scuba (see ItemStatsExporter). It is guaranteed that the

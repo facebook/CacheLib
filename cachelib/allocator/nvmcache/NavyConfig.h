@@ -441,13 +441,13 @@ class BlockCacheConfig {
     return *this;
   }
 
-  BlockCacheConfig& setEventTracker(EventTracker& eventTracker) {
+  BlockCacheConfig& setEventTracker(LegacyEventTracker& eventTracker) {
     eventTracker_ = eventTracker;
     return *this;
   }
 
-  const std::optional<std::reference_wrapper<EventTracker>>& getEventTracker()
-      const {
+  const std::optional<std::reference_wrapper<LegacyEventTracker>>&
+  getEventTracker() const {
     return eventTracker_;
   }
 
@@ -561,7 +561,7 @@ class BlockCacheConfig {
   // Index related config. If not specified, SparseMapIndex will be used
   BlockCacheIndexConfig indexConfig_;
 
-  std::optional<std::reference_wrapper<EventTracker>> eventTracker_;
+  std::optional<std::reference_wrapper<LegacyEventTracker>> eventTracker_;
 
   friend class NavyConfig;
 };

@@ -158,7 +158,7 @@ class EventInterface {
       std::unordered_map<std::string, uint64_t>& statsMap) const = 0;
 };
 
-using EventTracker = EventInterface<KAllocation::Key>;
+using LegacyEventTracker = EventInterface<KAllocation::Key>;
 
 } // namespace cachelib
 } // namespace facebook

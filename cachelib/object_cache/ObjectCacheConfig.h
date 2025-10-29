@@ -33,7 +33,7 @@ namespace objcache2 {
 template <typename ObjectCache>
 struct ObjectCacheConfig {
   using Key = KAllocation::Key;
-  using EventTrackerSharedPtr = std::shared_ptr<EventInterface<Key>>;
+  using EventTrackerSharedPtr = std::shared_ptr<LegacyEventTracker>;
   using ItemDestructor = typename ObjectCache::ItemDestructor;
   using RemoveCb = typename ObjectCache::RemoveCb;
   using SerializeCb = typename ObjectCache::SerializeCb;
