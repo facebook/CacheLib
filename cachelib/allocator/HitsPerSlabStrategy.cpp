@@ -143,11 +143,27 @@ ClassId HitsPerSlabStrategy::pickReceiver(const Config& config,
     return Slab::kInvalidClassId;
   }
 
-  // filter out alloc classes above retention target
+  // 1. Prioritize classes below their target age
+  // 2: If all classes tracked in classIdTargetEvictionAge met targets, use
+  // untracked classes only
   if (config.classIdTargetEvictionAge != nullptr &&
       !config.classIdTargetEvictionAge->empty()) {
-    receivers = filterReceiversByTargetEvictionAge(
-        stats, std::move(receivers), *config.classIdTargetEvictionAge.get());
+    auto candidates = filterReceiversByTargetEvictionAge(
+        stats, receivers, *config.classIdTargetEvictionAge.get());
+
+    if (!candidates.empty()) {
+      // Found classes below target age: use ONLY those
+      receivers = std::move(candidates);
+    } else {
+      // All tracked classes met target age: remove them and keep untracked ones
+      receivers = filter(
+          std::move(receivers),
+          [&](ClassId cid) {
+            return config.classIdTargetEvictionAge->find(cid) !=
+                   config.classIdTargetEvictionAge->end();
+          },
+          "receivers in target map that met their goals");
+    }
   }
 
   if (receivers.empty()) {
