@@ -439,7 +439,11 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   region.reset();
   {
     std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
-    reclaimsOutstanding_--;
+    if (reclaimsOutstanding_ > 0) {
+      // Though this should be always > 0 at this point with normal run path, it
+      // is possible that it's 0, if we run reclaim manually (e.g. for testing)
+      reclaimsOutstanding_--;
+    }
     cleanRegions_.push_back(rid);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {

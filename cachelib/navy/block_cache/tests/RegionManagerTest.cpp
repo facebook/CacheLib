@@ -196,10 +196,12 @@ TEST(RegionManager, ReadWrite) {
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
   ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
-  rm->startReclaim();
+
+  // getCleanRegion should have triggered next reclaim
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
   ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(1, rid.index());
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   auto& region = rm->getRegion(rid);
   auto [wDesc, addr] = region.openAndAllocate(4 * kSize);
@@ -381,6 +383,8 @@ TEST(RegionManager, cleanupRegionFailureSync) {
 
   ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
+  // getCleanRegion should have triggered next reclaim
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   // Write to Region 0
   auto& region = rm->getRegion(rid);
@@ -490,6 +494,8 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
 
   ASSERT_EQ(OpenStatus::Ready, rm->getCleanRegion(rid, false).first);
   ASSERT_EQ(0, rid.index());
+  // getCleanRegion should have triggered next reclaim
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   // Write to Region 0
   auto& region = rm->getRegion(rid);
