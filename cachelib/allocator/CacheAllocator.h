@@ -1808,7 +1808,7 @@ class CacheAllocator : public CacheBase {
   }
 
   FOLLY_ALWAYS_INLINE EventTracker* getLegacyEventTracker() const {
-    return config_.eventTracker.get();
+    return config_.legacyEventTracker.get();
   }
 
   // Releases a slab from a pool into its corresponding memory pool

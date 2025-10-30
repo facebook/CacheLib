@@ -576,7 +576,7 @@ void ObjectCache<AllocatorT>::init() {
       .setAccessConfig({config_.l1HashTablePower, config_.l1LockPower})
       .setDefaultAllocSizes({l1AllocSize})
       .enableItemReaperInBackground(config_.reaperInterval)
-      .setEventTracker(std::move(config_.eventTracker))
+      .setEventTracker(std::move(config_.legacyEventTracker))
       .setEvictionSearchLimit(config_.evictionSearchLimit);
   if (config_.itemDestructor) {
     l1Config.setItemDestructor(
