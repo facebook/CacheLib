@@ -47,6 +47,7 @@ void EventTracker::record(const EventInfo& eventInfo) {
   if (sampleKey(eventInfo.key, samplingRate_) == 0) {
     return;
   }
+  config_.eventSink->recordEvent(eventInfo);
 }
 
 } // namespace cachelib
