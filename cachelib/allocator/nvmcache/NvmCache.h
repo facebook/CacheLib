@@ -840,7 +840,8 @@ void NvmCache<C>::evictCB(HashedKey hk,
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
     navyCache_->updateEvictionStats(hk, value, lifetime);
 
-    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
+    if (auto eventTracker =
+            CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
       eventTracker->record(AllocatorApiEvent::NVM_EVICT, hk.key(),
                            AllocatorApiResult::EVICTED);
     }
@@ -1456,7 +1457,8 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
   // capture array reference for delContext. it is stable
   auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
                                                HashedKey) mutable {
-    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
+    if (auto eventTracker =
+            CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
       const auto result = status == navy::Status::Ok
                               ? AllocatorApiResult::REMOVED
                               : (status == navy::Status::NotFound

@@ -137,8 +137,8 @@ class CacheAPIWrapperForNvm {
   // @return Stats of the nvmcache
   static detail::Stats& getStats(C& cache) { return cache.stats(); }
 
-  static EventTracker* getEventTracker(C& cache) {
-    return cache.getEventTracker();
+  static LegacyEventTracker* getLegacyEventTracker(C& cache) {
+    return cache.getLegacyEventTracker();
   }
 };
 
