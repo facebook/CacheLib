@@ -441,14 +441,15 @@ class BlockCacheConfig {
     return *this;
   }
 
-  BlockCacheConfig& setEventTracker(LegacyEventTracker& eventTracker) {
-    eventTracker_ = eventTracker;
+  BlockCacheConfig& setLegacyEventTracker(
+      LegacyEventTracker& legacyEventTracker) {
+    legacyEventTracker_ = legacyEventTracker;
     return *this;
   }
 
   const std::optional<std::reference_wrapper<LegacyEventTracker>>&
-  getEventTracker() const {
-    return eventTracker_;
+  getLegacyEventTracker() const {
+    return legacyEventTracker_;
   }
 
   BlockCacheConfig& setDataChecksum(bool dataChecksum) noexcept {
@@ -561,7 +562,7 @@ class BlockCacheConfig {
   // Index related config. If not specified, SparseMapIndex will be used
   BlockCacheIndexConfig indexConfig_;
 
-  std::optional<std::reference_wrapper<LegacyEventTracker>> eventTracker_;
+  std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
 
   friend class NavyConfig;
 };

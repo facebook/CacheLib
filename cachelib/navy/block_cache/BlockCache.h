@@ -71,7 +71,8 @@ class BlockCache final : public Engine {
     // whether ItemDestructor is enabled
     bool itemDestructorEnabled{false};
 
-    std::optional<std::reference_wrapper<LegacyEventTracker>> eventTracker;
+    std::optional<std::reference_wrapper<LegacyEventTracker>>
+        legacyEventTracker;
 
     // Maximum number of retry times for in-mem buffer flushing.
     // When exceeding the limit, we will not reschedule any flushing job but
@@ -386,7 +387,7 @@ class BlockCache final : public Engine {
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
-  std::optional<std::reference_wrapper<LegacyEventTracker>> eventTracker_;
+  std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
 
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;

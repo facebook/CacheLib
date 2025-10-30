@@ -160,7 +160,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XLOG(INFO, "Block cache created");
   XDCHECK_NE(readBufferSize_, 0u);
 
-  eventTracker_ = config.eventTracker;
+  legacyEventTracker_ = config.legacyEventTracker;
 }
 std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
@@ -617,8 +617,8 @@ void BlockCache::updateEventTracker(folly::StringPiece key,
                                     AllocatorApiEvent event,
                                     AllocatorApiResult result,
                                     uint32_t size) {
-  if (eventTracker_.has_value()) {
-    eventTracker_->get().record(event, key, result, size);
+  if (legacyEventTracker_.has_value()) {
+    legacyEventTracker_->get().record(event, key, result, size);
   }
 }
 

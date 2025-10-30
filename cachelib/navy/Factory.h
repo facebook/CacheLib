@@ -99,9 +99,9 @@ class BlockCacheProto {
   // (Optional) Set Index related config.
   virtual void setIndexConfig(const BlockCacheIndexConfig& config) = 0;
 
-  virtual void setEventTracker(
-      const std::optional<std::reference_wrapper<EventTracker>>&
-          eventTracker) = 0;
+  virtual void setLegacyEventTracker(
+      const std::optional<std::reference_wrapper<LegacyEventTracker>>&
+          legacyEventTracker) = 0;
 };
 
 // BigHash engine proto. BigHash is used to cache small objects (under 2KB)
