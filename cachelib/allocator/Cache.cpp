@@ -180,9 +180,10 @@ void CacheBase::updateCompactCacheStats(const std::string& statPrefix,
                         util::narrow_cast<uint64_t>(hitRate));
 }
 
-void CacheBase::updateEventTrackerStats(const std::string& statPrefix) const {
-  const std::string prefix = statPrefix + "event_tracker.";
-  for (const auto& kv : getEventTrackerStatsMap()) {
+void CacheBase::updateLegacyEventTrackerStats(
+    const std::string& statPrefix) const {
+  const std::string prefix = statPrefix + "legacy_event_tracker.";
+  for (const auto& kv : getLegacyEventTrackerStatsMap()) {
     counters_.updateCount(prefix + kv.first, kv.second);
   }
 }
@@ -550,7 +551,7 @@ void CacheBase::exportStats(
     std::function<void(folly::StringPiece, uint64_t)> cb) const {
   updateGlobalCacheStats(statPrefix);
   updateNvmCacheStats(statPrefix);
-  updateEventTrackerStats(statPrefix);
+  updateLegacyEventTrackerStats(statPrefix);
 
   if (aggregatePoolStats_ && canAggregatePoolStats()) {
     updateAggregatedPoolStats(statPrefix);

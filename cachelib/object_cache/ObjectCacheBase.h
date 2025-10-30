@@ -76,9 +76,9 @@ class ObjectCacheBase : public CacheBase {
 
   // @return a map of <stat name -> stat value> representation for all the event
   // tracker stats. If no event tracker exists, this will be empty
-  std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  std::unordered_map<std::string, uint64_t> getLegacyEventTrackerStatsMap()
       const override {
-    return l1Cache_->getEventTrackerStatsMap();
+    return l1Cache_->getLegacyEventTrackerStatsMap();
   }
 
   // @return the Cache metadata

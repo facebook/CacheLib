@@ -1256,7 +1256,7 @@ class CacheAllocator : public CacheBase {
   util::StatsMap getNvmCacheStatsMap() const override final;
 
   // return the event tracker stats map
-  std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  std::unordered_map<std::string, uint64_t> getLegacyEventTrackerStatsMap()
       const override {
     std::unordered_map<std::string, uint64_t> eventTrackerStats;
     if (auto eventTracker = getLegacyEventTracker()) {
