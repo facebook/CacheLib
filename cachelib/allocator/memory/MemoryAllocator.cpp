@@ -29,6 +29,31 @@ void checkConfig(const MemoryAllocator::Config& config) {
     throw std::invalid_argument("Too many allocation classes");
   }
 }
+
+// Validates and clamps item size range for allocation size generation.
+// Returns clamped minItemSize and maxItemSize.
+std::pair<uint32_t, uint32_t> validateAndClampItemSizeRange(
+    uint32_t minItemSize, uint32_t maxItemSize) {
+  if (minItemSize > maxItemSize) {
+    throw std::invalid_argument("minItemSize must be <= maxItemSize");
+  }
+  if (maxItemSize > Slab::kSize) {
+    throw std::invalid_argument(
+        folly::sformat("maxItemSize must be <= {} because allocation size "
+                       "must be <= {} (Slab::kSize)",
+                       Slab::kSize,
+                       Slab::kSize));
+  }
+
+  // Handling items smaller than Slab::kMinAllocSize as Slab::kMinAllocSize
+  // to simplify the logic
+  minItemSize =
+      std::max(minItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
+  maxItemSize =
+      std::max(maxItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
+
+  return {minItemSize, maxItemSize};
+}
 } // namespace
 
 MemoryAllocator::MemoryAllocator(Config config,
@@ -263,23 +288,8 @@ std::set<uint32_t> MemoryAllocator::generateAllocSizes(
 
 std::set<uint32_t> MemoryAllocator::generateOptimalAllocSizesForItemRange(
     uint32_t minItemSize, uint32_t maxItemSize) {
-  if (minItemSize > maxItemSize) {
-    throw std::invalid_argument("minItemSize must be <= maxItemSize");
-  }
-  if (maxItemSize > Slab::kSize) {
-    throw std::invalid_argument(
-        folly::sformat("maxItemSize must be <= {} because allocation size "
-                       "must be <= {} (Slab::kSize)",
-                       Slab::kSize,
-                       Slab::kSize));
-  }
-
-  // Handling items smaller than Slab::kMinAllocSize as Slab::kMinAllocSize
-  // to simplify the logic
-  minItemSize =
-      std::max(minItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
-  maxItemSize =
-      std::max(maxItemSize, static_cast<uint32_t>(Slab::kMinAllocSize));
+  std::tie(minItemSize, maxItemSize) =
+      validateAndClampItemSizeRange(minItemSize, maxItemSize);
 
   // Looks confusing but since maxItemSize >= minItemSize, the number of
   // allocations per slab is smaller when dividing slab size by maxItemSize
@@ -324,6 +334,44 @@ std::set<uint32_t> MemoryAllocator::generateOptimalAllocSizesForItemRange(
                          allocSizes.size(), kMaxClasses));
     }
   }
+  XDCHECK_LE(maxItemSize, *allocSizes.rbegin());
+  return allocSizes;
+}
+
+std::set<uint32_t> MemoryAllocator::generateEvenlyDistributedAllocSizes(
+    uint32_t minItemSize, uint32_t maxItemSize, uint32_t numClassesToAdd) {
+  std::tie(minItemSize, maxItemSize) =
+      validateAndClampItemSizeRange(minItemSize, maxItemSize);
+
+  if (numClassesToAdd < 1) {
+    throw std::invalid_argument("numClassesToAdd must be at least 1");
+  }
+
+  if (numClassesToAdd > kMaxClasses) {
+    throw std::invalid_argument(
+        folly::sformat("numClassesToAdd {} exceeds maximum allowed {}",
+                       numClassesToAdd, kMaxClasses));
+  }
+
+  std::set<uint32_t> allocSizes;
+
+  // Divide the range [minItemSize, maxItemSize] into numClassesToAdd segments
+  // and create allocation classes starting from max working down
+  // Example: min=1000, max=4000, numClassesToAdd=3
+  //   rangeSize = 3000
+  //   i=0: offset=0, itemSize=4000
+  //   i=1: offset=1000, itemSize=3000
+  //   i=2: offset=2000, itemSize=2000
+  uint32_t rangeSize = maxItemSize - minItemSize;
+  for (uint32_t i = 0; i < numClassesToAdd; i++) {
+    uint32_t offset = rangeSize * i / numClassesToAdd;
+    uint32_t itemSize = maxItemSize - offset;
+    uint32_t aligned = util::getAlignedSize(itemSize, kAlignment);
+    uint32_t maximized = maximizeAllocSize(aligned, Slab::kSize, kAlignment);
+    XDCHECK(isValidAllocSize(maximized));
+    allocSizes.insert(maximized);
+  }
+
   XDCHECK_LE(maxItemSize, *allocSizes.rbegin());
   return allocSizes;
 }

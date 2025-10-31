@@ -27,6 +27,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
+#include <folly/Math.h>
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
@@ -662,6 +663,32 @@ class MemoryAllocator {
   //                              exceeds kMaxClasses
   static std::set<uint32_t> generateOptimalAllocSizesForItemRange(
       uint32_t minItemSize, uint32_t maxItemSize);
+
+  // Generates a set of allocation sizes with evenly distributed sizes.
+  // This function creates allocation classes by dividing the space between
+  // minItemSize and maxItemSize evenly. The maxItemSize is always included,
+  // and intermediate sizes are evenly distributed based on numClassesToAdd.
+  //
+  // For example: if minItemSize=1000, maxItemSize=5000, and numClassesToAdd=2,
+  // it will create 2 allocation classes: [3000, 5000].
+  // If numClassesToAdd=3, it will create: [2333, 3666, 5000].
+  //
+  // @param minItemSize      The minimum expected item size in bytes
+  // @param maxItemSize      The maximum expected item size in bytes
+  // @param numClassesToAdd  The total number of allocation classes to create.
+  //                         Must be at least 1 (which adds only maxItemSize).
+  //
+  // @return  std::set of allocation sizes that evenly cover the item size
+  //          range. Each allocation size is aligned to kAlignment (8 bytes)
+  //          and maximized using maximizeAllocSize.
+  //
+  // @throw std::invalid_argument if minItemSize > maxItemSize
+  // @throw std::invalid_argument if maxItemSize > Slab::kSize
+  // @throw std::invalid_argument if numClassesToAdd < 1
+  // @throw std::invalid_argument if numClassesToAdd exceeds kMaxClasses
+  static std::set<uint32_t> generateEvenlyDistributedAllocSizes(
+      uint32_t minItemSize, uint32_t maxItemSize, uint32_t numClassesToAdd);
+
   // Checks if a given allocation size is valid for cachelib. A valid
   // allocation size must satisfy the following requirements:
   // 1. >= Slab::kMinAllocSize (64 bytes)

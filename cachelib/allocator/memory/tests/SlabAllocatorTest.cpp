@@ -834,13 +834,15 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesPowerOf2WithBadParams) {
                std::invalid_argument);
 }
 
-TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {
-  auto expectAllAllocSizesValid = [](const std::set<uint32_t>& allocSizes) {
-    for (auto allocSize : allocSizes) {
-      EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
-    }
-  };
+namespace {
+auto expectAllAllocSizesValid = [](const std::set<uint32_t>& allocSizes) {
+  for (auto allocSize : allocSizes) {
+    EXPECT_TRUE(MemoryAllocator::isValidAllocSize(allocSize));
+  }
+};
+} // namespace
 
+TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRange) {
   {
     auto allocSizes = MemoryAllocator::generateOptimalAllocSizesForItemRange(
         Slab::kSize / 4, Slab::kSize);
@@ -908,4 +910,100 @@ TEST_F(SlabAllocatorTest, TestGenerateAllocSizesForItemRangeWithBadParams) {
   // requires too many allocation classes
   ASSERT_THROW(MemoryAllocator::generateOptimalAllocSizesForItemRange(64, 2048),
                std::runtime_error);
+}
+
+TEST_F(SlabAllocatorTest, TestGenerateEvenlyDistributedAllocSizes) {
+  // Test with numClassesToAdd=1 (only max)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 1);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.begin(), 5000u);
+  }
+
+  // Test with numClassesToAdd=2 (max + 1 intermediate)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 2);
+    EXPECT_EQ(allocSizes.size(), 2u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), 5000u);
+    auto it = allocSizes.begin();
+    EXPECT_EQ(*it, 3000u);
+  }
+
+  // Test with numClassesToAdd=3 (max + 2 intermediates)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 4000, 3);
+    EXPECT_EQ(allocSizes.size(), 3u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), 4000u);
+    auto it = allocSizes.begin();
+    EXPECT_EQ(*it, 2000u);
+    ++it;
+    EXPECT_EQ(*it, 3000u);
+  }
+
+  // Test with min == max
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(5000, 5000, 1);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.begin(), 5000u);
+  }
+
+  // Test with small sizes (below kMinAllocSize)
+  {
+    auto allocSizes =
+        MemoryAllocator::generateEvenlyDistributedAllocSizes(32, 40, 2);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+    // Should use kMinAllocSize for both min and max
+    EXPECT_EQ(allocSizes.size(), 1u);
+    EXPECT_EQ(*allocSizes.begin(), Slab::kMinAllocSize);
+  }
+
+  // Test with Slab::kSize as max
+  // This is just returning one class because the other size it tries to add is
+  // ~3MB which gets rounded up to 4MB
+  {
+    auto allocSizes = MemoryAllocator::generateEvenlyDistributedAllocSizes(
+        Slab::kSize / 2, Slab::kSize, 2);
+    EXPECT_EQ(allocSizes.size(), 1u);
+    expectAllAllocSizesValid(allocSizes);
+    EXPECT_EQ(*allocSizes.rbegin(), Slab::kSize);
+  }
+
+  {
+    auto allocSizes = MemoryAllocator::generateEvenlyDistributedAllocSizes(
+        103496, 963984, 14);
+    EXPECT_FALSE(allocSizes.empty());
+    expectAllAllocSizesValid(allocSizes);
+  }
+}
+
+TEST_F(SlabAllocatorTest,
+       TestGenerateEvenlyDistributedAllocSizesWithBadParams) {
+  // min size larger than max size
+  ASSERT_THROW(
+      MemoryAllocator::generateEvenlyDistributedAllocSizes(5000, 1000, 2),
+      std::invalid_argument);
+
+  // max size larger than slab size
+  ASSERT_THROW(MemoryAllocator::generateEvenlyDistributedAllocSizes(
+                   100, Slab::kSize + 1, 2),
+               std::invalid_argument);
+
+  // numClassesToAdd < 1
+  ASSERT_THROW(
+      MemoryAllocator::generateEvenlyDistributedAllocSizes(1000, 5000, 0),
+      std::invalid_argument);
+
+  // numClassesToAdd exceeds kMaxClasses
+  ASSERT_THROW(MemoryAllocator::generateEvenlyDistributedAllocSizes(
+                   1000, 5000, MemoryAllocator::kMaxClasses + 1),
+               std::invalid_argument);
 }
