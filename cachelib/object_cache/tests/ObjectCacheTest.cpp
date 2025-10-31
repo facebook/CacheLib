@@ -2319,4 +2319,114 @@ TEST(ObjectCacheTest, AggregatePoolStatsWithTwoShards) {
   EXPECT_FALSE(foundIndividualStats) << "Should NOT find individual shard "
                                         "stats with enableAggregatePoolStats()";
 }
+
+TEST(ObjectCacheTest, DynamicFreeMemorySizeControlTest) {
+  const uint64_t kMB = 1024 * 1024;
+  auto upperLimitBytes = 15 * kMB;
+  auto lowerLimitBytes = 9 * kMB;
+  auto itemSize = 1024;
+  uint64_t maxNumEntries = 1024 * 20;
+  uint64_t sizeControlIntervalMs = 50;
+
+  ObjectCache::Config config;
+  config.setCacheName("dynamic_free_mem_test");
+  config.setItemDestructor([&](ObjectCacheDestructorData data) {
+    data.deleteObject<MemoryConsumer>();
+  });
+
+  config.setCacheCapacity(maxNumEntries, itemSize * maxNumEntries,
+                          sizeControlIntervalMs);
+
+  config.setObjectSizeControllerMode(ObjCacheSizeControlMode::FreeMemoryOnly,
+                                     upperLimitBytes, lowerLimitBytes);
+  config.memoryMode = FreeMemoryOnly;
+
+  static std::atomic<uint64_t> currentFreeMem{20 * kMB};
+  config.setFreeMemCb([]() {
+    auto val = currentFreeMem.load();
+    return val;
+  });
+
+  auto objcache = ObjectCache::create(config);
+  std::cout << "[Test Start] Initial entries limit: "
+            << objcache->getCurrentEntriesLimit() << std::endl;
+
+  auto waitForEntriesLimitDecrease = [&](size_t initialLimit,
+                                         std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < timeout) {
+      if (objcache->getCurrentEntriesLimit() < initialLimit) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+  };
+
+  auto waitForEntriesLimitIncrease = [&](size_t initialLimit,
+                                         std::chrono::milliseconds timeout) {
+    auto start = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - start < timeout) {
+      if (objcache->getCurrentEntriesLimit() > initialLimit) {
+        return true;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
+  };
+
+  EXPECT_EQ(objcache->getCurrentEntriesLimit(), maxNumEntries);
+  EXPECT_EQ(objcache->getNumEntries(), 0);
+
+  for (size_t i = 0; i < maxNumEntries; i++) {
+    auto key = folly::sformat("key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+
+  EXPECT_EQ(objcache->getNumEntries(), maxNumEntries);
+  // we can expect our entries limit to be expanding or at least
+  // not receeding as free memory callback returns above the lower and upper
+  // limit
+  EXPECT_GE(objcache->getCurrentEntriesLimit(), maxNumEntries);
+  std::cout << "[After Fill] Entries: " << objcache->getNumEntries()
+            << ", Limit: " << objcache->getCurrentEntriesLimit() << std::endl;
+
+  std::cout << "[Test] Setting free memory to 5 MB (below lower limit of "
+            << lowerLimitBytes / kMB << " MB)" << std::endl;
+  currentFreeMem.store(5 * kMB);
+
+  EXPECT_TRUE(
+      waitForEntriesLimitDecrease(maxNumEntries, std::chrono::seconds(2)));
+
+  auto entriesAfterShrink = objcache->getCurrentEntriesLimit();
+  auto numEntriesAfterShrink = objcache->getNumEntries();
+
+  std::cout << "[After Shrink] Entries: " << numEntriesAfterShrink
+            << ", Limit: " << entriesAfterShrink << std::endl;
+  EXPECT_LT(entriesAfterShrink, maxNumEntries);
+  EXPECT_LT(numEntriesAfterShrink, maxNumEntries);
+
+  std::cout << "[Test] Setting free memory to 20 MB (above lower limit)"
+            << std::endl;
+  currentFreeMem.store(20 * kMB);
+
+  for (size_t i = 0; i < 10; i++) {
+    auto key = folly::sformat("new_key_{}", i);
+    objcache->insertOrReplace(key, std::make_unique<MemoryConsumer>(itemSize),
+                              itemSize);
+  }
+
+  EXPECT_TRUE(
+      waitForEntriesLimitIncrease(entriesAfterShrink, std::chrono::seconds(2)));
+
+  auto entriesAfterExpand = objcache->getCurrentEntriesLimit();
+  std::cout << "[After Expand] Entries: " << objcache->getNumEntries()
+            << ", Limit: " << entriesAfterExpand << std::endl;
+
+  EXPECT_GT(entriesAfterExpand, entriesAfterShrink);
+  std::cout << "[Test Complete] Cache shrunk from " << maxNumEntries << " to "
+            << entriesAfterShrink << ", then expanded to " << entriesAfterExpand
+            << std::endl;
+}
 } // namespace facebook::cachelib::objcache2::test

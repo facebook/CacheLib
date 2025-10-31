@@ -316,7 +316,6 @@ struct ObjectCacheConfig {
   // on top of Object Size mode guarantees.
   ObjCacheSizeControlMode memoryMode{ObjCacheSizeControlMode::ObjectSize};
 
-  // The number of entries to add or remove per iteration.
   // The limits means different things for different memory modes.
   // For Object Size mode,
   //   - upperLimitBytes: max total object size limit (shrink cache)
@@ -327,8 +326,16 @@ struct ObjectCacheConfig {
   // For RSS mode,
   //   - upperLimitBytes: max RSS limit (shrink cache)
   //   - lowerLimitBytes: min RSS limit (expand cache)
+  // For FreeMemoryOnly mode,
+  //   - lowerLimitBytes: min free memory limit (shrink cache)
   uint64_t upperLimitBytes{0};
   uint64_t lowerLimitBytes{0};
+
+  // In FreeMemoryOnly mode where we do not have average object size
+  // to adjust the cache size by, we used fixed values to shrink and expand.
+  uint64_t shrinkCacheBy{8};
+  uint64_t expandCacheBy{2};
+
   GetFreeMemCb getFreeMemBytes = util::getMemAvailable;
   GetRSSMemCb getRSSMemBytes = util::getRSSBytes;
 

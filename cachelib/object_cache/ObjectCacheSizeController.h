@@ -26,7 +26,12 @@ namespace facebook::cachelib::objcache2 {
 template <typename AllocatorT>
 class ObjectCache;
 
-enum ObjCacheSizeControlMode { FreeMemory, ResidentMemory, ObjectSize };
+enum ObjCacheSizeControlMode {
+  FreeMemory,
+  ResidentMemory,
+  ObjectSize,
+  FreeMemoryOnly
+};
 
 // Dynamically adjust the entriesLimit to limit the cache size for
 // object-cache.
@@ -45,10 +50,13 @@ class ObjectCacheSizeController : public PeriodicWorker {
 
   void getCounters(const util::CounterVisitor& visitor) const;
   size_t getTotalObjSizeBytes() const;
+  void shrinkCacheByEntriesNum(size_t entries);
+
+  // Ensure free memory is above the lower limit by shrinking cache if needed.
+  void ensureFreeMemoryAboveLowerLimit();
 
  private:
   void work() override final;
-  void shrinkCacheByEntriesNum(size_t entries);
   void expandCacheByEntriesNum(size_t entries);
   int64_t getNewNumEntries();
 
@@ -83,6 +91,12 @@ class ObjectCacheSizeController : public PeriodicWorker {
 
   // callback to get RSS memory in bytes
   GetRSSMemCb getRSSMem_;
+
+  TLCounter shrinkCacheCalls_{};
+  TLCounter expandCacheCalls_{};
+  TLCounter totalEntriesShrunk_{};
+  TLCounter totalEntriesExpanded_{};
+  TLCounter ensureFreeMemoryCalls_{};
 };
 
 template <typename AllocatorT>
@@ -102,6 +116,16 @@ size_t ObjectCacheSizeController<AllocatorT>::getTotalObjSizeBytes() const {
 
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::work() {
+  if (mode_ == FreeMemoryOnly) {
+    auto freeMemBytes = objCache_.config_.getFreeMemBytes();
+    if (freeMemBytes < objCache_.config_.lowerLimitBytes) {
+      ensureFreeMemoryAboveLowerLimit();
+    } else {
+      expandCacheByEntriesNum(objCache_.config_.expandCacheBy);
+    }
+    return;
+  }
+
   // This function adjusts number of entries allowed in the object cache
   // based on internal metrics (average object size, total object size, max
   // entries) and system metrics (free memory and RSS).
@@ -228,18 +252,22 @@ void ObjectCacheSizeController<AllocatorT>::work() {
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
     size_t entries) {
+  shrinkCacheCalls_.inc();
   util::Throttler t(throttlerConfig_);
   auto before = objCache_.getNumPlaceholders();
+  size_t actualShrunk = 0;
   for (size_t i = 0; i < entries; i++) {
     if (!objCache_.allocatePlaceholder()) {
       XLOGF(ERR, "Couldn't allocate placeholder {}",
             objCache_.getNumPlaceholders());
     } else {
       currentEntriesLimit_--;
+      actualShrunk++;
     }
     // throttle to slow down the allocation speed
     t.throttle();
   }
+  totalEntriesShrunk_.add(actualShrunk);
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
@@ -251,6 +279,7 @@ void ObjectCacheSizeController<AllocatorT>::shrinkCacheByEntriesNum(
 template <typename AllocatorT>
 void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
     size_t entries) {
+  expandCacheCalls_.inc();
   util::Throttler t(throttlerConfig_);
   auto before = objCache_.getNumPlaceholders();
   entries = std::min<size_t>(entries, before);
@@ -260,6 +289,7 @@ void ObjectCacheSizeController<AllocatorT>::expandCacheByEntriesNum(
     // throttle to slow down the release speed
     t.throttle();
   }
+  totalEntriesExpanded_.add(entries);
 
   XLOGF_EVERY_MS(
       INFO, 60'000,
@@ -283,6 +313,28 @@ void ObjectCacheSizeController<AllocatorT>::getCounters(
   visitor("objcache.rss_mem_bytes", objCache_.config_.getRSSMemBytes());
   visitor("objcache.current_entries_limit",
           currentEntriesLimit_.load(std::memory_order_relaxed));
+  visitor("objcache.size_controller.shrink_cache_calls",
+          shrinkCacheCalls_.get(), util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.expand_cache_calls",
+          expandCacheCalls_.get(), util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.total_entries_shrunk",
+          totalEntriesShrunk_.get(), util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.total_entries_expanded",
+          totalEntriesExpanded_.get(),
+          util::CounterVisitor::CounterType::RATE);
+  visitor("objcache.size_controller.ensure_free_memory_calls",
+          ensureFreeMemoryCalls_.get(),
+          util::CounterVisitor::CounterType::RATE);
+}
+
+template <typename AllocatorT>
+void ObjectCacheSizeController<AllocatorT>::ensureFreeMemoryAboveLowerLimit() {
+  ensureFreeMemoryCalls_.inc();
+  auto freeMemBytes = objCache_.config_.getFreeMemBytes();
+  while (freeMemBytes < objCache_.config_.lowerLimitBytes) {
+    shrinkCacheByEntriesNum(objCache_.config_.shrinkCacheBy);
+    freeMemBytes = objCache_.config_.getFreeMemBytes();
+  }
 }
 
 template <typename AllocatorT>
