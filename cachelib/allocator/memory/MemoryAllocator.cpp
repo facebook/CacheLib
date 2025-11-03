@@ -19,6 +19,7 @@
 #include <folly/Format.h>
 
 #include <algorithm>
+#include <utility>
 
 using namespace facebook::cachelib;
 
@@ -179,7 +180,8 @@ SlabReleaseContext MemoryAllocator::startSlabRelease(
     SlabReleaseAbortFn shouldAbortFn) {
   auto& pool = memoryPoolManager_.getPoolById(pid);
   return pool.startSlabRelease(victim, receiver, mode, hint,
-                               config_.enableZeroedSlabAllocs, shouldAbortFn);
+                               config_.enableZeroedSlabAllocs,
+                               std::move(shouldAbortFn));
 }
 
 bool MemoryAllocator::isAllocFreed(const SlabReleaseContext& ctx,

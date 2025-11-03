@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "cachelib/allocator/memory/AllocationClass.h"
 #include "cachelib/allocator/memory/SlabAllocator.h"
@@ -491,7 +492,7 @@ SlabReleaseContext MemoryPool::startSlabRelease(
   auto context = victim == Slab::kInvalidClassId
                      ? releaseFromFreeSlabs()
                      : getAllocationClassFor(victim).startSlabRelease(
-                           mode, hint, shouldAbortFn);
+                           mode, hint, std::move(shouldAbortFn));
   context.setReceiver(receiver);
   context.setZeroOnRelease(zeroOnRelease);
 
