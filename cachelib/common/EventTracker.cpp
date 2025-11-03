@@ -20,34 +20,92 @@ namespace facebook {
 namespace cachelib {
 
 void EventTracker::setSamplingRate(uint32_t samplingRate) {
-  samplingRate_ = samplingRate;
+  samplingRate_.store(samplingRate, std::memory_order_relaxed);
 }
 
-EventTracker::EventTracker(Config&& config)
-    : samplingRate_(config.samplingRate), config_(std::move(config)) {
-  validateConfig(config_);
+EventTracker::EventTracker(Config& config)
+    : eventInfoQueue_(config.queueSize),
+      samplingRate_(config.samplingRate),
+      eventSink_(std::move(config.eventSink)),
+      eventInfoCallback_(std::move(config.eventInfoCallback)) {
+  validateConfig();
+  backgroundThread_ = std::thread([this]() { runBackgroundThread(); });
 }
 
-void EventTracker::validateConfig(const Config& config) {
-  if (config.samplingRate < 1) {
+EventTracker::~EventTracker() {
+  eventInfoQueue_.blockingWrite(EventInfo());
+  backgroundThread_.join();
+}
+
+void EventTracker::validateConfig() {
+  // We are allowing samplingRate_ to be 0 if users don't want to enable
+  // it immediately or want to turn it off without having to delete the config
+  // from configerator.
+  // If config.queueSize < 1, then eventInfoQueue_ should throw.
+  if (eventSink_ == nullptr) {
     throw std::invalid_argument(
-        "EventTracker config validation failed: samplingRate must be >= 1");
+        "EventTracker config validation failed: eventSink must not be null");
   }
 }
 
-uint32_t EventTracker::sampleKey(folly::StringPiece key,
-                                 uint32_t samplingRate) {
-  if (samplingRate == 0) {
-    return 0;
+bool EventTracker::sampleKey(folly::StringPiece key) {
+  sampleAttemptCount_.inc();
+  if (samplingRate_ == 0) {
+    return false;
   }
-  return furcHash(key.data(), key.size(), samplingRate) == 0 ? samplingRate : 0;
+  if (furcHash(key.data(), key.size(), samplingRate_) == 0) {
+    sampleSuccessCount_.inc();
+    return true;
+  }
+  return false;
 }
 
-void EventTracker::record(const EventInfo& eventInfo) {
-  if (sampleKey(eventInfo.key, samplingRate_) == 0) {
-    return;
+void EventTracker::runBackgroundThread() {
+  try {
+    while (true) {
+      EventInfo eventInfo;
+      eventInfoQueue_.blockingRead(eventInfo);
+      if (!eventInfo.key.empty()) {
+        eventSink_->recordEvent(eventInfo);
+      } else {
+        // received sentinel event
+        break;
+      }
+    }
+  } catch (const std::exception& e) {
+    XLOG(ERR)
+        << "Exception in EventTracker thread. Stopping EventTracker. Error: "
+        << e.what();
+  } catch (...) {
+    XLOG(ERR)
+        << "Unknown exception in EventTracker thread. Stopping EventTracker.";
   }
-  config_.eventSink->recordEvent(eventInfo);
+}
+
+RecordResult EventTracker::record(const EventInfo& eventInfo) {
+  recordCount_.inc();
+  if (!sampleKey(eventInfo.key)) {
+    return RecordResult::NOT_SAMPLED;
+  }
+  return recordWithoutSampling(eventInfo);
+}
+
+RecordResult EventTracker::recordWithoutSampling(const EventInfo& eventInfo) {
+  addToQueueCount_.inc();
+  bool addedToQueue = eventInfoQueue_.write(eventInfo);
+  if (!addedToQueue) {
+    dropCount_.inc();
+  }
+  return addedToQueue ? RecordResult::QUEUED : RecordResult::QUEUE_FULL;
+}
+
+void EventTracker::getStats(
+    folly::F14FastMap<std::string, uint64_t>& statsMap) const {
+  statsMap["record"] = recordCount_.get();
+  statsMap["sample_attempts"] = sampleAttemptCount_.get();
+  statsMap["sample_success"] = sampleSuccessCount_.get();
+  statsMap["dropped"] = dropCount_.get();
+  statsMap["add_to_queue"] = addToQueueCount_.get();
 }
 
 } // namespace cachelib

@@ -134,8 +134,9 @@ class EventTrackerTest : public ::testing::Test {
                                                    uint32_t samplingRate = 1) {
     EventTracker::Config config;
     config.samplingRate = samplingRate;
+    config.queueSize = 1000;
     config.eventSink = std::make_unique<FileEventSink>(filePath);
-    return std::make_unique<EventTracker>(std::move(config));
+    return std::make_unique<EventTracker>(config);
   }
 
   void recordEvents(EventTracker* tracker,
@@ -153,7 +154,7 @@ class EventTrackerTest : public ::testing::Test {
 
 TEST_F(EventTrackerTest, BasicLogging) {
   const char* key = "sample_k0";
-  const uint32_t numItems = 10;
+  const uint32_t numItems = 500;
 
   auto events = createEvents(key, numItems);
   folly::test::TemporaryFile tmpFile;
@@ -169,17 +170,19 @@ TEST_F(EventTrackerTest, BasicLogging) {
 
 TEST_F(EventTrackerTest, SamplingRateChange) {
   const char* key = "sample_k1";
-  const uint32_t numItems = 100;
+  const uint32_t numItems = 500;
 
   auto events = createEvents(key, numItems);
   folly::test::TemporaryFile tmpFile;
 
-  auto eventTracker = createEventTracker(tmpFile.path().string());
-  recordEvents(eventTracker.get(), events, 0, numItems / 2);
+  {
+    auto eventTracker = createEventTracker(tmpFile.path().string());
+    recordEvents(eventTracker.get(), events, 0, numItems / 2);
 
-  eventTracker->setSamplingRate(3);
+    eventTracker->setSamplingRate(3);
 
-  recordEvents(eventTracker.get(), events, numItems / 2, numItems);
+    recordEvents(eventTracker.get(), events, numItems / 2, numItems);
+  }
 
   auto csvRows = readCsvRows(tmpFile);
 

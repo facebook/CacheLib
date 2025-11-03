@@ -39,6 +39,13 @@ struct EventInfo {
   // Default constructor marked noexcept for LockFreeRingBuffer compatibility
   EventInfo() noexcept = default;
 
+  // Copy and move constructors marked noexcept for folly::MPMCQueue
+  // compatibility
+  EventInfo(const EventInfo&) noexcept = default;
+  EventInfo(EventInfo&&) noexcept = default;
+  EventInfo& operator=(const EventInfo&) noexcept = default;
+  EventInfo& operator=(EventInfo&&) noexcept = default;
+
   folly::StringPiece cacheName; // Non-owning reference to cache name.
   time_t eventTimestamp{0};     // Timestamp of this event.
   AllocatorApiEvent event{AllocatorApiEvent::INVALID};   // Type of the event.
