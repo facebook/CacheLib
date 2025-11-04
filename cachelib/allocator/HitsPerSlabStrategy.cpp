@@ -245,6 +245,13 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
       improvement < config.diffRatio * static_cast<long double>(
                                            victimProjectedDeltaHitsPerSlab)) {
     XLOG(DBG, " Not enough to trigger slab rebalancing");
+    // Update hits on every attempt if enabled, even when no rebalancing occurs.
+    // This ensures consistent time windows for delta hit calculations.
+    if (config.updateHitsOnEveryAttempt) {
+      for (const auto i : poolStats.getClassIds()) {
+        poolState[i].updateHits(poolStats);
+      }
+    }
     return kNoOpContext;
   }
 

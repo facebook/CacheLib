@@ -53,6 +53,10 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
     // Enable victim selection based on free memory
     bool enableVictimByFreeMem{true};
 
+    // Update hits on every rebalancing attempt, even when no rebalancing
+    // occurs. This ensures consistent time windows for delta hit calculations.
+    bool updateHitsOnEveryAttempt{false};
+
     // optionial weight function based on allocation class size
     using WeightFn = std::function<double(
         const PoolId, const ClassId, const PoolStats& pStats)>;
