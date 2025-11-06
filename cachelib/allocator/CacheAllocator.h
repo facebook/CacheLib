@@ -448,7 +448,7 @@ class CacheAllocator : public CacheBase {
   // @throw std::invalid_argument if parent is nullptr
   void addChainedItem(WriteHandle& parent, WriteHandle child);
 
-  // Pop the first chained item assocaited with this parent and unmark this
+  // Pop the first chained item associated with this parent and unmark this
   // parent handle as having chained allocations.
   // The parent handle is not reset (to become a null handle) so that the caller
   // can continue using it as before calling this api.
