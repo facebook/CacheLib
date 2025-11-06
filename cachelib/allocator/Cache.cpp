@@ -615,4 +615,12 @@ void CacheBase::updateAggregatedPoolStats(const std::string& statPrefix) const {
   updatePoolStats(statPrefix, aggregatedStats);
 }
 
+void CacheBase::setEventTracker(EventTracker::Config&& config) {
+  *eventTracker_.wlock() = std::make_shared<EventTracker>(std::move(config));
+}
+
+std::shared_ptr<EventTracker> CacheBase::getEventTracker() const {
+  return *eventTracker_.rlock();
+}
+
 } // namespace facebook::cachelib

@@ -51,7 +51,7 @@ class EventTracker {
     std::function<void(EventInfo&)> eventInfoCallback = nullptr;
   };
 
-  explicit EventTracker(Config& config);
+  explicit EventTracker(Config&& config);
   ~EventTracker();
 
   void setSamplingRate(uint32_t samplingRate);

@@ -136,7 +136,7 @@ class EventTrackerTest : public ::testing::Test {
     config.samplingRate = samplingRate;
     config.queueSize = 1000;
     config.eventSink = std::make_unique<FileEventSink>(filePath);
-    return std::make_unique<EventTracker>(config);
+    return std::make_unique<EventTracker>(std::move(config));
   }
 
   void recordEvents(EventTracker* tracker,

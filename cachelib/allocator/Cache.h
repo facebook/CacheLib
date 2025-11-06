@@ -25,6 +25,7 @@
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/ICompactCache.h"
 #include "cachelib/allocator/memory/MemoryAllocator.h"
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 
@@ -222,6 +223,9 @@ class CacheBase {
   // Whether to aggregate pool stats to reduce ODS counter inflation
   bool aggregatePoolStats_{false};
 
+  std::shared_ptr<EventTracker> getEventTracker() const;
+  void setEventTracker(EventTracker::Config&& config);
+
  protected:
   // move bytes from one pool to another. The source pool should be at least
   // _bytes_ in size.
@@ -362,6 +366,8 @@ class CacheBase {
   std::unordered_map<PoolId, std::shared_ptr<RebalanceStrategy>>
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
+
+  folly::Synchronized<std::shared_ptr<EventTracker>> eventTracker_;
 
   // Enable aggregating pool stats
   void enableAggregatePoolStats() { aggregatePoolStats_ = true; }
