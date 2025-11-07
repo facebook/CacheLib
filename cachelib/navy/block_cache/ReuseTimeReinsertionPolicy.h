@@ -33,6 +33,7 @@ namespace facebook::cachelib::navy {
 namespace tests {
 class ReuseTimeReinsertionPolicyTest_PrevAccessBucketTracking_Test;
 class ReuseTimeReinsertionPolicyTest_ReuseTimeComputation_Test;
+class ReuseTimeReinsertionPolicyTest_ReinsertionThresholdBehavior_Test;
 } // namespace tests
 
 class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
@@ -80,6 +81,8 @@ class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
   friend class tests::ReuseTimeReinsertionPolicyTest_ReuseTimeComputation_Test;
   friend class tests::
       ReuseTimeReinsertionPolicyTest_PrevAccessBucketTracking_Test;
+  friend class tests::
+      ReuseTimeReinsertionPolicyTest_ReinsertionThresholdBehavior_Test;
 };
 
 } // namespace facebook::cachelib::navy

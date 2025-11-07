@@ -66,7 +66,7 @@ bool ReuseTimeReinsertionPolicy::shouldReinsert(folly::StringPiece key,
   }
 
   auto reuseTime = getReuseTime(key);
-  if ((reuseTime == 0) || (reuseTime >= reuseTimeThreshold_)) {
+  if ((reuseTime == 0) || (reuseTime > reuseTimeThreshold_)) {
     return false;
   }
   reinserted_.inc();
@@ -120,6 +120,7 @@ size_t ReuseTimeReinsertionPolicy::getReuseTime(folly::StringPiece key) {
     size_t timeSinceLastAccess = bucketSize_ * (std::get<0>(reuseTuple) + 1);
     size_t latestReuseTime = 0;
     if (std::get<1>(reuseTuple) >= 0) {
+      XCHECK(std::get<0>(reuseTuple) < std::get<1>(reuseTuple));
       latestReuseTime =
           (std::get<1>(reuseTuple) - std::get<0>(reuseTuple)) * bucketSize_;
     }

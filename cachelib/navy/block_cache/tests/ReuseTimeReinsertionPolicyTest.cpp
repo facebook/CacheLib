@@ -18,6 +18,7 @@
 
 #include "cachelib/navy/block_cache/FixedSizeIndex.h"
 #include "cachelib/navy/block_cache/ReuseTimeReinsertionPolicy.h"
+#include "cachelib/navy/common/Hash.h"
 
 namespace facebook::cachelib::navy::tests {
 
@@ -43,15 +44,13 @@ class ReuseTimeReinsertionPolicyTest : public ::testing::Test {
   void advanceTicks() { ticker_->advanceTicks(); }
 
   ReuseTimeReinsertionPolicy createPolicy() {
-    FixedSizeIndex index{kNumChunks, kNumBucketsPerChunkPower,
-                         kNumEntriesPerBucketPower};
-
-    return ReuseTimeReinsertionPolicy(index, kNumBuckets, kBucketSize,
+    return ReuseTimeReinsertionPolicy(index_, kNumBuckets, kBucketSize,
                                       kReuseThreshold, ticker_);
   }
 
- private:
   std::shared_ptr<NumberTicker> ticker_ = std::make_shared<NumberTicker>();
+  FixedSizeIndex index_{kNumChunks, kNumBucketsPerChunkPower,
+                        kNumEntriesPerBucketPower};
 };
 
 TEST_F(ReuseTimeReinsertionPolicyTest, PrevAccessBucketTracking) {
@@ -138,4 +137,28 @@ TEST_F(ReuseTimeReinsertionPolicyTest, ReuseTimeComputation) {
 
   ASSERT_EQ(policy.getReuseTime(kStrKey), 2 * kBucketSize);
 }
+
+TEST_F(ReuseTimeReinsertionPolicyTest, ReinsertionThresholdBehavior) {
+  ReuseTimeReinsertionPolicy policy = createPolicy();
+
+  auto kStrKey = "key1";
+  auto hk = makeHK(kStrKey);
+
+  // Insert the key into the index so shouldReinsert can find it
+  index_.insert(hk.keyHash(), 1, 1);
+
+  policy.onLookup(kStrKey);
+
+  for (uint32_t i = 0; i < kReuseThreshold; ++i) {
+    // Reuse time = i+1, threshold = 5, reinsert!
+    ASSERT_EQ(policy.getReuseTime(kStrKey), (i + 1) * kBucketSize);
+    ASSERT_TRUE(policy.shouldReinsert(kStrKey, ""));
+    advanceTicks();
+  }
+
+  // Reuse time = 6, threshold = 5, do not reinsert!
+  ASSERT_EQ(policy.getReuseTime(kStrKey), 6 * kBucketSize);
+  ASSERT_FALSE(policy.shouldReinsert(kStrKey, ""));
+}
+
 } // namespace facebook::cachelib::navy::tests
