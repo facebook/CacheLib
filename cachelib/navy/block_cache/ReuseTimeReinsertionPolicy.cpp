@@ -70,6 +70,7 @@ bool ReuseTimeReinsertionPolicy::shouldReinsert(folly::StringPiece key,
     return false;
   }
   reinserted_.inc();
+  reinsertedBytes_.add(value.size());
   return true;
 }
 
@@ -87,6 +88,9 @@ void ReuseTimeReinsertionPolicy::getCounters(
           cachelib::util::CounterVisitor::CounterType::RATE);
   visitor("bc_reinsert_reuse_time_success",
           reinserted_.get(),
+          cachelib::util::CounterVisitor::CounterType::RATE);
+  visitor("bc_reinsert_reuse_time_success_bytes",
+          reinsertedBytes_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
   visitor("bc_reinsert_expired",
           expired_.get(),

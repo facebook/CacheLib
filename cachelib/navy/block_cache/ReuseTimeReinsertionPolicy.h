@@ -75,6 +75,7 @@ class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
   AtomicCounter keyNotFound_{0};
   AtomicCounter expired_{0};
   AtomicCounter reinserted_{0};
+  AtomicCounter reinsertedBytes_{0};
   AtomicCounter noPrevAccess_{0};
   mutable util::PercentileStats reuseTimeStats_;
 
