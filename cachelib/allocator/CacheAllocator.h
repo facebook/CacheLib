@@ -151,6 +151,10 @@ class CacheAllocatorTestWrapper;
 class PersistenceCache;
 } // namespace tests
 
+namespace interface {
+class RAMCacheComponent;
+} // namespace interface
+
 // CacheAllocator can provide an interface to make Keyed Allocations(Item) and
 // takes two templated types that control how the allocation is
 // maintained(MMType aka MemoryManagementType) and accessed(AccessType). The
@@ -2408,6 +2412,9 @@ class CacheAllocator : public CacheBase {
   friend class GET_DECORATED_CLASS_NAME(objcache::test,
                                         ObjectCache,
                                         ObjectHandleInvalid);
+
+  // interface
+  friend class interface::RAMCacheComponent;
 };
 
 template <typename CacheTrait>

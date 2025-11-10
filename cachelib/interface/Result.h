@@ -23,7 +23,17 @@ namespace facebook::cachelib::interface {
 struct Error {
   enum class Code {
     INVALID_ARGUMENTS,
+    INVALID_CONFIG,
+
+    // Allocation errors
+    NO_SPACE,
+
+    // Insertion errors
+    INSERT_FAILED,
     ALREADY_INSERTED,
+
+    // Remove errors
+    REMOVE_FAILED,
   };
 
   Error(Code code, std::string error) : code_(code), error_(std::move(error)) {}

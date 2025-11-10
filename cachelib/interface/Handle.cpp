@@ -35,8 +35,11 @@ Handle::Handle(Handle&& other) noexcept
 }
 
 Handle::~Handle() noexcept {
-  if (item_ != nullptr && item_->decrementRefCount()) {
-    folly::coro::blockingWait(cache_->release(*item_, inserted_));
+  if (item_ != nullptr) {
+    if (item_->decrementRefCount()) {
+      folly::coro::blockingWait(cache_->release(*item_, inserted_));
+    }
+    item_ = nullptr;
   }
 }
 

@@ -49,6 +49,10 @@ class MapTest;
 class CacheAllocatorTestWrapper;
 } // namespace tests
 
+namespace interface {
+class RAMCacheItem;
+} // namespace interface
+
 // forward declaration
 template <typename CacheTrait>
 class CacheAllocator;
@@ -457,6 +461,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   friend class facebook::cachelib::tests::CacheAllocatorTestWrapper;
   template <typename K, typename V, typename C>
   friend class Map;
+
+  // interface
+  friend class interface::RAMCacheItem;
 
   // tests
   template <typename AllocatorT>
