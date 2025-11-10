@@ -26,10 +26,10 @@
 #include <iostream>
 #include <memory>
 #include <thread>
-#include <unordered_set>
 
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
+#include "cachelib/cachebench/runner/CacheStressorBase.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Config.h"
 #include "cachelib/cachebench/util/Exceptions.h"
@@ -48,7 +48,7 @@ constexpr uint32_t kNvmCacheWarmUpCheckRate = 1000;
 // schema, which contains a few integers for sanity checks use. So it is invalid
 // to use item.getMemory and item.getSize APIs.
 template <typename Allocator>
-class CacheStressor : public Stressor {
+class CacheStressor : public CacheStressorBase {
  public:
   using CacheT = Cache<Allocator>;
   using Key = typename CacheT::Key;
@@ -60,11 +60,7 @@ class CacheStressor : public Stressor {
   CacheStressor(CacheConfig cacheConfig,
                 StressorConfig config,
                 std::unique_ptr<GeneratorBase>&& generator)
-      : config_(std::move(config)),
-        throughputStats_(config_.numThreads),
-        wg_(std::move(generator)),
-        hardcodedString_(genHardcodedString()),
-        endTime_{std::chrono::system_clock::time_point::max()} {
+      : CacheStressorBase(std::move(config), std::move(generator)) {
     // if either consistency check is enabled or if we want to move
     // items during slab release, we want readers and writers of chained
     // allocs to be synchronized
@@ -73,14 +69,14 @@ class CacheStressor : public Stressor {
         (cacheConfig.moveOnSlabRelease || config_.checkConsistency)) {
       lockEnabled_ = true;
 
-      struct CacheStressSyncObj : public CacheT::SyncObj {
+      struct CacheStressorSyncObj : public CacheT::SyncObj {
         std::unique_lock<folly::SharedMutex> lock;
 
-        CacheStressSyncObj(CacheStressor& s, std::string itemKey)
+        CacheStressorSyncObj(CacheStressor& s, const std::string& itemKey)
             : lock{s.chainedItemAcquireUniqueLock(itemKey)} {}
       };
       movingSync = [this](typename CacheT::Item::Key key) {
-        return std::make_unique<CacheStressSyncObj>(*this, key.str());
+        return std::make_unique<CacheStressorSyncObj>(*this, key.str());
       };
     }
 
@@ -131,21 +127,17 @@ class CacheStressor : public Stressor {
     }
   }
 
-  ~CacheStressor() override { finish(); }
-
   // Start the stress test by spawning the worker threads and waiting for them
   // to finish the stress operations.
   void start() override {
-    {
-      std::lock_guard<std::mutex> l(timeMutex_);
-      startTime_ = std::chrono::system_clock::now();
-    }
+    setStartTime();
     std::cout << folly::sformat("Total {:.2f}M ops to be run",
                                 config_.numThreads * config_.numOps / 1e6)
               << std::endl;
 
     stressWorker_ = std::thread([this] {
       std::vector<std::thread> workers;
+      workers.reserve(config_.numThreads);
 
       for (uint64_t i = 0; i < config_.numThreads; ++i) {
         workers.push_back(
@@ -158,10 +150,7 @@ class CacheStressor : public Stressor {
       for (auto& worker : workers) {
         worker.join();
       }
-      {
-        std::lock_guard<std::mutex> l(timeMutex_);
-        endTime_ = std::chrono::system_clock::now();
-      }
+      setEndTime();
     });
   }
 
@@ -178,60 +167,14 @@ class CacheStressor : public Stressor {
 
   // Block until all stress workers are finished.
   void finish() override {
-    if (stressWorker_.joinable()) {
-      stressWorker_.join();
-    }
-    wg_->markShutdown();
+    CacheStressorBase::finish();
     cache_->clearCache(config_.maxInvalidDestructorCount);
-  }
-
-  // abort the stress run by indicating to the workload generator and
-  // delegating to the base class abort() to stop the test.
-  void abort() override {
-    wg_->markShutdown();
-    Stressor::abort();
   }
 
   // obtain stats from the cache instance.
   Stats getCacheStats() const override { return cache_->getStats(); }
 
-  // obtain aggregated throughput stats for the stress run so far.
-  ThroughputStats aggregateThroughputStats() const override {
-    ThroughputStats res{};
-    for (const auto& stats : throughputStats_) {
-      res += stats;
-    }
-
-    return res;
-  }
-
-  void renderWorkloadGeneratorStats(uint64_t elapsedTimeNs,
-                                    std::ostream& out) const override {
-    wg_->renderStats(elapsedTimeNs, out);
-  }
-
-  void renderWorkloadGeneratorStats(
-      uint64_t elapsedTimeNs, folly::UserCounters& counters) const override {
-    wg_->renderStats(elapsedTimeNs, counters);
-  }
-
-  uint64_t getTestDurationNs() const override {
-    std::lock_guard<std::mutex> l(timeMutex_);
-    return std::chrono::nanoseconds{
-        std::min(std::chrono::system_clock::now(), endTime_) - startTime_}
-        .count();
-  }
-
  private:
-  static std::string genHardcodedString() {
-    const std::string s = "The quick brown fox jumps over the lazy dog. ";
-    std::string val;
-    for (int i = 0; i < 4 * 1024 * 1024; i += s.size()) {
-      val += s;
-    }
-    return val;
-  }
-
   folly::SharedMutex& getLock(Key key) {
     auto bucket = MurmurHash2{}(key.data(), key.size()) % locks_.size();
     return locks_[bucket];
@@ -555,12 +498,6 @@ class CacheStressor : public Stressor {
     }
   }
 
-  const StressorConfig config_; // config for the stress run
-
-  std::vector<ThroughputStats> throughputStats_; // thread local stats
-
-  std::unique_ptr<GeneratorBase> wg_; // workload generator
-
   // locks when using chained item and moving.
   std::array<folly::SharedMutex, 1024> locks_;
 
@@ -570,25 +507,10 @@ class CacheStressor : public Stressor {
   // memorize rng to improve random performance
   folly::ThreadLocalPRNG rng;
 
-  // string used for generating random payloads
-  const std::string hardcodedString_;
-
   std::unique_ptr<CacheT> cache_;
 
   // Ticker that syncs the time according to trace timestamp.
   std::shared_ptr<TimeStampTicker> ticker_;
-
-  // main stressor thread
-  std::thread stressWorker_;
-
-  // mutex to protect reading the timestamps.
-  mutable std::mutex timeMutex_;
-
-  // start time for the stress test
-  std::chrono::time_point<std::chrono::system_clock> startTime_;
-
-  // time when benchmark finished. This is set once the benchmark finishes
-  std::chrono::time_point<std::chrono::system_clock> endTime_;
 
   // Token bucket used to limit the operations per second.
   std::unique_ptr<folly::BasicTokenBucket<>> rateLimiter_;
