@@ -1042,46 +1042,7 @@ class CacheAllocator : public CacheBase {
                              std::chrono::seconds ccacheInterval,
                              std::shared_ptr<PoolOptimizeStrategy> strategy,
                              unsigned int ccacheStepSizePercent);
-  // start memory monitor
-  // @param memMonitorMode                  memory monitor mode
-  // @param interval                        the period this worker fires
-  // @param memAdvisePercentPerIter         Percentage of
-  //                                        upperLimitGB-lowerLimitGB to be
-  //                                        advised every poll period. This
-  //                                        governs the rate of advise
-  // @param memReclaimPercentPerIter        Percentage of
-  //                                        upperLimitGB-lowerLimitGB to be
-  //                                        reclaimed every poll period. This
-  //                                        governs the rate of reclaim
-  // @param memLowerLimit                   The lower limit of resident memory
-  //                                        in GBytes
-  //                                        that triggers reclaiming of
-  //                                        previously advised away of memory
-  //                                        from cache
-  // @param memUpperLimit                   The upper limit of resident memory
-  //                                         in GBytes
-  //                                        that triggers advising of memory
-  //                                        from cache
-  // @param memMaxAdvisePercent             Maximum percentage of item cache
-  //                                        limit that
-  //                                        can be advised away before advising
-  //                                        is disabled leading to a probable
-  //                                        OOM.
-  // @param strategy                        strategy to find an allocation class
-  //                                        to release slab from
-  // @param reclaimRateLimitWindowSecs      specifies window in seconds over
-  //                                        which free/resident memory values
-  //                                        are tracked to determine rate of
-  //                                        change to rate limit reclaim
-  bool startNewMemMonitor(MemoryMonitor::Mode memMonitorMode,
-                          std::chrono::milliseconds interval,
-                          unsigned int memAdvisePercentPerIter,
-                          unsigned int memReclaimPercentPerIter,
-                          unsigned int memLowerLimitGB,
-                          unsigned int memUpperLimitGB,
-                          unsigned int memMaxAdvisePercent,
-                          std::shared_ptr<RebalanceStrategy> strategy,
-                          std::chrono::seconds reclaimRateLimitWindowSecs);
+
   // start memory monitor
   // @param interval                        the period this worker fires
   // @param config                          memory monitoring config
@@ -1164,14 +1125,11 @@ class CacheAllocator : public CacheBase {
   }
 
   // calculate the number of slabs to be advised/reclaimed in each pool
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override final {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise) override final {
     auto regularPoolIds = getRegularPoolIds();
-    return allocator_->calcNumSlabsToAdviseReclaim(regularPoolIds);
-  }
-
-  // update number of slabs to advise in the cache
-  void updateNumSlabsToAdvise(int32_t numSlabsToAdvise) override final {
-    allocator_->updateNumSlabsToAdvise(numSlabsToAdvise);
+    return allocator_->calcNumSlabsToAdviseReclaim(numSlabsToAdvise,
+                                                   regularPoolIds);
   }
 
   // returns a valid PoolId corresponding to the name or kInvalidPoolId if the
@@ -5922,7 +5880,7 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
   if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
-                      strategy)) {
+                      strategy, allocator_->getNumSlabsToAdvise())) {
     return false;
   }
 

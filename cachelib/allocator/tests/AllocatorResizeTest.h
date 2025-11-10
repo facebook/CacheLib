@@ -532,7 +532,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 10 * Slab::kSize);
 
-      alloc.updateNumSlabsToAdvise(4);
+      auto& memMonitor = *alloc.memMonitor_;
+      memMonitor.updateNumSlabsToAdvise(4);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
@@ -619,7 +620,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(alloc.getPool(poolId2).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId2).getCurrentAllocSize(), 24 * Slab::kSize);
 
-      alloc.updateNumSlabsToAdvise(24);
+      auto& memMonitor = *alloc.memMonitor_;
+      memMonitor.updateNumSlabsToAdvise(24);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
@@ -728,7 +730,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), 2 * numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 10 * Slab::kSize);
 
-      alloc.updateNumSlabsToAdvise(8);
+      auto& memMonitor = *alloc.memMonitor_;
+      memMonitor.updateNumSlabsToAdvise(8);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
@@ -850,7 +853,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(alloc.getPool(poolId3).getPoolSize(), numBytes);
       ASSERT_EQ(alloc.getPool(poolId3).getCurrentAllocSize(), 40 * Slab::kSize);
 
-      alloc.updateNumSlabsToAdvise(12);
+      auto& memMonitor = *alloc.memMonitor_;
+      memMonitor.updateNumSlabsToAdvise(12);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       ASSERT_EQ(alloc.getPool(poolId1).getPoolSize(), numBytes);
@@ -1047,7 +1051,8 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         ASSERT_EQ(alloc.getPool(poolIds[i]).getCurrentAllocSize(),
                   slabsPerPool * Slab::kSize);
       }
-      alloc.updateNumSlabsToAdvise(numPools * slabsPerPool / 2);
+      auto& memMonitor = *alloc.memMonitor_;
+      memMonitor.updateNumSlabsToAdvise(numPools * slabsPerPool / 2);
       std::this_thread::sleep_for(std::chrono::seconds{kWaitForMemMonitorTime});
 
       for (int i = 0; i < numPools; i++) {

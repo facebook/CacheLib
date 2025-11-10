@@ -177,17 +177,11 @@ class ObjectCacheBase : public CacheBase {
     throw std::runtime_error("Unsupported function in ObjectCacheBase!");
   }
 
-  // update the number of slabs to be advised
-  //
-  // not supported in object cache
-  void updateNumSlabsToAdvise(int32_t) override {
-    throw std::runtime_error("Unsupported function in ObjectCacheBase!");
-  }
-
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
   // not supported in object cache
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* numSlabsToAdvise */) override {
     throw std::runtime_error("Unsupported function in ObjectCacheBase!");
     return {};
   }

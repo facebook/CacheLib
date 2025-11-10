@@ -738,27 +738,24 @@ class MemoryAllocator {
     return alignedSize;
   }
 
+  // calculate total number of slabs that can be advised away across all pools
+  size_t getNumSlabsToAdvise() const noexcept {
+    return memoryPoolManager_.getNumSlabsToAdvise();
+  }
+
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
-  // @param poolIds    list of pools to process
+  // @param numSlabsToAdvise  total number of slabs to advise across all pools
+  // @param poolIds           list of pools to process
   //
   // @return   PoolAdviseReclaimData containing poolId,
   //           the number of slabs to advise or number of slabs to reclaim
   //           and flag indicating if the number is for advising-away or
   //           reclaiming
   PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
-      const std::set<PoolId>& poolIds) {
-    return memoryPoolManager_.calcNumSlabsToAdviseReclaim(poolIds);
-  }
-
-  // update number of slabs to advise in the cache
-  //
-  // @param numSlabs      the number of slabs to advise are updated
-  //                      (incremented or decremented) to reflect the
-  //                      new total number of slabs to be advised in the
-  //                      cache
-  void updateNumSlabsToAdvise(int32_t numSlabs) {
-    memoryPoolManager_.updateNumSlabsToAdvise(numSlabs);
+      size_t numSlabsToAdvise, const std::set<PoolId>& poolIds) {
+    return memoryPoolManager_.calcNumSlabsToAdviseReclaim(numSlabsToAdvise,
+                                                          poolIds);
   }
 
   // return the minimum allocation size

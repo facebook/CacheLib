@@ -184,13 +184,17 @@ class MemoryMonitor : public PeriodicWorker {
   // away), until the resident memory usage is above the lowerLimitGB,
   // percentReclaimPerIteration of (upperLimitGB - lowerLimitGB) at a time.
   //
-  // @param cache                Cachelib instance
-  // @param config               Memory monitor config
-  // @param strategy             Strategy to use to determine the allocation
-  //                             class in pool to steal slabs from, for advising
+  // @param cache                    Cachelib instance
+  // @param config                   Memory monitor config
+  // @param strategy                 Strategy to use to determine the
+  //                                 allocation class in pool to steal slabs
+  //                                 from, for advising
+  // @param initialNumSlabsToAdvise  initial number of slabs to advise away,
+  //                                 usually calculated by memory pool manager
   MemoryMonitor(CacheBase& cache,
                 const Config& config,
-                std::shared_ptr<RebalanceStrategy> strategy);
+                std::shared_ptr<RebalanceStrategy> strategy,
+                size_t initialNumSlabsToAdvise);
 
   ~MemoryMonitor() override;
 
@@ -214,6 +218,19 @@ class MemoryMonitor : public PeriodicWorker {
   }
 
  private:
+  // updates the number of slabs to be advised by numSlabs. This would
+  // either increment (to advise away more slabs) or decrement (to reclaim
+  // some of the previously advised away slabs) the numSlabsToAdvise_ by
+  // numSlabs.
+  //
+  // @param numSlabs   number of slabs to add-to/subtract-from numSlabToAdvise_
+  //
+  // @throw std::invalid_argument if numSlabs is negative and its absolute
+  //                              value is more than numSlabsToAdvise_
+  //                              (ie total slabs to be reclaimed cannot be
+  //                               more than total slabs advised away)
+  void updateNumSlabsToAdvise(int32_t numSlabs);
+
   // check free memory and advise/reclaim if necessary
   void checkFreeMemory();
 
@@ -259,6 +276,12 @@ class MemoryMonitor : public PeriodicWorker {
 
   // slab release stats for memory monitor.
   ReleaseStats stats_{};
+
+  // Number of slabs to advise away. This is target number of slabs to be
+  // advised across all pools. Note that this needs to be std::atomic since
+  // there can be a race condition where one worker is stopping and another is
+  // starting.
+  std::atomic_size_t numSlabsToAdvise_;
 
   // number of slabs released as a part of resizing pools.
   std::atomic<unsigned int> slabsReleased_{0};

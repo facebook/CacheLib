@@ -268,11 +268,9 @@ class CacheBase {
                            SlabReleaseMode mode,
                            const void* hint = nullptr) = 0;
 
-  // update the number of slabs to be advised
-  virtual void updateNumSlabsToAdvise(int32_t numSlabsToAdvise) = 0;
-
   // calculate the number of slabs to be advised/reclaimed in each pool
-  virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() = 0;
+  virtual PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t numSlabsToAdvise) = 0;
 
   // Releasing a slab from this allocation class id and pool id. The release
   // could be for a pool resizing or allocation class rebalancing.

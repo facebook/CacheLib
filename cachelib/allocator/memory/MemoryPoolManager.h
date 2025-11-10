@@ -152,29 +152,8 @@ class MemoryPoolManager {
     return getRemainingSizeLocked();
   }
 
-  // returns the number of slabs to be advised
-  uint64_t getNumSlabsToAdvise() const { return numSlabsToAdvise_; }
-
-  // updates the number of slabs to be advised by numSlabs. This would
-  // either increment (to advise away more slabs) or decrement (to reclaim
-  // some of the previously advised away slabs) the numSlabsToAdvise_ by
-  // numSlabs.
-  //
-  // @param numSlabs   number of slabs to add-to/subtract-from numSlabToAdvise_
-  //
-  // @throw std::invalid_argument if numSlabs is negative and its absolute
-  //                              value is more than numSlabsToAdvise_
-  //                              (ie total slabs to be reclaimed cannot be
-  //                               more than total slabs advised away)
-  void updateNumSlabsToAdvise(int32_t numSlabs) {
-    if (numSlabs < 0 && static_cast<uint64_t>(-numSlabs) > numSlabsToAdvise_) {
-      throw std::invalid_argument(
-          folly::sformat("Invalid numSlabs {} to update  numSlabsToAdvise {}",
-                         numSlabs,
-                         numSlabsToAdvise_.load()));
-    }
-    numSlabsToAdvise_ += numSlabs;
-  }
+  // calculate total number of slabs that can be advised away across all pools
+  size_t getNumSlabsToAdvise() const noexcept;
 
   // return total memory currently advised away
   size_t getAdvisedMemorySize() const noexcept {
@@ -194,7 +173,7 @@ class MemoryPoolManager {
   //           the number of slabs to advise or number of slabs to reclaim
   //           (indicated by negative number)
   PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
-      const std::set<PoolId>& poolIds) const;
+      uint64_t numSlabsToAdvise, const std::set<PoolId>& poolIds) const;
 
  private:
   // obtain the remaining size in bytes that is not reserved by taking into
@@ -214,6 +193,7 @@ class MemoryPoolManager {
   //                          while we are determining the number of slabs to
   //                          advise
   std::unordered_map<PoolId, uint64_t> getTargetSlabsToAdvise(
+      uint64_t numSlabsToAdvise,
       std::set<PoolId> poolIds,
       uint64_t totalSlabsInUse,
       std::unordered_map<PoolId, size_t>& numSlabsInUse) const;
@@ -234,12 +214,6 @@ class MemoryPoolManager {
 
   // slab allocator for the pools
   SlabAllocator& slabAlloc_;
-
-  // Number of slabs to advise away
-  // This is target number of slabs to be advised across all pools.
-  // This would be same as sum of current number of advised away slabs in
-  // each pool after a memory monitor iteration
-  std::atomic<uint64_t> numSlabsToAdvise_{0};
 
   // Allow access to private members by unit tests
   friend class facebook::cachelib::tests::AllocTestBase;

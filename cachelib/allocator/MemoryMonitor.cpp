@@ -27,10 +27,12 @@ constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
 MemoryMonitor::MemoryMonitor(CacheBase& cache,
                              const Config& config,
-                             std::shared_ptr<RebalanceStrategy> strategy)
+                             std::shared_ptr<RebalanceStrategy> strategy,
+                             uint64_t initialNumSlabsToAdvise)
     : cache_(cache),
       mode_(config.mode),
       strategy_(std::move(strategy)),
+      numSlabsToAdvise_(initialNumSlabsToAdvise),
       percentAdvisePerIteration_(config.maxAdvisePercentPerIter),
       percentReclaimPerIteration_(config.maxReclaimPercentPerIter),
       lowerLimit_(config.lowerLimitGB * kGBytes),
@@ -74,6 +76,25 @@ void MemoryMonitor::work() {
   default:
     throw std::runtime_error("Unsupported memory monitoring mode");
   }
+}
+
+void MemoryMonitor::updateNumSlabsToAdvise(int32_t numSlabs) {
+  auto curNumSlabsToAdvise = numSlabsToAdvise_.load(std::memory_order_acquire);
+  do {
+    if (numSlabs < 0 &&
+        static_cast<uint64_t>(-numSlabs) > curNumSlabsToAdvise) {
+      throw std::invalid_argument(
+          folly::sformat("Invalid numSlabs {} to update numSlabsToAdvise {}",
+                         numSlabs, curNumSlabsToAdvise));
+    }
+
+    auto newNumSlabsToAdvise = curNumSlabsToAdvise + numSlabs;
+    if (numSlabsToAdvise_.compare_exchange_weak(curNumSlabsToAdvise,
+                                                newNumSlabsToAdvise,
+                                                std::memory_order_acq_rel)) {
+      break;
+    }
+  } while (true);
 }
 
 void MemoryMonitor::checkFreeMemory() {
@@ -147,7 +168,8 @@ size_t MemoryMonitor::getSlabsInUse() const noexcept {
 }
 
 void MemoryMonitor::checkPoolsAndAdviseReclaim() {
-  auto results = cache_.calcNumSlabsToAdviseReclaim();
+  auto results = cache_.calcNumSlabsToAdviseReclaim(
+      numSlabsToAdvise_.load(std::memory_order_acquire));
   if (results.poolAdviseReclaimMap.empty()) {
     return;
   }
@@ -203,7 +225,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
     }
     return;
   } else {
-    XDCHECK(!results.advise);
     // Reclaim slabs, if marked for reclaim
     for (auto& result : results.poolAdviseReclaimMap) {
       PoolId poolId = result.first;
@@ -247,7 +268,7 @@ void MemoryMonitor::adviseAwaySlabs() {
                              percentAdvisePerIteration_ / 100;
   XLOGF(DBG, "Advising away {} slabs to free {} bytes", slabsToAdvise,
         slabsToAdvise * Slab::kSize);
-  cache_.updateNumSlabsToAdvise(slabsToAdvise);
+  updateNumSlabsToAdvise(slabsToAdvise);
 }
 
 void MemoryMonitor::reclaimSlabs() {
@@ -278,7 +299,7 @@ void MemoryMonitor::reclaimSlabs() {
   }
   XLOGF(DBG, "Reclaiming {} slabs to increase cache size by {} bytes",
         slabsToReclaim, slabsToReclaim * Slab::kSize);
-  cache_.updateNumSlabsToAdvise(-slabsToReclaim);
+  updateNumSlabsToAdvise(-slabsToReclaim);
 }
 
 RateLimiter::RateLimiter(bool detectIncrease)

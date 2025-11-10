@@ -51,13 +51,8 @@ MemoryPoolManager::MemoryPoolManager(
         "Memory Pool Manager can not be restored,"
         "pools size is not equal to nextPoolId");
   }
-  size_t slabsAdvised = 0;
   for (size_t i = 0; i < object.pools()->size(); ++i) {
     pools_[i] = std::make_unique<MemoryPool>(object.pools()[i], slabAlloc_);
-    slabsAdvised += pools_[i]->getNumSlabsAdvised();
-  }
-  for (const auto& kv : *object.poolsByName()) {
-    poolsByName_.insert(kv);
   }
 
   // Number items in the poolsByName map must be same as nextPoolId, if not
@@ -67,13 +62,28 @@ MemoryPoolManager::MemoryPoolManager(
         "Memory Pool Manager can not be restored,"
         "poolsByName size is not equal to nextPoolId");
   }
-  numSlabsToAdvise_ = slabAlloc_.numSlabsReclaimable();
-  if (slabsAdvised != numSlabsToAdvise_) {
+  for (const auto& kv : *object.poolsByName()) {
+    poolsByName_.insert(kv);
+  }
+
+  auto slabsAdvised = getNumSlabsToAdvise();
+  auto slabAllocAdvised = slabAlloc_.numSlabsReclaimable();
+  if (slabsAdvised != slabAllocAdvised) {
     throw std::logic_error(folly::sformat(
         "Aggregate of advised slabs in pools {} is not same as SlabAllocator"
         " number of slabs advised {}",
-        slabsAdvised, numSlabsToAdvise_.load()));
+        slabsAdvised, slabAllocAdvised));
   }
+}
+
+size_t MemoryPoolManager::getNumSlabsToAdvise() const noexcept {
+  size_t slabsAdvised = 0;
+  auto maxPools = nextPoolId_.load(std::memory_order_acquire);
+  for (auto i = 0; i < maxPools; i++) {
+    XDCHECK_NE(pools_[i], nullptr);
+    slabsAdvised += pools_[i]->getNumSlabsAdvised();
+  }
+  return slabsAdvised;
 }
 
 size_t MemoryPoolManager::getRemainingSizeLocked() const noexcept {
@@ -244,32 +254,32 @@ std::set<PoolId> MemoryPoolManager::getPoolsOverLimit() const {
 // any remainder is addressed afterwards. The goal is to make the sum of
 // target slabs to advise equal to numSlabsToAdvise_
 std::unordered_map<PoolId, uint64_t> MemoryPoolManager::getTargetSlabsToAdvise(
+    uint64_t numSlabsToAdvise,
     std::set<PoolId> poolIds,
     uint64_t totalSlabsInUse,
     std::unordered_map<PoolId, size_t>& numSlabsInUse) const {
   uint64_t sum = 0;
   std::unordered_map<PoolId, uint64_t> targets;
   for (auto id : poolIds) {
-    targets[id] = numSlabsInUse[id] * numSlabsToAdvise_ / totalSlabsInUse;
+    targets[id] = numSlabsInUse[id] * numSlabsToAdvise / totalSlabsInUse;
     sum += targets[id];
   }
-  for (auto it = poolIds.begin();
-       it != poolIds.end() && sum < numSlabsToAdvise_;
+  for (auto it = poolIds.begin(); it != poolIds.end() && sum < numSlabsToAdvise;
        ++it) {
     auto id = *it;
-    if (((targets[id] * totalSlabsInUse) / numSlabsToAdvise_) <
+    if (((targets[id] * totalSlabsInUse) / numSlabsToAdvise) <
         numSlabsInUse[id]) {
       targets[id]++;
       sum++;
     }
   }
-  XDCHECK_EQ(sum, numSlabsToAdvise_);
+  XDCHECK_EQ(sum, numSlabsToAdvise);
 
   return targets;
 }
 
 PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
-    const std::set<PoolId>& poolIds) const {
+    size_t numSlabsToAdvise, const std::set<PoolId>& poolIds) const {
   std::unique_lock l(lock_);
   uint64_t totalSlabsAdvised = 0;
   uint64_t totalSlabsInUse = 0;
@@ -285,12 +295,12 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
   results.advise = false;
   // No slabs in use or no slabs advised and no slabs to advise return empty map
   if (totalSlabsInUse == 0 ||
-      (numSlabsToAdvise_ == 0 && totalSlabsAdvised == 0)) {
+      (numSlabsToAdvise == 0 && totalSlabsAdvised == 0)) {
     return results;
   }
-  auto poolAdviseTargets =
-      getTargetSlabsToAdvise(poolIds, totalSlabsInUse, numSlabsInUse);
-  if (numSlabsToAdvise_ == totalSlabsAdvised) {
+  auto poolAdviseTargets = getTargetSlabsToAdvise(
+      numSlabsToAdvise, poolIds, totalSlabsInUse, numSlabsInUse);
+  if (numSlabsToAdvise == totalSlabsAdvised) {
     // No need to advise-away or reclaim any new slabs.
     // Just rebalance the advised away slabs in each pool
     for (auto& target : poolAdviseTargets) {
@@ -299,9 +309,9 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
     return results;
   }
 
-  if (numSlabsToAdvise_ > totalSlabsAdvised) {
+  if (numSlabsToAdvise > totalSlabsAdvised) {
     results.advise = true;
-    uint64_t diff = numSlabsToAdvise_ - totalSlabsAdvised;
+    uint64_t diff = numSlabsToAdvise - totalSlabsAdvised;
     for (auto id : poolIds) {
       if (diff == 0) {
         break;
@@ -317,7 +327,7 @@ PoolAdviseReclaimData MemoryPoolManager::calcNumSlabsToAdviseReclaim(
       diff -= poolSlabsToAdvise;
     }
   } else {
-    uint64_t diff = totalSlabsAdvised - numSlabsToAdvise_;
+    uint64_t diff = totalSlabsAdvised - numSlabsToAdvise;
     for (auto id : poolIds) {
       if (diff == 0) {
         break;

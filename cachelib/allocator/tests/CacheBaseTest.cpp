@@ -71,9 +71,9 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
   }
 
   util::StatsMap getNvmCacheStatsMap() const override { return {}; }
-  void updateNumSlabsToAdvise(int32_t /* unused */) override final {}
 
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override final {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* unused */) override final {
     return {};
   }
 
