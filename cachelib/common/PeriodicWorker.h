@@ -114,7 +114,7 @@ class PeriodicWorker {
   virtual void work() = 0;
 
   /* Worker thread which will periodically do the work */
-  std::unique_ptr<std::thread> workerThread_;
+  std::thread workerThread_;
 
   /* Sleep interval for the worker thread in milliseconds */
   std::atomic<uint64_t> interval_{0};
