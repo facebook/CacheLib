@@ -115,11 +115,11 @@ struct CacheConfig : public JSONConfig {
   uint64_t numPools{1};
   std::vector<double> poolSizes{1.0};
 
-  // uses a user specified file for caching. If the path specified is a file
-  // or raw device, then navy uses that directly. If the path specificied is a
-  // directory, we will create a file inside with appropriate size . If a
-  // directory is specified by user, cachebench cleans it up at exit. If it is
-  // a file, cachebench preserves the file upon exit. User can also specify a
+  // uses a user specified file for caching. If the path specified is a file or
+  // raw device, then navy uses that directly. If the path specified is a
+  // directory, we will create a file inside with appropriate size. If a
+  // directory is specified by user, cachebench cleans it up at exit. If it is a
+  // file, cachebench preserves the file upon exit. User can also specify a
   // number of devices. Cachelib's flash cache engine (Navy) will use them in a
   // raid0 fashion
   std::vector<std::string> nvmCachePaths{};
