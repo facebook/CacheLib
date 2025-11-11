@@ -189,6 +189,9 @@ class Region {
   // Checks whether the region's buffer is cleaned up.
   bool isCleanedupLocked() const { return (flags_ & kCleanedup) != 0; }
 
+  // Check if this region is being reclaimed
+  bool isBeingReclaimed() const { return (flags_ & kBeingReclaimed) != 0; }
+
   // Returns the number of active writers using the region.
   uint32_t getActiveWriters() const {
     std::lock_guard l{lock_};

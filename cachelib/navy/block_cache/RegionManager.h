@@ -355,6 +355,7 @@ class RegionManager {
   mutable AtomicCounter reclaimCount_;
   mutable AtomicCounter reclaimTimeCountUs_;
   mutable AtomicCounter evictedCount_;
+  mutable AtomicCounter readDuringReclaimCount_;
 
   // Stats to keep track of inmem buffer usage
   mutable AtomicCounter numInMemBufActive_;

@@ -588,6 +588,10 @@ Buffer RegionManager::read(const RegionDescriptor& desc,
   auto& region = getRegion(rid);
   // Do not expect to read beyond what was already written
   XDCHECK_LE(addr.offset() + size, region.getLastEntryEndOffset());
+  if (region.isBeingReclaimed()) {
+    readDuringReclaimCount_.inc();
+  }
+
   if (!desc.isPhysReadMode()) {
     auto buffer = Buffer(size);
     XDCHECK(region.hasBuffer());
@@ -617,6 +621,8 @@ void RegionManager::getCounters(const CounterVisitor& visitor) const {
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_region_reclaim_errors",
           reclaimRegionErrors_.get(),
+          CounterVisitor::CounterType::RATE);
+  visitor("navy_bc_read_during_reclaim", readDuringReclaimCount_.get(),
           CounterVisitor::CounterType::RATE);
   visitor("navy_bc_evictions",
           evictedCount_.get(),

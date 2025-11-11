@@ -1665,6 +1665,7 @@ TEST_F(NvmCacheTest, NavyStats) {
   EXPECT_TRUE(cs("navy_bc_reclaim"));
   EXPECT_TRUE(cs("navy_bc_reclaim_time"));
   EXPECT_TRUE(cs("navy_bc_region_reclaim_errors"));
+  EXPECT_TRUE(cs("navy_bc_read_during_reclaim"));
   EXPECT_TRUE(cs("navy_bc_evictions"));
   EXPECT_TRUE(cs("navy_bc_evictions_expired"));
   EXPECT_TRUE(cs("navy_bc_physical_written"));
