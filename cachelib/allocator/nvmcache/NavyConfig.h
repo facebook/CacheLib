@@ -720,7 +720,7 @@ class NavyConfig {
   const RandomAPConfig& randomAdmPolicy() const { return randomAPConfig_; }
 
   // ============ Device settings =============
-  uint64_t getBlockSize() const { return blockSize_; }
+  uint32_t getBlockSize() const { return blockSize_; }
   bool getExclusiveOwner() const { return isExclusiveOwner_; }
   const std::string& getFileName() const;
   const std::vector<std::string>& getRaidPaths() const;
@@ -778,7 +778,7 @@ class NavyConfig {
 
   // ============ Device settings =============
   // Set the device block size, i.e., minimum unit of IO
-  void setBlockSize(uint64_t blockSize) noexcept { blockSize_ = blockSize; }
+  void setBlockSize(uint32_t blockSize) noexcept { blockSize_ = blockSize; }
   // Set the NVMe FDP Device data placement mode in the Cachelib
   void setEnableFDP(bool enable) noexcept { enableFDP_ = enable; }
   // If true, Navy will only start if it's the sole owner of the file.
@@ -910,7 +910,7 @@ class NavyConfig {
 
   // ============ Device settings =============
   // Navy specific device block size in bytes.
-  uint64_t blockSize_{4096};
+  uint32_t blockSize_{4096};
   // The maximum key size (in bytes) for items cached in Navy.
   uint32_t maxKeySize_{255};
   // If true, Navy will only start if it's the sole owner of the file.
