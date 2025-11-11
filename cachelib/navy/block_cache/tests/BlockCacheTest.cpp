@@ -927,30 +927,19 @@ TEST(BlockCache, StackAllocReclaim) {
   }
 }
 
-TEST(BlockCache, ReadRegionDuringEviction) {
+TEST(BlockCache, ReadRegionDuringReclaim) {
   std::vector<CacheEntry> log;
   SeqPoints sp;
 
   std::vector<uint32_t> hits(4);
   auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
   auto device = std::make_unique<NiceMock<MockDevice>>(kDeviceSize, 1024);
-  // Region 0 eviction
-  EXPECT_CALL(*device, readImpl(0, 16 * 1024, _));
-  // Lookup log[2]
-  EXPECT_CALL(*device, readImpl(8192, 4096, _)).Times(2);
-  // Lookup log[1]
-  EXPECT_CALL(*device, readImpl(4096, 4096, _))
-      .WillOnce(Invoke([md = device.get(), &sp](uint64_t offset, uint32_t size,
-                                                void* buffer) {
-        sp.reached(0);
-        sp.wait(1);
-        return md->getRealDeviceRef().read(offset, size, buffer);
-      }));
 
   auto ex = std::make_unique<MockJobScheduler>();
   auto exPtr = ex.get();
   // Huge size class to fill a region in 4 allocs
   auto config = makeConfig(*ex, std::move(policy), *device);
+  config.numInMemBuffers = 2;
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 
@@ -958,8 +947,9 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   // reclaimed to be the free region. First three regions will be tracked.
   BufferGen bg;
   for (size_t j = 0; j < 3; j++) {
-    for (size_t i = 0; i < 4; i++) {
-      CacheEntry e{bg.gen(8), bg.gen(3800)};
+    // Each region will be filled with 32 items
+    for (size_t i = 0; i < 32; i++) {
+      CacheEntry e{bg.gen(8), bg.gen(256)};
       driver->insertAsync(e.key(), e.value(),
                           [](Status status, HashedKey /*key */) {
                             EXPECT_EQ(Status::Ok, status);
@@ -971,28 +961,40 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   }
   driver->flush();
 
-  std::thread lookupThread([&driver, &log] {
-    Buffer value;
-    // Doesn't block, only checks
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-    EXPECT_EQ(log[2].value(), value.view());
-    // Blocks
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(log[1].value(), value.view());
-  });
+  bool reclaimFinished = false;
 
-  sp.wait(0);
+  std::thread lookupThread([&driver, &log, &sp, &reclaimFinished] {
+    Buffer value;
+    // Wait until the reclaim gets begun
+    sp.wait(0);
+
+    do {
+      for (auto i = 31; i > 0; i--) {
+        auto res = driver->lookup(log[i].key(), value);
+        // lookup can return either Ok or NotFound since ongoing reclaim may
+        // discard the item
+        EXPECT_TRUE(res == Status::Ok || res == Status::NotFound);
+        if (res == Status::Ok) {
+          EXPECT_EQ(log[i].value(), value.view());
+        }
+      }
+      // Keep reading until the region reclaim is done
+    } while (!reclaimFinished);
+  });
 
   ENABLE_INJECT_PAUSE_IN_SCOPE();
 
   injectPauseSet("pause_reclaim_begin");
   injectPauseSet("pause_reclaim_done");
+  injectPauseSet("pause_do_eviction_start");
 
   // Send insert. Will schedule a reclaim job. We will also track
   // the third region as it had been filled up. We will also expect
   // to evict the first region eventually for the reclaim.
-  CacheEntry e{bg.gen(8), bg.gen(1000)};
+  CacheEntry e{bg.gen(8), bg.gen(256)};
   EXPECT_EQ(0, exPtr->getQueueSize());
+  // Start reading from lookupThread
+  sp.reached(0);
   driver->insertAsync(
       e.key(), e.value(),
       [](Status status, HashedKey /*key */) { EXPECT_EQ(Status::Ok, status); });
@@ -1001,47 +1003,15 @@ TEST(BlockCache, ReadRegionDuringEviction) {
   EXPECT_TRUE(exPtr->runFirstIf("insert"));
 
   // The reclaim should have been started
-  EXPECT_TRUE(injectPauseWait("pause_reclaim_begin", 1 /* numThreads */,
-                              false /* wakeup */));
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_begin"));
+  EXPECT_TRUE(injectPauseWait("pause_do_eviction_start"));
+  EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
+  reclaimFinished = true;
 
-  Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-  EXPECT_EQ(log[2].value(), value.view());
-
-  // Now, let the eviction thread goes; this would block access to the region
-  // but reclaim cannot be done as there is still an active reader outstanding.
-  injectPauseClear("pause_reclaim_begin");
-  // Wait for 5s to confirm the reclaim has not been done
-  EXPECT_FALSE(injectPauseWait("pause_reclaim_done", 1, false, 5000));
-
-  std::thread lookupThread2([&driver, &log] {
-    Buffer value2;
-    // Can't access region 0: blocked. Will retry until unblocked.
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value2));
-  });
-
-  // To make sure that the reason for key not found is access block, but not
-  // evicted from the index, remove it manually and expect it was found.
-  EXPECT_EQ(Status::Ok, driver->remove(log[2].key()));
-
-  // Reclaim still fails as the last reader is still outstanding; wait for 5s
-  EXPECT_FALSE(injectPauseWait("pause_reclaim_done", 1, false, 5000));
-
-  // Finish read and let evict region 0 entries
-  sp.reached(1);
-
-  // Reclaim should have been completed now
-  EXPECT_TRUE(injectPauseWait("pause_reclaim_done", 1, true, 5000));
+  lookupThread.join();
 
   finishAllJobs(*exPtr);
   driver->drain();
-  EXPECT_EQ(Status::NotFound, driver->remove(log[1].key()));
-  EXPECT_EQ(Status::NotFound, driver->remove(log[2].key()));
-
-  lookupThread.join();
-  lookupThread2.join();
-
-  driver->flush();
 }
 
 TEST(BlockCache, DeviceFailure) {

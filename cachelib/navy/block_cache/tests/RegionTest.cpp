@@ -53,6 +53,20 @@ TEST(Region, WriteAndBlock) {
   EXPECT_EQ(desc3.status(), OpenStatus::Ready);
 }
 
+TEST(Region, AllowReadDuringReclaim) {
+  Region r{RegionId(0), 1024};
+
+  auto desc = r.openForRead();
+  EXPECT_EQ(desc.status(), OpenStatus::Ready);
+
+  EXPECT_TRUE(r.readyForReclaim(false, true /* allowRead */));
+  // With allowRead set, read won't be blocked during reclaim.
+  auto desc2 = r.openForRead();
+  EXPECT_EQ(desc2.status(), OpenStatus::Ready);
+  r.close(std::move(desc));
+  r.close(std::move(desc2));
+}
+
 TEST(Region, BufferAttachDetach) {
   auto b = std::make_unique<Buffer>(1024);
   Region r{RegionId(0), 1024};

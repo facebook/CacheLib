@@ -153,7 +153,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      config.numInMemBuffers,
                      static_cast<uint16_t>(config.allocatorsPerPriority.size()),
                      config.inMemBufFlushRetryLimit,
-                     config.regionManagerFlushAsync},
+                     config.regionManagerFlushAsync,
+                     true /* allowReadDuringReclaim */},
       allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);
