@@ -25,12 +25,12 @@ TEST(Region, ReadAndBlock) {
   auto desc = r.openForRead();
   EXPECT_EQ(desc.status(), OpenStatus::Ready);
 
-  EXPECT_FALSE(r.readyForReclaim(false));
+  EXPECT_FALSE(r.readyForReclaim(false, false));
   // Once readyForReclaim has been attempted, all future accesses will be
   // blocked.
   EXPECT_EQ(r.openForRead().status(), OpenStatus::Retry);
   r.close(std::move(desc));
-  EXPECT_TRUE(r.readyForReclaim(false));
+  EXPECT_TRUE(r.readyForReclaim(false, false));
 
   r.reset();
   EXPECT_EQ(r.openForRead().status(), OpenStatus::Ready);
@@ -44,9 +44,9 @@ TEST(Region, WriteAndBlock) {
 
   auto [desc2, addr2] = r.openAndAllocate(100);
   EXPECT_EQ(desc2.status(), OpenStatus::Ready);
-  EXPECT_FALSE(r.readyForReclaim(false));
+  EXPECT_FALSE(r.readyForReclaim(false, false));
   r.close(std::move(desc2));
-  EXPECT_TRUE(r.readyForReclaim(false));
+  EXPECT_TRUE(r.readyForReclaim(false, false));
 
   r.reset();
   auto [desc3, addr3] = r.openAndAllocate(1024);

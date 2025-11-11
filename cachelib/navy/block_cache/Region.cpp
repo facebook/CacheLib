@@ -20,25 +20,38 @@
 
 namespace facebook::cachelib::navy {
 
-bool Region::readyForReclaim(bool wait) {
+bool Region::readyForReclaim(bool wait, bool allowRead) {
   std::unique_lock<TimedMutex> l{lock_};
-  flags_ |= kBlockAccess;
+  flags_ |= allowRead ? kBeingReclaimed : kBlockAccess;
   bool ready = false;
-  while (!(ready = (activeOpenLocked() == 0UL)) && wait) {
+  // If we allow read during reclaim, we only need to block on active writers,
+  // not readers, hence we give allowRead as a parameter to activeOpenLocked.
+  while (!(ready = (activeOpenLocked(allowRead) == 0UL)) && wait) {
     cond_.wait(l);
   }
 
   return ready;
 }
 
-uint32_t Region::activeOpenLocked() {
-  return activePhysReaders_ + activeInMemReaders_ + activeWriters_;
+void Region::waitForActiveReaders() {
+  std::unique_lock<TimedMutex> l{lock_};
+  // No more reader should be allowed.
+  flags_ |= kBlockAccess;
+  while (activeInMemReaders_ != 0 || activePhysReaders_ != 0) {
+    cond_.wait(l);
+  }
+}
+
+uint32_t Region::activeOpenLocked(bool writersOnly) const {
+  return writersOnly
+             ? activeWriters_
+             : (activePhysReaders_ + activeInMemReaders_ + activeWriters_);
 }
 
 std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
     uint32_t size) {
   std::lock_guard<TimedMutex> l{lock_};
-  XDCHECK(!(flags_ & kBlockAccess));
+  XDCHECK(!((flags_ & kBlockAccess) || (flags_ & kBeingReclaimed)));
   if (!canAllocateLocked(size)) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{});
   }
@@ -119,7 +132,7 @@ void Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
 
 void Region::reset() {
   std::lock_guard<TimedMutex> l{lock_};
-  XDCHECK_EQ(activeOpenLocked(), 0U);
+  XDCHECK_EQ(activeOpenLocked(false), 0U);
   priority_ = 0;
   flags_ = 0;
   activeWriters_ = 0;

@@ -82,6 +82,11 @@ class RegionManager {
   //                                  in-mem buffer
   // @param workerFlushAsync          whether to schedule async flushes with the
   //                                  workers (during reclaim)
+  // @param allowReadDuringReclaim    whether to allow read for the being
+  //                                  reclaimed region.
+  //                                  TODO: This should be the default behavior
+  //                                  and this flag should be removed once we're
+  //                                  convinced there's no missing corner cases.
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -95,7 +100,8 @@ class RegionManager {
                 uint32_t numInMemBuffers,
                 uint16_t numPriorities,
                 uint16_t inMemBufFlushRetryLimit,
-                bool workerFlushAsync);
+                bool workerFlushAsync,
+                bool allowReadDuringReclaim = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -270,6 +276,8 @@ class RegionManager {
     return baseOffset_ + toAbsolute(addr).offset();
   }
 
+  bool readAllowedDuringReclaim() const { return allowReadDuringReclaim_; }
+
  private:
   using LockGuard = std::lock_guard<TimedMutex>;
 
@@ -332,6 +340,9 @@ class RegionManager {
   // TODO (@haowux): Evaluate and always flush async.
   const bool workerFlushAsync_{false};
   mutable AtomicCounter numReclaimScheduled_;
+
+  // Whether to allow read for the being reclaimed region
+  const bool allowReadDuringReclaim_{false};
 
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;

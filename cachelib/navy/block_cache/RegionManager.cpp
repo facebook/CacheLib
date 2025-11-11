@@ -33,7 +33,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint32_t numInMemBuffers,
                              uint16_t numPriorities,
                              uint16_t inMemBufFlushRetryLimit,
-                             bool workerFlushAsync)
+                             bool workerFlushAsync,
+                             bool allowReadDuringReclaim)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -44,11 +45,13 @@ RegionManager::RegionManager(uint32_t numRegions,
       regions_{std::make_unique<std::unique_ptr<Region>[]>(numRegions)},
       numCleanRegions_{numCleanRegions},
       workerFlushAsync_{workerFlushAsync},
+      allowReadDuringReclaim_(allowReadDuringReclaim),
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
       placementHandle_{device_.allocatePlacementHandle()} {
-  XLOGF(INFO, "{} regions, {} bytes each", numRegions_, regionSize_);
+  XLOGF(INFO, "{} regions, {} bytes each, allowReadDuringReclaim {}",
+        numRegions_, regionSize_, allowReadDuringReclaim);
   for (uint32_t i = 0; i < numRegions; i++) {
     regions_[i] = std::make_unique<Region>(RegionId{i}, regionSize_);
   }
@@ -341,7 +344,7 @@ void RegionManager::doReclaim() {
 
   const auto startTime = getSteadyClock();
   auto& region = getRegion(rid);
-  bool status = region.readyForReclaim(true);
+  bool status = region.readyForReclaim(true, allowReadDuringReclaim_);
   XDCHECK(status);
 
   // We know now we're the only thread working with this region.
@@ -411,6 +414,9 @@ RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   //
   // Finally, 4r has acquire semantic which will sychronizes-with 3x's acq_rel.
   if (seqNumber_.load(std::memory_order_acquire) != seqNumber) {
+    // If allowReadDuringReclaim_ is true, this is the only case that will
+    // return Retry status. Immediate retry by checking the updated index
+    // should succeed in that case.
     region.close(std::move(desc));
     return RegionDescriptor{OpenStatus::Retry};
   }
@@ -434,6 +440,10 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // race where a read returns stale data. See openForRead() for details.
   seqNumber_.fetch_add(1, std::memory_order_acq_rel);
 
+  if (allowReadDuringReclaim_) {
+    // Should wait for all readers to finish before resetting the region
+    region.waitForActiveReaders();
+  }
   // Reset all region internal state, making it ready to be
   // used by a region allocator.
   region.reset();

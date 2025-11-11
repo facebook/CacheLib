@@ -251,24 +251,42 @@ uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
 }
 
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {
-  const auto seqNumber = regionManager_.getSeqNumber();
-  const auto lr = index_->lookup(hk.keyHash());
-  if (!lr.found()) {
-    lookupCount_.inc();
-    return Status::NotFound;
-  }
-  // If relative address has offset 0, the entry actually belongs to the
-  // previous region (this is address of its end). To compensate for this, we
-  // subtract 1 before conversion and add after to relative address.
-  auto addrEnd = decodeRelAddress(lr.address());
-  // Between acquring @seqNumber and @openForRead reclaim may start. There
-  // are two options what can happen in @openForRead:
-  //  - Reclaim in progress and open will fail because access mask disables
-  //    read and write,
-  //  - Reclaim finished, sequence number increased and open will fail
-  //    because of sequence number check. This means sequence number has to be
-  //    increased when we finish reclaim.
-  RegionDescriptor desc = regionManager_.openForRead(addrEnd.rid(), seqNumber);
+  auto retryIndex = (regionManager_.readAllowedDuringReclaim() ? 1 : 0);
+  RegionDescriptor desc;
+  RelAddress addrEnd;
+  Index::LookupResult lr;
+
+  do {
+    auto seqNumber = regionManager_.getSeqNumber();
+    lr = index_->lookup(hk.keyHash());
+    if (!lr.found()) {
+      lookupCount_.inc();
+      return Status::NotFound;
+    }
+    // If relative address has offset 0, the entry actually belongs to the
+    // previous region (this is address of its end). To compensate for this, we
+    // subtract 1 before conversion and add after to relative address.
+    addrEnd = decodeRelAddress(lr.address());
+    // Between acquiring @seqNumber and @openForRead, reclaim may start. There
+    // are two options what can happen in @openForRead:
+    //  - Reclaim in progress and open will fail because access mask
+    //  disables both read and write (Only when read is not allowed during
+    //  reclaim)
+    //  - Reclaim finished and reclaimed victim was released/reset. Sequence
+    //  number increased with that and open will fail because of sequence number
+    //  check. (This means sequence number will be increased when we finish
+    //  reclaim.)
+    desc = regionManager_.openForRead(addrEnd.rid(), seqNumber);
+    // If we get OpenStatus::Retry when read is allowed during reclaim, it means
+    // reclaim has finished and reclaimed victim was reset/released (checked by
+    // SeqNumber). Index should had been updated in this case (to the new
+    // location or as removed). So we need to lookup index again.
+    //
+    // In case read is NOT allowed during reclaim, there's no chance that this
+    // situation is resolved by looking up the index again. So we'll follow the
+    // old logic (just returning retry below)
+  } while (desc.status() == OpenStatus::Retry && retryIndex-- > 0);
+
   switch (desc.status()) {
   case OpenStatus::Ready: {
     auto status =
