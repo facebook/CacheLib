@@ -260,10 +260,10 @@ class EnginePairProtoImpl final : public EnginePairProto {
   std::string name_;
 };
 
-class CacheProtoImpl final : public CacheProto {
+class DriverProtoImpl final : public CacheProto {
  public:
-  CacheProtoImpl() = default;
-  ~CacheProtoImpl() override = default;
+  DriverProtoImpl() = default;
+  ~DriverProtoImpl() override = default;
 
   void setMaxConcurrentInserts(uint32_t limit) override {
     config_.maxConcurrentInserts = limit;
@@ -388,10 +388,10 @@ std::unique_ptr<EnginePairProto> createEnginePairProto() {
 }
 
 std::unique_ptr<CacheProto> createCacheProto() {
-  return std::make_unique<CacheProtoImpl>();
+  return std::make_unique<DriverProtoImpl>();
 }
 
 std::unique_ptr<AbstractCache> createCache(std::unique_ptr<CacheProto> proto) {
-  return std::move(dynamic_cast<CacheProtoImpl&>(*proto)).create();
+  return std::move(dynamic_cast<DriverProtoImpl&>(*proto)).create();
 }
 } // namespace facebook::cachelib::navy
