@@ -69,15 +69,27 @@ class ReuseTimeReinsertionPolicy : public BlockCacheReinsertionPolicy {
   const cachelib::navy::Index& index_;
   size_t numBuckets_{0};
   size_t bucketSize_{0};
+  size_t windowSizeMs_{1000}; // 1 second default
 
   std::unique_ptr<AccessTracker> tracker_;
   AtomicCounter reinsertAttempts_{0};
+  AtomicCounter attemptedBytes_{0};
   AtomicCounter keyNotFound_{0};
   AtomicCounter expired_{0};
   AtomicCounter reinserted_{0};
   AtomicCounter reinsertedBytes_{0};
   AtomicCounter noPrevAccess_{0};
   mutable util::PercentileStats reuseTimeStats_;
+
+  // Counters for tracking reinsertion rate within the window
+  mutable std::atomic<uint64_t> windowAttemptedCount_{0};
+  mutable std::atomic<uint64_t> windowReinsertedCount_{0};
+  mutable std::atomic<uint64_t> windowReinsertedBytes_{0};
+  mutable std::atomic<uint64_t> windowStartTime_{0};
+  mutable std::atomic<double> lastAcceptanceRate_{0.0};
+  mutable std::atomic<uint64_t> lastBytesAccepted_{0};
+
+  void updateRateWindow() const;
 
   friend class tests::ReuseTimeReinsertionPolicyTest_ReuseTimeComputation_Test;
   friend class tests::

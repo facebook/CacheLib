@@ -48,7 +48,10 @@ ReuseTimeReinsertionPolicy::ReuseTimeReinsertionPolicy(
 
 bool ReuseTimeReinsertionPolicy::shouldReinsert(folly::StringPiece key,
                                                 folly::StringPiece value) {
+  updateRateWindow(); // check if window needs to be reset
   reinsertAttempts_.inc();
+  attemptedBytes_.add(value.size());
+  windowAttemptedCount_.fetch_add(1, std::memory_order_relaxed);
 
   const auto lr = index_.peek(
       makeHK(cachelib::navy::BufferView{
@@ -70,6 +73,8 @@ bool ReuseTimeReinsertionPolicy::shouldReinsert(folly::StringPiece key,
     return false;
   }
   reinserted_.inc();
+  windowReinsertedCount_.fetch_add(1, std::memory_order_relaxed);
+  windowReinsertedBytes_.fetch_add(value.size(), std::memory_order_relaxed);
   reinsertedBytes_.add(value.size());
   return true;
 }
@@ -80,16 +85,19 @@ void ReuseTimeReinsertionPolicy::onLookup(folly::StringPiece key) {
 
 void ReuseTimeReinsertionPolicy::getCounters(
     const util::CounterVisitor& visitor) const {
-  visitor("bc_reinsert_reuse_time_attempts",
+  visitor("bc_reinsert_reuse_time_attempted",
           reinsertAttempts_.get(),
+          cachelib::util::CounterVisitor::CounterType::RATE);
+  visitor("bc_reinsert_reuse_time_attempted_bytes",
+          attemptedBytes_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
   visitor("bc_reinsert_reuse_time_key_not_found",
           keyNotFound_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
-  visitor("bc_reinsert_reuse_time_success",
+  visitor("bc_reinsert_reuse_time_accepted",
           reinserted_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
-  visitor("bc_reinsert_reuse_time_success_bytes",
+  visitor("bc_reinsert_reuse_time_accepted_bytes",
           reinsertedBytes_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
   visitor("bc_reinsert_expired",
@@ -98,7 +106,24 @@ void ReuseTimeReinsertionPolicy::getCounters(
   visitor("bc_reinsert_no_prev_access",
           noPrevAccess_.get(),
           cachelib::util::CounterVisitor::CounterType::RATE);
-  // Report percentile stats for reuse time values
+
+  visitor("bc_reinsert_last_byte_accepted",
+          lastBytesAccepted_.load(std::memory_order_relaxed),
+          cachelib::util::CounterVisitor::CounterType::COUNT);
+
+  visitor("bc_reinsert_last_acceptance_rate",
+          lastAcceptanceRate_.load(std::memory_order_relaxed),
+          cachelib::util::CounterVisitor::CounterType::COUNT);
+
+  auto attempts = reinsertAttempts_.get();
+  double acceptanceRate = attempts > 0
+                              ? static_cast<double>(reinserted_.get()) /
+                                    static_cast<double>(attempts)
+                              : 0.0;
+  visitor("bc_reinsert_acceptance_rate",
+          acceptanceRate,
+          cachelib::util::CounterVisitor::CounterType::COUNT);
+
   reuseTimeStats_.visitQuantileEstimator(visitor, "bc_reinsert_reuse_time");
 }
 
@@ -173,6 +198,40 @@ uint32_t ReuseTimeReinsertionPolicy::isExpired(folly::StringPiece value) {
   ::memcpy(&nvmItem, value.data(), sizeof(cachelib::NvmItem));
 
   return nvmItem.isExpired();
+}
+
+void ReuseTimeReinsertionPolicy::updateRateWindow() const {
+  auto currentTime = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+
+  auto windowStart = windowStartTime_.load(std::memory_order_relaxed);
+  // Initialize windowStartTime_ on first call
+  if (windowStart == 0) {
+    windowStartTime_.store(currentTime, std::memory_order_relaxed);
+    return;
+  }
+
+  auto elapsed = currentTime - windowStart;
+  if (elapsed >= windowSizeMs_) {
+    // Try to rotate the window (only one thread should succeed)
+    if (windowStartTime_.compare_exchange_strong(
+            windowStart, currentTime, std::memory_order_relaxed)) {
+      // Atomically read and reset counters to avoid losing increments
+      // from concurrent threads
+      auto attempts =
+          windowAttemptedCount_.exchange(0, std::memory_order_relaxed);
+      auto reinserted =
+          windowReinsertedCount_.exchange(0, std::memory_order_relaxed);
+      auto reinsertedBytes =
+          windowReinsertedBytes_.exchange(0, std::memory_order_relaxed);
+      double rate =
+          attempts > 0 ? static_cast<double>(reinserted) / attempts : 0.0;
+      lastAcceptanceRate_.store(rate, std::memory_order_relaxed);
+      lastBytesAccepted_.store(reinsertedBytes, std::memory_order_relaxed);
+    }
+  }
 }
 
 } // namespace facebook::cachelib::navy
