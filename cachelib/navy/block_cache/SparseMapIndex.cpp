@@ -268,9 +268,17 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   return range;
 }
 
-void SparseMapIndex::persist(RecordWriter& rw) const {
+void SparseMapIndex::persist(
+    std::optional<std::reference_wrapper<RecordWriter>> rw) const {
+  XDCHECK(rw.has_value());
+  if (!rw) {
+    XLOG(ERR,
+         "Cannot persist Block Cache index: No RecordWriter is available.");
+    return;
+  }
+
   serialization::IndexBucket bucketMap;
-  auto prevPos = rw.getCurPos();
+  auto prevPos = rw->get().getCurPos();
   uint64_t persisted = 0;
 
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
@@ -289,14 +297,15 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
     try {
       // Serialize bucket and this may throw exception when it's exceeding the
       // meta data size limit
-      serializeProto(bucketMap, rw);
+      serializeProto(bucketMap, rw->get());
       persisted += bucketMap.entries()->size();
     } catch (const std::exception& e) {
       // Log the error and more info on current index
       XLOGF(ERR,
             "Error persisting Block Cache Index: {}, persist() began at pos {} "
             "and current pos {}, trying to add {} entries from bucketMap {}",
-            e.what(), prevPos, rw.getCurPos(), bucketMap.entries()->size(), i);
+            e.what(), prevPos, rw->get().getCurPos(),
+            bucketMap.entries()->size(), i);
       auto memFootprint = computeMemFootprintRange();
       XLOGF(ERR,
             "Current Block cache items count: {}, persisted {} items, index "
@@ -314,9 +323,17 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
   }
 }
 
-void SparseMapIndex::recover(RecordReader& rr) {
+void SparseMapIndex::recover(
+    std::optional<std::reference_wrapper<RecordReader>> rr) {
+  XDCHECK(rr.has_value());
+  if (!rr) {
+    XLOG(ERR,
+         "Cannot recover Block Cache index: No RecordReader is available.");
+    return;
+  }
+
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
-    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr);
+    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr->get());
     uint32_t id = *bucketMap.bucketId();
     if (id >= numBucketMaps_) {
       throw std::invalid_argument{folly::sformat(

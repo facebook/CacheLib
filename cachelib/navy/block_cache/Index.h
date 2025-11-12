@@ -120,11 +120,15 @@ class Index {
     size_t minUsedBytes{0};
   };
 
-  // Writes index to a Thrift object
-  virtual void persist(RecordWriter& rw) const = 0;
+  // Writes index to a Thrift object or shm.
+  // When the index uses shm for its persistence, RecordWriter is not needed.
+  virtual void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const = 0;
 
-  // Resets index then inserts entries read from @deserializer.
-  virtual void recover(RecordReader& rr) = 0;
+  // Resets index then inserts entries read from @deserializer or shm.
+  // When the index uses shm for its persistence, RecordReader is not needed.
+  virtual void recover(
+      std::optional<std::reference_wrapper<RecordReader>> rr) = 0;
 
   // Gets value and update tracking counters
   virtual LookupResult lookup(uint64_t key) = 0;
