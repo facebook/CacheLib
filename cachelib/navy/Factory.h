@@ -161,6 +161,9 @@ class CacheProto {
   // Sets device that engine will use.
   virtual void setDevice(std::unique_ptr<Device> device) = 0;
 
+  // Sets Persistence Params for navy
+  virtual void setPersistParams(const NavyPersistParams& persistParams) = 0;
+
   // Sets metadata size.
   virtual void setMetadataSize(size_t metadataSize) = 0;
 

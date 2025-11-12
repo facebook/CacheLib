@@ -43,6 +43,7 @@ class BlockCache final : public Engine {
   // See CacheProto for details
   struct Config {
     Device* device{};
+    NavyPersistParams persistParams{};
     ExpiredCheck checkExpired;
     DestructorCallback destructorCb;
     // Checksum data read/written

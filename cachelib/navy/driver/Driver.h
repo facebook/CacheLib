@@ -46,6 +46,7 @@ class Driver final : public AbstractCache {
     std::unique_ptr<JobScheduler> scheduler;
     std::vector<EnginePair> enginePairs;
     std::unique_ptr<AdmissionPolicy> admissionPolicy;
+    NavyPersistParams persistParams;
     uint32_t smallItemMaxSize{};
     // Limited by scheduler parallelism (thread), this is large enough value to
     // mean "no limit".
@@ -181,6 +182,7 @@ class Driver final : public AbstractCache {
 
   std::unique_ptr<Device> device_;
   std::unique_ptr<JobScheduler> scheduler_;
+  NavyPersistParams persistParams_;
 
   const EnginePairSelector selector_{};
   std::vector<EnginePair> enginePairs_;

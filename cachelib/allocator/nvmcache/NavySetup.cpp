@@ -21,6 +21,7 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/Factory.h"
+#include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 #include "cachelib/navy/testing/MockDevice.h"
 
@@ -333,7 +334,7 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
 }
 } // namespace
 
-std::unique_ptr<cachelib::navy::Device> createDevice(
+std::unique_ptr<navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor) {
   auto blockSize = config.getBlockSize();
@@ -350,7 +351,7 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
       fileSize = alignDown(fileSize, stripeSize);
     }
 
-    return cachelib::navy::createFileDevice(
+    return navy::createFileDevice(
         filePaths,
         fileSize,
         config.getTruncateFile(),
@@ -363,8 +364,8 @@ std::unique_ptr<cachelib::navy::Device> createDevice(
         std::move(encryptor),
         config.getExclusiveOwner());
   } else {
-    return cachelib::navy::createMemoryDevice(config.getFileSize(),
-                                              std::move(encryptor), blockSize);
+    return navy::createMemoryDevice(config.getFileSize(), std::move(encryptor),
+                                    blockSize);
   }
 }
 
@@ -374,7 +375,8 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    bool itemDestructorEnabled) {
+    bool itemDestructorEnabled,
+    const navy::NavyPersistParams& persistParams) {
   auto device = createDevice(config, std::move(encryptor));
 
   std::unique_ptr<navy::MockDevice> mockDevice;
@@ -416,7 +418,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
     break;
   }
 
-  auto proto = cachelib::navy::createCacheProto();
+  auto proto = navy::createCacheProto();
   auto* devicePtr = device.get();
   proto->setDevice(std::move(device));
   proto->setJobScheduler(createJobScheduler(config));
@@ -426,6 +428,7 @@ std::unique_ptr<navy::AbstractCache> createNavyCache(
   setAdmissionPolicy(config, *proto);
   proto->setExpiredCheck(checkExpired);
   proto->setDestructorCallback(destructorCb);
+  proto->setPersistParams(persistParams);
 
   setupCacheProtos(config, *devicePtr, *proto, itemDestructorEnabled);
 

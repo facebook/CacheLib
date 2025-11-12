@@ -19,21 +19,24 @@
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
 #include "cachelib/navy/AbstractCache.h"
+#include "cachelib/navy/common/Types.h"
+
 namespace facebook {
 namespace cachelib {
 // return a navy cache which is created by CacheProto whose data is from
 // NavyConfig.
-std::unique_ptr<facebook::cachelib::navy::AbstractCache> createNavyCache(
+std::unique_ptr<navy::AbstractCache> createNavyCache(
     const navy::NavyConfig& config,
-    facebook::cachelib::navy::ExpiredCheck checkExpired,
-    facebook::cachelib::navy::DestructorCallback destructorCb,
+    navy::ExpiredCheck checkExpired,
+    navy::DestructorCallback destructorCb,
     bool truncate,
     std::shared_ptr<navy::DeviceEncryptor> encryptor,
-    bool itemDestructorEnabled);
+    bool itemDestructorEnabled,
+    const navy::NavyPersistParams& persistParams = {});
 
 // create a flash device for Navy engines to use
 // made public for testing purposes
-std::unique_ptr<cachelib::navy::Device> createDevice(
+std::unique_ptr<navy::Device> createDevice(
     const navy::NavyConfig& config,
     std::shared_ptr<navy::DeviceEncryptor> encryptor);
 } // namespace cachelib

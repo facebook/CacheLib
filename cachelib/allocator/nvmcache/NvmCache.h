@@ -41,6 +41,7 @@
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/Types.h"
 #include "folly/Range.h"
 
 namespace facebook::cachelib {
@@ -167,7 +168,8 @@ class NvmCache {
   NvmCache(C& c,
            Config config,
            bool truncate,
-           const ItemDestructor& itemDestructor);
+           const ItemDestructor& itemDestructor,
+           const navy::NavyPersistParams& navyPersistParams = {});
 
   // Look up item by key
   // @param key         key to lookup
@@ -973,7 +975,8 @@ template <typename C>
 NvmCache<C>::NvmCache(C& c,
                       Config config,
                       bool truncate,
-                      const ItemDestructor& itemDestructor)
+                      const ItemDestructor& itemDestructor,
+                      const navy::NavyPersistParams& navyPersistParams)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
       numShards_{config_.navyConfig.getNumShards()},
@@ -998,7 +1001,8 @@ NvmCache<C>::NvmCache(C& c,
       },
       truncate,
       std::move(config.deviceEncryptor),
-      itemDestructor_ ? true : false);
+      itemDestructor_ ? true : false,
+      navyPersistParams);
 }
 
 template <typename C>

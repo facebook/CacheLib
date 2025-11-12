@@ -62,6 +62,7 @@ Driver::Driver(Config&& config, ValidConfigTag)
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
+      persistParams_{config.persistParams},
       selector_{std::move(config.selector)},
       enginePairs_{std::move(config.enginePairs)},
       admissionPolicy_{std::move(config.admissionPolicy)},
