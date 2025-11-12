@@ -479,10 +479,14 @@ Status BlockCache::remove(HashedKey hk) {
 //
 // See @RegionEvictCallback for details
 uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
-  // Eviction callback guarantees are the following:
+  // Eviction callback guarantees are the following assuming no checksum errors:
   //   - Every value inserted will get eviction callback at some point of
   //     time.
   //   - It is invoked only once per insertion.
+  //
+  // If there is a checksum error of an item descriptor, we abort the reclaim
+  // and we will not be able to call the eviction callback for rest of the item
+  // that have not been evaluated in the region.
   //
   // We do not guarantee time between remove and callback invocation. If a
   // value v1 was replaced with v2 user will get callbacks for both v1 and
