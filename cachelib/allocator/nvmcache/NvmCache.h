@@ -18,6 +18,7 @@
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
+#include <folly/container/small_vector.h>
 #include <folly/fibers/TimedMutex.h>
 #include <folly/hash/Hash.h>
 #include <folly/json/dynamic.h>
@@ -352,8 +353,9 @@ class NvmCache {
   struct GetCtx {
     NvmCache& cache;       //< the NvmCache instance
     const std::string key; //< key being fetched
-    std::vector<std::shared_ptr<WaitContext<ReadHandle>>> waiters; // list of
-                                                                   // waiters
+    folly::small_vector<std::shared_ptr<WaitContext<ReadHandle>>, 4>
+        waiters;    // list of
+                    // waiters
     WriteHandle it; // will be set when Context is being filled
     util::LatencyTracker tracker_;
     bool valid_;
