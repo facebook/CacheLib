@@ -306,9 +306,7 @@ class CacheAllocatorConfig {
   // we move slab memory around. Come talk to Cache Library team if you think
   // this can help your service.
   CacheAllocatorConfig& enableMovingOnSlabRelease(
-      MoveCb cb,
-      ChainedItemMovingSync sync = {},
-      uint32_t movingAttemptsLimit = 10);
+      MoveCb cb, ChainedItemMovingSync sync = {});
 
   // Specify a threshold for detecting slab release stuck
   CacheAllocatorConfig& setSlabReleaseStuckThreashold(
@@ -611,10 +609,6 @@ class CacheAllocatorConfig {
   // for handles in IOBuf chains.
   unsigned int thresholdForConvertingToIOBuf{
       std::numeric_limits<unsigned int>::max()};
-
-  // number of attempts to move an item before giving up and try to
-  // evict the item
-  unsigned int movingTries{10};
 
   // Config that specifes how throttler will behave
   // How much time it will sleep and how long an interval between each sleep
@@ -1116,10 +1110,9 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolResizing(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableMovingOnSlabRelease(
-    MoveCb cb, ChainedItemMovingSync sync, uint32_t movingAttemptsLimit) {
+    MoveCb cb, ChainedItemMovingSync sync) {
   moveCb = cb;
   movingSync = sync;
-  movingTries = movingAttemptsLimit;
   return *this;
 }
 
@@ -1330,7 +1323,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
   configMap["thresholdForConvertingToIOBuf"] =
       std::to_string(thresholdForConvertingToIOBuf);
-  configMap["movingTries"] = std::to_string(movingTries);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";
   configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
