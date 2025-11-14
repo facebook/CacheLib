@@ -19,8 +19,6 @@
 #include <folly/FileUtil.h>
 #include <folly/json/json.h>
 
-#include <unordered_map>
-
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
