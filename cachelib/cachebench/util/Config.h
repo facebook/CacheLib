@@ -332,6 +332,9 @@ struct StressorConfig : public JSONConfig {
 
   bool useCombinedLockForIterators{false};
 
+  // if we want to use async DSA function
+  bool useDTOAsync{false};
+
   // admission policy for cache.
   std::shared_ptr<StressorAdmPolicy> admPolicy{};
 

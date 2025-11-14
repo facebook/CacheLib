@@ -44,6 +44,29 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 option(BUILD_TESTS "If enabled, compile the tests." ON)
 
+option(BUILD_WITH_DTO "If enabled, build with the DTO library for DSA support." ON)
+
+if (BUILD_WITH_DTO)
+    find_package(DTO REQUIRED)
+    if (DTO_FOUND)
+        message(STATUS "DTO found, remember to configure DSA devices for acceleration. If no DSA device is found, cachelib will fallback to software path.")
+    endif()
+endif ()
+
+include(CMakeDependentOption)
+# USE_DTO_API is only meaningful if BUILD_WITH_DTO is ON *and* DTO was found
+cmake_dependent_option(
+  USE_DTO_API
+  "Use DTO library API functions for DSA acceleration."
+  OFF
+  "BUILD_WITH_DTO;DTO_FOUND"
+  OFF
+)
+if (USE_DTO_API)
+    message(STATUS "Using DTO API for offloading")
+    add_compile_definitions(DTO_API)
+endif()
+
 
 set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")

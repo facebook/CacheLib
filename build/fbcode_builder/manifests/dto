@@ -1,0 +1,14 @@
+[manifest]
+name = dto
+
+[git]
+repo_url = https://github.com/intel/DTO.git
+branch = cachelib
+
+[build]
+builder = cmake
+
+[dependencies]
+accel-config
+uuid
+numa

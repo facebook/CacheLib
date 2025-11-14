@@ -27,6 +27,11 @@
 #include <memory>
 #include <thread>
 
+#ifdef DTO_API
+#include <dto.h>
+#define DTO_DSA_MIN_THRESHOLD (32 * 1024)
+#endif
+
 #include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/cache/TimeStampTicker.h"
 #include "cachelib/cachebench/runner/CacheStressorBase.h"
@@ -42,6 +47,13 @@ namespace cachelib {
 namespace cachebench {
 
 constexpr uint32_t kNvmCacheWarmUpCheckRate = 1000;
+
+#ifdef DTO_API
+void async_memcpy_callback(void *arg) {
+    auto &fn = *reinterpret_cast<std::function<void(void)>*>(arg);
+    fn();
+}
+#endif
 
 // Implementation of stressor that uses a workload generator to stress an
 // instance of the cache.  All item's value in CacheStressor follows CacheValue
@@ -436,6 +448,17 @@ class CacheStressor : public CacheStressorBase {
       ++stats.setFailure;
       return OpResultType::kSetFailure;
     } else {
+#ifdef DTO_API
+      if (config_.useDTOAsync && size >= DTO_DSA_MIN_THRESHOLD) {
+        auto insertToCache = [&] {
+            cache_->insertOrReplace(it);
+        };
+        std::function<void(void)> fn = insertToCache;
+        dto_memcpy_async(
+            it->getMemory(), itemValue.data(), size, &async_memcpy_callback, &insertToCache);
+        return OpResultType::kSetSuccess;
+      }
+#endif
       populateItem(it, itemValue);
       cache_->insertOrReplace(it);
       return OpResultType::kSetSuccess;

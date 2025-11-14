@@ -62,6 +62,10 @@ target_link_libraries(cachelib_navy PUBLIC
   GTest::gmock
   )
 
+if (BUILD_WITH_DTO)
+    target_link_libraries(cachelib_navy PUBLIC DTO::dto)
+endif()
+
 install(TARGETS cachelib_navy
         EXPORT cachelib-exports
         DESTINATION ${LIB_INSTALL_DIR} )
