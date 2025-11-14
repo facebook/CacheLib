@@ -23,6 +23,7 @@
 
 #include "cachelib/cachebench/runner/Runner.h"
 #include "cachelib/cachebench/runner/Stressor.h"
+#include "cachelib/cachebench/util/Sleep.h"
 #include "cachelib/common/Utils.h"
 
 #ifdef CACHEBENCH_FB_ENV
@@ -123,6 +124,7 @@ int main(int argc, char** argv) {
   using namespace facebook::cachelib;
   using namespace facebook::cachelib::cachebench;
 
+  calibrateSleep();
 #ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
   if (!checkArgsValidity()) {
