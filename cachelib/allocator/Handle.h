@@ -436,7 +436,7 @@ struct ReadHandleImpl {
   //             if the handle becomes/is ready, this returns the
   //             original callback back to the caller to execute.
   //
-  FOLLY_NODISCARD ReadyCallback onReady(ReadyCallback&& callBack) {
+  [[nodiscard]] ReadyCallback onReady(ReadyCallback&& callBack) {
     return (waitContext_) ? waitContext_->onReady(std::move(callBack))
                           : std::move(callBack);
   }
