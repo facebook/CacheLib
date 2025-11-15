@@ -74,6 +74,13 @@ BlockCacheReinsertionConfig makeHitsReinsertionConfig(
   return config;
 }
 
+BlockCacheReinsertionConfig makePctReinsertionConfig(
+    unsigned int pctThreshold) {
+  BlockCacheReinsertionConfig config{};
+  config.enablePctBased(pctThreshold);
+  return config;
+}
+
 std::unique_ptr<Engine> makeEngine(BlockCache::Config&& config,
                                    size_t metadataSize = 0) {
   config.cacheBaseOffset = metadataSize;
@@ -584,8 +591,9 @@ TEST(BlockCache, ReclaimCorruption) {
   auto ex = makeJobScheduler();
   auto config = makeConfig(*ex, std::move(policy), *device);
   config.checksum = true;
-  // items which are accessed once will be reinserted on reclaim
-  config.reinsertionConfig = makeHitsReinsertionConfig(1);
+  // Use 100% reinsertion so all items are eligible for reinsertion
+  // so that value checksuming will occur
+  config.reinsertionConfig = makePctReinsertionConfig(100);
   auto engine = makeEngine(std::move(config));
   auto driver = makeDriver(std::move(engine), std::move(ex));
 

@@ -473,25 +473,32 @@ Status BlockCache::remove(HashedKey hk) {
   return Status::NotFound;
 }
 
-// Callback for region eviction. The evicted region is reclaimed by removing,
-// evicting or reinserting each item in the region so that the region
-// can be freed.
-//
-// See @RegionEvictCallback for details
+/**
+ * Callback for region eviction.
+ *
+ * This function is called when a region in the block cache is being evicted.
+ * The evicted region is reclaimed by iterating over each item in the region and
+ * either removing, evicting, or reinserting the item, depending on its state
+ * and policy. This process frees up the region for reuse.
+ *
+ * If a checksum error is detected in an item's descriptor, the reclaim process
+ * is aborted for the remaining items in the region, and their eviction
+ * callbacks will not be invoked. If a cheksum error is detected in the value,
+ * we can continue working on the remaining items as the metadata is still valid
+ * and that is what we need to find the next item to evict/remove/reinsert.
+ *
+ * Note: The time between item removal and callback invocation is not
+ * guaranteed. If an item is replaced, callbacks for both the old and new values
+ * may be invoked in any order.
+ *
+ * @param rid    The RegionId of the region being evicted.
+ * @param buffer A BufferView containing the data of the region to be reclaimed.
+ * @return       The number of items successfully evicted from the region.
+ *
+ * See @RegionEvictCallback for further details.
+ */
 uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
-  // Eviction callback guarantees are the following assuming no checksum errors:
-  //   - Every value inserted will get eviction callback at some point of
-  //     time.
-  //   - It is invoked only once per insertion.
-  //
-  // If there is a checksum error of an item descriptor, we abort the reclaim
-  // and we will not be able to call the eviction callback for rest of the item
-  // that have not been evaluated in the region.
-  //
-  // We do not guarantee time between remove and callback invocation. If a
-  // value v1 was replaced with v2 user will get callbacks for both v1 and
-  // v2 when they are evicted (in no particular order).
-  uint32_t evictionCount = 0; // item that was evicted during reclaim
+  uint32_t evictionCount = 0;
   auto& region = regionManager_.getRegion(rid);
   auto offset = region.getLastEntryEndOffset();
   while (offset > 0) {
@@ -502,9 +509,11 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     if (desc.csSelf != desc.computeChecksum()) {
       reclaimEntryHeaderChecksumErrorCount_.inc();
       XLOGF(ERR,
-            "Item header checksum mismatch in onRegionReclaim(). Region {} is "
-            "likely corrupted. Aborting reclaim. Remaining items in the region "
-            "will not be cleaned up (destructor won't be invoked). ",
+            "Item header checksum mismatch in onRegionReclaim(). Item {} is "
+            "likely corrupted. Aborting reclaim. This and remaining items in "
+            "the region "
+            "will not be cleaned up (destructor won't be invoked) nor "
+            "reinserted. ",
             "Expected: {}, Actual: {}, Offset-end: {}, Physical-offset-end: {},"
             " Header size: {}, Header (hex): {}",
             rid.index(),
@@ -517,53 +526,37 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
                 folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
       break;
     }
-
+    /*
+     * Entry Layout:
+     * | Value | Padding | Key | EntryDesc |
+     * ^                                 ^
+     * entryEnd - entrySize            entryEnd
+     * (value starts here)
+     */
     const auto entrySize = serializedSize(desc.keySize, desc.valueSize);
     HashedKey hk =
         makeHK(entryEnd - sizeof(EntryDesc) - desc.keySize, desc.keySize);
     BufferView value{desc.valueSize, entryEnd - entrySize};
 
-    if (checksumData_ && desc.cs != checksum(value)) {
-      // We do not need to abort here since the EntryDesc checksum was good, so
-      // we can safely proceed to read the next entry.
-      XLOGF(ERR,
-            "Item value checksum mismatch in onRegionReclaim(). Region {} is "
-            "likely corrupted. Aborting reclaim. Remaining items in the region "
-            "will not be cleaned up (destructor won't be invoked). ",
-            "Expected: {}, Actual: {}, Offset: {}, Physical-offset: {}, "
-            "Value-size: {}, Payload (hex): {}",
-            rid.index(),
-            desc.cs,
-            checksum(value),
-            addrEnd.offset() - entrySize,
-            regionManager_.physicalOffset(addrEnd) - entrySize,
-            desc.valueSize,
-            folly::hexlify(folly::ByteRange(value.data(), value.dataEnd())));
-      reclaimValueChecksumErrorCount_.inc();
-      removeItem(hk, RelAddress{rid, offset});
-      // Reset the value to nullptr to avoid the destructor doing wrong thing
-      value = BufferView();
+    AllocatorApiResult reinsertionRes = reinsertOrRemoveItem(
+        hk, value, entrySize, RelAddress{rid, offset}, desc);
+    switch (reinsertionRes) {
+    case AllocatorApiResult::EVICTED:
+      evictionCount++;
+      usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
+      break;
+    case AllocatorApiResult::REMOVED:
+      holeCount_.sub(1);
+      holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
+      break;
+    default:
+      break;
+    }
+    if (destructorCb_ && reinsertionRes == AllocatorApiResult::EVICTED) {
+      destructorCb_(hk, value, DestructorEvent::Recycled);
     } else {
-      AllocatorApiResult reinsertionRes =
-          reinsertOrRemoveItem(hk, value, entrySize, RelAddress{rid, offset});
-      switch (reinsertionRes) {
-      case AllocatorApiResult::EVICTED:
-        evictionCount++;
-        usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
-        break;
-      case AllocatorApiResult::REMOVED:
-        holeCount_.sub(1);
-        holeSizeTotal_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
-        break;
-      default:
-        break;
-      }
-      if (destructorCb_ && reinsertionRes == AllocatorApiResult::EVICTED) {
-        destructorCb_(hk, value, DestructorEvent::Recycled);
-      } else {
-        updateEventTracker(hk.key(), AllocatorApiEvent::NVM_EVICT,
-                           reinsertionRes, entrySize);
-      }
+      updateEventTracker(hk.key(), AllocatorApiEvent::NVM_EVICT, reinsertionRes,
+                         entrySize);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -645,10 +638,12 @@ void BlockCache::updateEventTracker(folly::StringPiece key,
   }
 }
 
-AllocatorApiResult BlockCache::reinsertOrRemoveItem(HashedKey hk,
-                                                    BufferView value,
-                                                    uint32_t entrySize,
-                                                    RelAddress currAddr) {
+AllocatorApiResult BlockCache::reinsertOrRemoveItem(
+    HashedKey hk,
+    BufferView value,
+    uint32_t entrySize,
+    RelAddress currAddr,
+    const EntryDesc& entryDesc) {
   auto removeItem = [this, hk, currAddr](bool expired) {
     if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
       if (expired) {
@@ -666,13 +661,36 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(HashedKey hk,
     return AllocatorApiResult::REMOVED;
   }
 
-  if (checkExpired_ && checkExpired_(value)) {
-    return removeItem(true);
+  try {
+    if (checkExpired_ && checkExpired_(value)) {
+      return removeItem(true);
+    }
+
+    if (!reinsertionPolicy_ ||
+        !reinsertionPolicy_->shouldReinsert(hk.key(), toStringPiece(value))) {
+      return removeItem(false);
+    }
+  } catch (const std::exception& e) {
+    XLOGF(ERR, "Exception in reinsertOrRemoveItem: {}", e.what());
+    return AllocatorApiResult::CORRUPTED;
   }
 
-  if (!reinsertionPolicy_ ||
-      !reinsertionPolicy_->shouldReinsert(hk.key(), toStringPiece(value))) {
-    return removeItem(false);
+  // Validate checksum as we want to reinsert the item
+  if (checksumData_ && entryDesc.cs != checksum(value)) {
+    // We do not need to abort here since the EntryDesc checksum was good, so
+    // we can safely proceed to read the next entry.
+    XLOGF(ERR,
+          "Item value checksum mismatch in reinsertOrRemoveItem(). "
+          "Item is likely corrupted. Item will not be reinserted. "
+          "We will continue evaluating remaining items in the region."
+          "Expected: {}, Actual: {}, Value-size: {}, Payload (hex): {}",
+          entryDesc.cs,
+          checksum(value),
+          entryDesc.valueSize,
+          folly::hexlify(folly::ByteRange(value.data(), value.dataEnd())));
+    reclaimValueChecksumErrorCount_.inc();
+    removeItem(false);
+    return AllocatorApiResult::CORRUPTED;
   }
 
   // Priority of an re-inserted item is determined by its past accesses

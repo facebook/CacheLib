@@ -337,7 +337,8 @@ class BlockCache final : public Engine {
   AllocatorApiResult reinsertOrRemoveItem(HashedKey hk,
                                           BufferView value,
                                           uint32_t entrySize,
-                                          RelAddress currAddr);
+                                          RelAddress currAddr,
+                                          const EntryDesc& entryDesc);
 
   // Removes an entry key from the index.
   // @return true if the item is successfully removed; false if the item

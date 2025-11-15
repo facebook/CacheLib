@@ -96,6 +96,7 @@ enum class AllocatorApiResult : uint8_t {
   EXPIRED = 9,             // An item has expired.
   REINSERTED = 10,         // Reinserted an item.
   NVM_ADMITTED = 11,       // Admit item to NVM
+  CORRUPTED = 12,          // An item is corrupted.
 };
 
 inline const char* toString(AllocatorApiResult result) {
@@ -124,6 +125,8 @@ inline const char* toString(AllocatorApiResult result) {
     return "REINSERTED";
   case AllocatorApiResult::NVM_ADMITTED:
     return "NVM_ADMITTED";
+  case AllocatorApiResult::CORRUPTED:
+    return "CORRUPTED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";
