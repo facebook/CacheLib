@@ -32,7 +32,6 @@
 namespace facebook::cachelib::navy {
 
 BlockCache::Config& BlockCache::Config::validate() {
-  XDCHECK_NE(scheduler, nullptr);
   if (!device || !evictionPolicy) {
     throw std::invalid_argument("missing required param");
   }

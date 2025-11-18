@@ -139,10 +139,8 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.legacyEventTracker = legacyEventTracker;
   }
 
-  std::unique_ptr<Engine> create(JobScheduler& scheduler,
-                                 ExpiredCheck checkExpired,
+  std::unique_ptr<Engine> create(ExpiredCheck checkExpired,
                                  DestructorCallback cb) && {
-    config_.scheduler = &scheduler;
     config_.checkExpired = std::move(checkExpired);
     config_.destructorCb = std::move(cb);
     return std::make_unique<BlockCache>(std::move(config_));
@@ -243,7 +241,7 @@ class EnginePairProtoImpl final : public EnginePairProto {
       if (bcProto != nullptr) {
         bcProto->setDevice(device);
         bcProto->setPersistParams(persistParams);
-        bc = std::move(*bcProto).create(scheduler, checkExpired, destructorCb);
+        bc = std::move(*bcProto).create(checkExpired, destructorCb);
       }
     }
 

@@ -58,8 +58,6 @@ class BlockCache final : public Engine {
     uint64_t regionSize{16 * 1024 * 1024};
     // See AbstractCacheProto::setReadBufferSize
     uint32_t readBufferSize{};
-    // Job scheduler for background tasks
-    JobScheduler* scheduler{};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
     // The number of region_manager threads for reclaim and flush
