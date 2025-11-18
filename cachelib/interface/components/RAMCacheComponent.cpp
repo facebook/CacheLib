@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "cachelib/allocator/RAMCacheComponent.h"
+#include "cachelib/interface/components/RAMCacheComponent.h"
 
 #include <folly/logging/xlog.h>
 

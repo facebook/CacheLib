@@ -19,8 +19,8 @@
 #include <gtest/gtest.h>
 
 #include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/allocator/RAMCacheComponent.h"
 #include "cachelib/allocator/memory/Slab.h"
+#include "cachelib/interface/components/RAMCacheComponent.h"
 #include "cachelib/interface/tests/Utils.h"
 
 using namespace ::testing;

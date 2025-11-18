@@ -20,8 +20,8 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/logging/xlog.h>
 
-#include "cachelib/allocator/RAMCacheComponent.h"
 #include "cachelib/cachebench/util/Exceptions.h"
+#include "cachelib/interface/components/RAMCacheComponent.h"
 
 using namespace facebook::cachelib::interface;
 
