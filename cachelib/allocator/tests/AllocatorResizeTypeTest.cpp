@@ -40,12 +40,27 @@ TYPED_TEST(AllocatorResizeTest, BasicResizeWithSharedMem) {
   this->testBasicResizeWithSharedMem();
 }
 
-TYPED_TEST(AllocatorResizeTest, ResizeAndMemMonitorTests) {
+TYPED_TEST(AllocatorResizeTest, ResizeMemMonitor) {
   this->testResizeMemMonitor();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorNoResize) {
   this->testMemMonitorNoResize();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorCompactCache) {
   this->testMemMonitorCompactCache();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorEmptySlabs) {
   this->testMemMonitorEmptySlabs();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemoryAdviseWithSaveRestore) {
   this->testMemoryAdviseWithSaveRestore();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemoryMonitorPerIterationAdviseReclaim) {
   this->testMemoryMonitorPerIterationAdviseReclaim();
 }
 
