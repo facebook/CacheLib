@@ -218,10 +218,9 @@ class MemoryMonitor : public PeriodicWorker {
   }
 
  private:
-  // updates the number of slabs to be advised by numSlabs. This would
-  // either increment (to advise away more slabs) or decrement (to reclaim
-  // some of the previously advised away slabs) the numSlabsToAdvise_ by
-  // numSlabs.
+  // updates the number of slabs to be advised by numSlabs. This would either
+  // increment (to advise away more slabs) or decrement (to reclaim some of the
+  // previously advised away slabs) numSlabsToAdvise_ by numSlabs.
   //
   // @param numSlabs   number of slabs to add-to/subtract-from numSlabToAdvise_
   //

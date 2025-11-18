@@ -5880,7 +5880,7 @@ bool CacheAllocator<CacheTrait>::startNewMemMonitor(
     MemoryMonitor::Config config,
     std::shared_ptr<RebalanceStrategy> strategy) {
   if (!startNewWorker("MemoryMonitor", memMonitor_, interval, *this, config,
-                      strategy, allocator_->getNumSlabsToAdvise())) {
+                      strategy, allocator_->getNumSlabsAdvised())) {
     return false;
   }
 

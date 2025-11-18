@@ -80,21 +80,17 @@ void MemoryMonitor::work() {
 
 void MemoryMonitor::updateNumSlabsToAdvise(int32_t numSlabs) {
   auto curNumSlabsToAdvise = numSlabsToAdvise_.load(std::memory_order_acquire);
+  size_t newNumSlabsToAdvise;
   do {
+    newNumSlabsToAdvise = curNumSlabsToAdvise + numSlabs;
     if (numSlabs < 0 &&
         static_cast<uint64_t>(-numSlabs) > curNumSlabsToAdvise) {
       throw std::invalid_argument(
           folly::sformat("Invalid numSlabs {} to update numSlabsToAdvise {}",
                          numSlabs, curNumSlabsToAdvise));
     }
-
-    auto newNumSlabsToAdvise = curNumSlabsToAdvise + numSlabs;
-    if (numSlabsToAdvise_.compare_exchange_weak(curNumSlabsToAdvise,
-                                                newNumSlabsToAdvise,
-                                                std::memory_order_acq_rel)) {
-      break;
-    }
-  } while (true);
+  } while (!numSlabsToAdvise_.compare_exchange_weak(
+      curNumSlabsToAdvise, newNumSlabsToAdvise, std::memory_order_acq_rel));
 }
 
 void MemoryMonitor::checkFreeMemory() {

@@ -66,7 +66,7 @@ MemoryPoolManager::MemoryPoolManager(
     poolsByName_.insert(kv);
   }
 
-  auto slabsAdvised = getNumSlabsToAdvise();
+  auto slabsAdvised = getNumSlabsAdvised();
   auto slabAllocAdvised = slabAlloc_.numSlabsReclaimable();
   if (slabsAdvised != slabAllocAdvised) {
     throw std::logic_error(folly::sformat(
@@ -76,7 +76,7 @@ MemoryPoolManager::MemoryPoolManager(
   }
 }
 
-size_t MemoryPoolManager::getNumSlabsToAdvise() const noexcept {
+size_t MemoryPoolManager::getNumSlabsAdvised() const noexcept {
   size_t slabsAdvised = 0;
   auto maxPools = nextPoolId_.load(std::memory_order_acquire);
   for (auto i = 0; i < maxPools; i++) {

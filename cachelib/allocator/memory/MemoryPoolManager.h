@@ -152,8 +152,8 @@ class MemoryPoolManager {
     return getRemainingSizeLocked();
   }
 
-  // calculate total number of slabs that can be advised away across all pools
-  size_t getNumSlabsToAdvise() const noexcept;
+  // get the total number of slabs advised away across all pools
+  size_t getNumSlabsAdvised() const noexcept;
 
   // return total memory currently advised away
   size_t getAdvisedMemorySize() const noexcept {
@@ -167,7 +167,8 @@ class MemoryPoolManager {
 
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
-  // @param poolIds    list of pools to process
+  // @param numSlabsToAdvise  total number of slabs to be advised/reclaimed
+  // @param poolIds           list of pools to process
   //
   // @return   vector of pairs with first value as poolId and second value
   //           the number of slabs to advise or number of slabs to reclaim

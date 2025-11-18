@@ -738,9 +738,9 @@ class MemoryAllocator {
     return alignedSize;
   }
 
-  // calculate total number of slabs that can be advised away across all pools
-  size_t getNumSlabsToAdvise() const noexcept {
-    return memoryPoolManager_.getNumSlabsToAdvise();
+  // get the total number of slabs advised away across all pools
+  size_t getNumSlabsAdvised() const noexcept {
+    return memoryPoolManager_.getNumSlabsAdvised();
   }
 
   // calculate the number of slabs to be advised/reclaimed in each pool
