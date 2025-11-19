@@ -1,0 +1,997 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#pragma once
+
+#include <atomic>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#include <folly/Format.h>
+#include <folly/Math.h>
+#pragma GCC diagnostic pop
+
+#include "cachelib/allocator/Cache.h"
+#include "cachelib/allocator/CacheStats.h"
+#include "cachelib/allocator/Util.h"
+#include "cachelib/allocator/datastruct/MultiDList.h"
+#include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
+#include "cachelib/common/CompilerUtils.h"
+#include "cachelib/common/CountMinSketch.h"
+#include "cachelib/common/Mutex.h"
+
+namespace facebook::cachelib {
+// Implements the S3-FIFO cache eviction policy as described in
+class MMS3FIFO {
+ public:
+  // unique identifier per MMType
+  static const int kId;
+
+  // forward declaration;
+  template <typename T>
+  using Hook = DListHook<T>;
+  using SerializationType = serialization::MMS3FIFOObject;
+  using SerializationConfigType = serialization::MMS3FIFOConfig;
+  using SerializationTypeContainer = serialization::MMS3FIFOCollection;
+
+  enum LruType { Main, Tiny, NumTypes };
+
+  // Config class for MMS3FIFO
+  struct Config {
+    // create from serialized config
+    explicit Config(SerializationConfigType configState)
+        : Config(*configState.lruRefreshTime(),
+                 *configState.lruRefreshRatio(),
+                 *configState.updateOnWrite(),
+                 *configState.updateOnRead(),
+                 *configState.tryLockUpdate(),
+                 *configState.windowToCacheSizeRatio(),
+                 *configState.tinySizePercent(),
+                 *configState.mmReconfigureIntervalSecs(),
+                 *configState.newcomerWinsOnTie()) {}
+
+    // @param time        the LRU refresh time in seconds.
+    //                    An item will be promoted only once in each lru refresh
+    //                    time depite the number of accesses it gets.
+    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnR   whether to promote the item on read
+    Config(uint32_t time, bool updateOnW, bool updateOnR)
+        : Config(time,
+                 updateOnW,
+                 updateOnR,
+                 /* try lock update */ false,
+                 16,
+                 1) {}
+
+    // @param time              the LRU refresh time in seconds.
+    //                          An item will be promoted only once in each lru
+    //                          refresh time depite the number of accesses it
+    //                          gets.
+    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnR         whether to promote the item on read
+    // @param windowToCacheSize multiplier of window size to cache size
+    // @param tinySizePct       percentage number of tiny size to overall size
+    Config(uint32_t time,
+           bool updateOnW,
+           bool updateOnR,
+           size_t windowToCacheSize,
+           size_t tinySizePct)
+        : Config(time,
+                 updateOnW,
+                 updateOnR,
+                 /* try lock update */ false,
+                 windowToCacheSize,
+                 tinySizePct) {}
+
+    // @param time              the LRU refresh time in seconds.
+    //                          An item will be promoted only once in each lru
+    //                          refresh time depite the number of accesses it
+    //                          gets.
+    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnR         whether to promote the item on read
+    // @param tryLockU          whether to use a try lock when doing update.
+    // @param windowToCacheSize multiplier of window size to cache size
+    // @param tinySizePct       percentage number of tiny size to overall size
+    Config(uint32_t time,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           size_t windowToCacheSize,
+           size_t tinySizePct)
+        : Config(time,
+                 0.,
+                 updateOnW,
+                 updateOnR,
+                 tryLockU,
+                 windowToCacheSize,
+                 tinySizePct) {}
+
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
+    Config(uint32_t time,
+           double ratio,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           size_t windowToCacheSize,
+           size_t tinySizePct)
+        : Config(time,
+                 ratio,
+                 updateOnW,
+                 updateOnR,
+                 tryLockU,
+                 windowToCacheSize,
+                 tinySizePct,
+                 0) {}
+
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
+    Config(uint32_t time,
+           double ratio,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           size_t windowToCacheSize,
+           size_t tinySizePct,
+           uint32_t mmReconfigureInterval)
+        : defaultLruRefreshTime(time),
+          lruRefreshRatio(ratio),
+          updateOnWrite(updateOnW),
+          updateOnRead(updateOnR),
+          tryLockUpdate(tryLockU),
+          windowToCacheSizeRatio(windowToCacheSize),
+          tinySizePercent(tinySizePct),
+          mmReconfigureIntervalSecs(
+              std::chrono::seconds(mmReconfigureInterval)) {
+      checkConfig();
+    }
+
+    // @param time                    the LRU refresh time in seconds.
+    //                                An item will be promoted only once in each
+    //                                lru refresh time depite the number of
+    //                                accesses it gets.
+    // @param ratio                   the lru refresh ratio. The ratio times the
+    //                                oldest element's lifetime in warm queue
+    //                                would be the minimum value of LRU refresh
+    //                                time.
+    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnR               whether to promote the item on read
+    // @param tryLockU                whether to use a try lock when doing
+    //                                update.
+    // @param windowToCacheSize       multiplier of window size to cache size
+    // @param tinySizePct             percentage number of tiny size to overall
+    //                                size
+    // @param mmReconfigureInterval   Time interval for recalculating lru
+    //                                refresh time according to the ratio.
+    // @param newcomerWinsOnTie       If true, new comer will replace existing
+    //                                item if their access frequencies tie.
+    Config(uint32_t time,
+           double ratio,
+           bool updateOnW,
+           bool updateOnR,
+           bool tryLockU,
+           size_t windowToCacheSize,
+           size_t tinySizePct,
+           uint32_t mmReconfigureInterval,
+           bool _newcomerWinsOnTie)
+        : defaultLruRefreshTime(time),
+          lruRefreshRatio(ratio),
+          updateOnWrite(updateOnW),
+          updateOnRead(updateOnR),
+          tryLockUpdate(tryLockU),
+          windowToCacheSizeRatio(windowToCacheSize),
+          tinySizePercent(tinySizePct),
+          mmReconfigureIntervalSecs(
+              std::chrono::seconds(mmReconfigureInterval)),
+          newcomerWinsOnTie(_newcomerWinsOnTie) {
+      checkConfig();
+    }
+
+    Config() = default;
+    Config(const Config& rhs) = default;
+    Config(Config&& rhs) = default;
+
+    Config& operator=(const Config& rhs) = default;
+    Config& operator=(Config&& rhs) = default;
+
+    void checkConfig() {
+      if (tinySizePercent < 1 || tinySizePercent > 50) {
+        throw std::invalid_argument(
+            folly::sformat("Invalid tiny cache size {}. Tiny cache size "
+                           "must be between 1% and 50% of total cache size ",
+                           tinySizePercent));
+      }
+      if (windowToCacheSizeRatio < 2 || windowToCacheSizeRatio > 128) {
+        throw std::invalid_argument(
+            folly::sformat("Invalid window to cache size ratio {}. The ratio "
+                           "must be between 2 and 128",
+                           windowToCacheSizeRatio));
+      }
+    }
+
+    template <typename... Args>
+    void addExtraConfig(Args...) {}
+
+    // threshold value in seconds to compare with a node's update time to
+    // determine if we need to update the position of the node in the linked
+    // list. By default this is 60s to reduce the contention on the lru lock.
+    uint32_t defaultLruRefreshTime{60};
+    uint32_t lruRefreshTime{defaultLruRefreshTime};
+
+    // ratio of LRU refresh time to the tail age. If a refresh time computed
+    // according to this ratio is larger than lruRefreshtime, we will adopt
+    // this one instead of the lruRefreshTime set.
+    double lruRefreshRatio{0.};
+
+    // whether the lru needs to be updated on writes for recordAccess. If
+    // false, accessing the cache for writes does not promote the cached item
+    // to the head of the lru.
+    bool updateOnWrite{false};
+
+    // whether the lru needs to be updated on reads for recordAccess. If
+    // false, accessing the cache for reads does not promote the cached item
+    // to the head of the lru.
+    bool updateOnRead{true};
+
+    // whether to tryLock or lock the lru lock when attempting promotion on
+    // access. If set, and tryLock fails, access will not result in promotion.
+    bool tryLockUpdate{false};
+
+    // The multiplier for window size given the cache size.
+    size_t windowToCacheSizeRatio{32};
+
+    // The size of tiny cache, as a percentage of the total size.
+    size_t tinySizePercent{10};
+
+    // Minimum interval between reconfigurations. If 0, reconfigure is never
+    // called.
+    std::chrono::seconds mmReconfigureIntervalSecs{};
+
+    // If true, then if an item in the tail of the Tiny queue ties with the
+    // item in the tail of the main queue, the item from Tiny (newcomer) will
+    // replace the item from Main. This is fine for a default, but for
+    // strictly scan patterns (access a key exactly once and move on), this
+    // is not a desirable behavior (we'll always cache miss).
+    bool newcomerWinsOnTie{true};
+  };
+
+  // The container object which can be used to keep track of objects of type
+  // T. T must have a public member of type Hook. This object is wrapper
+  // around DList, is thread safe and can be accessed from multiple threads.
+  // The current implementation models an LRU using the above DList
+  // implementation.
+  template <typename T, Hook<T> T::* HookPtr>
+  struct Container {
+   private:
+    using LruList = MultiDList<T, HookPtr>;
+    using Mutex = folly::SpinLock;
+    using LockHolder = std::unique_lock<Mutex>;
+    using PtrCompressor = typename T::PtrCompressor;
+    using Time = typename Hook<T>::Time;
+    using CompressedPtrType = typename T::CompressedPtrType;
+    using RefFlags = typename T::Flags;
+
+   public:
+    Container() = default;
+    Container(Config c, PtrCompressor compressor)
+        : lru_(LruType::NumTypes, std::move(compressor)),
+          config_(std::move(c)) {
+      maybeGrowGhostLocked();
+      lruRefreshTime_ = config_.lruRefreshTime;
+      nextReconfigureTime_ =
+          config_.mmReconfigureIntervalSecs.count() == 0
+              ? std::numeric_limits<Time>::max()
+              : static_cast<Time>(util::getCurrentTimeSec()) +
+                    config_.mmReconfigureIntervalSecs.count();
+    }
+    Container(serialization::MMS3FIFOObject object, PtrCompressor compressor);
+
+    Container(const Container&) = delete;
+    Container& operator=(const Container&) = delete;
+
+    // records the information that the node was accessed. This could bump up
+    // the node to the head of the lru depending on the time when the node was
+    // last updated in lru and the kLruRefreshTime. If the node was moved to
+    // the head in the lru, the node's updateTime will be updated
+    // accordingly.
+    //
+    // @param node  node that we want to mark as relevant/accessed
+    // @param mode  the mode for the access operation.
+    //
+    // @return      True if the information is recorded and bumped the node
+    //              to the head of the lru, returns false otherwise
+    bool recordAccess(T& node, AccessMode mode) noexcept;
+
+    // adds the given node into the container and marks it as being present in
+    // the container. The node is added to the head of the lru.
+    //
+    // @param node  The node to be added to the container.
+    // @return  True if the node was successfully added to the container. False
+    //          if the node was already in the contianer. On error state of node
+    //          is unchanged.
+    bool add(T& node) noexcept;
+
+    // removes the node from the lru and sets it previous and next to nullptr.
+    //
+    // @param node  The node to be removed from the container.
+    // @return  True if the node was successfully removed from the container.
+    //          False if the node was not part of the container. On error, the
+    //          state of node is unchanged.
+    bool remove(T& node) noexcept;
+
+    class LockedIterator;
+    // same as the above but uses an iterator context. The iterator is updated
+    // on removal of the corresponding node to point to the next node. The
+    // iterator context holds the lock on the lru.
+    //
+    // iterator will be advanced to the next node after removing the node
+    //
+    // @param it    Iterator that will be removed
+    void remove(LockedIterator& it) noexcept;
+
+    // replaces one node with another, at the same position
+    //
+    // @param oldNode   node being replaced
+    // @param newNode   node to replace oldNode with
+    //
+    // @return true  If the replace was successful. Returns false if the
+    //               destination node did not exist in the container, or if the
+    //               source node already existed.
+    bool replace(T& oldNode, T& newNode) noexcept;
+
+    // context for iterating the MM container. At any given point of time,
+    // there can be only one iterator active since we need to lock the LRU for
+    // iteration. we can support multiple iterators at same time, by using a
+    // shared ptr in the context for the lock holder in the future.
+    class LockedIterator {
+     public:
+      using ListIterator = typename LruList::DListIterator;
+      // noncopyable but movable.
+      LockedIterator(const LockedIterator&) = delete;
+      LockedIterator& operator=(const LockedIterator&) = delete;
+      LockedIterator(LockedIterator&&) noexcept = default;
+
+      // Todo: Advance the iterator without calling getIter since getIter mutates
+      LockedIterator& operator++() noexcept {
+        ++getIter();
+        return *this;
+      }
+
+      LockedIterator& operator--() {
+        throw std::invalid_argument(
+            "Decrementing eviction iterator is not supported");
+      }
+
+      T* operator->() const noexcept { return getIter().operator->(); }
+      T& operator*() const noexcept { return getIter().operator*(); }
+
+      bool operator==(const LockedIterator& other) const noexcept {
+        return &c_ == &other.c_ && tIter_ == other.tIter_ &&
+               mIter_ == other.mIter_;
+      }
+
+      bool operator!=(const LockedIterator& other) const noexcept {
+        return !(*this == other);
+      }
+
+      explicit operator bool() const noexcept { return tIter_ || mIter_; }
+
+      T* get() const noexcept { return getIter().get(); }
+
+      // Invalidates this iterator
+      void reset() noexcept {
+        // Point iterator to first list's rend
+        tIter_.reset();
+        mIter_.reset();
+      }
+
+      // 1. Invalidate this iterator
+      // 2. Unlock
+      void destroy() {
+        reset();
+        if (l_.owns_lock()) {
+          l_.unlock();
+        }
+      }
+
+      // Reset this iterator to the beginning
+      void resetToBegin() {
+        if (!l_.owns_lock()) {
+          l_.lock();
+        }
+        tIter_.resetToBegin();
+        mIter_.resetToBegin();
+      }
+
+     private:
+      // private because it's easy to misuse and cause deadlock for MMS3FIFO
+      LockedIterator& operator=(LockedIterator&&) noexcept = default;
+
+      // create an lru iterator with the lock being held.
+      explicit LockedIterator(LockHolder l,
+                              const Container<T, HookPtr>& c) noexcept;
+
+      ListIterator& getIter() noexcept {
+        return const_cast<ListIterator&>(
+            static_cast<const LockedIterator*>(this)->getIter());
+      }
+
+      bool shouldEvictSmall() const noexcept {
+        int smallSize = static_cast<int>(c_.lru_.getList(LruType::Tiny).size());
+        int mainSize = static_cast<int>(c_.lru_.getList(LruType::Main).size());
+
+        if (smallSize == 0) {
+          return false;
+        }
+        if (mainSize == 0) {
+          return true;
+        }
+
+        const size_t total = smallSize + mainSize;
+        const size_t targetTiny =
+            static_cast<size_t>(c_.config_.tinySizePercent * c_.lru_.size() / 100);
+        // If tiny is at or above its target share, start evicting from tiny
+        return smallSize >= targetTiny;
+      }
+
+      // Todo: Now it may advance the iterators to skip items that need promotion.
+      // Is there a better way?
+      const ListIterator& getIter() const noexcept {
+        auto& tinyLru = c_.lru_.getList(LruType::Tiny);
+        auto& mainLru = c_.lru_.getList(LruType::Main);
+
+        while (true) {
+          bool tryTiny = shouldEvictSmall();
+          ListIterator activeIter = tryTiny ? tIter_ : mIter_;
+
+          if (!activeIter) {
+            // both exhausted, just return any
+            return activeIter;
+          }
+
+          if (tryTiny) {
+            // -------- evictS semantics ----------
+            // evictS:
+            //   while S not empty:
+            //     t = tail(S)
+            //     if t.freq accessed: move t to M, reset bit
+            //     else: eviction candidate
+            //
+            // Here we just choose the victim and do the promotion if needed.
+            // the actual removal from S or M is done in Container::remove(it).
+            // Remove() will insert into ghost
+
+            T& node = *activeIter;
+            if (Container<T, HookPtr>::isAccessed(node)) {
+              ++activeIter;
+              // promote to main cache
+              tinyLru.remove(node);
+              mainLru.linkAtHead(node);
+              Container<T, HookPtr>::unmarkTiny(node);
+              Container<T, HookPtr>::unmarkAccessed(node);
+              continue;
+            }
+            return activeIter;
+
+          } else {
+            // -------- evictM semantics ----------
+            // evictM:
+            //   while M not empty:
+            //     t = tail(M)
+            //     if t.freq > 0: move t to head(M), unset accessed bit.
+            //     else: evict
+            T& node = *activeIter;
+            if (Container<T, HookPtr>::isAccessed(node)) {
+              // Reinsert to head
+              ++activeIter;             // move iterator first
+              mainLru.moveToHead(node); // move t to head
+              Container<T, HookPtr>::unmarkAccessed(node);
+              continue;
+            }
+            return activeIter;
+          }
+        }
+      }
+
+      // only the container can create iterators
+      friend Container<T, HookPtr>;
+
+      const Container<T, HookPtr>& c_;
+      // Tiny and main cache iterators
+      ListIterator tIter_;
+      ListIterator mIter_;
+      // lock protecting the validity of the iterator
+      LockHolder l_;
+    };
+
+    Config getConfig() const;
+
+    void setConfig(const Config& newConfig);
+
+    bool isEmpty() const noexcept {
+      LockHolder l(lruMutex_);
+      return lru_.size() == 0;
+    }
+
+    size_t size() const noexcept {
+      LockHolder l(lruMutex_);
+      return lru_.size();
+    }
+
+    // TODO: Hash table for ghost queue
+    size_t counterSize() const noexcept {
+      LockHolder l(lruMutex_);
+      return accessFreq_.getByteSize();
+    }
+
+    // Returns the eviction age stats. See CacheStats.h for details
+    EvictionAgeStat getEvictionAgeStat(uint64_t projectedLength) const noexcept;
+
+    // Obtain an iterator that start from the tail and can be used
+    // to search for evictions. This iterator holds a lock to this
+    // container and only one such iterator can exist at a time
+    LockedIterator getEvictionIterator() const noexcept;
+
+    // Execute provided function under container lock. Function gets
+    // iterator passed as parameter.
+    template <typename F>
+    void withEvictionIterator(F&& f);
+
+    // Execute provided function under container lock.
+    template <typename F>
+    void withContainerLock(F&& f);
+
+    // for saving the state of the lru
+    //
+    // precondition:  serialization must happen without any reader or writer
+    // present. Any modification of this object afterwards will result in an
+    // invalid, inconsistent state for the serialized data.
+    //
+    serialization::MMS3FIFOObject saveState() const noexcept;
+
+    // return the stats for this container.
+    MMContainerStat getStats() const noexcept;
+
+    static LruType getLruType(const T& node) noexcept {
+      return isTiny(node) ? LruType::Tiny : LruType::Main;
+    }
+
+   private:
+    EvictionAgeStat getEvictionAgeStatLocked(
+        uint64_t projectedLength) const noexcept;
+
+    static Time getUpdateTime(const T& node) noexcept {
+      return (node.*HookPtr).getUpdateTime();
+    }
+
+    static void setUpdateTime(T& node, Time time) noexcept {
+      (node.*HookPtr).setUpdateTime(time);
+    }
+
+    // As the cache grows, the frequency counters may need to grow.
+    // Todo: Grow with hash table
+    void maybeGrowGhostLocked() noexcept;
+
+    // Returns the hash of node's key
+    static size_t hashNode(const T& node) noexcept {
+      return folly::hasher<folly::StringPiece>()(node.getKey());
+    }
+
+    // remove node from lru and adjust insertion points
+    //
+    // @param node          node to remove
+    void removeLocked(T& node) noexcept;
+
+    static bool isTiny(const T& node) noexcept {
+      return node.template isFlagSet<RefFlags::kMMFlag0>();
+    }
+
+    static bool isAccessed(const T& node) noexcept {
+      return node.template isFlagSet<RefFlags::kMMFlag1>();
+    }
+
+    // Bit MM_BIT_0 is used to record if the item is in tiny cache.
+    static void markTiny(T& node) noexcept {
+      node.template setFlag<RefFlags::kMMFlag0>();
+    }
+    static void unmarkTiny(T& node) noexcept {
+      node.template unSetFlag<RefFlags::kMMFlag0>();
+    }
+
+    // Bit MM_BIT_1 is used to record if the item has been accessed since being
+    // written in cache. Unaccessed items are ignored when determining projected
+    // update time.
+    static void markAccessed(T& node) noexcept {
+      node.template setFlag<RefFlags::kMMFlag1>();
+    }
+    static void unmarkAccessed(T& node) noexcept {
+      node.template unSetFlag<RefFlags::kMMFlag1>();
+    }
+
+    bool hashContains(const T& node) const noexcept {
+      // Mock implementation
+      // random return t or false
+      return (hashNode(node) % 2) == 0;
+    }
+
+    bool hashInsert(const T& node) noexcept {
+      // Mock implementation
+      return true;
+    }
+
+    // Initial cache capacity estimate for count-min-sketch
+    static constexpr size_t kDefaultCapacity = 100;
+
+    // Number of hashes
+    static constexpr size_t kHashCount = 4;
+
+    // The error threshold for frequency calculation
+    static constexpr size_t kErrorThreshold = 5;
+
+    // decay rate for frequency
+    static constexpr double kDecayFactor = 0.5;
+
+    // protects all operations on the lru. We never really just read the state
+    // of the LRU. Hence we dont really require a RW mutex at this point of
+    // time.
+    mutable Mutex lruMutex_;
+
+    // the lru
+    LruList lru_;
+
+    // the window size counter
+    size_t windowSize_{0};
+
+    // maximum value of window size which when hit the counters are halved
+    size_t maxWindowSize_{0};
+
+    // The capacity for which the counters are sized
+    size_t capacity_{0};
+
+    // The next time to reconfigure the container.
+    std::atomic<Time> nextReconfigureTime_{};
+
+    // How often to promote an item in the eviction queue.
+    std::atomic<uint32_t> lruRefreshTime_{};
+
+    // Max lruFreshTime.
+    static constexpr uint32_t kLruRefreshTimeCap{900};
+
+    // Config for this lru.
+    // Write access to the MMS3FIFO Config is serialized.
+    // Reads may be racy.
+    Config config_{};
+
+    // Approximate streaming frequency counters. The counts are halved every
+    // time the maxWindowSize is hit.
+    facebook::cachelib::util::CountMinSketch accessFreq_{};
+
+    // // Todo: Test?
+    // FRIEND_TEST(MMS3FIFOTest, SegmentStress);
+    // FRIEND_TEST(MMS3FIFOTest, TinyLFUBasic);
+    // FRIEND_TEST(MMS3FIFOTest, Reconfigure);
+  };
+};
+
+/* Container Interface Implementation */
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+MMS3FIFO::Container<T, HookPtr>::Container(serialization::MMS3FIFOObject object,
+                                           PtrCompressor compressor)
+    : lru_(*object.lrus(), std::move(compressor)), config_(*object.config()) {
+  lruRefreshTime_ = config_.lruRefreshTime;
+  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
+                             ? std::numeric_limits<Time>::max()
+                             : static_cast<Time>(util::getCurrentTimeSec()) +
+                                   config_.mmReconfigureIntervalSecs.count();
+  maybeGrowGhostLocked();
+}
+
+// Todo: initialize hash table
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
+  size_t capacity = lru_.size();
+  // If the new capacity ask is more than double the current size, recreate
+  // the approx frequency counters.
+  if (2 * capacity_ > capacity) {
+    return;
+  }
+  // Todo: ghost growing not implemented
+  printf("MMS3FIFO::Container::maybeGrowGhostLocked not implemented\n");
+}
+
+// We have no notion of "reconfiguring lock"
+// or refresh interval since we are not manipulating the list lru on access.
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
+                                                   AccessMode mode) noexcept {
+  if ((mode == AccessMode::kWrite && !config_.updateOnWrite) ||
+      (mode == AccessMode::kRead && !config_.updateOnRead)) {
+    return false;
+  }
+
+  const auto curr = static_cast<Time>(util::getCurrentTimeSec());
+  LockHolder l(lruMutex_);
+  // check if the node is still being memory managed
+  // No need refreshing since we are treating the list as a FIFO queue.
+  if (node.isInMMContainer() && !isAccessed(node)) {
+    if (!isAccessed(node)) {
+      markAccessed(node);
+    }
+    setUpdateTime(node, curr);
+    return true;
+  }
+  return false;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+cachelib::EvictionAgeStat MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStat(
+    uint64_t projectedLength) const noexcept {
+  LockHolder l(lruMutex_);
+  return getEvictionAgeStatLocked(projectedLength);
+}
+
+// We have 2 options:
+// 1. Use the tail to get eviction age -> Tail can be popular item
+// 2. Use the first unaccessed item from tail -> Tail is more accurate for age
+// estimation Currently we get the Nth unaccessed item from tail. This function
+// is used for:
+// - Filtering out slab candidates during slab release (projectedLength = 0),
+// actual age is used
+// - Estimating projected eviction age for lrutailage strategy, where
+// projectedLength > 0 We only implement up to 0 case for now. LRUTailAge should
+// not be used in MMS3FIFO.
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+cachelib::EvictionAgeStat
+MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
+    uint64_t projectedLength) const noexcept {
+  if (projectedLength != 0) {
+    throw std::invalid_argument(
+        "Projected eviction age estimation is not supported in MMS3FIFO");
+  }
+
+  EvictionAgeStat stat;
+  const auto curr = static_cast<Time>(util::getCurrentTimeSec());
+
+  auto& list = lru_.getList(LruType::Main);
+  auto it = list.rbegin();
+
+  // Check if accessed. If so, advance the iterator.
+  while (it != list.rend() && isAccessed(*it)) {
+    ++it;
+  }
+  stat.warmQueueStat.oldestElementAge =
+      it != list.rend() ? curr - getUpdateTime(*it) : 0;
+
+  stat.warmQueueStat.size = list.size();
+
+  return stat;
+}
+
+// Todo: Check whether item exist in ghost queue.
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
+  const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
+  LockHolder l(lruMutex_);
+  if (node.isInMMContainer()) {
+    return false;
+  }
+
+  if (hashContains(node)) {
+    // Insert to main queue
+    auto& mainLru = lru_.getList(LruType::Main);
+    mainLru.linkAtHead(node);
+  } else {
+    // Insert to tiny queue
+    auto& tinyLru = lru_.getList(LruType::Tiny);
+    tinyLru.linkAtHead(node);
+    markTiny(node);
+  }
+
+  maybeGrowGhostLocked();
+
+  node.markInMMContainer();
+  setUpdateTime(node, currTime);
+  unmarkAccessed(node);
+
+  // Always link to probationary queue. Eviction logic will
+  // decide / promote as needed.
+
+  // const auto expectedSize = config_.tinySizePercent * lru_.size() / 100;
+  // if (lru_.getList(LruType::Tiny).size() > expectedSize) {
+  //   auto tailNode = tinyLru.getTail();
+  //   tinyLru.remove(*tailNode);
+
+  //   auto& mainLru = lru_.getList(LruType::Main);
+  //   mainLru.linkAtHead(*tailNode);
+  //   unmarkTiny(*tailNode);
+
+  // Maybe rehash here.
+  return true;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
+MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() const noexcept {
+  LockHolder l(lruMutex_);
+  return LockedIterator{std::move(l), *this};
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+template <typename F>
+void MMS3FIFO::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
+  // Uses spinlock, can't use combined locking
+  fun(getEvictionIterator());
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+template <typename F>
+void MMS3FIFO::Container<T, HookPtr>::withContainerLock(F&& fun) {
+  LockHolder l(lruMutex_);
+  fun();
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
+  if (isTiny(node)) {
+    lru_.getList(LruType::Tiny).remove(node);
+    unmarkTiny(node);
+    // Insert to hash upon removal
+    hashInsert(node);
+  } else {
+    lru_.getList(LruType::Main).remove(node);
+  }
+
+  unmarkAccessed(node);
+  node.unmarkInMMContainer();
+  return;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+bool MMS3FIFO::Container<T, HookPtr>::remove(T& node) noexcept {
+  LockHolder l(lruMutex_);
+  if (!node.isInMMContainer()) {
+    return false;
+  }
+  removeLocked(node);
+  return true;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+void MMS3FIFO::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
+  T& node = *it;
+  XDCHECK(node.isInMMContainer());
+  ++it;
+  removeLocked(node);
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+bool MMS3FIFO::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
+  LockHolder l(lruMutex_);
+  if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
+    return false;
+  }
+  const auto updateTime = getUpdateTime(oldNode);
+
+  if (isTiny(oldNode)) {
+    lru_.getList(LruType::Tiny).replace(oldNode, newNode);
+    unmarkTiny(oldNode);
+    markTiny(newNode);
+  } else {
+    lru_.getList(LruType::Main).replace(oldNode, newNode);
+  }
+
+  oldNode.unmarkInMMContainer();
+  newNode.markInMMContainer();
+  setUpdateTime(newNode, updateTime);
+  if (isAccessed(oldNode)) {
+    markAccessed(newNode);
+  } else {
+    unmarkAccessed(newNode);
+  }
+  return true;
+}
+
+// Todo: all the configs, states
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+typename MMS3FIFO::Config MMS3FIFO::Container<T, HookPtr>::getConfig() const {
+  LockHolder l(lruMutex_);
+  return config_;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+void MMS3FIFO::Container<T, HookPtr>::setConfig(const Config& c) {
+  LockHolder l(lruMutex_);
+  config_ = c;
+  lruRefreshTime_.store(config_.lruRefreshTime, std::memory_order_relaxed);
+  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
+                             ? std::numeric_limits<Time>::max()
+                             : static_cast<Time>(util::getCurrentTimeSec()) +
+                                   config_.mmReconfigureIntervalSecs.count();
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+serialization::MMS3FIFOObject MMS3FIFO::Container<T, HookPtr>::saveState()
+    const noexcept {
+  serialization::MMS3FIFOConfig configObject;
+  *configObject.lruRefreshTime() =
+      lruRefreshTime_.load(std::memory_order_relaxed);
+  *configObject.lruRefreshRatio() = config_.lruRefreshRatio;
+  *configObject.updateOnWrite() = config_.updateOnWrite;
+  *configObject.updateOnRead() = config_.updateOnRead;
+  *configObject.windowToCacheSizeRatio() = config_.windowToCacheSizeRatio;
+  *configObject.tinySizePercent() = config_.tinySizePercent;
+  *configObject.mmReconfigureIntervalSecs() =
+      config_.mmReconfigureIntervalSecs.count();
+  *configObject.newcomerWinsOnTie() = config_.newcomerWinsOnTie;
+  // TODO: Serialize with ghost queue too.
+  // Right now serialization / save state is incomplete.
+
+  serialization::MMS3FIFOObject object;
+  *object.config() = configObject;
+  *object.lrus() = lru_.saveState();
+  return object;
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+MMContainerStat MMS3FIFO::Container<T, HookPtr>::getStats() const noexcept {
+  LockHolder l(lruMutex_);
+
+  auto evictionAge = getEvictionAgeStatLocked(0).warmQueueStat.oldestElementAge;
+
+  return {
+      lru_.size(),
+      evictionAge, // Approximation of tail age from first unaccesessed items
+      0, // We have no notion of refresh time, accesses only toggle access bit
+      0,           0, 0, 0};
+}
+
+// Locked Iterator Context Implementation
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+MMS3FIFO::Container<T, HookPtr>::LockedIterator::LockedIterator(
+    LockHolder l, const Container<T, HookPtr>& c) noexcept
+    : c_(c),
+      tIter_(c.lru_.getList(LruType::Tiny).rbegin()),
+      mIter_(c.lru_.getList(LruType::Main).rbegin()),
+      l_(std::move(l)) {}
+} // namespace facebook::cachelib
