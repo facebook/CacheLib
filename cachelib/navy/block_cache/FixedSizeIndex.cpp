@@ -35,11 +35,19 @@ void FixedSizeIndex::initialize() {
   XDCHECK(numBucketsPerMutex_ <= totalBuckets_);
   totalMutexes_ = (totalBuckets_ - 1) / numBucketsPerMutex_ + 1;
 
-  ht_ = std::make_unique<PackedItemRecord[]>(totalBuckets_);
   mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
-  validBucketsPerMutex_ = std::make_unique<size_t[]>(totalMutexes_);
-
   bucketDistInfo_.initialize(totalBuckets_);
+}
+
+size_t FixedSizeIndex::getRequiredPreallocSize() const {
+  // Need to preallocate buffer for those info which needs to be persistent
+  // 1. Main hash table with PackedItemRecord entries
+  // 2. Table entry count information per each mutex boundary
+  // (validBucketsPerMutex_)
+  // 3. BucketDistInfo
+  return sizeof(PackedItemRecord) * totalBuckets_ + // for ht_
+         sizeof(size_t) * totalMutexes_ +           // for validBucketsPerMutex_
+         bucketDistInfo_.getBucketDistInfoBufSize(); // for bucketDistInfo_
 }
 
 Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
@@ -151,6 +159,19 @@ bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
 }
 
 void FixedSizeIndex::reset() {
+  XLOGF(INFO,
+        "Resetting BlockCache hashtable with FixedSizeIndex: {} buckets",
+        totalBuckets_);
+  // check if we don't have shm enabled
+  void* baseAddr = shmManager_
+                       ? shmManager_
+                             ->createShm(getShmName(kShmIndexName),
+                                         getRequiredPreallocSize())
+                             .addr
+                       : util::mmapAlignedZeroedMemory(
+                             util::getPageSize(), getRequiredPreallocSize());
+  initWithBaseAddr(reinterpret_cast<uint8_t*>(baseAddr));
+
   uint64_t bucketId = 0;
   for (uint32_t i = 0; i < totalMutexes_; i++) {
     auto lock = std::lock_guard{mutex_[i]};
@@ -158,6 +179,34 @@ void FixedSizeIndex::reset() {
       ht_[bucketId++] = PackedItemRecord{};
     }
     validBucketsPerMutex_[i] = 0;
+  }
+
+  if (shmManager_) {
+    // Let's store currently used config to shm
+    serialization::FixedSizeIndexConfig cfg;
+    *cfg.version() = kFixedSizeIndexVersion;
+    *cfg.numChunks() = static_cast<int32_t>(numChunks_);
+    *cfg.numBucketsPerChunkPower() = numBucketsPerChunkPower_;
+    *cfg.numBucketsPerMutex() = static_cast<int64_t>(numBucketsPerMutex_);
+
+    auto ioBuf = Serializer::serializeToIOBuf(cfg);
+
+    auto shmAddr =
+        shmManager_->createShm(getShmName(kShmIndexInfoName), ioBuf->length());
+    Serializer serializer(
+        reinterpret_cast<uint8_t*>(shmAddr.addr),
+        reinterpret_cast<uint8_t*>(shmAddr.addr) + ioBuf->length());
+    serializer.writeToBuffer(std::move(ioBuf));
+
+    XLOGF(INFO,
+          "Created BlockCache hashtable with FixedSizeIndex on shared memory: "
+          "{} buckets",
+          totalBuckets_);
+  } else {
+    XLOGF(INFO,
+          "Created BlockCache hashtable with FixedSizeIndex, persistency is "
+          "disabled: {} buckets",
+          totalBuckets_);
   }
 }
 
@@ -188,76 +237,48 @@ Index::MemFootprintRange FixedSizeIndex::computeMemFootprintRange() const {
 }
 
 void FixedSizeIndex::persist(
-    std::optional<std::reference_wrapper<RecordWriter>> rw) const {
-  // TODO: need to revisit persist and recover
-  // : We already know that current persist and recover are not efficient
-  // and we don't handle well when we write more than pre-configured metadata
-  // size by serializing too many items.
-  // We will change to use shm for FixedSizeIndex for persist/recover soon.
-  // For now, this code will follow the same logic with the exisiting
-  // SparseMapIndex
-  XLOGF(INFO, "Persisting BlockCache hashtable: {} buckets", totalBuckets_);
-  XDCHECK(rw.has_value());
-
-  auto fillMapBuf = folly::IOBuf::wrapBuffer(bucketDistInfo_.fillMap_.get(),
-                                             bucketDistInfo_.fillMapBufSize_);
-  auto partialBitsBuf = folly::IOBuf::wrapBuffer(
-      bucketDistInfo_.partialBits_.get(), bucketDistInfo_.partialBitsBufSize_);
-
-  rw->get().writeRecord(std::move(fillMapBuf));
-  rw->get().writeRecord(std::move(partialBitsBuf));
-
-  for (uint64_t i = 0; i < totalBuckets_; ++i) {
-    serialization::IndexEntry entry;
-    entry.key() = i;
-    entry.address() = ht_[i].address;
-    entry.sizeHint() = ht_[i].getSizeHint();
-    entry.currentHits() = (uint8_t)(ht_[i].info.curHits);
-
-    serializeProto(entry, rw->get());
-  }
+    std::optional<std::reference_wrapper<RecordWriter>> /* rw */) const {
+  // FixedSizeIndex supports persistency by using shm and at this point, we
+  // don't have anything to store here. Leaving this only with the log message
+  // to have consistent API call flow with SparseMapIndex
   XLOG(INFO) << "Finished persisting BlockCache hashtable";
 }
 
 void FixedSizeIndex::recover(
-    std::optional<std::reference_wrapper<RecordReader>> rr) {
-  // TODO need to revisit persist and recover. See the comment in persist().
-  XLOGF(INFO, "Recovering BlockCache hashtable: {} buckets", totalBuckets_);
-  XDCHECK(rr.has_value());
+    std::optional<std::reference_wrapper<RecordReader>> /* rr */) {
+  XLOGF(INFO,
+        "Recovering BlockCache hashtable with FixedSizeIndex: {} buckets",
+        totalBuckets_);
+  // If recover() fails for whatever reason, it will throw exception. This
+  // exception will be caught in BlockCache::recover() and it will proceed with
+  // reset() with empty cache entries
 
-  auto fillMapBuf = rr->get().readRecord();
-  auto partialBitsBuf = rr->get().readRecord();
-
-  if (fillMapBuf->length() != bucketDistInfo_.fillMapBufSize_ ||
-      partialBitsBuf->length() != bucketDistInfo_.partialBitsBufSize_) {
-    XLOG(ERR) << "Failed to recover BlockCache index. BucketDistInfo format is "
-                 "different";
-    return;
+  if (!shmManager_) {
+    // Can't support persistency. Exception will be caught in
+    // BlockCache::recover()
+    throw std::runtime_error("Cannot recover FixedSizeIndex without shm");
   }
 
-  memcpy(
-      bucketDistInfo_.fillMap_.get(), fillMapBuf->data(), fillMapBuf->length());
-  memcpy(bucketDistInfo_.partialBits_.get(),
-         partialBitsBuf->data(),
-         partialBitsBuf->length());
+  // Check stored config first
+  auto infoAddr = shmManager_->attachShm(getShmName(kShmIndexInfoName));
+  Deserializer deserializer(
+      reinterpret_cast<uint8_t*>(infoAddr.addr),
+      reinterpret_cast<uint8_t*>(infoAddr.addr) + infoAddr.size);
 
-  for (uint64_t i = 0; i < totalBuckets_; ++i) {
-    auto entry = deserializeProto<serialization::IndexEntry>(rr->get());
-    if (static_cast<uint64_t>(*entry.key()) >= totalBuckets_) {
-      continue;
-    }
-
-    if (PackedItemRecord::isValidAddress(*entry.address())) {
-      // valid entry
-      ht_[*entry.key()] =
-          PackedItemRecord{static_cast<uint32_t>(*entry.address()),
-                           static_cast<uint16_t>(*entry.sizeHint()),
-                           static_cast<uint8_t>(*entry.currentHits())};
-      ++validBucketsPerMutex_[*entry.key() / numBucketsPerMutex_];
-    } else {
-      ht_[*entry.key()] = PackedItemRecord{};
-    }
+  auto storedCfg =
+      deserializer.deserialize<serialization::FixedSizeIndexConfig>();
+  if (!checkStoredConfig(storedCfg)) {
+    // Stored config values are different from current value. Exception will be
+    // caught in BlockCache::recover()
+    throw std::runtime_error(
+        "Failed to recover FixedSizeIndex. Different config value(s)");
   }
+
+  // Looks like we have stored FixedSizeIndex with the same config values
+  auto indexBaseAddr = shmManager_->attachShm(getShmName(kShmIndexName));
+
+  initWithBaseAddr(reinterpret_cast<uint8_t*>(indexBaseAddr.addr));
+
   XLOG(INFO) << "Finished recovering BlockCache hashtable";
 }
 
@@ -280,6 +301,28 @@ void FixedSizeIndex::setHitsTestOnly(uint64_t key,
           key,
           totalHits);
   }
+}
+
+bool FixedSizeIndex::checkStoredConfig(
+    const serialization::FixedSizeIndexConfig& stored) {
+  return (static_cast<uint32_t>(*stored.version()) == kFixedSizeIndexVersion &&
+          static_cast<uint32_t>(*stored.numChunks()) == numChunks_ &&
+          static_cast<uint8_t>(*stored.numBucketsPerChunkPower()) ==
+              numBucketsPerChunkPower_ &&
+          static_cast<uint64_t>(*stored.numBucketsPerMutex()) ==
+              numBucketsPerMutex_);
+}
+
+void FixedSizeIndex::initWithBaseAddr(uint8_t* addr) {
+  // In Shm, it's stored in this order:
+  // ht_, validBucketsPerMutex_, bucketDistInfo (fillMap_, partialBits_)
+  ht_ = reinterpret_cast<PackedItemRecord*>(addr);
+  addr += sizeof(PackedItemRecord) * totalBuckets_;
+
+  validBucketsPerMutex_ = reinterpret_cast<size_t*>(addr);
+  addr += sizeof(size_t) * totalMutexes_;
+
+  bucketDistInfo_.initWithBaseAddr(addr);
 }
 
 } // namespace navy

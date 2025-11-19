@@ -18,7 +18,10 @@
 
 #include <folly/fibers/TimedMutex.h>
 
+#include "cachelib/common/Serialization.h"
 #include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/serialization/gen-cpp2/objects_types.h"
+#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -51,14 +54,31 @@ using SharedMutex =
 // set up proper configurtion numbers.
 class FixedSizeIndex : public Index {
  public:
-  explicit FixedSizeIndex(uint32_t numChunks,
-                          uint8_t numBucketsPerChunkPower,
-                          uint64_t numBucketsPerMutex)
+  FixedSizeIndex(uint32_t numChunks,
+                 uint8_t numBucketsPerChunkPower,
+                 uint64_t numBucketsPerMutex,
+                 ShmManager* shmManager,
+                 const std::string& name)
       : numChunks_(numChunks),
         numBucketsPerChunkPower_(numBucketsPerChunkPower),
-        numBucketsPerMutex_(numBucketsPerMutex) {
+        numBucketsPerMutex_(numBucketsPerMutex),
+        shmManager_(shmManager),
+        name_(name) {
     initialize();
   }
+
+  // This constructor is mainly for testing. Don't use it for the real use case
+  FixedSizeIndex(uint32_t numChunks,
+                 uint8_t numBucketsPerChunkPower,
+                 uint64_t numBucketsPerMutex)
+      : FixedSizeIndex(numChunks,
+                       numBucketsPerChunkPower,
+                       numBucketsPerMutex,
+                       nullptr,
+                       "") {
+    reset();
+  }
+
   FixedSizeIndex() = delete;
   ~FixedSizeIndex() override = default;
   FixedSizeIndex(const FixedSizeIndex&) = delete;
@@ -67,6 +87,16 @@ class FixedSizeIndex : public Index {
   FixedSizeIndex& operator=(FixedSizeIndex&&) = delete;
 
   static constexpr double kSizeExpBase = 1.1925;
+  // This needs to be increased with any major changes to FixedSizeIndex.
+  // If persist() detects stored version being different with the current
+  // version number, it will give up on recovering and begin with the empty
+  // index.
+  static constexpr uint32_t kFixedSizeIndexVersion = 1;
+
+  // Shm names for FixedSizeIndex
+  static constexpr std::string_view kShmIndexInfoName =
+      "shm_fixed_size_index_info";
+  static constexpr std::string_view kShmIndexName = "shm_fixed_size_index";
 
   // Writes index content to a Thrift object
   void persist(
@@ -229,10 +259,16 @@ class FixedSizeIndex : public Index {
       XDCHECK(numBuckets > 0);
 
       numBuckets_ = numBuckets;
+      // Using 2 bits per each bucket for fillMap info
       fillMapBufSize_ = (numBuckets - 1) / 4 + 1;
       partialBitsBufSize_ = numBuckets;
-      fillMap_ = std::make_unique<uint8_t[]>(fillMapBufSize_);
-      partialBits_ = std::make_unique<uint8_t[]>(partialBitsBufSize_);
+    }
+
+    void initWithBaseAddr(uint8_t* addr) {
+      fillMap_ = addr;
+      // Each fillMap buf is one byte and each bucket uses 2 bits from there
+      addr += fillMapBufSize_;
+      partialBits_ = addr;
     }
 
     void updateBucketFillInfo(uint64_t bucketId,
@@ -277,9 +313,11 @@ class FixedSizeIndex : public Index {
     }
     uint8_t getPartialBits(uint64_t bid) const { return partialBits_[bid]; }
 
-    std::unique_ptr<uint8_t[]> fillMap_;
+    // fillMap_ is a array of uint8_t
+    uint8_t* fillMap_{};
     uint64_t fillMapBufSize_{0};
-    std::unique_ptr<uint8_t[]> partialBits_;
+    // partialBits_ is a array of uint8_t
+    uint8_t* partialBits_{};
     uint64_t partialBitsBufSize_{0};
     uint64_t numBuckets_{0};
 
@@ -443,19 +481,31 @@ class FixedSizeIndex : public Index {
            ((bid + kNextBucketOffset[offset]) % numBucketsPerMutex_);
   }
 
+  // Some helper functions below
+  bool checkStoredConfig(const serialization::FixedSizeIndexConfig& stored);
+  size_t getRequiredPreallocSize() const;
+  std::string getShmName(const std::string_view& namePrefix) {
+    return std::string(namePrefix) + "_" + name_;
+  }
+  void initWithBaseAddr(uint8_t* addr);
+
   // Configuration related variables
   const uint32_t numChunks_{0};
   const uint8_t numBucketsPerChunkPower_{0};
   const uint64_t numBucketsPerMutex_{0};
+  ShmManager* shmManager_{};
+  std::string name_;
 
   uint64_t bucketsPerChunk_{0};
   uint64_t totalBuckets_{0};
   uint64_t totalMutexes_{0};
 
-  std::unique_ptr<PackedItemRecord[]> ht_;
+  // ht_ is a array of PackedItemRecord
+  PackedItemRecord* ht_{};
   std::unique_ptr<SharedMutex[]> mutex_;
   // The size for ht (stored bucket count) will be managed per Mutex basis
-  std::unique_ptr<size_t[]> validBucketsPerMutex_;
+  // validBucketsPerMutex_ is a array of size_t
+  size_t* validBucketsPerMutex_{};
 
   BucketDistInfo bucketDistInfo_;
 

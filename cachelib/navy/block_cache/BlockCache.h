@@ -89,6 +89,8 @@ class BlockCache final : public Engine {
     bool preciseRemove{false};
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
+    // name of this BC instance
+    std::string name{};
 
     // Index related config
     BlockCacheIndexConfig indexConfig{};

@@ -33,8 +33,12 @@
 #include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook::cachelib::navy::tests {
-TEST(FixedSizeIndex, Recovery) {
-  FixedSizeIndex index{1, 8, 16};
+TEST(FixedSizeIndex, RecoveryOk) {
+  auto shmDir = "/tmp/fixed_size_index_test" + std::to_string(::getpid());
+  ShmManager shmManager(shmDir, true);
+  FixedSizeIndex index{1, 8, 16, &shmManager, ":recovery_test"};
+  index.reset();
+
   std::vector<std::pair<uint64_t, uint32_t>> log;
   // There won't be hash collision with these keys
   for (uint32_t i = 0; i < 128; i++) {
@@ -45,16 +49,49 @@ TEST(FixedSizeIndex, Recovery) {
   }
 
   folly::IOBufQueue ioq;
-  auto rw = createMemoryRecordWriter(ioq);
-  index.persist(*rw);
 
-  auto rr = createMemoryRecordReader(ioq);
-  FixedSizeIndex newIndex{1, 8, 16};
-  newIndex.recover(*rr);
+  index.persist(std::nullopt);
+  // shmManager shutDown() needs to be called explicitly for test here
+  shmManager.shutDown();
+
+  ShmManager newShmManager(shmDir, true);
+  FixedSizeIndex newIndex{1, 8, 16, &newShmManager, ":recovery_test"};
+  newIndex.recover(std::nullopt);
+
   for (auto& entry : log) {
     auto lookupResult = newIndex.lookup(entry.first);
     EXPECT_EQ(entry.second, lookupResult.address());
   }
+  newIndex.persist(std::nullopt);
+  newShmManager.shutDown();
+}
+
+TEST(FixedSizeIndex, RecoveryFail) {
+  auto shmDir = "/tmp/fixed_size_index_test" + std::to_string(::getpid());
+  ShmManager shmManager(shmDir, true);
+  FixedSizeIndex index{1, 8, 16, &shmManager, ":recovery_test"};
+  index.reset();
+
+  std::vector<std::pair<uint64_t, uint32_t>> log;
+  // There won't be hash collision with these keys
+  for (uint32_t i = 0; i < 128; i++) {
+    uint64_t key = i;
+    uint32_t val = i + 1;
+    index.insert(key, val, 100);
+    log.emplace_back(key, val);
+  }
+
+  folly::IOBufQueue ioq;
+  index.persist(std::nullopt);
+  // shmManager shutDown() needs to be called explicitly for test here
+  shmManager.shutDown();
+
+  ShmManager newShmManager(shmDir, true);
+  FixedSizeIndex newIndex{1, 9, 16, &newShmManager, ":recovery_test"};
+  // recover with the different config should fail and it should start with
+  // empty index
+  EXPECT_THROW(newIndex.recover(std::nullopt), std::runtime_error);
+  newShmManager.shutDown();
 }
 
 TEST(FixedSizeIndex, EntrySize) {

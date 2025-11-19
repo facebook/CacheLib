@@ -109,6 +109,8 @@ class BlockCacheProtoImpl final : public BlockCacheProto {
     config_.persistParams = params;
   }
 
+  void setName(const std::string& name) { config_.name = name; }
+
   void setNumInMemBuffers(uint32_t numInMemBuffers) override {
     config_.numInMemBuffers = numInMemBuffers;
   }
@@ -241,6 +243,7 @@ class EnginePairProtoImpl final : public EnginePairProto {
       if (bcProto != nullptr) {
         bcProto->setDevice(device);
         bcProto->setPersistParams(persistParams);
+        bcProto->setName(name_);
         bc = std::move(*bcProto).create(checkExpired, destructorCb);
       }
     }

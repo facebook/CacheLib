@@ -100,3 +100,10 @@ struct BigHashPersistentData {
   8: i64 usedSizeBytes = 0;
   9: ValidBucketCheckerState validBucketCheckerState;
 }
+
+struct FixedSizeIndexConfig {
+  1: i32 version = 0;
+  2: i32 numChunks = 0;
+  3: byte numBucketsPerChunkPower = 0;
+  4: i64 numBucketsPerMutex = 0;
+}
