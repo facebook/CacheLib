@@ -870,6 +870,10 @@ void BlockCache::flush() {
 void BlockCache::reset() {
   XLOG(INFO, "Reset block cache");
   index_->reset();
+  initializeBlockCache();
+}
+
+void BlockCache::initializeBlockCache() {
   // Allocator resets region manager
   allocator_.reset();
 
@@ -977,7 +981,7 @@ void BlockCache::persist(RecordWriter& rw) {
 
 bool BlockCache::recover(RecordReader& rr) {
   XLOG(INFO, "Starting block cache recovery");
-  reset();
+  initializeBlockCache();
   try {
     tryRecover(rr);
   } catch (const std::exception& e) {

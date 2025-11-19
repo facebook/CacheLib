@@ -348,6 +348,8 @@ class BlockCache final : public Engine {
 
   void validate(Config& config) const;
 
+  void initializeBlockCache();
+
   // Create the reinsertion policy from config.
   // This function may need a reference to index and should be called the last
   // in the initialization order.

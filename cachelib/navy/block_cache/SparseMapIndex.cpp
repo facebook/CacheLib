@@ -325,6 +325,11 @@ void SparseMapIndex::persist(
 
 void SparseMapIndex::recover(
     std::optional<std::reference_wrapper<RecordReader>> rr) {
+  // initialize before recover just in case it's called not in init phase
+  if (computeSize() > 0) {
+    reset();
+  }
+
   XDCHECK(rr.has_value());
   if (!rr) {
     XLOG(ERR,
