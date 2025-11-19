@@ -45,6 +45,10 @@ class CacheBaseTest : public CacheBase, public SlabAllocatorTestBase {
       const override {
     return {};
   }
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
+      const override {
+    return {};
+  }
   CacheMetadata getCacheMetadata() const noexcept override { return {}; }
   GlobalCacheStats getGlobalCacheStats() const override { return {}; }
   SlabReleaseStats getSlabReleaseStats() const override { return {}; }

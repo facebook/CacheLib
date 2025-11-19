@@ -1228,6 +1228,15 @@ class CacheAllocator : public CacheBase {
     return legacyEventTrackerStats;
   }
 
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
+      const override {
+    folly::F14FastMap<std::string, uint64_t> eventTrackerStats;
+    if (auto eventTracker = getEventTracker()) {
+      eventTracker->getStats(eventTrackerStats);
+    }
+    return eventTrackerStats;
+  }
+
   // Whether this cache allocator was created on shared memory.
   bool isOnShm() const noexcept { return isOnShm_; }
 

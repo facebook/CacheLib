@@ -81,6 +81,13 @@ class ObjectCacheBase : public CacheBase {
     return l1Cache_->getLegacyEventTrackerStatsMap();
   }
 
+  // @return a map of <stat name -> stat value> representation for all the event
+  // tracker stats. If no event tracker exists, this will be empty
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
+      const override {
+    return l1Cache_->getEventTrackerStatsMap();
+  }
+
   // @return the Cache metadata
   CacheMetadata getCacheMetadata() const noexcept override {
     return l1Cache_->getCacheMetadata();

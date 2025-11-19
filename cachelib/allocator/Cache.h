@@ -124,10 +124,15 @@ class CacheBase {
   // cache stats. This is useful for our monitoring to directly upload them.
   virtual util::StatsMap getNvmCacheStatsMap() const = 0;
 
-  // @return a map of <stat name -> stat value> representation for all the event
-  // tracker stats. If no event tracker exists, this will be empty
+  // @return a map of <stat name -> stat value> representation for all the
+  // legacy event tracker stats. If no event tracker exists, this will be empty
   virtual std::unordered_map<std::string, uint64_t>
   getLegacyEventTrackerStatsMap() const = 0;
+
+  // @return a map of <stat name -> stat value> representation for all the event
+  // tracker stats. If no event tracker exists, this will be empty
+  virtual folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
+      const = 0;
 
   // @return the Cache metadata
   virtual CacheMetadata getCacheMetadata() const noexcept = 0;
@@ -331,8 +336,11 @@ class CacheBase {
   void updateCompactCacheStats(const std::string& statPrefix,
                                const ICompactCache& c) const;
 
-  // Update stats specific to the event tracker
+  // Update stats specific to the legacy event tracker
   void updateLegacyEventTrackerStats(const std::string& statPrefix) const;
+
+  // Update stats specific to the event tracker
+  void updateEventTrackerStats(const std::string& statPrefix) const;
 
   // Update stats specific to NvmCache
   void updateNvmCacheStats(const std::string& statPrefix) const;

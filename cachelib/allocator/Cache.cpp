@@ -188,6 +188,13 @@ void CacheBase::updateLegacyEventTrackerStats(
   }
 }
 
+void CacheBase::updateEventTrackerStats(const std::string& statPrefix) const {
+  const std::string prefix = statPrefix + "event_tracker.";
+  for (const auto& kv : getEventTrackerStatsMap()) {
+    counters_.updateCount(prefix + kv.first, kv.second);
+  }
+}
+
 void CacheBase::updateNvmCacheStats(const std::string& statPrefix) const {
   const std::string prefix = statPrefix + "nvm.";
   auto statsMap = getNvmCacheStatsMap();
@@ -552,6 +559,7 @@ void CacheBase::exportStats(
   updateGlobalCacheStats(statPrefix);
   updateNvmCacheStats(statPrefix);
   updateLegacyEventTrackerStats(statPrefix);
+  updateEventTrackerStats(statPrefix);
 
   if (aggregatePoolStats_ && canAggregatePoolStats()) {
     updateAggregatedPoolStats(statPrefix);
