@@ -52,13 +52,16 @@ struct EventInfo {
   AllocatorApiResult result{AllocatorApiResult::FAILED}; // Result of the event.
   std::string key;                                       // The item's key.
   folly::Optional<size_t> size;                          // Size of the value.
-  folly::Optional<time_t> expiryTime;   // Expiry time of the item.
-  folly::Optional<uint32_t> allocSize;  // Allocation class size
-  folly::Optional<PoolId> poolId;       // The item's pool ID.
-  folly::Optional<std::string> app;     // The item's application.
-  folly::Optional<std::string> usecase; // The item's usecase.
-  folly::Optional<uint32_t> usecaseId;  // The item's usecase id.
-  folly::Optional<uint32_t> appId;      // The item's app id.
+  folly::Optional<time_t> expiryTime;     // Expiry time of the item.
+  folly::Optional<uint32_t> timeToExpire; // Time to expire in seconds (0 if
+                                          // expired).
+  folly::Optional<uint32_t> ttlSecs;      // User assigned TTL.
+  folly::Optional<uint32_t> allocSize;    // Allocation class size
+  folly::Optional<PoolId> poolId;         // The item's pool ID.
+  folly::Optional<std::string> app;       // The item's application.
+  folly::Optional<std::string> usecase;   // The item's usecase.
+  folly::Optional<uint32_t> usecaseId;    // The item's usecase id.
+  folly::Optional<uint32_t> appId;        // The item's app id.
   folly::Optional<
       folly::F14FastMap<std::string, std::variant<std::string, int64_t>>>
       metaInfo; // Map with additional metadata.

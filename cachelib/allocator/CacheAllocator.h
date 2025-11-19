@@ -1774,6 +1774,111 @@ class CacheAllocator : public CacheBase {
     return config_.legacyEventTracker.get();
   }
 
+  // Helper function to calculate time to expire
+  static uint32_t calculateTimeToExpire(time_t expiryTime, time_t currentTime) {
+    if (expiryTime > currentTime) {
+      return static_cast<uint32_t>(expiryTime - currentTime);
+    }
+    return 0;
+  }
+
+  // A struct holding optional event details
+  struct EventRecordParams {
+    folly::Optional<size_t> size{folly::none};       // Size of the item's value
+    folly::Optional<uint32_t> ttlSecs{folly::none};  // Time-to-live in seconds
+    folly::Optional<time_t> expiryTime{folly::none}; // Absolute expiry
+                                                     // timestamp
+    folly::Optional<uint32_t> allocSize{folly::none}; // Actual allocated size
+    folly::Optional<PoolId> poolId{folly::none};      // Memory pool identifier
+  };
+
+  /**
+   * Record event, key, result and info from a struct of type EventRecordParams.
+   *
+   * Usage:
+   *  recordEvent(event, key, result);
+   *  recordEvent(event, key, result, {.size = itemSize});
+   *  recordEvent(event, key, result, {.size=itemSize, .expiryTime=expiry});
+   *
+   * @param event            The event of type AllocatorApiEvent.
+   * @param key              The key associated with the event.
+   * @param result           The result of type AllocatorApiResult.
+   * @param params           Optional struct of type EventRecordParams.
+   *
+   * @return                 void
+   */
+  void recordEvent(AllocatorApiEvent event,
+                   Key key,
+                   AllocatorApiResult result,
+                   EventRecordParams params = {}) const {
+    if (auto eventTracker = getEventTracker()) {
+      if (eventTracker->sampleKey(key)) {
+        EventInfo eventInfo;
+        eventInfo.eventTimestamp = util::getCurrentTimeSec();
+        eventInfo.event = event;
+        eventInfo.result = result;
+        eventInfo.key = key;
+        if (params.size) {
+          eventInfo.size = *params.size;
+        }
+        if (params.expiryTime) {
+          eventInfo.expiryTime = *params.expiryTime;
+          eventInfo.timeToExpire = calculateTimeToExpire(
+              *params.expiryTime, eventInfo.eventTimestamp);
+        }
+        if (params.ttlSecs && *params.ttlSecs > 0) {
+          eventInfo.ttlSecs = *params.ttlSecs;
+        }
+        if (params.allocSize) {
+          eventInfo.allocSize = *params.allocSize;
+        }
+        if (params.poolId) {
+          eventInfo.poolId = *params.poolId;
+        }
+
+        eventTracker->record(eventInfo);
+      }
+    } else if (auto legacyEventTracker = getLegacyEventTracker()) {
+      folly::Optional<uint32_t> size =
+          params.size
+              ? folly::Optional<uint32_t>(static_cast<uint32_t>(*params.size))
+              : folly::none;
+      uint32_t ttl = params.ttlSecs ? *params.ttlSecs : 0;
+      legacyEventTracker->record(event, key, result, size, ttl);
+    }
+  }
+
+  /**
+   * Record event, key, result and info from a cache handle.
+   *
+   * @tparam HandleT         Cache handle type (e.g., ReadHandle, WriteHandle).
+   * @param event            The event of type AllocatorApiEvent.
+   * @param key              The key associated with the event.
+   * @param result           The result of type AllocatorApiResult.
+   * @param handle           The cache handle to extract metadata from.
+   *
+   * @return                 void
+   */
+  template <typename HandleT>
+  void recordEvent(AllocatorApiEvent event,
+                   Key key,
+                   AllocatorApiResult result,
+                   const HandleT& handle) const {
+    if (!handle) {
+      recordEvent(event, key, result);
+      return;
+    }
+
+    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
+    recordEvent(event, key, result,
+                EventRecordParams{.size = handle->getSize(),
+                                  .ttlSecs = static_cast<uint32_t>(
+                                      handle->getConfiguredTTL().count()),
+                                  .expiryTime = handle->getExpiryTime(),
+                                  .allocSize = allocInfo.allocSize,
+                                  .poolId = allocInfo.poolId});
+  }
+
   // Releases a slab from a pool into its corresponding memory pool
   // or back to the slab allocator, depending on SlabReleaseMode.
   //  SlabReleaseMode::kRebalance -> back to the pool
@@ -2770,12 +2875,21 @@ CacheAllocator<CacheTrait>::allocateInternal(PoolId pid,
     }
   }
 
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    const auto result =
-        handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    legacyEventTracker->record(AllocatorApiEvent::ALLOCATE, key, result, size,
-                               expiryTime ? expiryTime - creationTime : 0);
+  const auto result =
+      handle ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
+  uint32_t ttl =
+      handle ? static_cast<uint32_t>(handle->getConfiguredTTL().count())
+             : (expiryTime > creationTime ? (expiryTime - creationTime) : 0);
+
+  // Get allocInfo when handle is available to log poolId and allocSize
+  EventRecordParams eventParams{
+      .size = size, .ttlSecs = ttl, .expiryTime = expiryTime};
+  if (handle) {
+    const auto allocInfo = allocator_->getAllocInfo(handle->getMemory());
+    eventParams.allocSize = allocInfo.allocSize;
+    eventParams.poolId = allocInfo.poolId;
   }
+  recordEvent(AllocatorApiEvent::ALLOCATE, key, result, eventParams);
 
   return handle;
 }
@@ -2790,13 +2904,11 @@ CacheAllocator<CacheTrait>::allocateChainedItem(const ReadHandle& parent,
   }
 
   auto it = allocateChainedItemInternal(*parent, size);
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    const auto result =
-        it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
-    legacyEventTracker->record(AllocatorApiEvent::ALLOCATE_CHAINED,
-                               parent->getKey(), result, size,
-                               parent->getConfiguredTTL().count());
-  }
+  const auto result =
+      it ? AllocatorApiResult::ALLOCATED : AllocatorApiResult::FAILED;
+  // Log the parent's information since chained items share metadata with parent
+  recordEvent(AllocatorApiEvent::ALLOCATE_CHAINED, parent->getKey(), result,
+              parent);
   return it;
 }
 
@@ -2881,11 +2993,8 @@ void CacheAllocator<CacheTrait>::addChainedItem(WriteHandle& parent,
   insertInMMContainer(*child);
 
   invalidateNvm(*parent);
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    legacyEventTracker->record(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
-                               AllocatorApiResult::INSERTED, child->getSize(),
-                               child->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::ADD_CHAINED, parent->getKey(),
+              AllocatorApiResult::INSERTED, child.get());
 }
 
 template <typename CacheTrait>
@@ -2919,12 +3028,8 @@ CacheAllocator<CacheTrait>::popChainedItem(WriteHandle& parent) {
   // decrement the refcount to indicate this item is unlinked from its parent
   head->decRef();
   stats_.numChainedChildItems.dec();
-
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    legacyEventTracker->record(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
-                               AllocatorApiResult::REMOVED, head->getSize(),
-                               head->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::POP_CHAINED, parent->getKey(),
+              AllocatorApiResult::REMOVED, head.get());
 
   return head;
 }
@@ -3446,11 +3551,7 @@ bool CacheAllocator<CacheTrait>::insertImpl(const WriteHandle& handle,
     result = AllocatorApiResult::INSERTED;
   }
 
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    legacyEventTracker->record(event, handle->getKey(), result,
-                               handle->getSize(),
-                               handle->getConfiguredTTL().count());
-  }
+  recordEvent(event, handle->getKey(), result, handle);
 
   return result == AllocatorApiResult::INSERTED;
 }
@@ -3481,13 +3582,8 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
     }
   } catch (const std::exception&) {
     removeFromMMContainer(*(handle.getInternal()));
-    if (auto legacyEventTracker = getLegacyEventTracker()) {
-      legacyEventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
-                                 handle->getKey(),
-                                 AllocatorApiResult::FAILED,
-                                 handle->getSize(),
-                                 handle->getConfiguredTTL().count());
-    }
+    recordEvent(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(),
+                AllocatorApiResult::FAILED, handle);
     throw;
   }
 
@@ -3506,14 +3602,11 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
 
   handle.unmarkNascent();
 
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    XDCHECK(handle);
-    const auto result =
-        replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
-    legacyEventTracker->record(AllocatorApiEvent::INSERT_OR_REPLACE,
-                               handle->getKey(), result, handle->getSize(),
-                               handle->getConfiguredTTL().count());
-  }
+  XDCHECK(handle);
+  const auto result =
+      replaced ? AllocatorApiResult::REPLACED : AllocatorApiResult::INSERTED;
+  recordEvent(AllocatorApiEvent::INSERT_OR_REPLACE, handle->getKey(), result,
+              handle);
 
   return replaced;
 }
@@ -3803,20 +3896,13 @@ CacheAllocator<CacheTrait>::getNextCandidate(PoolId pid,
   unlinkItemForEviction(*candidate);
 
   // track DRAM eviction and its result
-  auto legacyEventTracker = getLegacyEventTracker();
   if (token.isValid() && shouldWriteToNvmCacheExclusive(*candidate)) {
-    if (legacyEventTracker) {
-      legacyEventTracker->record(
-          AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
-          AllocatorApiResult::NVM_ADMITTED, candidate->getSize());
-    }
+    recordEvent(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                AllocatorApiResult::NVM_ADMITTED, candidate);
     nvmCache_->put(*candidate, std::move(token));
   } else {
-    if (legacyEventTracker) {
-      legacyEventTracker->record(
-          AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
-          AllocatorApiResult::EVICTED, candidate->getSize());
-    }
+    recordEvent(AllocatorApiEvent::DRAM_EVICT, candidate->getKey(),
+                AllocatorApiResult::EVICTED, candidate);
   }
   return {candidate, toRecycle};
 }
@@ -3961,10 +4047,7 @@ CacheAllocator<CacheTrait>::remove(typename Item::Key key) {
     if (nvmCache_) {
       nvmCache_->remove(hk, std::move(tombStone));
     }
-    if (auto legacyEventTracker = getLegacyEventTracker()) {
-      legacyEventTracker->record(AllocatorApiEvent::REMOVE, key,
-                                 AllocatorApiResult::NOT_FOUND);
-    }
+    recordEvent(AllocatorApiEvent::REMOVE, key, AllocatorApiResult::NOT_FOUND);
     return RemoveRes::kNotFoundInRam;
   }
 
@@ -4017,11 +4100,8 @@ template <typename CacheTrait>
 typename CacheAllocator<CacheTrait>::RemoveRes
 CacheAllocator<CacheTrait>::remove(AccessIterator& it) {
   stats_.numCacheRemoves.inc();
-  if (auto legacyEventTracker = getLegacyEventTracker()) {
-    legacyEventTracker->record(AllocatorApiEvent::REMOVE, it->getKey(),
-                               AllocatorApiResult::REMOVED, it->getSize(),
-                               it->getConfiguredTTL().count());
-  }
+  recordEvent(AllocatorApiEvent::REMOVE, it->getKey(),
+              AllocatorApiResult::REMOVED, it.operator->());
   HashedKey hk{it->getKey()};
   auto tombstone =
       nvmCache_ ? nvmCache_->createDeleteTombStone(hk) : DeleteTombStoneGuard{};
@@ -4076,12 +4156,10 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
     nvmCache_->remove(hk, std::move(tombstone));
   }
 
-  auto legacyEventTracker = getLegacyEventTracker();
-  if (recordApiEvent && legacyEventTracker) {
+  if (recordApiEvent) {
     const auto result =
         success ? AllocatorApiResult::REMOVED : AllocatorApiResult::NOT_FOUND;
-    legacyEventTracker->record(AllocatorApiEvent::REMOVE, item.getKey(), result,
-                               item.getSize(), item.getConfiguredTTL().count());
+    recordEvent(AllocatorApiEvent::REMOVE, item.getKey(), result, &item);
   }
 
   // the last guy with reference to the item will release it back to the
@@ -4182,7 +4260,6 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
     stats_.numCacheGets.inc();
   }
 
-  auto legacyEventTracker = getLegacyEventTracker();
   XDCHECK(event == AllocatorApiEvent::FIND ||
           event == AllocatorApiEvent::FIND_FAST ||
           event == AllocatorApiEvent::PEEK)
@@ -4192,9 +4269,7 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
   if (UNLIKELY(!handle)) {
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
-      if (legacyEventTracker) {
-        legacyEventTracker->record(event, key, AllocatorApiResult::NOT_FOUND);
-      }
+      recordEvent(event, key, AllocatorApiResult::NOT_FOUND);
     }
     return handle;
   }
@@ -4204,19 +4279,15 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
     if (needToBumpStats) {
       stats_.numCacheGetMiss.inc();
       stats_.numCacheGetExpiries.inc();
-      if (legacyEventTracker) {
-        legacyEventTracker->record(event, key, AllocatorApiResult::EXPIRED);
-      }
+      recordEvent(event, key, AllocatorApiResult::EXPIRED, handle);
     }
     WriteHandle ret;
     ret.markExpired();
     return ret;
   }
 
-  if ((legacyEventTracker) && (needToBumpStats)) {
-    legacyEventTracker->record(event, key, AllocatorApiResult::FOUND,
-                               folly::Optional<uint32_t>(handle->getSize()),
-                               handle->getConfiguredTTL().count());
+  if (needToBumpStats) {
+    recordEvent(event, key, AllocatorApiResult::FOUND, handle);
   }
   return handle;
 }
