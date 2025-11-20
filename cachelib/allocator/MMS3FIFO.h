@@ -35,6 +35,8 @@
 
 namespace facebook::cachelib {
 // Implements the S3-FIFO cache eviction policy as described in
+// https://dl.acm.org/doi/pdf/10.1145/3600006.3613147
+// 
 
 class MMS3FIFO {
  public:
@@ -70,16 +72,16 @@ class MMS3FIFO {
 
     // @param udpateOnW         whether to promote the item on write
     // @param updateOnR         whether to promote the item on read
-    // @param windowToCacheSize multiplier of window size to cache size
-    // @param tinySizePct       percentage number of tiny size to overall size
+    // @param tinySizePercent   percentage number of tiny size to overall size
+    // @param ghostSizePercent  percentage number of ghost size to main size
     Config(bool updateOnW,
            bool updateOnR,
-           size_t tinySizePct,
-           size_t ghostSizePct)
+           size_t tinySizePercent,
+           size_t ghostSizePercent)
         : updateOnWrite(updateOnW),
           updateOnRead(updateOnR),
-          tinySizePercent(tinySizePct),
-          ghostSizePercent(ghostSizePct) {}
+          tinySizePercent(tinySizePercent),
+          ghostSizePercent(ghostSizePercent) {}
 
     Config() = default;
     Config(const Config& rhs) = default;
@@ -91,14 +93,10 @@ class MMS3FIFO {
     template <typename... Args>
     void addExtraConfig(Args...) {}
 
-    // whether the cache needs to be updated on writes for recordAccess. If
-    // false, accessing the cache for writes does not promote the cached item
-    // to the head of the lru.
+    // whether the cache needs to be updated on writes for recordAccess.
     bool updateOnWrite{false};
 
-    // whether the cache needs to be updated on reads for recordAccess. If
-    // false, accessing the cache for reads does not promote the cached item
-    // to the head of the lru.
+    // whether the cache needs to be updated on reads for recordAccess. 
     bool updateOnRead{true};
 
     // The size of tiny cache, as a percentage of the total size.
@@ -133,21 +131,18 @@ class MMS3FIFO {
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
-    // records the information that the node was accessed. This could bump up
-    // the node to the head of the lru depending on the time when the node was
-    // last updated in lru and the kLruRefreshTime. If the node was moved to
-    // the head in the lru, the node's updateTime will be updated
-    // accordingly.
+    // records the information that the node was accessed. 
+    // This doesn't bump up nodes and only sets the access bit.
+    // It also updates the timestamp of last access.
     //
     // @param node  node that we want to mark as relevant/accessed
-    // @param mode  the mode for the access operation.
-    //
-    // @return      True if the information is recorded and bumped the node
-    //              to the head of the lru, returns false otherwise
+    // @param mode the mode for the access operation.
+    // @return      True if the information is recorded, returns false otherwise
     bool recordAccess(T& node, AccessMode mode) noexcept;
 
     // adds the given node into the container and marks it as being present in
-    // the container. The node is added to the head of the lru.
+    // the container. The node is added to tiny queue, unless it is present
+    // in ghost queue, in which case it is added to main queue.
     //
     // @param node  The node to be added to the container.
     // @return  True if the node was successfully added to the container. False
@@ -155,7 +150,8 @@ class MMS3FIFO {
     //          is unchanged.
     bool add(T& node) noexcept;
 
-    // removes the node from the lru and sets it previous and next to nullptr.
+    // removes the node from the container, adds it to ghost queue 
+    // if it was from tiny queue.
     //
     // @param node  The node to be removed from the container.
     // @return  True if the node was successfully removed from the container.
@@ -164,9 +160,10 @@ class MMS3FIFO {
     bool remove(T& node) noexcept;
 
     class LockedIterator;
+
     // same as the above but uses an iterator context. The iterator is updated
     // on removal of the corresponding node to point to the next node. The
-    // iterator context holds the lock on the lru.
+    // iterator context holds the lock.
     //
     // iterator will be advanced to the next node after removing the node
     //
@@ -192,6 +189,7 @@ class MMS3FIFO {
       LockedIterator& operator=(const LockedIterator&) = delete;
       LockedIterator(LockedIterator&&) noexcept = default;
 
+      // Iterator in S3FIFO only returns unaccessed items, so ++ skips accessed items.
       LockedIterator& operator++() noexcept {
         // Advance the underlying iterator
         ListIterator& it = getIter();
@@ -323,7 +321,8 @@ class MMS3FIFO {
     }
 
     // Returns the eviction age stats. See CacheStats.h for details
-    // Todo
+    // Is not really relevant for S3FIFO since we don't use age.
+    // Todo: deprecate or remove?
     EvictionAgeStat getEvictionAgeStat(uint64_t projectedLength) const noexcept;
 
     // Obtain an iterator that start from the tail and can be used
@@ -342,7 +341,7 @@ class MMS3FIFO {
     template <typename F>
     void withContainerLock(F&& f);
 
-    // for saving the state of the lru
+    // for saving the state of the s3fifo
     //
     // precondition:  serialization must happen without any reader or writer
     // present. Any modification of this object afterwards will result in an
@@ -377,9 +376,7 @@ class MMS3FIFO {
       return folly::hasher<folly::StringPiece>()(node.getKey());
     }
 
-    // remove node from lru and adjust insertion points
-    //
-    // @param node          node to remove
+
     void removeLocked(T& node) noexcept;
 
     static bool isTiny(const T& node) noexcept {
@@ -408,7 +405,7 @@ class MMS3FIFO {
       node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
-    // protects all operations on the lru. We never really just read the state
+    // protects all operations on the lrus. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
     // time.
     mutable Mutex lruMutex_;
@@ -426,7 +423,7 @@ class MMS3FIFO {
     // Reads may be racy.
     Config config_{};
 
-    // // Todo: Test?
+    // // Todo: Test
     // FRIEND_TEST(MMS3FIFOTest, SegmentStress);
     // FRIEND_TEST(MMS3FIFOTest, TinyLFUBasic);
     // FRIEND_TEST(MMS3FIFOTest, Reconfigure);
@@ -474,10 +471,13 @@ bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
   LockHolder l(lruMutex_);
   // check if the node is still being memory managed
   // No need refreshing since we are treating the list as a FIFO queue.
-  if (node.isInMMContainer() && !isAccessed(node)) {
+  if (node.isInMMContainer()) {
     if (!isAccessed(node)) {
       markAccessed(node);
     }
+    // Update time here is only used by eviction age stats, which
+    // arguably is not meaningful in FIFO reinsertion strategy.
+    // Todo: We can consider removing update time in future.
     setUpdateTime(node, curr);
     return true;
   }
@@ -491,21 +491,14 @@ cachelib::EvictionAgeStat MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStat(
   return getEvictionAgeStatLocked(projectedLength);
 }
 
-// We have 2 options:
-// 1. Use the tail to get eviction age -> Tail can be popular item
-// 2. Use the first unaccessed item from tail -> Tail is more accurate for age
-// estimation Currently we get the Nth unaccessed item from tail. This function
-// is used for:
-// - Filtering out slab candidates during slab release (projectedLength = 0),
-// actual age is used
-// - Estimating projected eviction age for lrutailage strategy, where
-// projectedLength > 0 We only implement up to 0 case for now. LRUTailAge should
-// not be used in MMS3FIFO.
+// LRU Eviction age is not defined in a FIFO reinsertion strategy, since items in tail
+// can be waiting for promotion.
+// Unaccessed items may have been in the cache for a long time too.
+// Right now it finds first unaccessed item from the tail and reports its age.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat
 MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
-  printf("MMS3FIFO::Container::getEvictionAgeStatLocked not implemented\n");
   if (projectedLength != 0) {
     throw std::invalid_argument(
         "Projected eviction age estimation is not supported in MMS3FIFO");
@@ -557,6 +550,11 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   return true;
 }
 
+// This method is called before eviction iterator is called, so
+// Iterator doesn't have to mutate the lists while searching for victims.
+// 
+// It performs the necessary promotions and rebalancing to ensure
+// that items in the tail are evictable.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
   auto& tinyLru = lru_.getList(LruType::Tiny);
@@ -566,18 +564,6 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
     return;
   }
   auto totalSize = tinyLru.size() + mainLru.size();
-  // Print the proportions of size
-  if (totalSize % 1000 == 0) {
-    auto propTiny =
-        static_cast<double>(tinyLru.size()) / static_cast<double>(totalSize);
-    auto propMain =
-        static_cast<double>(mainLru.size()) / static_cast<double>(totalSize);
-    printf("Tiny size proportion: %.2f %d, Main size proportion: %.2f | %d\n",
-           propTiny,
-            tinyLru.size(),
-           propMain,
-           mainLru.size());
-  }
 
   // Promote until we find a victim, so iterator won't have to mutate the lists
   while (true) {
@@ -707,7 +693,6 @@ bool MMS3FIFO::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
   return true;
 }
 
-// Todo: all the configs, states
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Config MMS3FIFO::Container<T, HookPtr>::getConfig() const {
   LockHolder l(lruMutex_);
@@ -738,8 +723,6 @@ serialization::MMS3FIFOObject MMS3FIFO::Container<T, HookPtr>::saveState()
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 MMContainerStat MMS3FIFO::Container<T, HookPtr>::getStats() const noexcept {
   LockHolder l(lruMutex_);
-
-  // auto evictionAge = getEvictionAgeStatLocked(0).warmQueueStat.oldestElementAge;
 
   return {lru_.size(),
           0, // Approximation of tail age from first unaccesessed items
