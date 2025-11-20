@@ -30,56 +30,11 @@
 #include "cachelib/allocator/datastruct/MultiDList.h"
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
-#include "cachelib/common/CountMinSketch.h"
+#include "cachelib/common/FIFOHashSet.h"
 #include "cachelib/common/Mutex.h"
 
 namespace facebook::cachelib {
 // Implements the S3-FIFO cache eviction policy as described in
-
-#pragma once
-#include <cstdint>
-#include <deque>
-#include <unordered_set>
-
-class GhostQueue {
- public:
-  explicit GhostQueue(size_t capacity) : maxSize_(capacity) {}
-
-  bool contains(uint32_t key) const { return set_.find(key) != set_.end(); }
-
-  void insert(uint32_t key) {
-    if (set_.count(key) > 0) {
-      return;
-    }
-
-    fifo_.push_back(key);
-    set_.insert(key);
-
-    enforceCapacity();
-  }
-
-  void resize(size_t newSize) {
-    maxSize_ = newSize;
-    enforceCapacity();
-  }
-
-  size_t size() const { return set_.size(); }
-
- private:
-  void enforceCapacity() {
-    while (fifo_.size() > maxSize_) {
-      uint32_t k = fifo_.front();
-      fifo_.pop_front();
-      set_.erase(k);
-    }
-  }
-
- private:
-  size_t maxSize_;
-  std::deque<uint32_t> fifo_;
-  std::unordered_set<uint32_t> set_;
-};
-
 
 class MMS3FIFO {
  public:
@@ -559,12 +514,6 @@ class MMS3FIFO {
       return lru_.size();
     }
 
-    // TODO: Hash table for ghost queue
-    size_t counterSize() const noexcept {
-      LockHolder l(lruMutex_);
-      return accessFreq_.getByteSize();
-    }
-
     // Returns the eviction age stats. See CacheStats.h for details
     EvictionAgeStat getEvictionAgeStat(uint64_t projectedLength) const noexcept;
 
@@ -612,8 +561,7 @@ class MMS3FIFO {
       (node.*HookPtr).setUpdateTime(time);
     }
 
-    // As the cache grows, the frequency counters may need to grow.
-    // Todo: Grow with hash table
+    // As the cache grows, the ghost queue may need to be resized
     void maybeGrowGhostLocked() noexcept;
 
     // Returns the hash of node's key
@@ -676,7 +624,7 @@ class MMS3FIFO {
     // the lru
     LruList lru_;
 
-    GhostQueue ghostQueue_{0};
+    facebook::cachelib::util::FIFOHashSet ghostQueue_{};
 
     // the window size counter
     size_t windowSize_{0};
@@ -701,10 +649,6 @@ class MMS3FIFO {
     // Reads may be racy.
     Config config_{};
 
-    // Approximate streaming frequency counters. The counts are halved every
-    // time the maxWindowSize is hit.
-    facebook::cachelib::util::CountMinSketch accessFreq_{};
-
     // // Todo: Test?
     // FRIEND_TEST(MMS3FIFOTest, SegmentStress);
     // FRIEND_TEST(MMS3FIFOTest, TinyLFUBasic);
@@ -725,12 +669,11 @@ MMS3FIFO::Container<T, HookPtr>::Container(serialization::MMS3FIFOObject object,
   maybeGrowGhostLocked();
 }
 
-// Todo: initialize hash table
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   size_t capacity = lru_.size();
-  // If the new capacity ask is more than double the current size, recreate
-  // the approx frequency counters.
+  // If the new capacity ask is more than double the current size, 
+  // expand the ghost queue
   if (2 * capacity_ > capacity) {
     return;
   }
@@ -812,7 +755,6 @@ MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
   return stat;
 }
 
-// Todo: Check whether item exist in ghost queue.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
