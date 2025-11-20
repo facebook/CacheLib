@@ -35,6 +35,52 @@
 
 namespace facebook::cachelib {
 // Implements the S3-FIFO cache eviction policy as described in
+
+#pragma once
+#include <cstdint>
+#include <deque>
+#include <unordered_set>
+
+class GhostQueue {
+ public:
+  explicit GhostQueue(size_t capacity) : maxSize_(capacity) {}
+
+  bool contains(uint32_t key) const { return set_.find(key) != set_.end(); }
+
+  void insert(uint32_t key) {
+    if (set_.count(key) > 0) {
+      return;
+    }
+
+    fifo_.push_back(key);
+    set_.insert(key);
+
+    enforceCapacity();
+  }
+
+  void resize(size_t newSize) {
+    maxSize_ = newSize;
+    enforceCapacity();
+  }
+
+  size_t size() const { return set_.size(); }
+
+ private:
+  void enforceCapacity() {
+    while (fifo_.size() > maxSize_) {
+      uint32_t k = fifo_.front();
+      fifo_.pop_front();
+      set_.erase(k);
+    }
+  }
+
+ private:
+  size_t maxSize_;
+  std::deque<uint32_t> fifo_;
+  std::unordered_set<uint32_t> set_;
+};
+
+
 class MMS3FIFO {
  public:
   // unique identifier per MMType
@@ -74,7 +120,7 @@ class MMS3FIFO {
                  updateOnR,
                  /* try lock update */ false,
                  16,
-                 1) {}
+                 10) {}
 
     // @param time              the LRU refresh time in seconds.
     //                          An item will be promoted only once in each lru
@@ -317,7 +363,6 @@ class MMS3FIFO {
     Container(Config c, PtrCompressor compressor)
         : lru_(LruType::NumTypes, std::move(compressor)),
           config_(std::move(c)) {
-      maybeGrowGhostLocked();
       lruRefreshTime_ = config_.lruRefreshTime;
       nextReconfigureTime_ =
           config_.mmReconfigureIntervalSecs.count() == 0
@@ -380,10 +425,7 @@ class MMS3FIFO {
     //               source node already existed.
     bool replace(T& oldNode, T& newNode) noexcept;
 
-    // context for iterating the MM container. At any given point of time,
-    // there can be only one iterator active since we need to lock the LRU for
-    // iteration. we can support multiple iterators at same time, by using a
-    // shared ptr in the context for the lock holder in the future.
+
     class LockedIterator {
      public:
       using ListIterator = typename LruList::DListIterator;
@@ -392,10 +434,23 @@ class MMS3FIFO {
       LockedIterator& operator=(const LockedIterator&) = delete;
       LockedIterator(LockedIterator&&) noexcept = default;
 
-      // Todo: Advance the iterator without calling getIter since getIter mutates
       LockedIterator& operator++() noexcept {
-        ++getIter();
+        // Advance the underlying iterator
+        ListIterator& it = ++getIter();
+        // Skip accessed items
+        skipAccessed(it);
         return *this;
+      }
+
+      ListIterator& skipAccessed(ListIterator& it) noexcept {
+        while (it) {
+          T& node = *it;
+          if (!Container<T, HookPtr>::isAccessed(node)) {
+            break; // found a valid eviction victim
+          }
+          ++it; // skip this accessed item
+        }
+        return it;
       }
 
       LockedIterator& operator--() {
@@ -445,93 +500,38 @@ class MMS3FIFO {
       }
 
      private:
-      // private because it's easy to misuse and cause deadlock for MMS3FIFO
+      // private because it's easy to misuse and cause deadlock for MMTinyLFU
       LockedIterator& operator=(LockedIterator&&) noexcept = default;
 
       // create an lru iterator with the lock being held.
-      explicit LockedIterator(LockHolder l,
-                              const Container<T, HookPtr>& c) noexcept;
+      explicit LockedIterator(LockHolder l, const Container<T, HookPtr>& c) noexcept;
+
+      const ListIterator& getIter() const noexcept {
+        auto shouldEvictTiny = evictTiny();
+
+        return shouldEvictTiny ? tIter_ : mIter_;
+      }
 
       ListIterator& getIter() noexcept {
         return const_cast<ListIterator&>(
             static_cast<const LockedIterator*>(this)->getIter());
       }
 
-      bool shouldEvictSmall() const noexcept {
-        int smallSize = static_cast<int>(c_.lru_.getList(LruType::Tiny).size());
-        int mainSize = static_cast<int>(c_.lru_.getList(LruType::Main).size());
-
-        if (smallSize == 0) {
-          return false;
-        }
-        if (mainSize == 0) {
+      // Todo: can probably cache the evicttiny call
+      // Will switch when iter is exhausted.
+      bool evictTiny() const noexcept {
+        if (!mIter_) {
           return true;
         }
-
-        const size_t total = smallSize + mainSize;
-        const size_t targetTiny =
-            static_cast<size_t>(c_.config_.tinySizePercent * c_.lru_.size() / 100);
-        // If tiny is at or above its target share, start evicting from tiny
-        return smallSize >= targetTiny;
-      }
-
-      // Todo: Now it may advance the iterators to skip items that need promotion.
-      // Is there a better way?
-      const ListIterator& getIter() const noexcept {
-        auto& tinyLru = c_.lru_.getList(LruType::Tiny);
-        auto& mainLru = c_.lru_.getList(LruType::Main);
-
-        while (true) {
-          bool tryTiny = shouldEvictSmall();
-          ListIterator activeIter = tryTiny ? tIter_ : mIter_;
-
-          if (!activeIter) {
-            // both exhausted, just return any
-            return activeIter;
-          }
-
-          if (tryTiny) {
-            // -------- evictS semantics ----------
-            // evictS:
-            //   while S not empty:
-            //     t = tail(S)
-            //     if t.freq accessed: move t to M, reset bit
-            //     else: eviction candidate
-            //
-            // Here we just choose the victim and do the promotion if needed.
-            // the actual removal from S or M is done in Container::remove(it).
-            // Remove() will insert into ghost
-
-            T& node = *activeIter;
-            if (Container<T, HookPtr>::isAccessed(node)) {
-              ++activeIter;
-              // promote to main cache
-              tinyLru.remove(node);
-              mainLru.linkAtHead(node);
-              Container<T, HookPtr>::unmarkTiny(node);
-              Container<T, HookPtr>::unmarkAccessed(node);
-              continue;
-            }
-            return activeIter;
-
-          } else {
-            // -------- evictM semantics ----------
-            // evictM:
-            //   while M not empty:
-            //     t = tail(M)
-            //     if t.freq > 0: move t to head(M), unset accessed bit.
-            //     else: evict
-            T& node = *activeIter;
-            if (Container<T, HookPtr>::isAccessed(node)) {
-              // Reinsert to head
-              ++activeIter;             // move iterator first
-              mainLru.moveToHead(node); // move t to head
-              Container<T, HookPtr>::unmarkAccessed(node);
-              continue;
-            }
-            return activeIter;
-          }
+        if (!tIter_) {
+          return false;
         }
+
+        int smallSize = static_cast<int>(c_.lru_.getList(LruType::Tiny).size());
+
+        const size_t targetTiny = static_cast<size_t>(
+            c_.config_.tinySizePercent * c_.lru_.size()/100);
+        return smallSize >= targetTiny;
       }
 
       // only the container can create iterators
@@ -571,7 +571,9 @@ class MMS3FIFO {
     // Obtain an iterator that start from the tail and can be used
     // to search for evictions. This iterator holds a lock to this
     // container and only one such iterator can exist at a time
-    LockedIterator getEvictionIterator() const noexcept;
+    LockedIterator getEvictionIterator() noexcept;
+
+    void rebalanceForEviction();
 
     // Execute provided function under container lock. Function gets
     // iterator passed as parameter.
@@ -596,6 +598,7 @@ class MMS3FIFO {
     static LruType getLruType(const T& node) noexcept {
       return isTiny(node) ? LruType::Tiny : LruType::Main;
     }
+    
 
    private:
     EvictionAgeStat getEvictionAgeStatLocked(
@@ -623,6 +626,10 @@ class MMS3FIFO {
     // @param node          node to remove
     void removeLocked(T& node) noexcept;
 
+    size_t remove_tiny = 0;
+    size_t remove_main = 0;
+
+
     static bool isTiny(const T& node) noexcept {
       return node.template isFlagSet<RefFlags::kMMFlag0>();
     }
@@ -649,17 +656,6 @@ class MMS3FIFO {
       node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
-    bool hashContains(const T& node) const noexcept {
-      // Mock implementation
-      // random return t or false
-      return (hashNode(node) % 2) == 0;
-    }
-
-    bool hashInsert(const T& node) noexcept {
-      // Mock implementation
-      return true;
-    }
-
     // Initial cache capacity estimate for count-min-sketch
     static constexpr size_t kDefaultCapacity = 100;
 
@@ -679,6 +675,8 @@ class MMS3FIFO {
 
     // the lru
     LruList lru_;
+
+    GhostQueue ghostQueue_{0};
 
     // the window size counter
     size_t windowSize_{0};
@@ -736,8 +734,13 @@ void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   if (2 * capacity_ > capacity) {
     return;
   }
-  // Todo: ghost growing not implemented
-  printf("MMS3FIFO::Container::maybeGrowGhostLocked not implemented\n");
+  
+  // Capacity should be proportion of main queue
+  // Todo config
+  // now size of main queue
+  size_t capacityMain = lru_.getList(LruType::Main).size();
+
+  ghostQueue_.resize(capacityMain);
 }
 
 // We have no notion of "reconfiguring lock"
@@ -785,6 +788,7 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat
 MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
+  printf("MMS3FIFO::Container::getEvictionAgeStatLocked not implemented\n");
   if (projectedLength != 0) {
     throw std::invalid_argument(
         "Projected eviction age estimation is not supported in MMS3FIFO");
@@ -817,7 +821,7 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
     return false;
   }
 
-  if (hashContains(node)) {
+  if (ghostQueue_.contains(hashNode(node))) {
     // Insert to main queue
     auto& mainLru = lru_.getList(LruType::Main);
     mainLru.linkAtHead(node);
@@ -834,26 +838,85 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   setUpdateTime(node, currTime);
   unmarkAccessed(node);
 
-  // Always link to probationary queue. Eviction logic will
-  // decide / promote as needed.
-
-  // const auto expectedSize = config_.tinySizePercent * lru_.size() / 100;
-  // if (lru_.getList(LruType::Tiny).size() > expectedSize) {
-  //   auto tailNode = tinyLru.getTail();
-  //   tinyLru.remove(*tailNode);
-
-  //   auto& mainLru = lru_.getList(LruType::Main);
-  //   mainLru.linkAtHead(*tailNode);
-  //   unmarkTiny(*tailNode);
-
-  // Maybe rehash here.
   return true;
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
+void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
+  auto& tinyLru = lru_.getList(LruType::Tiny);
+  auto& mainLru = lru_.getList(LruType::Main);
+
+  if (tinyLru.size() == 0 && mainLru.size() == 0) {
+    return;
+  }
+  auto totalSize = tinyLru.size() + mainLru.size();
+  // Print the proportions of size
+  if (totalSize % 100 == 0) {
+    auto propTiny =
+        static_cast<double>(tinyLru.size()) / static_cast<double>(totalSize);
+    auto propMain =
+        static_cast<double>(mainLru.size()) / static_cast<double>(totalSize);
+    printf("Tiny size proportion: %.2f %d, Main size proportion: %.2f | %d\n",
+           propTiny,
+            tinyLru.size(),
+           propMain,
+           mainLru.size());
+  }
+
+  // Run S3-FIFO rules until the current tail (of chosen list)
+  // is an unaccessed victim.
+
+  while (true) {
+    bool tryTiny = (lru_.size() * config_.tinySizePercent /100) < tinyLru.size();
+
+    if (tryTiny) {
+      // Tail of S
+      auto it = tinyLru.rbegin();
+      if (!it) {
+        return;
+      }
+
+      T& node = *it;
+      if (Container<T, HookPtr>::isAccessed(node)) {
+        // accessed tail in S → promote to M head
+        tinyLru.remove(node);
+        mainLru.linkAtHead(node);
+        Container<T, HookPtr>::unmarkTiny(node);
+        Container<T, HookPtr>::unmarkAccessed(node);
+        // sizes changed, loop again
+        continue;
+      } else {
+        // unaccessed tail in S → valid victim, stop rebalancing
+        return;
+      }
+
+    } else {
+      // Tail of M
+      auto it = mainLru.rbegin();
+      if (!it) {
+        return;
+      }
+
+      T& node = *it;
+      if (Container<T, HookPtr>::isAccessed(node)) {
+        // accessed tail in M → move to head(M), clear bit
+        mainLru.moveToHead(node);
+        Container<T, HookPtr>::unmarkAccessed(node);
+        // try again with new tail
+        continue;
+      } else {
+        // unaccessed tail in M → victim
+        return;
+      }
+    }
+  }
+}
+
+template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
-MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() const noexcept {
+MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() noexcept {
   LockHolder l(lruMutex_);
+  rebalanceForEviction();
   return LockedIterator{std::move(l), *this};
 }
 
@@ -877,7 +940,7 @@ void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
     lru_.getList(LruType::Tiny).remove(node);
     unmarkTiny(node);
     // Insert to hash upon removal
-    hashInsert(node);
+    ghostQueue_.insert(hashNode(node));
   } else {
     lru_.getList(LruType::Main).remove(node);
   }
@@ -977,13 +1040,15 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 MMContainerStat MMS3FIFO::Container<T, HookPtr>::getStats() const noexcept {
   LockHolder l(lruMutex_);
 
-  auto evictionAge = getEvictionAgeStatLocked(0).warmQueueStat.oldestElementAge;
+  // auto evictionAge = getEvictionAgeStatLocked(0).warmQueueStat.oldestElementAge;
 
-  return {
-      lru_.size(),
-      evictionAge, // Approximation of tail age from first unaccesessed items
-      0, // We have no notion of refresh time, accesses only toggle access bit
-      0,           0, 0, 0};
+  return {lru_.size(),
+          0, // Approximation of tail age from first unaccesessed items
+          0, // We have no notion of refresh time, accesses only toggle access bit
+          0,           
+          0, 
+          0, 
+          0};
 }
 
 // Locked Iterator Context Implementation
