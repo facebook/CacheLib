@@ -182,8 +182,6 @@ class DynamicRandomAPConfig {
  * Another side effect caused by sparse_map index implementation is that it may
  * consume much more memory per entries than fixed sized one even when the same
  * number of buckets are populated and stored.
- *
- * TODO: For now, only SparseMapIndex related configs are supported here
  */
 class BlockCacheIndexConfig {
  public:
@@ -192,6 +190,31 @@ class BlockCacheIndexConfig {
   // config values as previously used in SparseMapIndex implementation.
   static constexpr uint32_t kDefaultNumSparseMapBuckets{64 * 1024};
   static constexpr uint64_t kDefaultNumBucketsPerMutex{64};
+
+  BlockCacheIndexConfig& enableFixedSizeIndex(bool enable) {
+    enableFixedSizeIndex_ = enable;
+    return *this;
+  }
+
+  // TODO: For the config values for fixed size index, we need to add more
+  // checks to see if it's a reasonable range with the block cache size given
+  BlockCacheIndexConfig& setNumChunks(uint32_t numChunks) {
+    if (numChunks == 0) {
+      throw std::invalid_argument("numChunks must be > 0");
+    }
+    numChunks_ = numChunks;
+    return *this;
+  }
+
+  BlockCacheIndexConfig& setNumBucketsPerChunkPower(
+      uint8_t numBucketsPerChunkPower) {
+    if (numBucketsPerChunkPower == 0 || numBucketsPerChunkPower >= 64) {
+      throw std::invalid_argument(
+          "numBucketsPerChunkPower is 0 or too large (>= 64).");
+    }
+    numBucketsPerChunkPower_ = numBucketsPerChunkPower;
+    return *this;
+  }
 
   BlockCacheIndexConfig& setNumBucketsPerMutex(uint64_t numBucketsPerMutex) {
     if (numBucketsPerMutex == 0) {
@@ -214,20 +237,50 @@ class BlockCacheIndexConfig {
     return *this;
   }
 
+  BlockCacheIndexConfig& setPersistUsingShm(bool useShm) {
+    persistUsingShm_ = useShm;
+    return *this;
+  }
+
   BlockCacheIndexConfig& validate() {
-    // with SparseMapIndex
-    if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numSparseMapBuckets must be power of two");
-    }
-    if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numBucketsPerMutex must be power of two");
-    }
-    if (numBucketsPerMutex_ > numSparseMapBuckets_) {
-      throw std::invalid_argument(
-          "with SparseMapIndex, numBucketsPerMutex must be <= "
-          "numSparseMapBuckets");
+    if (enableFixedSizeIndex_) {
+      // with FixedSizeIndex
+      if (numChunks_ == 0 || numBucketsPerMutex_ == 0 ||
+          numBucketsPerChunkPower_ == 0 || numBucketsPerChunkPower_ >= 64) {
+        throw std::invalid_argument(
+            "enableFixedSizeIndex is set, but numChunks, numBucketsPerMutex, "
+            "or numBucketsPerChunkPower is not a reasonable value");
+      }
+      if ((uint64_t)numChunks_ * (1ull << numBucketsPerChunkPower_) <
+          numBucketsPerMutex_) {
+        throw std::invalid_argument(
+            "enableFixedSizeIndex is set, numBucketsPerMutex is larger than "
+            "total number of buckets");
+      }
+      if (!persistUsingShm_) {
+        throw std::invalid_argument(
+            "with FixedSizeIndex, persistence using flash is not supported "
+            "yet");
+      }
+    } else {
+      // with SparseMapIndex
+      if (numSparseMapBuckets_ == 0 || !folly::isPowTwo(numSparseMapBuckets_)) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numSparseMapBuckets must be power of two");
+      }
+      if (numBucketsPerMutex_ == 0 || !folly::isPowTwo(numBucketsPerMutex_)) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numBucketsPerMutex must be power of two");
+      }
+      if (numBucketsPerMutex_ > numSparseMapBuckets_) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, numBucketsPerMutex must be <= "
+            "numSparseMapBuckets");
+      }
+      if (persistUsingShm_) {
+        throw std::invalid_argument(
+            "with SparseMapIndex, persistence using shm is not supported");
+      }
     }
     return *this;
   }
@@ -235,9 +288,14 @@ class BlockCacheIndexConfig {
   // getter functions
   bool isFixedSizeIndexEnabled() const { return enableFixedSizeIndex_; }
 
+  uint32_t getNumChunks() const { return numChunks_; }
+  uint8_t getNumBucketsPerChunkPower() const {
+    return numBucketsPerChunkPower_;
+  }
   uint64_t getNumBucketsPerMutex() const { return numBucketsPerMutex_; }
   uint32_t getNumSparseMapBuckets() const { return numSparseMapBuckets_; }
   bool isTrackItemHistoryEnabled() const { return trackItemHistory_; }
+  bool useShmToPersist() const { return persistUsingShm_; }
 
  private:
   // Whether to enable fixed size index, true for enabling it.
@@ -258,6 +316,25 @@ class BlockCacheIndexConfig {
   // SparseMapIndex. This is a compromise to keep index size low, enabling this
   // will make totalHits return undefined value.
   bool trackItemHistory_{false};
+
+  // Use Shm to persist. This is only for FixedSizeIndex.
+  // SparseMapIndex doesn't support persistence using Shm (and don't have a plan
+  // to do so)
+  // TODO: Currently, FixedSizeIndex only support persistence using Shm. We may
+  // support persistenc using flash in the future.
+  bool persistUsingShm_{false};
+
+  // Below are parameters for the fixed size index, and when it's not enabled
+  // they will be ignored
+
+  // The number of total chunks. Fixed size index will be divided into chunks
+  // and each chunk will maintain a fixed number of buckets with the fixed
+  // number mutexes.
+  uint32_t numChunks_{4};
+  // The integer power for the number of buckets per chunk which should be a
+  // power of 2.
+  // The total number of buckets = numChunks_ * (2 ^ numBucketsPerChunkPower_)
+  uint8_t numBucketsPerChunkPower_{27};
 };
 
 /**
@@ -500,6 +577,23 @@ class BlockCacheConfig {
   BlockCacheConfig& enableSparseMapIndex(uint32_t numSparseMapBuckets,
                                          uint32_t numBucketsPerMutex,
                                          bool trackItemHistory);
+  // To enable fixed size Index for BC. All the parameter should be valid.
+  // Without calling this explicitly, default index will be SparseMapIndex
+  // with the default parameters.
+  //
+  // With the fixed size index, the number of buckets that it can hold is
+  // decided by the configured numbers.
+  // The table is managed by a number of chunks (numChunks), and each chunk will
+  // maintain a number of buckets (2 ^ numBucketsPerChunkPower). For example, if
+  // numChunks is 4 and numBucketsPerChunkPower is 27, the total number of
+  // buckets is 4 * (2 ^ 27) = 512M. Those numbers should be decided considering
+  // the total entries populated with the cache and the memory footprint that it
+  // could consume.
+  // numBucketsPerMutex is for how many buckets will be covered by each mutex
+  // and total number mutexes will be decided by this number.
+  BlockCacheConfig& enableFixedSizeIndex(uint32_t numChunks,
+                                         uint8_t numBucketsPerChunkPower,
+                                         uint64_t numBucketsPerMutex);
 
   bool isLruEnabled() const { return lru_; }
 

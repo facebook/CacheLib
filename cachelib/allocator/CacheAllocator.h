@@ -2682,8 +2682,15 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
         *legacyEventTracker);
   }
 
+  navy::NavyPersistParams persistParam{
+      config_.nvmConfig->navyConfig.blockCache()
+          .getIndexConfig()
+          .useShmToPersist(),
+      shmManager_ != nullptr
+          ? *shmManager_
+          : std::optional<std::reference_wrapper<ShmManager>>{}};
   nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
-                                          config_.itemDestructor);
+                                          config_.itemDestructor, persistParam);
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();
   }

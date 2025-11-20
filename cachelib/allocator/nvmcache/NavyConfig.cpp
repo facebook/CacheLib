@@ -194,8 +194,23 @@ BlockCacheConfig& BlockCacheConfig::enableSparseMapIndex(
   if (trackItemHistory) {
     indexConfig_.enableTrackItemHistory();
   }
-  indexConfig_.setNumSparseMapBuckets(numSparseMapBuckets)
+  indexConfig_.enableFixedSizeIndex(false)
+      .setNumSparseMapBuckets(numSparseMapBuckets)
       .setNumBucketsPerMutex(numBucketsPerMutex)
+      .setPersistUsingShm(false)
+      .validate();
+  return *this;
+}
+
+BlockCacheConfig& BlockCacheConfig::enableFixedSizeIndex(
+    uint32_t numChunks,
+    uint8_t numBucketsPerChunkPower,
+    uint64_t numBucketsPerMutex) {
+  indexConfig_.enableFixedSizeIndex(true)
+      .setNumChunks(numChunks)
+      .setNumBucketsPerChunkPower(numBucketsPerChunkPower)
+      .setNumBucketsPerMutex(numBucketsPerMutex)
+      .setPersistUsingShm(true)
       .validate();
   return *this;
 }

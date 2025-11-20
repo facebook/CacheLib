@@ -25,6 +25,7 @@
 
 #include "cachelib/common/Time.h"
 #include "cachelib/common/inject_pause.h"
+#include "cachelib/navy/block_cache/FixedSizeIndex.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
@@ -111,14 +112,28 @@ uint32_t BlockCache::calcAllocAlignSize() const {
 }
 
 std::unique_ptr<Index> BlockCache::createIndex(
-    const BlockCacheIndexConfig& indexConfig) {
-  // always SparseMapIndex for now
-  return std::make_unique<SparseMapIndex>(
-      indexConfig.getNumSparseMapBuckets(),
-      indexConfig.getNumBucketsPerMutex(),
-      indexConfig.isTrackItemHistoryEnabled()
-          ? SparseMapIndex::ExtraField::kItemHitHistory
-          : SparseMapIndex::ExtraField::kTotalHits);
+    const BlockCacheIndexConfig& indexConfig,
+    const NavyPersistParams& persistParams,
+    const std::string& name) {
+  if (indexConfig.isFixedSizeIndexEnabled()) {
+    return std::make_unique<FixedSizeIndex>(
+        indexConfig.getNumChunks(),
+        indexConfig.getNumBucketsPerChunkPower(),
+        indexConfig.getNumBucketsPerMutex(),
+        (indexConfig.useShmToPersist() || persistParams.useShm)
+            ? (persistParams.shmManager.has_value()
+                   ? &(persistParams.shmManager.value().get())
+                   : nullptr)
+            : nullptr,
+        name);
+  } else {
+    return std::make_unique<SparseMapIndex>(
+        indexConfig.getNumSparseMapBuckets(),
+        indexConfig.getNumBucketsPerMutex(),
+        indexConfig.isTrackItemHistoryEnabled()
+            ? SparseMapIndex::ExtraField::kItemHitHistory
+            : SparseMapIndex::ExtraField::kTotalHits);
+  }
 }
 
 BlockCache::BlockCache(Config&& config)
@@ -139,7 +154,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       regionSize_{config.regionSize},
       itemDestructorEnabled_{config.itemDestructorEnabled},
       preciseRemove_{config.preciseRemove},
-      index_(createIndex(config.indexConfig)),
+      index_(
+          createIndex(config.indexConfig, config.persistParams, config.name)),
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,

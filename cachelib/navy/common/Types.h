@@ -53,10 +53,14 @@ enum class Status {
   ChecksumError,
 };
 
-// Parameters to configure navy persistence.
-// Rather than making it as another configurable args which will be externally
-// configurable, we will just pass down the parameters from main cache creation
-// for now
+// Internal struct for the parameters to configure navy persistence.
+// User can configure whether to use shm or flash by using setPersistUsingShm()
+// in BlockCacheIndexConfig. (TODO: Currently it's just set using the index type
+// (SparseMapIndex or FixedSizeIndex) with
+// BlockCacheConfig::enableSparseMapIndex() or
+// BlockCacheConfig::enableFixedSizeIndex()).
+// This struct is used to pass all the parameters for navy persistence
+// internally.
 struct NavyPersistParams {
   // Whether to use shm or flash for navy persistence
   // TODO: For now, this will be enforced by the configured index type.
