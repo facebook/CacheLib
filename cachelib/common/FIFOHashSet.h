@@ -77,9 +77,6 @@ class FIFOHashSetBase {
 
   // Resize queue capacity (evicts oldest entries if shrinking).
   void resize(size_t newSize) {
-    if (newSize == 0) {
-      throw std::invalid_argument{"GhostQueue capacity must be > 0"};
-    }
     maxSize_ = newSize;
     enforceCapacity();
   }

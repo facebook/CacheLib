@@ -112,17 +112,10 @@ struct MM2QCollection {
 
 
 struct MMS3FIFOConfig {
-  1: required i32 lruRefreshTime;
-  2: required bool updateOnWrite;
-  3: required i32 windowToCacheSizeRatio;
-  4: required i32 tinySizePercent;
-  5: bool updateOnRead = true;
-  6: bool tryLockUpdate = false;
-  7: double lruRefreshRatio = 0.0;
-  8: i32 mmReconfigureIntervalSecs = 0;
-  9: bool newcomerWinsOnTie = true;
-  10: i32 protectionFreq_ = 3;
-  11: i32 protectionSegmentSizePct = 80;
+  1: required bool updateOnWrite;
+  2: bool updateOnRead = true;
+  3: i32 tinySizePercent;
+  4: i32 ghostSizePercent;
 }
 
 struct MMS3FIFOObject {

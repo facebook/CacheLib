@@ -54,180 +54,32 @@ class MMS3FIFO {
   struct Config {
     // create from serialized config
     explicit Config(SerializationConfigType configState)
-        : Config(*configState.lruRefreshTime(),
-                 *configState.lruRefreshRatio(),
+        : Config(
                  *configState.updateOnWrite(),
                  *configState.updateOnRead(),
-                 *configState.tryLockUpdate(),
-                 *configState.windowToCacheSizeRatio(),
                  *configState.tinySizePercent(),
-                 *configState.mmReconfigureIntervalSecs(),
-                 *configState.newcomerWinsOnTie()) {}
+                  *configState.ghostSizePercent()) {}
 
-    // @param time        the LRU refresh time in seconds.
-    //                    An item will be promoted only once in each lru refresh
-    //                    time depite the number of accesses it gets.
     // @param udpateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
-    Config(uint32_t time, bool updateOnW, bool updateOnR)
-        : Config(time,
-                 updateOnW,
+    Config(bool updateOnW, bool updateOnR)
+        : Config(updateOnW,
                  updateOnR,
-                 /* try lock update */ false,
-                 16,
-                 10) {}
+                 10,
+                 90) {}
 
-    // @param time              the LRU refresh time in seconds.
-    //                          An item will be promoted only once in each lru
-    //                          refresh time depite the number of accesses it
-    //                          gets.
     // @param udpateOnW         whether to promote the item on write
     // @param updateOnR         whether to promote the item on read
     // @param windowToCacheSize multiplier of window size to cache size
     // @param tinySizePct       percentage number of tiny size to overall size
-    Config(uint32_t time,
-           bool updateOnW,
+    Config(bool updateOnW,
            bool updateOnR,
-           size_t windowToCacheSize,
-           size_t tinySizePct)
-        : Config(time,
-                 updateOnW,
-                 updateOnR,
-                 /* try lock update */ false,
-                 windowToCacheSize,
-                 tinySizePct) {}
-
-    // @param time              the LRU refresh time in seconds.
-    //                          An item will be promoted only once in each lru
-    //                          refresh time depite the number of accesses it
-    //                          gets.
-    // @param udpateOnW         whether to promote the item on write
-    // @param updateOnR         whether to promote the item on read
-    // @param tryLockU          whether to use a try lock when doing update.
-    // @param windowToCacheSize multiplier of window size to cache size
-    // @param tinySizePct       percentage number of tiny size to overall size
-    Config(uint32_t time,
-           bool updateOnW,
-           bool updateOnR,
-           bool tryLockU,
-           size_t windowToCacheSize,
-           size_t tinySizePct)
-        : Config(time,
-                 0.,
-                 updateOnW,
-                 updateOnR,
-                 tryLockU,
-                 windowToCacheSize,
-                 tinySizePct) {}
-
-    // @param time                    the LRU refresh time in seconds.
-    //                                An item will be promoted only once in each
-    //                                lru refresh time depite the number of
-    //                                accesses it gets.
-    // @param ratio                   the lru refresh ratio. The ratio times the
-    //                                oldest element's lifetime in warm queue
-    //                                would be the minimum value of LRU refresh
-    //                                time.
-    // @param udpateOnW               whether to promote the item on write
-    // @param updateOnR               whether to promote the item on read
-    // @param tryLockU                whether to use a try lock when doing
-    //                                update.
-    // @param windowToCacheSize       multiplier of window size to cache size
-    // @param tinySizePct             percentage number of tiny size to overall
-    //                                size
-    Config(uint32_t time,
-           double ratio,
-           bool updateOnW,
-           bool updateOnR,
-           bool tryLockU,
-           size_t windowToCacheSize,
-           size_t tinySizePct)
-        : Config(time,
-                 ratio,
-                 updateOnW,
-                 updateOnR,
-                 tryLockU,
-                 windowToCacheSize,
-                 tinySizePct,
-                 0) {}
-
-    // @param time                    the LRU refresh time in seconds.
-    //                                An item will be promoted only once in each
-    //                                lru refresh time depite the number of
-    //                                accesses it gets.
-    // @param ratio                   the lru refresh ratio. The ratio times the
-    //                                oldest element's lifetime in warm queue
-    //                                would be the minimum value of LRU refresh
-    //                                time.
-    // @param udpateOnW               whether to promote the item on write
-    // @param updateOnR               whether to promote the item on read
-    // @param tryLockU                whether to use a try lock when doing
-    //                                update.
-    // @param windowToCacheSize       multiplier of window size to cache size
-    // @param tinySizePct             percentage number of tiny size to overall
-    //                                size
-    // @param mmReconfigureInterval   Time interval for recalculating lru
-    //                                refresh time according to the ratio.
-    Config(uint32_t time,
-           double ratio,
-           bool updateOnW,
-           bool updateOnR,
-           bool tryLockU,
-           size_t windowToCacheSize,
            size_t tinySizePct,
-           uint32_t mmReconfigureInterval)
-        : defaultLruRefreshTime(time),
-          lruRefreshRatio(ratio),
-          updateOnWrite(updateOnW),
+           size_t ghostSizePct)
+        : updateOnWrite(updateOnW),
           updateOnRead(updateOnR),
-          tryLockUpdate(tryLockU),
-          windowToCacheSizeRatio(windowToCacheSize),
           tinySizePercent(tinySizePct),
-          mmReconfigureIntervalSecs(
-              std::chrono::seconds(mmReconfigureInterval)) {
-      checkConfig();
-    }
-
-    // @param time                    the LRU refresh time in seconds.
-    //                                An item will be promoted only once in each
-    //                                lru refresh time depite the number of
-    //                                accesses it gets.
-    // @param ratio                   the lru refresh ratio. The ratio times the
-    //                                oldest element's lifetime in warm queue
-    //                                would be the minimum value of LRU refresh
-    //                                time.
-    // @param udpateOnW               whether to promote the item on write
-    // @param updateOnR               whether to promote the item on read
-    // @param tryLockU                whether to use a try lock when doing
-    //                                update.
-    // @param windowToCacheSize       multiplier of window size to cache size
-    // @param tinySizePct             percentage number of tiny size to overall
-    //                                size
-    // @param mmReconfigureInterval   Time interval for recalculating lru
-    //                                refresh time according to the ratio.
-    // @param newcomerWinsOnTie       If true, new comer will replace existing
-    //                                item if their access frequencies tie.
-    Config(uint32_t time,
-           double ratio,
-           bool updateOnW,
-           bool updateOnR,
-           bool tryLockU,
-           size_t windowToCacheSize,
-           size_t tinySizePct,
-           uint32_t mmReconfigureInterval,
-           bool _newcomerWinsOnTie)
-        : defaultLruRefreshTime(time),
-          lruRefreshRatio(ratio),
-          updateOnWrite(updateOnW),
-          updateOnRead(updateOnR),
-          tryLockUpdate(tryLockU),
-          windowToCacheSizeRatio(windowToCacheSize),
-          tinySizePercent(tinySizePct),
-          mmReconfigureIntervalSecs(
-              std::chrono::seconds(mmReconfigureInterval)),
-          newcomerWinsOnTie(_newcomerWinsOnTie) {
-      checkConfig();
-    }
+          ghostSizePercent(ghostSizePct) {}
 
     Config() = default;
     Config(const Config& rhs) = default;
@@ -236,65 +88,24 @@ class MMS3FIFO {
     Config& operator=(const Config& rhs) = default;
     Config& operator=(Config&& rhs) = default;
 
-    void checkConfig() {
-      if (tinySizePercent < 1 || tinySizePercent > 50) {
-        throw std::invalid_argument(
-            folly::sformat("Invalid tiny cache size {}. Tiny cache size "
-                           "must be between 1% and 50% of total cache size ",
-                           tinySizePercent));
-      }
-      if (windowToCacheSizeRatio < 2 || windowToCacheSizeRatio > 128) {
-        throw std::invalid_argument(
-            folly::sformat("Invalid window to cache size ratio {}. The ratio "
-                           "must be between 2 and 128",
-                           windowToCacheSizeRatio));
-      }
-    }
-
     template <typename... Args>
     void addExtraConfig(Args...) {}
 
-    // threshold value in seconds to compare with a node's update time to
-    // determine if we need to update the position of the node in the linked
-    // list. By default this is 60s to reduce the contention on the lru lock.
-    uint32_t defaultLruRefreshTime{60};
-    uint32_t lruRefreshTime{defaultLruRefreshTime};
-
-    // ratio of LRU refresh time to the tail age. If a refresh time computed
-    // according to this ratio is larger than lruRefreshtime, we will adopt
-    // this one instead of the lruRefreshTime set.
-    double lruRefreshRatio{0.};
-
-    // whether the lru needs to be updated on writes for recordAccess. If
+    // whether the cache needs to be updated on writes for recordAccess. If
     // false, accessing the cache for writes does not promote the cached item
     // to the head of the lru.
     bool updateOnWrite{false};
 
-    // whether the lru needs to be updated on reads for recordAccess. If
+    // whether the cache needs to be updated on reads for recordAccess. If
     // false, accessing the cache for reads does not promote the cached item
     // to the head of the lru.
     bool updateOnRead{true};
 
-    // whether to tryLock or lock the lru lock when attempting promotion on
-    // access. If set, and tryLock fails, access will not result in promotion.
-    bool tryLockUpdate{false};
-
-    // The multiplier for window size given the cache size.
-    size_t windowToCacheSizeRatio{32};
-
     // The size of tiny cache, as a percentage of the total size.
     size_t tinySizePercent{10};
 
-    // Minimum interval between reconfigurations. If 0, reconfigure is never
-    // called.
-    std::chrono::seconds mmReconfigureIntervalSecs{};
-
-    // If true, then if an item in the tail of the Tiny queue ties with the
-    // item in the tail of the main queue, the item from Tiny (newcomer) will
-    // replace the item from Main. This is fine for a default, but for
-    // strictly scan patterns (access a key exactly once and move on), this
-    // is not a desirable behavior (we'll always cache miss).
-    bool newcomerWinsOnTie{true};
+    // The size of ghost queue, as a percentage of main queue
+    size_t ghostSizePercent{100};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -316,15 +127,7 @@ class MMS3FIFO {
    public:
     Container() = default;
     Container(Config c, PtrCompressor compressor)
-        : lru_(LruType::NumTypes, std::move(compressor)),
-          config_(std::move(c)) {
-      lruRefreshTime_ = config_.lruRefreshTime;
-      nextReconfigureTime_ =
-          config_.mmReconfigureIntervalSecs.count() == 0
-              ? std::numeric_limits<Time>::max()
-              : static_cast<Time>(util::getCurrentTimeSec()) +
-                    config_.mmReconfigureIntervalSecs.count();
-    }
+        : lru_(LruType::NumTypes, std::move(compressor)), config_(std::move(c)) {}
     Container(serialization::MMS3FIFOObject object, PtrCompressor compressor);
 
     Container(const Container&) = delete;
@@ -391,7 +194,12 @@ class MMS3FIFO {
 
       LockedIterator& operator++() noexcept {
         // Advance the underlying iterator
-        ListIterator& it = ++getIter();
+        ListIterator& it = getIter();
+
+        if (!it) {
+          return *this;
+        }
+        ++it;
         // Skip accessed items
         skipAccessed(it);
         return *this;
@@ -472,8 +280,8 @@ class MMS3FIFO {
             static_cast<const LockedIterator*>(this)->getIter());
       }
 
-      // Todo: can probably cache the evicttiny call
-      // Will switch when iter is exhausted.
+      // Decides to return iterator from tiny or main cache based on capacity.
+      // Will switch iterators when one of them is exhausted.
       bool evictTiny() const noexcept {
         if (!mIter_) {
           return true;
@@ -515,6 +323,7 @@ class MMS3FIFO {
     }
 
     // Returns the eviction age stats. See CacheStats.h for details
+    // Todo
     EvictionAgeStat getEvictionAgeStat(uint64_t projectedLength) const noexcept;
 
     // Obtain an iterator that start from the tail and can be used
@@ -548,7 +357,6 @@ class MMS3FIFO {
       return isTiny(node) ? LruType::Tiny : LruType::Main;
     }
     
-
    private:
     EvictionAgeStat getEvictionAgeStatLocked(
         uint64_t projectedLength) const noexcept;
@@ -573,10 +381,6 @@ class MMS3FIFO {
     //
     // @param node          node to remove
     void removeLocked(T& node) noexcept;
-
-    size_t remove_tiny = 0;
-    size_t remove_main = 0;
-
 
     static bool isTiny(const T& node) noexcept {
       return node.template isFlagSet<RefFlags::kMMFlag0>();
@@ -604,45 +408,18 @@ class MMS3FIFO {
       node.template unSetFlag<RefFlags::kMMFlag1>();
     }
 
-    // Initial cache capacity estimate for count-min-sketch
-    static constexpr size_t kDefaultCapacity = 100;
-
-    // Number of hashes
-    static constexpr size_t kHashCount = 4;
-
-    // The error threshold for frequency calculation
-    static constexpr size_t kErrorThreshold = 5;
-
-    // decay rate for frequency
-    static constexpr double kDecayFactor = 0.5;
-
     // protects all operations on the lru. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
     // time.
     mutable Mutex lruMutex_;
+    
+    // Current ghost capacity
+    size_t capacity_{0};
 
     // the lru
     LruList lru_;
 
-    facebook::cachelib::util::FIFOHashSet ghostQueue_{};
-
-    // the window size counter
-    size_t windowSize_{0};
-
-    // maximum value of window size which when hit the counters are halved
-    size_t maxWindowSize_{0};
-
-    // The capacity for which the counters are sized
-    size_t capacity_{0};
-
-    // The next time to reconfigure the container.
-    std::atomic<Time> nextReconfigureTime_{};
-
-    // How often to promote an item in the eviction queue.
-    std::atomic<uint32_t> lruRefreshTime_{};
-
-    // Max lruFreshTime.
-    static constexpr uint32_t kLruRefreshTimeCap{900};
+    facebook::cachelib::util::FIFOHashSet ghostQueue_;
 
     // Config for this lru.
     // Write access to the MMS3FIFO Config is serialized.
@@ -661,17 +438,13 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 MMS3FIFO::Container<T, HookPtr>::Container(serialization::MMS3FIFOObject object,
                                            PtrCompressor compressor)
     : lru_(*object.lrus(), std::move(compressor)), config_(*object.config()) {
-  lruRefreshTime_ = config_.lruRefreshTime;
-  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
-                             ? std::numeric_limits<Time>::max()
-                             : static_cast<Time>(util::getCurrentTimeSec()) +
-                                   config_.mmReconfigureIntervalSecs.count();
   maybeGrowGhostLocked();
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   size_t capacity = lru_.size();
+
   // If the new capacity ask is more than double the current size, 
   // expand the ghost queue
   if (2 * capacity_ > capacity) {
@@ -679,11 +452,12 @@ void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   }
   
   // Capacity should be proportion of main queue
-  // Todo config
-  // now size of main queue
   size_t capacityMain = lru_.getList(LruType::Main).size();
+  size_t expectedGhostSize =
+      static_cast<size_t>(capacityMain * config_.ghostSizePercent / 100);
 
-  ghostQueue_.resize(capacityMain);
+  ghostQueue_.resize(expectedGhostSize);
+  capacity_ = capacity;
 }
 
 // We have no notion of "reconfiguring lock"
@@ -793,7 +567,7 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
   }
   auto totalSize = tinyLru.size() + mainLru.size();
   // Print the proportions of size
-  if (totalSize % 100 == 0) {
+  if (totalSize % 1000 == 0) {
     auto propTiny =
         static_cast<double>(tinyLru.size()) / static_cast<double>(totalSize);
     auto propMain =
@@ -805,9 +579,7 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
            mainLru.size());
   }
 
-  // Run S3-FIFO rules until the current tail (of chosen list)
-  // is an unaccessed victim.
-
+  // Promote until we find a victim, so iterator won't have to mutate the lists
   while (true) {
     bool tryTiny = (lru_.size() * config_.tinySizePercent /100) < tinyLru.size();
 
@@ -825,10 +597,9 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
         mainLru.linkAtHead(node);
         Container<T, HookPtr>::unmarkTiny(node);
         Container<T, HookPtr>::unmarkAccessed(node);
-        // sizes changed, loop again
         continue;
       } else {
-        // unaccessed tail in S → valid victim, stop rebalancing
+        // unaccessed tail in S → valid victim, we can pass to iterator.
         return;
       }
 
@@ -844,7 +615,6 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
         // accessed tail in M → move to head(M), clear bit
         mainLru.moveToHead(node);
         Container<T, HookPtr>::unmarkAccessed(node);
-        // try again with new tail
         continue;
       } else {
         // unaccessed tail in M → victim
@@ -881,7 +651,7 @@ void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   if (isTiny(node)) {
     lru_.getList(LruType::Tiny).remove(node);
     unmarkTiny(node);
-    // Insert to hash upon removal
+    // Insert to ghost upon removal
     ghostQueue_.insert(hashNode(node));
   } else {
     lru_.getList(LruType::Main).remove(node);
@@ -947,31 +717,18 @@ typename MMS3FIFO::Config MMS3FIFO::Container<T, HookPtr>::getConfig() const {
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::setConfig(const Config& c) {
   LockHolder l(lruMutex_);
-  config_ = c;
-  lruRefreshTime_.store(config_.lruRefreshTime, std::memory_order_relaxed);
-  nextReconfigureTime_ = config_.mmReconfigureIntervalSecs.count() == 0
-                             ? std::numeric_limits<Time>::max()
-                             : static_cast<Time>(util::getCurrentTimeSec()) +
-                                   config_.mmReconfigureIntervalSecs.count();
+  config_ = c; 
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 serialization::MMS3FIFOObject MMS3FIFO::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMS3FIFOConfig configObject;
-  *configObject.lruRefreshTime() =
-      lruRefreshTime_.load(std::memory_order_relaxed);
-  *configObject.lruRefreshRatio() = config_.lruRefreshRatio;
   *configObject.updateOnWrite() = config_.updateOnWrite;
   *configObject.updateOnRead() = config_.updateOnRead;
-  *configObject.windowToCacheSizeRatio() = config_.windowToCacheSizeRatio;
+  *configObject.ghostSizePercent() = config_.ghostSizePercent;
   *configObject.tinySizePercent() = config_.tinySizePercent;
-  *configObject.mmReconfigureIntervalSecs() =
-      config_.mmReconfigureIntervalSecs.count();
-  *configObject.newcomerWinsOnTie() = config_.newcomerWinsOnTie;
-  // TODO: Serialize with ghost queue too.
-  // Right now serialization / save state is incomplete.
-
+  // TODO: Serialize the ghost queue too.
   serialization::MMS3FIFOObject object;
   *object.config() = configObject;
   *object.lrus() = lru_.saveState();
