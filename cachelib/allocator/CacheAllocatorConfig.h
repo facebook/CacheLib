@@ -60,7 +60,7 @@ class CacheAllocatorConfig {
   using MemoryTierConfigs = std::vector<MemoryTierCacheConfig>;
   using Key = typename CacheT::Key;
   using LegacyEventTrackerSharedPtr =
-      std::shared_ptr<typename CacheT::EventTracker>;
+      std::shared_ptr<typename CacheT::LegacyEventTracker>;
   using Item = typename CacheT::Item;
 
   // Set cache name as a string

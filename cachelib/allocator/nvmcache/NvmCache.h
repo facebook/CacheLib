@@ -40,6 +40,7 @@
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/common/Types.h"
@@ -292,6 +293,46 @@ class NvmCache {
   void markNvmItemRemovedLocked(HashedKey hk);
 
  private:
+  // Helper function to record event with NvmItem metadata
+  // @param event    The allocator API event type
+  // @param key      The key for the event
+  // @param result   The result of the operation
+  // @param nvmItem  The NvmItem to extract metadata from
+  void recordEvent(AllocatorApiEvent event,
+                   folly::StringPiece key,
+                   AllocatorApiResult result,
+                   const NvmItem* nvmItem = nullptr) {
+    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
+      if (!eventTracker->sampleKey(key)) {
+        return;
+      }
+    } else if (!CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
+      return;
+    }
+
+    if (!nvmItem) {
+      CacheAPIWrapperForNvm<C>::recordEvent(cache_, event, key, result);
+      return;
+    }
+
+    const auto blob = nvmItem->getBlob(0);
+    const auto itemSize = blob.data.size();
+    const auto allocSize = blob.origAllocSize;
+    const auto expiryTime = nvmItem->getExpiryTime();
+    uint32_t ttlSecs = 0;
+    if (expiryTime != 0 && expiryTime > nvmItem->getCreationTime()) {
+      ttlSecs = expiryTime - nvmItem->getCreationTime();
+    }
+
+    CacheAPIWrapperForNvm<C>::recordEvent(
+        cache_, event, key, result,
+        typename C::EventRecordParams{.size = itemSize,
+                                      .ttlSecs = ttlSecs,
+                                      .expiryTime = expiryTime,
+                                      .allocSize = allocSize,
+                                      .poolId = nvmItem->poolId()});
+  }
+
   // returns the itemRemoved_ set size
   // it is the number of items were both in dram and nvm
   // and were removed from dram but not yet removed from nvm
@@ -844,11 +885,8 @@ void NvmCache<C>::evictCB(HashedKey hk,
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
     navyCache_->updateEvictionStats(hk, value, lifetime);
 
-    if (auto legacyEventTracker =
-            CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
-      legacyEventTracker->record(AllocatorApiEvent::NVM_EVICT, hk.key(),
-                                 AllocatorApiResult::EVICTED);
-    }
+    recordEvent(AllocatorApiEvent::NVM_EVICT, hk.key(),
+                AllocatorApiResult::EVICTED, &nvmItem);
   }
 
   bool needDestructor = true;
@@ -1463,16 +1501,12 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
   // capture array reference for delContext. it is stable
   auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
                                                HashedKey) mutable {
-    if (auto legacyEventTracker =
-            CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
-      const auto result = status == navy::Status::Ok
-                              ? AllocatorApiResult::REMOVED
-                              : (status == navy::Status::NotFound
-                                     ? AllocatorApiResult::NOT_FOUND
-                                     : AllocatorApiResult::FAILED);
-      legacyEventTracker->record(AllocatorApiEvent::NVM_REMOVE, ctx.key(),
-                                 result);
-    }
+    const auto result =
+        status == navy::Status::Ok
+            ? AllocatorApiResult::REMOVED
+            : (status == navy::Status::NotFound ? AllocatorApiResult::NOT_FOUND
+                                                : AllocatorApiResult::FAILED);
+    recordEvent(AllocatorApiEvent::NVM_REMOVE, ctx.key(), result);
     delContexts.destroyContext(ctx);
     if (status == navy::Status::Ok || status == navy::Status::NotFound ||
         status == navy::Status::ChecksumError) {

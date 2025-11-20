@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/navy/block_cache/Allocator.h"
@@ -72,6 +73,8 @@ class BlockCache final : public Engine {
 
     std::optional<std::reference_wrapper<LegacyEventTracker>>
         legacyEventTracker;
+
+    std::optional<std::reference_wrapper<EventTracker>> eventTracker;
 
     // Maximum number of retry times for in-mem buffer flushing.
     // When exceeding the limit, we will not reschedule any flushing job but
@@ -329,10 +332,11 @@ class BlockCache final : public Engine {
     return regionManager_.toRelative(decodeAbsAddress(code).sub(1)).add(1);
   }
 
-  void updateEventTracker(folly::StringPiece key,
-                          AllocatorApiEvent event,
-                          AllocatorApiResult result,
-                          uint32_t size);
+  void recordEvent(folly::StringPiece key,
+                   AllocatorApiEvent event,
+                   AllocatorApiResult result,
+                   uint32_t size,
+                   const NvmItem* nvmItem = nullptr);
 
   AllocatorApiResult reinsertOrRemoveItem(HashedKey hk,
                                           BufferView value,
@@ -392,6 +396,7 @@ class BlockCache final : public Engine {
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
   std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
+  std::optional<std::reference_wrapper<EventTracker>> eventTracker_;
 
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;

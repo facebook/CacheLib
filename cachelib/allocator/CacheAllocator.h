@@ -226,7 +226,7 @@ class CacheAllocator : public CacheBase {
   using Key = typename Item::Key;
   using PoolIds = std::set<PoolId>;
 
-  using EventTracker = facebook::cachelib::LegacyEventTracker;
+  using LegacyEventTracker = facebook::cachelib::LegacyEventTracker;
 
   // SampleItem is a wrapper for the CacheItem which is provided as the sample
   // for uploading to Scuba (see ItemStatsExporter). It is guaranteed that the
@@ -266,6 +266,16 @@ class CacheAllocator : public CacheBase {
     folly::IOBuf iobuf_;
     AllocInfo allocInfo_{};
     bool fromNvm_ = false;
+  };
+
+  // A struct holding optional event details
+  struct EventRecordParams {
+    folly::Optional<size_t> size{folly::none};       // Size of the item's value
+    folly::Optional<uint32_t> ttlSecs{folly::none};  // Time-to-live in seconds
+    folly::Optional<time_t> expiryTime{folly::none}; // Absolute expiry
+                                                     // timestamp
+    folly::Optional<uint32_t> allocSize{folly::none}; // Actual allocated size
+    folly::Optional<PoolId> poolId{folly::none};      // Memory pool identifier
   };
 
   // holds information about removal, used in RemoveCb
@@ -1779,7 +1789,7 @@ class CacheAllocator : public CacheBase {
     return allocator_->reclaimSlabsAndGrow(id, numSlabs);
   }
 
-  FOLLY_ALWAYS_INLINE EventTracker* getLegacyEventTracker() const {
+  FOLLY_ALWAYS_INLINE LegacyEventTracker* getLegacyEventTracker() const {
     return config_.legacyEventTracker.get();
   }
 
@@ -1790,16 +1800,6 @@ class CacheAllocator : public CacheBase {
     }
     return 0;
   }
-
-  // A struct holding optional event details
-  struct EventRecordParams {
-    folly::Optional<size_t> size{folly::none};       // Size of the item's value
-    folly::Optional<uint32_t> ttlSecs{folly::none};  // Time-to-live in seconds
-    folly::Optional<time_t> expiryTime{folly::none}; // Absolute expiry
-                                                     // timestamp
-    folly::Optional<uint32_t> allocSize{folly::none}; // Actual allocated size
-    folly::Optional<PoolId> poolId{folly::none};      // Memory pool identifier
-  };
 
   /**
    * Record event, key, result and info from a struct of type EventRecordParams.
@@ -2672,7 +2672,12 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
   }
 
   auto legacyEventTracker = getLegacyEventTracker();
-  if (legacyEventTracker) {
+  auto eventTracker = getEventTracker();
+  if (eventTracker) {
+    XLOG(INFO) << "Set event tracker in block cache.";
+    config_.nvmConfig->navyConfig.blockCache().setEventTracker(*eventTracker);
+  } else if (legacyEventTracker) {
+    XLOG(INFO) << "Set legacy event tracker in block cache.";
     config_.nvmConfig->navyConfig.blockCache().setLegacyEventTracker(
         *legacyEventTracker);
   }

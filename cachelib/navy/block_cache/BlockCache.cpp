@@ -23,6 +23,7 @@
 #include <cstring>
 #include <utility>
 
+#include "cachelib/common/Time.h"
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
@@ -161,6 +162,7 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XDCHECK_NE(readBufferSize_, 0u);
 
   legacyEventTracker_ = config.legacyEventTracker;
+  eventTracker_ = config.eventTracker;
 }
 std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
@@ -554,8 +556,8 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     if (destructorCb_ && reinsertionRes == AllocatorApiResult::EVICTED) {
       destructorCb_(hk, value, DestructorEvent::Recycled);
     } else {
-      updateEventTracker(hk.key(), AllocatorApiEvent::NVM_EVICT, reinsertionRes,
-                         entrySize);
+      recordEvent(hk.key(), AllocatorApiEvent::NVM_EVICT, reinsertionRes,
+                  entrySize);
     }
     XDCHECK_GE(offset, entrySize);
     offset -= entrySize;
@@ -628,11 +630,65 @@ bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
   return false;
 }
 
-void BlockCache::updateEventTracker(folly::StringPiece key,
-                                    AllocatorApiEvent event,
-                                    AllocatorApiResult result,
-                                    uint32_t size) {
-  if (legacyEventTracker_.has_value()) {
+/**
+ * Record event, key, result, size and info from nvmItem.
+ *
+ * @param key              The key associated with the event.
+ * @param event            The event of type AllocatorApiEvent.
+ * @param result           The result of type AllocatorApiResult.
+ * @param size             The size of the item in NVM.
+ * @param params           Optional struct of type EventRecordParams.
+ *
+ * @return                 void
+ */
+void BlockCache::recordEvent(folly::StringPiece key,
+                             AllocatorApiEvent event,
+                             AllocatorApiResult result,
+                             uint32_t size,
+                             const NvmItem* nvmItem) {
+  if (eventTracker_.has_value()) {
+    if (!eventTracker_->get().sampleKey(key)) {
+      return;
+    }
+    EventInfo eventInfo;
+    eventInfo.event = event;
+    eventInfo.result = result;
+    eventInfo.size = size;
+    eventInfo.key = key;
+
+    // Extract additional information from NvmItem if available
+    if (nvmItem) {
+      eventInfo.poolId = nvmItem->poolId();
+      const auto expiryTime = nvmItem->getExpiryTime();
+      const auto creationTime = nvmItem->getCreationTime();
+
+      // expiryTime == 0 means no TTL was set for this item
+      if (expiryTime != 0) {
+        eventInfo.expiryTime = expiryTime;
+
+        // Calculate configured TTL from expiryTime and creationTime
+        // TTL = expiryTime - creationTime
+        if (expiryTime > creationTime) {
+          eventInfo.ttlSecs = expiryTime - creationTime;
+        }
+
+        // Calculate time to expire from current time
+        const auto currentTime = util::getCurrentTimeSec();
+        if (expiryTime > currentTime) {
+          eventInfo.timeToExpire =
+              static_cast<uint32_t>(expiryTime - currentTime);
+        }
+      }
+
+      // Access the allocation size of the item being stored
+      if (nvmItem->getNumBlobs() > 0) {
+        const auto blob = nvmItem->getBlob(0);
+        eventInfo.allocSize = blob.origAllocSize;
+      }
+    }
+
+    eventTracker_->get().record(eventInfo);
+  } else if (legacyEventTracker_.has_value()) {
     legacyEventTracker_->get().record(event, key, result, size);
   }
 }
