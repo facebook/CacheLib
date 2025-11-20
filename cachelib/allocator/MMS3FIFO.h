@@ -34,9 +34,17 @@
 #include "cachelib/common/Mutex.h"
 
 namespace facebook::cachelib {
+
 // Implements the S3-FIFO cache eviction policy as described in
 // https://dl.acm.org/doi/pdf/10.1145/3600006.3613147
+//
+// S3-FIFO is combines a "Tiny" queue, a larger "Main" queue, and a ghost history. 
+// New items enter the Tiny queue; recently accessed items are promoted to the Main queue.
+// Eviction always searches from the tails of these queues, skipping items
+// that have been accessed since insertion (using a single access bit).
 // 
+// A low overhead ghost queue (stores only 4 byte key hash/ item)tracks recently 
+// evicted keys from the small queue. Items found in ghost are directly into the Main queue. 
 
 class MMS3FIFO {
  public:
@@ -459,6 +467,7 @@ void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
 
 // We have no notion of "reconfiguring lock"
 // or refresh interval since we are not manipulating the list lru on access.
+// No need for locks, as we don't modify the list
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
                                                    AccessMode mode) noexcept {
@@ -468,16 +477,12 @@ bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
   }
 
   const auto curr = static_cast<Time>(util::getCurrentTimeSec());
-  LockHolder l(lruMutex_);
-  // check if the node is still being memory managed
-  // No need refreshing since we are treating the list as a FIFO queue.
+
   if (node.isInMMContainer()) {
     if (!isAccessed(node)) {
       markAccessed(node);
     }
-    // Update time here is only used by eviction age stats, which
-    // arguably is not meaningful in FIFO reinsertion strategy.
-    // Todo: We can consider removing update time in future.
+    // Todo: can deprecate update time next
     setUpdateTime(node, curr);
     return true;
   }
