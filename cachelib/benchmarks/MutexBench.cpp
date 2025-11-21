@@ -20,6 +20,7 @@
 #include <folly/SpinLock.h>
 #include <folly/init/Init.h>
 #include <folly/portability/Asm.h>
+#include <folly/system/HardwareConcurrency.h>
 #include <gflags/gflags.h>
 #include <sys/resource.h>
 
@@ -423,7 +424,7 @@ int main(int argc, char** argv) {
   gLoadInfo = {FLAGS_updates, FLAGS_evicts, FLAGS_deletes};
 
   if (FLAGS_num_threads == 0) {
-    FLAGS_num_threads = std::thread::hardware_concurrency();
+    FLAGS_num_threads = folly::hardware_concurrency();
     if (FLAGS_num_threads == 0) {
       FLAGS_num_threads = 32;
     }

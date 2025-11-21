@@ -15,6 +15,9 @@
  */
 
 #pragma once
+
+#include <folly/system/HardwareConcurrency.h>
+
 #include <cstdint>
 
 #include "cachelib/allocator/Cache.h"
@@ -77,7 +80,7 @@ class ItemRecords {
 
  public:
   explicit ItemRecords(bool enable,
-                       uint64_t threads = std::thread::hardware_concurrency())
+                       uint64_t threads = folly::hardware_concurrency())
       : enable_(enable), itemRecords_(threads), mutexes_(threads) {}
 
   bool validate(const DestructorData& data) {

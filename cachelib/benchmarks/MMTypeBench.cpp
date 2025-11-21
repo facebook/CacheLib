@@ -18,6 +18,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+#include <folly/system/HardwareConcurrency.h>
 #include <gflags/gflags.h>
 
 #include <condition_variable>
@@ -257,7 +258,7 @@ int main(int argc, char** argv) {
   const folly::Init init(&argc, &argv);
 
   if (FLAGS_num_threads == 0) {
-    FLAGS_num_threads = std::thread::hardware_concurrency();
+    FLAGS_num_threads = folly::hardware_concurrency();
     if (FLAGS_num_threads == 0) {
       FLAGS_num_threads = 32;
     }
