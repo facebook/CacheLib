@@ -110,8 +110,8 @@ class MMS3FIFO {
     // The size of tiny cache, as a percentage of the total size.
     size_t tinySizePercent{10};
 
-    // The size of ghost queue, as a percentage of main queue
-    size_t ghostSizePercent{100};
+    // The size of ghost queue, as a percentage of total size
+    size_t ghostSizePercent{90};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -418,7 +418,7 @@ class MMS3FIFO {
     // time.
     mutable Mutex lruMutex_;
     
-    // Current ghost capacity
+    // Current capacity to track ghost size
     size_t capacity_{0};
 
     // the lru
@@ -450,17 +450,12 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   size_t capacity = lru_.size();
 
-  // If the new capacity ask is more than double the current size, 
-  // expand the ghost queue
-  if (2 * capacity_ > capacity) {
+  // Only consider growing ghost when lru size doubles.
+  if (2 * capacity_ > capacity || capacity == 0) {
     return;
   }
   
-  // Capacity should be proportion of main queue
-  size_t capacityMain = lru_.getList(LruType::Main).size();
-  size_t expectedGhostSize =
-      static_cast<size_t>(capacityMain * config_.ghostSizePercent / 100);
-
+  size_t expectedGhostSize = static_cast<size_t>(capacity * config_.ghostSizePercent / 100);
   ghostQueue_.resize(expectedGhostSize);
   capacity_ = capacity;
 }
@@ -546,8 +541,6 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
     markTiny(node);
   }
 
-  maybeGrowGhostLocked();
-
   node.markInMMContainer();
   setUpdateTime(node, currTime);
   unmarkAccessed(node);
@@ -620,6 +613,8 @@ typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
 MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() noexcept {
   LockHolder l(lruMutex_);
   rebalanceForEviction();
+  // Cache is full now so we know it's max size
+  maybeGrowGhostLocked();
   return LockedIterator{std::move(l), *this};
 }
 

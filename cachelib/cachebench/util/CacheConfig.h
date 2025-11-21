@@ -106,8 +106,8 @@ struct CacheConfig : public JSONConfig {
   size_t lru2qColdPct{20};
 
   // S3FIFO params
-  size_t ghostSizePercent{100};
-  size_t tinySizePercent{10};
+  size_t ghostSizePercent{90}; // Ghost size as percentage of whole cache
+  size_t tinySizePercent{10}; // Tiny size as percentage of whole cache
 
   double allocFactor{1.5};
   // maximum alloc size generated using the alloc factor above.
