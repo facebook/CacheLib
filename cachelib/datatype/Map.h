@@ -382,6 +382,8 @@ class Map {
   Map(const Map& other) = delete;
   Map& operator=(const Map& other) = delete;
 
+  ~Map() = default;
+
   // Find a value given the key. Return nullptr if not found
   // @param key   key to an entry in this map
   EntryValue* find(const EntryKey& key);
