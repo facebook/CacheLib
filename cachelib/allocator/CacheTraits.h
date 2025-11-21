@@ -18,6 +18,7 @@
 #include "cachelib/allocator/ChainedHashTable.h"
 #include "cachelib/allocator/MM2Q.h"
 #include "cachelib/allocator/MMLru.h"
+#include "cachelib/allocator/MMS3FIFO.h"
 #include "cachelib/allocator/MMTinyLFU.h"
 #include "cachelib/allocator/MMWTinyLFU.h"
 #include "cachelib/allocator/memory/CompressedPtr.h"
@@ -49,6 +50,13 @@ struct LruCacheWithSpinBucketsTrait {
 
 struct Lru2QCacheTrait {
   using MMType = MM2Q;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr4B;
+};
+
+struct S3FIFOCacheTrait {
+  using MMType = MMS3FIFO;
   using AccessType = ChainedHashTable;
   using AccessTypeLocks = SharedMutexBuckets;
   using CompressedPtrType = CompressedPtr4B;
