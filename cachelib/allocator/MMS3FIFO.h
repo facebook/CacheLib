@@ -386,7 +386,7 @@ class MMS3FIFO {
     }
 
     // As the cache grows, the ghost queue may need to be resized
-    void maybeGrowGhostLocked() noexcept;
+    void maybeResizeGhostLocked() noexcept;
 
     // Returns the hash of node's key
     static size_t hashNode(const T& node) noexcept {
@@ -454,19 +454,21 @@ MMS3FIFO::Container<T, HookPtr>::Container(serialization::MMS3FIFOObject object,
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
-void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
-  size_t capacity = lru_.size();
+void MMS3FIFO::Container<T, HookPtr>::maybeResizeGhostLocked() noexcept {
+  size_t lruSize = lru_.size();
 
-  // Only consider growing ghost when lru size doubles.
-  // Right now we don't shrink ghost queue.
-  if (2 * capacity_ > capacity || capacity == 0) {
+  // Grow when size doubled, shrink when halved
+  const bool shouldGrow = lruSize >= 2 * capacity_;
+  const bool shouldShrink = lruSize <= capacity_ / 2;
+
+  if (!shouldGrow && !shouldShrink) {
     return;
   }
 
   size_t expectedGhostSize =
-      static_cast<size_t>(capacity * config_.ghostSizePercent / 100);
+      static_cast<size_t>(lruSize * config_.ghostSizePercent / 100);
   ghostQueue_.resize(expectedGhostSize);
-  capacity_ = capacity;
+  capacity_ = lruSize;
 }
 
 // We have no notion of "reconfiguring lock"
@@ -623,7 +625,7 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
 MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() noexcept {
   LockHolder l(*lruMutex_);
-  maybeGrowGhostLocked();
+  maybeResizeGhostLocked();
   rebalanceForEviction();
   // Cache is full now so we know it's max size
   return LockedIterator{std::move(l), *this};
