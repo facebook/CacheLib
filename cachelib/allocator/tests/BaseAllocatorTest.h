@@ -6964,6 +6964,26 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     // pool stats and NOT export aggregated stats (nothing to aggregate)
     EXPECT_FALSE(hasAggregatedStats(alloc));
   }
+
+  // Reproducing issue where using 128 allocation classes with tail hits
+  // tracking enabled would throw when adding a pool
+  void testMaxAllocSizesWithTailHitsTracking() {
+    typename AllocatorT::Config config;
+    config.setCacheSize(10 * Slab::kSize);
+    config.enableTailHitsTracking();
+
+    AllocatorT alloc(config);
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+
+    // Create 128 allocation sizes: 128, 256, 384, ..., 16384
+    std::set<uint32_t> allocSizes;
+    for (uint32_t i = 1; i <= 128; ++i) {
+      allocSizes.insert(i * 128);
+    }
+
+    // Assert that adding a pool with 128 allocation sizes does not throw
+    ASSERT_NO_THROW(alloc.addPool("test_pool", numBytes, allocSizes));
+  }
 };
 } // namespace tests
 } // namespace cachelib

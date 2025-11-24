@@ -4964,7 +4964,7 @@ PoolEvictionAgeStats CacheAllocator<CacheTrait>::getPoolEvictionAgeStats(
 
   const auto& pool = allocator_->getPool(pid);
   const auto& allocSizes = pool.getAllocSizes();
-  for (ClassId cid = 0; cid < static_cast<ClassId>(allocSizes.size()); ++cid) {
+  for (ClassId cid = 0; static_cast<size_t>(cid) < allocSizes.size(); ++cid) {
     auto& mmContainer = getMMContainer(pid, cid);
     const auto numItemsPerSlab =
         allocator_->getPool(pid).getAllocationClass(cid).getAllocsPerSlab();

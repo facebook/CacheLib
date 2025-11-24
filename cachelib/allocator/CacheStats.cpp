@@ -258,7 +258,8 @@ PoolStats& PoolStats::operator+=(const PoolStats& other) {
     } else {
       // No existing class with matching allocation size found, so create a new
       // one. Find a new class ID to avoid conflicts
-      ClassId newClassId = static_cast<ClassId>(cacheStats.size());
+      ClassId newClassId =
+          cacheStats.empty() ? 0 : static_cast<ClassId>(cacheStats.size() - 1);
       while (cacheStats.find(newClassId) != cacheStats.end()) {
         newClassId++;
       }

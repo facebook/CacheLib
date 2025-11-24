@@ -178,7 +178,7 @@ AllocationClass& MemoryPool::getAllocationClassFor(void* memory) const {
 }
 
 AllocationClass& MemoryPool::getAllocationClassFor(ClassId cid) const {
-  if (cid < static_cast<ClassId>(ac_.size())) {
+  if (cid >= 0 && static_cast<size_t>(cid) < ac_.size()) {
     XDCHECK(ac_[cid] != nullptr);
     return *ac_[cid];
   }
@@ -224,7 +224,7 @@ ClassId MemoryPool::getAllocationClassId(const void* memory) const {
   }
 
   const auto classId = header->classId;
-  if (classId >= static_cast<ClassId>(ac_.size()) || classId < 0) {
+  if (classId < 0 || static_cast<size_t>(classId) >= ac_.size()) {
     // at this point, the slab indicates that it belongs to a bogus classId and
     // things are corrupt and the caller cant do anything about it. so throw an
     // exception to abort.

@@ -472,6 +472,12 @@ using LruAllocatorTest = BaseAllocatorTest<LruAllocator>;
 using Lru2QAllocatorTest = BaseAllocatorTest<Lru2QAllocator>;
 using TinyLFUAllocatorTest = BaseAllocatorTest<TinyLFUAllocator>;
 
+// Reproducing issue where using 128 allocation classes with tail hits
+// tracking enabled would throw when adding a pool
+TEST_F(Lru2QAllocatorTest, MaxAllocSizesWithTailHitsTracking) {
+  testMaxAllocSizesWithTailHitsTracking();
+}
+
 // test all the error scenarios with respect to allocating a new key where it
 // is not accessible right away.
 TEST_F(LruAllocatorTest, AllocateInAccessible) {

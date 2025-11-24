@@ -317,7 +317,7 @@ TEST_F(MemoryPoolTest, Resize) {
     // try to release one slab from every allocation class belonging to the
     // memory pool.
     unsigned int numReleased = 0;
-    for (ClassId id = 0; id < static_cast<ClassId>(mp1.getNumClassId()); id++) {
+    for (ClassId id = 0; static_cast<size_t>(id) < mp1.getNumClassId(); id++) {
       if (getCurrentSlabAllocSize(mp1) <= mp1.getPoolSize()) {
         break;
       }
@@ -660,7 +660,7 @@ TEST_F(MemoryPoolTest, SlabRelease) {
     // with all the memory allocated, release a slab and we should be able to
     // make more allocations.
     auto numUsableSlabs = slabAlloc->getNumUsableSlabs();
-    for (ClassId id = 0; id < static_cast<ClassId>(mp.getNumClassId()); id++) {
+    for (ClassId id = 0; static_cast<size_t>(id) < mp.getNumClassId(); id++) {
       auto prevStat = mp.getStats();
       auto context =
           mp.startSlabRelease(id, Slab::kInvalidClassId, mode, nullptr,
