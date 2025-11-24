@@ -27,8 +27,11 @@ class ReleaseStats {
   using SlabReleaseEventsBuffer = std::deque<SlabReleaseData>;
 
   ReleaseStats() {}
+  ~ReleaseStats() = default;
   ReleaseStats(const ReleaseStats&) = delete;
   ReleaseStats& operator=(const ReleaseStats& other) = delete;
+  ReleaseStats(ReleaseStats&&) = delete;
+  ReleaseStats& operator=(ReleaseStats&&) = delete;
 
   // add slab release event
   // @param from              the victim allocation class
