@@ -22,6 +22,8 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 #include <folly/Format.h>
 #include <folly/Math.h>
+#include <folly/synchronization/DistributedMutex.h>
+
 #pragma GCC diagnostic pop
 
 #include "cachelib/allocator/Cache.h"
@@ -31,20 +33,21 @@
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/FIFOHashSet.h"
-#include "cachelib/common/Mutex.h"
 
 namespace facebook::cachelib {
 
 // Implements the S3-FIFO cache eviction policy as described in
 // https://dl.acm.org/doi/pdf/10.1145/3600006.3613147
 //
-// S3-FIFO is combines a "Tiny" queue, a larger "Main" queue, and a ghost history. 
-// New items enter the Tiny queue; recently accessed items are promoted to the Main queue.
-// Eviction always searches from the tails of these queues, skipping items
-// that have been accessed since insertion (using a single access bit).
-// 
-// A low overhead ghost queue (stores only 4 byte key hash/ item)tracks recently 
-// evicted keys from the small queue. Items found in ghost are directly into the Main queue. 
+// S3-FIFO is combines a "Tiny" queue, a larger "Main" queue, and a ghost
+// history. New items enter the Tiny queue; recently accessed items are promoted
+// to the Main queue. Eviction always searches from the tails of these queues,
+// skipping items that have been accessed since insertion (using a single access
+// bit).
+//
+// A low overhead ghost queue (stores only 4 byte key hash/ item)tracks recently
+// evicted keys from the small queue. Items found in ghost are directly into the
+// Main queue.
 
 class MMS3FIFO {
  public:
@@ -64,19 +67,15 @@ class MMS3FIFO {
   struct Config {
     // create from serialized config
     explicit Config(SerializationConfigType configState)
-        : Config(
-                 *configState.updateOnWrite(),
+        : Config(*configState.updateOnWrite(),
                  *configState.updateOnRead(),
                  *configState.tinySizePercent(),
-                  *configState.ghostSizePercent()) {}
+                 *configState.ghostSizePercent()) {}
 
     // @param udpateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     Config(bool updateOnW, bool updateOnR)
-        : Config(updateOnW,
-                 updateOnR,
-                 10,
-                 90) {}
+        : Config(updateOnW, updateOnR, 10, 90) {}
 
     // @param udpateOnW         whether to promote the item on write
     // @param updateOnR         whether to promote the item on read
@@ -89,7 +88,8 @@ class MMS3FIFO {
         : updateOnWrite(updateOnW),
           updateOnRead(updateOnR),
           tinySizePercent(tinySizePercent),
-          ghostSizePercent(ghostSizePercent) {}
+          ghostSizePercent(ghostSizePercent) {
+    }
 
     Config() = default;
     Config(const Config& rhs) = default;
@@ -104,7 +104,7 @@ class MMS3FIFO {
     // whether the cache needs to be updated on writes for recordAccess.
     bool updateOnWrite{false};
 
-    // whether the cache needs to be updated on reads for recordAccess. 
+    // whether the cache needs to be updated on reads for recordAccess.
     bool updateOnRead{true};
 
     // The size of tiny cache, as a percentage of the total size.
@@ -112,6 +112,8 @@ class MMS3FIFO {
 
     // The size of ghost queue, as a percentage of total size
     size_t ghostSizePercent{90};
+
+    size_t reserveCapacity{0};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -123,7 +125,7 @@ class MMS3FIFO {
   struct Container {
    private:
     using LruList = MultiDList<T, HookPtr>;
-    using Mutex = folly::SpinLock;
+    using Mutex = folly::DistributedMutex;
     using LockHolder = std::unique_lock<Mutex>;
     using PtrCompressor = typename T::PtrCompressor;
     using Time = typename Hook<T>::Time;
@@ -131,16 +133,22 @@ class MMS3FIFO {
     using RefFlags = typename T::Flags;
 
    public:
-    Container() = default;
+    Container() {};
+    // Reserve ghost queue here if needed
     Container(Config c, PtrCompressor compressor)
-        : lru_(LruType::NumTypes, std::move(compressor)), config_(std::move(c)) {}
+        : lru_(LruType::NumTypes, std::move(compressor)),
+          config_(std::move(c)) {
+            if (config_.reserveCapacity > 0) {
+              ghostQueue_.reserve(config_.reserveCapacity);
+            }
+          }
     Container(serialization::MMS3FIFOObject object, PtrCompressor compressor);
 
     Container(const Container&) = delete;
     Container& operator=(const Container&) = delete;
 
-    // records the information that the node was accessed. 
-    // This doesn't bump up nodes and only sets the access bit.
+    // records the information that the node was accessed.
+    // This doesn't move nodes and only sets the access bit.
     // It also updates the timestamp of last access.
     //
     // @param node  node that we want to mark as relevant/accessed
@@ -158,7 +166,7 @@ class MMS3FIFO {
     //          is unchanged.
     bool add(T& node) noexcept;
 
-    // removes the node from the container, adds it to ghost queue 
+    // removes the node from the container, adds it to ghost queue
     // if it was from tiny queue.
     //
     // @param node  The node to be removed from the container.
@@ -188,7 +196,6 @@ class MMS3FIFO {
     //               source node already existed.
     bool replace(T& oldNode, T& newNode) noexcept;
 
-
     class LockedIterator {
      public:
       using ListIterator = typename LruList::DListIterator;
@@ -197,7 +204,8 @@ class MMS3FIFO {
       LockedIterator& operator=(const LockedIterator&) = delete;
       LockedIterator(LockedIterator&&) noexcept = default;
 
-      // Iterator in S3FIFO only returns unaccessed items, so ++ skips accessed items.
+      // Iterator in S3FIFO only returns unaccessed items, so ++ skips accessed
+      // items.
       LockedIterator& operator++() noexcept {
         // Advance the underlying iterator
         ListIterator& it = getIter();
@@ -273,7 +281,8 @@ class MMS3FIFO {
       LockedIterator& operator=(LockedIterator&&) noexcept = default;
 
       // create an lru iterator with the lock being held.
-      explicit LockedIterator(LockHolder l, const Container<T, HookPtr>& c) noexcept;
+      explicit LockedIterator(LockHolder l,
+                              const Container<T, HookPtr>& c) noexcept;
 
       const ListIterator& getIter() const noexcept {
         auto shouldEvictTiny = evictTiny();
@@ -295,13 +304,23 @@ class MMS3FIFO {
         if (!tIter_) {
           return false;
         }
+        // List size will not change during iteration, return cached decision
+        if (evictTinyCache_ != -1) {
+          return evictTinyCache_ == 1;
+        }
 
         int smallSize = static_cast<int>(c_.lru_.getList(LruType::Tiny).size());
 
         const size_t targetTiny = static_cast<size_t>(
-            c_.config_.tinySizePercent * c_.lru_.size()/100);
-        return smallSize >= targetTiny;
+            c_.config_.tinySizePercent * c_.lru_.size() / 100);
+
+        this->evictTinyCache_ = smallSize >= targetTiny;
+
+        return evictTinyCache_;
       }
+
+      // Cache the value
+      mutable int evictTinyCache_{-1}; // -1 means not set, 0 false and 1 true
 
       // only the container can create iterators
       friend Container<T, HookPtr>;
@@ -317,16 +336,6 @@ class MMS3FIFO {
     Config getConfig() const;
 
     void setConfig(const Config& newConfig);
-
-    bool isEmpty() const noexcept {
-      LockHolder l(lruMutex_);
-      return lru_.size() == 0;
-    }
-
-    size_t size() const noexcept {
-      LockHolder l(lruMutex_);
-      return lru_.size();
-    }
 
     // Returns the eviction age stats. See CacheStats.h for details
     // Is not really relevant for S3FIFO since we don't use age.
@@ -363,7 +372,7 @@ class MMS3FIFO {
     static LruType getLruType(const T& node) noexcept {
       return isTiny(node) ? LruType::Tiny : LruType::Main;
     }
-    
+
    private:
     EvictionAgeStat getEvictionAgeStatLocked(
         uint64_t projectedLength) const noexcept;
@@ -383,7 +392,6 @@ class MMS3FIFO {
     static size_t hashNode(const T& node) noexcept {
       return folly::hasher<folly::StringPiece>()(node.getKey());
     }
-
 
     void removeLocked(T& node) noexcept;
 
@@ -416,8 +424,8 @@ class MMS3FIFO {
     // protects all operations on the lrus. We never really just read the state
     // of the LRU. Hence we dont really require a RW mutex at this point of
     // time.
-    mutable Mutex lruMutex_;
-    
+    mutable folly::cacheline_aligned<Mutex> lruMutex_;
+
     // Current capacity to track ghost size
     size_t capacity_{0};
 
@@ -443,7 +451,6 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 MMS3FIFO::Container<T, HookPtr>::Container(serialization::MMS3FIFOObject object,
                                            PtrCompressor compressor)
     : lru_(*object.lrus(), std::move(compressor)), config_(*object.config()) {
-  maybeGrowGhostLocked();
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
@@ -451,11 +458,13 @@ void MMS3FIFO::Container<T, HookPtr>::maybeGrowGhostLocked() noexcept {
   size_t capacity = lru_.size();
 
   // Only consider growing ghost when lru size doubles.
+  // Right now we don't shrink ghost queue.
   if (2 * capacity_ > capacity || capacity == 0) {
     return;
   }
-  
-  size_t expectedGhostSize = static_cast<size_t>(capacity * config_.ghostSizePercent / 100);
+
+  size_t expectedGhostSize =
+      static_cast<size_t>(capacity * config_.ghostSizePercent / 100);
   ghostQueue_.resize(expectedGhostSize);
   capacity_ = capacity;
 }
@@ -470,15 +479,14 @@ bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
       (mode == AccessMode::kRead && !config_.updateOnRead)) {
     return false;
   }
+  const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
-  const auto curr = static_cast<Time>(util::getCurrentTimeSec());
-
+  // Remove lock from record access wince we only set bits
   if (node.isInMMContainer()) {
     if (!isAccessed(node)) {
       markAccessed(node);
     }
-    // Todo: can deprecate update time next
-    setUpdateTime(node, curr);
+    setUpdateTime(node, currTime);
     return true;
   }
   return false;
@@ -487,21 +495,22 @@ bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStat(
     uint64_t projectedLength) const noexcept {
-  LockHolder l(lruMutex_);
-  return getEvictionAgeStatLocked(projectedLength);
+  return lruMutex_->lock_combine([this, projectedLength]() {
+    return getEvictionAgeStatLocked(projectedLength);
+  });
 }
 
-// LRU Eviction age is not defined in a FIFO reinsertion strategy, since items in tail
-// can be waiting for promotion.
-// Unaccessed items may have been in the cache for a long time too.
-// Right now it finds first unaccessed item from the tail and reports its age.
+// LRU Eviction age is not defined in a FIFO reinsertion strategy, since items
+// in tail can be waiting for promotion. Unaccessed items may have been in the
+// cache for a long time too. Right now it finds first unaccessed item from the
+// tail and reports its age.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat
 MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
   if (projectedLength != 0) {
-    throw std::invalid_argument(
-        "Projected eviction age estimation is not supported in MMS3FIFO");
+    // Projected eviction age estimation is not supported in MMS3FIFO
+    return EvictionAgeStat{};
   }
 
   EvictionAgeStat stat;
@@ -525,32 +534,36 @@ MMS3FIFO::Container<T, HookPtr>::getEvictionAgeStatLocked(
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
-  LockHolder l(lruMutex_);
-  if (node.isInMMContainer()) {
-    return false;
-  }
 
-  if (ghostQueue_.contains(hashNode(node))) {
-    // Insert to main queue
-    auto& mainLru = lru_.getList(LruType::Main);
-    mainLru.linkAtHead(node);
-  } else {
-    // Insert to tiny queue
-    auto& tinyLru = lru_.getList(LruType::Tiny);
-    tinyLru.linkAtHead(node);
-    markTiny(node);
-  }
+  const auto nodeHash = hashNode(node);
+  return lruMutex_->lock_combine([this, &node, currTime, nodeHash]() {
+    if (node.isInMMContainer()) {
+      return false;
+    }
 
-  node.markInMMContainer();
-  setUpdateTime(node, currTime);
-  unmarkAccessed(node);
+    const auto ghostContains = ghostQueue_.contains(nodeHash);
+    if (ghostContains) {
+      // Insert to main queue
+      auto& mainLru = lru_.getList(LruType::Main);
+      mainLru.linkAtHead(node);
+    } else {
+      // Insert to tiny queue
+      auto& tinyLru = lru_.getList(LruType::Tiny);
+      tinyLru.linkAtHead(node);
+      markTiny(node);
+    }
 
-  return true;
+    node.markInMMContainer();
+    setUpdateTime(node, currTime);
+    unmarkAccessed(node);
+
+    return true;
+  });
 }
 
 // This method is called before eviction iterator is called, so
 // Iterator doesn't have to mutate the lists while searching for victims.
-// 
+//
 // It performs the necessary promotions and rebalancing to ensure
 // that items in the tail are evictable.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
@@ -558,51 +571,49 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
   auto& tinyLru = lru_.getList(LruType::Tiny);
   auto& mainLru = lru_.getList(LruType::Main);
 
-  if (tinyLru.size() == 0 && mainLru.size() == 0) {
-    return;
-  }
   auto totalSize = tinyLru.size() + mainLru.size();
+  auto expectedTinySize =
+      static_cast<size_t>(config_.tinySizePercent * totalSize / 100);
 
   // Promote until we find a victim, so iterator won't have to mutate the lists
   while (true) {
-    bool tryTiny = (lru_.size() * config_.tinySizePercent /100) < tinyLru.size();
+    bool tryTiny = tinyLru.size() >= expectedTinySize;
 
     if (tryTiny) {
-      // Tail of S
-      auto it = tinyLru.rbegin();
-      if (!it) {
-        return;
+      // Tail of T
+      T* nodePtr = tinyLru.getTail();
+      if (!nodePtr) {
+        break;
       }
 
-      T& node = *it;
+      T& node = *nodePtr;
       if (Container<T, HookPtr>::isAccessed(node)) {
-        // accessed tail in S → promote to M head
+        // accessed tail in T → promote to M head
         tinyLru.remove(node);
         mainLru.linkAtHead(node);
         Container<T, HookPtr>::unmarkTiny(node);
         Container<T, HookPtr>::unmarkAccessed(node);
         continue;
       } else {
-        // unaccessed tail in S → valid victim, we can pass to iterator.
-        return;
+        // unaccessed tail in T → valid victim, we can stop here.
+        break;
       }
-
     } else {
       // Tail of M
-      auto it = mainLru.rbegin();
-      if (!it) {
-        return;
+      T* nodePtr = mainLru.getTail();
+      if (!nodePtr) {
+        break;
       }
 
-      T& node = *it;
+      T& node = *nodePtr;
       if (Container<T, HookPtr>::isAccessed(node)) {
         // accessed tail in M → move to head(M), clear bit
         mainLru.moveToHead(node);
         Container<T, HookPtr>::unmarkAccessed(node);
         continue;
       } else {
-        // unaccessed tail in M → victim
-        return;
+        // unaccessed tail in M → victim, we can stop here.
+        break;
       }
     }
   }
@@ -611,33 +622,31 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
 MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() noexcept {
-  LockHolder l(lruMutex_);
+  LockHolder l(*lruMutex_);
+  maybeGrowGhostLocked();
   rebalanceForEviction();
   // Cache is full now so we know it's max size
-  maybeGrowGhostLocked();
   return LockedIterator{std::move(l), *this};
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 template <typename F>
 void MMS3FIFO::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
-  // Uses spinlock, can't use combined locking
   fun(getEvictionIterator());
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 template <typename F>
 void MMS3FIFO::Container<T, HookPtr>::withContainerLock(F&& fun) {
-  LockHolder l(lruMutex_);
-  fun();
+  lruMutex_->lock_combine([&fun]() { fun(); });
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   if (isTiny(node)) {
-    lru_.getList(LruType::Tiny).remove(node);
+    lru_.getList(LruType::Tiny).remove(node); 
     unmarkTiny(node);
-    // Insert to ghost upon removal
+    // Insert into ghost queue upon eviction from tiny queue
     ghostQueue_.insert(hashNode(node));
   } else {
     lru_.getList(LruType::Main).remove(node);
@@ -650,59 +659,59 @@ void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::remove(T& node) noexcept {
-  LockHolder l(lruMutex_);
-  if (!node.isInMMContainer()) {
-    return false;
-  }
-  removeLocked(node);
-  return true;
+  return lruMutex_->lock_combine([this, &node]() {
+    if (!node.isInMMContainer()) {
+      return false;
+    }
+    removeLocked(node);
+    return true;
+  });
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
   T& node = *it;
   XDCHECK(node.isInMMContainer());
-  ++it;
+  ++it; 
   removeLocked(node);
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
-  LockHolder l(lruMutex_);
-  if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
-    return false;
-  }
-  const auto updateTime = getUpdateTime(oldNode);
+  return lruMutex_->lock_combine([this, &oldNode, &newNode]() {
+    if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
+      return false;
+    }
+    const auto updateTime = getUpdateTime(oldNode);
 
-  if (isTiny(oldNode)) {
-    lru_.getList(LruType::Tiny).replace(oldNode, newNode);
-    unmarkTiny(oldNode);
-    markTiny(newNode);
-  } else {
-    lru_.getList(LruType::Main).replace(oldNode, newNode);
-  }
+    if (isTiny(oldNode)) {
+      lru_.getList(LruType::Tiny).replace(oldNode, newNode);
+      unmarkTiny(oldNode);
+      markTiny(newNode);
+    } else {
+      lru_.getList(LruType::Main).replace(oldNode, newNode);
+    }
 
-  oldNode.unmarkInMMContainer();
-  newNode.markInMMContainer();
-  setUpdateTime(newNode, updateTime);
-  if (isAccessed(oldNode)) {
-    markAccessed(newNode);
-  } else {
-    unmarkAccessed(newNode);
-  }
-  return true;
+    oldNode.unmarkInMMContainer();
+    newNode.markInMMContainer();
+    setUpdateTime(newNode, updateTime);
+    if (isAccessed(oldNode)) {
+      markAccessed(newNode);
+    } else {
+      unmarkAccessed(newNode);
+    }
+    return true;
+  });
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Config MMS3FIFO::Container<T, HookPtr>::getConfig() const {
-  LockHolder l(lruMutex_);
-  return config_;
+  return lruMutex_->lock_combine([this]() { return config_; });
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::setConfig(const Config& c) {
-  LockHolder l(lruMutex_);
-  config_ = c; 
+  lruMutex_->lock_combine([this, c]() { config_ = c; });
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
@@ -720,17 +729,16 @@ serialization::MMS3FIFOObject MMS3FIFO::Container<T, HookPtr>::saveState()
   return object;
 }
 
+// Unless we use age for slab rebalancing, these stats are not used.
+// E.g. Filter based on minTailAge, or using LRUTailAge strategy.
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 MMContainerStat MMS3FIFO::Container<T, HookPtr>::getStats() const noexcept {
-  LockHolder l(lruMutex_);
-
+  // LockHolder l(*lruMutex_);
   return {lru_.size(),
           0, // Approximation of tail age from first unaccesessed items
-          0, // We have no notion of refresh time, accesses only toggle access bit
-          0,           
-          0, 
-          0, 
-          0};
+          0, // We have no notion of refresh time, accesses only toggle access
+             // bit
+          0, 0, 0, 0};
 }
 
 // Locked Iterator Context Implementation
