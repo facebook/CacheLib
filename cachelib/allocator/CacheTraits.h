@@ -97,6 +97,13 @@ struct Lru5B2QCacheTrait {
   using CompressedPtrType = CompressedPtr5B;
 };
 
+struct S3FIFO5BCacheTrait {
+  using MMType = MMS3FIFO;
+  using AccessType = ChainedHashTable;
+  using AccessTypeLocks = SharedMutexBuckets;
+  using CompressedPtrType = CompressedPtr5B;
+};
+
 struct TinyLFU5BCacheTrait {
   using MMType = MMTinyLFU;
   using AccessType = ChainedHashTable;
