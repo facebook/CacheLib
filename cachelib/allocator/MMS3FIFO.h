@@ -33,6 +33,7 @@
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/FIFOHashSet.h"
+#include "cachelib/common/FIFOAtomicHashSet.h"
 
 namespace facebook::cachelib {
 
@@ -139,7 +140,7 @@ class MMS3FIFO {
         : lru_(LruType::NumTypes, std::move(compressor)),
           config_(std::move(c)) {
             if (config_.reserveCapacity > 0) {
-              ghostQueue_.reserve(config_.reserveCapacity);
+              // ghostQueue_.reserve(config_.reserveCapacity);
             }
           }
     Container(serialization::MMS3FIFOObject object, PtrCompressor compressor);
@@ -216,7 +217,7 @@ class MMS3FIFO {
         ++it;
         // Skip accessed items
         skipAccessed(it);
-        return *this;
+        return *this; 
       }
 
       ListIterator& skipAccessed(ListIterator& it) noexcept {
@@ -432,7 +433,7 @@ class MMS3FIFO {
     // the lru
     LruList lru_;
 
-    facebook::cachelib::util::FIFOHashSet ghostQueue_;
+    facebook::cachelib::util::detail::FIFOAtomicHashSet ghostQueue_{40000000};
 
     // Config for this lru.
     // Write access to the MMS3FIFO Config is serialized.
@@ -538,12 +539,12 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
   const auto nodeHash = hashNode(node);
-  return lruMutex_->lock_combine([this, &node, currTime, nodeHash]() {
+  const auto ghostContains = ghostQueue_.contains(nodeHash);
+  return lruMutex_->lock_combine([this, &node, currTime, ghostContains]() {
     if (node.isInMMContainer()) {
       return false;
     }
 
-    const auto ghostContains = ghostQueue_.contains(nodeHash);
     if (ghostContains) {
       // Insert to main queue
       auto& mainLru = lru_.getList(LruType::Main);
@@ -625,6 +626,7 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 typename MMS3FIFO::Container<T, HookPtr>::LockedIterator
 MMS3FIFO::Container<T, HookPtr>::getEvictionIterator() noexcept {
   LockHolder l(*lruMutex_);
+  // This is cheap
   maybeResizeGhostLocked();
   rebalanceForEviction();
   // Cache is full now so we know it's max size
@@ -674,8 +676,32 @@ template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
   T& node = *it;
   XDCHECK(node.isInMMContainer());
-  ++it; 
-  removeLocked(node);
+  ++it;
+
+  bool evictedFromTiny = false;
+  if (isTiny(node)) {
+    lru_.getList(LruType::Tiny).remove(node);
+    unmarkTiny(node);
+    evictedFromTiny = true;
+    // Insert into ghost queue upon eviction from tiny queue
+  } else {
+    lru_.getList(LruType::Main).remove(node);
+  }
+
+  unmarkAccessed(node);
+  node.unmarkInMMContainer();
+  
+  if (evictedFromTiny) {
+    // We need to insert to ghost queue. 
+    // Release lock early
+    // AFAIK every call to remove(locked itr) is followed by the iterator's destruction.
+    // If this is not the case, we may need to rethink this.
+    if (it.l_.owns_lock()) {
+      it.l_.unlock();
+    }
+    ghostQueue_.insert(hashNode(node));
+  }
+  return;
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
