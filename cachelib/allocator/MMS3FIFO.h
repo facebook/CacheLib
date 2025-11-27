@@ -34,6 +34,7 @@
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/FIFOHashSet.h"
 #include "cachelib/common/FIFOAtomicHashSet.h"
+#include "cachelib/common/FIFOConcurrentHashSet.h"
 
 namespace facebook::cachelib {
 
@@ -113,8 +114,6 @@ class MMS3FIFO {
 
     // The size of ghost queue, as a percentage of total size
     size_t ghostSizePercent{90};
-
-    size_t reserveCapacity{0};
   };
 
   // The container object which can be used to keep track of objects of type
@@ -139,9 +138,6 @@ class MMS3FIFO {
     Container(Config c, PtrCompressor compressor)
         : lru_(LruType::NumTypes, std::move(compressor)),
           config_(std::move(c)) {
-            if (config_.reserveCapacity > 0) {
-              // ghostQueue_.reserve(config_.reserveCapacity);
-            }
           }
     Container(serialization::MMS3FIFOObject object, PtrCompressor compressor);
 
@@ -433,7 +429,9 @@ class MMS3FIFO {
     // the lru
     LruList lru_;
 
-    facebook::cachelib::util::detail::FIFOAtomicHashSet ghostQueue_{40000000};
+    facebook::cachelib::util::detail::FIFOConcurrentHashSet ghostQueue_;
+    // facebook::cachelib::util::detail::FIFOAtomicHashSet ghostQueue_;
+    // facebook::cachelib::util::FIFOHashSet ghostQueue_;
 
     // Config for this lru.
     // Write access to the MMS3FIFO Config is serialized.
