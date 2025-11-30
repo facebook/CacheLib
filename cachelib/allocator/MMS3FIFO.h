@@ -33,7 +33,6 @@
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 #include "cachelib/common/CompilerUtils.h"
 #include "cachelib/common/FIFOHashSet.h"
-#include "cachelib/common/FIFOAtomicHashSet.h"
 #include "cachelib/common/FIFOConcurrentHashSet.h"
 
 namespace facebook::cachelib {
@@ -386,8 +385,13 @@ class MMS3FIFO {
     void maybeResizeGhostLocked() noexcept;
 
     // Returns the hash of node's key
-    static size_t hashNode(const T& node) noexcept {
+    static size_t hashNode64(const T& node) noexcept {
       return folly::hasher<folly::StringPiece>()(node.getKey());
+    }
+
+    static uint32_t hashNode(const T& node) noexcept {
+      return static_cast<uint32_t>(
+          folly::hasher<folly::StringPiece>()(node.getKey()));
     }
 
     void removeLocked(T& node) noexcept;
@@ -429,9 +433,8 @@ class MMS3FIFO {
     // the lru
     LruList lru_;
 
-    facebook::cachelib::util::detail::FIFOConcurrentHashSet ghostQueue_;
-    // facebook::cachelib::util::detail::FIFOAtomicHashSet ghostQueue_;
-    // facebook::cachelib::util::FIFOHashSet ghostQueue_;
+    facebook::cachelib::util::FIFOConcurrentHashSet32 ghostQueue_;
+    // facebook::cachelib::util::FIFOHashSet32 ghostQueue_;
 
     // Config for this lru.
     // Write access to the MMS3FIFO Config is serialized.
@@ -482,7 +485,7 @@ bool MMS3FIFO::Container<T, HookPtr>::recordAccess(T& node,
   }
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
-  // Remove lock from record access wince we only set bits
+  // Remove lock from record access since we only set bits
   if (node.isInMMContainer()) {
     if (!isAccessed(node)) {
       markAccessed(node);
@@ -643,13 +646,12 @@ void MMS3FIFO::Container<T, HookPtr>::withContainerLock(F&& fun) {
   lruMutex_->lock_combine([&fun]() { fun(); });
 }
 
+// Ghost queue insertion done on callee, outside lock
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
   if (isTiny(node)) {
     lru_.getList(LruType::Tiny).remove(node); 
     unmarkTiny(node);
-    // Insert into ghost queue upon eviction from tiny queue
-    ghostQueue_.insert(hashNode(node));
   } else {
     lru_.getList(LruType::Main).remove(node);
   }
@@ -661,13 +663,19 @@ void MMS3FIFO::Container<T, HookPtr>::removeLocked(T& node) noexcept {
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>
 bool MMS3FIFO::Container<T, HookPtr>::remove(T& node) noexcept {
-  return lruMutex_->lock_combine([this, &node]() {
+  bool isTiny_ = isTiny(node);
+  auto result = lruMutex_->lock_combine([this, &node]() {
     if (!node.isInMMContainer()) {
       return false;
     }
     removeLocked(node);
     return true;
   });
+  if (result && isTiny_) {
+    // Insert to ghost queue
+    ghostQueue_.insert(hashNode(node));
+  }
+  return result;
 }
 
 template <typename T, MMS3FIFO::Hook<T> T::* HookPtr>

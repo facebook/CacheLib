@@ -3,11 +3,11 @@
 #include <folly/Format.h>
 #include <folly/Math.h>
 #include <folly/container/F14Set.h>
+#include <folly/synchronization/DistributedMutex.h>
 
 #include <cstdint>
 #include <deque>
 #include <stdexcept>
-#include <unordered_set>
 
 namespace facebook::cachelib::util {
 namespace detail {
@@ -26,87 +26,56 @@ class FIFOHashSetBase {
   FIFOHashSetBase(const FIFOHashSetBase&) = delete;
   FIFOHashSetBase& operator=(const FIFOHashSetBase&) = delete;
 
-  FIFOHashSetBase(FIFOHashSetBase&& other) noexcept {
-    maxSize_ = other.maxSize_;
-    fifo_ = std::move(other.fifo_);
-    set_ = std::move(other.set_);
-    other.maxSize_ = 0;
-  }
-
-  FIFOHashSetBase& operator=(FIFOHashSetBase&& other) noexcept {
-    if (this != &other) {
-      maxSize_ = other.maxSize_;
-      fifo_ = std::move(other.fifo_);
-      set_ = std::move(other.set_);
-      other.maxSize_ = 0;
-    }
-    return *this;
-  }
 
   bool contains(KeyT key) {
-    return set_.contains(key);
-  }
-
-  // Enforce size variant of contains
-  bool containsEnforce(KeyT key) {
-    enforceCapacityLocked();
-    return set_.contains(key);
+    return mutex_.lock_combine([&]() { return set_.contains(key); });
   }
 
   size_t size() {
-    return set_.size();
+    return mutex_.lock_combine([&]() { return set_.size(); });
   }
 
   size_t capacity() {
-    return maxSize_;
+    return mutex_.lock_combine([&]() { return maxSize_; });
   }
 
   void reserve(size_t newCap) {
-    set_.reserve(newCap);
+    mutex_.lock_combine([&]() { set_.reserve(newCap); });
   }
 
   void insert(KeyT key) {
-    auto [it, inserted] = set_.insert(key);
-    if (inserted) {
-      fifo_.push_back(key); 
-    }
-    enforceCapacityLocked();
-  }
-
-  // No enforce variant of insert
-  void insertNoEnforce(KeyT key) {
-    auto [it, inserted] = set_.insert(key);
-    if (inserted) {
-      fifo_.push_back(key);
-    }
+    mutex_.lock_combine([&]() {
+      auto [it, inserted] = set_.insert(key);
+      if (inserted) {
+        fifo_.push_back(key);
+      }
+      enforceCapacityLocked();
+    });
   }
 
   void resize(size_t newSize) {
-    maxSize_ = newSize;
-    enforceCapacityLocked();
-  }
-
-  // No enforce variant of resize
-  void resizeNoEnforce(size_t newSize) {
-    maxSize_ = newSize;
+    mutex_.lock_combine([&]() {
+      maxSize_ = newSize;
+    });
   }
 
  private:
-  // To prevent tail latency, limits max elements removed per call.
+  // Enforce max removal to control tail latency
   void enforceCapacityLocked() {
-    constexpr int max_rem = 5;
+    constexpr int max_rem = 2;
     int removed = 0;
 
     while (fifo_.size() > maxSize_ && removed < max_rem) {
       KeyT k = fifo_.front();
       fifo_.pop_front();
       set_.erase(k);
-      removed++;
+      ++removed;
     }
   }
 
  private:
-  // mutable folly::SpinLock lock_;
+  folly::DistributedMutex mutex_;
+
   size_t maxSize_{0};
   std::deque<KeyT> fifo_;
   folly::F14FastSet<KeyT> set_;
@@ -114,6 +83,6 @@ class FIFOHashSetBase {
 
 } // namespace detail
 
-using FIFOHashSet = detail::FIFOHashSetBase<uint64_t>;
+using FIFOHashSet32 = detail::FIFOHashSetBase<uint32_t>;
 
 } // namespace facebook::cachelib::util
