@@ -46,6 +46,8 @@ class RegionAllocator {
   RegionAllocator& operator=(const RegionAllocator&) = delete;
   RegionAllocator(RegionAllocator&& other) noexcept
       : priority_{other.priority_}, rid_{other.rid_} {}
+  RegionAllocator& operator=(RegionAllocator&&) noexcept = delete;
+  ~RegionAllocator() = default;
 
   // Sets new region to allocate from. Region allocator has to be reset before
   // calling this.
@@ -82,6 +84,7 @@ class Allocator {
   // @param allocatorsPerPriority   Number of allocators per priority
   explicit Allocator(RegionManager& regionManager,
                      const std::vector<uint32_t>& allocatorsPerPriority);
+  ~Allocator() = default;
 
   // Allocates and opens for writing.
   //
@@ -122,6 +125,8 @@ class Allocator {
   using LockGuard = std::lock_guard<TimedMutex>;
   Allocator(const Allocator&) = delete;
   Allocator& operator=(const Allocator&) = delete;
+  Allocator(Allocator&&) = delete;
+  Allocator& operator=(Allocator&&) = delete;
 
   // Releases region associated with the region allocator by flushing the
   // in-memory buffers and resetting the ra.
