@@ -34,6 +34,7 @@ add_library (cachelib_allocator
     CacheAllocatorLruCache.cpp
     CacheAllocatorLruCacheWithSpinBuckets.cpp
     CacheAllocatorS3FIFOCache.cpp
+    CacheAllocatorS3FIFO5BCache.cpp
     CacheAllocatorTinyLFU5BCache.cpp
     CacheAllocatorTinyLFUCache.cpp
     CacheAllocatorWTinyLFU5BCache.cpp
