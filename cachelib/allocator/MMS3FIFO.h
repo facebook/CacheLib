@@ -210,12 +210,12 @@ class MMS3FIFO {
           return *this;
         }
         ++it;
-        // Skip accessed items
-        skipAccessed(it);
+        // // Skip accessed items
+        // skipAccessed(it);
         return *this; 
       }
 
-      ListIterator& skipAccessed(ListIterator& it) noexcept {
+      void skipAccessed(ListIterator& it) noexcept {
         while (it) {
           T& node = *it;
           if (!Container<T, HookPtr>::isAccessed(node)) {
@@ -223,7 +223,6 @@ class MMS3FIFO {
           }
           ++it; // skip this accessed item
         }
-        return it;
       }
 
       LockedIterator& operator--() {
@@ -469,7 +468,7 @@ void MMS3FIFO::Container<T, HookPtr>::maybeResizeGhostLocked() noexcept {
 
   size_t expectedGhostSize =
       static_cast<size_t>(lruSize * config_.ghostSizePercent / 100);
-  ghostQueue_.resize(expectedGhostSize);
+  // ghostQueue_.resize(expectedGhostSize);
   capacity_ = lruSize;
 }
 
@@ -540,7 +539,8 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
   const auto nodeHash = hashNode(node);
-  const auto ghostContains = ghostQueue_.contains(nodeHash);
+  // auto ghostContains = ghostQueue_.contains(nodeHash);
+  auto ghostContains = false;
   return lruMutex_->lock_combine([this, &node, currTime, ghostContains]() {
     if (node.isInMMContainer()) {
       return false;
@@ -579,9 +579,16 @@ void MMS3FIFO::Container<T, HookPtr>::rebalanceForEviction() {
   auto expectedTinySize =
       static_cast<size_t>(config_.tinySizePercent * totalSize / 100);
 
+  auto rebalanceLimit = 5;
+  auto rebalanceCount = 0;
+
   // Promote until we find a victim, so iterator won't have to mutate the lists
   while (true) {
     bool tryTiny = tinyLru.size() >= expectedTinySize;
+    rebalanceCount++;
+    if (rebalanceCount > rebalanceLimit) {
+      break;
+    }
 
     if (tryTiny) {
       // Tail of T
@@ -672,8 +679,8 @@ bool MMS3FIFO::Container<T, HookPtr>::remove(T& node) noexcept {
     return true;
   });
   if (result && isTiny_) {
-    // Insert to ghost queue
-    ghostQueue_.insert(hashNode(node));
+    // // Insert to ghost queue
+    // ghostQueue_.insert(hashNode(node));
   }
   return result;
 }
@@ -705,7 +712,7 @@ void MMS3FIFO::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
     if (it.l_.owns_lock()) {
       it.l_.unlock();
     }
-    ghostQueue_.insert(hashNode(node));
+    // ghostQueue_.insert(hashNode(node));
   }
   return;
 }
