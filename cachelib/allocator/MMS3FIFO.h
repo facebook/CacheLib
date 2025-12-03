@@ -468,7 +468,7 @@ void MMS3FIFO::Container<T, HookPtr>::maybeResizeGhostLocked() noexcept {
 
   size_t expectedGhostSize =
       static_cast<size_t>(lruSize * config_.ghostSizePercent / 100);
-  // ghostQueue_.resize(expectedGhostSize);
+  ghostQueue_.resize(expectedGhostSize);
   capacity_ = lruSize;
 }
 
@@ -539,8 +539,7 @@ bool MMS3FIFO::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
   const auto nodeHash = hashNode(node);
-  // auto ghostContains = ghostQueue_.contains(nodeHash);
-  auto ghostContains = false;
+  auto ghostContains = ghostQueue_.contains(nodeHash);
   return lruMutex_->lock_combine([this, &node, currTime, ghostContains]() {
     if (node.isInMMContainer()) {
       return false;
@@ -680,7 +679,7 @@ bool MMS3FIFO::Container<T, HookPtr>::remove(T& node) noexcept {
   });
   if (result && isTiny_) {
     // // Insert to ghost queue
-    // ghostQueue_.insert(hashNode(node));
+    ghostQueue_.insert(hashNode(node));
   }
   return result;
 }
@@ -712,7 +711,7 @@ void MMS3FIFO::Container<T, HookPtr>::remove(LockedIterator& it) noexcept {
     if (it.l_.owns_lock()) {
       it.l_.unlock();
     }
-    // ghostQueue_.insert(hashNode(node));
+    ghostQueue_.insert(hashNode(node));
   }
   return;
 }
