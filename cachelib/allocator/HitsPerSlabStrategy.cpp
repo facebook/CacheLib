@@ -44,8 +44,8 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
       filterByNumEvictableSlabs(stats, std::move(victims), config.minSlabs);
 
   // ignore allocation classes that recently gained a slab. These will be
-  // growing in their eviction age and we want to let the evicitons stabilize
-  // before we consider  them again.
+  // growing in their eviction age and we want to let the evictions stabilize
+  // before we consider them again.
   victims = filterVictimsByHoldOff(pid, stats, std::move(victims));
 
   // we are only concerned about the eviction age and not the projected age.
