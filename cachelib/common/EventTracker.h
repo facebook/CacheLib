@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <common/hash/FurcHash.h>
 #include <folly/MPMCQueue.h>
 #include <folly/container/F14Map.h>
 
@@ -24,6 +23,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/EventSink.h"
+#include "cachelib/common/Hash.h"
 
 namespace facebook::cachelib {
 
