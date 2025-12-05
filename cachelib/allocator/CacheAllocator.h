@@ -2360,7 +2360,8 @@ class CacheAllocator : public CacheBase {
   friend ChainedAllocs;
   friend WritableChainedAllocs;
   // ensure any modification to a chain of chained items are synchronized
-  using ChainedItemLock = facebook::cachelib::SharedMutexBuckets;
+  using ChainedItemLock = RWBucketLocks<
+      trace::Profiled<folly::SharedMutex, "cachelib:chained_item">>;
   ChainedItemLock chainedItemLocks_;
 
   // nvmCache
@@ -3590,8 +3591,9 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
   insertInMMContainer(*(handle.getInternal()));
   WriteHandle replaced;
   try {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<TimedMutex>();
+    auto lock =
+        nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
+                  : std::unique_lock<typename NvmCacheT::ItemDestructorMutex>();
 
     replaced = accessContainer_->insertOrReplace(*(handle.getInternal()));
 
@@ -4151,8 +4153,9 @@ CacheAllocator<CacheTrait>::removeImpl(HashedKey hk,
                                        bool recordApiEvent) {
   bool success = false;
   {
-    auto lock = nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
-                          : std::unique_lock<TimedMutex>();
+    auto lock =
+        nvmCache_ ? nvmCache_->getItemDestructorLock(hk)
+                  : std::unique_lock<typename NvmCacheT::ItemDestructorMutex>();
 
     success = accessContainer_->remove(item);
 

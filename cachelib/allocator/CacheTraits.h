@@ -22,21 +22,26 @@
 #include "cachelib/allocator/MMWTinyLFU.h"
 #include "cachelib/allocator/memory/CompressedPtr.h"
 #include "cachelib/common/Mutex.h"
+#include "cachelib/common/Profiled.h"
 
 namespace facebook {
 namespace cachelib {
+
+using ChainedHashTableBucketMutexes = RWBucketLocks<
+    trace::Profiled<folly::SharedMutex, "cachelib:chained_hash_table">>;
+
 // The cache traits supported by CacheLib.
 // Cache trait is a combination of MMType, AccessType, AccesTypeLock and
-// CompressedPtr. MMType is the type of MM (memory management) container used by
-// the cache, which controls a cache item's life time. AccessType is the type of
-// access container, which controls how an item is accessed. AccessTypeLock is
-// the lock type for the access container that supports multiple locking
-// primitives CompressedPtr maps slabs and allocations within slabs in cache
-// memory.
+// CompressedPtr. MMType is the type of MM (memory management) container
+// used by the cache, which controls a cache item's life time. AccessType is
+// the type of access container, which controls how an item is accessed.
+// AccessTypeLock is the lock type for the access container that supports
+// multiple locking primitives CompressedPtr maps slabs and allocations
+// within slabs in cache memory.
 struct LruCacheTrait {
   using MMType = MMLru;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr4B;
 };
 
@@ -50,28 +55,28 @@ struct LruCacheWithSpinBucketsTrait {
 struct Lru2QCacheTrait {
   using MMType = MM2Q;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr4B;
 };
 
 struct TinyLFUCacheTrait {
   using MMType = MMTinyLFU;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr4B;
 };
 
 struct WTinyLFUCacheTrait {
   using MMType = MMWTinyLFU;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr4B;
 };
 
 struct Lru5BCacheTrait {
   using MMType = MMLru;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr5B;
 };
 
@@ -85,21 +90,21 @@ struct Lru5BCacheWithSpinBucketsTrait {
 struct Lru5B2QCacheTrait {
   using MMType = MM2Q;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr5B;
 };
 
 struct TinyLFU5BCacheTrait {
   using MMType = MMTinyLFU;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr5B;
 };
 
 struct WTinyLFU5BCacheTrait {
   using MMType = MMWTinyLFU;
   using AccessType = ChainedHashTable;
-  using AccessTypeLocks = SharedMutexBuckets;
+  using AccessTypeLocks = ChainedHashTableBucketMutexes;
   using CompressedPtrType = CompressedPtr5B;
 };
 

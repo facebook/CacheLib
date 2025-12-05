@@ -35,7 +35,7 @@ LruPolicy::LruPolicy(uint32_t expectedNumRegions)
 void LruPolicy::touch(RegionId rid) {
   XDCHECK(rid.valid());
   auto i = rid.index();
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   if (i >= array_.size()) {
     array_.resize(i + 1);
   }
@@ -51,7 +51,7 @@ void LruPolicy::track(const Region& region) {
   auto rid = region.id();
   XDCHECK(rid.valid());
   auto i = rid.index();
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   if (i >= array_.size()) {
     array_.resize(i + 1);
   }
@@ -70,7 +70,7 @@ RegionId LruPolicy::evict() {
   uint32_t hits{0};
 
   {
-    std::lock_guard<TimedMutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     if (tail_ == kInvalidIndex) {
       return RegionId{};
     }
@@ -88,7 +88,7 @@ RegionId LruPolicy::evict() {
 }
 
 void LruPolicy::reset() {
-  std::lock_guard<TimedMutex> lock{mutex_};
+  std::lock_guard lock{mutex_};
   array_.clear();
   head_ = kInvalidIndex;
   tail_ = kInvalidIndex;

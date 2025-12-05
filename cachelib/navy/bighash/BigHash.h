@@ -24,6 +24,7 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
@@ -184,7 +185,7 @@ class BigHash final : public Engine {
   // could overwrite another's writes.
   //
   // In short, just hold the lock during the entire operation!
-  SharedMutex& getMutex(BucketId bid) const {
+  auto& getMutex(BucketId bid) const {
     return mutex_[bid.index() & (kNumMutexes - 1)];
   }
 
@@ -224,7 +225,8 @@ class BigHash final : public Engine {
   Device& device_;
   // handle for data placement technologies like FDP
   int placementHandle_;
-  mutable std::vector<SharedMutex> mutex_{kNumMutexes};
+  mutable std::vector<trace::Profiled<SharedMutex, "cachelib:navy:bh">> mutex_{
+      kNumMutexes};
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of
   // couldExist which needs to be fast against other long running or

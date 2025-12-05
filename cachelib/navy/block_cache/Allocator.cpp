@@ -68,7 +68,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
 // written to the slot.
 std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     RegionAllocator& ra, uint32_t size, bool canWait) {
-  std::unique_lock<TimedMutex> lock{ra.getLock()};
+  std::unique_lock lock{ra.getLock()};
   RegionId rid = ra.getAllocationRegion();
   if (rid.valid()) {
     auto& region = regionManager_.getRegion(rid);
@@ -133,7 +133,7 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
 void Allocator::flush() {
   for (auto& ras : allocators_) {
     for (auto& ra : ras) {
-      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      std::lock_guard lock{ra.getLock()};
       flushAndReleaseRegionFromRALocked(ra, false /* async */);
     }
   }
@@ -144,7 +144,7 @@ void Allocator::reset() {
   regionManager_.reset();
   for (auto& ras : allocators_) {
     for (auto& ra : ras) {
-      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      std::lock_guard lock{ra.getLock()};
       ra.reset();
     }
   }

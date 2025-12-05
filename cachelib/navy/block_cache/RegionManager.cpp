@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/block_cache/RegionManager.h"
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -103,7 +104,7 @@ void RegionManager::reset() {
     regions_[i]->reset();
   }
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     // Reset is inherently single threaded. All pending jobs, including
     // reclaims, have to be finished first.
     XDCHECK_EQ(reclaimsOutstanding_, 0u);
@@ -168,7 +169,7 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
@@ -197,7 +198,7 @@ std::pair<std::unique_ptr<Buffer>, std::unique_ptr<CondWaiter>>
 RegionManager::claimBufferFromPool(bool addWaiter) {
   std::unique_ptr<Buffer> buf;
   {
-    std::lock_guard<TimedMutex> bufLock{bufferMutex_};
+    std::lock_guard bufLock{bufferMutex_};
     if (buffers_.empty()) {
       std::unique_ptr<CondWaiter> waiter;
       if (addWaiter) {
@@ -219,7 +220,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
   std::unique_ptr<CondWaiter> waiter;
   uint32_t newSched = 0;
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     if (!cleanRegions_.empty()) {
       rid = cleanRegions_.back();
       cleanRegions_.pop_back();
@@ -247,7 +248,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     XDCHECK(!waiter);
     std::tie(status, waiter) = assignBufferToRegion(rid, addWaiter);
     if (status != OpenStatus::Ready) {
-      std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+      std::lock_guard lock{cleanRegionsMutex_};
       cleanRegions_.push_back(rid);
       INJECT_PAUSE(pause_blockcache_clean_free_locked);
       if (cleanRegionsCond_.numWaiters() > 0) {
@@ -448,7 +449,7 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
   // used by a region allocator.
   region.reset();
   {
-    std::lock_guard<TimedMutex> lock{cleanRegionsMutex_};
+    std::lock_guard lock{cleanRegionsMutex_};
     if (reclaimsOutstanding_ > 0) {
       // Though this should be always > 0 at this point with normal run path, it
       // is possible that it's 0, if we run reclaim manually (e.g. for testing)

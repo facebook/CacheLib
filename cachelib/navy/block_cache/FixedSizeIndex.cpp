@@ -35,7 +35,7 @@ void FixedSizeIndex::initialize() {
   XDCHECK(numBucketsPerMutex_ <= totalBuckets_);
   totalMutexes_ = (totalBuckets_ - 1) / numBucketsPerMutex_ + 1;
 
-  mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
+  mutex_ = std::make_unique<SharedMutexType[]>(totalMutexes_);
   bucketDistInfo_.initialize(totalBuckets_);
 }
 

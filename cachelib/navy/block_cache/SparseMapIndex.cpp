@@ -41,7 +41,7 @@ void SparseMapIndex::initialize() {
   totalMutexes_ = numBucketMaps_ / numBucketMapsPerMutex_;
 
   bucketMaps_ = std::make_unique<Map[]>(numBucketMaps_);
-  mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
+  mutex_ = std::make_unique<SharedMutexType[]>(totalMutexes_);
 
   XLOGF(
       INFO,
@@ -100,7 +100,8 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
     LookupResult lr{true, it->second};
 
     trackRemove(it->second);
-    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is
+    // mutable
     it.value().address = address;
     it.value().currentHits = 0;
     it.value().extra = {0};
@@ -120,7 +121,8 @@ bool SparseMapIndex::replaceIfMatch(uint64_t key,
 
   auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == oldAddress) {
-    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is
+    // mutable
     it.value().address = newAddress;
     if (extraField_ == ExtraField::kItemHitHistory) {
       it.value().extra.itemHistory >>= 1;
@@ -224,9 +226,9 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // add the size of fixed mem used for sparse_map's member (sparse_hash)
     size_t bucketMapMemUsed = sizeof(bucketMaps_[i]);
 
-    // The number of buckets is a power of 2 and one sparse array instance will
-    // cover 64 buckets, so there will be (# of buckets) / 64 sparse array
-    // instances (called sparse bucket in sparse_map implementation).
+    // The number of buckets is a power of 2 and one sparse array instance
+    // will cover 64 buckets, so there will be (# of buckets) / 64 sparse
+    // array instances (called sparse bucket in sparse_map implementation).
     auto sparseBucketCount =
         (bucketMaps_[i].bucket_count() == 0)
             ? 0
@@ -241,9 +243,9 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // sparse_map implementation. Real memory consumed by it is up to how hash
     // values of keys are distributed
     //
-    // The default config for sparse_array will increase the real array by 4 per
-    // every resize. For the worst case, we may have 4 additional entries per
-    // each sparse array instance (sparse bucket)
+    // The default config for sparse_array will increase the real array by 4
+    // per every resize. For the worst case, we may have 4 additional entries
+    // per each sparse array instance (sparse bucket)
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (# of sparse buckets) * 4
     range.maxUsedBytes +=
@@ -253,8 +255,8 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
              : ((((entryCount - 1) >> 2) << 2) + (sparseBucketCount << 2)) *
                    entrySize);
 
-    // For the best case, all sparse_array will be filled with the exact number
-    // (mod 4 == 0) of real buckets and only one sparse array may have
+    // For the best case, all sparse_array will be filled with the exact
+    // number (mod 4 == 0) of real buckets and only one sparse array may have
     // additional buckets
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (1 or 0) * 4

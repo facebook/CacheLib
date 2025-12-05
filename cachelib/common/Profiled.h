@@ -69,12 +69,20 @@ class Profiled {
   void lock_shared() { mutex_.lock_shared(); }
   void unlock_shared() { mutex_.unlock_shared(); }
   bool try_lock() { return mutex_.try_lock(); }
+  template <typename Rep, typename Period>
+  bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout) {
+    return mutex_.try_lock_for(timeout);
+  }
   template <typename Clock, typename Duration>
   bool try_lock_until(
       const std::chrono::time_point<Clock, Duration>& deadline) {
     return mutex_.try_lock_until(deadline);
   }
   bool try_lock_shared() { return mutex_.try_lock_shared(); }
+  template <typename Rep, typename Period>
+  bool try_lock_shared_for(const std::chrono::duration<Rep, Period>& timeout) {
+    return mutex_.try_lock_shared_for(timeout);
+  }
   template <typename Clock, typename Duration>
   bool try_lock_shared_until(
       const std::chrono::time_point<Clock, Duration>& deadline) {

@@ -22,6 +22,7 @@
 
 #include <utility>
 
+#include "cachelib/common/Profiled.h"
 #include "folly/Range.h"
 
 namespace facebook {
@@ -40,7 +41,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   // @param key  key for the record
   // @return a valid Guard representing the tombstone
   Guard add(folly::StringPiece key) {
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::lock_guard l(mutex_);
     auto it = keys_.find(key);
 
     if (it == keys_.end()) {
@@ -53,7 +54,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
 
   // checks if there is a key present and returns true if so.
   bool isPresent(folly::StringPiece key) {
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::lock_guard l(mutex_);
     return keys_.count(key) != 0;
   }
 
@@ -107,7 +108,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
  private:
   // removes an instance of key. if the count drops to 0, we remove the key
   void remove(folly::StringPiece key) {
-    std::lock_guard<TimedMutex> l(mutex_);
+    std::lock_guard l(mutex_);
     auto it = keys_.find(key);
     if (it == keys_.end() || it->second == 0) {
       // this is not supposed to happen if guards are destroyed appropriately
@@ -122,7 +123,7 @@ class alignas(folly::hardware_destructive_interference_size) TombStones {
   }
 
   // mutex protecting the map below
-  TimedMutex mutex_;
+  trace::Profiled<TimedMutex, "cachelib:nvmcache:tombstones"> mutex_;
   folly::F14NodeMap<std::string, uint64_t> keys_;
 };
 

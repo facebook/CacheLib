@@ -337,9 +337,7 @@ class ChainedHashTable {
   // Interface for the Container that implements a hash table. Maintains
   // the node's isInAccessContainer state. T must implement an interface to
   // markAccessible(), unmarkAccessible() and isAccessible().
-  template <typename T,
-            Hook<T> T::* HookPtr,
-            typename LockT = facebook::cachelib::SharedMutexBuckets>
+  template <typename T, Hook<T> T::* HookPtr, typename LockT>
   struct Container {
    private:
     using BucketId = typename Impl<T, HookPtr>::BucketId;

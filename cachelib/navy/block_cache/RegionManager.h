@@ -178,7 +178,7 @@ class RegionManager {
   // Returns the buffer to the pool.
   void returnBufferToPool(std::unique_ptr<Buffer> buf) {
     {
-      std::lock_guard<TimedMutex> bufLock{bufferMutex_};
+      std::lock_guard bufLock{bufferMutex_};
       buffers_.push_back(std::move(buf));
       if (bufferCond_.numWaiters() > 0) {
         bufferCond_.notifyAll();
@@ -321,7 +321,8 @@ class RegionManager {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 
-  mutable TimedMutex cleanRegionsMutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_clean_regions">
+      cleanRegionsMutex_;
   mutable util::ConditionVariable cleanRegionsCond_;
   std::vector<RegionId> cleanRegions_;
   const uint32_t numCleanRegions_{};
@@ -365,7 +366,7 @@ class RegionManager {
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;
-  mutable TimedMutex bufferMutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_buffer"> bufferMutex_;
   mutable util::ConditionVariable bufferCond_;
   std::vector<std::unique_ptr<Buffer>> buffers_;
   int placementHandle_;

@@ -132,7 +132,12 @@ class ContextMap {
 
  private:
   folly::F14FastMap<uintptr_t, std::unique_ptr<T>> map_;
-  mutable folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>
+  static_assert(std::is_same_v<T, PutCtx> || std::is_same_v<T, DelCtx>,
+                "ContextMap only supports PutCtx and DelCtx");
+  mutable trace::Profiled<
+      folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>,
+      (std::is_same_v<T, PutCtx> ? "cachelib:nvmcache:put_ctx_map"
+                                 : "cachelib:nvmcache:del_ctx_map")>
       rwMutex_;
 };
 } // namespace detail

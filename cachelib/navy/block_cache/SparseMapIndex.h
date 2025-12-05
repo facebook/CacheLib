@@ -29,6 +29,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/RecordIO.h"
 
@@ -163,12 +164,12 @@ class SparseMapIndex : public Index {
 
   uint32_t subkey(uint64_t hash) const { return hash & 0xffffffffu; }
 
-  SharedMutex& getMutexOfBucketMap(uint32_t bucketMap) const {
+  auto& getMutexOfBucketMap(uint32_t bucketMap) const {
     XDCHECK(folly::isPowTwo(totalMutexes_));
     return mutex_[bucketMap & (totalMutexes_ - 1)];
   }
 
-  SharedMutex& getMutex(uint64_t hash) const {
+  auto& getMutex(uint64_t hash) const {
     auto b = bucketMap(hash);
     return getMutexOfBucketMap(b);
   }
@@ -182,7 +183,9 @@ class SparseMapIndex : public Index {
 
   // Experiments with 64 byte alignment didn't show any throughput test
   // performance improvement.
-  std::unique_ptr<SharedMutex[]> mutex_;
+  using SharedMutexType =
+      trace::Profiled<SharedMutex, "cachelib:navy:bc_sparse_index">;
+  std::unique_ptr<SharedMutexType[]> mutex_;
   std::unique_ptr<Map[]> bucketMaps_;
 
   mutable util::PercentileStats hitsEstimator_{kQuantileWindowSize};

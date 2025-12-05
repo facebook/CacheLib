@@ -59,7 +59,8 @@ class ConditionVariable {
 
   size_t numWaiters() { return numWaiters_; }
 
-  void wait(std::unique_lock<TimedMutex>& lock) {
+  template <typename M>
+  void wait(std::unique_lock<M>& lock) {
     Waiter waiter;
     addWaiter(&waiter);
     lock.unlock();

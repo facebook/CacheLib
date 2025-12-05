@@ -30,6 +30,7 @@
 #include <chrono>
 #include <cstring>
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/common/FdpNvme.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -341,7 +342,8 @@ class FileDevice : public Device {
   // Thread-local context, created on demand
   folly::ThreadLocalPtr<AsyncIoContext> tlContext_;
   // Keep list of contexts pointer for gdb debugging
-  folly::fibers::TimedMutex dbgAsyncIoContextsMutex_;
+  trace::Profiled<folly::fibers::TimedMutex, "cachelib:navy:dbg_async_io">
+      dbgAsyncIoContextsMutex_;
   std::vector<AsyncIoContext*> dbgAsyncIoContexts_;
 
   // io engine to be used
@@ -1082,7 +1084,7 @@ IoContext* FileDevice::getIoContext() {
 
     {
       // Keep pointers in a vector to ease the gdb debugging
-      std::lock_guard<folly::fibers::TimedMutex> lock{dbgAsyncIoContextsMutex_};
+      std::lock_guard lock{dbgAsyncIoContextsMutex_};
       if (dbgAsyncIoContexts_.size() < idx + 1) {
         dbgAsyncIoContexts_.resize(idx + 1);
       }

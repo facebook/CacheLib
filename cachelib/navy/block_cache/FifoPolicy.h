@@ -61,7 +61,7 @@ class FifoPolicy final : public EvictionPolicy {
 
   // Gets memory used by FIFO policy.
   size_t memorySize() const override {
-    std::lock_guard<TimedMutex> lock{mutex_};
+    std::lock_guard lock{mutex_};
     return sizeof(*this) + sizeof(detail::Node) * queue_.size();
   }
 
@@ -76,7 +76,7 @@ class FifoPolicy final : public EvictionPolicy {
 
  private:
   std::deque<detail::Node> queue_;
-  mutable TimedMutex mutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:fifo_policy"> mutex_;
 };
 
 // Segmented FIFO policy
@@ -155,7 +155,8 @@ class SegmentedFifoPolicy final : public EvictionPolicy {
   const unsigned int totalRatioWeight_;
 
   std::vector<std::deque<detail::Node>> segments_;
-  mutable TimedMutex mutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_segmented_fifo_policy">
+      mutex_;
 };
 } // namespace navy
 } // namespace cachelib

@@ -24,6 +24,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 #include "gtest/gtest_prod.h"
 
@@ -201,7 +202,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   const size_t deterministicKeyHashSuffixLength_{0};
 
   std::chrono::seconds startupTime_{0};
-  mutable SharedMutex mutex_;
+  mutable trace::Profiled<SharedMutex, "cachelib:navy:dynamic_random_ap">
+      mutex_;
   ThrottleParams params_;
   WriteStats writeStats_;
 

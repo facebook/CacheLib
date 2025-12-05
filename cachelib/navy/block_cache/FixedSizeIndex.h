@@ -18,6 +18,7 @@
 
 #include <folly/fibers/TimedMutex.h>
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/gen-cpp2/objects_types.h"
@@ -502,7 +503,9 @@ class FixedSizeIndex : public Index {
 
   // ht_ is a array of PackedItemRecord
   PackedItemRecord* ht_{};
-  std::unique_ptr<SharedMutex[]> mutex_;
+  using SharedMutexType =
+      trace::Profiled<SharedMutex, "cachelib:navy:bc_fixed_index">;
+  std::unique_ptr<SharedMutexType[]> mutex_;
   // The size for ht (stored bucket count) will be managed per Mutex basis
   // validBucketsPerMutex_ is a array of size_t
   size_t* validBucketsPerMutex_{};
@@ -545,7 +548,7 @@ class FixedSizeIndex : public Index {
    private:
     uint64_t bid_;
     uint64_t mid_;
-    std::lock_guard<SharedMutex> lg_;
+    std::lock_guard<SharedMutexType> lg_;
     size_t& validBuckets_;
     PackedItemRecord* record_{};
     uint8_t bucketOffset_{kInvalidBucketSlotOffset};
@@ -574,7 +577,7 @@ class FixedSizeIndex : public Index {
    private:
     uint64_t bid_;
     uint64_t mid_;
-    std::shared_lock<SharedMutex> lg_;
+    std::shared_lock<SharedMutexType> lg_;
     const PackedItemRecord* record_{};
   };
 

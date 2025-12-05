@@ -63,7 +63,7 @@ class RegionAllocator {
   uint16_t priority() const { return priority_; }
 
   // Returns the mutex lock.
-  TimedMutex& getLock() const { return mutex_; }
+  auto& getLock() const { return mutex_; }
 
  private:
   const uint16_t priority_{};
@@ -71,7 +71,8 @@ class RegionAllocator {
   // The current region id from which we are allocating
   RegionId rid_;
 
-  mutable TimedMutex mutex_{TimedMutex::Options(false)};
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_region_allocator">
+      mutex_{TimedMutex::Options(false)};
 };
 
 // Size class or stack allocator. Thread safe. Syncs access

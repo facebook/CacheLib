@@ -40,6 +40,7 @@
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
@@ -66,6 +67,8 @@ class NvmCache {
   using ItemDestructor = typename C::ItemDestructor;
   using DestructorData = typename C::DestructorData;
   using SampleItem = typename C::SampleItem;
+  using ItemDestructorMutex =
+      trace::Profiled<TimedMutex, "cachelib:nvmcache:item_destructor">;
 
   // Context passed in encodeCb or decodeCb. If the item has children,
   // they are passed in the form of a folly::Range.
@@ -277,8 +280,8 @@ class NvmCache {
   // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
   // eviction must erase item from itemRemoved_, so there won't memory leak or
   // influence to future item with same key.
-  std::unique_lock<TimedMutex> getItemDestructorLock(HashedKey hk) const {
-    using LockType = std::unique_lock<TimedMutex>;
+  auto getItemDestructorLock(HashedKey hk) const {
+    using LockType = std::unique_lock<ItemDestructorMutex>;
     return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(hk)]}
                            : LockType{};
   }
@@ -548,8 +551,9 @@ class NvmCache {
 
   // a map of fill locks for each shard
   struct FillLockStruct {
-    alignas(folly::hardware_destructive_interference_size) folly::fibers::
-        TimedRWMutexWritePriority<folly::fibers::GenericBaton> fillLock_;
+    alignas(folly::hardware_destructive_interference_size) trace::Profiled<
+        folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>,
+        "cachelib:nvmcache:fill"> fillLock_;
   };
   std::vector<FillLockStruct> fillLock_;
 
@@ -566,7 +570,7 @@ class NvmCache {
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::vector<TimedMutex> itemDestructorMutex_{numShards_};
+  mutable std::vector<ItemDestructorMutex> itemDestructorMutex_{numShards_};
 
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
@@ -1599,7 +1603,7 @@ template <typename C>
 uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
   uint64_t size = 0;
   for (size_t i = 0; i < numShards_; ++i) {
-    auto lock = std::unique_lock<TimedMutex>{itemDestructorMutex_[i]};
+    auto lock = std::unique_lock{itemDestructorMutex_[i]};
     size += itemRemoved_[i].size();
   }
   return size;

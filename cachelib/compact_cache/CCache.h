@@ -53,6 +53,7 @@
 #include "cachelib/common/FastStats.h"
 #include "cachelib/common/Hash.h"
 #include "cachelib/common/Mutex.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/compact_cache/CCacheFixedLruBucket.h"
 #include "cachelib/compact_cache/CCacheVariableLruBucket.h"
 
@@ -546,7 +547,8 @@ class CompactCache : public ICompactCache {
    * compact cache.
    */
   Allocator& allocator_;
-  RWBucketLocks<folly::SharedMutex> locks_;
+  using BucketMutex = trace::Profiled<folly::SharedMutex, "cachelib:ccache">;
+  RWBucketLocks<BucketMutex> locks_;
   RemoveCb removeCb_;
   ReplaceCb replaceCb_;
   ValidCb validCb_;
@@ -752,7 +754,7 @@ void CompactCache<C, A, B>::tableRehash(size_t oldNumChunks,
             bool sameLock = locks_.isSameLock(newBucket, bucket);
             auto higher_lock //
                 = sameLock   //
-                      ? std::unique_lock<folly::SharedMutex>()
+                      ? std::unique_lock<BucketMutex>()
                       : locks_.lockExclusive(newBucket);
             if (kHasValues) {
               if (kValuesFixedSize) {

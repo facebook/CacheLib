@@ -105,12 +105,17 @@ struct AccessTypeTest : public SlabAllocatorTestBase {
     std::string key_;
     bool accessible_{false};
     std::atomic<unsigned int> refcount_{0};
-    friend typename AccessType::template Container<Node, &Node::accessHook_>;
+    friend typename AccessType::template Container<
+        Node,
+        &Node::accessHook_,
+        RWBucketLocks<folly::SharedMutex>>;
     std::atomic<bool> shouldTriggerHandleException_{false};
   };
 
-  using Container =
-      typename AccessType::template Container<Node, &Node::accessHook_>;
+  using Container = typename AccessType::template Container<
+      Node,
+      &Node::accessHook_,
+      RWBucketLocks<folly::SharedMutex>>;
   using Config = typename AccessType::Config;
   using CompressedPtrType = typename Node::CompressedPtrType;
   using PtrCompressor = typename Node::PtrCompressor;

@@ -19,6 +19,7 @@
 #include <folly/fibers/TimedMutex.h>
 
 #include "cachelib/common/ConditionVariable.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/block_cache/Types.h"
 #include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/serialization/Serialization.h"
@@ -105,32 +106,32 @@ class Region {
   // Assigns this region a priority. The meaning of priority
   // is dependent on the eviction policy we choose.
   void setPriority(uint16_t priority) {
-    std::lock_guard<TimedMutex> l{lock_};
+    std::lock_guard l{lock_};
     priority_ = priority;
   }
 
   // Gets the priority this region is assigned.
   uint16_t getPriority() const {
-    std::lock_guard<TimedMutex> l{lock_};
+    std::lock_guard l{lock_};
     return priority_;
   }
 
   // Gets the end offset of last slot added to this region.
   uint32_t getLastEntryEndOffset() const {
-    std::lock_guard<TimedMutex> l{lock_};
+    std::lock_guard l{lock_};
     return lastEntryEndOffset_;
   }
 
   // Gets the number of items in this region.
   uint32_t getNumItems() const {
-    std::lock_guard<TimedMutex> l{lock_};
+    std::lock_guard l{lock_};
     return numItems_;
   }
 
   // If this region is actively used, then the fragmentation
   // is the bytes at the end of the region that's not used.
   uint32_t getFragmentationSize() const {
-    std::lock_guard<TimedMutex> l{lock_};
+    std::lock_guard l{lock_};
     if (numItems_) {
       return regionSize_ - lastEntryEndOffset_;
     }
@@ -240,7 +241,8 @@ class Region {
   uint32_t numItems_{0};
   std::unique_ptr<Buffer> buffer_{nullptr};
 
-  mutable TimedMutex lock_{TimedMutex::Options(false)};
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_region"> lock_{
+      TimedMutex::Options(false)};
   mutable util::ConditionVariable cond_;
 };
 
