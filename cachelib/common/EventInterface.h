@@ -42,6 +42,11 @@ enum class AllocatorApiEvent : uint8_t {
   NVM_REMOVE = 12,
   NVM_EVICT = 13,
   PEEK = 14,
+  NVM_INSERT = 15,
+  NVM_FIND = 16,
+  NVM_FIND_FAST = 17,
+  NVM_ADMIT = 18,
+  NVM_REINSERT = 19
 };
 
 inline const char* toString(AllocatorApiEvent event) {
@@ -76,6 +81,16 @@ inline const char* toString(AllocatorApiEvent event) {
     return "NVM_EVICT";
   case AllocatorApiEvent::PEEK:
     return "PEEK";
+  case AllocatorApiEvent::NVM_INSERT:
+    return "NVM_INSERT";
+  case AllocatorApiEvent::NVM_FIND:
+    return "NVM_FIND";
+  case AllocatorApiEvent::NVM_FIND_FAST:
+    return "NVM_FIND_FAST";
+  case AllocatorApiEvent::NVM_ADMIT:
+    return "NVM_ADMIT";
+  case AllocatorApiEvent::NVM_REINSERT:
+    return "NVM_REINSERT";
   default:
     XDCHECK(false);
     return "** CORRUPT EVENT **";
@@ -97,6 +112,10 @@ enum class AllocatorApiResult : uint8_t {
   REINSERTED = 10,         // Reinserted an item.
   NVM_ADMITTED = 11,       // Admit item to NVM
   CORRUPTED = 12,          // An item is corrupted.
+  ABORTED = 13,            // The event operation aborted.
+  ACCEPTED = 14,   // Positive result for admission and reinsertion policies
+  REJECTED = 15,   // Negative result for admission and reinsertion policies
+  INVALIDATED = 16 // Item invalidated (newer item for the key exist in NVM.)
 };
 
 inline const char* toString(AllocatorApiResult result) {
@@ -127,6 +146,10 @@ inline const char* toString(AllocatorApiResult result) {
     return "NVM_ADMITTED";
   case AllocatorApiResult::CORRUPTED:
     return "CORRUPTED";
+  case AllocatorApiResult::ABORTED:
+    return "ABORTED";
+  case AllocatorApiResult::INVALIDATED:
+    return "INVALIDATED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";

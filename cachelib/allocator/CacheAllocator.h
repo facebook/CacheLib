@@ -4004,10 +4004,14 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
   auto chainedItemRange = viewAsChainedAllocsRange(item);
 
-  if (nvmAdmissionPolicy_ &&
-      !nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
-    stats_.numNvmRejectsByAP.inc();
-    return false;
+  if (nvmAdmissionPolicy_) {
+    AllocatorApiResult admissionResult = AllocatorApiResult::ACCEPTED;
+    if (!nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
+      admissionResult = AllocatorApiResult::REJECTED;
+      stats_.numNvmRejectsByAP.inc();
+      return false;
+    }
+    recordEvent(AllocatorApiEvent::NVM_ADMIT, item.getKey(), admissionResult);
   }
 
   return true;

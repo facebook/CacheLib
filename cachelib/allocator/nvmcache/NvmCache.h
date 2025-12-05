@@ -672,29 +672,47 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
   }
 
   util::LatencyTracker tracker(stats().nvmLookupLatency_);
-
-  auto shard = getShardForKey(hk);
-  // invalidateToken any inflight puts for the same key since we are filling
-  // from nvmcache.
-  inflightPuts_[shard].invalidateToken(hk.key());
-
   stats().numNvmGets.inc();
 
+  auto shard = getShardForKey(hk);
+  // invalidateToken any inflight puts from DRAM -> NVM for the key
+  inflightPuts_[shard].invalidateToken(hk.key());
+  // map of fills from NVM -> DRAM for the shard to which the key belongs
   auto& fillMap = getFillMapForShard(shard);
 
+  /*
+   * Check for 3 things after we get the lock,
+   *  1. Is the item now in DRAM? If so, return.
+   *  2. FillMap has an entry so we can join as waiter in a GetCtx.
+   *  3. Assuming 1 and 2 are false, we can do a fast negative lookup.
+   */
   auto checkShared =
-      [this, &hk, &shard, &fillMap](
-          typename FillMap::iterator& itOut) -> std::optional<WriteHandle> {
+      [this, &hk, &shard,
+       &fillMap](typename FillMap::iterator& itOut,
+                 AllocatorApiEvent event) -> std::optional<WriteHandle> {
     // do not use the Cache::find() since that will call back into us.
     auto hdlShared = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
     if (UNLIKELY(hdlShared != nullptr)) {
+      AllocatorApiResult findResult = AllocatorApiResult::FOUND;
       if (hdlShared->isExpired()) {
         hdlShared.reset();
         hdlShared.markExpired();
         stats().numNvmGetMissExpired.inc();
         stats().numNvmGetMissFast.inc();
         stats().numNvmGetMiss.inc();
+        findResult = AllocatorApiResult::EXPIRED;
       }
+      // Special case where we have to record metadata with handle in NvmCache.h
+      CacheAPIWrapperForNvm<C>::recordEvent(
+          cache_, event, hk.key(), findResult,
+          typename C::EventRecordParams{
+              .size = hdlShared->getSize(),
+              .ttlSecs =
+                  hdlShared->getExpiryTime() > hdlShared->getCreationTime()
+                      ? hdlShared->getExpiryTime() -
+                            hdlShared->getCreationTime()
+                      : 0,
+              .expiryTime = hdlShared->getExpiryTime()});
       return hdlShared;
     }
 
@@ -723,6 +741,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
         !navyCache_->couldExist(hk)) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
+      recordEvent(event, hk.key(), AllocatorApiResult::NOT_FOUND);
       return WriteHandle{};
     }
     return std::nullopt;
@@ -735,7 +754,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
   {
     // Hot miss path: shared lock, immutable access only
     auto lock = getSharedFillLockForShard(shard);
-    if (auto hdlShared = checkShared(it)) {
+    if (auto hdlShared = checkShared(it, AllocatorApiEvent::NVM_FIND_FAST)) {
       return *std::move(hdlShared);
     }
     // fallthrough
@@ -745,7 +764,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
     auto lock = getFillLockForShard(shard);
 
     // Recheck miss path under exclusive lock
-    if (auto hdlShared = checkShared(it)) {
+    if (auto hdlShared = checkShared(it, AllocatorApiEvent::NVM_FIND)) {
       return *std::move(hdlShared);
     }
 
@@ -1143,19 +1162,27 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   }
 
   // we skip writing if we know that the item is expired or has chained items
-  if (!isEnabled() || item.isExpired()) {
+  if (!isEnabled()) {
+    return;
+  } else if (item.isExpired()) {
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::EXPIRED);
     return;
   }
 
   stats().numNvmPuts.inc();
   if (hasTombStone(hk)) {
     stats().numNvmAbortedPutOnTombstone.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
     return;
   }
 
   auto nvmItem = makeNvmItem(item);
   if (!nvmItem) {
     stats().numNvmPutEncodeFailure.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
     return;
   }
 
@@ -1183,16 +1210,20 @@ void NvmCache<C>::put(Item& item, PutToken token) {
     auto status = navyCache_->insertAsync(
         HashedKey::precomputed(ctx.key(), hk.keyHash()), makeBufferView(val),
         [this, putCleanup, valSize, val](navy::Status st, HashedKey key) {
+          auto eventRes = AllocatorApiResult::INSERTED;
           if (st == navy::Status::Ok) {
             stats().nvmPutSize_.trackValue(valSize);
           } else if (st == navy::Status::BadState) {
+            eventRes = AllocatorApiResult::FAILED;
             // we set disable navy since we got a BadState from navy
             disableNavy("Insert Failure. BadState");
           } else {
+            eventRes = AllocatorApiResult::FAILED;
             // put failed, DRAM eviction happened and destructor was not
             // executed. we unconditionally trigger destructor here for cleanup.
             evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed);
           }
+          recordEvent(AllocatorApiEvent::NVM_INSERT, key.key(), eventRes);
           putCleanup();
         });
 
@@ -1213,6 +1244,8 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   // upon handle release.
   if (!executed) {
     stats().numNvmAbortedPutOnInflightGet.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
   }
 }
 
@@ -1242,7 +1275,12 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (status != navy::Status::Ok) {
     // instead of disabling navy, we enqueue a delete and return a miss.
     if (status != navy::Status::NotFound) {
+      recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                  AllocatorApiResult::FAILED);
       remove(hk, createDeleteTombStone(hk));
+    } else {
+      recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                  AllocatorApiResult::NOT_FOUND);
     }
     stats().numNvmGetMiss.inc();
     return;
@@ -1258,6 +1296,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     hdl.markExpired();
     hdl.markWentToNvm();
     ctx.setWriteHandle(std::move(hdl));
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::EXPIRED, nvmItem);
     return;
   }
 
@@ -1268,6 +1308,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     // we failed to fill due to an internal failure. Return a miss and
     // invalidate what we have in nvmcache
     remove(hk, createDeleteTombStone(hk));
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::FAILED);
     return;
   }
 
@@ -1278,9 +1320,13 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     // a racing remove or evict while we were filling
     stats().numNvmGetMiss.inc();
     stats().numNvmGetMissDueToInflightRemove.inc();
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::NOT_FOUND);
     return;
   }
 
+  recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(), AllocatorApiResult::FOUND,
+              nvmItem);
   // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
   if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {
