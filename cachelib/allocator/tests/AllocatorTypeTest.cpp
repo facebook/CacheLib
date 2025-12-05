@@ -243,6 +243,10 @@ TYPED_TEST(BaseAllocatorTest, BasicFreeMemStrategy) {
 
 TYPED_TEST(BaseAllocatorTest, AllocSizes) { this->testAllocSizes(); }
 
+TYPED_TEST(BaseAllocatorTest, GenAllocClassesTuned) {
+  this->testGenAllocClassesTuned();
+}
+
 TYPED_TEST(BaseAllocatorTest, CacheCreationTime) {
   this->testCacheCreationTime();
 }

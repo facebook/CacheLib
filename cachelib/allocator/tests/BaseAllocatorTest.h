@@ -4185,6 +4185,58 @@ class BaseAllocatorTest : public AllocatorTest<AllocatorT> {
     ASSERT_NO_THROW(allocator.addPool("default", numBytes, goodAllocSizes));
   }
 
+  void testGenAllocClassesTuned() {
+    auto allocClasses = util::genAllocClassesTuned();
+    ASSERT_GT(allocClasses.size(), 0);
+
+    // Create an allocator with enough memory to support all allocation classes
+    // We need at least one slab per allocation class for testing
+    const size_t numSlabs = allocClasses.size() + 10;
+    typename AllocatorT::Config config;
+    config.setCacheSize(numSlabs * Slab::kSize);
+    AllocatorT allocator(config);
+
+    // Create a pool using the tuned allocation classes
+    const size_t numBytes = allocator.getCacheMemoryStats().ramCacheSize;
+    PoolId poolId = allocator.addPool("tuned_pool", numBytes, allocClasses);
+
+    // Try to allocate an item for each allocation size
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    size_t allocIndex = 0;
+    for (auto allocSize : allocClasses) {
+      const std::string key = "key_" + std::to_string(allocIndex++);
+
+      // Calculate the value size needed to result in this allocation size
+      // getRequiredSize(key, valueSize) returns the total size needed
+      // We need to find valueSize such that getRequiredSize <= allocSize
+      const auto requiredSizeForZero =
+          AllocatorT::Item::getRequiredSize(key, 0);
+      uint32_t valueSize = allocSize - requiredSizeForZero;
+
+      auto handle = allocator.allocate(poolId, key, valueSize);
+      ASSERT_NE(nullptr, handle)
+          << "Failed to allocate item for alloc size " << allocSize
+          << " (value size: " << valueSize << ")";
+
+      ASSERT_TRUE(allocator.insert(handle));
+      auto foundHandle = allocator.find(key);
+      ASSERT_NE(nullptr, foundHandle) << "Failed to find item with key " << key;
+
+      // Keep the handle to prevent immediate eviction
+      handles.push_back(std::move(handle));
+    }
+
+    // After allocating items, verify each allocation class now has exactly 1
+    // slab
+    auto finalPoolStats = allocator.getPoolStats(poolId);
+    for (size_t i = 0; i < allocClasses.size(); ++i) {
+      const auto classId = static_cast<ClassId>(i);
+      EXPECT_EQ(1, finalPoolStats.numSlabsForClass(classId))
+          << "Allocation class " << static_cast<int>(classId)
+          << " should have exactly 1 slab after allocation";
+    }
+  }
+
   // Check that item is in the expected container.
   bool findItem(AllocatorT& allocator, typename AllocatorT::Item* item) {
     auto& container = allocator.getMMContainer(*item);

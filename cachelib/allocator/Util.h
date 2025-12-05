@@ -225,6 +225,37 @@ inline std::set<uint32_t> generateAllocSizesPowerOf2(uint32_t minPowerOf2,
   return allocSizes;
 }
 
+// Returns set of allocation sizes that are chosen in a way to minimize worst
+// case cache efficiency loss. Efficiency loss for an item size is defined in
+// the following way: If item size is s, x is the assigned allocation size and
+// y is the optimal allocation size, then efficiency loss is: (4MB/y) /
+// (4MB/x)
+// - 4MB/y is the number of allocations per slab using the optimal
+// allocation size
+// - 4MB/x is the number of allocations per slab using the
+// assigned allocation size
+// Efficiency loss tells us how many more items we could have stored if we had
+// used the optimal allocation size. These allocation sizes try to provide a
+// good default for any cache
+inline std::set<uint32_t> genAllocClassesTuned() {
+  return {64,     72,     80,     88,      104,     120,     136,    152,
+          168,    184,    200,    216,     232,     248,     264,    296,
+          328,    360,    392,    424,     456,     488,     520,    552,
+          584,    616,    648,    712,     776,     848,     912,    992,
+          1088,   1168,   1232,   1304,    1416,    1488,    1608,   1680,
+          1832,   1928,   2064,   2216,    2312,    2504,    2624,   2792,
+          2968,   3120,   3328,   3584,    3912,    4160,    4440,   4632,
+          4904,   5096,   5384,   5848,    6120,    6416,    6752,   7120,
+          7528,   7984,   8504,   9096,    9776,    10560,   11488,  12016,
+          12592,  13224,  13928,  14712,   15592,   16576,   17696,  18976,
+          20456,  22192,  24240,  25416,   26712,   28144,   29744,  31536,
+          33552,  35848,  38472,  41520,   45096,   49344,   54464,  57456,
+          60784,  64520,  68752,  73584,   79136,   85592,   93200,  102296,
+          113352, 127096, 135296, 144624,  155344,  167768,  182360, 199728,
+          220752, 246720, 279616, 322632,  381296,  419424,  466032, 524288,
+          599184, 699048, 838856, 1048576, 1398096, 2097152, 4194304};
+}
+
 // Calculates curr - prev, returning 0 if curr is less than prev
 inline uint64_t safeDiff(const uint64_t prev, const uint64_t curr) {
   return curr > prev ? curr - prev : 0;

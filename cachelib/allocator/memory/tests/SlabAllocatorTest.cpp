@@ -1007,3 +1007,17 @@ TEST_F(SlabAllocatorTest,
                    1000, 5000, MemoryAllocator::kMaxClasses + 1),
                std::invalid_argument);
 }
+
+TEST_F(SlabAllocatorTest, TestTunedAllocationClassesValid) {
+  auto allocSizes = util::genAllocClassesTuned();
+  EXPECT_FALSE(allocSizes.empty());
+  expectAllAllocSizesValid(allocSizes);
+}
+
+TEST_F(SlabAllocatorTest, TestTunedAllocationClassesMaxAllocSize) {
+  auto allocClasses = util::genAllocClassesTuned();
+
+  // Ensure that Slab::kSize is included in the list of allocation classes
+  // Want to ensure that large items can be allocated
+  EXPECT_EQ(*allocClasses.rbegin(), Slab::kSize);
+}
