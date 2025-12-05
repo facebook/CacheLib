@@ -25,6 +25,8 @@
 
 #include <utility>
 
+#include "cachelib/common/Profiled.h"
+
 namespace facebook {
 namespace cachelib {
 
@@ -179,7 +181,9 @@ class alignas(folly::hardware_destructive_interference_size) InFlightPuts {
       keys_;
 
   // mutex protecting the map.
-  folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>
+  trace::Profiled<
+      folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>,
+      "cachelib:nvmcache:in_flight_puts">
       rwMutex_;
 };
 
