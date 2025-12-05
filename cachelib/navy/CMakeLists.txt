@@ -24,6 +24,7 @@ add_library (cachelib_navy
   block_cache/Allocator.cpp
   block_cache/BlockCache.cpp
   block_cache/FifoPolicy.cpp
+  block_cache/FixedSizeIndex.cpp
   block_cache/HitsReinsertionPolicy.cpp
   block_cache/LruPolicy.cpp
   block_cache/Region.cpp
@@ -59,6 +60,7 @@ endif()
 target_link_libraries(cachelib_navy PUBLIC
   cachelib_common
   cachelib_shm
+  cachelib_nvmitem
   GTest::gmock
   )
 

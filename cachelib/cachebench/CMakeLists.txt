@@ -13,12 +13,17 @@
 # limitations under the License.
 
 add_library (cachelib_cachebench
+  ../interface/CacheItem.cpp
+  ../interface/Handle.cpp
+  ../interface/components/RAMCacheComponent.cpp
   ./cache/Cache.cpp
   ./cache/TimeStampTicker.cpp
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
   ./consistency/ValueHistory.cpp
   ./consistency/ValueTracker.cpp
+  ./runner/CacheComponentStressor.cpp
+  ./runner/CacheStressorBase.cpp
   ./runner/FastShutdown.cpp
   ./runner/IntegrationStressor.cpp
   ./runner/ProgressTracker.cpp
@@ -27,6 +32,7 @@ add_library (cachelib_cachebench
   ./util/CacheConfig.cpp
   ./util/Config.cpp
   ./util/NandWrites.cpp
+  ./util/Sleep.cpp
   ./workload/BlockChunkCache.cpp
   ./workload/BlockChunkReplayGenerator.cpp
   ./workload/PieceWiseCache.cpp

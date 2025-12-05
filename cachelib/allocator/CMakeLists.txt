@@ -23,6 +23,16 @@ add_thrift_file(DATASTRUCT_TESTS
 add_thrift_file(MEMORY_SERIALIZE
                 memory/serialize/objects.thrift frozen2)
 
+# Create a separate library for NvmItem to break circular dependency between
+# cachelib_allocator and cachelib_navy
+add_library (cachelib_nvmitem
+  nvmcache/NvmItem.cpp
+)
+target_link_libraries(cachelib_nvmitem PUBLIC
+  cachelib_common
+  Folly::folly
+)
+
 add_library (cachelib_allocator
   ${SERIALIZE_THRIFT_FILES}
   ${DATASTRUCT_SERIALIZE_THRIFT_FILES}
@@ -55,7 +65,6 @@ add_library (cachelib_allocator
     memory/MemoryPoolManager.cpp
     MemoryMonitor.cpp
     memory/SlabAllocator.cpp
-    nvmcache/NvmItem.cpp
     nvmcache/NavyConfig.cpp
     nvmcache/NavySetup.cpp
     NvmCacheState.cpp
@@ -80,6 +89,9 @@ else()
   target_compile_definitions(cachelib_allocator PRIVATE SKIP_SIZE_VERIFY)
 endif()
 
+install(TARGETS cachelib_nvmitem
+        EXPORT cachelib-exports
+        DESTINATION ${LIB_INSTALL_DIR} )
 
 install(TARGETS cachelib_allocator
         EXPORT cachelib-exports
