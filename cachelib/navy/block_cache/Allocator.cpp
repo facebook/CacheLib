@@ -48,12 +48,13 @@ Allocator::Allocator(RegionManager& regionManager,
   }
 }
 
-std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size, uint16_t priority, bool canWait, uint64_t keyHash) {
+std::pair<RegionDescriptor, RelAddress> Allocator::allocate(uint32_t size,
+                                                            uint16_t priority,
+                                                            bool canWait,
+                                                            uint64_t keyHash) {
   XDCHECK_LT(priority, allocators_.size());
   if (size == 0 || size > regionManager_.regionSize()) {
-    return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
-                           RelAddress());
+    return std::make_pair(RegionDescriptor{OpenStatus::Error}, RelAddress());
   }
   RegionAllocator* ra =
       &allocators_[priority][keyHash % allocators_[priority].size()];
@@ -66,7 +67,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
 // have to wait. Every time we take a region from the clean list, we schedule
 // new reclaim job to refill it. Caller must close the region after data
 // written to the slot.
-std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
+std::pair<RegionDescriptor, RelAddress> Allocator::allocateWith(
     RegionAllocator& ra, uint32_t size, bool canWait) {
   std::unique_lock lock{ra.getLock()};
   RegionId rid = ra.getAllocationRegion();
@@ -75,7 +76,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
     auto [desc, addr] = region.openAndAllocate(size);
     XDCHECK_NE(OpenStatus::Retry, desc.status());
     if (desc.isReady()) {
-      return std::make_tuple(std::move(desc), size, addr);
+      return std::make_pair(std::move(desc), addr);
     }
     XDCHECK_EQ(OpenStatus::Error, desc.status());
     // Buffer has been fully allocated. Release the region by scheduling an
@@ -101,7 +102,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
       allocRetryWaits_.inc();
       waiter->baton_.wait();
     }
-    return std::make_tuple(RegionDescriptor{status}, size, RelAddress{});
+    return std::make_pair(RegionDescriptor{status}, RelAddress{});
   }
   XDCHECK(status == OpenStatus::Ready);
   XDCHECK(!waiter);
@@ -114,7 +115,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   ra.setAllocationRegion(rid);
   auto [desc, addr] = region.openAndAllocate(size);
   XDCHECK_EQ(OpenStatus::Ready, desc.status());
-  return std::make_tuple(std::move(desc), size, addr);
+  return std::make_pair(std::move(desc), addr);
 }
 
 void Allocator::close(RegionDescriptor&& desc) {

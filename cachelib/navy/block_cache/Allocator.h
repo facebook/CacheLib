@@ -95,20 +95,19 @@ class Allocator {
   // @param keyHash       Hash of the key to allocate for. Used for deciding the
   // allocator if there's more than one for the priority.
   //
-  // Returns a tuple containing region descriptor, allocated slotSize and
-  // allocated address
+  // Returns a pair containing region descriptor and allocated address
   // The region descriptor contains region id, open mode and status,
   // which is one of the following
-  //  - Ready   Fills @addr and @slotSize
+  //  - Ready   Fills @addr
   //  - Retry   Retry later, reclaim is running
   //  - Error   Can't allocate this size even later (hard failure)
   // When allocating with a priority, the priority must NOT exceed the
   // max priority which is (@numPriorities - 1) specified when constructing
   // this allocator.
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocate(uint32_t size,
-                                                              uint16_t priority,
-                                                              bool canWait,
-                                                              uint64_t keyHash);
+  std::pair<RegionDescriptor, RelAddress> allocate(uint32_t size,
+                                                   uint16_t priority,
+                                                   bool canWait,
+                                                   uint64_t keyHash);
 
   // Closes the region.
   void close(RegionDescriptor&& rid);
@@ -134,9 +133,10 @@ class Allocator {
   void flushAndReleaseRegionFromRALocked(RegionAllocator& ra, bool flushAsync);
 
   // Allocates @size bytes in region allocator @ra. If succeed (enough space),
-  // returns region descriptor, size and address.
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateWith(
-      RegionAllocator& ra, uint32_t size, bool wait);
+  // returns region descriptor and address.
+  std::pair<RegionDescriptor, RelAddress> allocateWith(RegionAllocator& ra,
+                                                       uint32_t size,
+                                                       bool wait);
 
   RegionManager& regionManager_;
   // Multiple allocators when we use priority-based allocation

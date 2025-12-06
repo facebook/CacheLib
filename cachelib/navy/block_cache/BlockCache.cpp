@@ -213,8 +213,8 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto [desc, slotSize, addr] = allocator_.allocate(
-      size, kDefaultItemPriority, true /* canWait */, hk.keyHash());
+  auto [desc, addr] = allocator_.allocate(size, kDefaultItemPriority,
+                                          true /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
   case OpenStatus::Error:
@@ -231,11 +231,11 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  const auto status = writeEntry(addr, slotSize, hk, value);
-  auto newObjSizeHint = encodeSizeHint(slotSize);
+  const auto status = writeEntry(addr, size, hk, value);
+  auto newObjSizeHint = encodeSizeHint(size);
   if (status == Status::Ok) {
     const auto lr = index_->insert(
-        hk.keyHash(), encodeRelAddress(addr.add(slotSize)), newObjSizeHint);
+        hk.keyHash(), encodeRelAddress(addr.add(size)), newObjSizeHint);
     // We replaced an existing key in the index
     uint64_t newObjSize = decodeSizeHint(newObjSizeHint);
     uint64_t oldObjSize = 0;
@@ -811,7 +811,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
           : std::min<uint16_t>(lr.currentHits(), numPriorities_ - 1);
 
   uint32_t size = serializedSize(hk.key().size(), value.size());
-  auto [desc, slotSize, addr] =
+  auto [desc, addr] =
       allocator_.allocate(size, priority, false /* canWait */, hk.keyHash());
 
   switch (desc.status()) {
@@ -838,7 +838,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  const auto status = writeEntry(addr, slotSize, hk, value);
+  const auto status = writeEntry(addr, size, hk, value);
   if (status != Status::Ok) {
     recordEvent(hk.key(), AllocatorApiEvent::NVM_REINSERT,
                 AllocatorApiResult::FAILED, entrySize);
@@ -846,10 +846,9 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
     return removeItem(false);
   }
 
-  const auto replaced =
-      index_->replaceIfMatch(hk.keyHash(),
-                             encodeRelAddress(addr.add(slotSize)),
-                             encodeRelAddress(currAddr));
+  const auto replaced = index_->replaceIfMatch(hk.keyHash(),
+                                               encodeRelAddress(addr.add(size)),
+                                               encodeRelAddress(currAddr));
   if (!replaced) {
     recordEvent(hk.key(), AllocatorApiEvent::NVM_REINSERT,
                 AllocatorApiResult::INVALIDATED, entrySize);
@@ -866,13 +865,13 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
 }
 
 Status BlockCache::writeEntry(RelAddress addr,
-                              uint32_t slotSize,
+                              uint32_t size,
                               HashedKey hk,
                               BufferView value) {
-  XDCHECK_LE(addr.offset() + slotSize, regionManager_.regionSize());
-  XDCHECK_EQ(slotSize % allocAlignSize_, 0ULL)
-      << folly::sformat(" alignSize={}, size={}", allocAlignSize_, slotSize);
-  auto buffer = Buffer(slotSize);
+  XDCHECK_LE(addr.offset() + size, regionManager_.regionSize());
+  XDCHECK_EQ(size % allocAlignSize_, 0ULL)
+      << folly::sformat(" alignSize={}, size={}", allocAlignSize_, size);
+  auto buffer = Buffer(size);
 
   // Copy descriptor and the key to the end
   size_t descOffset = buffer.size() - sizeof(EntryDesc);
@@ -945,7 +944,7 @@ Status BlockCache::readEntry(const RegionDescriptor& readDesc,
     return Status::NotFound;
   }
 
-  // Update slot size to actual, defined by key and value size
+  // Update the size to actual, defined by key and value size
   uint32_t size = serializedSize(desc.keySize, desc.valueSize);
   if (buffer.size() > size) {
     // Read more than actual size. Trim the invalid data in the beginning

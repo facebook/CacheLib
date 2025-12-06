@@ -267,11 +267,11 @@ class BlockCache final : public Engine {
   // the performance point of view, but makes sense to track them for perf:
   // especially portion on CPU time spent in std::memcpy.
   // @param addr        Address to write this entry into
-  // @param slotSize    Number of bytes this entry will take up on the device
+  // @param size        Number of bytes this entry will take up on the device
   // @param hk          Key of the entry
   // @param value       Payload of the entry
   Status writeEntry(RelAddress addr,
-                    uint32_t slotSize,
+                    uint32_t size,
                     HashedKey hk,
                     BufferView value);
   // @param readDesc      Descriptor for reading. This must be valid
