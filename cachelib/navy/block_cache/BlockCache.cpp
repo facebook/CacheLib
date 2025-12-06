@@ -26,6 +26,8 @@
 #include "cachelib/common/Time.h"
 #include "cachelib/common/inject_pause.h"
 #include "cachelib/navy/block_cache/FixedSizeIndex.h"
+#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
+#include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/SparseMapIndex.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
