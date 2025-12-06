@@ -116,7 +116,7 @@ void CachelibMapStressor::start() {
   }
 
   testThread_ = std::thread([this] {
-    const size_t numThreads = folly::hardware_concurrency();
+    const size_t numThreads = folly::available_concurrency();
     std::cout << folly::sformat("Total {:.2f}M ops to be run",
                                 numThreads * numOpsPerThread_ / 1e6)
               << std::endl;
@@ -255,7 +255,7 @@ void CachelibRangeMapStressor::start() {
   }
 
   testThread_ = std::thread([this] {
-    const size_t numThreads = folly::hardware_concurrency();
+    const size_t numThreads = folly::available_concurrency();
     std::cout << folly::sformat("Total {:.2f}M ops to be run",
                                 numThreads * numOpsPerThread_ / 1e6)
               << std::endl;

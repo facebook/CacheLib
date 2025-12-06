@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
   const folly::Init init(&argc, &argv);
 
   if (kNumThreads == 0) {
-    kNumThreads = folly::hardware_concurrency();
+    kNumThreads = folly::available_concurrency();
     if (kNumThreads == 0) {
       kNumThreads = 32;
     }

@@ -243,7 +243,7 @@ int main(int argc, char* argv[]) {
   ctx->cache = buildCache(cacheBytes, ctx->poolId);
 
   proxygen::HTTPServerOptions options;
-  options.threads = static_cast<size_t>(folly::hardware_concurrency());
+  options.threads = static_cast<size_t>(folly::available_concurrency());
   options.idleTimeout = std::chrono::milliseconds(60000);
   options.shutdownOn = {SIGINT, SIGTERM};
   options.handlerFactories =

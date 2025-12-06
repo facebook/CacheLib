@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
   const folly::Init init(&argc, &argv);
 
   if (FLAGS_num_threads == 0) {
-    FLAGS_num_threads = folly::hardware_concurrency();
+    FLAGS_num_threads = folly::available_concurrency();
     if (FLAGS_num_threads == 0) {
       FLAGS_num_threads = 32;
     }

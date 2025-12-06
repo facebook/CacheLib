@@ -80,7 +80,7 @@ class ItemRecords {
 
  public:
   explicit ItemRecords(bool enable,
-                       uint64_t threads = folly::hardware_concurrency())
+                       uint64_t threads = folly::available_concurrency())
       : enable_(enable), itemRecords_(threads), mutexes_(threads) {}
 
   bool validate(const DestructorData& data) {

@@ -424,7 +424,7 @@ int main(int argc, char** argv) {
   gLoadInfo = {FLAGS_updates, FLAGS_evicts, FLAGS_deletes};
 
   if (FLAGS_num_threads == 0) {
-    FLAGS_num_threads = folly::hardware_concurrency();
+    FLAGS_num_threads = folly::available_concurrency();
     if (FLAGS_num_threads == 0) {
       FLAGS_num_threads = 32;
     }
