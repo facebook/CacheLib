@@ -104,6 +104,10 @@ if (BUILD_TESTS)
     ./memory/tests/TestBase.cpp
     )
   add_dependencies(allocator_test_support thrift_generated_files)
+    
+  # Find xxhash library
+  find_library(XXHASH_LIBRARY xxhash)
+    
   target_link_libraries (allocator_test_support PUBLIC
     cachelib_allocator
     common_test_utils
@@ -112,6 +116,7 @@ if (BUILD_TESTS)
     GTest::gtest
     GTest::gtest_main
     GTest::gmock
+    ${XXHASH_LIBRARY}
   )
 
 
