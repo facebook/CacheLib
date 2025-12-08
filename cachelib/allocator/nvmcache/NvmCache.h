@@ -703,16 +703,8 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
         findResult = AllocatorApiResult::EXPIRED;
       }
       // Special case where we have to record metadata with handle in NvmCache.h
-      CacheAPIWrapperForNvm<C>::recordEvent(
-          cache_, event, hk.key(), findResult,
-          typename C::EventRecordParams{
-              .size = hdlShared->getSize(),
-              .ttlSecs =
-                  hdlShared->getExpiryTime() > hdlShared->getCreationTime()
-                      ? hdlShared->getExpiryTime() -
-                            hdlShared->getCreationTime()
-                      : 0,
-              .expiryTime = hdlShared->getExpiryTime()});
+      CacheAPIWrapperForNvm<C>::recordEvent(cache_, event, hk.key(),
+                                            findResult);
       return hdlShared;
     }
 
