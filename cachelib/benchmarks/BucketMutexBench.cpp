@@ -301,7 +301,7 @@ std::unordered_map<MutexType, std::pair<Stats, std::string>, EnumHash> stats = {
 };
 
 BENCHMARK(SharedMutexBuckets) {
-  runBench<facebook::cachelib::SharedMutexBuckets>(
+  runBench<facebook::cachelib::RWBucketLocks<folly::SharedMutex>>(
       stats[MutexType::kSharedMutexBuckets].first);
 }
 

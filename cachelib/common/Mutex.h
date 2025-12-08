@@ -388,9 +388,6 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
             : WriteLockHolder(Base::getLock(args...), timeout);
   }
 };
-using TimedMutexRWBuckets =
-    RWBucketLocks<folly::fibers::TimedRWMutex<folly::fibers::Baton>>;
-using SharedMutexBuckets = RWBucketLocks<folly::SharedMutex>;
 
 // a spinning mutex appearing as a rw mutex
 using SpinBuckets = RWBucketLocks<RWMockLock>;
