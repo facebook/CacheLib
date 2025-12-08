@@ -111,7 +111,7 @@ uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
 }
 
 Status Driver::insert(HashedKey key, BufferView value) {
-  folly::fibers::Baton done;
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:driver_insert"> done;
   Status cbStatus{Status::Ok};
   auto status = insertAsync(key, value,
                             [&done, &cbStatus](Status s, HashedKey /* key */) {

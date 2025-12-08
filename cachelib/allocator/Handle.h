@@ -27,6 +27,7 @@
 
 #include "cachelib/allocator/nvmcache/WaitContext.h"
 #include "cachelib/common/Exceptions.h"
+#include "cachelib/common/Profiled.h"
 
 namespace facebook {
 namespace cachelib {
@@ -407,8 +408,10 @@ struct ReadHandleImpl {
     // nullptr. So choose something that we dont expect to indicate a ptr
     // state that is not valid.
     static constexpr uintptr_t kItemNotReady = 0x1221;
-    mutable folly::fibers::Baton baton_; //< baton to wait on for the handle to
-                                         // be "ready"
+
+    // baton to wait on for the handle to be "ready"
+    mutable trace::Profiled<folly::fibers::Baton, "cachelib:handle"> baton_;
+
     std::mutex mtx_;                //< mutex to set and get onReadyCallback_
     ReadyCallback onReadyCallback_; //< callback invoked when "ready"
     std::atomic<Item*> it_{reinterpret_cast<Item*>(kItemNotReady)}; //< The item

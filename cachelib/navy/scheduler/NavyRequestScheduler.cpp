@@ -18,6 +18,8 @@
 
 #include <folly/fibers/ForEach.h>
 
+#include "cachelib/common/Profiled.h"
+
 namespace facebook {
 namespace cachelib {
 namespace navy {
@@ -214,7 +216,9 @@ void NavyRequestScheduler::checkHealth(
 
     funcs.emplace_back([i, &healthy, &dispatchers]() {
       auto& dispatcher = dispatchers[i];
-      auto baton = std::make_shared<folly::fibers::Baton>();
+      auto baton =
+          std::make_shared<trace::Profiled<folly::fibers::Baton,
+                                           "cachelib:navy:check_health">>();
       // Check the loop time of the eventbase by pushing a dummy task
       dispatcher->addTaskRemote([bat = baton]() { bat->post(); });
 

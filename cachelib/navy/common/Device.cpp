@@ -149,7 +149,7 @@ struct IOReq {
   uint32_t numRemaining_ = 0;
   std::vector<IOOp> ops_;
   // Baton is used to wait for the completion of the entire request
-  folly::fibers::Baton baton_;
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:io_req"> baton_;
 
   // Time when the processing of this req started
   std::chrono::nanoseconds startTime_;
@@ -268,7 +268,7 @@ class AsyncIoContext : public IoContext {
 
   // Waiter context to enforce the qdepth limit
   struct Waiter {
-    folly::fibers::Baton baton_;
+    trace::Profiled<folly::fibers::Baton, "cachelib:navy:async_io"> baton_;
     folly::SafeIntrusiveListHook hook_;
   };
 

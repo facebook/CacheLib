@@ -851,7 +851,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
     return nullptr;
   }
 
-  folly::fibers::Baton b;
+  trace::Profiled<folly::fibers::Baton, "cachelib:nvmcache:peek"> b;
   WriteHandle hdl{};
   hdl.markWentToNvm();
 

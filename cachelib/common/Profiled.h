@@ -36,18 +36,18 @@ struct StringParam {
 } // namespace detail
 
 /**
- * Profiled<> is a zero-overhead wrapper around a mutex that allows us to
- * profile the mutex usage on demand.
+ * Profiled<> is a zero-overhead wrapper around a mutex or a baton that allows
+ * profiling usage on demand.
  *
- * Simply wrap your Mutex type as `trace::Profiled<Mutex, "name">`, no other
+ * Simply wrap your type as `trace::Profiled<MutexOrBaton, "name">`, no other
  * changes are required.
  *
  * Profiled mutexes with the same name are considered different "shards" of the
  * same logical mutex.
  * In particular, `std::vector<trace::Profiled<Mutex, "sharded_mutex">>` works
- * as expected and will collect shard imbalance metrics.
+ * as expected and will also automatically collect shard imbalance metrics.
  */
-template <typename Mutex, detail::StringParam name>
+template <typename MutexOrBaton, detail::StringParam name>
 class Profiled {
  public:
   /**
@@ -55,7 +55,8 @@ class Profiled {
    * expected.
    */
   template <typename... Args>
-  explicit Profiled(Args&&... args) : mutex_(std::forward<Args>(args)...) {}
+  explicit Profiled(Args&&... args)
+      : mutexOrBaton_(std::forward<Args>(args)...) {}
 
   ~Profiled() = default;
   Profiled(const Profiled&) = delete;
@@ -66,33 +67,44 @@ class Profiled {
   /**
    * Passthrough API to the underlying mutex.
    */
-  void lock_shared() { mutex_.lock_shared(); }
-  void unlock_shared() { mutex_.unlock_shared(); }
-  bool try_lock() { return mutex_.try_lock(); }
+  void lock_shared() { mutexOrBaton_.lock_shared(); }
+  void unlock_shared() { mutexOrBaton_.unlock_shared(); }
+  bool try_lock() { return mutexOrBaton_.try_lock(); }
   template <typename Rep, typename Period>
   bool try_lock_for(const std::chrono::duration<Rep, Period>& timeout) {
-    return mutex_.try_lock_for(timeout);
+    return mutexOrBaton_.try_lock_for(timeout);
   }
   template <typename Clock, typename Duration>
   bool try_lock_until(
       const std::chrono::time_point<Clock, Duration>& deadline) {
-    return mutex_.try_lock_until(deadline);
+    return mutexOrBaton_.try_lock_until(deadline);
   }
-  bool try_lock_shared() { return mutex_.try_lock_shared(); }
+  bool try_lock_shared() { return mutexOrBaton_.try_lock_shared(); }
   template <typename Rep, typename Period>
   bool try_lock_shared_for(const std::chrono::duration<Rep, Period>& timeout) {
-    return mutex_.try_lock_shared_for(timeout);
+    return mutexOrBaton_.try_lock_shared_for(timeout);
   }
   template <typename Clock, typename Duration>
   bool try_lock_shared_until(
       const std::chrono::time_point<Clock, Duration>& deadline) {
-    return mutex_.try_lock_shared_until(deadline);
+    return mutexOrBaton_.try_lock_shared_until(deadline);
   }
-  void lock() { mutex_.lock(); }
-  void unlock() { mutex_.unlock(); }
+  void lock() { mutexOrBaton_.lock(); }
+  void unlock() { mutexOrBaton_.unlock(); }
+
+  /**
+   * Passthrough API to the underlying baton
+   */
+  void wait() { mutexOrBaton_.wait(); }
+  template <typename Rep, typename Period>
+  bool try_wait_for(const std::chrono::duration<Rep, Period>& timeout) {
+    return mutexOrBaton_.try_wait_for(timeout);
+  }
+  void post() { mutexOrBaton_.post(); }
+  void reset() { mutexOrBaton_.reset(); }
 
  private:
-  Mutex mutex_;
+  MutexOrBaton mutexOrBaton_;
 };
 
 } // namespace facebook::cachelib::trace

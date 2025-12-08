@@ -304,7 +304,7 @@ void RegionManager::doFlushInternal(RegionId rid) {
     }
 
     // Device write failed; retry after 100ms
-    folly::fibers::Baton b;
+    trace::Profiled<folly::fibers::Baton, "cachelib:navy:bc_flush_retry"> b;
     b.try_wait_for(std::chrono::milliseconds(100));
   }
 
