@@ -16,17 +16,15 @@
 
 #pragma once
 
+#include <folly/concurrency/AtomicSharedPtr.h>
 #include <gtest/gtest_prod.h>
 
 #include <mutex>
 #include <unordered_map>
 
-#include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/allocator/CacheStats.h"
 #include "cachelib/allocator/ICompactCache.h"
-#include "cachelib/allocator/memory/MemoryAllocator.h"
 #include "cachelib/common/EventTracker.h"
-#include "cachelib/common/Hash.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook {
@@ -83,11 +81,11 @@ class CacheBase {
   CacheBase() = default;
   virtual ~CacheBase() = default;
 
-  // Movable but not copyable
+  // Not copyable or movable
   CacheBase(const CacheBase&) = delete;
   CacheBase& operator=(const CacheBase&) = delete;
-  CacheBase(CacheBase&&) = default;
-  CacheBase& operator=(CacheBase&&) = default;
+  CacheBase(CacheBase&&) = delete;
+  CacheBase& operator=(CacheBase&&) = delete;
 
   // Get a string referring to the cache name for this cache
   virtual const std::string getCacheName() const = 0;
@@ -373,7 +371,7 @@ class CacheBase {
       poolResizeStrategies_;
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy_;
 
-  folly::Synchronized<std::shared_ptr<EventTracker>> eventTracker_;
+  folly::atomic_shared_ptr<EventTracker> eventTracker_;
 
   // Enable aggregating pool stats
   void enableAggregatePoolStats() { aggregatePoolStats_ = true; }

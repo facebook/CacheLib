@@ -664,8 +664,8 @@ void BlockCache::recordEvent(folly::StringPiece key,
                              AllocatorApiResult result,
                              uint32_t size,
                              const NvmItem* nvmItem) {
-  if (eventTracker_.has_value()) {
-    if (!eventTracker_->get().sampleKey(key)) {
+  if (eventTracker_) {
+    if (!eventTracker_->sampleKey(key)) {
       return;
     }
     EventInfo eventInfo;
@@ -705,7 +705,7 @@ void BlockCache::recordEvent(folly::StringPiece key,
       }
     }
 
-    eventTracker_->get().record(eventInfo);
+    eventTracker_->record(eventInfo);
   } else if (legacyEventTracker_.has_value()) {
     legacyEventTracker_->get().record(event, key, result, size);
   }

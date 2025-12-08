@@ -2676,7 +2676,7 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
   auto eventTracker = getEventTracker();
   if (eventTracker) {
     XLOG(INFO) << "Set event tracker in block cache.";
-    config_.nvmConfig->navyConfig.blockCache().setEventTracker(*eventTracker);
+    config_.nvmConfig->navyConfig.blockCache().setEventTracker(eventTracker);
   } else if (legacyEventTracker) {
     XLOG(INFO) << "Set legacy event tracker in block cache.";
     config_.nvmConfig->navyConfig.blockCache().setLegacyEventTracker(

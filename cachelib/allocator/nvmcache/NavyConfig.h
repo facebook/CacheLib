@@ -525,8 +525,9 @@ class BlockCacheConfig {
     return *this;
   }
 
-  BlockCacheConfig& setEventTracker(EventTracker& eventTracker) {
-    eventTracker_ = eventTracker;
+  BlockCacheConfig& setEventTracker(
+      std::shared_ptr<EventTracker> eventTracker) {
+    eventTracker_ = std::move(eventTracker);
     return *this;
   }
 
@@ -535,8 +536,7 @@ class BlockCacheConfig {
     return legacyEventTracker_;
   }
 
-  const std::optional<std::reference_wrapper<EventTracker>>& getEventTracker()
-      const {
+  const std::shared_ptr<EventTracker>& getEventTracker() const {
     return eventTracker_;
   }
 
@@ -668,7 +668,7 @@ class BlockCacheConfig {
   BlockCacheIndexConfig indexConfig_;
 
   std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
-  std::optional<std::reference_wrapper<EventTracker>> eventTracker_;
+  std::shared_ptr<EventTracker> eventTracker_;
 
   friend class NavyConfig;
 };
