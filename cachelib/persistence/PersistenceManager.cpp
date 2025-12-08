@@ -22,7 +22,7 @@
 
 #include <fstream>
 
-#include "cachelib/allocator/CacheAllocatorConfig.h"
+#include "cachelib/allocator/CacheDetails.h"
 #include "cachelib/common/Utils.h"
 
 namespace facebook::cachelib::persistence {
