@@ -26,6 +26,7 @@ add_library (cachelib_common
   PercentileStats.cpp
   PeriodicWorker.cpp
   piecewise/GenericPieces.cpp
+  piecewise/GenericPiecesBase.cpp
   piecewise/RequestRange.cpp
   Serialization.cpp
   Utils.cpp
