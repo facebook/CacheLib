@@ -493,6 +493,12 @@ bool PieceWiseCacheAdapter::updatePieceProcessingMetadataPiece(
         rw.metadataSize + rw.headerSize + rw.cachePieces->getRemainingBytes();
     stats_.recordIngressBytes(ingressBytes, rw.statsAggFields);
     rw.req.setOp(OpType::kSet);
+
+    // Write miss to trace if enabled
+    if (missTraceFile_.is_open()) {
+      writeMissToTrace(rw);
+    }
+
     return false;
   }
 
@@ -597,6 +603,11 @@ bool PieceWiseCacheAdapter::updatePieceProcessing(PieceWiseReqWrapper& rw,
     }
     stats_.recordIngressBytes(ingressBytes, rw.statsAggFields);
 
+    // Write miss to trace if enabled (for partial hits)
+    if (missTraceFile_.is_open()) {
+      writeMissToTrace(rw);
+    }
+
     // Perform set operation next for the current piece
     rw.req.setOp(OpType::kSet);
   } else if (result == OpResultType::kSetSkip) {
@@ -628,6 +639,11 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
     // Record ingress bytes since we will fetch the bytes from upstream.
     stats_.recordIngressBytes(rw.sizes[0], rw.statsAggFields);
 
+    // Write miss to trace if enabled (for non-piecewise objects)
+    if (missTraceFile_.is_open()) {
+      writeMissToTrace(rw);
+    }
+
     // Perform set operation next
     rw.req.setOp(OpType::kSet);
   } else {
@@ -635,6 +651,89 @@ bool PieceWiseCacheAdapter::updateNonPieceProcessing(PieceWiseReqWrapper& rw,
   }
 
   return done;
+}
+
+void PieceWiseCacheAdapter::writeMissTraceHeader() {
+  if (!missTraceFile_.is_open()) {
+    return;
+  }
+
+  // Write CSV header matching the input trace format
+  std::lock_guard<std::mutex> lock(missTraceMutex_);
+  missTraceFile_ << "timestamp,cacheKey,OpType,objectSize,responseSize,"
+                 << "responseHeaderSize,rangeStart,rangeEnd,TTL,SamplingRate,"
+                 << "cache_hit,item_value"
+                 << ",RequestHandler,cdn_content_type_id,vip_type" << std::endl;
+}
+
+void PieceWiseCacheAdapter::writeMissToTrace(const PieceWiseReqWrapper& rw) {
+  if (!missTraceFile_.is_open()) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(missTraceMutex_);
+
+  // Write CSV line matching input trace format
+  // timestamp,cacheKey,OpType,objectSize,responseSize,responseHeaderSize,
+  // rangeStart,rangeEnd,TTL,SamplingRate,cache_hit,item_value
+
+  // Output timestamp in milliseconds to match input trace format (input is in
+  // milliseconds, but req.timestamp is in seconds after conversion in
+  // PieceWiseReplayGenerator.cpp:125)
+  missTraceFile_ << (rw.req.timestamp * 1000) << "," << rw.baseKey << ","
+                 << "1" << ","; // OpType: GET
+
+  // Calculate adjusted range for partial hits - only output bytes that need to
+  // be filled For partial hits, we start from the current fetching piece index
+  int64_t rangeStart = -1;
+  int64_t rangeEnd = -1;
+  uint64_t responseSize = 0;
+  if (rw.cachePieces) {
+    // For partial hits, calculate the byte offset where we need to start cache
+    // filling. Note: When this method is called from updatePieceProcessing()
+    // for body piece misses, the fetch index has already been updated to the
+    // next piece, so we use (curFetchingPieceIndex - 1) to get the actual
+    // missing piece index. When called from
+    // updatePieceProcessingMetadataPiece() for full misses starting from
+    // metadata, curFetchingPieceIndex is still 0, so we use it directly.
+    auto missingPieceIndex = rw.cachePieces->getCurFetchingPieceIndex();
+    if (rw.pieceType == PieceType::Body) {
+      // Body piece miss: fetch index already advanced, subtract 1
+      missingPieceIndex = missingPieceIndex > 0 ? missingPieceIndex - 1 : 0;
+    }
+    rangeStart = missingPieceIndex * rw.cachePieces->getPieceSize();
+    rangeEnd = rw.cachePieces->getLastByteOffsetOfLastPiece();
+
+    // Avoid underflow when rangeEnd < rangeStart (e.g., when fullObjectSize is
+    // 0) TODO: simplify the case where fullObjectSize is 0
+    uint64_t bodySize =
+        rangeEnd >= rangeStart ? (rangeEnd - rangeStart + 1) : 0;
+    responseSize = bodySize + rw.headerSize;
+  } else {
+    // If no cachePieces, use original response size
+    responseSize = rw.sizes[0];
+    if (rw.requestRange.getRequestRange()) {
+      auto range = rw.requestRange.getRequestRange();
+      rangeStart = range->first;
+      auto defaultRangeEnd = rw.fullObjectSize > 1 ? rw.fullObjectSize - 1 : 0;
+      rangeEnd = range->second ? *range->second : defaultRangeEnd;
+    }
+  }
+
+  missTraceFile_ << rw.fullObjectSize << "," << responseSize << ","
+                 << rw.headerSize << "," << rangeStart << "," << rangeEnd << ","
+                 << rw.req.ttlSecs << ","
+                 << "1.0" << "," // SamplingRate: hardcode to 1.0 for now. The
+                                 // field is not used in PieceWiseReplay
+                 << "0" << ","   // cache_hit: 0 for miss
+                 << rw.req.itemValue;
+
+  // Write aggregation fields (RequestHandler, ContentType, VIPType)
+  for (const auto& field : rw.statsAggFields) {
+    missTraceFile_ << "," << field;
+  }
+
+  missTraceFile_ << std::endl;
 }
 
 } // namespace cachebench

@@ -314,6 +314,10 @@ struct StressorConfig : public JSONConfig {
   uint64_t cachePieceSize{65536}; // 64KB
   uint64_t maxCachePieces{32000}; // 32000 * 64KB = 2GB
 
+  // Miss trace output configuration
+  // If set, outputs all cache misses to this file for multi-tier simulation
+  std::string missTraceFile{};
+
   // If enabled and using trace replay mode. We will repeat the trace file again
   // and again until the number of operations specified in the test config.
   bool repeatTraceReplay{false};
