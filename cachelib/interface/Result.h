@@ -34,6 +34,9 @@ struct Error {
 
     // Remove errors
     REMOVE_FAILED,
+
+    // Other
+    UNIMPLEMENTED,
   };
 
   Error(Code code, std::string error) : code_(code), error_(std::move(error)) {}

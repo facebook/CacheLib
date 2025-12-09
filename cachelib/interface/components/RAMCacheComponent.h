@@ -37,8 +37,11 @@ namespace interface {
 /**
  * A CacheComponent that uses Cachelib's LruAllocator RAM cache without the
  * flash/NVM cache.
+ *
+ * Although all APIs use coroutines (according to the CacheComponent interface),
+ * they are synchronous under the hood.
  */
-class RAMCacheComponent : public interface::CacheComponent {
+class RAMCacheComponent : public CacheComponent {
  public:
   /**
    * Pool configuration. RAMCacheComponent includes only 1 pool - to add more
@@ -64,8 +67,7 @@ class RAMCacheComponent : public interface::CacheComponent {
    *
    * @param allocConfig the LruAllocatorConfig to use for the cache
    * @param poolConfig the pool configuration for the cache's only pool
-   * @return RAMCacheComponent if the config is valid, an error otherwise.
-   * Returns an error if NVM caching is enabled.
+   * @return RAMCacheComponent if the config is valid, an error otherwise
    */
   static Result<RAMCacheComponent> create(LruAllocatorConfig&& allocConfig,
                                           PoolConfig&& poolConfig) noexcept;
