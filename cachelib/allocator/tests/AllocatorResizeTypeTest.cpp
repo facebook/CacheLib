@@ -64,6 +64,18 @@ TYPED_TEST(AllocatorResizeTest, MemoryMonitorPerIterationAdviseReclaim) {
   this->testMemoryMonitorPerIterationAdviseReclaim();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit) {
+  this->testMemMonitorAdvisesAwayOverLimit();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit2) {
+  this->testMemMonitorAdvisesAwayOverLimit2();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit3) {
+  this->testMemMonitorAdvisesAwayOverLimit3();
+}
+
 TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
 }

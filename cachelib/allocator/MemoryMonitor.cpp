@@ -247,21 +247,32 @@ void MemoryMonitor::adviseAwaySlabs() {
     return;
   }
   const auto numAdvised = cache_.getCacheMemoryStats().numAdvisedSlabs();
-  const auto advisedPercent = numAdvised * 100 / (numAdvised + totalSlabs);
-  if (advisedPercent > maxLimitPercent_) {
-    XLOGF(CRITICAL,
-          "More than {} slabs of {} ({}"
-          "%) in the item cache memory have been advised away. "
-          "This exceeds the maximum limit of {}"
-          "%. Disabling advising which may result in an OOM.",
-          numAdvised, numAdvised + totalSlabs, advisedPercent,
-          maxLimitPercent_);
-    return;
-  }
+  // allSlabs represents the total number of slabs across all pools
+  const auto allSlabs = numAdvised + totalSlabs;
+
+  // Check if we've already hit or exceeded the maximum limit
+  const auto maxNumAdvisedSlabs = (maxLimitPercent_ * allSlabs / 100);
   // Advise percentAdvisePerIteration_% of upperLimit_ - lowerLimit_
   // every iteration
-  const auto slabsToAdvise = bytesToSlabs(upperLimit_ - lowerLimit_) *
-                             percentAdvisePerIteration_ / 100;
+  auto slabsToAdvise = bytesToSlabs(upperLimit_ - lowerLimit_) *
+                       percentAdvisePerIteration_ / 100;
+  auto remainingSlabsAllowedToAdviseAway =
+      numAdvised >= maxNumAdvisedSlabs ? 0 : maxNumAdvisedSlabs - numAdvised;
+  // Clamp slabsToAdvise to stay within maxLimitPercent_
+  slabsToAdvise = std::min(slabsToAdvise, remainingSlabsAllowedToAdviseAway);
+  if (slabsToAdvise == 0) {
+    // Only log CRITICAL if we hit the max limit, not if slabsToAdvise was
+    // already 0 due to configuration (e.g., upperLimit_ == lowerLimit_)
+    if (remainingSlabsAllowedToAdviseAway == 0) {
+      XLOGF(CRITICAL,
+            "Already advised {} slabs of {} ({}"
+            "%) which is at or exceeds the maximum limit of {}"
+            "%. Disabling advising which may result in an OOM.",
+            numAdvised, allSlabs, numAdvised * 100 / allSlabs,
+            maxLimitPercent_);
+    }
+    return;
+  }
   XLOGF(DBG, "Advising away {} slabs to free {} bytes", slabsToAdvise,
         slabsToAdvise * Slab::kSize);
   updateNumSlabsToAdvise(slabsToAdvise);

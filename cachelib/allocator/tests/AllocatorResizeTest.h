@@ -894,7 +894,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
   }
 
   // testMemoryMonitorPerIterationAdviseReclaim
-  // Crate 5 pools of 50 slabs each
+  // Create 5 pools of 50 slabs each
   // fillup all pools
   // since lower limit is set to 1GB and upper limit set to 2GB, and
   // advise reclaim percent per iter value of 2, per iteration, 5 slabs
@@ -967,7 +967,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
 
       unsigned int i;
       /* iterate for numItersToMaxAdviseAway times */
-      for (i = 1; i <= numItersToMaxAdviseAway + 1; i++) {
+      for (i = 1; i <= numItersToMaxAdviseAway; i++) {
         alloc.memMonitor_->adviseAwaySlabs();
         std::this_thread::sleep_for(std::chrono::seconds{2});
         ASSERT_EQ(alloc.allocator_->getAdvisedMemorySize(), i * perIterAdvSize);
@@ -980,7 +980,7 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
       ASSERT_EQ(totalAdvisedAwayMemory, i * perIterAdvSize);
 
       // Try to reclaim back
-      for (i = 1; i <= numItersToMaxAdviseAway + 1; i++) {
+      for (i = 1; i <= numItersToMaxAdviseAway; i++) {
         alloc.memMonitor_->reclaimSlabs();
         std::this_thread::sleep_for(std::chrono::seconds{2});
         ASSERT_EQ(alloc.allocator_->getAdvisedMemorySize(),
@@ -1171,6 +1171,109 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
     for (unsigned int i = 0; i <= numResizeThreads; i++) {
       threads[i].join();
     }
+  }
+
+  struct MemMonitorTestParams {
+    unsigned int totalSlabs;
+    unsigned int slabsToFill;
+    unsigned int maxAdvisePercent;
+    unsigned int expectedAdvisedAfterFirstIteration;
+    unsigned int expectedAdvisedAfterSecondIteration;
+  };
+
+  void setupMemMonitorTest(typename AllocatorT::Config& config) {
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
+    config.memMonitorInterval = std::chrono::seconds(kMemoryMonitorInterval);
+    config.memMonitorConfig.maxAdvisePercentPerIter = 4;
+    config.memMonitorConfig.upperLimitGB = 2;
+    config.memMonitorConfig.lowerLimitGB = 1;
+    // With these settings, memory monitor will advise away 4% * (2GB-1GB) =
+    // 40MB = 10 slabs per iteration
+  }
+
+  void runMemMonitorTest(const MemMonitorTestParams& params) {
+    typename AllocatorT::Config config;
+    setupMemMonitorTest(config);
+    config.memMonitorConfig.maxAdvisePercent = params.maxAdvisePercent;
+    config.setCacheSize(params.totalSlabs * Slab::kSize);
+
+    AllocatorT alloc(config);
+
+    const auto numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    const std::set<uint32_t> acSizes = {512 * 1024};
+    auto poolId = alloc.addPool("test_pool", numBytes, acSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId);
+
+    const auto allocSizes = alloc.getPool(poolId).getAllocSizes();
+    const size_t itemsPerSlab = Slab::kSize / allocSizes[0];
+    const size_t numItems = itemsPerSlab * params.slabsToFill;
+    const uint32_t itemSize = 450 * 1024;
+
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    for (size_t i = 0; i < numItems; ++i) {
+      auto handle = util::allocateAccessible(
+          alloc, poolId, folly::sformat("key_{}", i), itemSize);
+      ASSERT_NE(nullptr, handle);
+      handles.push_back(std::move(handle));
+    }
+    handles.clear();
+
+    ASSERT_EQ(alloc.getPoolStats(poolId).mpStats.allocatedSlabs(),
+              params.slabsToFill);
+    ASSERT_EQ(alloc.getPool(poolId).getNumSlabsAdvised(), 0);
+
+    alloc.memMonitor_->adviseAwaySlabs();
+    alloc.memMonitor_->checkPoolsAndAdviseReclaim();
+    ASSERT_EQ(alloc.getPool(poolId).getNumSlabsAdvised(),
+              params.expectedAdvisedAfterFirstIteration);
+
+    alloc.memMonitor_->adviseAwaySlabs();
+    alloc.memMonitor_->checkPoolsAndAdviseReclaim();
+    ASSERT_EQ(alloc.getPool(poolId).getNumSlabsAdvised(),
+              params.expectedAdvisedAfterSecondIteration);
+  }
+
+  void testMemMonitorAdvisesAwayOverLimit() {
+    // Test advising with maxAdvisePercent=51%
+    // Cache: 23 total slabs (1 for metadata, 22 usable)
+    // First iteration: advises 10 slabs (10/22 = 45%)
+    // Second iteration: advises 1 more slab (11/22 = 50% < 51%)
+    runMemMonitorTest({
+        .totalSlabs = 23,
+        .slabsToFill = 22,
+        .maxAdvisePercent = 51,
+        .expectedAdvisedAfterFirstIteration = 10,
+        .expectedAdvisedAfterSecondIteration = 11,
+    });
+  }
+
+  void testMemMonitorAdvisesAwayOverLimit2() {
+    // Test advising exactly at maxAdvisePercent boundary (50%)
+    // Cache: 21 total slabs (1 for metadata, 20 usable)
+    // First iteration: advises 10 slabs (10/20 = 50%)
+    // Second iteration: cannot advise more (would exceed 50% limit)
+    runMemMonitorTest({
+        .totalSlabs = 21,
+        .slabsToFill = 20,
+        .maxAdvisePercent = 50,
+        .expectedAdvisedAfterFirstIteration = 10,
+        .expectedAdvisedAfterSecondIteration = 10,
+    });
+  }
+
+  void testMemMonitorAdvisesAwayOverLimit3() {
+    // Test advising with maxAdvisePercent=51%
+    // Cache: 21 total slabs (1 for metadata, 20 usable)
+    // First iteration: advises 10 slabs (10/20 = 50%)
+    // Second iteration: cannot advise more because one more slab would exceed
+    // 51%
+    runMemMonitorTest({
+        .totalSlabs = 21,
+        .slabsToFill = 20,
+        .maxAdvisePercent = 51,
+        .expectedAdvisedAfterFirstIteration = 10,
+        .expectedAdvisedAfterSecondIteration = 10,
+    });
   }
 };
 } // namespace tests
