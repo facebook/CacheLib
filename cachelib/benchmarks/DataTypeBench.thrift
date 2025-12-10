@@ -17,6 +17,10 @@
 namespace cpp2 facebook.cachelib.datatypebench
 
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/thrift.thrift"
+
+@thrift.AllowLegacyMissingUris
+package;
 
 struct StdMap {
   1: required map<i32, string> m;

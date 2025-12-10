@@ -17,6 +17,10 @@
 namespace cpp2 facebook.cachelib.serialization
 
 include "cachelib/allocator/datastruct/serialize/objects.thrift"
+include "thrift/annotation/thrift.thrift"
+
+@thrift.AllowLegacyMissingUris
+package;
 
 // Adding a new "required" field will cause the cache to be dropped
 // in the next release for our users. If the field needs to be required,
