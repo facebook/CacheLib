@@ -149,6 +149,12 @@ struct Stats {
   // the number of allocated items that are permanent
   TLCounter numPermanentItems{0};
 
+  // Number of insertOrReplace calls that resulted in insert
+  AtomicCounter numInsertOrReplaceInserted{0};
+
+  // Number of insertOrReplace calls that resulted in replace
+  AtomicCounter numInsertOrReplaceReplaced{0};
+
   // the number of allocated and CHAINED items that are parents (i.e.,
   // consisting of at least one chained child)
   TLCounter numChainedParentItems{0};

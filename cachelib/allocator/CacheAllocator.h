@@ -3612,7 +3612,10 @@ CacheAllocator<CacheTrait>::insertOrReplace(const WriteHandle& handle) {
 
   // Remove from LRU as well if we do have a handle of old item
   if (replaced) {
+    stats_.numInsertOrReplaceReplaced.inc();
     removeFromMMContainer(*replaced);
+  } else {
+    stats_.numInsertOrReplaceInserted.inc();
   }
 
   if (UNLIKELY(nvmCache_ != nullptr)) {
