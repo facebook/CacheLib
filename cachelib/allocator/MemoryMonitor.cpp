@@ -215,7 +215,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
               static_cast<int>(poolId), static_cast<int>(classId), e.what());
         }
       }
-      slabsAdvised_ += slabsAdvised;
       XLOGF(DBG, "Advised away {} slabs from Pool ID: {}, to free {} bytes",
             slabsAdvised, static_cast<int>(poolId), slabsAdvised * Slab::kSize);
     }
@@ -231,7 +230,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
           "Reclaimed {} of {} slabs for Pool ID: {}, to grow cache by {} bytes",
           slabsReclaimed, slabsToReclaim, static_cast<int>(poolId),
           slabsReclaimed * Slab::kSize);
-      slabsReclaimed_ += slabsReclaimed;
     }
   }
 }

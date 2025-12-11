@@ -198,12 +198,6 @@ class MemoryMonitor : public PeriodicWorker {
 
   ~MemoryMonitor() override;
 
-  // number of slabs that have been advised away
-  unsigned int getNumSlabsAdvisedAway() const noexcept { return slabsAdvised_; }
-
-  // number of slabs that have been reclaimed
-  unsigned int getNumSlabsReclaimed() const noexcept { return slabsReclaimed_; }
-
   // maximum percentage of regular cache memory that can be advised away.
   size_t getMaxAdvisePct() const noexcept { return maxLimitPercent_; }
 
@@ -333,14 +327,8 @@ class MemoryMonitor : public PeriodicWorker {
   // decrease/increase.
   RateLimiter rateLimiter_;
 
-  // a count of total number of slabs advised away
-  std::atomic<unsigned int> slabsAdvised_{0};
-
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::AllocatorResizeTest;
-
-  // a count of total number of slabs reclaimed
-  std::atomic<unsigned int> slabsReclaimed_{0};
 
   // amount of memory available on the host
   std::atomic<size_t> memAvailableSize_{0};
