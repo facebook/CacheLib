@@ -30,7 +30,6 @@
   FRIEND_TEST(FixedSizeIndex, Hits)
 
 #include "cachelib/navy/block_cache/FixedSizeIndex.h"
-#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook::cachelib::navy::tests {
 TEST(FixedSizeIndex, RecoveryOk) {
