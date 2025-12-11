@@ -87,7 +87,11 @@ class FixedSizeIndex : public Index {
   FixedSizeIndex& operator=(const FixedSizeIndex&) = delete;
   FixedSizeIndex& operator=(FixedSizeIndex&&) = delete;
 
-  static constexpr double kSizeExpBase = 1.1925;
+  static constexpr double kSizeExpBase = 1.196;
+  // Rather than using extra bit for indicating combined entry in index, this
+  // specific size value will be used.
+  static constexpr uint8_t kCombinedEntrySizeExp = 0x3f;
+
   // This needs to be increased with any major changes to FixedSizeIndex.
   // If persist() detects stored version being different with the current
   // version number, it will give up on recovering and begin with the empty
@@ -194,10 +198,13 @@ class FixedSizeIndex : public Index {
     static uint8_t sizeHintToExp(uint16_t sizeHint) {
       // Input value (sizeHint) is the unit of kMinAllocAlignSize
       // (i.e. sizeHint = 1 means 512Bytes currently).
-      // We want to represent this 16bit value by exponent value with 6bits (a ^
-      // 0) = 0, (a ^ 63) >= max value (65535), then we get a = 1.1925
-      //, so we can represent sizeHint by the exponent of base 1.1925
-
+      // We want to represent this 16bit value by exponent value with 6bits
+      // while 0x3F (all '1's, or 63 in decimal) will be reserved to indicate
+      // it's a combined entry bucket.
+      // So (a ^ 0) = 0, (a ^ 62) >= max value (65535), then we will use a
+      // == 1.196. So we can represent sizeHint by the exponent of base 1.196.
+      // (All these exponent usage will be improved as described as TODO below,
+      // but for now, for simplicity, this exponent convention is used here)
       // TODO1: Will remove using exponents and multiplications and improve here
       // TODO2: Need to revisit and evaluate to see if we need the same
       // precision level for the larger sizes
@@ -210,7 +217,7 @@ class FixedSizeIndex : public Index {
         x *= m;
         ++xp;
       }
-      XDCHECK(xp < 64) << sizeHint << " " << xp;
+      XDCHECK(xp < kCombinedEntrySizeExp) << sizeHint << " " << xp;
       return xp;
     }
 
