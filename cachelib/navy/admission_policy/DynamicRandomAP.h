@@ -116,6 +116,8 @@ class DynamicRandomAP final : public AdmissionPolicy {
   explicit DynamicRandomAP(Config&& config);
   DynamicRandomAP(const DynamicRandomAP&) = delete;
   DynamicRandomAP& operator=(const DynamicRandomAP&) = delete;
+  DynamicRandomAP(DynamicRandomAP&&) = delete;
+  DynamicRandomAP& operator=(DynamicRandomAP&&) = delete;
   ~DynamicRandomAP() override = default;
 
   // Whether to accept the given hashed key.
