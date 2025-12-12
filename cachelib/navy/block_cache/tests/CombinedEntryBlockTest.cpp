@@ -24,7 +24,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntry) {
   CombinedEntryBlock combinedBlk;
 
   // Initial state
-  EXPECT_EQ(combinedBlk.getNumEntries(), 0);
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 0);
 
   // Add entries
   FixedSizeIndex::PackedItemRecord rec1{100, 10, 1};
@@ -38,7 +38,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntry) {
   EXPECT_EQ(res, CombinedEntryStatus::kOk);
 
   // Check entries
-  EXPECT_EQ(combinedBlk.getNumEntries(), 2);
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 2);
 
   auto entry1 = combinedBlk.getIndexEntry(key1);
   EXPECT_TRUE(entry1.hasValue());
@@ -60,7 +60,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntry) {
   EXPECT_EQ(res, CombinedEntryStatus::kUpdated);
 
   // Still has the same number of entries
-  EXPECT_EQ(combinedBlk.getNumEntries(), 2);
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 2);
   // Check updated entry
   entry1 = combinedBlk.getIndexEntry(key1);
   EXPECT_TRUE(entry1.hasValue());
@@ -71,7 +71,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
   CombinedEntryBlock combinedBlk;
 
   // Initial state
-  EXPECT_EQ(combinedBlk.getNumEntries(), 0);
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 0);
 
   // This will be changed in the future
   uint16_t maxNumEntries =
@@ -100,7 +100,65 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
   EXPECT_EQ(res, CombinedEntryStatus::kFull);
 
   // Check number of entries
-  EXPECT_EQ(combinedBlk.getNumEntries(), maxNumEntries);
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), maxNumEntries);
+}
+
+TEST(CombinedEntryBlockTest, RemoveIndexEntry) {
+  CombinedEntryBlock combinedBlk;
+
+  // Initial state
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 0);
+
+  // Add an entry
+  FixedSizeIndex::PackedItemRecord rec1{100, 10, 1};
+  uint64_t key1 = 0;
+  auto res = combinedBlk.addIndexEntry(0, key1, rec1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+
+  // Check the added entry
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 1);
+  EXPECT_EQ(combinedBlk.getNumValidEntries(), 1);
+  auto entry1 = combinedBlk.getIndexEntry(key1);
+  EXPECT_TRUE(entry1.hasValue());
+  EXPECT_EQ(entry1.value(), rec1);
+
+  // Remove the entry
+  res = combinedBlk.removeIndexEntry(key1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+  // Check the removed entry
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 1);
+  EXPECT_EQ(combinedBlk.getNumValidEntries(), 0);
+  entry1 = combinedBlk.getIndexEntry(key1);
+  EXPECT_FALSE(entry1.hasValue());
+  EXPECT_EQ(entry1.error(), CombinedEntryStatus::kNotFound);
+
+  // Add another entry
+  FixedSizeIndex::PackedItemRecord rec2{200, 10, 1};
+  uint64_t key2 = 1;
+  res = combinedBlk.addIndexEntry(0, key2, rec2);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+
+  // Check the added entry
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 2);
+  EXPECT_EQ(combinedBlk.getNumValidEntries(), 1);
+  auto entry2 = combinedBlk.getIndexEntry(key2);
+  EXPECT_TRUE(entry2.hasValue());
+  EXPECT_EQ(entry2.value(), rec2);
+
+  // Remove already removed entry
+  res = combinedBlk.removeIndexEntry(key1);
+  EXPECT_EQ(res, CombinedEntryStatus::kNotFound);
+
+  // Add same key entry again
+  rec1.address = 2000;
+  res = combinedBlk.addIndexEntry(0, key1, rec1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+  // Check the newly added entry
+  EXPECT_EQ(combinedBlk.getNumStoredEntries(), 2);
+  EXPECT_EQ(combinedBlk.getNumValidEntries(), 2);
+  entry1 = combinedBlk.getIndexEntry(key1);
+  EXPECT_TRUE(entry1.hasValue());
+  EXPECT_EQ(entry1.value(), rec1);
 }
 
 } // namespace facebook::cachelib::navy::tests

@@ -51,7 +51,7 @@ using EntryRecord = FixedSizeIndex::PackedItemRecord;
 //
 class CombinedEntryBlock {
  public:
-  // Size for the combined entry block which will be used for Index entries
+  // Size for the combined entry block
   static constexpr uint32_t kCombinedEntryBlockSize = 4096;
 
   CombinedEntryBlock() : buffer_(kCombinedEntryBlockSize) {}
@@ -64,15 +64,24 @@ class CombinedEntryBlock {
   // Get the index entry for the given key
   folly::Expected<EntryRecord, CombinedEntryStatus> getIndexEntry(uint64_t key);
 
-  // Get the number of entries
-  uint16_t getNumEntries() const { return numEntries_; }
+  // Remove the index entry for the given key
+  CombinedEntryStatus removeIndexEntry(uint64_t key);
+
+  // Get the number of stored entries
+  uint16_t getNumStoredEntries() const { return numStoredEntries_; }
+  // Get the number of valid entries
+  uint16_t getNumValidEntries() const { return numValidEntries_; }
 
   struct EntryPosInfo {
     // TODO: There will be padding here, but we'll probably need additional
     // fields in this struct anyway
-    uint64_t bid;
-    uint64_t key;
-    EntryPos pos;
+    uint64_t bid{};
+    uint64_t key{};
+    EntryPos pos{};
+    struct {
+      uint8_t removed : 1;
+      uint8_t reserved : 7;
+    } flag{};
   };
 
  private:
@@ -85,8 +94,19 @@ class CombinedEntryBlock {
     return sizeof(EntryPosInfo) * numEntry;
   }
 
+  EntryPosInfo& entryPosInfoRef(uint16_t keyIdx) {
+    return reinterpret_cast<EntryPosInfo*>(buffer_.data())[keyIdx];
+  }
+
+  EntryRecord& entryRecordRef(uint16_t pos) {
+    return *reinterpret_cast<EntryRecord*>(buffer_.data() + pos);
+  }
+
   Buffer buffer_;
-  uint16_t numEntries_{0};
+  // numStoredEntries can be different from storedKeys_.size()
+  // (When the same entry has to be re-written to the different position)
+  uint16_t numStoredEntries_{0};
+  uint16_t numValidEntries_{0};
   // current position grows in reverse direction (from the end to the 0)
   EntryPos curPos_{kCombinedEntryBlockSize};
 
