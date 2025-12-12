@@ -159,7 +159,6 @@ class FixedSizeIndex : public Index {
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
- private:
   // Internally, FixedSizeIndex will maintain each entry as PackedItemRecord
   // which is reduced size version of Index::ItemRecord, and there is missing
   // precision or info due to the smaller size, but those missing details are
@@ -193,6 +192,12 @@ class FixedSizeIndex : public Index {
       info.curHits = truncateCurHits(_currentHits);
       info.sizeExp = sizeHintToExp(_sizeHint);
       XDCHECK(isValidAddress(_address));
+    }
+
+    bool operator==(const PackedItemRecord& other) const noexcept {
+      return (address == other.address) &&
+             (info.curHits == other.info.curHits) &&
+             (info.sizeExp == other.info.sizeExp);
     }
 
     static uint8_t sizeHintToExp(uint16_t sizeHint) {
@@ -252,6 +257,7 @@ class FixedSizeIndex : public Index {
   static_assert(5 == sizeof(PackedItemRecord),
                 "PackedItemRecord size is 5 bytes");
 
+ private:
   class BucketDistInfo {
     // 1. It's assumed that caller (FixedSizeIndex) will handle all the
     // parameters validity for each function. It'll be only XDCHECKed here.
@@ -588,6 +594,7 @@ class FixedSizeIndex : public Index {
     const PackedItemRecord* record_{};
   };
 
+  friend class CombinedEntryBlock;
 // For unit tests private member access
 #ifdef FixedSizeIndex_TEST_FRIENDS
   FixedSizeIndex_TEST_FRIENDS;
