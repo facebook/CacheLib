@@ -18,7 +18,7 @@
 
 #include <folly/container/F14Map.h>
 
-#include "cachelib/navy/block_cache/FixedSizeIndex.h"
+#include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/common/Buffer.h"
 
 namespace facebook {
@@ -34,7 +34,7 @@ enum class CombinedEntryStatus : uint8_t {
 
 using EntryPos = uint16_t;
 using EntryIdx = uint16_t;
-using EntryRecord = FixedSizeIndex::PackedItemRecord;
+using EntryRecord = Index::PackedItemRecord;
 
 // Combined entry block is a special block which contains multiple entries'
 // info. It will be used to maintain overflowed index entries and also to have

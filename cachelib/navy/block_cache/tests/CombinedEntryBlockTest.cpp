@@ -27,12 +27,12 @@ TEST(CombinedEntryBlockTest, AddIndexEntry) {
   EXPECT_EQ(combinedBlk.getNumStoredEntries(), 0);
 
   // Add entries
-  FixedSizeIndex::PackedItemRecord rec1{100, 10, 1};
+  Index::PackedItemRecord rec1{100, 10, 1};
   uint64_t key1 = 0;
   auto res = combinedBlk.addIndexEntry(0, key1, rec1);
   EXPECT_EQ(res, CombinedEntryStatus::kOk);
 
-  FixedSizeIndex::PackedItemRecord rec2{200, 10, 1};
+  Index::PackedItemRecord rec2{200, 10, 1};
   uint64_t key2 = 1;
   res = combinedBlk.addIndexEntry(0, key2, rec2);
   EXPECT_EQ(res, CombinedEntryStatus::kOk);
@@ -85,7 +85,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
       (sizeof(CombinedEntryBlock::EntryPosInfo) + sizeof(EntryRecord));
 
   for (auto i = 0; i < maxNumEntries; i++) {
-    FixedSizeIndex::PackedItemRecord rec{(uint32_t)i + 100, 10, 1};
+    Index::PackedItemRecord rec{(uint32_t)i + 100, 10, 1};
     uint64_t key = i;
     auto res = combinedBlk.addIndexEntry(0, key, rec);
     EXPECT_EQ(res, CombinedEntryStatus::kOk);
@@ -93,7 +93,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
 
   // Check everything was added properly
   for (auto i = 0; i < maxNumEntries; i++) {
-    FixedSizeIndex::PackedItemRecord rec{(uint32_t)i + 100, 10, 1};
+    Index::PackedItemRecord rec{(uint32_t)i + 100, 10, 1};
     uint64_t key = i;
     auto entry = combinedBlk.getIndexEntry(key);
     EXPECT_TRUE(entry.hasValue());
@@ -101,7 +101,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
   }
 
   // One more entry will fail with kFull
-  FixedSizeIndex::PackedItemRecord rec{maxNumEntries, 10, 1};
+  Index::PackedItemRecord rec{maxNumEntries, 10, 1};
   auto res = combinedBlk.addIndexEntry(0, maxNumEntries, rec);
   EXPECT_EQ(res, CombinedEntryStatus::kFull);
 
@@ -116,7 +116,7 @@ TEST(CombinedEntryBlockTest, RemoveIndexEntry) {
   EXPECT_EQ(combinedBlk.getNumStoredEntries(), 0);
 
   // Add an entry
-  FixedSizeIndex::PackedItemRecord rec1{100, 10, 1};
+  Index::PackedItemRecord rec1{100, 10, 1};
   uint64_t key1 = 0;
   auto res = combinedBlk.addIndexEntry(0, key1, rec1);
   EXPECT_EQ(res, CombinedEntryStatus::kOk);
@@ -140,7 +140,7 @@ TEST(CombinedEntryBlockTest, RemoveIndexEntry) {
   EXPECT_FALSE(combinedBlk.peekIndexEntry(key1));
 
   // Add another entry
-  FixedSizeIndex::PackedItemRecord rec2{200, 10, 1};
+  Index::PackedItemRecord rec2{200, 10, 1};
   uint64_t key2 = 1;
   res = combinedBlk.addIndexEntry(0, key2, rec2);
   EXPECT_EQ(res, CombinedEntryStatus::kOk);
