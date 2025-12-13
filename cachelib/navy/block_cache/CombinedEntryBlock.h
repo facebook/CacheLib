@@ -67,6 +67,9 @@ class CombinedEntryBlock {
   // Remove the index entry for the given key
   CombinedEntryStatus removeIndexEntry(uint64_t key);
 
+  // Peek if we have a valid index entry for the given key
+  bool peekIndexEntry(uint64_t key);
+
   // Get the number of stored entries
   uint16_t getNumStoredEntries() const { return numStoredEntries_; }
   // Get the number of valid entries

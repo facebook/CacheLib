@@ -65,6 +65,12 @@ TEST(CombinedEntryBlockTest, AddIndexEntry) {
   entry1 = combinedBlk.getIndexEntry(key1);
   EXPECT_TRUE(entry1.hasValue());
   EXPECT_EQ(entry1.value(), rec1);
+
+  // peekIndexEntry should return true for all added entries
+  EXPECT_TRUE(combinedBlk.peekIndexEntry(key1));
+  EXPECT_TRUE(combinedBlk.peekIndexEntry(key2));
+  // peekIndexEntry should return false for non-existent entries
+  EXPECT_FALSE(combinedBlk.peekIndexEntry(key3));
 }
 
 TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
@@ -131,6 +137,7 @@ TEST(CombinedEntryBlockTest, RemoveIndexEntry) {
   entry1 = combinedBlk.getIndexEntry(key1);
   EXPECT_FALSE(entry1.hasValue());
   EXPECT_EQ(entry1.error(), CombinedEntryStatus::kNotFound);
+  EXPECT_FALSE(combinedBlk.peekIndexEntry(key1));
 
   // Add another entry
   FixedSizeIndex::PackedItemRecord rec2{200, 10, 1};
@@ -159,6 +166,7 @@ TEST(CombinedEntryBlockTest, RemoveIndexEntry) {
   entry1 = combinedBlk.getIndexEntry(key1);
   EXPECT_TRUE(entry1.hasValue());
   EXPECT_EQ(entry1.value(), rec1);
+  EXPECT_TRUE(combinedBlk.peekIndexEntry(key1));
 }
 
 } // namespace facebook::cachelib::navy::tests

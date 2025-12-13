@@ -94,6 +94,12 @@ CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
   return CombinedEntryStatus::kOk;
 }
 
+bool CombinedEntryBlock::peekIndexEntry(uint64_t key) {
+  auto it = storedKeys_.find(key);
+  return (it != storedKeys_.end() &&
+          entryPosInfoRef(it->second).flag.removed == 0);
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
