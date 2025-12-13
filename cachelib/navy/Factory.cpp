@@ -175,6 +175,10 @@ class BigHashProtoImpl final : public BigHashProto {
     hashTableBitSize_ = hashTableBitSize;
   }
 
+  void setNumMutexesPower(uint8_t numMutexesPower) override {
+    config_.numMutexesPower = numMutexesPower;
+  }
+
   void setDevice(Device* device) { config_.device = device; }
 
   void setDestructorCb(DestructorCallback cb) {

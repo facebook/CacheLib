@@ -77,6 +77,8 @@ class BigHash final : public Engine {
     // Optional bloom filter to reduce IO
     std::unique_ptr<BloomFilter> bloomFilter;
 
+    uint8_t numMutexesPower{14};
+
     uint64_t numBuckets() const { return cacheSize / bucketSize; }
 
     Config& validate();
@@ -186,11 +188,11 @@ class BigHash final : public Engine {
   //
   // In short, just hold the lock during the entire operation!
   auto& getMutex(BucketId bid) const {
-    return mutex_[bid.index() & (kNumMutexes - 1)];
+    return mutex_[bid.index() & (numMutexes_ - 1)];
   }
 
   folly::SpinLock& getBfLock(BucketId bid) const {
-    return bfLock_[bid.index() & (kNumMutexes - 1)];
+    return bfLock_[bid.index() & (numMutexes_ - 1)];
   }
 
   BucketId getBucketId(HashedKey hk) const {
@@ -207,9 +209,8 @@ class BigHash final : public Engine {
   void bfRebuild(BucketId bid, const Bucket* bucket);
   bool bfReject(BucketId bid, uint64_t keyHash) const;
 
-  // Use birthday paradox to estimate number of mutexes given number of parallel
-  // queries and desired probability of lock collision.
-  static constexpr size_t kNumMutexes = 16 * 1024;
+  // Number of mutexes for bucket locking
+  const size_t numMutexes_;
 
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
   static constexpr uint32_t kFormatVersion = 10;
@@ -225,8 +226,7 @@ class BigHash final : public Engine {
   Device& device_;
   // handle for data placement technologies like FDP
   int placementHandle_;
-  mutable std::vector<trace::Profiled<SharedMutex, "cachelib:navy:bh">> mutex_{
-      kNumMutexes};
+  mutable std::vector<trace::Profiled<SharedMutex, "cachelib:navy:bh">> mutex_;
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of
   // couldExist which needs to be fast against other long running or
@@ -234,7 +234,7 @@ class BigHash final : public Engine {
   // happens against the remove or evict of the given item, there could
   // be a false positive which is ok.
   // Nested lock orders are always mutex-then-spinlock
-  mutable std::vector<folly::SpinLock> bfLock_{kNumMutexes};
+  mutable std::vector<folly::SpinLock> bfLock_;
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;
@@ -264,9 +264,6 @@ class BigHash final : public Engine {
   // PercentileStats generates outputs in integers, so amplify by 100x
   mutable util::PercentileStats bucketExpirationsDist_x100_;
   mutable util::PercentileStats bhLifetimeSecs_;
-
-  static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
-                "number of mutexes must be power of two");
 
   friend class ValidBucketChecker;
 };

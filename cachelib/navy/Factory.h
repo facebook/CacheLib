@@ -122,6 +122,10 @@ class BigHashProto {
   // bit array of @hashTableBitSize bits.
   virtual void setBloomFilter(uint32_t numHashes,
                               uint32_t hashTableBitSize) = 0;
+
+  // (Optional) Set number of mutexes for bucket locking as power of 2.
+  // numMutexes = 1 << numMutexesPower. Default: 14 (16K mutexes)
+  virtual void setNumMutexesPower(uint8_t numMutexesPower) = 0;
 };
 
 class EnginePairProto {

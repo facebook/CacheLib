@@ -708,6 +708,12 @@ class BigHashConfig {
     return *this;
   }
 
+  // Set number of mutexes for bucket locking in BigHash engine.
+  BigHashConfig& setNumMutexesPower(uint8_t numMutexesPower) noexcept {
+    numMutexesPower_ = numMutexesPower;
+    return *this;
+  }
+
   bool isBloomFilterEnabled() const { return bucketBfSize_ > 0; }
 
   unsigned int getSizePct() const { return sizePct_; }
@@ -717,6 +723,8 @@ class BigHashConfig {
   uint64_t getBucketBfSize() const { return bucketBfSize_; }
 
   uint64_t getSmallItemMaxSize() const { return smallItemMaxSize_; }
+
+  uint8_t getNumMutexesPower() const { return numMutexesPower_; }
 
  private:
   // Percentage of how much of the device out of all is given to BigHash
@@ -731,6 +739,8 @@ class BigHashConfig {
   uint64_t bucketBfSize_{8};
   // The maximum item size to put into Navy BigHash engine.
   uint64_t smallItemMaxSize_{};
+  // numMutexes = 1 << numMutexesPower_.
+  uint8_t numMutexesPower_{14};
 };
 
 // Config for a pair of small,large engines.

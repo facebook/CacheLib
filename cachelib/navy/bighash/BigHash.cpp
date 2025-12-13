@@ -75,7 +75,8 @@ BigHash::BigHash(Config&& config)
     : BigHash{std::move(config.validate()), ValidConfigTag{}} {}
 
 BigHash::BigHash(Config&& config, ValidConfigTag)
-    : checkExpired_(std::move(config.checkExpired)),
+    : numMutexes_(size_t{1} << config.numMutexesPower),
+      checkExpired_(std::move(config.checkExpired)),
       destructorCb_{[cb = std::move(config.destructorCb)](
                         HashedKey hk, BufferView value, DestructorEvent event) {
         if (cb) {
@@ -87,12 +88,16 @@ BigHash::BigHash(Config&& config, ValidConfigTag)
       numBuckets_{config.numBuckets()},
       bloomFilter_{std::move(config.bloomFilter)},
       device_{*config.device},
-      placementHandle_{device_.allocatePlacementHandle()} {
+      placementHandle_{device_.allocatePlacementHandle()},
+      mutex_(numMutexes_),
+      bfLock_(numMutexes_) {
   XLOGF(INFO,
-        "BigHash created: buckets: {}, bucket size: {}, base offset: {}",
+        "BigHash created: buckets: {}, bucket size: {}, base offset: {}, num "
+        "mutexes: {}",
         numBuckets_,
         bucketSize_,
-        cacheBaseOffset_);
+        cacheBaseOffset_,
+        numMutexes_);
   reset();
 }
 

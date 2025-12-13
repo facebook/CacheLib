@@ -105,6 +105,9 @@ uint64_t setupBigHash(const navy::BigHashConfig& bigHashConfig,
     bigHash->setBloomFilter(kNumHashes, bitsPerHash);
   }
 
+  // Set number of mutexes from config
+  bigHash->setNumMutexesPower(bigHashConfig.getNumMutexesPower());
+
   proto.setBigHash(std::move(bigHash), bigHashConfig.getSmallItemMaxSize());
 
   if (bigHashCacheOffset <= bigHashStartOffsetLimit) {
