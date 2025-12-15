@@ -154,6 +154,9 @@ struct Request {
   Request(Request&& r) noexcept
       : key(r.key), sizeBegin(r.sizeBegin), sizeEnd(r.sizeEnd) {}
   Request& operator=(Request&&) = delete;
+  ~Request() = default;
+  Request(const Request&) = delete;
+  Request& operator=(const Request&) = delete;
 
   inline void update(std::string_view k,
                      size_t* valueSize,
