@@ -640,6 +640,75 @@ void BlockCache::onRegionCleanup(RegionId rid, BufferView buffer) {
   XDCHECK_GE(region.getNumItems(), evictionCount);
 }
 
+// To retrieve the 64bit key hash from the given address.
+// This function will not (and cannot) check if index changed in between this
+// function call for whatever reasons. It's caller's responsibility to make sure
+// the index is not changed and no race condition happens.
+//
+std::optional<uint64_t> BlockCache::onKeyHashRetrievalFromLocation(
+    uint32_t address) {
+  auto addrEnd = decodeRelAddress(address);
+  // It won't care about seq number here (giving it as std::nullopt). It's
+  // caller's responsibility to check about the race condition for the index
+  // change.
+  auto desc = regionManager_.openForRead(addrEnd.rid(), std::nullopt);
+
+  if (desc.status() != OpenStatus::Ready) {
+    // In rare cases, Region can return 'Retry' when it's being released after
+    // the reclaim. Checking the index again will resolve it since index should
+    // have been updated with the new location
+    return std::nullopt;
+  }
+
+  // We only need to read EntryDesc
+  auto readSize = sizeof(EntryDesc);
+
+  auto buffer =
+      regionManager_.read(desc, addrEnd.sub((uint32_t)readSize), readSize);
+  regionManager_.close(std::move(desc));
+
+  if (buffer.isNull()) {
+    return std::nullopt;
+  }
+
+  auto entryEnd = buffer.data() + buffer.size();
+  auto entryDesc = *reinterpret_cast<EntryDesc*>(entryEnd - sizeof(EntryDesc));
+  if (entryDesc.csSelf != entryDesc.computeChecksum()) {
+    XLOGF(ERR,
+          "Item header checksum mismatch in onKeyHashRetrievalFromLocation(). "
+          "Region {} is "
+          "likely corrupted. Expected: {}, Actual: {}, Offset-end: {}, "
+          "Physical-offset-end: {}, Header size: {}, Header (hex): {}",
+          addrEnd.rid().index(), entryDesc.csSelf, entryDesc.computeChecksum(),
+          addrEnd.offset(), regionManager_.physicalOffset(addrEnd),
+          sizeof(EntryDesc),
+          folly::hexlify(
+              folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
+    return std::nullopt;
+  }
+
+  folly::StringPiece key{reinterpret_cast<const char*>(
+                             entryEnd - sizeof(EntryDesc) - entryDesc.keySize),
+                         entryDesc.keySize};
+  if (HashedKey(key).keyHash() != entryDesc.keyHash) {
+    XLOGF(ERR,
+          "The key in Item header doesn't match with the key hash in "
+          "onKeyHashRetrievalFromLocation(). "
+          "Region {} is "
+          "likely corrupted. Expected: {}, Actual: {}, Offset-end: {}, "
+          "Physical-offset-end: {}, Header size: {}, Header (hex): {}",
+          addrEnd.rid().index(), entryDesc.keyHash, HashedKey(key).keyHash(),
+          addrEnd.offset(), regionManager_.physicalOffset(addrEnd),
+          sizeof(EntryDesc),
+          folly::hexlify(
+              folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
+    return std::nullopt;
+  }
+
+  // Looks like item header is valid. Return the keyHash from the header.
+  return entryDesc.keyHash;
+}
+
 bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
   if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
     return true;

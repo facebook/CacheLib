@@ -292,6 +292,21 @@ class BlockCache final : public Engine {
   // Allocator cleanup callback
   void onRegionCleanup(RegionId rid, BufferView buffer);
 
+  // Retrieve the key hash by reading the entry from the region.
+  // Will be used as a callback for Index so that Index can retrieve the key
+  // info using the location info. (Index may maintain only the partial key
+  // hash). If it fails to retrieve key hash for whatever reason (mostly because
+  // it's blocked for read when region's being released after reclaim), it will
+  // fail to retrieve and return nullopt.
+  //
+  // IMPORTANT: It's caller's responsibility to sync up between this retrieval
+  // and the Index change (location change from the other operations : reclaim,
+  // insert, remove, etc.)
+  // Since location is given by the caller, there's no way to resolve race
+  // condition within this function, and here it will just assume the proper
+  // location was given by the caller.
+  std::optional<uint64_t> onKeyHashRetrievalFromLocation(uint32_t address);
+
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
 

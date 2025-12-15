@@ -241,8 +241,11 @@ class RegionManager {
   // @param rid         region ID
   // @param seqNumber   the sequence number aqcuired before opening the region
   //                    for read; it is used to determine whether a reclaim
-  //                    happened during reading
-  RegionDescriptor openForRead(RegionId rid, uint64_t seqNumber);
+  //                    happened during reading.
+  //                    if it's not providied, this function will just open the
+  //                    region and doesn't check about the race between reclaim
+  //                    and this open. (Assuming it's caller's responsibility)
+  RegionDescriptor openForRead(RegionId rid, std::optional<uint64_t> seqNumber);
 
   // Closes the region and consumes the region descriptor.
   void close(RegionDescriptor&& desc);

@@ -373,7 +373,11 @@ void RegionManager::doReclaim() {
   INJECT_PAUSE(pause_reclaim_done);
 }
 
-RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
+RegionDescriptor RegionManager::openForRead(RegionId rid,
+                                            std::optional<uint64_t> seqNumber) {
+  // If seqNumber is not providied, this function will just open the
+  // region without checking the seqNumber. In this case the caller must take
+  // care of the race condition between reclaim and lookup.
   auto& region = getRegion(rid);
   auto desc = region.openForRead();
   if (!desc.isReady()) {
@@ -414,7 +418,8 @@ RegionDescriptor RegionManager::openForRead(RegionId rid, uint64_t seqNumber) {
   // by a acq_rel memory order in 3x. See releaseEvictedRegion() for details.
   //
   // Finally, 4r has acquire semantic which will sychronizes-with 3x's acq_rel.
-  if (seqNumber_.load(std::memory_order_acquire) != seqNumber) {
+  if (seqNumber.has_value() &&
+      seqNumber_.load(std::memory_order_acquire) != seqNumber.value()) {
     // If allowReadDuringReclaim_ is true, this is the only case that will
     // return Retry status. Immediate retry by checking the updated index
     // should succeed in that case.
