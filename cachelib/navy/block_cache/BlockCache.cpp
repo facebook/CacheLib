@@ -203,6 +203,10 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
 }
 
 Status BlockCache::insert(HashedKey hk, BufferView value) {
+  auto start = getSteadyClock();
+  SCOPE_EXIT {
+    insertLatency_.trackValue(toMicros(getSteadyClock() - start).count());
+  };
   INJECT_PAUSE(pause_blockcache_insert_entry);
 
   uint32_t size = serializedSize(hk.key().size(), value.size());
@@ -271,6 +275,11 @@ uint64_t BlockCache::estimateWriteSize(HashedKey hk, BufferView value) const {
 }
 
 Status BlockCache::lookup(HashedKey hk, Buffer& value) {
+  auto start = getSteadyClock();
+  SCOPE_EXIT {
+    lookupLatency_.trackValue(toMicros(getSteadyClock() - start).count());
+  };
+
   auto retryIndex = (regionManager_.readAllowedDuringReclaim() ? 1 : 0);
   RegionDescriptor desc;
   RelAddress addrEnd;
@@ -446,6 +455,10 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
 }
 
 Status BlockCache::remove(HashedKey hk) {
+  auto start = getSteadyClock();
+  SCOPE_EXIT {
+    removeLatency_.trackValue(toMicros(getSteadyClock() - start).count());
+  };
   removeCount_.inc();
 
   Buffer value;
@@ -1142,6 +1155,9 @@ void BlockCache::getCounters(const CounterVisitor& visitor) const {
   visitor("navy_bc_remove_attempt_collisions", removeAttemptCollisions_.get(),
           CounterVisitor::CounterType::RATE);
   bcLifetimeSecs_.visitQuantileEstimator(visitor, "navy_bc_item_lifetime_secs");
+  insertLatency_.visitQuantileEstimator(visitor, "navy_bc_insert_latency_us");
+  lookupLatency_.visitQuantileEstimator(visitor, "navy_bc_lookup_latency_us");
+  removeLatency_.visitQuantileEstimator(visitor, "navy_bc_remove_latency_us");
   // Allocator visits region manager
   allocator_.getCounters(visitor);
   index_->getCounters(visitor);

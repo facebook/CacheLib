@@ -1252,6 +1252,37 @@ Stats Cache<Allocator>::getStats() const {
     ret.nvmWriteLatencyMicrosP100 = lookup("navy_device_write_latency_us_max");
     ret.numNvmItemRemovedSetSize = lookup("items_tracked_for_destructor");
 
+    ret.bcInsertLatencyMicrosP50 = lookup("navy_bc_insert_latency_us_p50");
+    ret.bcInsertLatencyMicrosP90 = lookup("navy_bc_insert_latency_us_p90");
+    ret.bcInsertLatencyMicrosP99 = lookup("navy_bc_insert_latency_us_p99");
+    ret.bcInsertLatencyMicrosP999 = lookup("navy_bc_insert_latency_us_p999");
+    ret.bcInsertLatencyMicrosP9999 = lookup("navy_bc_insert_latency_us_p9999");
+    ret.bcInsertLatencyMicrosP99999 =
+        lookup("navy_bc_insert_latency_us_p99999");
+    ret.bcInsertLatencyMicrosP999999 =
+        lookup("navy_bc_insert_latency_us_p999999");
+    ret.bcInsertLatencyMicrosP100 = lookup("navy_bc_insert_latency_us_max");
+    ret.bcLookupLatencyMicrosP50 = lookup("navy_bc_lookup_latency_us_p50");
+    ret.bcLookupLatencyMicrosP90 = lookup("navy_bc_lookup_latency_us_p90");
+    ret.bcLookupLatencyMicrosP99 = lookup("navy_bc_lookup_latency_us_p99");
+    ret.bcLookupLatencyMicrosP999 = lookup("navy_bc_lookup_latency_us_p999");
+    ret.bcLookupLatencyMicrosP9999 = lookup("navy_bc_lookup_latency_us_p9999");
+    ret.bcLookupLatencyMicrosP99999 =
+        lookup("navy_bc_lookup_latency_us_p99999");
+    ret.bcLookupLatencyMicrosP999999 =
+        lookup("navy_bc_lookup_latency_us_p999999");
+    ret.bcLookupLatencyMicrosP100 = lookup("navy_bc_lookup_latency_us_max");
+    ret.bcRemoveLatencyMicrosP50 = lookup("navy_bc_remove_latency_us_p50");
+    ret.bcRemoveLatencyMicrosP90 = lookup("navy_bc_remove_latency_us_p90");
+    ret.bcRemoveLatencyMicrosP99 = lookup("navy_bc_remove_latency_us_p99");
+    ret.bcRemoveLatencyMicrosP999 = lookup("navy_bc_remove_latency_us_p999");
+    ret.bcRemoveLatencyMicrosP9999 = lookup("navy_bc_remove_latency_us_p9999");
+    ret.bcRemoveLatencyMicrosP99999 =
+        lookup("navy_bc_remove_latency_us_p99999");
+    ret.bcRemoveLatencyMicrosP999999 =
+        lookup("navy_bc_remove_latency_us_p999999");
+    ret.bcRemoveLatencyMicrosP100 = lookup("navy_bc_remove_latency_us_max");
+
     // track any non-zero check sum errors or io errors
     for (const auto& [k, v] : navyStats) {
       if (v != 0 && ((k.find("checksum_error") != std::string::npos) ||

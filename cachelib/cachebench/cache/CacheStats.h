@@ -107,6 +107,31 @@ struct Stats {
   double nvmWriteLatencyMicrosP999999{0};
   double nvmWriteLatencyMicrosP100{0};
 
+  double bcInsertLatencyMicrosP50{0};
+  double bcInsertLatencyMicrosP90{0};
+  double bcInsertLatencyMicrosP99{0};
+  double bcInsertLatencyMicrosP999{0};
+  double bcInsertLatencyMicrosP9999{0};
+  double bcInsertLatencyMicrosP99999{0};
+  double bcInsertLatencyMicrosP999999{0};
+  double bcInsertLatencyMicrosP100{0};
+  double bcLookupLatencyMicrosP50{0};
+  double bcLookupLatencyMicrosP90{0};
+  double bcLookupLatencyMicrosP99{0};
+  double bcLookupLatencyMicrosP999{0};
+  double bcLookupLatencyMicrosP9999{0};
+  double bcLookupLatencyMicrosP99999{0};
+  double bcLookupLatencyMicrosP999999{0};
+  double bcLookupLatencyMicrosP100{0};
+  double bcRemoveLatencyMicrosP50{0};
+  double bcRemoveLatencyMicrosP90{0};
+  double bcRemoveLatencyMicrosP99{0};
+  double bcRemoveLatencyMicrosP999{0};
+  double bcRemoveLatencyMicrosP9999{0};
+  double bcRemoveLatencyMicrosP99999{0};
+  double bcRemoveLatencyMicrosP999999{0};
+  double bcRemoveLatencyMicrosP100{0};
+
   uint64_t numNvmExceededMaxRetry{0};
 
   uint64_t numNvmDeletes{0};
@@ -327,6 +352,36 @@ struct Stats {
       fmtLatency(writeCat, "p99999", nvmWriteLatencyMicrosP99999);
       fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
       fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
+
+      folly::StringPiece insertCat = "BlockCache Insert Latency";
+      fmtLatency(insertCat, "p50", bcInsertLatencyMicrosP50);
+      fmtLatency(insertCat, "p90", bcInsertLatencyMicrosP90);
+      fmtLatency(insertCat, "p99", bcInsertLatencyMicrosP99);
+      fmtLatency(insertCat, "p999", bcInsertLatencyMicrosP999);
+      fmtLatency(insertCat, "p9999", bcInsertLatencyMicrosP9999);
+      fmtLatency(insertCat, "p99999", bcInsertLatencyMicrosP99999);
+      fmtLatency(insertCat, "p999999", bcInsertLatencyMicrosP999999);
+      fmtLatency(insertCat, "p100", bcInsertLatencyMicrosP100);
+
+      folly::StringPiece lookupCat = "BlockCache Lookup Latency";
+      fmtLatency(lookupCat, "p50", bcLookupLatencyMicrosP50);
+      fmtLatency(lookupCat, "p90", bcLookupLatencyMicrosP90);
+      fmtLatency(lookupCat, "p99", bcLookupLatencyMicrosP99);
+      fmtLatency(lookupCat, "p999", bcLookupLatencyMicrosP999);
+      fmtLatency(lookupCat, "p9999", bcLookupLatencyMicrosP9999);
+      fmtLatency(lookupCat, "p99999", bcLookupLatencyMicrosP99999);
+      fmtLatency(lookupCat, "p999999", bcLookupLatencyMicrosP999999);
+      fmtLatency(lookupCat, "p100", bcLookupLatencyMicrosP100);
+
+      folly::StringPiece removeCat = "BlockCache Remove Latency";
+      fmtLatency(removeCat, "p50", bcRemoveLatencyMicrosP50);
+      fmtLatency(removeCat, "p90", bcRemoveLatencyMicrosP90);
+      fmtLatency(removeCat, "p99", bcRemoveLatencyMicrosP99);
+      fmtLatency(removeCat, "p999", bcRemoveLatencyMicrosP999);
+      fmtLatency(removeCat, "p9999", bcRemoveLatencyMicrosP9999);
+      fmtLatency(removeCat, "p99999", bcRemoveLatencyMicrosP99999);
+      fmtLatency(removeCat, "p999999", bcRemoveLatencyMicrosP999999);
+      fmtLatency(removeCat, "p100", bcRemoveLatencyMicrosP100);
 
       constexpr double GB = 1024.0 * 1024 * 1024;
       double appWriteAmp =

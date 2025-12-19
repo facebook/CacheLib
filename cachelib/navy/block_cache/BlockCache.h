@@ -449,6 +449,9 @@ class BlockCache final : public Engine {
   mutable AtomicCounter excessiveReadBytes_;
 
   mutable util::PercentileStats bcLifetimeSecs_;
+  mutable util::PercentileStats insertLatency_;
+  mutable util::PercentileStats lookupLatency_;
+  mutable util::PercentileStats removeLatency_;
 };
 } // namespace navy
 } // namespace cachelib
