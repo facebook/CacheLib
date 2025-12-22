@@ -110,6 +110,31 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
   return lr;
 }
 
+Index::LookupResult FixedSizeIndex::insertIfNotExists(uint64_t key,
+                                                      uint32_t address,
+                                                      uint16_t sizeHint) {
+  LookupResult lr;
+  ExclusiveLockedBucket elb{key, *this, true};
+
+  XDCHECK(elb.bucketExist());
+  if (elb.isValidRecord()) {
+    lr = LookupResult(true,
+                      ItemRecord(elb.recordPtr()->address,
+                                 elb.recordPtr()->getSizeHint(),
+                                 0, /* totalHits */
+                                 elb.recordPtr()->info.curHits));
+    return lr;
+  }
+
+  ++elb.validBucketCntRef();
+  // TODO: need to combine this two ops into one to make sure updateDistInfo()
+  // part is not missed
+  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateDistInfo(key, *this);
+
+  return lr;
+}
+
 bool FixedSizeIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {

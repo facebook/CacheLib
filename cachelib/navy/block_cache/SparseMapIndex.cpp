@@ -113,6 +113,18 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
   return {};
 }
 
+Index::LookupResult SparseMapIndex::insertIfNotExists(uint64_t key,
+                                                      uint32_t address,
+                                                      uint16_t sizeHint) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+  auto [it, inserted] = map.try_emplace(subkey(key), address, sizeHint);
+  if (!inserted) {
+    return LookupResult{true, it->second};
+  }
+  return {};
+}
+
 bool SparseMapIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {

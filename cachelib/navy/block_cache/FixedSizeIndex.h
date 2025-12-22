@@ -121,6 +121,10 @@ class FixedSizeIndex : public Index {
   LookupResult insert(uint64_t key,
                       uint32_t address,
                       uint16_t sizeHint) override;
+  // Same as above but fails if the key already exists
+  LookupResult insertIfNotExists(uint64_t key,
+                                 uint32_t address,
+                                 uint16_t sizeHint) override;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
