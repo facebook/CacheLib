@@ -97,7 +97,7 @@ struct Stats {
   double nvmReadLatencyMicrosP9999{0};
   double nvmReadLatencyMicrosP99999{0};
   double nvmReadLatencyMicrosP999999{0};
-  double nvmReadLatencyMicrosP100{0};
+  double nvmReadLatencyMicrosMax{0};
   double nvmWriteLatencyMicrosP50{0};
   double nvmWriteLatencyMicrosP90{0};
   double nvmWriteLatencyMicrosP99{0};
@@ -105,7 +105,7 @@ struct Stats {
   double nvmWriteLatencyMicrosP9999{0};
   double nvmWriteLatencyMicrosP99999{0};
   double nvmWriteLatencyMicrosP999999{0};
-  double nvmWriteLatencyMicrosP100{0};
+  double nvmWriteLatencyMicrosMax{0};
 
   double bcInsertLatencyMicrosP50{0};
   double bcInsertLatencyMicrosP90{0};
@@ -342,7 +342,7 @@ struct Stats {
       fmtLatency(readCat, "p9999", nvmReadLatencyMicrosP9999);
       fmtLatency(readCat, "p99999", nvmReadLatencyMicrosP99999);
       fmtLatency(readCat, "p999999", nvmReadLatencyMicrosP999999);
-      fmtLatency(readCat, "p100", nvmReadLatencyMicrosP100);
+      fmtLatency(readCat, "max", nvmReadLatencyMicrosMax);
 
       fmtLatency(writeCat, "p50", nvmWriteLatencyMicrosP50);
       fmtLatency(writeCat, "p90", nvmWriteLatencyMicrosP90);
@@ -351,7 +351,7 @@ struct Stats {
       fmtLatency(writeCat, "p9999", nvmWriteLatencyMicrosP9999);
       fmtLatency(writeCat, "p99999", nvmWriteLatencyMicrosP99999);
       fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
-      fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
+      fmtLatency(writeCat, "max", nvmWriteLatencyMicrosMax);
 
       folly::StringPiece insertCat = "BlockCache Insert Latency";
       fmtLatency(insertCat, "p50", bcInsertLatencyMicrosP50);
