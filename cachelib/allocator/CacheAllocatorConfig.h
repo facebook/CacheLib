@@ -603,7 +603,7 @@ class CacheAllocatorConfig {
 
   // the amount of time to wait for a slab to be released before giving up
   // and aborting the release. 0 means we will wait forever
-  std::chrono::milliseconds slabRebalanceTimeout{std::chrono::milliseconds(0)};
+  std::chrono::milliseconds slabRebalanceTimeout{std::chrono::minutes(10)};
 
   // If refcount is larger than this threshold, we will use shared_ptr
   // for handles in IOBuf chains.
