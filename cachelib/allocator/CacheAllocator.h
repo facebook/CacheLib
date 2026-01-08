@@ -5013,17 +5013,22 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
                                              const void* hint) {
   stats_.numActiveSlabReleases.inc();
   SCOPE_EXIT { stats_.numActiveSlabReleases.dec(); };
-  switch (mode) {
-  case SlabReleaseMode::kRebalance:
-    stats_.numReleasedForRebalance.inc();
-    break;
-  case SlabReleaseMode::kResize:
-    stats_.numReleasedForResize.inc();
-    break;
-  case SlabReleaseMode::kAdvise:
-    stats_.numReleasedForAdvise.inc();
-    break;
-  }
+
+  auto incReleaseStats = [this, mode]() {
+    switch (mode) {
+    case SlabReleaseMode::kRebalance:
+      stats_.numReleasedForRebalance.inc();
+      break;
+    case SlabReleaseMode::kResize:
+      stats_.numReleasedForResize.inc();
+      break;
+    case SlabReleaseMode::kAdvise:
+      stats_.numReleasedForAdvise.inc();
+      break;
+    default:
+      break;
+    }
+  };
 
   try {
     auto releaseContext = allocator_->startSlabRelease(
@@ -5032,6 +5037,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
 
     // No work needed if the slab is already released
     if (releaseContext.isReleased()) {
+      incReleaseStats();
       return;
     }
 
@@ -5044,6 +5050,7 @@ void CacheAllocator<CacheTrait>::releaseSlab(PoolId pid,
     }
 
     allocator_->completeSlabRelease(releaseContext);
+    incReleaseStats();
   } catch (const exception::SlabReleaseAborted& e) {
     incrementAbortedSlabReleases();
     throw exception::SlabReleaseAborted(folly::sformat(
