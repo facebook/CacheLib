@@ -28,6 +28,7 @@
 #include "cachelib/allocator/PoolResizeStrategy.h"
 #include "cachelib/allocator/tests/TestBase.h"
 #include "cachelib/common/PeriodicWorker.h"
+#include "cachelib/common/TestUtils.h"
 #include "cachelib/compact_cache/CCacheCreator.h"
 
 namespace {
@@ -167,6 +168,68 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         << numBytes << " " << alloc.getPool(poolId1).getPoolSize();
 
     ASSERT_EQ(shrinkSize, alloc.getPool(poolId4).getCurrentAllocSize());
+  }
+
+  void testPoolResizerWithSlabReleaseTimeouts() {
+    // Test that pool resizer correctly handles slab release timeouts
+    typename AllocatorT::Config config;
+    const uint32_t poolResizeSlabsPerIter = 3;
+    config.enablePoolResizing(std::make_shared<RebalanceStrategy>(),
+                              std::chrono::seconds{1}, poolResizeSlabsPerIter);
+    config.slabRebalanceTimeout = std::chrono::milliseconds(2);
+
+    const unsigned int numSlabs = 25;
+    config.setCacheSize(numSlabs * Slab::kSize);
+    AllocatorT alloc(config);
+
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    const std::set<uint32_t> acSizes = {512 * 1024};
+    auto poolId = alloc.addPool("test_pool", numBytes, acSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId);
+    const uint32_t itemSize = 450 * 1024;
+
+    // pool resizer will only be triggered when all slabs are allocated, so we
+    // allocate items until allocation fails. Allocation will fail because we
+    // cannot evict because we hold handles to all items
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    size_t i = 0;
+    while (true) {
+      std::string key = folly::sformat("key_{}", i++);
+      auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
+      if (!handle) {
+        break;
+      }
+      // Hold handle so slab release will timeout
+      handles.push_back(std::move(handle));
+    }
+
+    // Shrink the pool to trigger resizing (makes pool over limit)
+    auto initialAbortedReleases =
+        alloc.getGlobalCacheStats().numAbortedSlabReleases;
+    const size_t shrinkSize = 9 * Slab::kSize;
+    ASSERT_TRUE(alloc.shrinkPool(poolId, shrinkSize));
+
+    // Wait for resizing attempts and slab release to time out
+    ASSERT_EVENTUALLY_TRUE([&] {
+      return alloc.getGlobalCacheStats().numAbortedSlabReleases >= 20;
+    });
+
+    EXPECT_GT(alloc.getSlabReleaseStats().numSlabReleaseForResizeAttempts, 0);
+    EXPECT_EQ(alloc.getSlabReleaseStats().numSlabReleaseForResize, 0);
+
+    size_t finalAbortedReleases =
+        alloc.getGlobalCacheStats().numAbortedSlabReleases;
+    EXPECT_GT(finalAbortedReleases, initialAbortedReleases)
+        << "Expected some slab releases to be aborted due to timeouts";
+
+    // releasing handles so slab release do not timeout anymore
+    handles.clear();
+
+    // After releasing handles, the pool should eventually resize
+    ASSERT_EVENTUALLY_TRUE([&] {
+      return alloc.getPool(poolId).getPoolSize() == numBytes - shrinkSize;
+    });
+    EXPECT_EQ(alloc.getPool(poolId).getPoolSize(), numBytes - shrinkSize);
   }
 
   void testGrowWithFreeMem() {

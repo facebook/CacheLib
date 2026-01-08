@@ -88,6 +88,10 @@ TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
 }
 
+TYPED_TEST(AllocatorResizeTest, PoolResizerWithSlabReleaseTimeouts) {
+  this->testPoolResizerWithSlabReleaseTimeouts();
+}
+
 } // end of namespace tests
 } // end of namespace cachelib
 } // end of namespace facebook
