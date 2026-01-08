@@ -1275,6 +1275,115 @@ class AllocatorResizeTest : public AllocatorTest<AllocatorT> {
         .expectedAdvisedAfterSecondIteration = 10,
     });
   }
+
+  void runMemMonitorAdvisesAwaySlabsTest(int numIterations,
+                                         int sleepSeconds,
+                                         int expectedAdvisedAfterThread,
+                                         int expectedAdvisedAfterOneMore) {
+    typename AllocatorT::Config config;
+    config.memMonitorConfig.mode = MemoryMonitor::TestMode;
+    // Setting interval to 999 because we want to call memory monitor manually
+    config.memMonitorInterval = std::chrono::seconds(999);
+    config.memMonitorConfig.maxAdvisePercentPerIter = 2;
+    config.memMonitorConfig.maxReclaimPercentPerIter = 10;
+    config.memMonitorConfig.maxAdvisePercent = 50;
+    config.memMonitorConfig.upperLimitGB = 2;
+    config.memMonitorConfig.lowerLimitGB = 1;
+    // With these settings, we advise away (2-1) * 0.02 = 20MB which is equal to
+    // 5 slabs per iteration
+
+    // Slab release timeout triggered this bug
+    config.slabRebalanceTimeout = std::chrono::milliseconds(50);
+
+    // Disable pool rebalancing to focus on memory monitor behavior
+    config.enablePoolRebalancing(nullptr, std::chrono::seconds{0});
+
+    // Create cache with 20 slabs, 1 is used for metadata
+    const unsigned int numSlabs = 21;
+    config.setCacheSize(numSlabs * Slab::kSize);
+
+    AllocatorT alloc(config);
+
+    const size_t numBytes = alloc.getCacheMemoryStats().ramCacheSize;
+    const std::set<uint32_t> acSizes = {512 * 1024};
+    auto poolId = alloc.addPool("test_pool", numBytes, acSizes);
+    ASSERT_NE(Slab::kInvalidPoolId, poolId);
+
+    // Fill up 20 slabs worth of allocations
+    const uint32_t itemSize = 450 * 1024;
+    const auto allocSizes = alloc.getPool(poolId).getAllocSizes();
+    const size_t itemsPerSlab = Slab::kSize / allocSizes[0];
+    const size_t numItems = itemsPerSlab * 20;
+
+    std::vector<typename AllocatorT::WriteHandle> handles;
+    // Allocate 20 slabs
+    for (size_t i = 0; i < numItems; ++i) {
+      std::string key = folly::sformat("key_{}", i);
+      auto handle = util::allocateAccessible(alloc, poolId, key, itemSize);
+      ASSERT_NE(nullptr, handle);
+      // hold handle, so that cachelib cannot release slab and slab release will
+      // timeout in memory monitor
+      handles.push_back(std::move(handle));
+    }
+
+    auto poolStats = alloc.getPoolStats(poolId);
+    size_t initialAllocatedSlabs = poolStats.mpStats.allocatedSlabs();
+    ASSERT_EQ(initialAllocatedSlabs, 20);
+
+    size_t advisedSlabs = alloc.getPool(poolId).getNumSlabsAdvised();
+    ASSERT_EQ(advisedSlabs, 0);
+
+    std::thread monitorThread([&alloc, &poolId, numIterations]() {
+      for (int i = 0; i < numIterations; i++) {
+        alloc.memMonitor_->adviseAwaySlabs();
+        alloc.memMonitor_->checkPoolsAndAdviseReclaim();
+        auto advisedSlabs = alloc.getPool(poolId).getNumSlabsAdvised();
+        auto expectedAdvisedSlabs = std::min(10, (i + 1) * 5);
+        ASSERT_EQ(expectedAdvisedSlabs, advisedSlabs);
+      }
+    });
+
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::seconds(sleepSeconds));
+
+    handles.clear();
+    monitorThread.join();
+
+    advisedSlabs = alloc.getPool(poolId).getNumSlabsAdvised();
+    ASSERT_EQ(advisedSlabs, expectedAdvisedAfterThread);
+
+    alloc.memMonitor_->adviseAwaySlabs();
+    alloc.memMonitor_->checkPoolsAndAdviseReclaim();
+    advisedSlabs = alloc.getPool(poolId).getNumSlabsAdvised();
+    ASSERT_EQ(advisedSlabs, expectedAdvisedAfterOneMore);
+
+    // Verify that slab releases were aborted due to timeouts
+    ASSERT_GT(alloc.getGlobalCacheStats().numAbortedSlabReleases, 0);
+  }
+
+  // Test to reproduce a bug where memory monitor advises away all slabs when
+  // slab releases timeout repeatedly
+  void testMemMonitorAdvisesAwayAllCacheBug() {
+    int numIterations = 4;
+    int sleepSeconds = 5;
+    int expectedAdvisedAfterThread = 10;
+    int expectedAdvisedAfterOneMore = 10;
+    runMemMonitorAdvisesAwaySlabsTest(numIterations, sleepSeconds,
+                                      expectedAdvisedAfterThread,
+                                      expectedAdvisedAfterOneMore);
+  }
+
+  // Test to ensure that if slab release is timed out, memory monitor will retry
+  // and still advise away slabs it intended to
+  void testMemMonitorAdvisesTimeout() {
+    int numIterations = 1;
+    int sleepSeconds = 2;
+    int expectedAdvisedAfterThread = 5;
+    int expectedAdvisedAfterOneMore = 10;
+    runMemMonitorAdvisesAwaySlabsTest(numIterations, sleepSeconds,
+                                      expectedAdvisedAfterThread,
+                                      expectedAdvisedAfterOneMore);
+  }
 };
 } // namespace tests
 } // namespace cachelib

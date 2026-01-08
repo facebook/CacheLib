@@ -113,6 +113,11 @@ class ObjectCacheBase : public CacheBase {
     l1Cache_->incrementAbortedSlabReleases();
   }
 
+  // Check if shutdown is in progress
+  bool isShutdownInProgress() const override {
+    return l1Cache_->isShutdownInProgress();
+  }
+
   // return the list of currently active pools that are oversized
   std::set<PoolId> getRegularPoolIdsForResize() const override {
     return l1Cache_->getRegularPoolIdsForResize();

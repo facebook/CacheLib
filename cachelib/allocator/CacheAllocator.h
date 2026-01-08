@@ -1159,6 +1159,11 @@ class CacheAllocator : public CacheBase {
     stats_.numAbortedSlabReleases.inc();
   }
 
+  // Check if shutdown is in progress
+  bool isShutdownInProgress() const override final {
+    return shutDownInProgress_.load();
+  }
+
   // return the distribution of the keys in the cache. This is expensive to
   // compute at times even with caching. So use with caution.
   // TODO think of a way to abstract this since it only makes sense for
@@ -5382,7 +5387,7 @@ bool CacheAllocator<CacheTrait>::markMovingForSlabRelease(
     // when checking with the AllocationClass
     itemFreed = true;
 
-    if (shutDownInProgress_) {
+    if (isShutdownInProgress()) {
       allocator_->abortSlabRelease(ctx);
       throw exception::SlabReleaseAborted(
           folly::sformat("Slab Release aborted while still trying to mark"

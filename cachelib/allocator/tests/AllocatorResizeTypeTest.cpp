@@ -76,6 +76,14 @@ TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayOverLimit3) {
   this->testMemMonitorAdvisesAwayOverLimit3();
 }
 
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesAwayAllCacheBug) {
+  this->testMemMonitorAdvisesAwayAllCacheBug();
+}
+
+TYPED_TEST(AllocatorResizeTest, MemMonitorAdvisesTimeout) {
+  this->testMemMonitorAdvisesTimeout();
+}
+
 TYPED_TEST(AllocatorResizeTest, ShrinkGrowthAdviseRaceCondition) {
   this->testShrinkGrowthAdviseRaceCondition();
 }

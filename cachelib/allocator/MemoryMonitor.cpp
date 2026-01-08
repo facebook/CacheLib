@@ -202,11 +202,20 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
 
         } catch (const exception::SlabReleaseAborted& e) {
           cache_.incrementAbortedSlabReleases();
+          // Check if this is due to shutdown or timeout
+          if (cache_.isShutdownInProgress()) {
+            XLOGF(WARN,
+                  "Shutdown in progress, aborting slab advise from pool {} for"
+                  " allocation class {}. Error: {}",
+                  static_cast<int>(poolId), static_cast<int>(classId),
+                  e.what());
+            return;
+          }
+          // It's a timeout, log and continue with next slab
           XLOGF(WARN,
-                "Aborted trying to advise away a slab from pool {} for"
-                " allocation class {}. Error: {}",
+                "Timeout while advising slab from pool {} for allocation class"
+                " {}. Continuing with remaining slabs. Error: {}",
                 static_cast<int>(poolId), static_cast<int>(classId), e.what());
-          return;
         } catch (const std::exception& e) {
           XLOGF(
               CRITICAL,
