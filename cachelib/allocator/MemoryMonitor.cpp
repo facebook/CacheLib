@@ -313,7 +313,7 @@ void MemoryMonitor::reclaimSlabs() {
   }
   XLOGF(DBG, "Reclaiming {} slabs to increase cache size by {} bytes",
         slabsToReclaim, slabsToReclaim * Slab::kSize);
-  updateNumSlabsToAdvise(-slabsToReclaim);
+  updateNumSlabsToAdvise(-static_cast<int32_t>(slabsToReclaim));
 }
 
 RateLimiter::RateLimiter(bool detectIncrease)
