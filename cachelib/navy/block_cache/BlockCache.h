@@ -32,6 +32,11 @@
 
 namespace facebook {
 namespace cachelib {
+namespace interface {
+class FlashCacheComponent;
+class FlashCacheItem;
+} // namespace interface
+
 namespace navy {
 class JobScheduler;
 
@@ -263,17 +268,42 @@ class BlockCache final : public Engine {
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
 
-  // Read and write are time consuming. It doesn't worth inlining them from
-  // the performance point of view, but makes sense to track them for perf:
-  // especially portion on CPU time spent in std::memcpy.
+  // Allocate a slot from the allocator
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value
+  // @param priority    priority of async operation
+  // @param canWait     whether to wait if space isn't currently available
+  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateImpl(
+      const HashedKey& hk,
+      const uint32_t valueSize,
+      const uint16_t priority,
+      const bool canWait);
+
+  // Allocate a slot for inserting into cache
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value
+  folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
+  allocateForInsert(const HashedKey& hk, const uint32_t valueSize);
+
+  // Write the entry descriptor and cache item key into the item buffer
+  // @param buffer      buffer to write into
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value to be inserted
+  static EntryDesc* writeEntryDescAndKey(Buffer& buffer,
+                                         const HashedKey& hk,
+                                         uint32_t valueSize);
+
+  // Read and write are time consuming. It isn't worth inlining them from a
+  // performance point of view, but makes sense to track them for performance,
+  // especially the CPU time spent in std::memcpy.
   // @param addr        Address to write this entry into
   // @param size        Number of bytes this entry will take up on the device
   // @param hk          Key of the entry
   // @param value       Payload of the entry
-  Status writeEntry(RelAddress addr,
-                    uint32_t size,
-                    HashedKey hk,
-                    BufferView value);
+  void writeEntry(RelAddress addr,
+                  uint32_t size,
+                  HashedKey hk,
+                  BufferView value);
   // @param readDesc      Descriptor for reading. This must be valid
   // @param addrEnd       End of the entry since the item layout is backward
   // @param approxSize    Approximate size since we got this size from index
@@ -284,6 +314,18 @@ class BlockCache final : public Engine {
                    uint32_t approxSize,
                    HashedKey expected,
                    Buffer& value);
+
+  // Update the index with the new entry
+  // @param keyHash      Hash of the key
+  // @param size         Full size of cache item on disk (allocated slot)
+  // @param addr         Address of the entry
+  // @param allowReplace Whether to allow replacing an existing entry or not
+  // @return true if the index was updated, false if the key already exists and
+  // allowReplace is false
+  bool updateIndex(uint64_t keyHash,
+                   uint32_t size,
+                   const RelAddress& addr,
+                   bool allowReplace) const;
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
@@ -375,6 +417,10 @@ class BlockCache final : public Engine {
   std::shared_ptr<BlockCacheReinsertionPolicy> makeReinsertionPolicy(
       const BlockCacheReinsertionConfig& reinsertionConfig);
 
+  // Helpers for hole accounting
+  void addHole(uint32_t size) const;
+  void removeHole(uint32_t size) const;
+
   const serialization::BlockCacheConfig config_;
   const uint16_t numPriorities_{};
   const ExpiredCheck checkExpired_;
@@ -452,6 +498,9 @@ class BlockCache final : public Engine {
   mutable util::PercentileStats insertLatency_;
   mutable util::PercentileStats lookupLatency_;
   mutable util::PercentileStats removeLatency_;
+
+  friend class interface::FlashCacheComponent;
+  friend class interface::FlashCacheItem;
 };
 } // namespace navy
 } // namespace cachelib

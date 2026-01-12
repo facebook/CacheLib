@@ -73,6 +73,9 @@ class CacheComponent {
    * Returns an AllocatedHandle to the old item if it was replaced. The input
    * AllocatedHandle is no longer usable (moved out).
    *
+   * Note: it may be too expensive for some implementations to return the old
+   * item; they'll just return std::nullopt.
+   *
    * @param handle AllocatedHandle returned by allocate()
    * @return an empty optional if the item was inserted, an AllocatedHandle to
    * the replaced item if it was replaced (no longer findable replaced) or an
@@ -110,6 +113,15 @@ class CacheComponent {
   virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
 
  protected:
+  /**
+   * Mark an item as inserted into cache.
+   * @param handle handle to the cache item
+   * @param inserted whether the item was inserted into cache
+   */
+  FOLLY_ALWAYS_INLINE void setInserted(Handle& handle, bool inserted) {
+    handle.inserted_ = inserted;
+  }
+
   /**
    * Release a handle (make unusable) without adjusting refcounts. Useful when
    * CacheComponent takes an rvalue ref to a handle that needs to be destroyed.

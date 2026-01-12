@@ -26,6 +26,7 @@ struct Error {
     INVALID_CONFIG,
 
     // Allocation errors
+    ALLOCATE_FAILED,
     NO_SPACE,
 
     // Insertion errors

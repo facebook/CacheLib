@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/utils/CoroFiberAdapter.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 
 namespace facebook::cachelib::interface {
@@ -65,6 +66,24 @@ class FlashCacheComponent : public CacheComponent {
   std::unique_ptr<navy::BlockCache> cache_;
 
   FlashCacheComponent(std::string&& name, navy::BlockCache::Config&& config);
+
+  // Runs func() on a RegionManager worker fiber. Should not be called from an
+  // existing region manager worker fiber!
+  template <typename FuncT,
+            typename CleanupFuncT = std::function<void()>,
+            typename ReturnT = std::invoke_result_t<FuncT>>
+  folly::coro::Task<ReturnT> onWorkerThread(FuncT&& func,
+                                            CleanupFuncT&& cleanup = {}) {
+    XDCHECK(!cache_->regionManager_.isOnWorker())
+        << "Calling public APIs from a worker thread is unsupported";
+    co_return co_await utils::onWorkerThread(
+        cache_->regionManager_.getNextWorker(),
+        std::forward<FuncT>(func),
+        std::forward<CleanupFuncT>(cleanup));
+  }
+
+  folly::coro::Task<UnitResult> insertImpl(AllocatedHandle&& handle,
+                                           bool allowReplace);
 
   // ------------------------------ Interface ------------------------------ //
 

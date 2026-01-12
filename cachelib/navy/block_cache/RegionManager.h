@@ -38,6 +38,10 @@
 
 namespace facebook {
 namespace cachelib {
+namespace interface {
+class FlashCacheComponent;
+}
+
 namespace navy {
 using folly::fibers::TimedMutex;
 using CondWaiter = util::ConditionVariable::Waiter;
@@ -373,6 +377,8 @@ class RegionManager {
   mutable util::ConditionVariable bufferCond_;
   std::vector<std::unique_ptr<Buffer>> buffers_;
   int placementHandle_;
+
+  friend class interface::FlashCacheComponent;
 };
 } // namespace navy
 } // namespace cachelib
