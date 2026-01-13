@@ -46,6 +46,17 @@ Handle::~Handle() noexcept {
 WriteHandle::WriteHandle(CacheComponent& cache, CacheItem& item) noexcept
     : Handle(cache, item, /* inserted */ true) {}
 
+WriteHandle::WriteHandle(WriteHandle&& other) noexcept
+    : Handle(std::move(other)),
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      dirty_(std::exchange(other.dirty_, false)) {}
+
+WriteHandle::~WriteHandle() noexcept {
+  if (item_ != nullptr && dirty_) {
+    cache_->writeBack(*item_);
+  }
+}
+
 WriteHandle::WriteHandle(CacheComponent& cache,
                          CacheItem& item,
                          bool inserted) noexcept

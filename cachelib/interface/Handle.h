@@ -79,16 +79,35 @@ class Handle {
 
 /**
  * A writable handle for an item that has been allocated AND inserted.
+ *
+ * The user *must* mark the write handle as dirty if they write to it, otherwise
+ * we'll skip flushing the write to the cache component.
  */
 class WriteHandle : public Handle {
  public:
   WriteHandle(CacheComponent& cache, CacheItem& item) noexcept;
+  ~WriteHandle() noexcept;
+
+  // WriteHandle *is* move-constructible but *not* move-assignable. WriteHandle
+  // `other` is no longer usable after the move.
+  WriteHandle(WriteHandle&& other) noexcept;
+  WriteHandle& operator=(WriteHandle&& other) noexcept = delete;
 
   FOLLY_ALWAYS_INLINE CacheItem* operator->() const noexcept { return item_; }
   FOLLY_ALWAYS_INLINE CacheItem& operator*() const noexcept { return *item_; }
   FOLLY_ALWAYS_INLINE CacheItem* get() const noexcept { return item_; }
 
+  /**
+   * Mark as dirty; on destruction we'll call into the cache to do the write.
+   */
+  FOLLY_ALWAYS_INLINE void markDirty(bool dirty = true) noexcept {
+    dirty_ = dirty;
+  }
+
  protected:
+  // Whether the CacheItem needs to be written back
+  bool dirty_{false};
+
   // Only used by AllocatedHandle
   WriteHandle(CacheComponent& cache, CacheItem& item, bool inserted) noexcept;
 };

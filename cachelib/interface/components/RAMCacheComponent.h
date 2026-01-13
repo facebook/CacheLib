@@ -102,6 +102,7 @@ class RAMCacheComponent : public CacheComponent {
 
   // ------------------------------ Interface ------------------------------ //
 
+  UnitResult writeBack(CacheItem& item) override;
   folly::coro::Task<void> release(CacheItem& item, bool inserted) override;
 };
 

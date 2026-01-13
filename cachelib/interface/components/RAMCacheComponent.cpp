@@ -268,6 +268,11 @@ folly::coro::Task<UnitResult> RAMCacheComponent::remove(ReadHandle&& handle) {
 RAMCacheComponent::RAMCacheComponent(LruAllocatorConfig&& config)
     : cache_(std::make_unique<LruAllocator>(std::move(config))) {}
 
+UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
+  /* no-op, writing to the RAM buffer is equivalent to writing back */
+  return folly::unit;
+}
+
 folly::coro::Task<void> RAMCacheComponent::release(interface::CacheItem& item,
                                                    bool inserted) {
   auto* implItem = reinterpret_cast<RAMCacheItem&>(item).item();

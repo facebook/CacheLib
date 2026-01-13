@@ -43,7 +43,7 @@ class CacheComponent {
    * Allocate space for a new item. Returns an AllocatedHandle that can be used
    * to access the allocated memory.
    *
-   * Note: the item *must* be inserted before it is visible for lookups.
+   * NOTE: the item *must* be inserted before it is visible for lookups.
    * Allocated items that are not inserted into cache will be freed when the
    * returned AllocatedHandle goes out of scope.  In other words if you've got
    * an AllocatedHandle, it's not yet in cache!
@@ -73,7 +73,7 @@ class CacheComponent {
    * Returns an AllocatedHandle to the old item if it was replaced. The input
    * AllocatedHandle is no longer usable (moved out).
    *
-   * Note: it may be too expensive for some implementations to return the old
+   * NOTE: it may be too expensive for some implementations to return the old
    * item; they'll just return std::nullopt.
    *
    * @param handle AllocatedHandle returned by allocate()
@@ -87,6 +87,10 @@ class CacheComponent {
   /**
    * Find an item in cache. Returns a handle if found, std::nullopt otherwise.
    * find() is for read-only access, findToWrite() is for write access.
+   *
+   * NOTE: if you write to the handle returned by findToWrite(), you must *must*
+   * mark the handle as dirty in order for the cache component to flush the
+   * write to the underlying storage.
    *
    * @param key cache item key
    * @return a handle if found, std::nullopt if not found or an error result
@@ -134,6 +138,17 @@ class CacheComponent {
   // ------------------------------ Interface ------------------------------ //
 
   /**
+   * Write a dirty cache item back to the cache.
+   *
+   * Called by WriteHandle destructor when the handle is marked dirty.
+   * Implementations should flush any buffered writes to the underlying storage.
+   *
+   * @param item cache item to write back
+   * @return folly::unit on success or an error result otherwise
+   */
+  virtual UnitResult writeBack(CacheItem& item) = 0;
+
+  /**
    * Release the item from the cache. Frees the associated allocation and
    * executes any necessary callbacks. Only meant to be called by the component
    * or cache item handles.
@@ -145,6 +160,7 @@ class CacheComponent {
   virtual folly::coro::Task<void> release(CacheItem& item, bool inserted) = 0;
 
   friend class Handle;
+  friend class WriteHandle;
 };
 
 } // namespace facebook::cachelib::interface

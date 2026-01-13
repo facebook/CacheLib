@@ -32,6 +32,7 @@ struct Error {
     // Insertion errors
     INSERT_FAILED,
     ALREADY_INSERTED,
+    WRITE_BACK_FAILED,
 
     // Lookup errors
     FIND_FAILED,

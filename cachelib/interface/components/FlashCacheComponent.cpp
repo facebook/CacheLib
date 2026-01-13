@@ -266,6 +266,10 @@ FlashCacheComponent::FlashCacheComponent(std::string&& name,
     : name_(std::move(name)),
       cache_(std::make_unique<navy::BlockCache>(std::move(config))) {}
 
+UnitResult FlashCacheComponent::writeBack(CacheItem& /* item */) {
+  return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+}
+
 folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
                                                      bool inserted) {
   auto& fccItem = reinterpret_cast<FlashCacheItem&>(item);
