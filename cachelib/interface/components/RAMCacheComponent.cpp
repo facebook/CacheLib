@@ -186,7 +186,7 @@ folly::coro::Task<UnitResult> RAMCacheComponent::insert(
     co_return makeError(Error::Code::INSERT_FAILED, e.what());
   }
 
-  handle.~AllocatedHandle();
+  auto _ = std::move(handle);
   co_return folly::unit;
 }
 
@@ -215,7 +215,7 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
     co_return makeError(Error::Code::INSERT_FAILED, e.what());
   }
 
-  handle.~AllocatedHandle();
+  auto _ = std::move(handle);
   if (replacedHandle) {
     co_return toGenericHandle<AllocatedHandle>(*this, replacedHandle);
   } else {
@@ -261,7 +261,7 @@ folly::coro::Task<UnitResult> RAMCacheComponent::remove(ReadHandle&& handle) {
     co_return makeError(Error::Code::REMOVE_FAILED, e.what());
   }
 
-  handle.~ReadHandle();
+  auto _ = std::move(handle);
   co_return folly::unit;
 }
 
