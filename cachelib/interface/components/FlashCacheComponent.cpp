@@ -16,6 +16,8 @@
 
 #include "cachelib/interface/components/FlashCacheComponent.h"
 
+#include "cachelib/common/Time.h"
+
 using namespace facebook::cachelib::navy;
 
 namespace facebook::cachelib::interface {
@@ -36,7 +38,7 @@ class FlashCacheItem : public CacheItem {
   static constexpr size_t kMetadataSize = 2 * sizeof(uint32_t);
 
   // Allocation constructor
-  // Note: valueSize *must* include space for creation & expiration time
+  // NOTE: valueSize *must* include space for creation & expiration time
   FlashCacheItem(const HashedKey& hashedKey,
                  uint32_t valueSize,
                  std::tuple<RegionDescriptor, size_t, RelAddress>&& allocation,
@@ -52,6 +54,13 @@ class FlashCacheItem : public CacheItem {
     metadata[0] = creationTime;
     metadata[1] = ttlSecs > 0 ? creationTime + ttlSecs : 0;
   }
+
+  // Find constructor
+  explicit FlashCacheItem(BlockCache::LookupData&& ld)
+      : desc_(std::move(ld.desc_)),
+        // Lookup returns the end address, update the offset to beginning
+        relAddr_(ld.addrEnd_.sub(ld.buffer_.size())),
+        buffer_(std::move(ld.buffer_)) {}
 
   RegionDescriptor& getRegionDescriptor() noexcept { return desc_; }
   RelAddress& getRelAddress() noexcept { return relAddr_; }
@@ -139,7 +148,7 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
     co_return makeError(Error::Code::ALLOCATE_FAILED,
                         "could not allocate space in a region");
   }
-  // Note: we can't checksum until the user has finished writing their data,
+  // NOTE: we can't checksum until the user has finished writing their data,
   // defer until they call insert()
   auto* item = new FlashCacheItem(hashedKey, valueSize, std::move(ret).value(),
                                   creationTime, ttlSecs);
@@ -159,7 +168,7 @@ folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
   auto totalSize = fccItem.getTotalSize();
   auto keyHash = desc->keyHash;
 
-  // Note: we don't need to run this on a worker thread because everything here
+  // NOTE: we don't need to run this on a worker thread because everything here
   // is synchronous - only allocation is async
 
   if (cache_->checksumData_) {
@@ -175,7 +184,7 @@ folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
     auto _ = std::move(handle);
     co_return folly::unit;
   } else {
-    // Note: do hole accounting in release()
+    // NOTE: do hole accounting in release()
     co_return makeError(Error::Code::ALREADY_INSERTED, "key already inserted");
   }
 }
@@ -190,15 +199,52 @@ FlashCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
   auto inserted =
       co_await insertImpl(std::move(handle), /* allowReplace */ true);
   XDCHECK(inserted) << "insertOrReplace should never fail";
-  // Note: returning the old data requires a flash read, don't expose for now
+  // NOTE: returning the old data requires a flash read, don't expose for now
   co_return std::move(inserted).then([](auto&&) {
     return Result<std::optional<AllocatedHandle>>(std::nullopt);
   });
 }
 
 folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
-    Key /* key */) {
-  co_return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+    Key key) {
+  auto res = co_await onWorkerThread(
+      [this, hashedKey = HashedKey(key)]()
+          -> folly::Expected<BlockCache::LookupData, navy::Status> {
+        auto ld = cache_->lookupInternal(hashedKey);
+        if (ld.status_ == Status::Retry) {
+          XDCHECK(!ld.desc_.isReady())
+              << "should not have a ready descriptor for retry status";
+          return folly::makeUnexpected(ld.status_);
+        }
+        return ld;
+      },
+      [this](auto&& res) {
+        if (res.hasValue() && res->desc_.isReady()) {
+          cache_->regionManager_.close(std::move(res->desc_));
+        }
+      });
+  // Retry is handled by onWorkerThread, we should always have a value here
+  XDCHECK(res.hasValue()) << "should always get value from lookupInternal()";
+  auto& ld = res.value();
+
+  if (ld.status_ == Status::Ok) {
+    auto expiryTime = reinterpret_cast<const uint32_t*>(ld.buffer_.data())[1];
+    if (util::isExpired(expiryTime)) {
+      cache_->regionManager_.close(std::move(ld.desc_));
+      co_return std::nullopt;
+    }
+    co_return ReadHandle(*this, *(new FlashCacheItem(std::move(ld))));
+  }
+
+  if (ld.desc_.isReady()) {
+    cache_->regionManager_.close(std::move(ld.desc_));
+  }
+  if (ld.status_ == Status::NotFound) {
+    co_return std::nullopt;
+  } else {
+    co_return makeError(Error::Code::FIND_FAILED,
+                        "flash device or checksum error");
+  }
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>

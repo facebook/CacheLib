@@ -690,21 +690,7 @@ uint32_t CacheItem<CacheTrait>::getExpiryTime() const noexcept {
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isExpired() const noexcept {
-  thread_local uint32_t staleTime = 0;
-
-  if (expiryTime_ == 0) {
-    return false;
-  }
-
-  if (expiryTime_ < staleTime) {
-    return true;
-  }
-
-  uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
-  if (currentTime != staleTime) {
-    staleTime = currentTime;
-  }
-  return expiryTime_ < currentTime;
+  return util::isExpired(expiryTime_);
 }
 
 template <typename CacheTrait>

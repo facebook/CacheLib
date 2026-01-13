@@ -33,6 +33,9 @@ struct Error {
     INSERT_FAILED,
     ALREADY_INSERTED,
 
+    // Lookup errors
+    FIND_FAILED,
+
     // Remove errors
     REMOVE_FAILED,
 
