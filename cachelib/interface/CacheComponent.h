@@ -61,7 +61,9 @@ class CacheComponent {
 
   /**
    * Insert an item into cache using an AllocatedHandle returned by allocate().
-   * If inserted, the AllocatedHandle is no longer usable (moved out).
+   * If inserted, the AllocatedHandle is no longer usable (moved out).  If not
+   * inserted, the handle *may or may not* be usable; the behavior is
+   * implementation-defined.  You can check by using `if (handle)`.
    *
    * @param handle AllocatedHandle returned by allocate()
    * @return folly::unit or an error result otherwise

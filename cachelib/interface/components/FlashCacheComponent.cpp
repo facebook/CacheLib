@@ -41,7 +41,7 @@ class FlashCacheItem : public CacheItem {
   // NOTE: valueSize *must* include space for creation & expiration time
   FlashCacheItem(const HashedKey& hashedKey,
                  uint32_t valueSize,
-                 std::tuple<RegionDescriptor, size_t, RelAddress>&& allocation,
+                 FlashCacheComponent::AllocData&& allocation,
                  const uint32_t creationTime,
                  const uint32_t ttlSecs)
       : desc_(std::move(std::get<0>(allocation))),
@@ -61,6 +61,16 @@ class FlashCacheItem : public CacheItem {
         // Lookup returns the end address, update the offset to beginning
         relAddr_(ld.addrEnd_.sub(ld.buffer_.size())),
         buffer_(std::move(ld.buffer_)) {}
+
+  // FindToWrite constructor
+  FlashCacheItem(FlashCacheComponent::AllocData&& allocation,
+                 Buffer&& existingData)
+      : desc_(std::move(std::get<0>(allocation))),
+        relAddr_(std::move(std::get<2>(allocation))),
+        buffer_(std::move(existingData)) {
+    XDCHECK_EQ(buffer_.size(), std::get<1>(allocation))
+        << "New allocation has a different size than existing data";
+  }
 
   RegionDescriptor& getRegionDescriptor() noexcept { return desc_; }
   RelAddress& getRelAddress() noexcept { return relAddr_; }
@@ -125,16 +135,10 @@ const std::string& FlashCacheComponent::getName() const noexcept {
   return name_;
 }
 
-folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
-    Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
-  if (key.empty()) {
-    co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty key");
-  }
-
-  HashedKey hashedKey(key);
-  uint32_t valueSize = size + FlashCacheItem::kMetadataSize;
+folly::coro::Task<Result<FlashCacheComponent::AllocData>>
+FlashCacheComponent::allocateImpl(const HashedKey& key, uint32_t valueSize) {
   auto ret = co_await onWorkerThread(
-      [=, this]() { return cache_->allocateForInsert(hashedKey, valueSize); },
+      [=, this]() { return cache_->allocateForInsert(key, valueSize); },
       [this](auto&& result) {
         if (result.hasValue()) {
           // Successfully allocated Region memory but coroutine was cancelled -
@@ -144,15 +148,29 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
           cache_->regionManager_.close(std::move(desc));
         }
       });
-  if (ret.hasError()) {
+  if (ret.hasValue()) {
+    co_return std::move(ret).value();
+  } else {
     co_return makeError(Error::Code::ALLOCATE_FAILED,
                         "could not allocate space in a region");
   }
-  // NOTE: we can't checksum until the user has finished writing their data,
-  // defer until they call insert()
-  auto* item = new FlashCacheItem(hashedKey, valueSize, std::move(ret).value(),
-                                  creationTime, ttlSecs);
-  co_return AllocatedHandle(*this, *item);
+}
+
+folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
+    Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
+  if (key.empty()) {
+    co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty key");
+  }
+
+  HashedKey hashedKey(key);
+  uint32_t valueSize = size + FlashCacheItem::kMetadataSize;
+  co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
+    // NOTE: we can't checksum until the user has finished writing their data,
+    // defer until they call insert()
+    auto* item = new FlashCacheItem(hashedKey, valueSize, std::move(value),
+                                    creationTime, ttlSecs);
+    return AllocatedHandle(*this, *item);
+  });
 }
 
 folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
@@ -162,24 +180,7 @@ folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
                         "empty AllocatedHandle");
   }
 
-  auto& fccItem = reinterpret_cast<FlashCacheItem&>(*handle);
-  auto* desc = fccItem.getEntryDescriptor();
-  auto logicalSizeWritten = desc->keySize + desc->valueSize;
-  auto totalSize = fccItem.getTotalSize();
-  auto keyHash = desc->keyHash;
-
-  // NOTE: we don't need to run this on a worker thread because everything here
-  // is synchronous - only allocation is async
-
-  if (cache_->checksumData_) {
-    desc->cs = checksum(fccItem.getBuffer().view().slice(0, desc->valueSize));
-  }
-  cache_->regionManager_.write(fccItem.getRelAddress(),
-                               std::move(fccItem.getBuffer()));
-  cache_->logicalWrittenCount_.add(logicalSizeWritten);
-  auto inserted = cache_->updateIndex(keyHash, totalSize,
-                                      fccItem.getRelAddress(), allowReplace);
-  if (inserted) {
+  if (writeBackImpl(*handle, allowReplace)) {
     setInserted(handle, true);
     auto _ = std::move(handle);
     co_return folly::unit;
@@ -248,8 +249,31 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>
-FlashCacheComponent::findToWrite(Key /* key */) {
-  co_return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+FlashCacheComponent::findToWrite(Key key) {
+  uint64_t keyHash;
+  uint32_t valueSize;
+  Buffer buf;
+  {
+    auto findResult = co_await find(key);
+    if (findResult.hasError()) {
+      co_return folly::makeUnexpected(std::move(findResult).error());
+    } else if (!findResult->has_value()) {
+      co_return std::nullopt;
+    }
+
+    auto* fccItem = reinterpret_cast<FlashCacheItem*>(
+        const_cast<CacheItem*>(findResult.value()->get()));
+    const auto* entryDesc = fccItem->getEntryDescriptor();
+    keyHash = entryDesc->keyHash;
+    valueSize = entryDesc->valueSize;
+    buf = std::move(fccItem->getBuffer());
+  }
+
+  auto hashedKey = HashedKey::precomputed(key, keyHash);
+  co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
+    auto* newItem = new FlashCacheItem(std::move(value), std::move(buf));
+    return WriteHandle(*this, *newItem);
+  });
 }
 
 folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key /* key */) {
@@ -266,8 +290,30 @@ FlashCacheComponent::FlashCacheComponent(std::string&& name,
     : name_(std::move(name)),
       cache_(std::make_unique<navy::BlockCache>(std::move(config))) {}
 
-UnitResult FlashCacheComponent::writeBack(CacheItem& /* item */) {
-  return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
+  auto& fccItem = reinterpret_cast<FlashCacheItem&>(item);
+  auto* desc = fccItem.getEntryDescriptor();
+  auto logicalSizeWritten = desc->keySize + desc->valueSize;
+  auto totalSize = fccItem.getTotalSize();
+  auto keyHash = desc->keyHash;
+
+  // Note: we don't need to run this on a worker thread because everything here
+  // is synchronous - only allocation is async
+
+  if (cache_->checksumData_) {
+    desc->cs = checksum(fccItem.getBuffer().view().slice(0, desc->valueSize));
+  }
+  cache_->regionManager_.write(fccItem.getRelAddress(),
+                               std::move(fccItem.getBuffer()));
+  cache_->logicalWrittenCount_.add(logicalSizeWritten);
+  return cache_->updateIndex(keyHash, totalSize, fccItem.getRelAddress(),
+                             allowReplace);
+}
+
+UnitResult FlashCacheComponent::writeBack(CacheItem& item) {
+  auto inserted = writeBackImpl(item, /* allowReplace */ true);
+  XDCHECK(inserted) << "writeBack should never fail";
+  return folly::unit;
 }
 
 folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
