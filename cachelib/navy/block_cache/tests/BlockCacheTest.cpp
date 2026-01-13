@@ -18,7 +18,6 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <future>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"

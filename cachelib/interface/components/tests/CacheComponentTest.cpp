@@ -24,8 +24,11 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/interface/CacheComponent.h"
+#include "cachelib/interface/components/FlashCacheComponent.h"
 #include "cachelib/interface/components/RAMCacheComponent.h"
 #include "cachelib/interface/tests/Utils.h"
+#include "cachelib/navy/block_cache/tests/TestHelpers.h"
+#include "cachelib/navy/common/Device.h"
 
 using namespace ::testing;
 using namespace facebook::cachelib;
@@ -75,6 +78,38 @@ class RAMCacheFactory : public CacheFactory {
   }
 };
 
+class FlashCacheFactory : public CacheFactory {
+ public:
+  FlashCacheFactory()
+      : hits_(/* count */ kDeviceSize / kRegionSize, /* value */ 0) {}
+
+  std::unique_ptr<CacheComponent> create() override {
+    device_ = navy::createMemoryDevice(kDeviceSize, /* encryptor */ nullptr);
+    auto flashCache = ASSERT_OK(
+        FlashCacheComponent::create("CacheComponentTest", makeConfig()));
+    return std::make_unique<FlashCacheComponent>(std::move(flashCache));
+  }
+
+ private:
+  using BlockCache = navy::BlockCache;
+
+  static constexpr uint64_t kRegionSize{/* 16KB */ 16 * 1024};
+  static constexpr uint64_t kDeviceSize{/* 256KB */ 256 * 1024};
+
+  std::unique_ptr<navy::Device> device_;
+  std::vector<uint32_t> hits_;
+
+  BlockCache::Config makeConfig() {
+    BlockCache::Config config;
+    config.regionSize = kRegionSize;
+    config.cacheSize = kDeviceSize;
+    config.device = device_.get();
+    config.evictionPolicy =
+        std::make_unique<NiceMock<navy::MockPolicy>>(&hits_);
+    return config;
+  }
+};
+
 template <typename FactoryType>
 class CacheComponentTest : public ::testing::Test {
  protected:
@@ -97,7 +132,7 @@ class CacheComponentTest : public ::testing::Test {
 };
 
 // Define the list of factory types to test
-using FactoryTypes = ::testing::Types<RAMCacheFactory>;
+using FactoryTypes = ::testing::Types<RAMCacheFactory, FlashCacheFactory>;
 TYPED_TEST_SUITE(CacheComponentTest, FactoryTypes);
 
 // ============================================================================
@@ -231,13 +266,15 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceExistingItem) {
   auto result2 =
       ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
 
-  CO_ASSERT_TRUE(result2.has_value());
-  auto& replacedHandle = result2.value();
-  EXPECT_EQ(replacedHandle->getKey(), key);
+  // Some implementations may not return the old data -- and that's ok!
+  if (result2.has_value()) {
+    auto& replacedHandle = result2.value();
+    EXPECT_EQ(replacedHandle->getKey(), key);
 
-  std::string replacedData(replacedHandle->template getMemoryAs<const char>(),
-                           data1.size());
-  EXPECT_EQ(replacedData, data1);
+    std::string replacedData(replacedHandle->template getMemoryAs<const char>(),
+                             data1.size());
+    EXPECT_EQ(replacedData, data1);
+  }
 
   auto findResult = ASSERT_OK(co_await this->cache_->find(key));
   CO_ASSERT_TRUE(findResult.has_value());
@@ -252,13 +289,14 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceMultipleTimes) {
   for (int i = 0; i < 5; ++i) {
     auto handle =
         ASSERT_OK(co_await this->cache_->allocate(key, 100, this->now(), 3600));
+    *handle->template getMemoryAs<uint32_t>() = i;
     auto result =
         ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle)));
 
     if (i == 0) {
       EXPECT_FALSE(result.has_value());
-    } else {
-      EXPECT_TRUE(result.has_value());
+    } else if (result.has_value()) {
+      EXPECT_EQ(*result.value()->template getMemoryAs<uint32_t>(), i - 1);
     }
   }
 }
@@ -283,14 +321,15 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   auto result2 =
       ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle2)));
 
-  CO_ASSERT_TRUE(result2.has_value());
-  auto& replacedSmallHandle = result2.value();
-  EXPECT_EQ(replacedSmallHandle->getKey(), key);
-  EXPECT_GE(replacedSmallHandle->getMemorySize(), smallData.size());
-  std::string retrievedSmall(
-      replacedSmallHandle->template getMemoryAs<const char>(),
-      smallData.size());
-  EXPECT_EQ(retrievedSmall, smallData);
+  if (result2.has_value()) {
+    auto& replacedSmallHandle = result2.value();
+    EXPECT_EQ(replacedSmallHandle->getKey(), key);
+    EXPECT_GE(replacedSmallHandle->getMemorySize(), smallData.size());
+    std::string retrievedSmall(
+        replacedSmallHandle->template getMemoryAs<const char>(),
+        smallData.size());
+    EXPECT_EQ(retrievedSmall, smallData);
+  }
 
   // Verify large data is now in cache
   auto findResult1 = ASSERT_OK(co_await this->cache_->find(key));
@@ -308,14 +347,15 @@ CO_TYPED_TEST(CacheComponentTest, InsertOrReplaceDifferentSizes) {
   auto result3 =
       ASSERT_OK(co_await this->cache_->insertOrReplace(std::move(handle3)));
 
-  CO_ASSERT_TRUE(result3.has_value());
-  auto& replacedLargeHandle = result3.value();
-  EXPECT_EQ(replacedLargeHandle->getKey(), key);
-  EXPECT_GE(replacedLargeHandle->getMemorySize(), largeData.size());
-  std::string retrievedLarge2(
-      replacedLargeHandle->template getMemoryAs<const char>(),
-      largeData.size());
-  EXPECT_EQ(retrievedLarge2, largeData);
+  if (result3.has_value()) {
+    auto& replacedLargeHandle = result3.value();
+    EXPECT_EQ(replacedLargeHandle->getKey(), key);
+    EXPECT_GE(replacedLargeHandle->getMemorySize(), largeData.size());
+    std::string retrievedLarge2(
+        replacedLargeHandle->template getMemoryAs<const char>(),
+        largeData.size());
+    EXPECT_EQ(retrievedLarge2, largeData);
+  }
 
   // Verify small data is now in cache
   auto findResult2 = ASSERT_OK(co_await this->cache_->find(key));
