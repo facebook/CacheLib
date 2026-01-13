@@ -276,13 +276,45 @@ FlashCacheComponent::findToWrite(Key key) {
   });
 }
 
-folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key /* key */) {
-  co_return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key key) {
+  auto res = co_await onWorkerThread(
+      [this,
+       hashedKey = HashedKey(key)]() -> folly::Expected<bool, navy::Status> {
+        auto innerResult = cache_->remove(hashedKey);
+        switch (innerResult) {
+        case navy::Status::Ok:
+          return true;
+        case navy::Status::NotFound:
+          return false;
+        default:
+          return folly::makeUnexpected(innerResult);
+        }
+      }
+      // No cleanup needed - it doesn't matter if we removed the item or not if
+      // the operation was cancelled (operation is "indeterminate")
+  );
+  if (res.hasValue()) {
+    co_return res.value();
+  } else {
+    co_return makeError(Error::Code::REMOVE_FAILED,
+                        "could not remove item from flash");
+  }
 }
 
-folly::coro::Task<UnitResult> FlashCacheComponent::remove(
-    ReadHandle&& /* handle */) {
-  co_return makeError(Error::Code::UNIMPLEMENTED, "not yet implemented");
+folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
+  if (!handle) {
+    co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty ReadHandle");
+  }
+
+  cache_->removeCount_.inc();
+  auto& fccItem =
+      reinterpret_cast<FlashCacheItem&>(const_cast<CacheItem&>(*handle));
+  auto hashedKey = HashedKey::precomputed(
+      fccItem.getKey(), fccItem.getEntryDescriptor()->keyHash);
+  auto status = cache_->removeImpl(hashedKey, fccItem.getBuffer());
+  XDCHECK(status == navy::Status::Ok || status == navy::Status::NotFound);
+  auto _ = std::move(handle);
+  co_return folly::unit;
 }
 
 FlashCacheComponent::FlashCacheComponent(std::string&& name,

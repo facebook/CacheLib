@@ -71,8 +71,8 @@ class FlashCacheComponent : public CacheComponent {
   // Runs func() on a RegionManager worker fiber. Should not be called from an
   // existing region manager worker fiber!
   template <typename FuncT,
-            typename CleanupFuncT = std::function<void()>,
-            typename ReturnT = std::invoke_result_t<FuncT>>
+            typename ReturnT = std::invoke_result_t<FuncT>,
+            typename CleanupFuncT = std::function<void(ReturnT)>>
   folly::coro::Task<ReturnT> onWorkerThread(FuncT&& func,
                                             CleanupFuncT&& cleanup = {}) {
     XDCHECK(!cache_->regionManager_.isOnWorker())

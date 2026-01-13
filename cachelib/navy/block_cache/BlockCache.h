@@ -333,6 +333,12 @@ class BlockCache final : public Engine {
                    const RelAddress& addr,
                    bool allowReplace) const;
 
+  // Remove an item previously found via lookup
+  // @param hk          key to be removed
+  // @param value       value populated with data read from lookup used for
+  //                    precise remove and item destructor callback
+  Status removeImpl(const HashedKey& hk, const Buffer& value);
+
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
   uint32_t onRegionReclaim(RegionId rid, BufferView buffer);

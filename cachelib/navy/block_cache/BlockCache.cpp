@@ -460,6 +460,21 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
   return std::make_pair(Status::NotFound, "");
 }
 
+Status BlockCache::removeImpl(const HashedKey& hk, const Buffer& value) {
+  auto lr = index_->remove(hk.keyHash());
+  if (lr.found()) {
+    uint64_t removedObjectSize = decodeSizeHint(lr.sizeHint());
+    addHole(removedObjectSize);
+    usedSizeBytes_.sub(removedObjectSize);
+    succRemoveCount_.inc();
+    if (!value.isNull() && destructorCb_) {
+      destructorCb_(hk, value.view(), DestructorEvent::Removed);
+    }
+    return Status::Ok;
+  }
+  return Status::NotFound;
+}
+
 Status BlockCache::remove(HashedKey hk) {
   auto start = getSteadyClock();
   SCOPE_EXIT {
@@ -496,18 +511,7 @@ Status BlockCache::remove(HashedKey hk) {
     }
   }
 
-  auto lr = index_->remove(hk.keyHash());
-  if (lr.found()) {
-    uint64_t removedObjectSize = decodeSizeHint(lr.sizeHint());
-    addHole(removedObjectSize);
-    usedSizeBytes_.sub(removedObjectSize);
-    succRemoveCount_.inc();
-    if (!value.isNull() && destructorCb_) {
-      destructorCb_(hk, value.view(), DestructorEvent::Removed);
-    }
-    return Status::Ok;
-  }
-  return Status::NotFound;
+  return removeImpl(hk, value);
 }
 
 /**
