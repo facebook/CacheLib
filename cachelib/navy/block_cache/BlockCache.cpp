@@ -524,7 +524,7 @@ Status BlockCache::remove(HashedKey hk) {
  *
  * If a checksum error is detected in an item's descriptor, the reclaim process
  * is aborted for the remaining items in the region, and their eviction
- * callbacks will not be invoked. If a cheksum error is detected in the value,
+ * callbacks will not be invoked. If a checksum error is detected in the value,
  * we can continue working on the remaining items as the metadata is still valid
  * and that is what we need to find the next item to evict/remove/reinsert.
  *
@@ -843,7 +843,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
     evictionLookupMissCounter_.inc();
     // Either item is not in index (NOT_FOUND) or the time has been
     // replaced by a newer item hence the current item is invalidated
-    // (INVALDIATED).
+    // (INVALIDATED).
     auto eventRes = !lr.found() ? AllocatorApiResult::NOT_FOUND
                                 : AllocatorApiResult::INVALIDATED;
     recordEvent(hk.key(), AllocatorApiEvent::NVM_REINSERT, eventRes, entrySize);
