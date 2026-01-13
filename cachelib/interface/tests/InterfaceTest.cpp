@@ -197,7 +197,7 @@ class TestCacheComponent : public CacheComponent {
   }
 };
 
-class CacheComponentTest : public ::testing::Test {
+class InterfaceTest : public ::testing::Test {
  public:
   void TearDown() override {
     EXPECT_TRUE(cache_.allocatedItems_.empty());
@@ -232,7 +232,7 @@ class CacheComponentTest : public ::testing::Test {
 };
 
 template <typename HandleType>
-class HandleTest : public CacheComponentTest {
+class HandleTest : public InterfaceTest {
  public:
   template <typename HandleT>
   TestCacheItem* makeItem() {
@@ -286,7 +286,7 @@ TYPED_TEST(HandleTest, move) {
   this->template checkReleased<TypeParam>(item, /* removedFromCache */ false);
 }
 
-CO_TEST_F(CacheComponentTest, basic) {
+CO_TEST_F(InterfaceTest, basic) {
   co_await allocateAndInsertItem();
 
   auto readHandle = ASSERT_OK(co_await cache_.find(key_));
@@ -306,7 +306,7 @@ CO_TEST_F(CacheComponentTest, basic) {
   EXPECT_FALSE(this->cache_.cachedItems_.contains(this->key_));
 }
 
-CO_TEST_F(CacheComponentTest, replace) {
+CO_TEST_F(InterfaceTest, replace) {
   co_await allocateAndInsertItem();
 
   auto allocHandle = ASSERT_OK(co_await cache_.allocate(
@@ -329,14 +329,14 @@ CO_TEST_F(CacheComponentTest, replace) {
   ASSERT_OK(co_await cache_.remove(std::move(readHandle)));
 }
 
-CO_TEST_F(CacheComponentTest, removeHandle) {
+CO_TEST_F(InterfaceTest, removeHandle) {
   co_await allocateAndInsertItem();
   auto readHandle = ASSERT_OK(co_await cache_.find(key_));
   ASSERT_OK(co_await cache_.remove(std::move(readHandle.value())));
   EXPECT_FALSE(this->cache_.cachedItems_.contains(this->key_));
 }
 
-CO_TEST_F(CacheComponentTest, duplicate) {
+CO_TEST_F(InterfaceTest, duplicate) {
   co_await allocateAndInsertItem();
   auto allocHandle = ASSERT_OK(co_await cache_.allocate(
       key_, /* valueSize */ 128, /* creationTime */ 1000, /* ttl */ 10));
