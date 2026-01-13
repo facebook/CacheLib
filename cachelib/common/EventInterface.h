@@ -150,6 +150,10 @@ inline const char* toString(AllocatorApiResult result) {
     return "ABORTED";
   case AllocatorApiResult::INVALIDATED:
     return "INVALIDATED";
+  case AllocatorApiResult::ACCEPTED:
+    return "ACCEPTED";
+  case AllocatorApiResult::REJECTED:
+    return "REJECTED";
   default:
     XDCHECK(false);
     return "** CORRUPT RESULT **";
