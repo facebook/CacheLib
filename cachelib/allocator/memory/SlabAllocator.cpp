@@ -23,7 +23,6 @@
 #include <sys/mman.h>
 
 #include <chrono>
-#include <memory>
 #include <stdexcept>
 
 #include "cachelib/common/Utils.h"
@@ -341,7 +340,7 @@ Slab* SlabAllocator::makeNewSlabImpl() {
 void SlabAllocator::initializeHeader(Slab* slab, PoolId id) {
   auto* header = getSlabHeader(slab);
   XDCHECK(header != nullptr);
-  header = new (header) SlabHeader(id);
+  new (header) SlabHeader(id);
 }
 
 Slab* SlabAllocator::makeNewSlab(PoolId id) {
@@ -461,8 +460,8 @@ std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
 
   // pick a random location in the memory.
   const auto offset = folly::Random::rand64(0, validMaxOffset);
-  const auto* memory = reinterpret_cast<void*>(
-      reinterpret_cast<uintptr_t>(slabMemoryStart_) + offset);
+  const auto* memory =
+      reinterpret_cast<const uint8_t*>(slabMemoryStart_) + offset;
 
   const auto* slab = getSlabForMemory(memory);
   const auto* header = getSlabHeader(slab);
@@ -484,8 +483,7 @@ std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
                   allocSize;
   allocIdx = allocIdx > maxAllocIdx ? maxAllocIdx : allocIdx;
   return std::make_tuple(
-      allocSize, reinterpret_cast<const void*>(
-                     reinterpret_cast<uintptr_t>(slab) + allocSize * allocIdx));
+      allocSize, reinterpret_cast<const uint8_t*>(slab) + allocSize * allocIdx);
 }
 
 serialization::SlabAllocatorObject SlabAllocator::saveState() {
