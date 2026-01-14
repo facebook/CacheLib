@@ -475,6 +475,10 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                    statPrefix + "nvm.insert.latency_us");
     visitEstimates(uploadStatsNanoToMicro, stats.nvmRemoveLatencyNs,
                    statPrefix + "nvm.remove.latency_us");
+    visitEstimates(uploadStatsNanoToMicro, stats.nvmMakeBlobCbLatencyNs,
+                   statPrefix + "nvm.make_blob_cb.latency_us");
+    visitEstimates(uploadStatsNanoToMicro, stats.nvmMakeObjCbLatencyNs,
+                   statPrefix + "nvm.make_obj_cb.latency_us");
     visitEstimates(uploadStats, stats.nvmPutSize,
                    statPrefix + "nvm.incoming_item_size_bytes");
 

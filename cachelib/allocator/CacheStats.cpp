@@ -54,10 +54,10 @@ struct SizeVerify {};
 void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
 #ifndef SKIP_SIZE_VERIFY
 #ifdef __GLIBCXX__
-#define EXPECTED_SIZE 16384
+#define EXPECTED_SIZE 16736
 #endif
 #ifdef _LIBCPP_VERSION
-#define EXPECTED_SIZE 16384
+#define EXPECTED_SIZE 16736
 #endif
   SizeVerify<sizeof(Stats)> a = SizeVerify<EXPECTED_SIZE>{};
   std::ignore = a;
@@ -115,6 +115,8 @@ void Stats::populateGlobalCacheStats(GlobalCacheStats& ret) const {
   ret.nvmLookupLatencyNs = this->nvmLookupLatency_.estimate();
   ret.nvmInsertLatencyNs = this->nvmInsertLatency_.estimate();
   ret.nvmRemoveLatencyNs = this->nvmRemoveLatency_.estimate();
+  ret.nvmMakeBlobCbLatencyNs = this->nvmMakeBlobCbLatency_.estimate();
+  ret.nvmMakeObjCbLatencyNs = this->nvmMakeObjCbLatency_.estimate();
   ret.ramEvictionAgeSecs = this->ramEvictionAgeSecs_.estimate();
   ret.ramItemLifeTimeSecs = this->ramItemLifeTimeSecs_.estimate();
   ret.nvmSmallLifetimeSecs = this->nvmSmallLifetimeSecs_.estimate();

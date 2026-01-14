@@ -199,6 +199,8 @@ struct Stats {
   mutable util::PercentileStats nvmLookupLatency_;
   mutable util::PercentileStats nvmInsertLatency_;
   mutable util::PercentileStats nvmRemoveLatency_;
+  mutable util::PercentileStats nvmMakeBlobCbLatency_;
+  mutable util::PercentileStats nvmMakeObjCbLatency_;
 
   // percentile stats for various cache statistics
   mutable util::PercentileStats ramEvictionAgeSecs_;
