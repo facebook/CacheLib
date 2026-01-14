@@ -121,10 +121,10 @@ class SlabAllocator {
   // fetch a random allocation in memory.
   // this does not guarantee the allocation is in a valid state.
   //
-  // @return the start address of the allocation
-  //         nullptr if the allocation is in invalid state according to
-  //         allocator.
-  const void* getRandomAlloc() const noexcept;
+  // @return a tuple containing the alloc size and the start address of the
+  //         allocation (nullptr if the allocation is in invalid state
+  //         according to allocator).
+  std::tuple<uint32_t, const void*> getRandomAlloc() const noexcept;
 
   // grab an empty slab from the slab allocator if one is available.
   //

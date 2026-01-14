@@ -4470,14 +4470,16 @@ CacheAllocator<CacheTrait>::getSampleItem() {
   }
 
   // Sampling from DRAM cache
-  auto item = reinterpret_cast<const Item*>(allocator_->getRandomAlloc());
+  auto [allocSize, rawItem] = allocator_->getRandomAlloc();
+  auto item = reinterpret_cast<const Item*>(rawItem);
   if (!item || UNLIKELY(item->isExpired())) {
     return SampleItem{false /* fromNvm */};
   }
 
   // Check that item returned is the same that was sampled
 
-  auto sharedHdl = std::make_shared<ReadHandle>(findInternal(item->getKey()));
+  auto sharedHdl =
+      std::make_shared<ReadHandle>(findInternal(item->getKeySized(allocSize)));
   if (sharedHdl->get() != item) {
     return SampleItem{false /* fromNvm */};
   }

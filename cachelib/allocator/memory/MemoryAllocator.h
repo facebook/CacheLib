@@ -501,10 +501,10 @@ class MemoryAllocator {
   // fetch a random allocation in memory.
   // this does not guarantee the allocation is in any valid state.
   //
-  // @return the start address of the allocation
-  //         nullptr if the random allocation is invalid state according to
-  //         the allocator.
-  const void* getRandomAlloc() const noexcept {
+  // @return a tuple containing the alloc size and the start address of the
+  //         allocation (nullptr if the allocation is in invalid state
+  //         according to allocator).
+  std::tuple<uint32_t, const void*> getRandomAlloc() const noexcept {
     return slabAllocator_.getRandomAlloc();
   }
 

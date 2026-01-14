@@ -133,6 +133,15 @@ class CACHELIB_PACKED_ATTR KAllocation {
     return Key{reinterpret_cast<char*>(getData()), keySize};
   }
 
+  // same as getKey() but ensures we don't create a key that could extend
+  // outside the given allocation size (safe to call on unallocated data)
+  const Key getKeySized(uint32_t allocSize) const noexcept {
+    uint32_t headerSize = isSmallKey() ? sizeof(PackedSize)
+                                       : sizeof(PackedSize) + sizeof(LargeKey);
+    auto keySize = std::min(allocSize - headerSize, getKeySize());
+    return Key{reinterpret_cast<char*>(getData()), keySize};
+  }
+
   // updates the current key with the new one. The key size must match.
   void changeKey(Key key) {
     if (key.size() != getKeySize()) {

@@ -452,7 +452,8 @@ bool SlabAllocator::isMemoryInSlab(const void* ptr,
   return getSlabForMemory(ptr) == slab;
 }
 
-const void* SlabAllocator::getRandomAlloc() const noexcept {
+std::tuple<uint32_t, const void*> SlabAllocator::getRandomAlloc()
+    const noexcept {
   // disregard the space we use for slab header.
   const auto validMaxOffset =
       memorySize_ - (reinterpret_cast<uintptr_t>(slabMemoryStart_) -
@@ -466,7 +467,7 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
   const auto* slab = getSlabForMemory(memory);
   const auto* header = getSlabHeader(slab);
   if (header == nullptr) {
-    return nullptr;
+    return std::make_tuple(0, nullptr);
   }
 
   XDCHECK_GE(reinterpret_cast<uintptr_t>(memory),
@@ -474,7 +475,7 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
 
   const auto allocSize = header->allocSize;
   if (allocSize == 0) {
-    return nullptr;
+    return std::make_tuple(0, nullptr);
   }
 
   const auto maxAllocIdx = Slab::kSize / allocSize - 1;
@@ -482,8 +483,9 @@ const void* SlabAllocator::getRandomAlloc() const noexcept {
                    reinterpret_cast<uintptr_t>(slab)) /
                   allocSize;
   allocIdx = allocIdx > maxAllocIdx ? maxAllocIdx : allocIdx;
-  return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(slab) +
-                                       allocSize * allocIdx);
+  return std::make_tuple(
+      allocSize, reinterpret_cast<const void*>(
+                     reinterpret_cast<uintptr_t>(slab) + allocSize * allocIdx));
 }
 
 serialization::SlabAllocatorObject SlabAllocator::saveState() {

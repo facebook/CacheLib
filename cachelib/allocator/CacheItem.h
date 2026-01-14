@@ -170,6 +170,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
   // Fetch the key corresponding to the allocation
   const Key getKey() const noexcept;
 
+  // Same as above but safe to call for unallocated data.  User must specify an
+  // allocation size.
+  const Key getKeySized(uint32_t allocSize) const noexcept;
+
   // Readonly memory for this allocation.
   const void* getMemory() const noexcept;
 
@@ -640,6 +644,12 @@ template <typename CacheTrait>
 const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
     const noexcept {
   return alloc_.getKey();
+}
+
+template <typename CacheTrait>
+const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKeySized(
+    uint32_t allocSize) const noexcept {
+  return alloc_.getKeySized(allocSize);
 }
 
 template <typename CacheTrait>
