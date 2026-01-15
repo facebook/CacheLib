@@ -19,6 +19,8 @@
 #include <folly/coro/Promise.h>
 #include <folly/coro/Task.h>
 
+#include <concepts>
+
 #include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/common/Types.h"
 
@@ -47,7 +49,7 @@ using DefaultCleanupT = decltype([](auto&&) {});
  */
 template <typename FuncT,
           typename CleanupFuncT = detail::DefaultCleanupT,
-          typename ReturnT = std::invoke_result_t<FuncT>>
+          std::movable ReturnT = std::invoke_result_t<FuncT>>
 folly::coro::Task<ReturnT> onWorkerThread(
     navy::NavyThread& thread,
     FuncT&& func,
