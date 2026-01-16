@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <magic_enum/magic_enum.hpp>
 #include <numeric>
 
 #include "cachelib/common/EventTracker.h"
@@ -76,22 +77,37 @@ class EventTrackerTest : public ::testing::Test {
       return false;
     }
     return row.at(0) == std::to_string(event.eventTimestamp) &&
-           row.at(1) == toString(event.event) &&
-           row.at(2) == toString(event.result) && row.at(3) == event.key;
+           row.at(1) == magic_enum::enum_name(event.event) &&
+           row.at(2) == magic_enum::enum_name(event.result) &&
+           row.at(3) == event.key;
   }
 
-  void checkCsvHeader(const std::vector<std::vector<std::string>>& csvRows) {
+  void checkCsvHeader(const std::vector<std::vector<std::string>>& csvRows,
+                      const std::vector<EventInfoField>& expectedFields =
+                          getDefaultEventInfoFields()) {
     ASSERT_FALSE(csvRows.empty()) << "CSV has no rows";
     std::string header = std::accumulate(
         csvRows.at(0).begin() + 1, csvRows.at(0).end(), csvRows.at(0).front(),
         [](const std::string& a, const std::string& b) { return a + "," + b; });
-    ASSERT_EQ(header, FileEventSink::kBaseHeader);
+
+    std::string expectedHeader;
+    bool first = true;
+    for (const auto& field : expectedFields) {
+      if (!first) {
+        expectedHeader += ",";
+      }
+      expectedHeader += toHeaderName(field);
+      first = false;
+    }
+    ASSERT_EQ(header, expectedHeader);
   }
 
   void checkCsvRows(const std::vector<std::vector<std::string>>& csvRows,
                     const std::vector<EventInfo>& events,
-                    bool checkAllRows = true) {
-    checkCsvHeader(csvRows);
+                    bool checkAllRows = true,
+                    const std::vector<EventInfoField>& expectedFields =
+                        getDefaultEventInfoFields()) {
+    checkCsvHeader(csvRows, expectedFields);
     if (checkAllRows) {
       // There is no sampling so we expect each row in CSV to
       // have a corresponding event in events vector.
@@ -106,8 +122,8 @@ class EventTrackerTest : public ::testing::Test {
             << "Row " << i + 1 << " does not match event " << i << ". Row: ["
             << row.at(0) << ", " << row.at(1) << ", " << row.at(2) << ", "
             << row.at(3) << "], Event: [" << event.eventTimestamp << ", "
-            << toString(event.event) << ", " << toString(event.result) << ", "
-            << event.key << "]";
+            << magic_enum::enum_name(event.event) << ", "
+            << magic_enum::enum_name(event.result) << ", " << event.key << "]";
       }
     } else {
       // There is sampling so we expect less events to be logged. We expect
@@ -189,7 +205,8 @@ TEST_F(EventTrackerTest, SamplingRateChange) {
   ASSERT_GE(csvRows.size(), numItems / 3 + 1);
   ASSERT_LE(csvRows.size(), numItems + 1);
 
-  checkCsvRows(csvRows, events, /*checkAllRows=*/false);
+  checkCsvRows(csvRows, events, /*checkAllRows=*/false,
+               getDefaultEventInfoFields());
 
   uint32_t lowIndexCount = 0;
   uint32_t highIndexCount = 0;
@@ -207,4 +224,56 @@ TEST_F(EventTrackerTest, SamplingRateChange) {
   ASSERT_EQ(lowIndexCount, numItems / 2);
   ASSERT_GT(lowIndexCount, highIndexCount);
   ASSERT_LT(lowIndexCount + highIndexCount, numItems);
+}
+
+TEST_F(EventTrackerTest, NvmAdmitWithSize) {
+  const char* key = "nvm_admit_key";
+  const size_t testSize = 1024;
+  const uint32_t testUsecaseId = 12345;
+
+  folly::test::TemporaryFile tmpFile;
+
+  {
+    EventTracker::Config config;
+    config.samplingRate = 1;
+    config.queueSize = 1000;
+    config.eventSink = std::make_unique<FileEventSink>(
+        tmpFile.path().string(),
+        std::vector<EventInfoField>{EventInfoField::Ts, EventInfoField::Event,
+                                    EventInfoField::Result, EventInfoField::Key,
+                                    EventInfoField::Size,
+                                    EventInfoField::UsecaseId});
+    auto eventTracker = std::make_unique<EventTracker>(std::move(config));
+
+    EventInfo eventInfo;
+    eventInfo.eventTimestamp = 12345;
+    eventInfo.key = key;
+    eventInfo.event = AllocatorApiEvent::NVM_ADMIT;
+    eventInfo.result = AllocatorApiResult::NVM_ADMITTED;
+    eventInfo.size = testSize;
+    eventInfo.usecaseId = testUsecaseId;
+
+    eventTracker->record(eventInfo);
+  }
+
+  auto csvRows = readCsvRows(tmpFile);
+
+  // Verify header includes size and usecaseId
+  ASSERT_EQ(csvRows.size(), 2) << "Expected header + 1 event row";
+  ASSERT_EQ(csvRows[0].size(), 6)
+      << "Expected 6 columns (ts,event,result,key,size,usecaseId)";
+  ASSERT_EQ(csvRows[0][4], "Size") << "Fifth column should be 'Size'";
+  ASSERT_EQ(csvRows[0][5], "UsecaseId") << "Sixth column should be 'UsecaseId'";
+
+  // Verify event data
+  const auto& row = csvRows[1];
+  ASSERT_EQ(row.size(), 6) << "Event row should have 6 columns";
+  ASSERT_EQ(row[0], "12345") << "Timestamp mismatch";
+  ASSERT_EQ(row[1], magic_enum::enum_name(AllocatorApiEvent::NVM_ADMIT))
+      << "Event type mismatch";
+  ASSERT_EQ(row[2], magic_enum::enum_name(AllocatorApiResult::NVM_ADMITTED))
+      << "Result mismatch";
+  ASSERT_EQ(row[3], key) << "Key mismatch";
+  ASSERT_EQ(row[4], std::to_string(testSize)) << "Size mismatch";
+  ASSERT_EQ(row[5], std::to_string(testUsecaseId)) << "UsecaseId mismatch";
 }

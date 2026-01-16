@@ -4006,7 +4006,6 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCache(const Item& item) {
   }
   return true;
 }
-
 template <typename CacheTrait>
 bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
     const Item& item) {
@@ -4014,12 +4013,14 @@ bool CacheAllocator<CacheTrait>::shouldWriteToNvmCacheExclusive(
 
   if (nvmAdmissionPolicy_) {
     AllocatorApiResult admissionResult = AllocatorApiResult::ACCEPTED;
-    if (!nvmAdmissionPolicy_->accept(item, chainedItemRange)) {
+    const bool accepted = nvmAdmissionPolicy_->accept(item, chainedItemRange);
+    if (!accepted) {
       admissionResult = AllocatorApiResult::REJECTED;
       stats_.numNvmRejectsByAP.inc();
-      return false;
     }
-    recordEvent(AllocatorApiEvent::NVM_ADMIT, item.getKey(), admissionResult);
+    recordEvent(AllocatorApiEvent::NVM_ADMIT, item.getKey(), admissionResult,
+                &item);
+    return accepted;
   }
 
   return true;
@@ -4299,7 +4300,7 @@ CacheAllocator<CacheTrait>::findInternalWithExpiration(
   XDCHECK(event == AllocatorApiEvent::FIND ||
           event == AllocatorApiEvent::FIND_FAST ||
           event == AllocatorApiEvent::PEEK)
-      << toString(event);
+      << magic_enum::enum_name(event);
 
   auto handle = findInternal(key);
   if (UNLIKELY(!handle)) {

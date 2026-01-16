@@ -21,6 +21,7 @@
 
 #include <deque>
 #include <fstream>
+#include <magic_enum/magic_enum.hpp>
 #include <mutex>
 #include <stdexcept>
 #include <variant>
@@ -30,6 +31,40 @@
 #include "cachelib/common/EventInterface.h"
 
 namespace facebook::cachelib {
+
+// Enum for EventInfo fields to avoid string comparisons when selecting columns
+enum class EventInfoField {
+  Ts,
+  Event,
+  Result,
+  Key,
+  Size,
+  ExpiryTime,
+  TimeToExpire,
+  TtlSecs,
+  AllocSize,
+  PoolId,
+  App,
+  Usecase,
+  UsecaseId,
+  AppId,
+};
+
+// Convert EventInfoField to header name string using magic_enum
+inline std::string_view toHeaderName(EventInfoField field) {
+  return magic_enum::enum_name(field);
+}
+
+// Default fields to include if none specified
+inline const std::vector<EventInfoField>& getDefaultEventInfoFields() {
+  static const std::vector<EventInfoField> defaults = {
+      EventInfoField::Ts,
+      EventInfoField::Event,
+      EventInfoField::Result,
+      EventInfoField::Key,
+  };
+  return defaults;
+}
 
 struct EventInfo {
   // Use std::string for owned fields (app, usecase), and folly::StringPiece for
@@ -130,12 +165,12 @@ class FifoEventSink : public EventSink {
 // EventSink that writes events to a file in CSV format.
 class FileEventSink : public EventSink {
  public:
-  static constexpr const char* kBaseHeader = "ts,event,result,key";
-  // additionalHeaders: vector of extra header names to look for in meta_info
-  explicit FileEventSink(const std::string& filename,
-                         std::vector<std::string> additionalHeaders = {})
+  // Constructor with enum-based fields (preferred - avoids string comparisons)
+  explicit FileEventSink(
+      const std::string& filename,
+      std::vector<EventInfoField> fields = getDefaultEventInfoFields())
       : file_(filename, std::ios::out | std::ios::trunc),
-        additionalHeaders_(std::move(additionalHeaders)) {
+        fields_(std::move(fields)) {
     if (!file_.is_open()) {
       throw std::runtime_error("Failed to open event log file: " + filename);
     }
@@ -162,38 +197,80 @@ class FileEventSink : public EventSink {
 
  private:
   std::ofstream file_;
-  std::vector<std::string> additionalHeaders_;
+  std::vector<EventInfoField> fields_;
   mutable std::mutex mutex_;
 
   void writeHeader() {
-    // Basic headers
-    file_ << kBaseHeader;
-    for (const auto& h : additionalHeaders_) {
-      file_ << "," << h;
+    bool first = true;
+    for (const auto& field : fields_) {
+      if (!first) {
+        file_ << ",";
+      }
+      file_ << toHeaderName(field);
+      first = false;
     }
     file_ << std::endl;
     file_.flush();
   }
 
-  void writeEvent(const EventInfo& eventInfo) {
-    file_ << eventInfo.eventTimestamp << "," << toString(eventInfo.event) << ","
-          << toString(eventInfo.result) << "," << eventInfo.key;
+  template <typename T>
+  void writeOptionalField(const folly::Optional<T>& field) {
+    field.has_value() ? (file_ << *field) : (file_ << "null");
+  }
 
-    for (const auto& h : additionalHeaders_) {
-      file_ << ",";
-      if (eventInfo.metaInfo.has_value()) {
-        auto it = eventInfo.metaInfo->find(h);
-        if (it != eventInfo.metaInfo->end()) {
-          if (std::holds_alternative<std::string>(it->second)) {
-            file_ << std::get<std::string>(it->second);
-          } else {
-            file_ << std::get<int64_t>(it->second);
-          }
-        } else {
-          file_ << "null";
-        }
-      } else {
-        file_ << "null";
+  void writeEvent(const EventInfo& eventInfo) {
+    bool first = true;
+    for (const auto& field : fields_) {
+      if (!first) {
+        file_ << ",";
+      }
+      first = false;
+      switch (field) {
+      case EventInfoField::Ts:
+        file_ << eventInfo.eventTimestamp;
+        break;
+      case EventInfoField::Event:
+        file_ << magic_enum::enum_name(eventInfo.event);
+        break;
+      case EventInfoField::Result:
+        file_ << magic_enum::enum_name(eventInfo.result);
+        break;
+      case EventInfoField::Key:
+        file_ << eventInfo.key;
+        break;
+      case EventInfoField::Size:
+        writeOptionalField(eventInfo.size);
+        break;
+      case EventInfoField::ExpiryTime:
+        writeOptionalField(eventInfo.expiryTime);
+        break;
+      case EventInfoField::TimeToExpire:
+        writeOptionalField(eventInfo.timeToExpire);
+        break;
+      case EventInfoField::TtlSecs:
+        writeOptionalField(eventInfo.ttlSecs);
+        break;
+      case EventInfoField::AllocSize:
+        writeOptionalField(eventInfo.allocSize);
+        break;
+      case EventInfoField::PoolId:
+        writeOptionalField(eventInfo.poolId);
+        break;
+      case EventInfoField::App:
+        writeOptionalField(eventInfo.app);
+        break;
+      case EventInfoField::Usecase:
+        writeOptionalField(eventInfo.usecase);
+        break;
+      case EventInfoField::UsecaseId:
+        writeOptionalField(eventInfo.usecaseId);
+        break;
+      case EventInfoField::AppId:
+        writeOptionalField(eventInfo.appId);
+        break;
+      default:
+        XLOG(WARN) << "Unknown field: " << toHeaderName(field);
+        break;
       }
     }
     file_ << std::endl;
