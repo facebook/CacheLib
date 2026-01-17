@@ -99,39 +99,7 @@ class GenericPieces : public GenericPiecesBase {
            1;
   }
 
-  uint64_t getRequestedSizeOfAPiece(uint64_t pieceIndex) const {
-    if (startPieceIndex_ == endPieceIndex_) {
-      XDCHECK_EQ(pieceIndex, startPieceIndex_);
-      return requestedEndByte_ - requestedStartByte_ + 1;
-    }
-
-    if (pieceIndex == startPieceIndex_) {
-      // For the first piece, trim bytes before requestedStartByte_
-      return pieceSize_ - requestedStartByte_ % pieceSize_;
-    } else if (pieceIndex == endPieceIndex_) {
-      // For the last piece, trim bytes after requestedEndByte_
-      return requestedEndByte_ % pieceSize_ + 1;
-    } else {
-      return pieceSize_;
-    }
-  }
-
-  uint64_t getBytesToTrimAtStart() const {
-    return requestedStartByte_ - startPieceIndex_ * pieceSize_;
-  }
-
-  uint64_t getBytesToTrimAtEnd() const {
-    return getLastByteOffsetOfLastPiece() - requestedEndByte_;
-  }
-
-  uint64_t getRequestedSize() const {
-    return (requestedEndByte_ - requestedStartByte_ + 1);
-  }
-
   uint64_t getStartPieceIndex() const { return startPieceIndex_; }
-  [[nodiscard]] uint64_t getStartPieceOffset() const {
-    return startPieceIndex_ * pieceSize_;
-  }
   uint64_t getEndPieceIndex() const { return endPieceIndex_; }
   uint64_t getRequestedStartByte() const { return requestedStartByte_; }
   uint64_t getRequestedEndByte() const { return requestedEndByte_; }
