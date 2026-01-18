@@ -21,7 +21,7 @@ WheelNameInfo = collections.namedtuple(
 )
 
 CMAKE_HEADER = """
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.8...4.0)
 
 project("{manifest_name}" LANGUAGES C)
 
