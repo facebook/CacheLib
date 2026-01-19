@@ -101,8 +101,6 @@ class GenericPieces : public GenericPiecesBase {
 
   uint64_t getStartPieceIndex() const { return startPieceIndex_; }
   uint64_t getEndPieceIndex() const { return endPieceIndex_; }
-  uint64_t getRequestedStartByte() const { return requestedStartByte_; }
-  uint64_t getRequestedEndByte() const { return requestedEndByte_; }
   uint64_t getFirstByteOffsetToFetch() const { return firstByteOffsetToFetch_; }
 
   /**
@@ -111,10 +109,6 @@ class GenericPieces : public GenericPiecesBase {
   uint64_t getTargetNumPieces() const;
 
  protected:
-  // Start byte of the request content (or range)
-  uint64_t requestedStartByte_;
-  // End byte of the request content (or range)
-  uint64_t requestedEndByte_;
   // Start piece index of the request content (or range)
   uint64_t startPieceIndex_;
   // End piece index of the request content (or range)

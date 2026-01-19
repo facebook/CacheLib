@@ -27,10 +27,9 @@ GenericPieces::GenericPieces(const std::string& baseKey,
                              uint64_t fullBodyLen,
                              const RequestRange* range)
     : GenericPiecesBase(baseKey, pieceSize, piecesPerGroup, fullBodyLen),
-      requestedStartByte_{0},
-      requestedEndByte_{fullBodyLen - 1},
       startPieceIndex_{0},
-      endPieceIndex_{numPiecesTotal_ - 1} {
+      endPieceIndex_{numPiecesTotal_ - 1},
+      firstByteOffsetToFetch_{0} {
   if (range) {
     resetFromRequestRange(*range);
   }
@@ -40,13 +39,11 @@ void GenericPieces::resetFromRequestRange(const RequestRange& range) {
   const auto& requestRange = range.getRequestRange();
   if (requestRange.has_value()) {
     // Range request, might not need to fetch all the pieces
-    requestedStartByte_ = requestRange->first;
-    startPieceIndex_ = requestedStartByte_ / pieceSize_;
+    startPieceIndex_ = requestRange->first / pieceSize_;
     if (requestRange->second.has_value()) {
       uint64_t requestedEndByte = requestRange->second.value();
       if (requestedEndByte < fullBodyLen_) {
-        requestedEndByte_ = requestedEndByte;
-        endPieceIndex_ = requestedEndByte_ / pieceSize_;
+        endPieceIndex_ = requestedEndByte / pieceSize_;
       }
     }
   }

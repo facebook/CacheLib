@@ -26,8 +26,6 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_FALSE(hr.getRequestRange().has_value());
   GenericPieces cp("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(4, cp.getNumPiecesTotal());
-  EXPECT_EQ(0, cp.getRequestedStartByte());
-  EXPECT_EQ(999, cp.getRequestedEndByte());
   EXPECT_EQ(0, cp.getStartPieceIndex());
   EXPECT_EQ(3, cp.getEndPieceIndex());
   EXPECT_EQ(0, cp.getCurFetchingPieceIndex());
@@ -44,8 +42,6 @@ TEST(GenericPiecesTests, Normal) {
   EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
   EXPECT_EQ(4, cp.getNumPiecesTotal());
-  EXPECT_EQ(260, cp.getRequestedStartByte());
-  EXPECT_EQ(759, cp.getRequestedEndByte());
   EXPECT_EQ(1, cp.getStartPieceIndex());
   EXPECT_EQ(2, cp.getEndPieceIndex());
   EXPECT_EQ(1, cp.getCurFetchingPieceIndex());
@@ -61,8 +57,6 @@ TEST(GenericPiecesTests, Normal) {
   hr = RequestRange(800, 995);
   EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
-  EXPECT_EQ(800, cp.getRequestedStartByte());
-  EXPECT_EQ(995, cp.getRequestedEndByte());
   EXPECT_EQ(3, cp.getStartPieceIndex());
   EXPECT_EQ(3, cp.getEndPieceIndex());
   EXPECT_EQ(3, cp.getCurFetchingPieceIndex());
@@ -77,8 +71,6 @@ TEST(GenericPiecesTests, Normal) {
   hr = RequestRange(400, folly::none);
   EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
-  EXPECT_EQ(400, cp.getRequestedStartByte());
-  EXPECT_EQ(999, cp.getRequestedEndByte());
   EXPECT_EQ(1, cp.getStartPieceIndex());
   EXPECT_EQ(3, cp.getEndPieceIndex());
   EXPECT_EQ(1, cp.getCurFetchingPieceIndex());
@@ -94,8 +86,6 @@ TEST(GenericPiecesTests, Normal) {
   hr = RequestRange(400, 56789);
   EXPECT_TRUE(hr.getRequestRange().has_value()); // Sanity check
   cp = GenericPieces("/mykey", 256, 0, 1000, &hr);
-  EXPECT_EQ(400, cp.getRequestedStartByte());
-  EXPECT_EQ(999, cp.getRequestedEndByte());
   EXPECT_EQ(1, cp.getStartPieceIndex());
   EXPECT_EQ(3, cp.getEndPieceIndex());
   EXPECT_EQ(1, cp.getCurFetchingPieceIndex());
