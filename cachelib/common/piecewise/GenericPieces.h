@@ -101,7 +101,9 @@ class GenericPieces : public GenericPiecesBase {
 
   uint64_t getStartPieceIndex() const { return startPieceIndex_; }
   uint64_t getEndPieceIndex() const { return endPieceIndex_; }
-  uint64_t getFirstByteOffsetToFetch() const { return firstByteOffsetToFetch_; }
+  uint64_t getFirstByteOffsetToFetch() const {
+    return startPieceIndex_ * getPieceSize();
+  }
 
   /**
    * Get the number of pieces we need to fetch (excluding the header piece)
@@ -113,8 +115,6 @@ class GenericPieces : public GenericPiecesBase {
   uint64_t startPieceIndex_;
   // End piece index of the request content (or range)
   uint64_t endPieceIndex_;
-  // Starting byte offset of the first piece
-  uint64_t firstByteOffsetToFetch_;
 };
 
 } // namespace cachelib

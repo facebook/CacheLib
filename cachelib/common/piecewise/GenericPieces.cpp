@@ -28,8 +28,7 @@ GenericPieces::GenericPieces(const std::string& baseKey,
                              const RequestRange* range)
     : GenericPiecesBase(baseKey, pieceSize, piecesPerGroup, fullBodyLen),
       startPieceIndex_{0},
-      endPieceIndex_{numPiecesTotal_ - 1},
-      firstByteOffsetToFetch_{0} {
+      endPieceIndex_{numPiecesTotal_ - 1} {
   if (range) {
     resetFromRequestRange(*range);
   }
@@ -50,8 +49,6 @@ void GenericPieces::resetFromRequestRange(const RequestRange& range) {
   XCHECK_GE(endPieceIndex_, startPieceIndex_);
 
   curFetchingPieceIndex_ = startPieceIndex_;
-
-  firstByteOffsetToFetch_ = startPieceIndex_ * pieceSize_;
 }
 
 uint64_t GenericPieces::getTargetNumPieces() const {
