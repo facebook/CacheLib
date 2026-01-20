@@ -635,4 +635,27 @@ std::shared_ptr<EventTracker> CacheBase::getEventTracker() const {
   return eventTracker_.load();
 }
 
+void CacheBase::setEventTrackerSamplingRate(uint32_t samplingRate) {
+  if (auto eventTracker = getEventTracker()) {
+    XLOG(INFO) << "Attempting to set sampling rate to " << samplingRate
+               << " for event tracker.";
+    eventTracker->setSamplingRate(samplingRate);
+    XLOG(INFO) << "EventTracker sampling rate is "
+               << eventTracker->getSamplingRate();
+  } else {
+    XLOG(INFO) << "Event tracker is not enabled. "
+                  "Setting EventTracker sampling rate to "
+               << samplingRate << " will have no effect.";
+  }
+}
+
+void CacheBase::disableEventTracker() {
+  if (auto eventTracker = getEventTracker()) {
+    XLOG(INFO) << "Disabling event tracker. Setting eventTracker_ to nullptr.";
+    eventTracker_.store(nullptr);
+  } else {
+    XLOG(INFO) << "Event tracker is already disabled.";
+  }
+}
+
 } // namespace facebook::cachelib

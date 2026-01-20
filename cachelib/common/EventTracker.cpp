@@ -23,6 +23,10 @@ void EventTracker::setSamplingRate(uint32_t samplingRate) {
   samplingRate_.store(samplingRate, std::memory_order_relaxed);
 }
 
+uint32_t EventTracker::getSamplingRate() const {
+  return samplingRate_.load(std::memory_order_relaxed);
+}
+
 EventTracker::EventTracker(Config&& config)
     : eventInfoQueue_(config.queueSize),
       samplingRate_(config.samplingRate),

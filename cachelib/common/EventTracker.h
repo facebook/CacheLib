@@ -56,6 +56,8 @@ class EventTracker {
 
   void setSamplingRate(uint32_t samplingRate);
 
+  uint32_t getSamplingRate() const;
+
   // This calls sampleKey and if sampled, adds the event
   // to the queue.
   RecordResult record(const EventInfo& eventInfo);
