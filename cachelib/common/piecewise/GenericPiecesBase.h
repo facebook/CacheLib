@@ -48,6 +48,17 @@ class GenericPiecesBase {
                     uint64_t piecesPerGroup,
                     uint64_t fullBodyLen);
 
+  virtual ~GenericPiecesBase() = default;
+
+  // ========================================================================
+  // Pure virtual methods for piece iteration.
+  // These behave differently depending on whether the requested range is
+  // single range or multi range.
+  // ========================================================================
+
+  virtual uint64_t getStartPieceIndex() const = 0;
+  virtual uint64_t getEndPieceIndex() const = 0;
+
   /**
    * We fetch one piece at a time and keep track of that piece
    * number here.

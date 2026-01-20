@@ -104,8 +104,8 @@ class GenericPieces : public GenericPiecesBase {
            1;
   }
 
-  uint64_t getStartPieceIndex() const { return startPieceIndex_; }
-  uint64_t getEndPieceIndex() const { return endPieceIndex_; }
+  uint64_t getStartPieceIndex() const override { return startPieceIndex_; }
+  uint64_t getEndPieceIndex() const override { return endPieceIndex_; }
   uint64_t getFirstByteOffsetToFetch() const {
     return startPieceIndex_ * getPieceSize();
   }
