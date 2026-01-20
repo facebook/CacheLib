@@ -107,7 +107,7 @@ class GenericPiecesBase {
   uint64_t numPiecesPerGroup_;
   uint64_t fullBodyLen_;
 
-  uint64_t curFetchingPieceIndex_;
+  uint64_t curFetchingPieceIndex_{0};
 
   // Calculated values
   // Total number of pieces for the full content

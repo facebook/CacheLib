@@ -49,6 +49,11 @@ class GenericPieces : public GenericPiecesBase {
                 uint64_t fullBodyLen,
                 const RequestRange* range);
 
+  /**
+   * Reset piece range based on the given request range.
+   * If range is invalid, don't modify the piece range. Only reset the fetch
+   * index.
+   */
   void resetFromRequestRange(const RequestRange& range);
 
   bool morePiecesToFetch() const {
