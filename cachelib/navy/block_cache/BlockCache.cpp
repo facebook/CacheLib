@@ -276,6 +276,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
 
   auto retryIndex = (regionManager_.readAllowedDuringReclaim() ? 1 : 0);
   Index::LookupResult lr;
+  RelAddress addrEnd;
   LookupData ld;
 
   do {
@@ -289,7 +290,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
     // If relative address has offset 0, the entry actually belongs to the
     // previous region (this is address of its end). To compensate for this, we
     // subtract 1 before conversion and add after to relative address.
-    ld.addrEnd_ = decodeRelAddress(lr.address());
+    addrEnd = decodeRelAddress(lr.address());
     // Between acquiring @seqNumber and @openForRead, reclaim may start. There
     // are two options what can happen in @openForRead:
     //  - Reclaim in progress and open will fail because access mask
@@ -299,7 +300,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
     //  number increased with that and open will fail because of sequence number
     //  check. (This means sequence number will be increased when we finish
     //  reclaim.)
-    ld.desc_ = regionManager_.openForRead(ld.addrEnd_.rid(), seqNumber);
+    ld.desc_ = regionManager_.openForRead(addrEnd.rid(), seqNumber);
     // If we get OpenStatus::Retry when read is allowed during reclaim, it means
     // reclaim has finished and reclaimed victim was reset/released (checked by
     // SeqNumber). Index should had been updated in this case (to the new
@@ -312,7 +313,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
 
   switch (ld.desc_.status()) {
   case OpenStatus::Ready: {
-    ld.status_ = readEntry(ld, decodeSizeHint(lr.sizeHint()), hk);
+    ld.status_ = readEntry(ld, addrEnd, decodeSizeHint(lr.sizeHint()), hk);
 
     if (FOLLY_UNLIKELY(ld.status_ == Status::DeviceError)) {
       // Remove this item from index so no future lookup will
@@ -322,7 +323,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
     } else if (ld.status_ == Status::ChecksumError) {
       // In case we are getting transient checksum error, we will retry to read
       // the entry (S421120)
-      ld.status_ = readEntry(ld, decodeSizeHint(lr.sizeHint()), hk);
+      ld.status_ = readEntry(ld, addrEnd, decodeSizeHint(lr.sizeHint()), hk);
       XLOGF(ERR,
             "Retry reading an entry after checksum error. Return code: "
             "{}",
@@ -338,7 +339,7 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
     }
 
     if (ld.status_ == Status::Ok) {
-      regionManager_.touch(ld.addrEnd_.rid());
+      regionManager_.touch(addrEnd.rid());
       succLookupCount_.inc();
     }
     lookupCount_.inc();
@@ -1015,6 +1016,7 @@ void BlockCache::writeEntry(RelAddress addr,
 }
 
 Status BlockCache::readEntry(LookupData& ld,
+                             RelAddress addrEnd,
                              uint32_t approxSize,
                              HashedKey expected) {
   // Because region opened for read, nobody will reclaim it or modify. Safe
@@ -1028,7 +1030,7 @@ Status BlockCache::readEntry(LookupData& ld,
   // Because we either use a predefined read buffer size, or align the size
   // up by kMinAllocAlignSize, our size might be bigger than the actual item
   // size. So we need to ensure we're not reading past the region's beginning.
-  approxSize = std::min(approxSize, ld.addrEnd_.offset());
+  approxSize = std::min(approxSize, addrEnd.offset());
 
   XDCHECK_EQ(approxSize % allocAlignSize_, 0ULL) << folly::sformat(
       " alignSize={}, approxSize={}", allocAlignSize_, approxSize);
@@ -1038,7 +1040,7 @@ Status BlockCache::readEntry(LookupData& ld,
   XDCHECK_GE(approxSize, folly::nextPowTwo(sizeof(EntryDesc)));
 
   auto buffer =
-      regionManager_.read(ld.desc_, ld.addrEnd_.sub(approxSize), approxSize);
+      regionManager_.read(ld.desc_, addrEnd.sub(approxSize), approxSize);
   if (buffer.isNull()) {
     return Status::DeviceError;
   }
@@ -1051,8 +1053,8 @@ Status BlockCache::readEntry(LookupData& ld,
         "Header checksum mismatch in readEntry() at Region: {}, Expected: {}, "
         "Actual: {}, Offset-end: {}, Physical-offset-end: {}, Header size: {}, "
         "Header (hex): {}",
-        ld.addrEnd_.rid().index(), desc.csSelf, desc.computeChecksum(),
-        ld.addrEnd_.offset(), regionManager_.physicalOffset(ld.addrEnd_),
+        addrEnd.rid().index(), desc.csSelf, desc.computeChecksum(),
+        addrEnd.offset(), regionManager_.physicalOffset(addrEnd),
         sizeof(EntryDesc),
         folly::hexlify(
             folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
@@ -1075,7 +1077,7 @@ Status BlockCache::readEntry(LookupData& ld,
     buffer.trimStart(buffer.size() - size);
   } else if (buffer.size() < size) {
     // Read less than actual size. Read again with proper buffer.
-    buffer = regionManager_.read(ld.desc_, ld.addrEnd_.sub(size), size);
+    buffer = regionManager_.read(ld.desc_, addrEnd.sub(size), size);
     if (buffer.isNull()) {
       return Status::DeviceError;
     }
@@ -1089,9 +1091,9 @@ Status BlockCache::readEntry(LookupData& ld,
         "Item value checksum mismatch in readEntry() looking up key {} in "
         "Region {}. Expected: {}, Actual: {}, Offset: {}, Physical-offset: {}, "
         "Value-size: {} Payload (hex): {}",
-        key, ld.addrEnd_.rid().index(), desc.cs, checksum(slice),
-        ld.addrEnd_.offset() - size,
-        regionManager_.physicalOffset(ld.addrEnd_) - size, slice.size(),
+        key, addrEnd.rid().index(), desc.cs, checksum(slice),
+        addrEnd.offset() - size, regionManager_.physicalOffset(addrEnd) - size,
+        slice.size(),
         folly::hexlify(
             folly::ByteRange(slice.data(), slice.data() + slice.size())));
     ld.buffer_.reset();

@@ -296,7 +296,6 @@ class BlockCache final : public Engine {
   struct LookupData {
     Buffer buffer_;
     RegionDescriptor desc_;
-    RelAddress addrEnd_;
     uint32_t valueSize_{0};
     Status status_{Status::Ok};
   };
@@ -317,9 +316,13 @@ class BlockCache final : public Engine {
                   HashedKey hk,
                   BufferView value);
   // @param ld          LookupData containing the entry metadata for reading
+  // @param addrEnd     End of the entry since the item layout is backward
   // @param approxSize  Approximate size since we got this size from index
   // @param expected    We expect the entry's key to match with our key
-  Status readEntry(LookupData& ld, uint32_t approxSize, HashedKey expected);
+  Status readEntry(LookupData& ld,
+                   RelAddress addrEnd,
+                   uint32_t approxSize,
+                   HashedKey expected);
 
   // Update the index with the new entry
   // @param keyHash      Hash of the key
