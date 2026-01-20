@@ -19,11 +19,13 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-ProgressTracker::ProgressTracker(const Stressor& s,
+ProgressTracker::ProgressTracker(size_t instanceId,
+                                 const Stressor& s,
                                  const std::string& detailedStatsFile)
-    : stressor_(s) {
+    : instanceId_(instanceId), stressor_(s) {
   if (!detailedStatsFile.empty()) {
     statsFile_.open(detailedStatsFile, std::ios::app);
+    statsFile_ << "=== Starting new run ===" << std::endl;
   }
 }
 
@@ -51,10 +53,13 @@ void ProgressTracker::work() {
   auto [overallHitRatio, ramHitRatio, nvmHitRatio] =
       currCacheStats.getHitRatios(prevStats_);
   auto thStr = folly::sformat(
-      "{} {:>10.2f}M ops completed. {} items in cache. {} items in nvm cache. "
+      "Instance {:>3}: {} {:>10.2f}M ops completed. {} items in cache. {} "
+      "items "
+      "in nvm cache. "
       "{} items evicted from nvm cache. "
       "Hit Ratio {:6.2f}% "
       "(RAM {:6.2f}%, NVM {:6.2f}%).",
+      instanceId_,
       buf,
       mOpsPerSec,
       currCacheStats.numItems,
@@ -63,9 +68,6 @@ void ProgressTracker::work() {
       overallHitRatio,
       ramHitRatio,
       nvmHitRatio);
-
-  // log this always to stdout
-  std::cout << thStr << std::endl;
 
   // additionally log into the stats file
   if (statsFile_.is_open()) {
@@ -82,6 +84,8 @@ void ProgressTracker::work() {
 
     stressor_.renderWorkloadGeneratorStats(elapsedTimeNs, statsFile_);
     statsFile_ << std::endl;
+  } else {
+    std::cout << thStr << std::endl;
   }
 
   prevStats_ = currCacheStats;

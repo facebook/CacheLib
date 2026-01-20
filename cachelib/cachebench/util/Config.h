@@ -369,12 +369,22 @@ class CacheBenchConfig {
                             const CacheConfigCustomizer& c = {},
                             const StressorConfigCustomizer& s = {});
 
-  const CacheConfig& getCacheConfig() const { return cacheConfig_; }
-  const StressorConfig& getStressorConfig() const { return stressorConfig_; }
+  const CacheConfig& getCacheConfig(size_t instanceId) const {
+    return configs_[instanceId].cacheConfig_;
+  }
+  const StressorConfig& getStressorConfig(size_t instanceId) const {
+    return configs_[instanceId].stressorConfig_;
+  }
+
+  // Number of concurrent cachebench instances to run.
+  size_t getNumInstances() const { return configs_.size(); }
 
  private:
-  CacheConfig cacheConfig_;
-  StressorConfig stressorConfig_;
+  struct Config {
+    CacheConfig cacheConfig_;
+    StressorConfig stressorConfig_;
+  };
+  std::vector<Config> configs_;
 };
 
 } // namespace cachebench

@@ -18,11 +18,12 @@
 #include <folly/logging/LoggerDB.h>
 #include <gflags/gflags.h>
 
+#include <filesystem>
 #include <memory>
 #include <thread>
+#include <vector>
 
 #include "cachelib/cachebench/runner/Runner.h"
-#include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Sleep.h"
 #include "cachelib/common/Utils.h"
 
@@ -58,15 +59,15 @@ DEFINE_int32(timeout_seconds,
              "Maximum allowed seconds for running test. 0 means no timeout");
 
 struct sigaction act;
-std::unique_ptr<facebook::cachelib::cachebench::Runner> runnerInstance;
+std::vector<facebook::cachelib::cachebench::Runner> runnerInstances;
 std::unique_ptr<std::thread> stopperThread;
 
 void sigint_handler(int sig_num) {
   switch (sig_num) {
   case SIGINT:
   case SIGTERM: {
-    if (runnerInstance) {
-      runnerInstance->abort();
+    for (auto& runner : runnerInstances) {
+      runner.abort();
     }
     break;
   }
@@ -93,8 +94,8 @@ void setupTimeoutHandler() {
             XLOGF(INFO,
                   "Stopping due to timeout {} seconds",
                   FLAGS_timeout_seconds);
-            if (runnerInstance) {
-              runnerInstance->abort();
+            for (auto& runner : runnerInstances) {
+              runner.abort();
             }
             eb.terminateLoopSoon();
           },
@@ -108,16 +109,66 @@ void setupTimeoutHandler() {
   }
 }
 
-bool checkArgsValidity() {
+std::optional<facebook::cachelib::cachebench::CacheBenchConfig>
+checkArgsValidity(
+    const facebook::cachelib::cachebench::CacheConfigCustomizer& c = {},
+    const facebook::cachelib::cachebench::StressorConfigCustomizer& s = {}) {
   if (FLAGS_json_test_config.empty() ||
       !facebook::cachelib::util::pathExists(FLAGS_json_test_config)) {
     std::cout << "Invalid config file: " << FLAGS_json_test_config
               << ". pass a valid --json_test_config for cachebench."
               << std::endl;
-    return false;
+    return std::nullopt;
+  }
+  facebook::cachelib::cachebench::CacheBenchConfig config(
+      FLAGS_json_test_config, c, s);
+  // Enforce non-empty progress_stats_file when running multiple instances to
+  // avoid garbled output
+  if (config.getNumInstances() > 1 && FLAGS_progress_stats_file.empty()) {
+    std::cout << "Error: --progress_stats_file must be specified when "
+                 "running multiple instances (numInstances="
+              << config.getNumInstances() << ")" << std::endl;
+    return std::nullopt;
   }
 
-  return true;
+  return config;
+}
+
+// Generate a unique progress stats file path for a given instance.
+// Appends "_N" before the file extension.
+std::string getProgressStatsFileForInstance(size_t instanceIdx) {
+  namespace fs = std::filesystem;
+  fs::path p(FLAGS_progress_stats_file);
+  fs::path stem = p.stem();
+  fs::path ext = p.extension();
+  fs::path parent = p.parent_path();
+
+  std::string newFilename =
+      stem.string() + "_" + std::to_string(instanceIdx) + ext.string();
+  return (parent / newFilename).string();
+}
+
+bool runAllRunners(std::chrono::seconds progress) {
+  std::cout << "Running " << runnerInstances.size() << " cachebench instance(s)"
+            << std::endl;
+
+  // Start each Runner in a separate thread since run() is blocking
+  std::vector<std::thread> threads;
+  std::vector<bool> results(runnerInstances.size(), false);
+  threads.reserve(runnerInstances.size());
+
+  for (uint32_t i = 0; i < runnerInstances.size(); ++i) {
+    threads.emplace_back([=, &results]() {
+      std::string progressFile = getProgressStatsFileForInstance(i);
+      results[i] = runnerInstances[i].run(progress, progressFile);
+    });
+  }
+
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  return std::ranges::all_of(results, [](bool result) { return result; });
 }
 
 int main(int argc, char** argv) {
@@ -127,13 +178,12 @@ int main(int argc, char** argv) {
   calibrateSleep();
 #ifdef CACHEBENCH_FB_ENV
   facebook::initFacebook(&argc, &argv);
-  if (!checkArgsValidity()) {
+  auto config = checkArgsValidity(customizeCacheConfigForFacebook,
+                                  customizeStressorConfigForFacebook);
+  if (!config) {
     return 1;
   }
 
-  CacheBenchConfig config(FLAGS_json_test_config,
-                          customizeCacheConfigForFacebook,
-                          customizeStressorConfigForFacebook);
   std::unique_ptr<util::OdslExporter> odslExporter_;
   std::unique_ptr<FB303ThriftService> fb303_;
   if (FLAGS_fb303_port == 0 && FLAGS_export_to_ods) {
@@ -141,31 +191,38 @@ int main(int argc, char** argv) {
   } else if (FLAGS_fb303_port > 0) {
     fb303_ = std::make_unique<FB303ThriftService>(FLAGS_fb303_port);
   }
+
   std::cout << "Welcome to FB-internal version of cachebench" << std::endl;
 #else
   const folly::Init init(&argc, &argv, true);
-  if (!checkArgsValidity()) {
+  auto config = checkArgsValidity();
+  if (!config) {
     return 1;
   }
 
-  CacheBenchConfig config(FLAGS_json_test_config);
   std::cout << "Welcome to OSS version of cachebench" << std::endl;
 #endif
 
   try {
-    runnerInstance =
-        std::make_unique<facebook::cachelib::cachebench::Runner>(config);
+    const size_t numInstances = config->getNumInstances();
+    runnerInstances.reserve(numInstances);
+    for (size_t i = 0; i < numInstances; ++i) {
+      runnerInstances.emplace_back(i, *config);
+    }
+
     setupSignalHandler();
     setupTimeoutHandler();
 
-    return runnerInstance->run(std::chrono::seconds(FLAGS_progress),
-                               FLAGS_progress_stats_file)
-               ? 0
-               : 1;
+    std::chrono::seconds progress(FLAGS_progress);
+    auto allPassed =
+        numInstances == 1
+            ? runnerInstances[0].run(progress, FLAGS_progress_stats_file)
+            : runAllRunners(progress);
+
+    std::cout << (allPassed ? "Finished!" : "Failed.") << std::endl;
+    return allPassed ? 0 : 1;
   } catch (const std::exception& e) {
     std::cout << "Invalid configuration. Exception: " << e.what() << std::endl;
     return 1;
   }
-
-  return 0;
 }

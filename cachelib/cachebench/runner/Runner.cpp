@@ -16,18 +16,20 @@
 
 #include "cachelib/cachebench/runner/Runner.h"
 
+#include "cachelib/cachebench/runner/ProgressTracker.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-Runner::Runner(const CacheBenchConfig& config)
-    : stressor_{Stressor::makeStressor(config.getCacheConfig(),
-                                       config.getStressorConfig())} {}
+Runner::Runner(size_t instanceId, const CacheBenchConfig& config)
+    : instanceId_(instanceId),
+      stressor_{Stressor::makeStressor(config.getCacheConfig(instanceId),
+                                       config.getStressorConfig(instanceId))} {}
 
 bool Runner::run(std::chrono::seconds progressInterval,
                  const std::string& progressStatsFile) {
-  ProgressTracker tracker{*stressor_, progressStatsFile};
+  ProgressTracker tracker{instanceId_, *stressor_, progressStatsFile};
 
   stressor_->start();
 
@@ -42,18 +44,16 @@ bool Runner::run(std::chrono::seconds progressInterval,
   auto opsStats = stressor_->aggregateThroughputStats();
   tracker.stop();
 
-  std::cout << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats.render(std::cout);
-
-  std::cout << "\n== Throughput for  ==\n";
-  opsStats.render(durationNs, std::cout);
-
-  stressor_->renderWorkloadGeneratorStats(durationNs, std::cout);
-  std::cout << std::endl;
+  bool passed = true;
+  if (progressStatsFile.empty()) {
+    passed = render(cacheStats, opsStats, durationNs, std::cout);
+  } else {
+    std::ofstream ofs{progressStatsFile, std::ios::app};
+    passed = render(cacheStats, opsStats, durationNs, ofs);
+  }
 
   stressor_.reset();
 
-  bool passed = cacheStats.renderIsTestPassed(std::cout);
   if (aborted_) {
     std::cerr << "Test aborted.\n";
     passed = false;
@@ -89,6 +89,22 @@ bool Runner::run(folly::UserCounters& counters) {
     return false;
   }
   return true;
+}
+
+bool Runner::render(Stats& cacheStats,
+                    ThroughputStats& opsStats,
+                    uint64_t durationNs,
+                    std::ostream& os) const {
+  os << "== Test Results ==\n== Allocator Stats ==" << std::endl;
+  cacheStats.render(os);
+
+  os << "\n== Throughput Stats ==\n";
+  opsStats.render(durationNs, os);
+
+  stressor_->renderWorkloadGeneratorStats(durationNs, os);
+  os << std::endl;
+
+  return cacheStats.renderIsTestPassed(os);
 }
 
 } // namespace cachebench
