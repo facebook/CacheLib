@@ -104,9 +104,7 @@ CacheComponentStressor::CacheComponentStressor(
 
   auto cache =
       RAMCacheComponent::create(std::move(lruConfig), std::move(poolConfig));
-  XCHECK(cache.hasValue())
-      << "Error code: " << static_cast<int8_t>(cache.error().code_) << ": "
-      << cache.error().error_;
+  XCHECK(cache.hasValue()) << cache.error();
   cache_ = std::make_unique<RAMCacheComponent>(std::move(cache).value());
 }
 

@@ -18,10 +18,13 @@
 
 #include <folly/Expected.h>
 
+#include <magic_enum/magic_enum.hpp>
+
 namespace facebook::cachelib::interface {
 
 struct Error {
-  enum class Code {
+  enum class Code : uint8_t {
+    // User errors
     INVALID_ARGUMENTS,
     INVALID_CONFIG,
 
@@ -60,3 +63,12 @@ using Result = folly::Expected<Value, Error>;
 using UnitResult = Result<folly::Unit>;
 
 } // namespace facebook::cachelib::interface
+
+namespace std {
+inline ostream& operator<<(ostream& os,
+                           const facebook::cachelib::interface::Error& error) {
+  os << "Error (" << magic_enum::enum_name(error.code_) << ", code "
+     << static_cast<uint8_t>(error.code_) << "): " << error.error_;
+  return os;
+}
+} // namespace std
