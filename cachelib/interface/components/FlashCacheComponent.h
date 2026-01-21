@@ -17,7 +17,6 @@
 #pragma once
 
 #include "cachelib/interface/CacheComponent.h"
-#include "cachelib/interface/utils/CoroFiberAdapter.h"
 #include "cachelib/navy/block_cache/BlockCache.h"
 
 namespace facebook::cachelib::interface {
@@ -74,14 +73,7 @@ class FlashCacheComponent : public CacheComponent {
             typename ReturnT = std::invoke_result_t<FuncT>,
             typename CleanupFuncT = std::function<void(ReturnT)>>
   folly::coro::Task<ReturnT> onWorkerThread(FuncT&& func,
-                                            CleanupFuncT&& cleanup = {}) {
-    XDCHECK(!cache_->regionManager_.isOnWorker())
-        << "Calling public APIs from a worker thread is unsupported";
-    co_return co_await utils::onWorkerThread(
-        cache_->regionManager_.getNextWorker(),
-        std::forward<FuncT>(func),
-        std::forward<CleanupFuncT>(cleanup));
-  }
+                                            CleanupFuncT&& cleanup = {});
 
   using AllocData =
       std::tuple<navy::RegionDescriptor, uint32_t, navy::RelAddress>;

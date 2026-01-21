@@ -17,6 +17,7 @@
 #include "cachelib/interface/components/FlashCacheComponent.h"
 
 #include "cachelib/common/Time.h"
+#include "cachelib/interface/utils/CoroFiberAdapter.h"
 
 using namespace facebook::cachelib::navy;
 
@@ -128,6 +129,17 @@ class FlashCacheItem : public CacheItem {
   } catch (const std::invalid_argument& ia) {
     return makeError(Error::Code::INVALID_CONFIG, ia.what());
   }
+}
+
+template <typename FuncT, typename ReturnT, typename CleanupFuncT>
+folly::coro::Task<ReturnT> FlashCacheComponent::onWorkerThread(
+    FuncT&& func, CleanupFuncT&& cleanup) {
+  XDCHECK(!cache_->regionManager_.isOnWorker())
+      << "Calling public APIs from a worker thread is unsupported";
+  co_return co_await utils::onWorkerThread(
+      cache_->regionManager_.getNextWorker(),
+      std::forward<FuncT>(func),
+      std::forward<CleanupFuncT>(cleanup));
 }
 
 const std::string& FlashCacheComponent::getName() const noexcept {
