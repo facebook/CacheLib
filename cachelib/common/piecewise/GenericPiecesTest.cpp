@@ -19,6 +19,7 @@
 #include "cachelib/common/piecewise/GenericPieces.h"
 
 using facebook::cachelib::GenericPieces;
+using facebook::cachelib::GenericPiecesBase;
 using facebook::cachelib::RequestRange;
 
 TEST(GenericPiecesTests, Normal) {
@@ -100,7 +101,7 @@ TEST(GenericPiecesTests, Normal) {
 
 TEST(GenericPiecesTests, getBaseKey) {
   std::string mainPart("any main part of a key");
-  EXPECT_EQ(mainPart, GenericPieces::getBaseKey(mainPart));
+  EXPECT_EQ(mainPart, GenericPiecesBase::getBaseKey(mainPart));
 
   std::string prefix("test:");
   std::string pieceSuffix("|#|header-0");
@@ -108,23 +109,23 @@ TEST(GenericPiecesTests, getBaseKey) {
 
   auto pieceKey = folly::to<std::string>(prefix, mainPart, pieceSuffix);
   auto expected = folly::to<std::string>(prefix, mainPart);
-  EXPECT_EQ(expected, GenericPieces::getBaseKey(pieceKey));
+  EXPECT_EQ(expected, GenericPiecesBase::getBaseKey(pieceKey));
 
   auto groupKey = folly::to<std::string>(prefix, mainPart, groupSuffix);
   expected = folly::to<std::string>(prefix, mainPart);
-  EXPECT_EQ(expected, GenericPieces::getBaseKey(groupKey));
+  EXPECT_EQ(expected, GenericPiecesBase::getBaseKey(groupKey));
 
   // Key without prefix
   auto keyWithoutPrefix = folly::to<std::string>(mainPart, groupSuffix);
-  EXPECT_EQ(mainPart, GenericPieces::getBaseKey(keyWithoutPrefix));
+  EXPECT_EQ(mainPart, GenericPiecesBase::getBaseKey(keyWithoutPrefix));
 
   // Key without suffix
   auto keyWithoutSuffix = folly::to<std::string>(prefix, mainPart);
-  EXPECT_EQ(keyWithoutSuffix, GenericPieces::getBaseKey(keyWithoutSuffix));
+  EXPECT_EQ(keyWithoutSuffix, GenericPiecesBase::getBaseKey(keyWithoutSuffix));
 
   // Just prefix.
-  EXPECT_EQ(prefix, GenericPieces::getBaseKey(prefix));
+  EXPECT_EQ(prefix, GenericPiecesBase::getBaseKey(prefix));
 
   // Just suffix
-  EXPECT_EQ("", GenericPieces::getBaseKey(pieceSuffix));
+  EXPECT_EQ("", GenericPiecesBase::getBaseKey(pieceSuffix));
 }
