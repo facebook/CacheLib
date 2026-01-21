@@ -51,10 +51,5 @@ void GenericPieces::resetFromRequestRange(const RequestRange& range) {
   curFetchingPieceIndex_ = startPieceIndex_;
 }
 
-uint64_t GenericPieces::getTargetNumPieces() const {
-  XDCHECK_GE(endPieceIndex_, startPieceIndex_);
-  return (endPieceIndex_ - startPieceIndex_) + 1;
-}
-
 } // namespace cachelib
 } // namespace facebook

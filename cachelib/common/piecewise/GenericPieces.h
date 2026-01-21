@@ -30,6 +30,7 @@ namespace cachelib {
  * A content can be split and stored in multiple pieces in cache. The class
  * provides the utility to map content object to pieces.
  *
+ * This class handles single contiguous range requests.
  */
 class GenericPieces : public GenericPiecesBase {
  public:
@@ -50,17 +51,23 @@ class GenericPieces : public GenericPiecesBase {
                 const RequestRange* range);
 
   /**
+   * Overrides from GenericPiecesBase
+   */
+  uint64_t getStartPieceIndex() const override { return startPieceIndex_; }
+  uint64_t getEndPieceIndex() const override { return endPieceIndex_; }
+
+  uint64_t getTargetNumPieces() const override {
+    return getEndPieceIndex() - getStartPieceIndex() + 1;
+  }
+
+  void updateFetchIndex() override { curFetchingPieceIndex_ += 1; }
+
+  /**
    * Reset piece range based on the given request range.
    * If range is invalid, don't modify the piece range. Only reset the fetch
    * index.
    */
   void resetFromRequestRange(const RequestRange& range);
-
-  /**
-   * Indicates we finished fetching a piece and are ready to fetch the
-   * next one.
-   */
-  void updateFetchIndex() { curFetchingPieceIndex_ += 1; }
 
   void setFetchIndex(uint64_t pieceIndex) {
     curFetchingPieceIndex_ = pieceIndex;
@@ -82,14 +89,6 @@ class GenericPieces : public GenericPiecesBase {
     return getLastByteOffsetOfLastPiece() -
            getStartPieceIndex() * getPieceSize() + 1;
   }
-
-  uint64_t getStartPieceIndex() const override { return startPieceIndex_; }
-  uint64_t getEndPieceIndex() const override { return endPieceIndex_; }
-
-  /**
-   * Get the number of pieces we need to fetch (excluding the header piece)
-   */
-  uint64_t getTargetNumPieces() const;
 
  protected:
   // Start piece index of the request content (or range)
