@@ -56,10 +56,6 @@ class GenericPieces : public GenericPiecesBase {
    */
   void resetFromRequestRange(const RequestRange& range);
 
-  bool morePiecesToFetch() const {
-    return curFetchingPieceIndex_ < endPieceIndex_;
-  }
-
   /**
    * Indicates we finished fetching a piece and are ready to fetch the
    * next one.
@@ -70,45 +66,25 @@ class GenericPieces : public GenericPiecesBase {
     curFetchingPieceIndex_ = pieceIndex;
   }
 
-  uint64_t getFirstByteOffsetOfCurPiece() const {
-    return curFetchingPieceIndex_ * getPieceSize();
-  }
-
-  uint64_t getLastByteOffsetOfLastPiece() const {
-    return std::min((endPieceIndex_ + 1) * pieceSize_ - 1, fullBodyLen_ - 1);
-  }
-
   uint64_t getRemainingBytes() const {
-    if (curFetchingPieceIndex_ > endPieceIndex_) {
+    if (curFetchingPieceIndex_ > getEndPieceIndex()) {
       return 0;
     }
     return getLastByteOffsetOfLastPiece() - getFirstByteOffsetOfCurPiece() + 1;
   }
 
   bool isPieceWithinBound(uint64_t pieceIndex) const {
-    return pieceIndex <= endPieceIndex_;
-  }
-
-  uint64_t getSizeOfAPiece(uint64_t pieceIndex) const {
-    // The size is full piece size when it's not the last piece
-    if (pieceIndex < endPieceIndex_) {
-      return pieceSize_;
-    } else {
-      return getLastByteOffsetOfLastPiece() % pieceSize_ + 1;
-    }
+    return pieceIndex <= getEndPieceIndex();
   }
 
   // Return the byte size of all pieces
   uint64_t getTotalSize() const {
-    return getLastByteOffsetOfLastPiece() - startPieceIndex_ * getPieceSize() +
-           1;
+    return getLastByteOffsetOfLastPiece() -
+           getStartPieceIndex() * getPieceSize() + 1;
   }
 
   uint64_t getStartPieceIndex() const override { return startPieceIndex_; }
   uint64_t getEndPieceIndex() const override { return endPieceIndex_; }
-  uint64_t getFirstByteOffsetToFetch() const {
-    return startPieceIndex_ * getPieceSize();
-  }
 
   /**
    * Get the number of pieces we need to fetch (excluding the header piece)

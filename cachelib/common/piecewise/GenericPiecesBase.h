@@ -51,20 +51,19 @@ class GenericPiecesBase {
   virtual ~GenericPiecesBase() = default;
 
   // ========================================================================
-  // Pure virtual methods for piece iteration.
+  // Pure virtual methods for piece range.
   // These behave differently depending on whether the requested range is
-  // single range or multi range.
+  // single-range or multi-range.
   // ========================================================================
 
   virtual uint64_t getStartPieceIndex() const = 0;
   virtual uint64_t getEndPieceIndex() const = 0;
 
-  /**
-   * We fetch one piece at a time and keep track of that piece
-   * number here.
-   */
-  uint64_t getCurFetchingPieceIndex() const { return curFetchingPieceIndex_; }
+  // ========================================================================
+  // Basic getters for piece and body info.
+  // ========================================================================
 
+  uint64_t getCurFetchingPieceIndex() const { return curFetchingPieceIndex_; }
   uint64_t getPieceSize() const { return pieceSize_; }
   uint64_t getPiecesPerGroup() const { return numPiecesPerGroup_; }
   /**
@@ -74,6 +73,41 @@ class GenericPiecesBase {
    */
   uint64_t getFullBodyLength() const { return fullBodyLen_; }
   uint64_t getNumPiecesTotal() const { return numPiecesTotal_; }
+
+  // ========================================================================
+  // Common piece iteration methods.
+  // These use virtual getters and work for both single-range and multi-range.
+  // ========================================================================
+
+  bool morePiecesToFetch() const {
+    return curFetchingPieceIndex_ < getEndPieceIndex();
+  }
+
+  uint64_t getFirstByteOffsetOfCurPiece() const {
+    return curFetchingPieceIndex_ * getPieceSize();
+  }
+
+  uint64_t getLastByteOffsetOfLastPiece() const {
+    return std::min((getEndPieceIndex() + 1) * getPieceSize() - 1,
+                    getFullBodyLength() - 1);
+  }
+
+  uint64_t getSizeOfAPiece(uint64_t pieceIndex) const {
+    // The size is full piece size when it's not the last piece
+    if (pieceIndex < getEndPieceIndex()) {
+      return getPieceSize();
+    } else {
+      return getLastByteOffsetOfLastPiece() % getPieceSize() + 1;
+    }
+  }
+
+  uint64_t getFirstByteOffsetToFetch() const {
+    return getStartPieceIndex() * getPieceSize();
+  }
+
+  // ========================================================================
+  // Static utility methods for cache key management.
+  // ========================================================================
 
   /**
    * We use "|#|" as the separator between the actual cachekey and meta
