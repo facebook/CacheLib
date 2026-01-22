@@ -58,6 +58,11 @@ class Runner {
     }
   }
 
+  // Get run stats. Must only be called after run() has returned.
+  const Stats& getCacheStats() const { return cacheStats_; }
+  const ThroughputStats& getThroughputStats() const { return opsStats_; }
+  uint64_t getTestDurationNs() const { return durationNs_; }
+
  private:
   // id of the stressor instance
   size_t instanceId_;
@@ -66,10 +71,12 @@ class Runner {
 
   bool aborted_{false};
 
-  bool render(Stats& cacheStats,
-              ThroughputStats& opsStats,
-              uint64_t durationNs,
-              std::ostream& os) const;
+  // Stats captured after run() completes
+  Stats cacheStats_;
+  ThroughputStats opsStats_;
+  uint64_t durationNs_{0};
+
+  bool render(std::ostream& os);
 };
 } // namespace cachebench
 } // namespace cachelib

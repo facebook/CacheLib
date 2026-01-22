@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "cachelib/cachebench/runner/Runner.h"
+#include "cachelib/cachebench/util/AggregateStats.h"
 #include "cachelib/cachebench/util/Sleep.h"
 #include "cachelib/common/Utils.h"
 
@@ -167,6 +168,8 @@ bool runAllRunners(std::chrono::seconds progress) {
   for (auto& t : threads) {
     t.join();
   }
+
+  std::cout << facebook::cachelib::cachebench::AggregatedStats(runnerInstances);
 
   return std::ranges::all_of(results, [](bool result) { return result; });
 }

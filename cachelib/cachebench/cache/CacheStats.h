@@ -18,6 +18,8 @@
 #include <folly/Benchmark.h>
 #include <gflags/gflags.h>
 
+#include "cachelib/allocator/memory/MemoryAllocatorStats.h"
+#include "cachelib/allocator/memory/Slab.h"
 #include "cachelib/common/PercentileStats.h"
 
 DECLARE_bool(report_api_latency);
@@ -165,7 +167,81 @@ struct Stats {
   // errors from the nvm engine.
   std::unordered_map<std::string, double> nvmErrors;
 
-  void render(std::ostream& out) const {
+  // Aggregate throughput stats from another instance. DOES NOT HANDLE
+  // LATENCY STATS!
+  Stats& operator+=(const Stats& other) {
+    backgndEvicStats.nEvictedItems += other.backgndEvicStats.nEvictedItems;
+    backgndEvicStats.nTraversals += other.backgndEvicStats.nTraversals;
+    backgndEvicStats.nClasses += other.backgndEvicStats.nClasses;
+    backgndEvicStats.evictionSize += other.backgndEvicStats.evictionSize;
+    backgndPromoStats.nPromotedItems += other.backgndPromoStats.nPromotedItems;
+    backgndPromoStats.nTraversals += other.backgndPromoStats.nTraversals;
+
+    numEvictions += other.numEvictions;
+    numItems += other.numItems;
+    evictAttempts += other.evictAttempts;
+    allocAttempts += other.allocAttempts;
+    allocFailures += other.allocFailures;
+
+    numCacheGets += other.numCacheGets;
+    numCacheGetMiss += other.numCacheGetMiss;
+    numCacheEvictions += other.numCacheEvictions;
+    numRamDestructorCalls += other.numRamDestructorCalls;
+    numNvmGets += other.numNvmGets;
+    numNvmGetMiss += other.numNvmGetMiss;
+    numNvmGetCoalesced += other.numNvmGetCoalesced;
+
+    numNvmItems += other.numNvmItems;
+    numNvmPuts += other.numNvmPuts;
+    numNvmPutErrs += other.numNvmPutErrs;
+    numNvmAbortedPutOnTombstone += other.numNvmAbortedPutOnTombstone;
+    numNvmAbortedPutOnInflightGet += other.numNvmAbortedPutOnInflightGet;
+    numNvmPutFromClean += other.numNvmPutFromClean;
+    numNvmUncleanEvict += other.numNvmUncleanEvict;
+    numNvmCleanEvict += other.numNvmCleanEvict;
+    numNvmCleanDoubleEvict += other.numNvmCleanDoubleEvict;
+    numNvmDestructorCalls += other.numNvmDestructorCalls;
+    numNvmEvictions += other.numNvmEvictions;
+    numNvmBytesWritten += other.numNvmBytesWritten;
+    numNvmNandBytesWritten += other.numNvmNandBytesWritten;
+    numNvmLogicalBytesWritten += other.numNvmLogicalBytesWritten;
+
+    numNvmItemRemovedSetSize += other.numNvmItemRemovedSetSize;
+    numNvmExceededMaxRetry += other.numNvmExceededMaxRetry;
+    numNvmDeletes += other.numNvmDeletes;
+    numNvmSkippedDeletes += other.numNvmSkippedDeletes;
+
+    slabsReleased += other.slabsReleased;
+    numAbortedSlabReleases += other.numAbortedSlabReleases;
+    numReaperSkippedSlabs += other.numReaperSkippedSlabs;
+    moveAttemptsForSlabRelease += other.moveAttemptsForSlabRelease;
+    moveSuccessesForSlabRelease += other.moveSuccessesForSlabRelease;
+    evictionAttemptsForSlabRelease += other.evictionAttemptsForSlabRelease;
+    evictionSuccessesForSlabRelease += other.evictionSuccessesForSlabRelease;
+    numNvmRejectsByExpiry += other.numNvmRejectsByExpiry;
+    numNvmRejectsByClean += other.numNvmRejectsByClean;
+
+    inconsistencyCount += other.inconsistencyCount;
+    // doesn't make sense to combine isNvmCacheDisabled since different test
+    // configs may or may not have NVM disabled
+    invalidDestructorCount += other.invalidDestructorCount;
+    unDestructedItemCount += other.unDestructedItemCount;
+
+    // doesn't make sense to combine pool/allocation class stats since different
+    // test setups may have different pool/allocation class configs
+
+    auto accumulateMap = [](auto& mapA, const auto& mapB) {
+      for (const auto& [key, otherVal] : mapB) {
+        mapA[key] += otherVal;
+      }
+    };
+    accumulateMap(nvmCounters, other.nvmCounters);
+    accumulateMap(nvmErrors, other.nvmErrors);
+
+    return *this;
+  }
+
+  void render(std::ostream& out, bool isAggregate = false) const {
     auto totalMisses = getTotalMisses();
     const double overallHitRatio = invertPctFn(totalMisses, numCacheGets);
     out << folly::sformat("Items in RAM  : {:,}", numItems) << std::endl;
@@ -189,63 +265,68 @@ struct Stats {
       }
     };
 
-    for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
-      out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
-                            poolUsageFraction[pid])
-          << std::endl;
-    }
-
-    if (FLAGS_report_ac_memory_usage_stats != "") {
-      auto formatMemory = [&](size_t bytes) -> std::tuple<std::string, double> {
-        if (FLAGS_report_ac_memory_usage_stats == "raw") {
-          return {"B", bytes};
-        }
-
-        constexpr double KB = 1024.0;
-        constexpr double MB = 1024.0 * 1024;
-        constexpr double GB = 1024.0 * 1024 * 1024;
-
-        if (bytes >= GB) {
-          return {"GB", static_cast<double>(bytes) / GB};
-        } else if (bytes >= MB) {
-          return {"MB", static_cast<double>(bytes) / MB};
-        } else if (bytes >= KB) {
-          return {"KB", static_cast<double>(bytes) / KB};
-        } else {
-          return {"B", bytes};
-        }
-      };
-
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
-        auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
-        auto [memorySizeSuffix, memorySize] =
-            formatMemory(stats.activeAllocs * stats.allocSize);
-        out << folly::sformat("pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}",
-                              pid, cid, allocSize, allocSizeSuffix, memorySize,
-                              memorySizeSuffix)
+    if (!isAggregate) {
+      for (auto pid = 0U; pid < poolUsageFraction.size(); pid++) {
+        out << folly::sformat("Fraction of pool {:,} used : {:.2f}", pid,
+                              poolUsageFraction[pid])
             << std::endl;
-      });
+      }
 
-      foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
-        auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
+      if (FLAGS_report_ac_memory_usage_stats != "") {
+        auto formatMemory =
+            [&](size_t bytes) -> std::tuple<std::string, double> {
+          if (FLAGS_report_ac_memory_usage_stats == "raw") {
+            return {"B", bytes};
+          }
 
-        // If the pool is not full, extrapolate usageFraction for AC assuming it
-        // will grow at the same rate. This value will be the same for all ACs.
-        double acUsageFraction;
-        if (poolUsageFraction[pid] < 1.0) {
-          acUsageFraction = poolUsageFraction[pid];
-        } else if (stats.usedSlabs == 0) {
-          acUsageFraction = 0.0;
-        } else {
-          acUsageFraction =
-              stats.activeAllocs / (stats.usedSlabs * stats.allocsPerSlab);
-        }
+          constexpr double KB = 1024.0;
+          constexpr double MB = 1024.0 * 1024;
+          constexpr double GB = 1024.0 * 1024 * 1024;
 
-        out << folly::sformat(
-                   "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid, cid,
-                   allocSize, allocSizeSuffix, acUsageFraction)
-            << std::endl;
-      });
+          if (bytes >= GB) {
+            return {"GB", static_cast<double>(bytes) / GB};
+          } else if (bytes >= MB) {
+            return {"MB", static_cast<double>(bytes) / MB};
+          } else if (bytes >= KB) {
+            return {"KB", static_cast<double>(bytes) / KB};
+          } else {
+            return {"B", bytes};
+          }
+        };
+
+        foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+          auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
+          auto [memorySizeSuffix, memorySize] =
+              formatMemory(stats.activeAllocs * stats.allocSize);
+          out << folly::sformat(
+                     "pid{:2} cid{:4} {:8.2f}{} memorySize: {:8.2f}{}", pid,
+                     cid, allocSize, allocSizeSuffix, memorySize,
+                     memorySizeSuffix)
+              << std::endl;
+        });
+
+        foreachAC(allocationClassStats, [&](auto pid, auto cid, auto stats) {
+          auto [allocSizeSuffix, allocSize] = formatMemory(stats.allocSize);
+
+          // If the pool is not full, extrapolate usageFraction for AC assuming
+          // it will grow at the same rate. This value will be the same for all
+          // ACs.
+          double acUsageFraction;
+          if (poolUsageFraction[pid] < 1.0) {
+            acUsageFraction = poolUsageFraction[pid];
+          } else if (stats.usedSlabs == 0) {
+            acUsageFraction = 0.0;
+          } else {
+            acUsageFraction =
+                stats.activeAllocs / (stats.usedSlabs * stats.allocsPerSlab);
+          }
+
+          out << folly::sformat(
+                     "pid{:2} cid{:4} {:8.2f}{} usageFraction: {:4.2f}", pid,
+                     cid, allocSize, allocSizeSuffix, acUsageFraction)
+              << std::endl;
+        });
+      }
     }
 
     if (numCacheGets > 0) {
@@ -253,7 +334,7 @@ struct Stats {
       out << folly::sformat("Hit Ratio     : {:6.2f}%", overallHitRatio)
           << std::endl;
 
-      if (FLAGS_report_api_latency) {
+      if (FLAGS_report_api_latency && !isAggregate) {
         auto printLatencies =
             [&out](folly::StringPiece cat,
                    const util::PercentileStats::Estimates& latency) {
@@ -281,12 +362,14 @@ struct Stats {
     if (!backgroundEvictionClasses.empty() &&
         backgndEvicStats.nEvictedItems > 0) {
       out << "== Class Background Eviction Counters Map ==" << std::endl;
-      foreachAC(backgroundEvictionClasses,
-                [&](auto pid, auto cid, auto evicted) {
-                  out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
-                                        cid, evicted)
-                      << std::endl;
-                });
+      if (!isAggregate) {
+        foreachAC(backgroundEvictionClasses,
+                  [&](auto pid, auto cid, auto evicted) {
+                    out << folly::sformat("pid{:2} cid{:4} evicted: {:4}", pid,
+                                          cid, evicted)
+                        << std::endl;
+                  });
+      }
 
       out << folly::sformat("Background Evicted Items : {:,}",
                             backgndEvicStats.nEvictedItems)
@@ -299,12 +382,14 @@ struct Stats {
     if (!backgroundPromotionClasses.empty() &&
         backgndPromoStats.nPromotedItems > 0) {
       out << "== Class Background Promotion Counters Map ==" << std::endl;
-      foreachAC(backgroundPromotionClasses,
-                [&](auto pid, auto cid, auto promoted) {
-                  out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
-                                        cid, promoted)
-                      << std::endl;
-                });
+      if (!isAggregate) {
+        foreachAC(backgroundPromotionClasses,
+                  [&](auto pid, auto cid, auto promoted) {
+                    out << folly::sformat("pid{:2} cid{:4} promoted: {:4}", pid,
+                                          cid, promoted)
+                        << std::endl;
+                  });
+      }
 
       out << folly::sformat("Background Promoted Items : {:,}",
                             backgndPromoStats.nPromotedItems)
@@ -328,60 +413,62 @@ struct Stats {
           "{:,}\n",
           numNvmRejectsByExpiry, numNvmRejectsByClean);
 
-      folly::StringPiece readCat = "NVM Read  Latency";
-      folly::StringPiece writeCat = "NVM Write Latency";
-      auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
-                            double val) {
-        out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
-      };
+      if (!isAggregate) {
+        folly::StringPiece readCat = "NVM Read  Latency";
+        folly::StringPiece writeCat = "NVM Write Latency";
+        auto fmtLatency = [&](folly::StringPiece cat, folly::StringPiece pct,
+                              double val) {
+          out << folly::sformat("{:20} {:8} : {:>10.2f} us\n", cat, pct, val);
+        };
 
-      fmtLatency(readCat, "p50", nvmReadLatencyMicrosP50);
-      fmtLatency(readCat, "p90", nvmReadLatencyMicrosP90);
-      fmtLatency(readCat, "p99", nvmReadLatencyMicrosP99);
-      fmtLatency(readCat, "p999", nvmReadLatencyMicrosP999);
-      fmtLatency(readCat, "p9999", nvmReadLatencyMicrosP9999);
-      fmtLatency(readCat, "p99999", nvmReadLatencyMicrosP99999);
-      fmtLatency(readCat, "p999999", nvmReadLatencyMicrosP999999);
-      fmtLatency(readCat, "p100", nvmReadLatencyMicrosP100);
+        fmtLatency(readCat, "p50", nvmReadLatencyMicrosP50);
+        fmtLatency(readCat, "p90", nvmReadLatencyMicrosP90);
+        fmtLatency(readCat, "p99", nvmReadLatencyMicrosP99);
+        fmtLatency(readCat, "p999", nvmReadLatencyMicrosP999);
+        fmtLatency(readCat, "p9999", nvmReadLatencyMicrosP9999);
+        fmtLatency(readCat, "p99999", nvmReadLatencyMicrosP99999);
+        fmtLatency(readCat, "p999999", nvmReadLatencyMicrosP999999);
+        fmtLatency(readCat, "p100", nvmReadLatencyMicrosP100);
 
-      fmtLatency(writeCat, "p50", nvmWriteLatencyMicrosP50);
-      fmtLatency(writeCat, "p90", nvmWriteLatencyMicrosP90);
-      fmtLatency(writeCat, "p99", nvmWriteLatencyMicrosP99);
-      fmtLatency(writeCat, "p999", nvmWriteLatencyMicrosP999);
-      fmtLatency(writeCat, "p9999", nvmWriteLatencyMicrosP9999);
-      fmtLatency(writeCat, "p99999", nvmWriteLatencyMicrosP99999);
-      fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
-      fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
+        fmtLatency(writeCat, "p50", nvmWriteLatencyMicrosP50);
+        fmtLatency(writeCat, "p90", nvmWriteLatencyMicrosP90);
+        fmtLatency(writeCat, "p99", nvmWriteLatencyMicrosP99);
+        fmtLatency(writeCat, "p999", nvmWriteLatencyMicrosP999);
+        fmtLatency(writeCat, "p9999", nvmWriteLatencyMicrosP9999);
+        fmtLatency(writeCat, "p99999", nvmWriteLatencyMicrosP99999);
+        fmtLatency(writeCat, "p999999", nvmWriteLatencyMicrosP999999);
+        fmtLatency(writeCat, "p100", nvmWriteLatencyMicrosP100);
 
-      folly::StringPiece insertCat = "BlockCache Insert Latency";
-      fmtLatency(insertCat, "p50", bcInsertLatencyMicrosP50);
-      fmtLatency(insertCat, "p90", bcInsertLatencyMicrosP90);
-      fmtLatency(insertCat, "p99", bcInsertLatencyMicrosP99);
-      fmtLatency(insertCat, "p999", bcInsertLatencyMicrosP999);
-      fmtLatency(insertCat, "p9999", bcInsertLatencyMicrosP9999);
-      fmtLatency(insertCat, "p99999", bcInsertLatencyMicrosP99999);
-      fmtLatency(insertCat, "p999999", bcInsertLatencyMicrosP999999);
-      fmtLatency(insertCat, "p100", bcInsertLatencyMicrosP100);
+        folly::StringPiece insertCat = "BlockCache Insert Latency";
+        fmtLatency(insertCat, "p50", bcInsertLatencyMicrosP50);
+        fmtLatency(insertCat, "p90", bcInsertLatencyMicrosP90);
+        fmtLatency(insertCat, "p99", bcInsertLatencyMicrosP99);
+        fmtLatency(insertCat, "p999", bcInsertLatencyMicrosP999);
+        fmtLatency(insertCat, "p9999", bcInsertLatencyMicrosP9999);
+        fmtLatency(insertCat, "p99999", bcInsertLatencyMicrosP99999);
+        fmtLatency(insertCat, "p999999", bcInsertLatencyMicrosP999999);
+        fmtLatency(insertCat, "p100", bcInsertLatencyMicrosP100);
 
-      folly::StringPiece lookupCat = "BlockCache Lookup Latency";
-      fmtLatency(lookupCat, "p50", bcLookupLatencyMicrosP50);
-      fmtLatency(lookupCat, "p90", bcLookupLatencyMicrosP90);
-      fmtLatency(lookupCat, "p99", bcLookupLatencyMicrosP99);
-      fmtLatency(lookupCat, "p999", bcLookupLatencyMicrosP999);
-      fmtLatency(lookupCat, "p9999", bcLookupLatencyMicrosP9999);
-      fmtLatency(lookupCat, "p99999", bcLookupLatencyMicrosP99999);
-      fmtLatency(lookupCat, "p999999", bcLookupLatencyMicrosP999999);
-      fmtLatency(lookupCat, "p100", bcLookupLatencyMicrosP100);
+        folly::StringPiece lookupCat = "BlockCache Lookup Latency";
+        fmtLatency(lookupCat, "p50", bcLookupLatencyMicrosP50);
+        fmtLatency(lookupCat, "p90", bcLookupLatencyMicrosP90);
+        fmtLatency(lookupCat, "p99", bcLookupLatencyMicrosP99);
+        fmtLatency(lookupCat, "p999", bcLookupLatencyMicrosP999);
+        fmtLatency(lookupCat, "p9999", bcLookupLatencyMicrosP9999);
+        fmtLatency(lookupCat, "p99999", bcLookupLatencyMicrosP99999);
+        fmtLatency(lookupCat, "p999999", bcLookupLatencyMicrosP999999);
+        fmtLatency(lookupCat, "p100", bcLookupLatencyMicrosP100);
 
-      folly::StringPiece removeCat = "BlockCache Remove Latency";
-      fmtLatency(removeCat, "p50", bcRemoveLatencyMicrosP50);
-      fmtLatency(removeCat, "p90", bcRemoveLatencyMicrosP90);
-      fmtLatency(removeCat, "p99", bcRemoveLatencyMicrosP99);
-      fmtLatency(removeCat, "p999", bcRemoveLatencyMicrosP999);
-      fmtLatency(removeCat, "p9999", bcRemoveLatencyMicrosP9999);
-      fmtLatency(removeCat, "p99999", bcRemoveLatencyMicrosP99999);
-      fmtLatency(removeCat, "p999999", bcRemoveLatencyMicrosP999999);
-      fmtLatency(removeCat, "p100", bcRemoveLatencyMicrosP100);
+        folly::StringPiece removeCat = "BlockCache Remove Latency";
+        fmtLatency(removeCat, "p50", bcRemoveLatencyMicrosP50);
+        fmtLatency(removeCat, "p90", bcRemoveLatencyMicrosP90);
+        fmtLatency(removeCat, "p99", bcRemoveLatencyMicrosP99);
+        fmtLatency(removeCat, "p999", bcRemoveLatencyMicrosP999);
+        fmtLatency(removeCat, "p9999", bcRemoveLatencyMicrosP9999);
+        fmtLatency(removeCat, "p99999", bcRemoveLatencyMicrosP99999);
+        fmtLatency(removeCat, "p999999", bcRemoveLatencyMicrosP999999);
+        fmtLatency(removeCat, "p100", bcRemoveLatencyMicrosP100);
+      }
 
       constexpr double GB = 1024.0 * 1024 * 1024;
       double appWriteAmp =

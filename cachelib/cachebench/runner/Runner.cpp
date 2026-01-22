@@ -39,17 +39,17 @@ bool Runner::run(std::chrono::seconds progressInterval,
 
   stressor_->finish();
 
-  uint64_t durationNs = stressor_->getTestDurationNs();
-  auto cacheStats = stressor_->getCacheStats();
-  auto opsStats = stressor_->aggregateThroughputStats();
+  durationNs_ = stressor_->getTestDurationNs();
+  cacheStats_ = stressor_->getCacheStats();
+  opsStats_ = stressor_->aggregateThroughputStats();
   tracker.stop();
 
   bool passed = true;
   if (progressStatsFile.empty()) {
-    passed = render(cacheStats, opsStats, durationNs, std::cout);
+    passed = render(std::cout);
   } else {
     std::ofstream ofs{progressStatsFile, std::ios::app};
-    passed = render(cacheStats, opsStats, durationNs, ofs);
+    passed = render(ofs);
   }
 
   stressor_.reset();
@@ -91,20 +91,17 @@ bool Runner::run(folly::UserCounters& counters) {
   return true;
 }
 
-bool Runner::render(Stats& cacheStats,
-                    ThroughputStats& opsStats,
-                    uint64_t durationNs,
-                    std::ostream& os) const {
+bool Runner::render(std::ostream& os) {
   os << "== Test Results ==\n== Allocator Stats ==" << std::endl;
-  cacheStats.render(os);
+  cacheStats_.render(os);
 
   os << "\n== Throughput Stats ==\n";
-  opsStats.render(durationNs, os);
+  opsStats_.render(durationNs_, os);
 
-  stressor_->renderWorkloadGeneratorStats(durationNs, os);
+  stressor_->renderWorkloadGeneratorStats(durationNs_, os);
   os << std::endl;
 
-  return cacheStats.renderIsTestPassed(os);
+  return cacheStats_.renderIsTestPassed(os);
 }
 
 } // namespace cachebench
