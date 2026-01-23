@@ -42,7 +42,10 @@ class ThreadPoolExecutor {
 
   // @param numThreads  number of threads for the executor
   // @param name        name for debugging
-  ThreadPoolExecutor(uint32_t numThreads, folly::StringPiece name);
+  // @param priority    nice value for threads (0 means no change)
+  ThreadPoolExecutor(uint32_t numThreads,
+                     folly::StringPiece name,
+                     int priority = 0);
 
   // put a job into the a specific queue in pool based on the key hash
   // @param job   the job to be executed
@@ -75,10 +78,14 @@ class ThreadPoolExecutor {
 // Pool of worker threads, each with their own job queue
 class ThreadPoolJobScheduler final : public JobScheduler {
  public:
-  // @param readerThreads   number of threads for the read scheduler
-  // @param writerThreads   number of threads for the write scheduler
+  // @param readerThreads    number of threads for the read scheduler
+  // @param writerThreads    number of threads for the write scheduler
+  // @param readerPriority   nice value for reader threads (0 means no change)
+  // @param writerPriority   nice value for writer threads (0 means no change)
   explicit ThreadPoolJobScheduler(uint32_t readerThreads,
-                                  uint32_t writerThreads);
+                                  uint32_t writerThreads,
+                                  int readerPriority = 0,
+                                  int writerPriority = 0);
   ThreadPoolJobScheduler(const ThreadPoolJobScheduler&) = delete;
   ThreadPoolJobScheduler& operator=(const ThreadPoolJobScheduler&) = delete;
   ~ThreadPoolJobScheduler() override { join(); }
@@ -112,13 +119,17 @@ class ThreadPoolJobScheduler final : public JobScheduler {
 // executiong of jobs enqueued by a key.
 class OrderedThreadPoolJobScheduler final : public JobScheduler {
  public:
-  // @param readerThreads   number of threads for the read scheduler
-  // @param writerThreads   number of threads for the write scheduler
-  // @param numShardsPower  power of two specification for sharding internally
-  //                        to avoid contention and queueing
+  // @param readerThreads    number of threads for the read scheduler
+  // @param writerThreads    number of threads for the write scheduler
+  // @param numShardsPower   power of two specification for sharding internally
+  //                         to avoid contention and queueing
+  // @param readerPriority   nice value for reader threads (0 means no change)
+  // @param writerPriority   nice value for writer threads (0 means no change)
   explicit OrderedThreadPoolJobScheduler(size_t readerThreads,
                                          size_t writerThreads,
-                                         size_t numShardsPower);
+                                         size_t numShardsPower,
+                                         int readerPriority = 0,
+                                         int writerPriority = 0);
   OrderedThreadPoolJobScheduler(const OrderedThreadPoolJobScheduler&) = delete;
   OrderedThreadPoolJobScheduler& operator=(
       const OrderedThreadPoolJobScheduler&) = delete;

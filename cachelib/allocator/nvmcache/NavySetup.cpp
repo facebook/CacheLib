@@ -323,9 +323,12 @@ std::unique_ptr<cachelib::navy::JobScheduler> createJobScheduler(
   auto maxNumWrites = config.getMaxNumWrites();
   auto stackSize = config.getStackSize();
   auto reqOrderShardsPower = config.getNavyReqOrderingShards();
+  auto readerPriority = config.getReaderThreadsPriority();
+  auto writerPriority = config.getWriterThreadsPriority();
   if (maxNumReads == 0 && maxNumWrites == 0) {
     return cachelib::navy::createOrderedThreadPoolJobScheduler(
-        readerThreads, writerThreads, reqOrderShardsPower);
+        readerThreads, writerThreads, reqOrderShardsPower, readerPriority,
+        writerPriority);
   }
 
   return cachelib::navy::createNavyRequestScheduler(readerThreads,

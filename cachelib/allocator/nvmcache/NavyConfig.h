@@ -872,6 +872,9 @@ class NavyConfig {
   }
   uint64_t getNavyReqOrderingShards() const { return navyReqOrderingShards_; }
 
+  int getReaderThreadsPriority() const { return readerThreadsPriority_; }
+  int getWriterThreadsPriority() const { return writerThreadsPriority_; }
+
   uint32_t getMaxNumReads() const { return maxNumReads_; }
   uint32_t getMaxNumWrites() const { return maxNumWrites_; }
   uint32_t getStackSize() const { return stackSize_; }
@@ -998,6 +1001,20 @@ class NavyConfig {
   // @throw std::invalid_argument if the input value is 0.
   void setNavyReqOrderingShards(uint64_t navyReqOrderingShards);
 
+  // Set the nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setReaderThreadsPriority(int priority) noexcept {
+    readerThreadsPriority_ = priority;
+  }
+
+  // Set the nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  void setWriterThreadsPriority(int priority) noexcept {
+    writerThreadsPriority_ = priority;
+  }
+
   // ============ Other settings =============
   void setMaxConcurrentInserts(uint32_t maxConcurrentInserts) noexcept {
     maxConcurrentInserts_ = maxConcurrentInserts;
@@ -1070,6 +1087,15 @@ class NavyConfig {
   // Navy.
   // This value needs to be non-zero.
   uint64_t navyReqOrderingShards_{20};
+
+  // Nice value (priority) for reader threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int readerThreadsPriority_{0};
+  // Nice value (priority) for writer threads.
+  // Valid range is -20 (highest priority) to 19 (lowest priority).
+  // 0 means use the default nice value (no change).
+  int writerThreadsPriority_{0};
 
   // Max number of concurrent reads/writes in whole Navy.
   // This needs to be a multiple of the number of readers and writers.
