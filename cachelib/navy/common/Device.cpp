@@ -1300,17 +1300,17 @@ std::unique_ptr<Device> createFileDevice(
 
   std::sort(filePaths.begin(), filePaths.end());
   std::vector<folly::File> fileVec;
+  fileVec.reserve(filePaths.size());
   for (const auto& path : filePaths) {
-    folly::File f;
     try {
       // TODO: beyondsora implement
-      f = openCacheFile(path, fdSize, truncateFile, isExclusiveOwner);
+      fileVec.emplace_back(
+          openCacheFile(path, fdSize, truncateFile, isExclusiveOwner));
     } catch (const std::exception& e) {
       XLOG(ERR) << "Exception in openCacheFile(" << path << "): " << e.what()
                 << ". Errno: " << errno;
       throw;
     }
-    fileVec.push_back(std::move(f));
   }
 
   return createDirectIoFileDevice(std::move(fileVec),
