@@ -2414,4 +2414,110 @@ TEST(BlockCache, RetryRead) {
     }
   }});
 }
+
+// Test that expired items during reinsertion trigger destructor callback
+// and properly update eviction count and usedSizeBytes.
+TEST(BlockCache, ExpiredItemDestructorCallback) {
+  std::vector<CacheEntry> log;
+  {
+    BufferGen bg;
+    // 1st region, 12k
+    log.emplace_back(bg.gen(8), bg.gen(5'000));
+    log.emplace_back(bg.gen(8), bg.gen(7'000));
+    // 2nd region, 14k
+    log.emplace_back(bg.gen(8), bg.gen(5'000));
+    log.emplace_back(bg.gen(8), bg.gen(3'000));
+    log.emplace_back(bg.gen(8), bg.gen(6'000));
+    // 3rd region, 16k
+    log.emplace_back(bg.gen(8), bg.gen(8'000));
+    log.emplace_back(bg.gen(8), bg.gen(8'000));
+    // 4th region, 15k - triggers reclaim
+    log.emplace_back(bg.gen(8), bg.gen(9'000));
+    log.emplace_back(bg.gen(8), bg.gen(6'000));
+    ASSERT_EQ(9, log.size());
+  }
+
+  // Track which items have been passed to destructor callback
+  std::vector<Buffer> destroyedKeys;
+
+  MockDestructor cb;
+  // Expect the destructor callback to be called for expired items
+  // during reclaim of the first region
+  EXPECT_CALL(cb, call(_, _, DestructorEvent::Recycled))
+      .WillRepeatedly(
+          [&destroyedKeys](HashedKey hk, BufferView, DestructorEvent) {
+            destroyedKeys.emplace_back(makeView(hk.key()));
+          });
+
+  std::vector<uint32_t> hits(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(&hits);
+  auto& mp = *policy;
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  config.numInMemBuffers = 9;
+  config.destructorCb = toCallback(cb);
+
+  // Mark the first item as expired
+  // checkExpired is called with the value, so we check if the value matches
+  Buffer expiredValue = Buffer{log[0].value()};
+  config.checkExpired = [&expiredValue](BufferView value) {
+    return value == expiredValue.view();
+  };
+
+  // Enable reinsertion so that items are evaluated for expiration
+  config.reinsertionConfig = makePctReinsertionConfig(100);
+
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  mockRegionsEvicted(mp, {0, 1, 2, 3, 0});
+
+  ENABLE_INJECT_PAUSE_IN_SCOPE();
+  injectPauseSet("pause_do_eviction_done");
+
+  // Insert first 7 items to fill regions 0, 1, 2
+  for (size_t i = 0; i < 7; i++) {
+    EXPECT_EQ(Status::Ok, driver->insert(log[i].key(), log[i].value()));
+  }
+
+  // Insert items 7 and 8 into region 3. There are 4 regions in total and the
+  // device was configured to require 1 clean region at all times, so this
+  // triggers reclaim of region 0.
+  EXPECT_EQ(Status::Ok, driver->insert(log[7].key(), log[7].value()));
+  EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
+
+  // Wait for eviction to complete
+  EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
+
+  // Drain all jobs
+  driver->drain();
+
+  // Verify the destructor callback was called for exactly one expired item
+  // (log[0]). The second item in region 0 (log[1]) should be reinserted since
+  // it's not expired and reinsertion policy is set to 100%.
+  ASSERT_EQ(1, destroyedKeys.size())
+      << "Only one item should be expired and destroyed";
+  EXPECT_EQ(destroyedKeys[0].view(), makeView(log[0].key().key()))
+      << "Destructor callback should be called for the expired item (log[0])";
+
+  // Verify the expired item is no longer in cache
+  Buffer value;
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+
+  // Verify eviction expired  count is properly updated
+  bool foundEvictionExpiredCounter = false;
+  driver->getCounters(
+      {[&foundEvictionExpiredCounter](folly::StringPiece name, double count,
+                                      CounterVisitor::CounterType type) {
+        if (name == "navy_bc_evictions_expired" &&
+            type == CounterVisitor::CounterType::RATE) {
+          foundEvictionExpiredCounter = true;
+          EXPECT_EQ(1, count) << "Eviction expired count should be 1";
+        }
+      }});
+  EXPECT_TRUE(foundEvictionExpiredCounter)
+      << "navy_bc_evictions_expired counter should be visited";
+}
+
 } // namespace facebook::cachelib::navy::tests

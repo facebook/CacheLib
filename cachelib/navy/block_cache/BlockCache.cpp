@@ -584,6 +584,7 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
         hk, value, entrySize, RelAddress{rid, offset}, desc);
     switch (reinsertionRes) {
     case AllocatorApiResult::EVICTED:
+    case AllocatorApiResult::EXPIRED:
       evictionCount++;
       usedSizeBytes_.sub(decodeSizeHint(encodeSizeHint(entrySize)));
       break;
@@ -593,7 +594,8 @@ uint32_t BlockCache::onRegionReclaim(RegionId rid, BufferView buffer) {
     default:
       break;
     }
-    if (destructorCb_ && reinsertionRes == AllocatorApiResult::EVICTED) {
+    if (destructorCb_ && (reinsertionRes == AllocatorApiResult::EVICTED ||
+                          reinsertionRes == AllocatorApiResult::EXPIRED)) {
       destructorCb_(hk, value, DestructorEvent::Recycled);
     } else {
       recordEvent(hk.key(), AllocatorApiEvent::NVM_EVICT, reinsertionRes,
