@@ -25,11 +25,10 @@ namespace facebook {
 namespace cachelib {
 namespace cachebench {
 
-// Implementation that controls overall workloa distribution. The following
+// Implementation that controls overall workload distribution. The following
 // are modeled
 // 1. op distribution to identify the type of operation
-// 2. popularity of key distribution  (discrete popularity and normal
-//    dist)
+// 2. popularity of key distribution (discrete popularity and normal dist)
 // 3. key size, value size and chained item sizes.
 class WorkloadDistribution {
  public:
