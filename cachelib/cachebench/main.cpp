@@ -161,7 +161,8 @@ bool runAllRunners(std::chrono::seconds progress) {
   for (uint32_t i = 0; i < runnerInstances.size(); ++i) {
     threads.emplace_back([=, &results]() {
       std::string progressFile = getProgressStatsFileForInstance(i);
-      results[i] = runnerInstances[i].run(progress, progressFile);
+      results[i] = runnerInstances[i].run(
+          progress, progressFile, /* alsoPrintResultsToConsole */ false);
     });
   }
 

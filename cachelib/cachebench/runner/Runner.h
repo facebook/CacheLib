@@ -41,9 +41,14 @@ class Runner {
   //                            benchmark run is reported/tracked.
   // @param progressStatsFile   the file to log periodic stats and progress
   //                            to in addition to stdtout. Ignored if empty
+  // @param alsoPrintResultsToConsole if true, also print results to console in
+  //                                  addition to progressStatsFile (if
+  //                                  progressStatsFile is not empty). Does
+  //                                  nothing if progressStatsFile is empty.
   // @return true if the run was successful, false if there is a failure.
   bool run(std::chrono::seconds progressInterval,
-           const std::string& progressStatsFile);
+           const std::string& progressStatsFile,
+           bool alsoPrintResultsToConsole = true);
 
   // for testings using folly::Benchmark
   // in addition to running time, cachebench has several metrics

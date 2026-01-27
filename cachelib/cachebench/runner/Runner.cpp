@@ -28,7 +28,8 @@ Runner::Runner(size_t instanceId, const CacheBenchConfig& config)
                                        config.getStressorConfig(instanceId))} {}
 
 bool Runner::run(std::chrono::seconds progressInterval,
-                 const std::string& progressStatsFile) {
+                 const std::string& progressStatsFile,
+                 bool alsoPrintResultsToConsole) {
   ProgressTracker tracker{instanceId_, *stressor_, progressStatsFile};
 
   stressor_->start();
@@ -50,6 +51,9 @@ bool Runner::run(std::chrono::seconds progressInterval,
   } else {
     std::ofstream ofs{progressStatsFile, std::ios::app};
     passed = render(ofs);
+    if (alsoPrintResultsToConsole) {
+      render(std::cout);
+    }
   }
 
   stressor_.reset();
