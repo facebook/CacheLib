@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Utility.h>
 #include <folly/fibers/TimedMutex.h>
 
 #include <chrono>
@@ -60,7 +61,7 @@ class ValidBucketChecker;
 // However, this design gives us the ability to forgo an in-memory index and
 // instead look up our items directly from disk. In practice, this means BigHash
 // is a flash engine optimized for small items.
-class BigHash final : public Engine {
+class BigHash final : public Engine, folly::NonCopyableNonMovable {
  public:
   struct Config {
     uint32_t bucketSize{4 * 1024};
@@ -90,8 +91,6 @@ class BigHash final : public Engine {
   //
   // @throw std::invalid_argument on bad config
   explicit BigHash(Config&& config);
-  BigHash(const BigHash&) = delete;
-  BigHash& operator=(const BigHash&) = delete;
   ~BigHash() override = default;
 
   // Return the size of usable space
