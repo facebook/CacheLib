@@ -1,112 +1,120 @@
+# CacheLib: A Pluggable Caching Engine for High-Performance Services
+
 <p align="center">
   <img width="500" height="140" alt="CacheLib" src="website/static/img/CacheLib-Logo-Large-transp.png">
 </p>
 
-# CacheLib
+CacheLib is a C++ library that provides a powerful, flexible, and high-performance in-process caching engine. It is designed to build and scale services that require efficient memory management, low-latency access to cached data, and the ability to leverage both DRAM and SSD storage transparently.
 
-Pluggable caching engine to build and scale high performance cache services. See
-[www.cachelib.org](https://cachelib.org) for documentation and more information.
+See [www.cachelib.org](https://cachelib.org) for comprehensive documentation and more information.
 
+## Quick Start
 
-## What is CacheLib ?
+Here is a minimal example of how to set up and use a simple CacheLib cache:
 
-CacheLib is a C++ library providing in-process high performance caching
-mechanism. CacheLib provides a thread safe API to build high throughput,
-low overhead caching services, with built-in ability to leverage
-DRAM and SSD caching transparently.
+```cpp
+#include <cachelib/allocator/CacheAllocator.h>
+#include <iostream>
 
+using Cache = facebook::cachelib::CacheAllocator;
+using PoolId = facebook::cachelib::PoolId;
 
-## Performance benchmarking
+int main() {
+    // 1. Configure the cache
+    Cache::Config config;
+    config.setCacheSize(1024 * 1024 * 1024); // 1GB
+    config.setCacheName("MyFirstCache");
+    config.setAccessConfig({25, 10}); // Use 25 buckets and 10 locks
 
-CacheLib provides a standalone executable `CacheBench` that can be used to
-evaluate the performance of heuristics and caching hardware platforms against
-production workloads. Additionally `CacheBench` enables stress testing
-implementation and design changes to CacheLib to catch correctness and
-performance issues.
+    // 2. Create the cache instance
+    std::unique_ptr<Cache> cache = std::make_unique<Cache>(config);
+    PoolId defaultPool = cache->addPool("default", cache->getCacheMemoryStats().cacheSize);
 
-See [CacheBench](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) for usage details
-and examples.
+    // 3. Allocate and write to an item
+    auto handle = cache->allocate(defaultPool, "my_key", 100);
+    if (handle) {
+        std::strcpy(reinterpret_cast<char*>(handle->getMemory()), "Hello, CacheLib!");
+        cache->insert(handle);
+    }
 
-## Versioning
-CacheLib has one single version number `facebook::cachelib::kCachelibVersion` that can be located at [CacheVersion.h](https://github.com/facebook/CacheLib/blob/main/cachelib/allocator/CacheVersion.h#L31). This version number must be incremented when incompatible changes are introduced. A change is incompatible if it could cause a complication failure due to removing public API or requires dropping the cache. Details about the compatibility information when the version number increases can be found in the [changelog](https://github.com/facebook/CacheLib/blob/main/CHANGELOG.md).
+    // 4. Read from the cache
+    auto readHandle = cache->find("my_key");
+    if (readHandle) {
+        std::cout << reinterpret_cast<char*>(readHandle->getMemory()) << std::endl;
+    }
 
+    // 5. Remove from the cache
+    cache->remove("my_key");
 
-## Building and installation with `getdeps.py`
+    return 0;
+}
+```
 
-This script is used by many of Meta's OSS tools.  It will download and build all of the necessary dependencies first, and will then invoke cmake etc to build folly.  This will help ensure that you build with relevant versions of all of the dependent libraries, taking into account what versions are installed locally on your system.
+## Key Features
 
-### Dependencies
+-   **High Performance**: Thread-safe, low-overhead API for concurrent access with zero-copy semantics.
+-   **Hybrid Caching**: Transparently caches data across both DRAM and SSDs.
+-   **Flexible Eviction Policies**: Includes a variety of caching algorithms like LRU, Segmented LRU, FIFO, 2Q, and TinyLFU.
+-   **Memory Management**: Provides hard RSS memory constraints to prevent OOMs and efficiently caches variable-sized objects.
+-   **Persistence**: Supports shared-memory based persistence of the cache across process restarts.
+-   **Intelligent Tuning**: Automatically tunes the cache for dynamic changes in workload.
+-   **Extensible**: Pluggable architecture for custom eviction policies and storage backends.
 
-You can install system dependencies to save building them:
+## Why Use CacheLib?
 
-    # Clone the repo
-    git clone https://github.com/facebook/CacheLib
-    # Install dependencies
-    cd CacheLib
-    sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
+CacheLib is ideal for services that manage gigabytes of cached data and require fine-grained control over memory. Consider using CacheLib if your service needs:
 
-If you'd like to see the packages before installing them:
+-   **Efficient Memory Use**: Caching for variable-sized objects without fragmentation.
+-   **High Concurrency**: Lock-free access patterns for high-throughput services.
+-   **OOM Protection**: Strict memory limits to ensure cache usage does not impact service stability.
+-   **Advanced Caching Algorithms**: Sophisticated eviction policies to maximize hit ratio.
+-   **Fast Restarts**: The ability to restore cache state quickly after a process restart.
 
-    ./build/fbcode_builder/getdeps.py install-system-deps --dry-run --recursive cachelib
+## Architecture Overview
 
-On other platforms or if on Linux and without system dependencies `getdeps.py` will mostly download and build them for you during the build step.
+CacheLib's architecture is designed for modularity and performance. It consists of three main components:
 
-Some of the dependencies `getdeps.py` uses and installs are:
+1.  **Access Container**: The indexing mechanism that maps keys to cached items. The default is a `ChainedHashTable` for O(1) lookups.
+2.  **MM (Memory Management) Container**: Manages the eviction policy (e.g., LRU) and tracks item lifecycle.
+3.  **Allocator**: Handles memory allocation from slabs, which are large chunks of memory carved from the total cache size.
 
-  * a version of boost compiled with C++14 support.
-  * googletest is required to build and run folly's tests.
+These components work together to provide a highly concurrent and efficient caching system.
 
-### Build
+## Getting Started
 
-This script will download and build all of the necessary dependencies first,
-and will then invoke cmake etc to build CacheLib.  This will help ensure that you build with relevant versions of all of the dependent libraries, taking into account what versions are installed locally on your system.
+### Building and Installation
 
-`getdeps.py` currently requires python 3.6+ to be on your path.
+We recommend using the provided `getdeps.py` script to build CacheLib and its dependencies.
 
-`getdeps.py` will invoke cmake etc.
+```bash
+# 1. Clone the repository
+git clone https://github.com/facebook/CacheLib
+cd CacheLib
 
-    # Clone the repo
-    git clone https://github.com/facebook/CacheLib
-    cd CacheLib
-    # Build, using system dependencies if available
-    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
+# 2. Install system dependencies
+sudo ./build/fbcode_builder/getdeps.py install-system-deps --recursive cachelib
 
-### Run tests
+# 3. Build CacheLib
+python3 ./build/fbcode_builder/getdeps.py --allow-system-packages build cachelib
 
-By default `getdeps.py` will build the tests for cachelib. To run them:
+# 4. Run tests
+python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
+```
 
-    python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib
+### Performance Benchmarking
 
-
+CacheLib includes `CacheBench`, a powerful tool for evaluating cache performance against production workloads. See the [CacheBench documentation](https://cachelib.org/docs/Cache_Library_User_Guides/Cachebench_Overview) for more details.
 
 ## Contributing
 
-We'd love to have your help in making CacheLib better. If you're interested,
-please read our [guide to contributing](CONTRIBUTING.md)
+We welcome contributions! If you're interested in helping make CacheLib better, please read our [Contributing Guide](CONTRIBUTING.md).
 
+## Community
 
+-   **GitHub Issues**: For bug reports and feature requests.
+-   **Discussions**: For questions and community discussions.
+-   **Stack Overflow**: Use the `cachelib` tag for questions.
 
 ## License
 
-CacheLib is *apache* licensed, as found in the [LICENSE](LICENSE) file.
-
-
-
-## Reporting and Fixing Security Issues
-
-Please do not open GitHub issues or pull requests - this makes the problem
-immediately visible to everyone, including malicious actors. Security issues in
-CacheLib can be safely reported via Facebook's Whitehat Bug Bounty program:
-
-https://www.facebook.com/whitehat
-
-Facebook's security team will triage your report and determine whether or not is
-it eligible for a bounty under our program.
-
-
-## Build status
-
-Clicking on a badge will show you the recent builds for that OS. If your target OS's build is failing, you may check out the latest [release](https://github.com/facebook/CacheLib/releases). If the release is too stale for you, you may wish to check recent issues and PRs for known workarounds.
-
-
-[![linux](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml/badge.svg)](https://github.com/facebook/CacheLib/actions/workflows/getdeps_linux.yml)
+CacheLib is Apache-2.0 licensed, as found in the [LICENSE](LICENSE) file.
