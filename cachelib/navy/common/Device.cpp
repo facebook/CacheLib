@@ -221,6 +221,10 @@ class CompletionHandler : public folly::EventHandler {
   }
 
   ~CompletionHandler() override { unregisterHandler(); }
+  CompletionHandler(const CompletionHandler&) = delete;
+  CompletionHandler& operator=(const CompletionHandler&) = delete;
+  CompletionHandler(CompletionHandler&&) = delete;
+  CompletionHandler& operator=(CompletionHandler&&) = delete;
 
   void handlerReady(uint16_t /*events*/) noexcept override;
 
@@ -313,6 +317,9 @@ class FileDevice : public Device {
 
   FileDevice(const FileDevice&) = delete;
   FileDevice& operator=(const FileDevice&) = delete;
+  FileDevice(FileDevice&&) = delete;
+  FileDevice& operator=(FileDevice&&) = delete;
+  ~FileDevice() override = default;
 
  private:
   IoContext* getIoContext();
@@ -368,6 +375,8 @@ class MemoryDevice final : public Device {
         buffer_{std::make_unique<uint8_t[]>(size)} {}
   MemoryDevice(const MemoryDevice&) = delete;
   MemoryDevice& operator=(const MemoryDevice&) = delete;
+  MemoryDevice(MemoryDevice&&) = delete;
+  MemoryDevice& operator=(MemoryDevice&&) = delete;
   ~MemoryDevice() override = default;
 
  private:

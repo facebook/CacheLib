@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/File.h>
+#include <folly/Utility.h>
 #include <folly/experimental/io/AsyncBase.h>
 #include <folly/experimental/io/IoUring.h>
 
@@ -92,13 +93,6 @@ enum nvme_io_opcode {
 class NvmeData {
  public:
   NvmeData() = default;
-  NvmeData& operator=(const NvmeData&) = default;
-
-  NvmeData(const NvmeData& data)
-      : nsId_(data.nsId_),
-        lbaShift_(data.lbaShift_),
-        maxTfrSize_(data.maxTfrSize_),
-        startLba_(data.startLba_) {}
 
   explicit NvmeData(int nsId,
                     uint32_t lbaShift,
@@ -134,16 +128,13 @@ class NvmeData {
 // This embeds the FDP semantics and specific io-handling.
 // Note: IO with FDP semantics need to be sent through Io_Uring_cmd interface
 // as of now; and not supported through conventional block interfaces.
-class FdpNvme {
+class FdpNvme : public folly::NonCopyableNonMovable {
  public:
   explicit FdpNvme(const std::string& fileName);
 
   // This constructor allows user to experiment with FdpNvme without having the
   // actual FDP device. Ex: FDP Unit Tests
   explicit FdpNvme(NvmeData& data, struct nvme_fdp_ruh_status* ruh_status);
-
-  FdpNvme(const FdpNvme&) = delete;
-  FdpNvme& operator=(const FdpNvme&) = delete;
 
 #ifndef CACHELIB_IOURING_DISABLE
   // Allocates an FDP specific placement handle. This handle will be
