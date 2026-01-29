@@ -20,6 +20,7 @@
 #include <folly/Format.h>
 #include <folly/Function.h>
 #include <folly/ThreadLocal.h>
+#include <folly/container/Reserve.h>
 #include <folly/experimental/io/AsyncIO.h>
 #include <folly/experimental/io/IoUring.h>
 #include <folly/fibers/TimedMutex.h>
@@ -630,6 +631,11 @@ IOReq::IOReq(IoContext& context,
   uint32_t idx = 0;
   if (fvec.size() > 1) {
     // For RAID devices
+    // Pre-allocate: number of ops equals the number of stripes touched
+    uint64_t startStripe = offset / stripeSize;
+    uint64_t endStripe = (offset + size - 1) / stripeSize;
+    folly::grow_capacity_by(ops_,
+                            static_cast<size_t>(endStripe - startStripe + 1));
     while (size > 0) {
       uint64_t stripe = offset / stripeSize;
       uint32_t fdIdx = stripe % fvec.size();
