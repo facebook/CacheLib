@@ -271,6 +271,13 @@ class NvmCache {
     return navyCache_->updateMaxRateForDynamicRandomAP(maxRate);
   }
 
+  // Set the EventTracker for all underlying NVM engines
+  void setEventTracker(std::shared_ptr<EventTracker> tracker) {
+    if (navyCache_) {
+      navyCache_->setEventTracker(std::move(tracker));
+    }
+  }
+
   // This lock is to protect concurrent NvmCache evictCB and CacheAllocator
   // remove/insertOrReplace/invalidateNvm.
   // This lock scope within the above functions is

@@ -379,4 +379,10 @@ void Driver::updateEvictionStats(HashedKey key,
                                  uint32_t lifetime) {
   enginePairs_[selectEnginePair(key)].updateEvictionStats(key, value, lifetime);
 }
+
+void Driver::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+  for (auto& enginePair : enginePairs_) {
+    enginePair.setEventTracker(tracker);
+  }
+}
 } // namespace facebook::cachelib::navy

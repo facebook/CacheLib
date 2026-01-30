@@ -21,10 +21,37 @@
 #include <magic_enum/magic_enum.hpp>
 #include <numeric>
 
+#include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/common/EventTracker.h"
 
 using namespace ::testing;
 using namespace facebook::cachelib;
+
+// Custom reinsertion policy that reinserts keys with even numbers
+// and evicts keys with odd numbers.
+// Key format expected: "key_<number>"
+class EvenKeyReinsertionPolicy : public BlockCacheReinsertionPolicy {
+ public:
+  bool shouldReinsert(folly::StringPiece key,
+                      folly::StringPiece /* value */) override {
+    // Extract the number from key format "key_<number>"
+    auto pos = key.rfind('_');
+    if (pos == folly::StringPiece::npos) {
+      return false;
+    }
+    auto numStr = key.subpiece(pos + 1);
+    try {
+      int num = std::stoi(numStr.str());
+      // Reinsert even keys, evict odd keys
+      return (num % 2 == 0);
+    } catch (...) {
+      return false;
+    }
+  }
+
+  void getCounters(const util::CounterVisitor& /* visitor */) const override {}
+};
 
 class EventTrackerTest : public ::testing::Test {
  protected:
@@ -276,4 +303,155 @@ TEST_F(EventTrackerTest, NvmAdmitWithSize) {
   ASSERT_EQ(row[3], key) << "Key mismatch";
   ASSERT_EQ(row[4], std::to_string(testSize)) << "Size mismatch";
   ASSERT_EQ(row[5], std::to_string(testUsecaseId)) << "UsecaseId mismatch";
+}
+
+// Test that verifies setEventTracker works with NVM cache enabled.
+// This test creates a CacheAllocator with NVM cache configuration similar
+// to WorkingSetAnalysisLoggingTest, then uses setEventTracker to set an
+// EventTracker with an in-memory event sink to capture and verify events.
+// The test is configured to cause NVM evictions by filling both RAM and NVM.
+// A custom reinsertion policy is used to reinsert even keys and evict odd keys.
+TEST_F(EventTrackerTest, NvmCacheWithEventTracker) {
+  // Create an in-memory event sink to capture events
+  auto inMemorySink = std::make_unique<InMemoryEventSink>();
+  auto* sinkPtr = inMemorySink.get();
+
+  // RAM cache: 20 slabs = 20 * 4MB = 80MB
+  LruAllocator::Config allocConfig;
+  allocConfig.setCacheSize(20 * Slab::kSize);
+  allocConfig.cacheName = "event_tracker_test";
+
+  // Configure NVM cache: 50MB total (small to trigger evictions faster)
+  // BlockCache: 25MB, BigHash: 25MB
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.truncateItemToOriginalAllocSizeInNvm = true;
+  nvmConfig.navyConfig.setDeviceMetadataSize(4 * 1024 * 1024);
+  nvmConfig.navyConfig.setMemoryFile(50 * 1024 * 1024); // 50MB NVM
+  nvmConfig.navyConfig.setBlockSize(1024);
+  nvmConfig.navyConfig.blockCache().setRegionSize(4 * 1024 * 1024);
+  nvmConfig.navyConfig.setNavyReqOrderingShards(10);
+  nvmConfig.navyConfig.bigHash()
+      .setSizePctAndMaxItemSize(50 /*bigHashSizePct*/,
+                                100 /*bigHashSmallItemMaxSize*/)
+      .setBucketSize(1024)
+      .setBucketBfSize(8);
+
+  // Enable custom reinsertion policy that reinserts even keys, evicts odd keys
+  nvmConfig.navyConfig.blockCache().enableCustomReinsertion(
+      std::make_shared<EvenKeyReinsertionPolicy>());
+
+  allocConfig.enableNvmCache(nvmConfig);
+
+  LruAllocator allocator(allocConfig);
+  const size_t numBytes = allocator.getCacheMemoryStats().ramCacheSize;
+  const auto poolId = allocator.addPool("default", numBytes);
+
+  // Create an EventTracker with in-memory sink and set it on the allocator
+  EventTracker::Config trackerConfig;
+  trackerConfig.samplingRate = 1;
+  trackerConfig.queueSize = 10000; // Larger queue to capture more events
+  trackerConfig.eventSink = std::move(inMemorySink);
+
+  allocator.setEventTracker(std::move(trackerConfig));
+
+  // Configure to overflow both RAM (80MB) and NVM (50MB) = 130MB total
+  // Using ~1KB items, we need ~130k items to fill 130MB
+  // We'll insert 200k items to ensure we trigger NVM evictions
+  const int nItems = 200000;
+  const int itemSize = 1000; // 1KB per item
+  const uint32_t itemTtl = 1000;
+
+  // Insert items - this will fill RAM, then spill to NVM, then evict from NVM
+  for (int i = 0; i < nItems; i++) {
+    std::string key = folly::sformat("key_{}", i);
+    auto handle = allocator.allocate(poolId, key, itemSize, itemTtl);
+    if (handle) {
+      allocator.insertOrReplace(handle);
+    }
+  }
+
+  // Flush to ensure NVM operations complete
+  allocator.flushNvmCache();
+
+  // Verify that BlockCache evictions have occurred
+  auto nvmStats = allocator.getNvmCacheStatsMap().toMap();
+  auto bcEvictionsIt = nvmStats.find("navy_bc_evictions");
+  ASSERT_NE(bcEvictionsIt, nvmStats.end())
+      << "Expected navy_bc_evictions stat to exist";
+  EXPECT_GT(bcEvictionsIt->second, 0)
+      << "Expected BlockCache evictions to have occurred after filling cache";
+
+  // Perform some finds to trigger NVM lookups
+  for (int i = 0; i < nItems; i++) {
+    std::string key = folly::sformat("key_{}", i);
+    allocator.find(key);
+  }
+
+  // Perform some removes
+  for (int i = 0; i < nItems / 2; i++) {
+    std::string key = folly::sformat("key_{}", i);
+    allocator.remove(key);
+  }
+
+  // Allow time for background thread to process events
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+  // Verify events were logged
+  auto records = sinkPtr->getRecords();
+
+  // We should have logged events for allocations, finds, removes, and NVM ops
+  EXPECT_GT(records.size(), 0) << "Expected events to be logged";
+
+  // Count events by type
+  std::unordered_map<AllocatorApiEvent, int> eventCounts;
+  for (const auto& record : records) {
+    eventCounts[record.event]++;
+  }
+
+  // Verify we have the expected event types
+  EXPECT_GT(eventCounts[AllocatorApiEvent::ALLOCATE], 0)
+      << "Expected ALLOCATE events";
+  EXPECT_GT(eventCounts[AllocatorApiEvent::FIND], 0) << "Expected FIND events";
+  EXPECT_GT(eventCounts[AllocatorApiEvent::REMOVE], 0)
+      << "Expected REMOVE events";
+  EXPECT_GT(eventCounts[AllocatorApiEvent::INSERT_OR_REPLACE], 0)
+      << "Expected INSERT_OR_REPLACE events";
+
+  // Verify we got DRAM eviction events (items evicted from RAM to NVM)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::DRAM_EVICT], 0)
+      << "Expected DRAM_EVICT events (items should have been evicted to NVM)";
+
+  // Verify we got NVM eviction events (items evicted from NVM due to overflow)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_EVICT], 0)
+      << "Expected NVM_EVICT events (NVM should have overflowed)";
+
+  // Verify we got NVM reinsertion events (even keys reinserted by policy)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_REINSERT], 0)
+      << "Expected NVM_REINSERT events (even keys should be reinserted)";
+
+  // Verify NVM insert events (items inserted into NVM cache)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_INSERT], 0)
+      << "Expected NVM_INSERT events";
+
+  // Verify NVM find events (lookups in NVM cache)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_FIND], 0)
+      << "Expected NVM_FIND events";
+
+  // Verify NVM fast find events (bloom filter hits)
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_FIND_FAST], 0)
+      << "Expected NVM_FIND_FAST events";
+
+  // Verify items fetched from NVM back to DRAM
+  EXPECT_GT(eventCounts[AllocatorApiEvent::INSERT_FROM_NVM], 0)
+      << "Expected INSERT_FROM_NVM events";
+
+  // Verify NVM remove events
+  EXPECT_GT(eventCounts[AllocatorApiEvent::NVM_REMOVE], 0)
+      << "Expected NVM_REMOVE events";
+
+  // Print event counts for debugging
+  for (const auto& [event, count] : eventCounts) {
+    std::cout << "Event: " << magic_enum::enum_name(event)
+              << ", Count: " << count << std::endl;
+  }
 }

@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include <folly/concurrency/AtomicSharedPtr.h>
+
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/AbstractCache.h"
 #include "cachelib/navy/common/Hash.h"
 
@@ -26,6 +29,18 @@ namespace navy {
 class Engine {
  public:
   virtual ~Engine() = default;
+
+  // Set the EventTracker for this engine.
+  // Thread-safe: can be called at runtime while other threads read.
+  void setEventTracker(std::shared_ptr<EventTracker> tracker) {
+    eventTracker_.store(std::move(tracker));
+  }
+
+  // Get the EventTracker for this engine.
+  // Thread-safe: returns a copy of the shared_ptr atomically.
+  std::shared_ptr<EventTracker> getEventTracker() const {
+    return eventTracker_.load();
+  }
 
   // return the size of usable space
   virtual uint64_t getSize() const = 0;
@@ -78,6 +93,9 @@ class Engine {
   // Update any stats needed to be updated when eviction is done
   // For now, only itme lifetime is updated
   virtual void updateEvictionStats(uint32_t lifetime) = 0;
+
+ protected:
+  folly::atomic_shared_ptr<EventTracker> eventTracker_;
 };
 } // namespace navy
 } // namespace cachelib

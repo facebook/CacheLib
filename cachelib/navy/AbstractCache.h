@@ -24,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
@@ -49,6 +50,9 @@ using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
+
+  // Set the EventTracker for all underlying engines
+  virtual void setEventTracker(std::shared_ptr<EventTracker> tracker) = 0;
 
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as

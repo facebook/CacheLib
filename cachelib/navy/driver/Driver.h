@@ -162,6 +162,9 @@ class Driver final : public AbstractCache {
                            BufferView value,
                            uint32_t lifetime) override;
 
+  // Set the EventTracker for all underlying engines
+  void setEventTracker(std::shared_ptr<EventTracker> tracker) override;
+
  private:
   struct ValidConfigTag {};
 

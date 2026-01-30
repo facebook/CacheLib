@@ -180,8 +180,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
   XDCHECK_NE(readBufferSize_, 0u);
 
   legacyEventTracker_ = config.legacyEventTracker;
-  eventTracker_ = config.eventTracker;
 }
+
 std::shared_ptr<BlockCacheReinsertionPolicy> BlockCache::makeReinsertionPolicy(
     const BlockCacheReinsertionConfig& reinsertionConfig) {
   auto hitsThreshold = reinsertionConfig.getHitsThreshold();
@@ -756,8 +756,9 @@ void BlockCache::recordEvent(folly::StringPiece key,
                              AllocatorApiResult result,
                              uint32_t size,
                              const NvmItem* nvmItem) {
-  if (eventTracker_) {
-    if (!eventTracker_->sampleKey(key)) {
+  auto eventTracker = getEventTracker();
+  if (eventTracker) {
+    if (!eventTracker->sampleKey(key)) {
       return;
     }
     EventInfo eventInfo;
@@ -797,7 +798,7 @@ void BlockCache::recordEvent(folly::StringPiece key,
       }
     }
 
-    eventTracker_->record(eventInfo);
+    eventTracker->record(eventInfo);
   } else if (legacyEventTracker_.has_value()) {
     legacyEventTracker_->get().record(event, key, result, size);
   }

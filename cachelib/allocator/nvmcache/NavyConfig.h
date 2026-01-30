@@ -23,7 +23,6 @@
 
 #include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/common/EventInterface.h"
-#include "cachelib/common/EventTracker.h"
 #include "cachelib/common/Hash.h"
 
 namespace facebook {
@@ -521,23 +520,14 @@ class BlockCacheConfig {
 
   BlockCacheConfig& setLegacyEventTracker(
       LegacyEventTracker& legacyEventTracker) {
-    legacyEventTracker_ = legacyEventTracker;
-    return *this;
-  }
-
-  BlockCacheConfig& setEventTracker(
-      std::shared_ptr<EventTracker> eventTracker) {
-    eventTracker_ = std::move(eventTracker);
+    legacyEventTracker_ =
+        std::reference_wrapper<LegacyEventTracker>(legacyEventTracker);
     return *this;
   }
 
   const std::optional<std::reference_wrapper<LegacyEventTracker>>&
   getLegacyEventTracker() const {
     return legacyEventTracker_;
-  }
-
-  const std::shared_ptr<EventTracker>& getEventTracker() const {
-    return eventTracker_;
   }
 
   BlockCacheConfig& setDataChecksum(bool dataChecksum) noexcept {
@@ -668,7 +658,6 @@ class BlockCacheConfig {
   BlockCacheIndexConfig indexConfig_;
 
   std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
-  std::shared_ptr<EventTracker> eventTracker_;
 
   friend class NavyConfig;
 };

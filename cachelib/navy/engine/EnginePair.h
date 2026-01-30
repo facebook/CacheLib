@@ -103,7 +103,7 @@ class EnginePair {
 
   uint64_t getUsableSize() const;
 
-  std::pair<Status, std::string> getRandomAlloc(Buffer& value);
+  std::pair<Status, std::string /* key */> getRandomAlloc(Buffer& value);
 
   void validate();
 
@@ -111,6 +111,9 @@ class EnginePair {
 
   // Update any stats needed to be updated when eviction is done
   void updateEvictionStats(HashedKey hk, BufferView value, uint32_t lifetime);
+
+  // Set the EventTracker for both engines in the pair
+  void setEventTracker(std::shared_ptr<EventTracker> tracker);
 
  private:
   // Update statistics for lookup

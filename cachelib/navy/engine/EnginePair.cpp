@@ -336,4 +336,11 @@ void EnginePair::updateEvictionStats(HashedKey hk,
   }
 }
 
+void EnginePair::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+  // Not setting in BigHash for now since we do not log anything there yet.
+  if (largeItemCache_) {
+    largeItemCache_->setEventTracker(std::move(tracker));
+  }
+}
+
 } // namespace facebook::cachelib::navy

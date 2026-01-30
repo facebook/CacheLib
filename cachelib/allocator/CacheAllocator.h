@@ -1252,6 +1252,22 @@ class CacheAllocator : public CacheBase {
     return eventTrackerStats;
   }
 
+  // Set the event tracker for the cache allocator.
+  // This overrides the base class method to also propagate the event tracker
+  // to the NVM cache if it is enabled.
+  void setEventTracker(EventTracker::Config&& config) {
+    // Call the base class method to set the event tracker
+    CacheBase::setEventTracker(std::move(config));
+
+    // If NVM cache is enabled, also set the event tracker there
+    if (nvmCache_ && nvmCache_->isEnabled()) {
+      if (auto eventTracker = getEventTracker()) {
+        XLOG(INFO) << "Setting event tracker in NVM cache engines.";
+        nvmCache_->setEventTracker(eventTracker);
+      }
+    }
+  }
+
   // Whether this cache allocator was created on shared memory.
   bool isOnShm() const noexcept { return isOnShm_; }
 
@@ -2678,11 +2694,7 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
   }
 
   auto legacyEventTracker = getLegacyEventTracker();
-  auto eventTracker = getEventTracker();
-  if (eventTracker) {
-    XLOG(INFO) << "Set event tracker in block cache.";
-    config_.nvmConfig->navyConfig.blockCache().setEventTracker(eventTracker);
-  } else if (legacyEventTracker) {
+  if (legacyEventTracker) {
     XLOG(INFO) << "Set legacy event tracker in block cache.";
     config_.nvmConfig->navyConfig.blockCache().setLegacyEventTracker(
         *legacyEventTracker);
@@ -2697,6 +2709,12 @@ void CacheAllocator<CacheTrait>::initNvmCache(bool dramCacheAttached) {
           : std::optional<std::reference_wrapper<ShmManager>>{}};
   nvmCache_ = std::make_unique<NvmCacheT>(*this, *config_.nvmConfig, truncate,
                                           config_.itemDestructor, persistParam);
+
+  // Set EventTracker dynamically after NvmCache creation
+  if (auto eventTracker = getEventTracker()) {
+    XLOG(INFO) << "Setting event tracker in NVM cache engines.";
+    nvmCache_->setEventTracker(eventTracker);
+  }
   if (!config_.cacheDir.empty()) {
     nvmCacheState_.clearPrevState();
   }
