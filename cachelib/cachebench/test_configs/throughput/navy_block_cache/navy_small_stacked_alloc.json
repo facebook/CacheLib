@@ -17,7 +17,6 @@
       "navyBlockSize": 512,
 
       "navyCleanRegions": 64,
-      "navyNumInmemBuffers": 0,
 
       "nvmCacheSizeMB" : 2048,
       "navyBigHashSizePct" : 0

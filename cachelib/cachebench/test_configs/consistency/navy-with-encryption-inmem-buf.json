@@ -10,7 +10,6 @@
     "nvmCacheSizeMB" : 1024,
     "navyBigHashBucketSize": 4096,
     "navyBlockSize": 4096,
-    "navyNumInmemBuffers": 30,
     "navyEncryption": true
   },
   "test_config" :

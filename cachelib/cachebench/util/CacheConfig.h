@@ -222,9 +222,6 @@ struct CacheConfig : public JSONConfig {
   // by default, we do not encrypt content in Navy
   bool navyEncryption = false;
 
-  // number of navy in-memory buffers
-  uint32_t navyNumInmemBuffers{30};
-
   // By default Navy will only flush to device at most 1MB, if larger than 1MB,
   // Navy will split it into multiple IOs.
   uint32_t deviceMaxWriteSize{1024 * 1024};
