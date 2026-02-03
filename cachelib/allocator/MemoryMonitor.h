@@ -126,7 +126,7 @@ class MemoryMonitor : public PeriodicWorker {
 
   // Memory monitoring can be setup to run in one of the two following modes:
   //
-  // 1. Free Memory Monitoring (Not supported for processes in cgroups)
+  // 1. Free Memory Monitoring
   //
   // Setup a free memory monitor that periodically checks system free memory.
   // If it dips below lowerLimitGB bytes, it advises percentAdvisePerIteration

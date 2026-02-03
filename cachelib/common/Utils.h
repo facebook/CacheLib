@@ -369,6 +369,12 @@ size_t getRSSBytes();
 // returns the current mem-available reported by the kernel. 0 means an error.
 size_t getMemAvailable();
 
+// Function signature to return cgroup memory
+using CgroupMemAvailableFn = size_t (*)();
+
+// Set a provider for cgroup memory.
+void setCgroupMemoryAdvising(CgroupMemAvailableFn provider);
+
 // Print stack trace for the current exception thrown
 void printExceptionStackTraces();
 
