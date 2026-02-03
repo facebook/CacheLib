@@ -455,8 +455,9 @@ std::vector<uint32_t> PoolStats::slabsDistribution() const {
   std::vector<uint32_t> ret;
   auto& acStats = mpStats.acStats;
   XDCHECK_LE(acStats.size(), MemoryAllocator::kMaxClasses);
+  ret.reserve(acStats.size());
   for (size_t i = 0; i < acStats.size(); i++) {
-    ret.push_back(acStats.at(static_cast<ClassId>(i)).totalSlabs());
+    ret.emplace_back(acStats.at(static_cast<ClassId>(i)).totalSlabs());
   }
   return ret;
 }
