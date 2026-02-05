@@ -1255,7 +1255,7 @@ class CacheAllocator : public CacheBase {
   // Set the event tracker for the cache allocator.
   // This overrides the base class method to also propagate the event tracker
   // to the NVM cache if it is enabled.
-  void setEventTracker(EventTracker::Config&& config) {
+  void setEventTracker(EventTracker::Config&& config) override {
     // Call the base class method to set the event tracker
     CacheBase::setEventTracker(std::move(config));
 

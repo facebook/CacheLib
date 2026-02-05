@@ -231,9 +231,7 @@ class CacheBase {
   bool aggregatePoolStats_{false};
 
   std::shared_ptr<EventTracker> getEventTracker() const;
-  void setEventTracker(EventTracker::Config&& config);
-  void setEventTrackerSamplingRate(uint32_t samplingRate);
-  void disableEventTracker();
+  virtual void setEventTracker(EventTracker::Config&& config);
 
  protected:
   // move bytes from one pool to another. The source pool should be at least
