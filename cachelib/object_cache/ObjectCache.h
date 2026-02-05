@@ -19,27 +19,18 @@
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
 
-#include <any>
 #include <atomic>
 #include <memory>
-#include <mutex>
-#include <new>
 #include <stdexcept>
 #include <string>
-#include <thread>
-#include <typeinfo>
 #include <vector>
 
 #include "cachelib/allocator/CacheAllocator.h"
-#include "cachelib/common/EventInterface.h"
-#include "cachelib/common/Serialization.h"
-#include "cachelib/common/Time.h"
 #include "cachelib/object_cache/ObjectCacheBase.h"
 #include "cachelib/object_cache/ObjectCacheConfig.h"
 #include "cachelib/object_cache/ObjectCacheSizeController.h"
 #include "cachelib/object_cache/ObjectCacheSizeDistTracker.h"
 #include "cachelib/object_cache/persistence/Persistence.h"
-#include "cachelib/object_cache/persistence/gen-cpp2/persistent_data_types.h"
 #include "cachelib/object_cache/util/ThreadMemoryTracker.h"
 
 namespace facebook::cachelib::objcache2 {
