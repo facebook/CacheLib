@@ -60,6 +60,10 @@ class GenericPieces : public GenericPiecesBase {
     return getEndPieceIndex() - getStartPieceIndex() + 1;
   }
 
+  uint64_t getNumFetchedPieces() const override {
+    return curFetchingPieceIndex_ - startPieceIndex_;
+  }
+
   void updateFetchIndex() override { curFetchingPieceIndex_ += 1; }
 
   /**

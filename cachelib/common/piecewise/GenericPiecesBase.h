@@ -62,6 +62,9 @@ class GenericPiecesBase {
   // Get the number of pieces we need to fetch (excluding the header piece).
   virtual uint64_t getTargetNumPieces() const = 0;
 
+  // Get the number of pieces fetched so far (before the current fetch index).
+  virtual uint64_t getNumFetchedPieces() const = 0;
+
   // Indicates we finished fetching a piece and are ready to fetch the next one.
   virtual void updateFetchIndex() = 0;
 
