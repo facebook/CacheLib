@@ -876,8 +876,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> rs;
+    rs.reserve(10);
     for (int i = 0; i < 10; i++) {
-      rs.push_back(std::thread{runMutateObjectOps, i + 1});
+      rs.emplace_back(runMutateObjectOps, i + 1);
     }
     for (int i = 0; i < 10; i++) {
       rs[i].join();
@@ -1618,8 +1619,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runReplaceOps});
+      ts.emplace_back(runReplaceOps);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1643,8 +1645,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runInsertOps, i});
+      ts.emplace_back(runInsertOps, i);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1673,8 +1676,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runInsertOps, i});
+      ts.emplace_back(runInsertOps, i);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
@@ -1813,8 +1817,9 @@ class ObjectCacheTest : public ::testing::Test {
     };
 
     std::vector<std::thread> ts;
+    ts.reserve(10);
     for (int i = 0; i < 10; i++) {
-      ts.push_back(std::thread{runUpdateTtlOps});
+      ts.emplace_back(runUpdateTtlOps);
     }
     for (int i = 0; i < 10; i++) {
       ts[i].join();
