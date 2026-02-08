@@ -49,7 +49,7 @@ set(BIN_INSTALL_DIR bin CACHE STRING
     "The subdirectory where binaries should be installed")
 set(TESTS_INSTALL_DIR tests CACHE STRING
     "The subdirectory where test binaries should be installed")
-set(INCLUDE_INSTALL_DIR include/cachelib CACHE STRING
+set(INCLUDE_INSTALL_DIR include CACHE STRING
     "The subdirectory where header files should be installed")
 set(LIB_INSTALL_DIR lib CACHE STRING
     "The subdirectory where libraries should be installed")
@@ -327,7 +327,7 @@ install(
     datatype
     navy
     shm
-  DESTINATION ${INCLUDE_INSTALL_DIR}
+  DESTINATION ${INCLUDE_INSTALL_DIR}/cachelib/
   FILES_MATCHING PATTERN "*.h"
   PATTERN "external" EXCLUDE
   PATTERN "tests" EXCLUDE
@@ -342,7 +342,7 @@ install(
   DIRECTORY
     ${CACHELIB_BUILD}/cachelib/
   DESTINATION
-    ${INCLUDE_INSTALL_DIR}
+    ${INCLUDE_INSTALL_DIR}/cachelib/
   FILES_MATCHING
     PATTERN "gen-cpp2/*.h"
     PATTERN "gen-cpp2/*.tcc"

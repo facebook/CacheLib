@@ -42,9 +42,9 @@ target_link_libraries(cachelib_common PUBLIC
   FBThrift::thriftprotocol
   Folly::folly
   Folly::follybenchmark
-  Folly::folly_exception_tracer
-  Folly::folly_exception_tracer_base
-  Folly::folly_exception_counter
+  Folly::folly_experimental_exception_tracer_exception_tracer
+  Folly::folly_experimental_exception_tracer_exception_tracer_base
+  Folly::folly_experimental_exception_tracer_exception_counter
   GTest::gtest
   ${XXHASH_LIBRARY}
 )
