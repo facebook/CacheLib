@@ -35,7 +35,6 @@ HitsPerSlabStrategy::HitsPerSlabStrategy(Config config)
 // - Prioritize classes with excessive free memory.
 // - Prioritize classes with tail age > maxLruTailAge.
 ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
-                                        const CacheBase& cache,
                                         PoolId pid,
                                         const PoolStats& stats) {
   auto victims = stats.getClassIds();
@@ -49,9 +48,6 @@ ClassId HitsPerSlabStrategy::pickVictim(const Config& config,
   // before we consider them again.
   victims = filterVictimsByHoldOff(pid, stats, std::move(victims));
 
-  // we are only concerned about the eviction age and not the projected age.
-  const auto poolEvictionAgeStats =
-      cache.getPoolEvictionAgeStats(pid, /* projectionLength */ 0);
   // filter out alloc classes with less than the minimum tail age
   if (config.minLruTailAge != 0) {
     victims =
@@ -214,7 +210,7 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
   const auto config = getConfigCopy();
 
   RebalanceContext ctx;
-  ctx.victimClassId = pickVictim(config, cache, pid, poolStats);
+  ctx.victimClassId = pickVictim(config, pid, poolStats);
   ctx.receiverClassId = pickReceiver(config, pid, poolStats, ctx.victimClassId);
 
   if (ctx.victimClassId == ctx.receiverClassId ||
@@ -274,11 +270,11 @@ RebalanceContext HitsPerSlabStrategy::pickVictimAndReceiverImpl(
 }
 
 // Victim-only selection for pool resizing (when slabs leave the pool entirely).
-ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& cache,
+ClassId HitsPerSlabStrategy::pickVictimImpl(const CacheBase& /* cache */,
                                             PoolId pid,
                                             const PoolStats& poolStats) {
   const auto config = getConfigCopy();
-  auto victimClassId = pickVictim(config, cache, pid, poolStats);
+  auto victimClassId = pickVictim(config, pid, poolStats);
 
   auto& poolState = getPoolState(pid);
   // update all alloc classes' hits state to current hits so that next time we

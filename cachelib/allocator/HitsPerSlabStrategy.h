@@ -157,10 +157,7 @@ class HitsPerSlabStrategy : public RebalanceStrategy {
   }
 
   // Selects the class with lowest weighted hits/slab as victim.
-  ClassId pickVictim(const Config& config,
-                     const CacheBase& cache,
-                     PoolId pid,
-                     const PoolStats& stats);
+  ClassId pickVictim(const Config& config, PoolId pid, const PoolStats& stats);
 
   // Selects the class with highest weighted hits/slab as receiver.
   ClassId pickReceiver(const Config& config,
