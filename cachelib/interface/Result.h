@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Conv.h>
 #include <folly/Expected.h>
 
 #include <magic_enum/magic_enum.hpp>
@@ -68,7 +69,7 @@ namespace std {
 inline ostream& operator<<(ostream& os,
                            const facebook::cachelib::interface::Error& error) {
   os << "Error (" << magic_enum::enum_name(error.code_) << ", code "
-     << static_cast<uint8_t>(error.code_) << "): " << error.error_;
+     << folly::to<std::string>(error.code_) << "): " << error.error_;
   return os;
 }
 } // namespace std
