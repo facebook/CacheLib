@@ -42,21 +42,64 @@ inline const char* toString(RecordResult result) {
   }
 }
 
+// Abstract interface for custom sampling implementations.
+// Implement this interface to provide custom sampling logic
+// that can be injected into EventTracker without adding dependencies
+// to the core CacheLib code.
+class SamplerInterface {
+ public:
+  virtual ~SamplerInterface() = default;
+
+  // Returns a non-zero weight (could be sampling rate) if the given key should
+  // be sampled, or 0 if it should not be sampled.
+  // @param key The key to check for sampling
+  // @return non-zero weight if sampled, 0 otherwise
+  virtual uint64_t shouldSample(folly::StringPiece key) const = 0;
+};
+
+// Default sampler implementation using furcHash-based consistent sampling.
+// Samples keys deterministically based on a configurable sampling rate.
+class FurcHashSampler final : public SamplerInterface {
+ public:
+  explicit FurcHashSampler(uint32_t samplingRate)
+      : samplingRate_{samplingRate} {}
+
+  uint64_t shouldSample(folly::StringPiece key) const override {
+    uint32_t rate = getSamplingRate();
+    if (rate > 0 && furcHash(key.data(), key.size(), rate) == 0) {
+      return rate;
+    }
+    return 0;
+  }
+
+  void setSamplingRate(uint32_t samplingRate) {
+    samplingRate_.store(samplingRate, std::memory_order_relaxed);
+  }
+
+  uint32_t getSamplingRate() const {
+    return samplingRate_.load(std::memory_order_relaxed);
+  }
+
+ private:
+  std::atomic<uint32_t> samplingRate_{0};
+};
+
 class EventTracker {
  public:
   struct Config {
-    uint32_t samplingRate = 0;
     uint32_t queueSize = 0;
     std::unique_ptr<EventSink> eventSink = nullptr;
     std::function<void(EventInfo&)> eventInfoCallback = nullptr;
+
+    // Optional custom sampler.
+    // If provided, this sampler will be used to determine whether a key
+    // should be sampled. If not provided, a default FurcHashSampler is
+    // created with sampling rate 0 (disabled).
+    std::unique_ptr<SamplerInterface> sampler = nullptr;
   };
 
   explicit EventTracker(Config&& config);
   ~EventTracker();
-
-  void setSamplingRate(uint32_t samplingRate);
-
-  uint32_t getSamplingRate() const;
 
   // This calls sampleKey and if sampled, adds the event
   // to the queue.
@@ -82,9 +125,9 @@ class EventTracker {
   std::thread backgroundThread_;
   folly::MPMCQueue<EventInfo> eventInfoQueue_;
 
-  std::atomic<uint32_t> samplingRate_;
   std::unique_ptr<EventSink> eventSink_;
   std::function<void(EventInfo&)> eventInfoCallback_;
+  std::unique_ptr<SamplerInterface> sampler_;
 
   AtomicCounter recordCount_{0};
   AtomicCounter sampleAttemptCount_{0};

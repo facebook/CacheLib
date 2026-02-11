@@ -176,7 +176,7 @@ class EventTrackerTest : public ::testing::Test {
   std::unique_ptr<EventTracker> createEventTracker(const std::string& filePath,
                                                    uint32_t samplingRate = 1) {
     EventTracker::Config config;
-    config.samplingRate = samplingRate;
+    config.sampler = std::make_unique<FurcHashSampler>(samplingRate);
     config.queueSize = 1000;
     config.eventSink = std::make_unique<FileEventSink>(filePath);
     return std::make_unique<EventTracker>(std::move(config));
@@ -219,10 +219,18 @@ TEST_F(EventTrackerTest, SamplingRateChange) {
   folly::test::TemporaryFile tmpFile;
 
   {
-    auto eventTracker = createEventTracker(tmpFile.path().string());
+    auto sampler = std::make_unique<FurcHashSampler>(1);
+    auto* samplerPtr = sampler.get();
+
+    EventTracker::Config config;
+    config.sampler = std::move(sampler);
+    config.queueSize = 1000;
+    config.eventSink = std::make_unique<FileEventSink>(tmpFile.path().string());
+    auto eventTracker = std::make_unique<EventTracker>(std::move(config));
+
     recordEvents(eventTracker.get(), events, 0, numItems / 2);
 
-    eventTracker->setSamplingRate(3);
+    samplerPtr->setSamplingRate(3);
 
     recordEvents(eventTracker.get(), events, numItems / 2, numItems);
   }
@@ -262,7 +270,7 @@ TEST_F(EventTrackerTest, NvmAdmitWithSize) {
 
   {
     EventTracker::Config config;
-    config.samplingRate = 1;
+    config.sampler = std::make_unique<FurcHashSampler>(1);
     config.queueSize = 1000;
     config.eventSink = std::make_unique<FileEventSink>(
         tmpFile.path().string(),
@@ -348,7 +356,7 @@ TEST_F(EventTrackerTest, NvmCacheWithEventTracker) {
 
   // Create an EventTracker with in-memory sink and set it on the allocator
   EventTracker::Config trackerConfig;
-  trackerConfig.samplingRate = 1;
+  trackerConfig.sampler = std::make_unique<FurcHashSampler>(1);
   trackerConfig.queueSize = 10000; // Larger queue to capture more events
   trackerConfig.eventSink = std::move(inMemorySink);
 
