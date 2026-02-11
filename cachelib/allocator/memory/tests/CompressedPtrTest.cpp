@@ -87,8 +87,11 @@ TEST_F(CompressedPtrTest, Stats) {
 
   uint32_t slabIdx = std::numeric_limits<uint16_t>::max();
   // Compressed pointer should fail when asking to compress a slab index
-  // max(uint16_t)
+  // max(uint16_t). The bounds check uses XDCHECK_LT which is only active
+  // in debug builds.
+#ifndef NDEBUG
   EXPECT_DEATH(compress<CompressedPtr4B>(compressedPtr, slabIdx, 0, false), "");
+#endif
 
   // Large compressed pointer should be fine when asking to compress a slab
   // index max(uint16_t).
@@ -101,8 +104,11 @@ TEST_F(CompressedPtrTest, Stats) {
   slabIdx = (1u << getCompressedPtrNumSlabIdxBits<CompressedPtr5B>(
                  compressedPtr5b, false)) -
             1;
+  // The bounds check uses XDCHECK_LT which is only active in debug builds.
+#ifndef NDEBUG
   EXPECT_DEATH(compress<CompressedPtr5B>(compressedPtr5b, slabIdx, 0, false),
                "");
+#endif
 
   // Reducing 1 from slab index should work for 5 byte compressed pointer.
   EXPECT_EQ(compress<CompressedPtr5B>(compressedPtr5b, slabIdx - 1, 0, false),
