@@ -31,6 +31,7 @@ std::vector<int> getRandomNumbers(int N, int max) {
   std::uniform_int_distribution<int> dis(0, max);
   // Generate N random numbers
   std::vector<int> randomNumbers;
+  randomNumbers.reserve(N);
   for (int i = 0; i < N; ++i) {
     randomNumbers.push_back(dis(gen));
   }
