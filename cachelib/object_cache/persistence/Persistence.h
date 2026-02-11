@@ -361,6 +361,7 @@ bool Restorer<ObjectCache>::run() {
     return false;
   }
   std::vector<std::thread> ts;
+  ts.reserve(workers_.size());
   for (size_t i = 0; i < workers_.size(); i++) {
     ts.emplace_back(std::thread{[&](int i) {
                                   workers_[i]->work();
