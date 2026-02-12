@@ -91,7 +91,7 @@ class MMTinyLFU {
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
     //                    time depite the number of accesses it gets.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time,
@@ -105,7 +105,7 @@ class MMTinyLFU {
     //                          An item will be promoted only once in each lru
     //                          refresh time depite the number of accesses it
     //                          gets.
-    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnW         whether to promote the item on write
     // @param updateOnR         whether to promote the item on read
     // @param windowToCacheSize multiplier of window size to cache size
     // @param tinySizePct       percentage number of tiny size to overall size
@@ -125,7 +125,7 @@ class MMTinyLFU {
     //                          An item will be promoted only once in each lru
     //                          refresh time depite the number of accesses it
     //                          gets.
-    // @param udpateOnW         whether to promote the item on write
+    // @param updateOnW         whether to promote the item on write
     // @param updateOnR         whether to promote the item on read
     // @param tryLockU          whether to use a try lock when doing update.
     // @param windowToCacheSize multiplier of window size to cache size
@@ -152,7 +152,7 @@ class MMTinyLFU {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     //                                update.
@@ -183,7 +183,7 @@ class MMTinyLFU {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     //                                update.
@@ -220,7 +220,7 @@ class MMTinyLFU {
     //                                oldest element's lifetime in warm queue
     //                                would be the minimum value of LRU refresh
     //                                time.
-    // @param udpateOnW               whether to promote the item on write
+    // @param updateOnW               whether to promote the item on write
     // @param updateOnR               whether to promote the item on read
     // @param tryLockU                whether to use a try lock when doing
     //                                update.

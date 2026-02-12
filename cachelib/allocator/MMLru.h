@@ -75,7 +75,7 @@ class MMLru {
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
     //                    time depite the number of accesses it gets.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time, updateOnW, updateOnR, false, 0) {}
@@ -83,7 +83,7 @@ class MMLru {
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
     //                    time depite the number of accesses it gets.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param ipSpec      insertion point spec, which is the inverse power of
     //                    length from the end of the queue. For example, value 1
@@ -105,7 +105,7 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
@@ -126,7 +126,7 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
@@ -157,7 +157,7 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
