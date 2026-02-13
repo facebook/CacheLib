@@ -1262,7 +1262,6 @@ class CacheAllocator : public CacheBase {
     // If NVM cache is enabled, also set the event tracker there
     if (nvmCache_ && nvmCache_->isEnabled()) {
       if (auto eventTracker = getEventTracker()) {
-        XLOG(INFO) << "Setting event tracker in NVM cache engines.";
         nvmCache_->setEventTracker(eventTracker);
       }
     }
