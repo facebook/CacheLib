@@ -119,10 +119,14 @@ void ObjectCacheSizeController<AllocatorT>::work() {
   if (mode_ == FreeMemoryOnly) {
     auto freeMemBytes = objCache_.config_.getFreeMemBytes();
     if (freeMemBytes < objCache_.config_.lowerLimitBytes) {
+      // Shrink cache when free memory is below the lower limit
       ensureFreeMemoryAboveLowerLimit();
-    } else {
+    } else if (freeMemBytes > objCache_.config_.upperLimitBytes) {
+      // Only expand cache when free memory is above the upper limit
       expandCacheByEntriesNum(objCache_.config_.expandCacheBy);
     }
+    // When free memory is between lower and upper limits, do nothing (stable
+    // zone)
     return;
   }
 

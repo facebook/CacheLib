@@ -327,7 +327,10 @@ struct ObjectCacheConfig {
   //   - upperLimitBytes: max RSS limit (shrink cache)
   //   - lowerLimitBytes: min RSS limit (expand cache)
   // For FreeMemoryOnly mode,
+  //   - upperLimitBytes: max free memory limit (expand cache)
   //   - lowerLimitBytes: min free memory limit (shrink cache)
+  //   When free memory is between lowerLimitBytes and upperLimitBytes,
+  //   the cache size remains stable (no shrinking or expanding).
   uint64_t upperLimitBytes{0};
   uint64_t lowerLimitBytes{0};
 
