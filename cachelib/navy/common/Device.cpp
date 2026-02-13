@@ -652,7 +652,7 @@ IOReq::IOReq(IoContext& context,
       buf += allowedIOSize;
     }
   } else {
-    ops_.emplace_back(*this, idx++, fvec[0].fd(), offset_, size_, data_,
+    ops_.emplace_back(*this, 0, fvec[0].fd(), offset_, size_, data_,
                       trackIOOpDeviceLatency, placeHandle_);
   }
 
@@ -1292,7 +1292,7 @@ std::unique_ptr<Device> createDirectIoFileDevice(
                                   IoEngine::Sync,
                                   0,
                                   false,
-                                  encryptor);
+                                  std::move(encryptor));
 }
 
 std::unique_ptr<Device> createFileDevice(
