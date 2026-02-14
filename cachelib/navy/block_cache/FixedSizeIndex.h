@@ -65,14 +65,14 @@ class FixedSizeIndex : public Index {
  public:
   FixedSizeIndex(uint32_t numChunks,
                  uint8_t numBucketsPerChunkPower,
-                 uint64_t numBucketsPerMutex,
+                 uint64_t numBucketsPerShard,
                  ShmManager* shmManager,
                  const std::string& name,
                  bool handleOverflow = false,
                  RetrieveKeyCallback retrieveKeyCb = nullptr)
       : numChunks_{numChunks},
         numBucketsPerChunkPower_{numBucketsPerChunkPower},
-        numBucketsPerMutex_{numBucketsPerMutex},
+        numBucketsPerShard_{numBucketsPerShard},
         shmManager_{shmManager},
         name_{name},
         handleOverflow_{handleOverflow},
@@ -83,10 +83,10 @@ class FixedSizeIndex : public Index {
   // This constructor is mainly for testing. Don't use it for the real use case
   FixedSizeIndex(uint32_t numChunks,
                  uint8_t numBucketsPerChunkPower,
-                 uint64_t numBucketsPerMutex)
+                 uint64_t numBucketsPerShard)
       : FixedSizeIndex(numChunks,
                        numBucketsPerChunkPower,
-                       numBucketsPerMutex,
+                       numBucketsPerShard,
                        nullptr,
                        "",
                        false,
@@ -176,8 +176,8 @@ class FixedSizeIndex : public Index {
   class BucketDistInfo {
     // 1. It's assumed that caller (FixedSizeIndex) will handle all the
     // parameters validity for each function. It'll be only XDCHECKed here.
-    // 2. # of buckets per mutex for FixedSizeIndex should be multiple of 8 so
-    // that each byte in this info won't be shared across the buckets mutex
+    // 2. # of buckets per shard for FixedSizeIndex should be multiple of 8 so
+    // that each byte in this info won't be shared across the buckets shard
     // boundary
     // 3. For now, it's 2-bit for fill info and 8-bit for partial key bits. All
     // those are hard coded
@@ -513,7 +513,7 @@ class FixedSizeIndex : public Index {
 
   // sharding is based on each mutex boundary
   uint64_t shardId(uint64_t bucketId) const {
-    return bucketId / numBucketsPerMutex_;
+    return bucketId / numBucketsPerShard_;
   }
 
   // Return the partial key bits to be used for hash collision open addressing
@@ -525,23 +525,23 @@ class FixedSizeIndex : public Index {
 
   // Get the next bucket id to check or use
   uint64_t calcBucketId(uint64_t bid, uint8_t offset) const {
-    // We don't want to go across the mutex boundary, so if it goes beyond that,
-    // it will wrap around and go back to the beginning of current mutex
+    // We don't want to go across the shard boundary, so if it goes beyond that,
+    // it will wrap around and go back to the beginning of current shard
     // boundary
     XDCHECK(offset < kNextBucketOffset.size()) << offset;
-    return (bid / numBucketsPerMutex_) * numBucketsPerMutex_ +
-           ((bid + kNextBucketOffset[offset]) % numBucketsPerMutex_);
+    return (bid / numBucketsPerShard_) * numBucketsPerShard_ +
+           ((bid + kNextBucketOffset[offset]) % numBucketsPerShard_);
   }
 
   // Some helper functions below
   //
 
   // Get the original bid before applying the offset. Also need to
-  // consider the wraparound on the mutex boundary.
+  // consider the wraparound on the shard boundary.
   uint64_t originalBucketId(uint64_t curBid, uint8_t fillOffset) {
-    return ((curBid % numBucketsPerMutex_) >= kNextBucketOffset[fillOffset])
+    return ((curBid % numBucketsPerShard_) >= kNextBucketOffset[fillOffset])
                ? curBid - kNextBucketOffset[fillOffset]
-               : curBid + numBucketsPerMutex_ - kNextBucketOffset[fillOffset];
+               : curBid + numBucketsPerShard_ - kNextBucketOffset[fillOffset];
   }
 
   bool checkStoredConfig(const serialization::FixedSizeIndexConfig& stored);
@@ -554,7 +554,7 @@ class FixedSizeIndex : public Index {
   // Configuration related variables
   const uint32_t numChunks_{0};
   const uint8_t numBucketsPerChunkPower_{0};
-  const uint64_t numBucketsPerMutex_{0};
+  const uint64_t numBucketsPerShard_{0};
   ShmManager* shmManager_{};
   std::string name_;
   // TODO: This field is probably for temporary, until it's all evaluated and
@@ -564,7 +564,7 @@ class FixedSizeIndex : public Index {
 
   uint64_t bucketsPerChunk_{0};
   uint64_t totalBuckets_{0};
-  uint64_t totalMutexes_{0};
+  uint64_t totalShards_{0};
 
   // ht_ is a array of PackedItemRecord
   PackedItemRecord* ht_{};
