@@ -25,6 +25,12 @@ namespace cachelib {
 namespace navy {
 
 void FixedSizeIndex::initialize() {
+  // TODO: All these XDCHECK should throw exception instead.
+  // For now, it's internally passed down so should be fine.
+  if (handleOverflow_ && retrieveKeyCb_ == nullptr) {
+    throw std::invalid_argument(
+        "retrieveKey callback must be set with handleOverflow enabled");
+  }
   XDCHECK(numChunks_ != 0 && numBucketsPerChunkPower_ != 0 &&
           numBucketsPerMutex_ != 0);
 
@@ -36,6 +42,15 @@ void FixedSizeIndex::initialize() {
   totalMutexes_ = (totalBuckets_ - 1) / numBucketsPerMutex_ + 1;
 
   mutex_ = std::make_unique<SharedMutexType[]>(totalMutexes_);
+  if (handleOverflow_) {
+    XDCHECK(retrieveKeyCb_ != nullptr);
+    // This in-memory combined entries is a temporary implementation until we
+    // keep it on flash
+    combinedEntries_ = std::make_unique<
+        folly::F14FastMap<uint64_t, std::unique_ptr<CombinedEntryBlock>>[]>(
+        totalMutexes_);
+  }
+
   bucketDistInfo_.initialize(totalBuckets_);
 }
 
@@ -43,10 +58,10 @@ size_t FixedSizeIndex::getRequiredPreallocSize() const {
   // Need to preallocate buffer for those info which needs to be persistent
   // 1. Main hash table with PackedItemRecord entries
   // 2. Table entry count information per each mutex boundary
-  // (validBucketsPerMutex_)
+  // (validBucketsPerShard_)
   // 3. BucketDistInfo
   return sizeof(PackedItemRecord) * totalBuckets_ + // for ht_
-         sizeof(size_t) * totalMutexes_ +           // for validBucketsPerMutex_
+         sizeof(size_t) * totalMutexes_ +           // for validBucketsPerShard_
          bucketDistInfo_.getBucketDistInfoBufSize(); // for bucketDistInfo_
 }
 
@@ -203,7 +218,7 @@ void FixedSizeIndex::reset() {
     for (uint64_t j = 0; j < numBucketsPerMutex_; ++j) {
       ht_[bucketId++] = PackedItemRecord{};
     }
-    validBucketsPerMutex_[i] = 0;
+    validBucketsPerShard_[i] = 0;
   }
 
   if (shmManager_) {
@@ -239,7 +254,7 @@ size_t FixedSizeIndex::computeSize() const {
   size_t size = 0;
   for (uint32_t i = 0; i < totalMutexes_; i++) {
     auto lock = std::shared_lock{mutex_[i]};
-    size += validBucketsPerMutex_[i];
+    size += validBucketsPerShard_[i];
   }
 
   return size;
@@ -340,11 +355,11 @@ bool FixedSizeIndex::checkStoredConfig(
 
 void FixedSizeIndex::initWithBaseAddr(uint8_t* addr) {
   // In Shm, it's stored in this order:
-  // ht_, validBucketsPerMutex_, bucketDistInfo (fillMap_, partialBits_)
+  // ht_, validBucketsPerShard_, bucketDistInfo (fillMap_, partialBits_)
   ht_ = reinterpret_cast<PackedItemRecord*>(addr);
   addr += sizeof(PackedItemRecord) * totalBuckets_;
 
-  validBucketsPerMutex_ = reinterpret_cast<size_t*>(addr);
+  validBucketsPerShard_ = reinterpret_cast<size_t*>(addr);
   addr += sizeof(size_t) * totalMutexes_;
 
   bucketDistInfo_.initWithBaseAddr(addr);

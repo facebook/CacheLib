@@ -127,7 +127,9 @@ std::unique_ptr<Index> BlockCache::createIndex(
                    ? &(persistParams.shmManager.value().get())
                    : nullptr)
             : nullptr,
-        name);
+        name,
+        /* handleOverflow */ false,
+        bindThis(&BlockCache::onKeyHashRetrievalFromLocation, *this));
   } else {
     return std::make_unique<SparseMapIndex>(
         indexConfig.getNumSparseMapBuckets(),

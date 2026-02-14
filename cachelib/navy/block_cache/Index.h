@@ -212,6 +212,10 @@ class Index {
 
     bool isValid() const { return isValidAddress(address); }
     uint16_t getSizeHint() const { return sizeExpToHint(info.sizeExp); }
+    bool isCombinedEntry() const {
+      return info.sizeExp == kCombinedEntrySizeExp;
+    }
+    void setCombinedEntry() { info.sizeExp = kCombinedEntrySizeExp; }
 
     int bumpCurHits() {
       if (info.curHits < 3) {
