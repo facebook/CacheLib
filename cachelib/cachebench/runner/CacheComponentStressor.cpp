@@ -20,6 +20,7 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/interface/components/RAMCacheComponent.h"
 
@@ -28,68 +29,6 @@ using namespace facebook::cachelib::interface;
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-namespace {
-void setupConfig(LruAllocatorConfig& allocatorConfig,
-                 RAMCacheComponent::PoolConfig& poolConfig,
-                 const CacheConfig& config) {
-  constexpr size_t MB = 1024ULL * 1024ULL;
-
-  allocatorConfig.enablePoolRebalancing(
-      config.getRebalanceStrategy(),
-      std::chrono::seconds(config.poolRebalanceIntervalSec));
-
-  if (config.allocSizes.empty()) {
-    XDCHECK(config.minAllocSize >= sizeof(CacheValue));
-    allocatorConfig.setDefaultAllocSizes(util::generateAllocSizes(
-        config.allocFactor, config.maxAllocSize, config.minAllocSize, true));
-  } else {
-    std::set<uint32_t> allocSizes;
-    for (uint64_t s : config.allocSizes) {
-      XDCHECK(s >= sizeof(CacheValue));
-      allocSizes.insert(s);
-    }
-    allocatorConfig.setDefaultAllocSizes(std::move(allocSizes));
-  }
-
-  // Set hash table config
-  allocatorConfig.setAccessConfig(typename LruAllocator::AccessConfig{
-      static_cast<uint32_t>(config.htBucketPower),
-      static_cast<uint32_t>(config.htLockPower)});
-
-  allocatorConfig.configureChainedItems(typename LruAllocator::AccessConfig{
-      static_cast<uint32_t>(config.chainedItemHtBucketPower),
-      static_cast<uint32_t>(config.chainedItemHtLockPower)});
-
-  allocatorConfig.setCacheSize(config.cacheSizeMB * (MB));
-
-  if (!config.cacheDir.empty()) {
-    allocatorConfig.cacheDir = config.cacheDir;
-  }
-
-  if (config.usePosixShm) {
-    allocatorConfig.usePosixForShm();
-  }
-
-  allocatorConfig.setMemoryLocking(config.lockMemory);
-
-  if (!config.memoryTierConfigs.empty()) {
-    allocatorConfig.configureMemoryTiers(config.memoryTierConfigs);
-  }
-
-  if (config.enableItemDestructor) {
-    auto removeCB = [&](const typename LruAllocator::DestructorData&) {};
-    allocatorConfig.setItemDestructor(removeCB);
-  }
-
-  allocatorConfig.cacheName = kCachebenchCacheName;
-
-  // Set up pool config
-  poolConfig.name_ = "pool_1";
-  poolConfig.size_ = (config.cacheSizeMB * MB) - (4 * MB);
-  poolConfig.mmConfig_ = makeMMConfig<typename LruAllocator::MMConfig>(config);
-  poolConfig.ensureProvisionable_ = true;
-}
-} // namespace
 
 CacheComponentStressor::CacheComponentStressor(
     const CacheConfig& cacheConfig,
@@ -97,15 +36,9 @@ CacheComponentStressor::CacheComponentStressor(
     std::unique_ptr<GeneratorBase>&& generator)
     : CacheStressorBase(std::move(config), std::move(generator)) {
   validate(cacheConfig);
-
-  LruAllocatorConfig lruConfig;
-  RAMCacheComponent::PoolConfig poolConfig;
-  setupConfig(lruConfig, poolConfig, cacheConfig);
-
-  auto cache =
-      RAMCacheComponent::create(std::move(lruConfig), std::move(poolConfig));
-  XCHECK(cache.hasValue()) << cache.error();
-  cache_ = std::make_unique<RAMCacheComponent>(std::move(cache).value());
+  XCHECK(cacheConfig.allocator == "RAM")
+      << "Unexpected allocator " << cacheConfig.allocator;
+  cache_ = createRAMCacheComponent(cacheConfig);
 }
 
 void CacheComponentStressor::start() {
@@ -218,11 +151,6 @@ void CacheComponentStressor::validate(const CacheConfig& cacheConfig) const {
   } else if (cacheConfig.nvmCacheSizeMB > 0) {
     throw std::invalid_argument(
         "CacheComponentStressor does not support NVM caching");
-  } else if (cacheConfig.numPools > 1 ||
-             config_.opPoolDistribution.size() != 1 ||
-             config_.keyPoolDistribution.size() != 1) {
-    throw std::invalid_argument(
-        "CacheComponentStressor does not support multiple pools");
   } else if (config_.opRatePerSec > 0 || config_.opDelayBatch > 0 ||
              config_.opDelayNs > 0) {
     throw std::invalid_argument(

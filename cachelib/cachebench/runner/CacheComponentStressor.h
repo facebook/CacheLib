@@ -20,7 +20,6 @@
 
 #include <memory>
 
-#include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/CacheStressorBase.h"
 #include "cachelib/cachebench/runner/Stressor.h"
