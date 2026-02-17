@@ -122,6 +122,10 @@ class FlashCacheItem : public CacheItem {
   Buffer buffer_;
 };
 
+// ============================================================================
+// FlashCacheComponent
+// ============================================================================
+
 /* static */ Result<FlashCacheComponent> FlashCacheComponent::create(
     std::string name, navy::BlockCache::Config&& config) noexcept {
   try {
@@ -167,7 +171,8 @@ FlashCacheComponent::allocateImpl(const HashedKey& key, uint32_t valueSize) {
   }
 }
 
-folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
+template <typename CacheItemT>
+folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocateGeneric(
     Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
   if (key.empty()) {
     co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty key");
@@ -178,10 +183,16 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
   co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
     // NOTE: we can't checksum until the user has finished writing their data,
     // defer until they call insert()
-    auto* item = new FlashCacheItem(hashedKey, valueSize, std::move(value),
-                                    creationTime, ttlSecs);
+    auto* item = new CacheItemT(hashedKey, valueSize, std::move(value),
+                                creationTime, ttlSecs);
     return AllocatedHandle(*this, *item);
   });
+}
+
+folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
+    Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
+  co_return co_await allocateGeneric<FlashCacheItem>(key, size, creationTime,
+                                                     ttlSecs);
 }
 
 folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
@@ -261,20 +272,23 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
   }
 }
 
+template <typename CacheItemT>
 folly::coro::Task<Result<std::optional<WriteHandle>>>
-FlashCacheComponent::findToWrite(Key key) {
+FlashCacheComponent::findToWriteGeneric(Key key) {
   uint64_t keyHash;
   uint32_t valueSize;
   Buffer buf;
   {
-    auto findResult = co_await find(key);
+    // NOTE: findToWriteGeneric can be called by child classes, make sure we're
+    // calling *our* version of find (not the child's)
+    auto findResult = co_await FlashCacheComponent::find(key);
     if (findResult.hasError()) {
       co_return folly::makeUnexpected(std::move(findResult).error());
     } else if (!findResult->has_value()) {
       co_return std::nullopt;
     }
 
-    auto* fccItem = reinterpret_cast<FlashCacheItem*>(
+    auto* fccItem = static_cast<FlashCacheItem*>(
         const_cast<CacheItem*>(findResult.value()->get()));
     const auto* entryDesc = fccItem->getEntryDescriptor();
     keyHash = entryDesc->keyHash;
@@ -284,9 +298,14 @@ FlashCacheComponent::findToWrite(Key key) {
 
   auto hashedKey = HashedKey::precomputed(key, keyHash);
   co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
-    auto* newItem = new FlashCacheItem(std::move(value), std::move(buf));
+    auto* newItem = new CacheItemT(std::move(value), std::move(buf));
     return WriteHandle(*this, *newItem);
   });
+}
+
+folly::coro::Task<Result<std::optional<WriteHandle>>>
+FlashCacheComponent::findToWrite(Key key) {
+  co_return co_await findToWriteGeneric<FlashCacheItem>(key);
 }
 
 folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key key) {
@@ -320,8 +339,7 @@ folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
   }
 
   cache_->removeCount_.inc();
-  auto& fccItem =
-      reinterpret_cast<FlashCacheItem&>(const_cast<CacheItem&>(*handle));
+  auto& fccItem = static_cast<FlashCacheItem&>(const_cast<CacheItem&>(*handle));
   auto hashedKey = HashedKey::precomputed(
       fccItem.getKey(), fccItem.getEntryDescriptor()->keyHash);
   auto status = cache_->removeImpl(hashedKey, fccItem.getBuffer());
@@ -336,7 +354,7 @@ FlashCacheComponent::FlashCacheComponent(std::string&& name,
       cache_(std::make_unique<navy::BlockCache>(std::move(config))) {}
 
 bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
-  auto& fccItem = reinterpret_cast<FlashCacheItem&>(item);
+  auto& fccItem = static_cast<FlashCacheItem&>(item);
   auto* desc = fccItem.getEntryDescriptor();
   auto logicalSizeWritten = desc->keySize + desc->valueSize;
   auto totalSize = fccItem.getTotalSize();
@@ -363,7 +381,7 @@ UnitResult FlashCacheComponent::writeBack(CacheItem& item) {
 
 folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
                                                      bool inserted) {
-  auto& fccItem = reinterpret_cast<FlashCacheItem&>(item);
+  auto& fccItem = static_cast<FlashCacheItem&>(item);
   if (!inserted) {
     cache_->addHole(fccItem.getTotalSize());
   }
@@ -373,5 +391,114 @@ folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
   delete &item;
   co_return;
 }
+
+// ============================================================================
+// ConsistentFlashCacheComponent
+// ============================================================================
+
+/**
+ * Same as FlashCacheItem but holds a lock while the item is still outstanding.
+ */
+class ConsistentFlashCacheItem : public FlashCacheItem {
+ public:
+  ConsistentFlashCacheItem(const HashedKey& hashedKey,
+                           uint32_t valueSize,
+                           FlashCacheComponent::AllocData&& allocation,
+                           const uint32_t creationTime,
+                           const uint32_t ttlSecs)
+      : FlashCacheItem(hashedKey,
+                       valueSize,
+                       std::move(allocation),
+                       creationTime,
+                       ttlSecs) {}
+  ConsistentFlashCacheItem(FlashCacheComponent::AllocData&& allocation,
+                           Buffer&& existingData)
+      : FlashCacheItem(std::move(allocation), std::move(existingData)) {}
+  void setLock(utils::ShardedSerializer::WriteLock&& lock) {
+    lock_ = std::move(lock);
+  }
+
+ private:
+  utils::ShardedSerializer::WriteLock lock_;
+};
+
+/* static */ Result<ConsistentFlashCacheComponent>
+ConsistentFlashCacheComponent::create(std::string name,
+                                      navy::BlockCache::Config&& config,
+                                      std::unique_ptr<Hash> hasher,
+                                      uint8_t shardsPower) noexcept {
+  try {
+    return ConsistentFlashCacheComponent(std::move(name), std::move(config),
+                                         std::move(hasher), shardsPower);
+  } catch (const std::invalid_argument& ia) {
+    return makeError(Error::Code::INVALID_CONFIG, ia.what());
+  }
+}
+
+folly::coro::Task<Result<AllocatedHandle>>
+ConsistentFlashCacheComponent::allocate(Key key,
+                                        uint32_t size,
+                                        uint32_t creationTime,
+                                        uint32_t ttlSecs) {
+  auto lock = co_await serializer_.wlock(key);
+  auto res = co_await Base::allocateGeneric<ConsistentFlashCacheItem>(
+      key, size, creationTime, ttlSecs);
+  if (res.hasError()) {
+    co_return folly::makeUnexpected(std::move(res).error());
+  }
+  // need to hold the lock through insert()/insertOrReplace() because the cache
+  // item stores a region descriptor
+  static_cast<ConsistentFlashCacheItem*>(res->get())->setLock(std::move(lock));
+  co_return res;
+}
+
+folly::coro::Task<Result<std::optional<ReadHandle>>>
+ConsistentFlashCacheComponent::find(Key key) {
+  // NOTE: we don't need to hold onto the lock because the returned item isn't
+  // holding on to a region descriptor
+  co_return co_await serializer_.withRlock(
+      key, [=, this]() -> folly::coro::Task<Result<std::optional<ReadHandle>>> {
+        co_return co_await Base::find(key);
+      });
+}
+
+folly::coro::Task<Result<std::optional<WriteHandle>>>
+ConsistentFlashCacheComponent::findToWrite(Key key) {
+  auto lock = co_await serializer_.wlock(key);
+  auto res = co_await Base::findToWriteGeneric<ConsistentFlashCacheItem>(key);
+  if (res.hasError()) {
+    co_return folly::makeUnexpected(std::move(res).error());
+  } else if (!res->has_value()) {
+    co_return std::nullopt;
+  }
+  // need to hold the lock through writeBack() since the cache item stores a
+  // region descriptor
+  static_cast<ConsistentFlashCacheItem*>(res->value().get())
+      ->setLock(std::move(lock));
+  co_return res;
+}
+
+folly::coro::Task<Result<bool>> ConsistentFlashCacheComponent::remove(Key key) {
+  co_return co_await serializer_.withWlock(
+      key, [=, this]() -> folly::coro::Task<Result<bool>> {
+        co_return co_await Base::remove(key);
+      });
+}
+
+folly::coro::Task<UnitResult> ConsistentFlashCacheComponent::remove(
+    ReadHandle&& handle) {
+  co_return co_await serializer_.withWlock(
+      handle->getKey(), [&, this]() -> folly::coro::Task<UnitResult> {
+        co_return co_await Base::remove(std::move(handle));
+      });
+}
+
+ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
+    std::string&& name,
+    navy::BlockCache::Config&& config,
+    std::unique_ptr<Hash> hasher,
+    uint8_t shardsPower)
+    : FlashCacheComponent(std::move(name), std::move(config)),
+      serializer_(std::move(hasher), shardsPower) {}
 
 } // namespace facebook::cachelib::interface
