@@ -43,11 +43,14 @@ class FlashCacheComponent : public CacheComponent {
    *
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
+   * @param device the device to use for the cache
    * @return FlashCacheComponent if the flash cache could be initialized, an
    * error otherwise.
    */
   static Result<FlashCacheComponent> create(
-      std::string name, navy::BlockCache::Config&& config) noexcept;
+      std::string name,
+      navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device) noexcept;
 
   // ------------------------------ Interface ------------------------------ //
 
@@ -64,7 +67,9 @@ class FlashCacheComponent : public CacheComponent {
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
 
  protected:
-  FlashCacheComponent(std::string&& name, navy::BlockCache::Config&& config);
+  FlashCacheComponent(std::string&& name,
+                      navy::BlockCache::Config&& config,
+                      std::unique_ptr<navy::Device> device);
 
   // Helpers in which the returned cache item is templatized so we can share the
   // implementation with child classes
@@ -77,6 +82,8 @@ class FlashCacheComponent : public CacheComponent {
 
  private:
   std::string name_;
+  // Note: device_ must be declared before cache_ so that it outlives it
+  std::unique_ptr<navy::Device> device_;
   std::unique_ptr<navy::BlockCache> cache_;
 
   // Runs func() on a RegionManager worker fiber. Should not be called from an
@@ -142,6 +149,7 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
    *
    * @param name name of the flash cache
    * @param config the BlockCache::Config to use for the cache
+   * @param device the device to use for the cache
    * @param hasher the hasher to use for sharding
    * @param shardsPower the number of shards to use (2^shardsPower) when
    * serializing operations, max is ShardedSerializer::kMaxShardsPower
@@ -151,6 +159,7 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
   static Result<ConsistentFlashCacheComponent> create(
       std::string name,
       navy::BlockCache::Config&& config,
+      std::unique_ptr<navy::Device> device,
       std::unique_ptr<Hash> hasher,
       uint8_t shardsPower) noexcept;
 
@@ -195,6 +204,7 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
 
   ConsistentFlashCacheComponent(std::string&& name,
                                 navy::BlockCache::Config&& config,
+                                std::unique_ptr<navy::Device> device,
                                 std::unique_ptr<Hash> hasher,
                                 uint8_t shardsPower);
 

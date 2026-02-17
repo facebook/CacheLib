@@ -127,9 +127,12 @@ class FlashCacheItem : public CacheItem {
 // ============================================================================
 
 /* static */ Result<FlashCacheComponent> FlashCacheComponent::create(
-    std::string name, navy::BlockCache::Config&& config) noexcept {
+    std::string name,
+    navy::BlockCache::Config&& config,
+    std::unique_ptr<navy::Device> device) noexcept {
   try {
-    return FlashCacheComponent(std::move(name), std::move(config));
+    return FlashCacheComponent(std::move(name), std::move(config),
+                               std::move(device));
   } catch (const std::invalid_argument& ia) {
     return makeError(Error::Code::INVALID_CONFIG, ia.what());
   }
@@ -349,9 +352,12 @@ folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
 }
 
 FlashCacheComponent::FlashCacheComponent(std::string&& name,
-                                         navy::BlockCache::Config&& config)
-    : name_(std::move(name)),
-      cache_(std::make_unique<navy::BlockCache>(std::move(config))) {}
+                                         navy::BlockCache::Config&& config,
+                                         std::unique_ptr<Device> device)
+    : name_(std::move(name)), device_(std::move(device)) {
+  config.device = device_.get();
+  cache_ = std::make_unique<navy::BlockCache>(std::move(config));
+}
 
 bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
   auto& fccItem = static_cast<FlashCacheItem&>(item);
@@ -425,11 +431,13 @@ class ConsistentFlashCacheItem : public FlashCacheItem {
 /* static */ Result<ConsistentFlashCacheComponent>
 ConsistentFlashCacheComponent::create(std::string name,
                                       navy::BlockCache::Config&& config,
+                                      std::unique_ptr<Device> device,
                                       std::unique_ptr<Hash> hasher,
                                       uint8_t shardsPower) noexcept {
   try {
     return ConsistentFlashCacheComponent(std::move(name), std::move(config),
-                                         std::move(hasher), shardsPower);
+                                         std::move(device), std::move(hasher),
+                                         shardsPower);
   } catch (const std::invalid_argument& ia) {
     return makeError(Error::Code::INVALID_CONFIG, ia.what());
   }
@@ -496,9 +504,11 @@ folly::coro::Task<UnitResult> ConsistentFlashCacheComponent::remove(
 ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
     std::string&& name,
     navy::BlockCache::Config&& config,
+    std::unique_ptr<Device> device,
     std::unique_ptr<Hash> hasher,
     uint8_t shardsPower)
-    : FlashCacheComponent(std::move(name), std::move(config)),
+    : FlashCacheComponent(
+          std::move(name), std::move(config), std::move(device)),
       serializer_(std::move(hasher), shardsPower) {}
 
 } // namespace facebook::cachelib::interface

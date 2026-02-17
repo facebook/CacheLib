@@ -84,16 +84,13 @@ class FlashCacheFactory : public CacheFactory {
       : hits_(/* count */ kDeviceSize / kRegionSize, /* value */ 0) {}
 
   std::unique_ptr<CacheComponent> create() override {
-    device_ = makeDevice();
-    auto flashCache = ASSERT_OK(
-        FlashCacheComponent::create("CacheComponentTest", makeConfig()));
+    auto flashCache = ASSERT_OK(FlashCacheComponent::create(
+        "CacheComponentTest", makeConfig(), makeDevice()));
     return std::make_unique<FlashCacheComponent>(std::move(flashCache));
   }
 
  protected:
   using BlockCache = navy::BlockCache;
-
-  std::unique_ptr<navy::Device> device_;
 
   std::unique_ptr<navy::Device> makeDevice() {
     return navy::createMemoryDevice(kDeviceSize, /* encryptor */ nullptr);
@@ -102,7 +99,6 @@ class FlashCacheFactory : public CacheFactory {
     BlockCache::Config config;
     config.regionSize = kRegionSize;
     config.cacheSize = kDeviceSize;
-    config.device = device_.get();
     config.evictionPolicy =
         std::make_unique<NiceMock<navy::MockPolicy>>(&hits_);
     return config;
@@ -118,10 +114,9 @@ class FlashCacheFactory : public CacheFactory {
 class ConsistentFlashCacheFactory : public FlashCacheFactory {
  public:
   std::unique_ptr<CacheComponent> create() override {
-    device_ = makeDevice();
     auto consistentFlashCache = ASSERT_OK(ConsistentFlashCacheComponent::create(
-        "CacheComponentTest", makeConfig(), std::make_unique<MurmurHash2>(),
-        kShardsPower));
+        "CacheComponentTest", makeConfig(), makeDevice(),
+        std::make_unique<MurmurHash2>(), kShardsPower));
     return std::make_unique<ConsistentFlashCacheComponent>(
         std::move(consistentFlashCache));
   }
