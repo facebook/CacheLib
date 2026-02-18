@@ -26,10 +26,14 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "cachelib/allocator/BackgroundMoverStrategy.h"
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/MM2Q.h"
+#include "cachelib/allocator/MMLru.h"
+#include "cachelib/allocator/MMTinyLFU.h"
+#include "cachelib/allocator/MMWTinyLFU.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/MemoryTierCacheConfig.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
@@ -712,6 +716,7 @@ class CacheAllocatorConfig {
   std::string stringifyAddr(const void* addr) const;
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
+  std::string_view getEvictionPolicyName() const;
 
   // Configuration for memory tiers.
   MemoryTierConfigs memoryTierConfigs{
@@ -1269,6 +1274,7 @@ template <typename T>
 std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   std::map<std::string, std::string> configMap;
 
+  configMap["evictionPolicy"] = std::string(getEvictionPolicyName());
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
   configMap["posixShm"] = isUsingPosixShm() ? "set" : "empty";
@@ -1303,6 +1309,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
     break;
   case MemoryMonitor::Disabled:
     configMap["memMonitorMode"] = "Disabled";
+    break;
+  case MemoryMonitor::TestMode:
+    configMap["memMonitorMode"] = "Test";
     break;
   default:
     configMap["memMonitorMode"] = "Unknown";
@@ -1394,6 +1403,22 @@ std::string CacheAllocatorConfig<T>::stringifyRebalanceStrategy(
     return "empty";
   }
   return folly::json::serialize(folly::toDynamic(strategy->exportConfig()), {});
+}
+
+template <typename T>
+std::string_view CacheAllocatorConfig<T>::getEvictionPolicyName() const {
+  const int id = T::MMType::kId;
+  if (id == MMLru::kId) {
+    return "MMLru";
+  } else if (id == MM2Q::kId) {
+    return "MM2Q";
+  } else if (id == MMTinyLFU::kId) {
+    return "MMTinyLFU";
+  } else if (id == MMWTinyLFU::kId) {
+    return "MMWTinyLFU";
+  } else {
+    return "Unknown";
+  }
 }
 } // namespace cachelib
 } // namespace facebook

@@ -67,6 +67,30 @@ TEST_F(CacheAllocatorConfigTest, TotalCacheSizeLessThanRatios) {
   EXPECT_THROW(config.validate(), std::invalid_argument);
 }
 
+TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyLru) {
+  LruAllocator::Config config;
+  auto serialized = config.serialize();
+  EXPECT_EQ(serialized["evictionPolicy"], "MMLru");
+}
+
+TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicy2Q) {
+  Lru2QAllocator::Config config;
+  auto serialized = config.serialize();
+  EXPECT_EQ(serialized["evictionPolicy"], "MM2Q");
+}
+
+TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyTinyLFU) {
+  TinyLFUAllocator::Config config;
+  auto serialized = config.serialize();
+  EXPECT_EQ(serialized["evictionPolicy"], "MMTinyLFU");
+}
+
+TEST_F(CacheAllocatorConfigTest, SerializeEvictionPolicyWTinyLFU) {
+  WTinyLFUAllocator::Config config;
+  auto serialized = config.serialize();
+  EXPECT_EQ(serialized["evictionPolicy"], "MMWTinyLFU");
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
