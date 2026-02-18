@@ -35,7 +35,8 @@ RegionManager::RegionManager(uint32_t numRegions,
                              uint16_t numPriorities,
                              uint16_t inMemBufFlushRetryLimit,
                              bool workerFlushAsync,
-                             bool allowReadDuringReclaim)
+                             bool allowReadDuringReclaim,
+                             bool cleanRegionFastPath)
     : numPriorities_{numPriorities},
       inMemBufFlushRetryLimit_{inMemBufFlushRetryLimit},
       numRegions_{numRegions},
@@ -47,6 +48,7 @@ RegionManager::RegionManager(uint32_t numRegions,
       numCleanRegions_{numCleanRegions},
       workerFlushAsync_{workerFlushAsync},
       allowReadDuringReclaim_(allowReadDuringReclaim),
+      cleanRegionFastPath_{cleanRegionFastPath},
       evictCb_{evictCb},
       cleanupCb_{cleanupCb},
       numInMemBuffers_{numInMemBuffers},
@@ -109,6 +111,7 @@ void RegionManager::reset() {
     // reclaims, have to be finished first.
     XDCHECK_EQ(reclaimsOutstanding_, 0u);
     cleanRegions_.clear();
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
     }
@@ -171,6 +174,7 @@ void RegionManager::releaseCleanedupRegion(RegionId rid) {
   {
     std::lock_guard lock{cleanRegionsMutex_};
     cleanRegions_.push_back(rid);
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();
@@ -216,6 +220,15 @@ RegionManager::claimBufferFromPool(bool addWaiter) {
 
 std::pair<OpenStatus, std::unique_ptr<CondWaiter>>
 RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
+  // Fast-path: if we know clean regions are empty and reclaims are in-flight,
+  // skip acquiring the mutex entirely. This prevents allocator threads from
+  // starving reclaim workers that need the same mutex to push clean regions.
+  if (cleanRegionFastPath_ && !addWaiter &&
+      cleanRegionsEmpty_.load(std::memory_order_relaxed)) {
+    cleanRegionRetries_.inc();
+    return {OpenStatus::Retry, nullptr};
+  }
+
   auto status = OpenStatus::Retry;
   std::unique_ptr<CondWaiter> waiter;
   uint32_t newSched = 0;
@@ -226,12 +239,18 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
       cleanRegions_.pop_back();
       INJECT_PAUSE(pause_blockcache_clean_alloc_locked);
       status = OpenStatus::Ready;
+      if (cleanRegions_.empty() && reclaimsOutstanding_ > 0) {
+        cleanRegionsEmpty_.store(true, std::memory_order_relaxed);
+      }
     } else {
       if (addWaiter) {
         waiter = std::make_unique<CondWaiter>();
         cleanRegionsCond_.addWaiter(waiter.get());
       }
       status = OpenStatus::Retry;
+      if (reclaimsOutstanding_ > 0) {
+        cleanRegionsEmpty_.store(true, std::memory_order_relaxed);
+      }
     }
     auto plannedClean = cleanRegions_.size() + reclaimsOutstanding_;
     if (plannedClean < numCleanRegions_) {
@@ -250,6 +269,7 @@ RegionManager::getCleanRegion(RegionId& rid, bool addWaiter) {
     if (status != OpenStatus::Ready) {
       std::lock_guard lock{cleanRegionsMutex_};
       cleanRegions_.push_back(rid);
+      cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
       INJECT_PAUSE(pause_blockcache_clean_free_locked);
       if (cleanRegionsCond_.numWaiters() > 0) {
         cleanRegionsCond_.notifyAll();
@@ -461,6 +481,9 @@ void RegionManager::releaseEvictedRegion(RegionId rid,
       reclaimsOutstanding_--;
     }
     cleanRegions_.push_back(rid);
+    // Clear the fast-path flag so allocator threads will try acquiring
+    // the mutex again now that a clean region is available.
+    cleanRegionsEmpty_.store(false, std::memory_order_relaxed);
     INJECT_PAUSE(pause_blockcache_clean_free_locked);
     if (cleanRegionsCond_.numWaiters() > 0) {
       cleanRegionsCond_.notifyAll();

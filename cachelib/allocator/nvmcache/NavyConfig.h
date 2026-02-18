@@ -550,6 +550,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& setCleanRegionFastPath(bool enable) noexcept {
+    cleanRegionFastPath_ = enable;
+    return *this;
+  }
+
   BlockCacheConfig& setAllocatorCount(uint32_t numAllocators) noexcept {
     allocatorsPerPriority_ = {numAllocators};
     return *this;
@@ -605,6 +610,8 @@ class BlockCacheConfig {
 
   bool isRegionManagerFlushAsync() const { return regionManagerFlushAsync_; }
 
+  bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
+
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
@@ -648,6 +655,11 @@ class BlockCacheConfig {
 
   // Whether the region manager workers flushes asynchronously.
   bool regionManagerFlushAsync_{false};
+
+  // Whether to enable the clean region fast path in getCleanRegion().
+  // When enabled, getCleanRegion() can skip acquiring the mutex and return
+  // Retry immediately if clean regions are empty and reclaims are in-flight.
+  bool cleanRegionFastPath_{false};
 
   // Number of allocators per priority.
   // Do not set this directly. This should be configured by setAllocatorCount

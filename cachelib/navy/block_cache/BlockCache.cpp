@@ -174,7 +174,8 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
                      static_cast<uint16_t>(config.allocatorsPerPriority.size()),
                      config.inMemBufFlushRetryLimit,
                      config.regionManagerFlushAsync,
-                     true /* allowReadDuringReclaim */},
+                     true /* allowReadDuringReclaim */,
+                     config.cleanRegionFastPath},
       allocator_{regionManager_, config.allocatorsPerPriority},
       reinsertionPolicy_{makeReinsertionPolicy(config.reinsertionConfig)} {
   validate(config);

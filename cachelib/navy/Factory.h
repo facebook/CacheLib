@@ -92,6 +92,9 @@ class BlockCacheProto {
   // (Optional) Set if the region manager worker flush should be async.
   virtual void setRegionManagerFlushAsync(bool flushAsync) = 0;
 
+  // (Optional) Enable the clean region fast path in getCleanRegion().
+  virtual void setCleanRegionFastPath(bool enable) = 0;
+
   // Set number of allocators per priority.
   virtual void setNumAllocatorsPerPriority(
       std::vector<uint32_t> numAllocatorsPerPriority) = 0;
