@@ -22,11 +22,11 @@
 #include <folly/ThreadLocal.h>
 #include <folly/container/Reserve.h>
 #include <folly/experimental/io/AsyncIO.h>
-#include <folly/experimental/io/IoUring.h>
 #include <folly/fibers/TimedMutex.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/io/async/EventHandler.h>
+#include <folly/io/async/IoUring.h>
 
 #include <chrono>
 #include <cstring>
