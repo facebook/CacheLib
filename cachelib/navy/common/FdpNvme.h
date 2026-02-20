@@ -18,7 +18,7 @@
 
 #include <folly/File.h>
 #include <folly/Utility.h>
-#include <folly/experimental/io/AsyncBase.h>
+#include <folly/io/async/AsyncBase.h>
 #include <folly/io/async/IoUring.h>
 
 #include "cachelib/navy/common/Buffer.h"
