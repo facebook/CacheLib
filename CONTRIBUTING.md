@@ -1,55 +1,63 @@
 # Contributing to CacheLib
-We want to make contributing to this project as easy and transparent as
-possible. 
+
+We want to make contributing to this project as easy and transparent as possible. We appreciate all contributions, from bug fixes and documentation improvements to new features.
 
 ## Code of Conduct
-The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
-## Contributor License Agreement ("CLA")
-In order to accept your pull request, we need you to submit a CLA. You only need
-to do this once to work on any of Facebook's open source projects.
+All contributors are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Contributor License Agreement (CLA)
+
+To accept your pull request, we need you to submit a CLA. You only need to do this once to work on any of Meta's open source projects.
 
 Complete your CLA here: <https://code.facebook.com/cla>
 
-## Contributing improvements to CacheLib
+## How to Contribute
 
-We love seeing CacheLib being widely adopted and useful among the industry and
-in other open source projects. If you'd like to leverage CacheLib in your
-project and are facing challenges, please reach out to us on any feedback to
-enable your adoption. This feedback is useful for us to help shape the future
-features of CacheLib. 
+We welcome contributions in many forms:
 
-If you are leveraging CacheLib in your application, we welcome any bug fixes,
-build fixes, documentation improvements 
-and feature improvements that you would like to see become part of CacheLib.
+-   **Bug Reports**: If you find a bug, please file a detailed issue on GitHub.
+-   **Feature Requests**: If you have an idea for a new feature, open an issue to discuss it.
+-   **Pull Requests**: We actively welcome your pull requests for bug fixes, improvements, and new features.
+-   **Documentation**: Improvements to our documentation are always welcome.
 
-We look forward to seeing CacheLib be used to prototype new innovative designs
-for cache hueristics and cache storage. When doing so, please open pull
-request for the new feature with a good summary describing the change, the
-design and how the feature was tested. Additionally, CacheBench offers a
-platform to evaluate these prototypes against industry standard workloads.  We
-would like to represent significant caching workloads in CacheBench to help
-the community understand caching challenges. 
+### Documentation Contributions
 
+Our documentation is built with Docusaurus and is located in the `website/` directory. To contribute to the documentation:
 
-## Pull Requests
-We actively welcome your pull requests.
+1.  Edit the Markdown files in `website/docs/`.
+2.  To preview your changes locally, run `cd website && npm install && npm start`.
+3.  Submit a pull request with your changes.
 
-1. Fork the repo and create your branch from `main`.
-2. If you've added code that should be tested, add tests.
-3. If you've changed APIs, update the documentation.
-4. Ensure the test suite passes.
-5. If you haven't already, complete the Contributor License Agreement ("CLA").
+### Pull Requests
 
+1.  **Fork the repository** and create your branch from `main`.
+2.  **Add tests** if you've added code that should be tested.
+3.  **Update documentation** if you've changed APIs or added new features.
+4.  **Ensure the test suite passes** by running `python3 ./build/fbcode_builder/getdeps.py --allow-system-packages test cachelib`.
+5.  **Format your code** using `clang-format` with the provided `.clang-format` configuration.
+6.  **Complete the CLA** if you haven't already.
 
-## Issues
-We use GitHub issues to track public bugs. Please ensure your description is
-clear and has sufficient instructions to be able to reproduce the issue.
+We use a "rebase and merge" workflow. Please ensure your branch is up-to-date with `main` before submitting your PR.
 
-Facebook has a [bounty program](https://www.facebook.com/whitehat/) for the safe
-disclosure of security bugs. In those cases, please go through the process
-outlined on that page and do not file a public issue.
+#### Pull Request Template
+
+When you open a pull request, please use the provided template and fill out the following sections:
+
+-   **Summary**: A brief description of the changes.
+-   **Test Plan**: How you tested your changes.
+-   **Documentation**: A description of any documentation updates.
+
+### Issues
+
+We use GitHub issues to track public bugs. Please ensure your description is clear and has sufficient instructions to reproduce the issue.
+
+For security bugs, please do not file a public issue. Instead, report it through Meta's [Whitehat Bug Bounty program](https://www.facebook.com/whitehat/).
+
+## Code Style
+
+We use `clang-format` to enforce a consistent code style. Please run `clang-format` on your changes before submitting a pull request. You can find the configuration in the `.clang-format` file in the root of the repository.
 
 ## License
-By contributing to CacheLib, you agree that your contributions will be licensed
-under the LICENSE file in the root directory of this source tree.
+
+By contributing to CacheLib, you agree that your contributions will be licensed under the Apache-2.0 License that covers the project.md project uses in this project.
