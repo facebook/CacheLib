@@ -22,7 +22,7 @@
 
 namespace facebook::cachelib::navy {
 namespace detail {
-unsigned int accumulate(const std::vector<unsigned int> nums) {
+unsigned int accumulate(const std::vector<unsigned int>& nums) {
   return std::accumulate(
       nums.begin(), nums.end(), 0u, [](unsigned int a, unsigned int b) {
         if (b == 0) {
