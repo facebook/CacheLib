@@ -68,6 +68,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
       Key key) override;
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
+  CacheComponentStats getStats() const noexcept override;
 
  protected:
   FlashCacheComponent(std::string&& name,

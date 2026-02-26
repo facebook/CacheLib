@@ -208,19 +208,27 @@ FlashCacheComponent::allocateImpl(const HashedKey& key, uint32_t valueSize) {
 template <typename CacheItemT>
 folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocateGeneric(
     Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
+  stats_->allocate_.throughput_.calls_.inc();
+
   if (key.empty()) {
+    stats_->allocate_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty key");
   }
 
+  auto latencyGuard = stats_->allocate_.latency_.start();
   HashedKey hashedKey(key);
   uint32_t valueSize = size + FlashCacheItem::kMetadataSize;
-  co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
-    // NOTE: we can't checksum until the user has finished writing their data,
-    // defer until they call insert()
-    auto* item = new CacheItemT(hashedKey, valueSize, std::move(value),
-                                creationTime, ttlSecs);
-    return AllocatedHandle(*this, *item);
-  });
+  auto result = co_await allocateImpl(hashedKey, valueSize);
+  if (result.hasError()) {
+    stats_->allocate_.throughput_.errors_.inc();
+    co_return folly::makeUnexpected(std::move(result).error());
+  }
+  stats_->allocate_.throughput_.successes_.inc();
+  // NOTE: we can't checksum until the user has finished writing their data,
+  // defer until they call insert()
+  auto* item = new CacheItemT(hashedKey, valueSize, std::move(result).value(),
+                              creationTime, ttlSecs);
+  co_return AllocatedHandle(*this, *item);
 }
 
 folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
@@ -231,17 +239,24 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
 
 folly::coro::Task<UnitResult> FlashCacheComponent::insertImpl(
     AllocatedHandle&& handle, bool allowReplace) {
+  auto& counter = allowReplace ? stats_->insertOrReplace_ : stats_->insert_;
+  counter.throughput_.calls_.inc();
+
   if (!handle) {
+    counter.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS,
                         "empty AllocatedHandle");
   }
 
+  auto latencyGuard = counter.latency_.start();
   if (writeBackImpl(*handle, allowReplace)) {
     setInserted(handle, true);
     auto _ = std::move(handle);
+    counter.throughput_.successes_.inc();
     co_return folly::unit;
   } else {
     // NOTE: do hole accounting in release()
+    counter.throughput_.errors_.inc();
     co_return makeError(Error::Code::ALREADY_INSERTED, "key already inserted");
   }
 }
@@ -264,6 +279,10 @@ FlashCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
 
 folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
     Key key) {
+  // calls_, hits_, and misses_ are not tracked here; BlockCache already tracks
+  // them via lookupCount_ and succLookupCount_. See getStats().
+  auto latencyGuard = stats_->find_.latency_.start();
+
   auto res = co_await onWorkerThread(
       [this, hashedKey = HashedKey(key)]()
           -> folly::Expected<BlockCache::LookupData, navy::Status> {
@@ -292,6 +311,7 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
 
   switch (ld.status_) {
   case Status::Ok: {
+    stats_->find_.throughput_.successes_.inc();
     auto expiryTime = FlashCacheItem::getExpiryTime(ld.buffer_.view());
     if (util::isExpired(expiryTime)) {
       co_return std::nullopt;
@@ -299,8 +319,10 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
     co_return ReadHandle(*this, *(new FlashCacheItem(std::move(ld))));
   }
   case Status::NotFound:
+    stats_->find_.throughput_.successes_.inc();
     co_return std::nullopt;
   default:
+    stats_->find_.throughput_.errors_.inc();
     co_return makeError(Error::Code::FIND_FAILED,
                         "flash device or checksum error");
   }
@@ -309,6 +331,9 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
 template <typename CacheItemT>
 folly::coro::Task<Result<std::optional<WriteHandle>>>
 FlashCacheComponent::findToWriteGeneric(Key key) {
+  stats_->findToWrite_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->findToWrite_.latency_.start();
+
   uint64_t keyHash;
   uint32_t valueSize;
   Buffer buf;
@@ -317,8 +342,11 @@ FlashCacheComponent::findToWriteGeneric(Key key) {
     // calling *our* version of find (not the child's)
     auto findResult = co_await FlashCacheComponent::find(key);
     if (findResult.hasError()) {
+      stats_->findToWrite_.throughput_.errors_.inc();
       co_return folly::makeUnexpected(std::move(findResult).error());
     } else if (!findResult->has_value()) {
+      stats_->findToWrite_.throughput_.misses_.inc();
+      stats_->findToWrite_.throughput_.successes_.inc();
       co_return std::nullopt;
     }
 
@@ -330,11 +358,17 @@ FlashCacheComponent::findToWriteGeneric(Key key) {
     buf = std::move(fccItem->getBuffer());
   }
 
+  stats_->findToWrite_.throughput_.hits_.inc();
   auto hashedKey = HashedKey::precomputed(key, keyHash);
-  co_return (co_await allocateImpl(hashedKey, valueSize)).then([&](auto value) {
-    auto* newItem = new CacheItemT(std::move(value), std::move(buf));
-    return WriteHandle(*this, *newItem);
-  });
+  auto allocResult = co_await allocateImpl(hashedKey, valueSize);
+  if (allocResult.hasError()) {
+    stats_->findToWrite_.throughput_.errors_.inc();
+    co_return folly::makeUnexpected(std::move(allocResult).error());
+  }
+  stats_->findToWrite_.throughput_.successes_.inc();
+  auto* newItem =
+      new CacheItemT(std::move(allocResult).value(), std::move(buf));
+  co_return WriteHandle(*this, *newItem);
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>
@@ -343,6 +377,9 @@ FlashCacheComponent::findToWrite(Key key) {
 }
 
 folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key key) {
+  stats_->removeByKey_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->removeByKey_.latency_.start();
+
   auto res = co_await onWorkerThread(
       [this,
        hashedKey = HashedKey(key)]() -> folly::Expected<bool, navy::Status> {
@@ -360,18 +397,29 @@ folly::coro::Task<Result<bool>> FlashCacheComponent::remove(Key key) {
       // the operation was cancelled (operation is "indeterminate")
   );
   if (res.hasValue()) {
+    if (res.value()) {
+      stats_->removeByKey_.throughput_.hits_.inc();
+    } else {
+      stats_->removeByKey_.throughput_.misses_.inc();
+    }
+    stats_->removeByKey_.throughput_.successes_.inc();
     co_return res.value();
   } else {
+    stats_->removeByKey_.throughput_.errors_.inc();
     co_return makeError(Error::Code::REMOVE_FAILED,
                         "could not remove item from flash");
   }
 }
 
 folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
+  stats_->removeByHandle_.throughput_.calls_.inc();
+
   if (!handle) {
+    stats_->removeByHandle_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS, "empty ReadHandle");
   }
 
+  auto latencyGuard = stats_->removeByHandle_.latency_.start();
   cache_->removeCount_.inc();
   auto& fccItem = static_cast<FlashCacheItem&>(const_cast<CacheItem&>(*handle));
   auto hashedKey = HashedKey::precomputed(
@@ -379,6 +427,7 @@ folly::coro::Task<UnitResult> FlashCacheComponent::remove(ReadHandle&& handle) {
   auto status = cache_->removeImpl(hashedKey, fccItem.getBuffer());
   XDCHECK(status == navy::Status::Ok || status == navy::Status::NotFound);
   auto _ = std::move(handle);
+  stats_->removeByHandle_.throughput_.successes_.inc();
   co_return folly::unit;
 }
 
@@ -410,13 +459,18 @@ bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
 }
 
 UnitResult FlashCacheComponent::writeBack(CacheItem& item) {
+  stats_->writeBack_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->writeBack_.latency_.start();
   auto inserted = writeBackImpl(item, /* allowReplace */ true);
   XDCHECK(inserted) << "writeBack should never fail";
+  stats_->writeBack_.throughput_.successes_.inc();
   return folly::unit;
 }
 
 folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
                                                      bool inserted) {
+  stats_->release_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->release_.latency_.start();
   auto& fccItem = static_cast<FlashCacheItem&>(item);
   if (!inserted) {
     cache_->addHole(fccItem.getTotalSize());
@@ -425,7 +479,20 @@ folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
     cache_->regionManager_.close(std::move(fccItem.getRegionDescriptor()));
   }
   delete &item;
+  stats_->release_.throughput_.successes_.inc();
   co_return;
+}
+
+CacheComponentStats FlashCacheComponent::getStats() const noexcept {
+  CacheComponentStats stats(*stats_);
+
+  // Populate find throughput from BlockCache's counters
+  stats.find_.throughput_.calls_ = cache_->lookupCount_.get();
+  stats.find_.throughput_.hits_ = cache_->succLookupCount_.get();
+  stats.find_.throughput_.misses_ =
+      stats.find_.throughput_.calls_ - stats.find_.throughput_.hits_;
+
+  return stats;
 }
 
 // ============================================================================
