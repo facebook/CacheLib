@@ -113,7 +113,9 @@ HandleT toGenericHandle(RAMCacheComponent& cache,
 } // namespace
 
 /* static */ Result<RAMCacheComponent> RAMCacheComponent::create(
-    LruAllocatorConfig&& allocConfig, PoolConfig&& poolConfig) noexcept {
+    LruAllocatorConfig&& allocConfig,
+    PoolConfig&& poolConfig,
+    const LatencySamplingConfig& latencySamplingConfig) noexcept {
   if (allocConfig.nvmConfig) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "RAMCacheComponent does not support NVM cache");
@@ -122,7 +124,8 @@ HandleT toGenericHandle(RAMCacheComponent& cache,
                      "RAMCacheComponent does not support pool rebalancing");
   }
   try {
-    auto cache = RAMCacheComponent(std::move(allocConfig));
+    auto cache =
+        RAMCacheComponent(std::move(allocConfig), latencySamplingConfig);
     // Add a default pool that will be used for all allocations
     cache.defaultPool_ = cache.cache_->addPool(poolConfig.name_,
                                                poolConfig.size_,
@@ -145,35 +148,48 @@ const std::string& RAMCacheComponent::getName() const noexcept {
 
 folly::coro::Task<Result<AllocatedHandle>> RAMCacheComponent::allocate(
     Key key, uint32_t size, uint32_t creationTime, uint32_t ttlSecs) {
+  stats_->allocate_.throughput_.calls_.inc();
+  // Latency is not tracked here; CacheAllocator already tracks it via
+  // stats_.allocateLatency_. See getStats().
+
   try {
     auto implHandle = cache_->allocate(
         defaultPool_, key, size + sizeof(RAMCacheItem), ttlSecs, creationTime);
     if (!implHandle) {
+      stats_->allocate_.throughput_.errors_.inc();
       co_return makeError(
           Error::Code::NO_SPACE,
           fmt::format("could not find room in cache for {}", key));
     }
+    stats_->allocate_.throughput_.successes_.inc();
     co_return toGenericHandle<AllocatedHandle>(*this, implHandle);
   } catch (const std::exception& e) {
+    stats_->allocate_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS, e.what());
   }
 }
 
 folly::coro::Task<UnitResult> RAMCacheComponent::insert(
     AllocatedHandle&& handle) {
+  stats_->insert_.throughput_.calls_.inc();
+
   if (!handle) {
+    stats_->insert_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS,
                         "empty AllocatedHandle");
   }
 
+  auto latencyGuard = stats_->insert_.latency_.start();
   try {
     auto* implItem = getImplItemFromHandle(handle);
     auto implHandle = cache_->acquire(implItem);
     if (!implHandle) {
       XLOG(DFATAL) << "Evicting item that hasn't been inserted";
+      stats_->insert_.throughput_.errors_.inc();
       co_return makeError(Error::Code::INSERT_FAILED, "item is being evicted");
     }
     if (!cache_->insert(implHandle)) {
+      stats_->insert_.throughput_.errors_.inc();
       co_return makeError(Error::Code::ALREADY_INSERTED,
                           "key already exists in cache");
     }
@@ -181,28 +197,36 @@ folly::coro::Task<UnitResult> RAMCacheComponent::insert(
     // Should only happen when implHandle->isAccessible() == true
     XLOG(DFATAL) << "Double-insert from the same allocated handle - did we "
                     "forget to release the AllocatedHandle after inserting?";
+    stats_->insert_.throughput_.errors_.inc();
     co_return makeError(Error::Code::ALREADY_INSERTED, ia.what());
   } catch (const std::exception& e) {
+    stats_->insert_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INSERT_FAILED, e.what());
   }
 
+  stats_->insert_.throughput_.successes_.inc();
   auto _ = std::move(handle);
   co_return folly::unit;
 }
 
 folly::coro::Task<Result<std::optional<AllocatedHandle>>>
 RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
+  stats_->insertOrReplace_.throughput_.calls_.inc();
+
   if (!handle) {
+    stats_->insertOrReplace_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS,
                         "empty AllocatedHandle");
   }
 
+  auto latencyGuard = stats_->insertOrReplace_.latency_.start();
   LruAllocator::WriteHandle replacedHandle;
   try {
     auto* implItem = getImplItemFromHandle(handle);
     auto implHandle = cache_->acquire(implItem);
     if (!implHandle) {
       XLOG(DFATAL) << "Evicting item that hasn't been inserted";
+      stats_->insertOrReplace_.throughput_.errors_.inc();
       co_return makeError(Error::Code::INSERT_FAILED, "item is being evicted");
     }
     replacedHandle = cache_->insertOrReplace(implHandle);
@@ -210,11 +234,14 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
     // Should only happen when implHandle->isAccessible() == true
     XLOG(DFATAL) << "Double-insert from the same allocated handle - did we "
                     "forget to release the AllocatedHandle after inserting?";
+    stats_->insertOrReplace_.throughput_.errors_.inc();
     co_return makeError(Error::Code::ALREADY_INSERTED, ia.what());
   } catch (const std::exception& e) {
+    stats_->insertOrReplace_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INSERT_FAILED, e.what());
   }
 
+  stats_->insertOrReplace_.throughput_.successes_.inc();
   auto _ = std::move(handle);
   if (replacedHandle) {
     co_return toGenericHandle<AllocatedHandle>(*this, replacedHandle);
@@ -225,60 +252,114 @@ RAMCacheComponent::insertOrReplace(AllocatedHandle&& handle) {
 
 folly::coro::Task<Result<std::optional<ReadHandle>>> RAMCacheComponent::find(
     Key key) {
+  stats_->find_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->find_.latency_.start();
+
   if (auto handle = cache_->find(key)) {
+    stats_->find_.throughput_.hits_.inc();
+    stats_->find_.throughput_.successes_.inc();
     co_return toGenericHandle<ReadHandle>(*this, handle);
   }
+  stats_->find_.throughput_.misses_.inc();
+  stats_->find_.throughput_.successes_.inc();
   co_return std::nullopt;
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>
 RAMCacheComponent::findToWrite(Key key) {
+  stats_->findToWrite_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->findToWrite_.latency_.start();
+
   if (auto handle = cache_->findToWrite(key)) {
+    stats_->findToWrite_.throughput_.hits_.inc();
+    stats_->findToWrite_.throughput_.successes_.inc();
     co_return toGenericHandle<WriteHandle>(*this, handle);
   }
+  stats_->findToWrite_.throughput_.misses_.inc();
+  stats_->findToWrite_.throughput_.successes_.inc();
   co_return std::nullopt;
 }
 
 folly::coro::Task<Result<bool>> RAMCacheComponent::remove(Key key) {
-  co_return cache_->remove(key) == LruAllocator::RemoveRes::kSuccess;
+  // calls_, hits_, and misses_ are not tracked here; CacheAllocator already
+  // tracks them via stats_.numCacheRemoves and stats_.numCacheRemoveRamHits.
+  // See getStats().
+  auto latencyGuard = stats_->removeByKey_.latency_.start();
+
+  bool removed = cache_->remove(key) == LruAllocator::RemoveRes::kSuccess;
+  stats_->removeByKey_.throughput_.successes_.inc();
+  co_return removed;
 }
 
 folly::coro::Task<UnitResult> RAMCacheComponent::remove(ReadHandle&& handle) {
+  stats_->removeByHandle_.throughput_.calls_.inc();
+
   if (!handle) {
+    stats_->removeByHandle_.throughput_.errors_.inc();
     co_return makeError(Error::Code::INVALID_ARGUMENTS,
                         "removing empty ReadHandle");
   }
 
+  auto latencyGuard = stats_->removeByHandle_.latency_.start();
   try {
     auto* implItem = getImplItemFromHandle(handle);
     LruAllocator::ReadHandle implHandle = cache_->acquire(implItem);
     if (!implHandle) {
       XLOG(DFATAL) << "Evicting item that has an outstanding reference";
+      stats_->removeByHandle_.throughput_.errors_.inc();
       co_return makeError(Error::Code::REMOVE_FAILED, "item is being evicted");
     }
     cache_->remove(implHandle);
   } catch (const std::exception& e) {
+    stats_->removeByHandle_.throughput_.errors_.inc();
     co_return makeError(Error::Code::REMOVE_FAILED, e.what());
   }
 
+  stats_->removeByHandle_.throughput_.successes_.inc();
   auto _ = std::move(handle);
   co_return folly::unit;
 }
 
-RAMCacheComponent::RAMCacheComponent(LruAllocatorConfig&& config)
-    : cache_(std::make_unique<LruAllocator>(std::move(config))) {}
+RAMCacheComponent::RAMCacheComponent(
+    LruAllocatorConfig&& config,
+    const LatencySamplingConfig& latencySamplingConfig)
+    : CacheComponentWithStats(latencySamplingConfig),
+      cache_(std::make_unique<LruAllocator>(std::move(config))) {}
 
 UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
+  stats_->writeBack_.throughput_.calls_.inc();
   /* no-op, writing to the RAM buffer is equivalent to writing back */
+  stats_->writeBack_.throughput_.successes_.inc();
   return folly::unit;
 }
 
 folly::coro::Task<void> RAMCacheComponent::release(interface::CacheItem& item,
                                                    bool inserted) {
+  stats_->release_.throughput_.calls_.inc();
+  auto latencyGuard = stats_->release_.latency_.start();
   auto* implItem = reinterpret_cast<RAMCacheItem&>(item).item();
   cache_->releaseBackToAllocator(
       *implItem, RemoveContext::kNormal, /* nascent */ !inserted);
+  stats_->release_.throughput_.successes_.inc();
   co_return;
+}
+
+CacheComponentStats RAMCacheComponent::getStats() const noexcept {
+  CacheComponentStats stats(*stats_);
+
+  // Populate removeByKey throughput from CacheAllocator's counters
+  auto& allocatorStats = cache_->stats();
+  stats.removeByKey_.throughput_.calls_ = allocatorStats.numCacheRemoves.get();
+  stats.removeByKey_.throughput_.hits_ =
+      allocatorStats.numCacheRemoveRamHits.get();
+  stats.removeByKey_.throughput_.misses_ =
+      stats.removeByKey_.throughput_.calls_ -
+      stats.removeByKey_.throughput_.hits_;
+
+  // Populate allocate latency from CacheAllocator's counter
+  stats.allocate_.latency_ = allocatorStats.allocateLatency_.estimate();
+
+  return stats;
 }
 
 } // namespace facebook::cachelib::interface

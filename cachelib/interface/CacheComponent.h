@@ -119,6 +119,10 @@ class CacheComponent {
    */
   virtual folly::coro::Task<UnitResult> remove(ReadHandle&& handle) = 0;
 
+  /**
+   * Get stats for the cache component.
+   * @return stats for the cache component
+   */
   virtual CacheComponentStats getStats() const noexcept = 0;
 
  protected:
