@@ -35,6 +35,13 @@
 namespace facebook::cachelib::interface {
 namespace detail {
 /**
+ * Cheap thread-local sampling function. Allows downsampling latency counters on
+ * super hot events (e.g., find()) to avoid overhead.  sampleRate = 0 means
+ * never sample.
+ */
+bool shouldSample(size_t sampleRate);
+
+/**
  * Counters for tracking the throughput, goodput and error rates of a cache
  * operation.
  */
@@ -93,15 +100,40 @@ struct LatencyMeasurementCounter {
     util::PercentileStats& stats_;
   };
 
-  // Helper to automatically measure latency & update counters in a scope
-  [[nodiscard]] LatencyGuard start() { return LatencyGuard{latency_}; }
+  /**
+   * Only bump latency counters every 1/sampleRate calls. Setting to 0 means
+   * never sample this latency counter.
+   *
+   * @param sampleRate 1/sampleRate calls will bump latency counters
+   */
+  LatencyMeasurementCounter(size_t sampleRate = 1) : sampleRate_(sampleRate) {}
 
-  // Estimate percentiles for reporting
+  /**
+   * Helper to automatically measure latency & update counters in a scope.
+   * Returns an non-empty std::optional if sampled for latency measurement.
+   *
+   * @return std::nullopt if not sampled, LatencyGuard if sampled
+   */
+  [[nodiscard]] std::optional<LatencyGuard> start() {
+    if (shouldSample(sampleRate_)) {
+      return std::make_optional<LatencyGuard>(latency_);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  /**
+   * Estimate percentiles for reporting
+   * @return PercentileStats::Estimates with nanosecond latency percentiles
+   */
   util::PercentileStats::Estimates toEstimates() const {
     return latency_.estimate();
   }
 
   mutable util::PercentileStats latency_;
+
+ private:
+  const size_t sampleRate_;
 };
 
 /**
@@ -110,12 +142,29 @@ struct LatencyMeasurementCounter {
  */
 template <typename ThroughputType, typename OpLatencyType>
 struct CacheComponentStatsImpl {
+  /**
+   * Configure a per-operation latency counter sampling rate. Samples 1/N
+   * operations for bumping latency counters. Setting to 0 means never sample.
+   */
+  struct LatencySamplingConfig {
+    size_t allocate_{1};
+    size_t insert_{1};
+    size_t insertOrReplace_{1};
+    size_t find_{1};
+    size_t findToWrite_{1};
+    size_t removeByKey_{1};
+    size_t removeByHandle_{1};
+    size_t writeBack_{1};
+    size_t release_{1};
+  };
+
   template <typename OpThroughputType>
   struct OpCounters {
     OpThroughputType throughput_;
     OpLatencyType latency_;
 
-    OpCounters() = default;
+    explicit OpCounters(size_t latencySampleRate)
+        : latency_{latencySampleRate} {}
 
     template <typename U>
     explicit OpCounters(const U& other)
@@ -133,7 +182,17 @@ struct CacheComponentStatsImpl {
   OpCounters<OpThroughputCounters<ThroughputType>> writeBack_;
   OpCounters<OpThroughputCounters<ThroughputType>> release_;
 
-  CacheComponentStatsImpl() = default;
+  explicit CacheComponentStatsImpl(
+      const LatencySamplingConfig& samplingConfig = {})
+      : allocate_(samplingConfig.allocate_),
+        insert_(samplingConfig.insert_),
+        insertOrReplace_(samplingConfig.insertOrReplace_),
+        find_(samplingConfig.find_),
+        findToWrite_(samplingConfig.findToWrite_),
+        removeByKey_(samplingConfig.removeByKey_),
+        removeByHandle_(samplingConfig.removeByHandle_),
+        writeBack_(samplingConfig.writeBack_),
+        release_(samplingConfig.release_) {}
 
   template <typename U>
   explicit CacheComponentStatsImpl(const U& other)

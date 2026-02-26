@@ -162,7 +162,9 @@ class TestCacheComponent : public CacheComponent {
     co_return folly::unit;
   }
 
-  CacheComponentStats getStats() const noexcept override { return {}; }
+  CacheComponentStats getStats() const noexcept override {
+    return CacheComponentStats();
+  }
 
   /**
    * Helper to find an item in the allocated list.

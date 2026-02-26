@@ -174,8 +174,9 @@ class CacheComponent {
  */
 class CacheComponentWithStats : public CacheComponent {
  public:
-  CacheComponentWithStats()
-      : stats_(std::make_unique<CacheComponentStatsCollector>()) {}
+  CacheComponentWithStats(
+      const CacheComponentStatsCollector::LatencySamplingConfig& config = {})
+      : stats_(std::make_unique<CacheComponentStatsCollector>(config)) {}
 
   CacheComponentStats getStats() const noexcept override {
     return CacheComponentStats(*stats_);
