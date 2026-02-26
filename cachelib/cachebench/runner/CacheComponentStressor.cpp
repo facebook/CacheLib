@@ -183,19 +183,15 @@ folly::coro::Task<void> CacheComponentStressor::stressCoroutine(
 
       const auto pid = static_cast<PoolId>(opPoolDist(gen));
       const auto& req = wg_->getReq(pid, gen, lastRequestId);
-      OpType op = req.getOp();
-      std::string_view key = req.key;
-      std::string oneHitKey;
-      if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
-        oneHitKey = Request::getUniqueKey();
-        key = oneHitKey;
-      }
+      // Save requestId before co_await: req is a reference to a thread-local
+      // that can be overwritten if the coroutine migrates threads.
+      auto requestId = req.requestId;
 
       OpResultType result = co_await executeOperation(stats, req, gen);
 
-      lastRequestId = req.requestId;
-      if (req.requestId) {
-        wg_->notifyResult(*req.requestId, result);
+      lastRequestId = requestId;
+      if (requestId) {
+        wg_->notifyResult(*requestId, result);
       }
     } catch (const cachebench::EndOfTrace&) {
       break;
@@ -208,12 +204,18 @@ folly::coro::Task<void> CacheComponentStressor::stressCoroutine(
 folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
     ThroughputStats& stats, const Request& req, std::mt19937_64& gen) {
   OpType op = req.getOp();
-  std::string_view key = req.key;
-  std::string oneHitKey;
+  // Extract all fields from req before any co_await. The req reference points
+  // to a thread-local that can be overwritten after coroutine thread migration.
+  std::string ownedKey(req.key);
   if (op == OpType::kLoneGet || op == OpType::kLoneSet) {
-    oneHitKey = Request::getUniqueKey();
-    key = oneHitKey;
+    ownedKey = Request::getUniqueKey();
   }
+  std::string_view key = ownedKey;
+
+  size_t size = *(req.sizeBegin);
+  uint32_t ttlSecs = req.ttlSecs;
+  auto admFeatureMap = req.admFeatureMap;
+  auto itemValue = req.itemValue;
 
   switch (op) {
   case OpType::kLoneSet:
@@ -224,13 +226,14 @@ folly::coro::Task<OpResultType> CacheComponentStressor::executeOperation(
         co_return OpResultType::kNop;
       }
     }
-    co_return co_await setKey(stats, key, *(req.sizeBegin), req.ttlSecs,
-                              req.admFeatureMap, req.itemValue);
+    co_return co_await setKey(stats, key, size, ttlSecs, admFeatureMap,
+                              itemValue);
   }
 
   case OpType::kLoneGet:
   case OpType::kGet: {
-    co_return co_await getKey(stats, key, req);
+    co_return co_await getKey(stats, key, size, ttlSecs, admFeatureMap,
+                              itemValue);
   }
 
   case OpType::kDel: {
@@ -288,7 +291,12 @@ folly::coro::Task<OpResultType> CacheComponentStressor::setKey(
 }
 
 folly::coro::Task<OpResultType> CacheComponentStressor::getKey(
-    ThroughputStats& stats, const std::string_view key, const Request& req) {
+    ThroughputStats& stats,
+    const std::string_view key,
+    size_t size,
+    uint32_t ttlSecs,
+    const std::unordered_map<std::string, std::string>& featureMap,
+    const std::string& itemValue) {
   ++stats.get;
 
   auto result = co_await cache_->find(Key{key});
@@ -301,8 +309,7 @@ folly::coro::Task<OpResultType> CacheComponentStressor::getKey(
     ++stats.getMiss;
     if (config_.enableLookaside) {
       // Allocate and insert on miss
-      co_await setKey(stats, key, *(req.sizeBegin), req.ttlSecs,
-                      req.admFeatureMap, req.itemValue);
+      co_await setKey(stats, key, size, ttlSecs, featureMap, itemValue);
     }
     co_return OpResultType::kGetMiss;
   }

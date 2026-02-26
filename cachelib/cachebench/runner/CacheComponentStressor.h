@@ -82,9 +82,13 @@ class CacheComponentStressor : public CacheStressorBase {
       const std::string& itemValue);
 
   // Get operation implementation
-  folly::coro::Task<OpResultType> getKey(ThroughputStats& stats,
-                                         const std::string_view key,
-                                         const Request& req);
+  folly::coro::Task<OpResultType> getKey(
+      ThroughputStats& stats,
+      const std::string_view key,
+      size_t size,
+      uint32_t ttlSecs,
+      const std::unordered_map<std::string, std::string>& featureMap,
+      const std::string& itemValue);
 
   // Delete operation implementation
   folly::coro::Task<OpResultType> deleteKey(ThroughputStats& stats,
