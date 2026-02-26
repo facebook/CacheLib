@@ -96,7 +96,9 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
         truncate = !isBlk;
       }
     } else {
-      cacheSize *= devicePaths.size();
+      XDCHECK_EQ(cacheSize % devicePaths.size(), 0UL)
+          << "Cache size should be evenly divisible by number of files";
+      cacheSize /= devicePaths.size();
     }
     auto stripeSize = config.navyRegionSizeMB * MB;
 
