@@ -18,6 +18,7 @@
 
 #include <folly/ScopeGuard.h>
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/RelaxedAtomic.h>
 
 #include <atomic>
 #include <memory>
@@ -603,6 +604,12 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return mmContainer.getEvictionIterator();
   }
 
+  template <typename A, typename B>
+  size_t getPaddingBytes(A* aligned, B* unaligned) {
+    return reinterpret_cast<uintptr_t>(aligned) -
+           reinterpret_cast<uintptr_t>(unaligned);
+  }
+
   // Config passed to the cache.
   Config config_{};
 
@@ -619,6 +626,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
 
   // Actual object size in total
   std::atomic<size_t> totalObjectSizeBytes_{0};
+  folly::relaxed_atomic_size_t totalKeyPaddingBytes_{0};
 
   TLCounter evictions_{};
   TLCounter lookups_;
@@ -680,6 +688,8 @@ void ObjectCache<AllocatorT>::init() {
               // update total object size
               totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
                                               std::memory_order_relaxed);
+              totalKeyPaddingBytes_.fetch_sub(
+                  getPaddingBytes(itemPtr, item.getMemory()));
             }
             // execute user defined item destructor
             config_.itemDestructor(ObjectCacheDestructorData(
@@ -708,6 +718,8 @@ void ObjectCache<AllocatorT>::init() {
           // update total object size
           totalObjectSizeBytes_.fetch_sub(itemPtr->objectSize,
                                           std::memory_order_relaxed);
+          totalKeyPaddingBytes_.fetch_sub(
+              getPaddingBytes(itemPtr, item.getMemory()));
         }
         // execute user defined item destructor
         config_.removeCb(ObjectCacheDestructorData(
@@ -728,8 +740,10 @@ void ObjectCache<AllocatorT>::init() {
             auto& nvmItem, auto& item, auto chain) {
           auto ret = makeObjCb(nvmItem, item, chain);
           if (ret) {
-            totalObjectSizeBytes_.fetch_add(
-                getAlignedItemPtr(item.getMemory())->objectSize);
+            auto alignedItemPtr = getAlignedItemPtr(item.getMemory());
+            totalObjectSizeBytes_.fetch_add(alignedItemPtr->objectSize);
+            totalKeyPaddingBytes_.fetch_add(
+                getPaddingBytes(alignedItemPtr, item.getMemory()));
           }
           return ret;
         };
@@ -926,6 +940,7 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   // to avoid any race condition with the size controller at start up
   if (config_.objectSizeTrackingEnabled) {
     totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+    totalKeyPaddingBytes_.fetch_add(getValueAlignmentPadding(key.size()));
   }
 
   auto replaced = this->l1Cache_->insertOrReplace(handle);
@@ -989,6 +1004,7 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
   // update total object size
   if (config_.objectSizeTrackingEnabled) {
     totalObjectSizeBytes_.fetch_add(objectSize, std::memory_order_relaxed);
+    totalKeyPaddingBytes_.fetch_add(getValueAlignmentPadding(key.size()));
   }
   // Release the handle now since we have inserted the handle into the cache,
   // and from now the Cache will be responsible for destroying the object
@@ -1081,6 +1097,7 @@ void ObjectCache<AllocatorT>::getObjectCacheCounters(
   visitor("objcache.evictions", evictions_.get(),
           util::CounterVisitor::CounterType::RATE);
   visitor("objcache.object_size_bytes", getTotalObjectSize());
+  visitor("objcache.key_padding_bytes", totalKeyPaddingBytes_.load());
   if (sizeController_) {
     sizeController_->getCounters(visitor);
   }

@@ -849,6 +849,10 @@ class ObjectCacheTest : public ::testing::Test {
       EXPECT_EQ(newSize + curCacheSize, objcache->getTotalObjectSize());
       curCacheSize += newSize;
     }
+
+    util::StatsMap stats;
+    objcache->getObjectCacheCounters(stats.createCountVisitor());
+    EXPECT_GT(stats.getCounts().at("objcache.key_padding_bytes"), 0);
   }
 
   void testMultithreadObjectSizeTrackingWithMutation() {
