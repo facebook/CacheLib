@@ -41,10 +41,11 @@ class ProgressTracker final : public cachelib::PeriodicWorker {
  private:
   void work() override;
 
-  const size_t instanceId_;  // id of the stressor instance
-  const Stressor& stressor_; // stressor instance
-  std::ofstream statsFile_;  // optional output file stream
-  Stats prevStats_; // previous snapshot of cache stats to perform deltas.
+  const size_t instanceId_;              // id of the stressor instance
+  const Stressor& stressor_;             // stressor instance
+  std::ofstream statsFile_;              // optional output file stream
+  std::unique_ptr<StatsBase> prevStats_; // previous snapshot of cache stats to
+                                         // perform deltas.
 };
 } // namespace cachebench
 } // namespace cachelib

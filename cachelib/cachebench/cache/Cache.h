@@ -322,7 +322,7 @@ class Cache {
   }
 
   // Get overall stats on the whole cache allocator
-  Stats getStats() const;
+  std::unique_ptr<StatsBase> getStats() const;
 
   // Get number of bytes written to NVM.
   double getNvmBytesWritten() const;
@@ -1114,12 +1114,14 @@ double Cache<Allocator>::getNvmBytesWritten() const {
 }
 
 template <typename Allocator>
-Stats Cache<Allocator>::getStats() const {
+std::unique_ptr<StatsBase> Cache<Allocator>::getStats() const {
+  auto retPtr = std::make_unique<Stats>();
+  auto& ret = *retPtr;
+
   PoolStats aggregate = cache_->getPoolStats(pools_[0]);
   auto usageFraction =
       1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
                 aggregate.poolUsableSize;
-  Stats ret;
   ret.poolUsageFraction.push_back(usageFraction);
   for (size_t pid = 1; pid < pools_.size(); pid++) {
     auto poolStats = cache_->getPoolStats(static_cast<PoolId>(pid));
@@ -1292,7 +1294,7 @@ Stats Cache<Allocator>::getStats() const {
     }
   }
 
-  return ret;
+  return retPtr;
 }
 
 template <typename Allocator>

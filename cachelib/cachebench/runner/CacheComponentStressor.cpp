@@ -20,6 +20,7 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/logging/xlog.h>
 
+#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/cachebench/util/Exceptions.h"
 #include "cachelib/interface/components/RAMCacheComponent.h"
@@ -61,15 +62,16 @@ void CacheComponentStressor::start() {
 }
 
 // TODO use CacheStressor::getCacheStats()
-Stats CacheComponentStressor::getCacheStats() const {
-  Stats ret;
+std::unique_ptr<StatsBase> CacheComponentStressor::getCacheStats() const {
+  auto retPtr = std::make_unique<Stats>();
+  auto& ret = *retPtr;
 
   // Try to cast to RAMCacheComponent to get detailed stats FlashCacheComponent
   // doesn't have the same stats interface; follow-on diffs will add stats
   // support for it
   auto* ramCache = dynamic_cast<RAMCacheComponent*>(cache_.get());
   if (ramCache == nullptr) {
-    return ret;
+    return retPtr;
   }
 
   auto& cache = ramCache->get();
@@ -142,7 +144,7 @@ Stats CacheComponentStressor::getCacheStats() const {
 
   ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
 
-  return ret;
+  return retPtr;
 }
 
 const CacheConfig& CacheComponentStressor::validate(

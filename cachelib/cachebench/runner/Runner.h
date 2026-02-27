@@ -64,7 +64,7 @@ class Runner {
   }
 
   // Get run stats. Must only be called after run() has returned.
-  const Stats& getCacheStats() const { return cacheStats_; }
+  std::unique_ptr<StatsBase>& getCacheStats() { return cacheStats_; }
   const ThroughputStats& getThroughputStats() const { return opsStats_; }
   uint64_t getTestDurationNs() const { return durationNs_; }
 
@@ -77,7 +77,7 @@ class Runner {
   bool aborted_{false};
 
   // Stats captured after run() completes
-  Stats cacheStats_;
+  std::unique_ptr<StatsBase> cacheStats_;
   ThroughputStats opsStats_;
   uint64_t durationNs_{0};
 

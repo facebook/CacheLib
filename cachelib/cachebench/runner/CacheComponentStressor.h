@@ -20,7 +20,6 @@
 
 #include <memory>
 
-#include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/runner/CacheStressorBase.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/cachebench/util/Config.h"
@@ -48,7 +47,7 @@ class CacheComponentStressor : public CacheStressorBase {
   void start() override;
 
   // Obtain stats from the cache instance
-  Stats getCacheStats() const override;
+  std::unique_ptr<StatsBase> getCacheStats() const override;
 
  private:
   // Validate the test config (implicitly validates the StressorConfig in

@@ -129,7 +129,8 @@ void FastShutdownStressor::start() {
     std::cout << "Reattaching to cache...\n";
     cache_->reAttach();
     expectedAbortCount++;
-    const auto stats = cache_->getStats();
+    const auto statsPtr = cache_->getStats();
+    auto& stats = statsPtr->as<Stats>();
     if (stats.numAbortedSlabReleases != expectedAbortCount) {
       throw std::runtime_error(
           folly::sformat("Failed. Expected abort count did not match {} {}",

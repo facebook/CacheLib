@@ -18,11 +18,20 @@
 
 namespace facebook::cachelib::cachebench {
 
-AggregatedStats::AggregatedStats(const std::vector<Runner>& runners)
+AggregatedStats::AggregatedStats(std::vector<Runner>& runners)
     : numInstances_(runners.size()) {
-  for (size_t i = 0; i < runners.size(); i++) {
+  XCHECK_GT(runners.size(), 1UL);
+
+  opsStats_ = runners[0].getThroughputStats();
+  // Steal the first runner's cache stats since we don't know the underlying
+  // type (and can't default-initialize one)
+  cacheStats_ = std::move(runners[0].getCacheStats());
+  durationNs_ = runners[0].getTestDurationNs();
+
+  // Aggregate subsequent runners
+  for (size_t i = 1; i < runners.size(); i++) {
     opsStats_ += runners[i].getThroughputStats();
-    cacheStats_ += runners[i].getCacheStats();
+    *cacheStats_ += *runners[i].getCacheStats();
     durationNs_ = std::max(durationNs_, runners[i].getTestDurationNs());
   }
 }
@@ -38,7 +47,7 @@ std::ostream& operator<<(
      << "== Aggregated Stats Across " << stats.numInstances_
      << " Instances ==" << std::endl
      << "== Allocator Stats ==" << std::endl;
-  stats.cacheStats_.render(os, /* isAggregate */ true);
+  stats.cacheStats_->render(os);
 
   os << std::endl << "== Throughput ==" << std::endl;
   const double elapsedSecs = stats.durationNs_ / static_cast<double>(1e9);

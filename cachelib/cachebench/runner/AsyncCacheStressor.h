@@ -171,7 +171,9 @@ class AsyncCacheStressor : public Stressor {
   }
 
   // obtain stats from the cache instance.
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   // obtain aggregated throughput stats for the stress run so far.
   ThroughputStats aggregateThroughputStats() const override {

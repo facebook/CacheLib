@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "cachelib/cachebench/cache/Cache.h"
 #include "cachelib/cachebench/runner/Stressor.h"
 #include "cachelib/datatype/Map.h"
 #include "cachelib/datatype/RangeMap.h"
@@ -58,7 +59,9 @@ class HighRefcountStressor : public Stressor {
   // @param numOps   number of ops per thread.
   HighRefcountStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   // Only number of operations are reported
   ThroughputStats aggregateThroughputStats() const override {
@@ -99,7 +102,9 @@ class CachelibMapStressor : public Stressor {
  public:
   CachelibMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   // Only number of operations are reported
   ThroughputStats aggregateThroughputStats() const override {
@@ -170,7 +175,9 @@ class CachelibRangeMapStressor : public Stressor {
  public:
   CachelibRangeMapStressor(const CacheConfig& cacheConfig, uint64_t numOps);
 
-  Stats getCacheStats() const override { return cache_->getStats(); }
+  std::unique_ptr<StatsBase> getCacheStats() const override {
+    return cache_->getStats();
+  }
 
   // Only number of operations are reported
   ThroughputStats aggregateThroughputStats() const override {

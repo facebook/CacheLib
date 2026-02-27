@@ -24,10 +24,10 @@ namespace facebook::cachelib::cachebench {
 
 struct AggregatedStats {
   // Aggregate stats across a vector of runners
-  explicit AggregatedStats(const std::vector<Runner>& runners);
+  explicit AggregatedStats(std::vector<Runner>& runners);
 
   ThroughputStats opsStats_;
-  Stats cacheStats_;
+  std::unique_ptr<StatsBase> cacheStats_;
   uint64_t durationNs_{0};
   size_t numInstances_{0};
 };
