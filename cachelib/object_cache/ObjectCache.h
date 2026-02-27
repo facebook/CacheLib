@@ -155,6 +155,26 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using WriteHandle = typename AllocatorT::WriteHandle;
   using CacheItem = typename AllocatorT::Item;
 
+  // ObjectCacheItem alignment so that atomics on items don't span cache lines
+  static constexpr size_t kValueAlignment = 8;
+  static_assert(folly::isPowTwo(kValueAlignment));
+
+  // Compute the exact number of extra bytes needed in the value region
+  // to align ObjectCacheItem to kValueAlignment given a key of size keySize.
+  static constexpr size_t getValueAlignmentPadding(size_t keySize) {
+    return (-keySize) & (kValueAlignment - 1);
+  }
+
+  static ObjectCacheItem* getAlignedItemPtr(void* memory) {
+    return reinterpret_cast<ObjectCacheItem*>(
+        __builtin_align_up(memory, kValueAlignment));
+  }
+
+  static const ObjectCacheItem* getAlignedItemPtr(const void* memory) {
+    return reinterpret_cast<const ObjectCacheItem*>(
+        __builtin_align_up(memory, kValueAlignment));
+  }
+
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
   explicit ObjectCache(InternalConstructor, const Config& config)
@@ -409,8 +429,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     if (!object) {
       return 0;
     }
-    return reinterpret_cast<const ObjectCacheItem*>(
-               getReadHandleRefInternal<T>(object)->getMemory())
+    return getAlignedItemPtr(getReadHandleRefInternal<T>(object)->getMemory())
         ->objectSize;
   }
 
@@ -418,8 +437,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     if (!itr.asHandle()) {
       return 0;
     }
-    return reinterpret_cast<const ObjectCacheItem*>(itr.asHandle()->getMemory())
-        ->objectSize;
+    return getAlignedItemPtr(itr.asHandle()->getMemory())->objectSize;
   }
 
   // Update the object size without updating the object itself.
@@ -463,7 +481,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
  private:
   // Minimum alloc size in bytes for l1 cache.
   static constexpr uint32_t kL1AllocSizeMin = 64;
-  static constexpr const char* kPlaceholderKey = "_cl_ph";
+  // Set key size to 8 bytes to automatically align values in placeholders
+  static constexpr folly::StringPiece kPlaceholderKey = "_cl_ph__";
+  // Ensure values are aligned automatically in placeholders
+  static_assert(kPlaceholderKey.size() % kValueAlignment == 0);
 
   // Names of periodic workers
   static constexpr folly::StringPiece kSizeControllerName{"SizeController"};
@@ -584,7 +605,7 @@ void ObjectCache<AllocatorT>::init() {
 
           auto& item = data.item;
 
-          auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+          auto itemPtr = getAlignedItemPtr(item.getMemory());
 
           SCOPE_EXIT {
             if (config_.objectSizeTrackingEnabled) {
@@ -612,7 +633,7 @@ void ObjectCache<AllocatorT>::init() {
 
       auto& item = data.item;
 
-      auto itemPtr = reinterpret_cast<ObjectCacheItem*>(item.getMemory());
+      auto itemPtr = getAlignedItemPtr(item.getMemory());
 
       SCOPE_EXIT {
         if (config_.objectSizeTrackingEnabled) {
@@ -640,7 +661,7 @@ void ObjectCache<AllocatorT>::init() {
           auto ret = makeObjCb(nvmItem, item, chain);
           if (ret) {
             totalObjectSizeBytes_.fetch_add(
-                item.template getMemoryAs<ObjectCacheItem>()->objectSize);
+                getAlignedItemPtr(item.getMemory())->objectSize);
           }
           return ret;
         };
@@ -757,7 +778,7 @@ std::shared_ptr<const T> ObjectCache<AllocatorT>::find(folly::StringPiece key) {
   }
   succL1Lookups_.inc();
 
-  auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
+  auto ptr = getAlignedItemPtr(found->getMemory())->objectPtr;
   // Use custom deleter
   auto deleter = Deleter<const T>(std::move(found));
   return std::shared_ptr<const T>(reinterpret_cast<const T*>(ptr),
@@ -775,7 +796,7 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::findToWrite(
   }
   succL1Lookups_.inc();
 
-  auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
+  auto ptr = getAlignedItemPtr(found->getMemory())->objectPtr;
   // Use custom deleter
   auto deleter = Deleter<T>(std::move(found));
   return std::shared_ptr<T>(reinterpret_cast<T*>(ptr), std::move(deleter));
@@ -790,7 +811,7 @@ std::shared_ptr<T> ObjectCache<AllocatorT>::peekToWrite(
     return nullptr;
   }
 
-  auto ptr = found->template getMemoryAs<ObjectCacheItem>()->objectPtr;
+  auto ptr = getAlignedItemPtr(found->getMemory())->objectPtr;
   // Use custom deleter
   auto deleter = Deleter<T>(std::move(found));
   return std::shared_ptr<T>(reinterpret_cast<T*>(ptr), std::move(deleter));
@@ -830,7 +851,7 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   // the replaced item is out of refcount; in this case, the object isn't
   // inserted to the cache and releasing the object will cause memory leak.
   T* ptr = object.get();
-  *handle->template getMemoryAs<ObjectCacheItem>() =
+  *getAlignedItemPtr(handle->getMemory()) =
       ObjectCacheItem{reinterpret_cast<uintptr_t>(ptr), objectSize};
 
   // Update total object size. This should be done before inserting into L1
@@ -844,7 +865,7 @@ ObjectCache<AllocatorT>::insertOrReplace(folly::StringPiece key,
   std::shared_ptr<T> replacedPtr = nullptr;
   if (replaced) {
     replaces_.inc();
-    auto itemPtr = reinterpret_cast<ObjectCacheItem*>(replaced->getMemory());
+    auto itemPtr = getAlignedItemPtr(replaced->getMemory());
     // Just release the handle. Cache destorys object when all handles
     // released.
     auto deleter = [h = std::move(replaced)](T*) {};
@@ -888,7 +909,7 @@ ObjectCache<AllocatorT>::insert(folly::StringPiece key,
     return {AllocStatus::kAllocError, std::shared_ptr<T>(std::move(object))};
   }
   T* ptr = object.get();
-  *handle->template getMemoryAs<ObjectCacheItem>() =
+  *getAlignedItemPtr(handle->getMemory()) =
       ObjectCacheItem{reinterpret_cast<uintptr_t>(ptr), objectSize};
 
   auto success = this->l1Cache_->insert(handle);
@@ -919,8 +940,10 @@ typename AllocatorT::WriteHandle ObjectCache<AllocatorT>::allocateFromL1(
     auto hash = cachelib::MurmurHash2{}(key.data(), key.size());
     poolId = static_cast<PoolId>(hash % config_.l1NumShards);
   }
-  return this->l1Cache_->allocate(poolId, key, sizeof(ObjectCacheItem), ttl,
-                                  creationTime);
+  return this->l1Cache_->allocate(
+      poolId, key,
+      sizeof(ObjectCacheItem) + getValueAlignmentPadding(key.size()), ttl,
+      creationTime);
 }
 
 template <typename AllocatorT>
@@ -940,7 +963,8 @@ bool ObjectCache<AllocatorT>::allocatePlaceholder() {
 template <typename AllocatorT>
 uint32_t ObjectCache<AllocatorT>::getL1AllocSize(uint32_t maxKeySizeBytes) {
   auto requiredSizeBytes = AllocatorT::Item::getRequiredSize(
-      maxKeySizeBytes, sizeof(ObjectCacheItem));
+      maxKeySizeBytes,
+      sizeof(ObjectCacheItem) + getValueAlignmentPadding(maxKeySizeBytes));
   if (requiredSizeBytes <= kL1AllocSizeMin) {
     return kL1AllocSizeMin;
   }
@@ -1060,13 +1084,13 @@ void ObjectCache<AllocatorT>::mutateObject(const std::shared_ptr<T>& object,
   if (memUsageAfter > memUsageBefore) { // updated to a larger value
     memUsageDiff = memUsageAfter - memUsageBefore;
     // do atomic update on objectSize
-    ObjectCacheItem* o = reinterpret_cast<ObjectCacheItem*>(hdl->getMemory());
+    ObjectCacheItem* o = getAlignedItemPtr(hdl->getMemory());
     __atomic_fetch_add(&(o->objectSize), memUsageDiff, __ATOMIC_SEQ_CST);
     totalObjectSizeBytes_.fetch_add(memUsageDiff, std::memory_order_relaxed);
   } else if (memUsageAfter < memUsageBefore) { // updated to a smaller value
     memUsageDiff = memUsageBefore - memUsageAfter;
     // do atomic update on objectSize
-    ObjectCacheItem* o = reinterpret_cast<ObjectCacheItem*>(hdl->getMemory());
+    ObjectCacheItem* o = getAlignedItemPtr(hdl->getMemory());
     __atomic_fetch_sub(&(o->objectSize), memUsageDiff, __ATOMIC_SEQ_CST);
     totalObjectSizeBytes_.fetch_sub(memUsageDiff, std::memory_order_relaxed);
   }
@@ -1095,8 +1119,7 @@ bool ObjectCache<AllocatorT>::updateObjectSize(const std::shared_ptr<T>& object,
 
   // do atomic update on objectSize
   const auto oldSize = __sync_lock_test_and_set(
-      &(reinterpret_cast<ObjectCacheItem*>(
-            getWriteHandleRefInternal<T>(object)->getMemory())
+      &(getAlignedItemPtr(getWriteHandleRefInternal<T>(object)->getMemory())
             ->objectSize),
       newSize);
   if (newSize > oldSize) {

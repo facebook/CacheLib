@@ -582,8 +582,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
       [blobCb = std::move(blobCb)](
           const typename T::CacheItem& item,
           folly::Range<typename T::NvmCache::ChainedItemIter>) {
-        uintptr_t ptr =
-            item.template getMemoryAs<typename T::Item>()->objectPtr;
+        uintptr_t ptr = T::getAlignedItemPtr(item.getMemory())->objectPtr;
         auto blob = blobCb(ptr);
         std::vector<BufferedBlob> blobs;
         if (blob == nullptr) {
@@ -605,7 +604,7 @@ ObjectCacheConfig<T>& ObjectCacheConfig<T>::overrideNvmCbs(ToBlobCb blobCb,
         if (ptr == reinterpret_cast<uintptr_t>(nullptr)) {
           return false;
         }
-        *it.template getMemoryAs<typename T::Item>() =
+        *T::getAlignedItemPtr(it.getMemory()) =
             typename T::Item{ptr, pBlob.data.size()};
 
         return true;

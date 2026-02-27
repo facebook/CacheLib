@@ -22,6 +22,7 @@
 #include <memory>
 
 #include "cachelib/allocator/CacheAllocator.h"
+#include "cachelib/allocator/KAllocation.h"
 #include "cachelib/allocator/tests/NvmTestUtils.h"
 #include "cachelib/common/TestUtils.h"
 #include "cachelib/object_cache/ObjectCache.h"
@@ -87,6 +88,7 @@ class ObjectCacheTest : public ::testing::Test {
     for (size_t i = 0; i < maxKeySizes.size(); i++) {
       EXPECT_TRUE(allocSizes[i] >= ObjectCache::kL1AllocSizeMin);
       EXPECT_TRUE(maxKeySizes[i] + sizeof(ObjectCacheItem) +
+                      ObjectCache::getValueAlignmentPadding(maxKeySizes[i]) +
                       sizeof(typename AllocatorT::Item) <=
                   allocSizes[i]);
       EXPECT_TRUE(allocSizes[i] % 8 == 0);
@@ -652,7 +654,7 @@ class ObjectCacheTest : public ::testing::Test {
          itr != objcache.getL1Cache().end();
          ++itr) {
       totalObjectSize +=
-          reinterpret_cast<const ObjectCacheItem*>(itr.asHandle()->getMemory())
+          ObjectCache::getAlignedItemPtr(itr.asHandle()->getMemory())
               ->objectSize;
     }
     EXPECT_EQ(totalObjectSize, objcache.getTotalObjectSize());
@@ -825,22 +827,28 @@ class ObjectCacheTest : public ::testing::Test {
         });
     config.objectSizeTrackingEnabled = true;
     auto objcache = ObjectCache::create(config);
+    size_t curCacheSize = 0;
 
-    auto [_, ptr, __] = objcache->insertOrReplace(
-        "foo", std::make_unique<ObjectType>(), sizeof(ObjectType));
-    EXPECT_EQ(sizeof(ObjectType), objcache->getObjectSize(ptr));
-    EXPECT_EQ(sizeof(ObjectType), objcache->getTotalObjectSize());
+    for (size_t keySize = 1; keySize < KAllocation::kKeyMaxLenSmall;
+         keySize++) {
+      std::string key(keySize, 'f');
+      auto [_, ptr, __] = objcache->insertOrReplace(
+          key, std::make_unique<ObjectType>(), sizeof(ObjectType));
+      EXPECT_EQ(sizeof(ObjectType), objcache->getObjectSize(ptr));
+      EXPECT_EQ(sizeof(ObjectType) + curCacheSize,
+                objcache->getTotalObjectSize());
 
-    auto found = objcache->template findToWrite<ObjectType>("foo");
-    ASSERT_NE(nullptr, found);
+      auto found = objcache->template findToWrite<ObjectType>(key);
+      ASSERT_NE(nullptr, found);
 
-    *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
-    const size_t newSize = sizeof(*found) + found->size();
-    const auto updated = objcache->updateObjectSize(ptr, newSize);
-    ASSERT_TRUE(updated);
+      *found = "longgggggggggggggggggggggggggggstringgggggggggggg";
+      const size_t newSize = sizeof(*found) + found->size();
+      ASSERT_TRUE(objcache->updateObjectSize(ptr, newSize));
 
-    EXPECT_EQ(newSize, objcache->getObjectSize(ptr));
-    EXPECT_EQ(newSize, objcache->getTotalObjectSize());
+      EXPECT_EQ(newSize, objcache->getObjectSize(ptr));
+      EXPECT_EQ(newSize + curCacheSize, objcache->getTotalObjectSize());
+      curCacheSize += newSize;
+    }
   }
 
   void testMultithreadObjectSizeTrackingWithMutation() {
@@ -1241,8 +1249,7 @@ class ObjectCacheTest : public ::testing::Test {
       auto evictItr = objcache.getEvictionIterator(poolId);
       std::vector<std::string> content;
       while (evictItr) {
-        auto* itemPtr = reinterpret_cast<typename ObjectCache::Item*>(
-            evictItr->getMemory());
+        auto* itemPtr = ObjectCache::getAlignedItemPtr(evictItr->getMemory());
         auto* objectPtr = reinterpret_cast<ThriftFoo*>(itemPtr->objectPtr);
         content.push_back(folly::sformat("{}: a {} b {} c {}",
                                          evictItr->getKey(),
