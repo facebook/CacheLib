@@ -149,7 +149,7 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   using Persistor = Persistor<ObjectCache<AllocatorT>>;
   using Restorer = Restorer<ObjectCache<AllocatorT>>;
   using EvictionIterator = typename AllocatorT::EvictionIterator;
-  using AccessIterator = typename AllocatorT::AccessIterator;
+  using RawAccessIterator = typename AllocatorT::AccessIterator;
   using NvmCache = typename AllocatorT::NvmCacheT;
   using NvmCacheConfig = typename AllocatorT::NvmCacheT::Config;
   using WriteHandle = typename AllocatorT::WriteHandle;
@@ -174,6 +174,72 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
     return reinterpret_cast<const ObjectCacheItem*>(
         __builtin_align_up(memory, kValueAlignment));
   }
+
+  // Wrapper iterator that provides aligned access to ObjectCacheItem.  Does not
+  // expose the underlying CacheItem to avoid using an unaligned pointer.
+  class AccessIterator {
+   public:
+    explicit AccessIterator(RawAccessIterator&& itr) : inner_(std::move(itr)) {}
+    AccessIterator(AccessIterator&&) = default;
+    AccessIterator& operator=(AccessIterator&&) = default;
+    AccessIterator(const AccessIterator&) = delete;
+    AccessIterator& operator=(const AccessIterator&) = delete;
+
+    AccessIterator& operator++() {
+      ++inner_;
+      return *this;
+    }
+    // AccessIterator exposes the cache item getters so "dereference" returns
+    // this iterator. Note: this is required for range-based for loops.
+    AccessIterator& operator*() { return *this; }
+    const AccessIterator& operator*() const { return *this; }
+
+    bool operator==(const AccessIterator& o) const {
+      return inner_ == o.inner_;
+    }
+    bool operator!=(const AccessIterator& o) const {
+      return inner_ != o.inner_;
+    }
+    FOLLY_ALWAYS_INLINE explicit operator bool() {
+      return inner_.asHandle().get() != nullptr;
+    }
+
+    void reset() { inner_.reset(); }
+
+    // Item accessors
+    const Key getKey() const { return inner_->getKey(); }
+    uint32_t getExpiryTime() const { return inner_->getExpiryTime(); }
+    bool isExpired() const { return inner_->isExpired(); }
+    uint32_t getCreationTime() const { return inner_->getCreationTime(); }
+    uint32_t getLastAccessTime() const { return inner_->getLastAccessTime(); }
+    std::chrono::seconds getConfiguredTTL() const {
+      return inner_->getConfiguredTTL();
+    }
+
+    void* getObjectPtr() {
+      return reinterpret_cast<void*>(
+          getAlignedItemPtr(inner_->getMemory())->objectPtr);
+    }
+    const void* getObjectPtr() const {
+      return reinterpret_cast<void*>(
+          getAlignedItemPtr(inner_->getMemory())->objectPtr);
+    }
+    template <typename T>
+    T* getObjectPtrAs() {
+      return reinterpret_cast<T*>(getObjectPtr());
+    }
+    template <typename T>
+    const T* getObjectPtrAs() const {
+      return reinterpret_cast<const T*>(getObjectPtr());
+    }
+
+    size_t getObjectSize() const {
+      return getAlignedItemPtr(inner_->getMemory())->objectSize;
+    }
+
+   private:
+    RawAccessIterator inner_;
+  };
 
   enum class AllocStatus { kSuccess, kAllocError, kKeyAlreadyExists };
 
@@ -304,10 +370,12 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   // This is only used in tests.
   AllocatorT& getL1Cache() { return *this->l1Cache_; }
 
-  // Get an iterator to iterate over all items in object-cache.
-  AccessIterator begin() { return this->l1Cache_->begin(); }
+  // Get an iterator to iterate over all items in object-cache.  The returned
+  // iterator provides getMemory() for safe aligned access to the
+  // ObjectCacheItem stored in each entry.
+  AccessIterator begin() { return AccessIterator{this->l1Cache_->begin()}; }
 
-  AccessIterator end() { return this->l1Cache_->end(); }
+  AccessIterator end() { return AccessIterator{this->l1Cache_->end()}; }
 
   // Get the default l1 allocation size in bytes.
   static uint32_t getL1AllocSize(uint32_t maxKeySizeBytes);
@@ -434,10 +502,10 @@ class ObjectCache : public ObjectCacheBase<AllocatorT> {
   }
 
   size_t getObjectSize(AccessIterator& itr) const {
-    if (!itr.asHandle()) {
+    if (!itr) {
       return 0;
     }
-    return getAlignedItemPtr(itr.asHandle()->getMemory())->objectSize;
+    return itr.getObjectSize();
   }
 
   // Update the object size without updating the object itself.

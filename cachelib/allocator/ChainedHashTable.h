@@ -598,7 +598,7 @@ class ChainedHashTable {
       folly::Optional<util::Throttler> throttler_ = folly::none;
 
       // returns the handle for current item in the iterator.
-      Handle& curr() {
+      Handle& curr() const {
         if (curSor_ < bucketElems_.size()) {
           return bucketElems_[curSor_];
         }
@@ -1223,6 +1223,14 @@ template <typename T,
           typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 T& ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator*() {
+  return *curr();
+}
+
+template <typename T,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
+          typename LockT>
+const T& ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator*()
+    const {
   return *curr();
 }
 
