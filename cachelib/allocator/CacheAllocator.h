@@ -3046,7 +3046,7 @@ typename CacheAllocator<CacheTrait>::WriteHandle
 CacheAllocator<CacheTrait>::popChainedItem(WriteHandle& parent) {
   if (!parent || !parent->hasChainedItem()) {
     throw std::invalid_argument(folly::sformat(
-        "Invalid parent {}", parent ? parent->toString() : nullptr));
+        "Invalid parent {}", parent ? parent->toString() : "null"));
   }
 
   WriteHandle head;
