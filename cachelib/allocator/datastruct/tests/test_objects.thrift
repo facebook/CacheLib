@@ -25,6 +25,8 @@ namespace cpp2 facebook.cachelib.test_serialization
 // testing warm rolls from the old format to the new format.
 // TODO(bwatling): remove this when 'compressedTail' is always present.
 struct SListObjectNoCompressedTail {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 size;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required i64 compressedHead; // Pointer to the head element
 }

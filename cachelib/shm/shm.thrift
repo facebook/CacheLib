@@ -22,6 +22,8 @@ package;
 namespace cpp2 facebook.cachelib.serialization
 
 struct ShmManagerObject {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required byte shmVal;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required map<string, string> nameToKeyMap;
 }

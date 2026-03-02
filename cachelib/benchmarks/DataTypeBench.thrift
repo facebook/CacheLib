@@ -23,10 +23,12 @@ include "thrift/annotation/thrift.thrift"
 package;
 
 struct StdMap {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required map<i32, string> m;
 }
 
 struct StdUnorderedMap {
   @cpp.Type{template = "std::unordered_map"}
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required map<i32, string> m;
 }
