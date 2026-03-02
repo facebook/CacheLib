@@ -43,6 +43,7 @@
 #include "cachelib/cachebench/consistency/ValueTracker.h"
 #include "cachelib/cachebench/util/CacheConfig.h"
 #include "cachelib/cachebench/util/NandWrites.h"
+#include "cachelib/navy/block_cache/SparseMapIndex.h"
 
 DECLARE_bool(report_api_latency);
 DECLARE_string(report_ac_memory_usage_stats);
@@ -668,7 +669,16 @@ Cache<Allocator>::Cache(const CacheConfig& config,
       }
     }
 
-    if (config_.navyHitsReinsertionThreshold > 0) {
+    if (config_.navyEnableItemHistoryTracking) {
+      bcConfig.enableSparseMapIndex(
+          navy::SparseMapIndex::kDefaultNumBucketMaps,
+          navy::SparseMapIndex::kDefaultBucketMapsPerMutex,
+          /*trackItemHistory=*/true);
+    }
+
+    if (config_.customReinsertionPolicyFactory) {
+      bcConfig.enableCustomReinsertion(config_.customReinsertionPolicyFactory);
+    } else if (config_.navyHitsReinsertionThreshold > 0) {
       bcConfig.enableHitsBasedReinsertion(
           static_cast<uint8_t>(config_.navyHitsReinsertionThreshold));
     }
