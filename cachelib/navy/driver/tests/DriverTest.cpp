@@ -98,6 +98,7 @@ class MockEngine : public Engine {
   MOCK_METHOD2(lookup, Status(HashedKey hk, Buffer& value));
   MOCK_METHOD1(couldExist, bool(HashedKey hk));
   MOCK_METHOD1(remove, Status(HashedKey hk));
+  MOCK_METHOD1(updateEvictionStats, void(uint32_t));
 
   MOCK_METHOD0(flush, void());
   MOCK_METHOD0(reset, void());

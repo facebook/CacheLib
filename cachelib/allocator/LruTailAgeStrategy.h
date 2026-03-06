@@ -21,15 +21,17 @@
 namespace facebook {
 namespace cachelib {
 
-// If an allocation class has its tail age higher than a threshold,
-// we look at how much it is higher than the average tail age. If the
-// differnece is greater than the tail age difference ratio specified
-// in the config, that allocation class will release a slab.
+// This strategy picks the allocation class with the oldest projected tail age
+// as the victim and the one with the youngest tail age as the receiver. A slab
+// is released from the victim only if the difference between the victim's
+// projected tail age and the receiver's tail age exceeds both the minimum tail
+// age difference and the tail age difference ratio of the victim's projected
+// tail age.
 class LruTailAgeStrategy : public RebalanceStrategy {
  public:
   struct Config : public BaseConfig {
-    // any LRU whose tail age surpasses the average tail age by this ratio is to
-    // be rebalanced
+    // the improvement (victim's projected tail age minus receiver's tail age)
+    // must exceed this ratio of the victim's projected tail age for rebalancing
     double tailAgeDifferenceRatio{0.25};
 
     // minimum tail age difference between victim and receiver for a slab
@@ -39,7 +41,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // minimum number of slabs to retain in every allocation class.
     unsigned int minSlabs{1};
 
-    // use free memory if it is amounts to more than this many slabs.
+    // use free memory if it amounts to more than this many slabs.
     unsigned int numSlabsFreeMem{3};
 
     // how many slabs worth of items do we project to determine a victim.
@@ -56,7 +58,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
     // This lets us specify which queue's eviction age to use.
     // Note not all eviction policies provide hot, warm, and cold queues.
     // We leave it up to the policy to determine how to define hot, warm, cold
-    // eviction ages. For exmaple, in LRU, we use the same eviction-age
+    // eviction ages. For example, in LRU, we use the same eviction-age
     // for all three stats.
     enum class QueueSelector { kHot, kWarm, kCold };
     QueueSelector queueSelector{QueueSelector::kWarm};
@@ -77,8 +79,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
           getWeight(_getWeight) {}
   };
 
-  // Update the config. This will not affect the current rebalancing, but
-  // will take effect in the next round
+  // Updates configuration. Takes effect on next rebalancing attempt.
   void updateConfig(const BaseConfig& baseConfig) override {
     std::lock_guard<std::mutex> l(configLock_);
     config_ = static_cast<const Config&>(baseConfig);
@@ -144,7 +145,7 @@ class LruTailAgeStrategy : public RebalanceStrategy {
                            ClassId cid) const;
 
   // Config for this strategy, this can be updated anytime.
-  // Do not access this directly, always use `getConfig()` to
+  // Do not access this directly, always use `getConfigCopy()` to
   // obtain a copy first
   Config config_;
   mutable std::mutex configLock_;

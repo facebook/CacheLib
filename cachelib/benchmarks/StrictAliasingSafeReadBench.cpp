@@ -104,6 +104,6 @@ BENCHMARK_RELATIVE(strict_aliasing_safe_read64) {
 }
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
 }

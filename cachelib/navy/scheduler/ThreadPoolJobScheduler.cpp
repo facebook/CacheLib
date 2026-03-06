@@ -18,6 +18,7 @@
 
 #include <folly/Format.h>
 #include <folly/logging/xlog.h>
+#include <folly/portability/SysResource.h>
 #include <folly/system/ThreadName.h>
 
 #include <cassert>
@@ -29,24 +30,37 @@ namespace facebook::cachelib::navy {
 std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
     unsigned int readerThreads,
     unsigned int writerThreads,
-    unsigned int reqOrderShardPower) {
+    unsigned int reqOrderShardPower,
+    int readerPriority,
+    int writerPriority) {
   return std::make_unique<OrderedThreadPoolJobScheduler>(
-      readerThreads, writerThreads, reqOrderShardPower);
+      readerThreads, writerThreads, reqOrderShardPower, readerPriority,
+      writerPriority);
 }
 
 ThreadPoolExecutor::ThreadPoolExecutor(uint32_t numThreads,
-                                       folly::StringPiece name)
+                                       folly::StringPiece name,
+                                       int priority)
     : name_{name}, queues_(numThreads) {
   XDCHECK_GT(numThreads, 0u);
   workers_.reserve(numThreads);
   for (uint32_t i = 0; i < numThreads; i++) {
     queues_[i] = std::make_unique<JobQueue>();
-    workers_.emplace_back(
-        [&q = queues_[i],
-         threadName = folly::sformat("navy_{}_{}", name.subpiece(0, 6), i)] {
-          folly::setThreadName(threadName);
-          q->process();
-        });
+    workers_.emplace_back([&q = queues_[i],
+                           threadName = folly::sformat("navy_{}_{}",
+                                                       name.subpiece(0, 6), i),
+                           priority] {
+      folly::setThreadName(threadName);
+      if (priority != 0) {
+        if (setpriority(PRIO_PROCESS, 0, priority) != 0) {
+          XLOGF(WARN, "Failed to set nice value {} for thread {}: {}", priority,
+                threadName, folly::errnoStr(errno));
+        } else {
+          XLOGF(INFO, "Set nice value {} for thread {}", priority, threadName);
+        }
+      }
+      q->process();
+    });
   }
 }
 
@@ -91,9 +105,11 @@ ThreadPoolExecutor::Stats ThreadPoolExecutor::getStats() const {
 }
 
 ThreadPoolJobScheduler::ThreadPoolJobScheduler(uint32_t readerThreads,
-                                               uint32_t writerThreads)
-    : reader_(readerThreads, "reader_pool"),
-      writer_(writerThreads, "writer_pool") {}
+                                               uint32_t writerThreads,
+                                               int readerPriority,
+                                               int writerPriority)
+    : reader_(readerThreads, "reader_pool", readerPriority),
+      writer_(writerThreads, "writer_pool", writerPriority) {}
 
 void ThreadPoolJobScheduler::enqueueWithKey(Job job,
                                             folly::StringPiece name,
@@ -160,12 +176,17 @@ constexpr size_t numShards(size_t power) { return 1ULL << power; }
 } // namespace
 
 OrderedThreadPoolJobScheduler::OrderedThreadPoolJobScheduler(
-    size_t readerThreads, size_t writerThreads, size_t numShardsPower)
+    size_t readerThreads,
+    size_t writerThreads,
+    size_t numShardsPower,
+    int readerPriority,
+    int writerPriority)
     : mutexes_(numShards(numShardsPower)),
       pendingJobs_(numShards(numShardsPower)),
       shouldSpool_(numShards(numShardsPower), false),
       numShardsPower_(numShardsPower),
-      scheduler_(readerThreads, writerThreads) {}
+      scheduler_(readerThreads, writerThreads, readerPriority, writerPriority) {
+}
 
 void OrderedThreadPoolJobScheduler::enqueueWithKey(Job job,
                                                    folly::StringPiece name,

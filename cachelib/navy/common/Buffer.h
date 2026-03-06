@@ -48,9 +48,6 @@ class BufferViewT {
   // @param data  Pointer to the data this view will encapsulate
   constexpr BufferViewT(size_t size, Type* data) : size_{size}, data_{data} {}
 
-  BufferViewT(const BufferViewT&) = default;
-  BufferViewT& operator=(const BufferViewT&) = default;
-
   // Return true if data is nullptr
   bool isNull() const { return data_ == nullptr; }
 
@@ -145,6 +142,7 @@ class Buffer {
 
   Buffer(Buffer&& other) noexcept = default;
   Buffer& operator=(Buffer&&) noexcept = default;
+  ~Buffer() = default;
 
   // Return a read-only view
   BufferView view() const { return BufferView{size_, data()}; }

@@ -75,7 +75,7 @@ class MMLru {
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
     //                    time depite the number of accesses it gets.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     Config(uint32_t time, bool updateOnW, bool updateOnR)
         : Config(time, updateOnW, updateOnR, false, 0) {}
@@ -83,9 +83,8 @@ class MMLru {
     // @param time        the LRU refresh time in seconds.
     //                    An item will be promoted only once in each lru refresh
     //                    time depite the number of accesses it gets.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
-    // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
     //                    length from the end of the queue. For example, value 1
     //                    means the insertion point is 1/2 from the end of LRU;
@@ -106,7 +105,7 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
@@ -127,7 +126,7 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
@@ -158,17 +157,17 @@ class MMLru {
     // @param ratio       the lru refresh ratio. The ratio times the
     //                    oldest element's lifetime in warm queue
     //                    would be the minimum value of LRU refresh time.
-    // @param udpateOnW   whether to promote the item on write
+    // @param updateOnW   whether to promote the item on write
     // @param updateOnR   whether to promote the item on read
     // @param tryLockU    whether to use a try lock when doing update.
     // @param ipSpec      insertion point spec, which is the inverse power of
     //                    length from the end of the queue. For example, value 1
     //                    means the insertion point is 1/2 from the end of LRU;
     //                    value 2 means 1/4 from the end of LRU.
-    // @param mmReconfigureInterval   Time interval for recalculating lru
-    //                                refresh time according to the ratio.
-    // useCombinedLockForIterators    Whether to use combined locking for
-    //                                withEvictionIterator
+    // @param mmReconfigureInterval         Time interval for recalculating lru
+    //                                      refresh time according to the ratio.
+    // @param useCombinedLockForIterators   Whether to use combined locking for
+    //                                      withEvictionIterator
     Config(uint32_t time,
            double ratio,
            bool updateOnW,
@@ -237,11 +236,11 @@ class MMLru {
   };
 
   // The container object which can be used to keep track of objects of type
-  // T. T must have a public member of type Hook. This object is wrapper
+  // T. T must have a public member of type Hook. This object is a wrapper
   // around DList, is thread safe and can be accessed from multiple threads.
   // The current implementation models an LRU using the above DList
   // implementation.
-  template <typename T, Hook<T> T::*HookPtr>
+  template <typename T, Hook<T> T::* HookPtr>
   struct Container {
    private:
     using LruList = DList<T, HookPtr>;
@@ -511,7 +510,7 @@ bool areBytesSame(const T& one, const T& two) {
 } // namespace detail
 
 /* Container Interface Implementation */
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
                                         PtrCompressor compressor)
     : compressor_(std::move(compressor)),
@@ -527,7 +526,7 @@ MMLru::Container<T, HookPtr>::Container(serialization::MMLruObject object,
                                    config_.mmReconfigureIntervalSecs.count();
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
                                                 AccessMode mode) noexcept {
   if ((mode == AccessMode::kWrite && !config_.updateOnWrite) ||
@@ -580,7 +579,7 @@ bool MMLru::Container<T, HookPtr>::recordAccess(T& node,
   return false;
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat MMLru::Container<T, HookPtr>::getEvictionAgeStat(
     uint64_t projectedLength) const noexcept {
   return lruMutex_->lock_combine([this, projectedLength]() {
@@ -588,7 +587,7 @@ cachelib::EvictionAgeStat MMLru::Container<T, HookPtr>::getEvictionAgeStat(
   });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 cachelib::EvictionAgeStat
 MMLru::Container<T, HookPtr>::getEvictionAgeStatLocked(
     uint64_t projectedLength) const noexcept {
@@ -608,7 +607,7 @@ MMLru::Container<T, HookPtr>::getEvictionAgeStatLocked(
   return stat;
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::setConfig(const Config& newConfig) {
   lruMutex_->lock_combine([this, newConfig]() {
     config_ = newConfig;
@@ -630,12 +629,12 @@ void MMLru::Container<T, HookPtr>::setConfig(const Config& newConfig) {
   });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 typename MMLru::Config MMLru::Container<T, HookPtr>::getConfig() const {
   return lruMutex_->lock_combine([this]() { return config_; });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::updateLruInsertionPoint() noexcept {
   if (config_.lruInsertionPointSpec == 0) {
     return;
@@ -677,7 +676,7 @@ void MMLru::Container<T, HookPtr>::updateLruInsertionPoint() noexcept {
   insertionPoint_ = curr;
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 bool MMLru::Container<T, HookPtr>::add(T& node) noexcept {
   const auto currTime = static_cast<Time>(util::getCurrentTimeSec());
 
@@ -698,14 +697,14 @@ bool MMLru::Container<T, HookPtr>::add(T& node) noexcept {
   });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 typename MMLru::Container<T, HookPtr>::LockedIterator
 MMLru::Container<T, HookPtr>::getEvictionIterator() const noexcept {
   LockHolder l(*lruMutex_);
   return LockedIterator{std::move(l), lru_.rbegin()};
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 template <typename F>
 void MMLru::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   if (config_.useCombinedLockForIterators) {
@@ -716,13 +715,13 @@ void MMLru::Container<T, HookPtr>::withEvictionIterator(F&& fun) {
   }
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 template <typename F>
 void MMLru::Container<T, HookPtr>::withContainerLock(F&& fun) {
   lruMutex_->lock_combine([&fun]() { fun(); });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::ensureNotInsertionPoint(T& node) noexcept {
   // If we are removing the insertion point node, grow tail before we remove
   // so that insertionPoint_ is valid (or nullptr) after removal
@@ -737,7 +736,7 @@ void MMLru::Container<T, HookPtr>::ensureNotInsertionPoint(T& node) noexcept {
   }
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::removeLocked(T& node) {
   ensureNotInsertionPoint(node);
   lru_.remove(node);
@@ -751,7 +750,7 @@ void MMLru::Container<T, HookPtr>::removeLocked(T& node) {
   return;
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 bool MMLru::Container<T, HookPtr>::remove(T& node) noexcept {
   return lruMutex_->lock_combine([this, &node]() {
     if (!node.isInMMContainer()) {
@@ -762,7 +761,7 @@ bool MMLru::Container<T, HookPtr>::remove(T& node) noexcept {
   });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::remove(Iterator& it) noexcept {
   T& node = *it;
   XDCHECK(node.isInMMContainer());
@@ -770,7 +769,7 @@ void MMLru::Container<T, HookPtr>::remove(Iterator& it) noexcept {
   removeLocked(node);
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 bool MMLru::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
   return lruMutex_->lock_combine([this, &oldNode, &newNode]() {
     if (!oldNode.isInMMContainer() || newNode.isInMMContainer()) {
@@ -800,7 +799,7 @@ bool MMLru::Container<T, HookPtr>::replace(T& oldNode, T& newNode) noexcept {
   });
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState()
     const noexcept {
   serialization::MMLruConfig configObject;
@@ -821,7 +820,7 @@ serialization::MMLruObject MMLru::Container<T, HookPtr>::saveState()
   return object;
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 MMContainerStat MMLru::Container<T, HookPtr>::getStats() const noexcept {
   auto stat = lruMutex_->lock_combine([this]() {
     auto* tail = lru_.getTail();
@@ -845,7 +844,7 @@ MMContainerStat MMLru::Container<T, HookPtr>::getStats() const noexcept {
           0};
 }
 
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 void MMLru::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
   if (currTime < nextReconfigureTime_) {
     return;
@@ -863,7 +862,7 @@ void MMLru::Container<T, HookPtr>::reconfigureLocked(const Time& currTime) {
 }
 
 // Iterator Context Implementation
-template <typename T, MMLru::Hook<T> T::*HookPtr>
+template <typename T, MMLru::Hook<T> T::* HookPtr>
 MMLru::Container<T, HookPtr>::LockedIterator::LockedIterator(
     LockHolder l, const Iterator& iter) noexcept
     : Iterator(iter), l_(std::move(l)) {}

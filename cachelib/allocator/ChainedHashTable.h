@@ -55,7 +55,7 @@ class ChainedHashTable {
 
  private:
   // Implements a hash table with chaining.
-  template <typename T, Hook<T> T::*HookPtr>
+  template <typename T, Hook<T> T::* HookPtr>
   class Impl {
    public:
     using Key = typename T::Key;
@@ -337,9 +337,7 @@ class ChainedHashTable {
   // Interface for the Container that implements a hash table. Maintains
   // the node's isInAccessContainer state. T must implement an interface to
   // markAccessible(), unmarkAccessible() and isAccessible().
-  template <typename T,
-            Hook<T> T::*HookPtr,
-            typename LockT = facebook::cachelib::SharedMutexBuckets>
+  template <typename T, Hook<T> T::* HookPtr, typename LockT>
   struct Container {
    private:
     using BucketId = typename Impl<T, HookPtr>::BucketId;
@@ -600,7 +598,7 @@ class ChainedHashTable {
       folly::Optional<util::Throttler> throttler_ = folly::none;
 
       // returns the handle for current item in the iterator.
-      Handle& curr() {
+      Handle& curr() const {
         if (curSor_ < bucketElems_.size()) {
           return bucketElems_[curSor_];
         }
@@ -692,7 +690,7 @@ class ChainedHashTable {
 };
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 const typename T::HandleMaker
     ChainedHashTable::Container<T, HookPtr, LockT>::kDefaultHandleMaker =
@@ -703,7 +701,7 @@ const typename T::HandleMaker
   return typename T::Handle{t};
 };
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
                                          const PtrCompressor& compressor,
                                          const Hasher& hasher)
@@ -722,7 +720,7 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
   std::fill(memStart, memStart + numBuckets_, CompressedPtrType{});
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
                                          void* memStart,
                                          const PtrCompressor& compressor,
@@ -748,21 +746,21 @@ ChainedHashTable::Impl<T, HookPtr>::Impl(size_t numBuckets,
   }
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 ChainedHashTable::Impl<T, HookPtr>::Impl::~Impl() {
   if (restorable_) {
     hashTable_.release();
   }
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 typename ChainedHashTable::Impl<T, HookPtr>::BucketId
 ChainedHashTable::Impl<T, HookPtr>::getBucket(
     typename T::Key k) const noexcept {
   return (*hasher_)(k.data(), k.size()) & numBucketsMask_;
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 bool ChainedHashTable::Impl<T, HookPtr>::insertInBucket(
     T& node, BucketId bucket) noexcept {
   XDCHECK_LT(bucket, numBuckets_);
@@ -779,7 +777,7 @@ bool ChainedHashTable::Impl<T, HookPtr>::insertInBucket(
   return true;
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 T* ChainedHashTable::Impl<T, HookPtr>::insertOrReplaceInBucket(
     T& node, BucketId bucket) noexcept {
   XDCHECK_LT(bucket, numBuckets_);
@@ -813,7 +811,7 @@ T* ChainedHashTable::Impl<T, HookPtr>::insertOrReplaceInBucket(
   return curr;
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 void ChainedHashTable::Impl<T, HookPtr>::removeFromBucket(
     T& node, BucketId bucket) noexcept {
   // node must be present in hashtable.
@@ -832,7 +830,7 @@ void ChainedHashTable::Impl<T, HookPtr>::removeFromBucket(
   }
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 T* ChainedHashTable::Impl<T, HookPtr>::findInBucket(
     Key key, BucketId bucket) const noexcept {
   XDCHECK_LT(bucket, numBuckets_);
@@ -843,7 +841,7 @@ T* ChainedHashTable::Impl<T, HookPtr>::findInBucket(
   return curr;
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 T* ChainedHashTable::Impl<T, HookPtr>::findPrevInBucket(
     const T& node, BucketId bucket) const noexcept {
   XDCHECK_LT(bucket, numBuckets_);
@@ -860,7 +858,7 @@ T* ChainedHashTable::Impl<T, HookPtr>::findPrevInBucket(
   return prev;
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 template <typename F>
 void ChainedHashTable::Impl<T, HookPtr>::forEachBucketElem(BucketId bucket,
                                                            F&& func) const {
@@ -873,7 +871,7 @@ void ChainedHashTable::Impl<T, HookPtr>::forEachBucketElem(BucketId bucket,
   }
 }
 
-template <typename T, typename ChainedHashTable::Hook<T> T::*HookPtr>
+template <typename T, typename ChainedHashTable::Hook<T> T::* HookPtr>
 unsigned int ChainedHashTable::Impl<T, HookPtr>::getBucketNumElems(
     BucketId bucket) const {
   XDCHECK_LT(bucket, numBuckets_);
@@ -890,7 +888,7 @@ unsigned int ChainedHashTable::Impl<T, HookPtr>::getBucketNumElems(
 
 // AccessContainer interface
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 ChainedHashTable::Container<T, HookPtr, LockT>::Container(
     const serialization::ChainedHashTableObject& object,
@@ -906,7 +904,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
                 std::move(hm)) {}
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 ChainedHashTable::Container<T, HookPtr, LockT>::Container(
     const serialization::ChainedHashTableObject& object,
@@ -953,7 +951,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Container(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename ChainedHashTable::Container<T, HookPtr, LockT>::DistributionStats
 ChainedHashTable::Container<T, HookPtr, LockT>::getDistributionStats() const {
@@ -1003,7 +1001,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::getDistributionStats() const {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 bool ChainedHashTable::Container<T, HookPtr, LockT>::insert(T& node) noexcept {
   if (node.isAccessible()) {
@@ -1024,7 +1022,7 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::insert(T& node) noexcept {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename T::Handle
 ChainedHashTable::Container<T, HookPtr, LockT>::insertOrReplace(T& node) {
@@ -1065,7 +1063,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::insertOrReplace(T& node) {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 bool ChainedHashTable::Container<T, HookPtr, LockT>::replaceIfAccessible(
     T& oldNode, T& newNode) noexcept {
@@ -1073,7 +1071,7 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::replaceIfAccessible(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 template <typename F>
 bool ChainedHashTable::Container<T, HookPtr, LockT>::replaceIf(T& oldNode,
@@ -1093,7 +1091,7 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::replaceIf(T& oldNode,
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node) noexcept {
   const auto bucket = ht_.getBucket(node.getKey());
@@ -1112,7 +1110,7 @@ bool ChainedHashTable::Container<T, HookPtr, LockT>::remove(T& node) noexcept {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::removeIf(
     T& node, const std::function<bool(const T& node)>& predicate) {
@@ -1135,7 +1133,7 @@ typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::removeIf(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::find(
     Key key) const {
@@ -1145,7 +1143,7 @@ typename T::Handle ChainedHashTable::Container<T, HookPtr, LockT>::find(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 serialization::ChainedHashTableObject
 ChainedHashTable::Container<T, HookPtr, LockT>::saveState() const {
@@ -1168,7 +1166,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::saveState() const {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 void ChainedHashTable::Container<T, HookPtr, LockT>::getBucketElems(
     BucketId bucket, std::vector<Handle>& handles) const {
@@ -1191,7 +1189,7 @@ void ChainedHashTable::Container<T, HookPtr, LockT>::getBucketElems(
 // Container's Iterator
 // with/without throtter to iterate
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename ChainedHashTable::Container<T, HookPtr, LockT>::Iterator&
 ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator++() {
@@ -1222,14 +1220,22 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator++() {
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 T& ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator*() {
   return *curr();
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
+          typename LockT>
+const T& ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator*()
+    const {
+  return *curr();
+}
+
+template <typename T,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
     Container<T, HookPtr, LockT>& container,
@@ -1245,7 +1251,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
     Iterator&& other) noexcept
@@ -1258,7 +1264,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename ChainedHashTable::Container<T, HookPtr, LockT>::Iterator&
 ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator=(
@@ -1271,7 +1277,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::operator=(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
     Container<T, HookPtr, LockT>& container, EndIterT)
@@ -1283,7 +1289,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::Iterator(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 typename ChainedHashTable::Container<T, HookPtr, LockT>::Iterator
 ChainedHashTable::Container<T, HookPtr, LockT>::begin(
@@ -1292,7 +1298,7 @@ ChainedHashTable::Container<T, HookPtr, LockT>::begin(
 }
 
 template <typename T,
-          typename ChainedHashTable::Hook<T> T::*HookPtr,
+          typename ChainedHashTable::Hook<T> T::* HookPtr,
           typename LockT>
 void ChainedHashTable::Container<T, HookPtr, LockT>::Iterator::reset() {
   curSor_ = 0;

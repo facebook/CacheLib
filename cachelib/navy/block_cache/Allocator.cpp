@@ -18,7 +18,6 @@
 
 #include <folly/logging/xlog.h>
 
-#include <cassert>
 #include <utility>
 
 #include "cachelib/navy/common/NavyThread.h"
@@ -48,34 +47,35 @@ Allocator::Allocator(RegionManager& regionManager,
   }
 }
 
-std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocate(
-    uint32_t size, uint16_t priority, bool canWait, uint64_t keyHash) {
+std::pair<RegionDescriptor, RelAddress> Allocator::allocate(uint32_t size,
+                                                            uint16_t priority,
+                                                            bool canWait,
+                                                            uint64_t keyHash) {
   XDCHECK_LT(priority, allocators_.size());
+  if (size == 0 || size > regionManager_.regionSize()) {
+    return std::make_pair(RegionDescriptor{OpenStatus::Error}, RelAddress());
+  }
   RegionAllocator* ra =
       &allocators_[priority][keyHash % allocators_[priority].size()];
-  if (size == 0 || size > regionManager_.regionSize()) {
-    return std::make_tuple(RegionDescriptor{OpenStatus::Error}, size,
-                           RelAddress());
-  }
   return allocateWith(*ra, size, canWait);
 } // namespace cachelib
 
 // Allocates using region allocator @ra. If region is full, we take another
 // from the clean list (regions ready for allocation) If the clean list is
-// empty, we retry allocation. This means reclamation doesn't keep up and we
+// empty, we retry allocation. This means reclaim doesn't keep up and we
 // have to wait. Every time we take a region from the clean list, we schedule
-// new reclamation job to refill it. Caller must close the region after data
+// new reclaim job to refill it. Caller must close the region after data
 // written to the slot.
-std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
+std::pair<RegionDescriptor, RelAddress> Allocator::allocateWith(
     RegionAllocator& ra, uint32_t size, bool canWait) {
-  std::unique_lock<TimedMutex> lock{ra.getLock()};
+  std::unique_lock lock{ra.getLock()};
   RegionId rid = ra.getAllocationRegion();
   if (rid.valid()) {
     auto& region = regionManager_.getRegion(rid);
     auto [desc, addr] = region.openAndAllocate(size);
     XDCHECK_NE(OpenStatus::Retry, desc.status());
     if (desc.isReady()) {
-      return std::make_tuple(std::move(desc), size, addr);
+      return std::make_pair(std::move(desc), addr);
     }
     XDCHECK_EQ(OpenStatus::Error, desc.status());
     // Buffer has been fully allocated. Release the region by scheduling an
@@ -89,7 +89,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   // picked ended up being full.
   XDCHECK(!rid.valid());
 
-  if (canWait && !getCurrentNavyThread()) {
+  if (canWait && !isOnNavyThread()) {
     // Waiting on main thread could cause indefinite blocking, so do not wait
     canWait = false;
   }
@@ -101,7 +101,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
       allocRetryWaits_.inc();
       waiter->baton_.wait();
     }
-    return std::make_tuple(RegionDescriptor{status}, size, RelAddress{});
+    return std::make_pair(RegionDescriptor{status}, RelAddress{});
   }
   XDCHECK(status == OpenStatus::Ready);
   XDCHECK(!waiter);
@@ -114,7 +114,7 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> Allocator::allocateWith(
   ra.setAllocationRegion(rid);
   auto [desc, addr] = region.openAndAllocate(size);
   XDCHECK_EQ(OpenStatus::Ready, desc.status());
-  return std::make_tuple(std::move(desc), size, addr);
+  return std::make_pair(std::move(desc), addr);
 }
 
 void Allocator::close(RegionDescriptor&& desc) {
@@ -133,7 +133,7 @@ void Allocator::flushAndReleaseRegionFromRALocked(RegionAllocator& ra,
 void Allocator::flush() {
   for (auto& ras : allocators_) {
     for (auto& ra : ras) {
-      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      std::lock_guard lock{ra.getLock()};
       flushAndReleaseRegionFromRALocked(ra, false /* async */);
     }
   }
@@ -144,7 +144,7 @@ void Allocator::reset() {
   regionManager_.reset();
   for (auto& ras : allocators_) {
     for (auto& ra : ras) {
-      std::lock_guard<TimedMutex> lock{ra.getLock()};
+      std::lock_guard lock{ra.getLock()};
       ra.reset();
     }
   }

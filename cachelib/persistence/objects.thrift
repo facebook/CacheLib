@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+include "thrift/annotation/thrift.thrift"
+
+@thrift.AllowLegacyMissingUris
+package;
+
 namespace cpp2 facebook.cachelib.persistence
 
 enum PersistenceType {
@@ -28,20 +33,26 @@ enum PersistenceType {
 }
 
 struct CacheLibVersions {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required i32 persistenceVersion;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 allocatorVersion;
+  @thrift.AllowUnsafeRequiredFieldQualifier
   3: required i64 ramFormatVerson;
   4: optional i64 nvmFormatVersion;
 }
 
 struct PersistCacheLibConfig {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required string cacheName;
 }
 
 struct PersistenceHeader {
+  @thrift.AllowUnsafeRequiredFieldQualifier
   1: required PersistenceType type;
   // total length of data, if the data is split
   // in blocks, it also includes checksum and length
   // of each block.
+  @thrift.AllowUnsafeRequiredFieldQualifier
   2: required i64 length;
 }

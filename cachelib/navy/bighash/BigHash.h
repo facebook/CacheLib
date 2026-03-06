@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <folly/Utility.h>
 #include <folly/fibers/TimedMutex.h>
 
 #include <chrono>
@@ -24,6 +25,7 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/BloomFilter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/bighash/Bucket.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
@@ -46,10 +48,10 @@ class ValidBucketChecker;
 // a series of buckets. One can think of it as a on-device hash table.
 //
 // Each item is hashed to a bucket according to its key. There is no size class,
-// and each bucket is consist of various variable-sized items. When full, we
-// evict the items in their insertion order. An eviction call back is guaranteed
-// to be invoked once per item. We currently do not support removeCB. That is
-// coming as part of Navy eventually.
+// and each bucket consists of various variable-sized items. When full, we evict
+// the items in their insertion order. An eviction call back is guaranteed to be
+// invoked once per item. We currently do not support removeCB. That is coming
+// as part of Navy eventually.
 //
 // Each read and write via BigHash happens in `bucketSize` granularity. This
 // means, you will read a full bucket even if your item is only 100 bytes.
@@ -59,7 +61,7 @@ class ValidBucketChecker;
 // However, this design gives us the ability to forgo an in-memory index and
 // instead look up our items directly from disk. In practice, this means BigHash
 // is a flash engine optimized for small items.
-class BigHash final : public Engine {
+class BigHash final : public Engine, folly::NonCopyableNonMovable {
  public:
   struct Config {
     uint32_t bucketSize{4 * 1024};
@@ -76,6 +78,8 @@ class BigHash final : public Engine {
     // Optional bloom filter to reduce IO
     std::unique_ptr<BloomFilter> bloomFilter;
 
+    uint8_t numMutexesPower{14};
+
     uint64_t numBuckets() const { return cacheSize / bucketSize; }
 
     Config& validate();
@@ -87,8 +91,6 @@ class BigHash final : public Engine {
   //
   // @throw std::invalid_argument on bad config
   explicit BigHash(Config&& config);
-  BigHash(const BigHash&) = delete;
-  BigHash& operator=(const BigHash&) = delete;
   ~BigHash() override = default;
 
   // Return the size of usable space
@@ -147,6 +149,11 @@ class BigHash final : public Engine {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(uint32_t lifetime) override {
+    bhLifetimeSecs_.trackValue(lifetime);
+  }
+
  private:
   class BucketId {
    public:
@@ -171,15 +178,6 @@ class BigHash final : public Engine {
   Buffer readBucket(BucketId bid);
   bool writeBucket(BucketId bid, Buffer buffer);
 
-  // Initialize the SharedMutexes.
-  std::vector<std::unique_ptr<SharedMutex>> initalizeMutexes() {
-    std::vector<std::unique_ptr<SharedMutex>> mutex;
-    for (size_t i = 0; i < kNumMutexes; ++i) {
-      mutex.emplace_back(std::make_unique<SharedMutex>());
-    }
-    return mutex;
-  }
-
   // The corresponding r/w bucket lock must be held during the entire
   // duration of the read and write operations. For example, during write,
   // if write lock is dropped after a bucket is read from device, user
@@ -188,12 +186,12 @@ class BigHash final : public Engine {
   // could overwrite another's writes.
   //
   // In short, just hold the lock during the entire operation!
-  SharedMutex& getMutex(BucketId bid) const {
-    return *mutex_[bid.index() & (kNumMutexes - 1)].get();
+  auto& getMutex(BucketId bid) const {
+    return mutex_[bid.index() & (numMutexes_ - 1)];
   }
 
   folly::SpinLock& getBfLock(BucketId bid) const {
-    return bfLock_[bid.index() & (kNumMutexes - 1)];
+    return bfLock_[bid.index() & (numMutexes_ - 1)];
   }
 
   BucketId getBucketId(HashedKey hk) const {
@@ -210,9 +208,8 @@ class BigHash final : public Engine {
   void bfRebuild(BucketId bid, const Bucket* bucket);
   bool bfReject(BucketId bid, uint64_t keyHash) const;
 
-  // Use birthday paradox to estimate number of mutexes given number of parallel
-  // queries and desired probability of lock collision.
-  static constexpr size_t kNumMutexes = 16 * 1024;
+  // Number of mutexes for bucket locking
+  const size_t numMutexes_;
 
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
   static constexpr uint32_t kFormatVersion = 10;
@@ -228,7 +225,7 @@ class BigHash final : public Engine {
   Device& device_;
   // handle for data placement technologies like FDP
   int placementHandle_;
-  std::vector<std::unique_ptr<SharedMutex>> mutex_{initalizeMutexes()};
+  mutable std::vector<trace::Profiled<SharedMutex, "cachelib:navy:bh">> mutex_;
   // Spinlocks for bloom filter operations
   // We use spinlock in addition to the mutex to avoid contentions of
   // couldExist which needs to be fast against other long running or
@@ -236,14 +233,14 @@ class BigHash final : public Engine {
   // happens against the remove or evict of the given item, there could
   // be a false positive which is ok.
   // Nested lock orders are always mutex-then-spinlock
-  std::unique_ptr<folly::SpinLock[]> bfLock_{new folly::SpinLock[kNumMutexes]};
+  mutable std::vector<folly::SpinLock> bfLock_;
 
   // thread local counters in synchronized path
   mutable TLCounter lookupCount_;
   mutable TLCounter bfProbeCount_;
   mutable TLCounter bfRejectCount_;
 
-  // atomic counters in asynchronized path
+  // atomic counters in asynchronous path
   mutable AtomicCounter itemCount_;
   mutable AtomicCounter insertCount_;
   mutable AtomicCounter succInsertCount_;
@@ -265,9 +262,7 @@ class BigHash final : public Engine {
   // counters to quantify the expired eviction overhead (temporary)
   // PercentileStats generates outputs in integers, so amplify by 100x
   mutable util::PercentileStats bucketExpirationsDist_x100_;
-
-  static_assert((kNumMutexes & (kNumMutexes - 1)) == 0,
-                "number of mutexes must be power of two");
+  mutable util::PercentileStats bhLifetimeSecs_;
 
   friend class ValidBucketChecker;
 };

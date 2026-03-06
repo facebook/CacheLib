@@ -16,9 +16,15 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <folly/fibers/TimedMutex.h>
 
+#include "cachelib/common/Profiled.h"
+#include "cachelib/common/Serialization.h"
+#include "cachelib/navy/block_cache/CombinedEntryBlock.h"
 #include "cachelib/navy/block_cache/Index.h"
+#include "cachelib/navy/serialization/gen-cpp2/objects_types.h"
+#include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
@@ -37,6 +43,12 @@ FixedSizeIndex_TEST_FRIENDS_FORWARD_DECLARATION;
 using SharedMutex =
     folly::fibers::TimedRWMutexWritePriority<folly::fibers::Baton>;
 
+// Callback to retrieve the key (64bit hashed key) from the given address info.
+// How to manage the key and value info within the given address of the flash is
+// not the scope that FixedSizeIndex should be involved with, so it'll just use
+// the callback function given when it's created.
+using RetrieveKeyCallback = std::function<std::optional<uint64_t>(uint32_t)>;
+
 // NVM index implementation with the fixed size memory footprint.
 // With the configured parameters given, it will decide how large the hash table
 // is, and it won't rehash on run time.
@@ -51,14 +63,37 @@ using SharedMutex =
 // set up proper configurtion numbers.
 class FixedSizeIndex : public Index {
  public:
-  explicit FixedSizeIndex(uint32_t numChunks,
-                          uint8_t numBucketsPerChunkPower,
-                          uint64_t numBucketsPerMutex)
-      : numChunks_(numChunks),
-        numBucketsPerChunkPower_(numBucketsPerChunkPower),
-        numBucketsPerMutex_(numBucketsPerMutex) {
+  FixedSizeIndex(uint32_t numChunks,
+                 uint8_t numBucketsPerChunkPower,
+                 uint64_t numBucketsPerShard,
+                 ShmManager* shmManager,
+                 const std::string& name,
+                 bool handleOverflow = false,
+                 RetrieveKeyCallback retrieveKeyCb = nullptr)
+      : numChunks_{numChunks},
+        numBucketsPerChunkPower_{numBucketsPerChunkPower},
+        numBucketsPerShard_{numBucketsPerShard},
+        shmManager_{shmManager},
+        name_{name},
+        handleOverflow_{handleOverflow},
+        retrieveKeyCb_{std::move(retrieveKeyCb)} {
     initialize();
   }
+
+  // This constructor is mainly for testing. Don't use it for the real use case
+  FixedSizeIndex(uint32_t numChunks,
+                 uint8_t numBucketsPerChunkPower,
+                 uint64_t numBucketsPerShard)
+      : FixedSizeIndex(numChunks,
+                       numBucketsPerChunkPower,
+                       numBucketsPerShard,
+                       nullptr,
+                       "",
+                       false,
+                       nullptr) {
+    reset();
+  }
+
   FixedSizeIndex() = delete;
   ~FixedSizeIndex() override = default;
   FixedSizeIndex(const FixedSizeIndex&) = delete;
@@ -66,14 +101,24 @@ class FixedSizeIndex : public Index {
   FixedSizeIndex& operator=(const FixedSizeIndex&) = delete;
   FixedSizeIndex& operator=(FixedSizeIndex&&) = delete;
 
-  static constexpr double kSizeExpBase = 1.1925;
+  // This needs to be increased with any major changes to FixedSizeIndex.
+  // If persist() detects stored version being different with the current
+  // version number, it will give up on recovering and begin with the empty
+  // index.
+  static constexpr uint32_t kFixedSizeIndexVersion = 1;
+
+  // Shm names for FixedSizeIndex
+  static constexpr std::string_view kShmIndexInfoName =
+      "shm_fixed_size_index_info";
+  static constexpr std::string_view kShmIndexName = "shm_fixed_size_index";
 
   // Writes index content to a Thrift object
-  void persist(RecordWriter& rw) const override;
+  void persist(
+      std::optional<std::reference_wrapper<RecordWriter>> rw) const override;
 
   // Resets index then inserts entries from a Thrift object read from
   // RecordReader.
-  void recover(RecordReader& rr) override;
+  void recover(std::optional<std::reference_wrapper<RecordReader>> rr) override;
 
   // Gets value and update tracking counters
   LookupResult lookup(uint64_t key) override;
@@ -90,6 +135,10 @@ class FixedSizeIndex : public Index {
   LookupResult insert(uint64_t key,
                       uint32_t address,
                       uint16_t sizeHint) override;
+  // Same as above but fails if the key already exists
+  LookupResult insertIfNotExists(uint64_t key,
+                                 uint32_t address,
+                                 uint16_t sizeHint) override;
 
   // Replaces old address with new address if there exists the key with the
   // identical old address. Current hits will be reset after successful replace.
@@ -124,100 +173,11 @@ class FixedSizeIndex : public Index {
   void getCounters(const CounterVisitor& visitor) const override;
 
  private:
-  // Internally, FixedSizeIndex will maintain each entry as PackedItemRecord
-  // which is reduced size version of Index::ItemRecord, and there is missing
-  // precision or info due to the smaller size, but those missing details are
-  // not critical ones.
-  struct FOLLY_PACK_ATTR PackedItemRecord {
-    // encoded address
-    uint32_t address{kInvalidAddress};
-    // info about size and current hits.
-    struct {
-      uint8_t curHits : 2;
-      uint8_t sizeExp : 6;
-    } info{};
-
-    // Instead of using 1-bit for a flag per item to say if it's a valid entry
-    // or not, we will use the pre-defined invalid address value to decide the
-    // validity. With the current block cache implementation, address 0 won't be
-    // used for index address, so we are using it as the invalid address value
-    // here.
-    //
-    // (Current BC implementation/design always stores the end of the slot
-    // address (for the entry), so it will be always the address of the end of
-    // entry descriptor. See BlockCache.h for more details)
-    static constexpr uint32_t kInvalidAddress{0};
-
-    PackedItemRecord() {}
-
-    PackedItemRecord(uint32_t _address,
-                     uint16_t _sizeHint,
-                     uint8_t _currentHits)
-        : address(_address) {
-      info.curHits = truncateCurHits(_currentHits);
-      info.sizeExp = sizeHintToExp(_sizeHint);
-      XDCHECK(isValidAddress(_address));
-    }
-
-    static uint8_t sizeHintToExp(uint16_t sizeHint) {
-      // Input value (sizeHint) is the unit of kMinAllocAlignSize
-      // (i.e. sizeHint = 1 means 512Bytes currently).
-      // We want to represent this 16bit value by exponent value with 6bits (a ^
-      // 0) = 0, (a ^ 63) >= max value (65535), then we get a = 1.1925
-      //, so we can represent sizeHint by the exponent of base 1.1925
-
-      // TODO1: Will remove using exponents and multiplications and improve here
-      // TODO2: Need to revisit and evaluate to see if we need the same
-      // precision level for the larger sizes
-
-      XDCHECK(sizeHint > 0) << sizeHint;
-      constexpr double m = kSizeExpBase;
-      double x = 1;
-      int xp = 0;
-      while (x < sizeHint) {
-        x *= m;
-        ++xp;
-      }
-      XDCHECK(xp < 64) << sizeHint << " " << xp;
-      return xp;
-    }
-
-    static uint16_t sizeExpToHint(uint8_t sizeExp) {
-      // TODO: Will remove using exponents and multiplications and improve here
-      constexpr double m = kSizeExpBase;
-      double sizeHint = 1;
-      for (int j = 0; j < sizeExp; ++j) {
-        sizeHint *= m;
-      }
-      return static_cast<uint16_t>(sizeHint);
-    }
-
-    static uint8_t truncateCurHits(uint8_t curHits) {
-      return (curHits > 3) ? 3 : curHits;
-    }
-
-    static bool isValidAddress(uint32_t address) {
-      return address != kInvalidAddress;
-    }
-
-    bool isValid() const { return isValidAddress(address); }
-    uint16_t getSizeHint() const { return sizeExpToHint(info.sizeExp); }
-
-    int bumpCurHits() {
-      if (info.curHits < 3) {
-        info.curHits++;
-      }
-      return info.curHits;
-    }
-  };
-  static_assert(5 == sizeof(PackedItemRecord),
-                "PackedItemRecord size is 5 bytes");
-
   class BucketDistInfo {
     // 1. It's assumed that caller (FixedSizeIndex) will handle all the
     // parameters validity for each function. It'll be only XDCHECKed here.
-    // 2. # of buckets per mutex for FixedSizeIndex should be multiple of 8 so
-    // that each byte in this info won't be shared across the buckets mutex
+    // 2. # of buckets per shard for FixedSizeIndex should be multiple of 8 so
+    // that each byte in this info won't be shared across the buckets shard
     // boundary
     // 3. For now, it's 2-bit for fill info and 8-bit for partial key bits. All
     // those are hard coded
@@ -228,10 +188,16 @@ class FixedSizeIndex : public Index {
       XDCHECK(numBuckets > 0);
 
       numBuckets_ = numBuckets;
+      // Using 2 bits per each bucket for fillMap info
       fillMapBufSize_ = (numBuckets - 1) / 4 + 1;
       partialBitsBufSize_ = numBuckets;
-      fillMap_ = std::make_unique<uint8_t[]>(fillMapBufSize_);
-      partialBits_ = std::make_unique<uint8_t[]>(partialBitsBufSize_);
+    }
+
+    void initWithBaseAddr(uint8_t* addr) {
+      fillMap_ = addr;
+      // Each fillMap buf is one byte and each bucket uses 2 bits from there
+      addr += fillMapBufSize_;
+      partialBits_ = addr;
     }
 
     void updateBucketFillInfo(uint64_t bucketId,
@@ -276,9 +242,11 @@ class FixedSizeIndex : public Index {
     }
     uint8_t getPartialBits(uint64_t bid) const { return partialBits_[bid]; }
 
-    std::unique_ptr<uint8_t[]> fillMap_;
+    // fillMap_ is a array of uint8_t
+    uint8_t* fillMap_{};
     uint64_t fillMapBufSize_{0};
-    std::unique_ptr<uint8_t[]> partialBits_;
+    // partialBits_ is a array of uint8_t
+    uint8_t* partialBits_{};
     uint64_t partialBitsBufSize_{0};
     uint64_t numBuckets_{0};
 
@@ -288,54 +256,221 @@ class FixedSizeIndex : public Index {
   void initialize();
 
   // Random prime numbers for the distance for next bucket slot to use.
-  static constexpr uint8_t kNextBucketOffset[4] = {0, 23, 61, 97};
+  static constexpr std::array<uint8_t, 4> kNextBucketOffset{0, 23, 61, 97};
+  // This offset will be used to indicate there's no valid bucket slot matching
+  // the given key
+  static constexpr uint8_t kInvalidBucketSlotOffset = 0xff;
+  // This bucket id will be used to indicate there's no valid bucket for the key
+  static constexpr uint64_t kInvalidBucketId = 0xffffffffffffffff;
 
-  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) const {
-    auto mid = mutexId(bid);
+  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) {
+    auto sid = shardId(bid);
+    // To store all the possible slot's bucket ids for this bid
+    std::array<uint64_t, kNextBucketOffset.size()> slotBids{};
 
     // Check if there's already one matching
-    for (auto i = 0; i < 4; i++) {
-      auto curBid = calcBucketId(bid, i);
-      // Make sure we don't go across the mutex boundary
-      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      // Store it to avoid same calculation multiple times
+      slotBids[i] = calcBucketId(bid, i);
+      // Make sure we don't go across the shard boundary
+      XDCHECK(shardId(slotBids[i]) == sid)
+          << bid << " " << i << " " << slotBids[i];
 
-      if (ht_[curBid].isValid() &&
-          bucketDistInfo_.getBucketFillOffset(curBid) == i &&
-          partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
+      // TODO: Make it more readable these if condition
+      if (ht_[slotBids[i]].isValid() && !ht_[slotBids[i]].isCombinedEntry() &&
+          bucketDistInfo_.getBucketFillOffset(slotBids[i]) == i &&
+          partialKeyBits(key) == bucketDistInfo_.getPartialKey(slotBids[i])) {
         return i;
+      }
+    }
+
+    // check if we have the entry in the combined entry block
+    if (handleOverflow_) {
+      auto res = checkCombinedIndexEntry(slotBids, key);
+      if (res != kInvalidBucketSlotOffset) {
+        return res;
       }
     }
 
     // No match. Find the empty one
-    for (auto i = 0; i < 4; i++) {
-      auto curBid = calcBucketId(bid, i);
-      // Make sure we don't go across the mutex boundary
-      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
-
-      if (!ht_[curBid].isValid()) {
-        return i;
-      }
+    auto emptySlot = findOrMakeEmptySlotByMoving(slotBids);
+    if (emptySlot.has_value()) {
+      return *emptySlot;
     }
 
-    // Let's just replace the current one
-    return 0;
+    if (handleOverflow_) {
+      // Handle overflowed bucket.
+      // If there's any combined entry slot, we can just use it
+      for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+        if (ht_[slotBids[i]].isCombinedEntry()) {
+          return i;
+        }
+      }
+
+      // There's no combined entry along the possible slots for this bid, so
+      // let's create one. We will add the current index entry to the combined
+      // entry block and store it at offset 0.
+      auto curBid = slotBids[0];
+      auto orgBid =
+          originalBucketId(curBid, bucketDistInfo_.getBucketFillOffset(curBid));
+      auto combinedBlk = createCombinedIndexBlock(curBid, orgBid, ht_[curBid]);
+      if (combinedBlk) {
+        // For now, it's just added to the combined entries map on the memory
+        combinedEntries_[sid][curBid] = std::move(combinedBlk);
+        ht_[curBid].setCombinedEntry();
+      }
+      // By returning offset 0, if createCombinedIndexBlock() couldn't create
+      // it, current entry will be just discarded . If we have created it and
+      // set it at curBid, current entry was already added to the combined blk
+      return 0;
+    } else {
+      // Let's just replace the current one
+      return 0;
+    }
   }
 
   uint8_t checkBucketOffset(uint64_t bid, uint64_t key) const {
-    auto mid = mutexId(bid);
+    // To store all the possible slot's bucket ids for this bid
+    std::array<uint64_t, kNextBucketOffset.size()> slotBids{};
 
-    for (auto i = 1; i < 4; i++) {
-      auto curBid = calcBucketId(bid, i);
-      // Make sure we don't go across the mutex boundary
-      XDCHECK(mutexId(curBid) == mid) << bid << " " << i << " " << curBid;
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      // Store it to avoid same calculation multiple times
+      slotBids[i] = calcBucketId(bid, i);
 
-      if (ht_[curBid].isValid() &&
-          bucketDistInfo_.getBucketFillOffset(curBid) == i &&
-          partialKeyBits(key) == bucketDistInfo_.getPartialKey(curBid)) {
+      // Make sure we don't go across the shard boundary
+      XDCHECK(shardId(slotBids[i]) == shardId(bid))
+          << bid << " " << i << " " << slotBids[i];
+
+      if (ht_[slotBids[i]].isValid() && !ht_[slotBids[i]].isCombinedEntry() &&
+          bucketDistInfo_.getBucketFillOffset(slotBids[i]) == i &&
+          partialKeyBits(key) == bucketDistInfo_.getPartialKey(slotBids[i])) {
         return i;
       }
     }
-    return 0;
+    return (handleOverflow_) ? checkCombinedIndexEntry(slotBids, key)
+                             : kInvalidBucketSlotOffset;
+  }
+
+  std::optional<uint8_t> findOrMakeEmptySlotByMoving(
+      const std::array<uint64_t, kNextBucketOffset.size()>& slotBids) {
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      if (!ht_[slotBids[i]].isValid()) {
+        return i;
+      }
+
+      // Don't ever move any combined entry. Combined index entry could have
+      // other org bid's entries too, and if it's moved, it'll be misplaced.
+      if (ht_[slotBids[i]].isCombinedEntry()) {
+        continue;
+      }
+
+      // If it's occupied and not for the same key's bucket, let's see if we
+      // can move it
+      auto curOffset = bucketDistInfo_.getBucketFillOffset(slotBids[i]);
+      if (curOffset != i) {
+        // Get the original bid before applying the offset.
+        auto orgBid = originalBucketId(slotBids[i], curOffset);
+        // Check if any sub bucket is empty and we can move this there
+        for (size_t sub = 0; sub < kNextBucketOffset.size(); sub++) {
+          if (sub == curOffset) {
+            continue;
+          }
+          auto checkBid = calcBucketId(orgBid, sub);
+          if (!ht_[checkBid].isValid()) {
+            // Move current one to this bucket
+            ht_[checkBid] = ht_[slotBids[i]];
+            ht_[slotBids[i]] = {};
+            bucketDistInfo_.updateBucketFillInfo(
+                checkBid, sub, bucketDistInfo_.getPartialKey(slotBids[i]));
+            // Moved, let's use this bucket.
+            return i;
+          }
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  uint8_t checkCombinedIndexEntry(
+      const std::array<uint64_t, kNextBucketOffset.size()>& slotBids,
+      uint64_t key) const {
+    auto sid = shardId(slotBids[0]);
+    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      if (ht_[slotBids[i]].isCombinedEntry()) {
+        // check if this combined entry has the index entry for the given key
+        auto it = combinedEntries_[sid].find(slotBids[i]);
+        if (it != combinedEntries_[sid].end() &&
+            it->second->peekIndexEntry(key)) {
+          return i;
+        }
+      }
+    }
+    // couldn't find the given key from the combined entry
+    return kInvalidBucketSlotOffset;
+  }
+
+  // This helper will get the proper bucket id and record entry
+  // Return value : The pair of <Bucket id, pointer to the record>
+  std::pair<uint64_t, PackedItemRecord*> getBucket(uint64_t orgBid,
+                                                   uint8_t offset) const {
+    if (offset != kInvalidBucketSlotOffset) {
+      auto bid = calcBucketId(orgBid, offset);
+      return std::make_pair(bid, &ht_[bid]);
+    } else {
+      // There's no bucket for the given key
+      return std::make_pair(kInvalidBucketId, nullptr);
+    }
+  }
+
+  // Create a combined index entry block with the initial entry record given.
+  //
+  // curBid : the bucket id that this entry is currently stored at.
+  // orgBid : the bucket id simply calculated by bucketId() (before placing it
+  //          to the slot (curBid) using partial bits and fill info)
+  //
+  std::unique_ptr<CombinedEntryBlock> createCombinedIndexBlock(
+      uint64_t curBid, uint64_t orgBid, const PackedItemRecord& record) {
+    // First, we need to get the key info with the current record.
+    auto key = retrieveKeyCb_(record.address);
+
+    if (!key) {
+      // TODO: Since we don't release the mutex for index while retrieving key
+      // hash for now, there's no case for the race condition on index access
+      // and modification. So, if we don't get the key hash, it's purely because
+      // it can't read it properly. We can just continue and discard currently
+      // stored entry.
+      return {};
+    };
+
+    // check for the integrity (if retrieved key should be placed in this
+    // bucket)
+    if (bucketId(key.value()) != orgBid ||
+        partialKeyBits(key.value()) != bucketDistInfo_.getPartialKey(curBid)) {
+      // Something is wrong. This key should not be in the current bucket.
+      XLOGF(ERR,
+            "Key hash {} seems to be stored in the incorrect bucket. Computed "
+            "bid = {} stored in bid={}, "
+            "orgBid={}, partialKey={}",
+            key.value(), bucketId(key.value()), curBid, orgBid,
+            bucketDistInfo_.getPartialKey(curBid));
+      // We will continue by discarding currently stored entry
+      return {};
+    }
+    std::unique_ptr<CombinedEntryBlock> combinedBlk =
+        std::make_unique<CombinedEntryBlock>();
+
+    // It's newly created and this must succeed
+    auto status = combinedBlk->addIndexEntry(curBid, key.value(), record);
+    if (status != CombinedEntryStatus::kOk) {
+      // Something is wrong
+      XLOGF(ERR,
+            "Adding Key hash {}, bid {} to CombinedEntryBlock failed, "
+            "status={}",
+            key.value(), curBid, status);
+      // We will continue by discarding currently stored entry
+      return {};
+    }
+    return combinedBlk;
   }
 
   // Updates hits information of a key.
@@ -343,15 +478,42 @@ class FixedSizeIndex : public Index {
                        uint8_t currentHits,
                        uint8_t totalHits) override;
 
+  // These are random prime numbers for distributing bucket id
+  static constexpr uint16_t kBucketRandomizeOffset[64] = {
+      1229, 1543, 1867, 2179, 2521, 2833, 3203, 3539, 3877, 4229, 4567,
+      4919, 5231, 5557, 5861, 6217, 1097, 1423, 1693, 2003, 3121, 3463,
+      4099, 4451, 4793, 5119, 5483, 5827, 6197, 6547, 6899, 7283, 7649,
+      5717, 6011, 7127, 7459, 7867, 8011, 8167, 8293, 8447, 8623, 8737,
+      8863, 9013, 9173, 9319, 9437, 7103, 6823, 6959, 7079, 7993, 8147,
+      8431, 8719, 9007, 9293, 9551, 9851, 2203, 4967, 5653};
+
+  // Current bit mapping from the hash (64bits) to the bucket id and others
+  // bit 0 ~ 31 : Reserved for bucket offset within chunk
+  // bit 32 ~  : Used for chunk id modulo calculation. The numChunks can be
+  //             configured as any integer up to 2^8 - 1 (8bit)
+  // bit 40 ~ 47 : Used for partial key bits (For utilizing 4 bucket slots)
+  // bit 48 ~ 61 : Used for randomizing bucket id
   uint64_t bucketId(uint64_t hash) const {
     uint64_t cid = (hash >> 32) % numChunks_;
     uint64_t bid = hash & (bucketsPerChunk_ - 1);
 
-    return ((cid << numBucketsPerChunkPower_) + bid);
+    // Random offset to further distribute bucket id by using the bits 48 ~ 61
+    // from hashed key
+    // offset will be decided by using 6bit + 6bit and 2bit as the weight
+    uint64_t randomizeOffset1 = (hash >> 48) & 0x3F;
+    uint64_t randomizeOffset2 = (hash >> 54) & 0x3F;
+    uint64_t addOffset2 = (hash >> 60) & 0x3;
+
+    // Adding calculated offset to bid to randomize distribution for the bucket
+    return (((cid << numBucketsPerChunkPower_) + bid) +
+            kBucketRandomizeOffset[randomizeOffset1] +
+            (kBucketRandomizeOffset[randomizeOffset2] << addOffset2)) %
+           totalBuckets_;
   }
 
-  uint64_t mutexId(uint64_t bucketId) const {
-    return bucketId / numBucketsPerMutex_;
+  // sharding is based on each mutex boundary
+  uint64_t shardId(uint64_t bucketId) const {
+    return bucketId / numBucketsPerShard_;
   }
 
   // Return the partial key bits to be used for hash collision open addressing
@@ -363,97 +525,136 @@ class FixedSizeIndex : public Index {
 
   // Get the next bucket id to check or use
   uint64_t calcBucketId(uint64_t bid, uint8_t offset) const {
-    // We don't want to go across the mutex boundary, so if it goes beyond that,
-    // it will wrap around and go back to the beginning of current mutex
+    // We don't want to go across the shard boundary, so if it goes beyond that,
+    // it will wrap around and go back to the beginning of current shard
     // boundary
-    return (bid / numBucketsPerMutex_) * numBucketsPerMutex_ +
-           ((bid + kNextBucketOffset[offset]) % numBucketsPerMutex_);
+    XDCHECK(offset < kNextBucketOffset.size()) << offset;
+    return (bid / numBucketsPerShard_) * numBucketsPerShard_ +
+           ((bid + kNextBucketOffset[offset]) % numBucketsPerShard_);
   }
+
+  // Some helper functions below
+  //
+
+  // Get the original bid before applying the offset. Also need to
+  // consider the wraparound on the shard boundary.
+  uint64_t originalBucketId(uint64_t curBid, uint8_t fillOffset) {
+    return ((curBid % numBucketsPerShard_) >= kNextBucketOffset[fillOffset])
+               ? curBid - kNextBucketOffset[fillOffset]
+               : curBid + numBucketsPerShard_ - kNextBucketOffset[fillOffset];
+  }
+
+  bool checkStoredConfig(const serialization::FixedSizeIndexConfig& stored);
+  size_t getRequiredPreallocSize() const;
+  std::string getShmName(const std::string_view& namePrefix) {
+    return std::string(namePrefix) + "_" + name_;
+  }
+  void initWithBaseAddr(uint8_t* addr);
 
   // Configuration related variables
   const uint32_t numChunks_{0};
   const uint8_t numBucketsPerChunkPower_{0};
-  const uint64_t numBucketsPerMutex_{0};
+  const uint64_t numBucketsPerShard_{0};
+  ShmManager* shmManager_{};
+  std::string name_;
+  // TODO: This field is probably for temporary, until it's all evaluated and
+  // validated to use flash for overflowed index entries
+  const bool handleOverflow_{false};
+  const RetrieveKeyCallback retrieveKeyCb_;
 
   uint64_t bucketsPerChunk_{0};
   uint64_t totalBuckets_{0};
-  uint64_t totalMutexes_{0};
+  uint64_t totalShards_{0};
 
-  std::unique_ptr<PackedItemRecord[]> ht_;
-  std::unique_ptr<SharedMutex[]> mutex_;
-  // The size for ht (stored bucket count) will be managed per Mutex basis
-  std::unique_ptr<size_t[]> sizeForMutex_;
+  // ht_ is a array of PackedItemRecord
+  PackedItemRecord* ht_{};
+
+  using SharedMutexType =
+      trace::Profiled<SharedMutex, "cachelib:navy:bc_fixed_index">;
+  std::unique_ptr<SharedMutexType[]> mutex_;
+
+  // The size for ht (stored bucket count) will be managed per each shard
+  // validBucketsPerShard_ is a array of size_t
+  size_t* validBucketsPerShard_{};
+
+  // Before we fully use flash for combined entries, this is an intermediate
+  // step to maintain combined entries only on memory.
+  std::unique_ptr<
+      folly::F14FastMap<uint64_t, std::unique_ptr<CombinedEntryBlock>>[]>
+      combinedEntries_;
 
   BucketDistInfo bucketDistInfo_;
 
   // A helper class for exclusive locked access to a bucket.
-  // It will lock the proper mutex with the given key when it's created.
-  // recordRef() and sizeRef() will return the record and size with exclusively
-  // locked bucket reference.
-  // Locked mutex will be released when it's destroyed.
+  // It will lock the mutex for the shard with the given key when it's created.
+  // recordPtr() and validBucketCntRef() will return the record and
+  // valid bucket count with exclusively locked bucket. Locked
+  // mutex will be released when it's destroyed.
   class ExclusiveLockedBucket {
    public:
     explicit ExclusiveLockedBucket(uint64_t key,
                                    FixedSizeIndex& index,
                                    bool alloc)
         : bid_(index.bucketId(key)),
-          mid_{index.mutexId(bid_)},
-          lg_{index.mutex_[mid_]},
-          record_{&index.ht_[bid_]},
-          size_{index.sizeForMutex_[mid_]} {
+          sid_{index.shardId(bid_)},
+          lg_{index.mutex_[sid_]},
+          validBuckets_{index.validBucketsPerShard_[sid_]} {
       auto offset = alloc ? index.decideBucketOffset(bid_, key)
                           : index.checkBucketOffset(bid_, key);
-      if (offset != 0) {
-        bid_ = index.calcBucketId(bid_, offset);
-        record_ = &index.ht_[bid_];
-        bucketOffset_ = offset;
-      }
+      std::tie(bid_, record_) = index.getBucket(bid_, offset);
+      bucketOffset_ = offset;
     }
 
-    PackedItemRecord& recordRef() { return *record_; }
-    size_t& sizeRef() { return size_; }
+    PackedItemRecord* recordPtr() { return record_; }
+    size_t& validBucketCntRef() { return validBuckets_; }
     void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
-      index.bucketDistInfo_.updateBucketFillInfo(
-          bid_, bucketOffset_, index.partialKeyBits(key));
+      if (bucketOffset_ != kInvalidBucketSlotOffset) {
+        index.bucketDistInfo_.updateBucketFillInfo(bid_, bucketOffset_,
+                                                   index.partialKeyBits(key));
+      }
     }
+    bool isValidRecord() const {
+      return (record_ != nullptr && record_->isValid());
+    }
+    bool bucketExist() const { return record_ != nullptr; }
 
    private:
     uint64_t bid_;
-    uint64_t mid_;
-    std::lock_guard<SharedMutex> lg_;
-    PackedItemRecord* record_;
-    size_t& size_;
-    uint8_t bucketOffset_{0};
+    uint64_t sid_;
+    std::lock_guard<SharedMutexType> lg_;
+    size_t& validBuckets_;
+    PackedItemRecord* record_{};
+    uint8_t bucketOffset_{kInvalidBucketSlotOffset};
   };
 
   // A helper class for shared locked access to a bucket.
   // It will lock the proper mutex with the given key when it's created.
-  // recordRef() will return the record with shared locked bucket reference.
+  // recordPtr() will return the record with shared locked bucket.
   // Locked mutex will be released when it's destroyed.
   class SharedLockedBucket {
    public:
     explicit SharedLockedBucket(uint64_t key, const FixedSizeIndex& index)
         : bid_(index.bucketId(key)),
-          mid_{index.mutexId(bid_)},
-          lg_{index.mutex_[mid_]},
-          record_{&index.ht_[bid_]} {
+          sid_{index.shardId(bid_)},
+          lg_{index.mutex_[sid_]} {
       // check next bucket if it should be used
-      auto offset = (index.checkBucketOffset(bid_, key));
-      if (offset != 0) {
-        bid_ = index.calcBucketId(bid_, offset);
-        record_ = &index.ht_[bid_];
-      }
+      std::tie(bid_, record_) =
+          index.getBucket(bid_, index.checkBucketOffset(bid_, key));
     }
 
-    const PackedItemRecord& recordRef() const { return *record_; }
+    const PackedItemRecord* recordPtr() const { return record_; }
+    bool isValidRecord() const {
+      return (record_ != nullptr && record_->isValid());
+    }
 
    private:
     uint64_t bid_;
-    uint64_t mid_;
-    std::shared_lock<SharedMutex> lg_;
-    const PackedItemRecord* record_;
+    uint64_t sid_;
+    std::shared_lock<SharedMutexType> lg_;
+    const PackedItemRecord* record_{};
   };
 
+  friend class CombinedEntryBlock;
 // For unit tests private member access
 #ifdef FixedSizeIndex_TEST_FRIENDS
   FixedSizeIndex_TEST_FRIENDS;

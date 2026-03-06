@@ -49,6 +49,10 @@ class MapTest;
 class CacheAllocatorTestWrapper;
 } // namespace tests
 
+namespace interface {
+class RAMCacheItem;
+} // namespace interface
+
 // forward declaration
 template <typename CacheTrait>
 class CacheAllocator;
@@ -148,6 +152,11 @@ class CACHELIB_PACKED_ATTR CacheItem {
   //         0 otherwise
   static uint32_t getRequiredSize(Key key, uint32_t size) noexcept;
 
+  // Same as above but explicitly passes in the key size.  Can be used in
+  // checks and compile-time constants.
+  static constexpr uint32_t getRequiredSize(uint32_t keySize,
+                                            uint32_t size) noexcept;
+
   // Get the number of maximum outstanding handles there can be at any given
   // time for an item
   static uint64_t getRefcountMax() noexcept;
@@ -160,6 +169,10 @@ class CACHELIB_PACKED_ATTR CacheItem {
 
   // Fetch the key corresponding to the allocation
   const Key getKey() const noexcept;
+
+  // Same as above but safe to call for unallocated data.  User must specify an
+  // allocation size.
+  const Key getKeySized(uint32_t allocSize) const noexcept;
 
   // Readonly memory for this allocation.
   const void* getMemory() const noexcept;
@@ -453,6 +466,9 @@ class CACHELIB_PACKED_ATTR CacheItem {
   template <typename K, typename V, typename C>
   friend class Map;
 
+  // interface
+  friend class interface::RAMCacheItem;
+
   // tests
   template <typename AllocatorT>
   friend class facebook::cachelib::tests::BaseAllocatorTest;
@@ -582,11 +598,25 @@ class CACHELIB_PACKED_ATTR CacheChainedItem : public CacheItem<CacheTrait> {
 template <typename CacheTrait>
 uint32_t CacheItem<CacheTrait>::getRequiredSize(Key key,
                                                 uint32_t size) noexcept {
-  const uint64_t requiredSize =
-      static_cast<uint64_t>(size) + key.size() + sizeof(Item);
+  const uint64_t requiredSize = static_cast<uint64_t>(size) + key.size() +
+                                sizeof(Item) +
+                                KAllocation::extraBytesForLargeKeys(key.size());
 
   XDCHECK_LE(requiredSize,
              static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()));
+  if (requiredSize >
+      static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+    return 0;
+  }
+  return static_cast<uint32_t>(requiredSize);
+}
+
+template <typename CacheTrait>
+constexpr uint32_t CacheItem<CacheTrait>::getRequiredSize(
+    uint32_t keySize, uint32_t size) noexcept {
+  const uint64_t requiredSize = static_cast<uint64_t>(size) + keySize +
+                                sizeof(Item) +
+                                KAllocation::extraBytesForLargeKeys(keySize);
   if (requiredSize >
       static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
     return 0;
@@ -614,6 +644,12 @@ template <typename CacheTrait>
 const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKey()
     const noexcept {
   return alloc_.getKey();
+}
+
+template <typename CacheTrait>
+const typename CacheItem<CacheTrait>::Key CacheItem<CacheTrait>::getKeySized(
+    uint32_t allocSize) const noexcept {
+  return alloc_.getKeySized(allocSize);
 }
 
 template <typename CacheTrait>
@@ -664,21 +700,7 @@ uint32_t CacheItem<CacheTrait>::getExpiryTime() const noexcept {
 
 template <typename CacheTrait>
 bool CacheItem<CacheTrait>::isExpired() const noexcept {
-  thread_local uint32_t staleTime = 0;
-
-  if (expiryTime_ == 0) {
-    return false;
-  }
-
-  if (expiryTime_ < staleTime) {
-    return true;
-  }
-
-  uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
-  if (currentTime != staleTime) {
-    staleTime = currentTime;
-  }
-  return expiryTime_ < currentTime;
+  return util::isExpired(expiryTime_);
 }
 
 template <typename CacheTrait>

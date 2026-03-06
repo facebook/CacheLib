@@ -26,6 +26,7 @@
 #include <memory>
 
 #include "cachelib/common/ConditionVariable.h"
+#include "cachelib/common/Profiled.h"
 
 namespace facebook {
 namespace cachelib {
@@ -36,6 +37,7 @@ class NavyThread;
 // @return the current NavyThread context if running on NavyThread. nullptr
 // otherwise.
 NavyThread* getCurrentNavyThread();
+bool isOnNavyThread();
 
 /**
  * NavyThread is a wrapper class that wraps folly::ScopedEventBaseThread and
@@ -76,13 +78,13 @@ class NavyThread {
    */
   void addTaskRemote(folly::Func func) {
     {
-      std::unique_lock<folly::fibers::TimedMutex> lk(drainMutex_);
+      std::unique_lock lk(drainMutex_);
       numRunning_++;
     }
 
     fm_->addTaskRemote([this, func = std::move(func)]() mutable {
       func();
-      std::unique_lock<folly::fibers::TimedMutex> lk(drainMutex_);
+      std::unique_lock lk(drainMutex_);
       XDCHECK_GT(numRunning_, 0u);
       if (--numRunning_ == 0u) {
         drainCond_.notifyAll();
@@ -99,13 +101,13 @@ class NavyThread {
    */
   void addTask(folly::Func func) {
     {
-      std::unique_lock<folly::fibers::TimedMutex> lk(drainMutex_);
+      std::unique_lock lk(drainMutex_);
       numRunning_++;
     }
 
     fm_->addTask([this, func = std::move(func)]() mutable {
       func();
-      std::unique_lock<folly::fibers::TimedMutex> lk(drainMutex_);
+      std::unique_lock lk(drainMutex_);
       XDCHECK_GT(numRunning_, 0u);
       if (--numRunning_ == 0u) {
         drainCond_.notifyAll();
@@ -117,7 +119,7 @@ class NavyThread {
    * Wait until tasks are drained
    */
   void drain() {
-    std::unique_lock<folly::fibers::TimedMutex> lk(drainMutex_);
+    std::unique_lock lk(drainMutex_);
     if (numRunning_ == 0) {
       return;
     }
@@ -138,7 +140,7 @@ class NavyThread {
   folly::fibers::FiberManager* fm_;
 
   size_t numRunning_{0};
-  folly::fibers::TimedMutex drainMutex_;
+  trace::Profiled<folly::fibers::TimedMutex, "cachelib:navy:drain"> drainMutex_;
   util::ConditionVariable drainCond_;
 };
 

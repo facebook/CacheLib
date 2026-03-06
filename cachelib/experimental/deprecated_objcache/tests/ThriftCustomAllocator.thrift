@@ -21,6 +21,9 @@ cpp_include "cachelib/experimental/deprecated_objcache/tests/Common.h"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
 
+@thrift.AllowLegacyMissingUris
+package;
+
 @thrift.DeprecatedUnvalidatedAnnotations{
   items = {
     "cpp.allocator": "facebook::cachelib::objcache::test::ScopedTestAllocator",

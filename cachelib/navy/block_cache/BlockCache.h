@@ -16,28 +16,27 @@
 
 #pragma once
 
-#include <atomic>
-#include <chrono>
 #include <memory>
-#include <stdexcept>
 #include <vector>
 
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
+#include "cachelib/allocator/nvmcache/NvmItem.h"
 #include "cachelib/common/AtomicCounter.h"
-#include "cachelib/common/CompilerUtils.h"
+#include "cachelib/common/EventInterface.h"
 #include "cachelib/navy/block_cache/Allocator.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
-#include "cachelib/navy/block_cache/HitsReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/Index.h"
-#include "cachelib/navy/block_cache/PercentageReinsertionPolicy.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
 #include "cachelib/navy/common/Device.h"
-#include "cachelib/navy/common/SizeDistribution.h"
 #include "cachelib/navy/engine/Engine.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
+namespace interface {
+class FlashCacheComponent;
+class FlashCacheItem;
+} // namespace interface
+
 namespace navy {
 class JobScheduler;
 
@@ -48,6 +47,7 @@ class BlockCache final : public Engine {
   // See CacheProto for details
   struct Config {
     Device* device{};
+    NavyPersistParams persistParams{};
     ExpiredCheck checkExpired;
     DestructorCallback destructorCb;
     // Checksum data read/written
@@ -62,8 +62,6 @@ class BlockCache final : public Engine {
     uint64_t regionSize{16 * 1024 * 1024};
     // See AbstractCacheProto::setReadBufferSize
     uint32_t readBufferSize{};
-    // Job scheduler for background tasks
-    JobScheduler* scheduler{};
     // Clean region pool size
     uint32_t cleanRegionsPool{1};
     // The number of region_manager threads for reclaim and flush
@@ -76,7 +74,9 @@ class BlockCache final : public Engine {
     // whether ItemDestructor is enabled
     bool itemDestructorEnabled{false};
 
-    // Maximum number of retry times for in-mem buffer flushing.
+    std::optional<std::reference_wrapper<LegacyEventTracker>>
+        legacyEventTracker;
+
     // When exceeding the limit, we will not reschedule any flushing job but
     // directly fail it.
     uint16_t inMemBufFlushRetryLimit{10};
@@ -92,6 +92,10 @@ class BlockCache final : public Engine {
     bool preciseRemove{false};
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
+    // Whether to enable the clean region fast path in getCleanRegion().
+    bool cleanRegionFastPath{false};
+    // name of this BC instance
+    std::string name{};
 
     // Index related config
     BlockCacheIndexConfig indexConfig{};
@@ -114,7 +118,7 @@ class BlockCache final : public Engine {
   explicit BlockCache(Config&& config);
   BlockCache(const BlockCache&) = delete;
   BlockCache& operator=(const BlockCache&) = delete;
-  ~BlockCache() override = default;
+  ~BlockCache() override;
 
   // return the size of usable space
   uint64_t getSize() const override { return regionManager_.getSize(); }
@@ -201,6 +205,11 @@ class BlockCache final : public Engine {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(uint32_t lifetime) override {
+    bcLifetimeSecs_.trackValue(lifetime);
+  }
+
   // The minimum alloc alignment size can be as small as 1. Since the
   // test cases have very small device size, they will end up with alloc
   // alignment size of 1 (if determined as device_size >> 32 ) and we may
@@ -250,33 +259,86 @@ class BlockCache final : public Engine {
   struct ValidConfigTag {};
   BlockCache(Config&& config, ValidConfigTag);
 
-  static std::unique_ptr<Index> createIndex(
-      const BlockCacheIndexConfig& indexConfig);
+  std::unique_ptr<Index> createIndex(const BlockCacheIndexConfig& indexConfig,
+                                     const NavyPersistParams& persistParams,
+                                     const std::string& name);
 
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
 
-  // Read and write are time consuming. It doesn't worth inlining them from
-  // the performance point of view, but makes sense to track them for perf:
-  // especially portion on CPU time spent in std::memcpy.
+  // Allocate a slot from the allocator
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value
+  // @param priority    priority of async operation
+  // @param canWait     whether to wait if space isn't currently available
+  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateImpl(
+      const HashedKey& hk,
+      const uint32_t valueSize,
+      const uint16_t priority,
+      const bool canWait);
+
+  // Allocate a slot for inserting into cache
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value
+  folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
+  allocateForInsert(const HashedKey& hk, const uint32_t valueSize);
+
+  // Write the entry descriptor and cache item key into the item buffer
+  // @param buffer      buffer to write into
+  // @param hk          key to be inserted
+  // @param valueSize   size of the value to be inserted
+  static EntryDesc* writeEntryDescAndKey(Buffer& buffer,
+                                         const HashedKey& hk,
+                                         uint32_t valueSize);
+
+  struct LookupData {
+    Buffer buffer_;
+    RegionDescriptor desc_;
+    uint32_t valueSize_{0};
+    Status status_{Status::Ok};
+  };
+
+  // Lookup the item, returning everything unmodified to the caller.
+  // @param hk          key to be looked up
+  LookupData lookupInternal(HashedKey hk);
+
+  // Read and write are time consuming. It isn't worth inlining them from a
+  // performance point of view, but makes sense to track them for performance,
+  // especially the CPU time spent in std::memcpy.
   // @param addr        Address to write this entry into
-  // @param slotSize    Number of bytes this entry will take up on the device
+  // @param size        Number of bytes this entry will take up on the device
   // @param hk          Key of the entry
   // @param value       Payload of the entry
-  Status writeEntry(RelAddress addr,
-                    uint32_t slotSize,
-                    HashedKey hk,
-                    BufferView value);
-  // @param readDesc      Descriptor for reading. This must be valid
-  // @param addrEnd       End of the entry since the item layout is backward
-  // @param approxSize    Approximate size since we got this size from index
-  // @param expected      We expect the entry's key to match with our key
-  // @param value         We will write the payload into this buffer
-  Status readEntry(const RegionDescriptor& readDesc,
+  void writeEntry(RelAddress addr,
+                  uint32_t size,
+                  HashedKey hk,
+                  BufferView value);
+  // @param ld          LookupData containing the entry metadata for reading
+  // @param addrEnd     End of the entry since the item layout is backward
+  // @param approxSize  Approximate size since we got this size from index
+  // @param expected    We expect the entry's key to match with our key
+  Status readEntry(LookupData& ld,
                    RelAddress addrEnd,
                    uint32_t approxSize,
-                   HashedKey expected,
-                   Buffer& value);
+                   HashedKey expected);
+
+  // Update the index with the new entry
+  // @param keyHash      Hash of the key
+  // @param size         Full size of cache item on disk (allocated slot)
+  // @param addr         Address of the entry
+  // @param allowReplace Whether to allow replacing an existing entry or not
+  // @return true if the index was updated, false if the key already exists and
+  // allowReplace is false
+  bool updateIndex(uint64_t keyHash,
+                   uint32_t size,
+                   const RelAddress& addr,
+                   bool allowReplace) const;
+
+  // Remove an item previously found via lookup
+  // @param hk          key to be removed
+  // @param value       value populated with data read from lookup used for
+  //                    precise remove and item destructor callback
+  Status removeImpl(const HashedKey& hk, const Buffer& value);
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
@@ -284,6 +346,21 @@ class BlockCache final : public Engine {
 
   // Allocator cleanup callback
   void onRegionCleanup(RegionId rid, BufferView buffer);
+
+  // Retrieve the key hash by reading the entry from the region.
+  // Will be used as a callback for Index so that Index can retrieve the key
+  // info using the location info. (Index may maintain only the partial key
+  // hash). If it fails to retrieve key hash for whatever reason (mostly because
+  // it's blocked for read when region's being released after reclaim), it will
+  // fail to retrieve and return nullopt.
+  //
+  // IMPORTANT: It's caller's responsibility to sync up between this retrieval
+  // and the Index change (location change from the other operations : reclaim,
+  // insert, remove, etc.)
+  // Since location is given by the caller, there's no way to resolve race
+  // condition within this function, and here it will just assume the proper
+  // location was given by the caller.
+  std::optional<uint64_t> onKeyHashRetrievalFromLocation(uint32_t address);
 
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
@@ -325,31 +402,37 @@ class BlockCache final : public Engine {
     return regionManager_.toRelative(decodeAbsAddress(code).sub(1)).add(1);
   }
 
-  enum class ReinsertionRes {
-    // Item was reinserted back into the cache
-    kReinserted,
-    // Item was removed by user earlier
-    kRemoved,
-    // Item wasn't eligible for re-insertion and was evicted
-    kEvicted,
-  };
-  ReinsertionRes reinsertOrRemoveItem(HashedKey hk,
-                                      BufferView value,
-                                      uint32_t entrySize,
-                                      RelAddress currAddr);
+  void recordEvent(folly::StringPiece key,
+                   AllocatorApiEvent event,
+                   AllocatorApiResult result,
+                   uint32_t size,
+                   const NvmItem* nvmItem = nullptr);
+
+  AllocatorApiResult reinsertOrRemoveItem(HashedKey hk,
+                                          BufferView value,
+                                          uint32_t entrySize,
+                                          RelAddress currAddr,
+                                          const EntryDesc& entryDesc);
 
   // Removes an entry key from the index.
-  // @return true if the item is successfully removed; false if the item cannot
+  // @return true if the item is successfully removed; false if the item
+  // cannot
   //         be found or was removed earlier.
   bool removeItem(HashedKey hk, RelAddress currAddr);
 
   void validate(Config& config) const;
+
+  void initializeBlockCache();
 
   // Create the reinsertion policy from config.
   // This function may need a reference to index and should be called the last
   // in the initialization order.
   std::shared_ptr<BlockCacheReinsertionPolicy> makeReinsertionPolicy(
       const BlockCacheReinsertionConfig& reinsertionConfig);
+
+  // Helpers for hole accounting
+  void addHole(uint32_t size) const;
+  void removeHole(uint32_t size) const;
 
   const serialization::BlockCacheConfig config_;
   const uint16_t numPriorities_{};
@@ -371,8 +454,8 @@ class BlockCache final : public Engine {
   const bool preciseRemove_{false};
 
   // Index stores offset of the slot *end*. This enables efficient paradigm
-  // "buffer pointer is value pointer", which means value has to be at offset 0
-  // of the slot and header (EntryDescriptor) at the end.
+  // "buffer pointer is value pointer", which means value has to be at offset
+  // 0 of the slot and header (EntryDescriptor) at the end.
   //
   // ----------------------------------------------------
   // |     Value                    |  EntryDescriptor  |
@@ -386,6 +469,7 @@ class BlockCache final : public Engine {
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;
+  std::optional<std::reference_wrapper<LegacyEventTracker>> legacyEventTracker_;
 
   // thread local counters in synchronized/critical path
   mutable TLCounter lookupCount_;
@@ -421,6 +505,14 @@ class BlockCache final : public Engine {
   mutable AtomicCounter cleanupValueChecksumErrorCount_;
   mutable AtomicCounter lookupForItemDestructorErrorCount_;
   mutable AtomicCounter excessiveReadBytes_;
+
+  mutable util::PercentileStats bcLifetimeSecs_;
+  mutable util::PercentileStats insertLatency_;
+  mutable util::PercentileStats lookupLatency_;
+  mutable util::PercentileStats removeLatency_;
+
+  friend class interface::FlashCacheComponent;
+  friend class interface::FlashCacheItem;
 };
 } // namespace navy
 } // namespace cachelib

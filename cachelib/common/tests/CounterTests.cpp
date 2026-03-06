@@ -50,7 +50,7 @@ TEST(TLCounter, AddSubIncDecBasic) {
 void runInThreads(int nThreads, const std::function<void()>& f) {
   std::vector<std::thread> threads;
   for (int i = 0; i < nThreads; i++) {
-    threads.push_back(std::thread(f));
+    threads.emplace_back(f);
   }
 
   for (auto& t : threads) {

@@ -78,7 +78,7 @@ class NandWritesTest : public Test {
   std::shared_ptr<MockProcessFactory> mockFactory_;
 };
 
-constexpr auto& kNvmePath = "/usr/sbin/nvme";
+constexpr auto& kNvmePath = "/usr/local/sbin/nvme";
 
 // If we fail to run the nvme command, nandWriteBytes should throw an
 // invalid_argument.
@@ -105,16 +105,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "EDA78F2Q",
-      "Index" : 0,
-      "ModelNumber" : "SAMSUNG MZ1LB1T9HALS-000FB",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "S41RNF0M207885",
-      "UsedBytes" : 1880372846592,
-      "MaximumLBA" : 459076086,
-      "PhysicalSize" : 1880375648256,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "S41RNF0M207885",
+              "ModelNumber" : "SAMSUNG MZ1LB1T9HALS-000FB",
+              "Firmware" : "EDA78F2Q",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 1880372846592,
+                  "MaximumLBA" : 459076086,
+                  "PhysicalSize" : 1880375648256,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -163,40 +177,74 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungPM983aDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "10105120",
-      "Index" : 0,
-      "ModelNumber" : "WDC CL SN720 SDAQNTW-512G-1020",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "200405805037",
-      "UsedBytes" : 512110190592,
-      "MaximumLBA" : 1000215216,
-      "PhysicalSize" : 512110190592,
-      "SectorSize" : 512
-    },
-    {
-      "DevicePath" : "/dev/nvme1n1",
-      "Firmware" : "EDW73F2Q",
-      "Index" : 1,
-      "ModelNumber" : "MZ1LB960HBJR-000FB",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "S5XBNE0N300490",
-      "UsedBytes" : 497998016512,
-      "MaximumLBA" : 122096646,
-      "PhysicalSize" : 500107862016,
-      "SectorSize" : 4096
-    },
-    {
-      "DevicePath" : "/dev/nvme2n1",
-      "Firmware" : "EDW73F2Q",
-      "Index" : 2,
-      "ModelNumber" : "MZ1LB960HBJR-000FB",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "S5XBNE0N300481",
-      "UsedBytes" : 498003058688,
-      "MaximumLBA" : 122096646,
-      "PhysicalSize" : 500107862016,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "200405805037",
+              "ModelNumber" : "WDC CL SN720 SDAQNTW-512G-1020",
+              "Firmware" : "10105120",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 512110190592,
+                  "MaximumLBA" : 1000215216,
+                  "PhysicalSize" : 512110190592,
+                  "SectorSize" : 512
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme1",
+              "SerialNumber" : "S5XBNE0N300490",
+              "ModelNumber" : "MZ1LB960HBJR-000FB",
+              "Firmware" : "EDW73F2Q",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme1n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 497998016512,
+                  "MaximumLBA" : 122096646,
+                  "PhysicalSize" : 500107862016,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme2",
+              "SerialNumber" : "S5XBNE0N300481",
+              "ModelNumber" : "MZ1LB960HBJR-000FB",
+              "Firmware" : "EDW73F2Q",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme2n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 498003058688,
+                  "MaximumLBA" : 122096646,
+                  "PhysicalSize" : 500107862016,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -244,43 +292,74 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSamsungPM9A3Device) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "P1FB007",
-      "Index" : 0,
-      "NameSpace" : 1,
-      "ModelNumber" : "MTFDHBA512TCK",
-      "ProductName" : "Non-Volatile memory controller: Micron Technology Inc Device 0x5410",
-      "SerialNumber" : "        21062E6B8061",
-      "UsedBytes" : 512110190592,
-      "MaximumLBA" : 1000215216,
-      "PhysicalSize" : 512110190592,
-      "SectorSize" : 512
-    },
-    {
-      "DevicePath" : "/dev/nvme1n1",
-      "Firmware" : "GDA82F2Q",
-      "Index" : 1,
-      "NameSpace" : 1,
-      "ModelNumber" : "MZOL23T8HCLS-00AFB",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "S5X9NG0T116005",
-      "UsedBytes" : 104910848,
-      "MaximumLBA" : 918149526,
-      "PhysicalSize" : 3760740458496,
-      "SectorSize" : 4096
-    },
-    {
-      "DevicePath" : "/dev/nvme2n1",
-      "Firmware" : "GDA82F2Q",
-      "Index" : 2,
-      "NameSpace" : 1,
-      "ModelNumber" : "MZOL23T8HCLS-00AFB",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "S5X9NG0T116027",
-      "UsedBytes" : 0,
-      "MaximumLBA" : 918149526,
-      "PhysicalSize" : 3760740458496,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "        21062E6B8061",
+              "ModelNumber" : "MTFDHBA512TCK",
+              "Firmware" : "P1FB007",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 512110190592,
+                  "MaximumLBA" : 1000215216,
+                  "PhysicalSize" : 512110190592,
+                  "SectorSize" : 512
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme1",
+              "SerialNumber" : "S5X9NG0T116005",
+              "ModelNumber" : "MZOL23T8HCLS-00AFB",
+              "Firmware" : "GDA82F2Q",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme1n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 104910848,
+                  "MaximumLBA" : 918149526,
+                  "PhysicalSize" : 3760740458496,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme2",
+              "SerialNumber" : "S5X9NG0T116027",
+              "ModelNumber" : "MZOL23T8HCLS-00AFB",
+              "Firmware" : "GDA82F2Q",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme2n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 0,
+                  "MaximumLBA" : 918149526,
+                  "PhysicalSize" : 3760740458496,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -334,16 +413,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSeagateDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "PA00FB0C",
-      "Index" : 0,
-      "ModelNumber" : "XM1441-1AB112048",
-      "ProductName" : "Non-Volatile memory controller: Seagate Technology PLC Nytro Flash Storage Nytro XM1440",
-      "SerialNumber" : "HE6016KT",
-      "UsedBytes" : 1920383410176,
-      "MaximumLBA" : 468843606,
-      "PhysicalSize" : 1920383410176,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "HE6016KT",
+              "ModelNumber" : "XM1441-1AB112048",
+              "Firmware" : "PA00FB0C",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 1920383410176,
+                  "MaximumLBA" : 468843606,
+                  "PhysicalSize" : 1920383410176,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -391,16 +484,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesWesternDigitalDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme1n1",
-      "Firmware" : "R9109005",
-      "Index" : 1,
-      "ModelNumber" : "WUS4BB019D4M9E7",
-      "ProductName" : "Non-Volatile memory controller: Western Digital Device 0x2401",
-      "SerialNumber" : "44203690005610",
-      "UsedBytes" : 477467774976,
-      "MaximumLBA" : 122096646,
-      "PhysicalSize" : 500107862016,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme1",
+              "SerialNumber" : "44203690005610",
+              "ModelNumber" : "WUS4BB019D4M9E7",
+              "Firmware" : "R9109005",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme1n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 477467774976,
+                  "MaximumLBA" : 122096646,
+                  "PhysicalSize" : 500107862016,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -449,16 +556,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesToshibaDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "1CET6105",
-      "Index" : 0,
-      "ModelNumber" : "KXD51LN11T92 TOSHIBA",
-      "ProductName" : "Non-Volatile memory controller: Toshiba America Info Systems Device 0x0119",
-      "SerialNumber" : "69DS10OHT7RQ",
-      "UsedBytes" : 1920383078400,
-      "MaximumLBA" : 468843606,
-      "PhysicalSize" : 1920383410176,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "69DS10OHT7RQ",
+              "ModelNumber" : "KXD51LN11T92 TOSHIBA",
+              "Firmware" : "1CET6105",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 1920383078400,
+                  "MaximumLBA" : 468843606,
+                  "PhysicalSize" : 1920383410176,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -505,42 +626,75 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesLiteonDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "1CET6105",
-      "Index" : 0,
-      "ModelNumber" : "KXD51LN11T92 TOSHIBA",
-      "ProductName" : "Non-Volatile memory controller: Toshiba America Info Systems Device 0x0119",
-      "SerialNumber" : "69DS10OHT7RQ",
-      "UsedBytes" : 1920383078400,
-      "MaximumLBA" : 468843606,
-      "PhysicalSize" : 1920383410176,
-      "SectorSize" : 4096
-    },
-    {
-      "DevicePath" : "/dev/nvme1n1",
-      "Firmware" : "CMWF2P3",
-      "Index" : 1,
-      "ModelNumber" : "SSSTC EPX-KW960",
-      "ProductName" : "Non-Volatile memory controller: Vendor 0x1e95 Device 0x23a0",
-      "SerialNumber" : "002303560014FA0B",
-      "UsedBytes" : 498103652352,
-      "MaximumLBA" : 122096646,
-      "PhysicalSize" : 500107862016,
-      "SectorSize" : 4096
-    },
-    {
-      "DevicePath" : "/dev/nvme2n1",
-      "Firmware" : "CMWF2P3",
-      "Index" : 2,
-      "ModelNumber" : "SSSTC EPX-KW960",
-      "ProductName" : "Non-Volatile memory controller: Vendor 0x1e95 Device 0x23a0",
-      "SerialNumber" : "002303560014FA0C",
-      "UsedBytes" : 498110795776,
-      "MaximumLBA" : 122096646,
-      "PhysicalSize" : 500107862016,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "69DS10OHT7RQ",
+              "ModelNumber" : "KXD51LN11T92 TOSHIBA",
+              "Firmware" : "1CET6105",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 1920383078400,
+                  "MaximumLBA" : 468843606,
+                  "PhysicalSize" : 1920383410176,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme1",
+              "SerialNumber" : "002303560014FA0B",
+              "ModelNumber" : "SSSTC EPX-KW960",
+              "Firmware" : "CMWF2P3",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme1n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 498103652352,
+                  "MaximumLBA" : 122096646,
+                  "PhysicalSize" : 500107862016,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme2",
+              "SerialNumber" : "002303560014FA0C",
+              "ModelNumber" : "SSSTC EPX-KW960",
+              "Firmware" : "CMWF2P3",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme2n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 498110795776,
+                  "MaximumLBA" : 122096646,
+                  "PhysicalSize" : 500107862016,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
-
   ]
 })EOF";
 
@@ -583,40 +737,74 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesSkhmsDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "41021C20",
-      "Index" : 0,
-      "ModelNumber" : "HFS512GDE9X083N",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "CN08Q749810308S3J",
-      "UsedBytes" : 512110190592,
-      "MaximumLBA" : 500118192,
-      "PhysicalSize" : 512110190592,
-      "SectorSize" : 512
-    },
-    {
-      "DevicePath" : "/dev/nvme1n1",
-      "Firmware" : "41021C20",
-      "Index" : 1,
-      "ModelNumber" : "HFS512GDE9X083N",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "CN08Q749810308S3J",
-      "UsedBytes" : 497998016512,
-      "MaximumLBA" : 500118192,
-      "PhysicalSize" : 512110190592,
-      "SectorSize" : 4096
-    },
-    {
-      "DevicePath" : "/dev/nvme2n1",
-      "Firmware" : "41021C20",
-      "Index" : 2,
-      "ModelNumber" : "HFS512GDE9X083N",
-      "ProductName" : "Unknown device",
-      "SerialNumber" : "CN08Q749810308S3J",
-      "UsedBytes" : 498003058688,
-      "MaximumLBA" : 500118192,
-      "PhysicalSize" : 512110190592,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "CN08Q749810308S3J",
+              "ModelNumber" : "HFS512GDE9X083N",
+              "Firmware" : "41021C20",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 512110190592,
+                  "MaximumLBA" : 500118192,
+                  "PhysicalSize" : 512110190592,
+                  "SectorSize" : 512
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme1",
+              "SerialNumber" : "CN08Q749810308S3J",
+              "ModelNumber" : "HFS512GDE9X083N",
+              "Firmware" : "41021C20",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme1n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 497998016512,
+                  "MaximumLBA" : 500118192,
+                  "PhysicalSize" : 512110190592,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        },
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme2",
+              "SerialNumber" : "CN08Q749810308S3J",
+              "ModelNumber" : "HFS512GDE9X083N",
+              "Firmware" : "41021C20",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme2n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 498003058688,
+                  "MaximumLBA" : 500118192,
+                  "PhysicalSize" : 512110190592,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -671,16 +859,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesIntelDevice) {
   constexpr auto& kListOutput = R"EOF({
   "Devices" : [
     {
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "8DV1FF05",
-      "Index" : 0,
-      "ModelNumber" : "INTEL SSDPEDME016T4F",
-      "ProductName" : "Non-Volatile memory controller: Intel Corporation PCIe Data Center SSD DC P3600 SSD [Add-in Card]",
-      "SerialNumber" : "CVMD7426005S1P6SGN",
-      "UsedBytes" : 1600321314816,
-      "MaximumLBA" : 390703446,
-      "PhysicalSize" : 1600321314816,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "CVMD7426005S1P6SGN",
+              "ModelNumber" : "INTEL SSDPEDME016T4F",
+              "Firmware" : "8DV1FF05",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 1600321314816,
+                  "MaximumLBA" : 390703446,
+                  "PhysicalSize" : 1600321314816,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]
 })EOF";
@@ -719,17 +921,30 @@ TEST_F(NandWritesTest, nandWriteBytes_handlesOcpSupportedDevice_ModelListed) {
   constexpr auto* kListOutput = R"EOF({
   "Devices" : [
     {
-      "NameSpace" : 1,
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "RG109W08",
-      "Index" : 0,
-      "ModelNumber" : "WUS6A7619PJP8X7",
-      "ProductName" : "Non-Volatile memory controller: Western Digital Device 0x2750",
-      "SerialNumber" : "232439E0007010",
-      "UsedBytes" : 486186942464,
-      "MaximumLBA" : 468843606,
-      "PhysicalSize" : 1920383410176,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "232439E0007010",
+              "ModelNumber" : "WUS6A7619PJP8X7",
+              "Firmware" : "RG109W08",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 486186942464,
+                  "MaximumLBA" : 468843606,
+                  "PhysicalSize" : 1920383410176,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]})EOF";
 
@@ -794,17 +1009,30 @@ TEST_F(NandWritesTest,
   constexpr auto* kListOutput = R"EOF({
   "Devices" : [
     {
-      "NameSpace" : 1,
-      "DevicePath" : "/dev/nvme0n1",
-      "Firmware" : "51096F10",
-      "Index" : 0,
-      "ModelNumber" : "HFS11111ABC",
-      "ProductName" : "Non-Volatile memory controller: SK hynix Device 0x2259",
-      "SerialNumber" : "1424BID4T0001I020A16",
-      "UsedBytes" : 486186942464,
-      "MaximumLBA" : 468975616,
-      "PhysicalSize" : 1920924123136,
-      "SectorSize" : 4096
+      "Subsystems" : [
+        {
+          "Controllers" : [
+            {
+              "Controller" : "nvme0",
+              "SerialNumber" : "1424BID4T0001I020A16",
+              "ModelNumber" : "HFS11111ABC",
+              "Firmware" : "51096F10",
+              "Transport" : "pcie",
+              "Namespaces" : [
+                {
+                  "NameSpace" : "nvme0n1",
+                  "NSID" : 1,
+                  "UsedBytes" : 486186942464,
+                  "MaximumLBA" : 468975616,
+                  "PhysicalSize" : 1920924123136,
+                  "SectorSize" : 4096
+                }
+              ]
+            }
+          ],
+          "Namespaces" : []
+        }
+      ]
     }
   ]})EOF";
 

@@ -248,8 +248,7 @@ bool Persistor<ObjectCache>::run() {
       if (itr->isExpired()) {
         numExpired_++;
       } else { // write the object to queue
-        auto itemPtr =
-            reinterpret_cast<typename ObjectCache::Item*>(itr->getMemory());
+        auto itemPtr = ObjectCache::getAlignedItemPtr(itr->getMemory());
         WorkUnit unit{itr->getKey(), itemPtr->objectPtr, itemPtr->objectSize,
                       itr->getExpiryTime()};
         queue_.blockingWrite(std::move(unit));
@@ -361,6 +360,7 @@ bool Restorer<ObjectCache>::run() {
     return false;
   }
   std::vector<std::thread> ts;
+  ts.reserve(workers_.size());
   for (size_t i = 0; i < workers_.size(); i++) {
     ts.emplace_back(std::thread{[&](int i) {
                                   workers_[i]->work();

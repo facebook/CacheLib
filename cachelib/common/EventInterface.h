@@ -19,6 +19,10 @@
 #include <folly/Optional.h>
 #include <folly/logging/xlog.h>
 
+#include <magic_enum/magic_enum.hpp>
+
+#include "cachelib/allocator/KAllocation.h"
+
 namespace facebook {
 namespace cachelib {
 
@@ -40,45 +44,12 @@ enum class AllocatorApiEvent : uint8_t {
   NVM_REMOVE = 12,
   NVM_EVICT = 13,
   PEEK = 14,
+  NVM_INSERT = 15,
+  NVM_FIND = 16,
+  NVM_FIND_FAST = 17,
+  NVM_ADMIT = 18,
+  NVM_REINSERT = 19
 };
-
-inline const char* toString(AllocatorApiEvent event) {
-  switch (event) {
-  case AllocatorApiEvent::INVALID:
-    return "INVALID";
-  case AllocatorApiEvent::FIND:
-    return "FIND";
-  case AllocatorApiEvent::FIND_FAST:
-    return "FIND_FAST";
-  case AllocatorApiEvent::ALLOCATE:
-    return "ALLOCATE";
-  case AllocatorApiEvent::INSERT:
-    return "INSERT";
-  case AllocatorApiEvent::INSERT_FROM_NVM:
-    return "INSERT_FROM_NVM";
-  case AllocatorApiEvent::INSERT_OR_REPLACE:
-    return "INSERT_OR_REPLACE";
-  case AllocatorApiEvent::REMOVE:
-    return "REMOVE";
-  case AllocatorApiEvent::ALLOCATE_CHAINED:
-    return "ALLOCATE_CHAINED";
-  case AllocatorApiEvent::ADD_CHAINED:
-    return "ADD_CHAINED";
-  case AllocatorApiEvent::POP_CHAINED:
-    return "POP_CHAINED";
-  case AllocatorApiEvent::DRAM_EVICT:
-    return "DRAM_EVICT";
-  case AllocatorApiEvent::NVM_REMOVE:
-    return "NVM_REMOVE";
-  case AllocatorApiEvent::NVM_EVICT:
-    return "NVM_EVICT";
-  case AllocatorApiEvent::PEEK:
-    return "PEEK";
-  default:
-    XDCHECK(false);
-    return "** CORRUPT EVENT **";
-  }
-}
 
 // Enum to describe possible outcomes of Allocator API calls.
 enum class AllocatorApiResult : uint8_t {
@@ -92,35 +63,14 @@ enum class AllocatorApiResult : uint8_t {
   REMOVED = 7,             // Removed an item.
   EVICTED = 8,             // Evicted an item.
   EXPIRED = 9,             // An item has expired.
+  REINSERTED = 10,         // Reinserted an item.
+  NVM_ADMITTED = 11,       // Admit item to NVM
+  CORRUPTED = 12,          // An item is corrupted.
+  ABORTED = 13,            // The event operation aborted.
+  ACCEPTED = 14,   // Positive result for admission and reinsertion policies
+  REJECTED = 15,   // Negative result for admission and reinsertion policies
+  INVALIDATED = 16 // Item invalidated (newer item for the key exist in NVM.)
 };
-
-inline const char* toString(AllocatorApiResult result) {
-  switch (result) {
-  case AllocatorApiResult::FAILED:
-    return "FAILED";
-  case AllocatorApiResult::FOUND:
-    return "FOUND";
-  case AllocatorApiResult::NOT_FOUND:
-    return "NOT_FOUND";
-  case AllocatorApiResult::NOT_FOUND_IN_MEMORY:
-    return "NOT_FOUND_IN_MEMORY";
-  case AllocatorApiResult::ALLOCATED:
-    return "ALLOCATED";
-  case AllocatorApiResult::INSERTED:
-    return "INSERTED";
-  case AllocatorApiResult::REPLACED:
-    return "REPLACED";
-  case AllocatorApiResult::REMOVED:
-    return "REMOVED";
-  case AllocatorApiResult::EVICTED:
-    return "EVICTED";
-  case AllocatorApiResult::EXPIRED:
-    return "EXPIRED";
-  default:
-    XDCHECK(false);
-    return "** CORRUPT RESULT **";
-  }
-}
 
 namespace EventInterfaceTypes {
 using SizeT = folly::Optional<uint32_t>;
@@ -149,6 +99,8 @@ class EventInterface {
   virtual void getStats(
       std::unordered_map<std::string, uint64_t>& statsMap) const = 0;
 };
+
+using LegacyEventTracker = EventInterface<KAllocation::Key>;
 
 } // namespace cachelib
 } // namespace facebook

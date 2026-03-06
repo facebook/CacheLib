@@ -20,7 +20,6 @@
 #include <folly/container/F14Map.h>
 #include <folly/fibers/TimedMutex.h>
 
-#include <cassert>
 #include <memory>
 #include <utility>
 
@@ -33,11 +32,13 @@
 #include "cachelib/navy/common/Device.h"
 #include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/common/Types.h"
-#include "cachelib/navy/serialization/RecordIO.h"
-#include "cachelib/navy/serialization/Serialization.h"
 
 namespace facebook {
 namespace cachelib {
+namespace interface {
+class FlashCacheComponent;
+}
+
 namespace navy {
 using folly::fibers::TimedMutex;
 using CondWaiter = util::ConditionVariable::Waiter;
@@ -67,10 +68,9 @@ class RegionManager {
   // @param regionSize                size of the region
   // @param baseOffset                base offset of the region
   // @param device                    reference to device
-  // @param numCleanRegions           How many regions reclamator maintains in
+  // @param numCleanRegions           How many regions should be maintained in
   //                                  the clean pool
-  // @param scheduler                 JobScheduler to run reclamation jobs
-  // @param numWorkers                Number of threads to run reclamation jobs
+  // @param numWorkers                Number of threads to run reclaim jobs
   // @param stackSize                 Fiber stack size for each worker thread.
   //                                  0 for default
   // @param evictCb                   Callback invoked when region evicted
@@ -81,6 +81,16 @@ class RegionManager {
   //                                  regions
   // @param inMemBufFlushRetryLimit   max number of flushing retry times for
   //                                  in-mem buffer
+  // @param workerFlushAsync          whether to schedule async flushes with the
+  //                                  workers (during reclaim)
+  // @param allowReadDuringReclaim    whether to allow read for the being
+  //                                  reclaimed region.
+  //                                  TODO: This should be the default behavior
+  //                                  and this flag should be removed once we're
+  //                                  convinced there's no missing corner cases.
+  // @param cleanRegionFastPath       whether to enable the fast path in
+  //                                  getCleanRegion() that skips the mutex
+  //                                  when clean regions are empty
   RegionManager(uint32_t numRegions,
                 uint64_t regionSize,
                 uint64_t baseOffset,
@@ -94,7 +104,9 @@ class RegionManager {
                 uint32_t numInMemBuffers,
                 uint16_t numPriorities,
                 uint16_t inMemBufFlushRetryLimit,
-                bool workerFlushAsync);
+                bool workerFlushAsync,
+                bool allowReadDuringReclaim = false,
+                bool cleanRegionFastPath = false);
   RegionManager(const RegionManager&) = delete;
   RegionManager& operator=(const RegionManager&) = delete;
 
@@ -145,7 +157,7 @@ class RegionManager {
 
   // Atomically loads the current sequence number (in memory_order_acquire
   // order).
-  // Sequence number increases when a reclamation finished. Since reclamation
+  // Sequence number increases when a reclaim finished. Since reclaim
   // may start during reading, by checking whether the sequence number changes,
   // we avoid reading a region that has been reclaimed.
   uint64_t getSeqNumber() const {
@@ -171,7 +183,7 @@ class RegionManager {
   // Returns the buffer to the pool.
   void returnBufferToPool(std::unique_ptr<Buffer> buf) {
     {
-      std::lock_guard<TimedMutex> bufLock{bufferMutex_};
+      std::lock_guard bufLock{bufferMutex_};
       buffers_.push_back(std::move(buf));
       if (bufferCond_.numWaiters() > 0) {
         bufferCond_.notifyAll();
@@ -233,9 +245,12 @@ class RegionManager {
   //
   // @param rid         region ID
   // @param seqNumber   the sequence number aqcuired before opening the region
-  //                    for read; it is used to determine whether a reclamation
-  //                    happened during reading
-  RegionDescriptor openForRead(RegionId rid, uint64_t seqNumber);
+  //                    for read; it is used to determine whether a reclaim
+  //                    happened during reading.
+  //                    if it's not providied, this function will just open the
+  //                    region and doesn't check about the race between reclaim
+  //                    and this open. (Assuming it's caller's responsibility)
+  RegionDescriptor openForRead(RegionId rid, std::optional<uint64_t> seqNumber);
 
   // Closes the region and consumes the region descriptor.
   void close(RegionDescriptor&& desc);
@@ -254,20 +269,22 @@ class RegionManager {
   // Schedules region reclaim job to create a clean region
   void startReclaim();
 
-  // Releases a region that was evicted during region reclamation.
+  // Releases a region that was evicted during region reclaim.
   //
   // @param rid        region ID
-  // @param startTime  time when a reclamation starts;
-  //                   it is used to count the reclamation time duration
+  // @param startTime  time when the reclaim starts;
+  //                   it is used to count the reclaim time duration
   void releaseEvictedRegion(RegionId rid, std::chrono::nanoseconds startTime);
 
-  // Evicts a region by calling @evictCb_ during region reclamation.
+  // Evicts a region by calling @evictCb_ during region reclaim.
   void doEviction(RegionId rid, BufferView buffer) const;
 
   // Convert relative address to phsyical offset on the device
   uint64_t physicalOffset(RelAddress addr) const {
     return baseOffset_ + toAbsolute(addr).offset();
   }
+
+  bool readAllowedDuringReclaim() const { return allowReadDuringReclaim_; }
 
  private:
   using LockGuard = std::lock_guard<TimedMutex>;
@@ -312,7 +329,8 @@ class RegionManager {
   mutable AtomicCounter physicalWrittenCount_;
   mutable AtomicCounter reclaimRegionErrors_;
 
-  mutable TimedMutex cleanRegionsMutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_clean_regions">
+      cleanRegionsMutex_;
   mutable util::ConditionVariable cleanRegionsCond_;
   std::vector<RegionId> cleanRegions_;
   const uint32_t numCleanRegions_{};
@@ -321,6 +339,17 @@ class RegionManager {
   std::atomic<uint64_t> seqNumber_{0};
 
   uint32_t reclaimsOutstanding_{0};
+
+  // Fast-path flag: when true, cleanRegions_ is empty and reclaims are
+  // in-flight. getCleanRegion() can skip acquiring cleanRegionsMutex_ and
+  // return Retry immediately, avoiding mutex contention that would starve
+  // reclaim workers trying to push clean regions back.
+  //
+  // Uses memory_order_relaxed: all stores are done under
+  // cleanRegionsMutex_ so writers are properly serialized, and the
+  // unsynchronized load on the fast-path may see a stale value but
+  // callers retry in a loop so correctness is not affected.
+  std::atomic<bool> cleanRegionsEmpty_{false};
 
   // The thread that runs the flush and reclaim. For Navy-async thread mode, the
   // async flushes will be run in-line on fiber by the async NavyThread itself
@@ -332,17 +361,24 @@ class RegionManager {
   const bool workerFlushAsync_{false};
   mutable AtomicCounter numReclaimScheduled_;
 
+  // Whether to allow read for the being reclaimed region
+  const bool allowReadDuringReclaim_{false};
+
+  // Whether the clean region fast path is enabled
+  const bool cleanRegionFastPath_{false};
+
   const RegionEvictCallback evictCb_;
   const RegionCleanupCallback cleanupCb_;
 
-  // To understand naming here, let me explain difference between "reclamation"
+  // To understand naming here, let me explain difference between "reclaim"
   // and "eviction". Cache evicts item and makes it inaccessible via lookup. It
-  // is an item level operation. When we say "reclamation" about regions we
-  // refer to wiping an entire region for reuse. As part of reclamation, every
+  // is an item level operation. When we say "reclaim" about regions we
+  // refer to wiping an entire region for reuse. As part of reclaim, every
   // item in the region gets evicted.
   mutable AtomicCounter reclaimCount_;
   mutable AtomicCounter reclaimTimeCountUs_;
   mutable AtomicCounter evictedCount_;
+  mutable AtomicCounter readDuringReclaimCount_;
 
   // Stats to keep track of inmem buffer usage
   mutable AtomicCounter numInMemBufActive_;
@@ -352,10 +388,12 @@ class RegionManager {
 
   const uint32_t numInMemBuffers_{0};
   // Locking order is region lock, followed by bufferMutex_;
-  mutable TimedMutex bufferMutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_buffer"> bufferMutex_;
   mutable util::ConditionVariable bufferCond_;
   std::vector<std::unique_ptr<Buffer>> buffers_;
   int placementHandle_;
+
+  friend class interface::FlashCacheComponent;
 };
 } // namespace navy
 } // namespace cachelib

@@ -24,6 +24,7 @@ if (BUILD_TESTS)
     cachelib_datatype
     cachelib_allocator
     Folly::follybenchmark
+    Folly::folly_subprocess
     glog::glog
     gflags
     GTest::gtest

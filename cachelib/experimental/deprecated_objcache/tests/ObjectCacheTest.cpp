@@ -66,7 +66,7 @@ using facebook::cachelib::objcache::test::ObjCacheString;
 template <>
 class Cpp2Ops<ObjCacheString> {
  public:
-  typedef ObjCacheString Type;
+  using Type = ObjCacheString;
   static constexpr protocol::TType thriftType() { return protocol::T_STRING; }
   template <class Protocol>
   static uint32_t write(Protocol* prot, const Type* value) {
@@ -505,7 +505,7 @@ TEST(ObjCache, Destructor) {
     auto vec =
         objcache->create<VectorOfHeapString>(0 /* poolId */, "test vec string");
     for (int i = 0; i < 10; i++) {
-      vec->push_back("hello world 0123456789");
+      vec->emplace_back("hello world 0123456789");
     }
     // If destructor callback isn't properly executed, we would trigger
     // ASAN failures since std::string has heap storage
@@ -962,7 +962,7 @@ TEST(ObjectCache, PersistenceMultipleTypes) {
 
       auto vecStr = objcache->create<VecStr>(
           0 /* poolId */, "vec_str test " + folly::to<std::string>(j));
-      vecStr->push_back("hello world 1234567890");
+      vecStr->emplace_back("hello world 1234567890");
       objcache->insertOrReplace(vecStr);
 
       auto mapStr = objcache->create<MapStr>(
@@ -1160,8 +1160,8 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
     for (int i = 0; i < 3; i++) {
       semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
           [sp](ObjCacheString* str) mutable
-          -> folly::SemiFuture<
-              std::pair<ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> {
+              -> folly::SemiFuture<std::pair<
+                  ObjCacheString*, std::shared_ptr<StrPromiseWrapper>>> {
             return std::make_pair(str, std::move(sp));
           }));
     }
@@ -1177,7 +1177,7 @@ TEST(ObjectCache, SharedPromiseColocateObject) {
       };
   std::vector<std::thread> ts;
   for (auto& sf : semiFutures) {
-    ts.push_back(std::thread{readString, std::move(sf)});
+    ts.emplace_back(readString, std::move(sf));
   }
 
   {
@@ -1232,7 +1232,7 @@ TEST(ObjectCache, SharedPromiseColocateObject2) {
     for (int i = 0; i < 3; i++) {
       semiFutures.push_back(sp->promise.getSemiFuture().deferValue(
           [sp](ObjCacheString* str) mutable
-          -> folly::SemiFuture<std::shared_ptr<ObjCacheString>> {
+              -> folly::SemiFuture<std::shared_ptr<ObjCacheString>> {
             return std::shared_ptr<ObjCacheString>{
                 str, [sp = std::move(sp)](auto /* unused */) {
                   // once sp goes out of
@@ -1254,7 +1254,7 @@ TEST(ObjectCache, SharedPromiseColocateObject2) {
       };
   std::vector<std::thread> ts;
   for (auto& sf : semiFutures) {
-    ts.push_back(std::thread{readString, std::move(sf)});
+    ts.emplace_back(readString, std::move(sf));
   }
 
   {

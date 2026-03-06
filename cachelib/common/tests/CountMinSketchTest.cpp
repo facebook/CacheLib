@@ -188,8 +188,8 @@ class CountMinSketchTest : public testing::Test {
     }
   }
 };
-typedef ::testing::Types<CountMinSketch, CountMinSketch16, CountMinSketch8>
-    CMSTypes;
+using CMSTypes =
+    ::testing::Types<CountMinSketch, CountMinSketch16, CountMinSketch8>;
 
 TYPED_TEST_CASE(CountMinSketchTest, CMSTypes);
 

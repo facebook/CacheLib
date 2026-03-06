@@ -19,6 +19,7 @@
 #include <folly/Range.h>
 #include <folly/fibers/Baton.h>
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/admission_policy/DynamicRandomAP.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
@@ -58,9 +59,11 @@ Driver::Driver(Config&& config, ValidConfigTag)
     : maxConcurrentInserts_{config.maxConcurrentInserts},
       maxParcelMemory_{config.maxParcelMemory},
       metadataSize_{config.metadataSize},
+      maxKeySize_{config.maxKeySize},
       useEstimatedWriteSize_{config.useEstimatedWriteSize},
       device_{std::move(config.device)},
       scheduler_{std::move(config.scheduler)},
+      persistParams_{config.persistParams},
       selector_{std::move(config.selector)},
       enginePairs_{std::move(config.enginePairs)},
       admissionPolicy_{std::move(config.admissionPolicy)},
@@ -108,7 +111,7 @@ uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
 }
 
 Status Driver::insert(HashedKey key, BufferView value) {
-  folly::fibers::Baton done;
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:driver_insert"> done;
   Status cbStatus{Status::Ok};
   auto status = insertAsync(key, value,
                             [&done, &cbStatus](Status s, HashedKey /* key */) {
@@ -169,7 +172,7 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
 }
 
 Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
-  if (hk.key().size() > kMaxKeySize) {
+  if (hk.key().size() > maxKeySize_) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
 
@@ -369,5 +372,17 @@ void Driver::getCounters(const CounterVisitor& visitor) const {
 std::pair<Status, std::string> Driver::getRandomAlloc(Buffer& value) {
   size_t idx = getRandomAllocDist(getRandomAllocGen);
   return enginePairs_[idx].getRandomAlloc(value);
+}
+
+void Driver::updateEvictionStats(HashedKey key,
+                                 BufferView value,
+                                 uint32_t lifetime) {
+  enginePairs_[selectEnginePair(key)].updateEvictionStats(key, value, lifetime);
+}
+
+void Driver::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+  for (auto& enginePair : enginePairs_) {
+    enginePair.setEventTracker(tracker);
+  }
 }
 } // namespace facebook::cachelib::navy

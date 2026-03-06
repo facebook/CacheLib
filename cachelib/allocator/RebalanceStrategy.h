@@ -59,6 +59,40 @@ struct RebalanceContext {
   }
 };
 
+class PickVictimStrategy {
+ public:
+  virtual ~PickVictimStrategy() = default;
+
+  virtual ClassId pickAllocClassForResizing(
+      const CacheBase& cache, PoolId pid, const PoolStats& poolStats) const = 0;
+};
+
+class TotalSlabsStrategy : public PickVictimStrategy {
+ public:
+  ClassId pickAllocClassForResizing(const CacheBase& cache,
+                                    PoolId pid,
+                                    const PoolStats& poolStats) const override;
+};
+
+class AllocationSizeStrategy : public PickVictimStrategy {
+ public:
+  struct Config {
+    unsigned int minSlabsForResizing = 10;
+    unsigned int numClassesToPickFrom = 10;
+  };
+
+  AllocationSizeStrategy() : config_() {}
+
+  explicit AllocationSizeStrategy(Config config) : config_(std::move(config)) {}
+
+  ClassId pickAllocClassForResizing(const CacheBase& cache,
+                                    PoolId pid,
+                                    const PoolStats& poolStats) const override;
+
+ private:
+  Config config_;
+};
+
 // Base class for rebalance strategy.
 // Given a pool, the rebalance strategy picks a victim allocation class to
 // release slabs, or picks a pair of victim and receiver. The idea here is the
@@ -83,10 +117,9 @@ class RebalanceStrategy {
     Manual,
     NumTypes
   };
-
   struct BaseConfig {};
-
-  RebalanceStrategy() = default;
+  RebalanceStrategy()
+      : pickVictimStrategy_(std::make_unique<TotalSlabsStrategy>()) {}
 
   virtual ~RebalanceStrategy() = default;
 
@@ -118,6 +151,9 @@ class RebalanceStrategy {
   void clearPoolRebalanceEvent(PoolId pid);
 
   double queryEffectiveMoveRate(PoolId pid) const;
+  void setPickVictimStrategy(std::unique_ptr<PickVictimStrategy> strategy) {
+    pickVictimStrategy_ = std::move(strategy);
+  }
 
   Type getType() const { return type_; }
 
@@ -150,7 +186,9 @@ class RebalanceStrategy {
   using PoolState = std::array<detail::Info, MemoryAllocator::kMaxClasses>;
   static const RebalanceContext kNoOpContext;
 
-  explicit RebalanceStrategy(Type strategyType) : type_(strategyType) {}
+  explicit RebalanceStrategy(Type strategyType)
+      : type_(strategyType),
+        pickVictimStrategy_(std::make_unique<TotalSlabsStrategy>()) {}
 
   virtual RebalanceContext pickVictimAndReceiverImpl(const CacheBase&,
                                                      PoolId,
@@ -235,11 +273,6 @@ class RebalanceStrategy {
   std::unordered_map<PoolId, std::deque<RebalanceContext>> recentRebalanceEvents_;
 
  private:
-  // picks any of the class id ordered by the total slabs.
-  ClassId pickAnyClassIdForResizing(const CacheBase& cache,
-                                    PoolId pid,
-                                    const PoolStats& poolStats);
-
   // initialize the pool's state to the current stats.
   void initPoolState(PoolId pid, const PoolStats& stats);
 
@@ -271,6 +304,10 @@ class RebalanceStrategy {
   // maintain the state of the previous snapshot of pool for every pool.  We
   // ll use this for processing and getting the deltas for some of these.
   std::unordered_map<PoolId, PoolState> poolState_;
+
+  // Strategy for picking victims for resizing and memory monitor when the
+  // rebalance strategy does not pick a victim
+  std::unique_ptr<PickVictimStrategy> pickVictimStrategy_;
 
   FRIEND_TEST(RebalanceStrategy, Basic);
 };

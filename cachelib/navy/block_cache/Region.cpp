@@ -20,25 +20,38 @@
 
 namespace facebook::cachelib::navy {
 
-bool Region::readyForReclaim(bool wait) {
-  std::unique_lock<TimedMutex> l{lock_};
-  flags_ |= kBlockAccess;
+bool Region::readyForReclaim(bool wait, bool allowRead) {
+  std::unique_lock l{lock_};
+  flags_ |= allowRead ? kBeingReclaimed : kBlockAccess;
   bool ready = false;
-  while (!(ready = (activeOpenLocked() == 0UL)) && wait) {
+  // If we allow read during reclaim, we only need to block on active writers,
+  // not readers, hence we give allowRead as a parameter to activeOpenLocked.
+  while (!(ready = (activeOpenLocked(allowRead) == 0UL)) && wait) {
     cond_.wait(l);
   }
 
   return ready;
 }
 
-uint32_t Region::activeOpenLocked() {
-  return activePhysReaders_ + activeInMemReaders_ + activeWriters_;
+void Region::waitForActiveReaders() {
+  std::unique_lock l{lock_};
+  // No more reader should be allowed.
+  flags_ |= kBlockAccess;
+  while (activeInMemReaders_ != 0 || activePhysReaders_ != 0) {
+    cond_.wait(l);
+  }
+}
+
+uint32_t Region::activeOpenLocked(bool writersOnly) const {
+  return writersOnly
+             ? activeWriters_
+             : (activePhysReaders_ + activeInMemReaders_ + activeWriters_);
 }
 
 std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
     uint32_t size) {
-  std::lock_guard<TimedMutex> l{lock_};
-  XDCHECK(!(flags_ & kBlockAccess));
+  std::lock_guard l{lock_};
+  XDCHECK(!((flags_ & kBlockAccess) || (flags_ & kBeingReclaimed)));
   if (!canAllocateLocked(size)) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress{});
   }
@@ -49,10 +62,10 @@ std::tuple<RegionDescriptor, RelAddress> Region::openAndAllocate(
 }
 
 RegionDescriptor Region::openForRead() {
-  std::unique_lock<TimedMutex> l{lock_};
+  std::unique_lock l{lock_};
   if (flags_ & kBlockAccess) {
     // Region is currently in reclaim, retry later
-    if (getCurrentNavyThread()) {
+    if (isOnNavyThread()) {
       // If we are on fiber, we can just sleep here
       cond_.wait(l);
     }
@@ -70,7 +83,7 @@ RegionDescriptor Region::openForRead() {
 }
 
 std::unique_ptr<Buffer> Region::detachBuffer() {
-  std::unique_lock<TimedMutex> l{lock_};
+  std::unique_lock l{lock_};
   XDCHECK_NE(buffer_, nullptr);
   while (activeInMemReaders_ != 0) {
     cond_.wait(l);
@@ -88,7 +101,7 @@ std::unique_ptr<Buffer> Region::detachBuffer() {
 // to call this function again.
 Region::FlushRes Region::flushBuffer(
     std::function<bool(RelAddress, BufferView)> callBack) {
-  std::unique_lock<TimedMutex> lock{lock_};
+  std::unique_lock lock{lock_};
   if (activeWriters_ != 0) {
     return FlushRes::kRetryPendingWrites;
   }
@@ -105,7 +118,7 @@ Region::FlushRes Region::flushBuffer(
 }
 
 void Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
-  std::unique_lock<TimedMutex> lock{lock_};
+  std::unique_lock lock{lock_};
   while (activeWriters_ != 0) {
     cond_.wait(lock);
   }
@@ -118,8 +131,8 @@ void Region::cleanupBuffer(std::function<void(RegionId, BufferView)> callBack) {
 }
 
 void Region::reset() {
-  std::lock_guard<TimedMutex> l{lock_};
-  XDCHECK_EQ(activeOpenLocked(), 0U);
+  std::lock_guard l{lock_};
+  XDCHECK_EQ(activeOpenLocked(false), 0U);
   priority_ = 0;
   flags_ = 0;
   activeWriters_ = 0;
@@ -131,7 +144,7 @@ void Region::reset() {
 }
 
 void Region::close(RegionDescriptor&& desc) {
-  std::lock_guard<TimedMutex> l{lock_};
+  std::lock_guard l{lock_};
   switch (desc.mode()) {
   case OpenMode::Write:
     XDCHECK_GT(activeWriters_, 0u);

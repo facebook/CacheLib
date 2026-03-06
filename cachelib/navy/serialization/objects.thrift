@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+include "thrift/annotation/thrift.thrift"
+
+@thrift.AllowLegacyMissingUris
+package;
+
 namespace cpp2 facebook.cachelib.navy.serialization
 
 struct IndexEntry {
@@ -99,4 +104,11 @@ struct BigHashPersistentData {
   7: map<i64, i64> deprecated_sizeDist;
   8: i64 usedSizeBytes = 0;
   9: ValidBucketCheckerState validBucketCheckerState;
+}
+
+struct FixedSizeIndexConfig {
+  1: i32 version = 0;
+  2: i32 numChunks = 0;
+  3: byte numBucketsPerChunkPower = 0;
+  4: i64 numBucketsPerShard = 0;
 }

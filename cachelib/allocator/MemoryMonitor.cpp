@@ -27,10 +27,12 @@ constexpr size_t kGBytes = 1024 * 1024 * 1024;
 
 MemoryMonitor::MemoryMonitor(CacheBase& cache,
                              const Config& config,
-                             std::shared_ptr<RebalanceStrategy> strategy)
+                             std::shared_ptr<RebalanceStrategy> strategy,
+                             uint64_t initialNumSlabsToAdvise)
     : cache_(cache),
       mode_(config.mode),
       strategy_(std::move(strategy)),
+      numSlabsToAdvise_(initialNumSlabsToAdvise),
       percentAdvisePerIteration_(config.maxAdvisePercentPerIter),
       percentReclaimPerIteration_(config.maxReclaimPercentPerIter),
       lowerLimit_(config.lowerLimitGB * kGBytes),
@@ -74,6 +76,21 @@ void MemoryMonitor::work() {
   default:
     throw std::runtime_error("Unsupported memory monitoring mode");
   }
+}
+
+void MemoryMonitor::updateNumSlabsToAdvise(int32_t numSlabs) {
+  auto curNumSlabsToAdvise = numSlabsToAdvise_.load(std::memory_order_acquire);
+  size_t newNumSlabsToAdvise;
+  do {
+    newNumSlabsToAdvise = curNumSlabsToAdvise + numSlabs;
+    if (numSlabs < 0 &&
+        static_cast<uint64_t>(-numSlabs) > curNumSlabsToAdvise) {
+      throw std::invalid_argument(
+          folly::sformat("Invalid numSlabs {} to update numSlabsToAdvise {}",
+                         numSlabs, curNumSlabsToAdvise));
+    }
+  } while (!numSlabsToAdvise_.compare_exchange_weak(
+      curNumSlabsToAdvise, newNumSlabsToAdvise, std::memory_order_acq_rel));
 }
 
 void MemoryMonitor::checkFreeMemory() {
@@ -147,7 +164,8 @@ size_t MemoryMonitor::getSlabsInUse() const noexcept {
 }
 
 void MemoryMonitor::checkPoolsAndAdviseReclaim() {
-  auto results = cache_.calcNumSlabsToAdviseReclaim();
+  auto results = cache_.calcNumSlabsToAdviseReclaim(
+      numSlabsToAdvise_.load(std::memory_order_acquire));
   if (results.poolAdviseReclaimMap.empty()) {
     return;
   }
@@ -183,11 +201,21 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
               stats.numFreeAllocsForClass(classId));
 
         } catch (const exception::SlabReleaseAborted& e) {
+          cache_.incrementAbortedSlabReleases();
+          // Check if this is due to shutdown or timeout
+          if (cache_.isShutdownInProgress()) {
+            XLOGF(WARN,
+                  "Shutdown in progress, aborting slab advise from pool {} for"
+                  " allocation class {}. Error: {}",
+                  static_cast<int>(poolId), static_cast<int>(classId),
+                  e.what());
+            return;
+          }
+          // It's a timeout, log and continue with next slab
           XLOGF(WARN,
-                "Aborted trying to advise away a slab from pool {} for"
-                " allocation class {}. Error: {}",
+                "Timeout while advising slab from pool {} for allocation class"
+                " {}. Continuing with remaining slabs. Error: {}",
                 static_cast<int>(poolId), static_cast<int>(classId), e.what());
-          return;
         } catch (const std::exception& e) {
           XLOGF(
               CRITICAL,
@@ -196,13 +224,11 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
               static_cast<int>(poolId), static_cast<int>(classId), e.what());
         }
       }
-      slabsAdvised_ += slabsAdvised;
       XLOGF(DBG, "Advised away {} slabs from Pool ID: {}, to free {} bytes",
             slabsAdvised, static_cast<int>(poolId), slabsAdvised * Slab::kSize);
     }
     return;
   } else {
-    XDCHECK(!results.advise);
     // Reclaim slabs, if marked for reclaim
     for (auto& result : results.poolAdviseReclaimMap) {
       PoolId poolId = result.first;
@@ -213,7 +239,6 @@ void MemoryMonitor::checkPoolsAndAdviseReclaim() {
           "Reclaimed {} of {} slabs for Pool ID: {}, to grow cache by {} bytes",
           slabsReclaimed, slabsToReclaim, static_cast<int>(poolId),
           slabsReclaimed * Slab::kSize);
-      slabsReclaimed_ += slabsReclaimed;
     }
   }
 }
@@ -229,24 +254,35 @@ void MemoryMonitor::adviseAwaySlabs() {
     return;
   }
   const auto numAdvised = cache_.getCacheMemoryStats().numAdvisedSlabs();
-  const auto advisedPercent = numAdvised * 100 / (numAdvised + totalSlabs);
-  if (advisedPercent > maxLimitPercent_) {
-    XLOGF(CRITICAL,
-          "More than {} slabs of {} ({}"
-          "%) in the item cache memory have been advised away. "
-          "This exceeds the maximum limit of {}"
-          "%. Disabling advising which may result in an OOM.",
-          numAdvised, numAdvised + totalSlabs, advisedPercent,
-          maxLimitPercent_);
-    return;
-  }
+  // allSlabs represents the total number of slabs across all pools
+  const auto allSlabs = numAdvised + totalSlabs;
+
+  // Check if we've already hit or exceeded the maximum limit
+  const auto maxNumAdvisedSlabs = (maxLimitPercent_ * allSlabs / 100);
   // Advise percentAdvisePerIteration_% of upperLimit_ - lowerLimit_
   // every iteration
-  const auto slabsToAdvise = bytesToSlabs(upperLimit_ - lowerLimit_) *
-                             percentAdvisePerIteration_ / 100;
+  auto slabsToAdvise = bytesToSlabs(upperLimit_ - lowerLimit_) *
+                       percentAdvisePerIteration_ / 100;
+  auto remainingSlabsAllowedToAdviseAway =
+      numAdvised >= maxNumAdvisedSlabs ? 0 : maxNumAdvisedSlabs - numAdvised;
+  // Clamp slabsToAdvise to stay within maxLimitPercent_
+  slabsToAdvise = std::min(slabsToAdvise, remainingSlabsAllowedToAdviseAway);
+  if (slabsToAdvise == 0) {
+    // Only log CRITICAL if we hit the max limit, not if slabsToAdvise was
+    // already 0 due to configuration (e.g., upperLimit_ == lowerLimit_)
+    if (remainingSlabsAllowedToAdviseAway == 0) {
+      XLOGF(CRITICAL,
+            "Already advised {} slabs of {} ({}"
+            "%) which is at or exceeds the maximum limit of {}"
+            "%. Disabling advising which may result in an OOM.",
+            numAdvised, allSlabs, numAdvised * 100 / allSlabs,
+            maxLimitPercent_);
+    }
+    return;
+  }
   XLOGF(DBG, "Advising away {} slabs to free {} bytes", slabsToAdvise,
         slabsToAdvise * Slab::kSize);
-  cache_.updateNumSlabsToAdvise(slabsToAdvise);
+  updateNumSlabsToAdvise(slabsToAdvise);
 }
 
 void MemoryMonitor::reclaimSlabs() {
@@ -277,7 +313,7 @@ void MemoryMonitor::reclaimSlabs() {
   }
   XLOGF(DBG, "Reclaiming {} slabs to increase cache size by {} bytes",
         slabsToReclaim, slabsToReclaim * Slab::kSize);
-  cache_.updateNumSlabsToAdvise(-slabsToReclaim);
+  updateNumSlabsToAdvise(-static_cast<int32_t>(slabsToReclaim));
 }
 
 RateLimiter::RateLimiter(bool detectIncrease)

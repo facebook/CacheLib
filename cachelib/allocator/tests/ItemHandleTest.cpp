@@ -37,8 +37,6 @@ struct TestItem {
   using CacheT = TestAllocator;
   using Item = int;
   using ChainedItem = int;
-
-  void reset() {}
 };
 
 struct TestNvmCache;

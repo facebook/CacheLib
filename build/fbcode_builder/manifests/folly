@@ -45,6 +45,7 @@ openssl
 zlib
 
 [dependencies.os=linux]
+libaio
 libiberty
 libunwind
 
@@ -63,6 +64,8 @@ fbcode/folly = folly
 
 [cmake.defines]
 BUILD_SHARED_LIBS=OFF
+
+[cmake.defines.not(os=windows)]
 BOOST_LINK_STATIC=ON
 
 [cmake.defines.os=freebsd]

@@ -118,8 +118,7 @@ uint32_t getRandomAllocSize() {
   // Reserve some space for the intrusive list's hook
   constexpr uint32_t kReservedSize = 8;
   assert(Slab::kSize >= kReservedSize);
-  return folly::Random::rand32() % (Slab::kSize - kReservedSize + 1) +
-         kReservedSize;
+  return folly::Random::rand32(Slab::kSize - kReservedSize + 1) + kReservedSize;
 }
 
 std::set<uint32_t> getRandomPow2AllocSizes(unsigned int n) {

@@ -24,6 +24,7 @@
 #include <memory>
 #include <stdexcept>
 
+#include "cachelib/common/EventTracker.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Hash.h"
 #include "cachelib/navy/common/Types.h"
@@ -49,6 +50,9 @@ using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 class AbstractCache {
  public:
   virtual ~AbstractCache() = default;
+
+  // Set the EventTracker for all underlying engines
+  virtual void setEventTracker(std::shared_ptr<EventTracker> tracker) = 0;
 
   // Return true if item is considered a "large item". This is meant to be
   // a very fast check to verify a key & value pair will be considered as
@@ -87,11 +91,11 @@ class AbstractCache {
   // is user responsibility to make a copy if needed (capture in callback).
   virtual void lookupAsync(HashedKey key, LookupCallback cb) = 0;
 
-  // Removes from the index, space reused after reclamation.
+  // Removes from the index, space reused after reclaim.
   // Returns: Ok, NotFound
   virtual Status remove(HashedKey key) = 0;
 
-  // Asynchronously removes key from the index, space reused after reclamation.
+  // Asynchronously removes key from the index, space reused after reclaim.
   // Callback is optional.
   //
   // See @lookupAsync about @key lifetime.
@@ -133,6 +137,12 @@ class AbstractCache {
   // Get key and Buffer for a random sample
   virtual std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) = 0;
+
+  // Update any stats needed to be updated when eviction is done
+  // For now, only itme lifetime is updated
+  virtual void updateEvictionStats(HashedKey key,
+                                   BufferView value,
+                                   uint32_t lifetime) = 0;
 };
 } // namespace navy
 } // namespace cachelib

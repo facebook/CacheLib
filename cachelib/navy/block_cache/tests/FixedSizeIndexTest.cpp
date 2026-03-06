@@ -30,11 +30,14 @@
   FRIEND_TEST(FixedSizeIndex, Hits)
 
 #include "cachelib/navy/block_cache/FixedSizeIndex.h"
-#include "cachelib/navy/testing/MockDevice.h"
 
 namespace facebook::cachelib::navy::tests {
-TEST(FixedSizeIndex, Recovery) {
-  FixedSizeIndex index{1, 8, 16};
+TEST(FixedSizeIndex, RecoveryOk) {
+  auto shmDir = "/tmp/fixed_size_index_test" + std::to_string(::getpid());
+  ShmManager shmManager(shmDir, true);
+  FixedSizeIndex index{1, 8, 16, &shmManager, ":recovery_test"};
+  index.reset();
+
   std::vector<std::pair<uint64_t, uint32_t>> log;
   // There won't be hash collision with these keys
   for (uint32_t i = 0; i < 128; i++) {
@@ -45,16 +48,49 @@ TEST(FixedSizeIndex, Recovery) {
   }
 
   folly::IOBufQueue ioq;
-  auto rw = createMemoryRecordWriter(ioq);
-  index.persist(*rw);
 
-  auto rr = createMemoryRecordReader(ioq);
-  FixedSizeIndex newIndex{1, 8, 16};
-  newIndex.recover(*rr);
+  index.persist(std::nullopt);
+  // shmManager shutDown() needs to be called explicitly for test here
+  shmManager.shutDown();
+
+  ShmManager newShmManager(shmDir, true);
+  FixedSizeIndex newIndex{1, 8, 16, &newShmManager, ":recovery_test"};
+  newIndex.recover(std::nullopt);
+
   for (auto& entry : log) {
     auto lookupResult = newIndex.lookup(entry.first);
     EXPECT_EQ(entry.second, lookupResult.address());
   }
+  newIndex.persist(std::nullopt);
+  newShmManager.shutDown();
+}
+
+TEST(FixedSizeIndex, RecoveryFail) {
+  auto shmDir = "/tmp/fixed_size_index_test" + std::to_string(::getpid());
+  ShmManager shmManager(shmDir, true);
+  FixedSizeIndex index{1, 8, 16, &shmManager, ":recovery_test"};
+  index.reset();
+
+  std::vector<std::pair<uint64_t, uint32_t>> log;
+  // There won't be hash collision with these keys
+  for (uint32_t i = 0; i < 128; i++) {
+    uint64_t key = i;
+    uint32_t val = i + 1;
+    index.insert(key, val, 100);
+    log.emplace_back(key, val);
+  }
+
+  folly::IOBufQueue ioq;
+  index.persist(std::nullopt);
+  // shmManager shutDown() needs to be called explicitly for test here
+  shmManager.shutDown();
+
+  ShmManager newShmManager(shmDir, true);
+  FixedSizeIndex newIndex{1, 9, 16, &newShmManager, ":recovery_test"};
+  // recover with the different config should fail and it should start with
+  // empty index
+  EXPECT_THROW(newIndex.recover(std::nullopt), std::runtime_error);
+  newShmManager.shutDown();
 }
 
 TEST(FixedSizeIndex, EntrySize) {
@@ -235,6 +271,134 @@ TEST(FixedSizeIndex, MemFootprintRangeTest) {
   range = index.computeMemFootprintRange();
   EXPECT_EQ(range.minUsedBytes, rangeEmpty.minUsedBytes);
   EXPECT_EQ(range.maxUsedBytes, rangeEmpty.maxUsedBytes);
+}
+
+TEST(FixedSizeIndex, Reset) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Insert some items
+  for (int i = 0; i < 100; i++) {
+    index.insert(i, i + 100, 200);
+    // Verify items are in the index
+    EXPECT_TRUE(index.lookup(i).found());
+    EXPECT_EQ(i + 100, index.lookup(i).address());
+  }
+
+  // Reset the index
+  index.reset();
+
+  // Verify all items are removed
+  for (int i = 0; i < 100; i++) {
+    EXPECT_FALSE(index.lookup(i).found());
+  }
+}
+
+TEST(FixedSizeIndex, ComputeSize) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Initially the size should be 0
+  EXPECT_EQ(0, index.computeSize());
+
+  // Insert some items
+  const int numItems = 50;
+  for (int i = 0; i < numItems; i++) {
+    index.insert(i, i + 100, 200);
+    // Verify items are in the index
+    EXPECT_TRUE(index.lookup(i).found());
+  }
+
+  // Verify the size matches the number of items inserted
+  EXPECT_EQ(numItems, index.computeSize());
+
+  // Remove some items
+  const int numToRemove = 20;
+  for (int i = 0; i < numToRemove; i++) {
+    index.remove(i);
+    EXPECT_FALSE(index.lookup(i).found());
+  }
+
+  // Verify the size is updated correctly
+  EXPECT_EQ(numItems - numToRemove, index.computeSize());
+}
+
+TEST(FixedSizeIndex, InsertIfNotExists) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Insert should succeed when key doesn't exist
+  auto result = index.insertIfNotExists(111, 100, 123);
+  EXPECT_FALSE(result.found());
+  auto lr = index.lookup(111);
+  EXPECT_TRUE(lr.found());
+  EXPECT_EQ(100, lr.address());
+  EXPECT_LE(123, lr.sizeHint());
+  EXPECT_EQ(1, lr.currentHits());
+
+  // Insert should fail when key already exists, should not modify hits and
+  // should return existing value.
+  result = index.insertIfNotExists(111, 200, 456);
+  EXPECT_TRUE(result.found());
+  EXPECT_EQ(100, result.address());
+  EXPECT_LE(123, result.sizeHint());
+  EXPECT_EQ(1, result.currentHits());
+
+  // Verify existing value is unchanged
+  lr = index.lookup(111);
+  EXPECT_TRUE(lr.found());
+  EXPECT_EQ(100, lr.address());
+  EXPECT_LE(123, lr.sizeHint());
+  EXPECT_EQ(2, lr.currentHits());
+}
+
+TEST(FixedSizeIndex, InsertIfNotExistsThreadSafe) {
+  FixedSizeIndex index{1, 8, 16};
+  const uint64_t key = 1314;
+
+  std::atomic<int> successCount{0};
+  auto tryInsert = [&]() {
+    for (size_t i = 0; i < 100; i++) {
+      auto result = index.insertIfNotExists(key, 123, 200);
+      if (!result.found()) {
+        successCount++;
+      }
+    }
+  };
+
+  std::vector<std::thread> threads;
+  threads.reserve(8);
+  for (int i = 0; i < 8; i++) {
+    threads.emplace_back(tryInsert);
+  }
+
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  // Only one thread should have successfully inserted
+  EXPECT_EQ(1, successCount);
+  EXPECT_TRUE(index.lookup(key).found());
+  EXPECT_EQ(123, index.lookup(key).address());
+}
+
+TEST(FixedSizeIndex, InsertIfNotExistsMultipleKeys) {
+  FixedSizeIndex index{1, 8, 16};
+
+  // Test multiple different keys can all be inserted successfully
+  for (uint64_t i = 0; i < 100; i++) {
+    auto result = index.insertIfNotExists(i, i + 1000, i + 500);
+    EXPECT_FALSE(result.found());
+    EXPECT_TRUE(index.lookup(i).found());
+    EXPECT_EQ(i + 1000, index.lookup(i).address());
+  }
+
+  // Verify attempting to re-insert fails for all keys
+  for (uint64_t i = 0; i < 100; i++) {
+    auto result = index.insertIfNotExists(i, i + 2000, i + 600);
+    EXPECT_TRUE(result.found());
+    EXPECT_EQ(i + 1000, result.address());
+
+    // Verify original values are unchanged
+    EXPECT_EQ(i + 1000, index.lookup(i).address());
+  }
 }
 
 } // namespace facebook::cachelib::navy::tests

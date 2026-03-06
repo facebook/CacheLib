@@ -76,7 +76,14 @@ class ObjectCacheBase : public CacheBase {
 
   // @return a map of <stat name -> stat value> representation for all the event
   // tracker stats. If no event tracker exists, this will be empty
-  std::unordered_map<std::string, uint64_t> getEventTrackerStatsMap()
+  std::unordered_map<std::string, uint64_t> getLegacyEventTrackerStatsMap()
+      const override {
+    return l1Cache_->getLegacyEventTrackerStatsMap();
+  }
+
+  // @return a map of <stat name -> stat value> representation for all the event
+  // tracker stats. If no event tracker exists, this will be empty
+  folly::F14FastMap<std::string, uint64_t> getEventTrackerStatsMap()
       const override {
     return l1Cache_->getEventTrackerStatsMap();
   }
@@ -99,6 +106,16 @@ class ObjectCacheBase : public CacheBase {
   // @return the slab release stats.
   SlabReleaseStats getSlabReleaseStats() const override {
     return l1Cache_->getSlabReleaseStats();
+  }
+
+  // Increment the number of aborted slab releases stat
+  void incrementAbortedSlabReleases() override {
+    l1Cache_->incrementAbortedSlabReleases();
+  }
+
+  // Check if shutdown is in progress
+  bool isShutdownInProgress() const override {
+    return l1Cache_->isShutdownInProgress();
   }
 
   // return the list of currently active pools that are oversized
@@ -172,17 +189,11 @@ class ObjectCacheBase : public CacheBase {
     throw std::runtime_error("Unsupported function in ObjectCacheBase!");
   }
 
-  // update the number of slabs to be advised
-  //
-  // not supported in object cache
-  void updateNumSlabsToAdvise(int32_t) override {
-    throw std::runtime_error("Unsupported function in ObjectCacheBase!");
-  }
-
   // calculate the number of slabs to be advised/reclaimed in each pool
   //
   // not supported in object cache
-  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim() override {
+  PoolAdviseReclaimData calcNumSlabsToAdviseReclaim(
+      size_t /* numSlabsToAdvise */) override {
     throw std::runtime_error("Unsupported function in ObjectCacheBase!");
     return {};
   }

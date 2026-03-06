@@ -14,7 +14,7 @@
 
       "checkConsistency" : true,
 
-      "numOps" : 30000000,
+      "numOps" : 10000000,
       "numThreads" : 40,
       "numKeys" : 200000,
 

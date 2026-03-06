@@ -379,7 +379,7 @@ BENCHMARK_PARAM(Insert, 128)
 BENCHMARK_RELATIVE_PARAM(InsertThreadLocal, 128)
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   folly::runBenchmarks();
 

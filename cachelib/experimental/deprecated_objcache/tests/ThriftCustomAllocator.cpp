@@ -87,7 +87,7 @@ TEST(ThriftCustomAllocator, Propagation) {
   // Move assignment with incompatible allocator
   useSimple1.m().value()[createStr("key-1")] =
       TestString{createStr("100"), alloc2};
-  // Verify copying occured. One construction for the value and a second
+  // Verify copying occurred. One construction for the value and a second
   // construction to copy-assign into the entry.
   EXPECT_EQ(3, alloc1.getNumAllocs());
   EXPECT_EQ(1, alloc2.getNumAllocs());
@@ -95,7 +95,7 @@ TEST(ThriftCustomAllocator, Propagation) {
   // Move assignment with compatible allocator
   useSimple1.m().value()[createStr("key-2")] =
       TestString{createStr("200"), alloc1};
-  // Verifying moving occured One construction for the map entry, second one
+  // Verifying moving occurred One construction for the map entry, second one
   // for the key, and a third one for the value which is moved in.
   EXPECT_EQ(6, alloc1.getNumAllocs());
   EXPECT_EQ(1, alloc2.getNumAllocs());
@@ -104,7 +104,7 @@ TEST(ThriftCustomAllocator, Propagation) {
   useSimple1.m().value().insert(
       std::make_pair(TestString{createStr("key-3"), alloc2},
                      TestString{createStr("300"), alloc2}));
-  // Verify copying occured. Three constructions from alloc1, one is for
+  // Verify copying occurred. Three constructions from alloc1, one is for
   // creating the map entry, and two allocations are for copying the key and
   // value. Two allocations from alloc2 are for creating the key-value pair.
   EXPECT_EQ(9, alloc1.getNumAllocs());
@@ -114,7 +114,7 @@ TEST(ThriftCustomAllocator, Propagation) {
   useSimple1.m().value().insert(
       std::make_pair(TestString{createStr("key-4"), alloc1},
                      TestString{createStr("400"), alloc1}));
-  // Verify moving occured. Three constructions from alloc1, one is for
+  // Verify moving occurred. Three constructions from alloc1, one is for
   // creating the map entry, and two allocations are for copying the key and
   // value. No allocations are made from alloc 2.
   EXPECT_EQ(12, alloc1.getNumAllocs());

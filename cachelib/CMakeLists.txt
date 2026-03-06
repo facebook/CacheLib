@@ -92,17 +92,11 @@ set(CMAKE_MODULE_PATH
 
 # specify the C++ standard
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD 20)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
   message(STATUS "setting C++ standard to C++${CMAKE_CXX_STANDARD}")
 endif()
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Explicitly enable coroutine support, since GCC does not enable it
-# by default when targeting C++17.
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fcoroutines>)
-endif()
 
 # include(fb_cxx_flags)
 message(STATUS "Update CXXFLAGS: ${CMAKE_CXX_FLAGS}")
@@ -128,6 +122,7 @@ find_package(Zstd REQUIRED)
 find_package(FBThrift REQUIRED) # must come after wangle
 find_package(NUMA REQUIRED)
 find_package(Sparsemap REQUIRED)
+find_package(magic_enum CONFIG REQUIRED)
 
 find_package(uring)
 if (NOT uring_FOUND)
@@ -248,6 +243,7 @@ function(add_thrift_file PREFIX THRIFT_RELATIVE_PATH CPP_OPTION)
     "types.tcc"
     "types_binary.cpp"
     "types_compact.cpp"
+    "types_serialization.cpp"
     )
 
   # The thrift cpp option "frozen2"
@@ -390,7 +386,7 @@ target_include_directories(
   INTERFACE
     $<INSTALL_INTERFACE:${INCLUDE_INSTALL_DIR}>
     )
-target_compile_features(cachelib_common INTERFACE cxx_std_17)
+target_compile_features(cachelib_common INTERFACE cxx_std_20)
 
 install(TARGETS
      cachelib

@@ -60,12 +60,12 @@ class FOLLY_PACK_ATTR RefcountWithFlags {
   static_assert(
       NumBits<Value>::value == kNumFlags + kNumAdminRefBits + kNumAccessRefBits,
       "Value must be exactly the number of all the bits added together.");
-  static constexpr Value kAccessRefMask = std::numeric_limits<Value>::max() >>
-                                          (NumBits<Value>::value -
-                                           kNumAccessRefBits);
-  static constexpr Value kRefMask = std::numeric_limits<Value>::max() >>
-                                    (NumBits<Value>::value - kNumAdminRefBits -
-                                     kNumAccessRefBits);
+  static constexpr Value kAccessRefMask =
+      std::numeric_limits<Value>::max() >>
+      (NumBits<Value>::value - kNumAccessRefBits);
+  static constexpr Value kRefMask =
+      std::numeric_limits<Value>::max() >>
+      (NumBits<Value>::value - kNumAdminRefBits - kNumAccessRefBits);
 
   /**
    * Access reference counts indicate wthere there are an outstanding

@@ -20,12 +20,18 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/allocator/RebalanceStrategy.h"
+#include "cachelib/allocator/nvmcache/BlockCacheReinsertionPolicy.h"
 #include "cachelib/cachebench/util/JSONConfig.h"
 #include "cachelib/common/Ticker.h"
 #include "cachelib/navy/common/Device.h"
 
 namespace facebook {
 namespace cachelib {
+
+namespace navy {
+class Index;
+} // namespace navy
+
 namespace cachebench {
 // Monitor that is set up after CacheAllocator is created and
 // destroyed before CacheAllocator is shut down.
@@ -115,11 +121,11 @@ struct CacheConfig : public JSONConfig {
   uint64_t numPools{1};
   std::vector<double> poolSizes{1.0};
 
-  // uses a user specified file for caching. If the path specified is a file
-  // or raw device, then navy uses that directly. If the path specificied is a
-  // directory, we will create a file inside with appropriate size . If a
-  // directory is specified by user, cachebench cleans it up at exit. If it is
-  // a file, cachebench preserves the file upon exit. User can also specify a
+  // uses a user specified file for caching. If the path specified is a file or
+  // raw device, then navy uses that directly. If the path specified is a
+  // directory, we will create a file inside with appropriate size. If a
+  // directory is specified by user, cachebench cleans it up at exit. If it is a
+  // file, cachebench preserves the file upon exit. User can also specify a
   // number of devices. Cachelib's flash cache engine (Navy) will use them in a
   // raid0 fashion
   std::vector<std::string> nvmCachePaths{};
@@ -180,6 +186,17 @@ struct CacheConfig : public JSONConfig {
   // use a probability based reinsertion policy with navy
   uint64_t navyProbabilityReinsertionThreshold{0};
 
+  // Optional custom reinsertion policy factory for Navy's BlockCache.
+  // When set, this takes precedence over the standard hits-based
+  // reinsertion policy.
+  std::function<std::shared_ptr<BlockCacheReinsertionPolicy>(
+      const navy::Index&)>
+      customReinsertionPolicyFactory;
+
+  // Enable item history tracking in Navy's BlockCache index.
+  // Required by reinsertion policies that use item access history.
+  bool navyEnableItemHistoryTracking{false};
+
   // number of asynchronous worker thread for navy read operation.
   uint32_t navyReaderThreads{32};
 
@@ -191,7 +208,7 @@ struct CacheConfig : public JSONConfig {
   uint32_t navyMaxNumWrites{0};
 
   // Default stack size of Navy fibers when async IO is enabled
-  uint32_t navyStackSizeKB{16};
+  uint32_t navyStackSizeKB{32};
 
   // qdepth to be used; override if already set automatically
   // by navyMaxNumReads and navyMaxNumWrites
@@ -221,9 +238,6 @@ struct CacheConfig : public JSONConfig {
 
   // by default, we do not encrypt content in Navy
   bool navyEncryption = false;
-
-  // number of navy in-memory buffers
-  uint32_t navyNumInmemBuffers{30};
 
   // By default Navy will only flush to device at most 1MB, if larger than 1MB,
   // Navy will split it into multiple IOs.

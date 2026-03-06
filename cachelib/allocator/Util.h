@@ -166,22 +166,6 @@ uint32_t getFragmentation(const T& cache, const U& item) {
   return cache.getUsableSize(item) - item.getSize();
 }
 
-// Check if the given key is valid.  If the key is not valid, and is passed to
-// other cachelib functions, they might throw exceptions, return null or fail
-// with an error
-//
-// @param key The key to check
-// @return true if the key is a valid cachelib key, false otherwise
-inline bool isKeyValid(folly::StringPiece key) {
-  return KAllocation::isKeyValid(key);
-}
-
-// Same as isKeyValid() above, but throws a std::invalid_argument error when
-// the key is not valid
-inline void throwIfKeyInvalid(folly::StringPiece key) {
-  KAllocation::throwIfKeyInvalid(key);
-}
-
 // helper function to generate the allocation sizes for addPool()
 inline std::set<uint32_t> generateAllocSizes(
     double allocationClassSizeFactor,
@@ -193,6 +177,83 @@ inline std::set<uint32_t> generateAllocSizes(
       maxAllocationClassSize,
       minAllocationClassSize,
       reduceFragmentationInAllocationClass);
+}
+
+// Helper function to generate allocation sizes as powers of 2.
+// This provides a simple, uniform distribution of allocation sizes where each
+// size is double the previous one. This can be useful when you want predictable
+// allocation class sizes, when your workload's size distribution aligns well
+// with power-of-2 buckets, or as a reasonable default/safeguard when you don't
+// have detailed knowledge of your item size distribution.
+//
+// @param minPowerOf2  The minimum power of 2 for allocation sizes
+//                     (must be >= Slab::kMinAllocPower, i.e., >= 6 for 64
+//                     bytes)
+// @param maxPowerOf2  The maximum power of 2 for allocation sizes
+//                     (must be <= Slab::kNumSlabBits, i.e., <= 22 for 4MB)
+//
+// @return  A set of allocation sizes where each size is 2^i for i in
+//          [minPowerOf2, maxPowerOf2]. For example, minPowerOf2=6 and
+//          maxPowerOf2=10 generates {64, 128, 256, 512, 1024}.
+//
+// @throw std::invalid_argument if minPowerOf2 > maxPowerOf2
+// @throw std::invalid_argument if minPowerOf2 < Slab::kMinAllocPower
+// @throw std::invalid_argument if maxPowerOf2 > Slab::kNumSlabBits
+inline std::set<uint32_t> generateAllocSizesPowerOf2(uint32_t minPowerOf2,
+                                                     uint32_t maxPowerOf2) {
+  if (minPowerOf2 > maxPowerOf2) {
+    throw std::invalid_argument("minPowerOf2 must be <= maxPowerOf2");
+  }
+  if (minPowerOf2 < Slab::kMinAllocPower) {
+    throw std::invalid_argument(folly::sformat(
+        "minPowerOf2 must be >= {} because allocation size must be >= {}",
+        Slab::kMinAllocPower,
+        Slab::kMinAllocSize));
+  }
+  if (maxPowerOf2 > Slab::kNumSlabBits) {
+    throw std::invalid_argument(
+        folly::sformat("maxPowerOf2 must be <= {} because allocation size "
+                       "must be <= {} (Slab::kSize)",
+                       Slab::kNumSlabBits,
+                       Slab::kSize));
+  }
+
+  std::set<uint32_t> allocSizes;
+  for (uint32_t i = minPowerOf2; i <= maxPowerOf2; i++) {
+    allocSizes.insert(1 << i);
+  }
+  return allocSizes;
+}
+
+// Returns set of allocation sizes that are chosen in a way to minimize worst
+// case cache efficiency loss. Efficiency loss for an item size is defined in
+// the following way: If item size is s, x is the assigned allocation size and
+// y is the optimal allocation size, then efficiency loss is: (4MB/y) /
+// (4MB/x)
+// - 4MB/y is the number of allocations per slab using the optimal
+// allocation size
+// - 4MB/x is the number of allocations per slab using the
+// assigned allocation size
+// Efficiency loss tells us how many more items we could have stored if we had
+// used the optimal allocation size. These allocation sizes try to provide a
+// good default for any cache
+inline std::set<uint32_t> genAllocClassesTuned() {
+  return {64,     72,     80,     88,      104,     120,     136,    152,
+          168,    184,    200,    216,     232,     248,     264,    296,
+          328,    360,    392,    424,     456,     488,     520,    552,
+          584,    616,    648,    712,     776,     848,     912,    992,
+          1088,   1168,   1232,   1304,    1416,    1488,    1608,   1680,
+          1832,   1928,   2064,   2216,    2312,    2504,    2624,   2792,
+          2968,   3120,   3328,   3584,    3912,    4160,    4440,   4632,
+          4904,   5096,   5384,   5848,    6120,    6416,    6752,   7120,
+          7528,   7984,   8504,   9096,    9776,    10560,   11488,  12016,
+          12592,  13224,  13928,  14712,   15592,   16576,   17696,  18976,
+          20456,  22192,  24240,  25416,   26712,   28144,   29744,  31536,
+          33552,  35848,  38472,  41520,   45096,   49344,   54464,  57456,
+          60784,  64520,  68752,  73584,   79136,   85592,   93200,  102296,
+          113352, 127096, 135296, 144624,  155344,  167768,  182360, 199728,
+          220752, 246720, 279616, 322632,  381296,  419424,  466032, 524288,
+          599184, 699048, 838856, 1048576, 1398096, 2097152, 4194304};
 }
 
 // Calculates curr - prev, returning 0 if curr is less than prev

@@ -299,14 +299,14 @@ void testPersistRecoveryWithParams(uint32_t numFilters,
       auto key = folly::Random::rand64();
       auto idx = folly::Random::rand64() % numFilters;
       bf.set(idx, key);
-      keysAdded.push_back(std::make_pair(idx, key));
+      keysAdded.emplace_back(idx, key);
     }
 
     while (keysNotPresent.size() < numKeys) {
       auto key = folly::Random::rand64();
       auto idx = folly::Random::rand64() % numFilters;
       if (!bf.couldExist(idx, key)) {
-        keysNotPresent.push_back(std::make_pair(idx, key));
+        keysNotPresent.emplace_back(idx, key);
       }
     }
 

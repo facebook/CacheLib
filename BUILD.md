@@ -8,7 +8,7 @@ to be build from source.
 
 The primary dependecies are:
 
-* a C++17 compiler (tested with GCC, CLANG)
+* a C++20 compiler (tested with GCC, CLANG)
 * [https://cmake.org/](CMake)
 * [https://github.com/facebook/folly](folly) - Facebook's Open Source library
 * [https://github.com/facebook/fbthrift](FBThrift) - Facebook Thrift

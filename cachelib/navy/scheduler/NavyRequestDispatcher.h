@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "cachelib/common/AtomicCounter.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/common/Time.h"
 #include "cachelib/navy/common/NavyThread.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
@@ -88,9 +89,9 @@ class NavyRequestDispatcher {
     uint64_t numSubmitted = 0;
     // The number requests dispatched to worker thread
     uint64_t numDispatched = 0;
-    // The number of requests currently outstanding
-    uint64_t numCompleted = 0;
     // The number of requests completed
+    uint64_t numCompleted = 0;
+    // The number of requests currently outstanding
     uint64_t curOutstanding = 0;
   };
 
@@ -135,7 +136,7 @@ class NavyRequestDispatcher {
   // Maximum number of outstanding requests
   size_t maxOutstanding_;
   // Baton used for waiting when limited by maxOutstanding_
-  folly::fibers::Baton baton_;
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:req_dispatcher"> baton_;
   // Worker thread
   NavyThread worker_;
 

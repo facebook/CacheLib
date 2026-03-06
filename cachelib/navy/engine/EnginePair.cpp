@@ -326,4 +326,21 @@ void EnginePair::validate() {
   }
 }
 
+void EnginePair::updateEvictionStats(HashedKey hk,
+                                     BufferView value,
+                                     uint32_t lifetime) {
+  if (isItemLarge(hk, value)) {
+    largeItemCache_->updateEvictionStats(lifetime);
+  } else {
+    smallItemCache_->updateEvictionStats(lifetime);
+  }
+}
+
+void EnginePair::setEventTracker(std::shared_ptr<EventTracker> tracker) {
+  // Not setting in BigHash for now since we do not log anything there yet.
+  if (largeItemCache_) {
+    largeItemCache_->setEventTracker(std::move(tracker));
+  }
+}
+
 } // namespace facebook::cachelib::navy

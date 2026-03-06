@@ -158,7 +158,9 @@ TEST_F(PosixShmTest, RemoveWithMMap) {
 
   // creating a new segment with same name should succeed while the previous
   // segment is still mapped.
-  { PosixShmSegment newS(ShmNew, segmentName, size); }
+  {
+    PosixShmSegment newS(ShmNew, segmentName, size);
+  }
 
   // the memory currently mapped is still valid even though we created a new
   // segment with similar name.

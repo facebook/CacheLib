@@ -18,7 +18,6 @@
 
 #include <folly/Range.h>
 
-#include <stdexcept>
 #include <utility>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wconversion"
@@ -35,21 +34,21 @@ namespace util {
 class PercentileStats {
  public:
   struct Estimates {
-    uint64_t avg;
-    uint64_t p0;
-    uint64_t p5;
-    uint64_t p10;
-    uint64_t p25;
-    uint64_t p50;
-    uint64_t p75;
-    uint64_t p90;
-    uint64_t p95;
-    uint64_t p99;
-    uint64_t p999;
-    uint64_t p9999;
-    uint64_t p99999;
-    uint64_t p999999;
-    uint64_t p100;
+    uint64_t avg{0};
+    uint64_t p0{0};
+    uint64_t p5{0};
+    uint64_t p10{0};
+    uint64_t p25{0};
+    uint64_t p50{0};
+    uint64_t p75{0};
+    uint64_t p90{0};
+    uint64_t p95{0};
+    uint64_t p99{0};
+    uint64_t p999{0};
+    uint64_t p9999{0};
+    uint64_t p99999{0};
+    uint64_t p999999{0};
+    uint64_t p100{0};
   };
 
   // visit each latency estimate using the visitor.

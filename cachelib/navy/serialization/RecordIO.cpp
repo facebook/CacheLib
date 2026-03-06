@@ -110,7 +110,7 @@ class DeviceMetaDataWriter final : public RecordWriter {
     auto dataOffset = 0;
     uint8_t* bufferData = buffer_.data();
 
-    auto flushBuffer = [=]() mutable {
+    auto flushBuffer = [=, this]() mutable {
       auto extraBytes = blockSize_ - bufIndex_;
       // zero the unused bytes in the buffer
       memset(&bufferData[bufIndex_], 0, extraBytes);

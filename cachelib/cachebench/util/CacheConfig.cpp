@@ -86,7 +86,6 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, navyAdmissionWriteRateMB);
   JSONSetVal(configJson, navyMaxConcurrentInserts);
   JSONSetVal(configJson, navyDataChecksum);
-  JSONSetVal(configJson, navyNumInmemBuffers);
   JSONSetVal(configJson, truncateItemToOriginalAllocSizeInNvm);
   JSONSetVal(configJson, navyEncryption);
   JSONSetVal(configJson, deviceMaxWriteSize);
@@ -111,10 +110,11 @@ CacheConfig::CacheConfig(const folly::dynamic& configJson) {
   JSONSetVal(configJson, nvmAdmissionRetentionTimeThreshold);
 
   JSONSetVal(configJson, customConfigJson);
+  JSONSetVal(configJson, navyEnableItemHistoryTracking);
   // if you added new fields to the configuration, update the JSONSetVal
   // to make them available for the json configs and increment the size
   // below
-  checkCorrectSize<CacheConfig, 760>();
+  checkCorrectSize<CacheConfig, 792>();
 
   if (numPools != poolSizes.size()) {
     throw std::invalid_argument(folly::sformat(

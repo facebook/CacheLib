@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <atomic>
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
@@ -181,9 +182,7 @@ void* mmapAlignedZeroedMemory(size_t alignment,
 }
 
 void setMaxLockMemory(uint64_t bytes) {
-  struct rlimit rlim {
-    bytes, bytes
-  };
+  struct rlimit rlim{bytes, bytes};
   const int rv = setrlimit(RLIMIT_MEMLOCK, &rlim);
   if (rv == 0) {
     return;
@@ -372,6 +371,10 @@ std::string toString(std::chrono::nanoseconds d) {
 namespace {
 // char to int  conversion
 bool isDigit(char c) { return std::isdigit(c); }
+
+// NOLINTNEXTLINE(facebook-avoid-non-const-global-variables)
+std::atomic<size_t (*)()> getCgroupMemAvailableFn{nullptr};
+
 } // namespace
 
 size_t getRSSBytes() {
@@ -403,7 +406,14 @@ size_t getRSSBytes() {
 }
 
 size_t getMemAvailable() {
-  // read MemAvailable line from  /proc/meminfo
+  auto fn = getCgroupMemAvailableFn.load();
+  if (fn != nullptr) {
+    size_t cgroupMem = fn();
+    if (cgroupMem > 0) {
+      return cgroupMem;
+    }
+  }
+
   std::string memInfoStr;
   if (!folly::readFile("/proc/meminfo", memInfoStr)) {
     return 0;
@@ -425,6 +435,10 @@ size_t getMemAvailable() {
     }
   }
   return 0;
+}
+
+void setCgroupMemoryAdvising(CgroupMemAvailableFn provider) {
+  getCgroupMemAvailableFn.store(provider);
 }
 
 void printExceptionStackTraces() {

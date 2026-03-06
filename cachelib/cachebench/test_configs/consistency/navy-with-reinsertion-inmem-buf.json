@@ -6,8 +6,7 @@
 
     "allocFactor" : 2.0,
     "navyProbabilityReinsertionThreshold": 50,
-    "nvmCacheSizeMB" : 512,
-    "navyNumInmemBuffers": 30
+    "nvmCacheSizeMB" : 512
   },
   "test_config" :
     {

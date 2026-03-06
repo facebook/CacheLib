@@ -17,6 +17,7 @@
 #pragma once
 #include <folly/Range.h>
 #include <folly/Subprocess.h>
+#include <folly/Utility.h>
 
 #include <cstdint>
 
@@ -24,9 +25,9 @@ namespace facebook {
 namespace hw {
 
 // Process interface used to provide mock Process objects for unit tests.
-class Process {
+class Process : public folly::NonCopyableNonMovable {
  public:
-  virtual ~Process() {}
+  virtual ~Process() = default;
 
   // Read and write from the process stdin and stdout. The returned pair
   // is the process (stdout, stderr). See the caveat in folly/Subprocess.h
@@ -38,9 +39,9 @@ class Process {
 
 // Factory class used to create Process objects. This allows us to provide mock
 // Process objects for unit tests.
-class ProcessFactory {
+class ProcessFactory : public folly::NonCopyableNonMovable {
  public:
-  virtual ~ProcessFactory() {}
+  virtual ~ProcessFactory() = default;
   virtual std::shared_ptr<Process> createProcess(
       const std::vector<std::string>& argv,
       const folly::Subprocess::Options& options,
@@ -61,10 +62,11 @@ class ProcessFactory {
 //
 // @throws std::runtime_error if the device is not recognized or an error occurs
 //         when running the `nvme` command.
-uint64_t nandWriteBytes(const folly::StringPiece deviceName,
-                        const folly::StringPiece nvmePath = "/usr/sbin/nvme",
-                        std::shared_ptr<ProcessFactory> processFactory =
-                            std::make_shared<ProcessFactory>());
+uint64_t nandWriteBytes(
+    const folly::StringPiece deviceName,
+    const folly::StringPiece nvmePath = "/usr/local/sbin/nvme",
+    std::shared_ptr<ProcessFactory> processFactory =
+        std::make_shared<ProcessFactory>());
 
 } // namespace hw
 } // namespace facebook

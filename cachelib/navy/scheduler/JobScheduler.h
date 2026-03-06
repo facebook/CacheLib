@@ -71,10 +71,17 @@ class JobScheduler {
 
 // Create a thread pool job scheduler that ensures ordering of requests by
 // key. This is the default job scheduler for use in Navy.
+// @param readerThreads      The number of reader threads
+// @param writerThreads      The number of writer threads
+// @param reqOrderShardPower The number of shards (in power of 2) for ordering
+// @param readerPriority     Nice value for reader threads (0 = no change)
+// @param writerPriority     Nice value for writer threads (0 = no change)
 std::unique_ptr<JobScheduler> createOrderedThreadPoolJobScheduler(
     uint32_t readerThreads,
     uint32_t writerThreads,
-    uint32_t reqOrderShardPower);
+    uint32_t reqOrderShardPower,
+    int readerPriority = 0,
+    int writerPriority = 0);
 
 // Create a scheduler which runs jobs on fiber. The jobs for the same key
 // are serialized and guaranteed not to be run concurrently

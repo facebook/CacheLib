@@ -188,6 +188,7 @@ TEST(NavyConfigTest, Serialization) {
   expectedConfigMap["navyConfig::fileName"] = "";
   expectedConfigMap["navyConfig::raidPaths"] = "test1,test2";
   expectedConfigMap["navyConfig::deviceMetadataSize"] = "1073741824";
+  expectedConfigMap["navyConfig::maxKeySize"] = "255";
   expectedConfigMap["navyConfig::fileSize"] = "10485760";
   expectedConfigMap["navyConfig::truncateFile"] = "false";
   expectedConfigMap["navyConfig::deviceMaxWriteSize"] = "4194304";
@@ -392,6 +393,21 @@ TEST(NavyConfigTest, BlockCache) {
             navy::BlockCacheIndexConfig::kDefaultNumSparseMapBuckets);
   EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(),
             navy::BlockCacheIndexConfig::kDefaultNumBucketsPerMutex);
+
+  // Enable FixedSizeIndex with invalid argument
+  EXPECT_THROW(config.blockCache().enableFixedSizeIndex(6, 0, 1024),
+               std::invalid_argument);
+  EXPECT_THROW(config.blockCache().enableFixedSizeIndex(6, 100, 3000),
+               std::invalid_argument);
+
+  // Enable FixedSizeIndex with the valid arguments
+  config.blockCache().enableFixedSizeIndex(8, 27, 64 * 1024);
+  EXPECT_TRUE(config.blockCache().getIndexConfig().isFixedSizeIndexEnabled());
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumChunks(), 8);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerChunkPower(),
+            27);
+  EXPECT_EQ(config.blockCache().getIndexConfig().getNumBucketsPerMutex(),
+            64 * 1024);
 
   // Enable SparseMap with the different parameters
   config.blockCache().enableSparseMapIndex(32 * 1024, 128);

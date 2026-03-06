@@ -33,6 +33,7 @@
 #include <chrono>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 #include "cachelib/allocator/memory/serialize/gen-cpp2/objects_types.h"
 
@@ -286,7 +287,7 @@ SlabReleaseContext AllocationClass::startSlabRelease(
     }
   } // alloc lock scope
 
-  auto results = pruneFreeAllocs(slab, shouldAbortFn);
+  auto results = pruneFreeAllocs(slab, std::move(shouldAbortFn));
   if (results.first) {
     lock_->lock_combine([&]() {
       header->setMarkedForRelease(false);

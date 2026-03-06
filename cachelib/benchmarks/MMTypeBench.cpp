@@ -18,6 +18,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+#include <folly/system/HardwareConcurrency.h>
 #include <gflags/gflags.h>
 
 #include <condition_variable>
@@ -254,10 +255,10 @@ BENCHMARK_RELATIVE(MM2QRecordAccessWriteUpdateRdWr) {
 } // namespace facebook
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   if (FLAGS_num_threads == 0) {
-    FLAGS_num_threads = std::thread::hardware_concurrency();
+    FLAGS_num_threads = folly::available_concurrency();
     if (FLAGS_num_threads == 0) {
       FLAGS_num_threads = 32;
     }

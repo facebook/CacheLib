@@ -35,7 +35,8 @@ class PieceWiseReplayGenerator : public ReplayGeneratorBase {
         traceStream_(config, 0, {}),
         pieceCacheAdapter_(config.maxCachePieces,
                            config.replayGeneratorConfig.numAggregationFields,
-                           config.replayGeneratorConfig.statsPerAggField),
+                           config.replayGeneratorConfig.statsPerAggField,
+                           config.missTraceFile),
         activeReqQ_(config.numThreads),
         threadFinished_(config.numThreads) {
     for (uint32_t i = 0; i < numShards_; ++i) {

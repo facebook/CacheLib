@@ -46,11 +46,13 @@ class Driver final : public AbstractCache {
     std::unique_ptr<JobScheduler> scheduler;
     std::vector<EnginePair> enginePairs;
     std::unique_ptr<AdmissionPolicy> admissionPolicy;
+    NavyPersistParams persistParams;
     uint32_t smallItemMaxSize{};
     // Limited by scheduler parallelism (thread), this is large enough value to
     // mean "no limit".
     uint32_t maxConcurrentInserts{1'000'000};
     uint64_t maxParcelMemory{256 << 20}; // 256MB
+    uint32_t maxKeySize{255};
     size_t metadataSize{};
 
     bool useEstimatedWriteSize{false};
@@ -155,6 +157,14 @@ class Driver final : public AbstractCache {
   std::pair<Status, std::string /* key */> getRandomAlloc(
       Buffer& value) override;
 
+  // Update any stats needed to be updated when eviction is done
+  void updateEvictionStats(HashedKey key,
+                           BufferView value,
+                           uint32_t lifetime) override;
+
+  // Set the EventTracker for all underlying engines
+  void setEventTracker(std::shared_ptr<EventTracker> tracker) override;
+
  private:
   struct ValidConfigTag {};
 
@@ -170,10 +180,12 @@ class Driver final : public AbstractCache {
   const uint32_t maxConcurrentInserts_{};
   const uint64_t maxParcelMemory_{};
   const size_t metadataSize_{};
+  const uint32_t maxKeySize_{};
   const bool useEstimatedWriteSize_;
 
   std::unique_ptr<Device> device_;
   std::unique_ptr<JobScheduler> scheduler_;
+  NavyPersistParams persistParams_;
 
   const EnginePairSelector selector_{};
   std::vector<EnginePair> enginePairs_;

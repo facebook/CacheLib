@@ -173,6 +173,38 @@ TEST(Util, SysctlTests) {
 
 TEST(Util, MemAvailable) { EXPECT_GT(util::getMemAvailable(), 0); }
 
+namespace {
+size_t mockCgroupMemProviderZero() { return 0; }
+
+size_t mockCgroupMemProviderFixed() {
+  return 1024ULL * 1024 * 1024; // 1 GB
+}
+} // namespace
+
+TEST(Util, CgroupMemoryAdvising) {
+  auto memBefore = util::getMemAvailable();
+  EXPECT_GT(memBefore, 0);
+
+  util::setCgroupMemoryAdvising(mockCgroupMemProviderZero);
+
+  auto memAfter = util::getMemAvailable();
+  EXPECT_GT(memAfter, 0);
+  EXPECT_GT(memAfter, memBefore / 10);
+  EXPECT_LT(memAfter, memBefore * 10);
+
+  util::setCgroupMemoryAdvising(nullptr);
+}
+
+TEST(Util, CgroupMemoryAdvisingWithProvider) {
+  util::setCgroupMemoryAdvising(mockCgroupMemProviderFixed);
+  auto mem = util::getMemAvailable();
+  EXPECT_EQ(mem, 1024ULL * 1024 * 1024);
+
+  util::setCgroupMemoryAdvising(nullptr);
+  auto memHost = util::getMemAvailable();
+  EXPECT_GT(memHost, 0);
+}
+
 TEST(Util, CounterVisitor) {
   // Uninitialized can be called.
   util::CounterVisitor v;

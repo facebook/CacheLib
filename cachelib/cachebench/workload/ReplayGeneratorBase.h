@@ -129,7 +129,7 @@ class TraceFileStream {
       } else {
         // Default order is key,op,size,op_count,key_size,ttl
         nextLineFields_.clear();
-        folly::split(",", line, nextLineFields_);
+        folly::split(',', line, nextLineFields_);
 
         if (nextLineFields_.size() < minNumFields_) {
           XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
@@ -171,7 +171,7 @@ class TraceFileStream {
 
   bool setNextLine(const std::string& line) {
     nextLineFields_.clear();
-    folly::split(",", line, nextLineFields_);
+    folly::split(',', line, nextLineFields_);
     if (nextLineFields_.size() < minNumFields_) {
       XLOG_N_PER_MS(INFO, 10, 1000) << folly::sformat(
           "Error parsing next line \"{}\": shorter than min required fields {}",

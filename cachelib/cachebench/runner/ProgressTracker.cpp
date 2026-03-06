@@ -19,11 +19,15 @@
 namespace facebook {
 namespace cachelib {
 namespace cachebench {
-ProgressTracker::ProgressTracker(const Stressor& s,
+ProgressTracker::ProgressTracker(size_t instanceId,
+                                 const Stressor& s,
                                  const std::string& detailedStatsFile)
-    : stressor_(s) {
+    : instanceId_(instanceId),
+      stressor_(s),
+      prevStats_(stressor_.getCacheStats()) {
   if (!detailedStatsFile.empty()) {
     statsFile_.open(detailedStatsFile, std::ios::app);
+    statsFile_ << "=== Starting new run ===" << std::endl;
   }
 }
 
@@ -47,34 +51,21 @@ void ProgressTracker::work() {
   auto throughputStats = stressor_.aggregateThroughputStats();
   auto mOpsPerSec = throughputStats.ops / 1e6;
 
-  const auto currCacheStats = stressor_.getCacheStats();
-  auto [overallHitRatio, ramHitRatio, nvmHitRatio] =
-      currCacheStats.getHitRatios(prevStats_);
-  auto thStr = folly::sformat(
-      "{} {:>10.2f}M ops completed. {} items in cache. {} items in nvm cache. "
-      "{} items evicted from nvm cache. "
-      "Hit Ratio {:6.2f}% "
-      "(RAM {:6.2f}%, NVM {:6.2f}%).",
-      buf,
-      mOpsPerSec,
-      currCacheStats.numItems,
-      currCacheStats.numNvmItems,
-      currCacheStats.numNvmEvictions,
-      overallHitRatio,
-      ramHitRatio,
-      nvmHitRatio);
-
-  // log this always to stdout
-  std::cout << thStr << std::endl;
+  auto currCacheStats = stressor_.getCacheStats();
+  auto thStr = folly::sformat("Instance {:>3}: {} {:>10.2f}M ops completed. {}",
+                              instanceId_,
+                              buf,
+                              mOpsPerSec,
+                              currCacheStats->progress(*prevStats_));
 
   // additionally log into the stats file
   if (statsFile_.is_open()) {
     statsFile_ << thStr << std::endl;
     statsFile_ << "== Allocator Stats ==" << std::endl;
-    currCacheStats.render(statsFile_);
+    currCacheStats->render(statsFile_);
 
     statsFile_ << "== Hit Ratio Stats Since Last ==" << std::endl;
-    currCacheStats.render(prevStats_, statsFile_);
+    currCacheStats->render(*prevStats_, statsFile_);
 
     statsFile_ << "== Throughput Stats ==" << std::endl;
     auto elapsedTimeNs = stressor_.getTestDurationNs();
@@ -82,9 +73,11 @@ void ProgressTracker::work() {
 
     stressor_.renderWorkloadGeneratorStats(elapsedTimeNs, statsFile_);
     statsFile_ << std::endl;
+  } else {
+    std::cout << thStr << std::endl;
   }
 
-  prevStats_ = currCacheStats;
+  prevStats_ = std::move(currCacheStats);
 }
 } // namespace cachebench
 } // namespace cachelib

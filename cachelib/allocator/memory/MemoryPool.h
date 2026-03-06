@@ -308,13 +308,6 @@ class MemoryPool {
   // returns the number of slabs currently advised away
   uint64_t getNumSlabsAdvised() const { return curSlabsAdvised_; }
 
-  // set the number of slabs advised away. This is called only when
-  // we have no slabs to advise away or reclaim but number of slabs
-  // advised in across the pools need to be rebalanced.
-  //
-  // @param value  new value for the curSlabsAdvised_
-  void setNumSlabsAdvised(uint64_t value) { curSlabsAdvised_ = value; }
-
  private:
   // container for storing a vector of AllocationClass.
   using ACVector = std::vector<std::unique_ptr<AllocationClass>>;

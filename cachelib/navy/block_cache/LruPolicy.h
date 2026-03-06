@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -98,14 +99,14 @@ class LruPolicy final : public EvictionPolicy {
   void dumpList(const char* tag,
                 uint32_t n,
                 uint32_t first,
-                uint32_t ListNode::*link) const;
+                uint32_t ListNode::* link) const;
 
   static constexpr std::chrono::seconds kEstimatorWindow{5};
 
   std::vector<ListNode> array_;
   uint32_t head_{kInvalidIndex};
   uint32_t tail_{kInvalidIndex};
-  mutable TimedMutex mutex_;
+  mutable trace::Profiled<TimedMutex, "cachelib:navy:bc_lru_policy"> mutex_;
 
   // various counters that are populated when we evict a region.
   mutable util::PercentileStats secSinceInsertionEstimator_;

@@ -41,7 +41,7 @@ void SparseMapIndex::initialize() {
   totalMutexes_ = numBucketMaps_ / numBucketMapsPerMutex_;
 
   bucketMaps_ = std::make_unique<Map[]>(numBucketMaps_);
-  mutex_ = std::make_unique<SharedMutex[]>(totalMutexes_);
+  mutex_ = std::make_unique<SharedMutexType[]>(totalMutexes_);
 
   XLOGF(
       INFO,
@@ -100,7 +100,8 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
     LookupResult lr{true, it->second};
 
     trackRemove(it->second);
-    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is
+    // mutable
     it.value().address = address;
     it.value().currentHits = 0;
     it.value().extra = {0};
@@ -112,6 +113,18 @@ Index::LookupResult SparseMapIndex::insert(uint64_t key,
   return {};
 }
 
+Index::LookupResult SparseMapIndex::insertIfNotExists(uint64_t key,
+                                                      uint32_t address,
+                                                      uint16_t sizeHint) {
+  auto& map = getMap(key);
+  auto lock = std::lock_guard{getMutex(key)};
+  auto [it, inserted] = map.try_emplace(subkey(key), address, sizeHint);
+  if (!inserted) {
+    return LookupResult{true, it->second};
+  }
+  return {};
+}
+
 bool SparseMapIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {
@@ -120,7 +133,8 @@ bool SparseMapIndex::replaceIfMatch(uint64_t key,
 
   auto it = map.find(subkey(key));
   if (it != map.end() && it->second.address == oldAddress) {
-    // tsl::sparse_map's `it->second` is immutable, while it.value() is mutable
+    // tsl::sparse_map's `it->second` is immutable, while it.value() is
+    // mutable
     it.value().address = newAddress;
     if (extraField_ == ExtraField::kItemHitHistory) {
       it.value().extra.itemHistory >>= 1;
@@ -224,9 +238,9 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // add the size of fixed mem used for sparse_map's member (sparse_hash)
     size_t bucketMapMemUsed = sizeof(bucketMaps_[i]);
 
-    // The number of buckets is a power of 2 and one sparse array instance will
-    // cover 64 buckets, so there will be (# of buckets) / 64 sparse array
-    // instances (called sparse bucket in sparse_map implementation).
+    // The number of buckets is a power of 2 and one sparse array instance
+    // will cover 64 buckets, so there will be (# of buckets) / 64 sparse
+    // array instances (called sparse bucket in sparse_map implementation).
     auto sparseBucketCount =
         (bucketMaps_[i].bucket_count() == 0)
             ? 0
@@ -241,9 +255,9 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
     // sparse_map implementation. Real memory consumed by it is up to how hash
     // values of keys are distributed
     //
-    // The default config for sparse_array will increase the real array by 4 per
-    // every resize. For the worst case, we may have 4 additional entries per
-    // each sparse array instance (sparse bucket)
+    // The default config for sparse_array will increase the real array by 4
+    // per every resize. For the worst case, we may have 4 additional entries
+    // per each sparse array instance (sparse bucket)
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (# of sparse buckets) * 4
     range.maxUsedBytes +=
@@ -253,8 +267,8 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
              : ((((entryCount - 1) >> 2) << 2) + (sparseBucketCount << 2)) *
                    entrySize);
 
-    // For the best case, all sparse_array will be filled with the exact number
-    // (mod 4 == 0) of real buckets and only one sparse array may have
+    // For the best case, all sparse_array will be filled with the exact
+    // number (mod 4 == 0) of real buckets and only one sparse array may have
     // additional buckets
     // (# of real buckets)
     // = (# of entries - (# of entries mod 4)) + (1 or 0) * 4
@@ -268,9 +282,17 @@ Index::MemFootprintRange SparseMapIndex::computeMemFootprintRange() const {
   return range;
 }
 
-void SparseMapIndex::persist(RecordWriter& rw) const {
+void SparseMapIndex::persist(
+    std::optional<std::reference_wrapper<RecordWriter>> rw) const {
+  XDCHECK(rw.has_value());
+  if (!rw) {
+    XLOG(ERR,
+         "Cannot persist Block Cache index: No RecordWriter is available.");
+    return;
+  }
+
   serialization::IndexBucket bucketMap;
-  auto prevPos = rw.getCurPos();
+  auto prevPos = rw->get().getCurPos();
   uint64_t persisted = 0;
 
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
@@ -289,14 +311,15 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
     try {
       // Serialize bucket and this may throw exception when it's exceeding the
       // meta data size limit
-      serializeProto(bucketMap, rw);
+      serializeProto(bucketMap, rw->get());
       persisted += bucketMap.entries()->size();
     } catch (const std::exception& e) {
       // Log the error and more info on current index
       XLOGF(ERR,
             "Error persisting Block Cache Index: {}, persist() began at pos {} "
             "and current pos {}, trying to add {} entries from bucketMap {}",
-            e.what(), prevPos, rw.getCurPos(), bucketMap.entries()->size(), i);
+            e.what(), prevPos, rw->get().getCurPos(),
+            bucketMap.entries()->size(), i);
       auto memFootprint = computeMemFootprintRange();
       XLOGF(ERR,
             "Current Block cache items count: {}, persisted {} items, index "
@@ -314,9 +337,22 @@ void SparseMapIndex::persist(RecordWriter& rw) const {
   }
 }
 
-void SparseMapIndex::recover(RecordReader& rr) {
+void SparseMapIndex::recover(
+    std::optional<std::reference_wrapper<RecordReader>> rr) {
+  // initialize before recover just in case it's called not in init phase
+  if (computeSize() > 0) {
+    reset();
+  }
+
+  XDCHECK(rr.has_value());
+  if (!rr) {
+    XLOG(ERR,
+         "Cannot recover Block Cache index: No RecordReader is available.");
+    return;
+  }
+
   for (uint32_t i = 0; i < numBucketMaps_; i++) {
-    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr);
+    auto bucketMap = deserializeProto<serialization::IndexBucket>(rr->get());
     uint32_t id = *bucketMap.bucketId();
     if (id >= numBucketMaps_) {
       throw std::invalid_argument{folly::sformat(

@@ -20,16 +20,18 @@
 #include <folly/Format.h>
 #include <folly/Function.h>
 #include <folly/ThreadLocal.h>
-#include <folly/experimental/io/AsyncIO.h>
-#include <folly/experimental/io/IoUring.h>
+#include <folly/container/Reserve.h>
 #include <folly/fibers/TimedMutex.h>
+#include <folly/io/async/AsyncIO.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/io/async/EventHandler.h>
+#include <folly/io/async/IoUring.h>
 
 #include <chrono>
 #include <cstring>
 
+#include "cachelib/common/Profiled.h"
 #include "cachelib/navy/common/FdpNvme.h"
 #include "cachelib/navy/common/Utils.h"
 
@@ -148,7 +150,7 @@ struct IOReq {
   uint32_t numRemaining_ = 0;
   std::vector<IOOp> ops_;
   // Baton is used to wait for the completion of the entire request
-  folly::fibers::Baton baton_;
+  trace::Profiled<folly::fibers::Baton, "cachelib:navy:io_req"> baton_;
 
   // Time when the processing of this req started
   std::chrono::nanoseconds startTime_;
@@ -220,6 +222,10 @@ class CompletionHandler : public folly::EventHandler {
   }
 
   ~CompletionHandler() override { unregisterHandler(); }
+  CompletionHandler(const CompletionHandler&) = delete;
+  CompletionHandler& operator=(const CompletionHandler&) = delete;
+  CompletionHandler(CompletionHandler&&) = delete;
+  CompletionHandler& operator=(CompletionHandler&&) = delete;
 
   void handlerReady(uint16_t /*events*/) noexcept override;
 
@@ -267,7 +273,7 @@ class AsyncIoContext : public IoContext {
 
   // Waiter context to enforce the qdepth limit
   struct Waiter {
-    folly::fibers::Baton baton_;
+    trace::Profiled<folly::fibers::Baton, "cachelib:navy:async_io"> baton_;
     folly::SafeIntrusiveListHook hook_;
   };
 
@@ -295,7 +301,7 @@ class AsyncIoContext : public IoContext {
   static constexpr uint16_t kDefaultFdpIdx = 0u;
 };
 
-// An FileDevice manages direct I/O to either a single or multiple (RAID0)
+// A FileDevice manages direct I/O to either a single or multiple (RAID0)
 // block device(s) or regular file(s).
 class FileDevice : public Device {
  public:
@@ -312,6 +318,9 @@ class FileDevice : public Device {
 
   FileDevice(const FileDevice&) = delete;
   FileDevice& operator=(const FileDevice&) = delete;
+  FileDevice(FileDevice&&) = delete;
+  FileDevice& operator=(FileDevice&&) = delete;
+  ~FileDevice() override = default;
 
  private:
   IoContext* getIoContext();
@@ -341,7 +350,8 @@ class FileDevice : public Device {
   // Thread-local context, created on demand
   folly::ThreadLocalPtr<AsyncIoContext> tlContext_;
   // Keep list of contexts pointer for gdb debugging
-  folly::fibers::TimedMutex dbgAsyncIoContextsMutex_;
+  trace::Profiled<folly::fibers::TimedMutex, "cachelib:navy:dbg_async_io">
+      dbgAsyncIoContextsMutex_;
   std::vector<AsyncIoContext*> dbgAsyncIoContexts_;
 
   // io engine to be used
@@ -366,6 +376,8 @@ class MemoryDevice final : public Device {
         buffer_{std::make_unique<uint8_t[]>(size)} {}
   MemoryDevice(const MemoryDevice&) = delete;
   MemoryDevice& operator=(const MemoryDevice&) = delete;
+  MemoryDevice(MemoryDevice&&) = delete;
+  MemoryDevice& operator=(MemoryDevice&&) = delete;
   ~MemoryDevice() override = default;
 
  private:
@@ -619,6 +631,11 @@ IOReq::IOReq(IoContext& context,
   uint32_t idx = 0;
   if (fvec.size() > 1) {
     // For RAID devices
+    // Pre-allocate: number of ops equals the number of stripes touched
+    uint64_t startStripe = offset / stripeSize;
+    uint64_t endStripe = (offset + size - 1) / stripeSize;
+    folly::grow_capacity_by(ops_,
+                            static_cast<size_t>(endStripe - startStripe + 1));
     while (size > 0) {
       uint64_t stripe = offset / stripeSize;
       uint32_t fdIdx = stripe % fvec.size();
@@ -635,7 +652,7 @@ IOReq::IOReq(IoContext& context,
       buf += allowedIOSize;
     }
   } else {
-    ops_.emplace_back(*this, idx++, fvec[0].fd(), offset_, size_, data_,
+    ops_.emplace_back(*this, 0, fvec[0].fd(), offset_, size_, data_,
                       trackIOOpDeviceLatency, placeHandle_);
   }
 
@@ -1082,7 +1099,7 @@ IoContext* FileDevice::getIoContext() {
 
     {
       // Keep pointers in a vector to ease the gdb debugging
-      std::lock_guard<folly::fibers::TimedMutex> lock{dbgAsyncIoContextsMutex_};
+      std::lock_guard lock{dbgAsyncIoContextsMutex_};
       if (dbgAsyncIoContexts_.size() < idx + 1) {
         dbgAsyncIoContexts_.resize(idx + 1);
       }
@@ -1103,7 +1120,7 @@ int FileDevice::allocatePlacementHandle() {
   return -1;
 }
 
-// Open cache file @fileName and set it size to @size.
+// Open cache file @fileName and set its size to @size.
 // Throws std::system_error if failed.
 folly::File openCacheFile(const std::string& fileName,
                           uint64_t size,
@@ -1275,7 +1292,7 @@ std::unique_ptr<Device> createDirectIoFileDevice(
                                   IoEngine::Sync,
                                   0,
                                   false,
-                                  encryptor);
+                                  std::move(encryptor));
 }
 
 std::unique_ptr<Device> createFileDevice(
@@ -1298,17 +1315,17 @@ std::unique_ptr<Device> createFileDevice(
 
   std::sort(filePaths.begin(), filePaths.end());
   std::vector<folly::File> fileVec;
+  fileVec.reserve(filePaths.size());
   for (const auto& path : filePaths) {
-    folly::File f;
     try {
       // TODO: beyondsora implement
-      f = openCacheFile(path, fdSize, truncateFile, isExclusiveOwner);
+      fileVec.emplace_back(
+          openCacheFile(path, fdSize, truncateFile, isExclusiveOwner));
     } catch (const std::exception& e) {
       XLOG(ERR) << "Exception in openCacheFile(" << path << "): " << e.what()
                 << ". Errno: " << errno;
       throw;
     }
-    fileVec.push_back(std::move(f));
   }
 
   return createDirectIoFileDevice(std::move(fileVec),

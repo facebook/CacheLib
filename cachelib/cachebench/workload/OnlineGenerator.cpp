@@ -36,7 +36,7 @@ OnlineGenerator::OnlineGenerator(const StressorConfig& config)
           "your "
           "test config.");
     }
-    workloadDist_.push_back(WorkloadDistribution(c));
+    workloadDist_.emplace_back(c);
   }
 
   if (config_.numKeys > std::numeric_limits<uint64_t>::max()) {

@@ -399,6 +399,45 @@ std::optional<uint64_t> ocpWriteBytes(
                          1 /* factor */);
 }
 
+// Finds a matching namespace in a controller's Namespaces array.
+// Returns the controller's ModelNumber if the deviceName matches.
+std::optional<std::string> findModelInController(
+    const folly::dynamic& controller, const folly::StringPiece deviceName) {
+  for (const auto& ns : controller["Namespaces"]) {
+    XLOG(DBG) << "Considering namespace " << ns["NameSpace"].asString();
+    if (ns["NameSpace"].asString() == deviceName) {
+      XLOG(DBG) << "Device matched, returning model number "
+                << controller["ModelNumber"].asString();
+      return controller["ModelNumber"].asString();
+    }
+  }
+  return std::nullopt;
+}
+
+// Parses nvme v2 JSON format where devices are nested under
+// Subsystems -> Controllers -> Namespaces.
+// NameSpace field is "nvme0n1" (no /dev/ prefix), so we strip the prefix
+// from devicePath before matching.
+std::optional<std::string> getModelNumber(const folly::dynamic& devices,
+                                          const folly::StringPiece devicePath) {
+  const auto deviceName =
+      devicePath.startsWith("/dev/") ? devicePath.subpiece(5) : devicePath;
+  for (const auto& device : devices) {
+    if (!device.count("Subsystems")) {
+      continue;
+    }
+    for (const auto& subsystem : device["Subsystems"]) {
+      for (const auto& controller : subsystem["Controllers"]) {
+        auto result = findModelInController(controller, deviceName);
+        if (result.has_value()) {
+          return result;
+        }
+      }
+    }
+  }
+  return std::nullopt;
+}
+
 // Gets the output of `nvme list` for the given device.
 std::optional<std::string> getDeviceModelNumber(
     std::shared_ptr<ProcessFactory> processFactory,
@@ -413,14 +452,7 @@ std::optional<std::string> getDeviceModelNumber(
   try {
     const auto& obj = folly::parseJson(out);
     const auto& devices = obj["Devices"];
-    for (const auto& device : devices) {
-      XLOG(DBG) << "Considering device " << device["DevicePath"].asString();
-      if (device["DevicePath"].asString() == devicePath) {
-        XLOG(DBG) << "Device matched, returning model number "
-                  << device["ModelNumber"].asString();
-        return device["ModelNumber"].asString();
-      }
-    }
+    return getModelNumber(devices, devicePath);
   } catch (const folly::json::parse_error& e) {
     XLOG(ERR) << e.what();
   }

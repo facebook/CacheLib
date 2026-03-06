@@ -711,7 +711,7 @@ TEST(BigHash, DestructorCallbackOutsideLock) {
     EXPECT_EQ(Status::Ok, bh.insert(makeHK("key 1"), makeView("value 2")));
   });
 
-  // wait until destrcutor started, which means bucket lock is released
+  // wait until destructor started, which means bucket lock is released
   while (!started) {
     ;
   }

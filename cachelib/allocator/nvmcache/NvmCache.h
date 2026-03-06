@@ -18,6 +18,7 @@
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
+#include <folly/container/small_vector.h>
 #include <folly/fibers/TimedMutex.h>
 #include <folly/hash/Hash.h>
 #include <folly/json/dynamic.h>
@@ -39,8 +40,12 @@
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/common/Exceptions.h"
 #include "cachelib/common/Hash.h"
+#include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Profiled.h"
+#include "cachelib/common/Time.h"
 #include "cachelib/common/Utils.h"
 #include "cachelib/navy/common/Device.h"
+#include "cachelib/navy/common/Types.h"
 #include "folly/Range.h"
 
 namespace facebook::cachelib {
@@ -63,6 +68,8 @@ class NvmCache {
   using ItemDestructor = typename C::ItemDestructor;
   using DestructorData = typename C::DestructorData;
   using SampleItem = typename C::SampleItem;
+  using ItemDestructorMutex =
+      trace::Profiled<TimedMutex, "cachelib:nvmcache:item_destructor">;
 
   // Context passed in encodeCb or decodeCb. If the item has children,
   // they are passed in the form of a folly::Range.
@@ -125,7 +132,7 @@ class NvmCache {
     // allows the user of cachelib to provide logic to:
     // 1. Create blobs to be copied into NvmItem from the Item being evicted
     // from DRAM; and
-    // 2. Propagate the content of Item with the Blobs retrieved from NvmItem.
+    // 2. Populate the content of Item with the Blobs retrieved from NvmItem.
     MakeBlobCB makeBlobCb{};
     MakeObjCB makeObjCb{};
 
@@ -133,7 +140,7 @@ class NvmCache {
     // into the nvm device will be encrypted.
     std::shared_ptr<navy::DeviceEncryptor> deviceEncryptor{};
 
-    // Whether or not store full alloc-class sizes into NVM device.
+    // Whether or not to store full alloc-class sizes into NVM device.
     // If true, only store the orignal size the user requested.
     bool truncateItemToOriginalAllocSizeInNvm{false};
 
@@ -145,7 +152,7 @@ class NvmCache {
     // this option is merely here to allow us to disable this behavior
     // gradually. See S421120 for more details.
     // Update: We're now disabling the NvmCache only when the device is throwing
-    // errors with IO reqeusts from the remove path. (DeviceError - which is
+    // errors with IO requests from the remove path. (DeviceError - which is a
     // real error). Leaving this option here for now, since it could be useful
     // in the future.
     bool disableNvmCacheOnBadState{true};
@@ -167,7 +174,8 @@ class NvmCache {
   NvmCache(C& c,
            Config config,
            bool truncate,
-           const ItemDestructor& itemDestructor);
+           const ItemDestructor& itemDestructor,
+           const navy::NavyPersistParams& navyPersistParams = {});
 
   // Look up item by key
   // @param key         key to lookup
@@ -263,6 +271,13 @@ class NvmCache {
     return navyCache_->updateMaxRateForDynamicRandomAP(maxRate);
   }
 
+  // Set the EventTracker for all underlying NVM engines
+  void setEventTracker(std::shared_ptr<EventTracker> tracker) {
+    if (navyCache_) {
+      navyCache_->setEventTracker(std::move(tracker));
+    }
+  }
+
   // This lock is to protect concurrent NvmCache evictCB and CacheAllocator
   // remove/insertOrReplace/invalidateNvm.
   // This lock scope within the above functions is
@@ -273,8 +288,8 @@ class NvmCache {
   // The lock ensures that the items in itemRemoved_ must exist in nvm, and nvm
   // eviction must erase item from itemRemoved_, so there won't memory leak or
   // influence to future item with same key.
-  std::unique_lock<TimedMutex> getItemDestructorLock(HashedKey hk) const {
-    using LockType = std::unique_lock<TimedMutex>;
+  auto getItemDestructorLock(HashedKey hk) const {
+    using LockType = std::unique_lock<ItemDestructorMutex>;
     return itemDestructor_ ? LockType{itemDestructorMutex_[getShardForKey(hk)]}
                            : LockType{};
   }
@@ -289,6 +304,46 @@ class NvmCache {
   void markNvmItemRemovedLocked(HashedKey hk);
 
  private:
+  // Helper function to record event with NvmItem metadata
+  // @param event    The allocator API event type
+  // @param key      The key for the event
+  // @param result   The result of the operation
+  // @param nvmItem  The NvmItem to extract metadata from
+  void recordEvent(AllocatorApiEvent event,
+                   folly::StringPiece key,
+                   AllocatorApiResult result,
+                   const NvmItem* nvmItem = nullptr) {
+    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
+      if (!eventTracker->sampleKey(key)) {
+        return;
+      }
+    } else if (!CacheAPIWrapperForNvm<C>::getLegacyEventTracker(cache_)) {
+      return;
+    }
+
+    if (!nvmItem) {
+      CacheAPIWrapperForNvm<C>::recordEvent(cache_, event, key, result);
+      return;
+    }
+
+    const auto blob = nvmItem->getBlob(0);
+    const auto itemSize = blob.data.size();
+    const auto allocSize = blob.origAllocSize;
+    const auto expiryTime = nvmItem->getExpiryTime();
+    uint32_t ttlSecs = 0;
+    if (expiryTime != 0 && expiryTime > nvmItem->getCreationTime()) {
+      ttlSecs = expiryTime - nvmItem->getCreationTime();
+    }
+
+    CacheAPIWrapperForNvm<C>::recordEvent(
+        cache_, event, key, result,
+        typename C::EventRecordParams{.size = itemSize,
+                                      .ttlSecs = ttlSecs,
+                                      .expiryTime = expiryTime,
+                                      .allocSize = allocSize,
+                                      .poolId = nvmItem->poolId()});
+  }
+
   // returns the itemRemoved_ set size
   // it is the number of items were both in dram and nvm
   // and were removed from dram but not yet removed from nvm
@@ -350,8 +405,9 @@ class NvmCache {
   struct GetCtx {
     NvmCache& cache;       //< the NvmCache instance
     const std::string key; //< key being fetched
-    std::vector<std::shared_ptr<WaitContext<ReadHandle>>> waiters; // list of
-                                                                   // waiters
+    folly::small_vector<std::shared_ptr<WaitContext<ReadHandle>>, 4>
+        waiters;    // list of
+                    // waiters
     WriteHandle it; // will be set when Context is being filled
     util::LatencyTracker tracker_;
     bool valid_;
@@ -422,8 +478,9 @@ class NvmCache {
   void removeFromFillMap(HashedKey hk) {
     std::unique_ptr<GetCtx> to_delete;
     {
-      auto lock = getFillLock(hk);
-      auto& map = getFillMap(hk);
+      const auto shard = getShardForKey(hk);
+      auto lock = getFillLockForShard(shard);
+      auto& map = getFillMapForShard(shard);
       auto it = map.find(hk.key());
       if (it == map.end()) {
         return;
@@ -436,7 +493,7 @@ class NvmCache {
   // Erase entry for the ctx from the fill map
   // @param     key   item key
   void invalidateFill(HashedKey hk) {
-    auto shard = getShardForKey(hk);
+    const auto shard = getShardForKey(hk);
     auto lock = getFillLockForShard(shard);
     auto& map = getFillMapForShard(shard);
     auto it = map.find(hk.key());
@@ -458,24 +515,20 @@ class NvmCache {
     return hk.keyHash() % numShards_;
   }
 
-  size_t getNumShards() const { return numShards_; }
-
-  size_t getShardForKey(folly::StringPiece key) const {
-    return getShardForKey(HashedKey{key});
-  }
-
   FillMap& getFillMapForShard(size_t shard) { return fills_[shard].fills_; }
 
-  FillMap& getFillMap(HashedKey hk) {
-    return getFillMapForShard(getShardForKey(hk));
+  /**
+   * Obtains an exclusive fill lock for the shard.
+   */
+  auto getFillLockForShard(size_t shard) {
+    return std::unique_lock{fillLock_[shard].fillLock_};
   }
 
-  std::unique_lock<TimedMutex> getFillLockForShard(size_t shard) {
-    return std::unique_lock<TimedMutex>(fillLock_[shard].fillLock_);
-  }
-
-  std::unique_lock<TimedMutex> getFillLock(HashedKey hk) {
-    return getFillLockForShard(getShardForKey(hk));
+  /**
+   * Obtains a shared fill lock for the shard.
+   */
+  auto getSharedFillLockForShard(size_t shard) {
+    return std::shared_lock{fillLock_[shard].fillLock_};
   }
 
   void onGetComplete(GetCtx& ctx,
@@ -506,7 +559,9 @@ class NvmCache {
 
   // a map of fill locks for each shard
   struct FillLockStruct {
-    alignas(folly::hardware_destructive_interference_size) TimedMutex fillLock_;
+    alignas(folly::hardware_destructive_interference_size) trace::Profiled<
+        folly::fibers::TimedRWMutexWritePriority<folly::fibers::GenericBaton>,
+        "cachelib:nvmcache:fill"> fillLock_;
   };
   std::vector<FillLockStruct> fillLock_;
 
@@ -523,7 +578,7 @@ class NvmCache {
 
   const ItemDestructor itemDestructor_;
 
-  mutable std::vector<TimedMutex> itemDestructorMutex_{numShards_};
+  mutable std::vector<ItemDestructorMutex> itemDestructorMutex_{numShards_};
 
   // Used to track the keys of items present in NVM that should be excluded for
   // executing Destructor upon eviction from NVM, if the item is not present in
@@ -536,7 +591,7 @@ class NvmCache {
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
   friend class tests::NvmCacheTest;
-  FRIEND_TEST(CachelibAdminTest, WorkingSetAnalysisLoggingTest);
+  FRIEND_TEST(CachelibAdminCoreTest, WorkingSetAnalysisLoggingTest);
 };
 
 template <typename C>
@@ -568,7 +623,7 @@ typename NvmCache<C>::Config NvmCache<C>::Config::validateAndSetDefaults() {
     if (blockSize % encryptionBlockSize != 0) {
       throw std::invalid_argument(folly::sformat(
           "Encryption enabled but the encryption block granularity is not "
-          "aligned to the navy block size. ecryption block size: {}, "
+          "aligned to the navy block size. encryption block size: {}, "
           "block size: {}",
           encryptionBlockSize,
           blockSize));
@@ -595,7 +650,7 @@ template <typename C>
 typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
     HashedKey hk) {
   // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % numShards_;
+  const auto shard = getShardForKey(hk);
   auto guard = tombstones_[shard].add(hk.key());
 
   // need to synchronize tombstone creations with fill lock to serialize
@@ -615,9 +670,7 @@ typename NvmCache<C>::DeleteTombStoneGuard NvmCache<C>::createDeleteTombStone(
 
 template <typename C>
 bool NvmCache<C>::hasTombStone(HashedKey hk) {
-  // lower bits for shard and higher bits for key.
-  const auto shard = hk.keyHash() % numShards_;
-  return tombstones_[shard].isPresent(hk.key());
+  return tombstones_[getShardForKey(hk)].isPresent(hk.key());
 }
 
 template <typename C>
@@ -627,33 +680,43 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
   }
 
   util::LatencyTracker tracker(stats().nvmLookupLatency_);
-
-  auto shard = getShardForKey(hk);
-  // invalidateToken any inflight puts for the same key since we are filling
-  // from nvmcache.
-  inflightPuts_[shard].invalidateToken(hk.key());
-
   stats().numNvmGets.inc();
 
-  GetCtx* ctx{nullptr};
-  WriteHandle hdl{nullptr};
-  {
-    auto lock = getFillLockForShard(shard);
+  auto shard = getShardForKey(hk);
+  // invalidateToken any inflight puts from DRAM -> NVM for the key
+  inflightPuts_[shard].invalidateToken(hk.key());
+  // map of fills from NVM -> DRAM for the shard to which the key belongs
+  auto& fillMap = getFillMapForShard(shard);
+
+  /*
+   * Check for 3 things after we get the lock,
+   *  1. Is the item now in DRAM? If so, return.
+   *  2. FillMap has an entry so we can join as waiter in a GetCtx.
+   *  3. Assuming 1 and 2 are false, we can do a fast negative lookup.
+   */
+  auto checkShared =
+      [this, &hk, &shard,
+       &fillMap](typename FillMap::iterator& itOut,
+                 AllocatorApiEvent event) -> std::optional<WriteHandle> {
     // do not use the Cache::find() since that will call back into us.
-    hdl = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
-    if (UNLIKELY(hdl != nullptr)) {
-      if (hdl->isExpired()) {
-        hdl.reset();
-        hdl.markExpired();
+    auto hdlShared = CacheAPIWrapperForNvm<C>::findInternal(cache_, hk.key());
+    if (UNLIKELY(hdlShared != nullptr)) {
+      AllocatorApiResult findResult = AllocatorApiResult::FOUND;
+      if (hdlShared->isExpired()) {
+        hdlShared.reset();
+        hdlShared.markExpired();
         stats().numNvmGetMissExpired.inc();
         stats().numNvmGetMissFast.inc();
         stats().numNvmGetMiss.inc();
+        findResult = AllocatorApiResult::EXPIRED;
       }
-      return hdl;
+      // Special case where we have to record metadata with handle in NvmCache.h
+      CacheAPIWrapperForNvm<C>::recordEvent(cache_, event, hk.key(),
+                                            findResult);
+      return hdlShared;
     }
 
-    auto& fillMap = getFillMapForShard(shard);
-    auto it = fillMap.find(hk.key());
+    itOut = fillMap.find(hk.key());
     // we use async apis for nvmcache operations into navy. async apis for
     // lookups incur additional overheads and thread hops. However, navy can
     // quickly answer negative lookups through a synchronous api. So we try to
@@ -674,11 +737,35 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
     // For concurrent put, if it is already enqueued, its put context already
     // exists. If it is not enqueued yet (in-flight) the above invalidateToken
     // will prevent the put from being enqueued.
-    if (it == fillMap.end() && !putContexts_[shard].hasContexts() &&
+    if (itOut == fillMap.end() && !putContexts_[shard].hasContexts() &&
         !navyCache_->couldExist(hk)) {
       stats().numNvmGetMiss.inc();
       stats().numNvmGetMissFast.inc();
+      recordEvent(event, hk.key(), AllocatorApiResult::NOT_FOUND);
       return WriteHandle{};
+    }
+    return std::nullopt;
+  };
+
+  WriteHandle hdl{nullptr};
+  typename FillMap::iterator it{};
+  GetCtx* ctx{nullptr};
+
+  {
+    // Hot miss path: shared lock, immutable access only
+    auto lock = getSharedFillLockForShard(shard);
+    if (auto hdlShared = checkShared(it, AllocatorApiEvent::NVM_FIND_FAST)) {
+      return *std::move(hdlShared);
+    }
+    // fallthrough
+  }
+  {
+    // Slow path: exclusive lock
+    auto lock = getFillLockForShard(shard);
+
+    // Recheck miss path under exclusive lock
+    if (auto hdlShared = checkShared(it, AllocatorApiEvent::NVM_FIND)) {
+      return *std::move(hdlShared);
     }
 
     hdl = CacheAPIWrapperForNvm<C>::createNvmCacheFillHandle(cache_);
@@ -721,7 +808,7 @@ bool NvmCache<C>::couldExistFast(HashedKey hk) {
     return false;
   }
 
-  auto shard = getShardForKey(hk);
+  const auto shard = getShardForKey(hk);
   // invalidateToken any inflight puts for the same key since we are filling
   // from nvmcache.
   inflightPuts_[shard].invalidateToken(hk.key());
@@ -772,7 +859,7 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
     return nullptr;
   }
 
-  folly::fibers::Baton b;
+  trace::Profiled<folly::fibers::Baton, "cachelib:nvmcache:peek"> b;
   WriteHandle hdl{};
   hdl.markWentToNvm();
 
@@ -819,10 +906,10 @@ void NvmCache<C>::evictCB(HashedKey hk,
     navyCache_->isItemLarge(hk, value)
         ? stats().nvmLargeLifetimeSecs_.trackValue(lifetime)
         : stats().nvmSmallLifetimeSecs_.trackValue(lifetime);
-    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
-      eventTracker->record(AllocatorApiEvent::NVM_EVICT, hk.key(),
-                           AllocatorApiResult::EVICTED);
-    }
+    navyCache_->updateEvictionStats(hk, value, lifetime);
+
+    recordEvent(AllocatorApiEvent::NVM_EVICT, hk.key(),
+                AllocatorApiResult::EVICTED, &nvmItem);
   }
 
   bool needDestructor = true;
@@ -951,7 +1038,8 @@ template <typename C>
 NvmCache<C>::NvmCache(C& c,
                       Config config,
                       bool truncate,
-                      const ItemDestructor& itemDestructor)
+                      const ItemDestructor& itemDestructor,
+                      const navy::NavyPersistParams& navyPersistParams)
     : config_(config.validateAndSetDefaults()),
       cache_(c),
       numShards_{config_.navyConfig.getNumShards()},
@@ -976,7 +1064,8 @@ NvmCache<C>::NvmCache(C& c,
       },
       truncate,
       std::move(config.deviceEncryptor),
-      itemDestructor_ ? true : false);
+      itemDestructor_ ? true : false,
+      navyPersistParams);
 }
 
 template <typename C>
@@ -1013,8 +1102,11 @@ std::unique_ptr<NvmItem> NvmCache<C>::makeNvmItem(const Item& item) {
   }
 
   if (config_.makeBlobCb) {
-    std::vector<BufferedBlob> bufferedBlobs =
-        config_.makeBlobCb(item, chainedItemRange);
+    std::vector<BufferedBlob> bufferedBlobs;
+    {
+      util::LatencyTracker tracker(stats().nvmMakeBlobCbLatency_);
+      bufferedBlobs = config_.makeBlobCb(item, chainedItemRange);
+    }
     if (bufferedBlobs.empty()) {
       return nullptr;
     }
@@ -1073,19 +1165,27 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   }
 
   // we skip writing if we know that the item is expired or has chained items
-  if (!isEnabled() || item.isExpired()) {
+  if (!isEnabled()) {
+    return;
+  } else if (item.isExpired()) {
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::EXPIRED);
     return;
   }
 
   stats().numNvmPuts.inc();
   if (hasTombStone(hk)) {
     stats().numNvmAbortedPutOnTombstone.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
     return;
   }
 
   auto nvmItem = makeNvmItem(item);
   if (!nvmItem) {
     stats().numNvmPutEncodeFailure.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
     return;
   }
 
@@ -1113,16 +1213,20 @@ void NvmCache<C>::put(Item& item, PutToken token) {
     auto status = navyCache_->insertAsync(
         HashedKey::precomputed(ctx.key(), hk.keyHash()), makeBufferView(val),
         [this, putCleanup, valSize, val](navy::Status st, HashedKey key) {
+          auto eventRes = AllocatorApiResult::INSERTED;
           if (st == navy::Status::Ok) {
             stats().nvmPutSize_.trackValue(valSize);
           } else if (st == navy::Status::BadState) {
+            eventRes = AllocatorApiResult::FAILED;
             // we set disable navy since we got a BadState from navy
             disableNavy("Insert Failure. BadState");
           } else {
+            eventRes = AllocatorApiResult::FAILED;
             // put failed, DRAM eviction happened and destructor was not
             // executed. we unconditionally trigger destructor here for cleanup.
             evictCB(key, makeBufferView(val), navy::DestructorEvent::PutFailed);
           }
+          recordEvent(AllocatorApiEvent::NVM_INSERT, key.key(), eventRes);
           putCleanup();
         });
 
@@ -1143,6 +1247,8 @@ void NvmCache<C>::put(Item& item, PutToken token) {
   // upon handle release.
   if (!executed) {
     stats().numNvmAbortedPutOnInflightGet.inc();
+    recordEvent(AllocatorApiEvent::NVM_INSERT, item.getKey(),
+                AllocatorApiResult::ABORTED);
   }
 }
 
@@ -1151,7 +1257,7 @@ template <typename F>
 typename folly::Expected<typename NvmCache<C>::PutToken,
                          InFlightPuts::PutTokenError>
 NvmCache<C>::createPutToken(folly::StringPiece key, F&& fn) {
-  return inflightPuts_[getShardForKey(key)].tryAcquireToken(
+  return inflightPuts_[getShardForKey(HashedKey{key})].tryAcquireToken(
       key, std::forward<F>(fn));
 }
 
@@ -1172,7 +1278,12 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
   if (status != navy::Status::Ok) {
     // instead of disabling navy, we enqueue a delete and return a miss.
     if (status != navy::Status::NotFound) {
+      recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                  AllocatorApiResult::FAILED);
       remove(hk, createDeleteTombStone(hk));
+    } else {
+      recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                  AllocatorApiResult::NOT_FOUND);
     }
     stats().numNvmGetMiss.inc();
     return;
@@ -1188,6 +1299,8 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     hdl.markExpired();
     hdl.markWentToNvm();
     ctx.setWriteHandle(std::move(hdl));
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::EXPIRED, nvmItem);
     return;
   }
 
@@ -1198,19 +1311,25 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
     // we failed to fill due to an internal failure. Return a miss and
     // invalidate what we have in nvmcache
     remove(hk, createDeleteTombStone(hk));
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::FAILED);
     return;
   }
 
   XDCHECK(it->isNvmClean());
 
-  auto lock = getFillLock(hk);
+  auto lock = getFillLockForShard(getShardForKey(hk));
   if (hasTombStone(hk) || !ctx.isValid()) {
     // a racing remove or evict while we were filling
     stats().numNvmGetMiss.inc();
     stats().numNvmGetMissDueToInflightRemove.inc();
+    recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(),
+                AllocatorApiResult::NOT_FOUND);
     return;
   }
 
+  recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(), AllocatorApiResult::FOUND,
+              nvmItem);
   // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
   if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {
@@ -1249,20 +1368,22 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
       cache_.addChainedItem(it, std::move(chainedIt));
       XDCHECK(it->hasChainedItem());
     }
-    if (!config_.makeObjCb(
-            nvmItem, *it,
-            CacheAPIWrapperForNvm<C>::viewAsWritableChainedAllocsRange(cache_,
-                                                                       *it))) {
-      return nullptr;
-    } else {
-      // Often times an object needs its associated destructor to be triggered
-      // to release resources (such as memory) properly. Today we use removeCB
-      // or ItemDestructor to represent this logic for cachelib's object-cache.
-      // Thus, we need to ensure these callbacks are always invoked when this
-      // item goes away even if the item had never been inserted into cache (aka
-      // not visible to other threads).
-      it.unmarkNascent();
+    {
+      util::LatencyTracker tracker(stats().nvmMakeObjCbLatency_);
+      if (!config_.makeObjCb(
+              nvmItem, *it,
+              CacheAPIWrapperForNvm<C>::viewAsWritableChainedAllocsRange(
+                  cache_, *it))) {
+        return nullptr;
+      }
     }
+    // Often times an object needs its associated destructor to be triggered
+    // to release resources (such as memory) properly. Today we use removeCB
+    // or ItemDestructor to represent this logic for cachelib's object-cache.
+    // Thus, we need to ensure these callbacks are always invoked when this
+    // item goes away even if the item had never been inserted into cache (aka
+    // not visible to other threads).
+    it.unmarkNascent();
     it->markNvmClean();
   } else {
     XDCHECK_LE(pBlob.data.size(), getStorageSizeInNvm(*it));
@@ -1382,6 +1503,7 @@ std::unique_ptr<folly::IOBuf> NvmCache<C>::createItemAsIOBuf(
   }
   // If the customized callback is set, we'll call it to propagate the payload.
   if (useCustomCb) {
+    util::LatencyTracker tracker(stats().nvmMakeObjCbLatency_);
     if (!config_.makeObjCb(nvmItem, *item,
                            viewAsWritableChainedAllocsRange(head.get()))) {
       return nullptr;
@@ -1435,14 +1557,12 @@ void NvmCache<C>::remove(HashedKey hk, DeleteTombStoneGuard tombstone) {
   // capture array reference for delContext. it is stable
   auto delCleanup = [&delContexts, &ctx, this](navy::Status status,
                                                HashedKey) mutable {
-    if (auto eventTracker = CacheAPIWrapperForNvm<C>::getEventTracker(cache_)) {
-      const auto result = status == navy::Status::Ok
-                              ? AllocatorApiResult::REMOVED
-                              : (status == navy::Status::NotFound
-                                     ? AllocatorApiResult::NOT_FOUND
-                                     : AllocatorApiResult::FAILED);
-      eventTracker->record(AllocatorApiEvent::NVM_REMOVE, ctx.key(), result);
-    }
+    const auto result =
+        status == navy::Status::Ok
+            ? AllocatorApiResult::REMOVED
+            : (status == navy::Status::NotFound ? AllocatorApiResult::NOT_FOUND
+                                                : AllocatorApiResult::FAILED);
+    recordEvent(AllocatorApiEvent::NVM_REMOVE, ctx.key(), result);
     delContexts.destroyContext(ctx);
     if (status == navy::Status::Ok || status == navy::Status::NotFound ||
         status == navy::Status::ChecksumError) {
@@ -1535,7 +1655,7 @@ template <typename C>
 uint64_t NvmCache<C>::getNvmItemRemovedSize() const {
   uint64_t size = 0;
   for (size_t i = 0; i < numShards_; ++i) {
-    auto lock = std::unique_lock<TimedMutex>{itemDestructorMutex_[i]};
+    auto lock = std::unique_lock{itemDestructorMutex_[i]};
     size += itemRemoved_[i].size();
   }
   return size;

@@ -26,10 +26,14 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "cachelib/allocator/BackgroundMoverStrategy.h"
 #include "cachelib/allocator/Cache.h"
 #include "cachelib/allocator/MM2Q.h"
+#include "cachelib/allocator/MMLru.h"
+#include "cachelib/allocator/MMTinyLFU.h"
+#include "cachelib/allocator/MMWTinyLFU.h"
 #include "cachelib/allocator/MemoryMonitor.h"
 #include "cachelib/allocator/MemoryTierCacheConfig.h"
 #include "cachelib/allocator/NvmAdmissionPolicy.h"
@@ -59,7 +63,8 @@ class CacheAllocatorConfig {
   using NvmCacheConfig = typename CacheT::NvmCacheT::Config;
   using MemoryTierConfigs = std::vector<MemoryTierCacheConfig>;
   using Key = typename CacheT::Key;
-  using EventTrackerSharedPtr = std::shared_ptr<typename CacheT::EventTracker>;
+  using LegacyEventTrackerSharedPtr =
+      std::shared_ptr<typename CacheT::LegacyEventTracker>;
   using Item = typename CacheT::Item;
 
   // Set cache name as a string
@@ -80,6 +85,9 @@ class CacheAllocatorConfig {
       uint32_t _maxAllocationClassSize,
       uint32_t _minAllocationClassSize,
       bool _reduceFragmentationInAllocationClass);
+
+  // Set whether users are allowed to use large keys (> 255 bytes)
+  CacheAllocatorConfig& setAllowLargeKeys(bool largeKeys);
 
   // Set the access config for cachelib's access container. Refer to our
   // user guide for how to tune access container (configure hashtable).
@@ -302,13 +310,15 @@ class CacheAllocatorConfig {
   // we move slab memory around. Come talk to Cache Library team if you think
   // this can help your service.
   CacheAllocatorConfig& enableMovingOnSlabRelease(
-      MoveCb cb,
-      ChainedItemMovingSync sync = {},
-      uint32_t movingAttemptsLimit = 10);
+      MoveCb cb, ChainedItemMovingSync sync = {});
 
   // Specify a threshold for detecting slab release stuck
   CacheAllocatorConfig& setSlabReleaseStuckThreashold(
       std::chrono::milliseconds threshold);
+
+  // Set the timeout for slab rebalance operations
+  CacheAllocatorConfig& setSlabRebalanceTimeout(
+      std::chrono::milliseconds timeout);
 
   // This customizes how many items we try to evict before giving up.s
   // We may fail to evict if someone else (another thread) is using an item.
@@ -331,7 +341,7 @@ class CacheAllocatorConfig {
 
   // Passes in a callback to initialize an event tracker when the allocator
   // starts
-  CacheAllocatorConfig& setEventTracker(EventTrackerSharedPtr&&);
+  CacheAllocatorConfig& setEventTracker(LegacyEventTrackerSharedPtr&&);
 
   // Set the minimum TTL for an item to be admitted into NVM cache.
   // If nvmAdmissionMinTTL is set to be positive, any item with configured TTL
@@ -351,6 +361,35 @@ class CacheAllocatorConfig {
   // skip promote children items in chained when parent fail to promote
   bool isSkipPromoteChildrenWhenParentFailed() const noexcept {
     return skipPromoteChildrenWhenParentFailed;
+  }
+
+  // Enable aggregating pool stats to a single stat
+  //
+  // When enabled, pool stats from all pools will be aggregated into a single
+  // "aggregated" stat to reduce ODS counter inflation. For example, with two
+  // pools and this option disabled, you will have separate stats like:
+  // -
+  // cachelib.cache_name.pool.cache_name_0.items
+  // -
+  // cachelib.cache_name.pool.cache_name_1.items
+  // With this option enabled, it will be aggregated to:
+  // - cachelib.cache_name.pool.aggregated.items
+  //
+  // LIMITATIONS:
+  // 1. If the cache is using more than 128 distinct allocation sizes across
+  //    all pools, pool stats cannot be aggregated and will fall back to
+  //    separate stat logging.
+  // 2. Some statistics such as evictionAgeSecs (avg and quantiles) may not be
+  //    mathematically precise. These stats are aggregated using weighted
+  //    averages based on the relative number of evictions from each pool.
+  //    While this provides a reasonable approximation, it may not represent
+  //    the exact distribution that would result from treating all pools as
+  //    a single entity.
+  CacheAllocatorConfig& enableAggregatePoolStats();
+
+  // @return whether pool stats aggregation is enabled
+  bool isAggregatePoolStatsEnabled() const noexcept {
+    return aggregatePoolStats;
   }
 
   // @return whether compact cache is enabled
@@ -444,6 +483,9 @@ class CacheAllocatorConfig {
   // a custom set of alloc sizes.
   std::set<uint32_t> defaultAllocSizes;
 
+  // whether to allow large keys (> 255 bytes)
+  bool allowLargeKeys{false};
+
   // whether to detach allocator memory upon a core dump
   bool disableFullCoredump{true};
 
@@ -531,8 +573,9 @@ class CacheAllocatorConfig {
   // optimization strategy
   std::shared_ptr<PoolOptimizeStrategy> poolOptimizeStrategy{nullptr};
 
-  // Callback for initializing the eventTracker on CacheAllocator construction.
-  EventTrackerSharedPtr eventTracker{nullptr};
+  // Callback for initializing the legacyEventTracker on CacheAllocator
+  // construction.
+  LegacyEventTrackerSharedPtr legacyEventTracker{nullptr};
 
   // whether to allow tracking tail hits in MM2Q
   bool trackTailHits{false};
@@ -562,14 +605,14 @@ class CacheAllocatorConfig {
   // 0 means it's infinite
   unsigned int evictionSearchTries{50};
 
+  // the amount of time to wait for a slab to be released before giving up
+  // and aborting the release. 0 means we will wait forever
+  std::chrono::milliseconds slabRebalanceTimeout{std::chrono::minutes(10)};
+
   // If refcount is larger than this threshold, we will use shared_ptr
   // for handles in IOBuf chains.
   unsigned int thresholdForConvertingToIOBuf{
       std::numeric_limits<unsigned int>::max()};
-
-  // number of attempts to move an item before giving up and try to
-  // evict the item
-  unsigned int movingTries{10};
 
   // Config that specifes how throttler will behave
   // How much time it will sleep and how long an interval between each sleep
@@ -660,6 +703,9 @@ class CacheAllocatorConfig {
 
   size_t numShards{8192};
 
+  // If true, aggregate pool stats into a single stat before exporting
+  bool aggregatePoolStats{false};
+
   friend CacheT;
 
  private:
@@ -670,6 +716,7 @@ class CacheAllocatorConfig {
   std::string stringifyAddr(const void* addr) const;
   std::string stringifyRebalanceStrategy(
       const std::shared_ptr<RebalanceStrategy>& strategy) const;
+  std::string_view getEvictionPolicyName() const;
 
   // Configuration for memory tiers.
   MemoryTierConfigs memoryTierConfigs{
@@ -714,6 +761,13 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDefaultAllocSizes(
 }
 
 template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAllowLargeKeys(
+    bool largeKeys) {
+  allowLargeKeys = largeKeys;
+  return *this;
+}
+
+template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setAccessConfig(
     AccessConfig config) {
   accessConfig = std::move(config);
@@ -751,7 +805,7 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableRejectFirstAPForNvm(
     bool useDramHitSignal) {
   if (numEntries == 0) {
     throw std::invalid_argument(
-        "Enalbing reject first AP needs non zero numEntries");
+        "Enabling reject first AP needs non zero numEntries");
   }
   rejectFirstAPNumEntries = numEntries;
   rejectFirstAPNumSplits = numSplits;
@@ -833,7 +887,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableNvmCacheBlockEncryption(
     std::shared_ptr<NvmCacheDeviceEncryptor> encryptor) {
   if (!nvmConfig) {
     throw std::invalid_argument(
-        "NvmCache encrytion/decrytion callbacks can not be set unless nvmcache "
+        "NvmCache encryption/decryption callbacks can not be set unless "
+        "nvmcache "
         "is used");
   }
   if (!encryptor) {
@@ -1060,10 +1115,9 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enablePoolResizing(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableMovingOnSlabRelease(
-    MoveCb cb, ChainedItemMovingSync sync, uint32_t movingAttemptsLimit) {
+    MoveCb cb, ChainedItemMovingSync sync) {
   moveCb = cb;
   movingSync = sync;
-  movingTries = movingAttemptsLimit;
   return *this;
 }
 
@@ -1071,6 +1125,13 @@ template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabReleaseStuckThreashold(
     std::chrono::milliseconds threshold) {
   slabReleaseStuckThreshold = threshold;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setSlabRebalanceTimeout(
+    std::chrono::milliseconds timeout) {
+  slabRebalanceTimeout = timeout;
   return *this;
 }
 
@@ -1098,8 +1159,8 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setThrottlerConfig(
 
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setEventTracker(
-    EventTrackerSharedPtr&& otherEventTracker) {
-  eventTracker = std::move(otherEventTracker);
+    LegacyEventTrackerSharedPtr&& otherEventTracker) {
+  legacyEventTracker = std::move(otherEventTracker);
   return *this;
 }
 
@@ -1131,6 +1192,12 @@ CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setDelayCacheWorkersStart() {
 template <typename T>
 CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::setNumShards(size_t shards) {
   numShards = shards;
+  return *this;
+}
+
+template <typename T>
+CacheAllocatorConfig<T>& CacheAllocatorConfig<T>::enableAggregatePoolStats() {
+  aggregatePoolStats = true;
   return *this;
 }
 
@@ -1207,6 +1274,7 @@ template <typename T>
 std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   std::map<std::string, std::string> configMap;
 
+  configMap["evictionPolicy"] = std::string(getEvictionPolicyName());
   configMap["size"] = std::to_string(size);
   configMap["cacheDir"] = cacheDir;
   configMap["posixShm"] = isUsingPosixShm() ? "set" : "empty";
@@ -1220,6 +1288,7 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
     configMap["defaultAllocSizes"] += std::to_string(elem);
   }
   configMap["disableFullCoredump"] = std::to_string(disableFullCoredump);
+  configMap["allowLargeKeys"] = std::to_string(allowLargeKeys);
   configMap["dropNvmCacheOnShmNew"] = std::to_string(dropNvmCacheOnShmNew);
   configMap["trackRecentItemsForDump"] =
       std::to_string(trackRecentItemsForDump);
@@ -1241,6 +1310,9 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   case MemoryMonitor::Disabled:
     configMap["memMonitorMode"] = "Disabled";
     break;
+  case MemoryMonitor::TestMode:
+    configMap["memMonitorMode"] = "Test";
+    break;
   default:
     configMap["memMonitorMode"] = "Unknown";
   }
@@ -1260,7 +1332,6 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
   configMap["evictionSearchTries"] = std::to_string(evictionSearchTries);
   configMap["thresholdForConvertingToIOBuf"] =
       std::to_string(thresholdForConvertingToIOBuf);
-  configMap["movingTries"] = std::to_string(movingTries);
   configMap["chainedItemsLockPower"] = std::to_string(chainedItemsLockPower);
   configMap["removeCb"] = removeCb ? "set" : "empty";
   configMap["nvmAP"] = nvmCacheAP ? "custom" : "empty";
@@ -1281,19 +1352,21 @@ std::map<std::string, std::string> CacheAllocatorConfig<T>::serialize() const {
       stringifyRebalanceStrategy(poolAdviseStrategy);
   configMap["defaultPoolRebalanceStrategy"] =
       stringifyRebalanceStrategy(defaultPoolRebalanceStrategy);
-  configMap["eventTracker"] = eventTracker ? "set" : "empty";
+  configMap["eventTracker"] = legacyEventTracker ? "set" : "empty";
   configMap["nvmAdmissionMinTTL"] = std::to_string(nvmAdmissionMinTTL);
   configMap["delayCacheWorkersStart"] =
       delayCacheWorkersStart ? "true" : "false";
   configMap["numShards"] = std::to_string(numShards);
+  configMap["aggregatePoolStats"] = aggregatePoolStats ? "true" : "false";
   mergeWithPrefix(configMap, throttleConfig.serialize(), "throttleConfig");
   mergeWithPrefix(configMap,
                   chainedItemAccessConfig.serialize(),
                   "chainedItemAccessConfig");
   mergeWithPrefix(configMap, accessConfig.serialize(), "accessConfig");
   mergeWithPrefix(configMap, reaperConfig.serialize(), "reaperConfig");
-  if (nvmConfig)
+  if (nvmConfig) {
     mergeWithPrefix(configMap, nvmConfig->serialize(), "nvmConfig");
+  }
 
   return configMap;
 }
@@ -1310,8 +1383,9 @@ void CacheAllocatorConfig<T>::mergeWithPrefix(
 
 template <typename T>
 std::string CacheAllocatorConfig<T>::stringifyAddr(const void* addr) const {
-  if (addr == nullptr)
+  if (addr == nullptr) {
     return "";
+  }
   const std::string HEX = "0123456789abcdef";
   uintptr_t num = (uintptr_t)slabMemoryBaseAddr;
   std::string res = "";
@@ -1329,6 +1403,22 @@ std::string CacheAllocatorConfig<T>::stringifyRebalanceStrategy(
     return "empty";
   }
   return folly::json::serialize(folly::toDynamic(strategy->exportConfig()), {});
+}
+
+template <typename T>
+std::string_view CacheAllocatorConfig<T>::getEvictionPolicyName() const {
+  const int id = T::MMType::kId;
+  if (id == MMLru::kId) {
+    return "MMLru";
+  } else if (id == MM2Q::kId) {
+    return "MM2Q";
+  } else if (id == MMTinyLFU::kId) {
+    return "MMTinyLFU";
+  } else if (id == MMWTinyLFU::kId) {
+    return "MMWTinyLFU";
+  } else {
+    return "Unknown";
+  }
 }
 } // namespace cachelib
 } // namespace facebook

@@ -16,8 +16,6 @@
 
 #include "cachelib/shm/SysVShmSegment.h"
 
-#include <folly/ScopeGuard.h>
-#include <folly/hash/Hash.h>
 #include <folly/logging/xlog.h>
 #include <numa.h>
 #include <numaif.h>

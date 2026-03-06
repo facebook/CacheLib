@@ -332,6 +332,11 @@ class BucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
   LockHolder tryLock(Args... args) noexcept {
     return LockHolder(Base::getLock(args...), std::try_to_lock);
   }
+
+  template <typename... Args>
+  LockHolder deferLock(Args... args) noexcept {
+    return LockHolder(Base::getLock(args...), std::defer_lock);
+  }
 };
 
 template <typename LockType,
@@ -383,9 +388,6 @@ class RWBucketLocks : public BaseBucketLocks<LockType, LockAlignmentType> {
             : WriteLockHolder(Base::getLock(args...), timeout);
   }
 };
-using TimedMutexRWBuckets =
-    RWBucketLocks<folly::fibers::TimedRWMutex<folly::fibers::Baton>>;
-using SharedMutexBuckets = RWBucketLocks<folly::SharedMutex>;
 
 // a spinning mutex appearing as a rw mutex
 using SpinBuckets = RWBucketLocks<RWMockLock>;

@@ -18,6 +18,7 @@
 
 #include "cachelib/allocator/CacheAllocator.h"
 #include "cachelib/cachebench/runner/AsyncCacheStressor.h"
+#include "cachelib/cachebench/runner/CacheComponentStressor.h"
 #include "cachelib/cachebench/runner/CacheStressor.h"
 #include "cachelib/cachebench/runner/FastShutdown.h"
 #include "cachelib/cachebench/runner/IntegrationStressor.h"
@@ -204,6 +205,9 @@ std::unique_ptr<Stressor> Stressor::makeStressor(
       return std::make_unique<AsyncCacheStressor<Lru5B2QAllocator>>(
           cacheConfig, stressorConfig, std::move(generator));
     }
+  } else if (stressorConfig.name == "cache_component") {
+    return std::make_unique<CacheComponentStressor>(
+        cacheConfig, stressorConfig, makeGenerator(stressorConfig));
   } else {
     auto generator = makeGenerator(stressorConfig);
     if (cacheConfig.allocator == "LRU") {

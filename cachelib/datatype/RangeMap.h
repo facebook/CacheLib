@@ -221,7 +221,7 @@ class FOLLY_PACK_ATTR BinaryIndex {
     BufferAddr addr{};
   };
 
-  typedef std::function<void(BufferAddr)> DeleteCB;
+  using DeleteCB = std::function<void(BufferAddr)>;
 
   static uint32_t computeStorageSize(uint32_t capacity);
 

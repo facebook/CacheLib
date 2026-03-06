@@ -23,8 +23,7 @@
     "poolRebalanceIntervalSec": 2,
     "rebalanceStrategy": "hits",
     "rebalanceMinRatio": 0.1,
-    "rebalanceMinSlabs": 2,
-    "navyNumInmemBuffers": 30
+    "rebalanceMinSlabs": 2
   },
   "test_config":
     {

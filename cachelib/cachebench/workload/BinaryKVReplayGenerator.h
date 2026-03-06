@@ -163,7 +163,7 @@ const Request& BinaryKVReplayGenerator::getReq(uint8_t,
     BinaryRequest* req = nullptr;
     try {
       req = binaryStream_.getNextPtr(stressorCtx.reqIdx_ + stressorCtx.runIdx_);
-    } catch (const EndOfTrace& e) {
+    } catch (const EndOfTrace&) {
       if (config_.repeatTraceReplay) {
         XLOGF_EVERY_MS(
             INFO, 60'000,

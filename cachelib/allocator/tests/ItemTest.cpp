@@ -212,5 +212,46 @@ TEST(ItemTest, ToString) {
       new (buffer) ChainedItem(dummyCompressedPtr, valueSize, now);
   chainedItem->toString();
 }
+
+TEST(ItemTest, SizedLargeKey) {
+  constexpr size_t bufSize = 128;
+  constexpr size_t halfBufSize = bufSize / 2;
+  constexpr size_t headerSize = 4;
+  constexpr size_t largeKeyMetadataSize = 4;
+  // Key size is half of buffer (minus header)
+  constexpr size_t keySize = halfBufSize - headerSize;
+
+  uint8_t keyBuffer[keySize];
+  std::memset(keyBuffer, /* ch */ 0xff, keySize);
+  KAllocation::Key key{reinterpret_cast<const char*>(keyBuffer), keySize};
+
+  // Initialize KAllocation with small key and all characters are 0xff
+  union Data {
+    KAllocation kalloc;
+    uint8_t buffer[bufSize];
+  };
+  Data data{KAllocation{key, /* valueSize */ halfBufSize}};
+
+  // Simulate the key getting evicted and the size getting set to 0
+  std::memset(data.buffer, /* ch */ 0, /* count */ headerSize);
+
+  // Internally the KAllocation thinks that we have a large key (key size = 0)
+  // so it will jump to the 4 bytes after the header to get the large key size
+  // (which should be uint32_t max).  getKeySize() should prune the key size to
+  // the passed in allocation size minus the header (8 bytes for large keys).
+  auto retrievedKey = data.kalloc.getKeySized(bufSize);
+  // Retrieved key size = 128 (alloc size) - 8 (large key header size)
+  EXPECT_EQ(retrievedKey.size(), bufSize - headerSize - largeKeyMetadataSize);
+  // Check the first 56 bytes against the key
+  EXPECT_EQ(std::memcmp(retrievedKey.data(), keyBuffer + largeKeyMetadataSize,
+                        keySize - largeKeyMetadataSize),
+            0);
+  // Check the remaining 64 bytes against the value
+  EXPECT_EQ(std::memcmp(retrievedKey.data() + keySize - largeKeyMetadataSize,
+                        data.buffer + halfBufSize,
+                        halfBufSize),
+            0);
+}
+
 } // namespace cachelib
 } // namespace facebook

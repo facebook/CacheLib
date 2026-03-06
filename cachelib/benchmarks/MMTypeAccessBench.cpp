@@ -16,6 +16,7 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
+#include <folly/system/HardwareConcurrency.h>
 
 #include <iomanip>
 #include <iostream>
@@ -78,10 +79,10 @@ uint64_t MMLruRecordAccessRead(uint32_t numNodes, uint32_t numAccess) {
 using namespace facebook::cachelib::benchmarks;
 
 int main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   if (kNumThreads == 0) {
-    kNumThreads = std::thread::hardware_concurrency();
+    kNumThreads = folly::available_concurrency();
     if (kNumThreads == 0) {
       kNumThreads = 32;
     }

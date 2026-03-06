@@ -15,6 +15,8 @@
  */
 
 #pragma once
+#include <folly/CPortability.h>
+
 #include <chrono>
 #include <ctime>
 #include <stdexcept>
@@ -47,6 +49,26 @@ inline uint64_t getCurrentTimeNs() {
 inline uint32_t getSteadyCurrentTimeSec() {
   auto ret = std::chrono::steady_clock::now().time_since_epoch();
   return std::chrono::duration_cast<std::chrono::seconds>(ret).count();
+}
+
+// FOLLY_EXPORT ensures the dynamic linker dedups the function so there's not a
+// copy of thread local variables per inline instance of this function
+FOLLY_EXPORT inline bool isExpired(uint32_t expiryTime) noexcept {
+  thread_local uint32_t staleTime = 0;
+
+  if (expiryTime == 0) {
+    return false;
+  }
+
+  if (expiryTime < staleTime) {
+    return true;
+  }
+
+  uint32_t currentTime = static_cast<uint32_t>(util::getCurrentTimeSec());
+  if (currentTime != staleTime) {
+    staleTime = currentTime;
+  }
+  return expiryTime < currentTime;
 }
 
 class Timer {
