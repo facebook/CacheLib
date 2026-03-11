@@ -339,19 +339,27 @@ class FixedSizeIndex : public Index {
     for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       // Store it to avoid same calculation multiple times
       slotBids[i] = calcSlotBucketId(bid, i);
-
       // Make sure we don't go across the shard boundary
       XDCHECK(shardId(slotBids[i]) == shardId(bid))
           << bid << " " << i << " " << slotBids[i];
+    }
 
+    // check if we have the entry in the combined entry block
+    if (handleOverflow_) {
+      auto res = checkCombinedIndexEntry(slotBids, key);
+      if (res != kInvalidBucketSlotOffset) {
+        return res;
+      }
+    }
+
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       if (ht_[slotBids[i]].isValid() && !ht_[slotBids[i]].isCombinedEntry() &&
           bucketDistInfo_.getBucketFillOffset(slotBids[i]) == i &&
           partialKeyBits(key) == bucketDistInfo_.getPartialKey(slotBids[i])) {
         return i;
       }
     }
-    return (handleOverflow_) ? checkCombinedIndexEntry(slotBids, key)
-                             : kInvalidBucketSlotOffset;
+    return kInvalidBucketSlotOffset;
   }
 
   std::optional<uint8_t> findOrMakeEmptySlotByMoving(
