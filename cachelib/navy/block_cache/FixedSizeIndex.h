@@ -409,6 +409,55 @@ class FixedSizeIndex : public Index {
     return kInvalidBucketSlotOffset;
   }
 
+  std::optional<PackedItemRecord> getCombinedIndexEntry(uint64_t sid,
+                                                        uint64_t bid,
+                                                        uint64_t key) const {
+    // For now, combined entry will be in memory only
+    auto it = combinedEntries_[sid].find(bid);
+    XDCHECK_NE(it, combinedEntries_[sid].end());
+
+    auto res = it->second->getIndexEntry(key);
+    if (!res.hasError()) {
+      return res.value();
+    }
+    return std::nullopt;
+  }
+
+  // It will add or update (if it's already there) an index entry for the given
+  // key and record.
+  bool insertCombinedIndexEntry(uint64_t sid,
+                                uint64_t bid,
+                                uint64_t key,
+                                const PackedItemRecord& record) {
+    // For now, combined entry will be in memory only
+    auto it = combinedEntries_[sid].find(bid);
+    XDCHECK_NE(it, combinedEntries_[sid].end());
+
+    auto res = it->second->addIndexEntry(bid, key, record);
+    if (res == CombinedEntryStatus::kUpdated ||
+        res == CombinedEntryStatus::kOk) {
+      return true;
+    }
+    // Currently, only failing case is when it's full
+    XDCHECK(res == CombinedEntryStatus::kFull);
+    XLOGF(ERR,
+          "Combined entry block for bid {} is full and couldn't add the "
+          "index entry for key {}",
+          bid, key);
+
+    // TODO: For now, we don't handle overflowed combined entry block case.
+    // So it's just returning simple boolean here
+    return false;
+  }
+
+  bool removeCombinedIndexEntry(uint64_t sid, uint64_t bid, uint64_t key) {
+    // For now, combined entry will be in memory only
+    auto it = combinedEntries_[sid].find(bid);
+    XDCHECK_NE(it, combinedEntries_[sid].end());
+
+    return (it->second->removeIndexEntry(key) == CombinedEntryStatus::kOk);
+  }
+
   // This helper will get the proper bucket id and record entry
   // Return value : The pair of <Bucket id, pointer to the record>
   std::pair<uint64_t, PackedItemRecord*> getBucket(uint64_t orgBid,
@@ -597,33 +646,121 @@ class FixedSizeIndex : public Index {
                                    bool alloc)
         : bid_(index.bucketId(key)),
           sid_{index.shardId(bid_)},
+          key_(key),
           lg_{index.mutex_[sid_]},
           validBuckets_{index.validBucketsPerShard_[sid_]} {
       auto offset = alloc ? index.decideBucketOffset(bid_, key)
                           : index.checkBucketOffset(bid_, key);
-      std::tie(bid_, record_) = index.getBucket(bid_, offset);
+      std::tie(bid_, htEntry_) = index.getBucket(bid_, offset);
       bucketOffset_ = offset;
+      if (htEntry_) {
+        if (!htEntry_->isCombinedEntry()) {
+          record_ = *htEntry_;
+        } else {
+          auto res = index.getCombinedIndexEntry(sid_, bid_, key);
+          if (res.has_value()) {
+            record_ = res.value();
+            // TODO: For now, hit count for combined index entry is only updated
+            // to combined entry itself. So hit count should be adjusted
+            record_.bumpCurHits(htEntry_->info.curHits);
+          }
+        }
+      }
     }
 
-    PackedItemRecord* recordPtr() { return record_; }
+    // Returned reference should be always used for read only.
+    const PackedItemRecord& recordRef() { return record_; }
     size_t& validBucketCntRef() { return validBuckets_; }
     void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
-      if (bucketOffset_ != kInvalidBucketSlotOffset) {
+      if (bucketOffset_ != kInvalidBucketSlotOffset &&
+          !htEntry_->isCombinedEntry()) {
         index.bucketDistInfo_.updateBucketFillInfo(bid_, bucketOffset_,
                                                    index.partialKeyBits(key));
       }
     }
-    bool isValidRecord() const {
-      return (record_ != nullptr && record_->isValid());
+
+    // htEntry_ is pointing to the bucket entry, while record_ is the actual
+    // record for the given key. record_ could be invalid even when we have
+    // the htEntry_ located for the given key.
+    bool isValidRecord() const { return (record_.isValid()); }
+
+    // If there's no bucket which can possibly have the record for the given
+    // key, htEntry_ is nullptr.
+    bool bucketExist() const { return htEntry_ != nullptr; }
+
+    void updateRecord(const PackedItemRecord newRec, FixedSizeIndex& index) {
+      if (!htEntry_->isCombinedEntry()) {
+        *htEntry_ = newRec;
+        record_ = newRec;
+      } else {
+        if (index.insertCombinedIndexEntry(sid_, bid_, key_, newRec)) {
+          record_ = newRec;
+        } else {
+          // Even when it fails, old one was removed within
+          // insertCombinedIndexEntry()
+          record_ = PackedItemRecord{};
+        }
+      }
     }
-    bool bucketExist() const { return record_ != nullptr; }
+
+    bool updateNewAddress(uint32_t newAddress, FixedSizeIndex& index) {
+      // This will be mainly used when the entry was moved to different location
+      // and only the address needs to be updated (ex. with reclaim-reinsert)
+      //
+      // We need a separate function from updateRecrod() since we don't keep
+      // sizeExp for each record and we don't want to re-calculate for sizeHint
+      // <-> sizeExp conversion
+      if (!htEntry_->isCombinedEntry()) {
+        htEntry_->address = newAddress;
+        htEntry_->info.curHits = 0;
+        record_ = *htEntry_;
+      } else {
+        record_.address = newAddress;
+        record_.info.curHits = 0;
+        if (!index.insertCombinedIndexEntry(sid_, bid_, key_, record_)) {
+          // Even when it fails, old one was removed within
+          // insertCombinedIndexEntry()
+          record_ = PackedItemRecord{};
+          return false;
+        }
+      }
+      return true;
+    }
+
+    void removeRecord(FixedSizeIndex& index) {
+      if (!htEntry_->isCombinedEntry()) {
+        *htEntry_ = PackedItemRecord{};
+      } else {
+        index.removeCombinedIndexEntry(sid_, bid_, key_);
+      }
+      record_ = PackedItemRecord{};
+    }
+
+    int bumpCurRecordHits() {
+      // TODO: Need to think about how to handle/manage hit count update for
+      // combined entries. We can't update/write the entry everytime it's
+      // looked up. For now, we will just use hitcount for the combined entry
+      // block itself. Not precise, but still related value.
+      return htEntry_->bumpCurHits();
+    }
+
+    // This function is only for test purpose.
+    void setCurRecordHits(uint8_t newHits) {
+      // Since it's only for testing, it assumes non combined entry
+      XDCHECK(htEntry_ != nullptr && record_.isValid() &&
+              !htEntry_->isCombinedEntry());
+      htEntry_->info.curHits = newHits;
+      record_.info.curHits = newHits;
+    }
 
    private:
     uint64_t bid_;
     uint64_t sid_;
+    uint64_t key_;
     std::lock_guard<SharedMutexType> lg_;
     size_t& validBuckets_;
-    PackedItemRecord* record_{};
+    PackedItemRecord* htEntry_{};
+    PackedItemRecord record_{};
     uint8_t bucketOffset_{kInvalidBucketSlotOffset};
   };
 
@@ -638,20 +775,33 @@ class FixedSizeIndex : public Index {
           sid_{index.shardId(bid_)},
           lg_{index.mutex_[sid_]} {
       // check next bucket if it should be used
-      std::tie(bid_, record_) =
+      std::tie(bid_, htEntry_) =
           index.getBucket(bid_, index.checkBucketOffset(bid_, key));
+      if (htEntry_) {
+        if (!htEntry_->isCombinedEntry()) {
+          record_ = *htEntry_;
+        } else {
+          auto res = index.getCombinedIndexEntry(sid_, bid_, key);
+          if (res.has_value()) {
+            record_ = res.value();
+            // TODO: For now, hit count for combined index entry is only
+            // updated to combined entry itself. So hit count should be
+            // adjusted
+            record_.bumpCurHits(htEntry_->info.curHits);
+          }
+        }
+      }
     }
 
-    const PackedItemRecord* recordPtr() const { return record_; }
-    bool isValidRecord() const {
-      return (record_ != nullptr && record_->isValid());
-    }
+    const PackedItemRecord& recordRef() const { return record_; }
+    bool isValidRecord() const { return (record_.isValid()); }
 
    private:
     uint64_t bid_;
     uint64_t sid_;
     std::shared_lock<SharedMutexType> lg_;
-    const PackedItemRecord* record_{};
+    const PackedItemRecord* htEntry_{};
+    PackedItemRecord record_{};
   };
 
   friend class CombinedEntryBlock;

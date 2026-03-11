@@ -215,12 +215,15 @@ class Index {
     bool isCombinedEntry() const {
       return info.sizeExp == kCombinedEntrySizeExp;
     }
-    void setCombinedEntry() { info.sizeExp = kCombinedEntrySizeExp; }
+    void setCombinedEntry() {
+      info.sizeExp = kCombinedEntrySizeExp;
+      // reset the current hits to 0
+      // This hit count will be for the combined entry itself
+      info.curHits = 0;
+    }
 
-    int bumpCurHits() {
-      if (info.curHits < 3) {
-        info.curHits++;
-      }
+    int bumpCurHits(uint8_t hits = 1) {
+      info.curHits = (uint8_t)(std::min(info.curHits + hits, 3));
       return info.curHits;
     }
   };

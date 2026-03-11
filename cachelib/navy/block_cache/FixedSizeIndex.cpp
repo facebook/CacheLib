@@ -78,10 +78,10 @@ Index::LookupResult FixedSizeIndex::lookup(uint64_t key) {
 
   if (elb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(elb.recordPtr()->address,
-                                   elb.recordPtr()->getSizeHint(),
+                        ItemRecord(elb.recordRef().address,
+                                   elb.recordRef().getSizeHint(),
                                    0, /* totalHits */
-                                   elb.recordPtr()->bumpCurHits()));
+                                   elb.bumpCurRecordHits()));
   }
 
   return {};
@@ -92,10 +92,10 @@ Index::LookupResult FixedSizeIndex::peek(uint64_t key) const {
 
   if (slb.isValidRecord()) {
     return LookupResult(true,
-                        ItemRecord(slb.recordPtr()->address,
-                                   slb.recordPtr()->getSizeHint(),
+                        ItemRecord(slb.recordRef().address,
+                                   slb.recordRef().getSizeHint(),
                                    0, /* totalHits */
-                                   slb.recordPtr()->info.curHits));
+                                   slb.recordRef().info.curHits));
   }
 
   return {};
@@ -110,16 +110,17 @@ Index::LookupResult FixedSizeIndex::insert(uint64_t key,
   XDCHECK(elb.bucketExist());
   if (elb.isValidRecord()) {
     lr = LookupResult(true,
-                      ItemRecord(elb.recordPtr()->address,
-                                 elb.recordPtr()->getSizeHint(),
+                      ItemRecord(elb.recordRef().address,
+                                 elb.recordRef().getSizeHint(),
                                  0, /* totalHits */
-                                 elb.recordPtr()->info.curHits));
+                                 elb.recordRef().info.curHits));
   } else {
     ++elb.validBucketCntRef();
   }
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
-  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateRecord(PackedItemRecord{address, sizeHint, /* currentHits */ 0},
+                   *this);
   elb.updateDistInfo(key, *this);
 
   return lr;
@@ -134,17 +135,18 @@ Index::LookupResult FixedSizeIndex::insertIfNotExists(uint64_t key,
   XDCHECK(elb.bucketExist());
   if (elb.isValidRecord()) {
     lr = LookupResult(true,
-                      ItemRecord(elb.recordPtr()->address,
-                                 elb.recordPtr()->getSizeHint(),
+                      ItemRecord(elb.recordRef().address,
+                                 elb.recordRef().getSizeHint(),
                                  0, /* totalHits */
-                                 elb.recordPtr()->info.curHits));
+                                 elb.recordRef().info.curHits));
     return lr;
   }
 
   ++elb.validBucketCntRef();
   // TODO: need to combine this two ops into one to make sure updateDistInfo()
   // part is not missed
-  *elb.recordPtr() = PackedItemRecord{address, sizeHint, /* currentHits */ 0};
+  elb.updateRecord(PackedItemRecord{address, sizeHint, /* currentHits */ 0},
+                   *this);
   elb.updateDistInfo(key, *this);
 
   return lr;
@@ -153,12 +155,12 @@ Index::LookupResult FixedSizeIndex::insertIfNotExists(uint64_t key,
 bool FixedSizeIndex::replaceIfMatch(uint64_t key,
                                     uint32_t newAddress,
                                     uint32_t oldAddress) {
+  // This will be mainly used when the entry was moved to different location
+  // and only the address needs to be updated (ex. with reclaim-reinsert)
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.isValidRecord() && elb.recordPtr()->address == oldAddress) {
-    elb.recordPtr()->address = newAddress;
-    elb.recordPtr()->info.curHits = 0;
-    return true;
+  if (elb.isValidRecord() && elb.recordRef().address == oldAddress) {
+    return elb.updateNewAddress(newAddress, *this);
   }
   return false;
 }
@@ -167,19 +169,19 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
   ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.isValidRecord()) {
-    LookupResult lr{true, ItemRecord(elb.recordPtr()->address,
-                                     elb.recordPtr()->getSizeHint(),
+    LookupResult lr{true, ItemRecord(elb.recordRef().address,
+                                     elb.recordRef().getSizeHint(),
                                      0, /* totalHits */
-                                     elb.recordPtr()->info.curHits)};
+                                     elb.recordRef().info.curHits)};
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
-    *elb.recordPtr() = PackedItemRecord{};
+    elb.removeRecord(*this);
     return lr;
   }
 
   if (elb.bucketExist()) {
-    *elb.recordPtr() = PackedItemRecord{};
+    elb.removeRecord(*this);
   }
   return {};
 }
@@ -187,8 +189,8 @@ Index::LookupResult FixedSizeIndex::remove(uint64_t key) {
 bool FixedSizeIndex::removeIfMatch(uint64_t key, uint32_t address) {
   ExclusiveLockedBucket elb{key, *this, false};
 
-  if (elb.isValidRecord() && elb.recordPtr()->address == address) {
-    *elb.recordPtr() = PackedItemRecord{};
+  if (elb.isValidRecord() && elb.recordRef().address == address) {
+    elb.removeRecord(*this);
 
     XDCHECK(elb.validBucketCntRef() > 0);
     --elb.validBucketCntRef();
@@ -219,6 +221,10 @@ void FixedSizeIndex::reset() {
       ht_[bucketId++] = PackedItemRecord{};
     }
     validBucketsPerShard_[i] = 0;
+    if (handleOverflow_) {
+      // Clear all the combined entries if any
+      combinedEntries_[i].clear();
+    }
   }
 
   if (shmManager_) {
@@ -333,8 +339,7 @@ void FixedSizeIndex::setHitsTestOnly(uint64_t key,
   ExclusiveLockedBucket elb{key, *this, false};
 
   if (elb.isValidRecord()) {
-    elb.recordPtr()->info.curHits =
-        PackedItemRecord::truncateCurHits(currentHits);
+    elb.setCurRecordHits(PackedItemRecord::truncateCurHits(currentHits));
     XLOGF(INFO,
           "setHitsTestOnly() for {}. totalHits {} was discarded in "
           "FixedSizeIndex",
