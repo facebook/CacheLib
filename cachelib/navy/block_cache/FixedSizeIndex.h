@@ -201,12 +201,12 @@ class FixedSizeIndex : public Index {
     }
 
     void updateBucketFillInfo(uint64_t bucketId,
-                              uint8_t offset,
+                              uint8_t slotOffset,
                               uint8_t partialKeys) {
       XDCHECK(bucketId < numBuckets_) << bucketId;
-      XDCHECK(offset <= 0x3) << offset;
+      XDCHECK(slotOffset <= 0x3) << slotOffset;
 
-      setBucketFillInfo(bucketId, offset);
+      setBucketFillInfo(bucketId, slotOffset);
       setPartialBits(bucketId, partialKeys);
     }
 
@@ -226,11 +226,11 @@ class FixedSizeIndex : public Index {
     }
 
    private:
-    void setBucketFillInfo(uint64_t bid, uint8_t bucketOffset) {
+    void setBucketFillInfo(uint64_t bid, uint8_t slotOffset) {
       uint64_t idx = bid / 4;
       uint8_t offset = (bid & 0x3) << 1;
       fillMap_[idx] =
-          (fillMap_[idx] & ~(0x3 << offset)) | (bucketOffset << offset);
+          (fillMap_[idx] & ~(0x3 << offset)) | (slotOffset << offset);
     }
 
     uint8_t getBucketFillInfo(uint64_t bid) const {
@@ -256,22 +256,23 @@ class FixedSizeIndex : public Index {
   void initialize();
 
   // Random prime numbers for the distance for next bucket slot to use.
-  static constexpr std::array<uint8_t, 4> kNextBucketOffset{0, 23, 61, 97};
+  static constexpr std::array<uint8_t, 4> kNextSlotOffset{0, 23, 61, 97};
+
   // This offset will be used to indicate there's no valid bucket slot matching
   // the given key
   static constexpr uint8_t kInvalidBucketSlotOffset = 0xff;
   // This bucket id will be used to indicate there's no valid bucket for the key
   static constexpr uint64_t kInvalidBucketId = 0xffffffffffffffff;
 
-  uint8_t decideBucketOffset(uint64_t bid, uint64_t key) {
+  uint8_t decideBucketSlotOffset(uint64_t bid, uint64_t key) {
     auto sid = shardId(bid);
     // To store all the possible slot's bucket ids for this bid
-    std::array<uint64_t, kNextBucketOffset.size()> slotBids{};
+    std::array<uint64_t, kNextSlotOffset.size()> slotBids{};
 
     // Check if there's already one matching
-    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       // Store it to avoid same calculation multiple times
-      slotBids[i] = calcBucketId(bid, i);
+      slotBids[i] = calcSlotBucketId(bid, i);
       // Make sure we don't go across the shard boundary
       XDCHECK(shardId(slotBids[i]) == sid)
           << bid << " " << i << " " << slotBids[i];
@@ -301,7 +302,7 @@ class FixedSizeIndex : public Index {
     if (handleOverflow_) {
       // Handle overflowed bucket.
       // If there's any combined entry slot, we can just use it
-      for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
         if (ht_[slotBids[i]].isCombinedEntry()) {
           return i;
         }
@@ -329,13 +330,13 @@ class FixedSizeIndex : public Index {
     }
   }
 
-  uint8_t checkBucketOffset(uint64_t bid, uint64_t key) const {
+  uint8_t checkBucketSlotOffset(uint64_t bid, uint64_t key) const {
     // To store all the possible slot's bucket ids for this bid
-    std::array<uint64_t, kNextBucketOffset.size()> slotBids{};
+    std::array<uint64_t, kNextSlotOffset.size()> slotBids{};
 
-    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       // Store it to avoid same calculation multiple times
-      slotBids[i] = calcBucketId(bid, i);
+      slotBids[i] = calcSlotBucketId(bid, i);
 
       // Make sure we don't go across the shard boundary
       XDCHECK(shardId(slotBids[i]) == shardId(bid))
@@ -352,8 +353,8 @@ class FixedSizeIndex : public Index {
   }
 
   std::optional<uint8_t> findOrMakeEmptySlotByMoving(
-      const std::array<uint64_t, kNextBucketOffset.size()>& slotBids) {
-    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+      const std::array<uint64_t, kNextSlotOffset.size()>& slotBids) {
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       if (!ht_[slotBids[i]].isValid()) {
         return i;
       }
@@ -371,11 +372,11 @@ class FixedSizeIndex : public Index {
         // Get the original bid before applying the offset.
         auto orgBid = originalBucketId(slotBids[i], curOffset);
         // Check if any sub bucket is empty and we can move this there
-        for (size_t sub = 0; sub < kNextBucketOffset.size(); sub++) {
+        for (size_t sub = 0; sub < kNextSlotOffset.size(); sub++) {
           if (sub == curOffset) {
             continue;
           }
-          auto checkBid = calcBucketId(orgBid, sub);
+          auto checkBid = calcSlotBucketId(orgBid, sub);
           if (!ht_[checkBid].isValid()) {
             // Move current one to this bucket
             ht_[checkBid] = ht_[slotBids[i]];
@@ -392,10 +393,10 @@ class FixedSizeIndex : public Index {
   }
 
   uint8_t checkCombinedIndexEntry(
-      const std::array<uint64_t, kNextBucketOffset.size()>& slotBids,
+      const std::array<uint64_t, kNextSlotOffset.size()>& slotBids,
       uint64_t key) const {
     auto sid = shardId(slotBids[0]);
-    for (size_t i = 0; i < kNextBucketOffset.size(); i++) {
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       if (ht_[slotBids[i]].isCombinedEntry()) {
         // check if this combined entry has the index entry for the given key
         auto it = combinedEntries_[sid].find(slotBids[i]);
@@ -461,9 +462,9 @@ class FixedSizeIndex : public Index {
   // This helper will get the proper bucket id and record entry
   // Return value : The pair of <Bucket id, pointer to the record>
   std::pair<uint64_t, PackedItemRecord*> getBucket(uint64_t orgBid,
-                                                   uint8_t offset) const {
-    if (offset != kInvalidBucketSlotOffset) {
-      auto bid = calcBucketId(orgBid, offset);
+                                                   uint8_t slotOffset) const {
+    if (slotOffset != kInvalidBucketSlotOffset) {
+      auto bid = calcSlotBucketId(orgBid, slotOffset);
       return std::make_pair(bid, &ht_[bid]);
     } else {
       // There's no bucket for the given key
@@ -485,9 +486,9 @@ class FixedSizeIndex : public Index {
     if (!key) {
       // TODO: Since we don't release the mutex for index while retrieving key
       // hash for now, there's no case for the race condition on index access
-      // and modification. So, if we don't get the key hash, it's purely because
-      // it can't read it properly. We can just continue and discard currently
-      // stored entry.
+      // and modification. So, if we don't get the key hash, it's purely
+      // because it can't read it properly. We can just continue and discard
+      // currently stored entry.
       return {};
     };
 
@@ -553,7 +554,8 @@ class FixedSizeIndex : public Index {
     uint64_t randomizeOffset2 = (hash >> 54) & 0x3F;
     uint64_t addOffset2 = (hash >> 60) & 0x3;
 
-    // Adding calculated offset to bid to randomize distribution for the bucket
+    // Adding calculated offset to bid to randomize distribution for the
+    // bucket
     return (((cid << numBucketsPerChunkPower_) + bid) +
             kBucketRandomizeOffset[randomizeOffset1] +
             (kBucketRandomizeOffset[randomizeOffset2] << addOffset2)) %
@@ -572,25 +574,25 @@ class FixedSizeIndex : public Index {
     return ((key >> 40) & 0xff);
   }
 
-  // Get the next bucket id to check or use
-  uint64_t calcBucketId(uint64_t bid, uint8_t offset) const {
-    // We don't want to go across the shard boundary, so if it goes beyond that,
-    // it will wrap around and go back to the beginning of current shard
+  // Get the next slot bucket id to check or use
+  uint64_t calcSlotBucketId(uint64_t bid, uint8_t offset) const {
+    // We don't want to go across the shard boundary, so if it goes beyond
+    // that, it will wrap around and go back to the beginning of current shard
     // boundary
-    XDCHECK(offset < kNextBucketOffset.size()) << offset;
+    XDCHECK(offset < kNextSlotOffset.size()) << offset;
     return (bid / numBucketsPerShard_) * numBucketsPerShard_ +
-           ((bid + kNextBucketOffset[offset]) % numBucketsPerShard_);
+           ((bid + kNextSlotOffset[offset]) % numBucketsPerShard_);
   }
 
   // Some helper functions below
   //
 
-  // Get the original bid before applying the offset. Also need to
+  // Get the original bid before applying the slot offset. Also need to
   // consider the wraparound on the shard boundary.
   uint64_t originalBucketId(uint64_t curBid, uint8_t fillOffset) {
-    return ((curBid % numBucketsPerShard_) >= kNextBucketOffset[fillOffset])
-               ? curBid - kNextBucketOffset[fillOffset]
-               : curBid + numBucketsPerShard_ - kNextBucketOffset[fillOffset];
+    return ((curBid % numBucketsPerShard_) >= kNextSlotOffset[fillOffset])
+               ? curBid - kNextSlotOffset[fillOffset]
+               : curBid + numBucketsPerShard_ - kNextSlotOffset[fillOffset];
   }
 
   bool checkStoredConfig(const serialization::FixedSizeIndexConfig& stored);
@@ -649,10 +651,10 @@ class FixedSizeIndex : public Index {
           key_(key),
           lg_{index.mutex_[sid_]},
           validBuckets_{index.validBucketsPerShard_[sid_]} {
-      auto offset = alloc ? index.decideBucketOffset(bid_, key)
-                          : index.checkBucketOffset(bid_, key);
+      auto offset = alloc ? index.decideBucketSlotOffset(bid_, key)
+                          : index.checkBucketSlotOffset(bid_, key);
       std::tie(bid_, htEntry_) = index.getBucket(bid_, offset);
-      bucketOffset_ = offset;
+      slotOffset_ = offset;
       if (htEntry_) {
         if (!htEntry_->isCombinedEntry()) {
           record_ = *htEntry_;
@@ -660,8 +662,9 @@ class FixedSizeIndex : public Index {
           auto res = index.getCombinedIndexEntry(sid_, bid_, key);
           if (res.has_value()) {
             record_ = res.value();
-            // TODO: For now, hit count for combined index entry is only updated
-            // to combined entry itself. So hit count should be adjusted
+            // TODO: For now, hit count for combined index entry is only
+            // updated to combined entry itself. So hit count should be
+            // adjusted
             record_.bumpCurHits(htEntry_->info.curHits);
           }
         }
@@ -672,9 +675,9 @@ class FixedSizeIndex : public Index {
     const PackedItemRecord& recordRef() { return record_; }
     size_t& validBucketCntRef() { return validBuckets_; }
     void updateDistInfo(uint64_t key, FixedSizeIndex& index) {
-      if (bucketOffset_ != kInvalidBucketSlotOffset &&
+      if (slotOffset_ != kInvalidBucketSlotOffset &&
           !htEntry_->isCombinedEntry()) {
-        index.bucketDistInfo_.updateBucketFillInfo(bid_, bucketOffset_,
+        index.bucketDistInfo_.updateBucketFillInfo(bid_, slotOffset_,
                                                    index.partialKeyBits(key));
       }
     }
@@ -704,8 +707,9 @@ class FixedSizeIndex : public Index {
     }
 
     bool updateNewAddress(uint32_t newAddress, FixedSizeIndex& index) {
-      // This will be mainly used when the entry was moved to different location
-      // and only the address needs to be updated (ex. with reclaim-reinsert)
+      // This will be mainly used when the entry was moved to different
+      // location and only the address needs to be updated (ex. with
+      // reclaim-reinsert)
       //
       // We need a separate function from updateRecrod() since we don't keep
       // sizeExp for each record and we don't want to re-calculate for sizeHint
@@ -761,7 +765,7 @@ class FixedSizeIndex : public Index {
     size_t& validBuckets_;
     PackedItemRecord* htEntry_{};
     PackedItemRecord record_{};
-    uint8_t bucketOffset_{kInvalidBucketSlotOffset};
+    uint8_t slotOffset_{kInvalidBucketSlotOffset};
   };
 
   // A helper class for shared locked access to a bucket.
@@ -776,7 +780,7 @@ class FixedSizeIndex : public Index {
           lg_{index.mutex_[sid_]} {
       // check next bucket if it should be used
       std::tie(bid_, htEntry_) =
-          index.getBucket(bid_, index.checkBucketOffset(bid_, key));
+          index.getBucket(bid_, index.checkBucketSlotOffset(bid_, key));
       if (htEntry_) {
         if (!htEntry_->isCombinedEntry()) {
           record_ = *htEntry_;
