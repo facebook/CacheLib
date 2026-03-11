@@ -268,11 +268,21 @@ class FixedSizeIndex : public Index {
     auto sid = shardId(bid);
     // To store all the possible slot's bucket ids for this bid
     std::array<uint64_t, kNextSlotOffset.size()> slotBids{};
-
-    // Check if there's already one matching
     for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       // Store it to avoid same calculation multiple times
       slotBids[i] = calcSlotBucketId(bid, i);
+    }
+
+    // check if we have the entry in the combined entry block
+    if (handleOverflow_) {
+      auto res = checkCombinedIndexEntry(slotBids, key);
+      if (res != kInvalidBucketSlotOffset) {
+        return res;
+      }
+    }
+
+    // Check if there's already one matching
+    for (size_t i = 0; i < kNextSlotOffset.size(); i++) {
       // Make sure we don't go across the shard boundary
       XDCHECK(shardId(slotBids[i]) == sid)
           << bid << " " << i << " " << slotBids[i];
@@ -282,14 +292,6 @@ class FixedSizeIndex : public Index {
           bucketDistInfo_.getBucketFillOffset(slotBids[i]) == i &&
           partialKeyBits(key) == bucketDistInfo_.getPartialKey(slotBids[i])) {
         return i;
-      }
-    }
-
-    // check if we have the entry in the combined entry block
-    if (handleOverflow_) {
-      auto res = checkCombinedIndexEntry(slotBids, key);
-      if (res != kInvalidBucketSlotOffset) {
-        return res;
       }
     }
 
