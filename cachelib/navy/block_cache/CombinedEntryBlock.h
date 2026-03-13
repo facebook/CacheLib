@@ -52,9 +52,17 @@ using EntryRecord = Index::PackedItemRecord;
 class CombinedEntryBlock {
  public:
   // Size for the combined entry block
-  static constexpr uint32_t kCombinedEntryBlockSize = 4096;
+  static constexpr uint16_t kDefaultSize = 4096;
 
-  CombinedEntryBlock() : buffer_(kCombinedEntryBlockSize) {}
+  // For the purpose of CombinedEntryBlock, it doesn't need to be large size
+  // hence blockSize is limited to 16bits
+  CombinedEntryBlock(uint16_t blockSize = kDefaultSize)
+      : allocated_{std::make_unique<uint8_t[]>(blockSize)},
+        bufView_(blockSize, allocated_.get()),
+        curPos_{blockSize} {}
+
+  CombinedEntryBlock(uint8_t* buf, uint16_t blockSize)
+      : bufView_(blockSize, buf), curPos_{blockSize} {}
 
   // Adding a index entry as the content of Combined entry block
   CombinedEntryStatus addIndexEntry(uint64_t bid,
@@ -75,6 +83,8 @@ class CombinedEntryBlock {
   // Get the number of valid entries
   uint16_t getNumValidEntries() const { return numValidEntries_; }
 
+  uint16_t getSize() const { return bufView_.size(); }
+
   struct EntryPosInfo {
     // TODO: There will be padding here, but we'll probably need additional
     // fields in this struct anyway
@@ -90,7 +100,7 @@ class CombinedEntryBlock {
  private:
   EntryPos getEntryPos(uint16_t keyIdx) const {
     XDCHECK((keyIdx + 1) * sizeof(EntryPosInfo) <= curPos_);
-    return (reinterpret_cast<const EntryPosInfo*>(buffer_.data())[keyIdx]).pos;
+    return (reinterpret_cast<const EntryPosInfo*>(bufView_.data())[keyIdx]).pos;
   }
 
   EntryPos getEmptySpacePos(uint16_t numEntry) const {
@@ -98,20 +108,29 @@ class CombinedEntryBlock {
   }
 
   EntryPosInfo& entryPosInfoRef(uint16_t keyIdx) {
-    return reinterpret_cast<EntryPosInfo*>(buffer_.data())[keyIdx];
+    return reinterpret_cast<EntryPosInfo*>(bufView_.data())[keyIdx];
   }
 
   EntryRecord& entryRecordRef(uint16_t pos) {
-    return *reinterpret_cast<EntryRecord*>(buffer_.data() + pos);
+    return *reinterpret_cast<EntryRecord*>(bufView_.data() + pos);
   }
 
-  Buffer buffer_;
+  // Buffer will be allocated only when this CombinedEntryBlock doesn't
+  // represent the data in other given buffer.
+  // If this CombinedEntryBlock uses the buffer given via the constructor,
+  // allocated_ will be nullptr and not used.
+  std::unique_ptr<uint8_t[]> allocated_{};
+
+  // bufView will always represent the buffer in use for thie CombinedEntryBlock
+  // no matter where the buffer is and how it's allocated.
+  MutableBufferView bufView_{};
+
   // numStoredEntries can be different from storedKeys_.size()
   // (When the same entry has to be re-written to the different position)
   uint16_t numStoredEntries_{0};
   uint16_t numValidEntries_{0};
   // current position grows in reverse direction (from the end to the 0)
-  EntryPos curPos_{kCombinedEntryBlockSize};
+  EntryPos curPos_{kDefaultSize};
 
   // For quick check if it's already stored and where its info is.
   folly::F14FastMap<uint64_t, EntryIdx> storedKeys_;

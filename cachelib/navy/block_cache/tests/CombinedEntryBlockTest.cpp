@@ -81,7 +81,7 @@ TEST(CombinedEntryBlockTest, AddIndexEntryFull) {
 
   // This will be changed in the future
   uint16_t maxNumEntries =
-      CombinedEntryBlock::kCombinedEntryBlockSize /
+      combinedBlk.getSize() /
       (sizeof(CombinedEntryBlock::EntryPosInfo) + sizeof(EntryRecord));
 
   for (auto i = 0; i < maxNumEntries; i++) {
