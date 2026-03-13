@@ -491,31 +491,17 @@ class FixedSizeIndex : public Index {
   std::unique_ptr<CombinedEntryBlock> createCombinedIndexBlock(
       uint64_t curBid, uint64_t orgBid, const PackedItemRecord& record) {
     // First, we need to get the key info with the current record.
-    auto key = retrieveKeyCb_(record.address);
+    auto key = getKeyFromAddress(record.address, curBid, orgBid);
 
     if (!key) {
-      // TODO: Since we don't release the mutex for index while retrieving key
-      // hash for now, there's no case for the race condition on index access
-      // and modification. So, if we don't get the key hash, it's purely
-      // because it can't read it properly. We can just continue and discard
-      // currently stored entry.
-      return {};
-    };
-
-    // check for the integrity (if retrieved key should be placed in this
-    // bucket)
-    if (bucketId(key.value()) != orgBid ||
-        partialKeyBits(key.value()) != bucketDistInfo_.getPartialKey(curBid)) {
-      // Something is wrong. This key should not be in the current bucket.
+      // Failed to get the key from address. We'll just discard this entry
       XLOGF(ERR,
-            "Key hash {} seems to be stored in the incorrect bucket. Computed "
-            "bid = {} stored in bid={}, "
-            "orgBid={}, partialKey={}",
-            key.value(), bucketId(key.value()), curBid, orgBid,
-            bucketDistInfo_.getPartialKey(curBid));
-      // We will continue by discarding currently stored entry
+            "Failed to get the key from the address {} to create a combined "
+            "index entry. This entry will be discarded (bid {})",
+            record.address, curBid);
       return {};
     }
+
     std::unique_ptr<CombinedEntryBlock> combinedBlk =
         std::make_unique<CombinedEntryBlock>();
 
@@ -531,6 +517,32 @@ class FixedSizeIndex : public Index {
       return {};
     }
     return combinedBlk;
+  }
+
+  std::optional<uint64_t> getKeyFromAddress(uint32_t addr,
+                                            uint64_t bid,
+                                            uint64_t orgBid) {
+    auto key = retrieveKeyCb_(addr);
+
+    if (!key) {
+      // TODO: Since we don't release the mutex for index while retrieving key
+      // hash for now, there's no case for the race condition on index access
+      // and modification. So, if we don't get the key hash, it's purely
+      // because it can't read it properly. We can just continue and discard
+      // currently stored entry.
+      XLOGF(ERR,
+            "Failed to retrieve the key from the address {} stored in bid = "
+            "{}, org bid = {}",
+            addr, bid, orgBid);
+      return std::nullopt;
+    }
+
+    // check for the integrity (if retrieved key should be placed in this
+    // bucket)
+    XDCHECK(bucketId(key.value()) == orgBid &&
+            partialKeyBits(key.value()) == bucketDistInfo_.getPartialKey(bid));
+
+    return key;
   }
 
   // Updates hits information of a key.
