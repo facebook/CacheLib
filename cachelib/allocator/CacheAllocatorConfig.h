@@ -1237,7 +1237,7 @@ bool CacheAllocatorConfig<T>::validateStrategy(
 
   auto type = strategy->getType();
   return type != RebalanceStrategy::NumTypes &&
-         (type != RebalanceStrategy::MarginalHits || trackTailHits);
+         ((type != RebalanceStrategy::MarginalHits && type != RebalanceStrategy::MarginalHitsNew) || trackTailHits);
 }
 
 template <typename T>
