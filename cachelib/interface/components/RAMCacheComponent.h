@@ -104,6 +104,7 @@ class RAMCacheComponent : public CacheComponentWithStats {
 
  private:
   std::unique_ptr<LruAllocator> cache_;
+  mutable std::chrono::steady_clock::time_point lastStatsCollectionTime_;
   PoolId defaultPool_;
 
   explicit RAMCacheComponent(

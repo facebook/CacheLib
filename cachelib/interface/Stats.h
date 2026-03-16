@@ -18,6 +18,7 @@
 
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/PercentileStats.h"
+#include "cachelib/common/Utils.h"
 
 /**
  * Counters for CacheComponents.
@@ -207,6 +208,9 @@ struct CacheComponentStatsImpl {
         release_(other.release_) {}
 };
 
+using ReportStats =
+    CacheComponentStatsImpl<size_t, util::PercentileStats::Estimates>;
+
 } // namespace detail
 
 // Data type for collecting stats in high throughput scenarios
@@ -215,8 +219,13 @@ using CacheComponentStatsCollector =
                                     detail::LatencyMeasurementCounter>;
 
 // Data type for reporting
-using CacheComponentStats =
-    detail::CacheComponentStatsImpl<size_t, util::PercentileStats::Estimates>;
+struct CacheComponentStats : public detail::ReportStats {
+  CacheComponentStats() = default;
+  template <typename U>
+  explicit CacheComponentStats(const U& other) : detail::ReportStats(other) {}
+
+  util::StatsMap extraStats_;
+};
 
 } // namespace facebook::cachelib::interface
 

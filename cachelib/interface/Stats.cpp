@@ -18,6 +18,8 @@
 
 #include <folly/Format.h>
 
+#include <set>
+
 using namespace facebook::cachelib::interface;
 using Estimates = facebook::cachelib::util::PercentileStats::Estimates;
 
@@ -89,6 +91,23 @@ void printOpCounters(std::ostream& os, const char* name, const OpCounterT& op) {
   }
 }
 
+void printExtraOpCounters(
+    std::ostream& os,
+    const std::string& type,
+    const std::unordered_map<std::string, double>& counters) {
+  if (!counters.empty()) {
+    // Sort counter names to keep relevant counters together
+    std::set<std::string> names;
+    for (const auto& [name, _] : counters) {
+      names.insert(name);
+    }
+    os << "  " << type << ":" << std::endl;
+    for (const auto& name : names) {
+      os << "    " << name << "=" << counters.at(name) << std::endl;
+    }
+  };
+}
+
 } // namespace
 
 namespace std {
@@ -104,6 +123,8 @@ std::ostream& operator<<(
   printOpCounters(os, "removeByHandle", stats.removeByHandle_);
   printOpCounters(os, "writeBack", stats.writeBack_);
   printOpCounters(os, "release", stats.release_);
+  printExtraOpCounters(os, "extra counters", stats.extraStats_.getCounts());
+  printExtraOpCounters(os, "extra rate counters", stats.extraStats_.getRates());
   return os;
 }
 } // namespace std

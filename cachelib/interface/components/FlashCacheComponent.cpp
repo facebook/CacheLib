@@ -492,6 +492,8 @@ CacheComponentStats FlashCacheComponent::getStats() const noexcept {
   stats.find_.throughput_.misses_ =
       stats.find_.throughput_.calls_ - stats.find_.throughput_.hits_;
 
+  cache_->getCounters(stats.extraStats_.createCountVisitor());
+
   return stats;
 }
 
