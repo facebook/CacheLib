@@ -89,6 +89,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   // Note: device_ must be declared before cache_ so that it outlives it
   std::unique_ptr<navy::Device> device_;
   std::unique_ptr<navy::BlockCache> cache_;
+  mutable std::unique_ptr<util::PercentileStats> coroToFiberLatency_;
 
   // Runs func() on a RegionManager worker fiber. Should not be called from an
   // existing region manager worker fiber!

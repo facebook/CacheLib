@@ -172,11 +172,19 @@ UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
 template <typename FuncT, typename ReturnT, typename CleanupFuncT>
 folly::coro::Task<ReturnT> FlashCacheComponent::onWorkerThread(
     FuncT&& func, CleanupFuncT&& cleanup) {
+  using namespace std::chrono;
+
   XDCHECK(!cache_->regionManager_.isOnWorker())
       << "Calling public APIs from a worker thread is unsupported";
+  auto start = steady_clock::now();
+  auto wrappedFunc = [this, start, f = std::forward<FuncT>(func)]() mutable {
+    coroToFiberLatency_->trackValue(static_cast<double>(
+        (duration_cast<nanoseconds>(steady_clock::now() - start)).count()));
+    return f();
+  };
   co_return co_await utils::onWorkerThread(
       cache_->regionManager_.getNextWorker(),
-      std::forward<FuncT>(func),
+      std::move(wrappedFunc),
       std::forward<CleanupFuncT>(cleanup));
 }
 
@@ -436,7 +444,8 @@ FlashCacheComponent::FlashCacheComponent(std::string&& name,
                                          std::unique_ptr<Device> device)
     : name_(std::move(name)),
       device_(std::move(device)),
-      cache_(std::make_unique<navy::BlockCache>(std::move(config))) {}
+      cache_(std::make_unique<navy::BlockCache>(std::move(config))),
+      coroToFiberLatency_(std::make_unique<util::PercentileStats>()) {}
 
 bool FlashCacheComponent::writeBackImpl(CacheItem& item, bool allowReplace) {
   auto& fccItem = static_cast<FlashCacheItem&>(item);
@@ -492,6 +501,8 @@ CacheComponentStats FlashCacheComponent::getStats() const noexcept {
   stats.find_.throughput_.misses_ =
       stats.find_.throughput_.calls_ - stats.find_.throughput_.hits_;
 
+  coroToFiberLatency_->visitQuantileEstimator(
+      stats.extraStats_.createCountVisitor(), "coro_to_fiber_hop_latency_ns");
   cache_->getCounters(stats.extraStats_.createCountVisitor());
 
   return stats;
