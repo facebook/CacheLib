@@ -550,7 +550,7 @@ ConsistentFlashCacheComponent::allocate(Key key,
                                         uint32_t size,
                                         uint32_t creationTime,
                                         uint32_t ttlSecs) {
-  auto lock = co_await serializer_.wlock(key);
+  auto lock = co_await timedWlock(key, lockLatency_->allocate_);
   auto res = co_await Base::allocateGeneric<ConsistentFlashCacheItem>(
       key, size, creationTime, ttlSecs);
   if (res.hasError()) {
@@ -566,15 +566,13 @@ folly::coro::Task<Result<std::optional<ReadHandle>>>
 ConsistentFlashCacheComponent::find(Key key) {
   // NOTE: we don't need to hold onto the lock because the returned item isn't
   // holding on to a region descriptor
-  co_return co_await serializer_.withRlock(
-      key, [=, this]() -> folly::coro::Task<Result<std::optional<ReadHandle>>> {
-        co_return co_await Base::find(key);
-      });
+  [[maybe_unused]] auto lock = co_await timedRlock(key, lockLatency_->find_);
+  co_return co_await Base::find(key);
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>
 ConsistentFlashCacheComponent::findToWrite(Key key) {
-  auto lock = co_await serializer_.wlock(key);
+  auto lock = co_await timedWlock(key, lockLatency_->findToWrite_);
   auto res = co_await Base::findToWriteGeneric<ConsistentFlashCacheItem>(key);
   if (res.hasError()) {
     co_return folly::makeUnexpected(std::move(res).error());
@@ -589,18 +587,38 @@ ConsistentFlashCacheComponent::findToWrite(Key key) {
 }
 
 folly::coro::Task<Result<bool>> ConsistentFlashCacheComponent::remove(Key key) {
-  co_return co_await serializer_.withWlock(
-      key, [=, this]() -> folly::coro::Task<Result<bool>> {
-        co_return co_await Base::remove(key);
-      });
+  auto lock = co_await timedWlock(key, lockLatency_->removeByKey_);
+  co_return co_await Base::remove(key);
 }
 
 folly::coro::Task<UnitResult> ConsistentFlashCacheComponent::remove(
     ReadHandle&& handle) {
-  co_return co_await serializer_.withWlock(
-      handle->getKey(), [&, this]() -> folly::coro::Task<UnitResult> {
-        co_return co_await Base::remove(std::move(handle));
-      });
+  auto lock =
+      co_await timedWlock(handle->getKey(), lockLatency_->removeByHandle_);
+  co_return co_await Base::remove(std::move(handle));
+}
+
+CacheComponentStats ConsistentFlashCacheComponent::getStats() const noexcept {
+  auto stats = FlashCacheComponent::getStats();
+  auto visitor = stats.extraStats_.createCountVisitor();
+  util::PercentileStats::visitQuantileEstimates(
+      visitor, lockLatency_->allocate_.toEstimates(),
+      "allocate.lock_latency_ns");
+  util::PercentileStats::visitQuantileEstimates(
+      visitor, lockLatency_->find_.toEstimates(), "find.lock_latency_ns");
+  util::PercentileStats::visitQuantileEstimates(
+      visitor,
+      lockLatency_->findToWrite_.toEstimates(),
+      "findToWrite.lock_latency_ns");
+  util::PercentileStats::visitQuantileEstimates(
+      visitor,
+      lockLatency_->removeByKey_.toEstimates(),
+      "removeByKey.lock_latency_ns");
+  util::PercentileStats::visitQuantileEstimates(
+      visitor,
+      lockLatency_->removeByHandle_.toEstimates(),
+      "removeByHandle.lock_latency_ns");
+  return stats;
 }
 
 ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
@@ -612,5 +630,19 @@ ConsistentFlashCacheComponent::ConsistentFlashCacheComponent(
     : FlashCacheComponent(
           std::move(name), std::move(config), std::move(device)),
       serializer_(std::move(hasher), shardsPower) {}
+
+folly::coro::Task<utils::ShardedSerializer::WriteLock>
+ConsistentFlashCacheComponent::timedWlock(
+    Key key, detail::LatencyMeasurementCounter& counter) {
+  auto guard = counter.start();
+  co_return co_await serializer_.wlock(key);
+}
+
+folly::coro::Task<utils::ShardedSerializer::ReadLock>
+ConsistentFlashCacheComponent::timedRlock(
+    Key key, detail::LatencyMeasurementCounter& counter) {
+  auto guard = counter.start();
+  co_return co_await serializer_.rlock(key);
+}
 
 } // namespace facebook::cachelib::interface

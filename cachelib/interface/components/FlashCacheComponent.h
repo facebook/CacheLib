@@ -206,14 +206,33 @@ class ConsistentFlashCacheComponent : public FlashCacheComponent {
   folly::coro::Task<Result<bool>> remove(Key key) override;
   folly::coro::Task<UnitResult> remove(ReadHandle&& handle) override;
 
+  CacheComponentStats getStats() const noexcept override;
+
  private:
+  // Per-operation latency counters for lock acquisition
+  struct LockLatencyCounters {
+    detail::LatencyMeasurementCounter allocate_;
+    detail::LatencyMeasurementCounter find_;
+    detail::LatencyMeasurementCounter findToWrite_;
+    detail::LatencyMeasurementCounter removeByKey_;
+    detail::LatencyMeasurementCounter removeByHandle_;
+  };
+
   utils::ShardedSerializer serializer_;
+  std::unique_ptr<LockLatencyCounters> lockLatency_{
+      std::make_unique<LockLatencyCounters>()};
 
   ConsistentFlashCacheComponent(std::string&& name,
                                 navy::BlockCache::Config&& config,
                                 std::unique_ptr<navy::Device> device,
                                 std::unique_ptr<Hash> hasher,
                                 uint8_t shardsPower);
+
+  // Helpers to time lock acquisition latency
+  folly::coro::Task<utils::ShardedSerializer::WriteLock> timedWlock(
+      Key key, detail::LatencyMeasurementCounter& counter);
+  folly::coro::Task<utils::ShardedSerializer::ReadLock> timedRlock(
+      Key key, detail::LatencyMeasurementCounter& counter);
 
   // ------------------------------ Interface ------------------------------ //
 
