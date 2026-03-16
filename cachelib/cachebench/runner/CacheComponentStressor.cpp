@@ -23,7 +23,6 @@
 #include "cachelib/cachebench/cache/CacheStats.h"
 #include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/cachebench/util/Exceptions.h"
-#include "cachelib/interface/components/RAMCacheComponent.h"
 
 using namespace facebook::cachelib::interface;
 
@@ -61,90 +60,8 @@ void CacheComponentStressor::start() {
   });
 }
 
-// TODO use CacheStressor::getCacheStats()
 std::unique_ptr<StatsBase> CacheComponentStressor::getCacheStats() const {
-  auto retPtr = std::make_unique<Stats>();
-  auto& ret = *retPtr;
-
-  // Try to cast to RAMCacheComponent to get detailed stats FlashCacheComponent
-  // doesn't have the same stats interface; follow-on diffs will add stats
-  // support for it
-  auto* ramCache = dynamic_cast<RAMCacheComponent*>(cache_.get());
-  if (ramCache == nullptr) {
-    return retPtr;
-  }
-
-  auto& cache = ramCache->get();
-  const auto cacheStats = cache.getGlobalCacheStats();
-  auto poolId = *cache.getPoolIds().begin();
-  PoolStats aggregate = cache.getPoolStats(poolId);
-  auto usageFraction =
-      1.0 - (static_cast<double>(aggregate.freeMemoryBytes())) /
-                aggregate.poolUsableSize;
-  ret.poolUsageFraction.push_back(usageFraction);
-
-  std::map<PoolId, std::map<ClassId, ACStats>> allocationClassStats{};
-
-  auto poolStats = cache.getPoolStats(poolId);
-  for (auto [cid, stats] : poolStats.mpStats.acStats) {
-    allocationClassStats[poolId][cid] = stats;
-  }
-
-  const auto rebalanceStats = cache.getSlabReleaseStats();
-
-  ret.allocationClassStats = allocationClassStats;
-  ret.numEvictions = aggregate.numEvictions();
-  ret.numItems = aggregate.numItems();
-  ret.evictAttempts = cacheStats.evictionAttempts;
-  ret.allocAttempts = cacheStats.allocAttempts;
-  ret.allocFailures = cacheStats.allocFailures;
-
-  ret.backgndEvicStats.nEvictedItems = cacheStats.evictionStats.numMovedItems;
-  ret.backgndEvicStats.nTraversals = cacheStats.evictionStats.runCount;
-  ret.backgndEvicStats.nClasses = cacheStats.evictionStats.totalClasses;
-  ret.backgndEvicStats.evictionSize = cacheStats.evictionStats.totalBytesMoved;
-
-  ret.backgndPromoStats.nPromotedItems =
-      cacheStats.promotionStats.numMovedItems;
-  ret.backgndPromoStats.nTraversals = cacheStats.promotionStats.runCount;
-
-  ret.numCacheGets = cacheStats.numCacheGets;
-  ret.numCacheGetMiss = cacheStats.numCacheGetMiss;
-  ret.numCacheEvictions = cacheStats.numCacheEvictions;
-  ret.numRamDestructorCalls = cacheStats.numRamDestructorCalls;
-  ret.numNvmGets = cacheStats.numNvmGets;
-  ret.numNvmGetMiss = cacheStats.numNvmGetMiss;
-  ret.numNvmGetCoalesced = cacheStats.numNvmGetCoalesced;
-  ret.numNvmRejectsByExpiry = cacheStats.numNvmRejectsByExpiry;
-  ret.numNvmRejectsByClean = cacheStats.numNvmRejectsByClean;
-
-  ret.numNvmPuts = cacheStats.numNvmPuts;
-  ret.numNvmPutErrs = cacheStats.numNvmPutErrs;
-  ret.numNvmAbortedPutOnTombstone = cacheStats.numNvmAbortedPutOnTombstone;
-  ret.numNvmAbortedPutOnInflightGet = cacheStats.numNvmAbortedPutOnInflightGet;
-  ret.numNvmPutFromClean = cacheStats.numNvmPutFromClean;
-  ret.numNvmUncleanEvict = cacheStats.numNvmUncleanEvict;
-  ret.numNvmCleanEvict = cacheStats.numNvmCleanEvict;
-  ret.numNvmCleanDoubleEvict = cacheStats.numNvmCleanDoubleEvict;
-  ret.numNvmDestructorCalls = cacheStats.numNvmDestructorCalls;
-  ret.numNvmEvictions = cacheStats.numNvmEvictions;
-
-  ret.numNvmDeletes = cacheStats.numNvmDeletes;
-  ret.numNvmSkippedDeletes = cacheStats.numNvmSkippedDeletes;
-
-  ret.slabsReleased = rebalanceStats.numSlabReleaseForRebalance;
-  ret.numAbortedSlabReleases = cacheStats.numAbortedSlabReleases;
-  ret.numReaperSkippedSlabs = cacheStats.numReaperSkippedSlabs;
-  ret.moveAttemptsForSlabRelease = rebalanceStats.numMoveAttempts;
-  ret.moveSuccessesForSlabRelease = rebalanceStats.numMoveSuccesses;
-  ret.evictionAttemptsForSlabRelease = rebalanceStats.numEvictionAttempts;
-  ret.evictionSuccessesForSlabRelease = rebalanceStats.numEvictionSuccesses;
-
-  ret.isNvmCacheDisabled = true;
-
-  ret.cacheAllocateLatencyNs = cacheStats.allocateLatencyNs;
-
-  return retPtr;
+  return std::make_unique<ComponentStats>(cache_->getStats());
 }
 
 const CacheConfig& CacheComponentStressor::validate(

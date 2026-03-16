@@ -219,3 +219,9 @@ using CacheComponentStats =
     detail::CacheComponentStatsImpl<size_t, util::PercentileStats::Estimates>;
 
 } // namespace facebook::cachelib::interface
+
+namespace std {
+std::ostream& operator<<(
+    std::ostream& os,
+    const facebook::cachelib::interface::CacheComponentStats& stats);
+}
