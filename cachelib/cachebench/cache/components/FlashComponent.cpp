@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <folly/system/HardwareConcurrency.h>
+
 #include "cachelib/cachebench/cache/components/Components.h"
 #include "cachelib/interface/components/FlashCacheComponent.h"
 #include "cachelib/navy/block_cache/FifoPolicy.h"
@@ -48,8 +50,9 @@ std::unique_ptr<CacheComponent> createFlashCacheComponent(
   std::string nvmCacheFilePath;
   std::unique_ptr<navy::Device> device;
   if (config.nvmCachePaths.empty()) {
-    device =
-        navy::createMemoryDevice(cacheSize, encryptor, config.navyBlockSize);
+    device = navy::createMemoryDevice(
+        cacheSize, encryptor, config.navyBlockSize,
+        folly::available_concurrency() /* numInitThreads */);
   } else {
     // Set up async options
     auto ioEngine = navy::IoEngine::Sync;
