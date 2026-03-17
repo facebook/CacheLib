@@ -198,7 +198,9 @@ const std::string& FlashCacheComponent::getName() const noexcept {
 folly::coro::Task<Result<FlashCacheComponent::AllocData>>
 FlashCacheComponent::allocateImpl(const HashedKey& key, uint32_t valueSize) {
   auto ret = co_await onWorkerThread(
-      [=, this]() { return cache_->allocateForInsert(key, valueSize); },
+      [=, this]() {
+        return cache_->allocateForInsert(key, valueSize, /* canWait */ false);
+      },
       [this](auto&& result) {
         if (result.hasValue()) {
           // Successfully allocated Region memory but coroutine was cancelled -

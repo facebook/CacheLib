@@ -1007,7 +1007,9 @@ std::tuple<RegionDescriptor, uint32_t, RelAddress> BlockCache::allocateImpl(
 }
 
 folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
-BlockCache::allocateForInsert(const HashedKey& hk, const uint32_t valueSize) {
+BlockCache::allocateForInsert(const HashedKey& hk,
+                              const uint32_t valueSize,
+                              bool canWait) {
   if (serializedSize(hk.key().size(), valueSize) > kMaxItemSize) {
     allocErrorCount_.inc();
     insertCount_.inc();
@@ -1015,8 +1017,7 @@ BlockCache::allocateForInsert(const HashedKey& hk, const uint32_t valueSize) {
   }
 
   // All newly inserted items are assigned with the lowest priority
-  auto retVal =
-      allocateImpl(hk, valueSize, kDefaultItemPriority, /* canWait */ true);
+  auto retVal = allocateImpl(hk, valueSize, kDefaultItemPriority, canWait);
   switch (std::get<0>(retVal).status()) {
   case OpenStatus::Ready:
     insertCount_.inc();

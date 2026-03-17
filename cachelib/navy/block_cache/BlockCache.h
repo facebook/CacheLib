@@ -286,8 +286,11 @@ class BlockCache final : public Engine {
   // Allocate a slot for inserting into cache
   // @param hk          key to be inserted
   // @param valueSize   size of the value
+  // @param canWait     whether to wait if space isn't currently available
   folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
-  allocateForInsert(const HashedKey& hk, const uint32_t valueSize);
+  allocateForInsert(const HashedKey& hk,
+                    const uint32_t valueSize,
+                    bool canWait = true);
 
   // Write the entry descriptor and cache item key into the item buffer
   // @param buffer      buffer to write into
