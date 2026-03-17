@@ -226,7 +226,7 @@ class BlockCache final : public Engine {
 
  private:
   // Serialization format version. Never 0. Versions < 10 reserved for testing.
-  static constexpr uint32_t kFormatVersion = 12;
+  static constexpr uint32_t kFormatVersion = 13;
   // This should be at least the nextTwoPow(sizeof(EntryDesc)).
   static constexpr uint32_t kDefReadBufferSize = 4096;
   // Default priority for an item inserted into block cache
@@ -237,12 +237,16 @@ class BlockCache final : public Engine {
     uint32_t keySize{};
     uint32_t valueSize{};
     uint64_t keyHash{};
+    uint32_t lastAccessTimeSecs{};
     uint32_t csSelf{};
     uint32_t cs{};
 
     EntryDesc() = default;
-    EntryDesc(uint32_t ks, uint32_t vs, uint64_t kh)
-        : keySize{ks}, valueSize{vs}, keyHash{kh} {
+    EntryDesc(uint32_t ks, uint32_t vs, uint64_t kh, uint32_t accessTime = 0)
+        : keySize{ks},
+          valueSize{vs},
+          keyHash{kh},
+          lastAccessTimeSecs{accessTime} {
       csSelf = computeChecksum();
     }
 
@@ -254,7 +258,7 @@ class BlockCache final : public Engine {
 
   // Instead of unportable packing, we make sure that struct size is equal to
   // the size of its members.
-  static_assert(sizeof(EntryDesc) == 24, "packed struct required");
+  static_assert(sizeof(EntryDesc) == 32, "packed struct required");
 
   struct ValidConfigTag {};
   BlockCache(Config&& config, ValidConfigTag);

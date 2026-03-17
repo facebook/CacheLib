@@ -45,7 +45,7 @@ namespace facebook::cachelib::navy::tests {
 namespace {
 constexpr uint64_t kDeviceSize{64 * 1024};
 constexpr uint64_t kRegionSize{16 * 1024};
-constexpr size_t kSizeOfEntryDesc{24};
+constexpr size_t kSizeOfEntryDesc{32};
 constexpr uint16_t kFlushRetryLimit{5};
 
 std::unique_ptr<JobScheduler> makeJobScheduler() {
@@ -2307,14 +2307,14 @@ TEST(BlockCache, SizeAndAlignment) {
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, smallValue.view()),
             alignSize);
 
-  // assumption: the item descriptor size is 24.
+  // assumption: the item descriptor size is kSizeOfEntryDesc.
   // Make an item at the size of 1024.
-  auto largeValue = bg.gen(alignSize - 24 - 3);
+  auto largeValue = bg.gen(alignSize - kSizeOfEntryDesc - 3);
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, largeValue.view()),
             alignSize);
 
   // Add one more byte and need 2*alignSize
-  auto hugeValue = bg.gen(alignSize - 24 - 3 + 1);
+  auto hugeValue = bg.gen(alignSize - kSizeOfEntryDesc - 3 + 1);
   EXPECT_EQ(engine->estimateWriteSize(HashedKey{"key"}, hugeValue.view()),
             alignSize * 2);
 }
