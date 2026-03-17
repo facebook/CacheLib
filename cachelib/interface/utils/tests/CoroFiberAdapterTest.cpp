@@ -54,7 +54,7 @@ CO_TEST_F(CoroFiberAdapterTest, retryThenSuccess) {
   auto result = co_await onWorkerThread(
       thread_,
       [&callCount]() -> Result<int> {
-        if (callCount++ < 3) {
+        if (callCount++ < 2) {
           return folly::makeUnexpected(navy::Status::Retry);
         }
         return 100;
@@ -62,7 +62,21 @@ CO_TEST_F(CoroFiberAdapterTest, retryThenSuccess) {
       [](auto&&) { FAIL() << "should not have called cleanup function"; });
   CO_ASSERT_TRUE(result.hasValue());
   EXPECT_EQ(result.value(), 100);
-  EXPECT_EQ(callCount, 4);
+  EXPECT_EQ(callCount, 3);
+}
+
+CO_TEST_F(CoroFiberAdapterTest, retriesExhausted) {
+  size_t callCount = 0;
+  auto result = co_await onWorkerThread(
+      thread_,
+      [&callCount]() -> Result<int> {
+        ++callCount;
+        return folly::makeUnexpected(navy::Status::Retry);
+      },
+      [](auto&&) {});
+  CO_ASSERT_TRUE(result.hasError());
+  EXPECT_EQ(result.error(), navy::Status::Retry);
+  EXPECT_EQ(callCount, 3);
 }
 
 CO_TEST_F(CoroFiberAdapterTest, returnError) {

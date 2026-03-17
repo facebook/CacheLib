@@ -311,8 +311,11 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
           cache_->regionManager_.close(std::move(res->desc_));
         }
       });
-  // Retry is handled by onWorkerThread, we should always have a value here
-  XDCHECK(res.hasValue()) << "should always get value from lookupInternal()";
+  if (res.hasError()) {
+    stats_->find_.throughput_.errors_.inc();
+    co_return makeError(Error::Code::FIND_FAILED,
+                        "flash lookup retries exhausted");
+  }
   auto& ld = res.value();
 
   // No need to hold on to the descriptor - we can't write to it (no write back)

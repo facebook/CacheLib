@@ -16,9 +16,11 @@
 
 #pragma once
 
+#include <folly/Random.h>
 #include <folly/coro/Promise.h>
 #include <folly/coro/Task.h>
 
+#include <chrono>
 #include <concepts>
 
 #include "cachelib/navy/common/NavyThread.h"
@@ -34,9 +36,11 @@ using DefaultCleanupT = decltype([](auto&&) {});
  * block until the operation completes. Returns the output from the function.
  *
  * Your function should return a folly::Expected<ValueT, navy::Status> --
- * onWorkerThread() will continue retrying if it returns a navy::Status::Retry
- * error. Note that the return value from the fiber *must* be movable.  If your
- * type isn't movable, wrap it in a unique_ptr.
+ * onWorkerThread() will retry up to kMaxAttempts times if it returns a
+ * navy::Status::Retry error, using exponential backoff with jitter between
+ * attempts. If all attempts return Retry, the final Retry error is returned
+ * to the caller. Note that the return value from the fiber *must* be movable.
+ * If your type isn't movable, wrap it in a unique_ptr.
  *
  * onWorkerThread() runs cleanup() on the fiber if the awaiting coroutine got
  * cancelled while the fiber was still executing.  This allows cleaning up in
@@ -88,11 +92,23 @@ folly::coro::Task<ReturnT> onWorkerThread(
        promise = std::move(promiseFuturePair.first),
        cleanupHelper = CleanupHelper(std::forward<CleanupFuncT>(cleanup)),
        token = cancellationToken]() mutable {
+        static constexpr size_t kMaxAttempts = 3;
+        static constexpr std::chrono::milliseconds kBaseDelay{10};
+
         // setting error is required to kick off the first loop
         cleanupHelper.result_ = folly::makeUnexpected(navy::Status::Retry);
-        while (cleanupHelper.result_.hasError() &&
-               cleanupHelper.result_.error() == navy::Status::Retry &&
-               !token.isCancellationRequested()) {
+        for (size_t attempt = 0;
+             attempt < kMaxAttempts && cleanupHelper.result_.hasError() &&
+             cleanupHelper.result_.error() == navy::Status::Retry &&
+             !token.isCancellationRequested();
+             ++attempt) {
+          if (attempt > 0) {
+            auto baseDelay = kBaseDelay * (1u << (attempt - 1));
+            auto jitter = std::chrono::milliseconds(
+                folly::Random::rand32(kBaseDelay.count()));
+            folly::futures::sleep(baseDelay + jitter).wait();
+          }
+
           try {
             cleanupHelper.result_ = func();
           } catch (...) {
