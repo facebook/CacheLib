@@ -16,7 +16,6 @@
 
 #include "cachelib/interface/Handle.h"
 
-#include <folly/coro/BlockingWait.h>
 #include <folly/logging/xlog.h>
 
 #include <cstring>
@@ -50,7 +49,7 @@ Handle::Handle(Handle&& other) noexcept
 Handle::~Handle() noexcept {
   if (item_ != nullptr) {
     if (item_->decrementRefCount()) {
-      folly::coro::blockingWait(cache_->release(*item_, inserted_));
+      cache_->release(*item_, inserted_);
     }
     item_ = nullptr;
   }

@@ -334,15 +334,13 @@ UnitResult RAMCacheComponent::writeBack(CacheItem& /* item */) {
   return folly::unit;
 }
 
-folly::coro::Task<void> RAMCacheComponent::release(interface::CacheItem& item,
-                                                   bool inserted) {
+void RAMCacheComponent::release(interface::CacheItem& item, bool inserted) {
   stats_->release_.throughput_.calls_.inc();
   auto latencyGuard = stats_->release_.latency_.start();
   auto* implItem = reinterpret_cast<RAMCacheItem&>(item).item();
   cache_->releaseBackToAllocator(
       *implItem, RemoveContext::kNormal, /* nascent */ !inserted);
   stats_->release_.throughput_.successes_.inc();
-  co_return;
 }
 
 CacheComponentStats RAMCacheComponent::getStats() const noexcept {

@@ -172,7 +172,7 @@ class CacheComponent {
    * @param inserted whether the item was previously inserted into the cache
    * (callbacks are typically only called when it was inserted)
    */
-  virtual folly::coro::Task<void> release(CacheItem& item, bool inserted) = 0;
+  virtual void release(CacheItem& item, bool inserted) = 0;
 
   friend class Handle;
   friend class WriteHandle;

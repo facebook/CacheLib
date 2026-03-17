@@ -111,7 +111,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
   // ------------------------------ Interface ------------------------------ //
 
   UnitResult writeBack(CacheItem& item) override;
-  folly::coro::Task<void> release(CacheItem& item, bool inserted) override;
+  void release(CacheItem& item, bool inserted) override;
 
   friend class FlashCacheItem;
   friend class ConsistentFlashCacheItem;

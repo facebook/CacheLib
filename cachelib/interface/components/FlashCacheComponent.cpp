@@ -483,8 +483,7 @@ UnitResult FlashCacheComponent::writeBack(CacheItem& item) {
   return folly::unit;
 }
 
-folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
-                                                     bool inserted) {
+void FlashCacheComponent::release(CacheItem& item, bool inserted) {
   stats_->release_.throughput_.calls_.inc();
   auto latencyGuard = stats_->release_.latency_.start();
   auto& fccItem = static_cast<FlashCacheItem&>(item);
@@ -497,7 +496,6 @@ folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
   // Item is stored inline in the Handle's buffer; destroy without deallocating
   item.~CacheItem();
   stats_->release_.throughput_.successes_.inc();
-  co_return;
 }
 
 CacheComponentStats FlashCacheComponent::getStats() const noexcept {
