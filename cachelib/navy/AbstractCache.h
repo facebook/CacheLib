@@ -67,7 +67,12 @@ class AbstractCache {
 
   // Inserts entry into cache.
   // Returns: Ok, Rejected, DeviceError
-  virtual Status insert(HashedKey key, BufferView value) = 0;
+  // TODO: For now passing lastAccessTimeSecs as a param. This is
+  // temporary until ItemMetadata lands. After that, we will pass
+  // ItemMetadata as a param.
+  virtual Status insert(HashedKey key,
+                        BufferView value,
+                        uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Asynchronously inserts entry into the cache.
   // Invokes callback when done on a worker thread. Callback is optional.
@@ -78,7 +83,8 @@ class AbstractCache {
   // Returns: Ok, Rejected
   virtual Status insertAsync(HashedKey key,
                              BufferView value,
-                             InsertCallback cb) = 0;
+                             InsertCallback cb,
+                             uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Looks up value. Returns non-null buffer if found.
   // Returns: Ok, NotFound, DeviceError

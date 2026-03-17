@@ -207,7 +207,9 @@ uint32_t BlockCache::serializedSize(uint32_t keySize,
   return powTwoAlign(size, allocAlignSize_);
 }
 
-Status BlockCache::insert(HashedKey hk, BufferView value) {
+Status BlockCache::insert(HashedKey hk,
+                          BufferView value,
+                          uint32_t lastAccessTimeSecs) {
   auto start = getSteadyClock();
   SCOPE_EXIT {
     insertLatency_.trackValue(toMicros(getSteadyClock() - start).count());
@@ -222,7 +224,7 @@ Status BlockCache::insert(HashedKey hk, BufferView value) {
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  writeEntry(addr, slotSize, hk, value);
+  writeEntry(addr, slotSize, hk, value, lastAccessTimeSecs);
   updateIndex(hk.keyHash(), slotSize, addr, /* allowReplace */ true);
   allocator_.close(std::move(desc));
   INJECT_PAUSE(pause_blockcache_insert_done);
@@ -1033,11 +1035,14 @@ BlockCache::allocateForInsert(const HashedKey& hk, const uint32_t valueSize) {
 }
 
 /* static */ BlockCache::EntryDesc* BlockCache::writeEntryDescAndKey(
-    Buffer& buffer, const HashedKey& hk, uint32_t valueSize) {
+    Buffer& buffer,
+    const HashedKey& hk,
+    uint32_t valueSize,
+    uint32_t lastAccessTimeSecs) {
   // Copy descriptor and the key to the end
   size_t descOffset = buffer.size() - sizeof(EntryDesc);
   auto desc = new (buffer.data() + descOffset)
-      EntryDesc(hk.key().size(), valueSize, hk.keyHash());
+      EntryDesc(hk.key().size(), valueSize, hk.keyHash(), lastAccessTimeSecs);
   buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
   return desc;
 }
@@ -1045,9 +1050,11 @@ BlockCache::allocateForInsert(const HashedKey& hk, const uint32_t valueSize) {
 void BlockCache::writeEntry(RelAddress addr,
                             uint32_t size,
                             HashedKey hk,
-                            BufferView value) {
+                            BufferView value,
+                            uint32_t lastAccessTimeSecs) {
   auto buffer = Buffer(size);
-  auto* desc = writeEntryDescAndKey(buffer, hk, value.size());
+  auto* desc =
+      writeEntryDescAndKey(buffer, hk, value.size(), lastAccessTimeSecs);
   if (checksumData_) {
     desc->cs = checksum(value);
   }

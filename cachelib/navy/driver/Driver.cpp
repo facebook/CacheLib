@@ -110,14 +110,18 @@ uint64_t Driver::estimateWriteSize(HashedKey hk, BufferView value) const {
              : hk.key().size() + value.size();
 }
 
-Status Driver::insert(HashedKey key, BufferView value) {
+Status Driver::insert(HashedKey key,
+                      BufferView value,
+                      uint32_t lastAccessTimeSecs) {
   trace::Profiled<folly::fibers::Baton, "cachelib:navy:driver_insert"> done;
   Status cbStatus{Status::Ok};
-  auto status = insertAsync(key, value,
-                            [&done, &cbStatus](Status s, HashedKey /* key */) {
-                              cbStatus = s;
-                              done.post();
-                            });
+  auto status = insertAsync(
+      key, value,
+      [&done, &cbStatus](Status s, HashedKey /* key */) {
+        cbStatus = s;
+        done.post();
+      },
+      lastAccessTimeSecs);
   if (status != Status::Ok) {
     return status;
   }
@@ -171,7 +175,10 @@ bool Driver::admissionTest(HashedKey hk, BufferView value) const {
   return false;
 }
 
-Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
+Status Driver::insertAsync(HashedKey hk,
+                           BufferView value,
+                           InsertCallback cb,
+                           uint32_t lastAccessTimeSecs) {
   if (hk.key().size() > maxKeySize_) {
     rejectedCount_.inc();
     rejectedBytes_.add(hk.key().size() + value.size());
@@ -200,7 +207,8 @@ Status Driver::insertAsync(HashedKey hk, BufferView value, InsertCallback cb) {
         }
         parcelMemory_.sub(totalSize);
         concurrentInserts_.dec();
-      });
+      },
+      lastAccessTimeSecs);
   return Status::Ok;
 }
 

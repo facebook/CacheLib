@@ -75,11 +75,12 @@ Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
 
 Status EnginePair::insertInternal(HashedKey hk,
                                   BufferView value,
-                                  bool& skipInsertion) {
+                                  bool& skipInsertion,
+                                  uint32_t lastAccessTimeSecs) {
   auto selection = select(hk, value);
   Status status = Status::Ok;
   if (!skipInsertion) {
-    status = selection.first.insert(hk, value);
+    status = selection.first.insert(hk, value, lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
@@ -112,11 +113,14 @@ Status EnginePair::insertInternal(HashedKey hk,
 
 void EnginePair::scheduleInsert(HashedKey hk,
                                 BufferView value,
-                                InsertCallback cb) {
+                                InsertCallback cb,
+                                uint32_t lastAccessTimeSecs) {
   insertCount_.inc();
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, value, skipInsertion = false]() mutable {
-        auto status = insertInternal(hk, value, skipInsertion);
+      [this, cb = std::move(cb), hk, value, skipInsertion = false,
+       lastAccessTimeSecs]() mutable {
+        auto status =
+            insertInternal(hk, value, skipInsertion, lastAccessTimeSecs);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }

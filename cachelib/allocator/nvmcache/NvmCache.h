@@ -1228,7 +1228,8 @@ void NvmCache<C>::put(Item& item, PutToken token) {
           }
           recordEvent(AllocatorApiEvent::NVM_INSERT, key.key(), eventRes);
           putCleanup();
-        });
+        },
+        item.getLastAccessTime());
 
     if (status == navy::Status::Ok) {
       guard.dismiss();

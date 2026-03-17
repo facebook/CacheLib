@@ -25,7 +25,9 @@ class NoopEngine final : public Engine {
  public:
   ~NoopEngine() override = default;
   uint64_t getSize() const override { return 0; }
-  Status insert(HashedKey /* hk */, BufferView /* value */) override {
+  Status insert(HashedKey /* hk */,
+                BufferView /* value */,
+                uint32_t /* lastAccessTimeSecs */ = 0) override {
     return Status::Rejected;
   }
   bool couldExist(HashedKey) override { return false; }

@@ -86,7 +86,9 @@ class Driver final : public AbstractCache {
   // @param key    the item key
   // @param value  the item value
   // @return a status indicates success or failure, and the reason for failure
-  Status insert(HashedKey key, BufferView value) override;
+  Status insert(HashedKey key,
+                BufferView value,
+                uint32_t lastAccessTimeSecs = 0) override;
 
   // insert a key and value into the cache asynchronously.
   // @param key    the item key
@@ -96,7 +98,8 @@ class Driver final : public AbstractCache {
   //               reason for failure
   Status insertAsync(HashedKey key,
                      BufferView value,
-                     InsertCallback cb) override;
+                     InsertCallback cb,
+                     uint32_t lastAccessTimeSecs = 0) override;
 
   // lookup a key in the cache.
   // @param key    the item key to lookup

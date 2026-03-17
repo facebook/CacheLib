@@ -143,7 +143,9 @@ class BlockCache final : public Engine {
   // @return  Status::Ok on success,
   //          Status::Rejected on error,
   //          Status::Retry on no space available for now.
-  Status insert(HashedKey hk, BufferView value) override;
+  Status insert(HashedKey hk,
+                BufferView value,
+                uint32_t lastAccessTimeSecs = 0) override;
 
   // Looks up a key in BlockCache.
   //
@@ -293,7 +295,8 @@ class BlockCache final : public Engine {
   // @param valueSize   size of the value to be inserted
   static EntryDesc* writeEntryDescAndKey(Buffer& buffer,
                                          const HashedKey& hk,
-                                         uint32_t valueSize);
+                                         uint32_t valueSize,
+                                         uint32_t lastAccessTimeSecs = 0);
 
   struct LookupData {
     Buffer buffer_;
@@ -316,7 +319,8 @@ class BlockCache final : public Engine {
   void writeEntry(RelAddress addr,
                   uint32_t size,
                   HashedKey hk,
-                  BufferView value);
+                  BufferView value,
+                  uint32_t lastAccessTimeSecs = 0);
   // @param ld          LookupData containing the entry metadata for reading
   // @param addrEnd     End of the entry since the item layout is backward
   // @param approxSize  Approximate size since we got this size from index
