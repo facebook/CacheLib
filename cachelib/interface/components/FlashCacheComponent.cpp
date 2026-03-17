@@ -128,6 +128,9 @@ class FlashCacheItem : public CacheItem {
   Buffer buffer_;
 };
 
+static_assert(sizeof(FlashCacheItem) <= Handle::kInlineBufSize,
+              "FlashCacheItem must fit in Handle's inline buffer");
+
 namespace {
 UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
   constexpr auto expireCheck = [](navy::BufferView v) -> bool {
@@ -234,9 +237,10 @@ folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocateGeneric(
   stats_->allocate_.throughput_.successes_.inc();
   // NOTE: we can't checksum until the user has finished writing their data,
   // defer until they call insert()
-  auto* item = new CacheItemT(hashedKey, valueSize, std::move(result).value(),
-                              creationTime, ttlSecs);
-  co_return AllocatedHandle(*this, *item);
+  AllocatedHandle handle(*this, InlineItem);
+  new (getInlineBuf(handle)) CacheItemT(
+      hashedKey, valueSize, std::move(result).value(), creationTime, ttlSecs);
+  co_return std::move(handle);
 }
 
 folly::coro::Task<Result<AllocatedHandle>> FlashCacheComponent::allocate(
@@ -324,7 +328,9 @@ folly::coro::Task<Result<std::optional<ReadHandle>>> FlashCacheComponent::find(
     if (util::isExpired(expiryTime)) {
       co_return std::nullopt;
     }
-    co_return ReadHandle(*this, *(new FlashCacheItem(std::move(ld))));
+    ReadHandle handle(*this, InlineItem);
+    new (getInlineBuf(handle)) FlashCacheItem(std::move(ld));
+    co_return std::move(handle);
   }
   case Status::NotFound:
     stats_->find_.throughput_.successes_.inc();
@@ -374,9 +380,10 @@ FlashCacheComponent::findToWriteGeneric(Key key) {
     co_return folly::makeUnexpected(std::move(allocResult).error());
   }
   stats_->findToWrite_.throughput_.successes_.inc();
-  auto* newItem =
-      new CacheItemT(std::move(allocResult).value(), std::move(buf));
-  co_return WriteHandle(*this, *newItem);
+  WriteHandle handle(*this, InlineItem);
+  new (getInlineBuf(handle))
+      CacheItemT(std::move(allocResult).value(), std::move(buf));
+  co_return std::move(handle);
 }
 
 folly::coro::Task<Result<std::optional<WriteHandle>>>
@@ -487,7 +494,8 @@ folly::coro::Task<void> FlashCacheComponent::release(CacheItem& item,
   if (fccItem.getRegionDescriptor().isReady()) {
     cache_->regionManager_.close(std::move(fccItem.getRegionDescriptor()));
   }
-  delete &item;
+  // Item is stored inline in the Handle's buffer; destroy without deallocating
+  item.~CacheItem();
   stats_->release_.throughput_.successes_.inc();
   co_return;
 }
@@ -537,6 +545,9 @@ class ConsistentFlashCacheItem : public FlashCacheItem {
  private:
   utils::ShardedSerializer::WriteLock lock_;
 };
+
+static_assert(sizeof(ConsistentFlashCacheItem) <= Handle::kInlineBufSize,
+              "ConsistentFlashCacheItem must fit in Handle's inline buffer");
 
 /* static */ Result<ConsistentFlashCacheComponent>
 ConsistentFlashCacheComponent::create(std::string name,

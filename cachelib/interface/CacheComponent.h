@@ -143,6 +143,12 @@ class CacheComponent {
    */
   FOLLY_ALWAYS_INLINE void releaseHandle(Handle&& handle) { handle.release(); }
 
+  /**
+   * Get a pointer to the inline buffer in the handle, suitable for placement
+   * new of a CacheItem subclass.
+   */
+  static void* getInlineBuf(Handle& handle) noexcept { return handle.buf_; }
+
  private:
   // ------------------------------ Interface ------------------------------ //
 
