@@ -512,7 +512,7 @@ class FixedSizeIndex : public Index {
       XLOGF(ERR,
             "Adding Key hash {}, bid {} to CombinedEntryBlock failed, "
             "status={}",
-            key.value(), curBid, status);
+            key.value(), curBid, static_cast<uint8_t>(status));
       // We will continue by discarding currently stored entry
       return {};
     }

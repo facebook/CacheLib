@@ -15,8 +15,13 @@
 add_library (cachelib_cachebench
   ../interface/CacheItem.cpp
   ../interface/Handle.cpp
+  ../interface/Stats.cpp
+  ../interface/components/FlashCacheComponent.cpp
   ../interface/components/RAMCacheComponent.cpp
   ./cache/Cache.cpp
+  ./cache/components/Components.cpp
+  ./cache/components/FlashComponent.cpp
+  ./cache/components/RAMComponent.cpp
   ./cache/TimeStampTicker.cpp
   ./consistency/LogEventStream.cpp
   ./consistency/ShortThreadId.cpp
@@ -42,6 +47,18 @@ add_library (cachelib_cachebench
   ./workload/PieceWiseReplayGenerator.cpp
   ./workload/SimpleFlashBenchmarkGenerator.cpp
   )
+
+# GCC 11's C++20 coroutine support has bugs that cause internal compiler errors
+# (segfaults) when compiling coroutine templates at -O2. Reduce optimization
+# for affected files to work around this.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12")
+  set_source_files_properties(
+    ../interface/components/FlashCacheComponent.cpp
+    PROPERTIES COMPILE_OPTIONS "-O1"
+  )
+endif()
+
 add_dependencies(cachelib_cachebench thrift_generated_files)
 target_link_libraries(cachelib_cachebench PUBLIC
   cachelib_datatype

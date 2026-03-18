@@ -23,6 +23,7 @@ add_library (cachelib_navy
   bighash/BucketStorage.cpp
   block_cache/Allocator.cpp
   block_cache/BlockCache.cpp
+  block_cache/CombinedEntryBlock.cpp
   block_cache/FifoPolicy.cpp
   block_cache/FixedSizeIndex.cpp
   block_cache/HitsReinsertionPolicy.cpp
@@ -116,5 +117,6 @@ if (BUILD_TESTS)
   add_source_test (testing/tests/MockJobSchedulerTest.cpp)
   add_source_test (testing/tests/SeqPointsTest.cpp)
   add_source_test (block_cache/tests/BlockCacheTest.cpp)
+  add_source_test (block_cache/tests/CombinedEntryBlockTest.cpp)
   add_source_test (bighash/tests/BigHashTest.cpp)
 endif()
