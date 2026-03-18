@@ -1762,7 +1762,7 @@ TEST(BlockCache, Checksum) {
 
   // Corrupt e1: header
   Buffer buf{2 * kIOAlignSize, kIOAlignSize};
-  memcpy(buf.data() + buf.size() - 4, "hack", 4);
+  memset(buf.data(), 'X', buf.size());
   EXPECT_TRUE(device->write(0, std::move(buf)));
   EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value));
 
