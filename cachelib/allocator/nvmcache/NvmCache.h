@@ -1271,9 +1271,6 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
                                 HashedKey hk,
                                 navy::BufferView val,
                                 uint32_t lastAccessTimeSecs) {
-  // lastAccessTimeSecs will be used by retention threshold enforcement
-  // in a follow-up diff.
-  (void)lastAccessTimeSecs;
   auto guard =
       folly::makeGuard([&ctx, hk]() { ctx.cache.removeFromFillMap(hk); });
   // navy got disabled while we were fetching. If so, safely return a miss.
@@ -1338,6 +1335,16 @@ void NvmCache<C>::onGetComplete(GetCtx& ctx,
 
   recordEvent(AllocatorApiEvent::NVM_FIND, hk.key(), AllocatorApiResult::FOUND,
               nvmItem);
+
+  // Track NVM hit time-to-access for every NVM hit, regardless of whether
+  // the DRAM promotion succeeds (another thread may have already promoted).
+  // TTA = currentTime - lastAccessTimeSecs (how long ago item was last
+  // accessed). Guard > 0 because BigHash doesn't store access time.
+  if (lastAccessTimeSecs > 0) {
+    auto ttaSecs = util::getCurrentTimeSec() - lastAccessTimeSecs;
+    stats().nvmHitTTASecs_.trackValue(ttaSecs);
+  }
+
   // by the time we filled from navy, another thread inserted in RAM. We
   // disregard.
   if (CacheAPIWrapperForNvm<C>::insertFromNvm(cache_, it)) {

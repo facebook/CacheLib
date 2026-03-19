@@ -481,6 +481,8 @@ void CacheBase::updateGlobalCacheStats(const std::string& statPrefix) const {
                    statPrefix + "nvm.make_obj_cb.latency_us");
     visitEstimates(uploadStats, stats.nvmPutSize,
                    statPrefix + "nvm.incoming_item_size_bytes");
+    visitEstimates(uploadStats, stats.nvmHitTTASecs,
+                   statPrefix + "nvm.hit_tta_secs");
 
     if (stats.numNvmDestructorRefcountOverflow > 0) {
       counters_.updateCount(statPrefix + "nvm.destructors.refcount_overflow",

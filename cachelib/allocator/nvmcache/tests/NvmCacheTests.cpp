@@ -2925,6 +2925,49 @@ TEST_F(NvmCacheTest, DataCorruption) {
     EXPECT_EQ(nullptr, it);
   }
 }
+
+TEST_F(NvmCacheTest, NvmHitTTATracking) {
+  // Disable BigHash — it doesn't store lastAccessTimeSecs (returns 0).
+  // BlockCache tracks it, so TTA can be computed.
+  this->config_.bigHash().setSizePctAndMaxItemSize(0, 100);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = config_;
+  this->allocConfig_.enableNvmCache(nvmConfig);
+  this->makeCache();
+
+  auto& cache = this->cache();
+  auto pid = this->poolId();
+
+  std::string key = "tta_test_key";
+  std::string val = "tta_test_value";
+
+  // 1. Insert item into DRAM
+  {
+    auto it = cache.allocate(pid, key, val.length());
+    ASSERT_NE(nullptr, it);
+    ::memcpy(it->getMemory(), val.data(), val.length());
+    cache.insertOrReplace(it);
+  }
+
+  // 2. Push to NVM and remove from RAM
+  this->pushToNvmCacheFromRamForTesting(key);
+  this->removeFromRamForTesting(key);
+
+  // 3. Wait so TTA (currentTime - lastAccessTimeSecs) > 0
+  /* sleep override */ std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  // 4. Fetch from NVM (triggers onGetComplete -> TTA tracking)
+  auto it = this->fetch(key, false /* ramOnly */);
+  ASSERT_NE(nullptr, it);
+
+  // 5. Verify NVM hit occurred
+  auto stats = this->getStats();
+  EXPECT_GT(stats.numNvmGets, 0);
+  EXPECT_GT(stats.numNvmGets - stats.numNvmGetMiss, 0);
+
+  // 6. Verify TTA was tracked (>= 1 second)
+  EXPECT_GE(stats.nvmHitTTASecs.p50, 1);
+}
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
