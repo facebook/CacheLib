@@ -28,7 +28,6 @@
 #include "cachelib/navy/admission_policy/AdmissionPolicy.h"
 #include "cachelib/navy/common/Buffer.h"
 #include "cachelib/navy/common/Device.h"
-#include "cachelib/navy/engine/Engine.h"
 #include "cachelib/navy/engine/EnginePair.h"
 #include "cachelib/navy/scheduler/JobScheduler.h"
 
@@ -126,10 +125,10 @@ class Driver final : public AbstractCache {
   // @param cb   a callback function be triggered when the remove complete.
   void removeAsync(HashedKey key, RemoveCallback cb) override;
 
-  // ensure all pending job have been completed
+  // ensure all pending jobs have been completed
   void drain() override;
 
-  // ensure all pending job have been completed and data has been flush to
+  // ensure all pending jobs have been completed and data has been flushed to
   // device(s).
   void flush() override;
 
