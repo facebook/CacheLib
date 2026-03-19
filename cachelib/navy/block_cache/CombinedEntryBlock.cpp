@@ -23,7 +23,7 @@ namespace navy {
 CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     uint64_t bid, uint64_t key, const EntryRecord& record) {
   bool update = false;
-  uint16_t keyIdx = numStoredEntries_;
+  uint16_t keyIdx = numStoredEntries();
 
   // Check if the key already exists
   auto it = storedKeys_.find(key);
@@ -59,7 +59,7 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
   } else {
     // It's not 'update' case.
     EntryPos pos = curPos_ - sizeof(EntryRecord);
-    if (pos < getEmptySpacePos(numStoredEntries_ + 1)) {
+    if (pos < getEmptySpacePos(numStoredEntries() + 1)) {
       // There's no space to add more entry here
       return CombinedEntryStatus::kFull;
     }
@@ -68,7 +68,7 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     entryPosInfoRef(keyIdx) = {bid, key, pos};
     storedKeys_.insert({key, keyIdx});
     increaseKeysForBid(bid);
-    numStoredEntries_++;
+    headerPtr_->numStoredEntries++;
     numValidEntries_++;
     curPos_ = pos;
     return CombinedEntryStatus::kOk;
@@ -112,6 +112,15 @@ bool CombinedEntryBlock::peekIndexEntry(uint64_t key) {
   auto it = storedKeys_.find(key);
   return (it != storedKeys_.end() &&
           entryPosInfoRef(it->second).flag.removed == 0);
+}
+
+void CombinedEntryBlock::clear() {
+  // Clear all the contents of the block. Buffer itself will be reused.
+  storedKeys_.clear();
+  keysForBids_.clear();
+  numValidEntries_ = 0;
+  curPos_ = getSize();
+  initHeader();
 }
 
 } // namespace navy

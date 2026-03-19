@@ -55,7 +55,7 @@ TEST(CombinedEntryManagerTest, AddIndexEntry) {
   EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 1);
 
   auto combinedBlk0 = combinedEntryMgr.getCombinedEntryBlock(stream);
-  EXPECT_EQ(combinedBlk0->getNumStoredEntries(), 2);
+  EXPECT_EQ(combinedBlk0->numStoredEntries(), 2);
 
   // Check if it's added well
   auto entry1 = combinedBlk0->getIndexEntry(key1);
@@ -78,7 +78,7 @@ TEST(CombinedEntryManagerTest, AddIndexEntry) {
 
   // Check if it's added well
   auto combinedBlk1 = combinedEntryMgr.getCombinedEntryBlock(stream1);
-  EXPECT_EQ(combinedBlk1->getNumStoredEntries(), 1);
+  EXPECT_EQ(combinedBlk1->numStoredEntries(), 1);
 
   auto entry3 = combinedBlk1->getIndexEntry(key3);
   EXPECT_TRUE(entry3.hasValue());
