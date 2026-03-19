@@ -30,6 +30,7 @@ enum class CombinedEntryStatus : uint8_t {
   kUpdated,
   kFull,
   kNotFound,
+  kError,
 };
 
 using EntryPos = uint16_t;

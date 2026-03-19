@@ -16,18 +16,36 @@
 
 #pragma once
 
+#include "cachelib/navy/block_cache/CombinedEntryBlock.h"
 #include "cachelib/shm/ShmManager.h"
 
 namespace facebook {
 namespace cachelib {
 namespace navy {
 
-// This class will manages things related to maintain combined entry blocks
+// This class will manage things related to maintaining combined entry blocks
+//
+// - There will be multiple streams (configured by 'numCombinedEntryStreams' in
+// constructor) and each stream will maintain an active combined entry block at
+// any moment.
+// - Inserting an entry to each stream will add the entry to the active combined
+// entry block (CEB) for the stream.
+// - For persistence, CombinedEntryManager will manage the buffer for each
+// active CEB and is responsible for persisting/recovering those buffers with
+// shutdown/start cycles. (TODO)
+// - Once active CEB is full, it will be flushed to the flash. (TODO)
+//
+// *** Access for each stream is NOT thread safe within CombinedEntryManager.
+// It's assumed that caller is responsible for protecting any concurrent access
+// issue per each stream. CombinedEntryManager does NOT handle/lock any access
+// to be thread safe.
 //
 class CombinedEntryManager {
  public:
   static constexpr std::string_view kShmCebManagerName =
       "shm_combined_entry_manager";
+
+  CombinedEntryManager() = delete;
 
   CombinedEntryManager(uint64_t numCombinedEntryStreams,
                        uint32_t CombinedEntryBlockSize,
@@ -36,7 +54,8 @@ class CombinedEntryManager {
       : numCebStreams_{numCombinedEntryStreams},
         cebSize_{CombinedEntryBlockSize},
         shmManager_{shmManager},
-        name_{name} {}
+        name_{name},
+        cebStreams_{numCebStreams_} {}
 
   // Resets all the combined entry block buffers
   void reset();
@@ -44,6 +63,18 @@ class CombinedEntryManager {
   void persist() const;
   // Recover the persisted content of the combined entry block buffers
   void recover();
+
+  // Will return the combined entry block for the given stream
+  CombinedEntryBlock* getCombinedEntryBlock(uint64_t stream);
+
+  // Adding a index entry to currently active combined entry block for the
+  // stream
+  CombinedEntryStatus addIndexEntryToStream(uint64_t stream,
+                                            uint64_t bid,
+                                            uint64_t key,
+                                            const EntryRecord& record);
+
+  size_t getTotalCombinedEntryBlocks() const { return totalCebs_; }
 
  private:
   size_t getRequiredPreallocSize() const;
@@ -53,6 +84,11 @@ class CombinedEntryManager {
   ShmManager* shmManager_{};
   std::string name_;
   uint8_t* cebBuffers_{};
+
+  // Total number of CombinedEntryBlocks whether it's in memory or flash
+  std::atomic<size_t> totalCebs_{0};
+  // Active CombinedEntryBlocks for each streams
+  std::vector<std::unique_ptr<CombinedEntryBlock>> cebStreams_;
 };
 
 } // namespace navy

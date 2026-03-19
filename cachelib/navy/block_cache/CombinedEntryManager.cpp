@@ -79,6 +79,55 @@ void CombinedEntryManager::recover() {
 
   XLOG(INFO) << "Finished recovering BlockCache Combined entry block buffers";
 }
+
+CombinedEntryBlock* CombinedEntryManager::getCombinedEntryBlock(
+    uint64_t stream) {
+  if (stream >= numCebStreams_) {
+    XLOGF(ERR, "Can't get the combined entry block, Invalid stream id: {}",
+          stream);
+    return nullptr;
+  }
+
+  // If we don't have the combined entry block for the stream, create one
+  if (cebStreams_[stream] == nullptr) {
+    // TODO: Let's just use CombinedEntryBlock as it is for now though it won't
+    // use shm for the buffer.
+    cebStreams_[stream] = std::make_unique<CombinedEntryBlock>(cebSize_);
+    totalCebs_++;
+  }
+
+  return cebStreams_[stream].get();
+}
+
+CombinedEntryStatus CombinedEntryManager::addIndexEntryToStream(
+    uint64_t stream, uint64_t bid, uint64_t key, const EntryRecord& record) {
+  auto ceb = getCombinedEntryBlock(stream);
+  if (!ceb) {
+    XLOGF(ERR,
+          "Can't add an index entry (bid {}, key {}) to the stream: CEB is not "
+          "available for the given stream {}",
+          bid, key, stream);
+    return CombinedEntryStatus::kError;
+  }
+
+  auto res = ceb->addIndexEntry(bid, key, record);
+  if (res == CombinedEntryStatus::kFull) {
+    // TODO: Here, it needs to be flushed to the flash and we need to open
+    // another CEB for the stream. For now, it will just return the status
+    XLOGF(
+        WARN,
+        "Can't add an index entry (bid {}, key {}) to the stream: CEB is full "
+        "for the given stream {}",
+        bid, key, stream);
+    // TODO: This will be changed, for now just return kFull
+    return CombinedEntryStatus::kFull;
+  }
+
+  XDCHECK(res == CombinedEntryStatus::kUpdated ||
+          res == CombinedEntryStatus::kOk);
+  return res;
+}
+
 } // namespace navy
 } // namespace cachelib
 } // namespace facebook
