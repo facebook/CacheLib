@@ -162,11 +162,14 @@ UnitResult initConfig(navy::BlockCache::Config& config, navy::Device* device) {
   if (config.checkExpired) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "expiration callback set in BlockCache::Config but "
-                     "FlashCacheComponent is going to set it");
+                     "component is going to set it");
+  } else if (!device) {
+    return makeError(Error::Code::INVALID_CONFIG,
+                     "need to supply a device to create()");
   } else if (config.device && config.device != device) {
     return makeError(Error::Code::INVALID_CONFIG,
                      "device set in BlockCache::Config is not the same as "
-                     "the device passed to FlashCacheComponent::create()");
+                     "the device passed to create()");
   }
 
   config.device = device;
