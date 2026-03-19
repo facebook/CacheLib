@@ -74,6 +74,18 @@ class CombinedEntryManager {
                                             uint64_t key,
                                             const EntryRecord& record);
 
+  // Peek active combined entry block(s) for the stream to check if we have a
+  // valid entry for the given key
+  bool peekIndexEntryFromStream(uint64_t stream, uint64_t key);
+
+  // Get the index entry for the given key from the active CEB(s) for the stream
+  folly::Expected<EntryRecord, CombinedEntryStatus> getIndexEntryFromStream(
+      uint64_t stream, uint64_t key);
+
+  // Remove an index entry for the given key from the active CEB(s) for the
+  // stream
+  CombinedEntryStatus removeIndexEntryFromStream(uint64_t stream, uint64_t key);
+
   size_t getTotalCombinedEntryBlocks() const { return totalCebs_; }
 
  private:

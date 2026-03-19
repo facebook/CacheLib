@@ -82,11 +82,7 @@ void CombinedEntryManager::recover() {
 
 CombinedEntryBlock* CombinedEntryManager::getCombinedEntryBlock(
     uint64_t stream) {
-  if (stream >= numCebStreams_) {
-    XLOGF(ERR, "Can't get the combined entry block, Invalid stream id: {}",
-          stream);
-    return nullptr;
-  }
+  XDCHECK(stream < numCebStreams_);
 
   // If we don't have the combined entry block for the stream, create one
   if (cebStreams_[stream] == nullptr) {
@@ -126,6 +122,58 @@ CombinedEntryStatus CombinedEntryManager::addIndexEntryToStream(
   XDCHECK(res == CombinedEntryStatus::kUpdated ||
           res == CombinedEntryStatus::kOk);
   return res;
+}
+
+// Check all the active combined entry block(s) for the stream to see if we have
+// a valid entry for the key.
+// (If it's already flushed to flash, index will be updated to point to the
+// flash location, so it will be handled differently and this won't be called
+// for that case)
+bool CombinedEntryManager::peekIndexEntryFromStream(uint64_t stream,
+                                                    uint64_t key) {
+  XDCHECK(stream < numCebStreams_);
+
+  if (cebStreams_[stream] == nullptr) {
+    return false;
+  }
+
+  // TODO: for now, only one active CEB for each stream. It'll be expanded
+  // to handle multiple in case there are pending flushes.
+  return cebStreams_[stream]->peekIndexEntry(key);
+}
+
+// Get the index entry for the given key from the active combined entry block(s)
+// for the stream. When there are multiple CEBs open for the stream, it will
+// look up starting from the latest one to get the latest entry in case the same
+// key entry was updated. (If it's already flushed to flash, index will be
+// updated to point to the flash location, so it will be handled differently and
+// this won't be called for that case)
+folly::Expected<EntryRecord, CombinedEntryStatus>
+CombinedEntryManager::getIndexEntryFromStream(uint64_t stream, uint64_t key) {
+  XDCHECK(stream < numCebStreams_);
+
+  if (cebStreams_[stream] == nullptr) {
+    return folly::makeUnexpected(CombinedEntryStatus::kNotFound);
+  }
+
+  // TODO: for now, only one active CEB for each stream. It'll be expanded
+  // to handle multiple in case there are pending flushes.
+  return cebStreams_[stream]->getIndexEntry(key);
+}
+
+// Remove a index entry for the given key from the active combined entry
+// block(s) for the stream. When there are multiple CEBs open for the stream, it
+// will check and remove starting from the latest one first.
+CombinedEntryStatus CombinedEntryManager::removeIndexEntryFromStream(
+    uint64_t stream, uint64_t key) {
+  XDCHECK(stream < numCebStreams_);
+
+  if (cebStreams_[stream] == nullptr) {
+    return CombinedEntryStatus::kNotFound;
+  }
+
+  // TODO: for now, only one active CEB for each stream.
+  return cebStreams_[stream]->removeIndexEntry(key);
 }
 
 } // namespace navy

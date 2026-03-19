@@ -34,10 +34,6 @@ TEST(CombinedEntryManagerTest, getCombinedEntryBlock) {
   auto combinedBlk2 = combinedEntryMgr.getCombinedEntryBlock(0);
   EXPECT_EQ(combinedBlk, combinedBlk2);
   EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 1);
-
-  // Invalid stream won't return anything
-  combinedBlk = combinedEntryMgr.getCombinedEntryBlock(1000);
-  EXPECT_EQ(combinedBlk, nullptr);
 }
 
 TEST(CombinedEntryManagerTest, AddIndexEntry) {
@@ -94,4 +90,65 @@ TEST(CombinedEntryManagerTest, AddIndexEntry) {
   EXPECT_FALSE(combinedBlk1->peekIndexEntry(key2));
 }
 
+TEST(CombinedEntryManagerTest, RemoveIndexEntry) {
+  CombinedEntryManager combinedEntryMgr(10, 4096, nullptr, "test");
+
+  // Initial state
+  EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 0);
+
+  // Add an entry
+  Index::PackedItemRecord rec1{100, 10, 1};
+  uint64_t key1 = 0;
+  uint64_t stream1 = 0;
+  auto res = combinedEntryMgr.addIndexEntryToStream(stream1, 0, key1, rec1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+  EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 1);
+
+  // Check the added entry
+  EXPECT_TRUE(combinedEntryMgr.peekIndexEntryFromStream(stream1, key1));
+  EXPECT_FALSE(combinedEntryMgr.peekIndexEntryFromStream(stream1 + 1, key1));
+
+  auto entry1 = combinedEntryMgr.getIndexEntryFromStream(stream1, key1);
+  EXPECT_TRUE(entry1.hasValue());
+  EXPECT_EQ(entry1.value(), rec1);
+
+  res = combinedEntryMgr.removeIndexEntryFromStream(stream1, key1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+
+  // Check the removed entry
+  entry1 = combinedEntryMgr.getIndexEntryFromStream(stream1, key1);
+  EXPECT_FALSE(entry1.hasValue());
+  EXPECT_EQ(entry1.error(), CombinedEntryStatus::kNotFound);
+  EXPECT_FALSE(combinedEntryMgr.peekIndexEntryFromStream(stream1, key1));
+
+  // Created combined entry block for the stream won't be destroyed
+  EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 1);
+
+  // Add another entry
+  Index::PackedItemRecord rec2{200, 10, 1};
+  uint64_t key2 = 1;
+  uint64_t stream2 = 1;
+  res = combinedEntryMgr.addIndexEntryToStream(stream2, 0, key2, rec2);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+  EXPECT_EQ(combinedEntryMgr.getTotalCombinedEntryBlocks(), 2);
+
+  // Check the added entry
+  EXPECT_TRUE(combinedEntryMgr.peekIndexEntryFromStream(stream2, key2));
+
+  // Remove non-existing entry
+  res = combinedEntryMgr.removeIndexEntryFromStream(stream2, key1);
+  EXPECT_EQ(res, CombinedEntryStatus::kNotFound);
+  // Remove already removed entry
+  res = combinedEntryMgr.removeIndexEntryFromStream(stream1, key1);
+  EXPECT_EQ(res, CombinedEntryStatus::kNotFound);
+
+  // Add the same key for the removed entry again
+  rec1.address = 2000;
+  res = combinedEntryMgr.addIndexEntryToStream(stream1, 0, key1, rec1);
+  EXPECT_EQ(res, CombinedEntryStatus::kOk);
+  // Check the newly added entry
+  entry1 = combinedEntryMgr.getIndexEntryFromStream(stream1, key1);
+  EXPECT_TRUE(entry1.hasValue());
+  EXPECT_EQ(entry1.value(), rec1);
+}
 } // namespace facebook::cachelib::navy::tests
