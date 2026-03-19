@@ -43,7 +43,7 @@ constexpr InlineItemTag InlineItem;
 class Handle {
  public:
   // Size of the inline buffer for storing cache items without heap allocation
-  static constexpr unsigned kInlineBufSize = 72;
+  static constexpr unsigned kInlineBufSize = 80;
 
   /**
    * Whether the handle is valid. All handles are valid unless they have been

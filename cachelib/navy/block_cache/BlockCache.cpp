@@ -257,11 +257,11 @@ Status BlockCache::insert(HashedKey hk,
   if (allocateRes.hasError()) {
     return allocateRes.error();
   }
-  auto& [desc, slotSize, addr] = allocateRes.value();
+  auto& [desc, slotSize, addr, bufferView] = allocateRes.value();
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  writeEntry(addr, slotSize, hk, value, lastAccessTimeSecs);
+  writeEntry(bufferView, hk, value, lastAccessTimeSecs);
   updateIndex(hk.keyHash(), slotSize, addr, /* allowReplace */ true);
   allocator_.close(std::move(desc));
   INJECT_PAUSE(pause_blockcache_insert_done);
@@ -505,7 +505,7 @@ std::pair<Status, std::string> BlockCache::getRandomAlloc(Buffer& value) {
   return std::make_pair(Status::NotFound, "");
 }
 
-Status BlockCache::removeImpl(const HashedKey& hk, const Buffer& value) {
+Status BlockCache::removeImpl(const HashedKey& hk, BufferView value) {
   auto lr = index_->remove(hk.keyHash());
   if (lr.found()) {
     uint64_t removedObjectSize = decodeSizeHint(lr.sizeHint());
@@ -513,7 +513,7 @@ Status BlockCache::removeImpl(const HashedKey& hk, const Buffer& value) {
     usedSizeBytes_.sub(removedObjectSize);
     succRemoveCount_.inc();
     if (!value.isNull() && destructorCb_) {
-      destructorCb_(hk, value.view(), DestructorEvent::Removed);
+      destructorCb_(hk, value, DestructorEvent::Removed);
     }
     return Status::Ok;
   }
@@ -556,7 +556,7 @@ Status BlockCache::remove(HashedKey hk) {
     }
   }
 
-  return removeImpl(hk, value);
+  return removeImpl(hk, value.view());
 }
 
 /**
@@ -981,7 +981,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
           ? kDefaultItemPriority
           : std::min<uint16_t>(lr.currentHits(), numPriorities_ - 1);
 
-  auto [desc, size, addr] =
+  auto [desc, size, addr, bufferView] =
       allocateImpl(hk, value.size(), priority, false /* canWait */);
 
   switch (desc.status()) {
@@ -1008,7 +1008,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  writeEntry(addr, size, hk, value);
+  writeEntry(bufferView, hk, value);
   const auto replaced = index_->replaceIfMatch(hk.keyHash(),
                                                encodeRelAddress(addr.add(size)),
                                                encodeRelAddress(currAddr));
@@ -1027,26 +1027,23 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
   return AllocatorApiResult::REINSERTED;
 }
 
-std::tuple<RegionDescriptor, uint32_t, RelAddress> BlockCache::allocateImpl(
-    const HashedKey& hk,
-    const uint32_t valueSize,
-    const uint16_t priority,
-    const bool canWait) {
+BlockCache::AllocData BlockCache::allocateImpl(const HashedKey& hk,
+                                               const uint32_t valueSize,
+                                               const uint16_t priority,
+                                               const bool canWait) {
   uint32_t size = serializedSize(hk.key().size(), valueSize);
-  auto [desc, addr] =
+  auto [desc, addr, view] =
       allocator_.allocate(size, priority, canWait, hk.keyHash());
   if (desc.isReady()) {
     XDCHECK_LE(addr.offset() + size, regionManager_.regionSize());
     XDCHECK_EQ(size % allocAlignSize_, 0ULL)
         << folly::sformat(" alignSize={}, size={}", allocAlignSize_, size);
   }
-  return std::make_tuple(std::move(desc), size, std::move(addr));
+  return std::make_tuple(std::move(desc), size, std::move(addr), view);
 }
 
-folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
-BlockCache::allocateForInsert(const HashedKey& hk,
-                              const uint32_t valueSize,
-                              bool canWait) {
+folly::Expected<BlockCache::AllocData, Status> BlockCache::allocateForInsert(
+    const HashedKey& hk, const uint32_t valueSize, bool canWait) {
   if (serializedSize(hk.key().size(), valueSize) > kMaxItemSize) {
     allocErrorCount_.inc();
     insertCount_.inc();
@@ -1073,32 +1070,31 @@ BlockCache::allocateForInsert(const HashedKey& hk,
 }
 
 /* static */ BlockCache::EntryDesc* BlockCache::writeEntryDescAndKey(
-    Buffer& buffer,
+    MutableBufferView buffer,
     const HashedKey& hk,
     uint32_t valueSize,
     uint32_t lastAccessTimeSecs) {
   // Copy descriptor and the key to the end
-  size_t descOffset = buffer.size() - sizeof(EntryDesc);
-  auto desc = new (buffer.data() + descOffset)
-      EntryDesc(hk.key().size(), valueSize, hk.keyHash(), lastAccessTimeSecs);
-  buffer.copyFrom(descOffset - hk.key().size(), makeView(hk.key()));
+  const auto& key = hk.key();
+  uint8_t* dest = buffer.data() + buffer.size() - sizeof(EntryDesc);
+  auto desc = new (dest)
+      EntryDesc(static_cast<uint32_t>(key.size()), valueSize, hk.keyHash(),
+                lastAccessTimeSecs);                      // desc
+  std::memcpy(dest - key.size(), key.data(), key.size()); // key
   return desc;
 }
 
-void BlockCache::writeEntry(RelAddress addr,
-                            uint32_t size,
+void BlockCache::writeEntry(MutableBufferView buffer,
                             HashedKey hk,
                             BufferView value,
                             uint32_t lastAccessTimeSecs) {
-  auto buffer = Buffer(size);
   auto* desc =
       writeEntryDescAndKey(buffer, hk, value.size(), lastAccessTimeSecs);
   if (checksumData_) {
     desc->cs = checksum(value);
   }
-  buffer.copyFrom(0, value);
+  std::memcpy(buffer.data(), value.data(), value.size());
 
-  regionManager_.write(addr, std::move(buffer));
   logicalWrittenCount_.add(hk.key().size() + value.size());
 }
 

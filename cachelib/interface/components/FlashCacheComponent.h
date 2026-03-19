@@ -100,8 +100,7 @@ class FlashCacheComponent : public CacheComponentWithStats {
                                             CleanupFuncT&& cleanup = {});
 
   // Helpers used by multiple other APIs
-  using AllocData =
-      std::tuple<navy::RegionDescriptor, uint32_t, navy::RelAddress>;
+  using AllocData = navy::BlockCache::AllocData;
   folly::coro::Task<Result<AllocData>> allocateImpl(const HashedKey& key,
                                                     uint32_t valueSize);
   bool writeBackImpl(CacheItem& item, bool allowReplace);

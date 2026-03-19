@@ -604,12 +604,6 @@ bool RegionManager::deviceWrite(RelAddress addr, BufferView view) {
   return true;
 }
 
-void RegionManager::write(RelAddress addr, Buffer buf) {
-  auto rid = addr.rid();
-  auto& region = getRegion(rid);
-  region.writeToBuffer(addr.offset(), buf.view());
-}
-
 Buffer RegionManager::read(const RegionDescriptor& desc,
                            RelAddress addr,
                            size_t size) const {

@@ -112,12 +112,16 @@ TEST(RegionManager, Recovery) {
         true /* workerFlushAsync */);
 
     // Empty region, like it was evicted and reclaimed
+    rm->getRegion(RegionId{1})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    rm->getRegion(RegionId{2})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
     for (int i = 0; i < 20; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{1}).openAndAllocate(101);
+      auto [desc, _, _2] = rm->getRegion(RegionId{1}).openAndAllocate(101);
       rm->getRegion(RegionId{1}).close(std::move(desc));
     }
     for (int i = 0; i < 30; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{2}).openAndAllocate(101);
+      auto [desc, _, _2] = rm->getRegion(RegionId{2}).openAndAllocate(101);
       rm->getRegion(RegionId{2}).close(std::move(desc));
     }
 
@@ -203,11 +207,11 @@ TEST(RegionManager, ReadWrite) {
   EXPECT_TRUE(injectPauseWait("pause_reclaim_done"));
 
   auto& region = rm->getRegion(rid);
-  auto [wDesc, addr] = region.openAndAllocate(4 * kSize);
+  auto [wDesc, _, allocView] = region.openAndAllocate(4 * kSize);
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(kSize);
   auto wAddr = RelAddress{rid, kLocalOffset};
-  rm->write(wAddr, buf.copy());
+  buf.view().copyTo(allocView.data() + kLocalOffset);
   auto rDesc = rm->openForRead(rid, 1);
   auto bufRead = rm->read(rDesc, wAddr, kSize);
   EXPECT_TRUE(bufRead.size() == kSize);
@@ -242,12 +246,16 @@ TEST(RegionManager, RecoveryLRUOrder) {
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
+    rm->getRegion(RegionId{0})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    rm->getRegion(RegionId{3})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
     for (int i = 0; i < 10; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{0}).openAndAllocate(200);
+      auto [desc, _, _2] = rm->getRegion(RegionId{0}).openAndAllocate(200);
       rm->getRegion(RegionId{0}).close(std::move(desc));
     }
     for (int i = 0; i < 20; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{3}).openAndAllocate(150);
+      auto [desc, _, _2] = rm->getRegion(RegionId{3}).openAndAllocate(150);
       rm->getRegion(RegionId{3}).close(std::move(desc));
     }
 
@@ -296,13 +304,17 @@ TEST(RegionManager, Fragmentation) {
 
     // Mark 1 and 2 clean (num entries == 0), 0 and 3 used. After recovery, LRU
     // should return clean before used, in order of index.
+    rm->getRegion(RegionId{0})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
+    rm->getRegion(RegionId{3})
+        .attachBuffer(std::make_unique<Buffer>(kRegionSize));
     for (int i = 0; i < 10; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{0}).openAndAllocate(200);
+      auto [desc, _, _2] = rm->getRegion(RegionId{0}).openAndAllocate(200);
       rm->getRegion(RegionId{0}).close(std::move(desc));
       fragmentationSize -= 200;
     }
     for (int i = 0; i < 20; i++) {
-      auto [desc, addr] = rm->getRegion(RegionId{3}).openAndAllocate(150);
+      auto [desc, _, _2] = rm->getRegion(RegionId{3}).openAndAllocate(150);
       rm->getRegion(RegionId{3}).close(std::move(desc));
       fragmentationSize -= 150;
     }
@@ -387,11 +399,10 @@ TEST(RegionManager, cleanupRegionFailureSync) {
 
   // Write to Region 0
   auto& region = rm->getRegion(rid);
-  auto [wDesc, addr] = region.openAndAllocate(kRegionSize);
+  auto [wDesc, addr, allocView] = region.openAndAllocate(kRegionSize);
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(1024);
-  auto wAddr = RelAddress{rid, 0};
-  rm->write(wAddr, buf.copy());
+  buf.view().copyTo(allocView.data());
   region.close(std::move(wDesc));
 
   SeqPoints sp;
@@ -498,11 +509,10 @@ TEST(RegionManager, cleanupRegionFailureAsync) {
 
   // Write to Region 0
   auto& region = rm->getRegion(rid);
-  auto [wDesc, addr] = region.openAndAllocate(kRegionSize);
+  auto [wDesc, _addr, allocView] = region.openAndAllocate(kRegionSize);
   EXPECT_EQ(OpenStatus::Ready, wDesc.status());
   auto buf = bg.gen(1024);
-  auto wAddr = RelAddress{rid, 0};
-  rm->write(wAddr, buf.copy());
+  buf.view().copyTo(allocView.data());
   region.close(std::move(wDesc));
 
   SeqPoints sp;

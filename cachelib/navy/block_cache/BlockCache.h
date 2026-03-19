@@ -281,31 +281,34 @@ class BlockCache final : public Engine {
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
 
+  using AllocData = std::tuple<navy::RegionDescriptor,
+                               uint32_t,
+                               navy::RelAddress,
+                               navy::MutableBufferView>;
+
   // Allocate a slot from the allocator
   // @param hk          key to be inserted
   // @param valueSize   size of the value
   // @param priority    priority of async operation
   // @param canWait     whether to wait if space isn't currently available
-  std::tuple<RegionDescriptor, uint32_t, RelAddress> allocateImpl(
-      const HashedKey& hk,
-      const uint32_t valueSize,
-      const uint16_t priority,
-      const bool canWait);
+  AllocData allocateImpl(const HashedKey& hk,
+                         const uint32_t valueSize,
+                         const uint16_t priority,
+                         const bool canWait);
 
   // Allocate a slot for inserting into cache
   // @param hk          key to be inserted
   // @param valueSize   size of the value
   // @param canWait     whether to wait if space isn't currently available
-  folly::Expected<std::tuple<RegionDescriptor, uint32_t, RelAddress>, Status>
-  allocateForInsert(const HashedKey& hk,
-                    const uint32_t valueSize,
-                    bool canWait = true);
+  folly::Expected<AllocData, Status> allocateForInsert(const HashedKey& hk,
+                                                       const uint32_t valueSize,
+                                                       bool canWait = true);
 
   // Write the entry descriptor and cache item key into the item buffer
   // @param buffer      buffer to write into
   // @param hk          key to be inserted
   // @param valueSize   size of the value to be inserted
-  static EntryDesc* writeEntryDescAndKey(Buffer& buffer,
+  static EntryDesc* writeEntryDescAndKey(MutableBufferView buffer,
                                          const HashedKey& hk,
                                          uint32_t valueSize,
                                          uint32_t lastAccessTimeSecs = 0);
@@ -328,8 +331,7 @@ class BlockCache final : public Engine {
   // @param size        Number of bytes this entry will take up on the device
   // @param hk          Key of the entry
   // @param value       Payload of the entry
-  void writeEntry(RelAddress addr,
-                  uint32_t size,
+  void writeEntry(MutableBufferView buffer,
                   HashedKey hk,
                   BufferView value,
                   uint32_t lastAccessTimeSecs = 0);
@@ -358,7 +360,7 @@ class BlockCache final : public Engine {
   // @param hk          key to be removed
   // @param value       value populated with data read from lookup used for
   //                    precise remove and item destructor callback
-  Status removeImpl(const HashedKey& hk, const Buffer& value);
+  Status removeImpl(const HashedKey& hk, BufferView value);
 
   // Allocator reclaim callback
   // Returns number of slots that were successfully evicted
