@@ -40,8 +40,8 @@ namespace navy {
 
 using InsertCallback = folly::Function<void(Status status, HashedKey key)>;
 
-using LookupCallback =
-    folly::Function<void(Status status, HashedKey key, Buffer value)>;
+using LookupCallback = folly::Function<void(
+    Status status, HashedKey key, Buffer value, uint32_t lastAccessTimeSecs)>;
 
 using RemoveCallback = folly::Function<void(Status status, HashedKey key)>;
 
@@ -88,7 +88,9 @@ class AbstractCache {
 
   // Looks up value. Returns non-null buffer if found.
   // Returns: Ok, NotFound, DeviceError
-  virtual Status lookup(HashedKey key, Buffer& value) = 0;
+  virtual Status lookup(HashedKey key,
+                        Buffer& value,
+                        uint32_t& lastAccessTimeSecs) = 0;
 
   // Asynchronously looks up value.
   // Invokes callback when done on a worker thread.

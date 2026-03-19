@@ -57,15 +57,19 @@ uint64_t EnginePair::estimateWriteSize(HashedKey hk, BufferView value) const {
   return select(hk, value).first.estimateWriteSize(hk, value);
 }
 
-Status EnginePair::lookupSync(HashedKey hk, Buffer& value) const {
+Status EnginePair::lookupSync(HashedKey hk,
+                              Buffer& value,
+                              uint32_t& lastAccessTimeSecs) const {
   lookupCount_.inc();
   Status status{Status::NotFound};
   // We do busy wait because we don't expect many retries.
-  while ((status = largeItemCache_->lookup(hk, value)) == Status::Retry) {
+  while ((status = largeItemCache_->lookup(hk, value, lastAccessTimeSecs)) ==
+         Status::Retry) {
     std::this_thread::yield();
   }
   if (status == Status::NotFound) {
-    while ((status = smallItemCache_->lookup(hk, value)) == Status::Retry) {
+    while ((status = smallItemCache_->lookup(hk, value, lastAccessTimeSecs)) ==
+           Status::Retry) {
       std::this_thread::yield();
     }
   }
@@ -150,17 +154,18 @@ void EnginePair::updateLookupStats(Status status) const {
 
 Status EnginePair::lookupInternal(HashedKey hk,
                                   Buffer& value,
-                                  bool& skipLargeItemCache) const {
+                                  bool& skipLargeItemCache,
+                                  uint32_t& lastAccessTimeSecs) const {
   Status status{Status::NotFound};
   if (!skipLargeItemCache) {
-    status = largeItemCache_->lookup(hk, value);
+    status = largeItemCache_->lookup(hk, value, lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
     skipLargeItemCache = true;
   }
   if (status == Status::NotFound) {
-    status = smallItemCache_->lookup(hk, value);
+    status = smallItemCache_->lookup(hk, value, lastAccessTimeSecs);
     if (status == Status::Retry) {
       return status;
     }
@@ -171,14 +176,16 @@ Status EnginePair::lookupInternal(HashedKey hk,
 
 void EnginePair::scheduleLookup(HashedKey hk, LookupCallback cb) {
   scheduler_->enqueueWithKey(
-      [this, cb = std::move(cb), hk, skipLargeItemCache = false]() mutable {
+      [this, cb = std::move(cb), hk, skipLargeItemCache = false,
+       lastAccessTimeSecs = uint32_t{0}]() mutable {
         Buffer value;
-        Status status = lookupInternal(hk, value, skipLargeItemCache);
+        Status status =
+            lookupInternal(hk, value, skipLargeItemCache, lastAccessTimeSecs);
         if (status == Status::Retry) {
           return JobExitCode::Reschedule;
         }
         if (cb) {
-          cb(status, hk, std::move(value));
+          cb(status, hk, std::move(value), lastAccessTimeSecs);
         }
 
         return JobExitCode::Done;

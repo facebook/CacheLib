@@ -65,15 +65,16 @@ class MockEngine : public Engine {
           cache_[entryHK] = std::move(entry);
           return Status::Ok;
         }));
-    ON_CALL(*this, lookup(_, _))
-        .WillByDefault(Invoke([this](HashedKey hk, Buffer& value) {
+    ON_CALL(*this, lookup(_, _, _))
+        .WillByDefault([this](HashedKey hk, Buffer& value,
+                              uint32_t& /* lastAccessTimeSecs */) {
           auto itr = cache_.find(hk);
           if (itr == cache_.end()) {
             return Status::NotFound;
           }
           value = itr->second.second.copy();
           return Status::Ok;
-        }));
+        });
     ON_CALL(*this, couldExist(_)).WillByDefault(Invoke([this](HashedKey hk) {
       auto itr = cache_.find(hk);
       if (itr == cache_.end()) {
@@ -99,7 +100,10 @@ class MockEngine : public Engine {
                Status(HashedKey hk,
                       BufferView value,
                       uint32_t lastAccessTimeSecs));
-  MOCK_METHOD2(lookup, Status(HashedKey hk, Buffer& value));
+  MOCK_METHOD3(lookup,
+               Status(HashedKey hk,
+                      Buffer& value,
+                      uint32_t& lastAccessTimeSecs));
   MOCK_METHOD1(couldExist, bool(HashedKey hk));
   MOCK_METHOD1(remove, Status(HashedKey hk));
   MOCK_METHOD1(updateEvictionStats, void(uint32_t));
@@ -247,7 +251,8 @@ void testCouldExistWithOneEngine(bool small) {
   exPtr->finish();
   EXPECT_TRUE(driver->couldExist(makeHK("key")));
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_FALSE(driver->couldExist(makeHK("key1")));
 
   uint32_t numLookups{std::numeric_limits<uint32_t>::max()};
@@ -288,8 +293,8 @@ TEST(Driver, SmallItem) {
     EXPECT_CALL(*bc, couldExist(makeHK("key")));
     EXPECT_CALL(*si, insert(makeHK("key"), value.view(), _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -314,7 +319,8 @@ TEST(Driver, SmallItem) {
   exPtr->finish();
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(value.view(), valueLookup.view());
 }
 
@@ -328,7 +334,7 @@ TEST(Driver, LargeItem) {
     testing::InSequence inSeq;
     EXPECT_CALL(*bc, insert(makeHK("key"), value.view(), _));
     EXPECT_CALL(*si, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -351,7 +357,8 @@ TEST(Driver, LargeItem) {
   exPtr->finish();
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(value.view(), valueLookup.view());
 }
 
@@ -368,8 +375,8 @@ TEST(Driver, SmallAndLargeItem) {
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -380,7 +387,8 @@ TEST(Driver, SmallAndLargeItem) {
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 }
 
@@ -399,8 +407,8 @@ TEST(Driver, InsertFailed) {
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _))
         .WillOnce(Return(Status::DeviceError));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -412,7 +420,8 @@ TEST(Driver, InsertFailed) {
             driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 }
 
@@ -432,7 +441,7 @@ TEST(Driver, InsertFailedRemoveOther) {
     EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
     EXPECT_CALL(*si, remove(makeHK("key")))
         .WillOnce(Return(Status::DeviceError));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -445,7 +454,8 @@ TEST(Driver, InsertFailedRemoveOther) {
   // We don't provide any guarantees what is available. But in our test we
   // can check what is visible.
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 }
 
@@ -470,8 +480,8 @@ TEST(Driver, InsertRetryRemoveOther) {
         .WillRepeatedly(testing::DoDefault());
     ;
 
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -496,9 +506,10 @@ TEST(Driver, InsertRetryRemoveOther) {
   EXPECT_EQ(exPtr->getDoneCount(), 2);
 
   Buffer valueLookup;
+  uint32_t lat = 0;
   // Look up the key, which now only exist in small item engine.
   // Both engines will be queried.
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 }
 
@@ -515,11 +526,11 @@ TEST(Driver, Remove) {
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
     EXPECT_CALL(*si, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
     // test retry
     EXPECT_CALL(*si, remove(makeHK("test retry")))
         .WillOnce(Return(Status::NotFound));
@@ -536,11 +547,12 @@ TEST(Driver, Remove) {
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup, lat));
 
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("test retry")));
 }
@@ -578,9 +590,9 @@ TEST(Driver, EvictBlockCache) {
     EXPECT_CALL(*bc, remove(makeHK("key")));
     EXPECT_CALL(*bc, insert(makeHK("key"), largeValue.view(), _));
     EXPECT_CALL(*si, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -591,7 +603,8 @@ TEST(Driver, EvictBlockCache) {
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), largeValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(largeValue.view(), valueLookup.view());
 
   // If we inserted in block cache, eviction from small cache should not
@@ -600,7 +613,7 @@ TEST(Driver, EvictBlockCache) {
 
   // But it can be evicted from block cache
   EXPECT_TRUE(bcPtr->evict(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup, lat));
 }
 
 TEST(Driver, EvictSmallItemCache) {
@@ -625,10 +638,10 @@ TEST(Driver, EvictSmallItemCache) {
     EXPECT_CALL(*si, remove(makeHK("key")));
     EXPECT_CALL(*si, insert(makeHK("key"), smallValue.view(), _));
     EXPECT_CALL(*bc, remove(makeHK("key")));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
-    EXPECT_CALL(*bc, lookup(makeHK("key"), _));
-    EXPECT_CALL(*si, lookup(makeHK("key"), _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*bc, lookup(makeHK("key"), _, _));
+    EXPECT_CALL(*si, lookup(makeHK("key"), _, _));
   }
 
   auto ex = makeJobScheduler();
@@ -639,13 +652,14 @@ TEST(Driver, EvictSmallItemCache) {
   EXPECT_EQ(Status::Ok, driver->insert(makeHK("key"), smallValue.view()));
 
   Buffer valueLookup;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key"), valueLookup, lat));
   EXPECT_EQ(smallValue.view(), valueLookup.view());
 
   EXPECT_FALSE(bcPtr->evict(makeHK("key")));
 
   EXPECT_TRUE(siPtr->evict(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup));
+  EXPECT_EQ(Status::NotFound, driver->lookup(makeHK("key"), valueLookup, lat));
 }
 
 TEST(Driver, Recovery) {
@@ -894,24 +908,24 @@ TEST(Driver, EnginePairCombinations) {
       // Insert to small 1, found at bh 1.
       EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
-      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
       EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bh 0.
       EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
-      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
       EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
 
     auto config =
@@ -923,20 +937,21 @@ TEST(Driver, EnginePairCombinations) {
 
     auto driver = std::make_unique<Driver>(std::move(config));
     Buffer valueLookup;
+    uint32_t lat = 0;
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue1.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue0.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue0.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue1.view());
   }
 
@@ -967,21 +982,21 @@ TEST(Driver, EnginePairCombinations) {
       // Insert to small 1, found at bh 1.
       EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
-      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
       EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bc 0.
       EXPECT_CALL(*bc0, insert(makeHK(key0), smallValue0.view(), _));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
       EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
     auto config =
         makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
@@ -992,22 +1007,23 @@ TEST(Driver, EnginePairCombinations) {
 
     auto driver = std::make_unique<Driver>(std::move(config));
     Buffer valueLookup;
+    uint32_t lat = 0;
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue1.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue0.view());
 
     // Have to do an evict, because MockEngine does not support replace.
     rawBc0->evict(makeHK(key0));
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue0.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue1.view());
   }
 
@@ -1037,23 +1053,23 @@ TEST(Driver, EnginePairCombinations) {
       testing::InSequence inSeq;
       // Insert to small 1, found at bc 1.
       EXPECT_CALL(*bc1, insert(makeHK(key1), smallValue1.view(), _));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
       EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert small 0, found at bh 0.
       EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
-      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       bc1->evict(makeHK(key1));
       // Insert to large 1, found at bc 1.
       EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
     }
     auto config =
         makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
@@ -1064,22 +1080,23 @@ TEST(Driver, EnginePairCombinations) {
 
     auto driver = std::make_unique<Driver>(std::move(config));
     Buffer valueLookup;
+    uint32_t lat = 0;
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue1.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue0.view());
 
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), smallValue0.view());
 
     // Have to do an evict, because MockEngine does not support replace.
     rawBc1->evict(makeHK(key1));
     EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
     EXPECT_EQ(valueLookup.view(), largeValue1.view());
   }
 
@@ -1116,35 +1133,35 @@ TEST(Driver, EnginePairCombinations) {
       // Insert to small 1, found at bh 1.
       EXPECT_CALL(*bh1, insert(makeHK(key1), smallValue1.view(), _));
       EXPECT_CALL(*bc1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
-      EXPECT_CALL(*bh1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
+      EXPECT_CALL(*bh1, lookup(makeHK(key1), _, _));
 
       // Insert large 0, found at bc 0.
       EXPECT_CALL(*bc0, insert(makeHK(key0), largeValue0.view(), _));
       EXPECT_CALL(*bh0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
 
       // Insert large 2, found at bc 2.
       EXPECT_CALL(*bc2, insert(makeHK(key2), largeValue2.view(), _));
       EXPECT_CALL(*bh2, remove(makeHK(key2)));
-      EXPECT_CALL(*bc2, lookup(makeHK(key2), _));
+      EXPECT_CALL(*bc2, lookup(makeHK(key2), _, _));
 
       // Insert small 0, found at bh 0.
       EXPECT_CALL(*bh0, insert(makeHK(key0), smallValue0.view(), _));
       EXPECT_CALL(*bc0, remove(makeHK(key0)));
-      EXPECT_CALL(*bc0, lookup(makeHK(key0), _));
-      EXPECT_CALL(*bh0, lookup(makeHK(key0), _));
+      EXPECT_CALL(*bc0, lookup(makeHK(key0), _, _));
+      EXPECT_CALL(*bh0, lookup(makeHK(key0), _, _));
 
       // Insert to large 1, found at bc 1.
       EXPECT_CALL(*bc1, insert(makeHK(key1), largeValue1.view(), _));
       EXPECT_CALL(*bh1, remove(makeHK(key1)));
-      EXPECT_CALL(*bc1, lookup(makeHK(key1), _));
+      EXPECT_CALL(*bc1, lookup(makeHK(key1), _, _));
 
       // Insert small 2, found at bh 2.
       EXPECT_CALL(*bh2, insert(makeHK(key2), smallValue2.view(), _));
       EXPECT_CALL(*bc2, remove(makeHK(key2)));
-      EXPECT_CALL(*bc2, lookup(makeHK(key2), _));
-      EXPECT_CALL(*bh2, lookup(makeHK(key2), _));
+      EXPECT_CALL(*bc2, lookup(makeHK(key2), _, _));
+      EXPECT_CALL(*bh2, lookup(makeHK(key2), _, _));
 
       auto config =
           makeDriverConfig(std::move(bc0), std::move(bh0), std::move(ex));
@@ -1158,28 +1175,29 @@ TEST(Driver, EnginePairCombinations) {
 
       auto driver = std::make_unique<Driver>(std::move(config));
       Buffer valueLookup;
+      uint32_t lat = 0;
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), smallValue1.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), smallValue1.view());
 
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), largeValue0.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), largeValue0.view());
 
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key2), largeValue2.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), largeValue2.view());
 
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key0), smallValue0.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key0), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), smallValue0.view());
 
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key1), largeValue1.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key1), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), largeValue1.view());
 
       EXPECT_EQ(Status::Ok, driver->insert(makeHK(key2), smallValue2.view()));
-      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup));
+      EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key2), valueLookup, lat));
       EXPECT_EQ(valueLookup.view(), smallValue2.view());
     }
   }

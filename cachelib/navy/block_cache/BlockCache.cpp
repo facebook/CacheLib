@@ -404,7 +404,11 @@ BlockCache::LookupData BlockCache::lookupInternal(HashedKey hk) {
   return ld;
 }
 
-Status BlockCache::lookup(HashedKey hk, Buffer& value) {
+Status BlockCache::lookup(HashedKey hk,
+                          Buffer& value,
+                          uint32_t& lastAccessTimeSecs) {
+  // return 0 if there is an issue in lookup (e.g. device error)
+  lastAccessTimeSecs = 0;
   auto ld = lookupInternal(hk);
   if (ld.desc_.isReady()) {
     regionManager_.close(std::move(ld.desc_));
@@ -412,6 +416,7 @@ Status BlockCache::lookup(HashedKey hk, Buffer& value) {
   if (ld.status_ == Status::Ok) {
     value = std::move(ld.buffer_);
     value.shrink(ld.valueSize_);
+    lastAccessTimeSecs = ld.lastAccessTimeSecs_;
   }
   return ld.status_;
 }
@@ -529,7 +534,8 @@ Status BlockCache::remove(HashedKey hk) {
 
   Buffer value;
   if ((itemDestructorEnabled_ && destructorCb_) || preciseRemove_) {
-    Status status = lookup(hk, value);
+    uint32_t unused = 0;
+    Status status = lookup(hk, value, unused);
 
     if (status != Status::Ok) {
       // device error, or region reclaimed, or item not found
@@ -1168,6 +1174,7 @@ Status BlockCache::readEntry(LookupData& ld,
 
   ld.buffer_ = std::move(buffer);
   ld.valueSize_ = desc.valueSize;
+  ld.lastAccessTimeSecs_ = desc.lastAccessTimeSecs;
   auto slice = ld.buffer_.view().slice(0, desc.valueSize);
   if (checksumData_ && desc.cs != checksum(slice)) {
     XLOG_N_PER_MS(ERR, 10, 10'000) << folly::sformat(

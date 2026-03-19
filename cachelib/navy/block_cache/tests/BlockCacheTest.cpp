@@ -158,7 +158,8 @@ class CollisionCreator {
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
 
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(makeHK(key), value, lat));
     EXPECT_EQ(makeView(val), value.view());
     driver->flush();
 
@@ -200,7 +201,8 @@ TEST(BlockCache, InsertLookup) {
     // Flush the first region
     driver->flush();
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
 
     driver->getCounters({[](folly::StringPiece name, double count,
                             CounterVisitor::CounterType type) {
@@ -226,13 +228,45 @@ TEST(BlockCache, InsertLookup) {
 
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   EXPECT_EQ(2, hits[0]);
   EXPECT_EQ(16, hits[1]);
   EXPECT_EQ(0, hits[2]);
   EXPECT_EQ(0, hits[3]);
+}
+
+TEST(BlockCache, LookupReturnsLastAccessTime) {
+  auto hits = std::make_unique<std::vector<uint32_t>>(4);
+  auto policy = std::make_unique<NiceMock<MockPolicy>>(hits.get());
+  auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
+  auto ex = makeJobScheduler();
+  auto config = makeConfig(std::move(policy), *device);
+  auto engine = makeEngine(std::move(config));
+  auto driver = makeDriver(std::move(engine), std::move(ex));
+
+  // Case 1: Insert with lastAccessTimeSecs=1000
+  CacheEntry e{strzBuffer("key"), strzBuffer("value")};
+  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 1000));
+  driver->flush();
+
+  Buffer value;
+  uint32_t lastAccessTimeSecs = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lastAccessTimeSecs));
+  EXPECT_EQ(e.value(), value.view());
+  EXPECT_EQ(1000, lastAccessTimeSecs);
+
+  // Case 2: Overwrite same key with lastAccessTimeSecs=2000
+  EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value(), 2000));
+  driver->flush();
+
+  Buffer value2;
+  uint32_t lastAccessTimeSecs2 = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value2, lastAccessTimeSecs2));
+  EXPECT_EQ(e.value(), value2.view());
+  EXPECT_EQ(2000, lastAccessTimeSecs2);
 }
 
 TEST(BlockCache, InsertLookupSync) {
@@ -252,7 +286,8 @@ TEST(BlockCache, InsertLookupSync) {
     EXPECT_EQ(Status::Ok, driver->insert(e.key(), e.value()));
     // Value is immediately available to query
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
     EXPECT_EQ(e.value(), value.view());
     log.push_back(std::move(e));
   }
@@ -267,7 +302,8 @@ TEST(BlockCache, InsertLookupSync) {
 
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   // Still zero hit in the second region, because we didn't fill it
@@ -316,16 +352,20 @@ TEST(BlockCache, AsyncCallbacks) {
   driver->flush();
 
   MockLookupCB cbLookup;
-  EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value")));
-  EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}));
+  EXPECT_CALL(cbLookup, call(Status::Ok, makeHK("key"), makeView("value"), _));
+  EXPECT_CALL(cbLookup, call(Status::NotFound, makeHK("cat"), BufferView{}, _));
   driver->lookupAsync(makeHK("key"),
-                      [&cbLookup](Status status, HashedKey key, Buffer value) {
-                        cbLookup.call(status, key, value.view());
+                      [&cbLookup](Status status, HashedKey key, Buffer value,
+                                  uint32_t lastAccessTimeSecs) {
+                        cbLookup.call(status, key, value.view(),
+                                      lastAccessTimeSecs);
                       });
 
   driver->lookupAsync(makeHK("cat"),
-                      [&cbLookup](Status status, HashedKey key, Buffer value) {
-                        cbLookup.call(status, key, value.view());
+                      [&cbLookup](Status status, HashedKey key, Buffer value,
+                                  uint32_t lastAccessTimeSecs) {
+                        cbLookup.call(status, key, value.view(),
+                                      lastAccessTimeSecs);
                       });
   driver->flush();
 
@@ -361,20 +401,21 @@ TEST(BlockCache, Remove) {
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[0].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(log[1].value(), value.view());
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("dog")));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[0].value(), value.view());
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("dog")));
   EXPECT_EQ(Status::NotFound, driver->remove(makeHK("fox")));
   EXPECT_EQ(Status::Ok, driver->remove(makeHK("cat")));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[1].key(), value, lat));
 }
 
 // Test precise remove flag works
@@ -442,8 +483,10 @@ TEST(BlockCache, PreciseRemove) {
 TEST(BlockCache, CollisionOverwrite) {
   auto collision = CollisionCreator("key", "value", "abc");
   Buffer value;
+  uint32_t lat = 0;
   // Original key is not found, because it didn't pass key equality check
-  EXPECT_EQ(Status::NotFound, collision.driver->lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound,
+            collision.driver->lookup(makeHK("key"), value, lat));
 }
 
 TEST(BlockCache, SimpleReclaim) {
@@ -479,11 +522,13 @@ TEST(BlockCache, SimpleReclaim) {
   // First 16 are reclaimed and so missing
   for (size_t i = 0; i < 16; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 16; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -542,8 +587,9 @@ TEST(BlockCache, HoleStats) {
 
   // lookup this entry from region 0 that will be soon reclaimed
   Buffer val;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[4].key(), val, lat));
 
   // Force reclaim on region 0. There are 4 regions and the device
   // was configured to require 1 clean region at all times.
@@ -692,11 +738,12 @@ TEST(BlockCache, StackAlloc) {
   exPtr->finish();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value, lat));
   EXPECT_EQ(e1.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value, lat));
   EXPECT_EQ(e2.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value, lat));
   EXPECT_EQ(e3.value(), value.view());
 
   EXPECT_EQ(0, exPtr->getQueueSize());
@@ -724,7 +771,8 @@ TEST(BlockCache, RegionUnderflow) {
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
   EXPECT_EQ(e.value(), value.view());
 }
 
@@ -752,7 +800,8 @@ TEST(BlockCache, SmallReadBuffer) {
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e.key(), value, lat));
   EXPECT_EQ(e.value(), value.view());
 }
 
@@ -781,7 +830,8 @@ TEST(BlockCache, SmallAllocAlignment) {
   }
   for (size_t i = 0; i < 96; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   return;
@@ -798,11 +848,13 @@ TEST(BlockCache, SmallAllocAlignment) {
   // Verify the first 32 items are now reclaimed and the others are still there
   for (size_t i = 0; i < 32; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 32; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -833,7 +885,8 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   }
   for (size_t i = 0; i < 24; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   return;
@@ -850,11 +903,13 @@ TEST(BlockCache, MultipleAllocAlignmentSizeItems) {
   // Verify the first 8 items are now reclaimed and the others are still there
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 8; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -923,11 +978,13 @@ TEST(BlockCache, StackAllocReclaim) {
 
   for (size_t i = 0; i < 2; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 2; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -970,12 +1027,13 @@ TEST(BlockCache, ReadRegionDuringReclaim) {
 
   std::thread lookupThread([&driver, &log, &sp, &reclaimFinished] {
     Buffer value;
+    uint32_t lat = 0;
     // Wait until the reclaim gets begun
     sp.wait(0);
 
     do {
       for (auto i = 31; i > 0; i--) {
-        auto res = driver->lookup(log[i].key(), value);
+        auto res = driver->lookup(log[i].key(), value, lat);
         // lookup can return either Ok or NotFound since ongoing reclaim may
         // discard the item
         EXPECT_TRUE(res == Status::Ok || res == Status::NotFound);
@@ -1060,10 +1118,11 @@ TEST(BlockCache, DeviceFailure) {
   driver->flush();
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key1"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key1"), value, lat));
   EXPECT_EQ(value1.view(), value.view());
-  EXPECT_EQ(Status::DeviceError, driver->lookup(makeHK("key2"), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key3"), value));
+  EXPECT_EQ(Status::DeviceError, driver->lookup(makeHK("key2"), value, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(makeHK("key3"), value, lat));
   EXPECT_EQ(value3.view(), value.view());
 }
 
@@ -1107,7 +1166,8 @@ void resetTestRun(Driver& cache) {
   cache.flush();
   for (size_t i = 0; i < 17; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, cache.lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, cache.lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1203,25 +1263,26 @@ TEST(BlockCache, DestructorCallback) {
   EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(log[0].key(), value, lat));
   EXPECT_EQ(log[5].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[5].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[5].key(), value, lat));
   EXPECT_EQ(log[5].value(), value.view());
 
-  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
   EXPECT_EQ(log[1].value(), value.view());
 
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value));
-  EXPECT_EQ(Status::Ok, driver->lookup(log[3].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[2].key(), value, lat));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[3].key(), value, lat));
   EXPECT_EQ(log[6].value(), value.view());
 
   // Make sure that the eviction for the region 1 is completed
   EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[4].key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[4].key(), value, lat));
 
-  EXPECT_EQ(Status::Ok, driver->lookup(log[7].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[7].key(), value, lat));
   EXPECT_EQ(log[7].value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(log[8].key(), value, lat));
   EXPECT_EQ(log[8].value(), value.view());
 
   exPtr->finish();
@@ -1259,11 +1320,13 @@ TEST(BlockCache, RegionLastOffset) {
   // First 7 are reclaimed and so are missing
   for (size_t i = 0; i < 7; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 7; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1320,11 +1383,13 @@ TEST(BlockCache, RegionLastOffsetOnReset) {
   // First 7 (from after reset) are reclaimed and so are missing
   for (size_t i = 0; i < 7; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 7; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   driver->flush();
@@ -1373,7 +1438,8 @@ TEST(BlockCache, Recovery) {
 
   for (auto& entry : log) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value, lat));
     EXPECT_EQ(entry.value(), value.view());
   }
 
@@ -1388,11 +1454,13 @@ TEST(BlockCache, Recovery) {
 
   for (size_t i = 0; i < 4; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
   for (size_t i = 4; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1437,11 +1505,13 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
 
     for (auto& key : keys) {
       Buffer buffer;
+      uint32_t lat = 0;
       ASSERT_EQ(Status::Ok,
                 engine->lookup(
                     makeHK(BufferView{key.size(),
                                       reinterpret_cast<uint8_t*>(key.data())}),
-                    buffer));
+                    buffer,
+                    lat));
     }
 
     auto rw = createMemoryRecordWriter(originalMetadata);
@@ -1459,11 +1529,13 @@ TEST(BlockCache, RecoveryWithDifferentCacheSize) {
     // All the keys should be present
     for (auto& key : keys) {
       Buffer buffer;
+      uint32_t lat = 0;
       ASSERT_EQ(Status::Ok,
                 engine->lookup(
                     makeHK(BufferView{key.size(),
                                       reinterpret_cast<uint8_t*>(key.data())}),
-                    buffer));
+                    buffer,
+                    lat));
     }
   }
 
@@ -1535,14 +1607,16 @@ TEST(BlockCache, SmallerSlotSizes) {
   }
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
   driver->flush();
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
   driver->persist();
@@ -1550,7 +1624,8 @@ TEST(BlockCache, SmallerSlotSizes) {
   EXPECT_TRUE(driver->recover());
   for (size_t i = 0; i < 8; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1752,11 +1827,12 @@ TEST(BlockCache, Checksum) {
 
   // Check everything is fine with checksumming before we corrupt data
   Buffer value;
-  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, driver->lookup(e1.key(), value, lat));
   EXPECT_EQ(e1.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e2.key(), value, lat));
   EXPECT_EQ(e2.value(), value.view());
-  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::Ok, driver->lookup(e3.key(), value, lat));
   EXPECT_EQ(e3.value(), value.view());
   driver->flush();
 
@@ -1764,7 +1840,7 @@ TEST(BlockCache, Checksum) {
   Buffer buf{2 * kIOAlignSize, kIOAlignSize};
   memset(buf.data(), 'X', buf.size());
   EXPECT_TRUE(device->write(0, std::move(buf)));
-  EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e1.key(), value, lat));
 
   const char corruption[kIOAlignSize]{"hack"};
   // Corrupt e2: key, reported as "key not found"
@@ -1773,14 +1849,14 @@ TEST(BlockCache, Checksum) {
       Buffer{BufferView{kIOAlignSize,
                         reinterpret_cast<const uint8_t*>(corruption)},
              kIOAlignSize}));
-  EXPECT_EQ(Status::NotFound, driver->lookup(e2.key(), value));
+  EXPECT_EQ(Status::NotFound, driver->lookup(e2.key(), value, lat));
 
   // Corrupt e3: value
   EXPECT_TRUE(device->write(
       3 * kIOAlignSize,
       Buffer{BufferView{1024, reinterpret_cast<const uint8_t*>(corruption)},
              kIOAlignSize}));
-  EXPECT_EQ(Status::ChecksumError, driver->lookup(e3.key(), value));
+  EXPECT_EQ(Status::ChecksumError, driver->lookup(e3.key(), value, lat));
 
   EXPECT_EQ(0, exPtr->getQueueSize());
 }
@@ -1846,7 +1922,8 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   // Access the first three keys
   for (size_t i = 0; i < 3; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
@@ -1867,26 +1944,30 @@ TEST(BlockCache, HitsReinsertionPolicy) {
   // First key was deleted so missing
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
   }
 
   // Second and third items are reinserted so lookup should succeed
   for (size_t i = 1; i < 3; i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 
   // Last item was never accessed so it was reclaimed and so missing
   for (size_t i = 3; i < 4; i++) {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[i].key(), value, lat));
   }
 
   // Remaining items are still in cache so lookup should succeed
   for (size_t i = 4; i < log.size(); i++) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(log[i].key(), value, lat));
     EXPECT_EQ(log[i].value(), value.view());
   }
 }
@@ -1924,7 +2005,8 @@ TEST(BlockCache, HitsReinsertionPolicyRecovery) {
 
   for (auto& entry : log) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, driver->lookup(entry.key(), value, lat));
     EXPECT_EQ(entry.value(), value.view());
   }
 }
@@ -1966,23 +2048,25 @@ TEST(BlockCache, UsePriorities) {
     driver->flush();
     if (i == 0) {
       Buffer value;
+      uint32_t lat = 0;
       // Look up 2nd item twice, so we'll reinsert it with pri-1
-      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
       // Look up 3rd item three times, so we'll reinsert it with pri-2
       // Note that we reinsert with pri-2, because any hits larger than
       // max priority will be assigned the max priority.
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
     }
   }
 
   // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
   }
 }
 
@@ -2029,23 +2113,25 @@ TEST(BlockCache, UsePrioritiesSizeClass) {
     driver->flush();
     if (i == 0) {
       Buffer value;
+      uint32_t lat = 0;
       // Look up 2nd item twice, so we'll reinsert it with pri-1
-      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
       // Look up 3rd item three times, so we'll reinsert it with pri-2
       // Note that we reinsert with pri-2, because any hits larger than
       // max priority will be assigned the max priority.
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
-      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
+      EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
     }
   }
 
   // Verify the 1st region is evicted but 2nd and 3rd items are reinserted
   {
     Buffer value;
-    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value));
-    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[1].key(), value, lat));
+    EXPECT_EQ(Status::Ok, driver->lookup(log[2].key(), value, lat));
   }
 }
 
@@ -2222,8 +2308,9 @@ TEST(BlockCache, testItemDestructor) {
   EXPECT_EQ(Status::Ok, driver->insert(log[8].key(), log[8].value()));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[5].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[5].key(), value, lat));
 
   exPtr->finish();
 }
@@ -2352,7 +2439,8 @@ TEST(BlockCache, RetryRead) {
             return dev->getRealDeviceRef().read(offset, size, buffer);
           }));
   Buffer value;
-  driver->lookup(e.key(), value);
+  uint32_t lat = 0;
+  driver->lookup(e.key(), value, lat);
 
   // checking the counters.
   driver->getCounters({[](folly::StringPiece name, double count) {
@@ -2392,7 +2480,7 @@ TEST(BlockCache, RetryRead) {
             return true;
           }));
 
-  driver->lookup(e.key(), value);
+  driver->lookup(e.key(), value, lat);
 
   // checking the counters
   driver->getCounters({[](folly::StringPiece name, double count) {
@@ -2503,7 +2591,8 @@ TEST(BlockCache, ExpiredItemDestructorCallback) {
 
   // Verify the expired item is no longer in cache
   Buffer value;
-  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, driver->lookup(log[0].key(), value, lat));
 
   // Verify eviction expired  count is properly updated
   bool foundEvictionExpiredCounter = false;

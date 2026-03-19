@@ -65,14 +65,15 @@ TEST(BigHash, InsertAndRemove) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(Status::NotFound, bh.remove(makeHK("key")));
 }
 
@@ -86,8 +87,9 @@ TEST(BigHash, CouldExistWithoutBF) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
@@ -108,10 +110,11 @@ TEST(BigHash, CouldExistWithBF) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
   // bloom filter is initially un-initialized. So it will only return true for
   // keys that were inserted.
   EXPECT_EQ(false, bh.couldExist(makeHK("key")));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   EXPECT_EQ(true, bh.couldExist(makeHK("key")));
@@ -128,7 +131,8 @@ TEST(BigHash, SimpleStats) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
   {
     MockCounterVisitor helper;
@@ -245,9 +249,10 @@ TEST(BigHash, DoubleInsert) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   EXPECT_CALL(helper,
@@ -255,7 +260,7 @@ TEST(BigHash, DoubleInsert) {
 
   // Insert the same key a second time will overwrite the previous value.
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("45678")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("45678"), value.view());
 }
 
@@ -306,14 +311,15 @@ TEST(BigHash, Reset) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
   auto oldBucketContent = readFirstBucket();
 
   bh.reset();
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 
   // bh reset should reset the bloom filter as well.
   EXPECT_EQ(1, bh.bfRejectCount());
@@ -404,7 +410,8 @@ TEST(BigHash, CorruptBucket) {
   bh.insert(makeHK("key"), makeView("12345"));
 
   Buffer value;
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   // Corrupt data. Use device directly to avoid alignment checks
@@ -414,7 +421,7 @@ TEST(BigHash, CorruptBucket) {
   memcpy(badBuf.data(), badBytes, sizeof(badBytes));
   device->getRealDeviceRef().write(0, std::move(badBuf));
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 }
 
 TEST(BigHash, Recovery) {
@@ -426,8 +433,9 @@ TEST(BigHash, Recovery) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   folly::IOBufQueue queue;
@@ -437,7 +445,7 @@ TEST(BigHash, Recovery) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_TRUE(bh.recover(*rr));
 
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 }
 
@@ -454,8 +462,9 @@ TEST(BigHash, RecoveryBadConfig) {
     BigHash bh(std::move(config));
 
     Buffer value;
+    uint32_t lat = 0;
     EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-    EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+    EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
     EXPECT_EQ(makeView("12345"), value.view());
 
     auto rw = createMemoryRecordWriter(queue);
@@ -485,9 +494,10 @@ TEST(BigHash, RecoveryCorruptedData) {
   BigHash bh(std::move(config));
 
   Buffer value;
+  uint32_t lat = 0;
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("key"), makeView("12345")));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("key"), value, lat));
   EXPECT_EQ(makeView("12345"), value.view());
 
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -500,7 +510,7 @@ TEST(BigHash, RecoveryCorruptedData) {
 
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("key"), value, lat));
 }
 
 TEST(BigHash, ConcurrentRead) {
@@ -525,7 +535,8 @@ TEST(BigHash, ConcurrentRead) {
 
   auto runRead = [&bh, &helper](HashedKey hk) {
     Buffer value;
-    EXPECT_EQ(Status::Ok, bh.lookup(hk, value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::Ok, bh.lookup(hk, value, lat));
     helper.call(hk, value.view());
   };
 
@@ -549,7 +560,8 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   BigHash bh(std::move(config));
 
   Buffer value;
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  uint32_t lat = 0;
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
 
   // After a bad recovery, filters will not be affected
   auto ioBuf = folly::IOBuf::createCombined(512);
@@ -562,7 +574,7 @@ TEST(BigHash, BloomFilterRecoveryFail) {
   auto rr = createMemoryRecordReader(queue);
   ASSERT_FALSE(bh.recover(*rr));
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
 }
 
 TEST(BigHash, BloomFilter) {
@@ -591,37 +603,38 @@ TEST(BigHash, BloomFilter) {
   EXPECT_EQ(0, bh.bfRejectCount());
 
   Buffer value;
+  uint32_t lat = 0;
   // Rejected by BF
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
   // False positive, rejected by key
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
   // False positive, rejected by key
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value, lat));
   EXPECT_EQ(1, bh.bfRejectCount());
 
   // Insert "101"
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("101"), bg.gen(20).view()));
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("110"), value, lat));
   EXPECT_EQ(2, bh.bfRejectCount());
 
   EXPECT_EQ(Status::Ok, bh.insert(makeHK("110"), bg.gen(20).view()));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value));
-  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("101"), value, lat));
+  EXPECT_EQ(Status::Ok, bh.lookup(makeHK("110"), value, lat));
   EXPECT_EQ(2, bh.bfRejectCount());
 
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("100"), value, lat));
   EXPECT_EQ(3, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("102"), value, lat));
   EXPECT_EQ(4, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("103"), value, lat));
   EXPECT_EQ(5, bh.bfRejectCount());
 
   // If we remove, BF will be rebuilt and will reject "101":
   EXPECT_EQ(Status::Ok, bh.remove(makeHK("101")));
   EXPECT_EQ(5, bh.bfRejectCount());
-  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value));
+  EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("101"), value, lat));
   EXPECT_EQ(6, bh.bfRejectCount());
 }
 
@@ -645,7 +658,8 @@ TEST(BigHash, BloomFilterRecovery) {
     BigHash bh(std::move(config));
     EXPECT_EQ(Status::Ok, bh.insert(makeHK("100"), makeView("cat")));
     Buffer value;
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value, lat));
     EXPECT_EQ(1, bh.bfRejectCount());
     auto rw = createMemoryRecordWriter(queue);
     bh.persist(*rw);
@@ -674,13 +688,14 @@ TEST(BigHash, BloomFilterRecovery) {
     EXPECT_EQ(Status::NotFound, bh.remove(makeHK("200")));
     EXPECT_EQ(2, bh.bfRejectCount());
     Buffer value;
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value));
+    uint32_t lat = 0;
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("200"), value, lat));
     EXPECT_EQ(3, bh.bfRejectCount());
 
     // Test lookup, second bucket
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value, lat));
     EXPECT_EQ(4, bh.bfRejectCount());
-    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value));
+    EXPECT_EQ(Status::NotFound, bh.lookup(makeHK("201"), value, lat));
     EXPECT_EQ(5, bh.bfRejectCount());
 
     actual = device->releaseRealDevice();

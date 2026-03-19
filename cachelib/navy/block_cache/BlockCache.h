@@ -163,7 +163,9 @@ class BlockCache final : public Engine {
   //          Status::Retry read cannot be served and needs to be retried again.
   //          Status::ChecksumError if the internal checksum does not match,
   //          Status::DeviceError otherwise.
-  Status lookup(HashedKey hk, Buffer& value) override;
+  Status lookup(HashedKey hk,
+                Buffer& value,
+                uint32_t& lastAccessTimeSecs) override;
 
   // Removes a key from BlockCache.
   //
@@ -317,6 +319,7 @@ class BlockCache final : public Engine {
     Buffer buffer_;
     RegionDescriptor desc_;
     uint32_t valueSize_{0};
+    uint32_t lastAccessTimeSecs_{0};
     Status status_{Status::Ok};
   };
 

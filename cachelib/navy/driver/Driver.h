@@ -106,7 +106,9 @@ class Driver final : public AbstractCache {
   // @param value  the returned value for the key if found
   // @return       a status indicates success or failure, and the reason for
   //               failure
-  Status lookup(HashedKey key, Buffer& value) override;
+  Status lookup(HashedKey key,
+                Buffer& value,
+                uint32_t& lastAccessTimeSecs) override;
 
   // lookup a key in the cache asynchronously.
   // @param key  the item key to lookup

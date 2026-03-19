@@ -63,7 +63,9 @@ class Engine {
                         uint32_t lastAccessTimeSecs = 0) = 0;
 
   // Looks up a key in the engine.
-  virtual Status lookup(HashedKey hk, Buffer& value) = 0;
+  virtual Status lookup(HashedKey hk,
+                        Buffer& value,
+                        uint32_t& lastAccessTimeSecs) = 0;
 
   // Remove must not return Status::Retry.
   virtual Status remove(HashedKey hk) = 0;

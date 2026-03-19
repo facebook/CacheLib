@@ -74,7 +74,9 @@ class EnginePair {
 
   // Perform lookup by keeping retrying until a result (Ok, NotFound, Error) is
   // reached.
-  Status lookupSync(HashedKey hk, Buffer& value) const;
+  Status lookupSync(HashedKey hk,
+                    Buffer& value,
+                    uint32_t& lastAccessTimeSecs) const;
 
   // Perform remove by keeping retrying until a result (Ok, NotFound, Error) is
   // reached.
@@ -130,7 +132,8 @@ class EnginePair {
   // Perform lookup in a retry friendly manner.
   Status lookupInternal(HashedKey hk,
                         Buffer& value,
-                        bool& skipLargeItemCache) const;
+                        bool& skipLargeItemCache,
+                        uint32_t& lastAccessTimeSecs) const;
 
   // insert an item to one of the engine and remove it from the other.
   // An option can be specified to skip insertion on retry.

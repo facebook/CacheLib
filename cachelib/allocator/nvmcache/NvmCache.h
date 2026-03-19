@@ -534,7 +534,8 @@ class NvmCache {
   void onGetComplete(GetCtx& ctx,
                      navy::Status s,
                      HashedKey key,
-                     navy::BufferView value);
+                     navy::BufferView value,
+                     uint32_t lastAccessTimeSecs);
 
   void evictCB(HashedKey hk, navy::BufferView val, navy::DestructorEvent e);
 
@@ -795,8 +796,9 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::find(HashedKey hk) {
 
   navyCache_->lookupAsync(
       HashedKey::precomputed(ctx->getKey(), hk.keyHash()),
-      [this, ctx](navy::Status s, HashedKey k, navy::Buffer v) {
-        this->onGetComplete(*ctx, s, k, v.view());
+      [this, ctx](navy::Status s, HashedKey k, navy::Buffer v,
+                  uint32_t lastAccessTimeSecs) {
+        this->onGetComplete(*ctx, s, k, v.view(), lastAccessTimeSecs);
       });
   guard.dismiss();
   return hdl;
@@ -866,7 +868,8 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::peek(folly::StringPiece key) {
   // no need for fill lock or inspecting the state of other concurrent
   // operations since we only want to check the state for debugging purposes.
   navyCache_->lookupAsync(
-      HashedKey{key}, [&, this](navy::Status st, HashedKey, navy::Buffer v) {
+      HashedKey{key},
+      [&, this](navy::Status st, HashedKey, navy::Buffer v, uint32_t) {
         if (st != navy::Status::NotFound) {
           auto nvmItem = reinterpret_cast<const NvmItem*>(v.data());
           hdl = createItem(key, *nvmItem);
@@ -1266,7 +1269,11 @@ template <typename C>
 void NvmCache<C>::onGetComplete(GetCtx& ctx,
                                 navy::Status status,
                                 HashedKey hk,
-                                navy::BufferView val) {
+                                navy::BufferView val,
+                                uint32_t lastAccessTimeSecs) {
+  // lastAccessTimeSecs will be used by retention threshold enforcement
+  // in a follow-up diff.
+  (void)lastAccessTimeSecs;
   auto guard =
       folly::makeGuard([&ctx, hk]() { ctx.cache.removeFromFillMap(hk); });
   // navy got disabled while we were fetching. If so, safely return a miss.
