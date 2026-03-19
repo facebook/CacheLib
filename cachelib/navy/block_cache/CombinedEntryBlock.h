@@ -17,6 +17,7 @@
 #pragma once
 
 #include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/common/Buffer.h"
@@ -116,6 +117,16 @@ class CombinedEntryBlock {
     return *reinterpret_cast<EntryRecord*>(bufView_.data() + pos);
   }
 
+  void increaseKeysForBid(uint64_t bid) { keysForBids_[bid]++; }
+
+  void decreaseKeysForBid(uint64_t bid) {
+    XDCHECK_GT(keysForBids_[bid], 0);
+    keysForBids_[bid]--;
+    if (keysForBids_[bid] == 0) {
+      keysForBids_.erase(bid);
+    }
+  }
+
   // Buffer will be allocated only when this CombinedEntryBlock doesn't
   // represent the data in other given buffer.
   // If this CombinedEntryBlock uses the buffer given via the constructor,
@@ -134,7 +145,9 @@ class CombinedEntryBlock {
   EntryPos curPos_{kDefaultSize};
 
   // For quick check if it's already stored and where its info is.
-  folly::F14FastMap<uint64_t, EntryIdx> storedKeys_;
+  folly::F14FastMap<uint64_t, EntryIdx> storedKeys_{};
+  // To maintain all the bids and # of keys stored with this CombinedEntryBlock
+  folly::F14FastMap<uint64_t, uint16_t> keysForBids_{};
 };
 
 } // namespace navy

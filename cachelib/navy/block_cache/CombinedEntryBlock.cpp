@@ -41,12 +41,23 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     if (posInfo.flag.removed == 1) {
       // In case it was removed before
       posInfo.flag.removed = 0;
+      posInfo.bid = bid;
       numValidEntries_++;
-      // It's not actually updated since it had been removed before
+      increaseKeysForBid(bid);
+      // It's not actually 'updated' since it had been removed before
       return CombinedEntryStatus::kOk;
     }
+
+    // bid may have been changed if it's assigned to a different bucket
+    if (posInfo.bid != bid) {
+      decreaseKeysForBid(posInfo.bid);
+      increaseKeysForBid(bid);
+      posInfo.bid = bid;
+    }
     return CombinedEntryStatus::kUpdated;
+
   } else {
+    // It's not 'update' case.
     EntryPos pos = curPos_ - sizeof(EntryRecord);
     if (pos < getEmptySpacePos(numStoredEntries_ + 1)) {
       // There's no space to add more entry here
@@ -56,6 +67,7 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     // Add the entry info for the newly added entry
     entryPosInfoRef(keyIdx) = {bid, key, pos};
     storedKeys_.insert({key, keyIdx});
+    increaseKeysForBid(bid);
     numStoredEntries_++;
     numValidEntries_++;
     curPos_ = pos;
@@ -89,7 +101,9 @@ CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
   // marked as removed. (When CombinedEntryBlock was already written to flash,
   // any modification including removing means new write to the different
   // CombinedEntryBlock anyway, so handling will be different for that)
+  auto bid = entryPosInfoRef(it->second).bid;
   entryPosInfoRef(it->second).flag.removed = 1;
+  decreaseKeysForBid(bid);
   numValidEntries_--;
   return CombinedEntryStatus::kOk;
 }
