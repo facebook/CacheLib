@@ -5568,24 +5568,17 @@ folly::IOBufQueue CacheAllocator<CacheTrait>::saveStateToIOBuf() {
   *metadata_.numChainedChildItems() = stats_.numChainedChildItems.get();
   *metadata_.numAbortedSlabReleases() = stats_.numAbortedSlabReleases.get();
 
-  auto serializeMMContainers = [](MMContainers& mmContainers) {
-    MMSerializationTypeContainer state;
-    for (unsigned int i = 0; i < mmContainers.size(); ++i) {
-      for (unsigned int j = 0; j < mmContainers[i].size(); ++j) {
-        if (mmContainers[i][j]) {
-          state.pools_ref()[i][j] = mmContainers[i][j]->saveState();
-        }
+  MMSerializationTypeContainer mmContainersState;
+  for (unsigned int i = 0; i < mmContainers_.size(); ++i) {
+    for (unsigned int j = 0; j < mmContainers_[i].size(); ++j) {
+      if (mmContainers_[i][j]) {
+        mmContainersState.pools_ref()[i][j] = mmContainers_[i][j]->saveState();
       }
     }
-    return state;
-  };
-  MMSerializationTypeContainer mmContainersState =
-      serializeMMContainers(mmContainers_);
-
+  }
   AccessSerializationType accessContainerState = accessContainer_->saveState();
   MemoryAllocator::SerializationType allocatorState = allocator_->saveState();
   CCacheManager::SerializationType ccState = compactCacheManager_->saveState();
-
   AccessSerializationType chainedItemAccessContainerState =
       chainedItemAccessContainer_->saveState();
 
