@@ -116,6 +116,7 @@ uint32_t BlockCache::calcAllocAlignSize() const {
 std::unique_ptr<Index> BlockCache::createIndex(
     const BlockCacheIndexConfig& indexConfig,
     const NavyPersistParams& persistParams,
+    bool useCombinedEntryBlock,
     const std::string& name) {
   if (indexConfig.isFixedSizeIndexEnabled()) {
     return std::make_unique<FixedSizeIndex>(
@@ -128,9 +129,16 @@ std::unique_ptr<Index> BlockCache::createIndex(
                    : nullptr)
             : nullptr,
         name,
-        /* handleOverflow */ false,
+        useCombinedEntryBlock,
+        combinedEntryMgr_.get(),
         bindThis(&BlockCache::onKeyHashRetrievalFromLocation, *this));
   } else {
+    // Combined entry block is not supported for sparse map index
+    if (useCombinedEntryBlock) {
+      XLOG(WARN,
+           "Combined entry block is set to be used, however sparse map index "
+           "doesn't support it. It will be ignored.");
+    }
     return std::make_unique<SparseMapIndex>(
         indexConfig.getNumSparseMapBuckets(),
         indexConfig.getNumBucketsPerMutex(),
@@ -141,6 +149,32 @@ std::unique_ptr<Index> BlockCache::createIndex(
 }
 
 BlockCache::~BlockCache() { regionManager_.drain(); }
+
+std::unique_ptr<CombinedEntryManager> BlockCache::createCombinedEntryManager(
+    const Config& config) {
+  if (config.useCombinedEntryBlock &&
+      config.indexConfig.isFixedSizeIndexEnabled()) {
+    // Let's use one stream per each mutex for the index
+    uint64_t numStreams = FixedSizeIndex::getTotalShardCount(
+        FixedSizeIndex::getTotalBucketCount(
+            config.indexConfig.getNumChunks(),
+            config.indexConfig.getNumBucketsPerChunkPower()),
+        config.indexConfig.getNumBucketsPerMutex());
+
+    // Currently, FixedSizeIndex and CombinedEntryManager will support shm
+    // persistence only
+    return std::make_unique<CombinedEntryManager>(
+        numStreams, CombinedEntryBlock::kDefaultSize - sizeof(EntryDesc),
+        (config.persistParams.useShm)
+            ? (config.persistParams.shmManager.has_value()
+                   ? &(config.persistParams.shmManager.value().get())
+                   : nullptr)
+            : nullptr,
+        config.name);
+  } else {
+    return nullptr;
+  }
+}
 
 BlockCache::BlockCache(Config&& config)
     : BlockCache{std::move(config.validate()), ValidConfigTag{}} {}
@@ -160,8 +194,11 @@ BlockCache::BlockCache(Config&& config, ValidConfigTag)
       regionSize_{config.regionSize},
       itemDestructorEnabled_{config.itemDestructorEnabled},
       preciseRemove_{config.preciseRemove},
-      index_(
-          createIndex(config.indexConfig, config.persistParams, config.name)),
+      combinedEntryMgr_(createCombinedEntryManager(config)),
+      index_(createIndex(config.indexConfig,
+                         config.persistParams,
+                         config.useCombinedEntryBlock,
+                         config.name)),
       regionManager_{config.getNumRegions(),
                      config.regionSize,
                      config.cacheBaseOffset,

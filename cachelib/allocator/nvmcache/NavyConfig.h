@@ -560,6 +560,11 @@ class BlockCacheConfig {
     return *this;
   }
 
+  BlockCacheConfig& useCombinedEntryBlock(bool enable) noexcept {
+    useCombinedEntryBlock_ = enable;
+    return *this;
+  }
+
   // TO enable Sparse Map Index with the configurable parameters. Without
   // calling this explicitly, default index will be still SparseMapIndex
   // with the default parameters.
@@ -612,6 +617,8 @@ class BlockCacheConfig {
 
   bool isCleanRegionFastPath() const { return cleanRegionFastPath_; }
 
+  bool isCombinedEntryBlockEnabled() const { return useCombinedEntryBlock_; }
+
   const BlockCacheReinsertionConfig& getReinsertionConfig() const {
     return reinsertionConfig_;
   }
@@ -660,6 +667,14 @@ class BlockCacheConfig {
   // When enabled, getCleanRegion() can skip acquiring the mutex and return
   // Retry immediately if clean regions are empty and reclaims are in-flight.
   bool cleanRegionFastPath_{false};
+
+  // Whether to use Combined entry block (For index entries and small sized
+  // items).
+  // Only FixedSizeIndex will support this and it doesn't work with
+  // SparseMapIndex
+  //
+  // TODO: For now, only index entries will be handled with Combined entry block
+  bool useCombinedEntryBlock_{false};
 
   // Number of allocators per priority.
   // Do not set this directly. This should be configured by setAllocatorCount

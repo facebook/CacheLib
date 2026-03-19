@@ -24,6 +24,7 @@
 #include "cachelib/common/AtomicCounter.h"
 #include "cachelib/common/EventInterface.h"
 #include "cachelib/navy/block_cache/Allocator.h"
+#include "cachelib/navy/block_cache/CombinedEntryManager.h"
 #include "cachelib/navy/block_cache/EvictionPolicy.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/block_cache/RegionManager.h"
@@ -92,8 +93,13 @@ class BlockCache final : public Engine {
     bool preciseRemove{false};
     // Whether region manager's worker threads should flush asynchronously.
     bool regionManagerFlushAsync{false};
+
     // Whether to enable the clean region fast path in getCleanRegion().
     bool cleanRegionFastPath{false};
+    // Whether to use Combined entry block (For index entries and small sized
+    // items)
+    bool useCombinedEntryBlock{false};
+
     // name of this BC instance
     std::string name{};
 
@@ -267,7 +273,10 @@ class BlockCache final : public Engine {
 
   std::unique_ptr<Index> createIndex(const BlockCacheIndexConfig& indexConfig,
                                      const NavyPersistParams& persistParams,
+                                     bool useCombinedEntryBlock,
                                      const std::string& name);
+  std::unique_ptr<CombinedEntryManager> createCombinedEntryManager(
+      const Config& config);
 
   // Entry disk size (with aux data and aligned)
   uint32_t serializedSize(uint32_t keySize, uint32_t valueSize) const;
@@ -464,6 +473,9 @@ class BlockCache final : public Engine {
   // whether preciseRemove is enabled
   const bool preciseRemove_{false};
 
+  // combinedEntryMgr_ should be initialized before index_
+  std::unique_ptr<CombinedEntryManager> combinedEntryMgr_;
+
   // Index stores offset of the slot *end*. This enables efficient paradigm
   // "buffer pointer is value pointer", which means value has to be at offset
   // 0 of the slot and header (EntryDescriptor) at the end.
@@ -477,6 +489,7 @@ class BlockCache final : public Engine {
   std::unique_ptr<Index> index_;
   RegionManager regionManager_;
   Allocator allocator_;
+
   // It is vital that the reinsertion policy is initialized after index_.
   // Make sure that this class member is defined after index_.
   std::shared_ptr<BlockCacheReinsertionPolicy> reinsertionPolicy_;

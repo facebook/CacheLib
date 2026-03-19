@@ -84,7 +84,7 @@ class CombinedEntryBlock {
   // Get the number of valid entries
   uint16_t getNumValidEntries() const { return numValidEntries_; }
 
-  uint16_t getSize() const { return bufView_.size(); }
+  uint16_t getSize() const { return static_cast<uint16_t>(bufView_.size()); }
 
   struct EntryPosInfo {
     // TODO: There will be padding here, but we'll probably need additional

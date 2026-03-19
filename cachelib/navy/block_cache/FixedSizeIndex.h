@@ -22,6 +22,7 @@
 #include "cachelib/common/Profiled.h"
 #include "cachelib/common/Serialization.h"
 #include "cachelib/navy/block_cache/CombinedEntryBlock.h"
+#include "cachelib/navy/block_cache/CombinedEntryManager.h"
 #include "cachelib/navy/block_cache/Index.h"
 #include "cachelib/navy/serialization/gen-cpp2/objects_types.h"
 #include "cachelib/shm/ShmManager.h"
@@ -69,6 +70,7 @@ class FixedSizeIndex : public Index {
                  ShmManager* shmManager,
                  const std::string& name,
                  bool handleOverflow = false,
+                 CombinedEntryManager* combinedEntryMgr = nullptr,
                  RetrieveKeyCallback retrieveKeyCb = nullptr)
       : numChunks_{numChunks},
         numBucketsPerChunkPower_{numBucketsPerChunkPower},
@@ -76,6 +78,7 @@ class FixedSizeIndex : public Index {
         shmManager_{shmManager},
         name_{name},
         handleOverflow_{handleOverflow},
+        combinedEntryMgr_{combinedEntryMgr},
         retrieveKeyCb_{std::move(retrieveKeyCb)} {
     initialize();
   }
@@ -90,6 +93,7 @@ class FixedSizeIndex : public Index {
                        nullptr,
                        "",
                        false,
+                       nullptr,
                        nullptr) {
     reset();
   }
@@ -111,6 +115,12 @@ class FixedSizeIndex : public Index {
   static constexpr std::string_view kShmIndexInfoName =
       "shm_fixed_size_index_info";
   static constexpr std::string_view kShmIndexName = "shm_fixed_size_index";
+
+  // Simple helpers
+  static uint64_t getTotalBucketCount(uint32_t numChunks,
+                                      uint8_t numBucketsPerChunkPower);
+  static uint64_t getTotalShardCount(uint64_t numBuckets,
+                                     uint64_t numBucketsPerShard);
 
   // Writes index content to a Thrift object
   void persist(
@@ -633,6 +643,7 @@ class FixedSizeIndex : public Index {
   // TODO: This field is probably for temporary, until it's all evaluated and
   // validated to use flash for overflowed index entries
   const bool handleOverflow_{false};
+  CombinedEntryManager* combinedEntryMgr_{};
   const RetrieveKeyCallback retrieveKeyCb_;
 
   uint64_t bucketsPerChunk_{0};

@@ -24,22 +24,32 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
-void FixedSizeIndex::initialize() {
+// static helpers
+uint64_t FixedSizeIndex::getTotalBucketCount(uint32_t numChunks,
+                                             uint8_t numBucketsPerChunkPower) {
   // TODO: All these XDCHECK should throw exception instead.
   // For now, it's internally passed down so should be fine.
+  XDCHECK(numChunks != 0 && numBucketsPerChunkPower != 0 &&
+          numBucketsPerChunkPower <= 63);
+  return (uint64_t)numChunks * (1ull << numBucketsPerChunkPower);
+}
+
+uint64_t FixedSizeIndex::getTotalShardCount(uint64_t totalBuckets,
+                                            uint64_t numBucketsPerShard) {
+  XDCHECK(totalBuckets != 0 && numBucketsPerShard != 0);
+  XDCHECK(numBucketsPerShard <= totalBuckets);
+  return (totalBuckets - 1) / numBucketsPerShard + 1;
+}
+
+void FixedSizeIndex::initialize() {
   if (handleOverflow_ && retrieveKeyCb_ == nullptr) {
     throw std::invalid_argument(
         "retrieveKey callback must be set with handleOverflow enabled");
   }
-  XDCHECK(numChunks_ != 0 && numBucketsPerChunkPower_ != 0 &&
-          numBucketsPerShard_ != 0);
 
-  XDCHECK(numBucketsPerChunkPower_ <= 63);
   bucketsPerChunk_ = (1ull << numBucketsPerChunkPower_);
-  totalBuckets_ = numChunks_ * bucketsPerChunk_;
-
-  XDCHECK(numBucketsPerShard_ <= totalBuckets_);
-  totalShards_ = (totalBuckets_ - 1) / numBucketsPerShard_ + 1;
+  totalBuckets_ = getTotalBucketCount(numChunks_, numBucketsPerChunkPower_);
+  totalShards_ = getTotalShardCount(totalBuckets_, numBucketsPerShard_);
 
   mutex_ = std::make_unique<SharedMutexType[]>(totalShards_);
   if (handleOverflow_) {
