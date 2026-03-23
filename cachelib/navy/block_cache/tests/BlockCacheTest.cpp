@@ -2542,6 +2542,7 @@ TEST(BlockCache, ExpiredItemDestructorCallback) {
   auto& mp = *policy;
   auto device = createMemoryDevice(kDeviceSize, nullptr /* encryption */);
   auto ex = makeJobScheduler();
+  auto* exPtr = ex.get();
   auto config = makeConfig(std::move(policy), *device);
   config.numInMemBuffers = 9;
   config.destructorCb = toCallback(cb);
@@ -2578,8 +2579,8 @@ TEST(BlockCache, ExpiredItemDestructorCallback) {
   // Wait for eviction to complete
   EXPECT_TRUE(injectPauseWait("pause_do_eviction_done"));
 
-  // Drain all jobs
-  driver->drain();
+  // Wait for all scheduled jobs to complete
+  exPtr->finish();
 
   // Verify the destructor callback was called for exactly one expired item
   // (log[0]). The second item in region 0 (log[1]) should be reinserted since
