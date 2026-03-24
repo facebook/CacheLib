@@ -859,7 +859,7 @@ Status BlockCache::onWriteCombinedEntryBlock(uint64_t stream,
     // Currently, this function (onWriteCombinedEntryBlock()) will be called
     // under the lock held for the index bucket, so checking/updating the
     // bucket entry are 'Locked' version
-    if (index_->isCombinedEntryBucketLocked(bid.first)) {
+    if (index_->isActiveCombinedEntryBucketLocked(bid.first)) {
       // TODO:  See if the latest entry for the same bid was added later to
       // new active CBE for the stream. (Should check with combinedEntryMgr_)
       // For now, combinedEntryMgr_ will maintain only one active CBE per each

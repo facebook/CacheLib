@@ -146,11 +146,12 @@ class SparseMapIndex : public Index {
   void getCounters(const CounterVisitor& visitor) const override;
 
   // SparseMapIndex doesn't support combined entry block
-  bool isCombinedEntryBucketLocked(uint64_t bid) const override {
-    XLOGF(WARN,
-          "isCombinedEntryBucketLocked() is called for bid {} but Combined "
-          "entry block is not supported by SparseMapIndex",
-          bid);
+  bool isActiveCombinedEntryBucketLocked(uint64_t bid) const override {
+    XLOGF(
+        WARN,
+        "isActiveCombinedEntryBucketLocked() is called for bid {} but Combined "
+        "entry block is not supported by SparseMapIndex",
+        bid);
     return false;
   }
 

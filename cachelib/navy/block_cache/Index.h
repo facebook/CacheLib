@@ -148,6 +148,11 @@ class Index {
     // address (for the entry), so it will be always the address of the end of
     // entry descriptor. See BlockCache.h for more details)
     static constexpr uint32_t kInvalidAddress{0};
+    // Likewise, address '1' won't be used for index address with current BC
+    // implementation/design. So we are using it to indicate it's in active
+    // Combined entry block (Still in memory and not written to region yet, so
+    // no region address was assigned yet).
+    static constexpr uint32_t kActiveCebAddress{1};
 
     PackedItemRecord() {}
 
@@ -217,6 +222,7 @@ class Index {
     }
     void setCombinedEntry() {
       info.sizeExp = kCombinedEntrySizeExp;
+      address = kActiveCebAddress;
       // reset the current hits to 0
       // This hit count will be for the combined entry itself
       info.curHits = 0;
@@ -296,9 +302,9 @@ class Index {
   // APIs only for the index supporting Combined Entry Block.
   //
 
-  // Return true if the given bucket is for combined entry block
+  // Return true if the given bucket is in active combined entry block.
   // Should be called under proper lock is held.
-  virtual bool isCombinedEntryBucketLocked(uint64_t bid) const = 0;
+  virtual bool isActiveCombinedEntryBucketLocked(uint64_t bid) const = 0;
   // Update the combined entry bucket's address to the given one.
   // Should be called under proper lock is held.
   virtual void updateCombinedEntryBucketLocked(uint64_t bid,

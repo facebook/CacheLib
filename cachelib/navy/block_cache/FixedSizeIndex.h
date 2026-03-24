@@ -183,8 +183,9 @@ class FixedSizeIndex : public Index {
   void getCounters(const CounterVisitor& visitor) const override;
 
   // For combined entry block only
-  bool isCombinedEntryBucketLocked(uint64_t bid) const override {
-    return ht_[bid].isCombinedEntry();
+  bool isActiveCombinedEntryBucketLocked(uint64_t bid) const override {
+    return ht_[bid].isCombinedEntry() &&
+           ht_[bid].address == PackedItemRecord::kActiveCebAddress;
   }
 
   // Update the address for the combined entry bucket
