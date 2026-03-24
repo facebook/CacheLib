@@ -63,8 +63,8 @@ class CombinedEntryBlock {
   // For the purpose of CombinedEntryBlock, it doesn't need to be large size
   // hence blockSize is limited to 16bits
   CombinedEntryBlock(uint16_t blockSize = kDefaultSize)
-      : allocated_{std::make_unique<uint8_t[]>(blockSize)},
-        bufView_(blockSize, allocated_.get()),
+      : ownedBuf_{blockSize},
+        bufView_{ownedBuf_.mutableView()},
         headerPtr_((Header*)bufView_.data()),
         // The first portion is for the header
         entryPosInfoBase_(bufView_.data() + sizeof(Header)),
@@ -80,6 +80,20 @@ class CombinedEntryBlock {
         curPos_{blockSize} {
     initHeader();
   }
+
+  // Constructor for read mode
+  // It's only for read mode, don't use it when it's for writing a combined
+  // entry block
+  explicit CombinedEntryBlock(Buffer&& readBuf)
+      : ownedBuf_{std::move(readBuf)},
+        bufView_{ownedBuf_.mutableView()},
+        headerPtr_((Header*)bufView_.data()),
+        // The first portion is for the header
+        entryPosInfoBase_(bufView_.data() + sizeof(Header)),
+        // Don't try to write here so set the curPos_ as 0
+        curPos_{0},
+        readMode_{true},
+        parsed_{false} {}
 
   // Adding a index entry as the content of Combined entry block
   CombinedEntryStatus addIndexEntry(uint64_t bid,
@@ -164,8 +178,8 @@ class CombinedEntryBlock {
 
   struct Header {
     char sig[kCebHeaderSigLen];
-    // numStoredEntries will be stored in the buffer as the part of the header.
-    // numStoredEntries can be different from storedKeys_.size()
+    // numStoredEntries will be stored in the buffer as the part of the
+    // header. numStoredEntries can be different from storedKeys_.size()
     // (When the same entry has to be re-written to the different position)
     uint32_t numStoredEntries;
   };
@@ -173,11 +187,12 @@ class CombinedEntryBlock {
   // Buffer will be allocated only when this CombinedEntryBlock doesn't
   // represent the data in other given buffer.
   // If this CombinedEntryBlock uses the buffer given via the constructor,
-  // allocated_ will be nullptr and not used.
-  std::unique_ptr<uint8_t[]> allocated_{};
+  // ownedBuf_ will be empty and not used.
+  Buffer ownedBuf_{};
 
-  // bufView will always represent the buffer in use for thie CombinedEntryBlock
-  // no matter where the buffer is and how it's allocated.
+  // bufView will always represent the buffer in use for thie
+  // CombinedEntryBlock no matter where the buffer is and how it's
+  // allocated.
   MutableBufferView bufView_{};
 
   Header* headerPtr_{nullptr};
@@ -188,9 +203,18 @@ class CombinedEntryBlock {
   // current position grows in reverse direction (from the end to the 0)
   EntryPos curPos_{kDefaultSize};
 
+  // For read mode. Read mode is when we read the combined entry block from
+  // the Region (mostly from flash)
+  bool readMode_{false};
+  // For read mode only. If parsed == true, all the content and info from the
+  // combined entry block is already parsed and stored to each members
+  // accordingly (e.g. storedKeys_, keysForBids_, ...)
+  bool parsed_{false};
+
   // For quick check if it's already stored and where its info is.
   StoredKeysMap storedKeys_{};
-  // To maintain all the bids and # of keys stored with this CombinedEntryBlock
+  // To maintain all the bids and # of keys stored with this
+  // CombinedEntryBlock
   StoredBidsMap keysForBids_{};
 };
 

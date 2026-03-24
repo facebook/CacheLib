@@ -22,6 +22,10 @@ namespace navy {
 
 CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
     uint64_t bid, uint64_t key, const EntryRecord& record) {
+  if (readMode_) {
+    return CombinedEntryStatus::kError;
+  }
+
   bool update = false;
   uint16_t keyIdx = numStoredEntries();
 
@@ -77,6 +81,12 @@ CombinedEntryStatus CombinedEntryBlock::addIndexEntry(
 
 folly::Expected<EntryRecord, CombinedEntryStatus>
 CombinedEntryBlock::getIndexEntry(uint64_t key) {
+  if (readMode_ && !parsed_) {
+    // TODO: need to scan the buffer and find the given key
+    // Return kNotFound for now
+    return folly::makeUnexpected(CombinedEntryStatus::kNotFound);
+  }
+
   auto it = storedKeys_.find(key);
   if (it == storedKeys_.end() ||
       entryPosInfoRef(it->second).flag.removed == 1) {
@@ -87,6 +97,10 @@ CombinedEntryBlock::getIndexEntry(uint64_t key) {
 }
 
 CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
+  if (readMode_) {
+    return CombinedEntryStatus::kError;
+  }
+
   auto it = storedKeys_.find(key);
   if (it == storedKeys_.end() ||
       entryPosInfoRef(it->second).flag.removed == 1) {
@@ -109,18 +123,27 @@ CombinedEntryStatus CombinedEntryBlock::removeIndexEntry(uint64_t key) {
 }
 
 bool CombinedEntryBlock::peekIndexEntry(uint64_t key) {
+  if (readMode_ && !parsed_) {
+    // TODO: need to scan the buffer and find the given key.
+    // Return false for now
+    return false;
+  }
   auto it = storedKeys_.find(key);
   return (it != storedKeys_.end() &&
           entryPosInfoRef(it->second).flag.removed == 0);
 }
 
 void CombinedEntryBlock::clear() {
-  // Clear all the contents of the block. Buffer itself will be reused.
-  storedKeys_.clear();
-  keysForBids_.clear();
-  numValidEntries_ = 0;
-  curPos_ = getSize();
-  initHeader();
+  if (!readMode_) {
+    // Clear all the contents of the block. Buffer itself will be reused.
+    storedKeys_.clear();
+    keysForBids_.clear();
+    numValidEntries_ = 0;
+    curPos_ = getSize();
+    initHeader();
+  } else {
+    XDCHECK(false);
+  }
 }
 
 } // namespace navy
