@@ -612,7 +612,7 @@ class CacheAllocator : public CacheBase {
 
   // Returns the storage medium if a key is potentially in cache. There is a
   // non-zero chance the key does not exist in cache (e.g. hash collision in
-  // NvmCache) even if a stoage medium is returned. This check is meant to be
+  // NvmCache) even if a storage medium is returned. This check is meant to be
   // synchronous and fast as we only check DRAM cache and in-memory index for
   // NvmCache. Similar to peek, this does not indicate to cachelib you have
   // looked up an item (i.e. no stats bump, no eviction queue promotion, etc.)
@@ -6247,18 +6247,18 @@ using Lru2QAllocator = CacheAllocator<Lru2QCacheTrait>;
 using Lru5B2QAllocator = CacheAllocator<Lru5B2QCacheTrait>;
 
 // CacheAllocator with Tiny LFU eviction policy
-// It has a window initially to gauage the frequency of accesses of newly
-// inserted items. And eventually it will onl admit items that are accessed
+// It has a window initially to gauge the frequency of accesses of newly
+// inserted items. And eventually it will only admit items that are accessed
 // beyond a threshold into the warm cache.
 using TinyLFUAllocator = CacheAllocator<TinyLFUCacheTrait>;
 
-// CacheAllocator with Tiny LFU eviction policy with the protection segment
-// It has a window initially to gauage the frequency of accesses of newly
-// inserted items. The Main Cache is broken down into probation segement taking
-// ~20% queue size and protection segment taking ~ 80%. For popular items
-// that exceed a defined protected frequence. It will be preserved in the
-// protection segment. If protectionSegment is full, it will no immediate
-// evict out main queue, but moved into the probation segment. This will
-// prevent the popular items from being evicted out immediately.
+// CacheAllocator with Tiny LFU eviction policy and protection segment. It has a
+// window initially to gauge the frequency of accesses of newly inserted items.
+// The Main Cache is broken down into probation segment taking ~20% queue size
+// and protection segment taking ~ 80%. Popular items that exceed a defined
+// protected frequency will be preserved in the protection segment. If
+// protection segment is full, it will not be immediately evicted out of the
+// main queue, but will be moved into the probation segment. This will prevent
+// the popular items from being evicted out immediately.
 using WTinyLFUAllocator = CacheAllocator<WTinyLFUCacheTrait>;
 } // namespace facebook::cachelib
