@@ -170,7 +170,8 @@ std::unique_ptr<CombinedEntryManager> BlockCache::createCombinedEntryManager(
                    ? &(config.persistParams.shmManager.value().get())
                    : nullptr)
             : nullptr,
-        config.name, bindThis(&BlockCache::onWriteCombinedEntryBlock, *this));
+        config.name, bindThis(&BlockCache::onWriteCombinedEntryBlock, *this),
+        bindThis(&BlockCache::onReadCombinedEntryBlock, *this));
   } else {
     return nullptr;
   }
@@ -869,6 +870,97 @@ Status BlockCache::onWriteCombinedEntryBlock(uint64_t stream,
     }
   }
   allocator_.close(std::move(desc));
+  return Status::Ok;
+}
+
+// This function will not (and cannot) check if index changed in between
+// this function call. It's caller's responsibility to make sure the index is
+// not changed and no race condition happens.
+// Currently, this will be called under the lock for the proper mutex for the
+// index, so it's fine.
+Status BlockCache::onReadCombinedEntryBlock(uint32_t address,
+                                            uint32_t readSize,
+                                            Buffer& cebBuffer) {
+  auto addrEnd = decodeRelAddress(address);
+  // It won't care about seq number here (giving it as std::nullopt). It's
+  // caller's responsibility to check about the race condition for the index
+  // change.
+  auto desc = regionManager_.openForRead(addrEnd.rid(), std::nullopt);
+  if (desc.status() != OpenStatus::Ready) {
+    // In rare cases, Region can return 'Retry' when it's being released after
+    // the reclaim. Checking the index again will resolve it since index should
+    // have been updated with the new location
+    return Status::Retry;
+  }
+
+  // For Combined entry block, we don't have a key following the header. Every
+  // key info will be within the value itself
+  uint32_t size = serializedSize(0, readSize);
+
+  auto buffer = regionManager_.read(desc, addrEnd.sub((uint32_t)size), size);
+  regionManager_.close(std::move(desc));
+
+  if (buffer.isNull()) {
+    return Status::DeviceError;
+  }
+
+  auto entryEnd = buffer.data() + buffer.size();
+  auto entryDesc = *reinterpret_cast<EntryDesc*>(entryEnd - sizeof(EntryDesc));
+  // Check header checksum
+  if (entryDesc.csSelf != entryDesc.computeChecksum()) {
+    XLOGF(ERR,
+          "Item header checksum mismatch in onReadCombinedEntryBlock(). "
+          "Region {} is "
+          "likely corrupted. Expected: {}, Actual: {}, Offset-end: {}, "
+          "Physical-offset-end: {}, Header size: {}, Header (hex): {}",
+          addrEnd.rid().index(), entryDesc.csSelf, entryDesc.computeChecksum(),
+          addrEnd.offset(), regionManager_.physicalOffset(addrEnd),
+          sizeof(EntryDesc),
+          folly::hexlify(
+              folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
+    return Status::ChecksumError;
+  }
+
+  // Check if EntryDesc matches with the Combined entry block
+  if (entryDesc.keyHash != kCombinedEntrySignatureValue ||
+      entryDesc.keySize != 0 || entryDesc.valueSize != readSize) {
+    // EntryDesc doesn't seem to be correct for Combined entry block. Something
+    // is wrong and we should return error.
+    XLOGF(ERR,
+          "Item header doesn't seem to be correct for Combined entry block in "
+          "onReadCombinedEntryBlock(). "
+          "Region {} is "
+          "likely corrupted. keyHash: {}, keySize: {}, valueSize: {}, "
+          "Offset-end: {}, "
+          "Physical-offset-end: {}, Header size: {}, Header (hex): {}",
+          addrEnd.rid().index(), entryDesc.keyHash, entryDesc.keySize,
+          entryDesc.valueSize, addrEnd.offset(),
+          regionManager_.physicalOffset(addrEnd), sizeof(EntryDesc),
+          folly::hexlify(
+              folly::ByteRange(entryEnd - sizeof(EntryDesc), entryEnd)));
+    return Status::NotFound;
+  }
+
+  // Check the checksum for the value
+  if (checksumData_ && entryDesc.cs != checksum(BufferView(entryDesc.valueSize,
+                                                           buffer.data()))) {
+    XLOGF(ERR,
+          "Item value checksum mismatch in onReadCombinedEntryBlock(). "
+          "Region {} is likely corrupted. Expected: {}, Actual: {}, Offset: "
+          "{}, Physical-offset: {}, "
+          "Value-size: {} Payload (hex): {}",
+          addrEnd.rid().index(), entryDesc.cs,
+          checksum(BufferView(entryDesc.valueSize, buffer.data())),
+          addrEnd.offset() - size,
+          regionManager_.physicalOffset(addrEnd) - size, entryDesc.valueSize,
+          folly::hexlify(folly::ByteRange(
+              buffer.data(), buffer.data() + entryDesc.valueSize)));
+    return Status::ChecksumError;
+  }
+
+  // shrink and set it as CEB's buffer
+  buffer.shrink(entryDesc.valueSize);
+  cebBuffer = std::move(buffer);
   return Status::Ok;
 }
 

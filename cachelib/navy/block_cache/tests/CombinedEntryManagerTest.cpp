@@ -22,17 +22,21 @@
 namespace facebook::cachelib::navy::tests {
 
 // Interface to create a mocking class only for testing
-class HandleWriteCEBToFlashClass {
+class HandleCEBIoToFlashClass {
  public:
-  virtual ~HandleWriteCEBToFlashClass() = default;
+  virtual ~HandleCEBIoToFlashClass() = default;
   virtual Status onWriteCombinedEntryBlock(uint64_t stream,
                                            const CombinedEntryBlock& ceb) = 0;
+  virtual Status onReadCombinedEntryBlock(uint32_t address,
+                                          uint32_t readSize,
+                                          Buffer& cebBuffer) = 0;
 };
 
-class MockWriteCEBToFlash : public HandleWriteCEBToFlashClass {
+class MockCEBIoToFlash : public HandleCEBIoToFlashClass {
  public:
   MOCK_METHOD2(onWriteCombinedEntryBlock,
                Status(uint64_t, const CombinedEntryBlock&));
+  MOCK_METHOD3(onReadCombinedEntryBlock, Status(uint32_t, uint32_t, Buffer&));
 };
 
 class CombinedEntryManagerTest : public testing::Test {
@@ -43,13 +47,13 @@ class CombinedEntryManagerTest : public testing::Test {
         4096,
         nullptr,
         "test",
-        bindThis(&MockWriteCEBToFlash::onWriteCombinedEntryBlock,
-                 mockCEBWriter_));
+        bindThis(&MockCEBIoToFlash::onWriteCombinedEntryBlock, mockCEBIo_),
+        bindThis(&MockCEBIoToFlash::onReadCombinedEntryBlock, mockCEBIo_));
   }
 
  protected:
   std::unique_ptr<CombinedEntryManager> combinedEntryMgr_;
-  MockWriteCEBToFlash mockCEBWriter_;
+  MockCEBIoToFlash mockCEBIo_;
 };
 
 TEST_F(CombinedEntryManagerTest, getCombinedEntryBlock) {
@@ -198,7 +202,7 @@ TEST_F(CombinedEntryManagerTest, FullyFilledThenWriteIssued) {
       combinedBlk0->getUsableSize() /
       (sizeof(CombinedEntryBlock::EntryPosInfo) + sizeof(EntryRecord));
 
-  EXPECT_CALL(mockCEBWriter_, onWriteCombinedEntryBlock(testing::_, testing::_))
+  EXPECT_CALL(mockCEBIo_, onWriteCombinedEntryBlock(testing::_, testing::_))
       .Times(0);
   for (auto i = 1; i < maxNumEntries; i++) {
     rec = {(uint32_t)i + 100, 10, 1};
@@ -209,7 +213,7 @@ TEST_F(CombinedEntryManagerTest, FullyFilledThenWriteIssued) {
   }
 
   // Now adding more index entry will trigger writing it to flash
-  EXPECT_CALL(mockCEBWriter_, onWriteCombinedEntryBlock(testing::_, testing::_))
+  EXPECT_CALL(mockCEBIo_, onWriteCombinedEntryBlock(testing::_, testing::_))
       .WillOnce(testing::Return(Status::Ok))
       .WillOnce(testing::Return(Status::Retry));
   rec = {(uint32_t)maxNumEntries + 100, 10, 1};

@@ -398,6 +398,15 @@ class BlockCache final : public Engine {
   Status onWriteCombinedEntryBlock(uint64_t stream,
                                    const CombinedEntryBlock& ceb);
 
+  // To read the combined entry block from the given address.
+  // @param address  address to read from
+  // @param readSize  size to read, which will be the size of CEB
+  // @param cebBuffer  buffer to be filled with combined entry block content
+  //
+  Status onReadCombinedEntryBlock(uint32_t address,
+                                  uint32_t readSize,
+                                  Buffer& cebBuffer);
+
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;
 

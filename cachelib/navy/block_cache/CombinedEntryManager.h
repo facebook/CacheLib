@@ -28,6 +28,9 @@ namespace navy {
 using WriteCebCallback =
     std::function<Status(uint64_t, const CombinedEntryBlock&)>;
 
+// Callback to read the active combined entry block from the region
+using ReadCebCallback = std::function<Status(uint32_t, uint32_t, Buffer&)>;
+
 // This class will manage things related to maintaining combined entry blocks
 //
 // - There will be multiple streams (configured by 'numCombinedEntryStreams' in
@@ -56,12 +59,14 @@ class CombinedEntryManager {
                        uint32_t CombinedEntryBlockSize,
                        ShmManager* shmManager,
                        const std::string& name,
-                       WriteCebCallback writeCebCb)
+                       WriteCebCallback writeCebCb,
+                       ReadCebCallback readCebCb)
       : numCebStreams_{numCombinedEntryStreams},
         cebSize_{CombinedEntryBlockSize},
         shmManager_{shmManager},
         name_{name},
         writeCebCb_{std::move(writeCebCb)},
+        readCebCb_{std::move(readCebCb)},
         cebStreams_{numCebStreams_} {}
 
   // Resets all the combined entry block buffers
@@ -105,6 +110,7 @@ class CombinedEntryManager {
   uint8_t* cebBuffers_{};
 
   const WriteCebCallback writeCebCb_;
+  const ReadCebCallback readCebCb_;
 
   // Total number of CombinedEntryBlocks whether it's in memory or flash
   std::atomic<size_t> totalCebs_{0};
