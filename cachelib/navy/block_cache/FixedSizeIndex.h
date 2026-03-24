@@ -182,6 +182,17 @@ class FixedSizeIndex : public Index {
   // Exports index stats via CounterVisitor.
   void getCounters(const CounterVisitor& visitor) const override;
 
+  // For combined entry block only
+  bool isCombinedEntryBucketLocked(uint64_t bid) const override {
+    return ht_[bid].isCombinedEntry();
+  }
+
+  // Update the address for the combined entry bucket
+  void updateCombinedEntryBucketLocked(uint64_t bid,
+                                       uint32_t address) override {
+    ht_[bid].address = address;
+  }
+
  private:
   class BucketDistInfo {
     // 1. It's assumed that caller (FixedSizeIndex) will handle all the

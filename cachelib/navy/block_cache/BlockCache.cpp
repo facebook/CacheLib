@@ -170,7 +170,7 @@ std::unique_ptr<CombinedEntryManager> BlockCache::createCombinedEntryManager(
                    ? &(config.persistParams.shmManager.value().get())
                    : nullptr)
             : nullptr,
-        config.name);
+        config.name, bindThis(&BlockCache::onWriteCombinedEntryBlock, *this));
   } else {
     return nullptr;
   }
@@ -261,7 +261,7 @@ Status BlockCache::insert(HashedKey hk,
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  writeEntry(bufferView, hk, value, lastAccessTimeSecs);
+  writeEntry(bufferView, hk, value, false, lastAccessTimeSecs);
   updateIndex(hk.keyHash(), slotSize, addr, /* allowReplace */ true);
   allocator_.close(std::move(desc));
   INJECT_PAUSE(pause_blockcache_insert_done);
@@ -816,6 +816,62 @@ std::optional<uint64_t> BlockCache::onKeyHashRetrievalFromLocation(
   return entryDesc.keyHash;
 }
 
+// Currently, all the operations related to combined entry block will be called
+// under the lock of the proper mutex for the corresponding index bucket.
+// So when this function is called (to write a combined entry block), it's safe
+// to assume that lock is still held and nothing will change in the index.
+// Later, to optimize the performance, we need to fine tune how we lock/unlock
+// the corresponding mutex for the operations related to CEB. For example, if it
+// needs flash I/O, it's better to release the lock so that other op in index
+// can proceed. That will be more complicated and we don't even know how much
+// latency impact this might bring in, so leave it as TODO. Also we can adjust
+// the config (e.q. # of buckets per mutex) to some degrees to minimize the
+// impact for now.
+Status BlockCache::onWriteCombinedEntryBlock(uint64_t stream,
+                                             const CombinedEntryBlock& ceb) {
+  // For Combined entry block, we don't have a key following the header. Every
+  // key info will be within the value itself
+  uint32_t size = serializedSize(0, ceb.getSize());
+
+  // Should not sleep and wait there when there's no clean region at the moment
+  // (canWait == false). Caller is supposed to handle this situation.
+  auto [desc, addr, bufView] = allocator_.allocate(size, kDefaultItemPriority,
+                                                   false /* canWait */, stream);
+
+  if (desc.status() != OpenStatus::Ready) {
+    XDCHECK(desc.status() == OpenStatus::Retry);
+    // Can't allocate from the region for now.
+    return Status::Retry;
+  }
+
+  writeEntry(bufView, std::nullopt, ceb.getBufferView(),
+             true /* combinedEntry */);
+
+  // Need to update the index for all the entries in combined entry block
+  // This update will be done per each bucket
+  for (const auto& bid : ceb.getStoredBids()) {
+    // getStoredBids() will return the map of bid to the number of keys stored
+    if (bid.second == 0) {
+      // No key is stored for this bid.
+      continue;
+    }
+    // Check if index entry is still pointing to combined entry block
+    // Currently, this function (onWriteCombinedEntryBlock()) will be called
+    // under the lock held for the index bucket, so checking/updating the
+    // bucket entry are 'Locked' version
+    if (index_->isCombinedEntryBucketLocked(bid.first)) {
+      // TODO:  See if the latest entry for the same bid was added later to
+      // new active CBE for the stream. (Should check with combinedEntryMgr_)
+      // For now, combinedEntryMgr_ will maintain only one active CBE per each
+      // stream. So it won't happen.
+      index_->updateCombinedEntryBucketLocked(bid.first,
+                                              encodeRelAddress(addr.add(size)));
+    }
+  }
+  allocator_.close(std::move(desc));
+  return Status::Ok;
+}
+
 bool BlockCache::removeItem(HashedKey hk, RelAddress currAddr) {
   if (index_->removeIfMatch(hk.keyHash(), encodeRelAddress(currAddr))) {
     return true;
@@ -1014,7 +1070,7 @@ AllocatorApiResult BlockCache::reinsertOrRemoveItem(
 
   // After allocation a region is opened for writing. Until we close it, the
   // region would not be reclaimed and index never gets an invalid entry.
-  writeEntry(bufferView, hk, value);
+  writeEntry(bufferView, hk, value, false);
   const auto replaced = index_->replaceIfMatch(hk.keyHash(),
                                                encodeRelAddress(addr.add(size)),
                                                encodeRelAddress(currAddr));
@@ -1091,17 +1147,35 @@ folly::Expected<BlockCache::AllocData, Status> BlockCache::allocateForInsert(
 }
 
 void BlockCache::writeEntry(MutableBufferView buffer,
-                            HashedKey hk,
+                            std::optional<HashedKey> hk,
                             BufferView value,
+                            bool combinedEntry,
                             uint32_t lastAccessTimeSecs) {
-  auto* desc =
-      writeEntryDescAndKey(buffer, hk, value.size(), lastAccessTimeSecs);
+  XDCHECK((combinedEntry && !hk.has_value()) ||
+          (!combinedEntry && hk.has_value()));
+
+  auto keySize = (combinedEntry) ? 0 : hk->key().size();
+  auto keyHash = (combinedEntry) ? kCombinedEntrySignatureValue : hk->keyHash();
+  size_t logicalWriteSize = 0;
+
+  // Copy descriptor and the key to the end
+  uint8_t* dest = buffer.data() + buffer.size() - sizeof(EntryDesc);
+  auto desc = new (dest) EntryDesc(static_cast<uint32_t>(keySize),
+                                   static_cast<uint32_t>(value.size()), keyHash,
+                                   lastAccessTimeSecs);
+
   if (checksumData_) {
     desc->cs = checksum(value);
   }
+
+  if (!combinedEntry) {
+    // Key info will be inside the value itself for combined entry block
+    std::memcpy(dest - keySize, hk->key().data(), keySize);
+    logicalWriteSize = keySize + value.size();
+  }
   std::memcpy(buffer.data(), value.data(), value.size());
 
-  logicalWrittenCount_.add(hk.key().size() + value.size());
+  logicalWrittenCount_.add(logicalWriteSize);
 }
 
 Status BlockCache::readEntry(LookupData& ld,

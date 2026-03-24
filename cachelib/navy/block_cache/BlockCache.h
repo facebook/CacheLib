@@ -116,6 +116,10 @@ class BlockCache final : public Engine {
     Config& validate();
   };
 
+  // Random but unique value to be used as the key hash value for Combined Entry
+  // Block
+  static constexpr uint64_t kCombinedEntrySignatureValue = 0xCEBB0FFE80000001;
+
   // Contructor can throw std::exception if config is invalid.
   //
   // @param config  config that was validated with Config::validate
@@ -332,11 +336,14 @@ class BlockCache final : public Engine {
   // especially the CPU time spent in std::memcpy.
   // @param addr        Address to write this entry into
   // @param size        Number of bytes this entry will take up on the device
-  // @param hk          Key of the entry
+  // @param hk          Key of the entry. Only when combinedEntry == false
   // @param value       Payload of the entry
+  // @param combinedEntry whether it's combined entry block or not
+  //
   void writeEntry(MutableBufferView buffer,
-                  HashedKey hk,
+                  std::optional<HashedKey> hk,
                   BufferView value,
+                  bool combinedEntry,
                   uint32_t lastAccessTimeSecs = 0);
   // @param ld          LookupData containing the entry metadata for reading
   // @param addrEnd     End of the entry since the item layout is backward
@@ -386,6 +393,10 @@ class BlockCache final : public Engine {
   // condition within this function, and here it will just assume the proper
   // location was given by the caller.
   std::optional<uint64_t> onKeyHashRetrievalFromLocation(uint32_t address);
+
+  // To write the combined entry block to currently open region
+  Status onWriteCombinedEntryBlock(uint64_t stream,
+                                   const CombinedEntryBlock& ceb);
 
   // Returns true if @config matches this cache's config_
   bool isValidRecoveryData(const serialization::BlockCacheConfig& config) const;

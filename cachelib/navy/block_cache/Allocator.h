@@ -87,8 +87,9 @@ class Allocator {
   // @param size          Allocation size
   // @param priority      Specifies how important this allocation is
   // @param canWait       If true, wait until allocation can be retried
-  // @param keyHash       Hash of the key to allocate for. Used for deciding the
-  // allocator if there's more than one for the priority.
+  // @param distKey       Distribution key to allocate for (ex. KeyHash). Used
+  //                      for deciding the allocator if there's more than one
+  //                      for the priority.
   //
   // Returns a pair containing region descriptor and allocated address
   // The region descriptor contains region id, open mode and status,
@@ -100,7 +101,7 @@ class Allocator {
   // max priority which is (@numPriorities - 1) specified when constructing
   // this allocator.
   std::tuple<RegionDescriptor, RelAddress, MutableBufferView> allocate(
-      uint32_t size, uint16_t priority, bool canWait, uint64_t keyHash);
+      uint32_t size, uint16_t priority, bool canWait, uint64_t distKey);
 
   // Closes the region.
   void close(RegionDescriptor&& rid);

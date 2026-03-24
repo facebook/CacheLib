@@ -292,6 +292,18 @@ class Index {
   // Exports index stats via CounterVisitor.
   virtual void getCounters(const CounterVisitor& visitor) const = 0;
 
+  /////////////////////////////////////////////////////////////////////////////
+  // APIs only for the index supporting Combined Entry Block.
+  //
+
+  // Return true if the given bucket is for combined entry block
+  // Should be called under proper lock is held.
+  virtual bool isCombinedEntryBucketLocked(uint64_t bid) const = 0;
+  // Update the combined entry bucket's address to the given one.
+  // Should be called under proper lock is held.
+  virtual void updateCombinedEntryBucketLocked(uint64_t bid,
+                                               uint32_t address) = 0;
+
  protected:
   // Updates hits information of a key.
   virtual void setHitsTestOnly(uint64_t key,

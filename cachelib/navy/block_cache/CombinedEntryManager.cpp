@@ -108,15 +108,26 @@ CombinedEntryStatus CombinedEntryManager::addIndexEntryToStream(
 
   auto res = ceb->addIndexEntry(bid, key, record);
   if (res == CombinedEntryStatus::kFull) {
-    // TODO: Here, it needs to be flushed to the flash and we need to open
-    // another CEB for the stream. For now, it will just return the status
-    XLOGF(
-        WARN,
-        "Can't add an index entry (bid {}, key {}) to the stream: CEB is full "
-        "for the given stream {}",
-        bid, key, stream);
-    // TODO: This will be changed, for now just return kFull
-    return CombinedEntryStatus::kFull;
+    auto writeStatus = writeCebCb_(stream, *ceb);
+    if (writeStatus == Status::Ok) {
+      // Write to flash was successful and all the index entries for the CEB
+      // were updated at this point.
+      ceb->clear();
+      // Now we can add the given index entry and it has to succeed.
+      res = ceb->addIndexEntry(bid, key, record);
+    } else {
+      // TODO: writing CEB can return Status::Retry when it can't find the clean
+      // region and can't allocate. We will handle this case gracefully by
+      // maintaining to-be-written CEBs, but for now, it will just give up on
+      // adding the given entry and return.
+      XDCHECK(writeStatus == Status::Retry);
+      XLOGF(WARN,
+            "Can't add an index entry (bid {}, key {}) to the stream: CEB is "
+            "full "
+            "for the given stream {}",
+            bid, key, stream);
+      return CombinedEntryStatus::kFull;
+    }
   }
 
   XDCHECK(res == CombinedEntryStatus::kUpdated ||

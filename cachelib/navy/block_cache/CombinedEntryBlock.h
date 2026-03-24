@@ -37,6 +37,10 @@ enum class CombinedEntryStatus : uint8_t {
 using EntryPos = uint16_t;
 using EntryIdx = uint16_t;
 using EntryRecord = Index::PackedItemRecord;
+// Map for all the stored keys to their EntryPosInfo location
+using StoredKeysMap = folly::F14FastMap<uint64_t, EntryIdx>;
+// Maintain info on all the bids and # of keys stored for each bid
+using StoredBidsMap = folly::F14FastMap<uint64_t, uint16_t>;
 
 // Combined entry block is a special block which contains multiple entries'
 // info. It will be used to maintain overflowed index entries and also to have
@@ -103,6 +107,10 @@ class CombinedEntryBlock {
   uint16_t getUsableSize() const {
     return (uint16_t)(bufView_.size() - sizeof(Header));
   }
+
+  BufferView getBufferView() const { return toView(bufView_); }
+
+  const StoredBidsMap& getStoredBids() const { return keysForBids_; }
 
   struct EntryPosInfo {
     // TODO: There will be padding here, but we'll probably need additional
@@ -181,9 +189,9 @@ class CombinedEntryBlock {
   EntryPos curPos_{kDefaultSize};
 
   // For quick check if it's already stored and where its info is.
-  folly::F14FastMap<uint64_t, EntryIdx> storedKeys_{};
+  StoredKeysMap storedKeys_{};
   // To maintain all the bids and # of keys stored with this CombinedEntryBlock
-  folly::F14FastMap<uint64_t, uint16_t> keysForBids_{};
+  StoredBidsMap keysForBids_{};
 };
 
 } // namespace navy

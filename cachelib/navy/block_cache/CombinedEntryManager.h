@@ -23,6 +23,11 @@ namespace facebook {
 namespace cachelib {
 namespace navy {
 
+// Callback to write the active combined entry block to the region when it's
+// filled out
+using WriteCebCallback =
+    std::function<Status(uint64_t, const CombinedEntryBlock&)>;
+
 // This class will manage things related to maintaining combined entry blocks
 //
 // - There will be multiple streams (configured by 'numCombinedEntryStreams' in
@@ -50,11 +55,13 @@ class CombinedEntryManager {
   CombinedEntryManager(uint64_t numCombinedEntryStreams,
                        uint32_t CombinedEntryBlockSize,
                        ShmManager* shmManager,
-                       const std::string& name)
+                       const std::string& name,
+                       WriteCebCallback writeCebCb)
       : numCebStreams_{numCombinedEntryStreams},
         cebSize_{CombinedEntryBlockSize},
         shmManager_{shmManager},
         name_{name},
+        writeCebCb_{std::move(writeCebCb)},
         cebStreams_{numCebStreams_} {}
 
   // Resets all the combined entry block buffers
@@ -96,6 +103,8 @@ class CombinedEntryManager {
   ShmManager* shmManager_{};
   std::string name_;
   uint8_t* cebBuffers_{};
+
+  const WriteCebCallback writeCebCb_;
 
   // Total number of CombinedEntryBlocks whether it's in memory or flash
   std::atomic<size_t> totalCebs_{0};

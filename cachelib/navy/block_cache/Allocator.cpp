@@ -48,14 +48,14 @@ Allocator::Allocator(RegionManager& regionManager,
 }
 
 std::tuple<RegionDescriptor, RelAddress, MutableBufferView> Allocator::allocate(
-    uint32_t size, uint16_t priority, bool canWait, uint64_t keyHash) {
+    uint32_t size, uint16_t priority, bool canWait, uint64_t distKey) {
   XDCHECK_LT(priority, allocators_.size());
   if (size == 0 || size > regionManager_.regionSize()) {
     return std::make_tuple(RegionDescriptor{OpenStatus::Error}, RelAddress(),
                            MutableBufferView());
   }
   RegionAllocator* ra =
-      &allocators_[priority][keyHash % allocators_[priority].size()];
+      &allocators_[priority][distKey % allocators_[priority].size()];
   return allocateWith(*ra, size, canWait);
 }
 
