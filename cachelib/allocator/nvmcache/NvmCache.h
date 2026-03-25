@@ -28,6 +28,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "cachelib/allocator/nvmcache/AccessTimeMap.h"
 #include "cachelib/allocator/nvmcache/CacheApiWrapper.h"
 #include "cachelib/allocator/nvmcache/InFlightPuts.h"
 #include "cachelib/allocator/nvmcache/NavyConfig.h"
@@ -589,6 +590,18 @@ class NvmCache {
   // finished.
   std::vector<folly::F14FastSet<std::string>> itemRemoved_;
 
+  // Tracks the most recent DRAM last-access timestamp for items in NVM.
+  // It is best offered and not updated on every DRAM access so could sometime
+  // have stale value which represents the promotion timestamp.
+  // Populated on DRAM eviction of NvmClean BlockCache items;
+  // consumed during BlockCache region reclaim to write fresh timestamps.
+  std::unique_ptr<AccessTimeMap> accessTimeMap_;
+
+  // BigHash small-item threshold from NavyConfig. Items with
+  // key.size() + nvmBufferSize <= this threshold go to BigHash.
+  // 0 means BigHash is not configured and all items go to BlockCache.
+  const uint64_t smallItemMaxSize_;
+
   std::unique_ptr<cachelib::navy::AbstractCache> navyCache_;
 
   friend class tests::NvmCacheTest;
@@ -1058,7 +1071,15 @@ NvmCache<C>::NvmCache(C& c,
       tombstones_(numShards_),
       itemDestructor_(itemDestructor),
       itemDestructorMutex_(numShards_),
-      itemRemoved_(numShards_) {
+      itemRemoved_(numShards_),
+      accessTimeMap_(
+          config_.navyConfig.getEnableAccessTimeMap()
+              ? std::make_unique<AccessTimeMap>(
+                    numShards_, config_.navyConfig.getAccessTimeMapMaxSize())
+              : nullptr),
+      smallItemMaxSize_(config_.navyConfig.isBigHashEnabled()
+                            ? config_.navyConfig.bigHash().getSmallItemMaxSize()
+                            : 0) {
   navyCache_ = createNavyCache(
       config_.navyConfig,
       checkExpired_,
@@ -1644,6 +1665,9 @@ template <typename C>
 util::StatsMap NvmCache<C>::getStatsMap() const {
   util::StatsMap statsMap;
   navyCache_->getCounters(statsMap.createCountVisitor());
+  if (accessTimeMap_) {
+    accessTimeMap_->getCounters(statsMap.createCountVisitor());
+  }
   statsMap.insertCount("items_tracked_for_destructor", getNvmItemRemovedSize());
   return statsMap;
 }

@@ -246,6 +246,11 @@ struct CacheConfig : public JSONConfig {
   // Enable the FDP Data placement mode in the device, if it is capable.
   bool deviceEnableFDP{false};
 
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool navyEnableAccessTimeMap{false};
+  // Maximum entries in the AccessTimeMap. 0 means unbounded.
+  size_t navyAccessTimeMapMaxSize{0};
+
   // Don't write to flash if cache TTL is smaller than this value.
   // Not used when its value is 0.  In seconds.
   uint32_t memoryOnlyTTL{0};

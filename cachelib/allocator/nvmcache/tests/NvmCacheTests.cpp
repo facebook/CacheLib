@@ -1893,6 +1893,16 @@ TEST_F(NvmCacheTest, NavyStats) {
   // item destructor
   EXPECT_TRUE(cs("items_tracked_for_destructor"));
 
+  // AccessTimeMap stats
+  EXPECT_TRUE(cs("navy_atm_sets"));
+  EXPECT_TRUE(cs("navy_atm_gets"));
+  EXPECT_TRUE(cs("navy_atm_get_and_removes"));
+  EXPECT_TRUE(cs("navy_atm_removes"));
+  EXPECT_TRUE(cs("navy_atm_hits"));
+  EXPECT_TRUE(cs("navy_atm_misses"));
+  EXPECT_TRUE(cs("navy_atm_evictions"));
+  EXPECT_TRUE(cs("navy_atm_size"));
+
   // there should be no additional stats
   if (nvmStats.size()) {
     for (auto kv : nvmStats) {

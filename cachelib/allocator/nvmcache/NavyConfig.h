@@ -899,6 +899,8 @@ class NavyConfig {
   uint64_t getMaxParcelMemoryMB() const { return maxParcelMemoryMB_; }
   bool getUseEstimatedWriteSize() const { return useEstimatedWriteSize_; }
   size_t getNumShards() const { return numShards_; }
+  bool getEnableAccessTimeMap() const { return enableAccessTimeMap_; }
+  size_t getAccessTimeMapMaxSize() const { return accessTimeMapMaxSize_; }
 
   // Setters:
   // Enable "dynamic_random" admission policy.
@@ -1042,6 +1044,12 @@ class NavyConfig {
     useEstimatedWriteSize_ = useEstimatedWriteSize;
   }
   void setNumShards(size_t numShards) noexcept { numShards_ = numShards; }
+  void setEnableAccessTimeMap(bool enable) noexcept {
+    enableAccessTimeMap_ = enable;
+  }
+  void setAccessTimeMapMaxSize(size_t maxSize) noexcept {
+    accessTimeMapMaxSize_ = maxSize;
+  }
 
   const std::vector<EnginesConfig>& enginesConfigs() const {
     return enginesConfigs_;
@@ -1139,6 +1147,10 @@ class NavyConfig {
   bool enableFDP_{false};
   // Number of nvm lock shards
   size_t numShards_{8192};
+  // Whether to enable the AccessTimeMap for tracking NVM item access times.
+  bool enableAccessTimeMap_{false};
+  // Maximum number of entries in the AccessTimeMap. 0 means unbounded.
+  size_t accessTimeMapMaxSize_{0};
 };
 } // namespace navy
 } // namespace cachelib
