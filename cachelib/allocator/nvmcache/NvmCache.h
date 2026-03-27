@@ -354,6 +354,15 @@ class NvmCache {
 
   detail::Stats& stats() { return CacheAPIWrapperForNvm<C>::getStats(cache_); }
 
+  // Returns true if the NVM item would be routed to BlockCache (large item
+  // engine) rather than BigHash (small item engine).
+  // Delegates to navy::isItemLarge() (navy/common/Types.h) which is the
+  // shared routing predicate also used by EnginePair::isItemLarge().
+  bool isNvmItemLarge(folly::StringPiece key, const NvmItem& nvmItem) const {
+    return navy::isItemLarge(key.size(), nvmItem.totalSize(),
+                             smallItemMaxSize_);
+  }
+
   // creates the RAM item from NvmItem.
   //
   // @param key   key for the nvm item

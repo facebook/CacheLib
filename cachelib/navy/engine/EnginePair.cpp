@@ -16,6 +16,7 @@
 
 #include "cachelib/navy/engine/EnginePair.h"
 
+#include "cachelib/navy/common/Types.h"
 #include "cachelib/navy/engine/NoopEngine.h"
 
 namespace facebook::cachelib::navy {
@@ -32,7 +33,7 @@ EnginePair::EnginePair(std::unique_ptr<Engine> smallItemCache,
       name_{std::move(name)} {}
 
 bool EnginePair::isItemLarge(HashedKey key, BufferView value) const {
-  return key.key().size() + value.size() > smallItemMaxSize_;
+  return navy::isItemLarge(key.key().size(), value.size(), smallItemMaxSize_);
 }
 
 std::pair<Engine&, Engine&> EnginePair::select(HashedKey key,
