@@ -867,13 +867,13 @@ class NavyConfig {
 
   // Return a const BigHashConfig to read values of its parameters.
   const BigHashConfig& bigHash() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].bigHash();
   }
 
   // Return a const BlockCacheConfig to read values of its parameters.
   const BlockCacheConfig& blockCache() const {
-    XDCHECK(enginesConfigs_.size() == 1);
+    XDCHECK(enginesConfigs_.size() > 0);
     return enginesConfigs_[0].blockCache();
   }
 
@@ -1097,7 +1097,6 @@ class NavyConfig {
   uint32_t qDepth_{0};
 
   // ============ Engines settings =============
-  // Currently we support one pair of engines.
   std::vector<EnginesConfig> enginesConfigs_{1};
   // Function to map each item to a pair of engine.
   EnginesSelector selector_{};
