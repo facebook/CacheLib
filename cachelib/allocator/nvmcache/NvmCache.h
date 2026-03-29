@@ -1430,11 +1430,17 @@ typename NvmCache<C>::WriteHandle NvmCache<C>::createItem(
     // not visible to other threads).
     it.unmarkNascent();
     it->markNvmClean();
+    if (isNvmItemLarge(key, nvmItem)) {
+      it->markNvmLargeItem();
+    }
   } else {
     XDCHECK_LE(pBlob.data.size(), getStorageSizeInNvm(*it));
     XDCHECK_LE(pBlob.origAllocSize, pBlob.data.size());
     ::memcpy(it->getMemory(), pBlob.data.data(), pBlob.data.size());
     it->markNvmClean();
+    if (isNvmItemLarge(key, nvmItem)) {
+      it->markNvmLargeItem();
+    }
 
     // if we have more, then we need to allocate them as chained items and add
     // them in the same order. To do that, we need to add them from the inverse

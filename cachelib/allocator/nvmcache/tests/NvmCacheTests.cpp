@@ -2978,6 +2978,42 @@ TEST_F(NvmCacheTest, NvmHitTTATracking) {
   // 6. Verify TTA was tracked (>= 1 second)
   EXPECT_GE(stats.nvmHitTTASecs.p50, 1);
 }
+TEST_F(NvmCacheTest, NvmLargeItemFlagOnPromotion) {
+  // Verify that the NvmLargeItem flag is set correctly on promotion:
+  // - Items routed to BlockCache (large) should have the flag set.
+  // - Items routed to BigHash (small) should NOT have the flag set.
+  this->config_.setSimpleFile(cacheDir_ + "/navy", 200 * 1024ULL * 1024ULL,
+                              true /* truncateFile */);
+  LruAllocator::NvmCacheConfig nvmConfig;
+  nvmConfig.navyConfig = this->config_;
+  nvmConfig.truncateItemToOriginalAllocSizeInNvm = true;
+  auto& config = this->getConfig();
+  config.enableNvmCache(nvmConfig);
+  this->poolAllocsizes_ = {20 * 1024};
+  auto& cache = this->makeCache();
+  auto pid = this->poolId();
+
+  auto testNvmLargeItemFlag = [&](const std::string& key, uint32_t valSize,
+                                  char fillChar) -> bool {
+    {
+      auto it = cache.allocate(pid, key, valSize);
+      EXPECT_NE(nullptr, it);
+      ::memset(it->getMemory(), fillChar, it->getSize());
+      cache.insertOrReplace(it);
+    }
+    EXPECT_TRUE(this->pushToNvmCacheFromRamForTesting(key));
+    cache.flushNvmCache();
+    this->removeFromRamForTesting(key);
+    auto hdl = this->fetch(key, false /* ramOnly */);
+    EXPECT_NE(nullptr, hdl);
+    EXPECT_TRUE(hdl->isNvmClean());
+    return hdl->isNvmLargeItem();
+  };
+
+  EXPECT_TRUE(testNvmLargeItemFlag("bc", 15 * 1024, 'L'));
+  EXPECT_FALSE(testNvmLargeItemFlag("bh", 50, 'S'));
+}
+
 } // namespace tests
 } // namespace cachelib
 } // namespace facebook
